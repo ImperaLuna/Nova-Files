@@ -1,0 +1,18 @@
+[package]
+name = "nova-files"
+version = "0.1.0"
+edition = "2024"
+
+description = "A fast, rounded file manager for Linux"
+license = "MIT"
+repository = "https://github.com/ImperaLuna/Nova-Files"
+
+[dependencies]
+gpui = "0.2.2"
+# Capped: libc 0.2.190 dropped `ENOATTR`, which `xattr` 0.2 (pulled in by
+# gpui 0.2.2) still needs on Linux.
+libc = ">=0.2.182, <0.2.190"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
