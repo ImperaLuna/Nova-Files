@@ -1,0 +1,58 @@
+# The Nova Files Cargo workspace: seven crates, one lint policy.
+#
+# Each crate's Cargo.toml opens with the outside and workspace crates it may
+# depend on; `tools/check-deps.sh` holds every crate to its list. Adding an
+# outside crate means editing that list in a reviewed PR that says why.
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/ImperaLuna/Nova-Files"
+publish = false
+
+[workspace.dependencies]
+nova-files-api = { path = "crates/nova-files-api" }
+nova-files-core = { path = "crates/nova-files-core" }
+nova-files-dbus = { path = "crates/nova-files-dbus" }
+nova-files-index = { path = "crates/nova-files-index" }
+nova-files-ui = { path = "crates/nova-files-ui" }
+
+[workspace.lints.rust]
+# Denied, not forbidden, so nova-files-index can opt in per site with
+# `#[expect(unsafe_code, reason = "...")]`. Every other crate root forbids it.
+unsafe_code = "deny"
+unused_qualifications = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+
+# Pedantic lints that cost more noise than they catch.
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+
+# Restriction picks. clippy.toml exempts tests where noted there.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+undocumented_unsafe_blocks = "deny"
+excessive_nesting = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

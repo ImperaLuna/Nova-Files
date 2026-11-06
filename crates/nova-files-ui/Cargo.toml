@@ -1,0 +1,20 @@
+# nova-files-ui
+#
+# The window. It sends commands to the core and draws from its events; it
+# never touches the disk.
+#
+# Allowed outside crates: gpui, gpui-component
+# Allowed workspace crates: nova-files-api
+
+[package]
+name = "nova-files-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

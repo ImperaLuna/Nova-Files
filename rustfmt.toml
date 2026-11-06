@@ -1,0 +1,2 @@
+# rustfmt settings. Only stable options, so the nixpkgs toolchain applies them.
+edition = "2024"

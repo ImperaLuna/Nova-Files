@@ -1,0 +1,57 @@
+# Clippy settings for nova-files-ui: the root clippy.toml plus bans that keep
+# the window off the disk and away from child processes. Clippy reads only
+# this file for this crate, so every root line is repeated here;
+# tools/check-clippy-config.sh fails when they drift apart.
+
+# Tests may unwrap, panic and print.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+
+# Size limits.
+too-many-lines-threshold = 80
+too-many-arguments-threshold = 5
+excessive-nesting-threshold = 5
+
+disallowed-methods = [
+    { path = "std::thread::sleep", reason = "event-driven, no polling: wait on a channel or event with a timeout" },
+
+    # The UI never touches the disk: it asks the core.
+    { path = "std::fs::read", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::read_to_string", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::read_dir", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::read_link", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::metadata", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::symlink_metadata", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::canonicalize", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::exists", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::write", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::copy", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::rename", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::hard_link", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::set_permissions", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::create_dir", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::create_dir_all", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::remove_file", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::remove_dir", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::remove_dir_all", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::exists", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::try_exists", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::is_file", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::is_dir", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::is_symlink", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::metadata", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::symlink_metadata", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::read_dir", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::read_link", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::path::Path::canonicalize", reason = "the UI never touches the disk: send a command to the core" },
+]
+
+disallowed-types = [
+    { path = "std::fs::File", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::OpenOptions", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::fs::DirBuilder", reason = "the UI never touches the disk: send a command to the core" },
+    { path = "std::process::Command", reason = "the UI starts no processes: send a command to the core" },
+]
