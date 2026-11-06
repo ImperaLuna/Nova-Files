@@ -22,7 +22,7 @@ permissions:
   actions: write
 
 env:
-  CACHIX_CACHE: nova-files
+  CACHIX_CACHE: nova-de
 
 jobs:
   check:
