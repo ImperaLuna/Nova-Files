@@ -18,7 +18,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-nova-files-api.workspace = true
 nova-files-core.workspace = true
 nova-files-dbus.workspace = true
 nova-files-ui.workspace = true

@@ -52,3 +52,21 @@ fn stops_when_idle_after_the_last_client_leaves() {
     let (events, _received) = mpsc::channel();
     assert!(core.connector.connect(events).is_err());
 }
+
+#[test]
+fn activity_restarts_the_idle_wait() {
+    let core = nova_files_core::spawn_with_idle_exit(IDLE_EXIT).unwrap();
+    let (_never_sent, quiet) = mpsc::channel::<()>();
+
+    // Each message lands inside the idle period, so the core keeps going
+    // well past one idle period in total.
+    for _ in 0..4 {
+        assert_eq!(
+            quiet.recv_timeout(IDLE_EXIT / 2),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        );
+        core.connector.activity().unwrap();
+    }
+
+    assert!(!core.thread.is_finished());
+}

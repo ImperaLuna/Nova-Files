@@ -17,7 +17,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use nova_files_dbus::{APP_ID, Bus, Started};
+use nova_files_dbus::{APP_ID, Bus, FILES_INTERFACE, Started};
 use zbus::blocking::Proxy;
 
 /// How long a test waits for the bus or a call before it counts as failed.
@@ -120,15 +120,11 @@ impl Drop for PrivateBus {
     }
 }
 
-fn object_path() -> String {
-    format!("/{}", APP_ID.replace('.', "/"))
-}
-
 #[test]
 fn first_start_answers_ping_through_the_core() {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn().unwrap();
-    let started = nova_files_dbus::start(&bus.bus(), core.connector, || {}).unwrap();
+    let started = nova_files_dbus::start(bus.bus(), core.connector, || {}).unwrap();
     assert!(matches!(started, Started::Service(_)));
 
     let client = zbus::blocking::connection::Builder::address(bus.address.as_str())
@@ -139,8 +135,8 @@ fn first_start_answers_ping_through_the_core() {
     let files = Proxy::new(
         &client,
         APP_ID,
-        object_path(),
-        "io.github.ImperaLuna.NovaFiles1",
+        nova_files_dbus::object_path().unwrap(),
+        FILES_INTERFACE,
     )
     .unwrap();
 
@@ -152,13 +148,13 @@ fn second_start_hands_its_window_to_the_first() {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn().unwrap();
     let (activations, activated) = mpsc::channel();
-    let first = nova_files_dbus::start(&bus.bus(), core.connector.clone(), move || {
+    let first = nova_files_dbus::start(bus.bus(), core.connector.clone(), move || {
         activations.send(()).ok();
     })
     .unwrap();
     assert!(matches!(first, Started::Service(_)));
 
-    let second = nova_files_dbus::start(&bus.bus(), core.connector, || {}).unwrap();
+    let second = nova_files_dbus::start(bus.bus(), core.connector, || {}).unwrap();
     let Started::AlreadyRunning(running) = second else {
         panic!("the second start should find the first");
     };
@@ -171,9 +167,9 @@ fn second_start_hands_its_window_to_the_first() {
 fn name_is_free_again_after_the_service_drops() {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn().unwrap();
-    let first = nova_files_dbus::start(&bus.bus(), core.connector.clone(), || {}).unwrap();
+    let first = nova_files_dbus::start(bus.bus(), core.connector.clone(), || {}).unwrap();
     drop(first);
 
-    let again = nova_files_dbus::start(&bus.bus(), core.connector, || {}).unwrap();
+    let again = nova_files_dbus::start(bus.bus(), core.connector, || {}).unwrap();
     assert!(matches!(again, Started::Service(_)));
 }

@@ -7,17 +7,25 @@
 
 use std::collections::HashMap;
 
+use nova_files_api::Connector;
+use zbus::fdo;
 use zbus::zvariant::OwnedValue;
 
+/// The interface name. The `#[zbus::interface]` attribute needs the
+/// literal too; a test checks the two match.
 pub const INTERFACE: &str = "org.freedesktop.Application";
 
 pub struct Application<F> {
+    connector: Connector,
     on_activate: F,
 }
 
 impl<F> Application<F> {
-    pub const fn new(on_activate: F) -> Self {
-        Self { on_activate }
+    pub const fn new(connector: Connector, on_activate: F) -> Self {
+        Self {
+            connector,
+            on_activate,
+        }
     }
 }
 
@@ -25,8 +33,28 @@ impl<F> Application<F> {
 impl<F: Fn() + Send + Sync + 'static> Application<F> {
     /// Opens a new window. `platform_data` (startup notification ids and
     /// the like) is not used yet.
-    fn activate(&self, platform_data: HashMap<String, OwnedValue>) {
+    ///
+    /// The core hears of it first, so it doesn't stop while the window is
+    /// still starting; if it has already stopped, the caller gets an error
+    /// rather than a window that never appears.
+    fn activate(&self, platform_data: HashMap<String, OwnedValue>) -> fdo::Result<()> {
         drop(platform_data);
+        self.connector
+            .activity()
+            .map_err(|error| fdo::Error::Failed(error.to_string()))?;
         (self.on_activate)();
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use zbus::object_server::Interface as _;
+
+    use super::{Application, INTERFACE};
+
+    #[test]
+    fn interface_name_matches_the_constant() {
+        assert_eq!(Application::<fn()>::name().as_str(), INTERFACE);
     }
 }

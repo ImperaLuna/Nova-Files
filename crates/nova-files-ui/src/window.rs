@@ -60,6 +60,9 @@ impl MainWindow {
                     return;
                 }
             }
+            // The core dropped this window's events: it has stopped.
+            this.update(cx, |this, cx| this.set_status(CoreStatus::Gone, cx))
+                .ok();
         });
         Self {
             status,

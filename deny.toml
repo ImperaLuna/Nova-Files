@@ -36,10 +36,25 @@ allow = [
 multiple-versions = "allow"
 wildcards = "deny"
 allow-wildcard-paths = true
-# No async runtime in our own code: threads and channels. That is held by
-# each crate's allowed list (tools/check-deps.sh), not banned here, because
-# GPUI's HTTP client pulls in tokio and that can't be switched off.
 deny = [
+    # No async runtime: threads and channels. GPUI's HTTP client pulls in
+    # tokio and async-std and can't be switched off, so only its crates may
+    # depend on them.
+    { crate = "tokio", reason = "threads and channels only, no async runtime", wrappers = [
+        "h2",
+        "hyper",
+        "hyper-rustls",
+        "hyper-util",
+        "tokio-rustls",
+        "tokio-socks",
+        "tokio-util",
+        "tower",
+        "wasm-bindgen-futures",
+        "zed-reqwest",
+    ] },
+    { crate = "async-std", reason = "threads and channels only, no async runtime", wrappers = [
+        "zed-async-tar",
+    ] },
     # libc 0.2.190 dropped ENOATTR, which xattr 0.2 (under GPUI's HTTP
     # client) still needs. Lift once GPUI moves to a newer xattr.
     { crate = "libc:>=0.2.190", reason = "xattr 0.2, used by GPUI, needs ENOATTR" },

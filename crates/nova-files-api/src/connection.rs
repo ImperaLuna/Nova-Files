@@ -57,6 +57,9 @@ pub enum CoreMessage {
     Command { client: ClientId, command: Command },
     /// A client dropped its connection.
     Disconnected { client: ClientId },
+    /// Something is about to use the core (a window is being opened), so
+    /// its idle wait starts again.
+    Activity,
 }
 
 impl std::fmt::Debug for CoreMessage {
@@ -75,6 +78,7 @@ impl std::fmt::Debug for CoreMessage {
                 .debug_struct("Disconnected")
                 .field("client", client)
                 .finish(),
+            Self::Activity => f.write_str("Activity"),
         }
     }
 }
@@ -99,6 +103,17 @@ pub struct Connector {
 }
 
 impl Connector {
+    /// Tells the core it is about to be used, so it doesn't stop while a
+    /// client is still starting up.
+    ///
+    /// # Errors
+    /// [`CoreGone`] when the core has stopped.
+    pub fn activity(&self) -> Result<(), CoreGone> {
+        self.sender
+            .send(CoreMessage::Activity)
+            .map_err(|_| CoreGone)
+    }
+
     /// Opens a connection whose events go to `events`.
     ///
     /// # Errors

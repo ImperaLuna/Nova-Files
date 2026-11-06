@@ -19,6 +19,6 @@ workspace = true
 
 [dependencies]
 nova-files-api.workspace = true
-# An async channel, so events from the core's thread wake the window's task.
-futures = { version = "0.3", default-features = false, features = ["std"] }
+# Async channels, so events from other threads wake the window's tasks.
+futures = { version = "0.3", default-features = false, features = ["std", "executor"] }
 gpui = "0.2.2"

@@ -1,33 +1,66 @@
-//! Carries the program's requests from a std channel into the GPUI app.
+//! The channel the program uses to ask the UI for windows, or to quit.
 //!
-//! The program sends from plain threads (D-Bus, the core's watcher); GPUI
-//! tasks wait on async channels. One thread blocks on the std receiver and
-//! passes each request on, so nothing polls.
+//! The sending half works from any thread (D-Bus, the core's watcher). The
+//! receiving half stays on the main thread and outlives each GPUI run: GPUI
+//! ends its run when the last window closes, and the program then waits on
+//! the same receiver, without a GPU, for the next request.
 
-use std::sync::mpsc::Receiver;
-use std::thread;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-use futures::channel::mpsc::{self, UnboundedReceiver};
+use futures::StreamExt as _;
+use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-use crate::Request;
+/// What the program asks of the UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Request {
+    /// Open another window.
+    OpenWindow,
+    /// Close every window and stop.
+    Quit,
+}
 
-const THREAD_NAME: &str = "nova-files-ui-requests";
-
-/// Returns an async stream of what arrives on `requests`. It ends when
-/// `requests` closes.
-pub fn forward(requests: Receiver<Request>) -> UnboundedReceiver<Request> {
+/// Creates the request channel.
+pub fn channel() -> (RequestSender, Requests) {
     let (sender, receiver) = mpsc::unbounded();
-    let spawned = thread::Builder::new()
-        .name(THREAD_NAME.to_owned())
-        .spawn(move || {
-            while let Ok(request) = requests.recv() {
-                if sender.unbounded_send(request).is_err() {
-                    return;
-                }
-            }
-        });
-    // Without the thread the stream ends at once and the UI quits, which is
-    // the right outcome when the OS can't start a thread.
-    drop(spawned);
-    receiver
+    (
+        RequestSender(sender),
+        Requests(Rc::new(RefCell::new(receiver))),
+    )
+}
+
+/// Sends requests to the UI. Cheap to clone and safe to share between
+/// threads.
+#[derive(Clone)]
+pub struct RequestSender(UnboundedSender<Request>);
+
+impl RequestSender {
+    /// Queues `request`. Dropped silently once the program has stopped
+    /// listening, since nothing is left to act on it.
+    pub fn send(&self, request: Request) {
+        self.0.unbounded_send(request).ok();
+    }
+}
+
+/// Receives requests, on the main thread only.
+#[derive(Clone)]
+pub struct Requests(Rc<RefCell<UnboundedReceiver<Request>>>);
+
+impl Requests {
+    /// Blocks until the next request; `None` once every sender is gone.
+    /// For use while no GPUI app runs on this thread.
+    pub fn wait(&self) -> Option<Request> {
+        futures::executor::block_on(self.next())
+    }
+
+    /// The next request; `None` once every sender is gone. The receiver is
+    /// borrowed only while polled, so a task that never resumes (its app
+    /// ended) doesn't keep it.
+    #[expect(
+        clippy::future_not_send,
+        reason = "the receiver stays on the main thread, with GPUI's tasks"
+    )]
+    pub async fn next(&self) -> Option<Request> {
+        futures::future::poll_fn(|cx| self.0.borrow_mut().poll_next_unpin(cx)).await
+    }
 }
