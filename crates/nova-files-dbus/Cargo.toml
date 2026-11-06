@@ -18,3 +18,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+nova-files-api.workspace = true
+zbus = "5"
+
+[dev-dependencies]
+nova-files-core.workspace = true
