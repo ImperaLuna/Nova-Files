@@ -1,19 +1,19 @@
 # One command per job. Run them inside `nix develop`.
 #
 # Recipes that take `crate` run on the whole workspace when it's left out:
-# `just test` or `just test nova-files-core`. `just check` runs everything
-# CI runs; use it before every push.
+# `just test` or `just test nova-files-core`. `just check` runs before every
+# push, `just mutants` once per PR.
+
+export CARGO_MUTANTS_JOBS := env("CARGO_MUTANTS_JOBS", "4")
 
 # List the recipes.
 default:
     @just --list
 
-# Everything CI runs: `nix flake check`, then mutation tests on the
-# lines changed since main (they need git history, which the Nix sandbox
-# doesn't have, so they can't run inside it).
+# The checks CI runs in the Nix sandbox. CI also runs `just mutants`, which
+# needs git history and so can't run inside the sandbox; run it once per PR.
 check:
     nix flake check
-    just mutants
 
 # Build one crate or the workspace.
 build crate="":
@@ -60,6 +60,7 @@ clippy-config:
     tools/check-clippy-config.sh
 
 # Mutation tests on lines changed since `base`; a survivor is an untested change.
+# Four builds at once by default; set CARGO_MUTANTS_JOBS to change it.
 mutants base="origin/main" crate="" *flags:
     mkdir -p target
     git diff {{ base }}... > target/mutants.diff

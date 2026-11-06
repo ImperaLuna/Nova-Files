@@ -90,5 +90,9 @@ jobs:
         run: nix develop --command cargo build --workspace --all-targets
       - name: Mutation tests
         if: github.event_name == 'pull_request'
-        # In place, so the builds reuse the cached target/ folder.
-        run: nix develop --command just mutants origin/${{ github.base_ref }} "" --in-place
+        # Two builds at once, not the local four: each copy of the tree needs
+        # its own target/ folder (about 7 GB), and the runner's disk can't
+        # hold four. Each copy starts from the cached target/ folder.
+        env:
+          CARGO_MUTANTS_JOBS: 2
+        run: nix develop --command just mutants origin/${{ github.base_ref }} "" --copy-target true

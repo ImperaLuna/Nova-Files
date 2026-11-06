@@ -119,7 +119,9 @@ real home. A bug fix comes with a test that fails without it.
 
 Work inside `nix develop`. `just` lists one command per job (`just test`,
 `just clippy nova-files-core`); most take an optional crate. Run
-`just check` (everything CI runs) before every push.
+`just check` (`nix flake check`) before every push. Run `just mutants` once
+per PR, after `just check` passes and before asking Codex for review; later
+fix rounds only rerun `just check`. CI runs both.
 
 Every change goes through a pull request.
 
