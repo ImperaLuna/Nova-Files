@@ -3,7 +3,7 @@
 # The public D-Bus interface that launchers and shells use to search and open
 # files.
 #
-# Allowed outside crates: zbus
+# Allowed outside crates: futures, zbus
 # Allowed workspace crates: nova-files-api
 
 [package]
@@ -18,3 +18,10 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# A one-shot channel, so a D-Bus call can await an answer from a thread.
+futures = { version = "0.3", default-features = false, features = ["std"] }
+nova-files-api.workspace = true
+zbus = "5"
+
+[dev-dependencies]
+nova-files-core.workspace = true

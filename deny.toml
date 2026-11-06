@@ -9,6 +9,9 @@ all-features = true
 [advisories]
 # A yanked crate is a warning: it doesn't fail the build on its own.
 yanked = "warn"
+# Unmaintained only fails for crates we depend on directly; the ones deep in
+# GPUI's and zbus's trees are theirs to replace. Vulnerabilities always fail.
+unmaintained = "workspace"
 
 [licenses]
 confidence-threshold = 0.9
@@ -23,6 +26,10 @@ allow = [
     "ISC",
     "Zlib",
     "Unicode-3.0",
+    "CC0-1.0",
+    "NCSA",
+    # File-level copyleft: changes to those files stay open; our code doesn't.
+    "MPL-2.0",
 ]
 
 [bans]
@@ -30,9 +37,27 @@ multiple-versions = "allow"
 wildcards = "deny"
 allow-wildcard-paths = true
 deny = [
-    # Threads and channels, no async runtime.
-    { crate = "tokio", reason = "threads and channels only, no async runtime" },
-    { crate = "async-std", reason = "threads and channels only, no async runtime" },
+    # No async runtime: threads and channels. GPUI's HTTP client pulls in
+    # tokio and async-std and can't be switched off, so only its crates may
+    # depend on them.
+    { crate = "tokio", reason = "threads and channels only, no async runtime", wrappers = [
+        "h2",
+        "hyper",
+        "hyper-rustls",
+        "hyper-util",
+        "tokio-rustls",
+        "tokio-socks",
+        "tokio-util",
+        "tower",
+        "wasm-bindgen-futures",
+        "zed-reqwest",
+    ] },
+    { crate = "async-std", reason = "threads and channels only, no async runtime", wrappers = [
+        "zed-async-tar",
+    ] },
+    # libc 0.2.190 dropped ENOATTR, which xattr 0.2 (under GPUI's HTTP
+    # client) still needs. Lift once GPUI moves to a newer xattr.
+    { crate = "libc:>=0.2.190", reason = "xattr 0.2, used by GPUI, needs ENOATTR" },
     # Nova Files has its own fanotify/inotify watcher.
     { crate = "notify", reason = "use the core's own fanotify/inotify watcher" },
     # The index is a rebuildable cache file, not a database.
