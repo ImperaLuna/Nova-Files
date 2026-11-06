@@ -26,9 +26,6 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 
 ## Rules
 
-- The UI never waits on the disk. Listing, stat, sizes, thumbnails, copies
-  and watches run off the UI thread and send results back; a slow or hung
-  mount never freezes a frame.
 - Check what the system offers (a trash, a portal, a mount service, a
   thumbnailer), never which desktop, distro or compositor is running.
 - Memory: decode images at the size they're shown, don't keep what isn't
@@ -36,22 +33,15 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 
 ## Engineering principles
 
-- One source of truth. A value used in more than one place (a color, size,
-  radius, duration, timeout, path, command name) is defined once and
-  referenced everywhere else: design values in the theme module, Rust
-  constants in the module that owns them. Never copy a literal into a
-  second file.
+- One source of truth, no hard-coded values. Every value (a color, size,
+  radius, opacity, gradient stop, easing, duration, timeout, path, command
+  name) is a named constant defined once, in the module that owns it, and
+  referenced everywhere else. Design values are theme tokens, even when one
+  component uses them (`radius::ROW`, not `14.0`); a component only refers
+  to tokens or derives ratios from them. When logic shows up twice, move it
+  into a shared function or component before adding a third copy.
 - Each module and file opens with a comment saying what it does and how.
   Read it before changing that code and keep it true in the same change.
-- No magic numbers or strings. Give values a named constant that says what
-  they mean (`radius::ROW`, not `14.0`). Every design value (colors,
-  opacities, gradient stops, easing) lives in the theme, even when one
-  component uses it; a component only refers to theme values or derives
-  ratios from them.
-- Don't repeat logic. When the same code shows up twice, move it into a
-  shared component or function before adding a third copy.
-- Names say what something is: no `tmp`, `data2` or single letters outside
-  short loops.
 - Small, focused files and components: each does one job.
 - Handle errors where they happen and show them in a useful form. No silent
   error swallowing or `unwrap()` on input that can fail (tests excepted).
@@ -63,8 +53,6 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
   the bug is general. If a workaround is truly unavoidable (an upstream
   bug), keep it in one place with a comment linking the issue and how to
   remove it.
-- Leave code cleaner than you found it, but keep refactors in their own
-  commit.
 - Reference apps (Sigma, Dux Files, Flea, Strata and others) are for
   learning the approach only. Write Nova Files' own code; never copy theirs.
 
@@ -101,11 +89,6 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
   each struct and enum) and cap their size.
 - Paths from config, `.desktop` files or other outside data must stay inside
   the folder they're meant for: no `..`, no absolute paths.
-- Network calls use HTTPS only, have a timeout and a size cap on the answer,
-  and back off on errors.
-- Secrets (tokens, passwords) live in types that don't derive `Debug`,
-  `Display` or `Serialize`, so they can't reach a log or a saved file by
-  accident.
 - Child processes get the environment they need, are always waited on, and
   have their output pipes drained.
 
@@ -131,15 +114,14 @@ real home. A bug fix comes with a test that fails without it.
 
 ## Commands
 
-Work inside `nix develop`: `cargo build`, `cargo test`, `cargo clippy` and
-`cargo fmt`. `nix build` builds the package.
+Work inside `nix develop`.
 
 Every change goes through a pull request.
 
 ## Review guidelines
 
 - Check the rules above, and look hardest for UI-thread blocking, races,
-  lost updates, missed file changes, data loss in file operations, waits
-  without a timeout and secrets that could reach a log.
+  lost updates, missed file changes, data loss in file operations and
+  waits without a timeout.
 - Each finding names the steps that trigger it, and says when they're rare.
 - Don't flag ratios derived from theme values.
