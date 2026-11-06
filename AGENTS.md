@@ -26,17 +26,12 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 
 ## Rules
 
-- The UI crate depends on `nova-files-api` alone: no file access, not even
-  for previews. It sends commands and gets events back, and never waits on
-  them, so a slow or hung mount never freezes a frame.
-- Each crate uses only the outside crates listed in its `Cargo.toml`
-  header comment; a new one comes with its reason in that comment.
-- Code that parses file contents (images, PDFs, video, fonts, archives)
-  runs only in a sandboxed helper process.
-- Threads and channels, no tokio or other async runtime.
-- Folder listings travel in batches, and large data is shared through
-  `Arc`, not copied.
-- The public D-Bus interface stays backward compatible.
+- The UI never waits on the disk. Listing, stat, sizes, thumbnails, copies
+  and watches run off the UI thread and send results back; a slow or hung
+  mount never freezes a frame.
+- Adding an outside crate needs a reason in the PR.
+- Other people's launchers call the D-Bus interface, so changes to it stay
+  backward compatible.
 - Check what the system offers (a trash, a portal, a mount service, a
   thumbnailer), never which desktop, distro or compositor is running.
 - Memory: decode images at the size they're shown, don't keep what isn't
@@ -148,7 +143,6 @@ Every change goes through a pull request.
 
 - Check the rules above, and look hardest for UI-thread blocking, races,
   lost updates, missed file changes, data loss in file operations, waits
-  without a timeout, secrets that could reach a log, and a crate reaching
-  past its allowed dependencies.
+  without a timeout and secrets that could reach a log.
 - Each finding names the steps that trigger it, and says when they're rare.
 - Don't flag ratios derived from theme values.
