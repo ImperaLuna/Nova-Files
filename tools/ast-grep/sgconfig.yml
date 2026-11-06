@@ -1,0 +1,4 @@
+# ast-grep project for Nova Files' own syntax checks. Run from the repo root:
+# `ast-grep scan --config tools/ast-grep/sgconfig.yml`.
+ruleDirs:
+  - rules

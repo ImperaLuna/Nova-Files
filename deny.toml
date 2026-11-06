@@ -1,0 +1,47 @@
+# cargo-deny: known vulnerabilities, licences, banned crates and sources.
+#
+# The per-crate allowed lists live at the top of each crate's Cargo.toml
+# (tools/check-deps.sh); this file bans what no crate may use at all.
+
+[graph]
+all-features = true
+
+[advisories]
+# A yanked crate is a warning: it doesn't fail the build on its own.
+yanked = "warn"
+
+[licenses]
+confidence-threshold = 0.9
+unused-allowed-license = "allow"
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = [
+    # Threads and channels, no async runtime.
+    { crate = "tokio", reason = "threads and channels only, no async runtime" },
+    { crate = "async-std", reason = "threads and channels only, no async runtime" },
+    # Nova Files has its own fanotify/inotify watcher.
+    { crate = "notify", reason = "use the core's own fanotify/inotify watcher" },
+    # The index is a rebuildable cache file, not a database.
+    { crate = "rusqlite", reason = "no database: the index is one mmapped file" },
+    { crate = "sqlx", reason = "no database: the index is one mmapped file" },
+    { crate = "sled", reason = "no database: the index is one mmapped file" },
+    { crate = "redb", reason = "no database: the index is one mmapped file" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
