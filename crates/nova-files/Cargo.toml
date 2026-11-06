@@ -18,3 +18,10 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+nova-files-api.workspace = true
+nova-files-core.workspace = true
+nova-files-dbus.workspace = true
+nova-files-ui.workspace = true
+
+[dev-dependencies]
+gpui = { version = "0.2.2", features = ["test-support"] }

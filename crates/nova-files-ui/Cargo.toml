@@ -3,7 +3,7 @@
 # The window. It sends commands to the core and draws from its events; it
 # never touches the disk.
 #
-# Allowed outside crates: gpui, gpui-component
+# Allowed outside crates: futures, gpui, gpui-component
 # Allowed workspace crates: nova-files-api
 
 [package]
@@ -18,3 +18,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+nova-files-api.workspace = true
+# An async channel, so events from the core's thread wake the window's task.
+futures = { version = "0.3", default-features = false, features = ["std"] }
+gpui = "0.2.2"
