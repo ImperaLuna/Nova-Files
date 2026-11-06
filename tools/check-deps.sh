@@ -44,7 +44,8 @@ while IFS=$'\t' read -r name manifest deps; do
             kind=outside
         fi
         if ! tr -s ' ' '\n' <<<"$allowed" | grep -qxF -- "$dep"; then
-            echo "$name depends on $dep, which is not in its allowed $kind crates ($manifest)"
+            echo "$name depends on $dep, which is not in its allowed $kind crates ($manifest)."
+            echo "  If it is really needed, add it to that line and say why in the PR."
             status=1
         fi
     done
