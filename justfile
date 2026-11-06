@@ -60,7 +60,7 @@ clippy-config:
     tools/check-clippy-config.sh
 
 # Mutation tests on lines changed since `base`; a survivor is an untested change.
-mutants base="origin/main" crate="":
+mutants base="origin/main" crate="" *flags:
     mkdir -p target
     git diff {{ base }}... > target/mutants.diff
-    cargo mutants --test-tool nextest --in-diff target/mutants.diff {{ if crate == "" { "--workspace" } else { "--package " + crate } }}
+    cargo mutants --test-tool nextest --in-diff target/mutants.diff {{ if crate == "" { "--workspace" } else { "--package " + crate } }} {{ flags }}
