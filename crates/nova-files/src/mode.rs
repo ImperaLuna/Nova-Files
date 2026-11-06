@@ -69,4 +69,13 @@ mod tests {
         assert!(mode(&["--frobnicate"]).is_err());
         assert!(mode(&["--service", "extra"]).is_err());
     }
+
+    #[test]
+    fn refusal_names_the_argument_and_the_usage() {
+        let error = mode(&["--frobnicate"]).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "unexpected argument --frobnicate; usage: nova-files [--service]"
+        );
+    }
 }

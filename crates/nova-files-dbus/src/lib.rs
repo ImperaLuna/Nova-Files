@@ -151,6 +151,31 @@ fn connect(
 /// # Errors
 /// When the application id doesn't make a valid object path.
 pub fn object_path() -> zbus::Result<OwnedObjectPath> {
-    let path = format!("/{}", APP_ID.replace('.', "/").replace('-', "_"));
+    object_path_for(APP_ID)
+}
+
+fn object_path_for(app_id: &str) -> zbus::Result<OwnedObjectPath> {
+    let path = format!("/{}", app_id.replace('.', "/").replace('-', "_"));
     Ok(ObjectPath::try_from(path)?.into())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn dashes_in_the_app_id_become_underscores() {
+        assert_eq!(
+            super::object_path_for("io.github.Example.My-App")
+                .unwrap()
+                .as_str(),
+            "/io/github/Example/My_App"
+        );
+    }
+
+    #[test]
+    fn object_path_follows_the_app_id() {
+        assert_eq!(
+            super::object_path().unwrap().as_str(),
+            "/io/github/ImperaLuna/NovaFiles"
+        );
+    }
 }

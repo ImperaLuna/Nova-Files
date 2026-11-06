@@ -3370,9 +3370,11 @@ name = "nova-files"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "nova-files-api",
  "nova-files-core",
  "nova-files-dbus",
  "nova-files-ui",
+ "zbus",
 ]
 
 [[package]]

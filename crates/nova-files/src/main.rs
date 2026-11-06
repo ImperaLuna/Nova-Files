@@ -20,8 +20,9 @@ use std::io::{self, Write as _};
 use std::process::ExitCode;
 use std::thread::{self, JoinHandle};
 
+use nova_files_api::Connector;
 use nova_files_dbus::{Bus, Started};
-use nova_files_ui::{Ended, Request, RequestSender};
+use nova_files_ui::{Ended, Request, RequestSender, Requests};
 
 use crate::mode::Mode;
 
@@ -63,16 +64,21 @@ fn run() -> Result<(), Box<dyn Error>> {
     };
 
     watch_core(core.thread, requests.clone())?;
+    show_windows(mode, &requests, &core.connector, &received);
+    Ok(())
+}
+
+/// Opens the first window in window mode. Then each `OpenWindow` while no
+/// window is open starts the UI again, until something asks it to quit.
+fn show_windows(mode: Mode, requests: &RequestSender, connector: &Connector, received: &Requests) {
     if mode == Mode::Window {
         requests.send(Request::OpenWindow);
     }
-    // Each OpenWindow while no window is open starts the UI again.
     while received.wait() == Some(Request::OpenWindow) {
-        if nova_files_ui::run(&core.connector, &received) == Ended::Quit {
+        if nova_files_ui::run(connector, received) == Ended::Quit {
             break;
         }
     }
-    Ok(())
 }
 
 /// Asks the UI to quit once the core thread ends, so the process ends with
