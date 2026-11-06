@@ -117,7 +117,12 @@ real home. A bug fix comes with a test that fails without it.
 
 ## Commands
 
-Work inside `nix develop`.
+Work inside `nix develop`. `just` lists one command per job (`just test`,
+`just clippy nova-files-core`); most take an optional crate. Run
+`just check` (the same `nix flake check` CI runs) before every push.
+
+A new outside crate goes into the "Allowed outside crates" line at the top
+of the crate's `Cargo.toml`, and the PR says why it's needed.
 
 Every change goes through a pull request.
 
