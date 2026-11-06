@@ -15,10 +15,13 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 
 - No explaining text in UI: if a UI needs an extra line to describe what a
   feature does or what a state means, the UX is wrong; fix the design
-  instead. Never add text that repeats what an icon, number or state already
-  shows (e.g. "Headphones · connected" in a connected list, "needs charging
-  soon" next to 5%, "battery" next to a battery icon). Titles are short
-  enough to fit; the key value (like a percentage) is always visible.
+  instead. Never add text that repeats what an icon, name or state already
+  shows. In a file manager that means: no subtitle under a section heading
+  ("Your recent files appear here"), no helper line under a toggle or field
+  ("Show files whose names start with a dot"), no sentence in an empty
+  folder (a quiet icon or "Empty" is enough), and no tooltip that repeats
+  its button's label. Titles are short enough to fit; the key value (a
+  size, a count, a progress percentage) is always visible.
 - Refine approved designs; don't redesign them.
 - Text from outside Nova Files (file names, file contents, metadata) is shown
   as plain text, whatever bytes it holds; a name that isn't valid UTF-8 still
