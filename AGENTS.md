@@ -11,6 +11,58 @@ This file is the only agent instruction file (Claude Code and Codex both read
 it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 `AGENTS.md`.
 
+## Architecture
+
+One program, `nova-files`, runs as one process with two halves: the **core**
+does the work (index, search, folder listing, watching, jobs, settings,
+theme) and the UI draws. In **service mode** only the core runs, with no
+window and no GPU; D-Bus starts it when a launcher searches. Opening a window
+joins the running process (single instance). The process exits 3 minutes
+after the last window, search or job ends, and nothing starts at login.
+
+Crates, each in `crates/<name>`, and the only outside crates each may use:
+
+- `nova-files`: start-up, single instance, service mode or window, wiring the
+  core to the UI. No logic of its own. Uses our crates only.
+- `nova-files-api`: the commands the UI sends, the events it gets back, and
+  the shared data types. Plain data, no I/O. Uses `std` only.
+- `nova-files-core`: search, folder listing, watching, jobs and their
+  journal, settings and theme. `rustix`, `serde`, `toml`.
+- `nova-files-index`: the on-disk index format. `memmap2`, `rustix`.
+- `nova-files-ui`: every window and view. `gpui`, `gpui-component`.
+- `nova-files-dbus`: the public D-Bus interface and launcher adapters. `zbus`.
+- `nova-files-thumbnailer`: a sandboxed helper program that thumbnails one
+  batch of files, then exits. `image`, `landlock`.
+
+Rules that follow from it:
+
+- The UI depends on `nova-files-api` alone and reaches the core only through
+  its commands and events. It never reads files, not even for previews.
+- The UI never waits on the core or the disk. Results arrive as events, so a
+  slow or hung mount never freezes a frame.
+- Folder listings travel in batches (about 1,000 entries per event), and
+  large data is shared through `Arc`, not copied.
+- Own the core, borrow the parsers, sandbox what we borrow. Code that parses
+  file contents (images, PDFs, video, fonts, archives) runs only inside the
+  thumbnailer or another sandboxed helper. Adding an outside crate means
+  adding it to the list above in the same PR, with the reason.
+- Work runs on threads with channels. Our crates stay free of tokio and
+  other async runtimes; `zbus` runs on its own executor.
+- The public D-Bus interface is the one stable surface, so changes to it stay
+  backward compatible. Everything else, `nova-files-api` included, may change
+  in any release.
+- The index holds names and metadata, never file contents. It's a cache: on
+  a version mismatch or damage, rebuild it. Rows store parent rows, and full
+  paths are rebuilt from them.
+- Settings live in one file the core owns and pushes live to every window
+  and launcher. Window state (size, tabs, last folder) belongs to the UI;
+  the core saves it as an opaque blob.
+- The core resolves the theme in order: the theme file in the config folder,
+  then the settings portal's light/dark mode and accent colour, then the
+  built-in defaults.
+- The core and UI share a process, so jobs keep a journal: a copy or move
+  cut off by a crash resumes on the next start.
+
 ## UI rules
 
 - No explaining text in UI: if a UI needs an extra line to describe what a
@@ -26,9 +78,6 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 
 ## Rules
 
-- The UI never waits on the disk. Listing, stat, sizes, thumbnails, copies
-  and watches run off the UI thread and send results back; a slow or hung
-  mount never freezes a frame.
 - Check what the system offers (a trash, a portal, a mount service, a
   thumbnailer), never which desktop, distro or compositor is running.
 - Memory: decode images at the size they're shown, don't keep what isn't
@@ -140,6 +189,7 @@ Every change goes through a pull request.
 
 - Check the rules above, and look hardest for UI-thread blocking, races,
   lost updates, missed file changes, data loss in file operations, waits
-  without a timeout and secrets that could reach a log.
+  without a timeout, secrets that could reach a log, and a crate using
+  anything outside its list in Architecture.
 - Each finding names the steps that trigger it, and says when they're rare.
 - Don't flag ratios derived from theme values.
