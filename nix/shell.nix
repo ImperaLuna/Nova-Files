@@ -12,6 +12,10 @@ build.craneLib.devShell {
     pkgs.rust-analyzer
     pkgs.cargo-mutants
     pkgs.just
+    # For the D-Bus tests outside `nix flake check`.
+    pkgs.dbus
   ];
   RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+  # GPUI loads these at run time; `cargo run` needs them as the package does.
+  LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath build.runtimeLibs;
 }

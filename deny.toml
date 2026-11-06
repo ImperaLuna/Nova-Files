@@ -9,6 +9,9 @@ all-features = true
 [advisories]
 # A yanked crate is a warning: it doesn't fail the build on its own.
 yanked = "warn"
+# Unmaintained only fails for crates we depend on directly; the ones deep in
+# GPUI's and zbus's trees are theirs to replace. Vulnerabilities always fail.
+unmaintained = "workspace"
 
 [licenses]
 confidence-threshold = 0.9
@@ -23,16 +26,23 @@ allow = [
     "ISC",
     "Zlib",
     "Unicode-3.0",
+    "CC0-1.0",
+    "NCSA",
+    # File-level copyleft: changes to those files stay open; our code doesn't.
+    "MPL-2.0",
 ]
 
 [bans]
 multiple-versions = "allow"
 wildcards = "deny"
 allow-wildcard-paths = true
+# No async runtime in our own code: threads and channels. That is held by
+# each crate's allowed list (tools/check-deps.sh), not banned here, because
+# GPUI's HTTP client pulls in tokio and that can't be switched off.
 deny = [
-    # Threads and channels, no async runtime.
-    { crate = "tokio", reason = "threads and channels only, no async runtime" },
-    { crate = "async-std", reason = "threads and channels only, no async runtime" },
+    # libc 0.2.190 dropped ENOATTR, which xattr 0.2 (under GPUI's HTTP
+    # client) still needs. Lift once GPUI moves to a newer xattr.
+    { crate = "libc:>=0.2.190", reason = "xattr 0.2, used by GPUI, needs ENOATTR" },
     # Nova Files has its own fanotify/inotify watcher.
     { crate = "notify", reason = "use the core's own fanotify/inotify watcher" },
     # The index is a rebuildable cache file, not a database.

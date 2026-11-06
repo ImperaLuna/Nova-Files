@@ -1,0 +1,7 @@
+# Build settings every cargo command in this repo shares.
+
+[env]
+# The application id: the D-Bus name, the D-Bus service file and, later, the
+# desktop file all use it. Rust reads it with `env!("NOVA_FILES_APP_ID")`
+# and nix/build.nix reads it from this file, so it is defined only here.
+NOVA_FILES_APP_ID = "io.github.ImperaLuna.NovaFiles"

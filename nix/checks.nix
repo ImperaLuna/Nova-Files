@@ -70,6 +70,8 @@ in
     // {
       inherit cargoArtifacts;
       cargoNextestExtraArgs = "--workspace --no-tests=warn";
+      # The D-Bus tests start a private dbus-daemon.
+      nativeCheckInputs = [ pkgs.dbus ];
     }
   );
 
