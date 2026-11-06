@@ -1,0 +1,20 @@
+# nova-files
+#
+# The program. Wiring only: it starts the core, the D-Bus service and the
+# window, and holds no logic of its own.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: nova-files-api, nova-files-core, nova-files-dbus, nova-files-index, nova-files-ui
+
+[package]
+name = "nova-files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

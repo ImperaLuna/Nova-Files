@@ -1,0 +1,20 @@
+# nova-files-api
+#
+# The commands, events and types the core and its clients share. Plain std
+# types, no I/O.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

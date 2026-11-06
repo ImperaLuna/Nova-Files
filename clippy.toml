@@ -1,0 +1,19 @@
+# Clippy settings for every crate. Clippy reads only the nearest clippy.toml
+# and never merges, so crates/nova-files-ui/clippy.toml repeats every line
+# here; tools/check-clippy-config.sh fails when the two drift apart.
+
+# Tests may unwrap, panic and print.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+
+# Size limits.
+too-many-lines-threshold = 80
+too-many-arguments-threshold = 5
+excessive-nesting-threshold = 5
+
+disallowed-methods = [
+    { path = "std::thread::sleep", reason = "event-driven, no polling: wait on a channel or event with a timeout" },
+]

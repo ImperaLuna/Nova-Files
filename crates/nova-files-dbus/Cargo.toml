@@ -1,0 +1,20 @@
+# nova-files-dbus
+#
+# The public D-Bus interface that launchers and shells use to search and open
+# files.
+#
+# Allowed outside crates: zbus
+# Allowed workspace crates: nova-files-api
+
+[package]
+name = "nova-files-dbus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

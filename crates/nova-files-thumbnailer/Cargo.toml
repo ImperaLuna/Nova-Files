@@ -1,0 +1,20 @@
+# nova-files-thumbnailer
+#
+# The sandboxed thumbnail helper. It renders one batch of thumbnails, then
+# exits.
+#
+# Allowed outside crates: image, landlock
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-thumbnailer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

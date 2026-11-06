@@ -117,7 +117,9 @@ real home. A bug fix comes with a test that fails without it.
 
 ## Commands
 
-Work inside `nix develop`.
+Work inside `nix develop`. `just` lists one command per job (`just test`,
+`just clippy nova-files-core`); most take an optional crate. Run
+`just check` (everything CI runs) before every push.
 
 Every change goes through a pull request.
 

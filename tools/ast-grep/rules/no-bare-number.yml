@@ -1,0 +1,37 @@
+# AGENTS.md "no hard-coded values": a number in code must be a named
+# constant, defined once (`const ROW_RADIUS: f32 = 14.0;`) and referenced
+# everywhere else. This flags number literals outside `const` and `static`
+# items. 0 and 1 are identities, not design values, so they pass, as do
+# attributes, enum discriminants, tuple fields (`pair.0`) and test code
+# (`#[cfg(test)]` modules and `#[test]` functions).
+id: no-bare-number
+language: rust
+severity: error
+message: Bare number. Name it as a const in the module that owns it.
+files:
+  - "crates/**/*.rs"
+ignores:
+  - "crates/*/tests/**"
+  - "crates/*/benches/**"
+rule:
+  any:
+    - kind: integer_literal
+    - kind: float_literal
+  not:
+    any:
+      - regex: '^[01](\.0*)?(_?([iu](8|16|32|64|128|size)|f32|f64))?$'
+      - inside: { kind: const_item, stopBy: end }
+      - inside: { kind: static_item, stopBy: end }
+      - inside: { kind: attribute_item, stopBy: end }
+      - inside: { kind: inner_attribute_item, stopBy: end }
+      - inside: { kind: enum_variant, stopBy: end }
+      - inside: { kind: field_expression, field: field }
+      # Test code: a `#[cfg(test)]` module or a `#[test]` function.
+      - inside:
+          kind: mod_item
+          stopBy: end
+          follows: { kind: attribute_item, regex: 'cfg\(test\)' }
+      - inside:
+          kind: function_item
+          stopBy: end
+          follows: { kind: attribute_item, regex: 'test\]$' }
