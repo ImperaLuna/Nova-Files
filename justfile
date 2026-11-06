@@ -8,9 +8,12 @@
 default:
     @just --list
 
-# Everything CI runs: the same `nix flake check` as GitHub.
+# Everything CI runs: `nix flake check`, then mutation tests on the
+# lines changed since main (they need git history, which the Nix sandbox
+# doesn't have, so they can't run inside it).
 check:
     nix flake check
+    just mutants
 
 # Build one crate or the workspace.
 build crate="":
