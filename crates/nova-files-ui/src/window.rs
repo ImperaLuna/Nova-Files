@@ -75,7 +75,7 @@ pub struct MainWindow {
     /// Thumbnails of the rows in `thumbnails_wanted`, by row.
     thumbnails: HashMap<usize, Arc<RenderImage>>,
     /// The window's scale factor when it last drew, for sizing thumbnails.
-    pub(crate) scale_factor: f32,
+    scale_factor: f32,
     /// The rows the core was last asked to make thumbnails for.
     thumbnails_wanted: Range<usize>,
     /// The listing asked for most recently; only its answer counts.
@@ -87,6 +87,15 @@ pub struct MainWindow {
     pub(crate) places: Vec<Place>,
     pub(crate) scroll: UniformListScrollHandle,
     _events: Task<()>,
+}
+
+/// A thumbnail shrunk for row `index` of listing `id`, `side` device
+/// pixels across.
+struct Shrunk {
+    id: ListingId,
+    index: usize,
+    side: u32,
+    image: RenderImage,
 }
 
 /// Delivers the core's events into the window's async channel.
@@ -347,32 +356,63 @@ impl MainWindow {
         }
     }
 
+    /// The window is drawing at `scale_factor`. Thumbnails shrunk for
+    /// another scale (the window moved to another screen) are dropped and
+    /// asked for again: an empty request first, so the core sends them anew.
+    pub(crate) fn set_scale_factor(&mut self, scale_factor: f32) {
+        let before = self.thumbnail_side();
+        self.scale_factor = scale_factor;
+        if self.thumbnail_side() == before {
+            return;
+        }
+        self.thumbnails.clear();
+        if let Some(listing) = &self.listing
+            && !self.thumbnails_wanted.is_empty()
+            && let Some(connection) = &self.connection
+        {
+            let forget = Command::Thumbnails {
+                id: listing.id,
+                first: EntryId(0),
+                count: 0,
+            };
+            connection.send(forget).ok();
+        }
+        self.thumbnails_wanted = 0..0;
+    }
+
+    /// A thumbnail's side in device pixels at the current scale.
+    fn thumbnail_side(&self) -> u32 {
+        thumbnail::device_side(size::THUMBNAIL, self.scale_factor)
+    }
+
     /// Shrinks row `index`'s thumbnail off the UI thread, then keeps it.
     fn shrink_thumbnail(&self, id: ListingId, index: usize, png: Arc<[u8]>, cx: &Context<Self>) {
-        let side = thumbnail::device_side(size::THUMBNAIL, self.scale_factor);
+        let side = self.thumbnail_side();
         let shrinking = cx
             .background_executor()
             .spawn(async move { thumbnail::shrink(&png, side) });
         cx.spawn(async move |this, cx| {
             let Some(image) = shrinking.await else { return };
-            this.update(cx, |this, cx| this.thumbnail_ready(id, index, image, cx))
+            let made = Shrunk {
+                id,
+                index,
+                side,
+                image,
+            };
+            this.update(cx, |this, cx| this.thumbnail_ready(made, cx))
                 .ok();
         })
         .detach();
     }
 
-    /// Keeps a shrunk thumbnail if its row is still wanted.
-    fn thumbnail_ready(
-        &mut self,
-        id: ListingId,
-        index: usize,
-        image: RenderImage,
-        cx: &mut Context<Self>,
-    ) {
-        if self.listing.as_ref().map(|listing| listing.id) == Some(id)
-            && self.thumbnails_wanted.contains(&index)
+    /// Keeps a thumbnail shrunk to `side` if its row is still wanted and
+    /// the window still draws at that size.
+    fn thumbnail_ready(&mut self, made: Shrunk, cx: &mut Context<Self>) {
+        if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
+            && self.thumbnails_wanted.contains(&made.index)
+            && made.side == self.thumbnail_side()
         {
-            self.thumbnails.insert(index, Arc::new(image));
+            self.thumbnails.insert(made.index, Arc::new(made.image));
             cx.notify();
         }
     }
