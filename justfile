@@ -60,8 +60,15 @@ clippy-config:
     tools/check-clippy-config.sh
 
 # Mutation tests on lines changed since `base`; a survivor is an untested change.
-# Four builds at once by default; set CARGO_MUTANTS_JOBS to change it.
+# Four builds at once by default; set CARGO_MUTANTS_JOBS to change it. With no
+# Rust lines changed there is nothing to mutate, so it stops before building.
 mutants base="origin/main" crate="" *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
     mkdir -p target
-    git diff {{ base }}... > target/mutants.diff
+    git diff {{ base }}... -- '*.rs' > target/mutants.diff
+    if [ ! -s target/mutants.diff ]; then
+        echo "No Rust changes since {{ base }}, nothing to mutate."
+        exit 0
+    fi
     cargo mutants --test-tool nextest --in-diff target/mutants.diff {{ if crate == "" { "--workspace" } else { "--package " + crate } }} {{ flags }}
