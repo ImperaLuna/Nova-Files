@@ -94,6 +94,23 @@ fn images_get_scaled_thumbnails_with_their_uri_and_mtime() {
     }
 }
 
+/// A photo-sized image, several MB once decoded: well inside the decode
+/// limit.
+const PHOTO_WIDTH: u32 = 1600;
+const PHOTO_HEIGHT: u32 = 1200;
+
+#[test]
+fn a_photo_sized_image_is_within_the_decode_limit() {
+    let folder = TempFolder::new("photo");
+    let thumbnails = folder.0.join("thumbnails");
+    let source = folder.0.join("big.png");
+    RgbImage::new(PHOTO_WIDTH, PHOTO_HEIGHT)
+        .save_with_format(&source, ImageFormat::Png)
+        .unwrap();
+
+    assert_eq!(run(&thumbnails, &[(&source, "b.png")]), ["ok"]);
+}
+
 #[test]
 fn an_image_is_known_by_its_content_not_its_name() {
     let folder = TempFolder::new("content");
