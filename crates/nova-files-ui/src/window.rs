@@ -205,11 +205,6 @@ impl MainWindow {
         })
     }
 
-    /// The scroll position of the list on screen.
-    pub const fn scroll(&self) -> &UniformListScrollHandle {
-        &self.scroll
-    }
-
     /// The thumbnail of row `index`, once the core has sent it.
     pub fn thumbnail(&self, index: usize) -> Option<&Arc<RenderImage>> {
         self.thumbnails.get(&index)
@@ -242,6 +237,11 @@ impl MainWindow {
         }
         self.thumbnails.retain(|index, _| wanted.contains(index));
         self.thumbnails_wanted = wanted;
+    }
+
+    /// The scroll position of the list on screen.
+    pub const fn scroll(&self) -> &UniformListScrollHandle {
+        &self.scroll
     }
 
     pub fn places(&self) -> &[Place] {
@@ -334,9 +334,8 @@ impl MainWindow {
                 self.details.extend_from_slice(&details);
                 cx.notify();
             }
-            Event::Thumbnail { id, entry, png }
-                if self.listing.as_ref().map(|listing| listing.id) == Some(id) =>
-            {
+            // Checked against the listing once shrunk, when it counts.
+            Event::Thumbnail { id, entry, png } => {
                 if let Ok(index) = usize::try_from(entry.0)
                     && self.thumbnails_wanted.contains(&index)
                 {
@@ -344,10 +343,8 @@ impl MainWindow {
                 }
             }
             // An answer for a folder the window has since moved away from.
-            Event::FolderListed(_)
-            | Event::FolderUnreadable { .. }
-            | Event::DetailsRead { .. }
-            | Event::Thumbnail { .. } => {}
+            Event::FolderListed(_) | Event::FolderUnreadable { .. } | Event::DetailsRead { .. } => {
+            }
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);
@@ -359,7 +356,7 @@ impl MainWindow {
     /// The window is drawing at `scale_factor`. Thumbnails shrunk for
     /// another scale (the window moved to another screen) are dropped and
     /// asked for again: an empty request first, so the core sends them anew.
-    pub(crate) fn set_scale_factor(&mut self, scale_factor: f32) {
+    pub fn set_scale_factor(&mut self, scale_factor: f32) {
         let before = self.thumbnail_side();
         self.scale_factor = scale_factor;
         if self.thumbnail_side() == before {
