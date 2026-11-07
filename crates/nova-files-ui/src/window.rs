@@ -4,8 +4,10 @@
 //! The window never touches the disk. Going somewhere sends the core a
 //! `ListFolder` with a new id and keeps showing the current folder until
 //! the answer for that id arrives; answers for older ids are dropped. A
-//! folder that can't be read leaves the window where it was; if the window
-//! has no folder yet, it falls back to the home folder, then the root.
+//! folder that can't be read leaves the window where it was (reading it
+//! again if its details were still coming, since asking cancelled them); if
+//! the window has no folder yet, it falls back to the home folder, then the
+//! root.
 //! Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
 //! them, so Up goes where the path on screen says.
 //!
@@ -19,9 +21,11 @@ use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{Context, EventEmitter, Task, UniformListScrollHandle};
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, EntryId, EntryKind, Event, EventSink, Listing,
-    ListingId, Place,
+    ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
+    Listing, ListingId, Place,
 };
+
+use crate::columns::{self, ColumnText};
 
 /// What the window knows about the core.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +56,9 @@ pub struct MainWindow {
     connection: Option<Connection>,
     /// The folder on screen, once its first listing has arrived.
     pub(crate) listing: Option<Listing>,
+    /// The details of the listing's first entries, in entry order; the
+    /// rest are still being read.
+    pub(crate) details: Vec<Details>,
     /// The listing asked for most recently; only its answer counts.
     asked: Option<ListingId>,
     next_listing: u64,
@@ -117,6 +124,7 @@ impl MainWindow {
             status,
             connection,
             listing: None,
+            details: Vec::new(),
             asked: None,
             next_listing: 0,
             // Popped from the end: home first, then the root.
@@ -138,6 +146,11 @@ impl MainWindow {
         self.listing.as_ref().map(|listing| listing.path.as_path())
     }
 
+    /// Whether a folder asked for hasn't answered yet.
+    pub const fn waiting(&self) -> bool {
+        self.asked.is_some()
+    }
+
     /// The names on screen, in order.
     pub fn entry_names(&self) -> Vec<String> {
         self.listing.as_ref().map_or_else(Vec::new, |listing| {
@@ -147,6 +160,23 @@ impl MainWindow {
                 .map(|entry| entry.name.to_string_lossy().into_owned())
                 .collect()
         })
+    }
+
+    /// The Modified, Type and Size text of entry `index` on screen. Modified
+    /// and Size are empty until the core has read that entry's details.
+    pub fn columns(&self, index: usize) -> Option<ColumnText> {
+        let entry = self.listing.as_ref()?.entries.get(index)?;
+        let details = self.details.get(index).copied().unwrap_or_default();
+        Some(ColumnText {
+            modified: details.modified.map(columns::modified).unwrap_or_default(),
+            type_name: columns::type_name(&entry.name, entry.kind),
+            size: details.size.map(columns::size).unwrap_or_default(),
+        })
+    }
+
+    /// The scroll position of the list on screen.
+    pub const fn scroll(&self) -> &UniformListScrollHandle {
+        &self.scroll
     }
 
     pub fn places(&self) -> &[Place] {
@@ -199,22 +229,45 @@ impl MainWindow {
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
                 self.asked = None;
                 let path = listing.path.clone();
+                // Read again in place: keep the scroll position.
+                let same_folder = self.folder() == Some(path.as_path());
                 self.listing = Some(listing);
-                self.scroll = UniformListScrollHandle::new();
+                self.details = Vec::new();
+                if !same_folder {
+                    self.scroll = UniformListScrollHandle::new();
+                }
                 cx.emit(WindowEvent::Opened(path));
                 cx.notify();
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
                 self.asked = None;
-                if self.listing.is_none()
-                    && let Some(fallback) = self.fallbacks.pop()
-                {
-                    self.open(&fallback);
+                match &self.listing {
+                    None => {
+                        if let Some(fallback) = self.fallbacks.pop() {
+                            self.open(&fallback);
+                        }
+                    }
+                    // Asking cancelled the details still on their way, so
+                    // the folder on screen is read again, once: not when it
+                    // is the folder that was just refused.
+                    Some(listing)
+                        if self.details.len() < listing.entries.len() && listing.path != path =>
+                    {
+                        let shown = listing.path.clone();
+                        self.open(&shown);
+                    }
+                    Some(_) => {}
                 }
                 cx.emit(WindowEvent::Refused(path));
             }
-            // An answer for a folder the window has since moved away from,
-            // or details the list has no columns for yet.
+            Event::DetailsRead { id, first, details }
+                if self.listing.as_ref().map(|listing| listing.id) == Some(id)
+                    && usize::try_from(first.0).ok() == Some(self.details.len()) =>
+            {
+                self.details.extend_from_slice(&details);
+                cx.notify();
+            }
+            // An answer for a folder the window has since moved away from.
             Event::FolderListed(_) | Event::FolderUnreadable { .. } | Event::DetailsRead { .. } => {
             }
             Event::Places(places) => {

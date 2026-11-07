@@ -1,9 +1,10 @@
 //! Draws the main window: a toolbar with Up and the folder's path, the
-//! places column, and the folder's entries.
+//! places column, and the folder's entries under a column header.
 //!
 //! The entries are a `uniform_list`, which builds only the rows on screen,
 //! so a folder of any size costs the same to draw. Each row is an icon slot
-//! and a name. Every element a test clicks carries a debug selector:
+//! and a name, then Modified, Type and Size; Modified and Size stay empty
+//! until the core has read that entry's details. Every element a test clicks carries a debug selector:
 //! `up`, `place-<n>` and `entry-<n>`, counted from 0.
 
 use gpui::{
@@ -33,7 +34,16 @@ impl Render for MainWindow {
                     .flex_1()
                     .min_h_0()
                     .child(self.places_column(cx))
-                    .child(self.entries(cx)),
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
+                            .p(size::PAD)
+                            .child(column_header())
+                            .child(self.entries(cx)),
+                    ),
             )
     }
 }
@@ -142,16 +152,25 @@ impl MainWindow {
                 };
                 listing
                     .entries
-                    .get(range)
+                    .get(range.clone())
                     .unwrap_or_default()
                     .iter()
-                    .map(|entry| {
+                    .zip(range.start..)
+                    .map(|(entry, index)| {
                         let id = entry.id;
+                        let text = this.columns(index).unwrap_or_default();
                         let name = SharedString::from(entry.name.to_string_lossy().into_owned());
-                        let index = usize::try_from(id.0).unwrap_or_default();
-                        let row = row(("entry", index), format!("entry-{index}"))
-                            .child(kind_icon(entry.kind))
-                            .child(div().min_w_0().truncate().child(name));
+                        let row = row(("entry", index), format!("entry-{index}")).child(cells(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(size::GAP)
+                                .child(kind_icon(entry.kind))
+                                .child(div().min_w_0().truncate().child(name)),
+                            text.modified,
+                            text.type_name,
+                            text.size,
+                        ));
                         match entry.kind {
                             EntryKind::Folder => row
                                 .cursor_pointer()
@@ -167,9 +186,54 @@ impl MainWindow {
         )
         .track_scroll(&self.scroll)
         .flex_1()
-        .h_full()
-        .p(size::PAD)
     }
+}
+
+/// The labels above the entries, lined up with [`cells`].
+fn column_header() -> impl IntoElement {
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .h(size::HEADER_HEIGHT)
+        .px(size::PAD)
+        .text_size(size::TEXT_SMALL)
+        .text_color(rgb(color::TEXT_DIM))
+        .border_b(size::DIVIDER)
+        .border_color(rgb(color::DIVIDER))
+        .child(cells(
+            div().child(NAME_LABEL),
+            MODIFIED_LABEL,
+            TYPE_LABEL,
+            SIZE_LABEL,
+        ))
+}
+
+/// One line of the columns: the name takes what the others leave.
+fn cells(
+    name: impl IntoElement,
+    modified: impl Into<SharedString>,
+    type_name: impl Into<SharedString>,
+    size_text: impl Into<SharedString>,
+) -> impl IntoElement {
+    let column = |width, text: SharedString| {
+        div()
+            .flex_none()
+            .w(width)
+            .truncate()
+            .text_color(rgb(color::TEXT_DIM))
+            .child(text)
+    };
+    div()
+        .flex()
+        .flex_1()
+        .min_w_0()
+        .items_center()
+        .gap(size::GAP)
+        .child(div().flex_1().min_w_0().child(name))
+        .child(column(size::MODIFIED_WIDTH, modified.into()))
+        .child(column(size::TYPE_WIDTH, type_name.into()))
+        .child(column(size::SIZE_WIDTH, size_text.into()).text_right())
 }
 
 /// One row of either list: icon slot and label, highlighted under the
@@ -218,6 +282,10 @@ fn place_name(place: &Place) -> SharedString {
 }
 
 const HOME_LABEL: &str = "Home";
+const NAME_LABEL: &str = "Name";
+const MODIFIED_LABEL: &str = "Modified";
+const TYPE_LABEL: &str = "Type";
+const SIZE_LABEL: &str = "Size";
 
 #[cfg(test)]
 mod tests {

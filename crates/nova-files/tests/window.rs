@@ -1,7 +1,8 @@
 //! A window and the real core, wired as the program wires them, against a
 //! real temp folder tree: the window connects, opens its folder, and goes
 //! into a folder, up, or to a place when clicked. A folder that can't be
-//! read leaves it where it was.
+//! read leaves it where it was. Each entry's Modified, Type and Size fill
+//! in once the core has read them.
 
 #![expect(
     clippy::unwrap_used,
@@ -244,4 +245,31 @@ async fn clicking_a_place_opens_it(cx: &mut TestAppContext) {
     click(cx, "place-0");
 
     wait_for_folder(&view, cx, &home).await;
+}
+
+#[gpui::test]
+async fn columns_fill_in_after_the_names(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree();
+    let (view, cx) = open_on(cx, tree.path()).await;
+
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.columns(1).is_some_and(|text| !text.size.is_empty())
+    })
+    .await;
+
+    view.read_with(cx, |view, _| {
+        let folder = view.columns(0).unwrap();
+        assert_ne!(folder.modified, "");
+        assert_eq!(
+            (folder.type_name.as_str(), folder.size.as_str()),
+            ("Folder", "")
+        );
+        let file = view.columns(1).unwrap();
+        assert_eq!(
+            (file.type_name.as_str(), file.size.as_str()),
+            ("Text", "0 B")
+        );
+        assert_eq!(view.columns(2), None);
+    });
 }

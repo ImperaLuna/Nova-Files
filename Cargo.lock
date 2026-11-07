@@ -3523,6 +3523,7 @@ version = "0.1.0"
 name = "nova-files-ui"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "futures",
  "gpui",
  "gpui_platform",

@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 mod assets;
+mod columns;
 mod requests;
 mod theme;
 mod view;
@@ -23,6 +24,7 @@ use std::rc::Rc;
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
 use nova_files_api::Connector;
 
+pub use columns::ColumnText;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
 
