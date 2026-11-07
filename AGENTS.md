@@ -123,7 +123,7 @@ Work inside `nix develop`. `just` lists one command per job (`just test`,
 per PR, after `just check` passes and before asking Codex for review; later
 fix rounds only rerun `just check`. CI runs both. Paste the run's last line
 (`N mutants tested in ...: ...`) into the PR description: CI's mutation job
-fails at once without it, or when it reports missed mutants. A mutant no test
+fails at once without it, or when it reports missed or timed-out mutants. A mutant no test
 can ever catch goes in `exclude_re` in `.cargo/mutants.toml`, with a reason,
 through its own PR off main.
 
