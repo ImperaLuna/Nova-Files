@@ -37,19 +37,38 @@ pub fn read_folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<Vec<Entr
     if !fs::metadata(path)?.is_dir() {
         return Err(Stopped::Unreadable(Unreadable::NotAFolder));
     }
-    let mut found = Vec::new();
-    for item in fs::read_dir(path)? {
-        if cancelled() {
-            return Err(Stopped::Cancelled);
-        }
-        // An entry that vanished between the folder read and this one is
-        // simply not there any more.
-        let Ok(item) = item else { continue };
-        let Ok(kind) = kind_of(&item) else { continue };
-        found.push((item.file_name(), kind));
+    if cancelled() {
+        return Err(Stopped::Cancelled);
     }
-    found.sort_by_cached_key(sort_key);
-    let entries = found
+    let mut items = fs::read_dir(path)?;
+    let mut found = Vec::new();
+    // Asked before each step, since each step can read the disk.
+    while !cancelled() {
+        let Some(item) = items.next() else {
+            found.sort_by_cached_key(sort_key);
+            return Ok(numbered(found));
+        };
+        match item.and_then(|item| Ok((item.file_name(), kind_of(&item)?))) {
+            Ok(entry) => found.push(entry),
+            Err(error) => vanished(error)?,
+        }
+    }
+    Err(Stopped::Cancelled)
+}
+
+/// Passes over an entry that vanished between the folder read and this
+/// one: it is simply not there any more. Any other error is the folder's.
+fn vanished(error: io::Error) -> Result<(), Stopped> {
+    if error.kind() == io::ErrorKind::NotFound {
+        Ok(())
+    } else {
+        Err(error.into())
+    }
+}
+
+/// The sorted entries, each with its position as its id.
+fn numbered(found: Vec<(OsString, EntryKind)>) -> Vec<Entry> {
+    found
         .into_iter()
         .zip(0..)
         .map(|((name, kind), index)| Entry {
@@ -57,8 +76,7 @@ pub fn read_folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<Vec<Entr
             name,
             kind,
         })
-        .collect();
-    Ok(entries)
+        .collect()
 }
 
 fn kind_of(item: &fs::DirEntry) -> io::Result<EntryKind> {
@@ -111,6 +129,15 @@ mod tests {
             .into_iter()
             .map(|(name, _)| name.to_string_lossy().into_owned())
             .collect()
+    }
+
+    #[test]
+    fn only_a_vanished_entry_is_passed_over() {
+        assert_eq!(vanished(io::ErrorKind::NotFound.into()), Ok(()));
+        assert_eq!(
+            vanished(io::Error::other("disk failed")),
+            Err(Stopped::Unreadable(Unreadable::Failed))
+        );
     }
 
     #[test]
