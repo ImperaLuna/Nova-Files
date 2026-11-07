@@ -140,7 +140,7 @@ fn open_refuses_uris_that_are_not_local_files() {
     let platform_data: HashMap<&str, zbus::zvariant::Value<'_>> = HashMap::new();
     let uris = vec!["file:///tmp", "https://example.com"];
 
-    let answer = application.call::<_, _, ()>("Open", &(uris, "", platform_data));
+    let answer = application.call::<_, _, ()>("Open", &(uris, platform_data));
 
     assert!(
         matches!(&answer, Err(zbus::Error::MethodError(name, _, _)) if name.as_str() == "org.freedesktop.DBus.Error.InvalidArgs"),

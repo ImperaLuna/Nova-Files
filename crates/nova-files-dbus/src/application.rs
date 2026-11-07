@@ -55,10 +55,9 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Application<F> {
     fn open(
         &self,
         uris: Vec<String>,
-        hint: String,
         platform_data: HashMap<String, OwnedValue>,
     ) -> fdo::Result<()> {
-        drop((hint, platform_data));
+        drop(platform_data);
         let folders = uris
             .into_iter()
             .map(|text| {
