@@ -1,0 +1,36 @@
+# A required check: a stacked pull request (base isn't main) may change
+# code only. Docs, agent rules, CI and tooling go in their own pull request
+# off main (tools/ci-stack-guard.sh has the list). A pull request based on
+# main passes at once.
+#
+# `edited` reruns it when a pull request's base changes, such as GitHub
+# retargeting a stack onto main after the one below merges.
+name: Stack guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: stack-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  stack-guard:
+    name: stack holds code only
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+        if: github.base_ref != 'main'
+        with:
+          # The merge commit and its base parent, to diff against.
+          fetch-depth: 2
+      - name: Check the changed files
+        if: github.base_ref != 'main'
+        env:
+          BASE: ${{ github.base_ref }}
+        run: git diff --name-only HEAD^1 HEAD | tools/ci-stack-guard.sh "$BASE"
