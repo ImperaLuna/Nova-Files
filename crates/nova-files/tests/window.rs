@@ -56,7 +56,7 @@ async fn open_on<'a>(
     cx.executor().allow_parking();
     let core = nova_files_core::spawn().unwrap();
     let start = folder.to_owned();
-    let (view, cx) = cx.add_window_view(|_, cx| MainWindow::new(&core.connector, start, cx));
+    let (view, cx) = cx.add_window_view(|_, cx| MainWindow::new(&core.connector, &start, cx));
     wait_for_folder(&view, cx, folder).await;
     (view, cx)
 }
@@ -87,7 +87,7 @@ fn window_without_a_core_still_opens(cx: &mut TestAppContext) {
     let core = nova_files_core::spawn_with_idle_exit(std::time::Duration::ZERO).unwrap();
     core.thread.join().unwrap();
 
-    let window = cx.add_window(|_, cx| MainWindow::new(&core.connector, PathBuf::from("/"), cx));
+    let window = cx.add_window(|_, cx| MainWindow::new(&core.connector, Path::new("/"), cx));
     let view = window.root(cx).unwrap();
 
     view.read_with(cx, |view, _| assert_eq!(view.status(), CoreStatus::Gone));
@@ -144,6 +144,33 @@ async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContex
         assert_eq!(view.folder(), Some(tree.path()));
         assert_eq!(view.entry_names(), ["Projects", "notes.txt"]);
     });
+}
+
+#[gpui::test]
+async fn unreadable_start_folder_falls_back_to_home(cx: &mut TestAppContext) {
+    let tree = TempFolder::tree();
+    cx.executor().allow_parking();
+    let core = nova_files_core::spawn().unwrap();
+    let missing = tree.path().join("missing");
+    let (view, cx) = cx.add_window_view(|_, cx| MainWindow::new(&core.connector, &missing, cx));
+
+    view.condition::<WindowEvent>(cx, |view, _| view.folder().is_some())
+        .await;
+
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.folder(), Some(nova_files_ui::home_folder().as_path()));
+    });
+}
+
+#[gpui::test]
+async fn dots_in_a_path_are_tidied(cx: &mut TestAppContext) {
+    let tree = TempFolder::tree();
+    let dotted = tree.path().join("Projects").join("..");
+    cx.executor().allow_parking();
+    let core = nova_files_core::spawn().unwrap();
+    let (view, cx) = cx.add_window_view(|_, cx| MainWindow::new(&core.connector, &dotted, cx));
+
+    wait_for_folder(&view, cx, tree.path()).await;
 }
 
 #[gpui::test]

@@ -16,14 +16,13 @@ mod window;
 
 use std::cell::Cell;
 use std::io::{self, Write as _};
-use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
 use nova_files_api::Connector;
 
 pub use requests::{Request, RequestSender, Requests, channel};
-pub use window::{CoreStatus, MainWindow, WindowEvent};
+pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
 
 /// Why [`run`] returned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,14 +76,6 @@ struct RequestLoop {
 
 impl Global for RequestLoop {}
 
-/// Where a new window opens: the home folder, or the root folder on a
-/// system without one.
-fn start_folder() -> PathBuf {
-    std::env::home_dir().unwrap_or_else(|| PathBuf::from(ROOT_FOLDER))
-}
-
-const ROOT_FOLDER: &str = "/";
-
 /// Opens a main window centred on the main display.
 fn open_window(connector: &Connector, cx: &mut App) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
@@ -94,9 +85,9 @@ fn open_window(connector: &Connector, cx: &mut App) {
         ..WindowOptions::default()
     };
     let connector = connector.clone();
-    let folder = start_folder();
+    let folder = home_folder();
     let opened = cx.open_window(options, move |_window, cx| {
-        cx.new(|cx| MainWindow::new(&connector, folder, cx))
+        cx.new(|cx| MainWindow::new(&connector, &folder, cx))
     });
     if let Err(error) = opened {
         // The display refused a window; any open ones carry on. Until there
