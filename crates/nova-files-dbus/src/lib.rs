@@ -93,7 +93,7 @@ impl RunningInstance {
         let proxy = Proxy::new(&self.connection, APP_ID, &self.path, APPLICATION_INTERFACE)?;
         let uris = vec![uri::file_uri(folder)];
         let platform_data: HashMap<&str, Value<'_>> = HashMap::new();
-        proxy.call::<_, _, ()>("Open", &(uris, "", platform_data))
+        proxy.call::<_, _, ()>("Open", &(uris, platform_data))
     }
 }
 
