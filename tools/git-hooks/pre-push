@@ -23,22 +23,25 @@ while read -r _local_ref local_sha remote_ref _remote_sha; do
     branch=${remote_ref#refs/heads/}
     [ "$branch" = main ] && continue
 
-    parent="" parent_base="" fewest=""
+    # The parent is the nearest pushed branch whose tip this branch holds.
+    # A branch stacked on this one never qualifies: it has commits this
+    # one lacks. A parent updated since this branch was built doesn't
+    # either; CI's check still covers that case.
+    parent="" fewest=""
     while read -r ref; do
         case $ref in "$main" | "refs/remotes/$remote/HEAD" | "refs/remotes/$remote/$branch") continue ;; esac
-        base=$(git merge-base "$ref" "$local_sha") || continue
-        # Sharing only main's history isn't stacking, and a branch stacked
-        # on this one (it holds all of it) isn't its parent.
-        git merge-base --is-ancestor "$base" "$main" && continue
-        [ "$base" = "$local_sha" ] && continue
-        count=$(git rev-list --count "$base..$local_sha")
+        git merge-base --is-ancestor "$ref" "$local_sha" || continue
+        # A branch already in main isn't a stack parent.
+        git merge-base --is-ancestor "$ref" "$main" && continue
+        count=$(git rev-list --count "$ref..$local_sha")
+        [ "$count" -eq 0 ] && continue
         if [ -z "$fewest" ] || [ "$count" -lt "$fewest" ]; then
-            parent=${ref#refs/remotes/"$remote"/} parent_base=$base fewest=$count
+            parent=${ref#refs/remotes/"$remote"/} fewest=$count
         fi
     done < <(git for-each-ref --format='%(refname)' "refs/remotes/$remote/")
 
     [ -n "$parent" ] || continue
-    if ! git diff --name-only "$parent_base" "$local_sha" | "$guard" "$parent"; then
+    if ! git diff --name-only -z "refs/remotes/$remote/$parent" "$local_sha" | "$guard" "$parent"; then
         echo "pre-push: refused to push $branch, which is stacked on $parent." >&2
         exit 1
     fi
