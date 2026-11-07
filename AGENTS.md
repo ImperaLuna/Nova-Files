@@ -126,9 +126,9 @@ fix rounds only rerun `just check`. CI runs both.
 Every change goes through a pull request. Push with `git push`, never
 through GitHub's file API, so the repo's pre-push hook runs (`nix develop`
 turns it on; elsewhere run `git config core.hooksPath tools/git-hooks`). A
-stacked pull request (base isn't main) changes code only: docs, this file,
-CI, Nix, tools/, the justfile and lint configs go in their own pull request
-off main.
+stacked pull request (base isn't main) changes code only: `crates/`,
+`data/`, `Cargo.toml` and `Cargo.lock`, without Markdown or lint configs.
+Everything else goes in its own pull request off main.
 
 ## Review guidelines
 
