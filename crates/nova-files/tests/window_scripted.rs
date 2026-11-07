@@ -307,3 +307,25 @@ fn another_scale_drops_the_thumbnails_and_asks_again(cx: &mut TestAppContext) {
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
     assert_eq!(core.thumbnail_requests(), [(0, 0)]);
 }
+
+#[gpui::test]
+fn a_thumbnail_arriving_asks_for_nothing_new(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = window(cx);
+    let id = answer_listing(&mut core, MANY);
+    cx.run_until_parked();
+    view.update(cx, |view, cx| {
+        view.scroll().0.borrow().base_handle.set_offset(SCROLLED);
+        cx.notify();
+    });
+    cx.run_until_parked();
+    let (first, count) = *core.thumbnail_requests().last().unwrap();
+    let row = first + count / 2;
+
+    core.send(thumbnail(id, row));
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| {
+        assert!(view.thumbnail(usize::try_from(row).unwrap()).is_some());
+    });
+    assert_eq!(core.thumbnail_requests(), []);
+}

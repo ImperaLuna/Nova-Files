@@ -150,8 +150,8 @@ impl MainWindow {
         uniform_list(
             "entries",
             count,
-            cx.processor(|this, range: std::ops::Range<usize>, _window, cx| {
-                this.show_rows(range.clone());
+            cx.processor(|this, range: std::ops::Range<usize>, window, cx| {
+                this.rows_drawn(range.clone(), window, cx);
                 let Some(listing) = &this.listing else {
                     return Vec::new();
                 };
