@@ -146,6 +146,11 @@ impl MainWindow {
         self.listing.as_ref().map(|listing| listing.path.as_path())
     }
 
+    /// Whether a folder asked for hasn't answered yet.
+    pub const fn waiting(&self) -> bool {
+        self.asked.is_some()
+    }
+
     /// The names on screen, in order.
     pub fn entry_names(&self) -> Vec<String> {
         self.listing.as_ref().map_or_else(Vec::new, |listing| {
@@ -238,8 +243,11 @@ impl MainWindow {
                         }
                     }
                     // Asking cancelled the details still on their way, so
-                    // the folder on screen is read again.
-                    Some(listing) if self.details.len() < listing.entries.len() => {
+                    // the folder on screen is read again, once: not when it
+                    // is the folder that was just refused.
+                    Some(listing)
+                        if self.details.len() < listing.entries.len() && listing.path != path =>
+                    {
                         let shown = listing.path.clone();
                         self.open(&shown);
                     }
