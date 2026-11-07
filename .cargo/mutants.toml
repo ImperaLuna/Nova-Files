@@ -13,6 +13,8 @@ exclude_re = [
     "nova-files-core/src/places\\.rs:.*replace places -> Vec<Place>",
     # Cancelling only saves a listing's remaining reads; no answer changes.
     "replace Client::cancel_listing with \\(\\)",
+    # Dropping a client cancels its listing, for the same reason.
+    "replace <impl Drop for Client>::drop with \\(\\)",
     # Open windows, so they need a display.
     "\\bshow_windows\\b",
     "nova-files-ui/src/lib\\.rs:.*\\brun\\b",
