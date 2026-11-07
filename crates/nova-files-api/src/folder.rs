@@ -1,5 +1,5 @@
-//! What a folder holds, as the core reports it: its entries, and why a
-//! folder couldn't be read.
+//! What a folder holds, as the core reports it: its entries, each entry's
+//! details, and why a folder couldn't be read.
 //!
 //! A listing is shared, not copied: the core hands one `Arc` to the window,
 //! however many entries it has.
@@ -7,6 +7,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 /// Names one listing request.
 ///
@@ -37,6 +38,16 @@ pub struct Entry {
     /// The name exactly as the disk has it, which may not be valid UTF-8.
     pub name: OsString,
     pub kind: EntryKind,
+}
+
+/// What the core reads about one entry after listing it. A field is `None`
+/// when the disk couldn't say (the entry vanished, or can't be read).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Details {
+    /// The file's size in bytes. Always `None` for a folder.
+    pub size: Option<u64>,
+    /// When the contents last changed.
+    pub modified: Option<SystemTime>,
 }
 
 /// A folder's entries: folders first, then files, each group A to Z.

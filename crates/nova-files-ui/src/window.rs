@@ -213,8 +213,10 @@ impl MainWindow {
                 }
                 cx.emit(WindowEvent::Refused(path));
             }
-            // An answer for a folder the window has since moved away from.
-            Event::FolderListed(_) | Event::FolderUnreadable { .. } => {}
+            // An answer for a folder the window has since moved away from,
+            // or details the list has no columns for yet.
+            Event::FolderListed(_) | Event::FolderUnreadable { .. } | Event::DetailsRead { .. } => {
+            }
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

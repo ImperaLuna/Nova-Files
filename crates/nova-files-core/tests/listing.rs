@@ -1,6 +1,6 @@
 //! Folder listing through the real core, against real temp folder trees:
-//! the order, links, empty folders, names that aren't UTF-8, and folders
-//! that can't be read.
+//! the order, links, empty folders, names that aren't UTF-8, folders that
+//! can't be read, and the details that follow a listing.
 
 #![expect(
     clippy::unwrap_used,
@@ -18,7 +18,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_api::{
-    Command, Connection, EntryId, EntryKind, Event, Listing, ListingId, PlaceKind, Unreadable,
+    Command, Connection, Details, EntryId, EntryKind, Event, Listing, ListingId, PlaceKind,
+    Unreadable,
 };
 
 /// How long a test waits for the core before it counts as a failure.
@@ -94,6 +95,29 @@ impl Client {
             .unwrap();
         self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
     }
+
+    /// The details of listing `id`'s `count` entries, with the entry each
+    /// batch started at.
+    fn details(&self, id: u64, count: usize) -> (Vec<u32>, Vec<Details>) {
+        let mut starts = Vec::new();
+        let mut all = Vec::new();
+        while all.len() < count {
+            match self.events.recv_timeout(ANSWER_TIMEOUT).unwrap() {
+                Event::DetailsRead {
+                    id: ListingId(got),
+                    first,
+                    details,
+                } if got == id => {
+                    assert_eq!(first.0 as usize, all.len(), "batches arrive in order");
+                    starts.push(first.0);
+                    all.extend_from_slice(&details);
+                }
+                other => panic!("expected details, got {other:?}"),
+            }
+        }
+        assert_eq!(all.len(), count);
+        (starts, all)
+    }
 }
 
 fn listing(event: Event) -> Listing {
@@ -139,6 +163,42 @@ fn lists_folders_first_then_files_each_a_to_z() {
     );
     let ids: Vec<EntryId> = listing.entries.iter().map(|entry| entry.id).collect();
     assert_eq!(ids, (0..6).map(EntryId).collect::<Vec<_>>());
+}
+
+#[test]
+fn details_follow_the_listing() {
+    let folder = TempFolder::new();
+    let root = folder.path();
+    fs::create_dir(root.join("folder")).unwrap();
+    fs::write(root.join("five.txt"), "12345").unwrap();
+    symlink(root.join("five.txt"), root.join("link")).unwrap();
+    symlink(root.join("gone"), root.join("broken")).unwrap();
+    let client = client();
+
+    let listing = listing(client.list(2, root));
+    let (_, details) = client.details(2, listing.entries.len());
+
+    let sizes: Vec<Option<u64>> = details.iter().map(|detail| detail.size).collect();
+    let link_size = fs::symlink_metadata(root.join("broken")).unwrap().len();
+    // folder, broken, five.txt, link
+    assert_eq!(sizes, [None, Some(link_size), Some(5), Some(5)]);
+    assert!(details.iter().all(|detail| detail.modified.is_some()));
+}
+
+#[test]
+fn details_of_a_big_folder_come_in_batches() {
+    const FILES: u32 = 3000;
+    let folder = TempFolder::new();
+    for index in 0..FILES {
+        fs::write(folder.path().join(format!("{index:05}.txt")), "").unwrap();
+    }
+    let client = client();
+
+    let listing = listing(client.list(4, folder.path()));
+    let (starts, details) = client.details(4, listing.entries.len());
+
+    assert!(starts.len() > 1);
+    assert!(details.iter().all(|detail| detail.size == Some(0)));
 }
 
 #[test]

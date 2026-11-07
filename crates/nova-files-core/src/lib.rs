@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod details;
 mod jobs;
 mod list;
 mod places;
