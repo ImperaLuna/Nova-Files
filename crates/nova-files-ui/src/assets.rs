@@ -73,4 +73,15 @@ mod tests {
         }
         assert!(Assets.load("icons/missing.svg").unwrap().is_none());
     }
+
+    #[test]
+    fn lists_the_icons_under_a_path() {
+        let listed = Assets.list("icons/").unwrap();
+        let expected: Vec<SharedString> = Icon::ALL
+            .into_iter()
+            .map(|icon| icon.path().into())
+            .collect();
+        assert_eq!(listed, expected);
+        assert!(Assets.list("fonts/").unwrap().is_empty());
+    }
 }

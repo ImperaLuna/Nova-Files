@@ -137,6 +137,7 @@ async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContex
 
     // The listing still shows Projects; the folder vanished meanwhile.
     click(cx, "entry-0");
+    view.read_with(cx, |view, _| assert!(view.is_loading()));
     view.condition::<WindowEvent>(cx, |view, _| !view.is_loading())
         .await;
 
@@ -181,9 +182,12 @@ async fn clicking_a_place_opens_it(cx: &mut TestAppContext) {
         .await;
     cx.run_until_parked();
     // Places come from the real home folder; a build sandbox may have none.
-    let Some(first) = view.read_with(cx, |view, _| view.places().first().cloned()) else {
+    if !nova_files_ui::home_folder().is_dir() {
         return;
-    };
+    }
+    view.condition::<WindowEvent>(cx, |view, _| !view.places().is_empty())
+        .await;
+    let first = view.read_with(cx, |view, _| view.places()[0].clone());
 
     click(cx, "place-0");
 
