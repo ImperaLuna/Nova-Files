@@ -112,24 +112,23 @@ jobs:
         if: steps.changes.outputs.run == 'true'
         run: nix develop .#mutants --command true
       - name: Wait for the free disk space
-        # The cargo cache and the copies of target/ need the room.
+        # The cargo cache needs the room.
         if: steps.changes.outputs.run == 'true'
         run: tools/ci-free-disk.sh wait
       - uses: Swatinem/rust-cache@v2
         if: steps.changes.outputs.run == 'true'
       - name: Warm the cargo cache
         if: steps.changes.outputs.run == 'true' && github.event_name != 'pull_request'
-        run: nix develop .#mutants --command cargo build --workspace --all-targets --profile ci
+        # The same build the mutation tests start with, so they reuse all of it.
+        run: nix develop .#mutants --command cargo nextest run --no-run --cargo-profile ci --workspace
       - name: Mutation tests
         if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request'
-        # Two builds at once, not the local four: each copy of the tree needs
-        # its own target/ folder, and the runner's disk can't hold four. Each
-        # copy starts from the cached target/ folder. The `ci` profile (no
-        # debug info) keeps those folders small and links each mutant fast.
-        # --caught and --unviable print a line per mutant, so the log shows
-        # progress instead of sitting silent until the end.
-        env:
-          CARGO_MUTANTS_JOBS: 2
+        # In place, one mutant at a time, in this checkout. cargo-mutants'
+        # copies of the tree lose file times, so cargo rebuilt about 300
+        # crates in every copy before the first mutant. --test-workspace
+        # builds the same crates the cache holds. --caught and --unviable
+        # print a line per mutant, so the log shows progress instead of
+        # sitting silent until the end.
         run: >-
           nix develop .#mutants --command just mutants HEAD^1 ""
-          --profile ci --copy-target true --caught --unviable
+          --profile ci --in-place --test-workspace=true --caught --unviable
