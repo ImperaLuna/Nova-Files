@@ -260,7 +260,7 @@ async fn columns_fill_in_after_the_names(cx: &mut TestAppContext) {
 
     view.read_with(cx, |view, _| {
         let folder = view.columns(0).unwrap();
-        assert!(!folder.modified.is_empty());
+        assert_ne!(folder.modified, "");
         assert_eq!(
             (folder.type_name.as_str(), folder.size.as_str()),
             ("Folder", "")
@@ -272,4 +272,30 @@ async fn columns_fill_in_after_the_names(cx: &mut TestAppContext) {
         );
         assert_eq!(view.columns(2), None);
     });
+}
+
+/// More files than one details batch, so some are still on their way when
+/// the listing arrives.
+const MANY_FILES: usize = 20_000;
+
+#[gpui::test]
+async fn details_still_fill_in_after_a_refused_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree();
+    let big = tree.path().join("big");
+    fs::create_dir(&big).unwrap();
+    for index in 0..MANY_FILES {
+        fs::write(big.join(format!("{index:05}")), "").unwrap();
+    }
+    let (view, cx) = open_on(cx, &big).await;
+
+    // Asked for at once, while the details are still being read.
+    view.update(cx, |view, _| view.open(&big.join("missing")));
+
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.columns(MANY_FILES - 1)
+            .is_some_and(|text| !text.size.is_empty())
+    })
+    .await;
+    view.read_with(cx, |view, _| assert_eq!(view.folder(), Some(big.as_path())));
 }

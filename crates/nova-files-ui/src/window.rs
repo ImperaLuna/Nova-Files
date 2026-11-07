@@ -4,8 +4,10 @@
 //! The window never touches the disk. Going somewhere sends the core a
 //! `ListFolder` with a new id and keeps showing the current folder until
 //! the answer for that id arrives; answers for older ids are dropped. A
-//! folder that can't be read leaves the window where it was; if the window
-//! has no folder yet, it falls back to the home folder, then the root.
+//! folder that can't be read leaves the window where it was (reading it
+//! again if its details were still coming, since asking cancelled them); if
+//! the window has no folder yet, it falls back to the home folder, then the
+//! root.
 //! Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
 //! them, so Up goes where the path on screen says.
 //!
@@ -217,18 +219,31 @@ impl MainWindow {
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
                 self.asked = None;
                 let path = listing.path.clone();
+                // Read again in place: keep the scroll position.
+                let same_folder = self.folder() == Some(path.as_path());
                 self.listing = Some(listing);
                 self.details = Vec::new();
-                self.scroll = UniformListScrollHandle::new();
+                if !same_folder {
+                    self.scroll = UniformListScrollHandle::new();
+                }
                 cx.emit(WindowEvent::Opened(path));
                 cx.notify();
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
                 self.asked = None;
-                if self.listing.is_none()
-                    && let Some(fallback) = self.fallbacks.pop()
-                {
-                    self.open(&fallback);
+                match &self.listing {
+                    None => {
+                        if let Some(fallback) = self.fallbacks.pop() {
+                            self.open(&fallback);
+                        }
+                    }
+                    // Asking cancelled the details still on their way, so
+                    // the folder on screen is read again.
+                    Some(listing) if self.details.len() < listing.entries.len() => {
+                        let shown = listing.path.clone();
+                        self.open(&shown);
+                    }
+                    Some(_) => {}
                 }
                 cx.emit(WindowEvent::Refused(path));
             }

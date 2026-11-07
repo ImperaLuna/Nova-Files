@@ -7,7 +7,7 @@
 
 use std::ffi::OsStr;
 use std::path::Path;
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local};
 use nova_files_api::EntryKind;
@@ -82,11 +82,22 @@ pub fn size(bytes: u64) -> String {
     }
 }
 
-/// The time in local time, to the minute.
+/// The time in local time, to the minute; empty for a time too far from
+/// now to show.
 pub fn modified(time: SystemTime) -> String {
-    DateTime::<Local>::from(time)
-        .format(DATE_FORMAT)
-        .to_string()
+    let since_epoch = match time.duration_since(UNIX_EPOCH) {
+        Ok(after) => i64::try_from(after.as_secs()).ok(),
+        Err(before) => {
+            let before = before.duration();
+            // Round away from the epoch, so 0.5 s before it is 1 s before.
+            let secs = before.as_secs() + u64::from(before.subsec_nanos() > 0);
+            i64::try_from(secs).ok().map(|secs| -secs)
+        }
+    };
+    since_epoch
+        .and_then(|secs| DateTime::from_timestamp(secs, 0))
+        .map(|time| time.with_timezone(&Local).format(DATE_FORMAT).to_string())
+        .unwrap_or_default()
 }
 
 /// The type name for an entry called `name`.
@@ -109,6 +120,8 @@ pub fn type_name(name: &OsStr, kind: EntryKind) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -120,6 +133,15 @@ mod tests {
         assert_eq!(size(1_800_000), "1.8 MB");
         assert_eq!(size(999_999_999), "1000 MB");
         assert_eq!(size(12_000_000_000), "12 GB");
+    }
+
+    #[test]
+    fn times_out_of_range_show_nothing() {
+        let far = Duration::from_secs(u64::MAX / 2);
+        assert_eq!(modified(UNIX_EPOCH.checked_add(far).unwrap()), "");
+        assert_eq!(modified(UNIX_EPOCH.checked_sub(far).unwrap()), "");
+        assert_ne!(modified(UNIX_EPOCH - Duration::from_secs(1)), "");
+        assert_ne!(modified(SystemTime::now()), "");
     }
 
     #[test]
