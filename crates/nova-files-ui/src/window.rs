@@ -138,11 +138,6 @@ impl MainWindow {
         })
     }
 
-    /// Whether a folder was asked for and hasn't answered yet.
-    pub const fn is_loading(&self) -> bool {
-        self.asked.is_some()
-    }
-
     pub fn places(&self) -> &[Place] {
         &self.places
     }
