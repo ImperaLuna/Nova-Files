@@ -11,13 +11,17 @@ exclude_re = [
     # Reads the real home folder and environment; tests hand the core a
     # temp home instead.
     "\\bHome::from_env\\b",
+    "\\bhome_folder\\b",
     # Cancelling only saves a listing's remaining reads; no answer changes.
     "replace Client::cancel_listing with \\(\\)",
     # Dropping a client cancels its listing, for the same reason.
     "replace <impl Drop for Client>::drop with \\(\\)",
+    # Only changes a highlight color; tests can't read colors back.
+    "nova-files-ui/src/view\\.rs:.*replace == with != in MainWindow::places_column",
     # Open windows, so they need a display.
     "\\bshow_windows\\b",
     "nova-files-ui/src/lib\\.rs:.*\\brun\\b",
+    "nova-files-ui/src/lib\\.rs:.*\\bopen_window\\b",
     # Window mode without a bus goes on to open a window.
     "replace match guard mode == Mode::Window with false in run",
     # Fires when the core stops, which takes the 3-minute idle wait.
