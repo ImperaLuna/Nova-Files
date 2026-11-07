@@ -11,9 +11,9 @@
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, ClickEvent, Context, Hsla, Image, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
-    div, img, prelude::FluentBuilder as _, rgb, svg, uniform_list,
+    AnyElement, ClickEvent, Context, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, Render, RenderImage, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Window, div, img, prelude::FluentBuilder as _, rgb, svg, uniform_list,
 };
 use nova_files_api::{EntryKind, Place, PlaceKind};
 
@@ -22,7 +22,8 @@ use crate::theme::{color, radius, size};
 use crate::window::MainWindow;
 
 impl Render for MainWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.scale_factor = window.scale_factor();
         div()
             .size_full()
             .flex()
@@ -259,7 +260,7 @@ fn row(id: (&'static str, usize), selector: String) -> gpui::Stateful<gpui::Div>
 /// The icon slot of an entry row: its thumbnail if it has one, otherwise
 /// its kind's icon, centred in the thumbnail's square so nothing shifts
 /// when the thumbnail arrives.
-fn entry_icon(kind: EntryKind, thumbnail: Option<&Arc<Image>>) -> impl IntoElement {
+fn entry_icon(kind: EntryKind, thumbnail: Option<&Arc<RenderImage>>) -> impl IntoElement {
     let slot = div()
         .flex()
         .flex_none()

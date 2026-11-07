@@ -3,7 +3,7 @@
 # The window. It sends commands to the core and draws from its events; it
 # never touches the disk.
 #
-# Allowed outside crates: chrono, futures, gpui, gpui-component, gpui_platform
+# Allowed outside crates: chrono, futures, gpui, gpui-component, gpui_platform, image
 # Allowed workspace crates: nova-files-api
 
 [package]
@@ -25,3 +25,5 @@ nova-files-api.workspace = true
 futures = { version = "0.3", default-features = false, features = ["std", "executor"] }
 gpui.workspace = true
 gpui_platform.workspace = true
+# Shrinks thumbnails to the size they're drawn; GPUI already builds it.
+image = { version = "0.25.10", default-features = false, features = ["png"] }

@@ -3547,6 +3547,7 @@ dependencies = [
  "futures",
  "gpui",
  "gpui_platform",
+ "image",
  "nova-files-api",
 ]
 

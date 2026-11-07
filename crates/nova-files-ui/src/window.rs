@@ -17,7 +17,7 @@
 //!
 //! As the list draws, the window asks the core for thumbnails of the rows
 //! on screen and one screen either side, and keeps only the thumbnails of
-//! those rows.
+//! those rows, shrunk to the size they're drawn (see `thumbnail`).
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -26,13 +26,19 @@ use std::sync::Arc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{Context, EventEmitter, Image, ImageFormat, Task, UniformListScrollHandle};
+use gpui::{Context, EventEmitter, RenderImage, Task, UniformListScrollHandle};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
     Listing, ListingId, Place,
 };
 
 use crate::columns::{self, ColumnText};
+use crate::theme::size;
+use crate::thumbnail;
+
+/// Until the window first draws, thumbnails are sized for a 2x screen,
+/// which is never too small.
+const DEFAULT_SCALE_FACTOR: f32 = 2.0;
 
 /// What the window knows about the core.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,7 +73,9 @@ pub struct MainWindow {
     /// rest are still being read.
     pub(crate) details: Vec<Details>,
     /// Thumbnails of the rows in `thumbnails_wanted`, by row.
-    thumbnails: HashMap<usize, Arc<Image>>,
+    thumbnails: HashMap<usize, Arc<RenderImage>>,
+    /// The window's scale factor when it last drew, for sizing thumbnails.
+    pub(crate) scale_factor: f32,
     /// The rows the core was last asked to make thumbnails for.
     thumbnails_wanted: Range<usize>,
     /// The listing asked for most recently; only its answer counts.
@@ -138,6 +146,7 @@ impl MainWindow {
             details: Vec::new(),
             thumbnails: HashMap::new(),
             thumbnails_wanted: 0..0,
+            scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
             next_listing: 0,
             // Popped from the end: home first, then the root.
@@ -193,7 +202,7 @@ impl MainWindow {
     }
 
     /// The thumbnail of row `index`, once the core has sent it.
-    pub fn thumbnail(&self, index: usize) -> Option<&Arc<Image>> {
+    pub fn thumbnail(&self, index: usize) -> Option<&Arc<RenderImage>> {
         self.thumbnails.get(&index)
     }
 
@@ -322,9 +331,7 @@ impl MainWindow {
                 if let Ok(index) = usize::try_from(entry.0)
                     && self.thumbnails_wanted.contains(&index)
                 {
-                    let image = Image::from_bytes(ImageFormat::Png, png.to_vec());
-                    self.thumbnails.insert(index, Arc::new(image));
-                    cx.notify();
+                    self.shrink_thumbnail(id, index, png, cx);
                 }
             }
             // An answer for a folder the window has since moved away from.
@@ -337,6 +344,36 @@ impl MainWindow {
                 cx.emit(WindowEvent::Places);
                 cx.notify();
             }
+        }
+    }
+
+    /// Shrinks row `index`'s thumbnail off the UI thread, then keeps it.
+    fn shrink_thumbnail(&self, id: ListingId, index: usize, png: Arc<[u8]>, cx: &Context<Self>) {
+        let side = thumbnail::device_side(size::THUMBNAIL, self.scale_factor);
+        let shrinking = cx
+            .background_executor()
+            .spawn(async move { thumbnail::shrink(&png, side) });
+        cx.spawn(async move |this, cx| {
+            let Some(image) = shrinking.await else { return };
+            this.update(cx, |this, cx| this.thumbnail_ready(id, index, image, cx))
+                .ok();
+        })
+        .detach();
+    }
+
+    /// Keeps a shrunk thumbnail if its row is still wanted.
+    fn thumbnail_ready(
+        &mut self,
+        id: ListingId,
+        index: usize,
+        image: RenderImage,
+        cx: &mut Context<Self>,
+    ) {
+        if self.listing.as_ref().map(|listing| listing.id) == Some(id)
+            && self.thumbnails_wanted.contains(&index)
+        {
+            self.thumbnails.insert(index, Arc::new(image));
+            cx.notify();
         }
     }
 
