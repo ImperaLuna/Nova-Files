@@ -111,6 +111,25 @@ fn a_photo_sized_image_is_within_the_decode_limit() {
     assert_eq!(run(&thumbnails, &[(&source, "b.png")]), ["ok"]);
 }
 
+/// A PNG whose header says 20000 by 20000 pixels (1.6 GB decoded), with
+/// almost no data.
+const HUGE_PNG: &[u8] = &[
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 78, 32, 0, 0, 78, 32, 8, 6,
+    0, 0, 0, 227, 112, 70, 57, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 96, 64, 5, 0, 0, 16, 0,
+    1, 57, 189, 143, 101, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+];
+
+#[test]
+fn an_image_too_big_to_decode_is_refused_without_a_failure_marker() {
+    let folder = TempFolder::new("huge");
+    let thumbnails = folder.0.join("thumbnails");
+    let source = folder.0.join("huge.png");
+    fs::write(&source, HUGE_PNG).unwrap();
+
+    assert_eq!(run(&thumbnails, &[(&source, "h.png")]), ["failed"]);
+    assert!(!thumbnails.join("fail/nova-files/h.png").exists());
+}
+
 #[test]
 fn an_image_is_known_by_its_content_not_its_name() {
     let folder = TempFolder::new("content");

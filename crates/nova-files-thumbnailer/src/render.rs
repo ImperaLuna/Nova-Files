@@ -101,8 +101,10 @@ fn decode(path: &Path) -> ImageResult<DynamicImage> {
     let mut reader = ImageReader::open(path)?.with_guessed_format()?;
     let mut limits = Limits::default();
     limits.max_alloc = Some(MAX_DECODE_BYTES);
-    reader.limits(limits);
+    reader.limits(limits.clone());
     let mut decoder = reader.into_decoder()?;
+    // `into_decoder` leaves the pixel buffer itself to the caller.
+    limits.reserve(decoder.total_bytes())?;
     // Phones store a photo's rotation apart from its pixels; the thumbnail
     // has none, so it is turned upright here.
     let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
