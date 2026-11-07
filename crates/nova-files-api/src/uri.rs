@@ -12,6 +12,8 @@ const SCHEME: &str = "file://";
 /// The one host a local file URI may name besides the empty one.
 const LOCALHOST: &str = "localhost";
 const HEX_RADIX: u32 = 16;
+/// Digits after each `%`.
+const HEX_LENGTH: usize = 2;
 const HEX_DIGITS: &[u8; 16] = b"0123456789ABCDEF";
 const HIGH_NIBBLE: u32 = 4;
 const LOW_NIBBLE_MASK: u8 = 0x0f;
@@ -53,11 +55,13 @@ fn percent_decode(text: &[u8]) -> Option<Vec<u8>> {
     let mut rest = text;
     while let Some((&byte, after)) = rest.split_first() {
         if byte == b'%' {
-            let (&high, after) = after.split_first()?;
-            let (&low, after) = after.split_first()?;
-            let high = char::from(high).to_digit(HEX_RADIX)?;
-            let low = char::from(low).to_digit(HEX_RADIX)?;
-            bytes.push(u8::try_from((high << HIGH_NIBBLE) | low).ok()?);
+            let (hex, after) = after.split_at_checked(HEX_LENGTH)?;
+            let hex = std::str::from_utf8(hex).ok()?;
+            // from_str_radix would also take a sign.
+            if !hex.bytes().all(|digit| digit.is_ascii_hexdigit()) {
+                return None;
+            }
+            bytes.push(u8::from_str_radix(hex, HEX_RADIX).ok()?);
             rest = after;
         } else {
             bytes.push(byte);
@@ -89,6 +93,7 @@ mod tests {
         assert_eq!(path_from_file_uri("file://server/share"), None);
         assert_eq!(path_from_file_uri("file:///bad%2"), None);
         assert_eq!(path_from_file_uri("file:///bad%zz"), None);
+        assert_eq!(path_from_file_uri("file:///bad%+1"), None);
         assert_eq!(path_from_file_uri("file:///a?b"), None);
     }
 
