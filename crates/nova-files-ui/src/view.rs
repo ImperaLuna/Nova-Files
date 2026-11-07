@@ -4,13 +4,16 @@
 //! The entries are a `uniform_list`, which builds only the rows on screen,
 //! so a folder of any size costs the same to draw. Each row is an icon slot
 //! and a name, then Modified, Type and Size; Modified and Size stay empty
-//! until the core has read that entry's details. Every element a test clicks carries a debug selector:
+//! until the core has read that entry's details. A thumbnail, once it
+//! arrives, takes the icon's place. Every element a test clicks carries a debug selector:
 //! `up`, `place-<n>` and `entry-<n>`, counted from 0.
 
+use std::sync::Arc;
+
 use gpui::{
-    AnyElement, ClickEvent, Context, Hsla, InteractiveElement as _, IntoElement,
+    AnyElement, ClickEvent, Context, Hsla, Image, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
-    div, prelude::FluentBuilder as _, rgb, svg, uniform_list,
+    div, img, prelude::FluentBuilder as _, rgb, svg, uniform_list,
 };
 use nova_files_api::{EntryKind, Place, PlaceKind};
 
@@ -147,6 +150,7 @@ impl MainWindow {
             "entries",
             count,
             cx.processor(|this, range: std::ops::Range<usize>, _window, cx| {
+                this.show_rows(range.clone());
                 let Some(listing) = &this.listing else {
                     return Vec::new();
                 };
@@ -165,7 +169,7 @@ impl MainWindow {
                                 .flex()
                                 .items_center()
                                 .gap(size::GAP)
-                                .child(kind_icon(entry.kind))
+                                .child(entry_icon(entry.kind, this.thumbnail(index)))
                                 .child(div().min_w_0().truncate().child(name)),
                             text.modified,
                             text.type_name,
@@ -252,11 +256,30 @@ fn row(id: (&'static str, usize), selector: String) -> gpui::Stateful<gpui::Div>
         .hover(|row| row.bg(rgb(color::ROW_HIGHLIGHT)))
 }
 
-/// The icon slot of an entry row; thumbnails take its place later.
-fn kind_icon(kind: EntryKind) -> impl IntoElement {
-    match kind {
-        EntryKind::Folder => icon(Icon::Folder, size::ROW_ICON, rgb(color::FOLDER).into()),
-        EntryKind::File => icon(Icon::File, size::ROW_ICON, rgb(color::FILE).into()),
+/// The icon slot of an entry row: its thumbnail if it has one, otherwise
+/// its kind's icon, centred in the thumbnail's square so nothing shifts
+/// when the thumbnail arrives.
+fn entry_icon(kind: EntryKind, thumbnail: Option<&Arc<Image>>) -> impl IntoElement {
+    let slot = div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .size(size::THUMBNAIL);
+    match (thumbnail, kind) {
+        (Some(image), _) => slot.child(
+            img(Arc::clone(image))
+                .size(size::THUMBNAIL)
+                .rounded(radius::THUMBNAIL),
+        ),
+        (None, EntryKind::Folder) => slot.child(icon(
+            Icon::Folder,
+            size::ROW_ICON,
+            rgb(color::FOLDER).into(),
+        )),
+        (None, EntryKind::File) => {
+            slot.child(icon(Icon::File, size::ROW_ICON, rgb(color::FILE).into()))
+        }
     }
 }
 

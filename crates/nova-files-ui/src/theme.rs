@@ -41,8 +41,10 @@ pub mod size {
     pub const TEXT_SMALL: Pixels = px(13.0);
     /// One row of the entries list or the places list.
     pub const ROW_HEIGHT: Pixels = px(32.0);
-    /// A row's icon. Thumbnails take this slot later.
+    /// A row's icon.
     pub const ROW_ICON: Pixels = px(18.0);
+    /// A row's thumbnail, in the icon's slot.
+    pub const THUMBNAIL: Pixels = px(24.0);
     /// The Up button's icon.
     pub const BUTTON_ICON: Pixels = px(16.0);
     /// The Modified, Type and Size columns; Name takes the rest.
@@ -73,6 +75,8 @@ pub mod radius {
 
     /// A row in either list.
     pub const ROW: Pixels = px(10.0);
+    /// A thumbnail in a row.
+    pub const THUMBNAIL: Pixels = px(4.0);
     /// A toolbar button.
     pub const BUTTON: Pixels = px(10.0);
 }

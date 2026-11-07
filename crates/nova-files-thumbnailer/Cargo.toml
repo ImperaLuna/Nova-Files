@@ -24,6 +24,8 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg", "pn
 landlock = "0.4"
 
 [dev-dependencies]
-# The tests run the helper the way the core does.
+# The tests run the helper the way the core does, and a window on top.
+gpui = { workspace = true, features = ["test-support"] }
 nova-files-api.workspace = true
 nova-files-core.workspace = true
+nova-files-ui.workspace = true

@@ -14,12 +14,19 @@
 //! The core's events arrive through an async channel the window's own task
 //! reads; closing the window drops the connection, which tells the core
 //! one client fewer is using it. Drawing lives in `view`.
+//!
+//! As the list draws, the window asks the core for thumbnails of the rows
+//! on screen and one screen either side, and keeps only the thumbnails of
+//! those rows.
 
+use std::collections::HashMap;
+use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{Context, EventEmitter, Task, UniformListScrollHandle};
+use gpui::{Context, EventEmitter, Image, ImageFormat, Task, UniformListScrollHandle};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
     Listing, ListingId, Place,
@@ -59,6 +66,10 @@ pub struct MainWindow {
     /// The details of the listing's first entries, in entry order; the
     /// rest are still being read.
     pub(crate) details: Vec<Details>,
+    /// Thumbnails of the rows in `thumbnails_wanted`, by row.
+    thumbnails: HashMap<usize, Arc<Image>>,
+    /// The rows the core was last asked to make thumbnails for.
+    thumbnails_wanted: Range<usize>,
     /// The listing asked for most recently; only its answer counts.
     asked: Option<ListingId>,
     next_listing: u64,
@@ -125,6 +136,8 @@ impl MainWindow {
             connection,
             listing: None,
             details: Vec::new(),
+            thumbnails: HashMap::new(),
+            thumbnails_wanted: 0..0,
             asked: None,
             next_listing: 0,
             // Popped from the end: home first, then the root.
@@ -177,6 +190,40 @@ impl MainWindow {
     /// The scroll position of the list on screen.
     pub const fn scroll(&self) -> &UniformListScrollHandle {
         &self.scroll
+    }
+
+    /// The thumbnail of row `index`, once the core has sent it.
+    pub fn thumbnail(&self, index: usize) -> Option<&Arc<Image>> {
+        self.thumbnails.get(&index)
+    }
+
+    /// The list is drawing rows `visible`: asks for their thumbnails and
+    /// one screen either side, and forgets the ones now out of range.
+    pub(crate) fn show_rows(&mut self, visible: Range<usize>) {
+        let Some(listing) = &self.listing else { return };
+        let screen = visible.len();
+        let wanted = visible.start.saturating_sub(screen)
+            ..visible
+                .end
+                .saturating_add(screen)
+                .min(listing.entries.len());
+        if wanted == self.thumbnails_wanted {
+            return;
+        }
+        let (Ok(first), Ok(count)) = (u32::try_from(wanted.start), u32::try_from(wanted.len()))
+        else {
+            return;
+        };
+        let command = Command::Thumbnails {
+            id: listing.id,
+            first: EntryId(first),
+            count,
+        };
+        if let Some(connection) = &self.connection {
+            connection.send(command).ok();
+        }
+        self.thumbnails.retain(|index, _| wanted.contains(index));
+        self.thumbnails_wanted = wanted;
     }
 
     pub fn places(&self) -> &[Place] {
@@ -233,6 +280,8 @@ impl MainWindow {
                 let same_folder = self.folder() == Some(path.as_path());
                 self.listing = Some(listing);
                 self.details = Vec::new();
+                self.thumbnails.clear();
+                self.thumbnails_wanted = 0..0;
                 if !same_folder {
                     self.scroll = UniformListScrollHandle::new();
                 }
@@ -267,8 +316,18 @@ impl MainWindow {
                 self.details.extend_from_slice(&details);
                 cx.notify();
             }
-            // An answer for a folder the window has since moved away from, or
-            // a thumbnail the list doesn't draw yet.
+            Event::Thumbnail { id, entry, png }
+                if self.listing.as_ref().map(|listing| listing.id) == Some(id) =>
+            {
+                if let Ok(index) = usize::try_from(entry.0)
+                    && self.thumbnails_wanted.contains(&index)
+                {
+                    let image = Image::from_bytes(ImageFormat::Png, png.to_vec());
+                    self.thumbnails.insert(index, Arc::new(image));
+                    cx.notify();
+                }
+            }
+            // An answer for a folder the window has since moved away from.
             Event::FolderListed(_)
             | Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
