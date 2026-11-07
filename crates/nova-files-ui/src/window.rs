@@ -14,18 +14,31 @@
 //! The core's events arrive through an async channel the window's own task
 //! reads; closing the window drops the connection, which tells the core
 //! one client fewer is using it. Drawing lives in `view`.
+//!
+//! As the list draws, the window asks the core for thumbnails of the rows
+//! on screen and one screen either side, and keeps only the thumbnails of
+//! those rows, shrunk to the size they're drawn (see `thumbnail`).
 
+use std::collections::HashMap;
+use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{Context, EventEmitter, Task, UniformListScrollHandle};
+use gpui::{Context, EventEmitter, RenderImage, Task, UniformListScrollHandle};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
     Listing, ListingId, Place,
 };
 
 use crate::columns::{self, ColumnText};
+use crate::theme::size;
+use crate::thumbnail;
+
+/// Until the window first draws, thumbnails are sized for a 2x screen,
+/// which is never too small.
+const DEFAULT_SCALE_FACTOR: f32 = 2.0;
 
 /// What the window knows about the core.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +72,12 @@ pub struct MainWindow {
     /// The details of the listing's first entries, in entry order; the
     /// rest are still being read.
     pub(crate) details: Vec<Details>,
+    /// Thumbnails of the rows in `thumbnails_wanted`, by row.
+    thumbnails: HashMap<usize, Arc<RenderImage>>,
+    /// The window's scale factor when it last drew, for sizing thumbnails.
+    scale_factor: f32,
+    /// The rows the core was last asked to make thumbnails for.
+    thumbnails_wanted: Range<usize>,
     /// The listing asked for most recently; only its answer counts.
     asked: Option<ListingId>,
     next_listing: u64,
@@ -68,6 +87,15 @@ pub struct MainWindow {
     pub(crate) places: Vec<Place>,
     pub(crate) scroll: UniformListScrollHandle,
     _events: Task<()>,
+}
+
+/// A thumbnail shrunk for row `index` of listing `id`, `side` device
+/// pixels across.
+struct Shrunk {
+    id: ListingId,
+    index: usize,
+    side: u32,
+    image: RenderImage,
 }
 
 /// Delivers the core's events into the window's async channel.
@@ -125,6 +153,9 @@ impl MainWindow {
             connection,
             listing: None,
             details: Vec::new(),
+            thumbnails: HashMap::new(),
+            thumbnails_wanted: 0..0,
+            scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
             next_listing: 0,
             // Popped from the end: home first, then the root.
@@ -172,6 +203,40 @@ impl MainWindow {
             type_name: columns::type_name(&entry.name, entry.kind),
             size: details.size.map(columns::size).unwrap_or_default(),
         })
+    }
+
+    /// The thumbnail of row `index`, once the core has sent it.
+    pub fn thumbnail(&self, index: usize) -> Option<&Arc<RenderImage>> {
+        self.thumbnails.get(&index)
+    }
+
+    /// The list is drawing rows `visible`: asks for their thumbnails and
+    /// one screen either side, and forgets the ones now out of range.
+    pub(crate) fn show_rows(&mut self, visible: Range<usize>) {
+        let Some(listing) = &self.listing else { return };
+        let screen = visible.len();
+        let wanted = visible.start.saturating_sub(screen)
+            ..visible
+                .end
+                .saturating_add(screen)
+                .min(listing.entries.len());
+        if wanted == self.thumbnails_wanted {
+            return;
+        }
+        let (Ok(first), Ok(count)) = (u32::try_from(wanted.start), u32::try_from(wanted.len()))
+        else {
+            return;
+        };
+        let command = Command::Thumbnails {
+            id: listing.id,
+            first: EntryId(first),
+            count,
+        };
+        if let Some(connection) = &self.connection {
+            connection.send(command).ok();
+        }
+        self.thumbnails.retain(|index, _| wanted.contains(index));
+        self.thumbnails_wanted = wanted;
     }
 
     /// The scroll position of the list on screen.
@@ -233,6 +298,8 @@ impl MainWindow {
                 let same_folder = self.folder() == Some(path.as_path());
                 self.listing = Some(listing);
                 self.details = Vec::new();
+                self.thumbnails.clear();
+                self.thumbnails_wanted = 0..0;
                 if !same_folder {
                     self.scroll = UniformListScrollHandle::new();
                 }
@@ -267,17 +334,83 @@ impl MainWindow {
                 self.details.extend_from_slice(&details);
                 cx.notify();
             }
-            // An answer for a folder the window has since moved away from, or
-            // a thumbnail the list doesn't draw yet.
-            Event::FolderListed(_)
-            | Event::FolderUnreadable { .. }
-            | Event::DetailsRead { .. }
-            | Event::Thumbnail { .. } => {}
+            // Checked against the listing once shrunk, when it counts.
+            Event::Thumbnail { id, entry, png } => {
+                if let Ok(index) = usize::try_from(entry.0)
+                    && self.thumbnails_wanted.contains(&index)
+                {
+                    self.shrink_thumbnail(id, index, png, cx);
+                }
+            }
+            // An answer for a folder the window has since moved away from.
+            Event::FolderListed(_) | Event::FolderUnreadable { .. } | Event::DetailsRead { .. } => {
+            }
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);
                 cx.notify();
             }
+        }
+    }
+
+    /// The window is drawing at `scale_factor`. Thumbnails shrunk for
+    /// another scale (the window moved to another screen) are dropped and
+    /// asked for again: an empty request first, so the core sends them anew.
+    pub fn set_scale_factor(&mut self, scale_factor: f32) {
+        let before = self.thumbnail_side();
+        self.scale_factor = scale_factor;
+        if self.thumbnail_side() == before {
+            return;
+        }
+        self.thumbnails.clear();
+        if let Some(listing) = &self.listing
+            && !self.thumbnails_wanted.is_empty()
+            && let Some(connection) = &self.connection
+        {
+            let forget = Command::Thumbnails {
+                id: listing.id,
+                first: EntryId(0),
+                count: 0,
+            };
+            connection.send(forget).ok();
+        }
+        self.thumbnails_wanted = 0..0;
+    }
+
+    /// A thumbnail's side in device pixels at the current scale.
+    fn thumbnail_side(&self) -> u32 {
+        thumbnail::device_side(size::THUMBNAIL, self.scale_factor)
+    }
+
+    /// Shrinks row `index`'s thumbnail off the UI thread, then keeps it.
+    fn shrink_thumbnail(&self, id: ListingId, index: usize, png: Arc<[u8]>, cx: &Context<Self>) {
+        let side = self.thumbnail_side();
+        let shrinking = cx
+            .background_executor()
+            .spawn(async move { thumbnail::shrink(&png, side) });
+        cx.spawn(async move |this, cx| {
+            let Some(image) = shrinking.await else { return };
+            let made = Shrunk {
+                id,
+                index,
+                side,
+                image,
+            };
+            this.update(cx, |this, cx| this.thumbnail_ready(made, cx))
+                .ok();
+        })
+        .detach();
+    }
+
+    /// Keeps a thumbnail shrunk to `side` if its row is still wanted and
+    /// the window still draws at that size.
+    fn thumbnail_ready(&mut self, made: Shrunk, cx: &mut Context<Self>) {
+        if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
+            && self.thumbnails_wanted.contains(&made.index)
+            && made.side == self.thumbnail_side()
+        {
+            self.thumbnails.insert(made.index, Arc::new(made.image));
+            cx.notify();
         }
     }
 

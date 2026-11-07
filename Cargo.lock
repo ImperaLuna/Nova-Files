@@ -3531,10 +3531,12 @@ version = "0.1.0"
 name = "nova-files-thumbnailer"
 version = "0.1.0"
 dependencies = [
+ "gpui",
  "image",
  "landlock",
  "nova-files-api",
  "nova-files-core",
+ "nova-files-ui",
 ]
 
 [[package]]
@@ -3545,6 +3547,7 @@ dependencies = [
  "futures",
  "gpui",
  "gpui_platform",
+ "image",
  "nova-files-api",
 ]
 

@@ -42,6 +42,22 @@ impl Core {
         None
     }
 
+    /// The thumbnail requests the window has sent since last asked, as
+    /// `(first, count)`, skipping other commands.
+    fn thumbnail_requests(&self) -> Vec<(u32, u32)> {
+        let mut requests = Vec::new();
+        while let Ok(message) = self.messages.try_recv() {
+            if let CoreMessage::Command {
+                command: Command::Thumbnails { first, count, .. },
+                ..
+            } = message
+            {
+                requests.push((first.0, count));
+            }
+        }
+        requests
+    }
+
     fn send(&self, event: Event) {
         self.events.as_ref().unwrap().deliver(event).unwrap();
     }
@@ -219,4 +235,75 @@ fn another_folder_starts_at_the_top(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     assert_eq!(offset(&view, cx), Point::default());
+}
+
+/// A 4 by 4 red PNG.
+const PNG: &[u8] = &[
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 6, 0,
+    0, 0, 169, 241, 158, 126, 0, 0, 0, 18, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 240, 31,
+    25, 51, 144, 46, 0, 0, 60, 64, 31, 225, 224, 129, 119, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174,
+    66, 96, 130,
+];
+
+fn thumbnail(id: ListingId, entry: u32) -> Event {
+    Event::Thumbnail {
+        id,
+        entry: EntryId(entry),
+        png: PNG.into(),
+    }
+}
+
+#[gpui::test]
+fn a_thumbnail_for_a_shown_row_is_kept(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+
+    core.send(thumbnail(id, 1));
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| {
+        assert!(view.thumbnail(1).is_some());
+        assert!(view.thumbnail(0).is_none());
+    });
+}
+
+#[gpui::test]
+fn a_thumbnail_for_a_listing_left_behind_is_dropped(cx: &mut TestAppContext) {
+    let (view, cx, mut core, id) = shown_with_details(cx, ENTRIES);
+
+    // Read again: the thumbnail for the old listing lands while the new
+    // one is already on screen.
+    view.update(cx, |view, _| view.open(Path::new(SHOWN)));
+    core.send(thumbnail(id, 1));
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+}
+
+#[gpui::test]
+fn the_same_scale_keeps_the_thumbnails(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+    core.send(thumbnail(id, 1));
+    cx.run_until_parked();
+    core.thumbnail_requests();
+
+    let scale = cx.update(|window, _| window.scale_factor());
+    view.update(cx, |view, _| view.set_scale_factor(scale));
+
+    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_some()));
+    assert_eq!(core.thumbnail_requests(), []);
+}
+
+#[gpui::test]
+fn another_scale_drops_the_thumbnails_and_asks_again(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+    core.send(thumbnail(id, 1));
+    cx.run_until_parked();
+    core.thumbnail_requests();
+
+    let scale = cx.update(|window, _| window.scale_factor());
+    view.update(cx, |view, _| view.set_scale_factor(scale * 2.0));
+
+    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+    assert_eq!(core.thumbnail_requests(), [(0, 0)]);
 }

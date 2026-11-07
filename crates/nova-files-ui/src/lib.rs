@@ -13,6 +13,7 @@ mod assets;
 mod columns;
 mod requests;
 mod theme;
+mod thumbnail;
 mod view;
 mod window;
 
