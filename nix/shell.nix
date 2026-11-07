@@ -15,6 +15,11 @@ build.craneLib.devShell {
     # For the D-Bus tests outside `nix flake check`.
     pkgs.dbus
   ];
+  # Turns on the repo's git hooks (tools/git-hooks), such as the one that
+  # refuses non-code changes in a stacked branch before the push.
+  shellHook = ''
+    git config core.hooksPath tools/git-hooks 2>/dev/null || true
+  '';
   RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
   # GPUI loads these at run time; `cargo run` needs them as the package does.
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath build.runtimeLibs;

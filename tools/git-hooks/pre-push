@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Refuses to push a stacked branch (one built on another pushed branch, not
+# directly on main) whose own commits change anything besides code, so the
+# push never reaches CI. tools/ci-stack-guard.sh has the list; CI runs the
+# same check as "stack holds code only".
+#
+# Offline: it compares against the remote-tracking branches from the last
+# fetch. The parent branch is the one sharing the most commits beyond main;
+# the branch's own changes are those since its merge base with the parent.
+# `nix develop` turns it on (core.hooksPath); elsewhere run
+# `git config core.hooksPath tools/git-hooks` once.
+set -euo pipefail
+
+remote=$1
+zero=0000000000000000000000000000000000000000
+main="refs/remotes/$remote/main"
+guard="$(git rev-parse --show-toplevel)/tools/ci-stack-guard.sh"
+
+git rev-parse -q --verify "$main" >/dev/null || exit 0
+
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue
+    branch=${remote_ref#refs/heads/}
+    [ "$branch" = main ] && continue
+
+    # The parent is the nearest pushed branch whose tip this branch holds.
+    # A branch stacked on this one never qualifies: it has commits this
+    # one lacks. A parent updated since this branch was built doesn't
+    # either; CI's check still covers that case.
+    parent="" fewest=""
+    while read -r ref; do
+        case $ref in "$main" | "refs/remotes/$remote/HEAD" | "refs/remotes/$remote/$branch") continue ;; esac
+        git merge-base --is-ancestor "$ref" "$local_sha" || continue
+        # A branch already in main isn't a stack parent.
+        git merge-base --is-ancestor "$ref" "$main" && continue
+        count=$(git rev-list --count "$ref..$local_sha")
+        [ "$count" -eq 0 ] && continue
+        if [ -z "$fewest" ] || [ "$count" -lt "$fewest" ]; then
+            parent=${ref#refs/remotes/"$remote"/} fewest=$count
+        fi
+    done < <(git for-each-ref --format='%(refname)' "refs/remotes/$remote/")
+
+    [ -n "$parent" ] || continue
+    if ! git diff --no-renames --name-only -z "refs/remotes/$remote/$parent" "$local_sha" | "$guard" "$parent"; then
+        echo "pre-push: refused to push $branch, which is stacked on $parent." >&2
+        exit 1
+    fi
+done
