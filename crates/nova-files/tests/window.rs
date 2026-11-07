@@ -86,13 +86,27 @@ async fn open_on<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
-    // The core answers from its own threads.
-    cx.executor().allow_parking();
-    let core = nova_files_core::spawn().unwrap();
-    let start = folder.to_owned();
-    let (view, cx) = cx.add_window_view(|_, cx| MainWindow::new(&core.connector, &start, cx));
+    let (view, cx) = window_on(cx, folder, folder);
     wait_for_folder(&view, cx, folder).await;
     (view, cx)
+}
+
+/// Opens a window on `folder` with a running core, both taking `home` as
+/// the home folder; doesn't wait.
+fn window_on<'a>(
+    cx: &'a mut TestAppContext,
+    folder: &Path,
+    home: &Path,
+) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
+    // The core answers from its own threads.
+    cx.executor().allow_parking();
+    let core_home = nova_files_core::Home {
+        folder: home.to_owned(),
+        config: home.join(".config"),
+    };
+    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home)).unwrap();
+    let (start, home) = (folder.to_owned(), home.to_owned());
+    cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx))
 }
 
 async fn wait_for_folder(view: &Entity<MainWindow>, cx: &VisualTestContext, folder: &Path) {
@@ -198,28 +212,13 @@ async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContex
 }
 
 #[gpui::test]
-/// Lands on the home folder, or on the root where there is no readable home
-/// (the Nix build sandbox's `HOME` doesn't exist).
 async fn unreadable_start_folder_falls_back_to_home(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
-    cx.executor().allow_parking();
-    let core = nova_files_core::spawn().unwrap();
     let missing = tree.path().join("missing");
-    let (view, cx) = cx.add_window_view(|_, cx| MainWindow::new(&core.connector, &missing, cx));
+    let (view, cx) = window_on(cx, &missing, tree.path());
 
-    view.condition::<WindowEvent>(cx, |view, _| view.folder().is_some())
-        .await;
-
-    let home = nova_files_ui::home_folder();
-    let expected = if home.is_dir() {
-        home
-    } else {
-        PathBuf::from("/")
-    };
-    view.read_with(cx, |view, _| {
-        assert_eq!(view.folder(), Some(expected.as_path()));
-    });
+    wait_for_folder(&view, cx, tree.path()).await;
 }
 
 #[gpui::test]
@@ -227,9 +226,7 @@ async fn dots_in_a_path_are_tidied(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     let dotted = tree.path().join("Projects").join("..");
-    cx.executor().allow_parking();
-    let core = nova_files_core::spawn().unwrap();
-    let (view, cx) = cx.add_window_view(|_, cx| MainWindow::new(&core.connector, &dotted, cx));
+    let (view, cx) = window_on(cx, &dotted, tree.path());
 
     wait_for_folder(&view, cx, tree.path()).await;
 }
@@ -238,19 +235,13 @@ async fn dots_in_a_path_are_tidied(cx: &mut TestAppContext) {
 async fn clicking_a_place_opens_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
-    let (view, cx) = open_on(cx, tree.path()).await;
-    view.condition::<WindowEvent>(cx, |view, _| view.status() == CoreStatus::Connected)
-        .await;
-    cx.run_until_parked();
-    // Places come from the real home folder; a build sandbox may have none.
-    if !nova_files_ui::home_folder().is_dir() {
-        return;
-    }
+    let home = tree.path().join("Projects");
+    let (view, cx) = window_on(cx, tree.path(), &home);
+    wait_for_folder(&view, cx, tree.path()).await;
     view.condition::<WindowEvent>(cx, |view, _| !view.places().is_empty())
         .await;
-    let first = view.read_with(cx, |view, _| view.places()[0].clone());
 
     click(cx, "place-0");
 
-    wait_for_folder(&view, cx, &first.path).await;
+    wait_for_folder(&view, cx, &home).await;
 }
