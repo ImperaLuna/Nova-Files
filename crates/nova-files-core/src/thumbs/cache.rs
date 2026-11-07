@@ -4,6 +4,8 @@
 //! A thumbnail is named after the MD5 of its file's URI and stores the
 //! file's mtime in a `Thumb::MTime` text chunk; it is good while that
 //! matches. Failure markers, kept per application, follow the same rule.
+//! A file cut short (it doesn't reach its end chunk) or too big to be a
+//! thumbnail doesn't count, so it is made again.
 
 use std::fs::File;
 use std::io::{self, Read as _};
@@ -45,32 +47,40 @@ pub fn failed(thumbnails: &Path) -> PathBuf {
     thumbnails.join(FAIL_FOLDER)
 }
 
+/// The file's bytes; an error for one bigger than a thumbnail can be.
 fn read_capped(path: &Path) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
+    // One byte past the cap tells a file at the cap from a bigger one.
     File::open(path)?
-        .take(MAX_THUMBNAIL_BYTES)
+        .take(MAX_THUMBNAIL_BYTES + 1)
         .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_THUMBNAIL_BYTES {
+        return Err(io::ErrorKind::FileTooLarge.into());
+    }
     Ok(bytes)
 }
 
-/// The text of the first `tEXt` chunk named `key`.
+/// The text of the first `tEXt` chunk named `key`, if the PNG's chunks run
+/// whole to its end chunk.
 fn text<'a>(png: &'a [u8], key: &[u8]) -> Option<&'a [u8]> {
     let mut rest = png.get(PNG_SIGNATURE_LENGTH..)?;
+    let mut found = None;
     loop {
         let (length, after) = rest.split_at_checked(CHUNK_LENGTH)?;
         let length = usize::try_from(u32::from_be_bytes(length.try_into().ok()?)).ok()?;
         let (kind, after) = after.split_at_checked(CHUNK_TYPE)?;
         let (data, after) = after.split_at_checked(length)?;
+        rest = after.get(CHUNK_CRC..)?;
         if kind == END_TYPE {
-            return None;
+            return found;
         }
-        if kind == TEXT_TYPE
+        if found.is_none()
+            && kind == TEXT_TYPE
             && let Some((name, value)) = split_once_nul(data)
             && name == key
         {
-            return Some(value);
+            found = Some(value);
         }
-        rest = after.get(CHUNK_CRC..)?;
     }
 }
 
@@ -113,6 +123,10 @@ mod tests {
         assert_eq!(text(&without, MTIME_KEY), None);
         let cut = png(&[(b"tEXt", b"Thumb::MTime\x0042")]);
         assert_eq!(text(&cut[..cut.len() - 6], MTIME_KEY), None);
+        let no_end = png(&[(b"tEXt", b"Thumb::MTime\x0042"), (b"IDAT", &[0; 64])]);
+        assert_eq!(text(&no_end, MTIME_KEY), None);
+        let end_cut = png(&[(b"tEXt", b"Thumb::MTime\x0042"), (b"IEND", b"")]);
+        assert_eq!(text(&end_cut[..end_cut.len() - 1], MTIME_KEY), None);
         assert_eq!(text(b"short", MTIME_KEY), None);
     }
 

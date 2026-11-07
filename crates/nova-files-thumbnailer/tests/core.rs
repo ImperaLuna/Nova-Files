@@ -133,3 +133,44 @@ fn shown_images_get_thumbnails_then_come_from_the_cache() {
     let (entry, again) = first_thumbnail(&client(&thumbnails, &missing), &folder);
     assert_eq!((entry, again), (EntryId(2), png));
 }
+
+#[test]
+fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
+    let temp = TempFolder::new("back");
+    let folder = temp.0.join("media");
+    fs::create_dir(&folder).unwrap();
+    RgbImage::new(WIDTH, HEIGHT)
+        .save_with_format(folder.join("photo.png"), ImageFormat::Png)
+        .unwrap();
+    let client = client(&temp.0.join("thumbnails"), Path::new(HELPER));
+    let (entry, png) = first_thumbnail(&client, &folder);
+
+    let want = |first| {
+        client
+            .connection
+            .send(Command::Thumbnails {
+                id: ListingId(1),
+                first: EntryId(first),
+                count: ROWS,
+            })
+            .unwrap();
+    };
+    // Away, past the photo, then back.
+    want(ROWS);
+    want(0);
+
+    loop {
+        match client.events.recv_timeout(WAIT).unwrap() {
+            Event::Thumbnail {
+                entry: got,
+                png: again,
+                ..
+            } => {
+                assert_eq!((got, again.to_vec()), (entry, png));
+                break;
+            }
+            Event::DetailsRead { .. } => {}
+            other => panic!("expected a thumbnail, got {other:?}"),
+        }
+    }
+}

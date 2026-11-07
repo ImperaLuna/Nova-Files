@@ -104,9 +104,21 @@ impl Queue {
         Some(Self { shared })
     }
 
-    /// The client now shows listing `id`; earlier work is dropped.
-    pub fn show(&self, id: ListingId, folder: PathBuf, entries: Arc<[Entry]>) {
+    /// The client now shows listing `id`; earlier work is dropped. Called
+    /// before the client hears of the listing, so its first request finds
+    /// it. `current` is asked under the queue's lock, so a listing that was
+    /// replaced meanwhile can't overwrite the one after it.
+    pub fn show(
+        &self,
+        id: ListingId,
+        folder: PathBuf,
+        entries: Arc<[Entry]>,
+        current: impl FnOnce() -> bool,
+    ) {
         self.shared.update(|state| {
+            if !current() {
+                return;
+            }
             state.shown = Some(Arc::new(Shown {
                 id,
                 folder,
@@ -134,6 +146,10 @@ impl Queue {
                 let first = usize::try_from(first.0).unwrap_or(usize::MAX);
                 let count = usize::try_from(count.min(MAX_WANTED)).unwrap_or_default();
                 state.wanted = first..first.saturating_add(count);
+                // Rows the client stopped showing may be asked for again,
+                // and it drops their thumbnails, so they count as not done.
+                let wanted = state.wanted.clone();
+                state.done.retain(|index| wanted.contains(index));
             }
         });
     }
@@ -230,6 +246,8 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
                 misses.push((index, job));
             }
         }
+        // The client may have moved on while the cache was read.
+        misses.retain(|(index, _)| shared.still_wanted(shown.id, *index));
         if misses.is_empty() {
             continue;
         }

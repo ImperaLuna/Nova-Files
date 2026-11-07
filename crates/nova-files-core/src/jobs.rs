@@ -118,13 +118,11 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
                 path: job_path.clone(),
                 entries: Arc::clone(&entries),
             });
+            if let Some(queue) = &thumbnails {
+                queue.show(id, job_path.clone(), Arc::clone(&entries), || !cancelled());
+            }
             // A client that left needs no answer, and no details.
             if events.deliver(listing).is_ok() {
-                if let Some(queue) = &thumbnails
-                    && !cancelled()
-                {
-                    queue.show(id, job_path.clone(), Arc::clone(&entries));
-                }
                 send_details(events.as_ref(), id, &job_path, &entries, cancelled);
             }
         });
