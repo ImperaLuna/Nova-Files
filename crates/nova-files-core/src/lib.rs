@@ -7,6 +7,9 @@
 
 #![forbid(unsafe_code)]
 
+mod jobs;
+mod list;
+mod places;
 mod run;
 
 use std::io;
@@ -14,6 +17,8 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::Connector;
+
+pub use places::Home;
 
 /// How long the core waits, with no client connected and no message, before
 /// it stops. Fixed by design, not a setting.
@@ -41,9 +46,18 @@ pub fn spawn() -> io::Result<RunningCore> {
 /// # Errors
 /// When the OS refuses to start the core's thread.
 pub fn spawn_with_idle_exit(idle_exit: Duration) -> io::Result<RunningCore> {
+    spawn_with(idle_exit, Home::from_env())
+}
+
+/// Starts the core with its places under `home` instead of the home folder
+/// the environment names, so tests never read the real one.
+///
+/// # Errors
+/// When the OS refuses to start the core's thread.
+pub fn spawn_with(idle_exit: Duration, home: Option<Home>) -> io::Result<RunningCore> {
     let (connector, receiver) = nova_files_api::channel();
     let thread = thread::Builder::new()
         .name(THREAD_NAME.to_owned())
-        .spawn(move || run::run(&receiver, idle_exit))?;
+        .spawn(move || run::run(&receiver, idle_exit, home.as_ref()))?;
     Ok(RunningCore { connector, thread })
 }

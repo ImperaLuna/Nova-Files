@@ -13,8 +13,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use crate::message::{ClientId, Command, Event};
 
-/// Where the core delivers one client's events.
-pub trait EventSink: Send + 'static {
+/// Where the core delivers one client's events. Shared between threads:
+/// the core answers some commands from worker threads.
+pub trait EventSink: Send + Sync + 'static {
     /// Hands `event` to the client.
     ///
     /// # Errors
