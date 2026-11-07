@@ -1,10 +1,11 @@
 //! The program. Wiring only: it starts the core, the D-Bus service and the
 //! window, and holds no logic of its own.
 //!
-//! `nova-files` opens a window. `nova-files --service`, which is how D-Bus
+//! `nova-files` opens a window on the home folder, `nova-files <folder>` on
+//! that folder. `nova-files --service`, which is how D-Bus
 //! starts it for a launcher, runs only the core until something asks for a
 //! window. Either way the first process claims the bus name; a later launch
-//! asks that process for a window and exits.
+//! asks that process for a window (on its folder) and exits.
 //!
 //! Windows come and go: GPUI ends its run when the last one closes, and the
 //! process carries on without a GPU, waiting for the next window request.
@@ -39,23 +40,25 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let mode = Mode::from_args(std::env::args_os().skip(1))?;
+    let mode = Mode::from_args(std::env::args_os().skip(1))?.resolve(std::env::current_dir)?;
     let core = nova_files_core::spawn()?;
     let (requests, received) = nova_files_ui::channel();
 
-    let on_activate = {
+    let on_open = {
         let requests = requests.clone();
-        move || requests.send(Request::OpenWindow)
+        move |folder| requests.send(Request::OpenWindow(folder))
     };
-    let _service = match nova_files_dbus::start(Bus::Session, core.connector.clone(), on_activate) {
+    let _service = match nova_files_dbus::start(Bus::Session, core.connector.clone(), on_open) {
         Ok(Started::Service(service)) => Some(service),
         Ok(Started::AlreadyRunning(running)) => {
-            if mode == Mode::Window {
-                running.activate()?;
+            match &mode {
+                Mode::Window(Some(folder)) => running.open(folder)?,
+                Mode::Window(None) => running.activate()?,
+                Mode::Service => {}
             }
             return Ok(());
         }
-        Err(error) if mode == Mode::Window => {
+        Err(error) if mode != Mode::Service => {
             // Still useful without a session bus: windows, no handover.
             report(&format!("no D-Bus session ({error}); running on its own"));
             None
@@ -71,11 +74,11 @@ fn run() -> Result<(), Box<dyn Error>> {
 /// Opens the first window in window mode. Then each `OpenWindow` while no
 /// window is open starts the UI again, until something asks it to quit.
 fn show_windows(mode: Mode, requests: &RequestSender, connector: &Connector, received: &Requests) {
-    if mode == Mode::Window {
-        requests.send(Request::OpenWindow);
+    if let Mode::Window(folder) = mode {
+        requests.send(Request::OpenWindow(folder));
     }
-    while received.wait() == Some(Request::OpenWindow) {
-        if nova_files_ui::run(connector, received) == Ended::Quit {
+    while let Some(Request::OpenWindow(folder)) = received.wait() {
+        if nova_files_ui::run(connector, received, folder) == Ended::Quit {
             break;
         }
     }
