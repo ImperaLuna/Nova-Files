@@ -82,6 +82,6 @@ mod tests {
             .map(|icon| icon.path().into())
             .collect();
         assert_eq!(listed, expected);
-        assert!(Assets.list("fonts/").unwrap().is_empty());
+        assert_eq!(Assets.list("fonts/").unwrap().len(), 0);
     }
 }
