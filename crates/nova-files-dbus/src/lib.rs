@@ -4,7 +4,8 @@
 //! [`start`] claims the application's bus name. The first process to claim
 //! it becomes the running instance and serves two interfaces on one
 //! object: the Nova Files interface (`Ping` for now) and the standard
-//! `org.freedesktop.Application`, whose `Activate` asks for a new window.
+//! `org.freedesktop.Application`, whose `Activate` and `Open` ask for a new
+//! window.
 //! A later process finds the name taken and gets a [`RunningInstance`] to
 //! hand its launch over to.
 
@@ -14,11 +15,12 @@ mod application;
 mod files;
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use nova_files_api::Connector;
+use nova_files_api::{Connector, uri};
 use zbus::blocking::{self, Connection, Proxy};
 use zbus::fdo::RequestNameFlags;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
@@ -81,13 +83,26 @@ impl RunningInstance {
         let platform_data: HashMap<&str, Value<'_>> = HashMap::new();
         proxy.call::<_, _, ()>("Activate", &(platform_data,))
     }
+
+    /// Asks the running instance for a new window on `folder`, which must
+    /// be absolute.
+    ///
+    /// # Errors
+    /// When the call fails or takes longer than [`CALL_TIMEOUT`].
+    pub fn open(&self, folder: &Path) -> zbus::Result<()> {
+        let proxy = Proxy::new(&self.connection, APP_ID, &self.path, APPLICATION_INTERFACE)?;
+        let uris = vec![uri::file_uri(folder)];
+        let platform_data: HashMap<&str, Value<'_>> = HashMap::new();
+        proxy.call::<_, _, ()>("Open", &(uris, platform_data))
+    }
 }
 
 /// Claims the bus name on `bus` and, if it was free, starts serving.
 ///
 /// `connector` reaches the core for D-Bus calls the core answers.
-/// `on_activate` runs when another launch asks for a window; it runs on a
-/// D-Bus thread and must hand the request on rather than do the work.
+/// `on_open` runs when another launch asks for a window, with the folder to
+/// open it on (`None` for the home folder); it runs on a D-Bus thread and
+/// must hand the request on rather than do the work.
 ///
 /// # Errors
 /// When the bus can't be reached within [`CALL_TIMEOUT`] or refuses the
@@ -95,10 +110,10 @@ impl RunningInstance {
 pub fn start(
     bus: Bus,
     connector: Connector,
-    on_activate: impl Fn() + Send + Sync + 'static,
+    on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
 ) -> zbus::Result<Started> {
     let path = object_path()?;
-    let connection = connect(bus, path.clone(), connector, on_activate)?;
+    let connection = connect(bus, path.clone(), connector, on_open)?;
     // Requested by hand, not with the builder's `name`, to pass DoNotQueue:
     // a second launch must learn the name is taken, not wait in line for it.
     match connection.request_name_with_flags(APP_ID, RequestNameFlags::DoNotQueue.into()) {
@@ -124,7 +139,7 @@ fn connect(
     bus: Bus,
     path: OwnedObjectPath,
     connector: Connector,
-    on_activate: impl Fn() + Send + Sync + 'static,
+    on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
 ) -> zbus::Result<Connection> {
     let (result_sender, result) = mpsc::channel();
     thread::Builder::new()
@@ -133,7 +148,7 @@ fn connect(
             let connection = bus.builder().and_then(|builder| {
                 builder
                     .serve_at(&path, files::Files::new(connector.clone()))?
-                    .serve_at(&path, application::Application::new(connector, on_activate))?
+                    .serve_at(&path, application::Application::new(connector, on_open))?
                     .build()
             });
             result_sender.send(connection).ok();
