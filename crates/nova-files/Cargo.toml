@@ -24,6 +24,6 @@ nova-files-dbus.workspace = true
 nova-files-ui.workspace = true
 
 [dev-dependencies]
-gpui = { version = "0.2.2", features = ["test-support"] }
+gpui = { workspace = true, features = ["test-support"] }
 # To call the running program over D-Bus, as a launcher would.
 zbus = "5"

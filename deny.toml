@@ -30,6 +30,8 @@ allow = [
     "NCSA",
     # File-level copyleft: changes to those files stay open; our code doesn't.
     "MPL-2.0",
+    # BSD-style licence of the Rust bzip2 port under GPUI's archive code.
+    "bzip2-1.0.6",
 ]
 
 [bans]
@@ -37,23 +39,14 @@ multiple-versions = "allow"
 wildcards = "deny"
 allow-wildcard-paths = true
 deny = [
-    # No async runtime: threads and channels. GPUI's HTTP client pulls in
-    # tokio and async-std and can't be switched off, so only its crates may
-    # depend on them.
+    # No async runtime: threads and channels. GPUI's web backend pulls in
+    # tokio and its HTTP client's tar code pulls in async-std; neither can be
+    # switched off, so only those crates may depend on them.
     { crate = "tokio", reason = "threads and channels only, no async runtime", wrappers = [
-        "h2",
-        "hyper",
-        "hyper-rustls",
-        "hyper-util",
-        "tokio-rustls",
-        "tokio-socks",
-        "tokio-util",
-        "tower",
         "wasm-bindgen-futures",
-        "zed-reqwest",
     ] },
     { crate = "async-std", reason = "threads and channels only, no async runtime", wrappers = [
-        "zed-async-tar",
+        "async-tar",
     ] },
     # libc 0.2.190 dropped ENOATTR, which xattr 0.2 (under GPUI's HTTP
     # client) still needs. Lift once GPUI moves to a newer xattr.
@@ -70,3 +63,12 @@ deny = [
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-git = [
+    # GPUI and its platform crates come from a fork of Zed (see Cargo.toml).
+    "https://github.com/ImperaLuna/zed",
+    # Zed's own forks and pins, which GPUI depends on by git.
+    "https://github.com/zed-industries/wgpu.git",
+    "https://github.com/zed-industries/font-kit",
+    "https://github.com/zed-industries/xim-rs.git",
+    "https://github.com/proptest-rs/proptest",
+]
