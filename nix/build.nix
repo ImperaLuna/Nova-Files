@@ -47,6 +47,50 @@ let
   };
 
   cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+
+  # The checks build with the `ci` profile from Cargo.toml (no LTO, no debug
+  # info) and share one dependency build, so a PR never waits on release
+  # linking. The release build is only for the package people install.
+  ciArgs = commonArgs // {
+    CARGO_PROFILE = "ci";
+  };
+  ciArtifacts = craneLib.buildDepsOnly ciArgs;
+
+  # The installed app: binaries, the D-Bus service file and the wrapper.
+  mkPackage =
+    args: artifacts:
+    craneLib.buildPackage (
+      args
+      // {
+        cargoArtifacts = artifacts;
+        # Tests run once, in the nextest check, not again in the package.
+        doCheck = false;
+        postInstall = ''
+          install -Dm644 ${../data/dbus-service.in} \
+            $out/share/dbus-1/services/${appId}.service
+          substituteInPlace $out/share/dbus-1/services/${appId}.service \
+            --replace-fail "@app_id@" "${appId}" \
+            --replace-fail "@bin@" "$out/bin/nova-files"
+          # Launchers list the app from this file. It is named after the app
+          # id, as DBusActivatable requires.
+          install -Dm644 ${../data/desktop-entry.in} \
+            $out/share/applications/${appId}.desktop
+          substituteInPlace $out/share/applications/${appId}.desktop \
+            --replace-fail "@bin@" "$out/bin/nova-files"
+        '';
+        postFixup = ''
+          wrapProgram $out/bin/nova-files \
+            --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeLibs}
+        '';
+        meta = {
+          description = "A fast file manager for Linux";
+          homepage = "https://github.com/ImperaLuna/Nova-Files";
+          license = pkgs.lib.licenses.mit;
+          mainProgram = "nova-files";
+          platforms = pkgs.lib.platforms.linux;
+        };
+      }
+    );
 in
 {
   inherit
@@ -54,39 +98,14 @@ in
     src
     commonArgs
     cargoArtifacts
+    ciArgs
+    ciArtifacts
     runtimeLibs
     ;
 
-  package = craneLib.buildPackage (
-    commonArgs
-    // {
-      inherit cargoArtifacts;
-      # Tests run once, in the nextest check, not again in the package.
-      doCheck = false;
-      postInstall = ''
-        install -Dm644 ${../data/dbus-service.in} \
-          $out/share/dbus-1/services/${appId}.service
-        substituteInPlace $out/share/dbus-1/services/${appId}.service \
-          --replace-fail "@app_id@" "${appId}" \
-          --replace-fail "@bin@" "$out/bin/nova-files"
-        # Launchers list the app from this file. It is named after the app
-        # id, as DBusActivatable requires.
-        install -Dm644 ${../data/desktop-entry.in} \
-          $out/share/applications/${appId}.desktop
-        substituteInPlace $out/share/applications/${appId}.desktop \
-          --replace-fail "@bin@" "$out/bin/nova-files"
-      '';
-      postFixup = ''
-        wrapProgram $out/bin/nova-files \
-          --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeLibs}
-      '';
-      meta = {
-        description = "A fast file manager for Linux";
-        homepage = "https://github.com/ImperaLuna/Nova-Files";
-        license = pkgs.lib.licenses.mit;
-        mainProgram = "nova-files";
-        platforms = pkgs.lib.platforms.linux;
-      };
-    }
-  );
+  package = mkPackage commonArgs cargoArtifacts;
+
+  # The same package from the `ci` profile, for `nix flake check`: it proves
+  # the install steps work without a release build.
+  ciPackage = mkPackage ciArgs ciArtifacts;
 }

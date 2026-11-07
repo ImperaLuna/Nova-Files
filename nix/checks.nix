@@ -1,6 +1,7 @@
 # Every check `nix flake check` runs, which is exactly what CI runs.
 #
-# Cargo checks reuse the dependency build from nix/build.nix. The checks in
+# Cargo checks build with the `ci` profile and reuse its dependency build
+# from nix/build.nix. The checks in
 # tools/ run as plain scripts over the source tree, with only the tools
 # each one needs.
 {
@@ -9,7 +10,7 @@
   advisory-db,
 }:
 let
-  inherit (build) craneLib commonArgs cargoArtifacts;
+  inherit (build) craneLib ciArgs ciArtifacts;
   inherit (pkgs) lib;
 
   repoFiles = lib.fileset.toSource {
@@ -52,23 +53,23 @@ let
   advisoryDbFolder = "advisory-db-3157b0e258782691";
 in
 {
-  package = build.package;
+  package = build.ciPackage;
 
   clippy = craneLib.cargoClippy (
-    commonArgs
+    ciArgs
     // {
-      inherit cargoArtifacts;
+      cargoArtifacts = ciArtifacts;
       # --deny warnings: compiler warnings fail CI too.
       cargoClippyExtraArgs = "--workspace --all-targets -- --deny warnings";
     }
   );
 
-  fmt = craneLib.cargoFmt { inherit (commonArgs) src pname version; };
+  fmt = craneLib.cargoFmt { inherit (ciArgs) src pname version; };
 
   nextest = craneLib.cargoNextest (
-    commonArgs
+    ciArgs
     // {
-      inherit cargoArtifacts;
+      cargoArtifacts = ciArtifacts;
       cargoNextestExtraArgs = "--workspace --no-tests=warn";
       # The D-Bus tests start a private dbus-daemon.
       nativeCheckInputs = [ pkgs.dbus ];
@@ -76,7 +77,7 @@ in
   );
 
   deny = craneLib.cargoDeny (
-    commonArgs
+    ciArgs
     // {
       cargoDenyChecks = "advisories bans licenses sources";
       cargoDenyExtraArgs = "--offline";
@@ -119,7 +120,7 @@ in
         nativeBuildInputs = [ pkgs.desktop-file-utils ];
       }
       ''
-        desktop-file-validate ${build.package}/share/applications/*.desktop
+        desktop-file-validate ${build.ciPackage}/share/applications/*.desktop
         touch $out
       '';
 
