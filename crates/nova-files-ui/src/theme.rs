@@ -13,6 +13,60 @@ pub mod window {
 
 /// Colors, as 0xRRGGBB.
 pub mod color {
-    /// The window's base surface.
+    /// The window's base surface, behind the folder's entries.
     pub const SURFACE: u32 = 0x001a_1918;
+    /// The places column and the toolbar, one step below the surface.
+    pub const SURFACE_SUNK: u32 = 0x0016_1514;
+    /// Hairlines between the toolbar, the places and the entries.
+    pub const DIVIDER: u32 = 0x002a_2724;
+    /// A row under the pointer, and the place that is open.
+    pub const ROW_HIGHLIGHT: u32 = 0x002a_2724;
+    /// Names.
+    pub const TEXT: u32 = 0x00d8_ccb0;
+    /// The path, and buttons that do nothing right now.
+    pub const TEXT_DIM: u32 = 0x008a_857c;
+    /// Folder icons.
+    pub const FOLDER: u32 = 0x0000_adb5;
+    /// File icons.
+    pub const FILE: u32 = 0x00a8_a296;
+}
+
+/// Sizes and spacing.
+pub mod size {
+    use gpui::{Pixels, px};
+
+    /// Body text.
+    pub const TEXT: Pixels = px(14.0);
+    /// The path in the toolbar.
+    pub const TEXT_SMALL: Pixels = px(13.0);
+    /// One row of the entries list or the places list.
+    pub const ROW_HEIGHT: Pixels = px(32.0);
+    /// A row's icon. Thumbnails take this slot later.
+    pub const ROW_ICON: Pixels = px(18.0);
+    /// The Up button's icon.
+    pub const BUTTON_ICON: Pixels = px(16.0);
+    /// The places column.
+    pub const PLACES_WIDTH: Pixels = px(200.0);
+    /// The toolbar above both columns.
+    pub const TOOLBAR_HEIGHT: Pixels = px(48.0);
+    /// Space around a column's rows and inside a row.
+    pub const PAD: Pixels = px(10.0);
+    /// Space between an icon and its label.
+    pub const GAP: Pixels = px(10.0);
+    /// Space between a button's icon and its label.
+    pub const BUTTON_GAP: Pixels = px(4.0);
+    /// Space between rows.
+    pub const ROW_GAP: Pixels = px(2.0);
+    /// Hairline width.
+    pub const DIVIDER: Pixels = px(1.0);
+}
+
+/// Corner radii.
+pub mod radius {
+    use gpui::{Pixels, px};
+
+    /// A row in either list.
+    pub const ROW: Pixels = px(10.0);
+    /// A toolbar button.
+    pub const BUTTON: Pixels = px(10.0);
 }
