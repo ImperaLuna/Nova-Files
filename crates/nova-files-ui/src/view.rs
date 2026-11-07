@@ -218,3 +218,23 @@ fn place_name(place: &Place) -> SharedString {
 }
 
 const HOME_LABEL: &str = "Home";
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn places_are_named_by_their_folder_except_home() {
+        let place = |kind, path: &str| Place {
+            kind,
+            path: PathBuf::from(path),
+        };
+        assert_eq!(place_name(&place(PlaceKind::Home, "/home/me")), "Home");
+        assert_eq!(
+            place_name(&place(PlaceKind::Documents, "/home/me/Dokumente")),
+            "Dokumente"
+        );
+    }
+}
