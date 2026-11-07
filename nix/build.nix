@@ -23,8 +23,28 @@ let
     libxrandr
   ];
 
+  # Hashes of the git dependencies, so they are fetched as ordinary store
+  # paths that Cachix serves, not cloned at evaluation time on every run
+  # (the zed fork's clone alone took a minute of each CI job). After
+  # changing a git dependency, set its hash to `pkgs.lib.fakeHash` and copy
+  # the real one from the build error.
+  outputHashes = {
+    "git+https://github.com/ImperaLuna/zed?rev=814a9d4aaa56b6e332840817a0116d61087fd94a#814a9d4aaa56b6e332840817a0116d61087fd94a" =
+      "sha256-PONhzGmYBps4BIwqrm4LXJTLFaf5g8FNeOeHfyPTWB0=";
+    "git+https://github.com/proptest-rs/proptest?rev=3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b#3dca198a8fef1b32e3a66f1e1897c955b4dc5b5b" =
+      "sha256-p5NTcHhruI8QQvANACg8AMRVNmuvGxs2NLit+/8PaWo=";
+    "git+https://github.com/zed-industries/font-kit?rev=94b0f28166665e8fd2f53ff6d268a14955c82269#94b0f28166665e8fd2f53ff6d268a14955c82269" =
+      "sha256-KXygi0olNQi5yM8eaJVykNDtbPMDjT+cWPBF8UrtXR4=";
+    "git+https://github.com/zed-industries/scap?rev=4afea48c3b002197176fb19cd0f9b180dd36eaac#4afea48c3b002197176fb19cd0f9b180dd36eaac" =
+      "sha256-BihiQHlal/eRsktyf0GI3aSWsUCW7WcICMsC2Xvb7kw=";
+    "git+https://github.com/zed-industries/wgpu.git?branch=v29#357a0c56e0070480ad9daea5d2eaa83150b79e88" =
+      "sha256-jwPdrd2XLvK5ddEutR/39OLMh2JU3UXNWIcJKCndh+U=";
+    "git+https://github.com/zed-industries/xim-rs.git?rev=16f35a2c881b815a2b6cdfd6687988e84f8447d8#16f35a2c881b815a2b6cdfd6687988e84f8447d8" =
+      "sha256-pRT4Sz1JU9ros47/7pmIW9kosWOGMOItcnNd+VrvnpE=";
+  };
+
   commonArgs = {
-    inherit src;
+    inherit src outputHashes;
     strictDeps = true;
     nativeBuildInputs = with pkgs; [
       pkg-config
