@@ -1,6 +1,9 @@
 # CI: the same `nix flake check` that runs locally, plus mutation tests on
 # the lines a pull request changes.
 #
+# Draft pull requests skip CI: Codex reviews a draft, and CI runs once the
+# PR is marked ready, and on every push after that.
+#
 # A new push cancels the run it replaces. Built Nix store paths come from
 # Cachix when the CACHIX_AUTH_TOKEN secret is set, otherwise from the
 # GitHub Actions cache, so a run only rebuilds what changed.
@@ -8,6 +11,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -27,6 +31,7 @@ env:
 jobs:
   check:
     name: nix flake check
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -58,6 +63,7 @@ jobs:
   # main but not ones saved on other PR branches, so main keeps it warm.
   mutants:
     name: mutation tests on changed lines
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}

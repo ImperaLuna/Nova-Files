@@ -123,6 +123,9 @@ Work inside `nix develop`. `just` lists one command per job (`just test`,
 per PR, after `just check` passes and before asking Codex for review; later
 fix rounds only rerun `just check`. CI runs both.
 
+Open every PR as a draft; CI skips drafts. Ask Codex to review the draft,
+fix what it finds, then mark the PR ready for review, which starts CI.
+
 Every change goes through a pull request.
 
 ## Review guidelines
