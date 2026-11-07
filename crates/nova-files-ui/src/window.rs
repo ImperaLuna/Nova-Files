@@ -249,16 +249,27 @@ fn tidy(path: &Path) -> PathBuf {
     for part in path.components() {
         match part {
             Component::CurDir => {}
-            Component::ParentDir => {
-                if !tidy.pop() && !tidy.has_root() {
-                    tidy.push(part);
+            Component::ParentDir => match tidy.components().next_back() {
+                Some(Component::Normal(_)) => {
+                    tidy.pop();
                 }
-            }
+                // `..` at the root stays at the root.
+                Some(Component::RootDir | Component::Prefix(_)) => {}
+                // Nothing left to take off: the `..` stays.
+                Some(Component::ParentDir | Component::CurDir) | None => tidy.push(part),
+            },
             Component::RootDir | Component::Prefix(_) | Component::Normal(_) => tidy.push(part),
         }
     }
-    tidy
+    if tidy.as_os_str().is_empty() {
+        PathBuf::from(CURRENT_FOLDER)
+    } else {
+        tidy
+    }
 }
+
+/// The relative path that names the folder it is relative to.
+const CURRENT_FOLDER: &str = ".";
 
 #[cfg(test)]
 mod tests {
@@ -272,5 +283,9 @@ mod tests {
         assert_eq!(tidy(Path::new("/")), PathBuf::from("/"));
         // A relative path keeps the `..` it can't take off.
         assert_eq!(tidy(Path::new("..")), PathBuf::from(".."));
+        assert_eq!(tidy(Path::new("../../child")), PathBuf::from("../../child"));
+        assert_eq!(tidy(Path::new("a/../../b")), PathBuf::from("../b"));
+        assert_eq!(tidy(Path::new("a/..")), PathBuf::from("."));
+        assert_eq!(tidy(Path::new(".")), PathBuf::from("."));
     }
 }
