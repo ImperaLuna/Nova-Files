@@ -75,6 +75,17 @@ impl EventSink for WindowSink {
 impl MainWindow {
     /// Opens a window on `folder`.
     pub fn new(connector: &Connector, folder: &Path, cx: &mut Context<Self>) -> Self {
+        Self::with_home(connector, folder, home_folder(), cx)
+    }
+
+    /// Opens a window on `folder` that falls back to `home` instead of the
+    /// home folder the environment names, so tests never open the real one.
+    pub fn with_home(
+        connector: &Connector,
+        folder: &Path,
+        home: PathBuf,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let (sink, mut events) = mpsc::unbounded();
         let connection = connector
             .connect(WindowSink(sink))
@@ -109,7 +120,7 @@ impl MainWindow {
             asked: None,
             next_listing: 0,
             // Popped from the end: home first, then the root.
-            fallbacks: vec![PathBuf::from(ROOT_FOLDER), home_folder()],
+            fallbacks: vec![PathBuf::from(ROOT_FOLDER), home],
             places: Vec::new(),
             scroll: UniformListScrollHandle::new(),
             _events: events,
