@@ -1,5 +1,6 @@
 //! The window. It sends commands to the core and draws from its events; it
-//! never touches the disk. A window opens on the home folder.
+//! never touches the disk. A window opens on the home folder unless the
+//! program names another.
 //!
 //! [`run`] takes over the calling thread with a GPUI app, opens a window,
 //! and follows the program's [`Request`]s until the last window closes or
@@ -16,6 +17,7 @@ mod window;
 
 use std::cell::Cell;
 use std::io::{self, Write as _};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
@@ -33,9 +35,10 @@ pub enum Ended {
     Quit,
 }
 
-/// Runs the UI on this thread with one window open, until the last window
-/// closes or the program asks it to quit.
-pub fn run(connector: &Connector, requests: &Requests) -> Ended {
+/// Runs the UI on this thread with one window open on `folder` (or the
+/// home folder), until the last window closes or the program asks it to
+/// quit.
+pub fn run(connector: &Connector, requests: &Requests, folder: Option<PathBuf>) -> Ended {
     let ended = Rc::new(Cell::new(Ended::WindowsClosed));
     let connector = connector.clone();
     let requests = requests.clone();
@@ -43,13 +46,13 @@ pub fn run(connector: &Connector, requests: &Requests) -> Ended {
     gpui_platform::application()
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
-            open_window(&connector, cx);
+            open_window(&connector, folder, cx);
             let follow = cx.spawn(async move |cx| {
                 loop {
                     let request = requests.next().await;
                     let keep_going = cx.update(|cx| match request {
-                        Some(Request::OpenWindow) => {
-                            open_window(&connector, cx);
+                        Some(Request::OpenWindow(folder)) => {
+                            open_window(&connector, folder, cx);
                             true
                         }
                         Some(Request::Quit) | None => {
@@ -76,8 +79,9 @@ struct RequestLoop {
 
 impl Global for RequestLoop {}
 
-/// Opens a main window centred on the main display.
-fn open_window(connector: &Connector, cx: &mut App) {
+/// Opens a main window on `folder` (or the home folder), centred on the
+/// main display.
+fn open_window(connector: &Connector, folder: Option<PathBuf>, cx: &mut App) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -85,7 +89,7 @@ fn open_window(connector: &Connector, cx: &mut App) {
         ..WindowOptions::default()
     };
     let connector = connector.clone();
-    let folder = home_folder();
+    let folder = folder.unwrap_or_else(home_folder);
     let opened = cx.open_window(options, move |_window, cx| {
         cx.new(|cx| MainWindow::new(&connector, &folder, cx))
     });

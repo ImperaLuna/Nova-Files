@@ -6,16 +6,17 @@
 //! the same receiver, without a GPU, for the next request.
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 /// What the program asks of the UI.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request {
-    /// Open another window.
-    OpenWindow,
+    /// Open another window, on this folder or on the home folder.
+    OpenWindow(Option<PathBuf>),
     /// Close every window and stop.
     Quit,
 }

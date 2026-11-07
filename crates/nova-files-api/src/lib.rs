@@ -11,6 +11,7 @@
 mod connection;
 mod folder;
 mod message;
+pub mod uri;
 
 pub use connection::{
     ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
