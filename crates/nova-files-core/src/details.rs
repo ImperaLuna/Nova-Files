@@ -50,3 +50,32 @@ fn read_one(path: &Path, kind: EntryKind, cancelled: impl Fn() -> bool) -> Optio
         modified: metadata.modified().ok(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+    use std::os::unix::fs::symlink;
+
+    use super::*;
+
+    #[test]
+    fn a_cancel_after_the_first_read_skips_the_broken_link_fallback() {
+        let folder =
+            std::env::temp_dir().join(format!("nova-files-details-cancel-{}", std::process::id()));
+        fs::create_dir_all(&folder).ok();
+        let link = folder.join("broken");
+        fs::remove_file(&link).ok();
+        symlink(folder.join("gone"), &link).ok();
+        let asked = Cell::new(0);
+        let cancelled = || {
+            asked.set(asked.get() + 1);
+            asked.get() > 1
+        };
+
+        let details = read_one(&link, EntryKind::File, cancelled);
+
+        fs::remove_dir_all(&folder).ok();
+        assert_eq!(details, None);
+        assert_eq!(asked.get(), 2);
+    }
+}
