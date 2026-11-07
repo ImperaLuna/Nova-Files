@@ -23,7 +23,7 @@ exclude_re = [
     "nova-files-ui/src/lib\\.rs:.*\\brun\\b",
     "nova-files-ui/src/lib\\.rs:.*\\bopen_window\\b",
     # Window mode without a bus goes on to open a window.
-    "replace match guard mode == Mode::Window with false in run",
+    "replace match guard mode != Mode::Service with false in run",
     # Fires when the core stops, which takes the 3-minute idle wait.
     "\\bwatch_core\\b",
 ]

@@ -1,6 +1,6 @@
 //! The built program against a private D-Bus daemon, without a display:
-//! service mode answers `Ping`, a later launch hands its window to the
-//! first instance (or, in service mode, leaves it alone), and bad starts
+//! service mode answers `Ping`, a later launch hands its window (and its
+//! folder) to the first instance (or, in service mode, leaves it alone), and bad starts
 //! exit with an error.
 
 #![expect(
@@ -12,6 +12,7 @@
 #[path = "../../nova-files-dbus/tests/support/mod.rs"]
 mod support;
 
+use std::path::PathBuf;
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::mpsc;
 use std::thread;
@@ -123,14 +124,33 @@ fn second_launch_hands_its_window_to_the_first() {
     let bus = PrivateBus::start();
     let (activations, activated) = mpsc::channel();
     let core = nova_files_core::spawn().unwrap();
-    let first = nova_files_dbus::start(bus.bus(), core.connector, move || {
-        activations.send(()).ok();
+    let first = nova_files_dbus::start(bus.bus(), core.connector, move |folder| {
+        activations.send(folder).ok();
     })
     .unwrap();
     assert!(matches!(first, Started::Service(_)));
 
     assert!(finish(program(&bus.address, &[])).status.success());
-    assert_eq!(activated.recv_timeout(WAIT), Ok(()));
+    assert_eq!(activated.recv_timeout(WAIT), Ok(None));
+}
+
+#[test]
+fn second_launch_with_a_folder_hands_it_to_the_first() {
+    let bus = PrivateBus::start();
+    let (opened, received) = mpsc::channel();
+    let core = nova_files_core::spawn().unwrap();
+    let _first = nova_files_dbus::start(bus.bus(), core.connector, move |folder| {
+        opened.send(folder).ok();
+    })
+    .unwrap();
+
+    let launch = finish(program(&bus.address, &["/tmp/some folder"]));
+
+    assert!(launch.status.success());
+    assert_eq!(
+        received.recv_timeout(WAIT),
+        Ok(Some(PathBuf::from("/tmp/some folder")))
+    );
 }
 
 #[test]
@@ -138,8 +158,8 @@ fn second_service_start_asks_for_no_window() {
     let bus = PrivateBus::start();
     let (activations, activated) = mpsc::channel();
     let core = nova_files_core::spawn().unwrap();
-    let _first = nova_files_dbus::start(bus.bus(), core.connector, move || {
-        activations.send(()).ok();
+    let _first = nova_files_dbus::start(bus.bus(), core.connector, move |folder| {
+        activations.send(folder).ok();
     })
     .unwrap();
 
