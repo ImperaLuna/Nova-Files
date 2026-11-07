@@ -7,7 +7,12 @@
 )]
 
 use std::fs;
+use std::io::{self, Write as _};
 use std::path::PathBuf;
+use std::process;
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::thread;
+use std::time::Duration;
 
 use gpui::TestAppContext;
 use image::{ImageFormat, RgbImage};
@@ -16,6 +21,33 @@ use nova_files_ui::{MainWindow, WindowEvent};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
 const SIDE: u32 = 300;
+
+/// How long the test may wait for the core and the helper.
+const WAIT: Duration = Duration::from_secs(5);
+
+/// Fails the test process if the test is still running after [`WAIT`]:
+/// GPUI's waits have no deadline of their own while the core answers from
+/// real threads, so a thumbnail that never comes would hang.
+struct Watchdog(Sender<()>);
+
+impl Watchdog {
+    fn start() -> Self {
+        let (done, finished) = mpsc::channel();
+        thread::spawn(move || {
+            if finished.recv_timeout(WAIT) == Err(RecvTimeoutError::Timeout) {
+                writeln!(io::stderr(), "no thumbnail within {WAIT:?}").ok();
+                process::exit(1);
+            }
+        });
+        Self(done)
+    }
+}
+
+impl Drop for Watchdog {
+    fn drop(&mut self) {
+        self.0.send(()).ok();
+    }
+}
 
 /// A folder under the system temp folder, removed when dropped.
 struct TempFolder(PathBuf);
@@ -28,8 +60,9 @@ impl Drop for TempFolder {
 
 #[gpui::test]
 async fn an_image_row_gets_its_thumbnail(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let temp = TempFolder(
-        std::env::temp_dir().join(format!("nova-files-thumbs-window-{}", std::process::id())),
+        std::env::temp_dir().join(format!("nova-files-thumbs-window-{}", process::id())),
     );
     let folder = temp.0.join("media");
     fs::create_dir_all(&folder).unwrap();

@@ -5,6 +5,7 @@
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -39,8 +40,17 @@ impl Drop for TempFolder {
 
 /// Runs one batch of `(file, name)` and returns the helper's answers.
 fn run(thumbnails: &Path, jobs: &[(&Path, &str)]) -> Vec<String> {
+    run_with_data(thumbnails, jobs, &thumbnails.join("no-data"))
+}
+
+/// [`run`], with `data` as the only data folder (MIME types and system
+/// thumbnailers).
+fn run_with_data(thumbnails: &Path, jobs: &[(&Path, &str)], data: &Path) -> Vec<String> {
     let mut command = Command::new(HELPER);
-    command.arg(thumbnails);
+    command
+        .arg(thumbnails)
+        .env("XDG_DATA_DIRS", data)
+        .env("XDG_DATA_HOME", data);
     for (file, name) in jobs {
         command
             .arg(file)
@@ -225,6 +235,83 @@ fn bad_arguments_are_refused() {
         .status()
         .unwrap();
     assert!(!status.success());
+}
+
+#[test]
+fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
+    let folder = TempFolder::new("system");
+    let thumbnails = folder.0.join("thumbnails");
+    let data = folder.0.join("data");
+    fs::create_dir_all(data.join("mime")).unwrap();
+    fs::create_dir_all(data.join("thumbnailers")).unwrap();
+    fs::write(
+        data.join("mime/globs2"),
+        "50:image/heif:*.heic\n50:video/mp4:*.mp4\n50:video/x-matroska:*.mkv\n",
+    )
+    .unwrap();
+    // Real programs standing in for real thumbnailers: a script that closes
+    // its output early, then copies a ready PNG over its output file once it
+    // has checked its input is there; and one that fails.
+    let made = folder.0.join("made.png");
+    RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
+        .save_with_format(&made, ImageFormat::Png)
+        .unwrap();
+    let script = folder.0.join("thumbnail.sh");
+    fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nexec >&-\nsleep 0.2\ntest -r \"$1\" && exec cp \"{}\" \"$2\"\n",
+            made.display()
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(
+        data.join("thumbnailers/copy.thumbnailer"),
+        format!(
+            "[Thumbnailer Entry]\nExec={} %i %o\nMimeType=image/heif;\n",
+            script.display()
+        ),
+    )
+    .unwrap();
+    fs::write(
+        data.join("thumbnailers/broken.thumbnailer"),
+        "[Thumbnailer Entry]\nExec=false %i %o\nMimeType=video/mp4;\n",
+    )
+    .unwrap();
+    // Not something the helper decodes itself.
+    let heic = folder.0.join("photo.heic");
+    fs::write(&heic, b"\0\0\0\x18ftypheic").unwrap();
+    let missing = folder.0.join("missing.heic");
+    let (mp4, mkv) = (folder.0.join("clip.mp4"), folder.0.join("film.mkv"));
+    fs::write(&mp4, b"").unwrap();
+    fs::write(&mkv, b"").unwrap();
+
+    let answers = run_with_data(
+        &thumbnails,
+        &[
+            (&heic, "h.png"),
+            (&mp4, "m.png"),
+            (&mkv, "k.png"),
+            (&missing, "x.png"),
+        ],
+        &data,
+    );
+
+    assert_eq!(answers, ["ok", "failed", "unsupported", "failed"]);
+    let thumb = image::open(thumbnails.join("normal/h.png")).unwrap();
+    assert_eq!(
+        (thumb.width(), thumb.height()),
+        (NORMAL_SIZE, NORMAL_SIZE / 2)
+    );
+    assert!(thumbnails.join("fail/nova-files/m.png").exists());
+    // A file that can't be read may be readable later.
+    assert!(!thumbnails.join("fail/nova-files/x.png").exists());
+    let left: Vec<_> = fs::read_dir(thumbnails.join("normal"))
+        .unwrap()
+        .map(|file| file.unwrap().file_name())
+        .collect();
+    assert_eq!(left, ["h.png"], "the thumbnailer's own output is removed");
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {

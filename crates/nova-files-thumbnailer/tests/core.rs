@@ -18,7 +18,7 @@ use nova_files_api::{Command, Connection, EntryId, Event, ListingId};
 use nova_files_core::{IDLE_EXIT, RunningCore, Thumbnails};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
-const WAIT: Duration = Duration::from_secs(10);
+const WAIT: Duration = Duration::from_secs(5);
 const WIDTH: u32 = 400;
 const HEIGHT: u32 = 200;
 const NORMAL_SIZE: u32 = 128;

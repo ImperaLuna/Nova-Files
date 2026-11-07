@@ -1,5 +1,7 @@
 //! Locks the helper in before it reads any file: it may read anywhere, but
-//! write, create or remove files only inside the thumbnails folder.
+//! write, create or remove files only inside the thumbnails folder. It may
+//! also write to `/dev/null`, where the system thumbnailers it starts send
+//! their output.
 //!
 //! Landlock does the locking. A kernel without Landlock (or an older ABI)
 //! gets as much of it as it supports; the helper still runs there, since a
@@ -18,6 +20,7 @@ use landlock::{
 /// The newest Landlock ABI the rules are written for.
 const ABI_VERSION: ABI = ABI::V3;
 const ROOT: &str = "/";
+const NULL_DEVICE: &str = "/dev/null";
 /// The thumbnails folder is private to the user, as the spec asks.
 pub const FOLDER_MODE: u32 = 0o700;
 
@@ -36,6 +39,10 @@ pub fn lock_in(writable: &Path) -> Result<(), Box<dyn Error>> {
             AccessFs::from_read(ABI_VERSION),
         ))?
         .add_rule(PathBeneath::new(PathFd::new(writable)?, all))?
+        .add_rule(PathBeneath::new(
+            PathFd::new(NULL_DEVICE)?,
+            AccessFs::WriteFile,
+        ))?
         .restrict_self()?;
     Ok(())
 }

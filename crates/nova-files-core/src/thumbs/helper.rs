@@ -1,10 +1,11 @@
 //! Runs the sandboxed helper on one batch and reads its answers.
 //!
-//! The helper gets only `PATH` from the environment and runs in a process
+//! The helper gets only what it needs from the environment (where programs,
+//! MIME data and thumbnailers are: [`PASSED_VARS`]) and runs in a process
 //! group of its own; its output is read on a thread of its own. A batch
-//! has [`PER_FILE`] for each of its files; past that the whole group is
-//! killed, so a thumbnailer the helper started can't outlive it. It is
-//! always waited on. What it made is read from the cache, not from its
+//! has [`PER_FILE`] for each of its files; past that the helper is killed.
+//! Once it is done the rest of its group is killed too, so nothing a
+//! thumbnailer left running outlives the batch. It is always waited on. What it made is read from the cache, not from its
 //! answers, so a helper killed part-way still counts the files it saved.
 
 use std::env;
@@ -22,7 +23,8 @@ use rustix::process::{self, Pid, Signal};
 /// How long each file of a batch may take; the helper gives a system
 /// thumbnailer less than this, so a batch of slow files still finishes.
 const PER_FILE: Duration = Duration::from_secs(15);
-const PATH_VAR: &str = "PATH";
+/// Where the helper finds the system's thumbnailers and MIME data.
+const PASSED_VARS: [&str; 4] = ["PATH", "HOME", "XDG_DATA_HOME", "XDG_DATA_DIRS"];
 const READER_THREAD: &str = "nova-files-thumbnail-reader";
 
 /// One file for the helper.
@@ -44,8 +46,10 @@ pub fn run(helper: &Path, thumbnails: &Path, jobs: &[Job]) {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .process_group(0);
-    if let Some(path) = env::var_os(PATH_VAR) {
-        command.env(PATH_VAR, path);
+    for var in PASSED_VARS {
+        if let Some(value) = env::var_os(var) {
+            command.env(var, value);
+        }
     }
     for job in jobs {
         command
@@ -59,22 +63,23 @@ pub fn run(helper: &Path, thumbnails: &Path, jobs: &[Job]) {
     };
     let output = child.stdout.take();
     let (done, finished) = mpsc::channel();
-    let reader = thread::Builder::new()
+    // A reader that couldn't start drops `done`, which ends the wait at once.
+    thread::Builder::new()
         .name(READER_THREAD.to_owned())
         .spawn(move || {
             if let Some(mut output) = output {
                 io::copy(&mut output, &mut io::sink()).ok();
             }
             done.send(()).ok();
-        });
+        })
+        .ok();
     let deadline = PER_FILE.saturating_mul(u32::try_from(jobs.len()).unwrap_or(u32::MAX));
-    let in_time = reader.is_ok() && finished.recv_timeout(deadline).is_ok();
-    if !in_time {
-        // The group is the helper's own: it and what it started.
-        if let Some(group) = i32::try_from(child.id()).ok().and_then(Pid::from_raw) {
-            process::kill_process_group(group, Signal::KILL).ok();
-        }
-        child.kill().ok();
+    finished.recv_timeout(deadline).ok();
+    // The group is the helper's own: it, if still running, and what it
+    // started. Until the helper is waited on, its id can't name another
+    // group.
+    if let Some(group) = i32::try_from(child.id()).ok().and_then(Pid::from_raw) {
+        process::kill_process_group(group, Signal::KILL).ok();
     }
     child.wait().ok();
 }
