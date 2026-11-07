@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Nova Files
+GenericName=File Manager
+Comment=Browse your files
+Exec=@bin@ %u
+Icon=system-file-manager
+Terminal=false
+Categories=System;FileTools;FileManager;
+MimeType=inode/directory;
+Keywords=folder;files;explorer;
+StartupNotify=true
+DBusActivatable=true
