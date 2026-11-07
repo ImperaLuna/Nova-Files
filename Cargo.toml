@@ -34,10 +34,10 @@ nova-files-ui = { path = "crates/nova-files-ui" }
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "a79f03a0ec62ca74425c5a74bb8ac48c30c90a14", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "814a9d4aaa56b6e332840817a0116d61087fd94a", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "a79f03a0ec62ca74425c5a74bb8ac48c30c90a14", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "814a9d4aaa56b6e332840817a0116d61087fd94a", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index can opt in per site with
