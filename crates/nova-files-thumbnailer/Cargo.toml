@@ -18,3 +18,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# Only the formats the helper decodes itself; the rest go to the system's
+# thumbnailers. GPUI already builds image with more formats.
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+landlock = "0.4"
