@@ -19,9 +19,11 @@ use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{Context, EventEmitter, Task, UniformListScrollHandle};
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, EntryId, EntryKind, Event, EventSink, Listing,
-    ListingId, Place,
+    ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
+    Listing, ListingId, Place,
 };
+
+use crate::columns::{self, ColumnText};
 
 /// What the window knows about the core.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +54,9 @@ pub struct MainWindow {
     connection: Option<Connection>,
     /// The folder on screen, once its first listing has arrived.
     pub(crate) listing: Option<Listing>,
+    /// The details of the listing's first entries, in entry order; the
+    /// rest are still being read.
+    pub(crate) details: Vec<Details>,
     /// The listing asked for most recently; only its answer counts.
     asked: Option<ListingId>,
     next_listing: u64,
@@ -117,6 +122,7 @@ impl MainWindow {
             status,
             connection,
             listing: None,
+            details: Vec::new(),
             asked: None,
             next_listing: 0,
             // Popped from the end: home first, then the root.
@@ -146,6 +152,18 @@ impl MainWindow {
                 .iter()
                 .map(|entry| entry.name.to_string_lossy().into_owned())
                 .collect()
+        })
+    }
+
+    /// The Modified, Type and Size text of entry `index` on screen. Modified
+    /// and Size are empty until the core has read that entry's details.
+    pub fn columns(&self, index: usize) -> Option<ColumnText> {
+        let entry = self.listing.as_ref()?.entries.get(index)?;
+        let details = self.details.get(index).copied().unwrap_or_default();
+        Some(ColumnText {
+            modified: details.modified.map(columns::modified).unwrap_or_default(),
+            type_name: columns::type_name(&entry.name, entry.kind),
+            size: details.size.map(columns::size).unwrap_or_default(),
         })
     }
 
@@ -200,6 +218,7 @@ impl MainWindow {
                 self.asked = None;
                 let path = listing.path.clone();
                 self.listing = Some(listing);
+                self.details = Vec::new();
                 self.scroll = UniformListScrollHandle::new();
                 cx.emit(WindowEvent::Opened(path));
                 cx.notify();
@@ -213,8 +232,14 @@ impl MainWindow {
                 }
                 cx.emit(WindowEvent::Refused(path));
             }
-            // An answer for a folder the window has since moved away from,
-            // or details the list has no columns for yet.
+            Event::DetailsRead { id, first, details }
+                if self.listing.as_ref().map(|listing| listing.id) == Some(id)
+                    && usize::try_from(first.0).ok() == Some(self.details.len()) =>
+            {
+                self.details.extend_from_slice(&details);
+                cx.notify();
+            }
+            // An answer for a folder the window has since moved away from.
             Event::FolderListed(_) | Event::FolderUnreadable { .. } | Event::DetailsRead { .. } => {
             }
             Event::Places(places) => {

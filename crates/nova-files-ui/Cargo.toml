@@ -3,7 +3,7 @@
 # The window. It sends commands to the core and draws from its events; it
 # never touches the disk.
 #
-# Allowed outside crates: futures, gpui, gpui-component, gpui_platform
+# Allowed outside crates: chrono, futures, gpui, gpui-component, gpui_platform
 # Allowed workspace crates: nova-files-api
 
 [package]
@@ -18,6 +18,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# Local time for the Modified column; GPUI already builds it.
+chrono = "0.4.45"
 nova-files-api.workspace = true
 # Async channels, so events from other threads wake the window's tasks.
 futures = { version = "0.3", default-features = false, features = ["std", "executor"] }

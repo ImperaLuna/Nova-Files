@@ -45,6 +45,12 @@ pub mod size {
     pub const ROW_ICON: Pixels = px(18.0);
     /// The Up button's icon.
     pub const BUTTON_ICON: Pixels = px(16.0);
+    /// The Modified, Type and Size columns; Name takes the rest.
+    pub const MODIFIED_WIDTH: Pixels = px(140.0);
+    pub const TYPE_WIDTH: Pixels = px(130.0);
+    pub const SIZE_WIDTH: Pixels = px(80.0);
+    /// The column header above the entries.
+    pub const HEADER_HEIGHT: Pixels = px(28.0);
     /// The places column.
     pub const PLACES_WIDTH: Pixels = px(200.0);
     /// The toolbar above both columns.
