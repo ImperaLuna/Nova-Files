@@ -249,9 +249,9 @@ fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
         "50:image/heif:*.heic\n50:video/mp4:*.mp4\n50:video/x-matroska:*.mkv\n",
     )
     .unwrap();
-    // Real programs standing in for real thumbnailers: a script that copies
-    // a ready PNG over its output once it has checked its input is there,
-    // and one that fails.
+    // Real programs standing in for real thumbnailers: a script that closes
+    // its output early, then copies a ready PNG over its output file once it
+    // has checked its input is there; and one that fails.
     let made = folder.0.join("made.png");
     RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
         .save_with_format(&made, ImageFormat::Png)
@@ -260,7 +260,7 @@ fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
     fs::write(
         &script,
         format!(
-            "#!/bin/sh\ntest -r \"$1\" && exec cp \"{}\" \"$2\"\n",
+            "#!/bin/sh\nexec >&-\nsleep 0.2\ntest -r \"$1\" && exec cp \"{}\" \"$2\"\n",
             made.display()
         ),
     )
