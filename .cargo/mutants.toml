@@ -12,6 +12,9 @@ exclude_re = [
     # temp home instead.
     "\\bHome::from_env\\b",
     "\\bhome_folder\\b",
+    # Reads the real environment too; its rules are tested through
+    # Thumbnails::from.
+    "\\bThumbnails::from_env\\b",
     # Cancelling only saves a listing's remaining reads; no answer changes.
     "replace Client::cancel_listing with \\(\\)",
     # Dropping a client cancels its listing, for the same reason.

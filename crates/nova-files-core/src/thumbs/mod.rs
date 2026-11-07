@@ -13,9 +13,12 @@
 mod cache;
 mod helper;
 mod md5;
+#[cfg(test)]
+mod tests;
 
 use std::collections::HashSet;
 use std::env;
+use std::ffi::OsString;
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -51,11 +54,25 @@ impl Thumbnails {
     /// helper next to the running program. `None` without a cache folder or
     /// a program path.
     pub fn from_env() -> Option<Self> {
-        let cache = env::var_os(CACHE_HOME_VAR)
+        Self::from(
+            env::var_os(CACHE_HOME_VAR),
+            env::home_dir(),
+            env::current_exe().ok(),
+        )
+    }
+
+    /// [`Self::from_env`] from the cache folder variable, the home folder
+    /// and the program's path.
+    fn from(
+        cache_home: Option<OsString>,
+        home: Option<PathBuf>,
+        program: Option<PathBuf>,
+    ) -> Option<Self> {
+        let cache = cache_home
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
-            .or_else(|| env::home_dir().map(|home| home.join(CACHE_IN_HOME)))?;
-        let helper = env::current_exe().ok()?.parent()?.join(HELPER_NAME);
+            .or_else(|| home.map(|home| home.join(CACHE_IN_HOME)))?;
+        let helper = program?.parent()?.join(HELPER_NAME);
         Some(Self {
             folder: cache.join(THUMBNAILS_FOLDER),
             helper,
