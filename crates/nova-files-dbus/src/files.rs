@@ -71,6 +71,9 @@ impl Files {
     async fn ping(&self) -> fdo::Result<()> {
         match self.ask_core(Command::Ping).await? {
             Event::Pong => Ok(()),
+            _ => Err(fdo::Error::Failed(
+                "the core gave an unexpected answer".to_owned(),
+            )),
         }
     }
 }

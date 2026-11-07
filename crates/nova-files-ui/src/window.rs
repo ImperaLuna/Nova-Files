@@ -78,6 +78,8 @@ impl MainWindow {
     fn on_event(&mut self, event: &Event, cx: &mut Context<Self>) {
         match event {
             Event::Pong => self.set_status(CoreStatus::Connected, cx),
+            // This window asks for no folders yet.
+            Event::FolderListed(_) | Event::FolderUnreadable { .. } | Event::Places(_) => {}
         }
     }
 

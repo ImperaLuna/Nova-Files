@@ -7,6 +7,9 @@
 
 #![forbid(unsafe_code)]
 
+mod jobs;
+mod list;
+mod places;
 mod run;
 
 use std::io;
