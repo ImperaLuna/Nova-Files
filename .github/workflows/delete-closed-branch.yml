@@ -1,0 +1,40 @@
+# Deletes a pull request's branch when the PR is closed without merging.
+# Merged PRs are covered by the repository's "delete branch on merge"
+# setting. A branch that an open PR still uses as its base is kept, because
+# deleting it would close the PRs stacked on it. PRs from forks are skipped:
+# their branches aren't in this repository.
+name: Delete closed branch
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  delete:
+    if: >-
+      !github.event.pull_request.merged &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the branch unless an open PR builds on it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          stacked=$(gh api "repos/$REPO/pulls?state=open&base=$BRANCH" --jq 'map(.number) | join(" ")')
+          if [ -n "$stacked" ]; then
+            echo "Keeping $BRANCH: open PRs build on it: $stacked"
+            exit 0
+          fi
+          if gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH"; then
+            echo "Deleted $BRANCH"
+          elif ! gh api "repos/$REPO/branches/$BRANCH" --silent 2>/dev/null; then
+            echo "$BRANCH is already gone"
+          else
+            exit 1
+          fi
