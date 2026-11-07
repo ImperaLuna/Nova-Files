@@ -104,7 +104,7 @@ impl MainWindow {
                     .when(is_open, |row| row.bg(rgb(color::ROW_HIGHLIGHT)))
                     .cursor_pointer()
                     .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
-                        this.open(target.clone());
+                        this.open(&target);
                     }))
                     .child(icon(
                         Icon::Folder,

@@ -4,13 +4,16 @@
 //! The window never touches the disk. Going somewhere sends the core a
 //! `ListFolder` with a new id and keeps showing the current folder until
 //! the answer for that id arrives; answers for older ids are dropped. A
-//! folder that can't be read leaves the window where it was.
+//! folder that can't be read leaves the window where it was; if the window
+//! has no folder yet, it falls back to the home folder, then the root.
+//! Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
+//! them, so Up goes where the path on screen says.
 //!
 //! The core's events arrive through an async channel the window's own task
 //! reads; closing the window drops the connection, which tells the core
 //! one client fewer is using it. Drawing lives in `view`.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
@@ -52,6 +55,9 @@ pub struct MainWindow {
     /// The listing asked for most recently; only its answer counts.
     asked: Option<ListingId>,
     next_listing: u64,
+    /// Where to go, in order, while the window has no folder and the one
+    /// asked for can't be read.
+    fallbacks: Vec<PathBuf>,
     pub(crate) places: Vec<Place>,
     pub(crate) scroll: UniformListScrollHandle,
     _events: Task<()>,
@@ -68,7 +74,7 @@ impl EventSink for WindowSink {
 
 impl MainWindow {
     /// Opens a window on `folder`.
-    pub fn new(connector: &Connector, folder: PathBuf, cx: &mut Context<Self>) -> Self {
+    pub fn new(connector: &Connector, folder: &Path, cx: &mut Context<Self>) -> Self {
         let (sink, mut events) = mpsc::unbounded();
         let connection = connector
             .connect(WindowSink(sink))
@@ -102,6 +108,8 @@ impl MainWindow {
             listing: None,
             asked: None,
             next_listing: 0,
+            // Popped from the end: home first, then the root.
+            fallbacks: vec![PathBuf::from(ROOT_FOLDER), home_folder()],
             places: Vec::new(),
             scroll: UniformListScrollHandle::new(),
             _events: events,
@@ -140,13 +148,14 @@ impl MainWindow {
     }
 
     /// Asks the core for `folder`; the window moves there once it answers.
-    pub fn open(&mut self, folder: PathBuf) {
+    pub fn open(&mut self, folder: &Path) {
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
+        let path = tidy(folder);
         let sent = self
             .connection
             .as_ref()
-            .map(|connection| connection.send(Command::ListFolder { id, path: folder }));
+            .map(|connection| connection.send(Command::ListFolder { id, path }));
         if matches!(sent, Some(Ok(()))) {
             self.asked = Some(id);
         }
@@ -162,7 +171,7 @@ impl MainWindow {
             && entry.kind == EntryKind::Folder
         {
             let folder = listing.path.join(&entry.name);
-            self.open(folder);
+            self.open(&folder);
         }
     }
 
@@ -174,7 +183,7 @@ impl MainWindow {
     /// Goes to the parent of the folder on screen.
     pub fn go_up(&mut self) {
         if let Some(parent) = self.parent() {
-            self.open(parent);
+            self.open(&parent);
         }
     }
 
@@ -191,6 +200,11 @@ impl MainWindow {
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
                 self.asked = None;
+                if self.listing.is_none()
+                    && let Some(fallback) = self.fallbacks.pop()
+                {
+                    self.open(&fallback);
+                }
                 cx.emit(WindowEvent::Refused(path));
             }
             // An answer for a folder the window has since moved away from.
@@ -213,3 +227,42 @@ impl MainWindow {
 }
 
 impl EventEmitter<WindowEvent> for MainWindow {}
+
+const ROOT_FOLDER: &str = "/";
+
+/// Where a window opens unless told otherwise: the home folder, or the
+/// root folder on a system without one.
+pub fn home_folder() -> PathBuf {
+    std::env::home_dir().unwrap_or_else(|| PathBuf::from(ROOT_FOLDER))
+}
+
+/// `path` with `.` dropped and each `..` taking off the part before it,
+/// worked out from the text alone. `..` at the root stays at the root.
+fn tidy(path: &Path) -> PathBuf {
+    let mut tidy = PathBuf::new();
+    for part in path.components() {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !tidy.pop() && !tidy.has_root() {
+                    tidy.push(part);
+                }
+            }
+            Component::RootDir | Component::Prefix(_) | Component::Normal(_) => tidy.push(part),
+        }
+    }
+    tidy
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tidy_resolves_dots_by_text() {
+        assert_eq!(tidy(Path::new("/home/me/..")), PathBuf::from("/home"));
+        assert_eq!(tidy(Path::new("/a/./b/../c")), PathBuf::from("/a/c"));
+        assert_eq!(tidy(Path::new("/..")), PathBuf::from("/"));
+        assert_eq!(tidy(Path::new("/")), PathBuf::from("/"));
+    }
+}
