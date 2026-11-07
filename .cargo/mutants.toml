@@ -10,7 +10,7 @@ test_workspace = true
 exclude_re = [
     # Reads the real home folder and environment; tests hand the core a
     # temp home instead.
-    "replace Home::from_env -> Option<Home>",
+    "\\bHome::from_env\\b",
     # Cancelling only saves a listing's remaining reads; no answer changes.
     "replace Client::cancel_listing with \\(\\)",
     # Dropping a client cancels its listing, for the same reason.
