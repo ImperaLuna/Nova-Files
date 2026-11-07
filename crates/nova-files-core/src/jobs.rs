@@ -6,13 +6,20 @@
 //! read and before it answers, so a cancelled job stops early and its late
 //! result is never sent. The client also drops answers whose id isn't its
 //! newest, which covers the moment between that check and the send.
+//!
+//! After the listing, the same job reads the entries' details and sends
+//! them in batches, under the same cancel rule.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 
-use nova_files_api::{ClientGone, Event, EventSink, Listing, ListingId, Unreadable};
+use nova_files_api::{
+    ClientGone, Entry, EntryId, Event, EventSink, Listing, ListingId, Unreadable,
+};
+
+use crate::details;
 
 use crate::list::{self, Stopped};
 use crate::places::{self, Home};
@@ -66,22 +73,33 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
         .name(LIST_THREAD.to_owned())
         .spawn(move || {
             let cancelled = || current.load(Ordering::SeqCst) != id.0;
-            let event = match list::read_folder(&job_path, cancelled) {
-                Ok(entries) => Event::FolderListed(Listing {
-                    id,
-                    path: job_path,
-                    entries: entries.into(),
-                }),
-                Err(Stopped::Unreadable(reason)) => Event::FolderUnreadable {
-                    id,
-                    path: job_path,
-                    reason,
-                },
+            let entries: Arc<[Entry]> = match list::read_folder(&job_path, cancelled) {
+                Ok(entries) => entries.into(),
+                Err(Stopped::Unreadable(reason)) => {
+                    if !cancelled() {
+                        events
+                            .deliver(Event::FolderUnreadable {
+                                id,
+                                path: job_path,
+                                reason,
+                            })
+                            .ok();
+                    }
+                    return;
+                }
                 Err(Stopped::Cancelled) => return,
             };
-            if !cancelled() {
-                // A client that left needs no answer.
-                events.deliver(event).ok();
+            if cancelled() {
+                return;
+            }
+            let listing = Event::FolderListed(Listing {
+                id,
+                path: job_path.clone(),
+                entries: Arc::clone(&entries),
+            });
+            // A client that left needs no answer, and no details.
+            if events.deliver(listing).is_ok() {
+                send_details(events.as_ref(), id, &job_path, &entries, cancelled);
             }
         });
     if spawned.is_err() {
@@ -92,6 +110,37 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
                 reason: Unreadable::Failed,
             })
             .ok();
+    }
+}
+
+/// Reads the details of `entries` in the folder at `folder` and sends them
+/// in batches, until done, cancelled or the client is gone.
+fn send_details(
+    events: &dyn EventSink,
+    id: ListingId,
+    folder: &Path,
+    entries: &[Entry],
+    cancelled: impl Fn() -> bool,
+) {
+    for (index, batch) in entries.chunks(details::BATCH).enumerate() {
+        let Some(read) = details::read_batch(folder, batch, &cancelled) else {
+            return;
+        };
+        let first = index * details::BATCH;
+        let Ok(first) = u32::try_from(first) else {
+            return;
+        };
+        if cancelled() {
+            return;
+        }
+        let event = Event::DetailsRead {
+            id,
+            first: EntryId(first),
+            details: read.into(),
+        };
+        if events.deliver(event).is_err() {
+            return;
+        }
     }
 }
 

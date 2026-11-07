@@ -16,7 +16,9 @@ pub mod uri;
 pub use connection::{
     ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
 };
-pub use folder::{Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable};
+pub use folder::{
+    Details, Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable,
+};
 pub use message::{ClientId, Command, Event};
 
 /// The application id: the D-Bus name, the Wayland app id and the name of
