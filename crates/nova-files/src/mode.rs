@@ -66,10 +66,21 @@ fn folder(argument: OsString) -> Result<PathBuf, UsageError> {
     if text.starts_with(FLAG_PREFIX) {
         return Err(UsageError(argument));
     }
-    if text.contains("://") {
+    if has_uri_scheme(text) {
         return uri::path_from_file_uri(text).ok_or(UsageError(argument));
     }
     Ok(PathBuf::from(argument))
+}
+
+/// Whether `text` starts with a URI scheme and `://` (`file://…`), not
+/// just holds `://` somewhere, as the path `/tmp/a://b` does.
+fn has_uri_scheme(text: &str) -> bool {
+    text.split_once("://").is_some_and(|(scheme, _)| {
+        scheme.starts_with(|first: char| first.is_ascii_alphabetic())
+            && scheme
+                .chars()
+                .all(|part| part.is_ascii_alphanumeric() || matches!(part, '+' | '-' | '.'))
+    })
 }
 
 /// An argument the program doesn't take.
@@ -126,6 +137,22 @@ mod tests {
     }
 
     #[test]
+    fn a_path_holding_a_scheme_separator_stays_a_path() {
+        assert_eq!(
+            mode(&["/tmp/a://b"]).unwrap(),
+            Mode::Window(Some(PathBuf::from("/tmp/a://b")))
+        );
+        assert_eq!(
+            mode(&["./a://b"]).unwrap(),
+            Mode::Window(Some(PathBuf::from("/home/me/./a://b")))
+        );
+        assert_eq!(
+            mode(&["9p://x"]).unwrap(),
+            Mode::Window(Some(PathBuf::from("/home/me/9p://x")))
+        );
+    }
+
+    #[test]
     fn working_folder_is_only_asked_for_a_relative_folder() {
         let gone = || Err(io::Error::from(io::ErrorKind::NotFound));
         assert!(Mode::Window(None).resolve(gone).is_ok());
@@ -148,6 +175,7 @@ mod tests {
         assert!(mode(&["--service", "extra"]).is_err());
         assert!(mode(&["/tmp", "/home"]).is_err());
         assert!(mode(&["https://example.com"]).is_err());
+        assert!(mode(&["svn+ssh://host/x"]).is_err());
     }
 
     #[test]
