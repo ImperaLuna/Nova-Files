@@ -42,6 +42,25 @@ fn ping_fails_once_the_core_has_stopped() {
     assert!(ping(&bus).is_err());
 }
 
+#[test]
+fn activate_fails_once_the_core_has_stopped() {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn_with_idle_exit(Duration::ZERO).unwrap();
+    core.thread.join().unwrap();
+    let (opened, received) = mpsc::channel();
+    let _first = nova_files_dbus::start(bus.bus(), core.connector.clone(), move |folder| {
+        opened.send(folder).ok();
+    })
+    .unwrap();
+    let second = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
+    let Started::AlreadyRunning(running) = second else {
+        panic!("the second start should find the first");
+    };
+
+    assert!(running.activate().is_err());
+    assert!(received.recv_timeout(Duration::from_millis(200)).is_err());
+}
+
 /// Calls `Ping` on the service at the app id, as a launcher would.
 fn ping(bus: &PrivateBus) -> zbus::Result<()> {
     let client = zbus::blocking::connection::Builder::address(bus.address.as_str())
