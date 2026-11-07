@@ -11,9 +11,14 @@
 
 use std::cell::RefCell;
 use std::fs;
+use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
+use std::process;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::thread;
+use std::time::Duration;
 
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 use nova_files_ui::{CoreStatus, MainWindow, WindowEvent};
@@ -28,7 +33,7 @@ impl TempFolder {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let name = format!(
             "nova-files-window-test-{}-{}",
-            std::process::id(),
+            process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
         let path = std::env::temp_dir().join(name);
@@ -45,6 +50,33 @@ impl TempFolder {
 impl Drop for TempFolder {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.0).ok();
+    }
+}
+
+/// How long a test may wait for the core before it fails.
+const WAIT: Duration = Duration::from_secs(10);
+
+/// Fails the test process if the test is still running after [`WAIT`].
+/// GPUI's waits have no deadline of their own while the core answers from
+/// real threads, so a window that never gets there would hang.
+struct Watchdog(Sender<()>);
+
+impl Watchdog {
+    fn start() -> Self {
+        let (done, finished) = mpsc::channel();
+        thread::spawn(move || {
+            if finished.recv_timeout(WAIT) == Err(RecvTimeoutError::Timeout) {
+                writeln!(io::stderr(), "the window never got there within {WAIT:?}").ok();
+                process::exit(1);
+            }
+        });
+        Self(done)
+    }
+}
+
+impl Drop for Watchdog {
+    fn drop(&mut self) {
+        self.0.send(()).ok();
     }
 }
 
@@ -77,6 +109,7 @@ fn click(cx: &mut VisualTestContext, selector: &'static str) {
 
 #[gpui::test]
 async fn window_connects_to_the_core(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
 
@@ -86,7 +119,7 @@ async fn window_connects_to_the_core(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn window_without_a_core_still_opens(cx: &mut TestAppContext) {
-    let core = nova_files_core::spawn_with_idle_exit(std::time::Duration::ZERO).unwrap();
+    let core = nova_files_core::spawn_with_idle_exit(Duration::ZERO).unwrap();
     core.thread.join().unwrap();
 
     let window = cx.add_window(|_, cx| MainWindow::new(&core.connector, Path::new("/"), cx));
@@ -97,6 +130,7 @@ fn window_without_a_core_still_opens(cx: &mut TestAppContext) {
 
 #[gpui::test]
 async fn shows_the_folder_it_opened_on(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
 
@@ -107,6 +141,7 @@ async fn shows_the_folder_it_opened_on(cx: &mut TestAppContext) {
 
 #[gpui::test]
 async fn clicking_a_folder_goes_into_it_and_up_comes_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
 
@@ -121,6 +156,7 @@ async fn clicking_a_folder_goes_into_it_and_up_comes_back(cx: &mut TestAppContex
 
 #[gpui::test]
 async fn clicking_a_file_stays_put(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
 
@@ -132,6 +168,7 @@ async fn clicking_a_file_stays_put(cx: &mut TestAppContext) {
 
 #[gpui::test]
 async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
     let gone = tree.path().join("Projects");
@@ -161,7 +198,10 @@ async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContex
 }
 
 #[gpui::test]
+/// Lands on the home folder, or on the root where there is no readable home
+/// (the Nix build sandbox's `HOME` doesn't exist).
 async fn unreadable_start_folder_falls_back_to_home(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     cx.executor().allow_parking();
     let core = nova_files_core::spawn().unwrap();
@@ -171,13 +211,20 @@ async fn unreadable_start_folder_falls_back_to_home(cx: &mut TestAppContext) {
     view.condition::<WindowEvent>(cx, |view, _| view.folder().is_some())
         .await;
 
+    let home = nova_files_ui::home_folder();
+    let expected = if home.is_dir() {
+        home
+    } else {
+        PathBuf::from("/")
+    };
     view.read_with(cx, |view, _| {
-        assert_eq!(view.folder(), Some(nova_files_ui::home_folder().as_path()));
+        assert_eq!(view.folder(), Some(expected.as_path()));
     });
 }
 
 #[gpui::test]
 async fn dots_in_a_path_are_tidied(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     let dotted = tree.path().join("Projects").join("..");
     cx.executor().allow_parking();
@@ -189,6 +236,7 @@ async fn dots_in_a_path_are_tidied(cx: &mut TestAppContext) {
 
 #[gpui::test]
 async fn clicking_a_place_opens_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
     view.condition::<WindowEvent>(cx, |view, _| view.status() == CoreStatus::Connected)
