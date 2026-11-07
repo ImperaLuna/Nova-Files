@@ -123,7 +123,11 @@ Work inside `nix develop`. `just` lists one command per job (`just test`,
 per PR, after `just check` passes and before asking Codex for review; later
 fix rounds only rerun `just check`. CI runs both.
 
-Every change goes through a pull request.
+Every change goes through a pull request. Push with `git push`, never
+through GitHub's file API, so the repo's pre-push hook runs (`nix develop`
+turns it on; elsewhere run `git config core.hooksPath tools/git-hooks`). A
+stacked pull request (base isn't main) changes code only: docs, this file,
+CI, the justfile and lint configs go in their own pull request off main.
 
 ## Review guidelines
 

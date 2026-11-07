@@ -1,9 +1,10 @@
 # CI: the same `nix flake check` that runs locally, plus mutation tests on
 # the lines a pull request changes.
 #
-# Both jobs are required checks, so they always run. Each first looks at
-# what the pull request changes (tools/ci-needs-run.sh) and, when nothing is
-# there for it, reports success in seconds without setting anything up.
+# All three jobs are required checks, so they always run. The two long ones
+# wait for the stack guard, then look at what the pull request changes
+# (tools/ci-needs-run.sh) and, when nothing is there for them, report
+# success in seconds without setting anything up.
 #
 # A new push cancels the run it replaces. Built Nix store paths come from
 # Cachix when the CACHIX_AUTH_TOKEN secret is set, otherwise from the
@@ -29,8 +30,30 @@ env:
   CACHIX_CACHE: nova-de
 
 jobs:
+  # A stacked pull request (base isn't main) may change code only: docs,
+  # agent rules, CI and tooling go in their own pull request off main
+  # (tools/ci-stack-guard.sh has the list; tools/git-hooks/pre-push refuses
+  # such a push before it gets here). It takes seconds, and the other jobs
+  # wait for it, so a bad push never starts the long ones.
+  stack-guard:
+    name: stack holds code only
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+        if: github.event_name == 'pull_request' && github.base_ref != 'main'
+        with:
+          # The merge commit and its base parent, to diff against.
+          fetch-depth: 2
+      - name: Check the changed files
+        if: github.event_name == 'pull_request' && github.base_ref != 'main'
+        env:
+          BASE: ${{ github.base_ref }}
+        run: git diff --name-only HEAD^1 HEAD | tools/ci-stack-guard.sh "$BASE"
+
   check:
     name: nix flake check
+    needs: stack-guard
     runs-on: ubuntu-latest
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -76,6 +99,7 @@ jobs:
   # main but not ones saved on other PR branches, so main keeps it warm.
   mutants:
     name: mutation tests on changed lines
+    needs: stack-guard
     runs-on: ubuntu-latest
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
