@@ -74,3 +74,11 @@ excessive_nesting = "deny"
 lto = "thin"
 codegen-units = 1
 
+# Checks and mutation tests in CI. The release profile's LTO makes every
+# test binary link for minutes, and debug info swells target/ and the link,
+# so CI builds the code like dev but without either.
+[profile.ci]
+inherits = "dev"
+debug = false
+incremental = false
+

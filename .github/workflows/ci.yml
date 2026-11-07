@@ -1,6 +1,10 @@
 # CI: the same `nix flake check` that runs locally, plus mutation tests on
 # the lines a pull request changes.
 #
+# Both jobs are required checks, so they always run. Each first looks at
+# what the pull request changes (tools/ci-needs-run.sh) and, when nothing is
+# there for it, reports success in seconds without setting anything up.
+#
 # A new push cancels the run it replaces. Built Nix store paths come from
 # Cachix when the CACHIX_AUTH_TOKEN secret is set, otherwise from the
 # GitHub Actions cache, so a run only rebuilds what changed.
@@ -31,18 +35,27 @@ jobs:
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
     steps:
-      - name: Free disk space
-        # Runners have about 14 GB free; the Nix store needs more once GPUI lands.
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - uses: actions/checkout@v5
+        with:
+          # The merge commit and its base parent, to see what changed.
+          fetch-depth: 2
+      - name: Look for changes to check
+        id: changes
+        run: tools/ci-needs-run.sh code
+      - name: Free disk space in the background
+        # The Nix store grows past the runner's free space only late in the
+        # build, by when the deletion is done, so nothing waits for it.
+        if: steps.changes.outputs.run == 'true'
+        run: tools/ci-free-disk.sh start
       - uses: cachix/install-nix-action@v31
+        if: steps.changes.outputs.run == 'true'
       - uses: cachix/cachix-action@v16
-        if: env.CACHIX_AUTH_TOKEN != ''
+        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN != ''
         with:
           name: ${{ env.CACHIX_CACHE }}
           authToken: ${{ env.CACHIX_AUTH_TOKEN }}
       - uses: nix-community/cache-nix-action@v6
-        if: env.CACHIX_AUTH_TOKEN == ''
+        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN == ''
         with:
           primary-key: nix-check-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock', '**/*.nix') }}
           restore-prefixes-first-match: nix-check-${{ runner.os }}-
@@ -51,7 +64,12 @@ jobs:
           purge-prefixes: nix-check-${{ runner.os }}-
           purge-created: 0
           purge-primary-key: never
-      - run: nix flake check --print-build-logs
+      - name: nix flake check
+        if: steps.changes.outputs.run == 'true'
+        run: nix flake check --print-build-logs
+      - name: Disk space left
+        if: steps.changes.outputs.run == 'true'
+        run: df -h /
 
   # On pull requests: mutation tests on the changed lines. On main: only a
   # build, to save the cargo cache. GitHub lets a PR restore caches saved on
@@ -62,20 +80,25 @@ jobs:
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
     steps:
-      - name: Free disk space
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - uses: actions/checkout@v5
         with:
-          # The whole history, so the diff against the base branch has a merge base.
-          fetch-depth: 0
+          # The merge commit and its base parent, to diff against.
+          fetch-depth: 2
+      - name: Look for Rust changes
+        id: changes
+        run: tools/ci-needs-run.sh rust
+      - name: Free disk space in the background
+        if: steps.changes.outputs.run == 'true'
+        run: tools/ci-free-disk.sh start
       - uses: cachix/install-nix-action@v31
+        if: steps.changes.outputs.run == 'true'
       - uses: cachix/cachix-action@v16
-        if: env.CACHIX_AUTH_TOKEN != ''
+        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN != ''
         with:
           name: ${{ env.CACHIX_CACHE }}
           authToken: ${{ env.CACHIX_AUTH_TOKEN }}
       - uses: nix-community/cache-nix-action@v6
-        if: env.CACHIX_AUTH_TOKEN == ''
+        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN == ''
         with:
           primary-key: nix-mutants-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock', '**/*.nix') }}
           restore-prefixes-first-match: nix-mutants-${{ runner.os }}-
@@ -84,15 +107,29 @@ jobs:
           purge-prefixes: nix-mutants-${{ runner.os }}-
           purge-created: 0
           purge-primary-key: never
+      - name: Fetch the mutants dev shell
+        # The slim shell from nix/mutants-shell.nix, not the full one.
+        if: steps.changes.outputs.run == 'true'
+        run: nix develop .#mutants --command true
+      - name: Wait for the free disk space
+        # The cargo cache and the copies of target/ need the room.
+        if: steps.changes.outputs.run == 'true'
+        run: tools/ci-free-disk.sh wait
       - uses: Swatinem/rust-cache@v2
+        if: steps.changes.outputs.run == 'true'
       - name: Warm the cargo cache
-        if: github.event_name != 'pull_request'
-        run: nix develop --command cargo build --workspace --all-targets
+        if: steps.changes.outputs.run == 'true' && github.event_name != 'pull_request'
+        run: nix develop .#mutants --command cargo build --workspace --all-targets --profile ci
       - name: Mutation tests
-        if: github.event_name == 'pull_request'
+        if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request'
         # Two builds at once, not the local four: each copy of the tree needs
-        # its own target/ folder (about 7 GB), and the runner's disk can't
-        # hold four. Each copy starts from the cached target/ folder.
+        # its own target/ folder, and the runner's disk can't hold four. Each
+        # copy starts from the cached target/ folder. The `ci` profile (no
+        # debug info) keeps those folders small and links each mutant fast.
+        # --caught and --unviable print a line per mutant, so the log shows
+        # progress instead of sitting silent until the end.
         env:
           CARGO_MUTANTS_JOBS: 2
-        run: nix develop --command just mutants origin/${{ github.base_ref }} "" --copy-target true
+        run: >-
+          nix develop .#mutants --command just mutants HEAD^1 ""
+          --profile ci --copy-target true --caught --unviable
