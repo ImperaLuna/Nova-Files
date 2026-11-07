@@ -1,7 +1,7 @@
 # Deletes a pull request's branch when the PR is closed without merging.
 # Merged PRs are covered by the repository's "delete branch on merge"
-# setting. A branch that an open PR still uses as its base is kept, because
-# deleting it would close the PRs stacked on it. PRs from forks are skipped:
+# setting. A branch that an open PR still uses, as its base or its head, is
+# kept, because deleting it would close that PR. PRs from forks are skipped:
 # their branches aren't in this repository.
 name: Delete closed branch
 
@@ -20,20 +20,31 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - name: Delete the branch unless an open PR builds on it
+      - name: Delete the branch unless an open PR still uses it
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
           REPO: ${{ github.repository }}
         run: |
-          stacked=$(gh api "repos/$REPO/pulls?state=open&base=$BRANCH" --jq 'map(.number) | join(" ")')
-          if [ -n "$stacked" ]; then
-            echo "Keeping $BRANCH: open PRs build on it: $stacked"
+          # Open PRs that still use the branch, as their base (a stack built
+          # on it) or as their head (the same branch opened against another
+          # base). Query values go through -f so any branch name is safe.
+          in_use=$(
+            {
+              gh api -X GET "repos/$REPO/pulls" -f state=open -f base="$BRANCH" --jq '.[].number'
+              gh api -X GET "repos/$REPO/pulls" -f state=open -f head="${REPO%%/*}:$BRANCH" --jq '.[].number'
+            } | tr '\n' ' '
+          )
+          if [ -n "${in_use// /}" ]; then
+            echo "Keeping $BRANCH: open PRs still use it: $in_use"
             exit 0
           fi
-          if gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH"; then
+          # Each path segment is URL-encoded, so a name like topic#fix can't
+          # be cut short and point at another branch.
+          ref=$(jq -rn --arg b "$BRANCH" '$b | split("/") | map(@uri) | join("/")')
+          if gh api -X DELETE "repos/$REPO/git/refs/heads/$ref"; then
             echo "Deleted $BRANCH"
-          elif ! gh api "repos/$REPO/branches/$BRANCH" --silent 2>/dev/null; then
+          elif ! gh api "repos/$REPO/branches/$ref" --silent 2>/dev/null; then
             echo "$BRANCH is already gone"
           else
             exit 1
