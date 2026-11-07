@@ -1,5 +1,5 @@
 //! The window. It sends commands to the core and draws from its events; it
-//! never touches the disk.
+//! never touches the disk. A window opens on the home folder.
 //!
 //! [`run`] takes over the calling thread with a GPUI app, opens a window,
 //! and follows the program's [`Request`]s until the last window closes or
@@ -8,8 +8,10 @@
 
 #![forbid(unsafe_code)]
 
+mod assets;
 mod requests;
 mod theme;
+mod view;
 mod window;
 
 use std::cell::Cell;
@@ -20,7 +22,7 @@ use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptio
 use nova_files_api::Connector;
 
 pub use requests::{Request, RequestSender, Requests, channel};
-pub use window::{CoreStatus, MainWindow};
+pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
 
 /// Why [`run`] returned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,29 +40,31 @@ pub fn run(connector: &Connector, requests: &Requests) -> Ended {
     let connector = connector.clone();
     let requests = requests.clone();
     let quit = Rc::clone(&ended);
-    gpui_platform::application().run(move |cx: &mut App| {
-        open_window(&connector, cx);
-        let follow = cx.spawn(async move |cx| {
-            loop {
-                let request = requests.next().await;
-                let keep_going = cx.update(|cx| match request {
-                    Some(Request::OpenWindow) => {
-                        open_window(&connector, cx);
-                        true
+    gpui_platform::application()
+        .with_assets(assets::Assets)
+        .run(move |cx: &mut App| {
+            open_window(&connector, cx);
+            let follow = cx.spawn(async move |cx| {
+                loop {
+                    let request = requests.next().await;
+                    let keep_going = cx.update(|cx| match request {
+                        Some(Request::OpenWindow) => {
+                            open_window(&connector, cx);
+                            true
+                        }
+                        Some(Request::Quit) | None => {
+                            quit.set(Ended::Quit);
+                            cx.quit();
+                            false
+                        }
+                    });
+                    if !keep_going {
+                        return;
                     }
-                    Some(Request::Quit) | None => {
-                        quit.set(Ended::Quit);
-                        cx.quit();
-                        false
-                    }
-                });
-                if !keep_going {
-                    return;
                 }
-            }
+            });
+            cx.set_global(RequestLoop { _follow: follow });
         });
-        cx.set_global(RequestLoop { _follow: follow });
-    });
     ended.get()
 }
 
@@ -81,8 +85,9 @@ fn open_window(connector: &Connector, cx: &mut App) {
         ..WindowOptions::default()
     };
     let connector = connector.clone();
+    let folder = home_folder();
     let opened = cx.open_window(options, move |_window, cx| {
-        cx.new(|cx| MainWindow::new(&connector, cx))
+        cx.new(|cx| MainWindow::new(&connector, &folder, cx))
     });
     if let Err(error) = opened {
         // The display refused a window; any open ones carry on. Until there
