@@ -8,6 +8,7 @@
 //! puts outside Home is left out.
 
 use std::env;
+use std::ffi::OsString;
 use std::fs;
 use std::io::Read as _;
 use std::path::{Component, Path, PathBuf};
@@ -35,7 +36,8 @@ pub fn places() -> Vec<Place> {
     let Some(home) = env::home_dir() else {
         return Vec::new();
     };
-    let user_dirs = read_user_dirs(&config_home(&home).join(USER_DIRS_FILE));
+    let config = config_home(&home, env::var_os(CONFIG_HOME_VAR));
+    let user_dirs = read_user_dirs(&config.join(USER_DIRS_FILE));
     places_in(&home, &user_dirs)
 }
 
@@ -60,12 +62,13 @@ fn places_in(home: &Path, user_dirs: &str) -> Vec<Place> {
         .collect()
 }
 
-fn config_home(home: &Path) -> PathBuf {
-    // The spec says a relative XDG_CONFIG_HOME is invalid and is ignored.
-    let from_env = env::var_os(CONFIG_HOME_VAR)
+/// The config folder: `XDG_CONFIG_HOME` (`from_env`) when it is absolute,
+/// which the spec requires, else `.config` in Home.
+fn config_home(home: &Path, from_env: Option<OsString>) -> PathBuf {
+    from_env
         .map(PathBuf::from)
-        .filter(|path| path.is_absolute());
-    from_env.unwrap_or_else(|| home.join(CONFIG_IN_HOME))
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| home.join(CONFIG_IN_HOME))
 }
 
 /// The file's text, or empty when it is missing, unreadable or too big.
@@ -172,6 +175,43 @@ mod tests {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).ok();
         }
+    }
+
+    #[test]
+    fn config_folder_comes_from_an_absolute_env_value_only() {
+        let home = Path::new(HOME);
+        assert_eq!(
+            config_home(home, Some(OsString::from("/etc/xdg-me"))),
+            PathBuf::from("/etc/xdg-me")
+        );
+        assert_eq!(
+            config_home(home, Some(OsString::from("relative"))),
+            PathBuf::from("/home/someone/.config")
+        );
+        assert_eq!(
+            config_home(home, None),
+            PathBuf::from("/home/someone/.config")
+        );
+    }
+
+    #[test]
+    fn reads_user_dirs_up_to_the_size_cap() {
+        let folder =
+            TempHome(env::temp_dir().join(format!("nova-files-user-dirs-{}", std::process::id())));
+        fs::create_dir_all(&folder.0).unwrap();
+        let small = folder.0.join("small");
+        let exact = folder.0.join("exact");
+        let big = folder.0.join("big");
+        let cap = usize::try_from(USER_DIRS_MAX_BYTES).unwrap();
+        fs::write(&small, "XDG_DOCUMENTS_DIR=\"$HOME/Docs\"\n").unwrap();
+        fs::write(&exact, "a".repeat(cap)).unwrap();
+        fs::write(&big, "a".repeat(cap + 1)).unwrap();
+
+        assert_eq!(read_user_dirs(&small), "XDG_DOCUMENTS_DIR=\"$HOME/Docs\"\n");
+        assert_eq!(read_user_dirs(&exact).len(), cap);
+        assert_eq!(read_user_dirs(&big), "");
+        assert_eq!(read_user_dirs(&folder.0.join("missing")), "");
+        assert_eq!(USER_DIRS_MAX_BYTES, 65_536);
     }
 
     #[test]

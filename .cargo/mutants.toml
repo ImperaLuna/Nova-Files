@@ -2,7 +2,17 @@
 #
 # Each exclusion is code no headless test can reach; everything else in the
 # program is covered by crates/nova-files/tests/service.rs.
+
+# Every mutant runs the whole workspace's tests: the window is tested from
+# crates/nova-files/tests, not from its own crate.
+test_workspace = true
+
 exclude_re = [
+    # Reads the real home folder and environment; `places_in` and
+    # `config_home` hold the logic and are tested with temp folders.
+    "nova-files-core/src/places\\.rs:.*replace places -> Vec<Place>",
+    # Cancelling only saves a listing's remaining reads; no answer changes.
+    "replace Client::cancel_listing with \\(\\)",
     # Open windows, so they need a display.
     "\\bshow_windows\\b",
     "nova-files-ui/src/lib\\.rs:.*\\brun\\b",
