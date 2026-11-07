@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{Context, EventEmitter, RenderImage, Task, UniformListScrollHandle};
+use gpui::{Context, EventEmitter, RenderImage, Task, UniformListScrollHandle, Window};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
     Listing, ListingId, Place,
@@ -78,6 +78,8 @@ pub struct MainWindow {
     scale_factor: f32,
     /// The rows the core was last asked to make thumbnails for.
     thumbnails_wanted: Range<usize>,
+    /// The rows the list drew last; see [`Self::rows_drawn`].
+    rows_drawn: Range<usize>,
     /// The listing asked for most recently; only its answer counts.
     asked: Option<ListingId>,
     next_listing: u64,
@@ -155,6 +157,7 @@ impl MainWindow {
             details: Vec::new(),
             thumbnails: HashMap::new(),
             thumbnails_wanted: 0..0,
+            rows_drawn: 0..0,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
             next_listing: 0,
@@ -210,9 +213,24 @@ impl MainWindow {
         self.thumbnails.get(&index)
     }
 
-    /// The list is drawing rows `visible`: asks for their thumbnails and
-    /// one screen either side, and forgets the ones now out of range.
-    pub(crate) fn show_rows(&mut self, visible: Range<usize>) {
+    /// The list drew rows `range`. It also draws its first row alone, each
+    /// frame, to measure it; asking for that row's thumbnails would swap
+    /// the request back and forth every frame, and each answer would draw
+    /// another frame. The rows on screen are the last range drawn, so the
+    /// request waits until the frame is done.
+    pub(crate) fn rows_drawn(
+        &mut self,
+        range: Range<usize>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.rows_drawn = range;
+        cx.defer_in(window, |this, _, _| this.show_rows(this.rows_drawn.clone()));
+    }
+
+    /// Rows `visible` are on screen: asks for their thumbnails and one
+    /// screen either side, and forgets the ones now out of range.
+    fn show_rows(&mut self, visible: Range<usize>) {
         let Some(listing) = &self.listing else { return };
         let screen = visible.len();
         let wanted = visible.start.saturating_sub(screen)
