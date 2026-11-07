@@ -22,3 +22,8 @@ workspace = true
 # thumbnailers. GPUI already builds image with more formats.
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 landlock = "0.4"
+
+[dev-dependencies]
+# The tests run the helper the way the core does.
+nova-files-api.workspace = true
+nova-files-core.workspace = true

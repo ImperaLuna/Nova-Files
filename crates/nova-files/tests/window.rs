@@ -105,7 +105,8 @@ fn window_on<'a>(
         folder: home.to_owned(),
         config: home.join(".config"),
     };
-    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home)).unwrap();
+    let core =
+        nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None).unwrap();
     let (start, home) = (folder.to_owned(), home.to_owned());
     cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx))
 }

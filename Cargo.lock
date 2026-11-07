@@ -3532,6 +3532,8 @@ version = "0.1.0"
 dependencies = [
  "image",
  "landlock",
+ "nova-files-api",
+ "nova-files-core",
 ]
 
 [[package]]

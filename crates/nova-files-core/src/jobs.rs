@@ -9,6 +9,9 @@
 //!
 //! After the listing, the same job reads the entries' details and sends
 //! them in batches, under the same cancel rule.
+//!
+//! Each client also has a thumbnail queue (see `thumbs`), told which
+//! listing is on screen as soon as its listing has been sent.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -20,6 +23,7 @@ use nova_files_api::{
 };
 
 use crate::details;
+use crate::thumbs::{Queue, Thumbnails};
 
 use crate::list::{self, Stopped};
 use crate::places::{self, Home};
@@ -35,13 +39,26 @@ pub struct Client {
     events: Arc<dyn EventSink>,
     /// The id of the listing that counts, or [`NO_LISTING`].
     current_listing: Arc<AtomicU64>,
+    /// `None` without a cache folder, or when its thread couldn't start.
+    thumbnails: Option<Arc<Queue>>,
 }
 
 impl Client {
-    pub fn new(events: Arc<dyn EventSink>) -> Self {
+    pub fn new(events: Arc<dyn EventSink>, thumbnails: Option<&Thumbnails>) -> Self {
+        let thumbnails = thumbnails
+            .and_then(|setup| Queue::start(setup.clone(), Arc::clone(&events)))
+            .map(Arc::new);
         Self {
             events,
             current_listing: Arc::new(AtomicU64::new(NO_LISTING)),
+            thumbnails,
+        }
+    }
+
+    /// The client wants thumbnails for `count` entries of listing `id`.
+    pub fn want_thumbnails(&self, id: ListingId, first: EntryId, count: u32) {
+        if let Some(queue) = &self.thumbnails {
+            queue.want(id, first, count);
         }
     }
 
@@ -66,6 +83,10 @@ impl Drop for Client {
 /// Lists `path` for `client` as listing `id`, replacing any listing before.
 pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
     client.current_listing.store(id.0, Ordering::SeqCst);
+    if let Some(queue) = &client.thumbnails {
+        queue.clear();
+    }
+    let thumbnails = client.thumbnails.clone();
     let events = Arc::clone(&client.events);
     let current = Arc::clone(&client.current_listing);
     let job_path = path.clone();
@@ -99,6 +120,11 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
             });
             // A client that left needs no answer, and no details.
             if events.deliver(listing).is_ok() {
+                if let Some(queue) = &thumbnails
+                    && !cancelled()
+                {
+                    queue.show(id, job_path.clone(), Arc::clone(&entries));
+                }
                 send_details(events.as_ref(), id, &job_path, &entries, cancelled);
             }
         });
