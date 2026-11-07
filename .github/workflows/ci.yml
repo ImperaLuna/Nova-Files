@@ -23,6 +23,8 @@ concurrency:
 
 permissions:
   contents: read
+  # The mutation job reads the PR description for the local run's summary.
+  pull-requests: read
   # cache-nix-action deletes the caches it replaces.
   actions: write
 
@@ -111,6 +113,16 @@ jobs:
       - name: Look for Rust changes
         id: changes
         run: tools/ci-needs-run.sh rust
+      - name: Check the PR has a clean local mutation run
+        # Agents run `just mutants` before review and paste its summary line
+        # into the description. A missing or failed one fails here in seconds
+        # instead of after the whole run. The body is read from the API, not
+        # the event, so editing it and rerunning this job picks up the change.
+        if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .body | tools/ci-mutants-summary.sh
       - name: Free disk space in the background
         if: steps.changes.outputs.run == 'true'
         run: tools/ci-free-disk.sh start
