@@ -9,8 +9,10 @@
     reason = "test setup should fail loudly; GPUI test contexts live on one thread"
 )]
 
+use std::cell::RefCell;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
@@ -135,12 +137,23 @@ async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContex
     let gone = tree.path().join("Projects");
     fs::remove_dir_all(&gone).unwrap();
 
+    let refused = Rc::new(RefCell::new(Vec::new()));
+    let _watch = cx.update(|_, cx| {
+        let refused = Rc::clone(&refused);
+        cx.subscribe(&view, move |_, event: &WindowEvent, _| {
+            if let WindowEvent::Refused(path) = event {
+                refused.borrow_mut().push(path.clone());
+            }
+        })
+    });
+
     // The listing still shows Projects; the folder vanished meanwhile.
     click(cx, "entry-0");
-    view.read_with(cx, |view, _| assert!(view.is_loading()));
-    view.condition::<WindowEvent>(cx, |view, _| !view.is_loading())
+    let seen = Rc::clone(&refused);
+    view.condition::<WindowEvent>(cx, move |_, _| !seen.borrow().is_empty())
         .await;
 
+    assert_eq!(*refused.borrow(), [gone]);
     view.read_with(cx, |view, _| {
         assert_eq!(view.folder(), Some(tree.path()));
         assert_eq!(view.entry_names(), ["Projects", "notes.txt"]);
