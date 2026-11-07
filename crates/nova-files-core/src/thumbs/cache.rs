@@ -90,23 +90,22 @@ fn split_once_nul(data: &[u8]) -> Option<(&[u8], &[u8])> {
     Some((&data[..at], &data[at + 1..]))
 }
 
-/// A PNG-shaped byte string: signature, then `(type, data)` chunks with
-/// dummy CRCs.
-#[cfg(test)]
-pub fn png(chunks: &[(&[u8], &[u8])]) -> Vec<u8> {
-    let mut out = vec![0; PNG_SIGNATURE_LENGTH];
-    for (kind, data) in chunks {
-        out.extend_from_slice(&u32::try_from(data.len()).unwrap_or(u32::MAX).to_be_bytes());
-        out.extend_from_slice(kind);
-        out.extend_from_slice(data);
-        out.extend_from_slice(&[0; CHUNK_CRC]);
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A PNG-shaped byte string: signature, then `(type, data)` chunks with
+    /// dummy CRCs.
+    fn png(chunks: &[(&[u8], &[u8])]) -> Vec<u8> {
+        let mut out = vec![0; PNG_SIGNATURE_LENGTH];
+        for (kind, data) in chunks {
+            out.extend_from_slice(&u32::try_from(data.len()).unwrap().to_be_bytes());
+            out.extend_from_slice(kind);
+            out.extend_from_slice(data);
+            out.extend_from_slice(&[0; CHUNK_CRC]);
+        }
+        out
+    }
 
     #[test]
     fn finds_the_mtime_text() {
