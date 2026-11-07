@@ -121,7 +121,11 @@ Work inside `nix develop`. `just` lists one command per job (`just test`,
 `just clippy nova-files-core`); most take an optional crate. Run
 `just check` (`nix flake check`) before every push. Run `just mutants` once
 per PR, after `just check` passes and before asking Codex for review; later
-fix rounds only rerun `just check`. CI runs both.
+fix rounds only rerun `just check`. CI runs both. Paste the run's last line
+(`N mutants tested in ...: ...`) into the PR description: CI's mutation job
+fails at once without it, or when it reports missed or timed-out mutants. A mutant no test
+can ever catch goes in `exclude_re` in `.cargo/mutants.toml`, with a reason,
+through its own PR off main.
 
 Every change goes through a pull request. Push with `git push`, never
 through GitHub's file API, so the repo's pre-push hook runs (`nix develop`
