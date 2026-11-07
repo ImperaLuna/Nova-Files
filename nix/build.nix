@@ -69,6 +69,12 @@ in
         substituteInPlace $out/share/dbus-1/services/${appId}.service \
           --replace-fail "@app_id@" "${appId}" \
           --replace-fail "@bin@" "$out/bin/nova-files"
+        # Launchers list the app from this file. It is named after the app
+        # id, as DBusActivatable requires.
+        install -Dm644 ${../data/desktop-entry.in} \
+          $out/share/applications/${appId}.desktop
+        substituteInPlace $out/share/applications/${appId}.desktop \
+          --replace-fail "@bin@" "$out/bin/nova-files"
       '';
       postFixup = ''
         wrapProgram $out/bin/nova-files \

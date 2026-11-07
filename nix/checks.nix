@@ -112,5 +112,16 @@ in
 
   nix-fmt = toolCheck "nix-fmt" "nixfmt --check flake.nix nix/*.nix" [ pkgs.nixfmt ];
 
+  # The installed desktop entry follows the freedesktop spec.
+  desktop-entry =
+    pkgs.runCommand "nova-files-desktop-entry"
+      {
+        nativeBuildInputs = [ pkgs.desktop-file-utils ];
+      }
+      ''
+        desktop-file-validate ${build.package}/share/applications/*.desktop
+        touch $out
+      '';
+
   duplicates = toolCheck "duplicates" "tools/check-duplicates.sh" [ pkgs.pmd ];
 }
