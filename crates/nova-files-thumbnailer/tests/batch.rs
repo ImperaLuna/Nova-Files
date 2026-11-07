@@ -8,7 +8,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use image::{ImageFormat, RgbImage};
+use image::codecs::jpeg::JpegEncoder;
+use image::{ImageEncoder as _, ImageFormat, RgbImage};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
 /// Bigger than a thumbnail, so the helper has to scale it down.
@@ -136,6 +137,35 @@ fn no_temp_files_are_left_behind() {
         .map(|file| file.unwrap().file_name())
         .collect();
     assert_eq!(left, ["a.png"]);
+}
+
+/// A TIFF-style EXIF block whose one entry says "rotate 90 degrees".
+const EXIF_ROTATE_90: &[u8] = &[
+    b'I', b'I', 42, 0, 8, 0, 0, 0, // little-endian header, first IFD at 8
+    1, 0, // one entry
+    0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, // Orientation, SHORT, 1, 6
+    0, 0, 0, 0, // no next IFD
+];
+
+#[test]
+fn a_rotated_photo_gets_an_upright_thumbnail() {
+    let folder = TempFolder::new("rotated");
+    let thumbnails = folder.0.join("thumbnails");
+    let source = folder.0.join("portrait.jpg");
+    let mut jpeg = Vec::new();
+    let mut encoder = JpegEncoder::new(&mut jpeg);
+    encoder.set_exif_metadata(EXIF_ROTATE_90.to_vec()).unwrap();
+    encoder
+        .encode_image(&RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT))
+        .unwrap();
+    fs::write(&source, jpeg).unwrap();
+
+    assert_eq!(run(&thumbnails, &[(&source, "p.png")]), ["ok"]);
+    let thumb = image::open(thumbnails.join("normal/p.png")).unwrap();
+    assert_eq!(
+        (thumb.width(), thumb.height()),
+        (NORMAL_SIZE / 2, NORMAL_SIZE)
+    );
 }
 
 #[test]

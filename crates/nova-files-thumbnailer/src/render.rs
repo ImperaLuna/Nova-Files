@@ -17,7 +17,11 @@ use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 use std::process;
 
-use image::{DynamicImage, ImageError, ImageFormat, ImageReader, ImageResult, Limits, RgbaImage};
+use image::metadata::Orientation;
+use image::{
+    DynamicImage, ImageDecoder as _, ImageError, ImageFormat, ImageReader, ImageResult, Limits,
+    RgbaImage,
+};
 
 use crate::batch::Job;
 use crate::png_text;
@@ -88,7 +92,13 @@ fn decode(path: &Path) -> ImageResult<DynamicImage> {
     let mut limits = Limits::default();
     limits.max_alloc = Some(MAX_DECODE_BYTES);
     reader.limits(limits);
-    reader.decode()
+    let mut decoder = reader.into_decoder()?;
+    // Phones store a photo's rotation apart from its pixels; the thumbnail
+    // has none, so it is turned upright here.
+    let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
+    let mut image = DynamicImage::from_decoder(decoder)?;
+    image.apply_orientation(orientation);
+    Ok(image)
 }
 
 /// Whether `error` says the file's data is broken, rather than that it
