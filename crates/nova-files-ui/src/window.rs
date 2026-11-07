@@ -259,5 +259,7 @@ mod tests {
         assert_eq!(tidy(Path::new("/a/./b/../c")), PathBuf::from("/a/c"));
         assert_eq!(tidy(Path::new("/..")), PathBuf::from("/"));
         assert_eq!(tidy(Path::new("/")), PathBuf::from("/"));
+        // A relative path keeps the `..` it can't take off.
+        assert_eq!(tidy(Path::new("..")), PathBuf::from(".."));
     }
 }
