@@ -6,9 +6,11 @@
 //! decode gets no marker: that can change without the file changing.
 //!
 //! The helper decodes JPEG, PNG and WebP itself, known by their first
-//! bytes (or name); any other file is `unsupported` and left alone. Each
-//! file is written to a temp file of this process's own in the same
-//! folder, then renamed over the old one.
+//! bytes (or name). Any other file goes to the system's thumbnailer for its
+//! MIME type, if one is installed (see `system`), whose picture is then
+//! scaled and written the same way; with none it is `unsupported` and left
+//! alone. Each file is written to a temp file of this process's own in the
+//! same folder, then renamed over the old one.
 
 use std::fs::{self, OpenOptions};
 use std::io::{self, Cursor, Write as _};
@@ -17,6 +19,7 @@ use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 use std::process;
 
+use image::error::{DecodingError, ImageFormatHint};
 use image::metadata::Orientation;
 use image::{
     DynamicImage, ImageDecoder as _, ImageError, ImageFormat, ImageReader, ImageResult, Limits,
@@ -24,8 +27,10 @@ use image::{
 };
 
 use crate::batch::Job;
+use crate::mime::MimeTypes;
 use crate::png_text;
 use crate::sandbox::FOLDER_MODE;
+use crate::system::{Request, Thumbnailers};
 
 /// The spec's "normal" thumbnail fits in this square.
 const NORMAL_SIZE: u32 = 128;
@@ -42,6 +47,14 @@ const MTIME_KEY: &str = "Thumb::MTime";
 const TEMP_SUFFIX: &str = "part";
 /// A failure marker is a 1x1 image, as the spec suggests.
 const MARKER_SIZE: u32 = 1;
+/// What a system thumbnailer writes, next to the thumbnail it becomes.
+const SYSTEM_OUTPUT_SUFFIX: &str = ".system.png";
+
+/// What the system offers for formats the helper can't decode.
+pub struct System {
+    pub mime: MimeTypes,
+    pub thumbnailers: Thumbnailers,
+}
 
 pub enum Outcome {
     Ok,
@@ -59,11 +72,16 @@ impl Outcome {
     }
 }
 
-pub fn render(folder: &Path, job: &Job) -> Outcome {
-    if !built_in(&job.source) {
-        return Outcome::Unsupported;
-    }
-    let image = match decode(&job.source) {
+pub fn render(folder: &Path, job: &Job, system: &System) -> Outcome {
+    let decoded = if built_in(&job.source) {
+        decode(&job.source)
+    } else {
+        let Some(made) = from_system(folder, job, system) else {
+            return Outcome::Unsupported;
+        };
+        made
+    };
+    let image = match decoded {
         Ok(image) => image,
         Err(error) => {
             if is_bad_data(&error) {
@@ -81,6 +99,47 @@ pub fn render(folder: &Path, job: &Job) -> Outcome {
     } else {
         Outcome::Failed
     }
+}
+
+/// The picture the system's thumbnailer makes for `job`; `None` when no
+/// thumbnailer handles its type.
+fn from_system(folder: &Path, job: &Job, system: &System) -> Option<ImageResult<DynamicImage>> {
+    let mime = system.mime.of(&job.source)?;
+    let into = folder.join(NORMAL_FOLDER);
+    if let Err(error) = fs::DirBuilder::new()
+        .recursive(true)
+        .mode(FOLDER_MODE)
+        .create(&into)
+    {
+        return Some(Err(error.into()));
+    }
+    let mut output_name = job.name.clone();
+    output_name.push(format!(".{}{SYSTEM_OUTPUT_SUFFIX}", process::id()));
+    let output = into.join(output_name);
+    fs::remove_file(&output).ok();
+    let request = Request {
+        input: &job.source,
+        uri: &job.uri,
+        output: &output,
+        size: NORMAL_SIZE,
+    };
+    let image = match system.thumbnailers.run(mime, &request)? {
+        Ok(()) => decode(&output),
+        // It ran and refused a file it could read: the file's data is the
+        // trouble.
+        Err(error) if error.kind() == io::ErrorKind::InvalidData && readable(&job.source) => Err(
+            ImageError::Decoding(DecodingError::new(ImageFormatHint::Unknown, error)),
+        ),
+        // Out of time, or a file or program it couldn't reach: worth another
+        // try later.
+        Err(error) => Err(error.into()),
+    };
+    fs::remove_file(&output).ok();
+    Some(image)
+}
+
+fn readable(path: &Path) -> bool {
+    fs::File::open(path).is_ok()
 }
 
 /// Whether the helper decodes the file itself: by its first bytes, or by
