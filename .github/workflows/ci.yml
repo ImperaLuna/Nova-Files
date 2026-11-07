@@ -124,6 +124,8 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .body | tools/ci-mutants-summary.sh
       - name: Free disk space in the background
+        # Running in place, the job holds one target/ folder, which fits in
+        # the runner's free space, so nothing waits for the deletion.
         if: steps.changes.outputs.run == 'true'
         run: tools/ci-free-disk.sh start
       - uses: cachix/install-nix-action@v31
@@ -147,12 +149,14 @@ jobs:
         # The slim shell from nix/mutants-shell.nix, not the full one.
         if: steps.changes.outputs.run == 'true'
         run: nix develop .#mutants --command true
-      - name: Wait for the free disk space
-        # The cargo cache needs the room.
-        if: steps.changes.outputs.run == 'true'
-        run: tools/ci-free-disk.sh wait
       - uses: Swatinem/rust-cache@v2
         if: steps.changes.outputs.run == 'true'
+        with:
+          # The build flags (mold, the ci profile) live in the dev shell,
+          # which rust-cache can't see, so the key names the files that set
+          # them. Without it a flag change kept restoring the old target/,
+          # rebuilt everything for the baseline, and never saved a new one.
+          key: ${{ hashFiles('nix/mutants-shell.nix', 'nix/build.nix', 'Cargo.toml') }}
       - name: Warm the cargo cache
         if: steps.changes.outputs.run == 'true' && github.event_name != 'pull_request'
         # The same build the mutation tests start with, so they reuse all of it.
@@ -168,3 +172,6 @@ jobs:
         run: >-
           nix develop .#mutants --command just mutants HEAD^1 ""
           --profile ci --in-place --test-workspace=true --caught --unviable
+      - name: Disk space left
+        if: steps.changes.outputs.run == 'true'
+        run: df -h /
