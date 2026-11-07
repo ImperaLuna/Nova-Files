@@ -16,7 +16,7 @@ use std::cell::Cell;
 use std::io::{self, Write as _};
 use std::rc::Rc;
 
-use gpui::{App, AppContext as _, Application, Bounds, WindowBounds, WindowOptions, size};
+use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
 use nova_files_api::Connector;
 
 pub use requests::{Request, RequestSender, Requests, channel};
@@ -38,27 +38,39 @@ pub fn run(connector: &Connector, requests: &Requests) -> Ended {
     let connector = connector.clone();
     let requests = requests.clone();
     let quit = Rc::clone(&ended);
-    Application::new().run(move |cx: &mut App| {
+    gpui_platform::application().run(move |cx: &mut App| {
         open_window(&connector, cx);
-        cx.spawn(async move |cx| {
+        let follow = cx.spawn(async move |cx| {
             loop {
                 let request = requests.next().await;
-                let handled = cx.update(|cx| match request {
-                    Some(Request::OpenWindow) => open_window(&connector, cx),
+                let keep_going = cx.update(|cx| match request {
+                    Some(Request::OpenWindow) => {
+                        open_window(&connector, cx);
+                        true
+                    }
                     Some(Request::Quit) | None => {
                         quit.set(Ended::Quit);
                         cx.quit();
+                        false
                     }
                 });
-                if handled.is_err() {
+                if !keep_going {
                     return;
                 }
             }
-        })
-        .detach();
+        });
+        cx.set_global(RequestLoop { _follow: follow });
     });
     ended.get()
 }
+
+/// The task that follows the program's requests. The app owns it, so it is
+/// dropped with the app when the run ends and never touches a released app.
+struct RequestLoop {
+    _follow: Task<()>,
+}
+
+impl Global for RequestLoop {}
 
 /// Opens a main window centred on the main display.
 fn open_window(connector: &Connector, cx: &mut App) {
