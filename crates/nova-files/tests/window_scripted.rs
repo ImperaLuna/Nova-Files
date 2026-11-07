@@ -139,6 +139,7 @@ fn the_shown_folder_refused_too_is_not_asked_for_again(cx: &mut TestAppContext) 
     let (view, cx, mut core, _) = shown_with_details(cx, 1);
 
     view.update(cx, |view, _| view.open(Path::new(MISSING)));
+    view.read_with(cx, |view, _| assert!(view.waiting()));
     let (id, path) = core.next_listing().unwrap();
     core.refuse(id, &path);
     cx.run_until_parked();
