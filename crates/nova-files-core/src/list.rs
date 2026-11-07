@@ -4,7 +4,6 @@
 //! listing nobody wants any more stops early. Links are followed only to
 //! learn whether they point at a folder.
 
-use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
@@ -49,7 +48,7 @@ pub fn read_folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<Vec<Entr
         let Ok(kind) = kind_of(&item) else { continue };
         found.push((item.file_name(), kind));
     }
-    found.sort_by(compare);
+    found.sort_by_cached_key(sort_key);
     let entries = found
         .into_iter()
         .zip(0..)
@@ -78,20 +77,14 @@ fn kind_of(item: &fs::DirEntry) -> io::Result<EntryKind> {
 }
 
 /// Folders before files; then by name ignoring case; then by the exact
-/// bytes, so the order is the same on every run.
-fn compare(a: &(OsString, EntryKind), b: &(OsString, EntryKind)) -> Ordering {
-    let rank = |kind: EntryKind| match kind {
-        EntryKind::Folder => 0,
-        EntryKind::File => 1,
-    };
-    rank(a.1)
-        .cmp(&rank(b.1))
-        .then_with(|| sort_key(&a.0).cmp(&sort_key(&b.0)))
-        .then_with(|| a.0.cmp(&b.0))
-}
-
-fn sort_key(name: &OsString) -> String {
-    name.to_string_lossy().to_lowercase()
+/// bytes, so the order is the same on every run. Worked out once per entry,
+/// not once per comparison.
+fn sort_key((name, kind): &(OsString, EntryKind)) -> (bool, String, OsString) {
+    (
+        *kind == EntryKind::File,
+        name.to_string_lossy().to_lowercase(),
+        name.clone(),
+    )
 }
 
 /// Sorts one `io::Error` into the reasons a client acts on.
@@ -113,7 +106,7 @@ mod tests {
             .iter()
             .map(|(name, kind)| (OsString::from(name), *kind))
             .collect();
-        items.sort_by(compare);
+        items.sort_by_cached_key(sort_key);
         items
             .into_iter()
             .map(|(name, _)| name.to_string_lossy().into_owned())

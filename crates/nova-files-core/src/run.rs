@@ -41,9 +41,8 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage) {
             clients.insert(client, Client::new(events));
         }
         CoreMessage::Disconnected { client } => {
-            if let Some(gone) = clients.remove(&client) {
-                gone.cancel_listing();
-            }
+            // Dropping the client stops its listing.
+            clients.remove(&client);
         }
         // Receiving it already restarted the idle wait.
         CoreMessage::Activity => {}

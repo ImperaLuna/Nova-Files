@@ -43,8 +43,16 @@ impl Client {
     }
 
     /// Stops the client's listing, if one is running.
-    pub fn cancel_listing(&self) {
+    fn cancel_listing(&self) {
         self.current_listing.store(NO_LISTING, Ordering::SeqCst);
+    }
+}
+
+/// A client the core forgets (it left, or stopped listening) needs no more
+/// answers, so its listing stops too.
+impl Drop for Client {
+    fn drop(&mut self) {
+        self.cancel_listing();
     }
 }
 

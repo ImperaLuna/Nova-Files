@@ -3,8 +3,9 @@
 //!
 //! Where those folders are comes from the system's `user-dirs.dirs` file
 //! (the freedesktop xdg-user-dirs format), which every desktop writes and
-//! which follows the user's language. Only folders inside Home are taken
-//! from it; anything else falls back to the usual name under Home.
+//! which follows the user's language. A folder the file doesn't mention is
+//! looked for under its usual name in Home; one it disables (`"$HOME/"`) or
+//! puts outside Home is left out.
 
 use std::env;
 use std::fs;
@@ -45,9 +46,13 @@ fn places_in(home: &Path, user_dirs: &str) -> Vec<Place> {
         kind: PlaceKind::Home,
         path: home.to_owned(),
     };
-    let standard = STANDARD.iter().map(|&(kind, key, default)| {
-        let path = user_dir(home, user_dirs, key).unwrap_or_else(|| home.join(default));
-        Place { kind, path }
+    let standard = STANDARD.iter().filter_map(|&(kind, key, default)| {
+        let path = match user_dir(home, user_dirs, key) {
+            Setting::Unset => home.join(default),
+            Setting::Folder(path) => path,
+            Setting::Refused => return None,
+        };
+        Some(Place { kind, path })
     });
     std::iter::once(home_place)
         .chain(standard)
@@ -76,22 +81,43 @@ fn read_user_dirs(path: &Path) -> String {
     }
 }
 
-/// The folder `key` names in `user_dirs`, if it is a folder inside `home`.
-/// The format is `KEY="$HOME/Folder"`, one per line.
-fn user_dir(home: &Path, user_dirs: &str, key: &str) -> Option<PathBuf> {
-    let value = user_dirs.lines().find_map(|line| {
+/// What `user-dirs.dirs` says about one folder.
+#[derive(Debug, PartialEq, Eq)]
+enum Setting {
+    /// Nothing: the usual name under Home applies.
+    Unset,
+    /// A folder inside Home.
+    Folder(PathBuf),
+    /// Disabled, outside Home, or not in the format.
+    Refused,
+}
+
+/// What `user_dirs` says about `key`. The format is `KEY="$HOME/Folder"`,
+/// one per line; the file is shell, so the last line for a key wins.
+fn user_dir(home: &Path, user_dirs: &str, key: &str) -> Setting {
+    let value = user_dirs.lines().rev().find_map(|line| {
         let (name, value) = line.trim().split_once('=')?;
         (name == key).then_some(value)
-    })?;
+    });
+    let Some(value) = value else {
+        return Setting::Unset;
+    };
     let relative = value
-        .strip_prefix('"')?
-        .strip_suffix('"')?
-        .strip_prefix(HOME_PREFIX)?;
-    let relative = Path::new(relative);
-    let inside = relative
-        .components()
-        .all(|part| matches!(part, Component::Normal(_)));
-    (inside && !relative.as_os_str().is_empty()).then(|| home.join(relative))
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .and_then(|value| value.strip_prefix(HOME_PREFIX))
+        .map(Path::new);
+    match relative {
+        Some(relative)
+            if !relative.as_os_str().is_empty()
+                && relative
+                    .components()
+                    .all(|part| matches!(part, Component::Normal(_))) =>
+        {
+            Setting::Folder(home.join(relative))
+        }
+        _ => Setting::Refused,
+    }
 }
 
 #[cfg(test)]
@@ -100,7 +126,7 @@ mod tests {
 
     const HOME: &str = "/home/someone";
 
-    fn dir(text: &str, key: &str) -> Option<PathBuf> {
+    fn dir(text: &str, key: &str) -> Setting {
         user_dir(Path::new(HOME), text, key)
     }
 
@@ -109,21 +135,33 @@ mod tests {
         let text = "# comment\nXDG_DOCUMENTS_DIR=\"$HOME/Dokumente\"\n";
         assert_eq!(
             dir(text, "XDG_DOCUMENTS_DIR"),
-            Some(PathBuf::from("/home/someone/Dokumente"))
+            Setting::Folder(PathBuf::from("/home/someone/Dokumente"))
+        );
+    }
+
+    #[test]
+    fn last_line_for_a_key_wins() {
+        let text = "XDG_DOCUMENTS_DIR=\"$HOME/Old\"\nXDG_DOCUMENTS_DIR=\"$HOME/New\"\n";
+        assert_eq!(
+            dir(text, "XDG_DOCUMENTS_DIR"),
+            Setting::Folder(PathBuf::from("/home/someone/New"))
         );
     }
 
     #[test]
     fn refuses_folders_outside_home() {
-        assert_eq!(dir("XDG_DOCUMENTS_DIR=\"/etc\"", "XDG_DOCUMENTS_DIR"), None);
+        assert_eq!(
+            dir("XDG_DOCUMENTS_DIR=\"/etc\"", "XDG_DOCUMENTS_DIR"),
+            Setting::Refused
+        );
         assert_eq!(
             dir("XDG_DOCUMENTS_DIR=\"$HOME/../x\"", "XDG_DOCUMENTS_DIR"),
-            None
+            Setting::Refused
         );
         // `$HOME/` alone means "no such folder" in the format.
         assert_eq!(
             dir("XDG_DOCUMENTS_DIR=\"$HOME/\"", "XDG_DOCUMENTS_DIR"),
-            None
+            Setting::Refused
         );
     }
 
@@ -142,7 +180,8 @@ mod tests {
             TempHome(env::temp_dir().join(format!("nova-files-places-{}", std::process::id())));
         fs::create_dir_all(home.0.join("Bilder")).unwrap();
         fs::create_dir_all(home.0.join("Documents")).unwrap();
-        let user_dirs = "XDG_PICTURES_DIR=\"$HOME/Bilder\"\n";
+        fs::create_dir_all(home.0.join("Downloads")).unwrap();
+        let user_dirs = "XDG_PICTURES_DIR=\"$HOME/Bilder\"\nXDG_DOWNLOAD_DIR=\"$HOME/\"\n";
 
         let places = places_in(&home.0, user_dirs);
 
@@ -161,10 +200,10 @@ mod tests {
     }
 
     #[test]
-    fn missing_key_gives_nothing() {
+    fn missing_key_is_unset() {
         assert_eq!(
             dir("XDG_MUSIC_DIR=\"$HOME/Music\"", "XDG_DOCUMENTS_DIR"),
-            None
+            Setting::Unset
         );
     }
 }
