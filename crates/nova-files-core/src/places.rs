@@ -185,7 +185,8 @@ mod tests {
             Setting::Folder(PathBuf::from(r#"/home/someone/$Docs "x" \y"#))
         );
         // A backslash with nothing after it stays.
-        assert_eq!(unescape("a\\"), "a\\");
+        let lone = format!("a{ESCAPE}");
+        assert_eq!(unescape(&lone), lone);
     }
 
     #[test]
