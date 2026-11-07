@@ -112,6 +112,33 @@ fn a_broken_image_gets_a_failure_marker_and_other_files_are_left_alone() {
 }
 
 #[test]
+fn a_file_that_cant_be_read_gets_no_failure_marker() {
+    let folder = TempFolder::new("unreadable");
+    let thumbnails = folder.0.join("thumbnails");
+    let missing = folder.0.join("missing.jpg");
+
+    assert_eq!(run(&thumbnails, &[(&missing, "x.png")]), ["failed"]);
+    assert!(!thumbnails.join("fail/nova-files/x.png").exists());
+}
+
+#[test]
+fn no_temp_files_are_left_behind() {
+    let folder = TempFolder::new("temp");
+    let thumbnails = folder.0.join("thumbnails");
+    let source = folder.0.join("a.png");
+    RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
+        .save_with_format(&source, ImageFormat::Png)
+        .unwrap();
+
+    assert_eq!(run(&thumbnails, &[(&source, "a.png")]), ["ok"]);
+    let left: Vec<_> = fs::read_dir(thumbnails.join("normal"))
+        .unwrap()
+        .map(|file| file.unwrap().file_name())
+        .collect();
+    assert_eq!(left, ["a.png"]);
+}
+
+#[test]
 fn bad_arguments_are_refused() {
     let folder = TempFolder::new("refused");
     let status = Command::new(HELPER)
