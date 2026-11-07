@@ -82,10 +82,9 @@ impl Drop for Client {
 
 /// Lists `path` for `client` as listing `id`, replacing any listing before.
 pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
+    // The thumbnail queue keeps the listing on screen until this one is
+    // shown: a folder that can't be read leaves the client where it was.
     client.current_listing.store(id.0, Ordering::SeqCst);
-    if let Some(queue) = &client.thumbnails {
-        queue.clear();
-    }
     let thumbnails = client.thumbnails.clone();
     let events = Arc::clone(&client.events);
     let current = Arc::clone(&client.current_listing);

@@ -174,3 +174,57 @@ fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
         }
     }
 }
+
+#[test]
+fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
+    let temp = TempFolder::new("refused");
+    let folder = temp.0.join("media");
+    fs::create_dir(&folder).unwrap();
+    RgbImage::new(WIDTH, HEIGHT)
+        .save_with_format(folder.join("photo.png"), ImageFormat::Png)
+        .unwrap();
+    let client = client(&temp.0.join("thumbnails"), Path::new(HELPER));
+    let (entry, png) = first_thumbnail(&client, &folder);
+
+    let missing = ListingId(2);
+    client
+        .connection
+        .send(Command::ListFolder {
+            id: missing,
+            path: temp.0.join("missing"),
+        })
+        .unwrap();
+    loop {
+        match client.events.recv_timeout(WAIT).unwrap() {
+            Event::FolderUnreadable { id, .. } if id == missing => break,
+            Event::DetailsRead { .. } | Event::Thumbnail { .. } => {}
+            other => panic!("expected the refusal, got {other:?}"),
+        }
+    }
+    // Still on the first listing: away and back again.
+    for first in [ROWS, 0] {
+        client
+            .connection
+            .send(Command::Thumbnails {
+                id: ListingId(1),
+                first: EntryId(first),
+                count: ROWS,
+            })
+            .unwrap();
+    }
+
+    loop {
+        match client.events.recv_timeout(WAIT).unwrap() {
+            Event::Thumbnail {
+                entry: got,
+                png: again,
+                ..
+            } => {
+                assert_eq!((got, again.to_vec()), (entry, png));
+                break;
+            }
+            Event::DetailsRead { .. } => {}
+            other => panic!("expected a thumbnail, got {other:?}"),
+        }
+    }
+}

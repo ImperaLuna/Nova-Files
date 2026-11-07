@@ -129,15 +129,6 @@ impl Queue {
         });
     }
 
-    /// The client is leaving its listing; nothing is wanted until the next
-    /// one is shown.
-    pub fn clear(&self) {
-        self.shared.update(|state| {
-            state.shown = None;
-            state.wanted = 0..0;
-        });
-    }
-
     /// The client wants thumbnails for `count` entries of listing `id` from
     /// `first`, in place of what it wanted before.
     pub fn want(&self, id: ListingId, first: EntryId, count: u32) {
@@ -228,38 +219,46 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
                 })
                 .is_ok()
         };
+        let wanted = |index: usize| shared.still_wanted(shown.id, index);
+        let normal = cache::normal(&setup.folder);
+        let failed = cache::failed(&setup.folder);
         let mut misses = Vec::new();
+        // Each read waits for its row to be still wanted, so rows the client
+        // moved away from cost nothing more.
         for index in batch {
+            if !wanted(index) {
+                continue;
+            }
             let Some(job) = job_for(&shown, index) else {
                 continue;
             };
-            if let Some(png) =
-                cache::read_if_current(&cache::normal(&setup.folder), &job.name, job.mtime)
-            {
+            if !wanted(index) {
+                continue;
+            }
+            if let Some(png) = cache::read_if_current(&normal, &job.name, job.mtime) {
                 if !answer(index, png) {
                     return;
                 }
-            } else if cache::read_if_current(&cache::failed(&setup.folder), &job.name, job.mtime)
-                .is_none()
-                && shared.still_wanted(shown.id, index)
+            } else if wanted(index)
+                && cache::read_if_current(&failed, &job.name, job.mtime).is_none()
             {
                 misses.push((index, job));
             }
         }
         // The client may have moved on while the cache was read.
-        misses.retain(|(index, _)| shared.still_wanted(shown.id, *index));
+        misses.retain(|(index, _)| wanted(*index));
         if misses.is_empty() {
             continue;
         }
         let jobs: Vec<helper::Job> = misses.iter().map(|(_, job)| job.clone()).collect();
-        let made = helper::run(&setup.helper, &setup.folder, &jobs);
-        for ((index, job), made) in misses.into_iter().zip(made) {
-            let png = made
-                .then(|| {
-                    cache::read_if_current(&cache::normal(&setup.folder), &job.name, job.mtime)
-                })
-                .flatten();
-            if let Some(png) = png
+        helper::run(&setup.helper, &setup.folder, &jobs);
+        // The cache is the answer, not the helper's word: a helper killed
+        // part-way still saved the files it finished.
+        for (index, job) in misses {
+            if !wanted(index) {
+                continue;
+            }
+            if let Some(png) = cache::read_if_current(&normal, &job.name, job.mtime)
                 && !answer(index, png)
             {
                 return;
