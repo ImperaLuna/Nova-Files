@@ -228,3 +228,85 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
         }
     }
 }
+
+/// Lists `folder` as `id`, asks for its first rows' thumbnails and returns
+/// the entries of the first `count` that arrive, in order.
+fn thumbnailed_entries(
+    client: &Client,
+    folder: &Path,
+    id: ListingId,
+    count: usize,
+) -> Vec<EntryId> {
+    client
+        .connection
+        .send(Command::ListFolder {
+            id,
+            path: folder.to_owned(),
+        })
+        .unwrap();
+    let mut entries = Vec::new();
+    while entries.len() < count {
+        match client.events.recv_timeout(WAIT).unwrap() {
+            Event::FolderListed(listing) if listing.id == id => client
+                .connection
+                .send(Command::Thumbnails {
+                    id,
+                    first: EntryId(0),
+                    count: ROWS,
+                })
+                .unwrap(),
+            Event::Thumbnail { id: got, entry, .. } if got == id => entries.push(entry),
+            Event::DetailsRead { .. } => {}
+            other => panic!("expected the listing or a thumbnail, got {other:?}"),
+        }
+    }
+    entries
+}
+
+#[test]
+fn cached_rows_answer_and_rows_that_failed_before_are_not_tried_again() {
+    let temp = TempFolder::new("marked");
+    let folder = temp.0.join("media");
+    fs::create_dir(&folder).unwrap();
+    let image = RgbImage::new(WIDTH, HEIGHT);
+    for name in ["a.png", "b.png"] {
+        image
+            .save_with_format(folder.join(name), ImageFormat::Png)
+            .unwrap();
+    }
+    let broken = folder.join("broken.png");
+    fs::write(&broken, b"not an image").unwrap();
+    let thumbnails = temp.0.join("thumbnails");
+    // The helper makes the two thumbnails and marks the broken file failed.
+    let first = thumbnailed_entries(
+        &client(&thumbnails, Path::new(HELPER)),
+        &folder,
+        ListingId(1),
+        2,
+    );
+    assert_eq!(first, [EntryId(0), EntryId(1)]);
+
+    // Now a real image, but with the mtime its marker was made for, so the
+    // marker still stands.
+    let mtime = fs::metadata(&broken).unwrap().modified().unwrap();
+    image.save_with_format(&broken, ImageFormat::Png).unwrap();
+    fs::File::options()
+        .write(true)
+        .open(&broken)
+        .unwrap()
+        .set_modified(mtime)
+        .unwrap();
+    image
+        .save_with_format(folder.join("new.png"), ImageFormat::Png)
+        .unwrap();
+
+    // Sorted: a.png, b.png, broken.png, new.png. The first two come from the
+    // cache; only new.png goes to the helper.
+    let again = thumbnailed_entries(
+        &client(&thumbnails, Path::new(HELPER)),
+        &folder,
+        ListingId(1),
+        3,
+    );
+    assert_eq!(again, [EntryId(0), EntryId(1), EntryId(3)]);
+}

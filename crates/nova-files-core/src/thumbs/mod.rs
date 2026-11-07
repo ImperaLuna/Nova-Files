@@ -13,6 +13,8 @@
 mod cache;
 mod helper;
 mod md5;
+#[cfg(test)]
+mod tests;
 
 use std::collections::HashSet;
 use std::env;

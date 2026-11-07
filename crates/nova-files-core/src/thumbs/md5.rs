@@ -95,8 +95,6 @@ const STEP_FOUR: (usize, usize) = (7, 0);
 const ROUND_ONE: usize = 0;
 const ROUND_TWO: usize = 1;
 const ROUND_THREE: usize = 2;
-/// Two hex digits per digest byte.
-const DIGEST_HEX_LENGTH: usize = STATE_WORDS * WORD * 2;
 
 /// The digest of `bytes` as 32 lowercase hex digits.
 pub fn hex(bytes: &[u8]) -> String {
@@ -104,14 +102,13 @@ pub fn hex(bytes: &[u8]) -> String {
     let bit_length = (bytes.len() as u64).wrapping_mul(BITS_PER_BYTE);
     let mut message = bytes.to_vec();
     message.push(PAD_START);
-    while message.len() % BLOCK != LENGTH_AT {
-        message.push(0);
-    }
+    let zeros = (LENGTH_AT + BLOCK - message.len() % BLOCK) % BLOCK;
+    message.resize(message.len() + zeros, 0);
     message.extend_from_slice(&bit_length.to_le_bytes());
     for block in message.as_chunks::<BLOCK>().0 {
         compress(&mut state, block);
     }
-    let mut out = String::with_capacity(DIGEST_HEX_LENGTH);
+    let mut out = String::new();
     for byte in state.iter().flat_map(|word| word.to_le_bytes()) {
         out.push(char::from(HEX[usize::from(byte >> HIGH_NIBBLE)]));
         out.push(char::from(HEX[usize::from(byte & LOW_NIBBLE_MASK)]));
@@ -128,8 +125,10 @@ fn compress(state: &mut [u32; STATE_WORDS], block: &[u8; BLOCK]) {
     for i in 0..BLOCK {
         let round = i / ROUND;
         let (mixed, index) = match round {
-            ROUND_ONE => ((b & c) | (!b & d), i),
-            ROUND_TWO => ((d & b) | (!d & c), step(i, STEP_TWO)),
+            // `(b & c) | (!b & d)` and `(d & b) | (!d & c)`, written so no
+            // operator can be swapped for another without changing them.
+            ROUND_ONE => (d ^ (b & (c ^ d)), i),
+            ROUND_TWO => (c ^ (d & (b ^ c)), step(i, STEP_TWO)),
             ROUND_THREE => (b ^ c ^ d, step(i, STEP_THREE)),
             _ => (c ^ (b | !d), step(i, STEP_FOUR)),
         };
@@ -165,6 +164,21 @@ mod tests {
             ),
             "57edf4a22be3c955ac49da2e2107b67a"
         );
+    }
+
+    #[test]
+    fn pads_messages_either_side_of_a_block_boundary() {
+        let digests = [
+            (55, "ef1772b6dff9a122358552954ad0df65"),
+            (56, "3b0c8ac703f828b04c6c197006d17218"),
+            (63, "b06521f39153d618550606be297466d5"),
+            (64, "014842d480b571495a4a0363793f7367"),
+            (119, "8a7bd0732ed6a28ce75f6dabc90e1613"),
+            (120, "5f61c0ccad4cac44c75ff505e1f1e537"),
+        ];
+        for (length, digest) in digests {
+            assert_eq!(hex(&vec![b'a'; length]), digest, "{length} bytes");
+        }
     }
 
     #[test]

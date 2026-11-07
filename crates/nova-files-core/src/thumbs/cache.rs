@@ -49,12 +49,13 @@ pub fn failed(thumbnails: &Path) -> PathBuf {
 
 /// The file's bytes; an error for one bigger than a thumbnail can be.
 fn read_capped(path: &Path) -> io::Result<Vec<u8>> {
+    let mut file = File::open(path)?;
     let mut bytes = Vec::new();
-    // One byte past the cap tells a file at the cap from a bigger one.
-    File::open(path)?
-        .take(MAX_THUMBNAIL_BYTES + 1)
+    (&mut file)
+        .take(MAX_THUMBNAIL_BYTES)
         .read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_THUMBNAIL_BYTES {
+    // A byte past the cap means the file is bigger than a thumbnail can be.
+    if file.read(&mut [0])? != 0 {
         return Err(io::ErrorKind::FileTooLarge.into());
     }
     Ok(bytes)
@@ -128,6 +129,44 @@ mod tests {
         let end_cut = png(&[(b"tEXt", b"Thumb::MTime\x0042"), (b"IEND", b"")]);
         assert_eq!(text(&end_cut[..end_cut.len() - 1], MTIME_KEY), None);
         assert_eq!(text(b"short", MTIME_KEY), None);
+    }
+
+    /// A thumbnail for mtime 42 that is exactly `size` bytes long.
+    fn thumbnail_of_size(size: usize) -> Vec<u8> {
+        let text: &[u8] = b"Thumb::MTime\x0042";
+        let chunk = CHUNK_LENGTH + CHUNK_TYPE + CHUNK_CRC;
+        let filler = size - PNG_SIGNATURE_LENGTH - 3 * chunk - text.len();
+        let bytes = png(&[(b"tEXt", text), (b"IDAT", &vec![0; filler]), (b"IEND", b"")]);
+        assert_eq!(bytes.len(), size);
+        bytes
+    }
+
+    #[test]
+    fn a_thumbnail_at_the_size_cap_is_read_and_a_bigger_file_is_not() {
+        let folder =
+            std::env::temp_dir().join(format!("nova-files-cache-cap-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let cap = usize::try_from(MAX_THUMBNAIL_BYTES).unwrap();
+        let at_cap = thumbnail_of_size(cap);
+        std::fs::write(folder.join("at-cap.png"), &at_cap).unwrap();
+        // Whole up to the cap, so only its size can refuse it.
+        let mut over = at_cap.clone();
+        over.push(0);
+        std::fs::write(folder.join("over.png"), &over).unwrap();
+
+        let read_at_cap = read_if_current(&folder, "at-cap.png", 42);
+        let read_over = read_if_current(&folder, "over.png", 42);
+        std::fs::remove_dir_all(&folder).unwrap();
+
+        assert_eq!(read_at_cap, Some(at_cap));
+        assert_eq!(read_over, None);
+    }
+
+    #[test]
+    fn markers_live_in_the_apps_own_fail_folder() {
+        let thumbnails = Path::new("/cache/thumbnails");
+        assert_eq!(failed(thumbnails), thumbnails.join("fail/nova-files"));
+        assert_eq!(normal(thumbnails), thumbnails.join("normal"));
     }
 
     #[test]
