@@ -108,7 +108,7 @@ pub fn hex(bytes: &[u8]) -> String {
         message.push(0);
     }
     message.extend_from_slice(&bit_length.to_le_bytes());
-    for block in message.chunks_exact(BLOCK) {
+    for block in message.as_chunks::<BLOCK>().0 {
         compress(&mut state, block);
     }
     let mut out = String::with_capacity(DIGEST_HEX_LENGTH);
@@ -119,10 +119,10 @@ pub fn hex(bytes: &[u8]) -> String {
     out
 }
 
-fn compress(state: &mut [u32; STATE_WORDS], block: &[u8]) {
+fn compress(state: &mut [u32; STATE_WORDS], block: &[u8; BLOCK]) {
     let mut words = [0_u32; ROUND];
-    for (word, bytes) in words.iter_mut().zip(block.chunks_exact(WORD)) {
-        *word = <[u8; WORD]>::try_from(bytes).map_or(0, u32::from_le_bytes);
+    for (word, bytes) in words.iter_mut().zip(block.as_chunks::<WORD>().0) {
+        *word = u32::from_le_bytes(*bytes);
     }
     let [mut a, mut b, mut c, mut d] = *state;
     for i in 0..BLOCK {
