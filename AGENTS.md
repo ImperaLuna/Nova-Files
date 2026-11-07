@@ -124,7 +124,8 @@ per PR, after `just check` passes and before asking Codex for review; later
 fix rounds only rerun `just check`. CI runs both.
 
 Open every PR as a draft; CI skips drafts. Ask Codex to review the draft,
-fix what it finds, then mark the PR ready for review, which starts CI.
+fix what it finds, and mark the PR ready for review as soon as Codex is
+done, in the same turn; that starts CI. Never leave a reviewed PR a draft.
 
 Every change goes through a pull request.
 
