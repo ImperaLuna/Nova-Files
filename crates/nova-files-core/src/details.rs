@@ -26,20 +26,27 @@ pub fn read_batch(
 ) -> Option<Vec<Details>> {
     let mut details = Vec::with_capacity(entries.len());
     for entry in entries {
-        if cancelled() {
-            return None;
-        }
-        details.push(read_one(&folder.join(&entry.name), entry.kind));
+        details.push(read_one(&folder.join(&entry.name), entry.kind, &cancelled)?);
     }
     Some(details)
 }
 
-fn read_one(path: &Path, kind: EntryKind) -> Details {
-    let Ok(metadata) = fs::metadata(path).or_else(|_| fs::symlink_metadata(path)) else {
-        return Details::default();
+/// One entry's details; `None` when `cancelled` said so before a read.
+fn read_one(path: &Path, kind: EntryKind, cancelled: impl Fn() -> bool) -> Option<Details> {
+    if cancelled() {
+        return None;
+    }
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        // Maybe a broken link, which reports itself.
+        Err(_) if cancelled() => return None,
+        Err(_) => match fs::symlink_metadata(path) {
+            Ok(metadata) => metadata,
+            Err(_) => return Some(Details::default()),
+        },
     };
-    Details {
+    Some(Details {
         size: (kind == EntryKind::File).then_some(metadata.len()),
         modified: metadata.modified().ok(),
-    }
+    })
 }
