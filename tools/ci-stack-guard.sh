@@ -13,7 +13,7 @@ if [ "$base" = main ]; then
     exit 0
 fi
 
-blocked=$(grep -zE '(\.md$|^nix/|^flake\.|^\.github/|^\.cargo/|^justfile$|(^|/)deny\.toml$|(^|/)clippy\.toml$)' | tr '\0' ' ' || true)
+blocked=$(grep -zE '(\.md$|^nix/|^flake\.|^\.github/|^tools/|^\.cargo/|^justfile$|(^|/)deny\.toml$|(^|/)clippy\.toml$)' | tr '\0' ' ' || true)
 if [ -n "$blocked" ]; then
     echo "A stacked pull request (base $base) may change code only; move these to a pull request off main: $blocked" >&2
     exit 1
