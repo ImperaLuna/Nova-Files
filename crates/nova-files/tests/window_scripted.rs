@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 
-use gpui::{Entity, TestAppContext, VisualTestContext};
+use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
     Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink, Listing, ListingId,
     Unreadable,
@@ -16,7 +16,10 @@ use nova_files_ui::MainWindow;
 
 const SHOWN: &str = "/shown";
 const MISSING: &str = "/shown/missing";
+const OTHER: &str = "/other";
 const ENTRIES: u32 = 3;
+/// Enough rows that the list scrolls in a test window.
+const MANY: u32 = 500;
 
 struct Core {
     messages: Receiver<CoreMessage>,
@@ -52,22 +55,23 @@ impl Core {
     }
 }
 
-/// A window on [`SHOWN`] whose listing has arrived with the details of
-/// its first `with_details` entries only.
-fn shown_with_details(
-    cx: &mut TestAppContext,
-    with_details: u32,
-) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
+/// A window on [`SHOWN`] and its scripted core; nothing answered yet.
+fn window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     let (connector, messages) = nova_files_api::channel();
     let (view, cx) = cx.add_window_view(|_, cx| {
         MainWindow::with_home(&connector, Path::new(SHOWN), PathBuf::from(SHOWN), cx)
     });
-    let mut core = Core {
+    let core = Core {
         messages,
         events: None,
     };
+    (view, cx, core)
+}
+
+/// Answers the window's next listing request with `count` files.
+fn answer_listing(core: &mut Core, count: u32) -> ListingId {
     let (id, path) = core.next_listing().unwrap();
-    let entries: Arc<[Entry]> = (0..ENTRIES)
+    let entries: Arc<[Entry]> = (0..count)
         .map(|index| Entry {
             id: EntryId(index),
             name: format!("{index}").into(),
@@ -75,20 +79,39 @@ fn shown_with_details(
         })
         .collect();
     core.send(Event::FolderListed(Listing { id, path, entries }));
+    id
+}
+
+/// One file's details: a size of `size` bytes.
+const fn sized(size: u64) -> Details {
+    Details {
+        size: Some(size),
+        modified: None,
+    }
+}
+
+/// A window on [`SHOWN`] whose listing has arrived with the details of
+/// its first `with_details` entries only.
+fn shown_with_details(
+    cx: &mut TestAppContext,
+    with_details: u32,
+) -> (Entity<MainWindow>, &mut VisualTestContext, Core, ListingId) {
+    let (view, cx, mut core) = window(cx);
+    let id = answer_listing(&mut core, ENTRIES);
     core.send(Event::DetailsRead {
         id,
         first: EntryId(0),
-        details: (0..with_details).map(|_| Details::default()).collect(),
+        details: (0..with_details).map(|_| sized(1)).collect(),
     });
     cx.run_until_parked();
-    (view, cx, core)
+    (view, cx, core, id)
 }
 
 #[gpui::test]
 fn a_refused_folder_reads_the_shown_one_again_while_its_details_are_missing(
     cx: &mut TestAppContext,
 ) {
-    let (view, cx, mut core) = shown_with_details(cx, 1);
+    let (view, cx, mut core, _) = shown_with_details(cx, 1);
 
     view.update(cx, |view, _| view.open(Path::new(MISSING)));
     let (id, path) = core.next_listing().unwrap();
@@ -101,7 +124,7 @@ fn a_refused_folder_reads_the_shown_one_again_while_its_details_are_missing(
 
 #[gpui::test]
 fn a_refused_folder_leaves_a_complete_listing_alone(cx: &mut TestAppContext) {
-    let (view, cx, mut core) = shown_with_details(cx, ENTRIES);
+    let (view, cx, mut core, _) = shown_with_details(cx, ENTRIES);
 
     view.update(cx, |view, _| view.open(Path::new(MISSING)));
     let (id, path) = core.next_listing().unwrap();
@@ -113,7 +136,7 @@ fn a_refused_folder_leaves_a_complete_listing_alone(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn the_shown_folder_refused_too_is_not_asked_for_again(cx: &mut TestAppContext) {
-    let (view, cx, mut core) = shown_with_details(cx, 1);
+    let (view, cx, mut core, _) = shown_with_details(cx, 1);
 
     view.update(cx, |view, _| view.open(Path::new(MISSING)));
     let (id, path) = core.next_listing().unwrap();
@@ -128,4 +151,71 @@ fn the_shown_folder_refused_too_is_not_asked_for_again(cx: &mut TestAppContext) 
         assert_eq!(view.folder(), Some(Path::new(SHOWN)));
         assert!(!view.waiting());
     });
+}
+
+#[gpui::test]
+fn details_for_another_listing_are_left_out(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, 1);
+
+    core.send(Event::DetailsRead {
+        id: ListingId(id.0 + 1),
+        first: EntryId(1),
+        details: Arc::new([sized(5)]),
+    });
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| assert_eq!(view.columns(1).unwrap().size, ""));
+}
+
+#[gpui::test]
+fn details_after_a_gap_are_left_out(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, 1);
+
+    core.send(Event::DetailsRead {
+        id,
+        first: EntryId(2),
+        details: Arc::new([sized(5)]),
+    });
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| assert_eq!(view.columns(2).unwrap().size, ""));
+}
+
+const SCROLLED: Point<gpui::Pixels> = point(px(0.0), px(-240.0));
+
+/// A window on [`SHOWN`] with many rows, scrolled down to [`SCROLLED`].
+fn scrolled(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
+    let (view, cx, mut core) = window(cx);
+    answer_listing(&mut core, MANY);
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| {
+        view.scroll().0.borrow().base_handle.set_offset(SCROLLED);
+    });
+    (view, cx, core)
+}
+
+fn offset(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Point<gpui::Pixels> {
+    view.read_with(cx, |view, _| view.scroll().0.borrow().base_handle.offset())
+}
+
+#[gpui::test]
+fn reading_the_shown_folder_again_keeps_its_scroll_position(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = scrolled(cx);
+
+    view.update(cx, |view, _| view.open(Path::new(SHOWN)));
+    answer_listing(&mut core, MANY);
+    cx.run_until_parked();
+
+    assert_eq!(offset(&view, cx), SCROLLED);
+}
+
+#[gpui::test]
+fn another_folder_starts_at_the_top(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = scrolled(cx);
+
+    view.update(cx, |view, _| view.open(Path::new(OTHER)));
+    answer_listing(&mut core, MANY);
+    cx.run_until_parked();
+
+    assert_eq!(offset(&view, cx), Point::default());
 }

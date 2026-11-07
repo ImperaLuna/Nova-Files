@@ -174,6 +174,11 @@ impl MainWindow {
         })
     }
 
+    /// The scroll position of the list on screen.
+    pub const fn scroll(&self) -> &UniformListScrollHandle {
+        &self.scroll
+    }
+
     pub fn places(&self) -> &[Place] {
         &self.places
     }

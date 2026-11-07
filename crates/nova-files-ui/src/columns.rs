@@ -129,6 +129,8 @@ mod tests {
         assert_eq!(size(0), "0 B");
         assert_eq!(size(999), "999 B");
         assert_eq!(size(1000), "1.0 KB");
+        assert_eq!(size(10_000), "10 KB");
+        assert_eq!(size(1_000_000), "1.0 MB");
         assert_eq!(size(640_000), "640 KB");
         assert_eq!(size(1_800_000), "1.8 MB");
         assert_eq!(size(999_999_999), "1000 MB");
@@ -142,6 +144,15 @@ mod tests {
         assert_eq!(modified(UNIX_EPOCH.checked_sub(far).unwrap()), "");
         assert_ne!(modified(UNIX_EPOCH - Duration::from_secs(1)), "");
         assert_ne!(modified(SystemTime::now()), "");
+    }
+
+    #[test]
+    fn times_before_the_epoch_round_away_from_it() {
+        let before = |secs: f64| modified(UNIX_EPOCH - Duration::from_secs_f64(secs));
+        // A minute before the epoch starts a minute; a moment more is the
+        // minute before that.
+        assert_eq!(before(60.5), before(61.0));
+        assert_ne!(before(60.5), before(60.0));
     }
 
     #[test]
