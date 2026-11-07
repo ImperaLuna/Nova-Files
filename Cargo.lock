@@ -3510,6 +3510,7 @@ name = "nova-files-core"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -3532,6 +3533,8 @@ version = "0.1.0"
 dependencies = [
  "image",
  "landlock",
+ "nova-files-api",
+ "nova-files-core",
 ]
 
 [[package]]

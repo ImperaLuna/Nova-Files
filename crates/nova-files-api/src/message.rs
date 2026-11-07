@@ -17,6 +17,15 @@ pub enum Command {
     ListFolder { id: ListingId, path: PathBuf },
     /// Ask which standard folders exist; the answer is [`Event::Places`].
     Places,
+    /// The entries of listing `id` the client shows or is about to show:
+    /// `count` entries from `first`. The core makes thumbnails for them and
+    /// answers each with [`Event::Thumbnail`]; each request replaces the
+    /// one before, so entries scrolled away are dropped.
+    Thumbnails {
+        id: ListingId,
+        first: EntryId,
+        count: u32,
+    },
 }
 
 /// Something the core tells one client.
@@ -40,6 +49,13 @@ pub enum Event {
         id: ListingId,
         first: EntryId,
         details: Arc<[Details]>,
+    },
+    /// A thumbnail for entry `entry` of listing `id`, as PNG bytes that fit
+    /// in 128 by 128 pixels.
+    Thumbnail {
+        id: ListingId,
+        entry: EntryId,
+        png: Arc<[u8]>,
     },
     /// The standard folders that exist, in places-list order.
     Places(Vec<Place>),

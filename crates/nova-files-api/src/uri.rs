@@ -1,8 +1,10 @@
 //! `file://` URIs, as D-Bus `Open` calls and desktop launchers pass them.
 //!
 //! A path is bytes, not text, so both directions work on bytes: every byte
-//! outside the URI's unreserved set is percent-encoded, and decoding gives
-//! back the exact bytes, valid UTF-8 or not.
+//! outside the set a path may hold as is ([`PATH_SAFE`], the same set
+//! `GLib`'s `g_filename_to_uri` leaves alone) is percent-encoded, and
+//! decoding gives back the exact bytes, valid UTF-8 or not. Matching `GLib`
+//! matters: the freedesktop thumbnail cache is keyed by the URI's text.
 
 use std::ffi::OsString;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
@@ -15,6 +17,9 @@ const HEX_RADIX: u32 = 16;
 /// Digits after each `%`.
 const HEX_LENGTH: usize = 2;
 const HEX_DIGITS: &[u8; 16] = b"0123456789ABCDEF";
+/// Bytes besides letters and digits that a path keeps unescaped, as in
+/// `GLib`.
+const PATH_SAFE: &[u8] = b"!$&'()*+,-./:=@_~";
 const HIGH_NIBBLE: u32 = 4;
 const LOW_NIBBLE_MASK: u8 = 0x0f;
 
@@ -39,7 +44,7 @@ pub fn path_from_file_uri(uri: &str) -> Option<PathBuf> {
 pub fn file_uri(path: &Path) -> String {
     let mut uri = String::from(SCHEME);
     for &byte in path.as_os_str().as_bytes() {
-        if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
+        if byte.is_ascii_alphanumeric() || PATH_SAFE.contains(&byte) {
             uri.push(char::from(byte));
         } else {
             uri.push('%');
@@ -95,6 +100,14 @@ mod tests {
         assert_eq!(path_from_file_uri("file:///bad%zz"), None);
         assert_eq!(path_from_file_uri("file:///bad%+1"), None);
         assert_eq!(path_from_file_uri("file:///a?b"), None);
+    }
+
+    #[test]
+    fn escapes_like_glib() {
+        assert_eq!(
+            file_uri(Path::new("/a/b (1)+c,d=e@f;g?h#i")),
+            "file:///a/b%20(1)+c,d=e@f%3Bg%3Fh%23i"
+        );
     }
 
     #[test]

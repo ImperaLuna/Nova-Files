@@ -66,7 +66,7 @@ fn client_at(home: &Path) -> Client {
         folder: home.to_owned(),
         config: home.join(".config"),
     };
-    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home)).unwrap();
+    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home), None).unwrap();
     let (sink, events) = mpsc::channel();
     let connection = core.connector.connect(sink).unwrap();
     Client {

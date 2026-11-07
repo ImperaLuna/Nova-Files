@@ -267,9 +267,12 @@ impl MainWindow {
                 self.details.extend_from_slice(&details);
                 cx.notify();
             }
-            // An answer for a folder the window has since moved away from.
-            Event::FolderListed(_) | Event::FolderUnreadable { .. } | Event::DetailsRead { .. } => {
-            }
+            // An answer for a folder the window has since moved away from, or
+            // a thumbnail the list doesn't draw yet.
+            Event::FolderListed(_)
+            | Event::FolderUnreadable { .. }
+            | Event::DetailsRead { .. }
+            | Event::Thumbnail { .. } => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

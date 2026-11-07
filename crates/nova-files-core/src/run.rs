@@ -16,9 +16,16 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::jobs::{self, Client};
 use crate::places::Home;
+use crate::thumbs::Thumbnails;
 
-/// Runs until idle; places come from `home`.
-pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, home: Option<&Home>) {
+/// Runs until idle; places come from `home`, thumbnails go to
+/// `thumbnails`.
+pub fn run(
+    receiver: &Receiver<CoreMessage>,
+    idle_exit: Duration,
+    home: Option<&Home>,
+    thumbnails: Option<&Thumbnails>,
+) {
     let mut clients: HashMap<ClientId, Client> = HashMap::new();
     loop {
         let message = if clients.is_empty() {
@@ -32,15 +39,20 @@ pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, home: Option<&
                 Err(_) => return,
             }
         };
-        handle(&mut clients, message, home);
+        handle(&mut clients, message, home, thumbnails);
     }
 }
 
-fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, home: Option<&Home>) {
+fn handle(
+    clients: &mut HashMap<ClientId, Client>,
+    message: CoreMessage,
+    home: Option<&Home>,
+    thumbnails: Option<&Thumbnails>,
+) {
     match message {
         CoreMessage::Connected { client, events } => {
             let events: Arc<dyn EventSink> = Arc::from(events);
-            clients.insert(client, Client::new(events));
+            clients.insert(client, Client::new(events, thumbnails));
         }
         CoreMessage::Disconnected { client } => {
             // Dropping the client stops its listing.
@@ -76,6 +88,10 @@ fn answer(
         }
         Command::Places => {
             jobs::places(client, home.cloned());
+            Ok(())
+        }
+        Command::Thumbnails { id, first, count } => {
+            client.want_thumbnails(id, first, count);
             Ok(())
         }
     }
