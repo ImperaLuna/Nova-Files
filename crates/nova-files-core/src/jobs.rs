@@ -15,7 +15,7 @@ use std::thread;
 use nova_files_api::{ClientGone, Event, EventSink, Listing, ListingId, Unreadable};
 
 use crate::list::{self, Stopped};
-use crate::places;
+use crate::places::{self, Home};
 
 const LIST_THREAD: &str = "nova-files-list";
 const PLACES_THREAD: &str = "nova-files-places";
@@ -95,13 +95,15 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
     }
 }
 
-/// Finds the places for `client`.
-pub fn places(client: &Client) {
+/// Finds the places under `home` for `client`.
+pub fn places(client: &Client, home: Option<Home>) {
     let events = Arc::clone(&client.events);
     let spawned = thread::Builder::new()
         .name(PLACES_THREAD.to_owned())
         .spawn(move || {
-            events.deliver(Event::Places(places::places())).ok();
+            events
+                .deliver(Event::Places(places::places(home.as_ref())))
+                .ok();
         });
     if spawned.is_err() {
         // Without a thread there are no places to offer; the list is empty

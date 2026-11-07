@@ -18,7 +18,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_api::{
-    Command, Connection, EntryId, EntryKind, Event, Listing, ListingId, Unreadable,
+    Command, Connection, EntryId, EntryKind, Event, Listing, ListingId, PlaceKind, Unreadable,
 };
 
 /// How long a test waits for the core before it counts as a failure.
@@ -59,8 +59,13 @@ struct Client {
     events: Receiver<Event>,
 }
 
-fn client() -> Client {
-    let core = nova_files_core::spawn().unwrap();
+/// A client of a core whose home is `home`, never the real one.
+fn client_at(home: &Path) -> Client {
+    let home = nova_files_core::Home {
+        folder: home.to_owned(),
+        config: home.join(".config"),
+    };
+    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home)).unwrap();
     let (sink, events) = mpsc::channel();
     let connection = core.connector.connect(sink).unwrap();
     Client {
@@ -68,6 +73,15 @@ fn client() -> Client {
         connection,
         events,
     }
+}
+
+/// A client of a core with an empty temp home.
+fn client() -> Client {
+    let home = TempFolder::new();
+    let client = client_at(home.path());
+    // The core reads the home folder only when asked for places.
+    drop(home);
+    client
 }
 
 impl Client {
@@ -216,12 +230,32 @@ fn folder_without_permission_is_reported() {
 
 #[test]
 fn places_answers_with_existing_folders_only() {
-    let client = client();
+    let home = TempFolder::new();
+    fs::create_dir_all(home.path().join(".config")).unwrap();
+    fs::create_dir(home.path().join("Bilder")).unwrap();
+    fs::create_dir(home.path().join("Downloads")).unwrap();
+    fs::write(
+        home.path().join(".config").join("user-dirs.dirs"),
+        "XDG_PICTURES_DIR=\"$HOME/Bilder\"\n",
+    )
+    .unwrap();
+    let client = client_at(home.path());
     client.connection.send(Command::Places).unwrap();
 
     let Event::Places(places) = client.events.recv_timeout(ANSWER_TIMEOUT).unwrap() else {
         panic!("expected places");
     };
 
-    assert!(places.iter().all(|place| place.path.is_dir()));
+    let found: Vec<(PlaceKind, PathBuf)> = places
+        .into_iter()
+        .map(|place| (place.kind, place.path))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (PlaceKind::Home, home.path().to_owned()),
+            (PlaceKind::Pictures, home.path().join("Bilder")),
+            (PlaceKind::Downloads, home.path().join("Downloads")),
+        ]
+    );
 }

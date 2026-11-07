@@ -8,9 +8,9 @@
 test_workspace = true
 
 exclude_re = [
-    # Reads the real home folder and environment; `places_in` and
-    # `config_home` hold the logic and are tested with temp folders.
-    "nova-files-core/src/places\\.rs:.*replace places -> Vec<Place>",
+    # Reads the real home folder and environment; tests hand the core a
+    # temp home instead.
+    "replace Home::from_env -> Option<Home>",
     # Cancelling only saves a listing's remaining reads; no answer changes.
     "replace Client::cancel_listing with \\(\\)",
     # Dropping a client cancels its listing, for the same reason.

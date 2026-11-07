@@ -15,8 +15,10 @@ use std::time::Duration;
 use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::jobs::{self, Client};
+use crate::places::Home;
 
-pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration) {
+/// Runs until idle; places come from `home`.
+pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, home: Option<&Home>) {
     let mut clients: HashMap<ClientId, Client> = HashMap::new();
     loop {
         let message = if clients.is_empty() {
@@ -30,11 +32,11 @@ pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration) {
                 Err(_) => return,
             }
         };
-        handle(&mut clients, message);
+        handle(&mut clients, message, home);
     }
 }
 
-fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage) {
+fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, home: Option<&Home>) {
     match message {
         CoreMessage::Connected { client, events } => {
             let events: Arc<dyn EventSink> = Arc::from(events);
@@ -50,7 +52,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage) {
             let Some(target) = clients.get(&client) else {
                 return;
             };
-            if answer(target, command).is_err() {
+            if answer(target, command, home).is_err() {
                 clients.remove(&client);
             }
         }
@@ -61,7 +63,11 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage) {
 ///
 /// # Errors
 /// [`nova_files_api::ClientGone`] when the client stopped listening.
-fn answer(client: &Client, command: Command) -> Result<(), nova_files_api::ClientGone> {
+fn answer(
+    client: &Client,
+    command: Command,
+    home: Option<&Home>,
+) -> Result<(), nova_files_api::ClientGone> {
     match command {
         Command::Ping => client.deliver(Event::Pong),
         Command::ListFolder { id, path } => {
@@ -69,7 +75,7 @@ fn answer(client: &Client, command: Command) -> Result<(), nova_files_api::Clien
             Ok(())
         }
         Command::Places => {
-            jobs::places(client);
+            jobs::places(client, home.cloned());
             Ok(())
         }
     }

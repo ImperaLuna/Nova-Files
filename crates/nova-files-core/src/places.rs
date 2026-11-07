@@ -29,16 +29,34 @@ const CONFIG_IN_HOME: &str = ".config";
 /// `user-dirs.dirs` is a few lines; anything bigger isn't one.
 const USER_DIRS_MAX_BYTES: u64 = 64 * 1024;
 const HOME_PREFIX: &str = "$HOME/";
+const ESCAPE: char = '\\';
 
-/// The places that exist on this system, in list order. Empty without a
+/// The user's home folder and config folder, where the places come from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Home {
+    pub folder: PathBuf,
+    /// Holds `user-dirs.dirs`.
+    pub config: PathBuf,
+}
+
+impl Home {
+    /// The home and config folders the environment names (`HOME`,
+    /// `XDG_CONFIG_HOME`), or `None` without a home folder.
+    pub fn from_env() -> Option<Self> {
+        let folder = env::home_dir()?;
+        let config = config_home(&folder, env::var_os(CONFIG_HOME_VAR));
+        Some(Self { folder, config })
+    }
+}
+
+/// The places that exist under `home`, in list order. Empty without a
 /// home folder.
-pub fn places() -> Vec<Place> {
-    let Some(home) = env::home_dir() else {
+pub fn places(home: Option<&Home>) -> Vec<Place> {
+    let Some(home) = home else {
         return Vec::new();
     };
-    let config = config_home(&home, env::var_os(CONFIG_HOME_VAR));
-    let user_dirs = read_user_dirs(&config.join(USER_DIRS_FILE));
-    places_in(&home, &user_dirs)
+    let user_dirs = read_user_dirs(&home.config.join(USER_DIRS_FILE));
+    places_in(&home.folder, &user_dirs)
 }
 
 /// The places under `home`, given the text of `user-dirs.dirs` (empty when
@@ -109,8 +127,8 @@ fn user_dir(home: &Path, user_dirs: &str, key: &str) -> Setting {
         .strip_prefix('"')
         .and_then(|value| value.strip_suffix('"'))
         .and_then(|value| value.strip_prefix(HOME_PREFIX))
-        .map(Path::new);
-    match relative {
+        .map(unescape);
+    match relative.as_deref().map(Path::new) {
         Some(relative)
             if !relative.as_os_str().is_empty()
                 && relative
@@ -121,6 +139,23 @@ fn user_dir(home: &Path, user_dirs: &str, key: &str) -> Setting {
         }
         _ => Setting::Refused,
     }
+}
+
+/// `text` with the shell's backslash escapes inside double quotes taken
+/// off (`\$` is `$`), as xdg-user-dirs writes them. Nothing is run.
+fn unescape(text: &str) -> String {
+    let mut plain = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(next) = chars.next() {
+        if next == ESCAPE
+            && let Some(escaped) = chars.next()
+        {
+            plain.push(escaped);
+        } else {
+            plain.push(next);
+        }
+    }
+    plain
 }
 
 #[cfg(test)]
@@ -140,6 +175,17 @@ mod tests {
             dir(text, "XDG_DOCUMENTS_DIR"),
             Setting::Folder(PathBuf::from("/home/someone/Dokumente"))
         );
+    }
+
+    #[test]
+    fn decodes_escaped_characters() {
+        let text = r#"XDG_DOCUMENTS_DIR="$HOME/\$Docs \"x\" \\y""#;
+        assert_eq!(
+            dir(text, "XDG_DOCUMENTS_DIR"),
+            Setting::Folder(PathBuf::from(r#"/home/someone/$Docs "x" \y"#))
+        );
+        // A backslash with nothing after it stays.
+        assert_eq!(unescape("a\\"), "a\\");
     }
 
     #[test]
