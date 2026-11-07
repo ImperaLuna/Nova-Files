@@ -95,6 +95,18 @@ fn images_get_scaled_thumbnails_with_their_uri_and_mtime() {
 }
 
 #[test]
+fn an_image_is_known_by_its_content_not_its_name() {
+    let folder = TempFolder::new("content");
+    let thumbnails = folder.0.join("thumbnails");
+    let source = folder.0.join("photo");
+    RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
+        .save_with_format(&source, ImageFormat::Png)
+        .unwrap();
+
+    assert_eq!(run(&thumbnails, &[(&source, "p.png")]), ["ok"]);
+}
+
+#[test]
 fn a_broken_image_gets_a_failure_marker_and_other_files_are_left_alone() {
     let folder = TempFolder::new("broken");
     let thumbnails = folder.0.join("thumbnails");

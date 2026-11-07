@@ -5,10 +5,10 @@
 //! A file that couldn't be read (no permission, say) or was too big to
 //! decode gets no marker: that can change without the file changing.
 //!
-//! The helper decodes JPEG, PNG and WebP itself; any other file is
-//! `unsupported` and left alone. Each file is written to a private temp
-//! file of this process's own in the same folder, then renamed over the old
-//! one.
+//! The helper decodes JPEG, PNG and WebP itself, known by their first
+//! bytes (or name); any other file is `unsupported` and left alone. Each
+//! file is written to a temp file of this process's own in the same
+//! folder, then renamed over the old one.
 
 use std::fs::{self, OpenOptions};
 use std::io::{self, Cursor, Write as _};
@@ -60,11 +60,7 @@ impl Outcome {
 }
 
 pub fn render(folder: &Path, job: &Job) -> Outcome {
-    let supported = matches!(
-        ImageFormat::from_path(&job.source),
-        Ok(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP)
-    );
-    if !supported {
+    if !built_in(&job.source) {
         return Outcome::Unsupported;
     }
     let image = match decode(&job.source) {
@@ -85,6 +81,20 @@ pub fn render(folder: &Path, job: &Job) -> Outcome {
     } else {
         Outcome::Failed
     }
+}
+
+/// Whether the helper decodes the file itself: by its first bytes, or by
+/// its name when they say nothing (or it can't be opened).
+fn built_in(path: &Path) -> bool {
+    let format = ImageReader::open(path)
+        .and_then(ImageReader::with_guessed_format)
+        .ok()
+        .and_then(|reader| reader.format())
+        .or_else(|| ImageFormat::from_path(path).ok());
+    matches!(
+        format,
+        Some(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP)
+    )
 }
 
 fn decode(path: &Path) -> ImageResult<DynamicImage> {
