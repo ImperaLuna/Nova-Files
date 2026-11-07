@@ -6,20 +6,25 @@
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
+    clippy::panic,
     reason = "test setup should fail loudly"
 )]
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_dbus::{APP_ID, APPLICATION_INTERFACE, FILES_INTERFACE, Started};
-use zbus::blocking::Proxy;
+use nova_files_api::Connector;
+use nova_files_dbus::{APP_ID, APPLICATION_INTERFACE, FILES_INTERFACE, RunningInstance, Started};
+use zbus::blocking::{Connection, Proxy};
 
 mod support;
 
 use support::{PrivateBus, WAIT};
+
+/// How long a test waits for something that should not happen.
+const QUIET: Duration = Duration::from_millis(200);
 
 #[test]
 fn first_start_answers_ping_through_the_core() {
@@ -47,27 +52,44 @@ fn activate_fails_once_the_core_has_stopped() {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn_with_idle_exit(Duration::ZERO).unwrap();
     core.thread.join().unwrap();
-    let (opened, received) = mpsc::channel();
-    let _first = nova_files_dbus::start(bus.bus(), core.connector.clone(), move |folder| {
-        opened.send(folder).ok();
+    let (_first, requests) = serve(&bus, &core.connector);
+
+    assert!(second(&bus, &core.connector).activate().is_err());
+    assert!(requests.recv_timeout(QUIET).is_err());
+}
+
+/// Starts the first instance on `bus`; each window it is asked for arrives
+/// on the receiver, with its folder.
+fn serve(bus: &PrivateBus, connector: &Connector) -> (Started, Receiver<Option<PathBuf>>) {
+    let (sender, requests) = mpsc::channel();
+    let started = nova_files_dbus::start(bus.bus(), connector.clone(), move |folder| {
+        sender.send(folder).ok();
     })
     .unwrap();
-    let second = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
-    let Started::AlreadyRunning(running) = second else {
+    (started, requests)
+}
+
+/// Starts a second instance, which finds the first.
+fn second(bus: &PrivateBus, connector: &Connector) -> RunningInstance {
+    let started = nova_files_dbus::start(bus.bus(), connector.clone(), |_| {}).unwrap();
+    let Started::AlreadyRunning(running) = started else {
         panic!("the second start should find the first");
     };
+    running
+}
 
-    assert!(running.activate().is_err());
-    assert!(received.recv_timeout(Duration::from_millis(200)).is_err());
+/// A plain D-Bus client on `bus`, as a launcher would connect.
+fn client(bus: &PrivateBus) -> Connection {
+    zbus::blocking::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .method_timeout(WAIT)
+        .build()
+        .unwrap()
 }
 
 /// Calls `Ping` on the service at the app id, as a launcher would.
 fn ping(bus: &PrivateBus) -> zbus::Result<()> {
-    let client = zbus::blocking::connection::Builder::address(bus.address.as_str())
-        .unwrap()
-        .method_timeout(WAIT)
-        .build()
-        .unwrap();
+    let client = client(bus);
     let files = Proxy::new(
         &client,
         APP_ID,
@@ -82,57 +104,32 @@ fn ping(bus: &PrivateBus) -> zbus::Result<()> {
 fn second_start_hands_its_window_to_the_first() {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn().unwrap();
-    let (activations, activated) = mpsc::channel();
-    let first = nova_files_dbus::start(bus.bus(), core.connector.clone(), move |folder| {
-        activations.send(folder).ok();
-    })
-    .unwrap();
+    let (first, requests) = serve(&bus, &core.connector);
     assert!(matches!(first, Started::Service(_)));
 
-    let second = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
-    let Started::AlreadyRunning(running) = second else {
-        panic!("the second start should find the first");
-    };
-    running.activate().unwrap();
+    second(&bus, &core.connector).activate().unwrap();
 
-    assert_eq!(activated.recv_timeout(WAIT), Ok(None));
+    assert_eq!(requests.recv_timeout(WAIT), Ok(None));
 }
 
 #[test]
 fn second_start_hands_its_folder_to_the_first() {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn().unwrap();
-    let (opened, received) = mpsc::channel();
-    let _first = nova_files_dbus::start(bus.bus(), core.connector.clone(), move |folder| {
-        opened.send(folder).ok();
-    })
-    .unwrap();
-
-    let second = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
-    let Started::AlreadyRunning(running) = second else {
-        panic!("the second start should find the first");
-    };
+    let (_first, requests) = serve(&bus, &core.connector);
     let folder = PathBuf::from("/tmp/a folder");
-    running.open(&folder).unwrap();
 
-    assert_eq!(received.recv_timeout(WAIT), Ok(Some(folder)));
+    second(&bus, &core.connector).open(&folder).unwrap();
+
+    assert_eq!(requests.recv_timeout(WAIT), Ok(Some(folder)));
 }
 
 #[test]
 fn open_refuses_uris_that_are_not_local_files() {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn().unwrap();
-    let (opened, received) = mpsc::channel();
-    let _first = nova_files_dbus::start(bus.bus(), core.connector, move |folder| {
-        opened.send(folder).ok();
-    })
-    .unwrap();
-
-    let client = zbus::blocking::connection::Builder::address(bus.address.as_str())
-        .unwrap()
-        .method_timeout(WAIT)
-        .build()
-        .unwrap();
+    let (_first, requests) = serve(&bus, &core.connector);
+    let client = client(&bus);
     let application = Proxy::new(
         &client,
         APP_ID,
@@ -149,7 +146,7 @@ fn open_refuses_uris_that_are_not_local_files() {
         matches!(&answer, Err(zbus::Error::MethodError(name, _, _)) if name.as_str() == "org.freedesktop.DBus.Error.InvalidArgs"),
         "{answer:?}"
     );
-    assert!(received.recv_timeout(Duration::from_millis(200)).is_err());
+    assert!(requests.recv_timeout(QUIET).is_err());
 }
 
 #[test]
