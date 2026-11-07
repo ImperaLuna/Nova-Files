@@ -143,7 +143,7 @@ fn empty_folder_lists_nothing() {
 
     let listing = listing(client().list(1, folder.path()));
 
-    assert!(listing.entries.is_empty());
+    assert_eq!(listing.entries.len(), 0);
 }
 
 #[test]
