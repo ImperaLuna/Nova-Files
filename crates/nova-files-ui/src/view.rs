@@ -179,7 +179,7 @@ impl MainWindow {
                             text.type_name,
                             text.size,
                         ));
-                        let selected = this.pick_selection() == Some((listing_id, id));
+                        let selected = this.pick_selects((listing_id, id));
                         row.when(selected, |row| row.bg(rgb(color::ROW_SELECTED)))
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {

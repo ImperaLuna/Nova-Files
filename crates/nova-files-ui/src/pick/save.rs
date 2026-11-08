@@ -14,12 +14,16 @@ use std::path::{Path, PathBuf};
 
 use gpui::{Context, Window};
 
+use nova_files_api::ListingId;
+
 use super::{Conflict, typed};
 use crate::window::MainWindow;
 
 /// A save waiting for a fresh listing of `folder`.
 pub struct Recheck {
-    pub folder: PathBuf,
+    folder: PathBuf,
+    /// The listing it asked for.
+    pub listing: Option<ListingId>,
     /// The name to save under, if it is still free.
     name: OsString,
     /// For Keep both, the file it keeps: the one to ask about again.
@@ -34,16 +38,19 @@ impl MainWindow {
 
     fn recheck(&mut self, folder: &Path, name: OsString, beside: Option<OsString>) {
         self.open(folder);
+        let listing = self.asked;
         if let Some(pick) = &mut self.pick {
             pick.recheck = Some(Recheck {
                 folder: folder.to_path_buf(),
+                listing,
                 name,
                 beside,
             });
         }
     }
 
-    /// Asks Replace or Keep both about the file `name` in `folder`.
+    /// Asks Replace or Keep both about the file `name` in `folder`, with
+    /// that file selected.
     pub fn ask_over(&mut self, folder: &Path, name: OsString) {
         let names: HashSet<&OsStr> = self
             .listing
@@ -52,7 +59,13 @@ impl MainWindow {
             .map(|entry| entry.name.as_os_str())
             .collect();
         let keep_both = typed::keep_both(&name, |candidate| names.contains(candidate));
+        // The file in the way shows as selected: that is the question.
+        let there = self.listing.as_ref().and_then(|listing| {
+            let entry = listing.entries.iter().find(|entry| entry.name == name)?;
+            Some((listing.id, entry.id))
+        });
         if let Some(pick) = &mut self.pick {
+            pick.selected = there;
             pick.conflict = Some(Conflict {
                 path: folder.join(name),
                 keep_both,

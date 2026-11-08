@@ -525,3 +525,83 @@ async fn a_clicked_name_means_that_file_even_with_outer_spaces(cx: &mut TestAppC
         Some(picked(tree.path().join(" notes.txt")))
     );
 }
+
+#[gpui::test]
+async fn going_elsewhere_before_a_save_is_checked_drops_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let projects = tree.path().join("Projects");
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("plan.txt")).await;
+    // Save, then go into a folder before the fresh listing is back.
+    view.update_in(cx, |view, window, cx| {
+        view.accept(window, cx);
+        view.open(&projects);
+    });
+    wait_for_folder(&view, cx, &projects).await;
+
+    // Back again, the folder doesn't take the old save.
+    view.update(cx, |view, _| view.go_up());
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+    assert!(answers.try_recv().is_err());
+    assert!(!closed(cx));
+}
+
+#[gpui::test]
+async fn dots_typed_go_to_folders(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let projects = tree.path().join("Projects");
+    let (view, cx, answers) = picker(cx, &tree, &projects, save("plan.txt")).await;
+    cx.simulate_keystrokes("ctrl-a");
+    cx.simulate_input("..");
+    cx.simulate_keystrokes("enter");
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.simulate_input(".");
+    cx.simulate_keystrokes("enter");
+    wait_for_name(&view, cx, "").await;
+    cx.run_until_parked();
+    assert!(answers.try_recv().is_err());
+    assert!(!closed(cx));
+}
+
+#[gpui::test]
+async fn a_suggested_name_is_not_mistaken_for_one_that_looks_the_same(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    // Shown the same way as the suggestion, but other bytes.
+    fs::write(
+        tree.path()
+            .join(OsString::from_vec(b"caf\xff.txt".to_vec())),
+        "",
+    )
+    .unwrap();
+    let suggested = OsString::from_vec(b"caf\xe9.txt".to_vec());
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested.clone())).await;
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join(suggested)))
+    );
+}
+
+#[gpui::test]
+async fn the_question_selects_the_file_in_the_way(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
+    cx.simulate_keystrokes("enter");
+    asked(&view, cx).await;
+    view.read_with(cx, |view, _| {
+        let names = view.entry_names();
+        let listing = view.listing_id().unwrap();
+        for (index, name) in names.iter().enumerate() {
+            let id = EntryId(u32::try_from(index).unwrap());
+            assert_eq!(
+                view.pick_selects((listing, id)),
+                name == "notes.txt",
+                "{name}"
+            );
+        }
+    });
+}

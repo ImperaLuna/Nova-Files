@@ -229,6 +229,11 @@ impl MainWindow {
         self.pick.as_ref()?.selected
     }
 
+    /// Whether the row `entry` shows as the picker's selection.
+    pub fn pick_selects(&self, entry: (ListingId, EntryId)) -> bool {
+        self.pick_selection() == Some(entry)
+    }
+
     /// The text in the picker's name box.
     pub fn pick_name(&self, cx: &App) -> Option<String> {
         let pick = self.pick.as_ref()?;
@@ -371,25 +376,29 @@ impl MainWindow {
     /// folder there; otherwise opens it as a file, or saves at it. Whether
     /// it answered.
     fn accept_name(&mut self, folder: &Path, name: &str) -> bool {
+        let Some(pick) = &self.pick else { return false };
+        // The app's own name, unchanged, means its exact bytes, even when
+        // the box can only show them lossily.
+        let suggested = match &pick.request.kind {
+            PickKind::Save { name: suggested } if suggested.to_string_lossy() == name => {
+                Some(suggested.clone())
+            }
+            _ => None,
+        };
         let found = self.listing.as_ref().and_then(|listing| {
-            let entry = listing
-                .entries
-                .iter()
-                .find(|entry| entry.name.to_string_lossy() == name)?;
+            let entry = listing.entries.iter().find(|entry| {
+                suggested.as_ref().map_or_else(
+                    || entry.name.to_string_lossy() == name,
+                    |suggested| entry.name == *suggested,
+                )
+            })?;
             Some((entry.kind, entry.id, entry.name.clone()))
         });
         let Some(found) = found else {
-            let Some(pick) = &self.pick else { return false };
             if pick.mode != Mode::Save {
                 return false;
             }
-            let name = match &pick.request.kind {
-                PickKind::Save { name: suggested } if suggested.to_string_lossy() == name => {
-                    suggested.clone()
-                }
-                _ => OsString::from(name),
-            };
-            self.save_new(folder, name);
+            self.save_new(folder, suggested.unwrap_or_else(|| OsString::from(name)));
             return false;
         };
         self.accept_found(folder, found)
@@ -435,6 +444,7 @@ impl MainWindow {
     /// selection and any question, and a typed jump that led here leaves
     /// its name in the box.
     pub fn pick_folder_opened(&mut self, path: &Path, cx: &mut Context<Self>) {
+        let listed = self.listing_id();
         let Some(pick) = &mut self.pick else { return };
         pick.selected = None;
         pick.conflict = None;
@@ -443,7 +453,11 @@ impl MainWindow {
             pick.name
                 .update(cx, |field, cx| field.set_text(&jump.name, cx));
         }
-        if let Some(recheck) = pick.recheck.take_if(|recheck| recheck.folder == path) {
+        // Only the listing a save asked for answers it; any other one came
+        // from going somewhere else, which drops the save.
+        if let Some(recheck) = pick.recheck.take()
+            && recheck.listing == listed
+        {
             self.save_checked(recheck, cx);
         }
     }
@@ -452,8 +466,9 @@ impl MainWindow {
     /// goes to the folder it is in instead.
     pub fn pick_folder_refused(&mut self, path: &Path) {
         let Some(pick) = &mut self.pick else { return };
-        // A save whose folder is gone waits for the user again.
-        pick.recheck.take_if(|recheck| recheck.folder == path);
+        // A save whose folder is gone waits for the user again, and one
+        // that going somewhere else replaced is dropped.
+        pick.recheck = None;
         let Some(jump) = pick.jump.take_if(|jump| jump.path == path) else {
             return;
         };

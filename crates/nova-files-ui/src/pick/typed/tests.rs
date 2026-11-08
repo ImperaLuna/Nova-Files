@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use super::{Typed, keep_both, read, stem};
+use super::{NAME_MAX, Typed, keep_both, read, stem};
 
 fn typed(text: &str) -> Typed {
     read(text, Path::new("/home/me"), Path::new("/home/me/Documents"))
@@ -92,4 +92,45 @@ fn a_name_that_is_not_utf8_keeps_its_bytes() {
     let name = OsStr::from_bytes(b"caf\xe9.txt");
     let kept = keep_both(name, |_| false);
     assert_eq!(kept.as_bytes(), b"caf\xe9.txt (2)");
+}
+
+#[test]
+fn dots_alone_are_folders() {
+    assert_eq!(
+        typed(".."),
+        Typed::Folder(PathBuf::from("/home/me/Documents/.."))
+    );
+    assert_eq!(
+        typed(" . "),
+        Typed::Folder(PathBuf::from("/home/me/Documents/."))
+    );
+    // A dot file is still a name.
+    assert_eq!(typed("..notes"), Typed::Name("..notes".to_owned()));
+}
+
+#[test]
+fn a_long_name_gives_up_the_end_of_its_stem() {
+    let extension = ".txt";
+    let long = format!(
+        "{}{extension}",
+        "é".repeat((NAME_MAX - extension.len()) / 2)
+    );
+    let kept = keep_both(OsStr::new(&long), |_| false);
+    let kept = kept.to_str().expect("still UTF-8");
+    assert!(kept.len() <= NAME_MAX, "{} bytes", kept.len());
+    assert!(kept.ends_with(" (2).txt"), "{kept}");
+    let short = format!("{}{extension}", "a".repeat(NAME_MAX - extension.len()));
+    let kept = keep_both(OsStr::new(&short), |_| false);
+    assert_eq!(kept.len(), NAME_MAX);
+}
+
+#[test]
+fn a_long_name_that_is_not_utf8_gives_up_its_end() {
+    use std::os::unix::ffi::OsStrExt as _;
+    let mut bytes = vec![0xe9; NAME_MAX];
+    bytes[0] = b'x';
+    let kept = keep_both(OsStr::from_bytes(&bytes), |_| false);
+    assert_eq!(kept.len(), NAME_MAX);
+    assert!(kept.as_bytes().starts_with(b"x\xe9"));
+    assert!(kept.as_bytes().ends_with(b"\xe9 (2)"));
 }

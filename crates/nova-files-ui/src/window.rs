@@ -89,7 +89,7 @@ pub struct MainWindow {
     /// The rows the list drew last; see [`Self::rows_drawn`].
     rows_drawn: Range<usize>,
     /// The listing asked for most recently; only its answer counts.
-    asked: Option<ListingId>,
+    pub(crate) asked: Option<ListingId>,
     /// Whether the core sent a listing since the one on screen, which the
     /// window dropped: the core now serves rows of that one, not this.
     core_moved: bool,
