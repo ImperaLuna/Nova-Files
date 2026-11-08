@@ -9,6 +9,7 @@
 
 mod details;
 mod details_queue;
+mod index;
 mod jobs;
 mod list;
 mod memory;
@@ -24,6 +25,7 @@ use std::time::Duration;
 
 use nova_files_api::Connector;
 
+pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
 pub use places::Home;
 pub use thumbs::Thumbnails;
