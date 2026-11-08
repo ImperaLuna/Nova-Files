@@ -113,9 +113,9 @@ impl<'a> Round<'a> {
             let Some(path) = index.path(at) else {
                 continue;
             };
+            // Only a folder row is ever skipped.
             if self.check(root, at, path, changes) == Inside::Skip
                 && let Some(entry) = index.entry(at)
-                && entry.kind == Kind::Folder
             {
                 rows.start = rows.start.max(entry.end.0);
             }
