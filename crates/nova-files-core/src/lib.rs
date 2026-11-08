@@ -13,8 +13,8 @@ mod list;
 mod memory;
 mod places;
 mod run;
-mod startup_trace;
 mod thumbs;
+mod trace;
 mod vulkan_drivers;
 
 use std::io;
@@ -25,8 +25,8 @@ use nova_files_api::Connector;
 
 pub use memory::set_give_back;
 pub use places::Home;
-pub use startup_trace::{TRACE_VARIABLE, start_startup_trace};
 pub use thumbs::Thumbnails;
+pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
 pub use vulkan_drivers::{FILTER_VARIABLE, absent_vendor_drivers};
 
 /// How long the core waits, with no client connected and no message, before

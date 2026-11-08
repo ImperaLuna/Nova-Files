@@ -37,6 +37,8 @@ nova-files-ui = { path = "crates/nova-files-ui" }
 #   start-up trace.
 # - FIL-71: take GPU memory in fixed 4 MiB blocks instead of blocks that
 #   grow from 8 MiB, so the first image atlas doesn't pull in 16 MiB.
+# - FIL-70: log each drawn frame's duration (target `gpui::frame`) for the
+#   frame trace.
 # - FIL-70: remember what each font resolved to, so a missing font (the
 #   default one, on most Linux systems) doesn't walk the fallback stack on
 #   every text run of every frame.
@@ -46,10 +48,10 @@ nova-files-ui = { path = "crates/nova-files-ui" }
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "f0d3b49faeac184159cd6dd2565eafdac09644c6", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "d16fec7d78dc81d50ec0bfde332700a5108d39e1", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "f0d3b49faeac184159cd6dd2565eafdac09644c6", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "d16fec7d78dc81d50ec0bfde332700a5108d39e1", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index and the nova-files binary (one
