@@ -163,6 +163,8 @@ jobs:
       - name: Warm the cargo cache
         if: steps.changes.outputs.run == 'true' && github.event_name != 'pull_request'
         # The same build the mutation tests start with, so they reuse all of it.
+        env:
+          CARGO_INCREMENTAL: 1
         run: nix develop .#mutants --command cargo nextest run --no-run --cargo-profile ci --workspace
       - name: Mutation tests
         if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request'
@@ -171,7 +173,11 @@ jobs:
         # crates in every copy before the first mutant. --test-workspace
         # builds the same crates the cache holds. --caught and --unviable
         # print a line per mutant, so the log shows progress instead of
-        # sitting silent until the end.
+        # sitting silent until the end. rust-cache sets CARGO_INCREMENTAL=0
+        # for the job, which beats the dev shell's incremental setting, so
+        # it is turned back on here: a mutant rebuilds one crate.
+        env:
+          CARGO_INCREMENTAL: 1
         run: >-
           nix develop .#mutants --command just mutants HEAD^1 ""
           --profile ci --in-place --test-workspace=true --caught --unviable
