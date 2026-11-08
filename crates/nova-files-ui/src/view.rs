@@ -5,7 +5,8 @@
 //! so a folder of any size costs the same to draw. Each row is an icon slot
 //! and a name, then Modified, Type and Size; Modified and Size stay empty
 //! until the core has read that entry's details. A thumbnail, once it
-//! arrives, takes the icon's place. Every element a test clicks carries a debug selector:
+//! arrives, takes the icon's place. In pick mode a double-click on a file
+//! picks it (see `pick`). Every element a test clicks carries a debug selector:
 //! `up`, `place-<n>` and `entry-<n>`, counted from 0.
 
 use std::sync::Arc;
@@ -181,6 +182,12 @@ impl MainWindow {
                                 .cursor_pointer()
                                 .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
                                     this.open_entry(id);
+                                }))
+                                .into_any_element(),
+                            EntryKind::File if this.picks_files() => row
+                                .cursor_pointer()
+                                .on_click(cx.listener(move |this, event, window, _| {
+                                    this.file_clicked(id, event, window);
                                 }))
                                 .into_any_element(),
                             EntryKind::File => row.into_any_element(),
