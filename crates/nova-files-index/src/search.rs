@@ -61,7 +61,10 @@ impl Index {
         for word in query.split_whitespace() {
             let mut folded = Vec::new();
             fold::fold_into(word.as_bytes(), &mut folded);
-            words.push(folded);
+            // A word of accents alone folds to nothing.
+            if !folded.is_empty() {
+                words.push(folded);
+            }
         }
         let stage = if words.is_empty() || limit == 0 {
             Stage::Done

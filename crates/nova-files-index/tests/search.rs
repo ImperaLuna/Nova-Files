@@ -162,6 +162,9 @@ fn nothing_to_look_for_finds_nothing() {
     let none: Vec<Vec<(PathBuf, MatchKind)>> = Vec::new();
     assert_eq!(home.stages("   ", LIMIT), none);
     assert_eq!(home.stages("tax", 0), none);
+    // A lone accent folds to nothing, so it is no word to look for.
+    assert_eq!(home.stages("\u{301}", LIMIT), none);
+    assert_eq!(home.stages("tax \u{301}", LIMIT), home.stages("tax", LIMIT));
     // Home itself is never a result.
     let root = home
         .folder
