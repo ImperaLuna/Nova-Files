@@ -478,6 +478,43 @@ fn a_profile_moved_over_a_folder_removes_it() {
 }
 
 #[test]
+fn a_new_folder_where_one_left_from_inside_is_kept() {
+    let (root, mut folders) = watched_folder("replaced-parent", &["a/sub/"], Box::new(|| false));
+    let (a, sub) = (root.join("a"), root.join("a/sub"));
+    let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
+    assert_eq!(folders.watch(a.clone(), zone.clone()), None);
+    let inner = policy::enters(&zone, OsStr::new("sub")).unwrap();
+    assert_eq!(folders.watch(sub.clone(), inner), None);
+    let a_wd = folders.by_path[&a];
+    // `a/sub` leaves home, `a` goes, and a new `a/sub` is made, before any
+    // event is read.
+    let outside =
+        std::env::temp_dir().join(format!("nova-files-left-again-{}", std::process::id()));
+    fs::rename(&sub, &outside).unwrap();
+    fs::remove_dir(&a).unwrap();
+    fs::create_dir_all(sub.join("new")).unwrap();
+    let changes = folders.handle(&[
+        event(&folders, &a, ReadFlags::MOVED_FROM.union(DIR), 22, "sub"),
+        Event {
+            wd: a_wd,
+            mask: ReadFlags::IGNORED,
+            cookie: 0,
+            name: None,
+        },
+        event(&folders, &root, ReadFlags::DELETE.union(DIR), 0, "a"),
+        event(&folders, &root, ReadFlags::CREATE.union(DIR), 0, "a"),
+    ]);
+    let last = changes.iter().rev().find(|change| match change {
+        Change::Added { path, .. } | Change::Removed { path } => path == &sub,
+        _ => false,
+    });
+    assert!(matches!(last, Some(Change::Added { .. })), "{changes:?}");
+    assert!(folders.by_path.contains_key(&sub.join("new")));
+    fs::remove_dir_all(&outside).ok();
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn swapped_folders_are_both_read_again() {
     let (root, mut folders) =
         watched_folder("swap", &["a/one.txt", "b/two.txt"], Box::new(|| false));

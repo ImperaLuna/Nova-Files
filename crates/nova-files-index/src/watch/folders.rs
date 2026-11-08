@@ -186,9 +186,9 @@ impl Folders {
         let mask = event.mask;
         if !mask.contains(ReadFlags::MOVED_FROM) {
             // Something new at a path that moved away earlier in this
-            // batch: that move left the tree, and must end before this
-            // takes its place.
-            self.leave_from(&path, leaving, changes);
+            // batch, or that held what did: those moves left the tree,
+            // and must end before this takes their place.
+            self.leave_under(&path, leaving, changes);
         }
         if mask.contains(ReadFlags::MOVED_FROM) {
             leaving.insert(
@@ -241,28 +241,10 @@ impl Folders {
             && !SystemMounts::default().is_mount_root(path)
     }
 
-    /// Ends the move away from `path` still waiting for its second half,
-    /// if there is one: it left the tree.
-    fn leave_from(
-        &mut self,
-        path: &Path,
-        leaving: &mut HashMap<u32, Leaving>,
-        changes: &mut Vec<Change>,
-    ) {
-        let Some(&cookie) = leaving
-            .iter()
-            .find_map(|(cookie, gone)| (gone.path == path).then_some(cookie))
-        else {
-            return;
-        };
-        if let Some(gone) = leaving.remove(&cookie) {
-            self.gone(gone, changes);
-        }
-    }
-
-    /// Ends the moves away from inside `folder` still pending, before
-    /// `folder` itself moves: they left from where it was, and must not
-    /// move with it.
+    /// Ends the moves away from `folder` or inside it still pending,
+    /// before `folder` moves or something new takes its place: they left
+    /// from where it was, and must not move with it or be confused with
+    /// what comes.
     fn leave_under(
         &mut self,
         folder: &Path,
