@@ -2,7 +2,8 @@
 //! real temp folder tree: the window connects, opens its folder, and goes
 //! into a folder, up, or to a place when clicked. A folder that can't be
 //! read leaves it where it was. Each entry's Modified, Type and Size fill
-//! in once the core has read them. A picker window picks the file
+//! in once the core has read them, lined up under their headers whatever
+//! the length of each name. A picker window picks the file
 //! double-clicked when it asks for files, and answers cancelled when it
 //! is closed.
 
@@ -278,6 +279,21 @@ async fn columns_fill_in_after_the_names(cx: &mut TestAppContext) {
         );
         assert_eq!(view.columns(2), None);
     });
+}
+
+#[gpui::test]
+async fn columns_line_up_under_their_headers(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree();
+    fs::write(tree.path().join("a much longer name.txt"), "").unwrap();
+    let (_view, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+
+    let mut left = |selector| cx.debug_bounds(selector).unwrap().left();
+    let header = left("modified-header");
+    for row in ["modified-0", "modified-1", "modified-2"] {
+        assert_eq!(left(row), header, "{row}");
+    }
 }
 
 /// A pick request for files to open, or a place to save at, whose answer
