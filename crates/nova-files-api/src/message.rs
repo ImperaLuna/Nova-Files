@@ -4,10 +4,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
+use crate::search::{Hit, SearchFailed, SearchId};
 
 /// The most entries one [`Command::Rows`] may name: several screens of
 /// rows. The core leaves out any past it.
 pub const MAX_ROWS: u32 = 512;
+
+/// The most hits one search stage may hold: more than a launcher shows.
+/// The core keeps the best ones.
+pub const MAX_HITS: u32 = 200;
 
 /// A request from a client to the core.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +36,18 @@ pub enum Command {
         id: ListingId,
         first: EntryId,
         count: u32,
+    },
+    /// Find files under home whose names match `query`, one word or
+    /// several separated by spaces. The answer is an [`Event::Found`] for
+    /// each stage, best first, at most `limit` hits each (and at most
+    /// [`MAX_HITS`]), or [`Event::SearchFailed`]. The first search builds
+    /// or opens the home index, so it may take a while; later ones take
+    /// milliseconds. A newer `Search` from the same client cancels this
+    /// one, which then may stop answering.
+    Search {
+        id: SearchId,
+        query: String,
+        limit: u32,
     },
 }
 
@@ -64,6 +81,16 @@ pub enum Event {
     },
     /// The standard folders that exist, in places-list order.
     Places(Vec<Place>),
+    /// One stage of [`Command::Search`] `id`: names as typed come first,
+    /// then letters in order and typos. `done` marks the last stage. A path
+    /// shows at most once per search.
+    Found {
+        id: SearchId,
+        hits: Vec<Hit>,
+        done: bool,
+    },
+    /// [`Command::Search`] `id` couldn't run.
+    SearchFailed { id: SearchId, reason: SearchFailed },
 }
 
 /// Names one connected client, so the core can answer the right one.

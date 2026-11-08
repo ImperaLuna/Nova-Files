@@ -26,10 +26,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rustix::fs::{Mode, OFlags};
 
-use crate::build::{Built, Facts, TooBig};
+use crate::build::{Built, TooBig};
 use crate::mounts::{MountCheck, SystemMounts};
 use crate::policy::{self, Zone};
-use crate::{FileId, Flags, Kind, RowId, Stamp};
+use crate::{Details, FileId, Flags, Kind, RowId, Stamp};
 
 const NANOS_PER_SECOND: i64 = 1_000_000_000;
 
@@ -105,10 +105,10 @@ pub fn crawl_with(
 }
 
 /// One entry of a folder, read along with the folder.
-struct Child {
-    name: OsString,
-    inode: u64,
-    details: io::Result<Metadata>,
+pub struct Child {
+    pub name: OsString,
+    pub inode: u64,
+    pub details: io::Result<Metadata>,
 }
 
 /// A folder whose entries are being added.
@@ -121,7 +121,7 @@ struct Frame {
     children: std::vec::IntoIter<Child>,
 }
 
-enum Stop {
+pub enum Stop {
     Cancelled,
     /// It vanished: deleted or moved away while the crawl ran.
     Gone,
@@ -260,7 +260,7 @@ impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
 /// Whether the file at `path` starts with the cache-folder signature.
 /// Only a plain file counts: a link isn't followed, and a pipe or device
 /// is never read, since reading one could wait forever.
-fn has_cache_signature(path: &Path) -> bool {
+pub fn has_cache_signature(path: &Path) -> bool {
     let mut start = [0; policy::CACHE_TAG_SIGNATURE.len()];
     let flags = OFlags::RDONLY
         .union(OFlags::NONBLOCK)
@@ -280,7 +280,7 @@ fn has_cache_signature(path: &Path) -> bool {
 
 /// Reads the folder at `path`: every entry with its details, sorted by
 /// name bytes.
-fn read_children(path: &Path, cancelled: &impl Fn() -> bool) -> Result<Vec<Child>, Stop> {
+pub fn read_children(path: &Path, cancelled: &impl Fn() -> bool) -> Result<Vec<Child>, Stop> {
     if cancelled() {
         return Err(Stop::Cancelled);
     }
@@ -304,8 +304,8 @@ fn read_children(path: &Path, cancelled: &impl Fn() -> bool) -> Result<Vec<Child
     Ok(children)
 }
 
-fn facts(details: &Metadata, kind: Kind) -> Facts {
-    Facts {
+pub fn facts(details: &Metadata, kind: Kind) -> Details {
+    Details {
         kind,
         flags: Flags::default(),
         id: FileId {
@@ -319,8 +319,8 @@ fn facts(details: &Metadata, kind: Kind) -> Facts {
 }
 
 /// An entry whose details couldn't be read: only its id is known.
-const fn unread(id: FileId) -> Facts {
-    Facts {
+const fn unread(id: FileId) -> Details {
+    Details {
         kind: Kind::File,
         flags: Flags::UNREADABLE,
         id,
