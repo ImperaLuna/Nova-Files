@@ -272,12 +272,27 @@ mod tests {
             OsString::from("sh"),
             OsString::from("/h/a b.png"),
         ];
+        assert!(launch(&[], None, None).is_err());
+        assert!(launch(&[OsString::from("/nonexistent/app")], None, None).is_err());
         launch(&line, Some(&root), Some("tok")).unwrap();
         let written = fs::read_to_string(&out).unwrap();
         assert_eq!(written, format!("/h/a b.png tok {}", root.display()));
-        assert!(launch(&[], None, None).is_err());
-        assert!(launch(&[OsString::from("/nonexistent/app")], None, None).is_err());
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_type_nothing_opens_is_left_to_the_portal() {
+        let opened =
+            open_in_default_app(Path::new("/h/a"), &["application/x-nova-files-test"], None);
+        assert!(
+            matches!(opened, Err(NotOpened::Sandboxed | NotOpened::NoApp)),
+            "{opened:?}"
+        );
+        let opened = open_in_default_app(Path::new("/h/a"), &[], None);
+        assert!(
+            matches!(opened, Err(NotOpened::Sandboxed | NotOpened::NoApp)),
+            "{opened:?}"
+        );
     }
 
     #[test]

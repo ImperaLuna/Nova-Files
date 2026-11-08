@@ -49,27 +49,16 @@ pub fn command_line(exec: &str, file: &Path, fields: Fields<'_>) -> Option<Vec<O
             line.push(OsString::from(word.text));
             continue;
         }
-        match word.text.as_str() {
-            "%f" | "%F" => {
-                line.push(file.as_os_str().to_owned());
-                took_file = true;
+        if word.text == "%i" {
+            if let Some(icon) = fields.icon {
+                line.extend([OsString::from(ICON_OPTION), OsString::from(icon)]);
             }
-            "%u" | "%U" => {
-                line.push(OsString::from(file_uri(file)));
-                took_file = true;
-            }
-            "%i" => {
-                if let Some(icon) = fields.icon {
-                    line.extend([OsString::from(ICON_OPTION), OsString::from(icon)]);
-                }
-            }
-            _ => {
-                let (expanded, file_in_word) = expand(&word.text, file, fields)?;
-                took_file |= file_in_word;
-                if !expanded.is_empty() {
-                    line.push(expanded);
-                }
-            }
+            continue;
+        }
+        let (expanded, file_in_word) = expand(&word.text, file, fields)?;
+        took_file |= file_in_word;
+        if !expanded.is_empty() {
+            line.push(expanded);
         }
     }
     (took_file && !line.is_empty()).then_some(line)

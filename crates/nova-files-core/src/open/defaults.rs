@@ -29,7 +29,8 @@ const ID_SEPARATOR: char = ';';
 /// A desktop ID names `applications/a/b.desktop` as `a-b.desktop`.
 const ID_FOLDER_SEPARATOR: char = '-';
 /// Big systems have a cache of a few hundred KB.
-const MAX_LIST_BYTES: u64 = 4 * 1024 * 1024;
+/// 4 MiB.
+const MAX_LIST_BYTES: u64 = 4_194_304;
 
 /// Where to look.
 #[derive(Debug, Clone, Default)]
@@ -407,7 +408,9 @@ mod tests {
     #[test]
     fn an_id_cannot_leave_the_applications_folder() {
         let tree = Tree::new("escape");
-        tree.app("share/evil.desktop").app("share/applications/sub/x.desktop").write(
+        tree.app("share/evil.desktop")
+            .app("share/applications/sub/x.desktop")
+            .app("share/applications/x.desktop").write(
             "config/mimeapps.list",
             "[Default Applications]\nimage/png=../evil.desktop\nimage/gif=sub/x.desktop\nimage/bmp=-x.desktop\n",
         );

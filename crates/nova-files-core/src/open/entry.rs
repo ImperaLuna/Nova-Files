@@ -15,7 +15,8 @@ const KEY_END: char = '=';
 const APPLICATION: &str = "Application";
 const TRUE: &str = "true";
 /// A real entry is a few KB.
-const MAX_ENTRY_BYTES: u64 = 256 * 1024;
+/// 256 KiB.
+const MAX_ENTRY_BYTES: u64 = 262_144;
 /// Any of the execute bits.
 const EXECUTABLE: u32 = 0o111;
 
