@@ -67,6 +67,11 @@ impl Searcher {
     fn search_and_settle(&self) {
         self.start_build(false);
         assert!(self.run("report", LIMIT as usize, || true, |_, _| true));
+        self.settle();
+    }
+
+    /// Waits for a running build to end.
+    fn settle(&self) {
         let state = self.state();
         drop(
             self.shared
@@ -198,6 +203,30 @@ fn lost_changes_crawl_anew() {
     });
     searcher.search_and_settle();
     assert_ne!(scratch.index_inode(), built);
+}
+
+#[test]
+fn a_failed_crawl_after_lost_changes_fails_searches_until_one_works() {
+    let scratch = Scratch::new("failed");
+    let searcher = scratch.searcher();
+    searcher.search_and_settle();
+    let home = scratch.root.join("home");
+    searcher.live(|live| live.take(&[Change::Rescan { folder: home }]));
+    // A file where the cache folder was: no crawl can be saved.
+    let cache = scratch.place().folder;
+    fs::remove_dir_all(&cache).unwrap();
+    fs::write(&cache, b"").unwrap();
+    // Answers from the old index, and the crawl it starts fails.
+    searcher.search_and_settle();
+    let search = || searcher.run("report", LIMIT as usize, || true, |_, _| true);
+    assert!(!search());
+    searcher.settle();
+    fs::remove_file(&cache).unwrap();
+    // Fails, and starts the crawl that works.
+    assert!(!search());
+    searcher.settle();
+    assert!(search());
+    searcher.live(|live| assert!(!live.lost));
 }
 
 #[test]

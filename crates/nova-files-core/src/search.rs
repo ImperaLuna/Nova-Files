@@ -10,7 +10,9 @@
 //!
 //! After [`REBUILD_AFTER`] changes, or a [`Change::Rescan`] (changes were
 //! lost), the next search starts a fresh crawl in the background and keeps
-//! answering from the old index until the new one is in.
+//! answering from the old index until the new one is in. When changes
+//! were lost and that crawl fails, searches fail too, each trying again,
+//! until a crawl works: the old index no longer shows the disk.
 //!
 //! [`Command::Search`]: nova_files_api::Command::Search
 
@@ -51,6 +53,8 @@ struct Shared {
 struct State {
     live: Option<Live>,
     building: bool,
+    /// The last build failed.
+    failed: bool,
 }
 
 /// An open index with its watcher and what the log said so far.
@@ -115,7 +119,8 @@ impl Searcher {
     /// Waits for the index, then hands each stage's hits to `answer`
     /// until it returns `false`. Stops before reading the log or a stage
     /// once `wanted` says a newer search replaced this one. `false` when
-    /// there is no index.
+    /// there is no index, or changes were lost and the crawl to recover
+    /// failed; that search starts another.
     fn run(
         &self,
         query: &str,
@@ -129,9 +134,15 @@ impl Searcher {
             .built
             .wait_while(state, |state| state.live.is_none() && state.building)
             .unwrap_or_else(PoisonError::into_inner);
+        let failed = state.failed;
         let Some(live) = &mut state.live else {
             return false;
         };
+        if live.lost && failed {
+            drop(state);
+            self.start_build(true);
+            return false;
+        }
         if !wanted() {
             return true;
         }
@@ -182,6 +193,7 @@ impl Searcher {
                 {
                     let mut state = job.state.lock().unwrap_or_else(PoisonError::into_inner);
                     state.building = false;
+                    state.failed = live.is_none();
                     if live.is_some() {
                         state.live = live;
                     }
@@ -189,11 +201,10 @@ impl Searcher {
                 job.built.notify_all();
             });
         if spawned.is_err() {
-            shared
-                .state
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .building = false;
+            let mut state = shared.state.lock().unwrap_or_else(PoisonError::into_inner);
+            state.building = false;
+            state.failed = true;
+            drop(state);
             shared.built.notify_all();
         }
     }
