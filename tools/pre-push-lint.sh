@@ -18,6 +18,11 @@ if ! command -v cargo >/dev/null; then
     exit 0
 fi
 git rev-parse -q --verify "$main" >/dev/null || exit 0
+if [ -z "${IN_NIX_SHELL:-}" ]; then
+    # A rustup or distro toolchain can be older than the flake's and miss
+    # newer lints CI's Clippy has.
+    echo "pre-push: not inside nix develop; $(cargo clippy --version 2>/dev/null || echo 'Clippy') may lack lints CI's has." >&2
+fi
 
 workspace=false
 declare -A crates=()
