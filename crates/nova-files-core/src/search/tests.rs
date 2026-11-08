@@ -66,7 +66,7 @@ impl Searcher {
     /// Runs a search to its end and waits for any build it started.
     fn search_and_settle(&self) {
         self.start_build(false);
-        assert!(self.run("report", LIMIT as usize, |_, _| true));
+        assert!(self.run("report", LIMIT as usize, || true, |_, _| true));
         let state = self.state();
         drop(
             self.shared
@@ -106,6 +106,22 @@ fn a_newer_search_cancels_one_waiting_for_the_index() {
         done = last;
     }
     assert!(events.recv_timeout(QUIET).is_err());
+}
+
+#[test]
+fn a_replaced_search_stops_before_it_scans() {
+    let scratch = Scratch::new("replaced");
+    let searcher = scratch.searcher();
+    searcher.search_and_settle();
+    let answered = searcher.run(
+        "report",
+        LIMIT as usize,
+        || false,
+        |_, _| {
+            panic!("a replaced search answered");
+        },
+    );
+    assert!(answered);
 }
 
 #[test]

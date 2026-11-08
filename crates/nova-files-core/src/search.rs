@@ -87,14 +87,17 @@ impl Searcher {
             client.deliver(Event::SearchFailed { id, reason }).ok();
             return;
         }
-        self.start_build(false);
         let searcher = self.clone();
         let limit = usize::try_from(limit.min(MAX_HITS)).unwrap_or_default();
         let spawned = thread::Builder::new()
             .name(SEARCH_THREAD.to_owned())
             .spawn(move || {
-                let answer = |event| !cancelled() && events.deliver(event).is_ok();
-                if !searcher.run(&query, limit, |hits, done| {
+                // Here, not on the core's thread: a running search holds the
+                // lock this takes.
+                searcher.start_build(false);
+                let wanted = || !cancelled();
+                let answer = |event| wanted() && events.deliver(event).is_ok();
+                if !searcher.run(&query, limit, wanted, |hits, done| {
                     answer(Event::Found { id, hits, done })
                 }) {
                     answer(Event::SearchFailed {
@@ -110,11 +113,14 @@ impl Searcher {
     }
 
     /// Waits for the index, then hands each stage's hits to `answer`
-    /// until it returns `false`. `false` when there is no index.
+    /// until it returns `false`. Stops before reading the log or a stage
+    /// once `wanted` says a newer search replaced this one. `false` when
+    /// there is no index.
     fn run(
         &self,
         query: &str,
         limit: usize,
+        wanted: impl Fn() -> bool,
         mut answer: impl FnMut(Vec<Hit>, bool) -> bool,
     ) -> bool {
         let shared = &self.shared;
@@ -126,23 +132,25 @@ impl Searcher {
         let Some(live) = &mut state.live else {
             return false;
         };
+        if !wanted() {
+            return true;
+        }
         live.read_log();
         let outdated = live.lost || live.changes > REBUILD_AFTER;
         let mut search = live.index.search_now(query, limit, &live.overlay);
-        let mut done = false;
-        while !done {
-            // A search with nothing to look for has no stages: it answers
-            // once, with no hits.
-            let hits = search
-                .next()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|hit| Hit {
-                    path: hit.path,
-                    matched: matched(hit.kind),
-                });
-            done = search.is_done();
-            if !answer(hits.collect(), done) {
+        if search.is_done() {
+            // Nothing to look for: no stages, one answer with no hits.
+            answer(Vec::new(), true);
+        }
+        while wanted() {
+            let Some(hits) = search.next() else {
+                break;
+            };
+            let hits = hits.into_iter().map(|hit| Hit {
+                path: hit.path,
+                matched: matched(hit.kind),
+            });
+            if !answer(hits.collect(), search.is_done()) {
                 break;
             }
         }
