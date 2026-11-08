@@ -25,7 +25,7 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use rustix::event::{EventfdFlags, PollFd, PollFlags, eventfd, poll};
+use rustix::event::{EventfdFlags, PollFd, PollFlags, Timespec, eventfd, poll};
 use rustix::fs::inotify::{self, CreateFlags};
 use rustix::io::Errno;
 
@@ -60,7 +60,9 @@ impl Watcher {
     ) -> io::Result<Self> {
         let inotify = inotify::init(CreateFlags::CLOEXEC.union(CreateFlags::NONBLOCK))?;
         let stop = Arc::new(eventfd(0, EventfdFlags::CLOEXEC)?);
-        let mut folders = Folders::new(inotify, index.root().to_owned());
+        let asked = Arc::clone(&stop);
+        let stopping = Box::new(move || is_readable(&asked));
+        let mut folders = Folders::new(inotify, index.root().to_owned(), stopping);
         let mut caught = folders.watch_index(index);
         caught.extend(folders.catch_up(index));
         for change in &caught {
@@ -136,6 +138,16 @@ fn run(
     }
 }
 
+/// Whether `fd` has something to read now, without waiting.
+fn is_readable(fd: &OwnedFd) -> bool {
+    let mut fds = [PollFd::new(fd, PollFlags::IN)];
+    let now = Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    poll(&mut fds, Some(&now)).is_ok_and(|ready| ready > 0)
+}
+
 /// Every event the kernel has queued, until a read would block.
 fn read_events(fd: &OwnedFd, buffer: &mut [MaybeUninit<u8>]) -> io::Result<Vec<Event>> {
     let mut reader = inotify::Reader::new(fd, buffer);
@@ -153,5 +165,18 @@ fn read_events(fd: &OwnedFd, buffer: &mut [MaybeUninit<u8>]) -> io::Result<Vec<E
             Err(Errno::AGAIN | Errno::INTR) => return Ok(events),
             Err(error) => return Err(error.into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_counter_is_readable_only_once_written_to() {
+        let counter = eventfd(0, EventfdFlags::CLOEXEC).unwrap();
+        assert!(!is_readable(&counter));
+        rustix::io::write(&counter, &WAKE.to_ne_bytes()).unwrap();
+        assert!(is_readable(&counter));
     }
 }
