@@ -83,6 +83,9 @@ pub struct Folders {
     root: PathBuf,
     by_wd: HashMap<i32, Watched>,
     by_path: HashMap<PathBuf, i32>,
+    /// What this batch's events named that was gone again before it could
+    /// be read: moved on with its folder, maybe.
+    vanished: Vec<PathBuf>,
     stopping: Stopping,
 }
 
@@ -93,6 +96,7 @@ impl Folders {
             root,
             by_wd: HashMap::new(),
             by_path: HashMap::new(),
+            vanished: Vec::new(),
             stopping,
         }
     }
@@ -129,6 +133,7 @@ impl Folders {
     pub fn handle(&mut self, events: &[Event]) -> Vec<Change> {
         let mut changes = Vec::new();
         let mut leaving: HashMap<u32, Leaving> = HashMap::new();
+        self.vanished.clear();
         for event in events {
             self.handle_one(event, &mut leaving, &mut changes);
         }
@@ -302,10 +307,20 @@ impl Folders {
                 if self.zone_of_watch(&from.path) == policy::enters(&folder.zone, name) =>
             {
                 self.repath(&from.path, &to);
+                // Made inside before the move and gone from the old path
+                // by the time it was read: read where it went.
+                let arrived: Vec<PathBuf> = self
+                    .vanished
+                    .iter()
+                    .filter_map(|lost| Some(to.join(lost.strip_prefix(&from.path).ok()?)))
+                    .collect();
                 changes.push(Change::Moved {
                     from: from.path,
                     to,
                 });
+                for path in arrived {
+                    self.add_again(&path, changes);
+                }
             }
             (true, true) => {
                 // Not watched at its old path (made and moved before its
@@ -367,6 +382,7 @@ impl Folders {
     fn add(&mut self, zone: &Zone, name: &OsStr, path: PathBuf, changes: &mut Vec<Change>) {
         let Ok(details) = fs::symlink_metadata(&path) else {
             // Gone again already.
+            self.vanished.push(path);
             return;
         };
         if !details.is_dir() {

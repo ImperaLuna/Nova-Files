@@ -515,6 +515,27 @@ fn a_new_folder_where_one_left_from_inside_is_kept() {
 }
 
 #[test]
+fn a_folder_made_inside_one_that_then_moved_is_read_where_it_went() {
+    let (root, mut folders) = watched_folder("made-then-moved", &["a/"], Box::new(|| false));
+    let (a, b) = (root.join("a"), root.join("b"));
+    let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
+    assert_eq!(folders.watch(a.clone(), zone), None);
+    // `a/sub/file` is made, then `a` becomes `b`, before any event is read.
+    fs::create_dir_all(a.join("sub")).unwrap();
+    fs::write(a.join("sub/file"), b"").unwrap();
+    fs::rename(&a, &b).unwrap();
+    let changes = folders.handle(&[
+        event(&folders, &a, ReadFlags::CREATE.union(DIR), 0, "sub"),
+        event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 23, "a"),
+        event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 23, "b"),
+    ]);
+    let (sub, file) = (b.join("sub"), b.join("sub/file"));
+    assert_eq!(added_paths(&changes), [sub.as_path(), &file]);
+    assert!(folders.by_path.contains_key(&sub));
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn swapped_folders_are_both_read_again() {
     let (root, mut folders) =
         watched_folder("swap", &["a/one.txt", "b/two.txt"], Box::new(|| false));

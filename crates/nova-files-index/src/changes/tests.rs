@@ -180,3 +180,34 @@ fn damaged_records_are_errors() {
     assert_eq!(empty.len(), RECORD_FIXED);
     assert_eq!(parse(&empty).unwrap().unwrap().1, RECORD_FIXED);
 }
+
+#[test]
+fn logs_created_at_the_same_time_each_publish_their_own_file() {
+    let path = TempLog::new("concurrent");
+    let lock = beside(&path.0, ".lock");
+    for _ in 0..50 {
+        let created: Vec<ChangeLog> = std::thread::scope(|scope| {
+            // All started before any is waited on.
+            let mut creators = Vec::new();
+            for _ in 0..4 {
+                creators.push(scope.spawn(|| ChangeLog::create(&path.0, CRAWLED)));
+            }
+            creators
+                .into_iter()
+                .map(|creator| creator.join().unwrap().unwrap())
+                .collect()
+        });
+        // The last one in place is one of them: its record reaches readers.
+        let rescan = Change::Rescan {
+            folder: PathBuf::from("/home/me"),
+        };
+        for mut log in created {
+            log.append(&rescan).unwrap();
+        }
+        assert_eq!(
+            LogReader::open(&path.0).unwrap().read_new().unwrap(),
+            [rescan]
+        );
+    }
+    fs::remove_file(lock).ok();
+}
