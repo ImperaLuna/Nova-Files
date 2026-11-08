@@ -302,6 +302,21 @@ fn a_folder_that_became_a_profile_while_closed_is_removed() {
 }
 
 #[test]
+fn a_folder_that_became_a_profile_while_closed_is_no_longer_watched() {
+    let closed = Closed::new(&["apps/browser/bookmarks.html", "docs/"]);
+    fs::write(closed.path("apps/browser/profiles.ini"), b"").unwrap();
+    let mut opened = closed.open();
+    fs::write(closed.path("apps/browser/later.html"), b"").unwrap();
+    fs::write(closed.path("docs/later.txt"), b"").unwrap();
+    let after = opened.next();
+    assert_eq!(
+        added_paths(&after),
+        [closed.path("docs/later.txt").as_path()],
+        "{after:?}"
+    );
+}
+
+#[test]
 fn nothing_is_read_through_a_link_that_replaced_a_folder() {
     let outside = TempFolder::new().with(&["b/new.txt"]);
     let closed = Closed::new(&["a/b/old.txt"]);

@@ -33,6 +33,8 @@ use std::ffi::OsString;
 use std::fs::{self, Metadata};
 use std::path::{Path, PathBuf};
 
+use rustix::fs::inotify;
+
 use crate::changes::Change;
 use crate::crawl;
 use crate::policy::{self, Zone};
@@ -212,18 +214,42 @@ impl Folders {
         if replaced || moved_folder {
             return false;
         }
+        let mut unwatched: HashSet<PathBuf> = marked.iter().cloned().collect();
+        unwatched.extend(missing.iter().map(|old| old.path.clone()));
+        self.forget_all(&unwatched);
         for folder in marked {
-            self.forget(&folder);
             changes.push(Change::Removed { path: folder });
         }
         for old in missing {
-            self.forget(&old.path);
             changes.push(Change::Removed { path: old.path });
         }
         for new in found {
             self.add(&new.zone, &new.name, new.path, changes);
         }
         true
+    }
+}
+
+impl Folders {
+    /// Drops the watches on `folders` and everything under them, in one
+    /// pass over the watches however many folders went.
+    fn forget_all(&mut self, folders: &HashSet<PathBuf>) {
+        if folders.is_empty() {
+            return;
+        }
+        let under: Vec<PathBuf> = self
+            .by_path
+            .keys()
+            .filter(|watched| watched.ancestors().any(|folder| folders.contains(folder)))
+            .cloned()
+            .collect();
+        for watched in under {
+            if let Some(wd) = self.by_path.remove(&watched) {
+                self.by_wd.remove(&wd);
+                // The kernel may have dropped it already.
+                inotify::remove_watch(&self.inotify, wd).ok();
+            }
+        }
     }
 }
 
