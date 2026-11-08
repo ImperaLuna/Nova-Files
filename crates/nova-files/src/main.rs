@@ -18,7 +18,9 @@
 //! Then, while it is the only thread, it tells the Vulkan
 //! loader to skip drivers for GPUs the PC doesn't have (see
 //! `nova_files_core::absent_vendor_drivers`); each skipped driver is a set of
-//! libraries a cold start no longer reads.
+//! libraries a cold start no longer reads. If the first window then can't
+//! set up its GPU, the program starts again on that folder with every
+//! driver (see `restart_with_every_driver`).
 //!
 //! It also hands the core a way to give freed memory back to the system
 //! after heavy work (see `memory`).
@@ -26,18 +28,32 @@
 mod memory;
 mod mode;
 
+use std::cell::Cell;
 use std::error::Error;
 use std::io::{self, Write as _};
-use std::process::ExitCode;
+use std::os::unix::process::CommandExt as _;
+use std::path::Path;
+use std::process::{Command, ExitCode};
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use nova_files_api::Connector;
-use nova_files_dbus::{Bus, Started};
-use nova_files_ui::{Ended, Request, RequestSender, Requests};
+use nova_files_dbus::{Bus, Service, Started};
+use nova_files_ui::{Ended, RecoverGpu, Request, RequestSender, Requests};
 
 use crate::mode::Mode;
 
 const CORE_WATCH_THREAD: &str = "nova-files-core-watch";
+
+/// Set on a restart that gives the Vulkan loader every driver, so the new
+/// process doesn't filter them again.
+const EVERY_DRIVER_VARIABLE: &str = "NOVA_FILES_EVERY_VULKAN_DRIVER";
+
+/// Whether this process set the Vulkan driver filter. A filter the user set
+/// is never taken back.
+static FILTER_SET: AtomicBool = AtomicBool::new(false);
 
 fn main() -> ExitCode {
     if let Err(error) = nova_files_core::start_startup_trace() {
@@ -54,16 +70,57 @@ fn main() -> ExitCode {
     }
 }
 
+/// How long a restarted process waits for the bus to free its old name
+/// before it takes the name as another instance's.
+const RESTART_NAME_WAIT: Duration = Duration::from_millis(500);
+
+/// How long to wait for the bus name: only a restart waits.
+fn name_wait() -> Duration {
+    if every_driver_asked() {
+        RESTART_NAME_WAIT
+    } else {
+        Duration::ZERO
+    }
+}
+
+/// Whether this process is a restart that must keep every driver.
+fn every_driver_asked() -> bool {
+    std::env::var_os(EVERY_DRIVER_VARIABLE).is_some()
+}
+
 #[expect(
     unsafe_code,
     reason = "setting a variable is sound only while no other thread exists, and main calls this first"
 )]
 fn skip_absent_vulkan_drivers() {
+    if every_driver_asked() {
+        return;
+    }
     if let Some(filter) = nova_files_core::absent_vendor_drivers() {
         // SAFETY: called first thing in `main`, before the core, D-Bus or
         // GPUI start a thread, so nothing can read the environment meanwhile.
         unsafe { std::env::set_var(nova_files_core::FILTER_VARIABLE, filter) };
+        FILTER_SET.store(true, Ordering::SeqCst);
     }
+}
+
+/// The command that starts this program again on `folder` with every
+/// Vulkan driver, or `None` when this process didn't filter any.
+///
+/// A window that can't set up its GPU with drivers filtered may still draw
+/// with the software driver (lavapipe): after an NVIDIA driver update
+/// without a reboot, NVIDIA's Vulkan and OpenGL both fail. The environment
+/// can't be changed once threads run, so the new process gets it instead.
+fn restart_with_every_driver(folder: &Path) -> Option<Command> {
+    if !FILTER_SET.load(Ordering::SeqCst) {
+        return None;
+    }
+    let mut command = Command::new(std::env::current_exe().ok()?);
+    command
+        .arg(folder)
+        .env_remove(nova_files_core::FILTER_VARIABLE)
+        .env(EVERY_DRIVER_VARIABLE, "1");
+    Some(command)
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
@@ -75,7 +132,9 @@ fn run() -> Result<(), Box<dyn Error>> {
         let requests = requests.clone();
         move |folder| requests.send(Request::OpenWindow(folder))
     };
-    let _service = match nova_files_dbus::start(Bus::Session, core.connector.clone(), on_open) {
+    let started =
+        nova_files_dbus::start_waiting(Bus::Session, core.connector.clone(), on_open, name_wait());
+    let service = match started {
         Ok(Started::Service(service)) => Some(service),
         Ok(Started::AlreadyRunning(running)) => {
             match &mode {
@@ -94,18 +153,42 @@ fn run() -> Result<(), Box<dyn Error>> {
     };
 
     watch_core(core.thread, requests.clone())?;
-    show_windows(mode, &requests, &core.connector, &received);
+    show_windows(mode, &requests, &core.connector, &received, service);
     Ok(())
 }
 
 /// Opens the first window in window mode. Then each `OpenWindow` while no
 /// window is open starts the UI again, until something asks it to quit.
-fn show_windows(mode: Mode, requests: &RequestSender, connector: &Connector, received: &Requests) {
+///
+/// Holds the bus name (`service`) until the program ends or restarts.
+fn show_windows(
+    mode: Mode,
+    requests: &RequestSender,
+    connector: &Connector,
+    received: &Requests,
+    service: Option<Service>,
+) {
+    let service = Cell::new(service);
+    // Replaces this process, so it returns only when that failed.
+    let restart: RecoverGpu = Rc::new(move |folder| {
+        let Some(mut command) = restart_with_every_driver(folder) else {
+            return;
+        };
+        // The bus confirms the release, so the new process finds the name
+        // free.
+        if let Some(Err(error)) = service.take().as_ref().map(Service::release) {
+            report(&format!("could not give up the bus name: {error}"));
+        }
+        report(&format!(
+            "restarting with every Vulkan driver: {}",
+            command.exec()
+        ));
+    });
     if let Mode::Window(folder) = mode {
         requests.send(Request::OpenWindow(folder));
     }
     while let Some(Request::OpenWindow(folder)) = received.wait() {
-        if nova_files_ui::run(connector, received, folder) == Ended::Quit {
+        if nova_files_ui::run(connector, received, folder, &restart) == Ended::Quit {
             break;
         }
     }
@@ -128,4 +211,46 @@ fn watch_core(core: JoinHandle<()>, requests: RequestSender) -> io::Result<()> {
 /// Until there is a log, errors go to stderr.
 fn report(message: &str) {
     writeln!(io::stderr(), "nova-files: {message}").ok();
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+
+    use super::*;
+
+    #[test]
+    fn a_restart_gives_back_the_drivers_this_process_filtered() {
+        FILTER_SET.store(true, Ordering::SeqCst);
+
+        let command = restart_with_every_driver(Path::new("/srv/photos")).unwrap();
+
+        assert_eq!(command.get_program(), std::env::current_exe().unwrap());
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            [OsStr::new("/srv/photos")]
+        );
+        let envs: Vec<_> = command.get_envs().collect();
+        assert!(envs.contains(&(OsStr::new(nova_files_core::FILTER_VARIABLE), None)));
+        assert!(envs.contains(&(OsStr::new(EVERY_DRIVER_VARIABLE), Some(OsStr::new("1")))));
+    }
+
+    #[test]
+    fn no_restart_when_this_process_filtered_nothing() {
+        assert!(restart_with_every_driver(Path::new("/srv/photos")).is_none());
+    }
+
+    #[expect(
+        unsafe_code,
+        reason = "nextest runs each test in a process of its own, with no other thread reading"
+    )]
+    #[test]
+    fn a_restart_keeps_every_driver_and_waits_for_its_name() {
+        assert!(!every_driver_asked());
+        assert_eq!(name_wait(), Duration::ZERO);
+        // SAFETY: see the reason above.
+        unsafe { std::env::set_var(EVERY_DRIVER_VARIABLE, "1") };
+        assert!(every_driver_asked());
+        assert_eq!(name_wait(), RESTART_NAME_WAIT);
+    }
 }
