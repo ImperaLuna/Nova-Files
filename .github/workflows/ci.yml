@@ -169,7 +169,7 @@ jobs:
           key: ${{ steps.flags.outputs.hash }}
           # Only main saves. A PR can't read another PR's cache, and each
           # one saved 1 GB, which pushed main's out of the repo's 10 GB.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: true # TEMP: bench only
       - name: Warm the cargo cache
         if: steps.changes.outputs.run == 'true' && github.event_name != 'pull_request'
         # The same build the mutation tests start with, so they reuse all of it.
