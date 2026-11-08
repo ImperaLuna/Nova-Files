@@ -15,8 +15,11 @@ use std::fs;
 use std::os::unix::ffi::OsStringExt as _;
 use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _, symlink};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+mod support;
+
+use support::TempFolder;
 
 use nova_files_index::{CrawlError, Flags, Index, Kind, OpenError, RowId, Stamp, crawl};
 
@@ -24,48 +27,6 @@ const NO_ACCESS: u32 = 0o000;
 const PRIVATE_FILE: u32 = 0o600;
 const PRIVATE_FOLDER: u32 = 0o700;
 const MODE_BITS: u32 = 0o777;
-
-/// A folder under the system temp folder, removed when dropped.
-struct TempFolder(PathBuf);
-
-impl TempFolder {
-    fn new() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-index-test-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(name);
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-
-    /// Makes the files at `paths` (and their folders); a path ending in
-    /// `/` is a folder.
-    fn with(self, paths: &[&str]) -> Self {
-        for path in paths {
-            let full = self.0.join(path);
-            if path.ends_with('/') {
-                fs::create_dir_all(&full).unwrap();
-            } else {
-                fs::create_dir_all(full.parent().unwrap()).unwrap();
-                fs::write(&full, path.as_bytes()).unwrap();
-            }
-        }
-        self
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
-}
 
 /// Crawls `home`, saves the index beside it and opens it again.
 fn indexed(home: &Path) -> (Index, TempFolder) {
@@ -233,6 +194,25 @@ fn rows_are_depth_first_with_each_folder_a_run() {
     assert_eq!(index.entry(RowId(0)).unwrap().parent, None);
     assert_eq!(index.entry(RowId(index.rows())), None);
     assert_eq!(index.name(RowId(index.rows())), None);
+}
+
+#[test]
+fn children_are_a_folder_s_direct_entries() {
+    let home = TempFolder::new().with(&["b/x/1", "b/x/2", "b/y", "a", "empty/", "c/z"]);
+    let (index, _cache) = indexed(home.path());
+    let names = |folder: RowId| -> Vec<OsString> {
+        let mut names: Vec<OsString> = index
+            .children(folder)
+            .map(|row| index.name(row).unwrap().to_owned())
+            .collect();
+        names.sort();
+        names
+    };
+    assert_eq!(names(RowId(0)), ["a", "b", "c", "empty"]);
+    assert_eq!(names(find(&index, "b")), ["x", "y"]);
+    assert_eq!(names(find(&index, "b/x")), ["1", "2"]);
+    assert!(names(find(&index, "empty")).is_empty());
+    assert!(names(find(&index, "a")).is_empty());
 }
 
 #[test]
