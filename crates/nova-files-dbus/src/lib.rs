@@ -40,6 +40,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use enumflags2::BitFlags;
 use nova_files_api::{Connector, uri};
 use zbus::blocking::connection::Builder;
 use zbus::blocking::fdo::DBusProxy;
@@ -248,9 +249,8 @@ fn queue_for_portal(connection: &Connection, picker: impl Picker, holds: Holds) 
     }
     // With no flags, the bus queues the request while the name is taken
     // and never lets another program replace us. zbus's default flags do
-    // the opposite, and its flag set can only be named through a flag, so
-    // no flags is one flag without itself.
-    let no_flags = !RequestNameFlags::DoNotQueue & RequestNameFlags::DoNotQueue;
+    // the opposite.
+    let no_flags = BitFlags::<RequestNameFlags>::EMPTY;
     matches!(
         connection.request_name_with_flags(PORTAL_BUS_NAME, no_flags),
         Ok(RequestNameReply::PrimaryOwner)
