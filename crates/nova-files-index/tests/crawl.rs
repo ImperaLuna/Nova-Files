@@ -211,8 +211,8 @@ fn children_are_a_folder_s_direct_entries() {
     assert_eq!(names(RowId(0)), ["a", "b", "c", "empty"]);
     assert_eq!(names(find(&index, "b")), ["x", "y"]);
     assert_eq!(names(find(&index, "b/x")), ["1", "2"]);
-    assert!(names(find(&index, "empty")).is_empty());
-    assert!(names(find(&index, "a")).is_empty());
+    assert_eq!(names(find(&index, "empty")), Vec::<OsString>::new());
+    assert_eq!(names(find(&index, "a")), Vec::<OsString>::new());
 }
 
 #[test]

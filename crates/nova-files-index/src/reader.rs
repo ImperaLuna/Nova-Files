@@ -196,7 +196,13 @@ fn check_rows(bytes: &[u8], header: &Header) -> Result<(), OpenError> {
     // The folders whose runs the current row is inside, innermost last,
     // with where each run ends.
     let mut open: Vec<(u32, u32)> = Vec::new();
-    for (raw, at) in rows.chunks_exact(ROW_LEN).map_while(Row::read).zip(0..) {
+    for (raw, at) in rows
+        .as_chunks::<ROW_LEN>()
+        .0
+        .iter()
+        .map_while(|row| Row::read(row))
+        .zip(0..)
+    {
         check_name(&raw, header, at)?;
         while open.last().is_some_and(|&(_, end)| end <= at) {
             open.pop();

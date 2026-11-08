@@ -128,7 +128,7 @@ fn added_paths(changes: &[Change]) -> Vec<&Path> {
 fn nothing_changed_logs_nothing() {
     let closed = Closed::new(&["docs/a.txt", "music/"]);
     let opened = closed.open();
-    assert!(opened.caught.is_empty());
+    assert_eq!(opened.caught, []);
     assert_eq!(opened.told, 0);
 }
 
@@ -244,7 +244,7 @@ fn folders_untouched_lately_are_not_read_again() {
     let closed = Closed::settled(&["docs/a.txt"]);
     // Rewriting a file leaves its folder's time alone.
     fs::write(closed.path("docs/a.txt"), b"longer now").unwrap();
-    assert!(closed.caught_up().is_empty());
+    assert_eq!(closed.caught_up(), []);
 }
 
 #[test]

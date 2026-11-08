@@ -74,12 +74,12 @@ fn every_change_reads_back_as_written() {
     let mut log = ChangeLog::create(&path.0, CRAWLED).unwrap();
     let mut reader = LogReader::open(&path.0).unwrap();
     assert_eq!(reader.crawled(), CRAWLED);
-    assert!(reader.read_new().unwrap().is_empty());
+    assert_eq!(reader.read_new().unwrap(), []);
     for change in every_change() {
         log.append(&change).unwrap();
     }
     assert_eq!(reader.read_new().unwrap(), every_change());
-    assert!(reader.read_new().unwrap().is_empty());
+    assert_eq!(reader.read_new().unwrap(), []);
     // A second reader reads it all from the start, on its own.
     assert_eq!(
         LogReader::open(&path.0).unwrap().read_new().unwrap(),
@@ -98,7 +98,7 @@ fn a_reader_waits_for_a_record_to_be_whole() {
     let (first, second) = whole.split_at(RECORD_FIXED + 2);
     for part in [&first[..2], &first[2..]] {
         file.write_all(part).unwrap();
-        assert!(reader.read_new().unwrap().is_empty());
+        assert_eq!(reader.read_new().unwrap(), []);
     }
     file.write_all(second).unwrap();
     assert_eq!(reader.read_new().unwrap(), &every_change()[..1]);
@@ -131,7 +131,7 @@ fn creating_starts_the_log_over() {
     ChangeLog::create(&path.0, None).unwrap();
     let mut reader = LogReader::open(&path.0).unwrap();
     assert_eq!(reader.crawled(), None);
-    assert!(reader.read_new().unwrap().is_empty());
+    assert_eq!(reader.read_new().unwrap(), []);
     assert!(!Path::new(&format!("{}.new", path.0.display())).exists());
 }
 

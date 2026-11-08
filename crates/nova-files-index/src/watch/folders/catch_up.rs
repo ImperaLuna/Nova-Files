@@ -151,13 +151,13 @@ impl Folders {
                 round.check(&self.root, row, path, &mut changes);
             }
         }
+        // One round per moved folder: an entry moved between two folders
+        // that were themselves moved reads as removed and added.
         let mut moved = self.settle(round.found, round.missing, &mut changes);
-        while !moved.is_empty() {
+        while let Some((folder, to)) = moved.pop() {
             let mut round = Round::new(index);
-            for (folder, to) in moved {
-                round.check_moved(&self.root, folder, &to, &mut changes);
-            }
-            moved = self.settle(round.found, round.missing, &mut changes);
+            round.check_moved(&self.root, folder, &to, &mut changes);
+            moved.extend(self.settle(round.found, round.missing, &mut changes));
         }
         changes
     }

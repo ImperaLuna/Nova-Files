@@ -204,7 +204,7 @@ fn a_move_out_of_home_is_a_removal() {
     watched.until(removed(&path));
     // Its watches went with it: changes out there aren't logged.
     fs::write(outside.path().join("gone/after.txt"), b"").unwrap();
-    assert!(watched.settle().is_empty());
+    assert_eq!(watched.settle(), []);
 }
 
 #[test]
@@ -233,7 +233,7 @@ fn a_folder_that_becomes_a_cache_is_removed() {
     watched.until(removed(&target));
     watched.settle();
     fs::write(target.join("build.o"), b"").unwrap();
-    assert!(watched.settle().is_empty());
+    assert_eq!(watched.settle(), []);
 }
 
 #[test]
@@ -255,7 +255,7 @@ fn stopping_ends_the_thread() {
     let mut watched = Watched::new(&[]);
     watched.watcher.take().unwrap().stop().unwrap();
     fs::write(watched.path("after.txt"), b"").unwrap();
-    assert!(watched.settle().is_empty());
+    assert_eq!(watched.settle(), []);
 }
 
 #[test]
@@ -323,7 +323,7 @@ fn dropping_the_watcher_stops_it() {
     let mut watched = Watched::new(&[]);
     drop(watched.watcher.take());
     fs::write(watched.path("after.txt"), b"").unwrap();
-    assert!(watched.settle().is_empty());
+    assert_eq!(watched.settle(), []);
 }
 
 #[test]

@@ -436,7 +436,7 @@ mod tests {
             cookie: 0,
             name: Some(OsString::from("a.txt")),
         };
-        assert!(folders.handle(&[stray]).is_empty());
+        assert_eq!(folders.handle(&[stray]), []);
     }
 
     #[test]
@@ -477,7 +477,7 @@ mod tests {
         built.save(&saved).unwrap();
         let index = Index::open(&saved).unwrap();
         let mut folders = folders(&root);
-        assert!(folders.watch_index(&index).is_empty());
+        assert_eq!(folders.watch_index(&index), []);
         let mut watched: Vec<&PathBuf> = folders.by_path.keys().collect();
         watched.sort();
         assert_eq!(watched, [&root, &root.join("plain")]);
