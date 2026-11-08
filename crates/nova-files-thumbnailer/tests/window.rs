@@ -77,7 +77,7 @@ async fn an_image_row_gets_its_thumbnail(cx: &mut TestAppContext) {
     };
     // The core and the helper answer from their own threads.
     cx.executor().allow_parking();
-    let core = nova_files_core::spawn_with(IDLE_EXIT, None, Some(setup)).unwrap();
+    let core = nova_files_core::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
     let (start, home) = (folder.clone(), temp.0.clone());
     let (view, cx) =
         cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx));
