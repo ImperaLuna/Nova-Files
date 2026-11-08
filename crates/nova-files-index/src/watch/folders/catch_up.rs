@@ -99,15 +99,13 @@ impl<'a> Round<'a> {
     fn check_rows(
         &mut self,
         root: &Path,
-        rows: std::ops::Range<u32>,
+        mut rows: std::ops::Range<u32>,
         moved: Option<(&Path, &Path)>,
         changes: &mut Vec<Change>,
     ) {
         let index = self.index;
-        let mut row = rows.start;
-        while row < rows.end {
+        while let Some(row) = rows.next() {
             let at = RowId(row);
-            row += 1;
             let Some(path) = index.path(at) else {
                 continue;
             };
@@ -122,7 +120,7 @@ impl<'a> Round<'a> {
                 && let Some(entry) = index.entry(at)
                 && entry.kind == Kind::Folder
             {
-                row = row.max(entry.end.0);
+                rows.start = rows.start.max(entry.end.0);
             }
         }
     }
