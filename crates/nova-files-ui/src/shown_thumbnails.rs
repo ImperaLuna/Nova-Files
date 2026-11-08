@@ -77,7 +77,7 @@ mod tests {
         assert!(shown.get(0).is_none());
         assert_eq!(shown.get(1).map(|image| image.id), Some(images[1].id));
         assert_eq!(shown.get(2).map(|image| image.id), Some(images[2].id));
-        assert!(shown.keep_rows(&(1..3)).is_empty());
+        assert_eq!(ids(&shown.keep_rows(&(1..3))), []);
     }
 
     #[test]
@@ -101,6 +101,6 @@ mod tests {
 
         assert_eq!(ids(&shown.take_all()), ids(&images));
         assert!(shown.get(0).is_none());
-        assert!(shown.take_all().is_empty());
+        assert_eq!(ids(&shown.take_all()), []);
     }
 }
