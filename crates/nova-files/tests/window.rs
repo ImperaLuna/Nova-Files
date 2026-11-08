@@ -2,7 +2,9 @@
 //! real temp folder tree: the window connects, opens its folder, and goes
 //! into a folder, up, or to a place when clicked. A folder that can't be
 //! read leaves it where it was. Each entry's Modified, Type and Size fill
-//! in once the core has read them.
+//! in once the core has read them. A picker window picks the file
+//! double-clicked when it asks for files, and answers cancelled when it
+//! is closed.
 
 #![expect(
     clippy::unwrap_used,
@@ -21,7 +23,10 @@ use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
 
-use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
+use gpui::{
+    Entity, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, TestAppContext, VisualTestContext,
+};
+use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_ui::{CoreStatus, MainWindow, WindowEvent};
 
 /// A folder under the system temp folder, removed when dropped.
@@ -273,4 +278,148 @@ async fn columns_fill_in_after_the_names(cx: &mut TestAppContext) {
         );
         assert_eq!(view.columns(2), None);
     });
+}
+
+/// A pick request for files to open, or a place to save at, whose answer
+/// arrives on the receiver.
+fn pick_request(kind: PickKind) -> (Box<PickRequest>, mpsc::Receiver<PickAnswer>) {
+    let (sender, answers) = mpsc::channel();
+    let request = PickRequest {
+        id: PickId(9),
+        kind,
+        title: "Open".to_owned(),
+        accept_label: None,
+        filters: Vec::new(),
+        filter: None,
+        folder: None,
+        reply: PickReply::new(move |answer| {
+            sender.send(answer).ok();
+        }),
+    };
+    (Box::new(request), answers)
+}
+
+const OPEN_ONE: PickKind = PickKind::Open {
+    multiple: false,
+    folders: false,
+};
+
+/// Double-clicks the element drawn with `selector`.
+fn double_click(cx: &mut VisualTestContext, selector: &'static str) {
+    cx.run_until_parked();
+    let position = cx.debug_bounds(selector).unwrap().center();
+    for click_count in 1..=2 {
+        cx.simulate_event(MouseDownEvent {
+            position,
+            modifiers: Modifiers::none(),
+            button: MouseButton::Left,
+            click_count,
+            first_mouse: false,
+        });
+        cx.simulate_event(MouseUpEvent {
+            position,
+            modifiers: Modifiers::none(),
+            button: MouseButton::Left,
+            click_count,
+        });
+    }
+}
+
+#[gpui::test]
+async fn a_picker_picks_the_file_double_clicked(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree();
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let (request, answers) = pick_request(OPEN_ONE);
+    view.update(cx, |view, _| view.set_pick(request));
+
+    click(cx, "entry-1");
+    assert!(answers.try_recv().is_err());
+
+    double_click(cx, "entry-1");
+    assert_eq!(
+        answers.try_recv(),
+        Ok(PickAnswer::Picked {
+            paths: vec![tree.path().join("notes.txt")],
+            filter: None
+        })
+    );
+}
+
+#[gpui::test]
+async fn a_picker_still_goes_into_folders(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree();
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let (request, answers) = pick_request(OPEN_ONE);
+    view.update(cx, |view, _| view.set_pick(request));
+
+    click(cx, "entry-0");
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+
+    assert!(answers.try_recv().is_err());
+    view.read_with(cx, |view, _| assert_eq!(view.pick_id(), Some(PickId(9))));
+}
+
+#[gpui::test]
+async fn a_picker_picks_nothing_from_a_listing_it_has_left(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree();
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let (request, answers) = pick_request(OPEN_ONE);
+    view.update(cx, |view, _| view.set_pick(request));
+    let first = view.read_with(cx, |view, _| view.listing_id()).unwrap();
+    let notes = EntryId(1);
+
+    // While the next folder loads, the old rows are still on screen.
+    view.update(cx, |view, _| view.open(&tree.path().join("Projects")));
+    assert!(!view.update(cx, |view, _| view.pick_entry(first, notes)));
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+
+    // Back in the same folder, the same row, but a newer listing.
+    view.update(cx, |view, _| view.go_up());
+    wait_for_folder(&view, cx, tree.path()).await;
+    assert!(!view.update(cx, |view, _| view.pick_entry(first, notes)));
+
+    assert!(answers.try_recv().is_err());
+    let now = view.read_with(cx, |view, _| view.listing_id()).unwrap();
+    assert!(view.update(cx, |view, _| view.pick_entry(now, notes)));
+}
+
+#[gpui::test]
+async fn a_save_picker_leaves_double_clicked_files_alone(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree();
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let (request, answers) = pick_request(PickKind::Save {
+        name: "a.txt".into(),
+    });
+    view.update(cx, |view, _| view.set_pick(request));
+
+    double_click(cx, "entry-1");
+
+    assert!(answers.try_recv().is_err());
+    view.read_with(cx, |view, _| assert_eq!(view.pick_id(), Some(PickId(9))));
+}
+
+#[gpui::test]
+async fn closing_a_picker_answers_cancelled(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree();
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let (request, answers) = pick_request(OPEN_ONE);
+    view.update(cx, |view, _| view.set_pick(request));
+
+    // From the app, not a window: the UI closes pickers from its request
+    // loop, with no window borrowed.
+    let app: &mut TestAppContext = cx;
+    app.update(|cx| nova_files_ui::close_picker(PickId(8), cx));
+    cx.run_until_parked();
+    assert!(answers.try_recv().is_err());
+
+    let app: &mut TestAppContext = cx;
+    app.update(|cx| nova_files_ui::close_picker(PickId(9), cx));
+    assert_eq!(app.update(|cx| cx.windows().len()), 0);
+    assert_eq!(answers.try_recv(), Ok(PickAnswer::Cancelled));
+    drop(view);
 }
