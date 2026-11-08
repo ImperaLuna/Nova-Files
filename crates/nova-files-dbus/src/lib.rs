@@ -2,17 +2,35 @@
 //! open files.
 //!
 //! [`start`] claims the application's bus name. The first process to claim
-//! it becomes the running instance and serves two interfaces on one
-//! object: the Nova Files interface (`Ping` for now) and the standard
-//! `org.freedesktop.Application`, whose `Activate` and `Open` ask for a new
-//! window.
-//! A later process finds the name taken and gets a [`RunningInstance`] to
-//! hand its launch over to.
+//! it becomes the running instance and serves, on the application's object:
+//! - the Nova Files interface (`files`, `Ping` for now),
+//! - the search interface (`search`), versioned on its own,
+//! - the standard `org.freedesktop.Application`, whose `Activate` and
+//!   `Open` ask for a new window.
+//!
+//! It then serves the portal's `FileChooser` interface at the portal path
+//! (`file_chooser`) and asks for the file picker's portal bus name, waiting
+//! in the bus's queue if another program holds it. A later process finds
+//! the application's name taken and gets a [`RunningInstance`] to hand its
+//! launch over to; it never serves the picker or asks for its name.
+//!
+//! Each module is one interface, so search and the picker grow in files of
+//! their own. Our own interfaces are named `io.github.ImperaLuna.NovaFiles*`
+//! and carry a version number: a change that breaks callers gets a new
+//! interface beside the old one.
+//!
+//! The core stops 3 minutes after its last connection. A call answered at
+//! once connects for the call (`Ping`); a request that outlives its call (a
+//! search still sending stages, an open picker) takes a hold (`holds`),
+//! which ends when the request does or when its caller leaves the bus.
 
 #![forbid(unsafe_code)]
 
 mod application;
+mod file_chooser;
 mod files;
+mod holds;
+mod search;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -20,15 +38,22 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use enumflags2::BitFlags;
 use nova_files_api::{Connector, uri};
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{self, Connection, Proxy};
-use zbus::fdo::RequestNameFlags;
+use zbus::fdo::{RequestNameFlags, RequestNameReply};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
 
 pub use application::INTERFACE as APPLICATION_INTERFACE;
+pub use file_chooser::{
+    BUS_NAME as PORTAL_BUS_NAME, INTERFACE as FILE_CHOOSER_INTERFACE,
+    OBJECT_PATH as PORTAL_OBJECT_PATH,
+};
 pub use files::INTERFACE as FILES_INTERFACE;
+pub use holds::{Hold, HoldError, Holds};
 pub use nova_files_api::APP_ID;
+pub use search::INTERFACE as SEARCH_INTERFACE;
 
 /// The longest any D-Bus call made from here may take, and the longest
 /// connecting to the bus may take.
@@ -46,7 +71,7 @@ pub enum Bus {
 }
 
 impl Bus {
-    fn builder(&self) -> zbus::Result<blocking::connection::Builder<'static>> {
+    pub(crate) fn builder(&self) -> zbus::Result<blocking::connection::Builder<'static>> {
         let builder = match self {
             Self::Session => blocking::connection::Builder::session()?,
             Self::Address(address) => blocking::connection::Builder::address(address.as_str())?,
@@ -64,20 +89,32 @@ pub enum Started {
     AlreadyRunning(RunningInstance),
 }
 
-/// This process's hold on the bus name.
+/// This process's hold on the bus names.
 pub struct Service {
     connection: Connection,
+    portal: bool,
 }
 
 impl Service {
-    /// Gives the bus name up and waits for the bus to confirm, so a process
-    /// started after this returns can claim it at once, even while this
-    /// connection is still open.
+    /// Whether this process owned [`PORTAL_BUS_NAME`] when it started.
+    /// Another program may hold it; this process then waits in the bus's
+    /// queue for it and becomes the file picker once it is freed.
+    pub const fn serves_portal(&self) -> bool {
+        self.portal
+    }
+
+    /// Gives the bus names up and waits for the bus to confirm, so a
+    /// process started after this returns can claim them at once, even
+    /// while this connection is still open.
     ///
     /// # Errors
-    /// When the call fails or takes longer than [`CALL_TIMEOUT`].
+    /// When a call fails or takes longer than [`CALL_TIMEOUT`].
     pub fn release(&self) -> zbus::Result<()> {
-        self.connection.release_name(APP_ID).map(drop)
+        // Both, even when the first fails: the application name matters
+        // most to a restart.
+        let portal = self.connection.release_name(PORTAL_BUS_NAME);
+        self.connection.release_name(APP_ID)?;
+        portal.map(drop)
     }
 }
 
@@ -156,7 +193,10 @@ pub fn start_waiting(
         // DoNotQueue: a second launch must learn the name is taken, not
         // wait in line for it.
         match connection.request_name_with_flags(APP_ID, RequestNameFlags::DoNotQueue.into()) {
-            Ok(_) => return Ok(Started::Service(Service { connection })),
+            Ok(_) => {
+                let portal = queue_for_portal(&connection);
+                return Ok(Started::Service(Service { connection, portal }));
+            }
             Err(zbus::Error::NameTaken) => {
                 let left = deadline.saturating_duration_since(Instant::now());
                 let freed_in_time = freed
@@ -175,6 +215,27 @@ pub fn start_waiting(
             Err(error) => return Err(error),
         }
     }
+}
+
+/// Serves the file picker and asks for its bus name, waiting in the bus's
+/// queue when another program holds it. Whether this process owns it now;
+/// the picker is optional, so any failure leaves the app running without
+/// it.
+fn queue_for_portal(connection: &Connection) -> bool {
+    let served = connection
+        .object_server()
+        .at(PORTAL_OBJECT_PATH, file_chooser::FileChooser);
+    if !matches!(served, Ok(true)) {
+        return false;
+    }
+    // With no flags, the bus queues the request while the name is taken
+    // and never lets another program replace us. zbus's default flags do
+    // the opposite.
+    let no_flags = BitFlags::<RequestNameFlags>::EMPTY;
+    matches!(
+        connection.request_name_with_flags(PORTAL_BUS_NAME, no_flags),
+        Ok(RequestNameReply::PrimaryOwner)
+    )
 }
 
 /// Sends on the returned channel each time the bus name loses its owner.
@@ -217,6 +278,7 @@ fn connect(
             let connection = bus.builder().and_then(|builder| {
                 builder
                     .serve_at(&path, files::Files::new(connector.clone()))?
+                    .serve_at(&path, search::Search)?
                     .serve_at(&path, application::Application::new(connector, on_open))?
                     .build()
             });

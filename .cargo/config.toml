@@ -5,3 +5,8 @@
 # desktop file all use it. Rust reads it with `env!("NOVA_FILES_APP_ID")`
 # and nix/build.nix reads it from this file, so it is defined only here.
 NOVA_FILES_APP_ID = "io.github.ImperaLuna.NovaFiles"
+
+# The file picker's xdg-desktop-portal backend name. Rust reads it with
+# `env!("NOVA_FILES_PORTAL_BUS_NAME")`; nix/build.nix names the `.portal`
+# file after its last part, which is what `portals.conf` picks.
+NOVA_FILES_PORTAL_BUS_NAME = "org.freedesktop.impl.portal.desktop.novafiles"
