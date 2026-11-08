@@ -131,11 +131,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .body | tools/ci-mutants-summary.sh
-      - name: Free disk space in the background
-        # Running in place, the job holds one target/ folder, which fits in
-        # the runner's free space, so nothing waits for the deletion.
-        if: steps.changes.outputs.run == 'true'
-        run: tools/ci-free-disk.sh start
       - uses: cachix/install-nix-action@v31
         if: steps.changes.outputs.run == 'true'
       - uses: cachix/cachix-action@v16
