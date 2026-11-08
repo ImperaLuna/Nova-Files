@@ -90,11 +90,32 @@ pub fn titlebar(request: &PickRequest) -> TitlebarOptions {
 
 /// The label on the Open or Save button: the app's, or what it is for.
 pub fn accept_label(request: &PickRequest) -> String {
-    request
-        .accept_label
-        .clone()
-        .unwrap_or_else(|| Mode::of(&request.kind).label().to_owned())
+    request.accept_label.as_deref().map_or_else(
+        || Mode::of(&request.kind).label().to_owned(),
+        without_mnemonic,
+    )
 }
+
+/// GTK's mnemonic marks: `_` before the letter to underline (`_OK`), and
+/// `__` for an underscore itself. The bar has no mnemonics, so a single
+/// `_` goes.
+fn without_mnemonic(label: &str) -> String {
+    let mut plain = String::with_capacity(label.len());
+    let mut chars = label.chars();
+    while let Some(c) = chars.next() {
+        match (c, chars.clone().next()) {
+            (MNEMONIC, Some(MNEMONIC)) => {
+                plain.push(MNEMONIC);
+                chars.next();
+            }
+            (MNEMONIC, _) => {}
+            (c, _) => plain.push(c),
+        }
+    }
+    plain
+}
+
+const MNEMONIC: char = '_';
 
 /// A window's pick: the app's request and the bar's state.
 pub struct Picker {
@@ -158,7 +179,18 @@ impl MainWindow {
         let name_events =
             cx.subscribe_in(&name, window, |this, _, event, window, cx| match event {
                 TextFieldEvent::Submitted => this.accept(window, cx),
-                TextFieldEvent::Cancelled => this.cancel(window),
+                // Escape takes back a question first, then cancels.
+                TextFieldEvent::Cancelled => {
+                    let asking = this
+                        .pick
+                        .as_mut()
+                        .and_then(|pick| pick.conflict.take())
+                        .is_some();
+                    if !asking {
+                        this.cancel(window);
+                    }
+                    cx.notify();
+                }
                 TextFieldEvent::Changed => {
                     if let Some(pick) = &mut this.pick {
                         pick.conflict = None;
@@ -540,6 +572,11 @@ mod tests {
             ..request("", FILES)
         };
         assert_eq!(accept_label(&upload), "Upload");
+        let mnemonic = PickRequest {
+            accept_label: Some("_Save__as".to_owned()),
+            ..request("", FILES)
+        };
+        assert_eq!(accept_label(&mnemonic), "Save_as");
         assert_eq!(accept_label(&request("", FOLDERS)), "Open");
         let save = PickKind::Save {
             name: "a.txt".into(),

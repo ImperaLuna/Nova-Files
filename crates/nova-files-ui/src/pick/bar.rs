@@ -16,6 +16,7 @@ use crate::window::MainWindow;
 const CANCEL_LABEL: &str = "Cancel";
 const REPLACE_LABEL: &str = "Replace";
 const KEEP_BOTH_LABEL: &str = "Keep both";
+const QUESTION_LABEL: &str = "A file with this name is here.";
 
 impl MainWindow {
     pub fn pick_bar(pick: &Picker, cx: &Context<Self>) -> impl IntoElement {
@@ -59,6 +60,14 @@ impl MainWindow {
                 .items_center()
                 .justify_end()
                 .gap(size::GAP)
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_color(rgb(color::TEXT_DIM))
+                        .child(QUESTION_LABEL),
+                )
                 .child(
                     button("pick-replace", REPLACE_LABEL.into(), false).on_click(
                         cx.listener(|this, _: &ClickEvent, window, _| this.replace(window)),

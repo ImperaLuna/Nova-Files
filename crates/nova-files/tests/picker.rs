@@ -442,6 +442,23 @@ async fn a_save_into_a_folder_that_went_away_waits(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn escape_takes_back_the_question_before_it_cancels(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
+    cx.simulate_keystrokes("enter");
+    asked(&view, cx).await;
+    cx.simulate_keystrokes("escape");
+    let question = view.read_with(cx, |view, _| view.pick_conflict().map(ToOwned::to_owned));
+    assert_eq!(question, None);
+    assert!(answers.try_recv().is_err());
+    assert!(!closed(cx));
+
+    cx.simulate_keystrokes("escape");
+    assert_eq!(answers.try_recv(), Ok(PickAnswer::Cancelled));
+}
+
+#[gpui::test]
 async fn a_file_made_after_the_listing_still_asks(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
