@@ -639,6 +639,31 @@ mod tests {
     }
 
     #[test]
+    fn a_watched_folder_moved_inside_home_keeps_its_watches() {
+        let (root, mut folders) = watched_folder("folder-moved", &["new/file"], Box::new(|| false));
+        // Watched as `old`, renamed `new` on disk before the events are read.
+        let (old, new) = (root.join("old"), root.join("new"));
+        fs::create_dir(&old).unwrap();
+        let zone = policy::enters(&Zone::Home, OsStr::new("old")).unwrap();
+        assert_eq!(folders.watch(old.clone(), zone), None);
+        fs::remove_dir(&old).unwrap();
+        let changes = folders.handle(&[
+            event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 6, "old"),
+            event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 6, "new"),
+        ]);
+        assert_eq!(
+            changes,
+            [Change::Moved {
+                from: old.clone(),
+                to: new.clone()
+            }]
+        );
+        assert!(folders.by_path.contains_key(&new));
+        assert!(!folders.by_path.contains_key(&old));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
     fn a_folder_made_where_one_moved_away_replaces_it() {
         let (root, mut folders) = watched_folder("reused", &["same/file"], Box::new(|| false));
         let changes = folders.handle(&[

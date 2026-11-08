@@ -162,3 +162,16 @@ fn read_events(fd: &OwnedFd, buffer: &mut [MaybeUninit<u8>]) -> io::Result<Vec<E
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_counter_is_readable_only_once_written_to() {
+        let counter = eventfd(0, EventfdFlags::CLOEXEC).unwrap();
+        assert!(!is_readable(&counter));
+        rustix::io::write(&counter, &WAKE.to_ne_bytes()).unwrap();
+        assert!(is_readable(&counter));
+    }
+}
