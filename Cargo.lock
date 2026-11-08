@@ -3523,6 +3523,7 @@ dependencies = [
 name = "nova-files-dbus"
 version = "0.1.0"
 dependencies = [
+ "enumflags2",
  "futures",
  "nova-files-api",
  "nova-files-core",
