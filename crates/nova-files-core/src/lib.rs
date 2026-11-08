@@ -9,11 +9,13 @@
 
 mod details;
 mod details_queue;
+mod index;
 mod jobs;
 mod list;
 mod memory;
 mod places;
 mod run;
+mod search;
 mod thumbs;
 mod trace;
 mod vulkan_drivers;
@@ -24,6 +26,9 @@ use std::time::Duration;
 
 use nova_files_api::Connector;
 
+use search::Searcher;
+
+pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
 pub use places::Home;
 pub use thumbs::Thumbnails;
@@ -56,12 +61,20 @@ pub fn spawn() -> io::Result<RunningCore> {
 /// # Errors
 /// When the OS refuses to start the core's thread.
 pub fn spawn_with_idle_exit(idle_exit: Duration) -> io::Result<RunningCore> {
-    spawn_with(idle_exit, Home::from_env(), Thumbnails::from_env())
+    spawn_with(
+        idle_exit,
+        Home::from_env(),
+        Thumbnails::from_env(),
+        IndexPlace::from_env(),
+    )
 }
 
-/// Starts the core with its places under `home` and its thumbnails in
-/// `thumbnails` instead of what the environment names, so tests never touch
-/// the real ones. Without `thumbnails` the core makes none.
+/// Starts the core with the given folders instead of what the environment
+/// names, so tests never touch the real ones.
+///
+/// Places come from `home`, thumbnails go to `thumbnails` and the index of
+/// `home` to `index`. Without `thumbnails` the core makes none; without
+/// `home` or `index` it can't search.
 ///
 /// # Errors
 /// When the OS refuses to start the core's thread.
@@ -69,10 +82,17 @@ pub fn spawn_with(
     idle_exit: Duration,
     home: Option<Home>,
     thumbnails: Option<Thumbnails>,
+    index: Option<IndexPlace>,
 ) -> io::Result<RunningCore> {
     let (connector, receiver) = nova_files_api::channel();
+    let searcher = Searcher::new(index, home.as_ref().map(|home| home.folder.clone()));
+    let setup = run::Setup {
+        home,
+        thumbnails,
+        searcher,
+    };
     let thread = thread::Builder::new()
         .name(THREAD_NAME.to_owned())
-        .spawn(move || run::run(&receiver, idle_exit, home.as_ref(), thumbnails.as_ref()))?;
+        .spawn(move || run::run(&receiver, idle_exit, &setup))?;
     Ok(RunningCore { connector, thread })
 }

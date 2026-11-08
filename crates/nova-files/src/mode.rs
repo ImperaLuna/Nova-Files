@@ -2,7 +2,8 @@
 //!
 //! `nova-files` opens a window on the home folder, `nova-files <folder>`
 //! (a path or a `file://` URI, as launchers pass it) on that folder, and
-//! `nova-files --service` runs only the core.
+//! `nova-files --service` runs only the core. `nova-files --index <folder>`
+//! builds the file index of that folder and exits, for the bench.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -13,6 +14,8 @@ use nova_files_api::uri;
 
 /// D-Bus passes it when it starts the program for a launcher.
 const SERVICE_FLAG: &str = "--service";
+/// Builds the index of the folder after it, then exits.
+const INDEX_FLAG: &str = "--index";
 /// Anything else starting with this is a flag the program doesn't take.
 const FLAG_PREFIX: &str = "-";
 /// What the usage line calls the folder argument.
@@ -24,6 +27,8 @@ pub enum Mode {
     Window(Option<PathBuf>),
     /// Run only the core until something asks for a window.
     Service,
+    /// Build the file index of the folder, then exit.
+    Index(PathBuf),
 }
 
 impl Mode {
@@ -37,6 +42,10 @@ impl Mode {
         let mode = match args.next() {
             None => Self::Window(None),
             Some(flag) if flag == SERVICE_FLAG => Self::Service,
+            Some(flag) if flag == INDEX_FLAG => {
+                let missing = || UsageError(flag.clone());
+                Self::Index(folder(args.next().ok_or_else(missing)?)?)
+            }
             Some(other) => Self::Window(Some(folder(other)?)),
         };
         args.next().map_or(Ok(mode), |extra| Err(UsageError(extra)))
@@ -52,6 +61,9 @@ impl Mode {
         match self {
             Self::Window(Some(folder)) if folder.is_relative() => {
                 Ok(Self::Window(Some(working_folder()?.join(folder))))
+            }
+            Self::Index(folder) if folder.is_relative() => {
+                Ok(Self::Index(working_folder()?.join(folder)))
             }
             other => Ok(other),
         }
@@ -91,7 +103,7 @@ impl fmt::Display for UsageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "unexpected argument {}; usage: nova-files [{SERVICE_FLAG} | <{FOLDER_ARGUMENT}>]",
+            "unexpected argument {}; usage: nova-files [{SERVICE_FLAG} | {INDEX_FLAG} <{FOLDER_ARGUMENT}> | <{FOLDER_ARGUMENT}>]",
             self.0.display()
         )
     }
@@ -118,6 +130,22 @@ mod tests {
     #[test]
     fn service_flag_runs_only_the_core() {
         assert_eq!(mode(&["--service"]).unwrap(), Mode::Service);
+    }
+
+    #[test]
+    fn index_flag_indexes_the_folder_after_it() {
+        assert_eq!(
+            mode(&["--index", "/srv/bench"]).unwrap(),
+            Mode::Index(PathBuf::from("/srv/bench"))
+        );
+        assert_eq!(
+            mode(&["--index", "bench"]).unwrap(),
+            Mode::Index(PathBuf::from("/home/me/bench"))
+        );
+        assert!(mode(&["--index"]).is_err());
+        assert!(mode(&["--index", "/srv/bench", "extra"]).is_err());
+        let gone = || Err(io::Error::from(io::ErrorKind::NotFound));
+        assert!(Mode::Index(PathBuf::from("/srv")).resolve(gone).is_ok());
     }
 
     #[test]
@@ -183,7 +211,7 @@ mod tests {
         let error = mode(&["--frobnicate"]).unwrap_err();
         assert_eq!(
             error.to_string(),
-            "unexpected argument --frobnicate; usage: nova-files [--service | <folder>]"
+            "unexpected argument --frobnicate; usage: nova-files [--service | --index <folder> | <folder>]"
         );
     }
 }
