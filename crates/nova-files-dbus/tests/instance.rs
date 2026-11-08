@@ -159,3 +159,51 @@ fn name_is_free_again_after_the_service_drops() {
     let again = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
     assert!(matches!(again, Started::Service(_)));
 }
+
+#[test]
+fn a_released_name_is_free_at_once() {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn().unwrap();
+    let Started::Service(first) =
+        nova_files_dbus::start(bus.bus(), core.connector.clone(), |_| {}).unwrap()
+    else {
+        panic!("the first start owns the name");
+    };
+    first.release().unwrap();
+
+    // `first` still holds its connection, so only the release freed it.
+    let again = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
+    assert!(matches!(again, Started::Service(_)));
+    drop(first);
+}
+
+#[test]
+fn a_waiting_start_takes_the_name_once_it_is_freed() {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn().unwrap();
+    let Started::Service(first) =
+        nova_files_dbus::start(bus.bus(), core.connector.clone(), |_| {}).unwrap()
+    else {
+        panic!("the first start owns the name");
+    };
+    // Released a little after the second start first finds it taken.
+    let (_hold, held) = mpsc::channel::<()>();
+    let release = std::thread::spawn(move || {
+        held.recv_timeout(QUIET).ok();
+        first.release().unwrap();
+    });
+
+    let again = nova_files_dbus::start_waiting(bus.bus(), core.connector, |_| {}, WAIT).unwrap();
+    assert!(matches!(again, Started::Service(_)));
+    release.join().unwrap();
+}
+
+#[test]
+fn a_waiting_start_gives_up_after_its_wait() {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn().unwrap();
+    let _first = nova_files_dbus::start(bus.bus(), core.connector.clone(), |_| {}).unwrap();
+
+    let again = nova_files_dbus::start_waiting(bus.bus(), core.connector, |_| {}, QUIET).unwrap();
+    assert!(matches!(again, Started::AlreadyRunning(_)));
+}

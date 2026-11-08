@@ -131,11 +131,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .body | tools/ci-mutants-summary.sh
-      - name: Free disk space in the background
-        # Running in place, the job holds one target/ folder, which fits in
-        # the runner's free space, so nothing waits for the deletion.
-        if: steps.changes.outputs.run == 'true'
-        run: tools/ci-free-disk.sh start
       - uses: cachix/install-nix-action@v31
         if: steps.changes.outputs.run == 'true'
       - uses: cachix/cachix-action@v16
@@ -157,17 +152,29 @@ jobs:
         # The slim shell from nix/mutants-shell.nix, not the full one.
         if: steps.changes.outputs.run == 'true'
         run: nix develop .#mutants --command true
+      - name: Hash the build flags
+        id: flags
+        if: steps.changes.outputs.run == 'true'
+        # The flags (mold, incremental, the ci profile) live in the dev shell
+        # and in Cargo.toml's [profile.*] tables, which rust-cache can't see.
+        # Only those go in the key: a dependency change already changes
+        # rust-cache's lock hash, which falls back to main's latest target/
+        # and rebuilds only what changed, while a key change starts from
+        # nothing. The whole Cargo.toml was in the key before, so every GPUI
+        # bump rebuilt everything (293 s instead of 4 s).
+        run: tools/ci-build-flags-hash.sh >>"$GITHUB_OUTPUT"
       - uses: Swatinem/rust-cache@v2
         if: steps.changes.outputs.run == 'true'
         with:
-          # The build flags (mold, the ci profile) live in the dev shell,
-          # which rust-cache can't see, so the key names the files that set
-          # them. Without it a flag change kept restoring the old target/,
-          # rebuilt everything for the baseline, and never saved a new one.
-          key: ${{ hashFiles('nix/mutants-shell.nix', 'nix/build.nix', 'Cargo.toml') }}
+          key: ${{ steps.flags.outputs.hash }}
+          # Only main saves. A PR can't read another PR's cache, and each
+          # one saved 1 GB, which pushed main's out of the repo's 10 GB.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Warm the cargo cache
         if: steps.changes.outputs.run == 'true' && github.event_name != 'pull_request'
         # The same build the mutation tests start with, so they reuse all of it.
+        env:
+          CARGO_INCREMENTAL: 1
         run: nix develop .#mutants --command cargo nextest run --no-run --cargo-profile ci --workspace
       - name: Mutation tests
         if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request'
@@ -176,7 +183,11 @@ jobs:
         # crates in every copy before the first mutant. --test-workspace
         # builds the same crates the cache holds. --caught and --unviable
         # print a line per mutant, so the log shows progress instead of
-        # sitting silent until the end.
+        # sitting silent until the end. rust-cache sets CARGO_INCREMENTAL=0
+        # for the job, which beats the dev shell's incremental setting, so
+        # it is turned back on here: a mutant rebuilds one crate.
+        env:
+          CARGO_INCREMENTAL: 1
         run: >-
           nix develop .#mutants --command just mutants HEAD^1 ""
           --profile ci --in-place --test-workspace=true --caught --unviable
