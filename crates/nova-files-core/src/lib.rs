@@ -13,6 +13,7 @@ mod index;
 mod jobs;
 mod list;
 mod memory;
+mod open;
 mod places;
 mod run;
 mod search;
@@ -30,6 +31,7 @@ use search::Searcher;
 
 pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
+pub use open::{NotOpened, open_in_default_app};
 pub use places::Home;
 pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
