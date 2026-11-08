@@ -9,5 +9,5 @@ cd "$(dirname "$0")/.."
 {
     cat nix/mutants-shell.nix
     # Every line from a [profile...] header up to the next other header.
-    awk '/^\[/ { keep = /^\[profile[.\]]/ } keep' Cargo.toml
+    awk '/^\[/ { keep = /^\[profile(\.|\])/ } keep' Cargo.toml
 } | sha256sum | cut -d' ' -f1 | sed 's/^/hash=/'
