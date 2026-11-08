@@ -10,7 +10,10 @@
 //! Windows come and go: GPUI ends its run when the last one closes, and the
 //! process carries on without a GPU, waiting for the next window request.
 //! The process ends when the core stops, which it does once idle (see
-//! `nova_files_core::IDLE_EXIT`).
+//! `nova_files_core::IDLE_EXIT`), or when its bus connection closes, as
+//! when the session bus stops: nothing can reach it any more, and a new bus
+//! would start an instance of its own. Open windows close with it, as a
+//! `GApplication`'s do.
 //!
 //! With `NOVA_FILES_STARTUP_TRACE` or `NOVA_FILES_FRAME_TRACE` set, it
 //! first starts the start-up or frame trace (see
@@ -141,6 +144,14 @@ fn run() -> Result<(), Box<dyn Error>> {
     let service = match started {
         Ok(Started::Service(mut service)) => {
             service.serve_file_picker(core.connector.clone(), UiPicker(requests.clone()));
+            let quit = requests.clone();
+            let watched = service.on_bus_lost(move || {
+                report("the D-Bus session ended; stopping");
+                quit.send(Request::Quit);
+            });
+            if let Err(error) = watched {
+                report(&format!("can't watch the D-Bus session: {error}"));
+            }
             Some(service)
         }
         Ok(Started::AlreadyRunning(running)) => {
