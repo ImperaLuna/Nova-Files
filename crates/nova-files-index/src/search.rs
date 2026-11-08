@@ -271,7 +271,13 @@ impl Search<'_> {
             .into_iter()
             .filter_map(|(kind, _, cost, length, source)| {
                 let path = self.path(source)?;
-                let hidden = self.hidden_last && is_hidden(root, &path);
+                // With hidden rows ranked like the rest, every row is
+                // "not hidden" and no path needs walking.
+                let hidden = if self.hidden_last {
+                    is_hidden(root, &path)
+                } else {
+                    false
+                };
                 Some(((kind, hidden, cost, length, source), path))
             })
             .collect();
