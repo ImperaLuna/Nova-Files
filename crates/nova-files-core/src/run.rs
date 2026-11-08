@@ -90,8 +90,8 @@ fn answer(
             jobs::places(client, home.cloned());
             Ok(())
         }
-        Command::Thumbnails { id, first, count } => {
-            client.want_thumbnails(id, first, count);
+        Command::Rows { id, first, count } => {
+            client.want_rows(id, first, count);
             Ok(())
         }
     }

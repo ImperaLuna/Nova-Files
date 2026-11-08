@@ -19,7 +19,7 @@ pub use connection::{
 pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable,
 };
-pub use message::{ClientId, Command, Event};
+pub use message::{ClientId, Command, Event, MAX_ROWS};
 
 /// The application id: the D-Bus name, the Wayland app id and the name of
 /// the D-Bus service file. Set once, in `.cargo/config.toml`.

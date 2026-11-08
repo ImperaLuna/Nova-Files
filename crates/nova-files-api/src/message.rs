@@ -5,23 +5,29 @@ use std::sync::Arc;
 
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 
+/// The most entries one [`Command::Rows`] may name: several screens of
+/// rows. The core leaves out any past it.
+pub const MAX_ROWS: u32 = 512;
+
 /// A request from a client to the core.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// Ask the core to answer with [`Event::Pong`], to show it is running.
     Ping,
     /// List the folder at `path`. The answer is [`Event::FolderListed`] or
-    /// [`Event::FolderUnreadable`] with the same `id`; a listing is followed
-    /// by [`Event::DetailsRead`] batches. A newer `ListFolder` from the same
-    /// client cancels this one, which then may never answer.
+    /// [`Event::FolderUnreadable`] with the same `id`. A newer `ListFolder`
+    /// from the same client cancels this one, which then may never answer.
     ListFolder { id: ListingId, path: PathBuf },
     /// Ask which standard folders exist; the answer is [`Event::Places`].
     Places,
     /// The entries of listing `id` the client shows or is about to show:
-    /// `count` entries from `first`. The core makes thumbnails for them and
-    /// answers each with [`Event::Thumbnail`]; each request replaces the
-    /// one before, so entries scrolled away are dropped.
-    Thumbnails {
+    /// `count` entries from `first`. The core reads the details of those it
+    /// hasn't read yet, answering with [`Event::DetailsRead`], and makes
+    /// their thumbnails, answering each with [`Event::Thumbnail`]. Each
+    /// request replaces the one before, so entries scrolled away are
+    /// dropped. Entries never asked for never have their details read. At
+    /// most [`MAX_ROWS`] entries count.
+    Rows {
         id: ListingId,
         first: EntryId,
         count: u32,
@@ -42,9 +48,8 @@ pub enum Event {
         reason: Unreadable,
     },
     /// Details for entries `first` onward of listing `id`, one per entry,
-    /// in entry order. Batches follow [`Event::FolderListed`] in order, with
-    /// no gaps, until every entry has its details or a newer listing
-    /// cancels them.
+    /// in entry order, answering [`Command::Rows`]. Each entry's details
+    /// come at most once per listing.
     DetailsRead {
         id: ListingId,
         first: EntryId,

@@ -1,6 +1,6 @@
 //! Folder listing through the real core, against real temp folder trees:
 //! the order, links, empty folders, names that aren't UTF-8, folders that
-//! can't be read, and the details that follow a listing.
+//! can't be read, and the details of the rows a client shows.
 
 #![expect(
     clippy::unwrap_used,
@@ -96,27 +96,39 @@ impl Client {
         self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
     }
 
-    /// The details of listing `id`'s `count` entries, with the entry each
-    /// batch started at.
-    fn details(&self, id: u64, count: usize) -> (Vec<u32>, Vec<Details>) {
-        let mut starts = Vec::new();
+    /// Shows rows `first..first + count` of listing `id` and returns the
+    /// details that come back: the entry the first answer starts at, and
+    /// `expected` details from there on.
+    fn show_rows(&self, id: u64, first: u32, count: u32, expected: usize) -> (u32, Vec<Details>) {
+        self.connection
+            .send(Command::Rows {
+                id: ListingId(id),
+                first: EntryId(first),
+                count,
+            })
+            .unwrap();
+        let mut start = None;
         let mut all = Vec::new();
-        while all.len() < count {
+        while all.len() < expected {
             match self.events.recv_timeout(ANSWER_TIMEOUT).unwrap() {
                 Event::DetailsRead {
                     id: ListingId(got),
                     first,
                     details,
                 } if got == id => {
-                    assert_eq!(first.0 as usize, all.len(), "batches arrive in order");
-                    starts.push(first.0);
+                    let start = *start.get_or_insert(first.0);
+                    assert_eq!(
+                        first.0 as usize,
+                        start as usize + all.len(),
+                        "runs arrive in order"
+                    );
                     all.extend_from_slice(&details);
                 }
                 other => panic!("expected details, got {other:?}"),
             }
         }
-        assert_eq!(all.len(), count);
-        (starts, all)
+        assert_eq!(all.len(), expected);
+        (start.unwrap(), all)
     }
 }
 
@@ -176,7 +188,8 @@ fn details_follow_the_listing() {
     let client = client();
 
     let listing = listing(client.list(2, root));
-    let (_, details) = client.details(2, listing.entries.len());
+    let count = listing.entries.len();
+    let (_, details) = client.show_rows(2, 0, u32::try_from(count).unwrap(), count);
 
     let sizes: Vec<Option<u64>> = details.iter().map(|detail| detail.size).collect();
     let link_size = fs::symlink_metadata(root.join("broken")).unwrap().len();
@@ -185,20 +198,70 @@ fn details_follow_the_listing() {
     assert!(details.iter().all(|detail| detail.modified.is_some()));
 }
 
-#[test]
-fn details_of_a_big_folder_come_in_batches() {
-    const FILES: u32 = 3000;
+/// A client with a listing (id 4) of a folder of `files` empty files.
+fn big_folder(files: u32) -> (TempFolder, Client) {
     let folder = TempFolder::new();
-    for index in 0..FILES {
+    for index in 0..files {
         fs::write(folder.path().join(format!("{index:05}.txt")), "").unwrap();
     }
     let client = client();
+    listing(client.list(4, folder.path()));
+    (folder, client)
+}
 
-    let listing = listing(client.list(4, folder.path()));
-    let (starts, details) = client.details(4, listing.entries.len());
+#[test]
+fn only_the_rows_shown_get_details() {
+    let (_folder, client) = big_folder(3000);
 
-    assert!(starts.len() > 1);
+    let (start, details) = client.show_rows(4, 1000, 40, 40);
+
+    // Nothing before row 1000 was read, though it was listed first.
+    assert_eq!(start, 1000);
     assert!(details.iter().all(|detail| detail.size == Some(0)));
+}
+
+#[test]
+fn rows_shown_before_are_not_read_again() {
+    let (_folder, client) = big_folder(100);
+    client.show_rows(4, 0, 10, 10);
+    client.show_rows(4, 20, 10, 10);
+
+    let (start, details) = client.show_rows(4, 0, 30, 10);
+
+    assert_eq!(start, 10);
+    assert_eq!(details.len(), 10);
+}
+
+#[test]
+fn rows_past_the_end_are_left_out() {
+    let (_folder, client) = big_folder(10);
+
+    let (start, details) = client.show_rows(4, 5, 100, 5);
+
+    assert_eq!((start, details.len()), (5, 5));
+    client.connection.send(Command::Ping).unwrap();
+    assert_eq!(
+        client.events.recv_timeout(ANSWER_TIMEOUT).unwrap(),
+        Event::Pong
+    );
+}
+
+#[test]
+fn rows_of_an_older_listing_are_not_read() {
+    let (folder, client) = big_folder(10);
+    listing(client.list(5, folder.path()));
+
+    client
+        .connection
+        .send(Command::Rows {
+            id: ListingId(4),
+            first: EntryId(0),
+            count: 10,
+        })
+        .unwrap();
+    let (start, _) = client.show_rows(5, 3, 1, 1);
+
+    assert_eq!(start, 3);
 }
 
 #[test]

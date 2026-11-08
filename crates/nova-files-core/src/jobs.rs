@@ -7,13 +7,12 @@
 //! result is never sent. The client also drops answers whose id isn't its
 //! newest, which covers the moment between that check and the send.
 //!
-//! After the listing, the same job reads the entries' details and sends
-//! them in batches, under the same cancel rule.
-//!
-//! Each client also has a thumbnail queue (see `thumbs`), told which
-//! listing is on screen as soon as its listing has been sent.
+//! Each client also has a details queue (see `details_queue`) and a
+//! thumbnail queue (see `thumbs`), both told which listing is on screen
+//! just before its listing is sent, and both told which of its rows the
+//! client shows. The listing itself reads names and kinds only.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
@@ -22,7 +21,7 @@ use nova_files_api::{
     ClientGone, Entry, EntryId, Event, EventSink, Listing, ListingId, Unreadable,
 };
 
-use crate::details;
+use crate::details_queue;
 use crate::thumbs::{Queue, Thumbnails};
 
 use crate::list::{self, Stopped};
@@ -40,6 +39,8 @@ pub struct Client {
     events: Arc<dyn EventSink>,
     /// The id of the listing that counts, or [`NO_LISTING`].
     current_listing: Arc<AtomicU64>,
+    /// `None` when its thread couldn't start: rows then show no details.
+    details: Option<Arc<details_queue::Queue>>,
     /// `None` without a cache folder, or when its thread couldn't start.
     thumbnails: Option<Arc<Queue>>,
 }
@@ -49,15 +50,21 @@ impl Client {
         let thumbnails = thumbnails
             .and_then(|setup| Queue::start(setup.clone(), Arc::clone(&events)))
             .map(Arc::new);
+        let details = details_queue::Queue::start(Arc::clone(&events)).map(Arc::new);
         Self {
             events,
+            details,
             current_listing: Arc::new(AtomicU64::new(NO_LISTING)),
             thumbnails,
         }
     }
 
-    /// The client wants thumbnails for `count` entries of listing `id`.
-    pub fn want_thumbnails(&self, id: ListingId, first: EntryId, count: u32) {
+    /// The client shows `count` entries of listing `id` from `first`, or
+    /// is about to: it wants their details and thumbnails.
+    pub fn want_rows(&self, id: ListingId, first: EntryId, count: u32) {
+        if let Some(queue) = &self.details {
+            queue.want(id, first, count);
+        }
         if let Some(queue) = &self.thumbnails {
             queue.want(id, first, count);
         }
@@ -83,9 +90,12 @@ impl Drop for Client {
 
 /// Lists `path` for `client` as listing `id`, replacing any listing before.
 pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
-    // The thumbnail queue keeps the listing on screen until this one is
-    // shown: a folder that can't be read leaves the client where it was.
+    // The details and thumbnail queues keep the listing on screen until
+    // this one is sent: a folder that can't be read leaves the client where
+    // it was. A listing sent but dropped by the client as stale has moved
+    // them on; the window then reads its folder again (see its module).
     client.current_listing.store(id.0, Ordering::SeqCst);
+    let details = client.details.clone();
     let thumbnails = client.thumbnails.clone();
     let events = Arc::clone(&client.events);
     let current = Arc::clone(&client.current_listing);
@@ -118,15 +128,15 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
                 path: job_path.clone(),
                 entries: Arc::clone(&entries),
             });
+            if let Some(queue) = &details {
+                queue.show(id, job_path.clone(), Arc::clone(&entries), || !cancelled());
+            }
             if let Some(queue) = &thumbnails {
                 queue.show(id, job_path.clone(), Arc::clone(&entries), || !cancelled());
             }
-            // A client that left needs no answer, and no details.
-            if events.deliver(listing).is_ok() {
-                send_details(events.as_ref(), id, &job_path, &entries, cancelled);
-            }
-            // Reading the folder and its details is the heaviest work the
-            // core does; most of what it built is free again now.
+            events.deliver(listing).ok();
+            // Reading the folder is the heaviest work the core does; most
+            // of what it built is free again now.
             drop(entries);
             memory::give_back();
         });
@@ -138,37 +148,6 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
                 reason: Unreadable::Failed,
             })
             .ok();
-    }
-}
-
-/// Reads the details of `entries` in the folder at `folder` and sends them
-/// in batches, until done, cancelled or the client is gone.
-fn send_details(
-    events: &dyn EventSink,
-    id: ListingId,
-    folder: &Path,
-    entries: &[Entry],
-    cancelled: impl Fn() -> bool,
-) {
-    for (index, batch) in entries.chunks(details::BATCH).enumerate() {
-        let Some(read) = details::read_batch(folder, batch, &cancelled) else {
-            return;
-        };
-        let first = index * details::BATCH;
-        let Ok(first) = u32::try_from(first) else {
-            return;
-        };
-        if cancelled() {
-            return;
-        }
-        let event = Event::DetailsRead {
-            id,
-            first: EntryId(first),
-            details: read.into(),
-        };
-        if events.deliver(event).is_err() {
-            return;
-        }
     }
 }
 

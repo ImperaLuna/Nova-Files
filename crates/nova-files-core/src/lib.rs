@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod details;
+mod details_queue;
 mod jobs;
 mod list;
 mod memory;

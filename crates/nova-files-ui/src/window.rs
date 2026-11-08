@@ -4,10 +4,12 @@
 //! The window never touches the disk. Going somewhere sends the core a
 //! `ListFolder` with a new id and keeps showing the current folder until
 //! the answer for that id arrives; answers for older ids are dropped. A
-//! folder that can't be read leaves the window where it was (reading it
-//! again if its details were still coming, since asking cancelled them); if
-//! the window has no folder yet, it falls back to the home folder, then the
-//! root.
+//! folder that can't be read leaves the window where it was; if the window
+//! has no folder yet, it falls back to the home folder, then the root. The
+//! core serves rows of the last listing it sent, so when the window dropped
+//! a newer listing it no longer wanted, the folder on screen is read again
+//! (once, and not when it is the folder just refused) to get its rows
+//! served: at the refusal, or at once if the refusal came first.
 //! Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
 //! them, so Up goes where the path on screen says.
 //!
@@ -15,12 +17,14 @@
 //! reads; closing the window drops the connection, which tells the core
 //! one client fewer is using it. Drawing lives in `view`.
 //!
-//! As the list draws, the window asks the core for thumbnails of the rows
-//! on screen and one screen either side, and keeps only the thumbnails of
-//! those rows, shrunk to the size they're drawn (see `thumbnail`). A
-//! thumbnail it lets go of is dropped from GPUI's image atlas too (see
-//! `shown_thumbnails`).
+//! As the list draws, the window tells the core which rows are on screen,
+//! plus one screen either side. The core answers with those rows' details
+//! (read once each; the window keeps them for the listing) and their
+//! thumbnails. The window keeps only the thumbnails of those rows, shrunk
+//! to the size they're drawn (see `thumbnail`). A thumbnail it lets go of
+//! is dropped from GPUI's image atlas too (see `shown_thumbnails`).
 
+use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -71,19 +75,23 @@ pub struct MainWindow {
     connection: Option<Connection>,
     /// The folder on screen, once its first listing has arrived.
     pub(crate) listing: Option<Listing>,
-    /// The details of the listing's first entries, in entry order; the
-    /// rest are still being read.
-    pub(crate) details: Vec<Details>,
-    /// Thumbnails of the rows in `thumbnails_wanted`, by row.
+    /// The details the core has read so far, by row. Rows never shown have
+    /// none.
+    details: HashMap<usize, Details>,
+    /// Thumbnails of the rows in `rows_wanted`, by row.
     thumbnails: ShownThumbnails,
     /// The window's scale factor when it last drew, for sizing thumbnails.
     scale_factor: f32,
-    /// The rows the core was last asked to make thumbnails for.
-    thumbnails_wanted: Range<usize>,
+    /// The rows the core was last told about: on screen and one screen
+    /// either side.
+    rows_wanted: Range<usize>,
     /// The rows the list drew last; see [`Self::rows_drawn`].
     rows_drawn: Range<usize>,
     /// The listing asked for most recently; only its answer counts.
     asked: Option<ListingId>,
+    /// Whether the core sent a listing since the one on screen, which the
+    /// window dropped: the core now serves rows of that one, not this.
+    core_moved: bool,
     next_listing: u64,
     /// Where to go, in order, while the window has no folder and the one
     /// asked for can't be read.
@@ -156,12 +164,13 @@ impl MainWindow {
             status,
             connection,
             listing: None,
-            details: Vec::new(),
+            details: HashMap::new(),
             thumbnails: ShownThumbnails::default(),
-            thumbnails_wanted: 0..0,
+            rows_wanted: 0..0,
             rows_drawn: 0..0,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
+            core_moved: false,
             next_listing: 0,
             // Popped from the end: home first, then the root.
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home],
@@ -202,7 +211,7 @@ impl MainWindow {
     /// and Size are empty until the core has read that entry's details.
     pub fn columns(&self, index: usize) -> Option<ColumnText> {
         let entry = self.listing.as_ref()?.entries.get(index)?;
-        let details = self.details.get(index).copied().unwrap_or_default();
+        let details = self.details.get(&index).copied().unwrap_or_default();
         Some(ColumnText {
             modified: details.modified.map(columns::modified).unwrap_or_default(),
             type_name: columns::type_name(&entry.name, entry.kind),
@@ -216,7 +225,7 @@ impl MainWindow {
     }
 
     /// The list drew rows `range`. It also draws its first row alone, each
-    /// frame, to measure it; asking for that row's thumbnails would swap
+    /// frame, to measure it; asking for that row alone would swap
     /// the request back and forth every frame, and each answer would draw
     /// another frame. The rows on screen are the last range drawn, so the
     /// request waits until the frame is done.
@@ -232,8 +241,8 @@ impl MainWindow {
         });
     }
 
-    /// Rows `visible` are on screen: asks for their thumbnails and one
-    /// screen either side, and forgets the ones now out of range.
+    /// Rows `visible` are on screen: asks for their details and thumbnails
+    /// and one screen either side, and forgets thumbnails now out of range.
     fn show_rows(&mut self, visible: Range<usize>, window: &mut Window, cx: &mut App) {
         let Some(listing) = &self.listing else { return };
         let screen = visible.len();
@@ -242,14 +251,14 @@ impl MainWindow {
                 .end
                 .saturating_add(screen)
                 .min(listing.entries.len());
-        if wanted == self.thumbnails_wanted {
+        if wanted == self.rows_wanted {
             return;
         }
         let (Ok(first), Ok(count)) = (u32::try_from(wanted.start), u32::try_from(wanted.len()))
         else {
             return;
         };
-        let command = Command::Thumbnails {
+        let command = Command::Rows {
             id: listing.id,
             first: EntryId(first),
             count,
@@ -258,7 +267,7 @@ impl MainWindow {
             connection.send(command).ok();
         }
         release(self.thumbnails.keep_rows(&wanted), Some(window), cx);
-        self.thumbnails_wanted = wanted;
+        self.rows_wanted = wanted;
     }
 
     /// The scroll position of the list on screen.
@@ -319,9 +328,10 @@ impl MainWindow {
                 // Read again in place: keep the scroll position.
                 let same_folder = self.folder() == Some(path.as_path());
                 self.listing = Some(listing);
-                self.details = Vec::new();
+                self.core_moved = false;
+                self.details = HashMap::new();
                 release(self.thumbnails.take_all(), None, cx);
-                self.thumbnails_wanted = 0..0;
+                self.rows_wanted = 0..0;
                 if !same_folder {
                     self.scroll = UniformListScrollHandle::new();
                 }
@@ -336,12 +346,7 @@ impl MainWindow {
                             self.open(&fallback);
                         }
                     }
-                    // Asking cancelled the details still on their way, so
-                    // the folder on screen is read again, once: not when it
-                    // is the folder that was just refused.
-                    Some(listing)
-                        if self.details.len() < listing.entries.len() && listing.path != path =>
-                    {
+                    Some(listing) if self.core_moved && listing.path != path => {
                         let shown = listing.path.clone();
                         self.open(&shown);
                     }
@@ -349,29 +354,49 @@ impl MainWindow {
                 }
                 cx.emit(WindowEvent::Refused(path));
             }
-            Event::DetailsRead { id, first, details }
-                if self.listing.as_ref().map(|listing| listing.id) == Some(id)
-                    && usize::try_from(first.0).ok() == Some(self.details.len()) =>
-            {
-                self.details.extend_from_slice(&details);
-                cx.notify();
+            Event::DetailsRead { id, first, details } => {
+                if let Some(listing) = &self.listing
+                    && listing.id == id
+                    && let Ok(first) = usize::try_from(first.0)
+                {
+                    let rows = first..listing.entries.len();
+                    self.details.extend(rows.zip(details.iter().copied()));
+                    cx.notify();
+                }
             }
             // Checked against the listing once shrunk, when it counts.
             Event::Thumbnail { id, entry, png } => {
                 if let Ok(index) = usize::try_from(entry.0)
-                    && self.thumbnails_wanted.contains(&index)
+                    && self.rows_wanted.contains(&index)
                 {
                     self.shrink_thumbnail(id, index, png, cx);
                 }
             }
             // An answer for a folder the window has since moved away from.
-            Event::FolderListed(_) | Event::FolderUnreadable { .. } | Event::DetailsRead { .. } => {
-            }
+            Event::FolderListed(stale) => self.dropped_listing(stale.id),
+            Event::FolderUnreadable { .. } => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);
                 cx.notify();
             }
+        }
+    }
+
+    /// The window dropped listing `id`, which it no longer wanted. One newer
+    /// than the folder on screen moved the core's row queues to it. A
+    /// refusal still to come reads the folder on screen again (see
+    /// `on_event`); with nothing asked for, nothing would, so it is read
+    /// again now.
+    fn dropped_listing(&mut self, id: ListingId) {
+        let Some(listing) = &self.listing else { return };
+        if id <= listing.id {
+            return;
+        }
+        self.core_moved = true;
+        if self.asked.is_none() {
+            let shown = listing.path.clone();
+            self.open(&shown);
         }
     }
 
@@ -386,17 +411,17 @@ impl MainWindow {
         }
         release(self.thumbnails.take_all(), Some(window), cx);
         if let Some(listing) = &self.listing
-            && !self.thumbnails_wanted.is_empty()
+            && !self.rows_wanted.is_empty()
             && let Some(connection) = &self.connection
         {
-            let forget = Command::Thumbnails {
+            let forget = Command::Rows {
                 id: listing.id,
                 first: EntryId(0),
                 count: 0,
             };
             connection.send(forget).ok();
         }
-        self.thumbnails_wanted = 0..0;
+        self.rows_wanted = 0..0;
     }
 
     /// A thumbnail's side in device pixels at the current scale.
@@ -428,7 +453,7 @@ impl MainWindow {
     /// the window still draws at that size.
     fn thumbnail_ready(&mut self, made: Shrunk, cx: &mut Context<Self>) {
         if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
-            && self.thumbnails_wanted.contains(&made.index)
+            && self.rows_wanted.contains(&made.index)
             && made.side == self.thumbnail_side()
         {
             let replaced = self.thumbnails.insert(made.index, Arc::new(made.image));

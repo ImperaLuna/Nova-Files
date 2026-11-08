@@ -85,7 +85,7 @@ fn first_thumbnail(client: &Client, folder: &Path) -> (EntryId, Vec<u8>) {
     }
     client
         .connection
-        .send(Command::Thumbnails {
+        .send(Command::Rows {
             id,
             first: EntryId(0),
             count: ROWS,
@@ -148,7 +148,7 @@ fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
     let want = |first| {
         client
             .connection
-            .send(Command::Thumbnails {
+            .send(Command::Rows {
                 id: ListingId(1),
                 first: EntryId(first),
                 count: ROWS,
@@ -205,7 +205,7 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
     for first in [ROWS, 0] {
         client
             .connection
-            .send(Command::Thumbnails {
+            .send(Command::Rows {
                 id: ListingId(1),
                 first: EntryId(first),
                 count: ROWS,
@@ -249,7 +249,7 @@ fn thumbnailed_entries(
         match client.events.recv_timeout(WAIT).unwrap() {
             Event::FolderListed(listing) if listing.id == id => client
                 .connection
-                .send(Command::Thumbnails {
+                .send(Command::Rows {
                     id,
                     first: EntryId(0),
                     count: ROWS,
