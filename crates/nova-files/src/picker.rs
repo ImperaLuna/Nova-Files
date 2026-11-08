@@ -33,7 +33,7 @@ mod tests {
         picker.pick(PickRequest {
             id: PickId(4),
             kind: PickKind::Save {
-                name: "a.txt".to_owned(),
+                name: "a.txt".into(),
             },
             title: "Save".to_owned(),
             accept_label: None,
@@ -43,6 +43,8 @@ mod tests {
             reply: PickReply::new(drop),
         });
         picker.close(PickId(4));
+        // With the sender gone, a close that sent nothing ends the wait.
+        drop(picker);
 
         assert!(matches!(received.wait(), Some(Request::Pick(request)) if request.id == PickId(4)));
         assert!(matches!(

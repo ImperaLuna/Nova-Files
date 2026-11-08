@@ -26,7 +26,7 @@ use std::time::Duration;
 use gpui::{
     Entity, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, TestAppContext, VisualTestContext,
 };
-use nova_files_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
+use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_ui::{CoreStatus, MainWindow, WindowEvent};
 
 /// A folder under the system temp folder, removed when dropped.
@@ -362,12 +362,37 @@ async fn a_picker_still_goes_into_folders(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn a_picker_picks_nothing_from_a_listing_it_has_left(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree();
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let (request, answers) = pick_request(OPEN_ONE);
+    view.update(cx, |view, _| view.set_pick(request));
+    let first = view.read_with(cx, |view, _| view.listing_id()).unwrap();
+    let notes = EntryId(1);
+
+    // While the next folder loads, the old rows are still on screen.
+    view.update(cx, |view, _| view.open(&tree.path().join("Projects")));
+    assert!(!view.update(cx, |view, _| view.pick_entry(first, notes)));
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+
+    // Back in the same folder, the same row, but a newer listing.
+    view.update(cx, |view, _| view.go_up());
+    wait_for_folder(&view, cx, tree.path()).await;
+    assert!(!view.update(cx, |view, _| view.pick_entry(first, notes)));
+
+    assert!(answers.try_recv().is_err());
+    let now = view.read_with(cx, |view, _| view.listing_id()).unwrap();
+    assert!(view.update(cx, |view, _| view.pick_entry(now, notes)));
+}
+
+#[gpui::test]
 async fn a_save_picker_leaves_double_clicked_files_alone(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(PickKind::Save {
-        name: "a.txt".to_owned(),
+        name: "a.txt".into(),
     });
     view.update(cx, |view, _| view.set_pick(request));
 

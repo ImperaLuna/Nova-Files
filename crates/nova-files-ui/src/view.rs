@@ -156,6 +156,7 @@ impl MainWindow {
                 let Some(listing) = &this.listing else {
                     return Vec::new();
                 };
+                let listing_id = listing.id;
                 listing
                     .entries
                     .get(range.clone())
@@ -184,13 +185,13 @@ impl MainWindow {
                                     this.open_entry(id);
                                 }))
                                 .into_any_element(),
-                            EntryKind::File if this.picks_files() => row
-                                .cursor_pointer()
+                            // A double-click picks it in a picker; elsewhere it
+                            // does nothing yet.
+                            EntryKind::File => row
                                 .on_click(cx.listener(move |this, event, window, _| {
-                                    this.file_clicked(id, event, window);
+                                    this.file_clicked(listing_id, id, event, window);
                                 }))
                                 .into_any_element(),
-                            EntryKind::File => row.into_any_element(),
                         }
                     })
                     .collect()

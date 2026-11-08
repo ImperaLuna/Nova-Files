@@ -25,9 +25,7 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use gpui::{
-    App, AppContext as _, Bounds, Global, Task, TitlebarOptions, WindowBounds, WindowOptions, size,
-};
+use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
 use nova_files_api::{Connector, PickRequest};
 
 pub use columns::ColumnText;
@@ -117,24 +115,24 @@ impl Global for RequestLoop {}
 
 /// Opens a main window on its folder (or the home folder), or a picker
 /// window titled as the asking app wants, centred on the main display.
-/// When that fails with no window open, `recover_gpu` gets the folder; a
-/// picker that fails to open answers cancelled.
+/// When a main window fails with no window open, `recover_gpu` gets the
+/// folder. A picker that fails to open, or that can't answer its request
+/// yet, answers cancelled: restarting would lose the asking app's call.
 fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu, cx: &mut App) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
     let (folder, pick) = match opening {
         Opening::Folder(folder) => (folder, None),
-        Opening::Pick(request) => (request.folder.clone(), Some(request)),
+        Opening::Pick(request) if !pick::can_answer(&request) => return,
+        Opening::Pick(mut request) => (request.folder.take(), Some(request)),
     };
+    let recovers = pick.is_none();
     let mut options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         app_id: Some(nova_files_api::APP_ID.to_owned()),
         ..WindowOptions::default()
     };
     if let Some(request) = &pick {
-        options.titlebar = Some(TitlebarOptions {
-            title: Some(request.title.clone().into()),
-            ..TitlebarOptions::default()
-        });
+        options.titlebar = Some(pick::titlebar(&request.title));
     }
     let connector = connector.clone();
     let folder = folder.unwrap_or_else(home_folder);
@@ -149,7 +147,7 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
         })
     });
     if let Err(error) = opened {
-        if cx.windows().is_empty() {
+        if recovers && cx.windows().is_empty() {
             recover_gpu(&recover_folder);
         }
         // The display refused a window; any open ones carry on. Until there
