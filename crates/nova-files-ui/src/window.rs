@@ -17,22 +17,24 @@
 //!
 //! As the list draws, the window asks the core for thumbnails of the rows
 //! on screen and one screen either side, and keeps only the thumbnails of
-//! those rows, shrunk to the size they're drawn (see `thumbnail`).
+//! those rows, shrunk to the size they're drawn (see `thumbnail`). A
+//! thumbnail it lets go of is dropped from GPUI's image atlas too (see
+//! `shown_thumbnails`).
 
-use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{Context, EventEmitter, RenderImage, Task, UniformListScrollHandle, Window};
+use gpui::{App, Context, EventEmitter, RenderImage, Task, UniformListScrollHandle, Window};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
     Listing, ListingId, Place,
 };
 
 use crate::columns::{self, ColumnText};
+use crate::shown_thumbnails::ShownThumbnails;
 use crate::theme::size;
 use crate::thumbnail;
 
@@ -73,7 +75,7 @@ pub struct MainWindow {
     /// rest are still being read.
     pub(crate) details: Vec<Details>,
     /// Thumbnails of the rows in `thumbnails_wanted`, by row.
-    thumbnails: HashMap<usize, Arc<RenderImage>>,
+    thumbnails: ShownThumbnails,
     /// The window's scale factor when it last drew, for sizing thumbnails.
     scale_factor: f32,
     /// The rows the core was last asked to make thumbnails for.
@@ -155,7 +157,7 @@ impl MainWindow {
             connection,
             listing: None,
             details: Vec::new(),
-            thumbnails: HashMap::new(),
+            thumbnails: ShownThumbnails::default(),
             thumbnails_wanted: 0..0,
             rows_drawn: 0..0,
             scale_factor: DEFAULT_SCALE_FACTOR,
@@ -210,7 +212,7 @@ impl MainWindow {
 
     /// The thumbnail of row `index`, once the core has sent it.
     pub fn thumbnail(&self, index: usize) -> Option<&Arc<RenderImage>> {
-        self.thumbnails.get(&index)
+        self.thumbnails.get(index)
     }
 
     /// The list drew rows `range`. It also draws its first row alone, each
@@ -225,12 +227,14 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         self.rows_drawn = range;
-        cx.defer_in(window, |this, _, _| this.show_rows(this.rows_drawn.clone()));
+        cx.defer_in(window, |this, window, cx| {
+            this.show_rows(this.rows_drawn.clone(), window, cx);
+        });
     }
 
     /// Rows `visible` are on screen: asks for their thumbnails and one
     /// screen either side, and forgets the ones now out of range.
-    fn show_rows(&mut self, visible: Range<usize>) {
+    fn show_rows(&mut self, visible: Range<usize>, window: &mut Window, cx: &mut App) {
         let Some(listing) = &self.listing else { return };
         let screen = visible.len();
         let wanted = visible.start.saturating_sub(screen)
@@ -253,7 +257,7 @@ impl MainWindow {
         if let Some(connection) = &self.connection {
             connection.send(command).ok();
         }
-        self.thumbnails.retain(|index, _| wanted.contains(index));
+        release(self.thumbnails.keep_rows(&wanted), Some(window), cx);
         self.thumbnails_wanted = wanted;
     }
 
@@ -316,7 +320,7 @@ impl MainWindow {
                 let same_folder = self.folder() == Some(path.as_path());
                 self.listing = Some(listing);
                 self.details = Vec::new();
-                self.thumbnails.clear();
+                release(self.thumbnails.take_all(), None, cx);
                 self.thumbnails_wanted = 0..0;
                 if !same_folder {
                     self.scroll = UniformListScrollHandle::new();
@@ -374,13 +378,13 @@ impl MainWindow {
     /// The window is drawing at `scale_factor`. Thumbnails shrunk for
     /// another scale (the window moved to another screen) are dropped and
     /// asked for again: an empty request first, so the core sends them anew.
-    pub fn set_scale_factor(&mut self, scale_factor: f32) {
+    pub fn set_scale_factor(&mut self, scale_factor: f32, window: &mut Window, cx: &mut App) {
         let before = self.thumbnail_side();
         self.scale_factor = scale_factor;
         if self.thumbnail_side() == before {
             return;
         }
-        self.thumbnails.clear();
+        release(self.thumbnails.take_all(), Some(window), cx);
         if let Some(listing) = &self.listing
             && !self.thumbnails_wanted.is_empty()
             && let Some(connection) = &self.connection
@@ -427,7 +431,8 @@ impl MainWindow {
             && self.thumbnails_wanted.contains(&made.index)
             && made.side == self.thumbnail_side()
         {
-            self.thumbnails.insert(made.index, Arc::new(made.image));
+            let replaced = self.thumbnails.insert(made.index, Arc::new(made.image));
+            release(replaced, None, cx);
             cx.notify();
         }
     }
@@ -442,6 +447,19 @@ impl MainWindow {
 }
 
 impl EventEmitter<WindowEvent> for MainWindow {}
+
+/// Drops `images` from GPUI's image atlas. `window` is the window being
+/// drawn or updated, if any: GPUI takes it out of its list meanwhile, so
+/// it has to be named.
+fn release(
+    images: impl IntoIterator<Item = Arc<RenderImage>>,
+    mut window: Option<&mut Window>,
+    cx: &mut App,
+) {
+    for image in images {
+        cx.drop_image(image, window.as_deref_mut());
+    }
+}
 
 const ROOT_FOLDER: &str = "/";
 

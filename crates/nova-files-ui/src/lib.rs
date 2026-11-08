@@ -12,6 +12,7 @@
 mod assets;
 mod columns;
 mod requests;
+mod shown_thumbnails;
 mod theme;
 mod thumbnail;
 mod view;

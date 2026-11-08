@@ -26,6 +26,7 @@ use crate::details;
 use crate::thumbs::{Queue, Thumbnails};
 
 use crate::list::{self, Stopped};
+use crate::memory;
 use crate::places::{self, Home};
 
 const LIST_THREAD: &str = "nova-files-list";
@@ -124,6 +125,10 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
             if events.deliver(listing).is_ok() {
                 send_details(events.as_ref(), id, &job_path, &entries, cancelled);
             }
+            // Reading the folder and its details is the heaviest work the
+            // core does; most of what it built is free again now.
+            drop(entries);
+            memory::give_back();
         });
     if spawned.is_err() {
         client

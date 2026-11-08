@@ -22,7 +22,11 @@
 //! libraries a cold start no longer reads. If the first window then can't
 //! set up its GPU, the program starts again on that folder with every
 //! driver (see `restart_with_every_driver`).
+//!
+//! It also hands the core a way to give freed memory back to the system
+//! after heavy work (see `memory`).
 
+mod memory;
 mod mode;
 
 use std::cell::Cell;
@@ -57,6 +61,7 @@ fn main() -> ExitCode {
         report(&format!("{error}"));
     }
     skip_absent_vulkan_drivers();
+    nova_files_core::set_give_back(memory::give_back);
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
