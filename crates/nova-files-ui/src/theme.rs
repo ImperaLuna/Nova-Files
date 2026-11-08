@@ -91,6 +91,12 @@ pub mod size {
     pub const DIVIDER: Pixels = px(1.0);
 }
 
+/// How much of an element shows through.
+pub mod opacity {
+    /// A file the picker's type filter leaves out: still there, set back.
+    pub const DIMMED: f32 = 0.4;
+}
+
 /// Corner radii.
 pub mod radius {
     use gpui::{Pixels, px};

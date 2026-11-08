@@ -11,6 +11,9 @@
 use std::ffi::OsString;
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
+
+use crate::file_type::FileTypes;
 
 /// One pick request, unique while the program runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -102,6 +105,8 @@ pub struct PickRequest {
     pub filter: Option<usize>,
     /// Where to start; the home folder when `None`.
     pub folder: Option<PathBuf>,
+    /// The MIME database for the filters' MIME rules, once it is read.
+    pub types: Option<Arc<dyn FileTypes>>,
     pub reply: PickReply,
 }
 

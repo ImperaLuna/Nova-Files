@@ -19,7 +19,7 @@ use gpui::{
 use nova_files_api::{EntryKind, Place, PlaceKind};
 
 use crate::assets::Icon;
-use crate::theme::{color, radius, size};
+use crate::theme::{color, opacity, radius, size};
 use crate::window::MainWindow;
 
 impl Render for MainWindow {
@@ -181,6 +181,7 @@ impl MainWindow {
                         ));
                         let selected = this.pick_selection() == Some((listing_id, id));
                         row.when(selected, |row| row.bg(rgb(color::ROW_SELECTED)))
+                            .when(this.pick_dims(index), |row| row.opacity(opacity::DIMMED))
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
                                 this.entry_clicked((listing_id, id), event, window, cx);

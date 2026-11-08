@@ -12,6 +12,7 @@ mod details_queue;
 mod jobs;
 mod list;
 mod memory;
+mod mime;
 mod places;
 mod run;
 mod thumbs;
@@ -25,6 +26,7 @@ use std::time::Duration;
 use nova_files_api::Connector;
 
 pub use memory::set_give_back;
+pub use mime::MimeTypes;
 pub use places::Home;
 pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
