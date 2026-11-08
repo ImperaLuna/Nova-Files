@@ -34,7 +34,7 @@ mod search;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -53,7 +53,9 @@ pub use file_chooser::{
 pub use files::INTERFACE as FILES_INTERFACE;
 pub use holds::{Hold, HoldError, Holds};
 pub use nova_files_api::APP_ID;
-pub use search::INTERFACE as SEARCH_INTERFACE;
+pub use search::{
+    ACTIVATION_TOKEN, INTERFACE as SEARCH_INTERFACE, OPEN_URI_INTERFACE, PORTAL_NAME, PORTAL_PATH,
+};
 
 /// The longest any D-Bus call made from here may take, and the longest
 /// connecting to the bus may take.
@@ -272,14 +274,21 @@ fn connect(
     on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
 ) -> zbus::Result<Connection> {
     let (result_sender, result) = mpsc::channel();
+    let on_open = Arc::new(on_open);
+    let search_open = Arc::clone(&on_open);
     thread::Builder::new()
         .name(CONNECT_THREAD.to_owned())
         .spawn(move || {
-            let connection = bus.builder().and_then(|builder| {
-                builder
-                    .serve_at(&path, files::Files::new(connector.clone()))?
-                    .serve_at(&path, search::Search)?
-                    .serve_at(&path, application::Application::new(connector, on_open))?
+            let connection = Holds::new(connector.clone(), &bus).and_then(|holds| {
+                let searches = search::Searches::new(connector.clone(), holds, move |folder| {
+                    search_open(folder);
+                });
+                let application =
+                    application::Application::new(connector.clone(), move |folder| on_open(folder));
+                bus.builder()?
+                    .serve_at(&path, files::Files::new(connector))?
+                    .serve_at(&path, searches)?
+                    .serve_at(&path, application)?
                     .build()
             });
             result_sender.send(connection).ok();
