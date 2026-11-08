@@ -7,7 +7,12 @@
 let
   craneLib = crane.mkLib pkgs;
   src = craneLib.cleanCargoSource ../.;
-  appId = (pkgs.lib.importTOML ../.cargo/config.toml).env.NOVA_FILES_APP_ID;
+  cargoEnv = (pkgs.lib.importTOML ../.cargo/config.toml).env;
+  appId = cargoEnv.NOVA_FILES_APP_ID;
+  # xdg-desktop-portal finds the file picker by this bus name; portals.conf
+  # picks it by the `.portal` file's name, its last part.
+  portalBusName = cargoEnv.NOVA_FILES_PORTAL_BUS_NAME;
+  portalName = pkgs.lib.last (pkgs.lib.splitString "." portalBusName);
 
   # GPUI opens these with dlopen at run time, so they go on the library path
   # of the wrapped binary and of tests, not only on the link line.
@@ -76,7 +81,8 @@ let
   };
   ciArtifacts = craneLib.buildDepsOnly ciArgs;
 
-  # The installed app: binaries, the D-Bus service file and the wrapper.
+  # The installed app: binaries, the D-Bus service files, the desktop entry,
+  # the file picker's .portal file and the wrapper.
   mkPackage =
     args: artifacts:
     craneLib.buildPackage (
@@ -96,6 +102,18 @@ let
           install -Dm644 ${../data/desktop-entry.in} \
             $out/share/applications/${appId}.desktop
           substituteInPlace $out/share/applications/${appId}.desktop \
+            --replace-fail "@bin@" "$out/bin/nova-files"
+          # The file picker: xdg-desktop-portal reads the .portal file, and
+          # D-Bus starts the program in service mode when the portal first
+          # calls it.
+          install -Dm644 ${../data/portal.in} \
+            $out/share/xdg-desktop-portal/portals/${portalName}.portal
+          substituteInPlace $out/share/xdg-desktop-portal/portals/${portalName}.portal \
+            --replace-fail "@portal_bus_name@" "${portalBusName}"
+          install -Dm644 ${../data/portal-dbus-service.in} \
+            $out/share/dbus-1/services/${portalBusName}.service
+          substituteInPlace $out/share/dbus-1/services/${portalBusName}.service \
+            --replace-fail "@portal_bus_name@" "${portalBusName}" \
             --replace-fail "@bin@" "$out/bin/nova-files"
         '';
         postFixup = ''
@@ -121,6 +139,7 @@ in
     ciArgs
     ciArtifacts
     runtimeLibs
+    portalName
     ;
 
   package = mkPackage commonArgs cargoArtifacts;
