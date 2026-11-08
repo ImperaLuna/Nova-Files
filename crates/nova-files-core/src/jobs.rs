@@ -90,8 +90,10 @@ impl Drop for Client {
 
 /// Lists `path` for `client` as listing `id`, replacing any listing before.
 pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
-    // The thumbnail queue keeps the listing on screen until this one is
-    // shown: a folder that can't be read leaves the client where it was.
+    // The details and thumbnail queues keep the listing on screen until
+    // this one is sent: a folder that can't be read leaves the client where
+    // it was. A listing sent but dropped by the client as stale has moved
+    // them on; the window then reads its folder again (see its module).
     client.current_listing.store(id.0, Ordering::SeqCst);
     let details = client.details.clone();
     let thumbnails = client.thumbnails.clone();

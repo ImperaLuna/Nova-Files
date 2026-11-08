@@ -7,8 +7,9 @@
 //! entry order. An entry's details are read once per listing, so scrolling
 //! back costs nothing. Entries never shown are never read: a 100,000-entry
 //! folder costs a few screens of reads, not 100,000. A new listing replaces
-//! the old one and its work; the worker asks before each read whether its
-//! listing is still the one shown.
+//! the old one and its work. Before each read the worker asks whether its
+//! run is still wanted (same listing, and some of it still asked for), so
+//! a run scrolled away stops at once and the rows now shown come next.
 
 use std::collections::HashSet;
 use std::ops::Range;
@@ -16,15 +17,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 
-use nova_files_api::{ClientGone, Details, Entry, EntryId, Event, EventSink, ListingId};
+use nova_files_api::{ClientGone, Details, Entry, EntryId, Event, EventSink, ListingId, MAX_ROWS};
 
 use crate::details;
 
 /// Entries per [`Event::DetailsRead`]: a few screens of rows, so the
 /// rows asked for arrive in one or two events, each one redraw.
 const BATCH: usize = 256;
-/// The most entries one request may name: several screens of rows.
-const MAX_WANTED: u32 = 512;
 const WORKER_THREAD: &str = "nova-files-details";
 
 /// One client's details work. Dropping it stops the worker.
@@ -107,7 +106,7 @@ impl Queue {
                 && listing.id == id
             {
                 let first = usize::try_from(first.0).unwrap_or(usize::MAX);
-                let count = usize::try_from(count.min(MAX_WANTED)).unwrap_or_default();
+                let count = usize::try_from(count.min(MAX_ROWS)).unwrap_or_default();
                 let end = first.saturating_add(count).min(listing.entries.len());
                 state.wanted = first.min(end)..end;
             }
@@ -133,14 +132,17 @@ impl Shared {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Whether listing `id` is still the one shown.
-    fn current(&self, id: ListingId) -> bool {
+    /// Whether `run` is still wanted: its listing is the one shown, and
+    /// the client still asks for some of its entries.
+    fn still_wanted(&self, run: &Run) -> bool {
         let state = self.lock();
         !state.closed
             && state
                 .listing
                 .as_ref()
-                .is_some_and(|listing| listing.id == id)
+                .is_some_and(|listing| listing.id == run.listed.id)
+            && state.wanted.start < run.entries.end
+            && run.entries.start < state.wanted.end
     }
 
     /// Waits for the next run: the first wanted entry not read yet and the
@@ -214,7 +216,7 @@ fn work(shared: &Shared, events: &dyn EventSink) {
         // `want` keeps the wanted entries inside the listing.
         let entries = listed.entries.get(run.entries.clone()).unwrap_or_default();
         let Some(read) =
-            details::read_batch(&listed.folder, entries, || !shared.current(listed.id))
+            details::read_batch(&listed.folder, entries, || !shared.still_wanted(&run))
         else {
             continue;
         };

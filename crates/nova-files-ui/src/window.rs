@@ -5,7 +5,10 @@
 //! `ListFolder` with a new id and keeps showing the current folder until
 //! the answer for that id arrives; answers for older ids are dropped. A
 //! folder that can't be read leaves the window where it was; if the window
-//! has no folder yet, it falls back to the home folder, then the root.
+//! has no folder yet, it falls back to the home folder, then the root. The
+//! core serves rows of the last listing it sent, so when the window dropped
+//! a listing it no longer wanted, the folder on screen is read again (once,
+//! and not when it is the folder just refused) to get its rows served.
 //! Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
 //! them, so Up goes where the path on screen says.
 //!
@@ -85,6 +88,9 @@ pub struct MainWindow {
     rows_drawn: Range<usize>,
     /// The listing asked for most recently; only its answer counts.
     asked: Option<ListingId>,
+    /// Whether the core sent a listing since the one on screen, which the
+    /// window dropped: the core now serves rows of that one, not this.
+    core_moved: bool,
     next_listing: u64,
     /// Where to go, in order, while the window has no folder and the one
     /// asked for can't be read.
@@ -163,6 +169,7 @@ impl MainWindow {
             rows_drawn: 0..0,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
+            core_moved: false,
             next_listing: 0,
             // Popped from the end: home first, then the root.
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home],
@@ -320,6 +327,7 @@ impl MainWindow {
                 // Read again in place: keep the scroll position.
                 let same_folder = self.folder() == Some(path.as_path());
                 self.listing = Some(listing);
+                self.core_moved = false;
                 self.details = HashMap::new();
                 release(self.thumbnails.take_all(), None, cx);
                 self.rows_wanted = 0..0;
@@ -331,10 +339,17 @@ impl MainWindow {
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
                 self.asked = None;
-                if self.listing.is_none()
-                    && let Some(fallback) = self.fallbacks.pop()
-                {
-                    self.open(&fallback);
+                match &self.listing {
+                    None => {
+                        if let Some(fallback) = self.fallbacks.pop() {
+                            self.open(&fallback);
+                        }
+                    }
+                    Some(listing) if self.core_moved && listing.path != path => {
+                        let shown = listing.path.clone();
+                        self.open(&shown);
+                    }
+                    Some(_) => {}
                 }
                 cx.emit(WindowEvent::Refused(path));
             }
@@ -357,7 +372,8 @@ impl MainWindow {
                 }
             }
             // An answer for a folder the window has since moved away from.
-            Event::FolderListed(_) | Event::FolderUnreadable { .. } => {}
+            Event::FolderListed(_) => self.core_moved = true,
+            Event::FolderUnreadable { .. } => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

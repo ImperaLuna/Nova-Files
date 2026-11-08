@@ -5,6 +5,10 @@ use std::sync::Arc;
 
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 
+/// The most entries one [`Command::Rows`] may name: several screens of
+/// rows. The core leaves out any past it.
+pub const MAX_ROWS: u32 = 512;
+
 /// A request from a client to the core.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -21,7 +25,8 @@ pub enum Command {
     /// hasn't read yet, answering with [`Event::DetailsRead`], and makes
     /// their thumbnails, answering each with [`Event::Thumbnail`]. Each
     /// request replaces the one before, so entries scrolled away are
-    /// dropped. Entries never asked for never have their details read.
+    /// dropped. Entries never asked for never have their details read. At
+    /// most [`MAX_ROWS`] entries count.
     Rows {
         id: ListingId,
         first: EntryId,

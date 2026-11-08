@@ -25,7 +25,7 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::UNIX_EPOCH;
 
-use nova_files_api::{Entry, EntryId, EntryKind, Event, EventSink, ListingId, uri};
+use nova_files_api::{Entry, EntryId, EntryKind, Event, EventSink, ListingId, MAX_ROWS, uri};
 
 /// The thumbnails folder under the cache folder.
 const THUMBNAILS_FOLDER: &str = "thumbnails";
@@ -36,8 +36,6 @@ const HELPER_NAME: &str = "nova-files-thumbnailer";
 /// Files per helper run: enough to spread the start-up cost, few enough
 /// that the first thumbnails arrive quickly.
 const BATCH: usize = 8;
-/// The most entries one request may name: several screens of rows.
-const MAX_WANTED: u32 = 512;
 const WORKER_THREAD: &str = "nova-files-thumbnails";
 
 /// Where thumbnails go and the helper that makes them.
@@ -137,7 +135,7 @@ impl Queue {
         self.shared.update(|state| {
             if state.shown.as_ref().is_some_and(|shown| shown.id == id) {
                 let first = usize::try_from(first.0).unwrap_or(usize::MAX);
-                let count = usize::try_from(count.min(MAX_WANTED)).unwrap_or_default();
+                let count = usize::try_from(count.min(MAX_ROWS)).unwrap_or_default();
                 state.wanted = first..first.saturating_add(count);
                 // Rows the client stopped showing may be asked for again,
                 // and it drops their thumbnails, so they count as not done.

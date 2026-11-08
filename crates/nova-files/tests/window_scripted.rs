@@ -141,6 +141,51 @@ fn a_refused_folder_leaves_the_shown_one_alone(cx: &mut TestAppContext) {
     });
 }
 
+/// Opens [`OTHER`] then [`MISSING`] on a window showing [`SHOWN`], answers
+/// [`OTHER`] (too late: the window wants [`MISSING`] by then) and refuses
+/// [`MISSING`].
+fn drop_a_listing_then_refuse(
+    view: &Entity<MainWindow>,
+    cx: &mut VisualTestContext,
+    core: &mut Core,
+) {
+    view.update(cx, |view, _| {
+        view.open(Path::new(OTHER));
+        view.open(Path::new(MISSING));
+    });
+    answer_listing(core, ENTRIES);
+    let (id, path) = core.next_listing().unwrap();
+    core.refuse(id, &path);
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+fn a_refused_folder_reads_the_shown_one_again_after_a_dropped_listing(cx: &mut TestAppContext) {
+    let (view, cx, mut core, _) = shown_with_details(cx, 1);
+
+    drop_a_listing_then_refuse(&view, cx, &mut core);
+
+    let (_, again) = core.next_listing().unwrap();
+    assert_eq!(again, Path::new(SHOWN));
+    assert!(core.next_listing().is_none());
+}
+
+#[gpui::test]
+fn the_shown_folder_refused_too_is_not_asked_for_again(cx: &mut TestAppContext) {
+    let (view, cx, mut core, _) = shown_with_details(cx, 1);
+    drop_a_listing_then_refuse(&view, cx, &mut core);
+
+    let (id, path) = core.next_listing().unwrap();
+    core.refuse(id, &path);
+    cx.run_until_parked();
+
+    assert!(core.next_listing().is_none());
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.folder(), Some(Path::new(SHOWN)));
+        assert!(!view.waiting());
+    });
+}
+
 #[gpui::test]
 fn details_for_another_listing_are_left_out(cx: &mut TestAppContext) {
     let (view, cx, core, id) = shown_with_details(cx, 1);
