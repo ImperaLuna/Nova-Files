@@ -3512,6 +3512,8 @@ dependencies = [
  "log",
  "nova-files-api",
  "rustix 1.1.6",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

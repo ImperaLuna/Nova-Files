@@ -14,8 +14,11 @@
 //!
 //! With `NOVA_FILES_STARTUP_TRACE` set, it first starts the start-up trace
 //! (see `nova_files_core::start_startup_trace`).
-
-#![forbid(unsafe_code)]
+//!
+//! Then, while it is the only thread, it tells the Vulkan
+//! loader to skip drivers for GPUs the PC doesn't have (see
+//! `nova_files_core::absent_vendor_drivers`); each skipped driver is a set of
+//! libraries a cold start no longer reads.
 
 mod mode;
 
@@ -36,12 +39,25 @@ fn main() -> ExitCode {
     if let Err(error) = nova_files_core::start_startup_trace() {
         report(&format!("start-up trace: {error}"));
     }
+    skip_absent_vulkan_drivers();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             report(&format!("{error}"));
             ExitCode::FAILURE
         }
+    }
+}
+
+#[expect(
+    unsafe_code,
+    reason = "setting a variable is sound only while no other thread exists, and main calls this first"
+)]
+fn skip_absent_vulkan_drivers() {
+    if let Some(filter) = nova_files_core::absent_vendor_drivers() {
+        // SAFETY: called first thing in `main`, before the core, D-Bus or
+        // GPUI start a thread, so nothing can read the environment meanwhile.
+        unsafe { std::env::set_var(nova_files_core::FILTER_VARIABLE, filter) };
     }
 }
 
