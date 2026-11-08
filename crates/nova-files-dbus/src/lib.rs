@@ -2,17 +2,35 @@
 //! open files.
 //!
 //! [`start`] claims the application's bus name. The first process to claim
-//! it becomes the running instance and serves two interfaces on one
-//! object: the Nova Files interface (`Ping` for now) and the standard
-//! `org.freedesktop.Application`, whose `Activate` and `Open` ask for a new
-//! window.
-//! A later process finds the name taken and gets a [`RunningInstance`] to
-//! hand its launch over to.
+//! it becomes the running instance and serves, on the application's object:
+//! - the Nova Files interface (`files`, `Ping` for now),
+//! - the search interface (`search`), versioned on its own,
+//! - the standard `org.freedesktop.Application`, whose `Activate` and
+//!   `Open` ask for a new window.
+//!
+//! It then claims the file picker's portal bus name too and serves the
+//! portal's `FileChooser` interface at the portal path (`file_chooser`). A
+//! later process finds the application's name taken and gets a
+//! [`RunningInstance`] to hand its launch over to; it never claims the
+//! portal name.
+//!
+//! Each module is one interface, so search and the picker grow in files of
+//! their own. Our own interfaces are named `io.github.ImperaLuna.NovaFiles*`
+//! and carry a version number: a change that breaks callers gets a new
+//! interface beside the old one.
+//!
+//! The core stops 3 minutes after its last connection. A call answered at
+//! once connects for the call (`Ping`); a request that outlives its call (a
+//! search still sending stages, an open picker) takes a hold (`holds`),
+//! which ends when the request does or when its caller leaves the bus.
 
 #![forbid(unsafe_code)]
 
 mod application;
+mod file_chooser;
 mod files;
+mod holds;
+mod search;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -27,8 +45,14 @@ use zbus::fdo::RequestNameFlags;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
 
 pub use application::INTERFACE as APPLICATION_INTERFACE;
+pub use file_chooser::{
+    BUS_NAME as PORTAL_BUS_NAME, INTERFACE as FILE_CHOOSER_INTERFACE,
+    OBJECT_PATH as PORTAL_OBJECT_PATH,
+};
 pub use files::INTERFACE as FILES_INTERFACE;
+pub use holds::{Hold, HoldError, Holds};
 pub use nova_files_api::APP_ID;
+pub use search::INTERFACE as SEARCH_INTERFACE;
 
 /// The longest any D-Bus call made from here may take, and the longest
 /// connecting to the bus may take.
@@ -64,19 +88,29 @@ pub enum Started {
     AlreadyRunning(RunningInstance),
 }
 
-/// This process's hold on the bus name.
+/// This process's hold on the bus names.
 pub struct Service {
     connection: Connection,
+    portal: bool,
 }
 
 impl Service {
-    /// Gives the bus name up and waits for the bus to confirm, so a process
-    /// started after this returns can claim it at once, even while this
-    /// connection is still open.
+    /// Whether this process also owns [`PORTAL_BUS_NAME`]. Another program
+    /// may hold it; the app then runs without being the file picker.
+    pub const fn serves_portal(&self) -> bool {
+        self.portal
+    }
+
+    /// Gives the bus names up and waits for the bus to confirm, so a
+    /// process started after this returns can claim them at once, even
+    /// while this connection is still open.
     ///
     /// # Errors
-    /// When the call fails or takes longer than [`CALL_TIMEOUT`].
+    /// When a call fails or takes longer than [`CALL_TIMEOUT`].
     pub fn release(&self) -> zbus::Result<()> {
+        if self.portal {
+            self.connection.release_name(PORTAL_BUS_NAME)?;
+        }
         self.connection.release_name(APP_ID).map(drop)
     }
 }
@@ -156,7 +190,10 @@ pub fn start_waiting(
         // DoNotQueue: a second launch must learn the name is taken, not
         // wait in line for it.
         match connection.request_name_with_flags(APP_ID, RequestNameFlags::DoNotQueue.into()) {
-            Ok(_) => return Ok(Started::Service(Service { connection })),
+            Ok(_) => {
+                let portal = claim(&connection, PORTAL_BUS_NAME)?;
+                return Ok(Started::Service(Service { connection, portal }));
+            }
             Err(zbus::Error::NameTaken) => {
                 let left = deadline.saturating_duration_since(Instant::now());
                 let freed_in_time = freed
@@ -174,6 +211,16 @@ pub fn start_waiting(
             }
             Err(error) => return Err(error),
         }
+    }
+}
+
+/// Claims `name` without queueing for it; `false` when another connection
+/// owns it.
+fn claim(connection: &Connection, name: &'static str) -> zbus::Result<bool> {
+    match connection.request_name_with_flags(name, RequestNameFlags::DoNotQueue.into()) {
+        Ok(_) => Ok(true),
+        Err(zbus::Error::NameTaken) => Ok(false),
+        Err(error) => Err(error),
     }
 }
 
@@ -217,7 +264,9 @@ fn connect(
             let connection = bus.builder().and_then(|builder| {
                 builder
                     .serve_at(&path, files::Files::new(connector.clone()))?
+                    .serve_at(&path, search::Search)?
                     .serve_at(&path, application::Application::new(connector, on_open))?
+                    .serve_at(PORTAL_OBJECT_PATH, file_chooser::FileChooser)?
                     .build()
             });
             result_sender.send(connection).ok();

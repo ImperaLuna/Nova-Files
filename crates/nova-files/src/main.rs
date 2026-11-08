@@ -136,7 +136,12 @@ fn run() -> Result<(), Box<dyn Error>> {
     let started =
         nova_files_dbus::start_waiting(Bus::Session, core.connector.clone(), on_open, name_wait());
     let service = match started {
-        Ok(Started::Service(service)) => Some(service),
+        Ok(Started::Service(service)) => {
+            if !service.serves_portal() {
+                report("another program is the file picker's portal backend");
+            }
+            Some(service)
+        }
         Ok(Started::AlreadyRunning(running)) => {
             match &mode {
                 Mode::Window(Some(folder)) => running.open(folder)?,
