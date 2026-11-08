@@ -171,6 +171,44 @@ fn a_refused_folder_reads_the_shown_one_again_after_a_dropped_listing(cx: &mut T
 }
 
 #[gpui::test]
+fn a_listing_dropped_after_the_refusal_reads_the_shown_one_again(cx: &mut TestAppContext) {
+    let (view, cx, mut core, _) = shown_with_details(cx, 1);
+    view.update(cx, |view, _| {
+        view.open(Path::new(OTHER));
+        view.open(Path::new(MISSING));
+    });
+    let (other, other_path) = core.next_listing().unwrap();
+    let (missing, missing_path) = core.next_listing().unwrap();
+
+    core.refuse(missing, &missing_path);
+    cx.run_until_parked();
+    assert!(core.next_listing().is_none());
+    core.send(Event::FolderListed(Listing {
+        id: other,
+        path: other_path,
+        entries: Arc::new([]),
+    }));
+    cx.run_until_parked();
+
+    let (_, again) = core.next_listing().unwrap();
+    assert_eq!(again, Path::new(SHOWN));
+}
+
+#[gpui::test]
+fn an_older_listing_dropped_leaves_the_shown_one_alone(cx: &mut TestAppContext) {
+    let (_view, cx, mut core, id) = shown_with_details(cx, 1);
+
+    core.send(Event::FolderListed(Listing {
+        id: ListingId(id.0.saturating_sub(1)),
+        path: PathBuf::from(OTHER),
+        entries: Arc::new([]),
+    }));
+    cx.run_until_parked();
+
+    assert!(core.next_listing().is_none());
+}
+
+#[gpui::test]
 fn the_shown_folder_refused_too_is_not_asked_for_again(cx: &mut TestAppContext) {
     let (view, cx, mut core, _) = shown_with_details(cx, 1);
     drop_a_listing_then_refuse(&view, cx, &mut core);

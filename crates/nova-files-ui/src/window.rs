@@ -7,8 +7,9 @@
 //! folder that can't be read leaves the window where it was; if the window
 //! has no folder yet, it falls back to the home folder, then the root. The
 //! core serves rows of the last listing it sent, so when the window dropped
-//! a listing it no longer wanted, the folder on screen is read again (once,
-//! and not when it is the folder just refused) to get its rows served.
+//! a newer listing it no longer wanted, the folder on screen is read again
+//! (once, and not when it is the folder just refused) to get its rows
+//! served: at the refusal, or at once if the refusal came first.
 //! Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
 //! them, so Up goes where the path on screen says.
 //!
@@ -372,13 +373,30 @@ impl MainWindow {
                 }
             }
             // An answer for a folder the window has since moved away from.
-            Event::FolderListed(_) => self.core_moved = true,
+            Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::FolderUnreadable { .. } => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);
                 cx.notify();
             }
+        }
+    }
+
+    /// The window dropped listing `id`, which it no longer wanted. One newer
+    /// than the folder on screen moved the core's row queues to it. A
+    /// refusal still to come reads the folder on screen again (see
+    /// `on_event`); with nothing asked for, nothing would, so it is read
+    /// again now.
+    fn dropped_listing(&mut self, id: ListingId) {
+        let Some(listing) = &self.listing else { return };
+        if id <= listing.id {
+            return;
+        }
+        self.core_moved = true;
+        if self.asked.is_none() {
+            let shown = listing.path.clone();
+            self.open(&shown);
         }
     }
 
