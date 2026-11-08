@@ -12,6 +12,10 @@ exclude_re = [
     # temp home instead.
     "\\bHome::from_env\\b",
     "\\bhome_folder\\b",
+    # Read the real PC's GPUs and Vulkan drivers (FIL-66); tests hand the
+    # decision recorded sysfs and manifest folders instead.
+    "\\babsent_vendor_drivers\\b",
+    "\\bskip_absent_vulkan_drivers\\b",
     # Cancelling only saves a listing's remaining reads; no answer changes.
     "replace Client::cancel_listing with \\(\\)",
     # Dropping a client cancels its listing, for the same reason.
