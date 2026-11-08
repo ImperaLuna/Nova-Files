@@ -45,6 +45,26 @@ struct State {
     closed: bool,
 }
 
+impl State {
+    /// The next run to read: the first wanted entry not read yet and the
+    /// unread ones right after it, up to [`BATCH`]. `None` when every
+    /// wanted entry is read.
+    fn next_run(&self) -> Option<Run> {
+        let listed = self.listing.clone()?;
+        let unread = |index: &usize| !self.read.contains(index);
+        let start = self.wanted.clone().find(unread)?;
+        let end = (start..self.wanted.end)
+            .take(BATCH)
+            .take_while(unread)
+            .last()
+            .map_or(start, |last| last + 1);
+        Some(Run {
+            listed,
+            entries: start..end,
+        })
+    }
+}
+
 /// The listing on the client's screen.
 struct Listed {
     id: ListingId,
@@ -145,33 +165,20 @@ impl Shared {
             && run.entries.start < state.wanted.end
     }
 
-    /// Waits for the next run: the first wanted entry not read yet and the
-    /// unread ones right after it, up to [`BATCH`]. `None` once closed.
+    /// Waits for the next run (see [`State::next_run`]). `None` once
+    /// closed.
     fn next_run(&self) -> Option<Run> {
         let mut state = self.lock();
-        loop {
-            if state.closed {
-                return None;
-            }
-            if let Some(listed) = state.listing.clone() {
-                let unread = |index: &usize| !state.read.contains(index);
-                if let Some(start) = state.wanted.clone().find(unread) {
-                    let end = (start..state.wanted.end)
-                        .take(BATCH)
-                        .take_while(unread)
-                        .last()
-                        .map_or(start, |last| last + 1);
-                    return Some(Run {
-                        listed,
-                        entries: start..end,
-                    });
-                }
+        while !state.closed {
+            if let Some(run) = state.next_run() {
+                return Some(run);
             }
             state = self
                 .wake
                 .wait(state)
                 .unwrap_or_else(PoisonError::into_inner);
         }
+        None
     }
 
     /// Sends the details of `run`, read as `read`, unless its listing was
@@ -229,14 +236,15 @@ fn work(shared: &Shared, events: &dyn EventSink) {
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
+    use std::sync::mpsc;
 
     use nova_files_api::EntryKind;
 
     use super::*;
 
-    /// A queue state showing `count` files, wanting `wanted`, with `read`
-    /// already sent.
-    fn shared(count: u32, wanted: Range<usize>, read: &[usize]) -> Shared {
+    /// A queue state showing `count` files as listing 0, wanting `wanted`,
+    /// with `read` already sent.
+    fn state(count: u32, wanted: Range<usize>, read: &[usize]) -> State {
         let entries: Arc<[Entry]> = (0..count)
             .map(|index| Entry {
                 id: EntryId(index),
@@ -244,7 +252,7 @@ mod tests {
                 kind: EntryKind::File,
             })
             .collect();
-        let state = State {
+        State {
             listing: Some(Arc::new(Listed {
                 id: ListingId(0),
                 folder: PathBuf::new(),
@@ -253,29 +261,102 @@ mod tests {
             wanted,
             read: read.iter().copied().collect(),
             closed: false,
-        };
+        }
+    }
+
+    fn shared(state: State) -> Shared {
         Shared {
             state: Mutex::new(state),
             wake: Condvar::new(),
         }
     }
 
-    fn next(shared: &Shared) -> Range<usize> {
-        shared.next_run().map(|run| run.entries).unwrap_or_default()
+    fn next(state: &State) -> Option<Range<usize>> {
+        state.next_run().map(|run| run.entries)
+    }
+
+    /// A run of entries `entries` of a listing with id `id`.
+    fn run(id: u64, entries: Range<usize>) -> Run {
+        Run {
+            listed: Arc::new(Listed {
+                id: ListingId(id),
+                folder: PathBuf::new(),
+                entries: Arc::new([]),
+            }),
+            entries,
+        }
     }
 
     #[test]
     fn a_run_holds_at_most_one_batch() {
-        assert_eq!(next(&shared(600, 0..512, &[])), 0..BATCH);
+        assert_eq!(next(&state(600, 0..512, &[])), Some(0..BATCH));
     }
 
     #[test]
     fn a_run_starts_at_the_first_unread_row_and_stops_at_a_read_one() {
-        assert_eq!(next(&shared(10, 0..10, &[0, 1, 4])), 2..4);
+        assert_eq!(next(&state(10, 0..10, &[0, 1, 4])), Some(2..4));
+    }
+
+    #[test]
+    fn a_run_of_one_row_holds_that_row() {
+        assert_eq!(next(&state(10, 0..10, &[0, 2])), Some(1..2));
     }
 
     #[test]
     fn a_run_stops_at_the_end_of_what_is_wanted() {
-        assert_eq!(next(&shared(10, 3..6, &[])), 3..6);
+        assert_eq!(next(&state(10, 3..6, &[])), Some(3..6));
+    }
+
+    #[test]
+    fn nothing_to_read_once_every_wanted_row_is_read() {
+        assert_eq!(next(&state(10, 3..5, &[3, 4])), None);
+    }
+
+    #[test]
+    fn a_run_is_wanted_while_some_of_it_is_asked_for() {
+        let queue = shared(state(100, 10..20, &[]));
+        assert!(queue.still_wanted(&run(0, 15..30)));
+        assert!(queue.still_wanted(&run(0, 0..11)));
+        assert!(queue.still_wanted(&run(0, 19..20)));
+    }
+
+    #[test]
+    fn a_run_next_to_what_is_asked_for_is_not_wanted() {
+        let queue = shared(state(100, 10..20, &[]));
+        assert!(!queue.still_wanted(&run(0, 0..10)));
+        assert!(!queue.still_wanted(&run(0, 20..30)));
+    }
+
+    #[test]
+    fn a_run_of_another_listing_or_a_closed_queue_is_not_wanted() {
+        let queue = shared(state(100, 0..20, &[]));
+        assert!(!queue.still_wanted(&run(1, 0..10)));
+        queue.update(|state| state.closed = true);
+        assert!(!queue.still_wanted(&run(0, 0..10)));
+    }
+
+    #[test]
+    fn details_of_a_replaced_listing_are_not_sent() {
+        let queue = shared(state(10, 0..10, &[]));
+        let (sink, events) = mpsc::channel();
+
+        queue
+            .send(&run(1, 0..1), vec![Details::default()], &sink)
+            .ok();
+
+        assert!(events.try_recv().is_err());
+        assert!(queue.lock().read.is_empty());
+    }
+
+    #[test]
+    fn dropping_the_queue_stops_the_worker() {
+        let shared = Arc::new(shared(state(10, 0..10, &[])));
+        let queue = Queue {
+            shared: Arc::clone(&shared),
+        };
+
+        drop(queue);
+
+        assert!(shared.next_run().is_none());
     }
 }
