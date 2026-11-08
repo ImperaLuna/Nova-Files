@@ -152,14 +152,24 @@ jobs:
         # The slim shell from nix/mutants-shell.nix, not the full one.
         if: steps.changes.outputs.run == 'true'
         run: nix develop .#mutants --command true
+      - name: Hash the build flags
+        id: flags
+        if: steps.changes.outputs.run == 'true'
+        # The flags (mold, incremental, the ci profile) live in the dev shell
+        # and in Cargo.toml's [profile.*] tables, which rust-cache can't see.
+        # Only those go in the key: a dependency change already changes
+        # rust-cache's lock hash, which falls back to main's latest target/
+        # and rebuilds only what changed, while a key change starts from
+        # nothing. The whole Cargo.toml was in the key before, so every GPUI
+        # bump rebuilt everything (293 s instead of 4 s).
+        run: tools/ci-build-flags-hash.sh >>"$GITHUB_OUTPUT"
       - uses: Swatinem/rust-cache@v2
         if: steps.changes.outputs.run == 'true'
         with:
-          # The build flags (mold, the ci profile) live in the dev shell,
-          # which rust-cache can't see, so the key names the files that set
-          # them. Without it a flag change kept restoring the old target/,
-          # rebuilt everything for the baseline, and never saved a new one.
-          key: ${{ hashFiles('nix/mutants-shell.nix', 'nix/build.nix', 'Cargo.toml') }}
+          key: ${{ steps.flags.outputs.hash }}
+          # Only main saves. A PR can't read another PR's cache, and each
+          # one saved 1 GB, which pushed main's out of the repo's 10 GB.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Warm the cargo cache
         if: steps.changes.outputs.run == 'true' && github.event_name != 'pull_request'
         # The same build the mutation tests start with, so they reuse all of it.
