@@ -16,8 +16,8 @@
 //! later; until then the portal answers it with its own error.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use futures::channel::oneshot;
 use nova_files_api::{PickAnswer, PickId, PickReply, PickRequest};
@@ -72,24 +72,40 @@ impl<P: Picker> FileChooser<P> {
         handle: OwnedObjectPath,
         parsed: Parsed,
     ) -> (u32, Options) {
-        let Some(caller) = header.sender() else {
-            return (FAILED, Options::new());
-        };
-        let Ok(hold) = self.holds.take(caller).await else {
-            return (FAILED, Options::new());
-        };
         let id = PickId(self.next.fetch_add(1, Ordering::Relaxed));
+        let closed = Arc::new(Mutex::new(false));
         let request_object = Request {
             id,
             picker: Arc::clone(&self.picker),
+            closed: Arc::clone(&closed),
         };
-        // Served first, so a `Close` that comes at once finds it.
+        // Served before anything waits, so a `Close` that comes at once
+        // finds it and is kept.
         if !matches!(server.at(&handle, request_object).await, Ok(true)) {
             return (FAILED, Options::new());
         }
-        let (sender, answer) = oneshot::channel();
         let filters = parsed.filters.clone();
-        self.picker.pick(PickRequest {
+        let answer = self.answer(header, id, &closed, parsed).await;
+        server.remove::<Request<P>, _>(&handle).await.ok();
+        answer.map_or_else(
+            || (FAILED, Options::new()),
+            |answer| portal_options::results(&answer, &filters),
+        )
+    }
+
+    /// Shows the pick and waits for its answer, holding the core meanwhile.
+    /// None when the pick can't start.
+    async fn answer(
+        &self,
+        header: &Header<'_>,
+        id: PickId,
+        closed: &Mutex<bool>,
+        parsed: Parsed,
+    ) -> Option<PickAnswer> {
+        let caller = header.sender()?;
+        let hold = self.holds.take(caller).await.ok()?;
+        let (sender, answer) = oneshot::channel();
+        let request = PickRequest {
             id,
             kind: parsed.kind,
             title: parsed.title,
@@ -100,12 +116,34 @@ impl<P: Picker> FileChooser<P> {
             reply: PickReply::new(move |answer| {
                 sender.send(answer).ok();
             }),
-        });
+        };
+        if !show_unless_closed(&*self.picker, closed, request) {
+            return Some(PickAnswer::Cancelled);
+        }
         let answer = answer.await.unwrap_or(PickAnswer::Cancelled);
-        server.remove::<Request<P>, _>(&handle).await.ok();
         drop(hold);
-        portal_options::results(&answer, &filters)
+        Some(answer)
     }
+}
+
+/// Hands `request` to the picker unless its request object was closed
+/// first. Under the lock `Close` takes, so the picker gets the pick before
+/// any close for it, or never once it was closed. Whether it was shown.
+#[expect(
+    clippy::significant_drop_tightening,
+    reason = "the lock is held across the hand-off on purpose"
+)]
+fn show_unless_closed(picker: &impl Picker, closed: &Mutex<bool>, request: PickRequest) -> bool {
+    let closed = lock(closed);
+    if *closed {
+        return false;
+    }
+    picker.pick(request);
+    true
+}
+
+fn lock(closed: &Mutex<bool>) -> MutexGuard<'_, bool> {
+    closed.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.FileChooser")]
@@ -156,23 +194,34 @@ impl<P: Picker> FileChooser<P> {
 struct Request<P> {
     id: PickId,
     picker: Arc<P>,
+    /// Set by `Close`; a pick closed before it reached the picker never
+    /// shows.
+    closed: Arc<Mutex<bool>>,
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Request")]
 impl<P: Picker> Request<P> {
     /// Closes the picker. The pick's answer then arrives as cancelled, and
     /// the pick removes this object.
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "held while the picker is told, so a pick can't slip in between"
+    )]
     fn close(&self) {
+        let mut closed = lock(&self.closed);
+        *closed = true;
         self.picker.close(self.id);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use nova_files_api::{PickId, PickRequest};
+    use std::sync::{Arc, Mutex};
+
+    use nova_files_api::{PickId, PickKind, PickReply, PickRequest};
     use zbus::object_server::Interface as _;
 
-    use super::{FileChooser, INTERFACE, Picker};
+    use super::{FileChooser, INTERFACE, Picker, Request, lock, show_unless_closed};
 
     struct Nothing;
 
@@ -183,8 +232,72 @@ mod tests {
         fn close(&self, _id: PickId) {}
     }
 
+    /// Counts the picks and closes it is handed.
+    #[derive(Default)]
+    struct Counts {
+        picks: Mutex<u32>,
+        closes: Mutex<u32>,
+    }
+
+    impl Picker for Counts {
+        fn pick(&self, request: PickRequest) {
+            drop(request);
+            *lock_count(&self.picks) += 1;
+        }
+        fn close(&self, _id: PickId) {
+            *lock_count(&self.closes) += 1;
+        }
+    }
+
+    fn lock_count(count: &Mutex<u32>) -> std::sync::MutexGuard<'_, u32> {
+        count
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn request() -> PickRequest {
+        PickRequest {
+            id: PickId(1),
+            kind: PickKind::Open {
+                multiple: false,
+                folders: false,
+            },
+            title: String::new(),
+            accept_label: None,
+            filters: Vec::new(),
+            filter: None,
+            folder: None,
+            reply: PickReply::new(drop),
+        }
+    }
+
     #[test]
     fn interface_name_matches_the_constant() {
         assert_eq!(FileChooser::<Nothing>::name().as_str(), INTERFACE);
+    }
+
+    #[test]
+    fn a_pick_closed_before_it_shows_never_shows() {
+        let picker = Arc::new(Counts::default());
+        let closed = Arc::new(Mutex::new(false));
+        let request_object = Request {
+            id: PickId(1),
+            picker: Arc::clone(&picker),
+            closed: Arc::clone(&closed),
+        };
+
+        request_object.close();
+        assert!(*lock(&closed));
+        assert_eq!(*lock_count(&picker.closes), 1);
+
+        assert!(!show_unless_closed(&*picker, &closed, request()));
+        assert_eq!(*lock_count(&picker.picks), 0);
+    }
+
+    #[test]
+    fn a_pick_not_closed_shows() {
+        let picker = Counts::default();
+        assert!(show_unless_closed(&picker, &Mutex::new(false), request()));
+        assert_eq!(*lock_count(&picker.picks), 1);
     }
 }

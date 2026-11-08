@@ -215,7 +215,7 @@ mod tests {
             }
         );
         assert_eq!(parsed.folder, None);
-        assert!(parsed.filters.is_empty());
+        assert_eq!(parsed.filters, []);
         assert_eq!(parsed.filter, None);
         assert_eq!(parsed.accept_label, None);
         assert_eq!(parsed.title, "Open");
