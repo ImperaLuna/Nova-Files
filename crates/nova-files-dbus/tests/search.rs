@@ -116,7 +116,7 @@ fn service_with(scratch: &Scratch, indexed: bool, idle_exit: Duration) -> Servic
 }
 
 /// A short idle time, for tests of what keeps the core up.
-const SHORT_IDLE: Duration = Duration::from_millis(1000);
+const SHORT_IDLE: Duration = Duration::from_secs(1);
 
 /// A launcher: a bus connection, the search interface, and the signals it
 /// receives.
