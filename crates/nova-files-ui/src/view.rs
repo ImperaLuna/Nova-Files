@@ -7,7 +7,13 @@
 //! until the core has read that entry's details. A thumbnail, once it
 //! arrives, takes the icon's place. In pick mode a double-click on a file
 //! picks it (see `pick`). Every element a test clicks carries a debug selector:
-//! `up`, `place-<n>` and `entry-<n>`, counted from 0.
+//! `up`, `place-<n>` and `entry-<n>`, counted from 0. Each line's Modified
+//! cell carries one too, `modified-header` and `modified-<n>`, so a test can
+//! check the columns line up.
+//!
+//! Every row spans the list's full width: `uniform_list` lays each row out
+//! on its own, and a row sized to its content would push its columns along
+//! by the width of its name.
 
 use std::sync::Arc;
 
@@ -177,6 +183,7 @@ impl MainWindow {
                             text.modified,
                             text.type_name,
                             text.size,
+                            format!("modified-{index}"),
                         ));
                         match entry.kind {
                             EntryKind::Folder => row
@@ -219,15 +226,18 @@ fn column_header() -> impl IntoElement {
             MODIFIED_LABEL,
             TYPE_LABEL,
             SIZE_LABEL,
+            MODIFIED_HEADER_SELECTOR.to_owned(),
         ))
 }
 
-/// One line of the columns: the name takes what the others leave.
+/// One line of the columns: the name takes what the others leave. The
+/// Modified cell carries `modified_selector`.
 fn cells(
     name: impl IntoElement,
     modified: impl Into<SharedString>,
     type_name: impl Into<SharedString>,
     size_text: impl Into<SharedString>,
+    modified_selector: String,
 ) -> impl IntoElement {
     let column = |width, text: SharedString| {
         div()
@@ -244,17 +254,18 @@ fn cells(
         .items_center()
         .gap(size::GAP)
         .child(div().flex_1().min_w_0().child(name))
-        .child(column(size::MODIFIED_WIDTH, modified.into()))
+        .child(column(size::MODIFIED_WIDTH, modified.into()).debug_selector(|| modified_selector))
         .child(column(size::TYPE_WIDTH, type_name.into()))
         .child(column(size::SIZE_WIDTH, size_text.into()).text_right())
 }
 
-/// One row of either list: icon slot and label, highlighted under the
-/// pointer.
+/// One row of either list, as wide as the list: icon slot and label,
+/// highlighted under the pointer.
 fn row(id: (&'static str, usize), selector: String) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .debug_selector(|| selector)
+        .w_full()
         .flex()
         .flex_none()
         .items_center()
@@ -318,6 +329,7 @@ const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
 const TYPE_LABEL: &str = "Type";
 const SIZE_LABEL: &str = "Size";
+const MODIFIED_HEADER_SELECTOR: &str = "modified-header";
 
 #[cfg(test)]
 mod tests {
