@@ -81,7 +81,14 @@ let
     let
       fresh = craneLib.buildDepsOnly args;
     in
-    if depsBase == null then fresh else fresh.overrideAttrs { cargoArtifacts = baseArtifacts; };
+    if depsBase == null then
+      fresh
+    else
+      fresh.overrideAttrs {
+        cargoArtifacts = baseArtifacts;
+        FIL76_BENCH = "2";
+        CARGO_LOG = "cargo::core::compiler::fingerprint=info";
+      };
 
   cargoArtifacts = buildDeps commonArgs (depsBase.cargoArtifacts or null);
 

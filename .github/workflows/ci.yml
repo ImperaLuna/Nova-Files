@@ -80,6 +80,7 @@ jobs:
         with:
           name: ${{ env.CACHIX_CACHE }}
           authToken: ${{ env.CACHIX_AUTH_TOKEN }}
+          skipPush: true
       - uses: nix-community/cache-nix-action@v6
         if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN == ''
         with:
@@ -92,7 +93,10 @@ jobs:
           purge-primary-key: never
       - name: nix flake check
         if: steps.changes.outputs.run == 'true'
-        run: nix flake check --print-build-logs
+        run: |
+          nix flake check --print-build-logs 2>&1 \
+            | grep --line-buffered -vE '> +(Compiling|Checking|Fresh) ' \
+            | awk '/fingerprint/ { if (++n > 120) next } { print }'
       - name: Disk space left
         if: steps.changes.outputs.run == 'true'
         run: df -h /
