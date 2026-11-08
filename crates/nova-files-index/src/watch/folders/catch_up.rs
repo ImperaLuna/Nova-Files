@@ -12,7 +12,8 @@
 //!
 //! An entry removed in one place and added in another with the same
 //! device and inode was moved while nobody watched: one [`Change::Moved`],
-//! and the moved folder's watches are installed at its new place. Files
+//! the moved folder's watches are installed at its new place, and its
+//! folders are checked there in another round. Files
 //! inside folders whose time didn't change can lag in size and date until
 //! they are written again: names never do.
 //!
@@ -26,7 +27,7 @@
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{self, Metadata};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::changes::Change;
 use crate::crawl;
@@ -53,67 +54,124 @@ struct Found {
 /// An entry in the index and not on disk.
 struct Missing {
     path: PathBuf,
+    row: RowId,
     id: FileId,
+}
+
+/// One round of reading folders again: what turned up and what went.
+struct Round<'a> {
+    index: &'a Index,
+    /// Folders whose stored time is at least this may hide a change.
+    unsure: Option<Stamp>,
+    found: Vec<Found>,
+    missing: Vec<Missing>,
+}
+
+impl<'a> Round<'a> {
+    fn new(index: &'a Index) -> Self {
+        Self {
+            index,
+            unsure: index
+                .crawled()
+                .map(|Stamp(nanos)| Stamp(nanos.saturating_sub(SAME_TICK))),
+            found: Vec::new(),
+            missing: Vec::new(),
+        }
+    }
+
+    /// Reads the folder at `row` again, now at `path`, when its time moved
+    /// or may hide a change.
+    fn check(&mut self, root: &Path, row: RowId, path: PathBuf, changes: &mut Vec<Change>) {
+        let Some(entry) = self.index.entry(row).filter(was_read) else {
+            return;
+        };
+        let zone = path.strip_prefix(root).ok().and_then(policy::zone_of);
+        let Some(zone) = zone else {
+            return;
+        };
+        let Ok(details) = fs::symlink_metadata(&path) else {
+            // Gone: its parent's read says so.
+            return;
+        };
+        if !details.is_dir() {
+            return;
+        }
+        let now = crawl::facts(&details, Kind::Folder);
+        if now.modified == entry.modified {
+            let recent =
+                matches!((entry.modified, self.unsure), (Some(was), Some(unsure)) if was >= unsure);
+            if !recent {
+                return;
+            }
+        } else {
+            changes.push(Change::Changed {
+                details: now,
+                path: path.clone(),
+            });
+        }
+        let folder = Compared {
+            index: self.index,
+            row,
+            path,
+            zone,
+        };
+        folder.compare(&mut self.found, &mut self.missing, changes);
+    }
+}
+
+impl Round<'_> {
+    /// Checks every folder inside `folder`, itself included, at its place
+    /// under `to`, where it was moved.
+    fn check_moved(&mut self, root: &Path, folder: RowId, to: &Path, changes: &mut Vec<Change>) {
+        let index = self.index;
+        let (Some(from), Some(entry)) = (index.path(folder), index.entry(folder)) else {
+            return;
+        };
+        for row in (folder.0..entry.end.0).map(RowId) {
+            let path = index.path(row);
+            if let Some(inside) = path
+                .as_deref()
+                .and_then(|path| path.strip_prefix(&from).ok())
+            {
+                self.check(root, row, to.join(inside), changes);
+            }
+        }
+    }
 }
 
 impl Folders {
     /// The changes since `index` was crawled, found by reading the folders
-    /// whose modified time moved.
+    /// whose modified time moved. Folders moved while nothing watched are
+    /// then checked at their new place, and so on down.
     pub fn catch_up(&mut self, index: &Index) -> Vec<Change> {
         let mut changes = Vec::new();
-        let mut found = Vec::new();
-        let mut missing = Vec::new();
-        let unsure = index
-            .crawled()
-            .map(|Stamp(nanos)| Stamp(nanos.saturating_sub(SAME_TICK)));
+        let mut round = Round::new(index);
         for row in (0..index.rows()).map(RowId) {
-            let Some(entry) = index.entry(row).filter(was_read) else {
-                continue;
-            };
-            let Some(path) = index.path(row) else {
-                continue;
-            };
-            let zone = path.strip_prefix(&self.root).ok().and_then(policy::zone_of);
-            let Some(zone) = zone else {
-                continue;
-            };
-            let Ok(details) = fs::symlink_metadata(&path) else {
-                // Gone: its parent's read says so.
-                continue;
-            };
-            if !details.is_dir() {
-                continue;
+            if let Some(path) = index.path(row) {
+                round.check(&self.root, row, path, &mut changes);
             }
-            let now = crawl::facts(&details, Kind::Folder);
-            if now.modified == entry.modified {
-                let recent =
-                    matches!((entry.modified, unsure), (Some(was), Some(unsure)) if was >= unsure);
-                if !recent {
-                    continue;
-                }
-            } else {
-                changes.push(Change::Changed {
-                    details: now,
-                    path: path.clone(),
-                });
-            }
-            let folder = Compared {
-                index,
-                row,
-                path,
-                zone,
-            };
-            folder.compare(&mut found, &mut missing, &mut changes);
         }
-        self.settle(found, missing, &mut changes);
+        let mut moved = self.settle(round.found, round.missing, &mut changes);
+        while !moved.is_empty() {
+            let mut round = Round::new(index);
+            for (folder, to) in moved {
+                round.check_moved(&self.root, folder, &to, &mut changes);
+            }
+            moved = self.settle(round.found, round.missing, &mut changes);
+        }
         changes
     }
 
     /// Pairs what was found with what went missing by file id: moves.
     /// The rest are removals and additions. Removals come first, then
     /// moves, then additions, so a name that now holds another file ends
-    /// up added.
-    fn settle(&mut self, found: Vec<Found>, mut missing: Vec<Missing>, changes: &mut Vec<Change>) {
+    /// up added. Returns the moved folders, by their old row and new path.
+    fn settle(
+        &mut self,
+        found: Vec<Found>,
+        mut missing: Vec<Missing>,
+        changes: &mut Vec<Change>,
+    ) -> Vec<(RowId, PathBuf)> {
         let mut moved = Vec::new();
         let mut added = Vec::new();
         for new in found {
@@ -126,6 +184,7 @@ impl Folders {
             self.forget(&old.path);
             changes.push(Change::Removed { path: old.path });
         }
+        let mut folders = Vec::new();
         for (old, new) in moved {
             self.forget(&old.path);
             changes.push(Change::Moved {
@@ -135,12 +194,14 @@ impl Folders {
             if new.is_folder {
                 // Its contents moved with it; only the watches are new.
                 let mut unused = Vec::new();
-                self.add(&new.zone, &new.name, new.path, &mut unused);
+                self.add(&new.zone, &new.name, new.path.clone(), &mut unused);
+                folders.push((old.row, new.path));
             }
         }
         for new in added {
             self.add(&new.zone, &new.name, new.path, changes);
         }
+        folders
     }
 }
 
@@ -162,10 +223,15 @@ impl Compared<'_> {
         let Ok(children) = crawl::read_children(&self.path, &|| false) else {
             return;
         };
-        let mut indexed: HashMap<OsString, Entry> = self
+        let mut indexed: HashMap<OsString, (RowId, Entry)> = self
             .index
             .children(self.row)
-            .filter_map(|row| Some((self.index.name(row)?.to_owned(), self.index.entry(row)?)))
+            .filter_map(|row| {
+                Some((
+                    self.index.name(row)?.to_owned(),
+                    (row, self.index.entry(row)?),
+                ))
+            })
             .collect();
         for child in children {
             let Ok(details) = child.details else {
@@ -178,11 +244,12 @@ impl Compared<'_> {
             };
             let old = indexed.remove(&child.name);
             match old {
-                Some(old) if old.id == id => changed(&old, path, &details, changes),
+                Some((_, old)) if old.id == id => changed(&old, path, &details, changes),
                 _ => {
-                    if let Some(old) = old {
+                    if let Some((row, old)) = old {
                         missing.push(Missing {
                             path: path.clone(),
+                            row,
                             id: old.id,
                         });
                     }
@@ -198,9 +265,10 @@ impl Compared<'_> {
                 }
             }
         }
-        for (name, old) in indexed {
+        for (name, (row, old)) in indexed {
             missing.push(Missing {
                 path: self.path.join(name),
+                row,
                 id: old.id,
             });
         }

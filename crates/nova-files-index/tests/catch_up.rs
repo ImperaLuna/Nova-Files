@@ -260,3 +260,28 @@ fn folders_touched_just_before_the_crawl_are_read_again() {
         "{changes:?}"
     );
 }
+
+#[test]
+fn changes_inside_a_folder_moved_while_closed_are_found() {
+    let closed = Closed::new(&["a/folder/old.txt", "a/folder/inner/deep.txt", "b/"]);
+    fs::rename(closed.path("a/folder"), closed.path("b/folder")).unwrap();
+    fs::write(closed.path("b/folder/new.txt"), b"").unwrap();
+    fs::write(closed.path("b/folder/inner/deeper.txt"), b"").unwrap();
+    // Last, so neither new file gets its inode.
+    fs::remove_file(closed.path("b/folder/old.txt")).unwrap();
+    let changes = entries(closed.caught_up());
+    assert!(changes.contains(&Change::Moved {
+        from: closed.path("a/folder"),
+        to: closed.path("b/folder")
+    }));
+    assert!(
+        changes.contains(&Change::Removed {
+            path: closed.path("b/folder/old.txt")
+        }),
+        "{changes:#?}"
+    );
+    let expected =
+        ["b/folder/inner/deeper.txt", "b/folder/new.txt"].map(|relative| closed.path(relative));
+    let expected: Vec<&Path> = expected.iter().map(PathBuf::as_path).collect();
+    assert_eq!(added_paths(&changes), expected);
+}
