@@ -145,6 +145,11 @@ impl Iterator for Search<'_> {
 }
 
 impl Search<'_> {
+    /// Whether every stage has run, so the next call yields `None`.
+    pub fn is_done(&self) -> bool {
+        self.stage == Stage::Done
+    }
+
     fn stage_hits(&mut self, loose: bool) -> Vec<Hit> {
         let mut ranked = self.scan_rows(loose);
         ranked.extend(self.scan_added(loose));

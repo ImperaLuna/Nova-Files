@@ -55,7 +55,7 @@ fn client(thumbnails: &Path, helper: &Path) -> Client {
         folder: thumbnails.to_owned(),
         helper: helper.to_owned(),
     };
-    let core = nova_files_core::spawn_with(IDLE_EXIT, None, Some(setup)).unwrap();
+    let core = nova_files_core::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
     let (sink, events) = mpsc::channel();
     let connection = core.connector.connect(sink).unwrap();
     Client {

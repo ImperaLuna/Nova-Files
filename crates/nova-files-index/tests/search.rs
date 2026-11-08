@@ -235,6 +235,18 @@ fn a_limit_of_exactly_the_hits_keeps_them_all() {
 }
 
 #[test]
+fn a_search_knows_when_its_last_stage_ran() {
+    let home = Home::new();
+    let mut search = home.index.search("tax", LIMIT);
+    assert!(!search.is_done());
+    search.next();
+    assert!(!search.is_done());
+    search.next();
+    assert!(search.is_done());
+    assert!(home.index.search(" ", LIMIT).is_done());
+}
+
+#[test]
 fn nothing_to_look_for_finds_nothing() {
     let home = Home::new();
     let none: Vec<Vec<(PathBuf, MatchKind)>> = Vec::new();

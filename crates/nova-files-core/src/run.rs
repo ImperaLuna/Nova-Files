@@ -16,16 +16,18 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::jobs::{self, Client};
 use crate::places::Home;
+use crate::search::Searcher;
 use crate::thumbs::Thumbnails;
 
-/// Runs until idle; places come from `home`, thumbnails go to
-/// `thumbnails`.
-pub fn run(
-    receiver: &Receiver<CoreMessage>,
-    idle_exit: Duration,
-    home: Option<&Home>,
-    thumbnails: Option<&Thumbnails>,
-) {
+/// Where the core finds and keeps things.
+pub struct Setup {
+    pub home: Option<Home>,
+    pub thumbnails: Option<Thumbnails>,
+    pub searcher: Searcher,
+}
+
+/// Runs until idle.
+pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup) {
     let mut clients: HashMap<ClientId, Client> = HashMap::new();
     loop {
         let message = if clients.is_empty() {
@@ -39,20 +41,15 @@ pub fn run(
                 Err(_) => return,
             }
         };
-        handle(&mut clients, message, home, thumbnails);
+        handle(&mut clients, message, setup);
     }
 }
 
-fn handle(
-    clients: &mut HashMap<ClientId, Client>,
-    message: CoreMessage,
-    home: Option<&Home>,
-    thumbnails: Option<&Thumbnails>,
-) {
+fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: &Setup) {
     match message {
         CoreMessage::Connected { client, events } => {
             let events: Arc<dyn EventSink> = Arc::from(events);
-            clients.insert(client, Client::new(events, thumbnails));
+            clients.insert(client, Client::new(events, setup.thumbnails.as_ref()));
         }
         CoreMessage::Disconnected { client } => {
             // Dropping the client stops its listing.
@@ -64,7 +61,7 @@ fn handle(
             let Some(target) = clients.get(&client) else {
                 return;
             };
-            if answer(target, command, home).is_err() {
+            if answer(target, command, setup).is_err() {
                 clients.remove(&client);
             }
         }
@@ -78,7 +75,7 @@ fn handle(
 fn answer(
     client: &Client,
     command: Command,
-    home: Option<&Home>,
+    setup: &Setup,
 ) -> Result<(), nova_files_api::ClientGone> {
     match command {
         Command::Ping => client.deliver(Event::Pong),
@@ -87,11 +84,15 @@ fn answer(
             Ok(())
         }
         Command::Places => {
-            jobs::places(client, home.cloned());
+            jobs::places(client, setup.home.clone());
             Ok(())
         }
         Command::Rows { id, first, count } => {
             client.want_rows(id, first, count);
+            Ok(())
+        }
+        Command::Search { id, query, limit } => {
+            setup.searcher.search(client, id, query, limit);
             Ok(())
         }
     }
