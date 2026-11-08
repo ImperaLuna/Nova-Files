@@ -71,11 +71,12 @@ pub struct Service {
 
 impl Service {
     /// Gives the bus name up and waits for the bus to confirm, so a process
-    /// started after this returns can claim it at once.
+    /// started after this returns can claim it at once, even while this
+    /// connection is still open.
     ///
     /// # Errors
     /// When the call fails or takes longer than [`CALL_TIMEOUT`].
-    pub fn release(self) -> zbus::Result<()> {
+    pub fn release(&self) -> zbus::Result<()> {
         self.connection.release_name(APP_ID).map(drop)
     }
 }

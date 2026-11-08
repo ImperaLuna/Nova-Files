@@ -171,7 +171,7 @@ fn show_windows(
         };
         // The bus confirms the release, so the new process finds the name
         // free.
-        if let Some(Err(error)) = service.take().map(Service::release) {
+        if let Some(Err(error)) = service.take().as_ref().map(Service::release) {
             report(&format!("could not give up the bus name: {error}"));
         }
         report(&format!(

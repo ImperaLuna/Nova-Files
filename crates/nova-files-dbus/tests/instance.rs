@@ -171,8 +171,10 @@ fn a_released_name_is_free_at_once() {
     };
     first.release().unwrap();
 
+    // `first` still holds its connection, so only the release freed it.
     let again = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
     assert!(matches!(again, Started::Service(_)));
+    drop(first);
 }
 
 #[test]
