@@ -297,11 +297,12 @@ impl Folders {
         // folder.
         let is_folder = from.is_folder;
         let kept = policy::keeps(&folder.zone, name, is_folder);
-        if from.kept && kept && fs::symlink_metadata(&from.path).is_ok() {
+        if fs::symlink_metadata(&from.path).is_ok() {
             // Something still stands where it left: swapped with what was
-            // at `to` (`RENAME_EXCHANGE`), file or folder. Two moves that
-            // each land on the other would lose one, so both paths are
-            // read again; the exchange's second pair does it once more.
+            // at `to` (`RENAME_EXCHANGE`), file or folder, kept or not. Two
+            // moves that each land on the other would lose one, so both
+            // paths are read again, each by the rules of what is there
+            // now; the exchange's second pair does it once more.
             self.read_again(&[from.path, to], changes);
             return;
         }
@@ -347,11 +348,16 @@ impl Folders {
 
     /// The zone of the watch on the folder at `path`, if it has one.
     /// Adds the entry at `path` as it is now, in the zone of its folder.
+    /// Nothing when the rules leave it out.
     fn add_again(&mut self, path: &Path, changes: &mut Vec<Change>) {
         let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
             return;
         };
-        if let Some(zone) = self.zone_of_watch(parent) {
+        let Some(zone) = self.zone_of_watch(parent) else {
+            return;
+        };
+        let is_folder = fs::symlink_metadata(path).is_ok_and(|details| details.is_dir());
+        if policy::keeps(&zone, name, is_folder) {
             self.add(&zone, name, path.to_owned(), changes);
         }
     }

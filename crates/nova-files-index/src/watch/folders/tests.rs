@@ -391,6 +391,69 @@ fn a_file_and_a_folder_swapped_are_both_read_again() {
 }
 
 #[test]
+fn a_hidden_folder_swapped_with_a_shown_one_is_read_as_it_is_now() {
+    let (root, mut folders) = watched_folder(
+        "swap-hidden",
+        &[".hidden/secret.txt", "shown/old.txt"],
+        Box::new(|| false),
+    );
+    let (hidden, shown) = (root.join(".hidden"), root.join("shown"));
+    let zone = policy::enters(&Zone::Home, OsStr::new("shown")).unwrap();
+    assert_eq!(folders.watch(shown.clone(), zone), None);
+    rustix::fs::renameat_with(
+        rustix::fs::CWD,
+        &hidden,
+        rustix::fs::CWD,
+        &shown,
+        rustix::fs::RenameFlags::EXCHANGE,
+    )
+    .unwrap();
+    let changes = folders.handle(&[
+        event(
+            &folders,
+            &root,
+            ReadFlags::MOVED_FROM.union(DIR),
+            20,
+            ".hidden",
+        ),
+        event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 20, "shown"),
+        event(
+            &folders,
+            &root,
+            ReadFlags::MOVED_FROM.union(DIR),
+            21,
+            "shown",
+        ),
+        event(
+            &folders,
+            &root,
+            ReadFlags::MOVED_TO.union(DIR),
+            21,
+            ".hidden",
+        ),
+    ]);
+    // What was hidden is now `shown`, and indexed.
+    let last = changes.iter().rev().find(|change| match change {
+        Change::Added { path, .. } | Change::Removed { path } => path == &shown,
+        _ => false,
+    });
+    assert!(matches!(last, Some(Change::Added { .. })), "{changes:?}");
+    assert!(added_paths(&changes).contains(&shown.join("secret.txt").as_path()));
+    assert!(
+        !added_paths(&changes)
+            .iter()
+            .any(|path| path.starts_with(&hidden))
+    );
+    let wd = folders.by_path[&shown];
+    assert_eq!(
+        inotify::add_watch(&folders.inotify, &shown, WATCHED),
+        Ok(wd)
+    );
+    assert!(!folders.by_path.contains_key(&hidden));
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_profile_moved_over_a_folder_removes_it() {
     let (root, mut folders) = watched_folder(
         "profile-over",
