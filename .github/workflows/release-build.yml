@@ -11,7 +11,7 @@ name: Release build
 
 on:
   push:
-    branches: [main, fil-74-release-cache] # TEMP: measure on the branch; removed before the PR
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
