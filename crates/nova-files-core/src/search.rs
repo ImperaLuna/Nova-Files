@@ -16,6 +16,7 @@
 //!
 //! [`Command::Search`]: nova_files_api::Command::Search
 
+use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
@@ -193,7 +194,12 @@ impl Searcher {
         let spawned = thread::Builder::new()
             .name(INDEX_THREAD.to_owned())
             .spawn(move || {
-                let live = Live::start(&place, &root, fresh);
+                // A build that panics counts as failed, so the searches
+                // waiting for it go on rather than waiting forever.
+                let live =
+                    panic::catch_unwind(AssertUnwindSafe(|| Live::start(&place, &root, fresh)))
+                        .ok()
+                        .flatten();
                 {
                     let mut state = job.state.lock().unwrap_or_else(PoisonError::into_inner);
                     state.building = false;
