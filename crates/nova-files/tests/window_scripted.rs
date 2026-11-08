@@ -48,7 +48,7 @@ impl Core {
         let mut requests = Vec::new();
         while let Ok(message) = self.messages.try_recv() {
             if let CoreMessage::Command {
-                command: Command::Thumbnails { first, count, .. },
+                command: Command::Rows { first, count, .. },
                 ..
             } = message
             {
@@ -124,41 +124,11 @@ fn shown_with_details(
 }
 
 #[gpui::test]
-fn a_refused_folder_reads_the_shown_one_again_while_its_details_are_missing(
-    cx: &mut TestAppContext,
-) {
-    let (view, cx, mut core, _) = shown_with_details(cx, 1);
-
-    view.update(cx, |view, _| view.open(Path::new(MISSING)));
-    let (id, path) = core.next_listing().unwrap();
-    core.refuse(id, &path);
-    cx.run_until_parked();
-
-    let (_, again) = core.next_listing().unwrap();
-    assert_eq!(again, Path::new(SHOWN));
-}
-
-#[gpui::test]
-fn a_refused_folder_leaves_a_complete_listing_alone(cx: &mut TestAppContext) {
-    let (view, cx, mut core, _) = shown_with_details(cx, ENTRIES);
-
-    view.update(cx, |view, _| view.open(Path::new(MISSING)));
-    let (id, path) = core.next_listing().unwrap();
-    core.refuse(id, &path);
-    cx.run_until_parked();
-
-    assert!(core.next_listing().is_none());
-}
-
-#[gpui::test]
-fn the_shown_folder_refused_too_is_not_asked_for_again(cx: &mut TestAppContext) {
+fn a_refused_folder_leaves_the_shown_one_alone(cx: &mut TestAppContext) {
     let (view, cx, mut core, _) = shown_with_details(cx, 1);
 
     view.update(cx, |view, _| view.open(Path::new(MISSING)));
     view.read_with(cx, |view, _| assert!(view.waiting()));
-    let (id, path) = core.next_listing().unwrap();
-    core.refuse(id, &path);
-    cx.run_until_parked();
     let (id, path) = core.next_listing().unwrap();
     core.refuse(id, &path);
     cx.run_until_parked();
@@ -167,6 +137,7 @@ fn the_shown_folder_refused_too_is_not_asked_for_again(cx: &mut TestAppContext) 
     view.read_with(cx, |view, _| {
         assert_eq!(view.folder(), Some(Path::new(SHOWN)));
         assert!(!view.waiting());
+        assert_eq!(view.columns(0).unwrap().size, "1 B");
     });
 }
 
@@ -185,7 +156,7 @@ fn details_for_another_listing_are_left_out(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn details_after_a_gap_are_left_out(cx: &mut TestAppContext) {
+fn details_after_a_gap_fill_their_own_rows(cx: &mut TestAppContext) {
     let (view, cx, core, id) = shown_with_details(cx, 1);
 
     core.send(Event::DetailsRead {
@@ -195,7 +166,10 @@ fn details_after_a_gap_are_left_out(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
 
-    view.read_with(cx, |view, _| assert_eq!(view.columns(2).unwrap().size, ""));
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.columns(1).unwrap().size, "");
+        assert_eq!(view.columns(2).unwrap().size, "5 B");
+    });
 }
 
 const SCROLLED: Point<gpui::Pixels> = point(px(0.0), px(-240.0));

@@ -1,7 +1,7 @@
-//! Reading each entry's size and modified time, after its folder is listed.
+//! Reading entries' size and modified time, after their folder is listed.
 //!
-//! The listing goes out first, so the names show at once; the details
-//! follow in batches of [`BATCH`] entries, in entry order. [`read_batch`]
+//! The listing goes out first, so the names show at once; the details of
+//! the entries on screen follow (see `details_queue`). [`read_batch`]
 //! asks `cancelled` before each read from the disk and gives up as soon as
 //! it says so. A link reports what it points to; a broken link reports
 //! itself. An entry that can't be read (it vanished, say) gets empty
@@ -11,11 +11,6 @@ use std::fs;
 use std::path::Path;
 
 use nova_files_api::{Details, Entry, EntryKind};
-
-/// Entries per [`nova_files_api::Event::DetailsRead`]: large enough that a
-/// 100,000-entry folder sends few events, small enough that the first
-/// screen fills in quickly.
-pub const BATCH: usize = 2048;
 
 /// The details of each of `entries`, all in the folder at `folder`, in the
 /// same order. `None` when `cancelled` said so before the batch was done.
