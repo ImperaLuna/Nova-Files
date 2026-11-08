@@ -129,7 +129,8 @@ through its own PR off main.
 
 Every change goes through a pull request. Push with `git push`, never
 through GitHub's file API, so the repo's pre-push hook runs (`nix develop`
-turns it on; elsewhere run `git config core.hooksPath tools/git-hooks`). A
+turns it on; elsewhere run `git config core.hooksPath tools/git-hooks`); it
+also runs rustfmt and Clippy on the crates the push changes. A
 stacked pull request (base isn't main) changes code only: `crates/`,
 `data/`, `Cargo.toml` and `Cargo.lock`, without Markdown or lint configs.
 Everything else goes in its own pull request off main.
