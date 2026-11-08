@@ -10,6 +10,7 @@
 mod details;
 mod jobs;
 mod list;
+mod memory;
 mod places;
 mod run;
 mod startup_trace;
@@ -22,6 +23,7 @@ use std::time::Duration;
 
 use nova_files_api::Connector;
 
+pub use memory::set_give_back;
 pub use places::Home;
 pub use startup_trace::{TRACE_VARIABLE, start_startup_trace};
 pub use thumbs::Thumbnails;

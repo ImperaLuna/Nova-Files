@@ -19,7 +19,11 @@
 //! loader to skip drivers for GPUs the PC doesn't have (see
 //! `nova_files_core::absent_vendor_drivers`); each skipped driver is a set of
 //! libraries a cold start no longer reads.
+//!
+//! It also hands the core a way to give freed memory back to the system
+//! after heavy work (see `memory`).
 
+mod memory;
 mod mode;
 
 use std::error::Error;
@@ -40,6 +44,7 @@ fn main() -> ExitCode {
         report(&format!("start-up trace: {error}"));
     }
     skip_absent_vulkan_drivers();
+    nova_files_core::set_give_back(memory::give_back);
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

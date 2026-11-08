@@ -3,7 +3,7 @@
 # The program. Wiring only: it starts the core, the D-Bus service and the
 # window, and holds no logic of its own.
 #
-# Allowed outside crates: none
+# Allowed outside crates: libc
 # Allowed workspace crates: nova-files-api, nova-files-core, nova-files-dbus, nova-files-index, nova-files-ui
 
 [package]
@@ -18,6 +18,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# malloc_trim, to give freed memory back after a listing (memory.rs).
+libc = "0.2.189"
 nova-files-api.workspace = true
 nova-files-core.workspace = true
 nova-files-dbus.workspace = true
