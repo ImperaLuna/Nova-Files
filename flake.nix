@@ -15,6 +15,14 @@
       url = "github:rustsec/advisory-db";
       flake = false;
     };
+    # An earlier Nova Files commit whose dependency build the current one
+    # starts from, so a Cargo.lock change rebuilds only the crates it
+    # touches (nix/build.nix). After a GPUI bump lands on main, point the
+    # rev at that main commit and run `nix flake update deps-base`.
+    deps-base = {
+      url = "github:ImperaLuna/Nova-Files/c8ae1f63baaa195a859831fb7b2fd471131c17ab";
+      flake = false;
+    };
   };
 
   outputs =
@@ -23,6 +31,7 @@
       nixpkgs,
       crane,
       advisory-db,
+      deps-base,
     }:
     let
       systems = [
@@ -30,7 +39,13 @@
         "aarch64-linux"
       ];
       forEachSystem = f: nixpkgs.lib.genAttrs systems (system: f system nixpkgs.legacyPackages.${system});
-      build = forEachSystem (_system: pkgs: import ./nix/build.nix { inherit pkgs crane; });
+      build = forEachSystem (
+        _system: pkgs:
+        import ./nix/build.nix {
+          inherit pkgs crane;
+          depsBase = import "${deps-base}/nix/build.nix" { inherit pkgs crane; };
+        }
+      );
     in
     {
       packages = forEachSystem (

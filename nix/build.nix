@@ -3,7 +3,13 @@
 # Crane builds the dependencies once (`cargoArtifacts`) and every Cargo
 # check reuses them, so a change to our code never rebuilds the crates we
 # borrow.
-{ pkgs, crane }:
+{
+  pkgs,
+  crane,
+  # The build of an earlier commit (see the deps-base input in flake.nix),
+  # or null to build every dependency from scratch.
+  depsBase ? null,
+}:
 let
   craneLib = crane.mkLib pkgs;
   src = craneLib.cleanCargoSource ../.;
@@ -66,7 +72,18 @@ let
     inherit ((pkgs.lib.importTOML ../Cargo.toml).workspace.package) version;
   };
 
-  cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+  # A dependency build starts from the earlier commit's target folder, so
+  # Cargo rebuilds only the crates whose version, source or dependencies
+  # changed since then; the rest keep their fingerprints. Without this, any
+  # Cargo.lock change, such as a GPUI bump, rebuilt all of them.
+  buildDeps =
+    args: baseArtifacts:
+    let
+      fresh = craneLib.buildDepsOnly args;
+    in
+    if depsBase == null then fresh else fresh.overrideAttrs { cargoArtifacts = baseArtifacts; };
+
+  cargoArtifacts = buildDeps commonArgs (depsBase.cargoArtifacts or null);
 
   # The checks build with the `ci` profile from Cargo.toml (no LTO, no debug
   # info) and share one dependency build, so a PR never waits on release
@@ -74,7 +91,7 @@ let
   ciArgs = commonArgs // {
     CARGO_PROFILE = "ci";
   };
-  ciArtifacts = craneLib.buildDepsOnly ciArgs;
+  ciArtifacts = buildDeps ciArgs (depsBase.ciArtifacts or null);
 
   # The installed app: binaries, the D-Bus service file and the wrapper.
   mkPackage =

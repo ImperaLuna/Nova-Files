@@ -31,6 +31,23 @@
         "type": "github"
       }
     },
+    "deps-base": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794127559,
+        "narHash": "sha256-+DGpkcl1cxciWdewPgMzT8NZm1KGNA6p7BLZBrdXQt4=",
+        "owner": "ImperaLuna",
+        "repo": "Nova-Files",
+        "rev": "c8ae1f63baaa195a859831fb7b2fd471131c17ab",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ImperaLuna",
+        "repo": "Nova-Files",
+        "rev": "c8ae1f63baaa195a859831fb7b2fd471131c17ab",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1793726008,
@@ -51,6 +68,7 @@
       "inputs": {
         "advisory-db": "advisory-db",
         "crane": "crane",
+        "deps-base": "deps-base",
         "nixpkgs": "nixpkgs"
       }
     }
