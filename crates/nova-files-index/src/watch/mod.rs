@@ -90,6 +90,15 @@ impl Watcher {
         self.finish()
     }
 
+    /// Whether the thread still follows the folders. It ends early only
+    /// on an error, such as a full disk while writing the log; changes
+    /// after that are missed until the index is crawled anew.
+    pub fn is_running(&self) -> bool {
+        self.thread
+            .as_ref()
+            .is_some_and(|thread| !thread.is_finished())
+    }
+
     fn finish(&mut self) -> io::Result<()> {
         let Some(thread) = self.thread.take() else {
             return Ok(());
