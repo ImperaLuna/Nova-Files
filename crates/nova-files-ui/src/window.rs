@@ -34,10 +34,11 @@ use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{App, Context, EventEmitter, RenderImage, Task, UniformListScrollHandle, Window};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
-    Listing, ListingId, PickRequest, Place,
+    Listing, ListingId, Place,
 };
 
 use crate::columns::{self, ColumnText};
+use crate::pick::Picker;
 use crate::shown_thumbnails::ShownThumbnails;
 use crate::theme::size;
 use crate::thumbnail;
@@ -99,7 +100,9 @@ pub struct MainWindow {
     pub(crate) places: Vec<Place>,
     pub(crate) scroll: UniformListScrollHandle,
     /// Another app's request, while the window is its picker (see `pick`).
-    pub(crate) pick: Option<Box<PickRequest>>,
+    pub(crate) pick: Option<Picker>,
+    /// The home folder, which `~` names in a picker's name box.
+    pub(crate) home: PathBuf,
     _events: Task<()>,
 }
 
@@ -175,7 +178,8 @@ impl MainWindow {
             core_moved: false,
             next_listing: 0,
             // Popped from the end: home first, then the root.
-            fallbacks: vec![PathBuf::from(ROOT_FOLDER), home],
+            fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
+            home,
             places: Vec::new(),
             scroll: UniformListScrollHandle::new(),
             pick: None,
@@ -338,6 +342,7 @@ impl MainWindow {
                 if !same_folder {
                     self.scroll = UniformListScrollHandle::new();
                 }
+                self.pick_folder_opened(&path, cx);
                 cx.emit(WindowEvent::Opened(path));
                 cx.notify();
             }
@@ -355,6 +360,7 @@ impl MainWindow {
                     }
                     Some(_) => {}
                 }
+                self.pick_folder_refused(&path);
                 cx.emit(WindowEvent::Refused(path));
             }
             Event::DetailsRead { id, first, details } => {
@@ -499,7 +505,7 @@ pub fn home_folder() -> PathBuf {
 
 /// `path` with `.` dropped and each `..` taking off the part before it,
 /// worked out from the text alone. `..` at the root stays at the root.
-fn tidy(path: &Path) -> PathBuf {
+pub fn tidy(path: &Path) -> PathBuf {
     let mut tidy = PathBuf::new();
     for part in path.components() {
         match part {

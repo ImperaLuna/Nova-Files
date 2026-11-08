@@ -331,7 +331,7 @@ async fn a_picker_picks_the_file_double_clicked(cx: &mut TestAppContext) {
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(OPEN_ONE);
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
     click(cx, "entry-1");
     assert!(answers.try_recv().is_err());
@@ -352,7 +352,7 @@ async fn a_picker_still_goes_into_folders(cx: &mut TestAppContext) {
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(OPEN_ONE);
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
     click(cx, "entry-0");
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
@@ -367,7 +367,7 @@ async fn a_picker_picks_nothing_from_a_listing_it_has_left(cx: &mut TestAppConte
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(OPEN_ONE);
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
     let first = view.read_with(cx, |view, _| view.listing_id()).unwrap();
     let notes = EntryId(1);
 
@@ -394,7 +394,7 @@ async fn a_save_picker_leaves_double_clicked_files_alone(cx: &mut TestAppContext
     let (request, answers) = pick_request(PickKind::Save {
         name: "a.txt".into(),
     });
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
     double_click(cx, "entry-1");
 
@@ -408,7 +408,7 @@ async fn closing_a_picker_answers_cancelled(cx: &mut TestAppContext) {
     let tree = TempFolder::tree();
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(OPEN_ONE);
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
     // From the app, not a window: the UI closes pickers from its request
     // loop, with no window borrowed.

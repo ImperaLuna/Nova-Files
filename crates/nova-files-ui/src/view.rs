@@ -5,8 +5,8 @@
 //! so a folder of any size costs the same to draw. Each row is an icon slot
 //! and a name, then Modified, Type and Size; Modified and Size stay empty
 //! until the core has read that entry's details. A thumbnail, once it
-//! arrives, takes the icon's place. In pick mode a double-click on a file
-//! picks it (see `pick`). Every element a test clicks carries a debug selector:
+//! arrives, takes the icon's place. In pick mode a click selects an entry
+//! and the pick bar runs along the bottom (see `pick`). Every element a test clicks carries a debug selector:
 //! `up`, `place-<n>` and `entry-<n>`, counted from 0.
 
 use std::sync::Arc;
@@ -50,6 +50,7 @@ impl Render for MainWindow {
                             .child(self.entries(cx)),
                     ),
             )
+            .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
     }
 }
 
@@ -178,21 +179,13 @@ impl MainWindow {
                             text.type_name,
                             text.size,
                         ));
-                        match entry.kind {
-                            EntryKind::Folder => row
-                                .cursor_pointer()
-                                .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
-                                    this.open_entry(id);
-                                }))
-                                .into_any_element(),
-                            // A double-click picks it in a picker; elsewhere it
-                            // does nothing yet.
-                            EntryKind::File => row
-                                .on_click(cx.listener(move |this, event, window, _| {
-                                    this.file_clicked(listing_id, id, event, window);
-                                }))
-                                .into_any_element(),
-                        }
+                        let selected = this.pick_selection() == Some((listing_id, id));
+                        row.when(selected, |row| row.bg(rgb(color::ROW_SELECTED)))
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |this, event, window, cx| {
+                                this.entry_clicked((listing_id, id), event, window, cx);
+                            }))
+                            .into_any_element()
                     })
                     .collect()
             }),
