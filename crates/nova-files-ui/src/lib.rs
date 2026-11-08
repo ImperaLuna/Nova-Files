@@ -101,8 +101,21 @@ impl Global for RequestLoop {}
 /// tries once more.
 fn open_window(connector: &Connector, folder: Option<PathBuf>, retry_gpu: RetryGpu, cx: &mut App) {
     let folder = folder.unwrap_or_else(home_folder);
-    let opened = match try_open_window(connector, folder.clone(), cx) {
-        Err(_) if retry_gpu() => try_open_window(connector, folder, cx),
+    let open = |cx: &mut App| -> gpui::Result<WindowHandle<MainWindow>> {
+        let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            app_id: Some(nova_files_api::APP_ID.to_owned()),
+            ..WindowOptions::default()
+        };
+        let connector = connector.clone();
+        let folder = folder.clone();
+        cx.open_window(options, move |_window, cx| {
+            cx.new(|cx| MainWindow::new(&connector, &folder, cx))
+        })
+    };
+    let opened = match open(cx) {
+        Err(_) if retry_gpu() => open(cx),
         opened => opened,
     };
     if let Err(error) = opened {
@@ -114,21 +127,4 @@ fn open_window(connector: &Connector, folder: Option<PathBuf>, retry_gpu: RetryG
         )
         .ok();
     }
-}
-
-fn try_open_window(
-    connector: &Connector,
-    folder: PathBuf,
-    cx: &mut App,
-) -> gpui::Result<WindowHandle<MainWindow>> {
-    let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
-    let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(bounds)),
-        app_id: Some(nova_files_api::APP_ID.to_owned()),
-        ..WindowOptions::default()
-    };
-    let connector = connector.clone();
-    cx.open_window(options, move |_window, cx| {
-        cx.new(|cx| MainWindow::new(&connector, &folder, cx))
-    })
 }
