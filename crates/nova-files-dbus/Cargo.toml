@@ -3,7 +3,7 @@
 # The public D-Bus interface that launchers and shells use to search and open
 # files.
 #
-# Allowed outside crates: enumflags2, futures, zbus
+# Allowed outside crates: enumflags2, futures, rustix, zbus
 # Allowed workspace crates: nova-files-api
 
 [package]
@@ -24,6 +24,9 @@ enumflags2 = "0.7.12"
 # A one-shot channel, so a D-Bus call can await an answer from a thread.
 futures = { version = "0.3", default-features = false, features = ["std"] }
 nova-files-api.workspace = true
+# Opens a file to hand to the portal as an O_PATH descriptor, which never
+# blocks (a FIFO would) and needs no read permission.
+rustix = { version = "1.1.6", default-features = false, features = ["fs", "std"] }
 zbus = "5"
 
 [dev-dependencies]

@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use nova_files_api::{ClientGone, Connection, Connector, CoreGone, Event, EventSink};
+use nova_files_api::{ClientGone, Command, Connection, Connector, CoreGone, Event, EventSink};
 use zbus::blocking::fdo::DBusProxy;
 
 use crate::Bus;
@@ -112,9 +112,24 @@ impl Holds {
     /// [`HoldError`] when the core has stopped, the caller has left, or
     /// the bus doesn't say (as once the watch has ended).
     pub async fn take(&self, caller: &UniqueName<'_>) -> Result<Hold, HoldError> {
+        self.take_with(caller, Discard).await
+    }
+
+    /// Like [`Holds::take`], with the core's events for the hold going to
+    /// `events`; [`Hold::send`] sends it commands. When the caller leaves,
+    /// the connection goes with the hold, so the core drops what it was
+    /// doing for it.
+    ///
+    /// # Errors
+    /// As [`Holds::take`].
+    pub async fn take_with(
+        &self,
+        caller: &UniqueName<'_>,
+        events: impl EventSink,
+    ) -> Result<Hold, HoldError> {
         let connection = self
             .connector
-            .connect(Discard)
+            .connect(events)
             .map_err(|CoreGone| HoldError::CoreGone)?;
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         lock(&self.held)
@@ -153,6 +168,22 @@ pub struct Hold {
     caller: String,
     id: u64,
     held: Arc<Mutex<Held>>,
+}
+
+impl Hold {
+    /// Sends `command` on the hold's connection.
+    ///
+    /// # Errors
+    /// [`HoldError::CallerGone`] once the caller has left and the hold
+    /// with it; [`HoldError::CoreGone`] when the core has stopped.
+    pub fn send(&self, command: Command) -> Result<(), HoldError> {
+        lock(&self.held)
+            .get(&self.caller)
+            .and_then(|holds| holds.get(&self.id))
+            .ok_or(HoldError::CallerGone)?
+            .send(command)
+            .map_err(|CoreGone| HoldError::CoreGone)
+    }
 }
 
 impl Drop for Hold {

@@ -3528,6 +3528,7 @@ dependencies = [
  "futures",
  "nova-files-api",
  "nova-files-core",
+ "rustix 1.1.6",
  "zbus",
 ]
 
