@@ -21,7 +21,9 @@
 //! then the loader works as it always does.
 //!
 //! The answer is the value for [`FILTER_VARIABLE`], which the program sets
-//! before it starts any thread. Children inherit it, which is harmless: it
+//! before it starts any thread. When a window's GPU setup still fails (a
+//! driver updated without a reboot breaks NVIDIA's Vulkan and OpenGL both),
+//! the program removes the filter and tries once more, so lavapipe can draw. Children inherit it, which is harmless: it
 //! only hides drivers for hardware that isn't there.
 
 use std::collections::{BTreeMap, BTreeSet};
