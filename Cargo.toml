@@ -23,7 +23,7 @@ nova-files-index = { path = "crates/nova-files-index" }
 nova-files-ui = { path = "crates/nova-files-ui" }
 
 # GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds fixes
-# on top of a Zed stable release (FIL-42, FIL-44, FIL-65, FIL-68). Each pin is its
+# on top of a Zed stable release (FIL-42, FIL-44, FIL-65, FIL-68, FIL-70). Each pin is its
 # own branch, `nova/<tag>` (with a suffix when fixes are added to a pin), so
 # older pins stay buildable:
 # - zed-industries/zed#63289: make the path (MSAA) textures only when a frame
@@ -35,16 +35,18 @@ nova-files-ui = { path = "crates/nova-files-ui" }
 #   overlaps the GPU setup instead of coming before it.
 # - FIL-68: log the start-up phases (target `gpui::startup`) for the
 #   start-up trace.
+# - FIL-70: log each drawn frame's duration (target `gpui::frame`) for the
+#   frame trace.
 # When all are merged upstream, point these back at zed-industries/zed.
 #
 # The crates.io release (0.2.2) draws through blade, which turns on ray
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "7332108fb30888158d22ec43b1136de9662759cf", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "d2d241fa524ddaac71279d39621bc3ac8e5ac03b", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "7332108fb30888158d22ec43b1136de9662759cf", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "d2d241fa524ddaac71279d39621bc3ac8e5ac03b", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index and the nova-files binary (one
