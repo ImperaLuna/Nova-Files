@@ -1,0 +1,3 @@
+[portal]
+DBusName=@portal_bus_name@
+Interfaces=org.freedesktop.impl.portal.FileChooser
