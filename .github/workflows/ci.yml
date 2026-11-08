@@ -104,13 +104,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
-  # On pull requests: mutation tests on the changed lines. On main: only a
-  # build, to save the cargo cache. GitHub lets a PR restore caches saved on
-  # main but not ones saved on other PR branches, so main keeps it warm.
+  # On pull requests: mutation tests on the changed lines, split over up to
+  # four runners (tools/ci-mutants-shard.sh decides how many the mutants are
+  # worth). On main: one runner and only a build, to save the cargo cache.
+  # GitHub lets a PR restore caches saved on main but not ones saved on other
+  # PR branches, so main keeps it warm.
   mutants:
-    name: mutation tests on changed lines
+    name: mutation tests, shard ${{ matrix.shard }}
     needs: stack-guard
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        shard: ${{ fromJSON(github.event_name == 'pull_request' && '[0, 1, 2, 3]' || '[0]') }}
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
     steps:
@@ -126,7 +131,8 @@ jobs:
         # into the description. A missing or failed one fails here in seconds
         # instead of after the whole run. The body is read from the API, not
         # the event, so editing it and rerunning this job picks up the change.
-        if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request'
+        # One shard checks it for all of them.
+        if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request' && matrix.shard == 0
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
@@ -176,8 +182,14 @@ jobs:
         env:
           CARGO_INCREMENTAL: 1
         run: nix develop .#mutants --command cargo nextest run --no-run --cargo-profile ci --workspace
-      - name: Mutation tests
+      - name: Pick this shard's mutants
+        id: shard
         if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request'
+        run: >-
+          nix develop .#mutants --command tools/ci-mutants-shard.sh
+          "${{ matrix.shard }}" "${{ strategy.job-total }}" HEAD^1
+      - name: Mutation tests
+        if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request' && steps.shard.outputs.skip == 'false'
         # In place, one mutant at a time, in this checkout. cargo-mutants'
         # copies of the tree lose file times, so cargo rebuilt about 300
         # crates in every copy before the first mutant. --test-workspace
@@ -191,6 +203,7 @@ jobs:
         run: >-
           nix develop .#mutants --command just mutants HEAD^1 ""
           --profile ci --in-place --test-workspace=true --caught --unviable
+          ${{ steps.shard.outputs.flags }}
       - name: Disk space left
         if: steps.changes.outputs.run == 'true'
         run: df -h /
@@ -201,3 +214,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+
+  # The required check. The shards' names carry their index, so this job
+  # keeps the one name the ruleset asks for, and fails unless every shard
+  # passed (a skipped job, after a failed stack guard, fails it too).
+  mutants-result:
+    name: mutation tests on changed lines
+    needs: mutants
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every shard passed
+        env:
+          RESULT: ${{ needs.mutants.result }}
+        run: test "$RESULT" = success
