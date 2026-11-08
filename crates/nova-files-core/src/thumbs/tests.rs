@@ -98,3 +98,12 @@ fn dropping_the_queue_stops_its_worker() {
         Err(mpsc::RecvTimeoutError::Disconnected)
     );
 }
+
+#[test]
+fn the_environment_names_the_thumbnails_folder_and_helper() {
+    // Tests run with a home folder and a program path.
+    let thumbnails = Thumbnails::from_env().unwrap();
+    let cache = crate::places::cache_home().unwrap();
+    assert_eq!(thumbnails.folder, cache.join(THUMBNAILS_FOLDER));
+    assert_eq!(thumbnails.helper.file_name().unwrap(), HELPER_NAME);
+}
