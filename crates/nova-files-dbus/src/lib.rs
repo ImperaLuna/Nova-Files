@@ -8,9 +8,10 @@
 //! - the standard `org.freedesktop.Application`, whose `Activate` and
 //!   `Open` ask for a new window.
 //!
-//! It then serves the portal's `FileChooser` interface at the portal path
-//! (`file_chooser`) and asks for the file picker's portal bus name, waiting
-//! in the bus's queue if another program holds it. A later process finds
+//! [`Service::serve_file_picker`] then serves the portal's `FileChooser`
+//! interface at the portal path (`file_chooser`) and asks for the file
+//! picker's portal bus name, waiting in the bus's queue if another program
+//! holds it. A later process finds
 //! the application's name taken and gets a [`RunningInstance`] to hand its
 //! launch over to; it never serves the picker or asks for its name.
 //!
@@ -30,6 +31,7 @@ mod application;
 mod file_chooser;
 mod files;
 mod holds;
+mod portal_options;
 mod search;
 
 use std::collections::HashMap;
@@ -47,7 +49,7 @@ use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
 pub use application::INTERFACE as APPLICATION_INTERFACE;
 pub use file_chooser::{
     BUS_NAME as PORTAL_BUS_NAME, INTERFACE as FILE_CHOOSER_INTERFACE,
-    OBJECT_PATH as PORTAL_OBJECT_PATH,
+    OBJECT_PATH as PORTAL_OBJECT_PATH, Picker,
 };
 pub use files::INTERFACE as FILES_INTERFACE;
 pub use holds::{Hold, HoldError, Holds};
@@ -62,6 +64,7 @@ const CONNECT_THREAD: &str = "nova-files-dbus-connect";
 const NAME_WATCH_THREAD: &str = "nova-files-dbus-name-watch";
 
 /// Which bus to claim the name on.
+#[derive(Clone)]
 pub enum Bus {
     /// The user's session bus, as the program uses.
     Session,
@@ -95,11 +98,22 @@ pub struct Service {
 }
 
 impl Service {
-    /// Whether this process owned [`PORTAL_BUS_NAME`] when it started.
-    /// Another program may hold it; this process then waits in the bus's
-    /// queue for it and becomes the file picker once it is freed.
+    /// Whether this process owned [`PORTAL_BUS_NAME`] when it began to
+    /// serve the file picker. Another program may hold it; this process
+    /// then waits in the bus's queue for it and becomes the file picker
+    /// once it is freed.
     pub const fn serves_portal(&self) -> bool {
         self.portal
+    }
+
+    /// Serves the file picker, shown by `picker`, and asks for its bus
+    /// name, waiting in the bus's queue when another program holds it. Pick
+    /// requests hold the core `connector` reaches, watched on `bus`. The
+    /// picker is optional, so any failure leaves the app running without
+    /// it; [`Self::serves_portal`] says how it went.
+    pub fn serve_file_picker(&mut self, bus: &Bus, connector: Connector, picker: impl Picker) {
+        self.portal = Holds::new(connector, bus)
+            .is_ok_and(|holds| queue_for_portal(&self.connection, picker, holds));
     }
 
     /// Gives the bus names up and waits for the bus to confirm, so a
@@ -193,8 +207,10 @@ pub fn start_waiting(
         // wait in line for it.
         match connection.request_name_with_flags(APP_ID, RequestNameFlags::DoNotQueue.into()) {
             Ok(_) => {
-                let portal = queue_for_portal(&connection);
-                return Ok(Started::Service(Service { connection, portal }));
+                return Ok(Started::Service(Service {
+                    connection,
+                    portal: false,
+                }));
             }
             Err(zbus::Error::NameTaken) => {
                 let left = deadline.saturating_duration_since(Instant::now());
@@ -216,14 +232,13 @@ pub fn start_waiting(
     }
 }
 
-/// Serves the file picker and asks for its bus name, waiting in the bus's
-/// queue when another program holds it. Whether this process owns it now;
-/// the picker is optional, so any failure leaves the app running without
-/// it.
-fn queue_for_portal(connection: &Connection) -> bool {
-    let served = connection
-        .object_server()
-        .at(PORTAL_OBJECT_PATH, file_chooser::FileChooser);
+/// Serves the file picker and asks for its bus name; whether this process
+/// owns it now.
+fn queue_for_portal(connection: &Connection, picker: impl Picker, holds: Holds) -> bool {
+    let served = connection.object_server().at(
+        PORTAL_OBJECT_PATH,
+        file_chooser::FileChooser::new(picker, holds),
+    );
     if !matches!(served, Ok(true)) {
         return false;
     }
