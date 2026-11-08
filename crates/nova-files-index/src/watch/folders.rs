@@ -231,7 +231,7 @@ impl Folders {
                 // Most likely a folder that couldn't be read now can be.
                 self.add(&folder.zone, name, path, changes);
             } else if kept {
-                changed(path, changes);
+                self.changed(path, changes);
             }
             self.check_marker(&folder, name, changes);
         }
@@ -341,6 +341,26 @@ impl Folders {
             }
             (false, false) => self.forget_if_folder(&from.path, is_folder),
         }
+    }
+
+    /// A file at `path` changed: its new details, unless it is gone again.
+    fn changed(&mut self, path: PathBuf, changes: &mut Vec<Change>) {
+        let Ok(details) = fs::symlink_metadata(&path) else {
+            // Its folder may have moved on with it.
+            self.vanished.push(path);
+            return;
+        };
+        let kind = if details.is_dir() {
+            Kind::Folder
+        } else if details.is_symlink() {
+            Kind::Link
+        } else {
+            Kind::File
+        };
+        changes.push(Change::Changed {
+            path,
+            details: crawl::facts(&details, kind),
+        });
     }
 
     /// The zone of the watch on the folder at `path`, if it has one.
@@ -571,24 +591,6 @@ impl Folders {
             }
         }
     }
-}
-
-/// A file at `path` changed: its new details, unless it is gone again.
-fn changed(path: PathBuf, changes: &mut Vec<Change>) {
-    let Ok(details) = fs::symlink_metadata(&path) else {
-        return;
-    };
-    let kind = if details.is_dir() {
-        Kind::Folder
-    } else if details.is_symlink() {
-        Kind::Link
-    } else {
-        Kind::File
-    };
-    changes.push(Change::Changed {
-        path,
-        details: crawl::facts(&details, kind),
-    });
 }
 
 /// Whether the folder at `path`, holding `children`, says it isn't worth

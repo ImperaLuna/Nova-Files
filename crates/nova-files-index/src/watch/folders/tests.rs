@@ -536,6 +536,25 @@ fn a_folder_made_inside_one_that_then_moved_is_read_where_it_went() {
 }
 
 #[test]
+fn a_file_written_in_a_folder_that_then_moved_is_read_where_it_went() {
+    let (root, mut folders) = watched_folder("written-then-moved", &["a/file"], Box::new(|| false));
+    let (a, b) = (root.join("a"), root.join("b"));
+    let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
+    assert_eq!(folders.watch(a.clone(), zone), None);
+    // `a/file` is written, then `a` becomes `b`, before any event is read.
+    fs::write(a.join("file"), b"longer now").unwrap();
+    fs::rename(&a, &b).unwrap();
+    let changes = folders.handle(&[
+        event(&folders, &a, ReadFlags::CLOSE_WRITE, 0, "file"),
+        event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 24, "a"),
+        event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 24, "b"),
+    ]);
+    let file = b.join("file");
+    assert_eq!(added_paths(&changes), [file.as_path()]);
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn swapped_folders_are_both_read_again() {
     let (root, mut folders) =
         watched_folder("swap", &["a/one.txt", "b/two.txt"], Box::new(|| false));
