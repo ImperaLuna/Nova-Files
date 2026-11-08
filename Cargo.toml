@@ -31,16 +31,18 @@ nova-files-ui = { path = "crates/nova-files-ui" }
 # - zed-industries/zed#65755: load OpenGL only when hardware Vulkan fails.
 # - FIL-65: build the GPU pipelines on a window's first frame, once it has
 #   settled on opaque or transparent, instead of twice per window.
+# - FIL-65: load the system fonts on a background thread, so reading them
+#   overlaps the GPU setup instead of coming before it.
 # When all are merged upstream, point these back at zed-industries/zed.
 #
 # The crates.io release (0.2.2) draws through blade, which turns on ray
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "5c411e8218fd8b759148bc04406ee60e0f7c3a5a", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "c6828e8dc23590aad9c69d5fb03a8d5c799b12cd", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "5c411e8218fd8b759148bc04406ee60e0f7c3a5a", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "c6828e8dc23590aad9c69d5fb03a8d5c799b12cd", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index can opt in per site with
