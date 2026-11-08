@@ -8,8 +8,9 @@
 //! [`ALLOWED`]. Inside an allowed place the zone is open again, minus
 //! cache folders. Anywhere, a hidden folder outside the allowed places is
 //! skipped, as are `node_modules`, `__pycache__`, and folders that say what
-//! they are by a file inside them ([`marked`]): a cache (`CACHEDIR.TAG`), a
-//! browser profile, or a Wine or Proton prefix. Hidden files are indexed
+//! they are by a file inside them: a browser profile or a Wine or Proton
+//! prefix ([`marked`]), or a cache ([`CACHE_TAG`], when the crawl finds
+//! [`is_cache_signature`] in it). Hidden files are indexed
 //! wherever their folder is.
 //!
 //! Places never indexed (`~/.ssh`, `~/.gnupg`, `~/.mozilla`, `~/.var`
@@ -41,12 +42,16 @@ const SKIPPED: [&str; 2] = ["node_modules", "__pycache__"];
 /// any case, is a cache: `Cache`, `GPUCache`, `Code Cache`, `ShaderCache`.
 const CACHE_ENDINGS: [&str; 2] = ["cache", "caches"];
 
-/// A folder holding one of these files is skipped. `CACHEDIR.TAG` is the
-/// cache-folder standard (bford.info/cachedir), set by Cargo, pip and many
-/// more; only its presence is checked. `Local State` sits in every
-/// Chromium-family browser's profile folder, `profiles.ini` in every
+/// A folder holding one of these files is skipped. `Local State` sits in
+/// every Chromium-family browser's profile folder, `profiles.ini` in every
 /// Mozilla one.
-const MARKERS: [&str; 3] = ["CACHEDIR.TAG", "Local State", "profiles.ini"];
+const MARKERS: [&str; 2] = ["Local State", "profiles.ini"];
+
+/// The cache-folder standard's file (bford.info/cachedir), set by Cargo,
+/// pip and many more. It counts only when it starts with
+/// [`CACHE_TAG_SIGNATURE`], so a stray file of that name hides nothing.
+pub const CACHE_TAG: &str = "CACHEDIR.TAG";
+pub const CACHE_TAG_SIGNATURE: &[u8] = b"Signature: 8a477f597d28d172789f06886806bc55";
 
 /// A folder holding all of these is a Wine or Proton prefix.
 const WINE_PREFIX: [&str; 2] = ["drive_c", "system.reg"];
@@ -97,6 +102,11 @@ pub fn enters(zone: &Zone, name: &OsStr) -> Option<Zone> {
 pub fn marked(names: &[OsString]) -> bool {
     let holds = |wanted: &str| names.iter().any(|name| name == wanted);
     MARKERS.iter().any(|marker| holds(marker)) || WINE_PREFIX.iter().all(|file| holds(file))
+}
+
+/// Whether a [`CACHE_TAG`] file that starts with `start` marks a cache.
+pub fn is_cache_signature(start: &[u8]) -> bool {
+    start == CACHE_TAG_SIGNATURE
 }
 
 /// The zone of the hidden folder at `path`: open inside an allowed place,
@@ -203,7 +213,7 @@ mod tests {
     #[test]
     fn marker_files_skip_their_folder() {
         let names = |list: &[&str]| list.iter().map(OsString::from).collect::<Vec<_>>();
-        assert!(marked(&names(&["CACHEDIR.TAG", "data"])));
+        assert!(!marked(&names(&["CACHEDIR.TAG"])));
         assert!(marked(&names(&["Default", "Local State"])));
         assert!(marked(&names(&["profiles.ini"])));
         assert!(marked(&names(&["drive_c", "system.reg", "user.reg"])));
@@ -211,5 +221,12 @@ mod tests {
         assert!(!marked(&names(&["system.reg"])));
         assert!(!marked(&names(&["notes.txt"])));
         assert!(!marked(&[]));
+    }
+
+    #[test]
+    fn only_the_signature_marks_a_cache() {
+        assert!(is_cache_signature(CACHE_TAG_SIGNATURE));
+        assert!(!is_cache_signature(b""));
+        assert!(!is_cache_signature(&CACHE_TAG_SIGNATURE[1..]));
     }
 }

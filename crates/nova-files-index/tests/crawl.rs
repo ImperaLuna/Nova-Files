@@ -130,6 +130,7 @@ const HOME: &[&str] = &[
     "Projects/app/__pycache__/mod.pyc",
     "Projects/app/target/CACHEDIR.TAG",
     "Projects/app/target/debug/app",
+    "Projects/app/stray/CACHEDIR.TAG",
     "Games/prefix/drive_c/windows/win.ini",
     "Games/prefix/system.reg",
 ];
@@ -172,11 +173,18 @@ const INDEXED: &[&str] = &[
     "Projects/app/.gitignore",
     "Projects/app/src",
     "Projects/app/src/main.rs",
+    "Projects/app/stray",
+    "Projects/app/stray/CACHEDIR.TAG",
 ];
 
 #[test]
 fn home_is_indexed_without_hidden_folders_caches_and_profiles() {
     let home = TempFolder::new().with(HOME);
+    fs::write(
+        home.path().join("Projects/app/target/CACHEDIR.TAG"),
+        b"Signature: 8a477f597d28d172789f06886806bc55\n# made by cargo\n",
+    )
+    .unwrap();
     symlink("Documents", home.path().join("Docs link")).unwrap();
     let (index, _cache) = indexed(home.path());
     let expected: BTreeSet<PathBuf> = INDEXED.iter().map(PathBuf::from).collect();
@@ -306,7 +314,7 @@ fn another_drive_is_indexed_but_not_entered() {
 
 #[test]
 fn the_crawl_asks_to_stop_before_every_read() {
-    let home = TempFolder::new().with(&["a/1", "a/2", "b"]);
+    let home = TempFolder::new().with(&["a/1", "a/2", "a/CACHEDIR.TAG", "b"]);
     let asked = Cell::new(0);
     crawl(home.path(), || {
         asked.set(asked.get() + 1);
@@ -314,8 +322,9 @@ fn the_crawl_asks_to_stop_before_every_read() {
     })
     .unwrap();
     // Once at the start, then for each of the folders home and a: once
-    // before reading it and once per entry.
-    assert_eq!(asked.get(), 1 + (1 + 2) + (1 + 2));
+    // before reading it and once per entry; and once before reading a's
+    // CACHEDIR.TAG, which has no signature.
+    assert_eq!(asked.get(), 1 + (1 + 2) + (1 + 3 + 1));
     for stop_at in 1..=asked.get() {
         let asked = Cell::new(0);
         let result = crawl(home.path(), || {

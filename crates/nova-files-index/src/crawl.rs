@@ -7,21 +7,25 @@
 //! is added once it is read, after `policy` had its say on the folder and
 //! on what it holds; it is closed once its last entry is added.
 //!
-//! The crawl stays on the crawled folder's drive: a folder that is another
-//! drive's mount point is indexed but not entered. Entries that vanish
+//! The crawl stays on the crawled folder's filesystem: a folder something
+//! is mounted on (as `mounts` tells) is indexed but not entered. A btrfs
+//! subvolume isn't a mount, so it is entered, though its device number
+//! differs. A `CACHEDIR.TAG` counts only with the standard's signature. Entries that vanish
 //! while the crawl runs are left out; a folder that can't be read is
 //! indexed with no rows under it and [`Flags::UNREADABLE`]. `cancelled` is
 //! asked before every read from the disk.
 
 use std::ffi::OsString;
-use std::fs::{self, Metadata};
+use std::fs::{self, File, Metadata};
 use std::io;
+use std::io::Read as _;
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{DirEntryExt as _, MetadataExt as _};
 use std::path::{self, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::build::{Built, Facts, TooBig};
+use crate::mounts::{MountCheck, SystemMounts};
 use crate::policy::{self, Zone};
 use crate::{FileId, Flags, Kind, RowId, Stamp};
 
@@ -52,6 +56,15 @@ impl From<TooBig> for CrawlError {
 /// # Errors
 /// [`CrawlError`] when `root` can't be crawled or the crawl was cancelled.
 pub fn crawl(root: &Path, cancelled: impl Fn() -> bool) -> Result<Built, CrawlError> {
+    crawl_with(root, SystemMounts::default(), cancelled)
+}
+
+/// [`crawl`], with `mounts` telling which folders are mount points.
+pub fn crawl_with(
+    root: &Path,
+    mounts: impl MountCheck,
+    cancelled: impl Fn() -> bool,
+) -> Result<Built, CrawlError> {
     let crawled = now();
     let stop = |error: io::Error| CrawlError::Unreadable(error.kind());
     if cancelled() {
@@ -69,7 +82,7 @@ pub fn crawl(root: &Path, cancelled: impl Fn() -> bool) -> Result<Built, CrawlEr
     let mut crawl = Crawl {
         built: Built::new(crawled),
         stack: Vec::new(),
-        device: details.dev(),
+        mounts,
         cancelled,
     };
     let row = crawl.built.push(
@@ -79,6 +92,7 @@ pub fn crawl(root: &Path, cancelled: impl Fn() -> bool) -> Result<Built, CrawlEr
     )?;
     crawl.stack.push(Frame {
         row,
+        device: details.dev(),
         path: root,
         zone: Zone::Home,
         children: children.into_iter(),
@@ -97,6 +111,8 @@ struct Child {
 /// A folder whose entries are being added.
 struct Frame {
     row: RowId,
+    /// The folder's device, for entries whose details can't be read.
+    device: u64,
     path: PathBuf,
     zone: Zone,
     children: std::vec::IntoIter<Child>,
@@ -107,15 +123,22 @@ enum Stop {
     Failed(io::Error),
 }
 
-struct Crawl<C> {
+struct Crawl<M, C> {
     built: Built,
     stack: Vec<Frame>,
-    /// The crawled folder's drive.
-    device: u64,
+    mounts: M,
     cancelled: C,
 }
 
-impl<C: Fn() -> bool> Crawl<C> {
+/// Where a child goes: its folder's row, rules and device, and its path.
+struct Spot {
+    parent: RowId,
+    zone: Zone,
+    device: u64,
+    path: PathBuf,
+}
+
+impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
     fn run(&mut self) -> Result<(), CrawlError> {
         while let Some(frame) = self.stack.last_mut() {
             let Some(child) = frame.children.next() else {
@@ -123,30 +146,34 @@ impl<C: Fn() -> bool> Crawl<C> {
                 self.stack.pop();
                 continue;
             };
-            let (parent, zone, path) =
-                (frame.row, frame.zone.clone(), frame.path.join(&child.name));
-            self.add(parent, &zone, path, child)?;
+            let spot = Spot {
+                parent: frame.row,
+                zone: frame.zone.clone(),
+                device: frame.device,
+                path: frame.path.join(&child.name),
+            };
+            self.add(spot, child)?;
         }
         Ok(())
     }
 
-    /// Adds `child`, at `path` in folder `parent`, if `zone`'s rules keep it.
-    fn add(
-        &mut self,
-        parent: RowId,
-        zone: &Zone,
-        path: PathBuf,
-        child: Child,
-    ) -> Result<(), CrawlError> {
+    /// Adds `child` at `spot`, if the zone's rules keep it.
+    fn add(&mut self, spot: Spot, child: Child) -> Result<(), CrawlError> {
+        let Spot {
+            parent,
+            zone,
+            device,
+            path,
+        } = spot;
         let name = child.name.as_bytes();
         let details = match child.details {
             Ok(details) => details,
             // It vanished after the folder was read.
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-            Err(_) if !policy::keeps_file(zone) => return Ok(()),
+            Err(_) if !policy::keeps_file(&zone) => return Ok(()),
             Err(_) => {
                 let facts = unread(FileId {
-                    device: self.device,
+                    device,
                     inode: child.inode,
                 });
                 self.built.push(Some(parent), name, facts)?;
@@ -154,7 +181,7 @@ impl<C: Fn() -> bool> Crawl<C> {
             }
         };
         if !details.is_dir() {
-            if policy::keeps_file(zone) {
+            if policy::keeps_file(&zone) {
                 let kind = if details.is_symlink() {
                     Kind::Link
                 } else {
@@ -164,21 +191,22 @@ impl<C: Fn() -> bool> Crawl<C> {
             }
             return Ok(());
         }
-        let Some(inner) = policy::enters(zone, &child.name) else {
+        let Some(inner) = policy::enters(&zone, &child.name) else {
             return Ok(());
         };
         let folder = facts(&details, Kind::Folder);
-        if details.dev() != self.device {
+        if self.mounts.is_mount_root(&path) {
             let row = self.built.push(Some(parent), name, folder)?;
             self.built.flag(row, Flags::OTHER_DRIVE);
             return Ok(());
         }
-        match read_children(&path, &self.cancelled) {
-            Ok(children) if policy::marked(&names(&children)) => Ok(()),
-            Ok(children) => {
+        match self.read_folder(&path) {
+            Ok(None) => Ok(()),
+            Ok(Some(children)) => {
                 let row = self.built.push(Some(parent), name, folder)?;
                 self.stack.push(Frame {
                     row,
+                    device: details.dev(),
                     path,
                     zone: inner,
                     children: children.into_iter(),
@@ -194,6 +222,33 @@ impl<C: Fn() -> bool> Crawl<C> {
             }
         }
     }
+
+    /// The folder's entries, or `None` when what it holds says it isn't
+    /// worth indexing.
+    fn read_folder(&self, path: &Path) -> Result<Option<Vec<Child>>, Stop> {
+        let children = read_children(path, &self.cancelled)?;
+        let names: Vec<OsString> = children.iter().map(|child| child.name.clone()).collect();
+        if policy::marked(&names) {
+            return Ok(None);
+        }
+        if names.iter().any(|name| name == policy::CACHE_TAG) {
+            if (self.cancelled)() {
+                return Err(Stop::Cancelled);
+            }
+            if has_cache_signature(&path.join(policy::CACHE_TAG)) {
+                return Ok(None);
+            }
+        }
+        Ok(Some(children))
+    }
+}
+
+/// Whether the file at `path` starts with the cache-folder signature.
+fn has_cache_signature(path: &Path) -> bool {
+    let mut start = [0; policy::CACHE_TAG_SIGNATURE.len()];
+    File::open(path)
+        .and_then(|mut file| file.read_exact(&mut start))
+        .is_ok_and(|()| policy::is_cache_signature(&start))
 }
 
 /// Reads the folder at `path`: every entry with its details, sorted by
@@ -221,10 +276,6 @@ fn read_children(path: &Path, cancelled: &impl Fn() -> bool) -> Result<Vec<Child
     }
     children.sort_unstable_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));
     Ok(children)
-}
-
-fn names(children: &[Child]) -> Vec<OsString> {
-    children.iter().map(|child| child.name.clone()).collect()
 }
 
 fn facts(details: &Metadata, kind: Kind) -> Facts {
@@ -268,3 +319,6 @@ fn stamp(time: SystemTime) -> Option<Stamp> {
 fn now() -> Option<Stamp> {
     stamp(SystemTime::now())
 }
+
+#[cfg(test)]
+mod tests;

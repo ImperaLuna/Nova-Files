@@ -14,6 +14,7 @@
 mod build;
 mod crawl;
 mod format;
+mod mounts;
 mod policy;
 mod reader;
 
@@ -53,8 +54,8 @@ impl Flags {
     /// The folder, or the entry's details, couldn't be read; a folder with
     /// this flag has no rows under it.
     pub const UNREADABLE: Self = Self(1);
-    /// A folder on another drive than the crawled folder, mounted inside
-    /// it. It isn't entered.
+    /// A folder something is mounted on: another drive, a network share,
+    /// a bind mount. It isn't entered.
     pub const OTHER_DRIVE: Self = Self(1 << 1);
 
     pub const fn contains(self, other: Self) -> bool {

@@ -3534,6 +3534,7 @@ name = "nova-files-index"
 version = "0.1.0"
 dependencies = [
  "memmap2",
+ "rustix 1.1.6",
 ]
 
 [[package]]
