@@ -230,9 +230,10 @@ fn queue_for_portal(connection: &Connection) -> bool {
     // With no flags, the bus queues the request while the name is taken
     // and never lets another program replace us. zbus's default flags do
     // the opposite, and its flag set can only be named through a flag, so
-    // the set starts from two and drops them.
-    let mut no_flags = RequestNameFlags::DoNotQueue | RequestNameFlags::ReplaceExisting;
-    no_flags.remove(no_flags);
+    // no flags is the complement of all three.
+    let no_flags = !(RequestNameFlags::AllowReplacement
+        | RequestNameFlags::ReplaceExisting
+        | RequestNameFlags::DoNotQueue);
     matches!(
         connection.request_name_with_flags(PORTAL_BUS_NAME, no_flags),
         Ok(RequestNameReply::PrimaryOwner)
