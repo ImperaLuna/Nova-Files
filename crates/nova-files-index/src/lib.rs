@@ -86,3 +86,18 @@ pub struct Entry {
     /// Where the filesystem records it.
     pub created: Option<Stamp>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flags_combine_and_contain() {
+        let both = Flags::UNREADABLE.with(Flags::OTHER_DRIVE);
+        assert!(both.contains(Flags::UNREADABLE));
+        assert!(both.contains(Flags::OTHER_DRIVE));
+        assert!(!Flags::UNREADABLE.contains(Flags::OTHER_DRIVE));
+        assert!(!Flags::default().contains(Flags::UNREADABLE));
+        assert_eq!(Flags::UNREADABLE.with(Flags::UNREADABLE), Flags::UNREADABLE);
+    }
+}

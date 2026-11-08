@@ -66,18 +66,19 @@ pub fn crawl_with(
     cancelled: impl Fn() -> bool,
 ) -> Result<Built, CrawlError> {
     let crawled = now();
-    let stop = |error: io::Error| CrawlError::Unreadable(error.kind());
+    let unreadable = |error: io::Error| CrawlError::Unreadable(error.kind());
     if cancelled() {
         return Err(CrawlError::Cancelled);
     }
-    let root = path::absolute(root).map_err(stop)?;
-    let details = fs::symlink_metadata(&root).map_err(stop)?;
+    let root = path::absolute(root).map_err(unreadable)?;
+    let details = fs::symlink_metadata(&root).map_err(unreadable)?;
     if !details.is_dir() {
         return Err(CrawlError::NotAFolder);
     }
     let children = read_children(&root, &cancelled).map_err(|reason| match reason {
         Stop::Cancelled => CrawlError::Cancelled,
-        Stop::Failed(error) => stop(error),
+        Stop::Gone => CrawlError::Unreadable(io::ErrorKind::NotFound),
+        Stop::Failed(error) => unreadable(error),
     })?;
     let mut crawl = Crawl {
         built: Built::new(crawled),
@@ -120,7 +121,18 @@ struct Frame {
 
 enum Stop {
     Cancelled,
+    /// It vanished: deleted or moved away while the crawl ran.
+    Gone,
     Failed(io::Error),
+}
+
+/// Sorts a read error into a vanished entry or a real failure.
+fn stop(error: io::Error) -> Stop {
+    if error.kind() == io::ErrorKind::NotFound {
+        Stop::Gone
+    } else {
+        Stop::Failed(error)
+    }
 }
 
 struct Crawl<M, C> {
@@ -166,17 +178,18 @@ impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
             path,
         } = spot;
         let name = child.name.as_bytes();
-        let details = match child.details {
+        let details = match child.details.map_err(stop) {
             Ok(details) => details,
             // It vanished after the folder was read.
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-            Err(_) if !policy::keeps_file(&zone) => return Ok(()),
-            Err(_) => {
-                let facts = unread(FileId {
-                    device,
-                    inode: child.inode,
-                });
-                self.built.push(Some(parent), name, facts)?;
+            Err(Stop::Gone | Stop::Cancelled) => return Ok(()),
+            Err(Stop::Failed(_)) => {
+                if policy::keeps_file(&zone) {
+                    let id = FileId {
+                        device,
+                        inode: child.inode,
+                    };
+                    self.built.push(Some(parent), name, unread(id))?;
+                }
                 return Ok(());
             }
         };
@@ -201,7 +214,7 @@ impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
             return Ok(());
         }
         match self.read_folder(&path) {
-            Ok(None) => Ok(()),
+            Ok(None) | Err(Stop::Gone) => Ok(()),
             Ok(Some(children)) => {
                 let row = self.built.push(Some(parent), name, folder)?;
                 self.stack.push(Frame {
@@ -214,7 +227,6 @@ impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
                 Ok(())
             }
             Err(Stop::Cancelled) => Err(CrawlError::Cancelled),
-            Err(Stop::Failed(error)) if error.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(Stop::Failed(_)) => {
                 let row = self.built.push(Some(parent), name, folder)?;
                 self.built.flag(row, Flags::UNREADABLE);
@@ -258,20 +270,19 @@ fn read_children(path: &Path, cancelled: &impl Fn() -> bool) -> Result<Vec<Child
         return Err(Stop::Cancelled);
     }
     let mut children = Vec::new();
-    for item in fs::read_dir(path).map_err(Stop::Failed)? {
+    for item in fs::read_dir(path).map_err(stop)? {
         if cancelled() {
             return Err(Stop::Cancelled);
         }
-        match item {
+        match item.map_err(stop) {
             Ok(item) => children.push(Child {
                 name: item.file_name(),
                 inode: item.ino(),
                 details: item.metadata(),
             }),
-            // An entry the folder lists but that can't be read is as good
-            // as gone.
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Stop::Failed(error)),
+            // An entry the folder lists but that has vanished since.
+            Err(Stop::Gone | Stop::Cancelled) => {}
+            Err(failed) => return Err(failed),
         }
     }
     children.sort_unstable_by(|a, b| a.name.as_bytes().cmp(b.name.as_bytes()));

@@ -42,23 +42,25 @@ pub struct SystemMounts {
 
 impl MountCheck for SystemMounts {
     fn is_mount_root(&self, folder: &Path) -> bool {
-        let asked = statx(CWD, folder, AtFlags::SYMLINK_NOFOLLOW, StatxFlags::empty());
-        match asked {
-            Ok(answer)
-                if answer
-                    .stx_attributes_mask
-                    .contains(StatxAttributes::MOUNT_ROOT) =>
-            {
-                answer.stx_attributes.contains(StatxAttributes::MOUNT_ROOT)
-            }
-            _ => self
-                .listed
-                .get_or_init(|| {
-                    fs::read(MOUNTINFO).map_or_else(|_| HashSet::new(), |text| mount_points(&text))
-                })
-                .contains(folder),
-        }
+        statx(CWD, folder, AtFlags::SYMLINK_NOFOLLOW, StatxFlags::empty())
+            .ok()
+            .and_then(|answer| mount_root(answer.stx_attributes_mask, answer.stx_attributes))
+            .unwrap_or_else(|| {
+                self.listed
+                    .get_or_init(|| {
+                        fs::read(MOUNTINFO)
+                            .map_or_else(|_| HashSet::new(), |text| mount_points(&text))
+                    })
+                    .contains(folder)
+            })
     }
+}
+
+/// What `statx` says about being a mount root: `None` when the kernel
+/// doesn't report it (`mask` lacks it).
+fn mount_root(mask: StatxAttributes, attributes: StatxAttributes) -> Option<bool> {
+    mask.contains(StatxAttributes::MOUNT_ROOT)
+        .then(|| attributes.contains(StatxAttributes::MOUNT_ROOT))
 }
 
 /// The mount points a mountinfo file lists.
@@ -113,6 +115,19 @@ mod tests {
         assert_eq!(unescape(b"a\\9zz"), b"a\\9zz");
         assert_eq!(unescape(b"end\\04"), b"end\\04");
         assert_eq!(unescape(b"\\011x"), b"\tx");
+    }
+
+    #[test]
+    fn statx_answers_only_when_it_reports_mount_roots() {
+        let root = StatxAttributes::MOUNT_ROOT;
+        let none = StatxAttributes::empty();
+        assert_eq!(mount_root(root, root), Some(true));
+        assert_eq!(mount_root(root, none), Some(false));
+        assert_eq!(mount_root(none, root), None);
+        assert_eq!(
+            mount_root(StatxAttributes::IMMUTABLE, StatxAttributes::IMMUTABLE),
+            None
+        );
     }
 
     #[test]

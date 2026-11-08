@@ -52,7 +52,7 @@ fn a_mount_point_is_indexed_but_not_entered() {
     let home = Home::new("mount");
     let mounts = Mounts(std::iter::once(home.0.join("drive")).collect());
     let index = indexed(&home.0, mounts);
-    assert_eq!(index.len(), 2);
+    assert_eq!(index.rows(), 2);
     let drive = index.entry(RowId(1)).unwrap();
     assert!(drive.flags.contains(Flags::OTHER_DRIVE));
     assert_eq!(drive.end, RowId(2));
@@ -62,7 +62,7 @@ fn a_mount_point_is_indexed_but_not_entered() {
 fn a_folder_that_isnt_a_mount_is_entered() {
     let home = Home::new("plain");
     let index = indexed(&home.0, Mounts(HashSet::new()));
-    assert_eq!(index.len(), 3);
+    assert_eq!(index.rows(), 3);
     assert_eq!(index.entry(RowId(1)).unwrap().flags, Flags::default());
 }
 
@@ -82,11 +82,20 @@ fn a_folder_with_its_own_device_that_isnt_a_mount_is_entered() {
         return;
     };
     let index = indexed(dev, Mounts(HashSet::new()));
-    let row = (0..index.len())
+    let row = (0..index.rows())
         .map(RowId)
         .find(|&row| index.path(row).unwrap() == other.path())
         .unwrap();
     let entry = index.entry(row).unwrap();
     assert!(!entry.flags.contains(Flags::OTHER_DRIVE));
     assert!(entry.end.0 > row.0 + 1, "{:?} was entered", other.path());
+}
+
+#[test]
+fn only_a_missing_entry_counts_as_gone() {
+    assert!(matches!(stop(io::ErrorKind::NotFound.into()), Stop::Gone));
+    assert!(matches!(
+        stop(io::ErrorKind::PermissionDenied.into()),
+        Stop::Failed(error) if error.kind() == io::ErrorKind::PermissionDenied
+    ));
 }

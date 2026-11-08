@@ -56,9 +56,6 @@ impl Index {
     /// [`OpenError`] when there is no usable index there.
     pub fn open(path: &Path) -> Result<Self, OpenError> {
         let file = File::open(path)?;
-        if usize::try_from(file.metadata()?.len()).is_ok_and(|len| len < HEADER_LEN) {
-            return Err(OpenError::Damaged("shorter than a header"));
-        }
         #[expect(unsafe_code, reason = "mapping the index is the point of this crate")]
         // SAFETY: the map is only sound while nobody changes the file under
         // it. Nova Files never writes an index in place: `Built::save`
@@ -73,18 +70,13 @@ impl Index {
     }
 
     /// How many rows it has; always at least one, the crawled folder.
-    pub const fn len(&self) -> u32 {
+    pub const fn rows(&self) -> u32 {
         #[expect(
             clippy::cast_possible_truncation,
             reason = "check() refused more rows than a u32 counts"
         )]
         let rows = self.header.rows as u32;
         rows
-    }
-
-    /// Never true: an index always holds the crawled folder.
-    pub const fn is_empty(&self) -> bool {
-        self.header.rows == 0
     }
 
     /// The file's size in bytes.
@@ -135,6 +127,11 @@ impl Index {
         while let Some(at) = next {
             names.push(self.name(at)?);
             next = self.raw(at)?.parent();
+            // check() made every parent come before its row; this keeps a
+            // bad read from ever looping.
+            if next.is_some_and(|parent| parent >= at) {
+                return None;
+            }
         }
         Some(names.iter().rev().collect())
     }

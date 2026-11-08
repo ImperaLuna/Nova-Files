@@ -76,7 +76,7 @@ fn indexed(home: &Path) -> (Index, TempFolder) {
 }
 
 fn rows(index: &Index) -> impl Iterator<Item = RowId> {
-    (0..index.len()).map(RowId)
+    (0..index.rows()).map(RowId)
 }
 
 /// Every indexed path except the crawled folder, relative to it.
@@ -231,8 +231,8 @@ fn rows_are_depth_first_with_each_folder_a_run() {
         }
     }
     assert_eq!(index.entry(RowId(0)).unwrap().parent, None);
-    assert_eq!(index.entry(RowId(index.len())), None);
-    assert_eq!(index.name(RowId(index.len())), None);
+    assert_eq!(index.entry(RowId(index.rows())), None);
+    assert_eq!(index.name(RowId(index.rows())), None);
 }
 
 #[test]
@@ -256,7 +256,6 @@ fn rows_hold_the_files_details() {
     }
     assert_eq!(index.root(), home.path());
     assert_eq!(index.entry(RowId(0)).unwrap().kind, Kind::Folder);
-    assert!(!index.is_empty());
     assert_eq!(
         index.bytes(),
         usize::try_from(fs::metadata(cache.path().join("index")).unwrap().len()).unwrap()
@@ -292,6 +291,46 @@ fn a_folder_that_cant_be_read_is_indexed_empty() {
 }
 
 #[test]
+fn entries_whose_details_cant_be_read_are_kept_where_files_are() {
+    // A folder that can be listed but not entered: its entries' names can
+    // be read, their details can't.
+    const LIST_ONLY: u32 = 0o444;
+    let home = TempFolder::new().with(&["listed/a.txt", ".local/bin/tool"]);
+    let listed = home.path().join("listed");
+    let local = home.path().join(".local");
+    for folder in [&listed, &local] {
+        fs::set_permissions(folder, fs::Permissions::from_mode(LIST_ONLY)).unwrap();
+    }
+    let blocked = fs::metadata(listed.join("a.txt")).is_err();
+    let index = blocked.then(|| indexed(home.path()));
+    for folder in [&listed, &local] {
+        fs::set_permissions(folder, fs::Permissions::from_mode(PRIVATE_FOLDER)).unwrap();
+    }
+    // Running as root, which reads them anyway.
+    let Some((index, _cache)) = index else {
+        return;
+    };
+    let file = index.entry(find(&index, "listed/a.txt")).unwrap();
+    assert_eq!(file.flags, Flags::UNREADABLE);
+    assert_eq!(file.kind, Kind::File);
+    assert_eq!(
+        file.id.inode,
+        fs::metadata(listed.join("a.txt")).unwrap().ino()
+    );
+    // On the way to an allowed place only folders are kept, and an entry
+    // that can't be read isn't known to be one.
+    let rows: Vec<_> = relative_paths(&index).into_iter().collect();
+    assert_eq!(
+        rows,
+        [
+            PathBuf::from(".local"),
+            PathBuf::from("listed"),
+            PathBuf::from("listed/a.txt")
+        ]
+    );
+}
+
+#[test]
 fn another_drive_is_indexed_but_not_entered() {
     // /dev holds mount points of other filesystems (pts, shm) on most
     // systems; without one there is nothing to test.
@@ -314,17 +353,17 @@ fn another_drive_is_indexed_but_not_entered() {
 
 #[test]
 fn the_crawl_asks_to_stop_before_every_read() {
-    let home = TempFolder::new().with(&["a/1", "a/2", "a/CACHEDIR.TAG", "b"]);
+    let home = TempFolder::new().with(&["a/1", "a/2", "a/CACHEDIR.TAG", "b/x"]);
     let asked = Cell::new(0);
     crawl(home.path(), || {
         asked.set(asked.get() + 1);
         false
     })
     .unwrap();
-    // Once at the start, then for each of the folders home and a: once
+    // Once at the start, then for each of the folders home, a and b: once
     // before reading it and once per entry; and once before reading a's
     // CACHEDIR.TAG, which has no signature.
-    assert_eq!(asked.get(), 1 + (1 + 2) + (1 + 3 + 1));
+    assert_eq!(asked.get(), 1 + (1 + 2) + (1 + 3 + 1) + (1 + 1));
     for stop_at in 1..=asked.get() {
         let asked = Cell::new(0);
         let result = crawl(home.path(), || {
@@ -362,8 +401,8 @@ fn saving_replaces_the_index_and_readers_keep_the_old_one() {
     let old = Index::open(&path).unwrap();
     crawl(second.path(), || false).unwrap().save(&path).unwrap();
     let new = Index::open(&path).unwrap();
-    assert_eq!((old.len(), old.root()), (2, first.path()));
-    assert_eq!((new.len(), new.root()), (3, second.path()));
+    assert_eq!((old.rows(), old.root()), (2, first.path()));
+    assert_eq!((new.rows(), new.root()), (3, second.path()));
     let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & MODE_BITS;
     assert_eq!(mode(&path), PRIVATE_FILE);
     assert_eq!(mode(path.parent().unwrap()), PRIVATE_FOLDER);
@@ -378,7 +417,7 @@ fn a_stale_temp_file_is_replaced() {
     let path = cache.path().join("index");
     fs::write(cache.path().join("index.new"), b"left by a crash").unwrap();
     crawl(home.path(), || false).unwrap().save(&path).unwrap();
-    assert_eq!(Index::open(&path).unwrap().len(), 2);
+    assert_eq!(Index::open(&path).unwrap().rows(), 2);
     assert!(!cache.path().join("index.new").exists());
 }
 
@@ -393,7 +432,8 @@ fn saving_where_it_cant_write_keeps_nothing() {
 
 #[test]
 fn opening_tells_why_there_is_no_index() {
-    let cache = TempFolder::new().with(&["short", "other"]);
+    let cache = TempFolder::new().with(&["short", "other", "empty"]);
+    fs::write(cache.path().join("empty"), b"").unwrap();
     fs::write(cache.path().join("other"), vec![b'x'; 4096]).unwrap();
     assert_eq!(
         Index::open(&cache.path().join("missing")).err(),
@@ -405,6 +445,10 @@ fn opening_tells_why_there_is_no_index() {
     );
     assert_eq!(
         Index::open(&cache.path().join("short")).err(),
+        Some(OpenError::Damaged("shorter than a header"))
+    );
+    assert_eq!(
+        Index::open(&cache.path().join("empty")).err(),
         Some(OpenError::Damaged("shorter than a header"))
     );
     assert!(matches!(

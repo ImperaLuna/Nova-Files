@@ -157,10 +157,8 @@ impl Built {
 
     fn write_temp(&self, temp: &Path) -> io::Result<()> {
         // A temp file left by a crash is stale: nobody else writes here.
-        match fs::remove_file(temp) {
-            Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
-            _ => {}
-        }
+        // If it can't be removed, creating the new one says why.
+        fs::remove_file(temp).ok();
         let file = OpenOptions::new()
             .write(true)
             .create_new(true)
