@@ -1,4 +1,5 @@
-//! The channel the program uses to ask the UI for windows, or to quit.
+//! The channel the program uses to ask the UI for windows, for pickers
+//! other apps asked for, or to quit.
 //!
 //! The sending half works from any thread (D-Bus, the core's watcher). The
 //! receiving half stays on the main thread and outlives each GPUI run: GPUI
@@ -11,12 +12,17 @@ use std::rc::Rc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use nova_files_api::{PickId, PickRequest};
 
 /// What the program asks of the UI.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Request {
     /// Open another window, on this folder or on the home folder.
     OpenWindow(Option<PathBuf>),
+    /// Open a picker window for another app's request.
+    Pick(Box<PickRequest>),
+    /// Close the picker window for this request, if it is still open.
+    ClosePick(PickId),
     /// Close every window and stop.
     Quit,
 }

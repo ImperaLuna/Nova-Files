@@ -4,7 +4,7 @@
 # here is a green run on GitHub. `nix develop` gives the same tools plus
 # rust-analyzer and `just`, whose recipes run one job, optionally for one
 # crate (see the justfile). CI's mutation job uses the slimmer
-# `nix develop .#mutants`.
+# `nix develop .#mutants`. NixOS systems import `nixosModules.default`.
 {
   description = "Nova Files, a fast file manager for Linux";
 
@@ -38,6 +38,12 @@
           default = build.${system}.package;
         }
       );
+
+      # `programs.nova-files` (see nix/module.nix).
+      nixosModules.default = import ./nix/module.nix {
+        inherit (self) packages;
+        builds = build;
+      };
 
       overlays.default = final: _prev: {
         nova-files = self.packages.${final.stdenv.hostPlatform.system}.default;

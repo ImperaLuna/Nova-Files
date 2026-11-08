@@ -34,7 +34,7 @@ use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{App, Context, EventEmitter, RenderImage, Task, UniformListScrollHandle, Window};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
-    Listing, ListingId, Place,
+    Listing, ListingId, PickRequest, Place,
 };
 
 use crate::columns::{self, ColumnText};
@@ -98,6 +98,8 @@ pub struct MainWindow {
     fallbacks: Vec<PathBuf>,
     pub(crate) places: Vec<Place>,
     pub(crate) scroll: UniformListScrollHandle,
+    /// Another app's request, while the window is its picker (see `pick`).
+    pub(crate) pick: Option<Box<PickRequest>>,
     _events: Task<()>,
 }
 
@@ -176,6 +178,7 @@ impl MainWindow {
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home],
             places: Vec::new(),
             scroll: UniformListScrollHandle::new(),
+            pick: None,
             _events: events,
         };
         window.open(folder);
