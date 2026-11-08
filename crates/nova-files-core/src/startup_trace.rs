@@ -165,7 +165,7 @@ mod tests {
         let trace = StartupTrace::open(&file.0).unwrap();
         record(&trace, "wgpu_hal::vulkan", Level::Debug, "instance flags");
         record(&trace, "gpui", Level::Warn, "enabling OpenGL fallback");
-        assert!(file.lines().is_empty());
+        assert_eq!(file.lines(), Vec::new());
     }
 
     #[test]
