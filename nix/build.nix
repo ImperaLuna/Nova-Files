@@ -66,15 +66,32 @@ let
     inherit ((pkgs.lib.importTOML ../Cargo.toml).workspace.package) version;
   };
 
-  cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+  # Crane's dependency build runs `cargo check` (for Clippy) and then
+  # `cargo build`, one after the other. Nothing runs Clippy on the release
+  # build, so its dependency build skips the check.
+  cargoArtifacts = craneLib.buildDepsOnly (commonArgs // { cargoCheckCommand = "true"; });
 
   # The checks build with the `ci` profile from Cargo.toml (no LTO, no debug
-  # info) and share one dependency build, so a PR never waits on release
-  # linking. The release build is only for the package people install.
+  # info), so a PR never waits on release linking. The release build is only
+  # for the package people install.
   ciArgs = commonArgs // {
     CARGO_PROFILE = "ci";
   };
-  ciArtifacts = craneLib.buildDepsOnly ciArgs;
+
+  # The `ci` dependencies are built twice over: checked for Clippy, and
+  # compiled for the tests and the package. They are two builds so Nix runs
+  # them side by side; after a Cargo.lock change, such as a GPUI bump, every
+  # dependency is rebuilt and the two used to take turns.
+  ciCheckArtifacts = craneLib.buildDepsOnly (
+    ciArgs
+    // {
+      pname = "${commonArgs.pname}-check";
+      cargoBuildCommand = "true";
+      cargoCheckExtraArgs = "--all-targets";
+      doCheck = false;
+    }
+  );
+  ciArtifacts = craneLib.buildDepsOnly (ciArgs // { cargoCheckCommand = "true"; });
 
   # The installed app: binaries, the D-Bus service file and the wrapper.
   mkPackage =
@@ -119,6 +136,7 @@ in
     commonArgs
     cargoArtifacts
     ciArgs
+    ciCheckArtifacts
     ciArtifacts
     runtimeLibs
     ;

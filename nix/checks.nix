@@ -1,16 +1,21 @@
 # Every check `nix flake check` runs, which is exactly what CI runs.
 #
-# Cargo checks build with the `ci` profile and reuse its dependency build
-# from nix/build.nix. The checks in
-# tools/ run as plain scripts over the source tree, with only the tools
-# each one needs.
+# Cargo checks build with the `ci` profile and reuse its dependency builds
+# from nix/build.nix: Clippy the checked one, the rest the compiled one.
+# The checks in tools/ run as plain scripts over the source tree, with only
+# the tools each one needs.
 {
   pkgs,
   build,
   advisory-db,
 }:
 let
-  inherit (build) craneLib ciArgs ciArtifacts;
+  inherit (build)
+    craneLib
+    ciArgs
+    ciCheckArtifacts
+    ciArtifacts
+    ;
   inherit (pkgs) lib;
 
   repoFiles = lib.fileset.toSource {
@@ -58,7 +63,7 @@ in
   clippy = craneLib.cargoClippy (
     ciArgs
     // {
-      cargoArtifacts = ciArtifacts;
+      cargoArtifacts = ciCheckArtifacts;
       # --deny warnings: compiler warnings fail CI too.
       cargoClippyExtraArgs = "--workspace --all-targets -- --deny warnings";
     }
