@@ -25,7 +25,7 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use rustix::event::{EventfdFlags, PollFd, PollFlags, eventfd, poll};
+use rustix::event::{EventfdFlags, PollFd, PollFlags, Timespec, eventfd, poll};
 use rustix::fs::inotify::{self, CreateFlags};
 use rustix::io::Errno;
 
@@ -59,7 +59,9 @@ impl Watcher {
     ) -> io::Result<Self> {
         let inotify = inotify::init(CreateFlags::CLOEXEC.union(CreateFlags::NONBLOCK))?;
         let stop = Arc::new(eventfd(0, EventfdFlags::CLOEXEC)?);
-        let mut folders = Folders::new(inotify, index.root().to_owned());
+        let asked = Arc::clone(&stop);
+        let stopping = Box::new(move || is_readable(&asked));
+        let mut folders = Folders::new(inotify, index.root().to_owned(), stopping);
         let unwatched = folders.watch_index(index);
         for change in &unwatched {
             log.append(change)?;
@@ -129,6 +131,16 @@ fn run(
             on_change();
         }
     }
+}
+
+/// Whether `fd` has something to read now, without waiting.
+fn is_readable(fd: &OwnedFd) -> bool {
+    let mut fds = [PollFd::new(fd, PollFlags::IN)];
+    let now = Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    poll(&mut fds, Some(&now)).is_ok_and(|ready| ready > 0)
 }
 
 /// Every event the kernel has queued, until a read would block.

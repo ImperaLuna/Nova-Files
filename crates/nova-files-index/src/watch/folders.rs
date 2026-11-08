@@ -30,6 +30,7 @@ use rustix::io::Errno;
 
 use crate::changes::Change;
 use crate::crawl::{self, Stop};
+use crate::mounts::{MountCheck as _, SystemMounts};
 use crate::policy::{self, Zone};
 use crate::reader::Index;
 use crate::{Flags, Kind, RowId};
@@ -69,20 +70,26 @@ struct Leaving {
     kept: bool,
 }
 
+/// Whether the watcher is being stopped, so a long read of a new tree can
+/// end early.
+pub type Stopping = Box<dyn Fn() -> bool + Send>;
+
 pub struct Folders {
     inotify: OwnedFd,
     root: PathBuf,
     by_wd: HashMap<i32, Watched>,
     by_path: HashMap<PathBuf, i32>,
+    stopping: Stopping,
 }
 
 impl Folders {
-    pub fn new(inotify: OwnedFd, root: PathBuf) -> Self {
+    pub fn new(inotify: OwnedFd, root: PathBuf, stopping: Stopping) -> Self {
         Self {
             inotify,
             root,
             by_wd: HashMap::new(),
             by_path: HashMap::new(),
+            stopping,
         }
     }
 
@@ -122,10 +129,7 @@ impl Folders {
             self.handle_one(event, &mut leaving, &mut changes);
         }
         for (_, gone) in leaving {
-            self.forget(&gone.path);
-            if gone.kept {
-                changes.push(Change::Removed { path: gone.path });
-            }
+            self.gone(gone, &mut changes);
         }
         changes
     }
@@ -155,6 +159,12 @@ impl Folders {
         let is_folder = event.mask.contains(ReadFlags::ISDIR);
         let kept = policy::keeps(&folder.zone, name, is_folder);
         let mask = event.mask;
+        if !mask.contains(ReadFlags::MOVED_FROM) {
+            // Something new at a path that moved away earlier in this
+            // batch: that move left the tree, and must end before this
+            // takes its place.
+            self.leave_from(&path, leaving, changes);
+        }
         if mask.contains(ReadFlags::MOVED_FROM) {
             leaving.insert(event.cookie, Leaving { path, kept });
         } else if mask.contains(ReadFlags::MOVED_TO) {
@@ -163,6 +173,7 @@ impl Folders {
                 None if kept => self.add(&folder.zone, name, path, changes),
                 None => {}
             }
+            self.check_marker(&folder, name, changes);
         } else if mask.contains(ReadFlags::CREATE) {
             if kept {
                 self.add(&folder.zone, name, path, changes);
@@ -174,10 +185,49 @@ impl Folders {
                 changes.push(Change::Removed { path });
             }
         } else if mask.intersects(ReadFlags::CLOSE_WRITE.union(ReadFlags::ATTRIB)) {
-            if kept {
+            if kept && is_folder && self.can_enter_unwatched(&folder.zone, name, &path) {
+                // Most likely a folder that couldn't be read now can be.
+                self.add(&folder.zone, name, path, changes);
+            } else if kept {
                 changed(path, changes);
             }
             self.check_marker(&folder, name, changes);
+        }
+    }
+
+    /// Whether the folder at `path`, named `name` in a folder of `zone`,
+    /// is one the rules enter but that has no watch, and isn't another
+    /// drive's (which the crawl doesn't read).
+    fn can_enter_unwatched(&self, zone: &Zone, name: &OsStr, path: &Path) -> bool {
+        !self.by_path.contains_key(path)
+            && policy::enters(zone, name).is_some()
+            && !SystemMounts::default().is_mount_root(path)
+    }
+
+    /// Ends the move away from `path` still waiting for its second half,
+    /// if there is one: it left the tree.
+    fn leave_from(
+        &mut self,
+        path: &Path,
+        leaving: &mut HashMap<u32, Leaving>,
+        changes: &mut Vec<Change>,
+    ) {
+        let Some(&cookie) = leaving
+            .iter()
+            .find_map(|(cookie, gone)| (gone.path == path).then_some(cookie))
+        else {
+            return;
+        };
+        if let Some(gone) = leaving.remove(&cookie) {
+            self.gone(gone, changes);
+        }
+    }
+
+    /// A move away from `gone.path` that never arrived inside the tree.
+    fn gone(&mut self, gone: Leaving, changes: &mut Vec<Change>) {
+        self.forget(&gone.path);
+        if gone.kept {
+            changes.push(Change::Removed { path: gone.path });
         }
     }
 
@@ -189,12 +239,32 @@ impl Folders {
         let is_folder = fs::symlink_metadata(&to).is_ok_and(|details| details.is_dir());
         let kept = policy::keeps(&folder.zone, name, is_folder);
         match (from.kept, kept) {
-            (true, true) => {
+            (true, true) if !is_folder => {
+                changes.push(Change::Moved {
+                    from: from.path,
+                    to: to.clone(),
+                });
+                // The file may have been made under its old name too late
+                // to be seen there, or written since.
+                self.add(&folder.zone, name, to, changes);
+            }
+            (true, true)
+                if self.zone_of_watch(&from.path) == policy::enters(&folder.zone, name) =>
+            {
                 self.repath(&from.path, &to);
                 changes.push(Change::Moved {
                     from: from.path,
                     to,
                 });
+            }
+            (true, true) => {
+                // Not watched at its old path (made and moved before its
+                // events were read), or now under other rules (out of a
+                // hidden place, say): what it held there says nothing of
+                // what is indexed here, so it is read again.
+                self.forget(&from.path);
+                changes.push(Change::Removed { path: from.path });
+                self.add(&folder.zone, name, to, changes);
             }
             (true, false) => {
                 self.forget(&from.path);
@@ -206,6 +276,12 @@ impl Folders {
             }
             (false, false) => self.forget(&from.path),
         }
+    }
+
+    /// The zone of the watch on the folder at `path`, if it has one.
+    fn zone_of_watch(&self, path: &Path) -> Option<Zone> {
+        let wd = self.by_path.get(path)?;
+        self.by_wd.get(wd).map(|watched| watched.zone.clone())
     }
 
     /// Adds the entry at `path`, named `name` in a folder of `zone`; a
@@ -232,6 +308,9 @@ impl Folders {
         };
         let mut pending = vec![(path, inner, details)];
         while let Some((path, zone, details)) = pending.pop() {
+            if (self.stopping)() {
+                return;
+            }
             pending.extend(self.add_folder(path, &zone, &details, changes));
         }
     }
@@ -246,7 +325,7 @@ impl Folders {
         changes: &mut Vec<Change>,
     ) -> Vec<(PathBuf, Zone, fs::Metadata)> {
         changes.extend(self.watch(path.clone(), zone.clone()));
-        let children = match crawl::read_children(&path, &|| false) {
+        let children = match crawl::read_children(&path, &self.stopping) {
             Ok(children) => children,
             Err(Stop::Cancelled | Stop::Gone | Stop::Failed(_)) => {
                 // Gone already, or unreadable: indexed without contents.
@@ -403,7 +482,7 @@ mod tests {
 
     fn folders(root: &Path) -> Folders {
         let fd = inotify::init(CreateFlags::CLOEXEC.union(CreateFlags::NONBLOCK)).unwrap();
-        Folders::new(fd, root.to_owned())
+        Folders::new(fd, root.to_owned(), Box::new(|| false))
     }
 
     #[test]
@@ -478,6 +557,123 @@ mod tests {
         watched.sort();
         assert_eq!(watched, [&root, &root.join("plain")]);
         fs::remove_file(&saved).ok();
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// A temp folder named after `test`, made afresh with `paths` in it
+    /// (a path ending in `/` is a folder), and watched.
+    fn watched_folder(test: &str, paths: &[&str], stopping: Stopping) -> (PathBuf, Folders) {
+        let root = std::env::temp_dir().join(format!("nova-files-{test}-{}", std::process::id()));
+        fs::remove_dir_all(&root).ok();
+        fs::create_dir_all(&root).unwrap();
+        for path in paths {
+            if path.ends_with('/') {
+                fs::create_dir_all(root.join(path)).unwrap();
+            } else {
+                fs::create_dir_all(root.join(path).parent().unwrap()).unwrap();
+                fs::write(root.join(path), b"").unwrap();
+            }
+        }
+        let fd = inotify::init(CreateFlags::CLOEXEC.union(CreateFlags::NONBLOCK)).unwrap();
+        let mut folders = Folders::new(fd, root.clone(), stopping);
+        assert_eq!(folders.watch(root.clone(), Zone::Home), None);
+        (root, folders)
+    }
+
+    fn event(folders: &Folders, folder: &Path, mask: ReadFlags, cookie: u32, name: &str) -> Event {
+        Event {
+            wd: folders.by_path[folder],
+            mask,
+            cookie,
+            name: Some(OsString::from(name)),
+        }
+    }
+
+    fn added_paths(changes: &[Change]) -> Vec<&Path> {
+        changes
+            .iter()
+            .filter_map(|change| match change {
+                Change::Added { path, .. } => Some(path.as_path()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    const DIR: ReadFlags = ReadFlags::ISDIR;
+
+    #[test]
+    fn a_new_tree_is_not_read_while_stopping() {
+        let (root, mut folders) =
+            watched_folder("stopping", &["new/inner/file"], Box::new(|| true));
+        let created = event(&folders, &root, ReadFlags::CREATE.union(DIR), 0, "new");
+        assert_eq!(folders.handle(&[created]), []);
+        assert!(!folders.by_path.contains_key(&root.join("new")));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_folder_made_and_moved_before_its_events_are_read_is_watched() {
+        // `old` was made, filled and renamed `new` before any event was
+        // read, so only `new` is on disk.
+        let (root, mut folders) = watched_folder("made-moved", &["new/file"], Box::new(|| false));
+        let changes = folders.handle(&[
+            event(&folders, &root, ReadFlags::CREATE.union(DIR), 0, "old"),
+            event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 3, "old"),
+            event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 3, "new"),
+        ]);
+        assert!(added_paths(&changes).contains(&root.join("new/file").as_path()));
+        assert!(folders.by_path.contains_key(&root.join("new")));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_file_moved_inside_home_is_added_at_its_new_path_too() {
+        let (root, mut folders) = watched_folder("file-moved", &["b.txt"], Box::new(|| false));
+        let changes = folders.handle(&[
+            event(&folders, &root, ReadFlags::MOVED_FROM, 4, "a.txt"),
+            event(&folders, &root, ReadFlags::MOVED_TO, 4, "b.txt"),
+        ]);
+        assert!(matches!(&changes[0], Change::Moved { to, .. } if to == &root.join("b.txt")));
+        assert_eq!(added_paths(&changes), [root.join("b.txt")]);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_folder_made_where_one_moved_away_replaces_it() {
+        let (root, mut folders) = watched_folder("reused", &["same/file"], Box::new(|| false));
+        let changes = folders.handle(&[
+            event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 5, "same"),
+            event(&folders, &root, ReadFlags::CREATE.union(DIR), 0, "same"),
+        ]);
+        let same = root.join("same");
+        assert_eq!(changes[0], Change::Removed { path: same.clone() });
+        assert!(added_paths(&changes).contains(&same.join("file").as_path()));
+        assert!(folders.by_path.contains_key(&same));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_folder_that_can_be_read_again_is_read() {
+        // Unreadable at the crawl, so not watched; its mode changed.
+        let (root, mut folders) = watched_folder("readable", &["locked/file"], Box::new(|| false));
+        let changes = folders.handle(&[event(
+            &folders,
+            &root,
+            ReadFlags::ATTRIB.union(DIR),
+            0,
+            "locked",
+        )]);
+        assert!(added_paths(&changes).contains(&root.join("locked/file").as_path()));
+        assert!(folders.by_path.contains_key(&root.join("locked")));
+        // Once watched, a change of mode is only a change.
+        let again = folders.handle(&[event(
+            &folders,
+            &root,
+            ReadFlags::ATTRIB.union(DIR),
+            0,
+            "locked",
+        )]);
+        assert!(matches!(again.as_slice(), [Change::Changed { .. }]));
         fs::remove_dir_all(&root).ok();
     }
 

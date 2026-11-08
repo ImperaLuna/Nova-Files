@@ -263,6 +263,35 @@ fn a_folder_that_becomes_a_cache_is_removed() {
 }
 
 #[test]
+fn a_cache_tag_moved_into_place_removes_its_folder() {
+    let mut watched = Watched::new(&["project/target/build.o"]);
+    let target = watched.path("project/target");
+    let draft = target.join("tag.tmp");
+    fs::write(&draft, SIGNATURE).unwrap();
+    watched.until(added(&draft));
+    fs::rename(&draft, target.join("CACHEDIR.TAG")).unwrap();
+    watched.until(removed(&target));
+}
+
+#[test]
+fn a_folder_moved_out_of_a_hidden_place_is_read_again() {
+    let mut watched = Watched::new(&[
+        ".config/app/Cache/blob",
+        ".config/app/app.conf",
+        "Documents/",
+    ]);
+    let moved = watched.path("Documents/app");
+    fs::rename(watched.path(".config/app"), &moved).unwrap();
+    // Caches are left out only inside hidden places.
+    watched.until(added(&moved.join("Cache/blob")));
+    watched.until(added(&moved.join("app.conf")));
+    // And the folder is watched under its new rules.
+    let later = moved.join("Cache/later");
+    fs::write(&later, b"").unwrap();
+    watched.until(added(&later));
+}
+
+#[test]
 fn a_stray_cache_tag_changes_nothing() {
     let mut watched = Watched::new(&["project/"]);
     let tag = watched.path("project/CACHEDIR.TAG");
