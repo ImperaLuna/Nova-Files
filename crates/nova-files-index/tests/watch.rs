@@ -351,3 +351,16 @@ fn dropping_the_watcher_stops_it() {
     fs::write(watched.path("after.txt"), b"").unwrap();
     assert!(watched.settle().is_empty());
 }
+
+#[test]
+fn a_link_to_a_folder_moves_like_a_file() {
+    let mut watched = Watched::new(&["docs/", ".local/bin/"]);
+    let link = watched.path("docs-link");
+    std::os::unix::fs::symlink(watched.path("docs"), &link).unwrap();
+    watched.until(added(&link));
+    // Files aren't kept on the way to an allowed place; a folder named
+    // share would be, so following the link would get this wrong.
+    let moved = watched.path(".local/share");
+    fs::rename(&link, &moved).unwrap();
+    watched.until(removed(&link));
+}

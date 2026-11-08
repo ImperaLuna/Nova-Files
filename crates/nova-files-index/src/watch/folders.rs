@@ -185,7 +185,9 @@ impl Folders {
     fn moved(&mut self, from: Leaving, folder: &Watched, to: PathBuf, changes: &mut Vec<Change>) {
         let name = to.file_name().unwrap_or_default().to_owned();
         let name = name.as_os_str();
-        let kept = policy::keeps(&folder.zone, name, to.is_dir());
+        // Links aren't followed: a link to a folder is kept like a file.
+        let is_folder = fs::symlink_metadata(&to).is_ok_and(|details| details.is_dir());
+        let kept = policy::keeps(&folder.zone, name, is_folder);
         match (from.kept, kept) {
             (true, true) => {
                 self.repath(&from.path, &to);
