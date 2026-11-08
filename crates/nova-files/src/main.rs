@@ -30,6 +30,7 @@ use crate::mode::Mode;
 const CORE_WATCH_THREAD: &str = "nova-files-core-watch";
 
 fn main() -> ExitCode {
+    nova_files_ui::fil65_mark("main");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

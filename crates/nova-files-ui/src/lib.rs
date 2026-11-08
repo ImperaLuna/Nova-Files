@@ -46,10 +46,13 @@ pub fn run(connector: &Connector, requests: &Requests, folder: Option<PathBuf>) 
     let connector = connector.clone();
     let requests = requests.clone();
     let quit = Rc::clone(&ended);
+    fil65_mark("ui application start");
     gpui_platform::application()
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
+            fil65_mark("ui run callback");
             open_window(&connector, folder, cx);
+            fil65_mark("ui open_window returned");
             let follow = cx.spawn(async move |cx| {
                 loop {
                     let request = requests.next().await;
@@ -93,7 +96,9 @@ fn open_window(connector: &Connector, folder: Option<PathBuf>, cx: &mut App) {
     };
     let connector = connector.clone();
     let folder = folder.unwrap_or_else(home_folder);
-    let opened = cx.open_window(options, move |_window, cx| {
+    let opened = cx.open_window(options, move |window, cx| {
+        fil65_mark("ui window built");
+        window.on_next_frame(|_, _| fil65_mark("ui first frame callback"));
         cx.new(|cx| MainWindow::new(&connector, &folder, cx))
     });
     if let Err(error) = opened {
@@ -105,4 +110,14 @@ fn open_window(connector: &Connector, folder: Option<PathBuf>, cx: &mut App) {
         )
         .ok();
     }
+}
+
+/// FIL-65 timing build only: prints a start-up mark to stderr as
+/// `FIL65 <unix ms> <label>`. Never merged.
+pub fn fil65_mark(label: &str) {
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64() * 1000.0)
+        .unwrap_or_default();
+    writeln!(io::stderr(), "FIL65 {ms:.1} {label}").ok();
 }
