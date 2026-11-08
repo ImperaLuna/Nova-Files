@@ -2,7 +2,8 @@
 # Refuses to push a stacked branch (one built on another pushed branch, not
 # directly on main) whose own commits change anything besides code, so the
 # push never reaches CI. tools/ci-stack-guard.sh has the list; CI runs the
-# same check as "stack holds code only".
+# same check as "stack holds code only". Then tools/pre-push-lint.sh runs
+# rustfmt and Clippy on the crates the push changes.
 #
 # Offline: it compares against the remote-tracking branches from the last
 # fetch. The parent branch is the one sharing the most commits beyond main;
@@ -14,6 +15,7 @@ set -euo pipefail
 remote=$1
 zero=0000000000000000000000000000000000000000
 main="refs/remotes/$remote/main"
+pushed=()
 guard="$(git rev-parse --show-toplevel)/tools/ci-stack-guard.sh"
 
 git rev-parse -q --verify "$main" >/dev/null || exit 0
@@ -22,6 +24,7 @@ while read -r _local_ref local_sha remote_ref _remote_sha; do
     [ "$local_sha" = "$zero" ] && continue
     branch=${remote_ref#refs/heads/}
     [ "$branch" = main ] && continue
+    pushed+=("$local_sha")
 
     # The parent is the nearest pushed branch whose tip this branch holds.
     # A branch stacked on this one never qualifies: it has commits this
@@ -46,3 +49,6 @@ while read -r _local_ref local_sha remote_ref _remote_sha; do
         exit 1
     fi
 done
+
+# Lints the working tree, so push the branch you have checked out.
+[ ${#pushed[@]} -eq 0 ] || "$(git rev-parse --show-toplevel)/tools/pre-push-lint.sh" "$remote" "${pushed[@]}"
