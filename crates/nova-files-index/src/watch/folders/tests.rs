@@ -231,6 +231,54 @@ fn a_dropped_watch_inside_home_asks_for_nothing() {
 }
 
 #[test]
+fn home_moved_away_asks_for_a_rescan() {
+    let (root, mut folders) = watched_folder("home-moved", &["a/"], Box::new(|| false));
+    let a = root.join("a");
+    let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
+    assert_eq!(folders.watch(a.clone(), zone), None);
+    let moved_self = |wd| Event {
+        wd,
+        mask: ReadFlags::MOVE_SELF,
+        cookie: 0,
+        name: None,
+    };
+    // Another folder's own move is seen from its parent.
+    assert_eq!(folders.handle(&[moved_self(folders.by_path[&a])]), []);
+    assert_eq!(
+        folders.handle(&[moved_self(folders.by_path[&root])]),
+        [Change::Rescan {
+            folder: root.clone()
+        }]
+    );
+    assert!(folders.by_path.is_empty());
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_folder_watched_again_at_its_new_path_leaves_the_old_one() {
+    let (root, mut folders) = watched_folder("rewatched", &["a/"], Box::new(|| false));
+    let (a, b) = (root.join("a"), root.join("b"));
+    let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
+    assert_eq!(folders.watch(a.clone(), zone.clone()), None);
+    let wd = folders.by_path[&a];
+    // Moved away and back under another name before the events were read.
+    fs::rename(&a, &b).unwrap();
+    assert_eq!(folders.watch(b.clone(), zone), None);
+    assert_eq!(folders.by_path.get(&b), Some(&wd));
+    assert!(!folders.by_path.contains_key(&a));
+    // Its old path's leaving doesn't take the watch with it.
+    folders.handle(&[event(
+        &folders,
+        &root,
+        ReadFlags::MOVED_FROM.union(DIR),
+        12,
+        "a",
+    )]);
+    assert_eq!(folders.by_path.get(&b), Some(&wd));
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn swapped_folders_are_both_read_again() {
     let (root, mut folders) =
         watched_folder("swap", &["a/one.txt", "b/two.txt"], Box::new(|| false));

@@ -44,6 +44,7 @@ const WATCHED: WatchFlags = WatchFlags::CREATE
     .union(WatchFlags::MOVED_TO)
     .union(WatchFlags::CLOSE_WRITE)
     .union(WatchFlags::ATTRIB)
+    .union(WatchFlags::MOVE_SELF)
     .union(WatchFlags::DONT_FOLLOW)
     .union(WatchFlags::ONLYDIR)
     .union(WatchFlags::EXCL_UNLINK);
@@ -165,6 +166,17 @@ impl Folders {
             }
             return;
         }
+        if event.mask.contains(ReadFlags::MOVE_SELF) {
+            // A folder's own move is seen from its parent, except home's.
+            if self.by_path.get(&self.root) == Some(&event.wd) {
+                // Its watches now see wherever it went, not what stands
+                // at its path.
+                let root = self.root.clone();
+                self.forget(&root);
+                changes.push(Change::Rescan { folder: root });
+            }
+            return;
+        }
         let (Some(folder), Some(name)) = (self.by_wd.get(&event.wd).cloned(), &event.name) else {
             return;
         };
@@ -200,7 +212,7 @@ impl Folders {
             }
             self.check_marker(&folder, name, changes);
         } else if mask.contains(ReadFlags::DELETE) {
-            self.forget(&path);
+            self.forget_if_folder(&path, is_folder);
             if kept {
                 changes.push(Change::Removed { path });
             }
@@ -245,7 +257,7 @@ impl Folders {
 
     /// A move away from `gone.path` that never arrived inside the tree.
     fn gone(&mut self, gone: Leaving, changes: &mut Vec<Change>) {
-        self.forget(&gone.path);
+        self.forget_if_folder(&gone.path, gone.is_folder);
         if gone.kept {
             changes.push(Change::Removed { path: gone.path });
         }
@@ -289,19 +301,19 @@ impl Folders {
                 // events were read), or now under other rules (out of a
                 // hidden place, say): what it held there says nothing of
                 // what is indexed here, so it is read again.
-                self.forget(&from.path);
+                self.forget_if_folder(&from.path, is_folder);
                 changes.push(Change::Removed { path: from.path });
                 self.add(&folder.zone, name, to, changes);
             }
             (true, false) => {
-                self.forget(&from.path);
+                self.forget_if_folder(&from.path, is_folder);
                 changes.push(Change::Removed { path: from.path });
             }
             (false, true) => {
-                self.forget(&from.path);
+                self.forget_if_folder(&from.path, is_folder);
                 self.add(&folder.zone, name, to, changes);
             }
-            (false, false) => self.forget(&from.path),
+            (false, false) => self.forget_if_folder(&from.path, is_folder),
         }
     }
 
@@ -457,6 +469,15 @@ impl Folders {
     fn watch(&mut self, path: PathBuf, zone: Zone) -> Option<Change> {
         match inotify::add_watch(&self.inotify, &path, WATCHED) {
             Ok(wd) => {
+                // The kernel hands back the watch a folder already has: one
+                // moved here before its old path's events were read. Its
+                // old path must not keep it, or its leaving drops it.
+                if let Some(old) = self.by_wd.get(&wd)
+                    && old.path != path
+                    && self.by_path.get(&old.path) == Some(&wd)
+                {
+                    self.by_path.remove(&old.path);
+                }
                 self.by_path.insert(path.clone(), wd);
                 self.by_wd.insert(wd, Watched { path, zone });
                 None
@@ -465,6 +486,14 @@ impl Folders {
             Err(Errno::NOENT | Errno::NOTDIR) => None,
             // Over the watch limit, or not readable.
             Err(_) => Some(Change::Rescan { folder: path }),
+        }
+    }
+
+    /// Drops the watches under `path` when it was a folder: a file has
+    /// none, and looking costs a pass over every watch.
+    fn forget_if_folder(&mut self, path: &Path, is_folder: bool) {
+        if is_folder {
+            self.forget(path);
         }
     }
 
