@@ -1,0 +1,53 @@
+# Builds the release package (`nix build .#default`, the one people install
+# and the benchmark runs) on every push to main, and cachix-action pushes
+# it to the nova-de cache. A PC that pins this commit then downloads the
+# finished app instead of compiling GPUI and Nova Files itself.
+#
+# `nix flake check` only builds the `ci` profile, so without this job the
+# release build (thin LTO) is never in the cache. Nothing waits for this job:
+# it isn't a required check and doesn't run on pull requests. Run it by
+# hand (workflow_dispatch) to fill the cache for another branch.
+name: Release build
+
+on:
+  push:
+    branches: [main, fil-74-release-cache] # TEMP: measure on the branch; removed before the PR
+  workflow_dispatch:
+
+concurrency:
+  # Only the newest commit matters: `just pin` in nova-benchmark pins the
+  # latest main, so a newer push cancels an older build still running.
+  group: release-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CACHIX_CACHE: nova-de
+
+jobs:
+  build:
+    name: release build into Cachix
+    runs-on: ubuntu-latest
+    # A cold build compiles every dependency with codegen-units = 1.
+    timeout-minutes: 120
+    env:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Free disk space in the background
+        run: tools/ci-free-disk.sh start
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v16
+        with:
+          name: ${{ env.CACHIX_CACHE }}
+          authToken: ${{ env.CACHIX_AUTH_TOKEN }}
+      - name: Build the release package
+        run: nix build .#default --print-build-logs
+      - name: Package size
+        # What a PC downloads from nova-de: the app itself. Its libraries
+        # come from cache.nixos.org.
+        run: nix path-info --size --closure-size --human-readable ./result
+      - name: Disk space left
+        run: df -h /
