@@ -169,7 +169,10 @@ impl Shared {
     /// closed.
     fn next_run(&self) -> Option<Run> {
         let mut state = self.lock();
-        while !state.closed {
+        loop {
+            if state.closed {
+                return None;
+            }
             if let Some(run) = state.next_run() {
                 return Some(run);
             }
@@ -178,7 +181,6 @@ impl Shared {
                 .wait(state)
                 .unwrap_or_else(PoisonError::into_inner);
         }
-        None
     }
 
     /// Sends the details of `run`, read as `read`, unless its listing was
