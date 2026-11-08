@@ -30,4 +30,7 @@ exclude_re = [
     "replace match guard mode != Mode::Service with false in run",
     # Fires when the core stops, which takes the 3-minute idle wait.
     "\\bwatch_core\\b",
+    # Drops thumbnails from GPUI's image atlas (FIL-70), which no test can
+    # read; the ShownThumbnails tests cover which images get dropped.
+    "nova-files-ui/src/window\\.rs:.*replace release with \\(\\)",
 ]
