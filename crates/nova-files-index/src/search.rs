@@ -97,14 +97,15 @@ impl Index {
         limit: usize,
         overlay: Option<&'a Overlay>,
     ) -> Search<'a> {
-        let words: Vec<Vec<u8>> = query
-            .split_whitespace()
-            .map(|word| {
-                let mut folded = Vec::new();
-                fold::fold_into(word.as_bytes(), &mut folded);
-                folded
-            })
-            .collect();
+        let mut words: Vec<Vec<u8>> = Vec::new();
+        for word in query.split_whitespace() {
+            let mut folded = Vec::new();
+            fold::fold_into(word.as_bytes(), &mut folded);
+            // A word of accents alone folds to nothing.
+            if !folded.is_empty() {
+                words.push(folded);
+            }
+        }
         let stage = if words.is_empty() || limit == 0 {
             Stage::Done
         } else {
