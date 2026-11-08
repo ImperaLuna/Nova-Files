@@ -313,6 +313,61 @@ fn a_folder_that_left_its_parent_is_removed_before_the_parent_moves() {
 }
 
 #[test]
+fn swapped_files_are_both_added_as_they_are() {
+    let (root, mut folders) = watched_folder("swap-files", &["a.txt", "b.txt"], Box::new(|| false));
+    let (a, b) = (root.join("a.txt"), root.join("b.txt"));
+    rustix::fs::renameat_with(
+        rustix::fs::CWD,
+        &a,
+        rustix::fs::CWD,
+        &b,
+        rustix::fs::RenameFlags::EXCHANGE,
+    )
+    .unwrap();
+    let changes = folders.handle(&[
+        event(&folders, &root, ReadFlags::MOVED_FROM, 15, "a.txt"),
+        event(&folders, &root, ReadFlags::MOVED_TO, 15, "b.txt"),
+        event(&folders, &root, ReadFlags::MOVED_FROM, 16, "b.txt"),
+        event(&folders, &root, ReadFlags::MOVED_TO, 16, "a.txt"),
+    ]);
+    assert!(
+        !changes
+            .iter()
+            .any(|change| matches!(change, Change::Moved { .. })),
+        "{changes:?}"
+    );
+    let mut added = added_paths(&changes);
+    added.sort();
+    added.dedup();
+    assert_eq!(added, [a.as_path(), &b]);
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_profile_moved_over_a_folder_removes_it() {
+    let (root, mut folders) = watched_folder(
+        "profile-over",
+        &["dest/", ".app/profiles.ini"],
+        Box::new(|| false),
+    );
+    let dest = root.join("dest");
+    fs::rename(root.join(".app"), &dest).unwrap();
+    let changes = folders.handle(&[
+        event(
+            &folders,
+            &root,
+            ReadFlags::MOVED_FROM.union(DIR),
+            17,
+            ".app",
+        ),
+        event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 17, "dest"),
+    ]);
+    assert_eq!(changes, [Change::Removed { path: dest.clone() }]);
+    assert!(!folders.by_path.contains_key(&dest));
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn swapped_folders_are_both_read_again() {
     let (root, mut folders) =
         watched_folder("swap", &["a/one.txt", "b/two.txt"], Box::new(|| false));

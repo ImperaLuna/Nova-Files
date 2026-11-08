@@ -304,6 +304,13 @@ impl Folders {
             return;
         }
         match (from.kept, kept) {
+            (true, true) if !is_folder && fs::symlink_metadata(&from.path).is_ok() => {
+                // Something still stands where it left: swapped with the
+                // file it landed on (`RENAME_EXCHANGE`). A move would lose
+                // one of them, so both are added as they are now.
+                self.add(&folder.zone, name, to, changes);
+                self.add_again(&from.path, changes);
+            }
             (true, true) if !is_folder => {
                 changes.push(Change::Moved {
                     from: from.path,
@@ -354,6 +361,16 @@ impl Folders {
         moving != there && fs::symlink_metadata(from).is_ok_and(|details| details.is_dir())
     }
 
+    /// Adds the entry at `path` as it is now, in the zone of its folder.
+    fn add_again(&mut self, path: &Path, changes: &mut Vec<Change>) {
+        let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+            return;
+        };
+        if let Some(zone) = self.zone_of_watch(parent) {
+            self.add(&zone, name, path.to_owned(), changes);
+        }
+    }
+
     /// Removes what was indexed at `paths` and reads them anew. Every
     /// watch goes before any is added, since each path now holds a folder
     /// another watch was on.
@@ -363,12 +380,7 @@ impl Folders {
             changes.push(Change::Removed { path: path.clone() });
         }
         for path in paths {
-            let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
-                continue;
-            };
-            if let Some(zone) = self.zone_of_watch(parent) {
-                self.add(&zone, name, path.clone(), changes);
-            }
+            self.add_again(path, changes);
         }
     }
 
@@ -443,6 +455,8 @@ impl Folders {
         };
         if is_marked(&path, &children) {
             self.forget(&path);
+            // It may have taken the place of an indexed folder.
+            changes.push(Change::Removed { path });
             return Vec::new();
         }
         changes.push(Change::Added {
