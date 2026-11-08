@@ -13,6 +13,7 @@ mod list;
 mod places;
 mod run;
 mod thumbs;
+mod vulkan_drivers;
 
 use std::io;
 use std::thread::{self, JoinHandle};
@@ -22,6 +23,7 @@ use nova_files_api::Connector;
 
 pub use places::Home;
 pub use thumbs::Thumbnails;
+pub use vulkan_drivers::{FILTER_VARIABLE, absent_vendor_drivers};
 
 /// How long the core waits, with no client connected and no message, before
 /// it stops. Fixed by design, not a setting.

@@ -11,8 +11,11 @@
 //! process carries on without a GPU, waiting for the next window request.
 //! The process ends when the core stops, which it does once idle (see
 //! `nova_files_core::IDLE_EXIT`).
-
-#![forbid(unsafe_code)]
+//!
+//! Before anything else, while it is the only thread, it tells the Vulkan
+//! loader to skip drivers for GPUs the PC doesn't have (see
+//! `nova_files_core::absent_vendor_drivers`); each skipped driver is a set of
+//! libraries a cold start no longer reads.
 
 mod mode;
 
@@ -30,12 +33,25 @@ use crate::mode::Mode;
 const CORE_WATCH_THREAD: &str = "nova-files-core-watch";
 
 fn main() -> ExitCode {
+    skip_absent_vulkan_drivers();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             report(&format!("{error}"));
             ExitCode::FAILURE
         }
+    }
+}
+
+#[expect(
+    unsafe_code,
+    reason = "setting a variable is sound only while no other thread exists, and main calls this first"
+)]
+fn skip_absent_vulkan_drivers() {
+    if let Some(filter) = nova_files_core::absent_vendor_drivers() {
+        // SAFETY: called first thing in `main`, before the core, D-Bus or
+        // GPUI start a thread, so nothing can read the environment meanwhile.
+        unsafe { std::env::set_var(nova_files_core::FILTER_VARIABLE, filter) };
     }
 }
 
