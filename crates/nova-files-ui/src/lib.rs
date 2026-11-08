@@ -22,9 +22,7 @@ use std::io::{self, Write as _};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gpui::{
-    App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowHandle, WindowOptions, size,
-};
+use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
 use nova_files_api::Connector;
 
 pub use columns::ColumnText;
@@ -100,25 +98,22 @@ impl Global for RequestLoop {}
 /// main display. When that fails and `retry_gpu` changed something, it
 /// tries once more.
 fn open_window(connector: &Connector, folder: Option<PathBuf>, retry_gpu: RetryGpu, cx: &mut App) {
+    let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
+    let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        app_id: Some(nova_files_api::APP_ID.to_owned()),
+        ..WindowOptions::default()
+    };
     let folder = folder.unwrap_or_else(home_folder);
-    let open = |cx: &mut App| -> gpui::Result<WindowHandle<MainWindow>> {
-        let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            app_id: Some(nova_files_api::APP_ID.to_owned()),
-            ..WindowOptions::default()
-        };
-        let connector = connector.clone();
-        let folder = folder.clone();
-        cx.open_window(options, move |_window, cx| {
-            cx.new(|cx| MainWindow::new(&connector, &folder, cx))
-        })
-    };
-    let opened = match open(cx) {
-        Err(_) if retry_gpu() => open(cx),
-        opened => opened,
-    };
+    let (window_connector, window_folder) = (connector.clone(), folder.clone());
+    let opened = cx.open_window(options, move |_window, cx| {
+        cx.new(|cx| MainWindow::new(&window_connector, &window_folder, cx))
+    });
     if let Err(error) = opened {
+        // `retry_gpu` says yes at most once, so this goes one level deep.
+        if retry_gpu() {
+            return open_window(connector, Some(folder), retry_gpu, cx);
+        }
         // The display refused a window; any open ones carry on. Until there
         // is a log, stderr is where this goes.
         writeln!(
