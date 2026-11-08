@@ -115,8 +115,10 @@ impl MimeTypes {
         self.aliases.get(mime).map_or(mime, String::as_str)
     }
 
-    /// `mime`, then every type it is a kind of, each once.
-    fn ancestry(&self, mime: &str) -> Vec<String> {
+    /// `mime` with its alias resolved, then every type it is a kind of,
+    /// nearest first, each once (`text/*` types end with `text/plain`).
+    /// `application/octet-stream`, which every type is, isn't listed.
+    pub fn ancestry(&self, mime: &str) -> Vec<String> {
         let mut order: Vec<String> = Vec::new();
         let mut queue = VecDeque::from([self.canonical(mime).to_owned()]);
         while let Some(current) = queue.pop_front() {
@@ -154,7 +156,7 @@ impl FileTypes for MimeTypes {
                     glob.pattern.chars().count(),
                 )
             })
-            .map(|glob| glob.mime.as_str())
+            .map(|glob| self.canonical(&glob.mime))
     }
 
     fn is_a(&self, mime: &str, wanted: &str) -> bool {

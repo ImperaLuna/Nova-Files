@@ -159,3 +159,23 @@ fn the_data_folders_follow_the_xdg_spec() {
         ["/usr/local/share", "/usr/share"].map(PathBuf::from)
     );
 }
+
+#[test]
+fn a_name_gets_the_type_its_alias_stands_for() {
+    let (_dir, types) = types("alias-of");
+    assert_eq!(types.of(OsStr::new("scan.old")), Some("image/png"));
+}
+
+#[test]
+fn ancestry_lists_the_type_then_its_parents_nearest_first() {
+    let (_dir, types) = types("ancestry");
+    assert_eq!(
+        types.ancestry("application/x-compressed-tar"),
+        ["application/x-compressed-tar", "application/gzip"]
+    );
+    assert_eq!(
+        types.ancestry("text/x-markdown"),
+        ["text/markdown", "text/plain"]
+    );
+    assert_eq!(types.ancestry("text/x-csrc"), ["text/x-csrc", "text/plain"]);
+}
