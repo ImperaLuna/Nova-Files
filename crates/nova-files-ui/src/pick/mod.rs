@@ -19,9 +19,12 @@
 //! The window never touches the disk, so what is there is what the folder
 //! on screen lists, and a typed path is tried as a folder first: if the
 //! core can't list it, the window goes to the folder it is in instead,
-//! with its last part as the name.
+//! with its last part as the name. A save answers only from a fresh
+//! listing of its folder (see `save`). A name a click put in the box means
+//! the entry clicked, until the box is edited.
 
 mod bar;
+mod save;
 mod typed;
 
 use std::ffi::{OsStr, OsString};
@@ -29,8 +32,8 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use gpui::{
-    App, AppContext as _, ClickEvent, Context, Entity, Focusable as _, Subscription,
-    TitlebarOptions, Window,
+    AnyWindowHandle, App, AppContext as _, ClickEvent, Context, Entity, Focusable as _,
+    Subscription, TitlebarOptions, Window,
 };
 use nova_files_api::{
     Entry, EntryId, EntryKind, ListingId, PickAnswer, PickId, PickKind, PickRequest,
@@ -105,6 +108,15 @@ pub struct Picker {
     pub conflict: Option<Conflict>,
     /// A typed path the window is going to.
     jump: Option<Jump>,
+    /// The entry a click put in the name box and the text it put there:
+    /// while the box still holds that text, it means that entry, whatever
+    /// its name's bytes or spaces.
+    copied: Option<(EntryId, String)>,
+    /// A save waiting for a fresh listing of its folder (see `save`).
+    recheck: Option<save::Recheck>,
+    /// The picker's window, to close once a save is answered from a
+    /// listing.
+    window: AnyWindowHandle,
     _name_events: Subscription,
 }
 
@@ -163,6 +175,9 @@ impl MainWindow {
             selected: None,
             conflict: None,
             jump: None,
+            copied: None,
+            recheck: None,
+            window: window.window_handle(),
             _name_events: name_events,
         });
     }
@@ -228,6 +243,7 @@ impl MainWindow {
             (EntryKind::File, Mode::Files | Mode::Save) => {
                 pick.selected = Some((listing, id));
                 pick.name.update(cx, |field, cx| field.set_text(&name, cx));
+                pick.copied = Some((id, name));
                 pick.conflict = None;
             }
         }
@@ -269,11 +285,27 @@ impl MainWindow {
         }
         let Some(pick) = &self.pick else { return };
         if pick.conflict.is_some() {
-            self.keep_both(window);
+            self.keep_both();
+            cx.notify();
             return;
         }
         let folder = self.folder().unwrap_or(&self.home).to_path_buf();
         let text = pick.name.read(cx).text().to_owned();
+        let clicked = pick
+            .copied
+            .as_ref()
+            .filter(|(_, copied)| *copied == text)
+            .and_then(|&(id, _)| {
+                let entry = self.entry(self.listing_id()?, id)?;
+                Some((entry.kind, id, entry.name.clone()))
+            });
+        if let Some(found) = clicked {
+            if self.accept_found(&folder, found) {
+                window.remove_window();
+            }
+            cx.notify();
+            return;
+        }
         let answered = match typed::read(&text, &self.home, &folder) {
             typed::Typed::Nothing => self.accept_selection(&folder),
             typed::Typed::Folder(path) => self.jump(&path, false),
@@ -307,52 +339,48 @@ impl MainWindow {
     /// folder there; otherwise opens it as a file, or saves at it. Whether
     /// it answered.
     fn accept_name(&mut self, folder: &Path, name: &str) -> bool {
-        let Some(pick) = &self.pick else { return false };
-        let mode = pick.mode;
         let found = self.listing.as_ref().and_then(|listing| {
-            let index = listing
+            let entry = listing
                 .entries
                 .iter()
-                .position(|entry| entry.name.to_string_lossy() == name)?;
-            let entry = &listing.entries[index];
+                .find(|entry| entry.name.to_string_lossy() == name)?;
             Some((entry.kind, entry.id, entry.name.clone()))
         });
-        let suggested = match &pick.request.kind {
-            PickKind::Save { name: suggested } if suggested.to_string_lossy() == name => {
-                Some(suggested.clone())
+        let Some(found) = found else {
+            let Some(pick) = &self.pick else { return false };
+            if pick.mode != Mode::Save {
+                return false;
             }
-            _ => None,
-        };
-        match (mode, found) {
-            (_, Some((EntryKind::Folder, id, _))) => {
-                self.open_entry(id);
-                false
-            }
-            (Mode::Files, Some((EntryKind::File, _, file))) => self.answer(folder.join(file)),
-            (Mode::Save, Some((EntryKind::File, _, file))) => {
-                let taken = |name: &OsStr| self.has_entry(name);
-                let keep_both = typed::keep_both(&file, taken);
-                if let Some(pick) = &mut self.pick {
-                    pick.conflict = Some(Conflict {
-                        path: folder.join(file),
-                        keep_both,
-                    });
+            let name = match &pick.request.kind {
+                PickKind::Save { name: suggested } if suggested.to_string_lossy() == name => {
+                    suggested.clone()
                 }
-                false
-            }
-            (Mode::Save, None) => {
-                let name = suggested.unwrap_or_else(|| OsString::from(name));
-                self.answer(folder.join(name))
-            }
-            (Mode::Files | Mode::Folders, _) => false,
-        }
+                _ => OsString::from(name),
+            };
+            self.save_new(folder, name);
+            return false;
+        };
+        self.accept_found(folder, found)
     }
 
-    /// Whether the folder on screen has an entry called `name`.
-    fn has_entry(&self, name: &OsStr) -> bool {
-        self.listing
-            .as_ref()
-            .is_some_and(|listing| listing.entries.iter().any(|entry| entry.name == name))
+    /// The entry `found` of the folder on screen, named or clicked: goes
+    /// into a folder (emptying the box), picks a file, or asks before a
+    /// save over it. Whether it answered.
+    fn accept_found(
+        &mut self,
+        folder: &Path,
+        (kind, _, name): (EntryKind, EntryId, OsString),
+    ) -> bool {
+        let Some(pick) = &self.pick else { return false };
+        match (pick.mode, kind) {
+            (_, EntryKind::Folder) => self.jump(&folder.join(name), false),
+            (Mode::Files, EntryKind::File) => self.answer(folder.join(name)),
+            (Mode::Save, EntryKind::File) => {
+                self.ask_over(folder, name);
+                false
+            }
+            (Mode::Folders, EntryKind::File) => false,
+        }
     }
 
     /// Goes to the typed `path`. With `fallback`, a path the core can't
@@ -378,9 +406,13 @@ impl MainWindow {
         let Some(pick) = &mut self.pick else { return };
         pick.selected = None;
         pick.conflict = None;
+        pick.copied = None;
         if let Some(jump) = pick.jump.take_if(|jump| jump.path == path) {
             pick.name
                 .update(cx, |field, cx| field.set_text(&jump.name, cx));
+        }
+        if let Some(recheck) = pick.recheck.take_if(|recheck| recheck.folder == path) {
+            self.save_checked(recheck, cx);
         }
     }
 
@@ -388,6 +420,8 @@ impl MainWindow {
     /// goes to the folder it is in instead.
     pub fn pick_folder_refused(&mut self, path: &Path) {
         let Some(pick) = &mut self.pick else { return };
+        // A save whose folder is gone waits for the user again.
+        pick.recheck.take_if(|recheck| recheck.folder == path);
         let Some(jump) = pick.jump.take_if(|jump| jump.path == path) else {
             return;
         };
@@ -409,33 +443,6 @@ impl MainWindow {
         }
     }
 
-    /// Replace: saves over the file that is there.
-    pub fn replace(&mut self, window: &mut Window) {
-        let Some(path) = self
-            .pick
-            .as_mut()
-            .and_then(|pick| pick.conflict.take())
-            .map(|conflict| conflict.path)
-        else {
-            return;
-        };
-        if self.answer(path) {
-            window.remove_window();
-        }
-    }
-
-    /// Keep both: saves beside the file that is there, under the numbered
-    /// name.
-    pub fn keep_both(&mut self, window: &mut Window) {
-        let Some(conflict) = self.pick.as_mut().and_then(|pick| pick.conflict.take()) else {
-            return;
-        };
-        let path = conflict.path.with_file_name(conflict.keep_both);
-        if self.answer(path) {
-            window.remove_window();
-        }
-    }
-
     /// Cancel, or Escape in the name box: answers cancelled and closes.
     pub fn cancel(&mut self, window: &mut Window) {
         // Answered now, not when the window's view is freed.
@@ -445,7 +452,7 @@ impl MainWindow {
 
     /// Answers the app with `path`. Whether it answered, so the window can
     /// close.
-    fn answer(&mut self, path: PathBuf) -> bool {
+    pub fn answer(&mut self, path: PathBuf) -> bool {
         let Some(pick) = self.pick.take() else {
             return false;
         };

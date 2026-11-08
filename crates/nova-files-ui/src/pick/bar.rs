@@ -64,9 +64,14 @@ impl MainWindow {
                         cx.listener(|this, _: &ClickEvent, window, _| this.replace(window)),
                     ),
                 )
-                .child(button("pick-keep-both", keep_both.into(), true).on_click(
-                    cx.listener(|this, _: &ClickEvent, window, _| this.keep_both(window)),
-                ))
+                .child(
+                    button("pick-keep-both", keep_both.into(), true).on_click(cx.listener(
+                        |this, _: &ClickEvent, _, cx| {
+                            this.keep_both();
+                            cx.notify();
+                        },
+                    )),
+                )
         });
         div()
             .flex()

@@ -10,77 +10,45 @@
     reason = "test setup should fail loudly; GPUI test contexts live on one thread"
 )]
 
+mod common;
+
 use std::ffi::OsString;
 use std::fs;
-use std::io::{self, Write as _};
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Path, PathBuf};
-use std::process;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::thread;
-use std::time::Duration;
+use std::sync::mpsc::{self, Receiver};
 
-use gpui::{
-    Entity, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, TestAppContext, VisualTestContext,
-};
+use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_ui::{MainWindow, WindowEvent};
 
-/// A folder under the system temp folder, removed when dropped: a folder
-/// `Projects` (holding `nova`) and the files `notes.txt` and
-/// `notes (2).txt`.
-struct TempFolder(PathBuf);
+use common::{TempFolder, Watchdog, double_click};
 
-impl TempFolder {
-    fn tree() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-picker-test-{}-{}",
-            process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(name);
-        fs::create_dir_all(path.join("Projects").join("nova")).unwrap();
-        fs::write(path.join("notes.txt"), "").unwrap();
-        fs::write(path.join("notes (2).txt"), "").unwrap();
-        Self(path)
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
+/// The shared tree plus `notes (2).txt`.
+fn picker_tree() -> TempFolder {
+    let tree = TempFolder::tree("picker");
+    fs::write(tree.path().join("notes (2).txt"), "").unwrap();
+    tree
 }
 
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
+/// The answer, once the picker has given one. A save answers only after a
+/// fresh listing of its folder, so it takes a trip to the core.
+async fn answer(
+    view: &Entity<MainWindow>,
+    cx: &VisualTestContext,
+    answers: &Receiver<PickAnswer>,
+) -> Option<PickAnswer> {
+    view.condition::<WindowEvent>(cx, |view, _| view.pick_id().is_none())
+        .await;
+    answers.try_recv().ok()
 }
 
-/// How long a test may wait for the core before it fails.
-const WAIT: Duration = Duration::from_secs(10);
-
-/// Fails the test process if the test is still running after [`WAIT`].
-struct Watchdog(Sender<()>);
-
-impl Watchdog {
-    fn start() -> Self {
-        let (done, finished) = mpsc::channel();
-        thread::spawn(move || {
-            if finished.recv_timeout(WAIT) == Err(RecvTimeoutError::Timeout) {
-                writeln!(io::stderr(), "the picker never got there within {WAIT:?}").ok();
-                process::exit(1);
-            }
-        });
-        Self(done)
-    }
-}
-
-impl Drop for Watchdog {
-    fn drop(&mut self) {
-        self.0.send(()).ok();
-    }
+/// Waits until the bar asks Replace or Keep both, and returns the
+/// numbered name it offers.
+async fn asked(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Option<OsString> {
+    view.condition::<WindowEvent>(cx, |view, _| view.pick_conflict().is_some())
+        .await;
+    view.read_with(cx, |view, _| view.pick_conflict().map(ToOwned::to_owned))
 }
 
 /// A picker for `kind` on `folder` of `tree`, with the tree as home, once
@@ -148,26 +116,6 @@ fn click(cx: &mut VisualTestContext, selector: &'static str) {
     cx.simulate_click(bounds.center(), Modifiers::none());
 }
 
-fn double_click(cx: &mut VisualTestContext, selector: &'static str) {
-    cx.run_until_parked();
-    let position = cx.debug_bounds(selector).unwrap().center();
-    for click_count in 1..=2 {
-        cx.simulate_event(MouseDownEvent {
-            position,
-            modifiers: Modifiers::none(),
-            button: MouseButton::Left,
-            click_count,
-            first_mouse: false,
-        });
-        cx.simulate_event(MouseUpEvent {
-            position,
-            modifiers: Modifiers::none(),
-            button: MouseButton::Left,
-            click_count,
-        });
-    }
-}
-
 fn picked(path: PathBuf) -> PickAnswer {
     PickAnswer::Picked {
         paths: vec![path],
@@ -199,7 +147,7 @@ fn save(name: impl Into<OsString>) -> PickKind {
 #[gpui::test]
 async fn a_click_puts_the_name_in_the_box_and_open_picks_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
     assert_eq!(name(&view, cx).as_deref(), Some(""));
 
@@ -221,7 +169,7 @@ async fn a_click_puts_the_name_in_the_box_and_open_picks_it(cx: &mut TestAppCont
 #[gpui::test]
 async fn enter_on_a_typed_name_picks_that_file(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (_view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
     cx.simulate_input("missing.txt");
     cx.simulate_keystrokes("enter");
@@ -239,7 +187,7 @@ async fn enter_on_a_typed_name_picks_that_file(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn a_typed_folder_name_goes_into_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
     cx.simulate_input("Projects");
     cx.simulate_keystrokes("enter");
@@ -250,7 +198,7 @@ async fn a_typed_folder_name_goes_into_it(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn typed_paths_go_there(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let projects = tree.path().join("Projects");
     let (view, cx, answers) = picker(cx, &tree, &projects, FILES).await;
 
@@ -272,7 +220,7 @@ async fn typed_paths_go_there(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn a_typed_path_to_a_file_goes_to_its_folder_with_its_name(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let projects = tree.path().join("Projects");
     let (view, cx, answers) = picker(cx, &tree, &projects, FILES).await;
 
@@ -292,27 +240,28 @@ async fn a_typed_path_to_a_file_goes_to_its_folder_with_its_name(cx: &mut TestAp
 #[gpui::test]
 async fn a_save_selects_the_name_before_its_extension(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
-    let (_view, cx, answers) = picker(cx, &tree, tree.path(), save("report.pdf")).await;
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("report.pdf")).await;
     // Typing replaces just the selected part.
     cx.simulate_input("plan");
     cx.simulate_keystrokes("enter");
     assert_eq!(
-        answers.try_recv().ok(),
+        answer(&view, cx, &answers).await,
         Some(picked(tree.path().join("plan.pdf")))
     );
+    cx.run_until_parked();
     assert!(closed(cx));
 }
 
 #[gpui::test]
 async fn a_save_keeps_a_suggested_name_that_is_not_utf8(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let suggested = OsString::from_vec(b"caf\xe9.txt".to_vec());
-    let (_view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested.clone())).await;
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested.clone())).await;
     click(cx, "pick-accept");
     assert_eq!(
-        answers.try_recv().ok(),
+        answer(&view, cx, &answers).await,
         Some(picked(tree.path().join(suggested)))
     );
 }
@@ -320,27 +269,30 @@ async fn a_save_keeps_a_suggested_name_that_is_not_utf8(cx: &mut TestAppContext)
 #[gpui::test]
 async fn a_save_onto_a_file_asks_and_enter_keeps_both(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
     cx.simulate_keystrokes("enter");
-    let asked = view.read_with(cx, |view, _| view.pick_conflict().map(ToOwned::to_owned));
     // `notes (2).txt` is taken too.
-    assert_eq!(asked, Some(OsString::from("notes (3).txt")));
+    assert_eq!(
+        asked(&view, cx).await,
+        Some(OsString::from("notes (3).txt"))
+    );
     assert!(answers.try_recv().is_err());
 
     cx.simulate_keystrokes("enter");
     assert_eq!(
-        answers.try_recv(),
-        Ok(picked(tree.path().join("notes (3).txt")))
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join("notes (3).txt")))
     );
 }
 
 #[gpui::test]
 async fn replace_saves_over_the_file(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
-    let (_view, cx, answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
     click(cx, "pick-accept");
+    asked(&view, cx).await;
     click(cx, "pick-replace");
     assert_eq!(
         answers.try_recv().ok(),
@@ -351,29 +303,31 @@ async fn replace_saves_over_the_file(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn keep_both_saves_beside_the_file(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
-    let (_view, cx, answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
     click(cx, "pick-accept");
+    asked(&view, cx).await;
     click(cx, "pick-keep-both");
     assert_eq!(
-        answers.try_recv(),
-        Ok(picked(tree.path().join("notes (3).txt")))
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join("notes (3).txt")))
     );
 }
 
 #[gpui::test]
 async fn typing_after_the_question_takes_it_back(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
     cx.simulate_keystrokes("enter");
+    asked(&view, cx).await;
     cx.simulate_keystrokes("end backspace backspace backspace");
     cx.simulate_input("md");
-    let asked = view.read_with(cx, |view, _| view.pick_conflict().map(ToOwned::to_owned));
-    assert_eq!(asked, None);
+    let question = view.read_with(cx, |view, _| view.pick_conflict().map(ToOwned::to_owned));
+    assert_eq!(question, None);
     cx.simulate_keystrokes("enter");
     assert_eq!(
-        answers.try_recv().ok(),
+        answer(&view, cx, &answers).await,
         Some(picked(tree.path().join("notes.md")))
     );
 }
@@ -381,7 +335,7 @@ async fn typing_after_the_question_takes_it_back(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn clicking_a_file_in_a_save_copies_its_name(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), save("a.txt")).await;
     double_click(cx, "entry-1");
     assert_eq!(name(&view, cx).as_deref(), Some("notes (2).txt"));
@@ -391,7 +345,7 @@ async fn clicking_a_file_in_a_save_copies_its_name(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn a_folder_picker_picks_the_folder_on_screen(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (_view, cx, answers) = picker(cx, &tree, tree.path(), FOLDERS).await;
     // A file is no folder to pick.
     click(cx, "entry-2");
@@ -405,7 +359,7 @@ async fn a_folder_picker_picks_the_folder_on_screen(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn a_folder_picker_picks_the_folder_clicked(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FOLDERS).await;
     click(cx, "entry-0");
     // A click selects; it doesn't go in.
@@ -423,7 +377,7 @@ async fn a_folder_picker_picks_the_folder_clicked(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn a_folder_picker_goes_into_a_folder_double_clicked(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FOLDERS).await;
     double_click(cx, "entry-0");
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
@@ -439,7 +393,7 @@ async fn a_folder_picker_goes_into_a_folder_double_clicked(cx: &mut TestAppConte
 #[gpui::test]
 async fn cancel_answers_cancelled(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (_view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
     click(cx, "pick-cancel");
     assert_eq!(answers.try_recv(), Ok(PickAnswer::Cancelled));
@@ -449,7 +403,7 @@ async fn cancel_answers_cancelled(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn escape_answers_cancelled(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (_view, cx, answers) = picker(cx, &tree, tree.path(), save("a.txt")).await;
     cx.simulate_keystrokes("escape");
     assert_eq!(answers.try_recv(), Ok(PickAnswer::Cancelled));
@@ -459,9 +413,98 @@ async fn escape_answers_cancelled(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn nothing_is_picked_while_a_folder_loads(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FOLDERS).await;
     view.update(cx, |view, _| view.open(&tree.path().join("Projects")));
     view.update_in(cx, MainWindow::accept);
     assert!(answers.try_recv().is_err());
+}
+
+#[gpui::test]
+async fn a_save_into_a_folder_that_went_away_waits(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let projects = tree.path().join("Projects");
+    let (view, cx, answers) = picker(cx, &tree, &projects, save("plan.txt")).await;
+    fs::remove_dir_all(&projects).unwrap();
+    cx.simulate_keystrokes("enter");
+    view.condition::<WindowEvent>(cx, |view, _| !view.waiting())
+        .await;
+
+    // Back again and on screen, the folder doesn't take the old save.
+    fs::create_dir_all(&projects).unwrap();
+    cx.simulate_keystrokes("ctrl-a");
+    cx.simulate_input("~/Projects/");
+    cx.simulate_keystrokes("enter");
+    wait_for_name(&view, cx, "").await;
+    cx.run_until_parked();
+    assert!(answers.try_recv().is_err());
+}
+
+#[gpui::test]
+async fn a_file_made_after_the_listing_still_asks(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("late.txt")).await;
+    // Another program saves under the same name while the dialog is open.
+    fs::write(tree.path().join("late.txt"), "").unwrap();
+    cx.simulate_keystrokes("enter");
+    assert_eq!(asked(&view, cx).await, Some(OsString::from("late (2).txt")));
+    assert!(answers.try_recv().is_err());
+}
+
+#[gpui::test]
+async fn keep_both_asks_again_when_its_name_was_taken_meanwhile(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        asked(&view, cx).await,
+        Some(OsString::from("notes (3).txt"))
+    );
+    fs::write(tree.path().join("notes (3).txt"), "").unwrap();
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        asked(&view, cx).await,
+        Some(OsString::from("notes (4).txt"))
+    );
+    assert!(answers.try_recv().is_err());
+}
+
+#[gpui::test]
+async fn a_folder_name_typed_goes_in_and_empties_the_box(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), FOLDERS).await;
+    cx.simulate_input("Projects");
+    cx.simulate_keystrokes("enter");
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+    assert_eq!(name(&view, cx).as_deref(), Some(""));
+
+    click(cx, "pick-accept");
+    assert_eq!(
+        answers.try_recv().ok(),
+        Some(picked(tree.path().join("Projects")))
+    );
+}
+
+#[gpui::test]
+async fn a_clicked_name_means_that_file_even_with_outer_spaces(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    fs::write(tree.path().join(" notes.txt"), "").unwrap();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
+    let row = view
+        .read_with(cx, |view, _| view.entry_names())
+        .iter()
+        .position(|name| name == " notes.txt")
+        .unwrap();
+    let selector: &'static str = format!("entry-{row}").leak();
+    click(cx, selector);
+    click(cx, "pick-accept");
+    assert_eq!(
+        answers.try_recv().ok(),
+        Some(picked(tree.path().join(" notes.txt")))
+    );
 }
