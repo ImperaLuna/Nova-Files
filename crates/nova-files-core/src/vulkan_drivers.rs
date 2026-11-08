@@ -9,14 +9,21 @@
 //! [`absent_vendor_drivers`] reads the vendors of the display devices on the
 //! PCI bus and the library each manifest loads. A manifest whose library
 //! serves only one vendor, or only GPUs that aren't on PCI, and that vendor
-//! isn't present, goes in the filter. Software drivers (lavapipe) and
-//! libraries not in [`LIBRARY_VENDORS`] are always kept. It decides nothing
+//! isn't present, goes in the filter. The software driver (lavapipe) goes
+//! too when a driver for a GPU that is present is installed: GPUI only
+//! draws with a software Vulkan driver when it has no other, and when the
+//! hardware driver fails it moves to OpenGL, which still has a software
+//! fallback of its own. Skipping lavapipe saves loading LLVM, the biggest
+//! library a start reads. Libraries not in [`LIBRARY_VENDORS`] are always
+//! kept. It decides nothing
 //! when the user already chose drivers (a `VK_*` driver variable or a loader
 //! settings file), when a GPU isn't on PCI, or when the system can't be read:
 //! then the loader works as it always does.
 //!
 //! The answer is the value for [`FILTER_VARIABLE`], which the program sets
-//! before it starts any thread. Children inherit it, which is harmless: it
+//! before it starts any thread. When a window's GPU setup still fails (a
+//! driver updated without a reboot breaks NVIDIA's Vulkan and OpenGL both),
+//! the program removes the filter and tries once more, so lavapipe can draw. Children inherit it, which is harmless: it
 //! only hides drivers for hardware that isn't there.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -82,6 +89,9 @@ enum Serves {
     /// Only GPUs built into a chip (not on PCI), such as Arm boards and
     /// Apple Silicon.
     OnChip,
+    /// Any machine, drawing on the CPU: needed only when no driver for a
+    /// present GPU is installed.
+    Software,
 }
 
 const AMD: u32 = 0x1002;
@@ -92,7 +102,7 @@ const MICROSOFT: u32 = 0x1414;
 const IMAGINATION: u32 = 0x1010;
 
 /// The driver libraries known to serve one kind of GPU only, by file name.
-const LIBRARY_VENDORS: [(&str, Serves); 12] = [
+const LIBRARY_VENDORS: [(&str, Serves); 13] = [
     ("libvulkan_radeon.so", Serves::PciVendor(AMD)),
     ("libvulkan_intel.so", Serves::PciVendor(INTEL)),
     ("libvulkan_intel_hasvk.so", Serves::PciVendor(INTEL)),
@@ -105,6 +115,7 @@ const LIBRARY_VENDORS: [(&str, Serves); 12] = [
     ("libvulkan_asahi.so", Serves::OnChip),
     ("libvulkan_broadcom.so", Serves::OnChip),
     ("libvulkan_freedreno.so", Serves::OnChip),
+    ("libvulkan_lvp.so", Serves::Software),
 ];
 
 /// The part of a Vulkan driver manifest this reads.
@@ -155,11 +166,15 @@ fn decide(
     if present.is_empty() {
         return None;
     }
+    let found = manifests(roots);
+    let hardware_driver = found
+        .iter()
+        .any(|(_, library)| serves_a_present_gpu(library, &present));
     // The filter matches file names, so a name is skipped only when every
     // manifest by that name serves nothing present.
     let mut by_name: BTreeMap<String, bool> = BTreeMap::new();
-    for (name, library) in manifests(roots) {
-        let absent = serves_nothing_present(&library, &present);
+    for (name, library) in found {
+        let absent = serves_nothing_present(&library, &present, hardware_driver);
         by_name
             .entry(name)
             .and_modify(|skip| *skip &= absent)
@@ -173,19 +188,32 @@ fn decide(
     (!skipped.is_empty()).then(|| skipped.join(FILTER_SEPARATOR))
 }
 
-/// Whether the library is known to serve only GPUs this PC doesn't have.
-fn serves_nothing_present(library: &str, present: &BTreeSet<u32>) -> bool {
+/// Whether the library is known to serve only GPUs this PC doesn't have,
+/// or is the software driver while `hardware_driver` (a driver for a
+/// present GPU) is installed.
+fn serves_nothing_present(library: &str, present: &BTreeSet<u32>, hardware_driver: bool) -> bool {
+    known_serves(library).is_some_and(|serves| match serves {
+        Serves::PciVendor(vendor) => !present.contains(&vendor),
+        // Only reached when every GPU is on PCI.
+        Serves::OnChip => true,
+        Serves::Software => hardware_driver,
+    })
+}
+
+/// Whether the library is a known driver for a GPU this PC has.
+fn serves_a_present_gpu(library: &str, present: &BTreeSet<u32>) -> bool {
+    matches!(known_serves(library), Some(Serves::PciVendor(vendor)) if present.contains(&vendor))
+}
+
+/// Who the library serves, when it is in [`LIBRARY_VENDORS`].
+fn known_serves(library: &str) -> Option<Serves> {
     let name = Path::new(library)
         .file_name()
         .map_or_else(|| library.into(), |name| name.to_string_lossy());
     LIBRARY_VENDORS
         .iter()
         .find(|(known, _)| *known == name)
-        .is_some_and(|(_, serves)| match serves {
-            Serves::PciVendor(vendor) => !present.contains(vendor),
-            // Only reached when every GPU is on PCI.
-            Serves::OnChip => true,
-        })
+        .map(|(_, serves)| *serves)
 }
 
 /// Whether every DRM card's device sits on the PCI bus. `None` when the
@@ -446,6 +474,7 @@ mod tests {
                 "freedreno_icd.x86_64.json",
                 "intel_hasvk_icd.x86_64.json",
                 "intel_icd.x86_64.json",
+                "lvp_icd.x86_64.json",
                 "panfrost_icd.x86_64.json",
                 "powervr_mesa_icd.x86_64.json",
                 "radeon_icd.x86_64.json",
@@ -455,11 +484,10 @@ mod tests {
     }
 
     #[test]
-    fn software_unknown_and_present_vendor_drivers_stay() {
+    fn unknown_and_present_vendor_drivers_stay() {
         let system = nvidia_desktop("kept");
         let skipped = system.decide().unwrap();
         for kept in [
-            "lvp_icd.x86_64.json",
             "gfxstream_vk_icd.x86_64.json",
             "nvidia_icd.json",
             "nouveau_icd.x86_64.json",
@@ -500,6 +528,31 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn the_software_driver_stays_without_a_driver_for_the_gpu() {
+        // A VM's display device, which no installed driver serves.
+        let system = FakeSystem::new("vm");
+        system.pci_device("0000:00:02.0", VGA_CLASS, "0x1234");
+        system.card("card0", "pci");
+        system.nixos_drivers();
+        let skipped = system.decide().unwrap();
+        assert!(!skipped.contains("lvp_icd"));
+        assert!(skipped.contains("radeon_icd"));
+    }
+
+    #[test]
+    fn the_software_driver_stays_when_the_only_driver_for_the_gpu_is_unknown() {
+        let system = FakeSystem::new("unknown-driver");
+        system.pci_device("0000:01:00.0", VGA_CLASS, "0x10de");
+        system.card("card1", "pci");
+        system.manifest("own_icd.json", "/opt/own/libvulkan_own.so");
+        system.manifest(
+            "lvp_icd.x86_64.json",
+            "/nix/store/x-mesa/lib/libvulkan_lvp.so",
+        );
+        assert_eq!(system.decide(), None);
     }
 
     #[test]

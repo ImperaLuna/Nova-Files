@@ -18,9 +18,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use nova_files_api::{Connector, uri};
+use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{self, Connection, Proxy};
 use zbus::fdo::RequestNameFlags;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
@@ -34,6 +35,7 @@ pub use nova_files_api::APP_ID;
 pub const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 
 const CONNECT_THREAD: &str = "nova-files-dbus-connect";
+const NAME_WATCH_THREAD: &str = "nova-files-dbus-name-watch";
 
 /// Which bus to claim the name on.
 pub enum Bus {
@@ -64,7 +66,19 @@ pub enum Started {
 
 /// This process's hold on the bus name.
 pub struct Service {
-    _connection: Connection,
+    connection: Connection,
+}
+
+impl Service {
+    /// Gives the bus name up and waits for the bus to confirm, so a process
+    /// started after this returns can claim it at once, even while this
+    /// connection is still open.
+    ///
+    /// # Errors
+    /// When the call fails or takes longer than [`CALL_TIMEOUT`].
+    pub fn release(&self) -> zbus::Result<()> {
+        self.connection.release_name(APP_ID).map(drop)
+    }
 }
 
 /// The process that owns the bus name.
@@ -112,22 +126,77 @@ pub fn start(
     connector: Connector,
     on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
 ) -> zbus::Result<Started> {
+    start_waiting(bus, connector, on_open, Duration::ZERO)
+}
+
+/// [`start`], but while the name is taken it asks again for up to `wait`
+/// before settling for [`Started::AlreadyRunning`]. A restarted process
+/// uses it in case the bus hasn't freed its old name yet.
+///
+/// # Errors
+/// As [`start`].
+pub fn start_waiting(
+    bus: Bus,
+    connector: Connector,
+    on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
+    wait: Duration,
+) -> zbus::Result<Started> {
     let path = object_path()?;
     let connection = connect(bus, path.clone(), connector, on_open)?;
-    // Requested by hand, not with the builder's `name`, to pass DoNotQueue:
-    // a second launch must learn the name is taken, not wait in line for it.
-    match connection.request_name_with_flags(APP_ID, RequestNameFlags::DoNotQueue.into()) {
-        Ok(_) => Ok(Started::Service(Service {
-            _connection: connection,
-        })),
-        // The same connection makes the call; the objects it also serves
-        // are never reached, since the name points at the other process.
-        Err(zbus::Error::NameTaken) => Ok(Started::AlreadyRunning(RunningInstance {
-            connection,
-            path,
-        })),
-        Err(error) => Err(error),
+    // Watched before the first request, so a release in between still
+    // counts.
+    let freed = if wait.is_zero() {
+        None
+    } else {
+        Some(watch_name_freed(&connection)?)
+    };
+    let deadline = Instant::now() + wait;
+    loop {
+        // Requested by hand, not with the builder's `name`, to pass
+        // DoNotQueue: a second launch must learn the name is taken, not
+        // wait in line for it.
+        match connection.request_name_with_flags(APP_ID, RequestNameFlags::DoNotQueue.into()) {
+            Ok(_) => return Ok(Started::Service(Service { connection })),
+            Err(zbus::Error::NameTaken) => {
+                let left = deadline.saturating_duration_since(Instant::now());
+                let freed_in_time = freed
+                    .as_ref()
+                    .is_some_and(|freed| freed.recv_timeout(left).is_ok());
+                if !freed_in_time {
+                    // The same connection makes the call; the objects it
+                    // also serves are never reached, since the name points
+                    // at the other process.
+                    return Ok(Started::AlreadyRunning(RunningInstance {
+                        connection,
+                        path,
+                    }));
+                }
+            }
+            Err(error) => return Err(error),
+        }
     }
+}
+
+/// Sends on the returned channel each time the bus name loses its owner.
+///
+/// The bus has no "until" for signals, so the watching thread stays blocked
+/// until the next change of owner; only a restarted process starts one.
+fn watch_name_freed(connection: &Connection) -> zbus::Result<mpsc::Receiver<()>> {
+    let changes =
+        DBusProxy::new(connection)?.receive_name_owner_changed_with_args(&[(0, APP_ID)])?;
+    let (sender, freed) = mpsc::channel();
+    thread::Builder::new()
+        .name(NAME_WATCH_THREAD.to_owned())
+        .spawn(move || {
+            for change in changes {
+                let owner_gone = change.args().is_ok_and(|args| args.new_owner().is_none());
+                if owner_gone && sender.send(()).is_err() {
+                    return;
+                }
+            }
+        })
+        .map_err(|error| zbus::Error::Failure(error.to_string()))?;
+    Ok(freed)
 }
 
 /// Connects and serves the interfaces, giving up after [`CALL_TIMEOUT`].
