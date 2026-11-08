@@ -101,6 +101,10 @@ pub fn results(answer: &PickAnswer, filters: &[FileFilter]) -> (u32, Options) {
     let PickAnswer::Picked { paths, filter } = answer else {
         return (CANCELLED, Options::new());
     };
+    // Nothing picked is no answer an app can use.
+    if paths.is_empty() {
+        return (CANCELLED, Options::new());
+    }
     let uris: Vec<String> = paths.iter().map(|path| uri::file_uri(path)).collect();
     let mut results = Options::new();
     if let Some(uris) = owned(Value::from(uris)) {
@@ -145,16 +149,14 @@ fn get<T: TryFrom<OwnedValue>>(options: &Options, key: &str) -> Option<T> {
     T::try_from(options.get(key)?.try_clone().ok()?).ok()
 }
 
-/// A path option: bytes ending in a NUL, as the portal sends paths.
+/// A path option: bytes ending in a NUL, as the portal sends paths. Only
+/// an absolute path counts; anything else is relative to nothing here.
 fn get_path(options: &Options, key: &str) -> Option<PathBuf> {
     let mut bytes: Vec<u8> = get(options, key)?;
     if bytes.last() == Some(&0) {
         bytes.pop();
     }
-    if bytes.is_empty() {
-        return None;
-    }
-    Some(PathBuf::from(OsString::from_vec(bytes)))
+    Some(PathBuf::from(OsString::from_vec(bytes))).filter(|path| path.is_absolute())
 }
 
 fn owned(value: Value<'_>) -> Option<OwnedValue> {
@@ -369,6 +371,27 @@ mod tests {
         let (code, results) = results(&answer, &[]);
         assert_eq!(code, SUCCESS);
         assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn a_relative_current_file_gives_no_folder() {
+        let parsed = save(
+            String::new(),
+            &options(vec![
+                ("current_folder", Value::from(path_bytes("/srv/docs"))),
+                ("current_file", Value::from(path_bytes("report.odt"))),
+            ]),
+        );
+        assert_eq!(parsed.folder, Some(PathBuf::from("/srv/docs")));
+    }
+
+    #[test]
+    fn picking_nothing_answers_cancelled() {
+        let answer = PickAnswer::Picked {
+            paths: Vec::new(),
+            filter: None,
+        };
+        assert_eq!(results(&answer, &[]).0, CANCELLED);
     }
 
     #[test]

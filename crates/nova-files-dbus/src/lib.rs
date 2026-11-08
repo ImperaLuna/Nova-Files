@@ -41,8 +41,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use nova_files_api::{Connector, uri};
+use zbus::blocking::connection::Builder;
 use zbus::blocking::fdo::DBusProxy;
-use zbus::blocking::{self, Connection, Proxy};
+use zbus::blocking::{Connection, Proxy};
 use zbus::fdo::{RequestNameFlags, RequestNameReply};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
 
@@ -73,10 +74,10 @@ pub enum Bus {
 }
 
 impl Bus {
-    pub(crate) fn builder(&self) -> zbus::Result<blocking::connection::Builder<'static>> {
+    pub(crate) fn builder(&self) -> zbus::Result<Builder<'static>> {
         let builder = match self {
-            Self::Session => blocking::connection::Builder::session()?,
-            Self::Address(address) => blocking::connection::Builder::address(address.as_str())?,
+            Self::Session => Builder::session()?,
+            Self::Address(address) => Builder::address(address.as_str())?,
         };
         Ok(builder.method_timeout(CALL_TIMEOUT))
     }
@@ -94,6 +95,8 @@ pub enum Started {
 /// This process's hold on the bus names.
 pub struct Service {
     connection: Connection,
+    /// The bus `connection` is on, for the file picker's own connection.
+    bus: Bus,
     portal: bool,
 }
 
@@ -108,11 +111,11 @@ impl Service {
 
     /// Serves the file picker, shown by `picker`, and asks for its bus
     /// name, waiting in the bus's queue when another program holds it. Pick
-    /// requests hold the core `connector` reaches, watched on `bus`. The
-    /// picker is optional, so any failure leaves the app running without
-    /// it; [`Self::serves_portal`] says how it went.
-    pub fn serve_file_picker(&mut self, bus: &Bus, connector: Connector, picker: impl Picker) {
-        self.portal = Holds::new(connector, bus)
+    /// requests hold the core `connector` reaches. The picker is optional,
+    /// so any failure leaves the app running without it;
+    /// [`Self::serves_portal`] says how it went.
+    pub fn serve_file_picker(&mut self, connector: Connector, picker: impl Picker) {
+        self.portal = Holds::new(connector, &self.bus)
             .is_ok_and(|holds| queue_for_portal(&self.connection, picker, holds));
     }
 
@@ -192,7 +195,7 @@ pub fn start_waiting(
     wait: Duration,
 ) -> zbus::Result<Started> {
     let path = object_path()?;
-    let connection = connect(bus, path.clone(), connector, on_open)?;
+    let connection = connect(bus.clone(), path.clone(), connector, on_open)?;
     // Watched before the first request, so a release in between still
     // counts.
     let freed = if wait.is_zero() {
@@ -209,6 +212,7 @@ pub fn start_waiting(
             Ok(_) => {
                 return Ok(Started::Service(Service {
                     connection,
+                    bus,
                     portal: false,
                 }));
             }
@@ -276,27 +280,35 @@ fn watch_name_freed(connection: &Connection) -> zbus::Result<mpsc::Receiver<()>>
 }
 
 /// Connects and serves the interfaces, giving up after [`CALL_TIMEOUT`].
-///
-/// zbus has no timeout for connecting and authenticating, so that happens
-/// on its own thread; if the bus never answers, the thread is left blocked
-/// and the caller carries on without D-Bus.
 fn connect(
     bus: Bus,
     path: OwnedObjectPath,
     connector: Connector,
     on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
 ) -> zbus::Result<Connection> {
+    connect_within_timeout(bus, move |builder| {
+        builder
+            .serve_at(path.clone(), files::Files::new(connector.clone()))?
+            .serve_at(path.clone(), search::Search)?
+            .serve_at(path, application::Application::new(connector, on_open))
+    })
+}
+
+/// Connects to `bus` with what `serve` adds to the connection, giving up
+/// after [`CALL_TIMEOUT`].
+///
+/// zbus has no timeout for connecting and authenticating, so that happens
+/// on its own thread; if the bus never answers, the thread is left blocked
+/// and the caller carries on without D-Bus.
+pub(crate) fn connect_within_timeout(
+    bus: Bus,
+    serve: impl FnOnce(Builder<'static>) -> zbus::Result<Builder<'static>> + Send + 'static,
+) -> zbus::Result<Connection> {
     let (result_sender, result) = mpsc::channel();
     thread::Builder::new()
         .name(CONNECT_THREAD.to_owned())
         .spawn(move || {
-            let connection = bus.builder().and_then(|builder| {
-                builder
-                    .serve_at(&path, files::Files::new(connector.clone()))?
-                    .serve_at(&path, search::Search)?
-                    .serve_at(&path, application::Application::new(connector, on_open))?
-                    .build()
-            });
+            let connection = bus.builder().and_then(serve).and_then(Builder::build);
             result_sender.send(connection).ok();
         })
         .map_err(|error| zbus::Error::Failure(error.to_string()))?;

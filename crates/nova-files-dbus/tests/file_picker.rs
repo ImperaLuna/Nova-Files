@@ -73,7 +73,6 @@ fn setup(connector: &Connector) -> Setup {
     let (requests_sender, requests) = mpsc::channel();
     let (closes_sender, closes) = mpsc::channel();
     service.serve_file_picker(
-        &bus.bus(),
         connector.clone(),
         TestPicker {
             requests: requests_sender,

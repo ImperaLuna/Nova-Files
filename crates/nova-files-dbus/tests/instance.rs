@@ -303,7 +303,7 @@ fn picker_service(bus: &PrivateBus, connector: &Connector) -> Service {
     else {
         panic!("the application name is free");
     };
-    service.serve_file_picker(&bus.bus(), connector.clone(), NoPicker);
+    service.serve_file_picker(connector.clone(), NoPicker);
     service
 }
 
