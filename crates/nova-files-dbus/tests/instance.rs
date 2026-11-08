@@ -369,7 +369,11 @@ fn a_caller_already_gone_gets_no_hold() {
 
     let taken = zbus::block_on(setup.holds.take(setup.service.inner(), &name.as_ref()));
 
-    assert!(matches!(taken, Err(HoldError::CallerGone)));
+    let Err(error) = taken else {
+        panic!("a caller that left gets no hold");
+    };
+    assert!(matches!(error, HoldError::CallerGone));
+    assert_eq!(error.to_string(), "the caller has left the bus");
     assert_eq!(setup.holds.count(&name.as_ref()), 0);
     setup.core_ended.recv_timeout(WAIT).unwrap();
 }
