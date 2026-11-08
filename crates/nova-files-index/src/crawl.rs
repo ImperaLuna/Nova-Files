@@ -24,6 +24,8 @@ use std::os::unix::fs::{DirEntryExt as _, MetadataExt as _};
 use std::path::{self, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rustix::fs::{Mode, OFlags};
+
 use crate::build::{Built, TooBig};
 use crate::mounts::{MountCheck, SystemMounts};
 use crate::policy::{self, Zone};
@@ -256,10 +258,23 @@ impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
 }
 
 /// Whether the file at `path` starts with the cache-folder signature.
+/// Only a plain file counts: a link isn't followed, and a pipe or device
+/// is never read, since reading one could wait forever.
 pub fn has_cache_signature(path: &Path) -> bool {
     let mut start = [0; policy::CACHE_TAG_SIGNATURE.len()];
-    File::open(path)
-        .and_then(|mut file| file.read_exact(&mut start))
+    let flags = OFlags::RDONLY
+        .union(OFlags::NONBLOCK)
+        .union(OFlags::NOFOLLOW)
+        .union(OFlags::CLOEXEC);
+    rustix::fs::open(path, flags, Mode::empty())
+        .map(File::from)
+        .map_err(io::Error::from)
+        .and_then(|mut file| {
+            if !file.metadata()?.is_file() {
+                return Err(io::ErrorKind::InvalidInput.into());
+            }
+            file.read_exact(&mut start)
+        })
         .is_ok_and(|()| policy::is_cache_signature(&start))
 }
 

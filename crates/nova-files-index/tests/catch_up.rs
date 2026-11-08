@@ -6,6 +6,7 @@
 mod support;
 
 use std::fs;
+use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, SystemTime};
@@ -184,30 +185,40 @@ fn a_new_folder_is_added_whole_and_watched() {
 }
 
 #[test]
-fn moves_while_closed_are_moves() {
-    let closed = Closed::new(&["a/file.txt", "a/folder/inner.txt", "b/"]);
+fn a_file_moved_while_closed_is_removed_then_added() {
+    let closed = Closed::new(&["a/file.txt", "b/"]);
+    let inode = fs::metadata(closed.path("a/file.txt")).unwrap().ino();
     fs::rename(closed.path("a/file.txt"), closed.path("b/file.txt")).unwrap();
-    fs::rename(closed.path("a/folder"), closed.path("b/folder")).unwrap();
-    let mut opened = closed.open();
-    let mut moves: Vec<Change> = entries(std::mem::take(&mut opened.caught));
-    moves.sort_by_key(|change| format!("{change:?}"));
+    let changes = entries(closed.caught_up());
+    let [
+        Change::Removed { path: removed },
+        Change::Added {
+            path: added,
+            details,
+        },
+    ] = changes.as_slice()
+    else {
+        panic!("{changes:?}");
+    };
     assert_eq!(
-        moves,
-        [
-            Change::Moved {
-                from: closed.path("a/file.txt"),
-                to: closed.path("b/file.txt")
-            },
-            Change::Moved {
-                from: closed.path("a/folder"),
-                to: closed.path("b/folder")
-            },
-        ]
+        (removed, added),
+        (&closed.path("a/file.txt"), &closed.path("b/file.txt"))
     );
-    // The moved folder is watched at its new place.
-    let later = closed.path("b/folder/later.txt");
-    fs::write(&later, b"").unwrap();
-    assert!(added_paths(&opened.next()).contains(&later.as_path()));
+    // The addition still tells it is the same file.
+    assert_eq!(details.id.inode, inode);
+}
+
+#[test]
+fn a_folder_moved_while_closed_asks_for_a_rescan() {
+    let closed = Closed::new(&["a/folder/inner.txt", "a/file.txt", "b/"]);
+    fs::rename(closed.path("a/folder"), closed.path("b/folder")).unwrap();
+    fs::rename(closed.path("a/file.txt"), closed.path("b/file.txt")).unwrap();
+    assert_eq!(
+        closed.caught_up(),
+        [Change::Rescan {
+            folder: closed.path("")
+        }]
+    );
 }
 
 #[test]
@@ -262,26 +273,101 @@ fn folders_touched_just_before_the_crawl_are_read_again() {
 }
 
 #[test]
-fn changes_inside_a_folder_moved_while_closed_are_found() {
-    let closed = Closed::new(&["a/folder/old.txt", "a/folder/inner/deep.txt", "b/"]);
-    fs::rename(closed.path("a/folder"), closed.path("b/folder")).unwrap();
-    fs::write(closed.path("b/folder/new.txt"), b"").unwrap();
-    fs::write(closed.path("b/folder/inner/deeper.txt"), b"").unwrap();
-    // Last, so neither new file gets its inode.
-    fs::remove_file(closed.path("b/folder/old.txt")).unwrap();
+fn a_file_written_and_moved_while_closed_is_added_as_it_is_now() {
+    let closed = Closed::new(&["a/file.txt", "b/"]);
+    fs::write(closed.path("a/file.txt"), b"longer than before").unwrap();
+    fs::rename(closed.path("a/file.txt"), closed.path("b/file.txt")).unwrap();
     let changes = entries(closed.caught_up());
-    assert!(changes.contains(&Change::Moved {
-        from: closed.path("a/folder"),
-        to: closed.path("b/folder")
-    }));
+    let to = closed.path("b/file.txt");
     assert!(
-        changes.contains(&Change::Removed {
-            path: closed.path("b/folder/old.txt")
-        }),
-        "{changes:#?}"
+        changes.iter().any(
+            |change| matches!(change, Change::Added { path, details } if *path == to && details.size == 18)
+        ),
+        "{changes:?}"
     );
-    let expected =
-        ["b/folder/inner/deeper.txt", "b/folder/new.txt"].map(|relative| closed.path(relative));
-    let expected: Vec<&Path> = expected.iter().map(PathBuf::as_path).collect();
-    assert_eq!(added_paths(&changes), expected);
+}
+
+#[test]
+fn a_folder_that_became_a_profile_while_closed_is_removed() {
+    let closed = Closed::new(&["apps/browser/bookmarks.html"]);
+    fs::write(closed.path("apps/browser/profiles.ini"), b"").unwrap();
+    let mut opened = closed.open();
+    let changes = entries(std::mem::take(&mut opened.caught));
+    assert_eq!(
+        changes,
+        [Change::Removed {
+            path: closed.path("apps/browser")
+        }]
+    );
+}
+
+#[test]
+fn a_folder_that_became_a_profile_while_closed_is_no_longer_watched() {
+    let closed = Closed::new(&["apps/browser/bookmarks.html", "docs/"]);
+    fs::write(closed.path("apps/browser/profiles.ini"), b"").unwrap();
+    let mut opened = closed.open();
+    fs::write(closed.path("apps/browser/later.html"), b"").unwrap();
+    fs::write(closed.path("docs/later.txt"), b"").unwrap();
+    let after = opened.next();
+    assert_eq!(
+        added_paths(&after),
+        [closed.path("docs/later.txt").as_path()],
+        "{after:?}"
+    );
+}
+
+#[test]
+fn nothing_is_read_through_a_link_that_replaced_a_folder() {
+    let outside = TempFolder::new().with(&["b/new.txt"]);
+    let closed = Closed::new(&["a/b/old.txt"]);
+    fs::remove_dir_all(closed.path("a")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), closed.path("a")).unwrap();
+    let changes = entries(closed.caught_up());
+    assert!(
+        changes.iter().all(|change| match change {
+            Change::Added { path, .. } | Change::Changed { path, .. } =>
+                !path.starts_with(closed.path("a/b")),
+            _ => true,
+        }),
+        "{changes:?}"
+    );
+}
+
+#[test]
+fn a_folder_replaced_by_another_while_closed_asks_for_a_rescan() {
+    let closed = Closed::new(&["a/one.txt", "b/two.txt"]);
+    // `b` now holds what was `a`, and what was `b` is `c`: comparing the
+    // new `b` with the old one's rows would lose `two.txt`.
+    fs::rename(closed.path("b"), closed.path("c")).unwrap();
+    fs::rename(closed.path("a"), closed.path("b")).unwrap();
+    assert_eq!(
+        closed.caught_up(),
+        [Change::Rescan {
+            folder: closed.path("")
+        }]
+    );
+}
+
+#[test]
+fn swapped_names_are_logged_so_both_survive_a_replay() {
+    let closed = Closed::new(&["a.txt", "b.txt"]);
+    fs::rename(closed.path("a.txt"), closed.path("tmp")).unwrap();
+    fs::rename(closed.path("b.txt"), closed.path("a.txt")).unwrap();
+    fs::rename(closed.path("tmp"), closed.path("b.txt")).unwrap();
+    let changes = entries(closed.caught_up());
+    // Both leave before either comes back.
+    let removed = changes
+        .iter()
+        .filter(|change| matches!(change, Change::Removed { .. }))
+        .count();
+    assert_eq!(removed, 2, "{changes:?}");
+    assert!(matches!(
+        &changes[2..],
+        [Change::Added { .. }, Change::Added { .. }]
+    ));
+    let expected = [closed.path("a.txt"), closed.path("b.txt")];
+    assert_eq!(
+        added_paths(&changes),
+        expected.each_ref().map(PathBuf::as_path)
+    );
 }

@@ -87,9 +87,16 @@ impl ChangeLog {
     /// # Errors
     /// When the file can't be written.
     pub fn create(path: &Path, crawled: Option<Stamp>) -> io::Result<Self> {
-        let mut temp = path.as_os_str().to_owned();
-        temp.push(".new");
-        let temp = PathBuf::from(temp);
+        // Held until the new log is in place, so two creators, even in two
+        // processes, never share the temp file.
+        let lock = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(FILE_MODE)
+            .open(beside(path, ".lock"))?;
+        lock.lock()?;
+        let temp = beside(path, ".new");
         // Left by a crash; if it can't be removed, creating it says why.
         fs::remove_file(&temp).ok();
         let mut file = OpenOptions::new()
@@ -103,6 +110,7 @@ impl ChangeLog {
         if written.is_err() {
             fs::remove_file(&temp).ok();
         }
+        drop(lock);
         written.map(|()| Self { file })
     }
 
@@ -113,6 +121,12 @@ impl ChangeLog {
     pub fn append(&mut self, change: &Change) -> io::Result<()> {
         self.file.write_all(&record(change)?)
     }
+}
+
+fn beside(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    PathBuf::from(name)
 }
 
 /// A reader's place in a change log.
