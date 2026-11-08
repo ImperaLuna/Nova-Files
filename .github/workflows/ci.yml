@@ -52,7 +52,11 @@ jobs:
         if: github.event_name == 'pull_request' && github.base_ref != 'main'
         env:
           BASE: ${{ github.base_ref }}
-        run: git diff --no-renames --name-only -z HEAD^1 HEAD | tools/ci-stack-guard.sh "$BASE"
+        # Files the branch got by merging main are let through, so main is
+        # fetched to compare against.
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          git diff --no-renames --name-only -z HEAD^1 HEAD | tools/ci-stack-guard.sh "$BASE" FETCH_HEAD HEAD
 
   check:
     name: nix flake check
