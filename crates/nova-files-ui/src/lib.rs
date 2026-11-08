@@ -41,7 +41,7 @@ pub enum Ended {
 /// Called with the folder when the first window can't be opened, which
 /// means its GPU setup failed. The program uses it to start again with
 /// every Vulkan driver; it returns only when it didn't.
-pub type RecoverGpu = fn(&Path);
+pub type RecoverGpu = Rc<dyn Fn(&Path)>;
 
 /// Runs the UI on this thread with one window open on `folder` (or the
 /// home folder), until the last window closes or the program asks it to
@@ -50,22 +50,23 @@ pub fn run(
     connector: &Connector,
     requests: &Requests,
     folder: Option<PathBuf>,
-    recover_gpu: RecoverGpu,
+    recover_gpu: &RecoverGpu,
 ) -> Ended {
     let ended = Rc::new(Cell::new(Ended::WindowsClosed));
     let connector = connector.clone();
     let requests = requests.clone();
     let quit = Rc::clone(&ended);
+    let recover_gpu = Rc::clone(recover_gpu);
     gpui_platform::application()
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
-            open_window(&connector, folder, recover_gpu, cx);
+            open_window(&connector, folder, &recover_gpu, cx);
             let follow = cx.spawn(async move |cx| {
                 loop {
                     let request = requests.next().await;
                     let keep_going = cx.update(|cx| match request {
                         Some(Request::OpenWindow(folder)) => {
-                            open_window(&connector, folder, recover_gpu, cx);
+                            open_window(&connector, folder, &recover_gpu, cx);
                             true
                         }
                         Some(Request::Quit) | None => {
@@ -98,7 +99,7 @@ impl Global for RequestLoop {}
 fn open_window(
     connector: &Connector,
     folder: Option<PathBuf>,
-    recover_gpu: RecoverGpu,
+    recover_gpu: &RecoverGpu,
     cx: &mut App,
 ) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);

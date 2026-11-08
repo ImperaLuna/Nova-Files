@@ -24,16 +24,19 @@
 
 mod mode;
 
+use std::cell::Cell;
 use std::error::Error;
 use std::io::{self, Write as _};
 use std::os::unix::process::CommandExt as _;
 use std::path::Path;
 use std::process::{Command, ExitCode};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use nova_files_api::Connector;
-use nova_files_dbus::{Bus, Started};
+use nova_files_dbus::{Bus, Service, Started};
 use nova_files_ui::{Ended, RecoverGpu, Request, RequestSender, Requests};
 
 use crate::mode::Mode;
@@ -59,6 +62,19 @@ fn main() -> ExitCode {
             report(&format!("{error}"));
             ExitCode::FAILURE
         }
+    }
+}
+
+/// How long a restarted process waits for the bus to free its old name
+/// before it takes the name as another instance's.
+const RESTART_NAME_WAIT: Duration = Duration::from_millis(500);
+
+/// How long to wait for the bus name: only a restart waits.
+fn name_wait() -> Duration {
+    if every_driver_asked() {
+        RESTART_NAME_WAIT
+    } else {
+        Duration::ZERO
     }
 }
 
@@ -111,7 +127,9 @@ fn run() -> Result<(), Box<dyn Error>> {
         let requests = requests.clone();
         move |folder| requests.send(Request::OpenWindow(folder))
     };
-    let _service = match nova_files_dbus::start(Bus::Session, core.connector.clone(), on_open) {
+    let started =
+        nova_files_dbus::start_waiting(Bus::Session, core.connector.clone(), on_open, name_wait());
+    let service = match started {
         Ok(Started::Service(service)) => Some(service),
         Ok(Started::AlreadyRunning(running)) => {
             match &mode {
@@ -130,27 +148,42 @@ fn run() -> Result<(), Box<dyn Error>> {
     };
 
     watch_core(core.thread, requests.clone())?;
-    show_windows(mode, &requests, &core.connector, &received);
+    show_windows(mode, &requests, &core.connector, &received, service);
     Ok(())
 }
 
 /// Opens the first window in window mode. Then each `OpenWindow` while no
 /// window is open starts the UI again, until something asks it to quit.
-fn show_windows(mode: Mode, requests: &RequestSender, connector: &Connector, received: &Requests) {
+///
+/// Holds the bus name (`service`) until the program ends or restarts.
+fn show_windows(
+    mode: Mode,
+    requests: &RequestSender,
+    connector: &Connector,
+    received: &Requests,
+    service: Option<Service>,
+) {
+    let service = Cell::new(service);
     // Replaces this process, so it returns only when that failed.
-    let restart: RecoverGpu = |folder| {
-        if let Some(mut command) = restart_with_every_driver(folder) {
-            report(&format!(
-                "restarting with every Vulkan driver: {}",
-                command.exec()
-            ));
+    let restart: RecoverGpu = Rc::new(move |folder| {
+        let Some(mut command) = restart_with_every_driver(folder) else {
+            return;
+        };
+        // The bus confirms the release, so the new process finds the name
+        // free.
+        if let Some(Err(error)) = service.take().map(Service::release) {
+            report(&format!("could not give up the bus name: {error}"));
         }
-    };
+        report(&format!(
+            "restarting with every Vulkan driver: {}",
+            command.exec()
+        ));
+    });
     if let Mode::Window(folder) = mode {
         requests.send(Request::OpenWindow(folder));
     }
     while let Some(Request::OpenWindow(folder)) = received.wait() {
-        if nova_files_ui::run(connector, received, folder, restart) == Ended::Quit {
+        if nova_files_ui::run(connector, received, folder, &restart) == Ended::Quit {
             break;
         }
     }
@@ -207,10 +240,12 @@ mod tests {
         reason = "nextest runs each test in a process of its own, with no other thread reading"
     )]
     #[test]
-    fn a_restart_keeps_every_driver() {
+    fn a_restart_keeps_every_driver_and_waits_for_its_name() {
         assert!(!every_driver_asked());
+        assert_eq!(name_wait(), Duration::ZERO);
         // SAFETY: see the reason above.
         unsafe { std::env::set_var(EVERY_DRIVER_VARIABLE, "1") };
         assert!(every_driver_asked());
+        assert_eq!(name_wait(), RESTART_NAME_WAIT);
     }
 }
