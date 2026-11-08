@@ -22,22 +22,27 @@ nova-files-dbus = { path = "crates/nova-files-dbus" }
 nova-files-index = { path = "crates/nova-files-index" }
 nova-files-ui = { path = "crates/nova-files-ui" }
 
-# GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds two
-# memory fixes on top of a Zed stable release (FIL-42, FIL-44). Each pin is
-# its own branch, `nova/<tag>`, so older pins stay buildable:
+# GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds fixes
+# on top of a Zed stable release (FIL-42, FIL-44, FIL-65). Each pin is its
+# own branch, `nova/<tag>` (with a suffix when fixes are added to a pin), so
+# older pins stay buildable:
 # - zed-industries/zed#63289: make the path (MSAA) textures only when a frame
 #   draws a path.
 # - zed-industries/zed#65755: load OpenGL only when hardware Vulkan fails.
-# When both are merged upstream, point these back at zed-industries/zed.
+# - FIL-65: build the GPU pipelines on a window's first frame, once it has
+#   settled on opaque or transparent, instead of twice per window.
+# - FIL-65: load the system fonts on a background thread, so reading them
+#   overlaps the GPU setup instead of coming before it.
+# When all are merged upstream, point these back at zed-industries/zed.
 #
 # The crates.io release (0.2.2) draws through blade, which turns on ray
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "814a9d4aaa56b6e332840817a0116d61087fd94a", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "c6828e8dc23590aad9c69d5fb03a8d5c799b12cd", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "814a9d4aaa56b6e332840817a0116d61087fd94a", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "c6828e8dc23590aad9c69d5fb03a8d5c799b12cd", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index can opt in per site with
