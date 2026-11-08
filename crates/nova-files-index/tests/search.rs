@@ -259,6 +259,27 @@ fn without_changes_a_live_search_finds_the_same() {
 }
 
 #[test]
+fn moved_entries_rank_by_where_they_are_now() {
+    let home = Home::new();
+    // Out of a hidden folder: no longer ranked after visible names.
+    let changes = [home.moved(".config/tax-tool", "Documents/tax-tool")];
+    assert_eq!(
+        home.stages_now("tax", 1, &changes).remove(0),
+        [at("Documents/tax-tool", MatchKind::WordStart)]
+    );
+    // Into one: ranked after visible names of the same kind, so with both
+    // visible ones moved in, the shortest hidden name comes first.
+    let changes = [
+        home.moved("Documents/taxes 2024.pdf", ".config/taxes 2024.pdf"),
+        home.moved("Documents/tax return.pdf", ".config/tax return.pdf"),
+    ];
+    assert_eq!(
+        home.stages_now("tax", 1, &changes).remove(0),
+        [at(".config/tax-tool", MatchKind::WordStart)]
+    );
+}
+
+#[test]
 fn removed_entries_are_left_out() {
     let home = Home::new();
     let first = home

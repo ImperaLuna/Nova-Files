@@ -236,6 +236,9 @@ impl Search<'_> {
     /// The best `limit` of `ranked` that are still there, best first, each
     /// path once.
     fn best(&mut self, mut ranked: Vec<Rank>) -> Vec<Hit> {
+        if self.overlay.is_some_and(Overlay::moves) {
+            return self.best_moved(ranked);
+        }
         let changed = self.overlay.is_some_and(|overlay| !overlay.is_empty());
         if !changed && ranked.len() > self.limit {
             // Without changes every match is still there: the best `limit`
@@ -252,6 +255,32 @@ impl Search<'_> {
             let Some(path) = self.path(source) else {
                 continue;
             };
+            if self.shown.insert(path.clone()) {
+                hits.push(Hit { path, kind });
+            }
+        }
+        hits
+    }
+
+    /// [`Search::best`] when entries moved: a move can take a row into or
+    /// out of a hidden folder, so every match is placed first and ranked
+    /// by where it is now.
+    fn best_moved(&mut self, ranked: Vec<Rank>) -> Vec<Hit> {
+        let root = self.index.root();
+        let mut placed: Vec<(Rank, PathBuf)> = ranked
+            .into_iter()
+            .filter_map(|(kind, _, cost, length, source)| {
+                let path = self.path(source)?;
+                let hidden = self.hidden_last && is_hidden(root, &path);
+                Some(((kind, hidden, cost, length, source), path))
+            })
+            .collect();
+        placed.sort_unstable_by_key(|(rank, _)| *rank);
+        let mut hits = Vec::new();
+        for ((kind, ..), path) in placed {
+            if hits.len() == self.limit {
+                break;
+            }
             if self.shown.insert(path.clone()) {
                 hits.push(Hit { path, kind });
             }
