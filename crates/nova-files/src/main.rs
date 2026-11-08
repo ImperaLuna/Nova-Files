@@ -12,7 +12,10 @@
 //! The process ends when the core stops, which it does once idle (see
 //! `nova_files_core::IDLE_EXIT`).
 //!
-//! Before anything else, while it is the only thread, it tells the Vulkan
+//! With `NOVA_FILES_STARTUP_TRACE` set, it first starts the start-up trace
+//! (see `nova_files_core::start_startup_trace`).
+//!
+//! Then, while it is the only thread, it tells the Vulkan
 //! loader to skip drivers for GPUs the PC doesn't have (see
 //! `nova_files_core::absent_vendor_drivers`); each skipped driver is a set of
 //! libraries a cold start no longer reads.
@@ -33,6 +36,9 @@ use crate::mode::Mode;
 const CORE_WATCH_THREAD: &str = "nova-files-core-watch";
 
 fn main() -> ExitCode {
+    if let Err(error) = nova_files_core::start_startup_trace() {
+        report(&format!("start-up trace: {error}"));
+    }
     skip_absent_vulkan_drivers();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
