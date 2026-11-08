@@ -285,3 +285,100 @@ fn changes_inside_a_folder_moved_while_closed_are_found() {
     let expected: Vec<&Path> = expected.iter().map(PathBuf::as_path).collect();
     assert_eq!(added_paths(&changes), expected);
 }
+
+#[test]
+fn a_file_written_and_moved_while_closed_is_moved_and_changed() {
+    let closed = Closed::new(&["a/file.txt", "b/"]);
+    fs::write(closed.path("a/file.txt"), b"longer than before").unwrap();
+    fs::rename(closed.path("a/file.txt"), closed.path("b/file.txt")).unwrap();
+    let changes = entries(closed.caught_up());
+    let to = closed.path("b/file.txt");
+    let moved = changes
+        .iter()
+        .position(|change| matches!(change, Change::Moved { to: at, .. } if *at == to));
+    let rewritten = changes.iter().position(|change| {
+        matches!(change, Change::Changed { path, details } if *path == to && details.size == 18)
+    });
+    assert!(moved.unwrap() < rewritten.unwrap(), "{changes:?}");
+}
+
+#[test]
+fn a_folder_that_became_a_profile_while_closed_is_removed() {
+    let closed = Closed::new(&["apps/browser/bookmarks.html"]);
+    fs::write(closed.path("apps/browser/profiles.ini"), b"").unwrap();
+    let mut opened = closed.open();
+    let changes = entries(std::mem::take(&mut opened.caught));
+    assert_eq!(
+        changes,
+        [Change::Removed {
+            path: closed.path("apps/browser")
+        }]
+    );
+}
+
+#[test]
+fn nothing_is_read_through_a_link_that_replaced_a_folder() {
+    let outside = TempFolder::new().with(&["b/new.txt"]);
+    let closed = Closed::new(&["a/b/old.txt"]);
+    fs::remove_dir_all(closed.path("a")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), closed.path("a")).unwrap();
+    let changes = entries(closed.caught_up());
+    assert!(
+        changes.iter().all(|change| match change {
+            Change::Added { path, .. } | Change::Changed { path, .. } =>
+                !path.starts_with(closed.path("a/b")),
+            _ => true,
+        }),
+        "{changes:?}"
+    );
+}
+
+#[test]
+fn folders_moved_along_a_chain_keep_their_watches() {
+    let closed = Closed::new(&["a/one.txt", "b/two.txt"]);
+    // Sorted by name, `a -> b` comes before `b -> c`.
+    fs::rename(closed.path("b"), closed.path("c")).unwrap();
+    fs::rename(closed.path("a"), closed.path("b")).unwrap();
+    let mut opened = closed.open();
+    let changes = entries(std::mem::take(&mut opened.caught));
+    // Replayed in order, each move lands where nothing still stands.
+    let moved: Vec<(&Path, &Path)> = changes
+        .iter()
+        .filter_map(|change| match change {
+            Change::Moved { from, to } => Some((from.as_path(), to.as_path())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        moved,
+        [
+            (closed.path("b").as_path(), closed.path("c").as_path()),
+            (closed.path("a").as_path(), closed.path("b").as_path()),
+        ]
+    );
+    let later = closed.path("b/later.txt");
+    fs::write(&later, b"").unwrap();
+    assert!(added_paths(&opened.next()).contains(&later.as_path()));
+}
+
+#[test]
+fn swapped_names_are_logged_so_both_survive_a_replay() {
+    let closed = Closed::new(&["a.txt", "b.txt"]);
+    fs::rename(closed.path("a.txt"), closed.path("tmp")).unwrap();
+    fs::rename(closed.path("b.txt"), closed.path("a.txt")).unwrap();
+    fs::rename(closed.path("tmp"), closed.path("b.txt")).unwrap();
+    let changes = entries(closed.caught_up());
+    // A ring has no safe order: one half becomes a removal and a fresh
+    // addition, after the other half's move.
+    let [
+        Change::Removed { path: removed },
+        Change::Moved { from, to },
+        Change::Added { path: added, .. },
+    ] = changes.as_slice()
+    else {
+        panic!("{changes:?}");
+    };
+    // `from` leaves for `to` once `to` is gone, then `from` is read anew.
+    assert_eq!((removed, added), (to, from));
+    assert_ne!(from, to);
+}
