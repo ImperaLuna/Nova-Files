@@ -279,6 +279,40 @@ fn a_folder_watched_again_at_its_new_path_leaves_the_old_one() {
 }
 
 #[test]
+fn a_folder_that_left_its_parent_is_removed_before_the_parent_moves() {
+    let (root, mut folders) = watched_folder("left-then-moved", &["a/sub/"], Box::new(|| false));
+    let (a, sub, b) = (root.join("a"), root.join("a/sub"), root.join("b"));
+    let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
+    assert_eq!(folders.watch(a.clone(), zone.clone()), None);
+    let inner = policy::enters(&zone, OsStr::new("sub")).unwrap();
+    assert_eq!(folders.watch(sub.clone(), inner), None);
+    // `a/sub` leaves home, then `a` becomes `b`, before any event is read.
+    let outside = std::env::temp_dir().join(format!("nova-files-left-{}", std::process::id()));
+    fs::rename(&sub, &outside).unwrap();
+    fs::rename(&a, &b).unwrap();
+    let changes = folders.handle(&[
+        event(&folders, &a, ReadFlags::MOVED_FROM.union(DIR), 13, "sub"),
+        event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 14, "a"),
+        event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 14, "b"),
+    ]);
+    assert_eq!(
+        changes,
+        [
+            Change::Removed { path: sub.clone() },
+            Change::Moved {
+                from: a,
+                to: b.clone()
+            }
+        ]
+    );
+    assert!(folders.by_path.contains_key(&b));
+    assert!(!folders.by_path.contains_key(&b.join("sub")));
+    assert!(!folders.by_path.contains_key(&sub));
+    fs::remove_dir_all(&outside).ok();
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn swapped_folders_are_both_read_again() {
     let (root, mut folders) =
         watched_folder("swap", &["a/one.txt", "b/two.txt"], Box::new(|| false));

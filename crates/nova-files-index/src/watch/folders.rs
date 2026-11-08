@@ -201,7 +201,12 @@ impl Folders {
             );
         } else if mask.contains(ReadFlags::MOVED_TO) {
             match leaving.remove(&event.cookie) {
-                Some(from) => self.moved(from, &folder, path, changes),
+                Some(from) => {
+                    if from.is_folder {
+                        self.leave_under(&from.path, leaving, changes);
+                    }
+                    self.moved(from, &folder, path, changes);
+                }
                 None if kept => self.add(&folder.zone, name, path, changes),
                 None => {}
             }
@@ -252,6 +257,27 @@ impl Folders {
         };
         if let Some(gone) = leaving.remove(&cookie) {
             self.gone(gone, changes);
+        }
+    }
+
+    /// Ends the moves away from inside `folder` still pending, before
+    /// `folder` itself moves: they left from where it was, and must not
+    /// move with it.
+    fn leave_under(
+        &mut self,
+        folder: &Path,
+        leaving: &mut HashMap<u32, Leaving>,
+        changes: &mut Vec<Change>,
+    ) {
+        let under: Vec<u32> = leaving
+            .iter()
+            .filter(|(_, gone)| gone.path.starts_with(folder))
+            .map(|(&cookie, _)| cookie)
+            .collect();
+        for cookie in under {
+            if let Some(gone) = leaving.remove(&cookie) {
+                self.gone(gone, changes);
+            }
         }
     }
 
