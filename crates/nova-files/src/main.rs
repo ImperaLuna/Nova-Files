@@ -52,9 +52,7 @@ fn main() -> ExitCode {
     if let Err(error) = nova_files_core::start_startup_trace() {
         report(&format!("start-up trace: {error}"));
     }
-    if !every_driver_asked() {
-        skip_absent_vulkan_drivers();
-    }
+    skip_absent_vulkan_drivers();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
@@ -74,6 +72,9 @@ fn every_driver_asked() -> bool {
     reason = "setting a variable is sound only while no other thread exists, and main calls this first"
 )]
 fn skip_absent_vulkan_drivers() {
+    if every_driver_asked() {
+        return;
+    }
     if let Some(filter) = nova_files_core::absent_vendor_drivers() {
         // SAFETY: called first thing in `main`, before the core, D-Bus or
         // GPUI start a thread, so nothing can read the environment meanwhile.
