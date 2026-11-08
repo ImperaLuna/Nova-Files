@@ -150,11 +150,18 @@ impl Folders {
             return;
         }
         if event.mask.contains(ReadFlags::IGNORED) {
-            if let Some(gone) = self.by_wd.remove(&event.wd)
-                // A folder moved over this one may hold its path by now.
-                && self.by_path.get(&gone.path) == Some(&event.wd)
-            {
+            let Some(gone) = self.by_wd.remove(&event.wd) else {
+                return;
+            };
+            // A folder moved over this one may hold its path by now.
+            if self.by_path.get(&gone.path) == Some(&event.wd) {
                 self.by_path.remove(&gone.path);
+            }
+            if gone.path == self.root {
+                // Home itself went, so nothing watches what takes its place.
+                changes.push(Change::Rescan {
+                    folder: self.root.clone(),
+                });
             }
             return;
         }
@@ -252,6 +259,12 @@ impl Folders {
         // folder.
         let is_folder = from.is_folder;
         let kept = policy::keeps(&folder.zone, name, is_folder);
+        if is_folder && self.swapped(&from.path, &to) {
+            // Exchanged with the folder at `to` (`RENAME_EXCHANGE`): two
+            // moves that each land on the other, so both are read again.
+            self.read_again(&[from.path, to], changes);
+            return;
+        }
         match (from.kept, kept) {
             (true, true) if !is_folder => {
                 changes.push(Change::Moved {
@@ -293,6 +306,34 @@ impl Folders {
     }
 
     /// The zone of the watch on the folder at `path`, if it has one.
+    /// Whether a folder moved from `from` to `to` swapped places with the
+    /// one there: `to` is still watched as another folder, and a folder
+    /// still stands at `from`.
+    fn swapped(&self, from: &Path, to: &Path) -> bool {
+        let (Some(moving), Some(there)) = (self.by_path.get(from), self.by_path.get(to)) else {
+            return false;
+        };
+        moving != there && fs::symlink_metadata(from).is_ok_and(|details| details.is_dir())
+    }
+
+    /// Removes what was indexed at `paths` and reads them anew. Every
+    /// watch goes before any is added, since each path now holds a folder
+    /// another watch was on.
+    fn read_again(&mut self, paths: &[PathBuf], changes: &mut Vec<Change>) {
+        for path in paths {
+            self.forget(path);
+            changes.push(Change::Removed { path: path.clone() });
+        }
+        for path in paths {
+            let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+                continue;
+            };
+            if let Some(zone) = self.zone_of_watch(parent) {
+                self.add(&zone, name, path.clone(), changes);
+            }
+        }
+    }
+
     fn zone_of_watch(&self, path: &Path) -> Option<Zone> {
         let wd = self.by_path.get(path)?;
         self.by_wd.get(wd).map(|watched| watched.zone.clone())

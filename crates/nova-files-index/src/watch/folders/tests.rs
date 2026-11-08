@@ -51,7 +51,13 @@ fn a_watch_the_kernel_dropped_is_forgotten() {
         cookie: 0,
         name: None,
     };
-    folders.handle(&[ignored]);
+    // Home itself went: what takes its place is read again.
+    assert_eq!(
+        folders.handle(&[ignored]),
+        [Change::Rescan {
+            folder: root.clone()
+        }]
+    );
     assert!(folders.by_wd.is_empty());
     assert!(folders.by_path.is_empty());
     fs::remove_dir_all(&root).ok();
@@ -204,6 +210,61 @@ fn a_folder_moved_over_another_keeps_its_watch() {
         },
     ]);
     assert_eq!(folders.by_path.get(&y), Some(&moving));
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_dropped_watch_inside_home_asks_for_nothing() {
+    let (root, mut folders) = watched_folder("dropped", &["a/"], Box::new(|| false));
+    let a = root.join("a");
+    let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
+    assert_eq!(folders.watch(a.clone(), zone), None);
+    let ignored = Event {
+        wd: folders.by_path[&a],
+        mask: ReadFlags::IGNORED,
+        cookie: 0,
+        name: None,
+    };
+    assert_eq!(folders.handle(&[ignored]), []);
+    assert!(!folders.by_path.contains_key(&a));
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn swapped_folders_are_both_read_again() {
+    let (root, mut folders) =
+        watched_folder("swap", &["a/one.txt", "b/two.txt"], Box::new(|| false));
+    let (a, b) = (root.join("a"), root.join("b"));
+    let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
+    assert_eq!(folders.watch(a.clone(), zone.clone()), None);
+    assert_eq!(folders.watch(b.clone(), zone), None);
+    rustix::fs::renameat_with(
+        rustix::fs::CWD,
+        &a,
+        rustix::fs::CWD,
+        &b,
+        rustix::fs::RenameFlags::EXCHANGE,
+    )
+    .unwrap();
+    let changes = folders.handle(&[
+        event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 10, "a"),
+        event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 10, "b"),
+        event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 11, "b"),
+        event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 11, "a"),
+    ]);
+    let mut added = added_paths(&changes);
+    added.sort();
+    added.dedup();
+    assert_eq!(
+        added,
+        [a.as_path(), &a.join("two.txt"), &b, &b.join("one.txt")]
+    );
+    // Each path's watch is the one the kernel has on the folder there now.
+    for path in [&a, &b] {
+        let wd = folders.by_path[path];
+        assert_eq!(inotify::add_watch(&folders.inotify, path, WATCHED), Ok(wd));
+        assert_eq!(&folders.by_wd[&wd].path, path);
+    }
     fs::remove_dir_all(&root).ok();
 }
 
