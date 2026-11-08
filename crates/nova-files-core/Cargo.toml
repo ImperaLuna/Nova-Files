@@ -3,7 +3,7 @@
 # The core. Index, search, folder listing, watching, jobs and settings. It
 # never draws anything.
 #
-# Allowed outside crates: rustix, serde, toml
+# Allowed outside crates: log, rustix, serde, toml
 # Allowed workspace crates: nova-files-api, nova-files-index
 
 [package]
@@ -20,4 +20,6 @@ workspace = true
 [dependencies]
 # Kills the thumbnail helper's process group when a batch runs out of time.
 rustix = { version = "1.1.6", default-features = false, features = ["process", "std"] }
+# Receives GPUI's start-up phases for the start-up trace; GPUI already builds it.
+log = { version = "0.4.35", features = ["std"] }
 nova-files-api.workspace = true
