@@ -288,7 +288,9 @@ fn the_same_scale_keeps_the_thumbnails(cx: &mut TestAppContext) {
     core.thumbnail_requests();
 
     let scale = cx.update(|window, _| window.scale_factor());
-    view.update(cx, |view, _| view.set_scale_factor(scale));
+    view.update_in(cx, |view, window, cx| {
+        view.set_scale_factor(scale, window, cx);
+    });
 
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_some()));
     assert_eq!(core.thumbnail_requests(), []);
@@ -302,7 +304,9 @@ fn another_scale_drops_the_thumbnails_and_asks_again(cx: &mut TestAppContext) {
     core.thumbnail_requests();
 
     let scale = cx.update(|window, _| window.scale_factor());
-    view.update(cx, |view, _| view.set_scale_factor(scale * 2.0));
+    view.update_in(cx, |view, window, cx| {
+        view.set_scale_factor(scale * 2.0, window, cx);
+    });
 
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
     assert_eq!(core.thumbnail_requests(), [(0, 0)]);
