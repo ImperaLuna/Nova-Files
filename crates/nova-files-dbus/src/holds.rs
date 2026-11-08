@@ -10,7 +10,11 @@
 //!
 //! [`Holds`] watches `NameOwnerChanged` before the first hold is taken, and
 //! [`Holds::take`] checks the caller is still on the bus after registering,
-//! so a caller that leaves in between is still caught.
+//! so a caller that leaves in between is still caught. The watch has a bus
+//! connection of its own, owning no names, so its thread (blocked until
+//! the next signal) never keeps the app's names taken. If that connection
+//! breaks, every hold is dropped and no new one is given: a hold nobody
+//! watches could outlive its caller.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -19,6 +23,8 @@ use std::thread;
 
 use nova_files_api::{ClientGone, Connection, Connector, CoreGone, Event, EventSink};
 use zbus::blocking::fdo::DBusProxy;
+
+use crate::Bus;
 use zbus::names::{BusName, UniqueName};
 
 const WATCH_THREAD: &str = "nova-files-dbus-holds";
@@ -33,6 +39,9 @@ pub struct Holds {
     connector: Connector,
     held: Arc<Mutex<Held>>,
     next: Arc<AtomicU64>,
+    /// Asks the bus whether a caller is still there, on the watch's
+    /// connection: once the watch has ended, this fails too.
+    bus: zbus::fdo::DBusProxy<'static>,
 }
 
 /// Why [`Holds::take`] gave no hold.
@@ -63,15 +72,18 @@ impl Holds {
     /// leaves `bus`.
     ///
     /// # Errors
-    /// When the bus refuses the signal subscription or the watching thread
-    /// can't start.
-    pub fn new(connector: Connector, bus: &zbus::blocking::Connection) -> zbus::Result<Self> {
+    /// When the bus can't be reached, refuses the signal subscription, or
+    /// the watching thread can't start.
+    pub fn new(connector: Connector, bus: &Bus) -> zbus::Result<Self> {
+        let connection = bus.builder()?.build()?;
+        let changes = DBusProxy::new(&connection)?.receive_name_owner_changed()?;
+        let proxy = zbus::block_on(zbus::fdo::DBusProxy::new(connection.inner()))?;
         let holds = Self {
             connector,
             held: Arc::default(),
             next: Arc::default(),
+            bus: proxy,
         };
-        let changes = DBusProxy::new(bus)?.receive_name_owner_changed()?;
         let held = Arc::downgrade(&holds.held);
         // Blocked until the next change of owner; it ends at the first
         // change after the last clone of the holds is gone.
@@ -85,21 +97,21 @@ impl Holds {
                         lock(&held).remove(args.name().as_str());
                     }
                 }
+                // The connection is gone, so callers leaving can't be seen.
+                if let Some(held) = held.upgrade() {
+                    lock(&held).clear();
+                }
             })
             .map_err(|error| zbus::Error::Failure(error.to_string()))?;
         Ok(holds)
     }
 
-    /// Takes a hold on the core for `caller`, a unique name on `bus`.
+    /// Takes a hold on the core for `caller`, a unique name on the bus.
     ///
     /// # Errors
     /// [`HoldError`] when the core has stopped, the caller has left, or
-    /// the bus doesn't say.
-    pub async fn take(
-        &self,
-        bus: &zbus::Connection,
-        caller: &UniqueName<'_>,
-    ) -> Result<Hold, HoldError> {
+    /// the bus doesn't say (as once the watch has ended).
+    pub async fn take(&self, caller: &UniqueName<'_>) -> Result<Hold, HoldError> {
         let connection = self
             .connector
             .connect(Discard)
@@ -116,9 +128,8 @@ impl Holds {
         };
         // Registered first, so a caller leaving now is seen by the watch or
         // by this check.
-        let present = zbus::fdo::DBusProxy::new(bus)
-            .await
-            .map_err(HoldError::Bus)?
+        let present = self
+            .bus
             .name_has_owner(BusName::Unique(caller.clone()))
             .await
             .map_err(|error| HoldError::Bus(error.into()))?;

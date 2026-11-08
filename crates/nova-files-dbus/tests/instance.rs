@@ -260,25 +260,59 @@ fn a_release_frees_the_portal_name_too() {
 }
 
 #[test]
-fn the_app_runs_without_the_portal_name_when_another_program_holds_it() {
+fn the_app_waits_for_the_portal_name_while_another_program_holds_it() {
     let bus = PrivateBus::start();
     let other = client(&bus);
     other.request_name(PORTAL_BUS_NAME).unwrap();
     let core = nova_files_core::spawn().unwrap();
-
     let Started::Service(service) =
         nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
     else {
         panic!("the application name is free");
     };
     assert!(!service.serves_portal());
-    // Releasing leaves the other program's name alone.
-    service.release().unwrap();
-    let owner = zbus::blocking::fdo::DBusProxy::new(&client(&bus))
+    let watcher = client(&bus);
+    let mut changes = zbus::blocking::fdo::DBusProxy::new(&watcher)
         .unwrap()
-        .get_name_owner(PORTAL_BUS_NAME.try_into().unwrap())
+        .receive_name_owner_changed_with_args(&[(0, PORTAL_BUS_NAME)])
         .unwrap();
-    assert_eq!(owner.as_str(), other.unique_name().unwrap().as_str());
+
+    other.release_name(PORTAL_BUS_NAME).unwrap();
+
+    let (sender, owned) = mpsc::channel();
+    std::thread::spawn(move || {
+        let change = changes.next().unwrap();
+        sender
+            .send(change.args().unwrap().new_owner().is_some())
+            .ok();
+    });
+    assert_eq!(owned.recv_timeout(WAIT), Ok(true));
+    let portal = introspect(&bus, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH);
+    assert!(portal.contains(FILE_CHOOSER_INTERFACE), "{portal}");
+    drop(service);
+}
+
+#[test]
+fn a_release_leaves_another_programs_portal_name_alone() {
+    let bus = PrivateBus::start();
+    let other = client(&bus);
+    other.request_name(PORTAL_BUS_NAME).unwrap();
+    let core = nova_files_core::spawn().unwrap();
+    let Started::Service(service) =
+        nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
+    else {
+        panic!("the application name is free");
+    };
+
+    service.release().unwrap();
+    other.release_name(PORTAL_BUS_NAME).unwrap();
+
+    // Out of the queue too: nobody takes the name over.
+    let has_owner = zbus::blocking::fdo::DBusProxy::new(&client(&bus))
+        .unwrap()
+        .name_has_owner(PORTAL_BUS_NAME.try_into().unwrap())
+        .unwrap();
+    assert!(!has_owner);
 }
 
 /// The introspection XML of `path` on the service owning `name`.
@@ -297,7 +331,6 @@ const PAST_IDLE: Duration = Duration::from_millis(900);
 
 struct Setup {
     bus: PrivateBus,
-    service: Connection,
     holds: Holds,
     /// Gets a message once the core has stopped.
     core_ended: Receiver<()>,
@@ -306,8 +339,7 @@ struct Setup {
 fn setup() -> Setup {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn_with_idle_exit(IDLE).unwrap();
-    let service = client(&bus);
-    let holds = Holds::new(core.connector, &service).unwrap();
+    let holds = Holds::new(core.connector, &bus.bus()).unwrap();
     let (ended, core_ended) = mpsc::channel();
     let thread = core.thread;
     std::thread::spawn(move || {
@@ -316,7 +348,6 @@ fn setup() -> Setup {
     });
     Setup {
         bus,
-        service,
         holds,
         core_ended,
     }
@@ -324,7 +355,7 @@ fn setup() -> Setup {
 
 fn take(setup: &Setup, caller: &Connection) -> Result<nova_files_dbus::Hold, HoldError> {
     let name = caller.unique_name().unwrap().to_owned();
-    zbus::block_on(setup.holds.take(setup.service.inner(), &name.as_ref()))
+    zbus::block_on(setup.holds.take(&name.as_ref()))
 }
 
 #[test]
@@ -367,7 +398,7 @@ fn a_caller_already_gone_gets_no_hold() {
     let name = caller.unique_name().unwrap().to_owned();
     drop(caller);
 
-    let taken = zbus::block_on(setup.holds.take(setup.service.inner(), &name.as_ref()));
+    let taken = zbus::block_on(setup.holds.take(&name.as_ref()));
 
     let Err(error) = taken else {
         panic!("a caller that left gets no hold");
@@ -376,6 +407,19 @@ fn a_caller_already_gone_gets_no_hold() {
     assert_eq!(error.to_string(), "the caller has left the bus");
     assert_eq!(setup.holds.count(&name.as_ref()), 0);
     setup.core_ended.recv_timeout(WAIT).unwrap();
+}
+
+#[test]
+fn every_hold_ends_when_the_bus_goes() {
+    let setup = setup();
+    let caller = client(&setup.bus);
+    let hold = take(&setup, &caller).unwrap();
+
+    drop(setup.bus);
+
+    setup.core_ended.recv_timeout(WAIT).unwrap();
+    drop(hold);
+    drop(caller);
 }
 
 #[test]
