@@ -374,7 +374,8 @@ impl MainWindow {
             }
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
-            Event::FolderUnreadable { .. } => {}
+            // The window never searches.
+            Event::FolderUnreadable { .. } | Event::Found { .. } | Event::SearchFailed { .. } => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

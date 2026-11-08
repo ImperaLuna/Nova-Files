@@ -12,7 +12,9 @@
 //! inotify and appends what changes to a [`ChangeLog`], which any number
 //! of [`LogReader`]s follow.
 //!
-//! [`Index::search`] finds rows by name, in stages ([`Search`]).
+//! [`Index::search`] finds rows by name, in stages ([`Search`]);
+//! [`Index::search_now`] does the same with the changes since the crawl,
+//! kept in an [`Overlay`].
 //!
 //! The index is a rebuildable cache, not a database: an index that is
 //! missing, out of date or damaged is crawled again.
@@ -22,6 +24,7 @@ mod changes;
 mod crawl;
 mod format;
 mod mounts;
+mod overlay;
 mod policy;
 mod reader;
 mod search;
@@ -30,8 +33,9 @@ mod watch;
 pub use build::Built;
 pub use changes::{Change, ChangeLog, LogReader};
 pub use crawl::{CrawlError, crawl};
+pub use overlay::Overlay;
 pub use reader::{Index, OpenError};
-pub use search::{Hit, MatchKind, Search};
+pub use search::{Hit, MatchKind, STAGES, Search};
 pub use watch::Watcher;
 
 /// A row's position in the index. Row 0 is the crawled folder.

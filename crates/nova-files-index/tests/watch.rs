@@ -313,8 +313,14 @@ fn a_failing_thread_is_reported_on_stop() {
     let mut watched = Watched::with_callback(&[], |root| {
         assert!(!root.join("boom").exists(), "on_change failed");
     });
+    assert!(watched.watcher.as_ref().unwrap().is_running());
     fs::write(watched.path("boom"), b"").unwrap();
     watched.until(added(&watched.path("boom")));
+    let deadline = Instant::now() + WAIT;
+    while watched.watcher.as_ref().unwrap().is_running() {
+        assert!(Instant::now() < deadline, "the thread didn't end");
+        std::thread::yield_now();
+    }
     assert!(watched.watcher.take().unwrap().stop().is_err());
 }
 

@@ -1,4 +1,5 @@
-//! Searching a crawled home: stages, ranking, hidden rows.
+//! Searching a crawled home: stages, ranking, hidden rows, and changes
+//! since the crawl.
 
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
@@ -6,7 +7,9 @@ mod support;
 
 use std::path::PathBuf;
 
-use nova_files_index::{Hit, Index, MatchKind, crawl};
+use nova_files_index::{
+    Change, Details, FileId, Flags, Hit, Index, Kind, MatchKind, Overlay, STAGES, crawl,
+};
 use support::TempFolder;
 
 /// Enough for every test below.
@@ -50,19 +53,69 @@ impl Home {
 
     /// Each stage's hits, as paths under home and kinds.
     fn stages(&self, query: &str, limit: usize) -> Vec<Vec<(PathBuf, MatchKind)>> {
-        self.index
-            .search(query, limit)
+        self.named(self.index.search(query, limit))
+    }
+
+    /// Like [`Home::stages`], after `changes`.
+    fn stages_now(
+        &self,
+        query: &str,
+        limit: usize,
+        changes: &[Change],
+    ) -> Vec<Vec<(PathBuf, MatchKind)>> {
+        let mut overlay = Overlay::new();
+        for change in changes {
+            overlay.apply(change);
+        }
+        self.named(self.index.search_now(query, limit, &overlay))
+    }
+
+    fn named(&self, search: impl Iterator<Item = Vec<Hit>>) -> Vec<Vec<(PathBuf, MatchKind)>> {
+        search
             .take(STAGES_AND_ONE)
-            .map(|hits| hits.into_iter().map(|hit| self.named(hit)).collect())
+            .map(|hits| {
+                hits.into_iter()
+                    .map(|hit| {
+                        let path = hit.path.strip_prefix(self.folder.path()).unwrap();
+                        (path.to_owned(), hit.kind)
+                    })
+                    .collect()
+            })
             .collect()
     }
 
-    fn named(&self, hit: Hit) -> (PathBuf, MatchKind) {
-        let path = self.index.path(hit.row).unwrap();
-        (
-            path.strip_prefix(self.folder.path()).unwrap().to_owned(),
-            hit.kind,
-        )
+    fn at(&self, path: &str) -> PathBuf {
+        self.folder.path().join(path)
+    }
+
+    fn added(&self, path: &str) -> Change {
+        Change::Added {
+            path: self.at(path),
+            details: Details {
+                kind: Kind::File,
+                flags: Flags::default(),
+                id: FileId {
+                    device: 0,
+                    inode: 0,
+                },
+                size: 0,
+                modified: None,
+                created: None,
+            },
+        }
+    }
+
+    fn removed(&self, path: &str) -> Change {
+        Change::Removed {
+            path: self.at(path),
+        }
+    }
+
+    fn moved(&self, from: &str, to: &str) -> Change {
+        Change::Moved {
+            from: self.at(from),
+            to: self.at(to),
+        }
     }
 }
 
@@ -139,12 +192,37 @@ fn hidden_rows_rank_last_unless_the_query_starts_with_a_dot() {
 #[test]
 fn each_stage_keeps_its_best_hits() {
     let home = Home::new();
-    let first = home.stages("tax", FEW).remove(0);
+    let stages = home.stages("tax", FEW);
+    // The hits left out of the first stage don't come back in the second.
     assert_eq!(
-        first,
+        stages,
         [
-            at("Documents/tax return.pdf", MatchKind::WordStart),
-            at("Documents/taxes 2024.pdf", MatchKind::WordStart),
+            vec![
+                at("Documents/tax return.pdf", MatchKind::WordStart),
+                at("Documents/taxes 2024.pdf", MatchKind::WordStart),
+            ],
+            vec![],
+        ]
+    );
+    let changes = [home.added("Documents/t-a-x.txt")];
+    let stages = home.stages_now("tax", 1, &changes);
+    assert_eq!(
+        stages,
+        [
+            vec![at("Documents/tax return.pdf", MatchKind::WordStart)],
+            vec![at("Documents/t-a-x.txt", MatchKind::InOrder)],
+        ]
+    );
+    let changes = [
+        home.added("Documents/tax notes.txt"),
+        home.added("Documents/tax notes 2.txt"),
+    ];
+    let stages = home.stages_now("notes tax", 1, &changes);
+    assert_eq!(
+        stages,
+        [
+            vec![at("Documents/tax notes.txt", MatchKind::WordStart)],
+            vec![]
         ]
     );
 }
@@ -154,6 +232,24 @@ fn a_limit_of_exactly_the_hits_keeps_them_all() {
     let home = Home::new();
     let first = home.stages("tax", TAX_HITS).remove(0);
     assert_eq!(first.len(), TAX_HITS);
+}
+
+#[test]
+fn a_search_knows_when_its_last_stage_ran() {
+    let home = Home::new();
+    let mut search = home.index.search("tax", LIMIT);
+    assert!(!search.is_done());
+    search.next();
+    assert!(!search.is_done());
+    search.next();
+    assert!(search.is_done());
+    assert!(home.index.search(" ", LIMIT).is_done());
+}
+
+#[test]
+fn a_search_yields_no_more_than_its_stages() {
+    let home = Home::new();
+    assert_eq!(home.index.search("tax", LIMIT).count(), STAGES);
 }
 
 #[test]
@@ -175,4 +271,106 @@ fn nothing_to_look_for_finds_nothing() {
         .unwrap()
         .to_owned();
     assert_eq!(home.stages(&root, LIMIT), [vec![], vec![]]);
+}
+
+#[test]
+fn without_changes_a_live_search_finds_the_same() {
+    let home = Home::new();
+    assert_eq!(home.stages_now("tax", FEW, &[]), home.stages("tax", FEW));
+}
+
+#[test]
+fn moved_entries_rank_by_where_they_are_now() {
+    let home = Home::new();
+    // Out of a hidden folder: no longer ranked after visible names.
+    let changes = [home.moved(".config/tax-tool", "Documents/tax-tool")];
+    assert_eq!(
+        home.stages_now("tax", 1, &changes).remove(0),
+        [at("Documents/tax-tool", MatchKind::WordStart)]
+    );
+    // Into one: ranked after visible names of the same kind, so with both
+    // visible ones moved in, the shortest hidden name comes first.
+    let changes = [
+        home.moved("Documents/taxes 2024.pdf", ".config/taxes 2024.pdf"),
+        home.moved("Documents/tax return.pdf", ".config/tax return.pdf"),
+    ];
+    assert_eq!(
+        home.stages_now("tax", 1, &changes).remove(0),
+        [at(".config/tax-tool", MatchKind::WordStart)]
+    );
+}
+
+#[test]
+fn removed_entries_are_left_out() {
+    let home = Home::new();
+    let first = home
+        .stages_now("tax", FEW, &[home.removed("Documents/tax return.pdf")])
+        .remove(0);
+    // The next best fills the gap.
+    assert_eq!(
+        first,
+        [
+            at("Documents/taxes 2024.pdf", MatchKind::WordStart),
+            at(".config/tax-tool", MatchKind::WordStart),
+        ]
+    );
+}
+
+#[test]
+fn moved_entries_are_found_at_their_new_place() {
+    let home = Home::new();
+    let changes = [home.moved("Pictures/Holiday", "Documents/Holiday")];
+    let first = home.stages_now("photos", LIMIT, &changes).remove(0);
+    assert_eq!(
+        first,
+        [at("Documents/Holiday/photos.txt", MatchKind::Exact)]
+    );
+}
+
+#[test]
+fn renamed_entries_are_found_by_their_new_name() {
+    let home = Home::new();
+    let changes = [home.moved("Documents/report.pdf", "Documents/summary.pdf")];
+    assert_eq!(home.stages_now("report", LIMIT, &changes), [vec![], vec![]]);
+    let first = home.stages_now("summary", LIMIT, &changes).remove(0);
+    assert_eq!(first, [at("Documents/summary.pdf", MatchKind::Exact)]);
+}
+
+#[test]
+fn added_entries_are_found_in_both_stages() {
+    let home = Home::new();
+    let changes = [
+        home.added("Documents/receipts.pdf"),
+        home.added(".cache/receipts.log"),
+    ];
+    let stages = home.stages_now("receipt", LIMIT, &changes);
+    assert_eq!(
+        stages,
+        [
+            vec![
+                at("Documents/receipts.pdf", MatchKind::WordStart),
+                at(".cache/receipts.log", MatchKind::WordStart),
+            ],
+            vec![],
+        ]
+    );
+    let stages = home.stages_now("rcpts", LIMIT, &changes);
+    assert_eq!(
+        stages,
+        [
+            vec![],
+            vec![
+                at("Documents/receipts.pdf", MatchKind::InOrder),
+                at(".cache/receipts.log", MatchKind::InOrder),
+            ]
+        ]
+    );
+}
+
+#[test]
+fn an_entry_is_shown_once() {
+    let home = Home::new();
+    let changes = [home.added("Documents/report.pdf")];
+    let first = home.stages_now("report", LIMIT, &changes).remove(0);
+    assert_eq!(first, [at("Documents/report.pdf", MatchKind::Exact)]);
 }
