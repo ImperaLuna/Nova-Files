@@ -33,6 +33,7 @@ fn program(address: &str, args: &[&str]) -> Command {
     command
         .args(args)
         .env("DBUS_SESSION_BUS_ADDRESS", address)
+        .env_remove(nova_files_core::TRACE_VARIABLE)
         .env_remove("DISPLAY")
         .env_remove("WAYLAND_DISPLAY")
         .stdin(Stdio::null())
@@ -188,6 +189,39 @@ fn unknown_flag_is_refused_with_the_usage() {
     ));
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unexpected argument --frobnicate"),
+        "{stderr}"
+    );
+}
+
+/// A start that ends at once (a bad flag), with the start-up trace going to
+/// `trace`.
+fn traced_start(trace: &std::path::Path) -> Output {
+    let mut command = program("unix:path=/nonexistent/nova-files-bus", &["--frobnicate"]);
+    command.env(nova_files_core::TRACE_VARIABLE, trace);
+    finish(command)
+}
+
+#[test]
+fn the_start_up_trace_records_the_process_start() {
+    let trace = std::env::temp_dir().join(format!("nova-files-trace-{}", std::process::id()));
+    std::fs::remove_file(&trace).ok();
+    traced_start(&trace);
+    let written = std::fs::read_to_string(&trace).unwrap();
+    std::fs::remove_file(&trace).ok();
+    let labels: Vec<&str> = written
+        .lines()
+        .filter_map(|line| line.split_once(' ').map(|(_, label)| label))
+        .collect();
+    assert_eq!(labels, ["process-start"]);
+}
+
+#[test]
+fn a_trace_that_cant_be_written_is_reported_and_the_start_goes_on() {
+    let output = traced_start(std::path::Path::new("/nonexistent/folder/trace"));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("start-up trace"), "{stderr}");
     assert!(
         stderr.contains("unexpected argument --frobnicate"),
         "{stderr}"

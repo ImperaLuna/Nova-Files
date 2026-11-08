@@ -11,6 +11,9 @@
 //! process carries on without a GPU, waiting for the next window request.
 //! The process ends when the core stops, which it does once idle (see
 //! `nova_files_core::IDLE_EXIT`).
+//!
+//! With `NOVA_FILES_STARTUP_TRACE` set, it first starts the start-up trace
+//! (see `nova_files_core::start_startup_trace`).
 
 #![forbid(unsafe_code)]
 
@@ -30,6 +33,9 @@ use crate::mode::Mode;
 const CORE_WATCH_THREAD: &str = "nova-files-core-watch";
 
 fn main() -> ExitCode {
+    if let Err(error) = nova_files_core::start_startup_trace() {
+        report(&format!("start-up trace: {error}"));
+    }
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

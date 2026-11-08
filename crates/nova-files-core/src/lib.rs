@@ -12,6 +12,7 @@ mod jobs;
 mod list;
 mod places;
 mod run;
+mod startup_trace;
 mod thumbs;
 
 use std::io;
@@ -21,6 +22,7 @@ use std::time::Duration;
 use nova_files_api::Connector;
 
 pub use places::Home;
+pub use startup_trace::{TRACE_VARIABLE, start_startup_trace};
 pub use thumbs::Thumbnails;
 
 /// How long the core waits, with no client connected and no message, before
