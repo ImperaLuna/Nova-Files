@@ -4,6 +4,7 @@
 use super::*;
 use crate::Kind;
 
+const LONG_LOG: usize = 4_000;
 const CRAWLED: Option<Stamp> = Some(Stamp(1_700_000_000_000_000_000));
 /// Details with every field set to something that would show a mix-up.
 const DEVICE: u64 = 3;
@@ -110,7 +111,8 @@ fn a_long_log_is_read_in_full() {
     let change = Change::Removed {
         path: PathBuf::from("/home/me/a-fairly-long-folder-name/with-a-file-inside.txt"),
     };
-    let count = READ_CHUNK / RECORD_FIXED * 2;
+    // Past what one read of the file returns at once.
+    let count = LONG_LOG;
     for _ in 0..count {
         log.append(&change).unwrap();
     }

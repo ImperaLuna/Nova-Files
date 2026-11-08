@@ -53,6 +53,11 @@ struct Watched {
 
 impl Watched {
     fn new(paths: &[&str]) -> Self {
+        Self::with_callback(paths, |_| {})
+    }
+
+    /// As [`Watched::new`], with `extra` run after each batch too.
+    fn with_callback(paths: &[&str], extra: impl Fn(&Path) + Send + 'static) -> Self {
         let home = TempFolder::new();
         for path in paths {
             let full = home.0.join(path);
@@ -71,11 +76,12 @@ impl Watched {
         let log = ChangeLog::create(&log_path, index.crawled()).unwrap();
         let reader = LogReader::open(&log_path).unwrap();
         let (tell, woken) = mpsc::channel();
+        let root = home.0.clone();
         let watcher = Watcher::start(&index, log, move || {
             tell.send(()).ok();
+            extra(&root);
         })
         .unwrap();
-        assert_eq!(watcher.unwatched(), 0);
         Self {
             home,
             _cache: cache,
@@ -274,6 +280,74 @@ fn a_stray_cache_tag_changes_nothing() {
 fn stopping_ends_the_thread() {
     let mut watched = Watched::new(&[]);
     watched.watcher.take().unwrap().stop().unwrap();
+    fs::write(watched.path("after.txt"), b"").unwrap();
+    assert!(watched.settle().is_empty());
+}
+
+#[test]
+fn a_file_moved_onto_the_way_to_an_allowed_place_is_not_added() {
+    let mut watched = Watched::new(&[".local/bin/"]);
+    let outside = TempFolder::new();
+    let file = outside.0.join("note.txt");
+    fs::write(&file, b"").unwrap();
+    fs::rename(&file, watched.path(".local/note.txt")).unwrap();
+    // A file that is kept, so the test knows the watcher has caught up.
+    let shown = watched.path(".local/bin/tool");
+    fs::write(&shown, b"").unwrap();
+    watched.until(added(&shown));
+    let changes = watched.settle();
+    assert!(
+        !paths(&changes).contains(&watched.path(".local/note.txt").as_path()),
+        "{changes:?}"
+    );
+}
+
+#[test]
+fn a_marker_in_home_itself_removes_nothing() {
+    let mut watched = Watched::new(&[]);
+    let marker = watched.path("profiles.ini");
+    fs::write(&marker, b"").unwrap();
+    watched.until(added(&marker));
+    let changes = watched.settle();
+    let root = watched.home.0.clone();
+    assert!(!changes.iter().any(removed(&root)), "{changes:?}");
+}
+
+#[test]
+fn a_folder_that_cant_be_read_is_added_with_a_rescan() {
+    use std::os::unix::fs::DirBuilderExt as _;
+    const NO_ACCESS: u32 = 0o000;
+    let mut watched = Watched::new(&[]);
+    let locked = watched.path("locked");
+    fs::DirBuilder::new()
+        .mode(NO_ACCESS)
+        .create(&locked)
+        .unwrap();
+    if fs::read_dir(&locked).is_ok() {
+        // Running as root, which reads and watches it anyway.
+        return;
+    }
+    watched.until(added(&locked));
+    let rescan = Change::Rescan {
+        folder: locked.clone(),
+    };
+    watched.until(|change| *change == rescan);
+}
+
+#[test]
+fn a_failing_thread_is_reported_on_stop() {
+    let mut watched = Watched::with_callback(&[], |root| {
+        assert!(!root.join("boom").exists(), "on_change failed");
+    });
+    fs::write(watched.path("boom"), b"").unwrap();
+    watched.until(added(&watched.path("boom")));
+    assert!(watched.watcher.take().unwrap().stop().is_err());
+}
+
+#[test]
+fn dropping_the_watcher_stops_it() {
+    let mut watched = Watched::new(&[]);
+    drop(watched.watcher.take());
     fs::write(watched.path("after.txt"), b"").unwrap();
     assert!(watched.settle().is_empty());
 }

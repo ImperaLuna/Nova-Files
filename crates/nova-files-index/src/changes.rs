@@ -21,7 +21,7 @@
 
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write as _};
+use std::io::{self, Read as _, Seek as _, SeekFrom, Write as _};
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{FileExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
@@ -56,8 +56,6 @@ const OP_RESCAN: u8 = 5;
 /// Between the two paths of a move; no path holds one.
 const PATH_GAP: u8 = 0;
 const FILE_MODE: u32 = 0o600;
-/// How much a reader reads at a time.
-const READ_CHUNK: usize = 64 * 1024;
 
 /// One change on disk. Paths are whole paths.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,15 +152,8 @@ impl LogReader {
     /// When the file can't be read or holds a damaged record.
     pub fn read_new(&mut self) -> io::Result<Vec<Change>> {
         let mut bytes = Vec::new();
-        let mut chunk = vec![0; READ_CHUNK];
-        loop {
-            let at = self.at + u64::try_from(bytes.len()).map_err(io::Error::other)?;
-            let read = self.file.read_at(&mut chunk, at)?;
-            if read == 0 {
-                break;
-            }
-            bytes.extend_from_slice(chunk.get(..read).unwrap_or_default());
-        }
+        (&self.file).seek(SeekFrom::Start(self.at))?;
+        (&self.file).read_to_end(&mut bytes)?;
         let mut changes = Vec::new();
         let mut rest = bytes.as_slice();
         while let Some((change, len)) = parse(rest)? {

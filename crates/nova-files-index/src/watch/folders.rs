@@ -24,8 +24,6 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rustix::fs::inotify::{self, ReadFlags, WatchFlags};
 use rustix::io::Errno;
@@ -35,6 +33,19 @@ use crate::crawl::{self, Stop};
 use crate::policy::{self, Zone};
 use crate::reader::Index;
 use crate::{Flags, Kind, RowId};
+
+/// What a watch reports: everything that changes what a folder holds or
+/// an entry's details. Links aren't followed, the target is a folder, and
+/// a deleted file still open elsewhere stops reporting.
+const WATCHED: WatchFlags = WatchFlags::CREATE
+    .union(WatchFlags::DELETE)
+    .union(WatchFlags::MOVED_FROM)
+    .union(WatchFlags::MOVED_TO)
+    .union(WatchFlags::CLOSE_WRITE)
+    .union(WatchFlags::ATTRIB)
+    .union(WatchFlags::DONT_FOLLOW)
+    .union(WatchFlags::ONLYDIR)
+    .union(WatchFlags::EXCL_UNLINK);
 
 /// One event, copied out of the kernel's buffer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,17 +74,15 @@ pub struct Folders {
     root: PathBuf,
     by_wd: HashMap<i32, Watched>,
     by_path: HashMap<PathBuf, i32>,
-    unwatched: Arc<AtomicUsize>,
 }
 
 impl Folders {
-    pub fn new(inotify: OwnedFd, root: PathBuf, unwatched: Arc<AtomicUsize>) -> Self {
+    pub fn new(inotify: OwnedFd, root: PathBuf) -> Self {
         Self {
             inotify,
             root,
             by_wd: HashMap::new(),
             by_path: HashMap::new(),
-            unwatched,
         }
     }
 
@@ -81,14 +90,17 @@ impl Folders {
         &self.inotify
     }
 
-    /// Watches every folder `index` holds that was read.
-    pub fn watch_index(&mut self, index: &Index) {
-        let skipped = Flags::UNREADABLE.with(Flags::OTHER_DRIVE);
+    /// Watches every folder `index` holds that was read; returns a rescan
+    /// for each one that couldn't be watched.
+    pub fn watch_index(&mut self, index: &Index) -> Vec<Change> {
+        let mut unwatched = Vec::new();
         for row in (0..index.rows()).map(RowId) {
             let Some(entry) = index.entry(row) else {
                 continue;
             };
-            if entry.kind != Kind::Folder || entry.flags.0 & skipped.0 != 0 {
+            let not_read =
+                entry.flags.contains(Flags::UNREADABLE) || entry.flags.contains(Flags::OTHER_DRIVE);
+            if entry.kind != Kind::Folder || not_read {
                 continue;
             }
             let Some(path) = index.path(row) else {
@@ -96,9 +108,10 @@ impl Folders {
             };
             let zone = path.strip_prefix(&self.root).ok().and_then(policy::zone_of);
             if let Some(zone) = zone {
-                self.watch(path, zone);
+                unwatched.extend(self.watch(path, zone));
             }
         }
+        unwatched
     }
 
     /// The changes a batch of events means.
@@ -160,7 +173,7 @@ impl Folders {
             if kept {
                 changes.push(Change::Removed { path });
             }
-        } else if mask.intersects(ReadFlags::CLOSE_WRITE | ReadFlags::ATTRIB) {
+        } else if mask.intersects(ReadFlags::CLOSE_WRITE.union(ReadFlags::ATTRIB)) {
             if kept {
                 changed(path, changes);
             }
@@ -230,7 +243,7 @@ impl Folders {
         details: &fs::Metadata,
         changes: &mut Vec<Change>,
     ) -> Vec<(PathBuf, Zone, fs::Metadata)> {
-        self.watch(path.clone(), zone.clone());
+        changes.extend(self.watch(path.clone(), zone.clone()));
         let children = match crawl::read_children(&path, &|| false) {
             Ok(children) => children,
             Err(Stop::Cancelled | Stop::Gone | Stop::Failed(_)) => {
@@ -292,26 +305,18 @@ impl Folders {
         }
     }
 
-    fn watch(&mut self, path: PathBuf, zone: Zone) {
-        let flags = WatchFlags::CREATE
-            | WatchFlags::DELETE
-            | WatchFlags::MOVED_FROM
-            | WatchFlags::MOVED_TO
-            | WatchFlags::CLOSE_WRITE
-            | WatchFlags::ATTRIB
-            | WatchFlags::DONT_FOLLOW
-            | WatchFlags::ONLYDIR
-            | WatchFlags::EXCL_UNLINK;
-        match inotify::add_watch(&self.inotify, &path, flags) {
+    /// Watches the folder at `path`; a rescan of it when it can't be.
+    fn watch(&mut self, path: PathBuf, zone: Zone) -> Option<Change> {
+        match inotify::add_watch(&self.inotify, &path, WATCHED) {
             Ok(wd) => {
                 self.by_path.insert(path.clone(), wd);
                 self.by_wd.insert(wd, Watched { path, zone });
-            }
-            Err(Errno::NOSPC) => {
-                self.unwatched.fetch_add(1, Ordering::Relaxed);
+                None
             }
             // Gone, or not a folder any more: its own event says so.
-            Err(_) => {}
+            Err(Errno::NOENT | Errno::NOTDIR) => None,
+            // Over the watch limit, or not readable.
+            Err(_) => Some(Change::Rescan { folder: path }),
         }
     }
 
@@ -395,8 +400,8 @@ mod tests {
     use rustix::fs::inotify::CreateFlags;
 
     fn folders(root: &Path) -> Folders {
-        let fd = inotify::init(CreateFlags::CLOEXEC | CreateFlags::NONBLOCK).unwrap();
-        Folders::new(fd, root.to_owned(), Arc::new(AtomicUsize::new(0)))
+        let fd = inotify::init(CreateFlags::CLOEXEC.union(CreateFlags::NONBLOCK)).unwrap();
+        Folders::new(fd, root.to_owned())
     }
 
     #[test]
@@ -434,7 +439,7 @@ mod tests {
             std::env::temp_dir().join(format!("nova-files-watch-ignored-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         let mut folders = folders(&root);
-        folders.watch(root.clone(), Zone::Home);
+        assert_eq!(folders.watch(root.clone(), Zone::Home), None);
         let wd = folders.by_path[&root];
         let ignored = Event {
             wd,
@@ -446,5 +451,44 @@ mod tests {
         assert!(folders.by_wd.is_empty());
         assert!(folders.by_path.is_empty());
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn folders_not_read_by_the_crawl_are_not_watched() {
+        use crate::mounts::MountCheck;
+        struct DriveIsMounted(PathBuf);
+        impl MountCheck for DriveIsMounted {
+            fn is_mount_root(&self, folder: &Path) -> bool {
+                folder == self.0
+            }
+        }
+        let root =
+            std::env::temp_dir().join(format!("nova-files-watch-drive-{}", std::process::id()));
+        fs::create_dir_all(root.join("drive/inside")).unwrap();
+        fs::create_dir_all(root.join("plain")).unwrap();
+        let built = crawl::crawl_with(&root, DriveIsMounted(root.join("drive")), || false).unwrap();
+        let saved = root.with_extension("index");
+        built.save(&saved).unwrap();
+        let index = Index::open(&saved).unwrap();
+        let mut folders = folders(&root);
+        assert!(folders.watch_index(&index).is_empty());
+        let mut watched: Vec<&PathBuf> = folders.by_path.keys().collect();
+        watched.sort();
+        assert_eq!(watched, [&root, &root.join("plain")]);
+        fs::remove_file(&saved).ok();
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_folder_that_cant_be_watched_gets_a_rescan() {
+        let mut folders = folders(Path::new("/"));
+        let missing = PathBuf::from("/nowhere/at/all");
+        assert_eq!(folders.watch(missing, Zone::Home), None);
+        // A file isn't a folder: watching it is refused as gone.
+        let file =
+            std::env::temp_dir().join(format!("nova-files-watch-file-{}", std::process::id()));
+        fs::write(&file, b"").unwrap();
+        assert_eq!(folders.watch(file.clone(), Zone::Home), None);
+        fs::remove_file(&file).ok();
     }
 }

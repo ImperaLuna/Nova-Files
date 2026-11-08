@@ -11,8 +11,9 @@
 //! them there.
 //!
 //! inotify watches one folder at a time without root. Since Linux 5.11 the
-//! watch limit grows with memory, up to 1,048,576, far past a home folder;
-//! a folder over the limit is counted in [`Watcher::unwatched`].
+//! watch limit grows with memory, up to 1,048,576, far past a home folder.
+//! A folder that can't be watched (over the limit, or not readable) gets a
+//! [`Change::Rescan`]: its changes won't be seen until it is read again.
 
 mod folders;
 
@@ -22,7 +23,6 @@ use std::mem::MaybeUninit;
 use std::os::fd::OwnedFd;
 use std::os::unix::ffi::OsStrExt as _;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread::{self, JoinHandle};
 
 use rustix::event::{EventfdFlags, PollFd, PollFlags, eventfd, poll};
@@ -35,7 +35,7 @@ use folders::{Event, Folders};
 
 const THREAD_NAME: &str = "nova-files-watch";
 /// Room for a few hundred events per read.
-const READ_BUFFER: usize = 64 * 1024;
+const READ_BUFFER: usize = 65_536;
 /// What [`Watcher::stop`] writes to the eventfd; any value wakes the poll.
 const WAKE: u64 = 1;
 
@@ -43,7 +43,6 @@ const WAKE: u64 = 1;
 #[derive(Debug)]
 pub struct Watcher {
     stop: Arc<OwnedFd>,
-    unwatched: Arc<AtomicUsize>,
     thread: Option<JoinHandle<io::Result<()>>>,
 }
 
@@ -58,25 +57,21 @@ impl Watcher {
         mut log: ChangeLog,
         on_change: impl Fn() + Send + 'static,
     ) -> io::Result<Self> {
-        let inotify = inotify::init(CreateFlags::CLOEXEC | CreateFlags::NONBLOCK)?;
+        let inotify = inotify::init(CreateFlags::CLOEXEC.union(CreateFlags::NONBLOCK))?;
         let stop = Arc::new(eventfd(0, EventfdFlags::CLOEXEC)?);
-        let unwatched = Arc::new(AtomicUsize::new(0));
-        let mut folders = Folders::new(inotify, index.root().to_owned(), Arc::clone(&unwatched));
-        folders.watch_index(index);
+        let mut folders = Folders::new(inotify, index.root().to_owned());
+        let unwatched = folders.watch_index(index);
+        for change in &unwatched {
+            log.append(change)?;
+        }
         let woken = Arc::clone(&stop);
         let thread = thread::Builder::new()
             .name(THREAD_NAME.to_owned())
             .spawn(move || run(&mut folders, &woken, &mut log, &on_change))?;
         Ok(Self {
             stop,
-            unwatched,
             thread: Some(thread),
         })
-    }
-
-    /// How many folders couldn't be watched, past the system's limit.
-    pub fn unwatched(&self) -> usize {
-        self.unwatched.load(Ordering::Relaxed)
     }
 
     /// Stops the thread and waits for it.
