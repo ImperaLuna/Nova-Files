@@ -35,7 +35,7 @@ pub use changes::{Change, ChangeLog, LogReader};
 pub use crawl::{CrawlError, crawl};
 pub use overlay::Overlay;
 pub use reader::{Index, OpenError};
-pub use search::{Hit, MatchKind, Search};
+pub use search::{Hit, MatchKind, STAGES, Search};
 pub use watch::Watcher;
 
 /// A row's position in the index. Row 0 is the crawled folder.

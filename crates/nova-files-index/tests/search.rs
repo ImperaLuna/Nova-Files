@@ -8,7 +8,7 @@ mod support;
 use std::path::PathBuf;
 
 use nova_files_index::{
-    Change, Details, FileId, Flags, Hit, Index, Kind, MatchKind, Overlay, crawl,
+    Change, Details, FileId, Flags, Hit, Index, Kind, MatchKind, Overlay, STAGES, crawl,
 };
 use support::TempFolder;
 
@@ -244,6 +244,12 @@ fn a_search_knows_when_its_last_stage_ran() {
     search.next();
     assert!(search.is_done());
     assert!(home.index.search(" ", LIMIT).is_done());
+}
+
+#[test]
+fn a_search_yields_no_more_than_its_stages() {
+    let home = Home::new();
+    assert_eq!(home.index.search("tax", LIMIT).count(), STAGES);
 }
 
 #[test]

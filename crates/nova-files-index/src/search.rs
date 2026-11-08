@@ -60,6 +60,9 @@ pub struct Search<'a> {
     stage: Stage,
 }
 
+/// How many stages a search yields at most: as typed, then loose.
+pub const STAGES: usize = 2;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stage {
     AsTyped,
