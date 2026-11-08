@@ -3,16 +3,16 @@
 //! lands (FIL-36); the layout is fixed here.
 //!
 //! xdg-desktop-portal finds a backend by its own bus name, so the running
-//! instance claims [`BUS_NAME`] beside the application id and serves this
+//! instance asks for [`BUS_NAME`] beside the application id and serves this
 //! interface at [`OBJECT_PATH`], the path every portal backend uses. Its
 //! interface name and methods are the portal's, not ours, so it carries no
 //! version of its own. A pick request takes a hold on the core (see
 //! `holds`) until the user answers, the asking app calls `Request.Close`
 //! or the caller leaves the bus.
 
-/// The backend's bus name. A `.portal` file names it, and `portals.conf`
-/// picks it by the `.portal` file's name.
-pub const BUS_NAME: &str = "org.freedesktop.impl.portal.desktop.novafiles";
+/// The backend's bus name, set once in `.cargo/config.toml`. A `.portal`
+/// file names it, and `portals.conf` picks it by the `.portal` file's name.
+pub const BUS_NAME: &str = env!("NOVA_FILES_PORTAL_BUS_NAME");
 
 /// Where xdg-desktop-portal calls every backend.
 pub const OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
