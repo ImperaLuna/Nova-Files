@@ -20,12 +20,17 @@
 //! the opened app take focus.
 
 use std::collections::HashMap;
+use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::thread;
+use std::time::Duration;
+
+use futures::channel::oneshot;
 
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, Event, EventSink, Hit, Matched, SearchFailed,
-    SearchId,
+    ClientGone, Command, Connector, Event, EventSink, Hit, Matched, SearchFailed, SearchId,
 };
 use rustix::fs::{Mode, OFlags};
 use zbus::fdo;
@@ -49,14 +54,17 @@ pub const OPEN_URI_INTERFACE: &str = "org.freedesktop.portal.OpenURI";
 pub const ACTIVATION_TOKEN: &str = "activation-token";
 const PORTAL_ACTIVATION_TOKEN: &str = "activation_token";
 
+/// How long `Open` waits to learn what a path is: well inside a caller's
+/// own call timeout, so the caller gets this error.
+const FILE_SYSTEM_TIMEOUT: Duration = Duration::from_secs(2);
+const LOOK_THREAD: &str = "nova-files-dbus-look";
+
 const FOUND: &str = "Found";
 const FAILED: &str = "Failed";
 
-/// One running search: dropping it ends the core connection and the hold.
-struct Search {
-    _hold: Hold,
-    core: Connection,
-}
+/// One running search: a hold whose core connection runs it. Dropping it,
+/// or the caller leaving, ends the connection and so the search.
+type Search = Hold;
 
 /// Each caller's running search, by its unique bus name, with its id.
 struct Running<T> {
@@ -85,7 +93,32 @@ impl<T> Running<T> {
         )
     }
 
-    /// Whether `id` is the caller's running search.
+    /// Runs `send` if `id` is the caller's running search, ending it after
+    /// when `last`. The map stays locked meanwhile, so once `end` or a
+    /// newer `put` returns, nothing more is sent for the older search.
+    fn send_if_current<R>(
+        &self,
+        caller: &str,
+        id: u64,
+        last: bool,
+        send: impl FnOnce() -> R,
+    ) -> Option<R> {
+        let mut searches = self.lock();
+        if searches
+            .get(caller)
+            .is_none_or(|(running, _)| *running != id)
+        {
+            return None;
+        }
+        let result = send();
+        if last {
+            searches.remove(caller);
+        }
+        drop(searches);
+        Some(result)
+    }
+
+    #[cfg(test)]
     fn is_current(&self, caller: &str, id: u64) -> bool {
         self.lock()
             .get(caller)
@@ -94,13 +127,7 @@ impl<T> Running<T> {
 
     /// Ends the caller's search `id`, if it is still the running one.
     fn end(&self, caller: &str, id: u64) {
-        let mut searches = self.lock();
-        if searches
-            .get(caller)
-            .is_some_and(|(running, _)| *running == id)
-        {
-            searches.remove(caller);
-        }
+        self.send_if_current(caller, id, true, || ());
     }
 
     /// The map stays whole whatever panicked while holding it: each change
@@ -128,6 +155,16 @@ impl<F> Searches<F> {
     }
 }
 
+impl<F: Fn(Option<PathBuf>)> Searches<F> {
+    /// Opens a window on `folder`, first telling the core, so it doesn't
+    /// reach its idle exit while the window starts.
+    fn open_window(&self, folder: PathBuf) -> fdo::Result<()> {
+        self.connector.activity().map_err(failed)?;
+        (self.on_open)(Some(folder));
+        Ok(())
+    }
+}
+
 #[zbus::interface(name = "io.github.ImperaLuna.NovaFiles.Search1")]
 impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
     /// Starts search `id` for `query`, one word or several, with at most
@@ -147,7 +184,6 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
         let caller = header
             .sender()
             .ok_or_else(|| fdo::Error::Failed("the call has no sender".to_owned()))?;
-        let hold = self.holds.take(caller).await.map_err(failed)?;
         let stages = Stages {
             bus: zbus::blocking::Connection::from(emitter.connection().clone()),
             path: emitter.path().to_string(),
@@ -155,18 +191,15 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
             id,
             running: Arc::clone(&self.running),
         };
-        let core = self.connector.connect(stages).map_err(failed)?;
+        let search = self.holds.take_with(caller, stages).await.map_err(failed)?;
         let command = Command::Search {
             id: SearchId(id),
             query,
             limit,
         };
-        let search = Search { _hold: hold, core };
         // In first, so its stages count as current when they come.
         self.running
-            .put(caller.as_str(), id, search, |search| {
-                search.core.send(command)
-            })
+            .put(caller.as_str(), id, search, |search| search.send(command))
             .map_err(failed)
     }
 
@@ -188,11 +221,10 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
         platform_data: HashMap<String, OwnedValue>,
     ) -> fdo::Result<()> {
         let path = absolute(path)?;
-        if path.is_dir() {
-            (self.on_open)(Some(path));
-            return Ok(());
+        match look_at(path.clone()).await? {
+            Target::Folder => self.open_window(path),
+            Target::File(file) => open_file(bus, file, token(&platform_data)).await,
         }
-        open_file(bus, &path, token(&platform_data)).await
     }
 
     /// Opens a Nova Files window on the folder that holds `path`.
@@ -207,8 +239,7 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
         let folder = path
             .parent()
             .ok_or_else(|| fdo::Error::InvalidArgs("the root has no folder".to_owned()))?;
-        (self.on_open)(Some(folder.to_owned()));
-        Ok(())
+        self.open_window(folder.to_owned())
     }
 
     /// One stage of search `id`: (path, how it matched) pairs, best first.
@@ -238,37 +269,33 @@ struct Stages {
 
 impl EventSink for Stages {
     fn deliver(&self, event: Event) -> Result<(), ClientGone> {
-        if !self.running.is_current(&self.caller, self.id) {
-            return Err(ClientGone);
-        }
+        let (caller, path, id) = (Some(self.caller.as_str()), self.path.as_str(), self.id);
         let sent = match event {
             Event::Found { hits, done, .. } => {
                 let hits: Vec<(String, String)> = hits.iter().filter_map(wire).collect();
-                let sent = self.bus.emit_signal(
-                    Some(self.caller.as_str()),
-                    self.path.as_str(),
-                    INTERFACE,
-                    FOUND,
-                    &(self.id, hits, done),
-                );
-                if done {
-                    self.running.end(&self.caller, self.id);
-                }
-                sent
+                self.running.send_if_current(&self.caller, id, done, || {
+                    self.bus
+                        .emit_signal(caller, path, INTERFACE, FOUND, &(id, hits, done))
+                })
             }
             Event::SearchFailed { reason, .. } => {
-                self.running.end(&self.caller, self.id);
-                self.bus.emit_signal(
-                    Some(self.caller.as_str()),
-                    self.path.as_str(),
-                    INTERFACE,
-                    FAILED,
-                    &(self.id, reason_name(reason)),
-                )
+                self.running.send_if_current(&self.caller, id, true, || {
+                    self.bus.emit_signal(
+                        caller,
+                        path,
+                        INTERFACE,
+                        FAILED,
+                        &(id, reason_name(reason)),
+                    )
+                })
             }
-            _ => Ok(()),
+            _ => Some(Ok(())),
         };
-        sent.map_err(|_| ClientGone)
+        match sent {
+            Some(Ok(())) => Ok(()),
+            // Not the running search any more, or its caller is gone.
+            _ => Err(ClientGone),
+        }
     }
 }
 
@@ -313,10 +340,62 @@ fn token(platform_data: &HashMap<String, OwnedValue>) -> Option<String> {
     String::try_from(value.try_clone().ok()?).ok()
 }
 
-/// Asks the portal to open `path` with the user's default app.
-async fn open_file(bus: &zbus::Connection, path: &Path, token: Option<String>) -> fdo::Result<()> {
-    let fd = rustix::fs::open(path, OFlags::PATH.union(OFlags::CLOEXEC), Mode::empty())
-        .map_err(|error| fdo::Error::InvalidArgs(format!("{}: {error}", path.display())))?;
+/// What a path to open is.
+enum Target {
+    Folder,
+    /// A file, opened `O_PATH`.
+    File(OwnedFd),
+}
+
+/// Looks at `path` on threads of its own, giving up after
+/// [`FILE_SYSTEM_TIMEOUT`]: on a mount that doesn't answer, the lookup
+/// blocks, and zbus answers every call on one executor.
+async fn look_at(path: PathBuf) -> fdo::Result<Target> {
+    let (looked, look) = mpsc::channel();
+    let (answer_sender, answer) = oneshot::channel();
+    spawn(move || {
+        looked.send(target(&path)).ok();
+    })?;
+    // The lookup may never end; this one does.
+    spawn(move || {
+        answer_sender
+            .send(look.recv_timeout(FILE_SYSTEM_TIMEOUT))
+            .ok();
+    })?;
+    match answer.await {
+        Ok(Ok(target)) => target,
+        Ok(Err(RecvTimeoutError::Timeout)) => Err(fdo::Error::Timeout(
+            "the file system did not answer".to_owned(),
+        )),
+        Ok(Err(RecvTimeoutError::Disconnected)) | Err(_) => {
+            Err(fdo::Error::Failed("the lookup stopped".to_owned()))
+        }
+    }
+}
+
+fn spawn(work: impl FnOnce() + Send + 'static) -> fdo::Result<()> {
+    thread::Builder::new()
+        .name(LOOK_THREAD.to_owned())
+        .spawn(work)
+        .map(drop)
+        .map_err(failed)
+}
+
+fn target(path: &Path) -> fdo::Result<Target> {
+    if path.is_dir() {
+        return Ok(Target::Folder);
+    }
+    rustix::fs::open(path, OFlags::PATH.union(OFlags::CLOEXEC), Mode::empty())
+        .map(Target::File)
+        .map_err(|error| fdo::Error::InvalidArgs(format!("{}: {error}", path.display())))
+}
+
+/// Asks the portal to open `file` with the user's default app.
+async fn open_file(
+    bus: &zbus::Connection,
+    file: OwnedFd,
+    token: Option<String>,
+) -> fdo::Result<()> {
     let mut options: HashMap<&str, Value<'_>> = HashMap::new();
     if let Some(token) = token {
         options.insert(PORTAL_ACTIVATION_TOKEN, Value::from(token));
@@ -324,7 +403,7 @@ async fn open_file(bus: &zbus::Connection, path: &Path, token: Option<String>) -
     let portal = zbus::Proxy::new(bus, PORTAL_NAME, PORTAL_PATH, OPEN_URI_INTERFACE).await?;
     // No parent window: the launcher has closed by now.
     let request: zbus::zvariant::OwnedObjectPath = portal
-        .call("OpenFile", &("", Fd::from(&fd), options))
+        .call("OpenFile", &("", Fd::from(&file), options))
         .await?;
     drop(request);
     Ok(())
@@ -371,6 +450,26 @@ mod tests {
         assert!(running.is_current(CALLER, 2));
         assert_eq!(dropped.get(), 0);
         running.end(CALLER, 2);
+        assert!(!running.is_current(CALLER, 2));
+        assert_eq!(dropped.get(), 1);
+    }
+
+    #[test]
+    fn only_the_running_search_sends_and_its_last_stage_ends_it() {
+        let dropped = Cell::new(0);
+        let running = Running::default();
+        running.put(CALLER, 2, Dropped(&dropped), |_| ());
+        assert_eq!(running.send_if_current(CALLER, 1, false, || "sent"), None);
+        assert_eq!(running.send_if_current(OTHER, 2, false, || "sent"), None);
+        assert_eq!(
+            running.send_if_current(CALLER, 2, false, || "sent"),
+            Some("sent")
+        );
+        assert!(running.is_current(CALLER, 2));
+        assert_eq!(
+            running.send_if_current(CALLER, 2, true, || "last"),
+            Some("last")
+        );
         assert!(!running.is_current(CALLER, 2));
         assert_eq!(dropped.get(), 1);
     }

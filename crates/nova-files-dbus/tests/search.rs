@@ -62,7 +62,7 @@ impl Scratch {
         self.home().join("Documents/report.pdf")
     }
 
-    fn core(&self, indexed: bool) -> RunningCore {
+    fn core(&self, indexed: bool, idle_exit: Duration) -> RunningCore {
         let home = Home {
             folder: self.home(),
             config: self.0.join("config"),
@@ -70,7 +70,7 @@ impl Scratch {
         let place = indexed.then(|| IndexPlace {
             folder: self.0.join("cache"),
         });
-        nova_files_core::spawn_with(IDLE_EXIT, Some(home), None, place).unwrap()
+        nova_files_core::spawn_with(idle_exit, Some(home), None, place).unwrap()
     }
 }
 
@@ -84,26 +84,39 @@ impl Drop for Scratch {
 /// `windows`.
 struct Service {
     bus: PrivateBus,
-    _core: RunningCore,
     _started: Started,
     windows: Receiver<Option<PathBuf>>,
+    /// Gets a message once the core has stopped.
+    core_ended: Receiver<()>,
 }
 
 fn service(scratch: &Scratch, indexed: bool) -> Service {
+    service_with(scratch, indexed, IDLE_EXIT)
+}
+
+fn service_with(scratch: &Scratch, indexed: bool, idle_exit: Duration) -> Service {
     let bus = PrivateBus::start();
-    let core = scratch.core(indexed);
+    let RunningCore { connector, thread } = scratch.core(indexed, idle_exit);
     let (sender, windows) = mpsc::channel();
-    let started = nova_files_dbus::start(bus.bus(), core.connector.clone(), move |folder| {
+    let started = nova_files_dbus::start(bus.bus(), connector, move |folder| {
         sender.send(folder).ok();
     })
     .unwrap();
+    let (ended, core_ended) = mpsc::channel();
+    std::thread::spawn(move || {
+        thread.join().ok();
+        ended.send(()).ok();
+    });
     Service {
         bus,
-        _core: core,
         _started: started,
         windows,
+        core_ended,
     }
 }
+
+/// A short idle time, for tests of what keeps the core up.
+const SHORT_IDLE: Duration = Duration::from_millis(1000);
 
 /// A launcher: a bus connection, the search interface, and the signals it
 /// receives.
@@ -291,6 +304,28 @@ fn a_cancelled_search_sends_nothing() {
 }
 
 #[test]
+fn a_search_ends_when_its_caller_leaves() {
+    let scratch = Scratch::new();
+    let _fifo = block_the_index(&scratch);
+    let service = service_with(&scratch, true, SHORT_IDLE);
+    // No signal streams, so dropping it leaves the bus.
+    let caller = connect(&service.bus);
+    let search = Proxy::new(
+        &caller,
+        APP_ID,
+        nova_files_dbus::object_path().unwrap(),
+        SEARCH_INTERFACE,
+    )
+    .unwrap();
+    // Waits on the index for good: only the caller leaving ends it.
+    search
+        .call::<_, _, ()>("Search", &(1_u64, "report", LIMIT))
+        .unwrap();
+    drop((search, caller));
+    service.core_ended.recv_timeout(WAIT).unwrap();
+}
+
+#[test]
 fn a_newer_search_replaces_the_older_one() {
     let scratch = Scratch::new();
     let fifo = block_the_index(&scratch);
@@ -340,6 +375,39 @@ fn show_in_folder_opens_the_holding_folder() {
     let folder = scratch.home().join("Documents");
     assert_eq!(service.windows.recv_timeout(WAIT), Ok(Some(folder)));
     assert!(launcher.call("ShowInFolder", Path::new("/"), None).is_err());
+}
+
+/// Opening a window tells the core first, so it doesn't stop while the
+/// window starts.
+fn opening_a_window_keeps_the_core_up(method: &str, path: fn(&Scratch) -> PathBuf) {
+    let scratch = Scratch::new();
+    let service = service_with(&scratch, false, SHORT_IDLE);
+    let launcher = Launcher::new(&service.bus);
+    assert!(
+        service
+            .core_ended
+            .recv_timeout(SHORT_IDLE * 6 / 10)
+            .is_err()
+    );
+    launcher.call(method, &path(&scratch), None).unwrap();
+    service.windows.recv_timeout(WAIT).unwrap();
+    // Past the first idle exit, short of the one from the call.
+    assert!(
+        service
+            .core_ended
+            .recv_timeout(SHORT_IDLE * 7 / 10)
+            .is_err()
+    );
+}
+
+#[test]
+fn open_on_a_folder_keeps_the_core_up() {
+    opening_a_window_keeps_the_core_up("Open", Scratch::home);
+}
+
+#[test]
+fn show_in_folder_keeps_the_core_up() {
+    opening_a_window_keeps_the_core_up("ShowInFolder", Scratch::file);
 }
 
 #[test]
