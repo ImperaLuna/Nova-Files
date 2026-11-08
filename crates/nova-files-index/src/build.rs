@@ -22,6 +22,9 @@ const FILE_MODE: u32 = 0o600;
 const FOLDER_MODE: u32 = 0o700;
 /// Added to the index file's name for the file being written.
 const TEMP_SUFFIX: &str = ".new";
+/// Beside the index; held while a save writes the temp file and renames
+/// it, so two saves, even from two processes, never share the temp file.
+const LOCK_SUFFIX: &str = ".lock";
 
 /// What the crawl learned about one entry, apart from its name and place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,7 +148,14 @@ impl Built {
                 .mode(FOLDER_MODE)
                 .create(folder)?;
         }
-        let temp = temp_path(path);
+        let lock = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(FILE_MODE)
+            .open(beside(path, LOCK_SUFFIX))?;
+        lock.lock()?;
+        let temp = beside(path, TEMP_SUFFIX);
         let written = self
             .write_temp(&temp)
             .and_then(|()| fs::rename(&temp, path));
@@ -156,7 +166,8 @@ impl Built {
     }
 
     fn write_temp(&self, temp: &Path) -> io::Result<()> {
-        // A temp file left by a crash is stale: nobody else writes here.
+        // A temp file left by a crash is stale: the lock keeps out other
+        // saves.
         // If it can't be removed, creating the new one says why.
         fs::remove_file(temp).ok();
         let file = OpenOptions::new()
@@ -170,9 +181,9 @@ impl Built {
     }
 }
 
-fn temp_path(path: &Path) -> PathBuf {
+fn beside(path: &Path, suffix: &str) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
-    name.push(TEMP_SUFFIX);
+    name.push(suffix);
     PathBuf::from(name)
 }
 
@@ -238,10 +249,15 @@ mod tests {
     }
 
     #[test]
-    fn the_temp_file_sits_next_to_the_index() {
+    fn the_temp_and_lock_files_sit_next_to_the_index() {
+        let index = Path::new("/cache/nova/index");
         assert_eq!(
-            temp_path(Path::new("/cache/nova/index")),
+            beside(index, TEMP_SUFFIX),
             Path::new("/cache/nova/index.new")
+        );
+        assert_eq!(
+            beside(index, LOCK_SUFFIX),
+            Path::new("/cache/nova/index.lock")
         );
     }
 }

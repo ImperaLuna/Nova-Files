@@ -196,6 +196,27 @@ fn home_is_indexed_without_hidden_folders_caches_and_profiles() {
 }
 
 #[test]
+fn only_a_plain_cache_tag_marks_a_cache_folder() {
+    const SIGNED: &[u8] = b"Signature: 8a477f597d28d172789f06886806bc55\n";
+    let home = TempFolder::new().with(&["pipe/a", "link/a", "tag"]);
+    fs::write(home.path().join("tag"), SIGNED).unwrap();
+    // A pipe would wait for a writer forever if the crawl read it.
+    rustix::fs::mknodat(
+        rustix::fs::CWD,
+        home.path().join("pipe/CACHEDIR.TAG"),
+        rustix::fs::FileType::Fifo,
+        rustix::fs::Mode::from_raw_mode(PRIVATE_FILE),
+        0,
+    )
+    .unwrap();
+    symlink("../tag", home.path().join("link/CACHEDIR.TAG")).unwrap();
+    let (index, _cache) = indexed(home.path());
+    let paths = relative_paths(&index);
+    assert!(paths.contains(Path::new("pipe/a")));
+    assert!(paths.contains(Path::new("link/a")));
+}
+
+#[test]
 fn rows_are_depth_first_with_each_folder_a_run() {
     let home = TempFolder::new().with(&["b/x/1", "b/x/2", "b/y", "a", "c/", "B"]);
     let (index, _cache) = indexed(home.path());
@@ -406,8 +427,30 @@ fn saving_replaces_the_index_and_readers_keep_the_old_one() {
     let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & MODE_BITS;
     assert_eq!(mode(&path), PRIVATE_FILE);
     assert_eq!(mode(path.parent().unwrap()), PRIVATE_FOLDER);
-    let left: Vec<_> = fs::read_dir(path.parent().unwrap()).unwrap().collect();
-    assert_eq!(left.len(), 1, "only the index is left");
+    let mut left: Vec<_> = fs::read_dir(path.parent().unwrap())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    left.sort();
+    assert_eq!(left, ["index", "index.lock"], "no temp file is left");
+}
+
+#[test]
+fn saves_at_the_same_time_each_publish_a_whole_index() {
+    let home = TempFolder::new().with(&["a/1", "a/2", "b/3", "c"]);
+    let cache = TempFolder::new();
+    let path = cache.path().join("index");
+    let built = crawl(home.path(), || false).unwrap();
+    std::thread::scope(|scope| {
+        for _ in 0..4 {
+            scope.spawn(|| {
+                for _ in 0..20 {
+                    built.save(&path).unwrap();
+                    assert_eq!(Index::open(&path).unwrap().rows(), 7);
+                }
+            });
+        }
+    });
 }
 
 #[test]
