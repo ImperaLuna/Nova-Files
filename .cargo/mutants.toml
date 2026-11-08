@@ -36,4 +36,7 @@ exclude_re = [
     # The text field's selection (FIL-36): when its two ends meet, which
     # end is the caret makes no difference, so `<=` here is the same code.
     "nova-files-ui/src/text/edit\\.rs:.*replace < with <= in TextEdit::select_range",
+    # Only changes which row a picker highlights (FIL-36); the picker tests
+    # check the selection itself.
+    "nova-files-ui/src/view\\.rs:.*replace == with != in MainWindow::entries",
 ]
