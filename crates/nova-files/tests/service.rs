@@ -173,6 +173,43 @@ fn second_service_start_asks_for_no_window() {
     assert!(activated.recv_timeout(QUIET).is_err());
 }
 
+/// A process restarted with every Vulkan driver waits for the name its old
+/// self is still giving up, and serves, instead of handing over to a
+/// process that is gone.
+#[test]
+fn a_restart_takes_the_name_its_old_process_gives_up() {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn().unwrap();
+    let Started::Service(old) = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
+    else {
+        panic!("the old process owns the name");
+    };
+    let watcher = client(&bus);
+    let owners = DBusProxy::new(&watcher)
+        .unwrap()
+        .receive_name_owner_changed_with_args(&[(0, APP_ID)])
+        .unwrap();
+    let (sender, owned) = mpsc::channel();
+    thread::spawn(move || {
+        for change in owners {
+            if change.args().unwrap().new_owner().is_some() {
+                sender.send(()).ok();
+            }
+        }
+    });
+
+    let mut restart = program(&bus.address, &["--service"]);
+    restart.env("NOVA_FILES_EVERY_VULKAN_DRIVER", "1");
+    let _restarted = Running(restart.spawn().unwrap());
+    // The old process lets go a little after the restart first asks.
+    assert!(owned.recv_timeout(QUIET).is_err());
+    old.release().unwrap();
+
+    owned
+        .recv_timeout(WAIT)
+        .expect("the restarted process takes the name");
+}
+
 #[test]
 fn service_mode_without_a_bus_fails() {
     let output = finish(program(
