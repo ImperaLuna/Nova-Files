@@ -120,6 +120,19 @@ impl Index {
         Some(OsStr::from_bytes(name))
     }
 
+    /// The rows directly inside `folder`, in order: each one's run is
+    /// skipped to reach the next. Opening checked that every run ends
+    /// after its row, so this always moves forward.
+    pub fn children(&self, folder: RowId) -> impl Iterator<Item = RowId> + '_ {
+        let end = self.entry(folder).map_or(folder, |entry| entry.end);
+        let first = RowId(folder.0.saturating_add(1));
+        std::iter::successors(Some(first).filter(|&row| row < end), move |&row| {
+            self.entry(row)
+                .map(|entry| entry.end)
+                .filter(|&next| next < end)
+        })
+    }
+
     /// The full path of `row`, put together from its parents' names.
     pub fn path(&self, row: RowId) -> Option<PathBuf> {
         let mut names = Vec::new();

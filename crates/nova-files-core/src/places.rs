@@ -26,6 +26,8 @@ const STANDARD: [(PlaceKind, &str, &str); 3] = [
 const USER_DIRS_FILE: &str = "user-dirs.dirs";
 const CONFIG_HOME_VAR: &str = "XDG_CONFIG_HOME";
 const CONFIG_IN_HOME: &str = ".config";
+const CACHE_HOME_VAR: &str = "XDG_CACHE_HOME";
+const CACHE_IN_HOME: &str = ".cache";
 /// `user-dirs.dirs` is a few lines; anything bigger isn't one.
 const USER_DIRS_MAX_BYTES: u64 = 64 * 1024;
 const HOME_PREFIX: &str = "$HOME/";
@@ -47,6 +49,19 @@ impl Home {
         let config = config_home(&folder, env::var_os(CONFIG_HOME_VAR));
         Some(Self { folder, config })
     }
+}
+
+/// The user's cache folder: `$XDG_CACHE_HOME`, or `~/.cache` when that is
+/// unset or relative. `None` without either.
+pub fn cache_home() -> Option<PathBuf> {
+    cache_home_from(env::var_os(CACHE_HOME_VAR), env::home_dir())
+}
+
+fn cache_home_from(variable: Option<OsString>, home: Option<PathBuf>) -> Option<PathBuf> {
+    variable
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| home.map(|home| home.join(CACHE_IN_HOME)))
 }
 
 /// The places that exist under `home`, in list order. Empty without a
@@ -292,5 +307,32 @@ mod tests {
             dir("XDG_MUSIC_DIR=\"$HOME/Music\"", "XDG_DOCUMENTS_DIR"),
             Setting::Unset
         );
+    }
+
+    #[test]
+    fn cache_home_prefers_an_absolute_variable() {
+        let home = Some(PathBuf::from("/home/me"));
+        assert_eq!(
+            cache_home_from(Some("/var/cache/me".into()), home.clone()),
+            Some(PathBuf::from("/var/cache/me"))
+        );
+        assert_eq!(
+            cache_home_from(Some("relative".into()), home.clone()),
+            Some(PathBuf::from("/home/me/.cache"))
+        );
+        assert_eq!(
+            cache_home_from(None, home),
+            Some(PathBuf::from("/home/me/.cache"))
+        );
+        assert_eq!(cache_home_from(None, None), None);
+    }
+
+    #[test]
+    fn cache_home_reads_the_environment() {
+        assert_eq!(
+            cache_home(),
+            cache_home_from(env::var_os(CACHE_HOME_VAR), env::home_dir())
+        );
+        assert!(cache_home().is_some_and(|cache| cache.is_absolute()));
     }
 }

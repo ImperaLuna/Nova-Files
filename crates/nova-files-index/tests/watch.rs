@@ -5,9 +5,12 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
+
+mod support;
+
+use support::TempFolder;
 
 use nova_files_index::{Change, ChangeLog, Index, Kind, LogReader, Watcher, crawl};
 
@@ -16,29 +19,6 @@ const WAIT: Duration = Duration::from_secs(5);
 /// How long a test waits to be sure no change comes.
 const QUIET: Duration = Duration::from_millis(300);
 const SIGNATURE: &[u8] = b"Signature: 8a477f597d28d172789f06886806bc55";
-
-/// A folder under the system temp folder, removed when dropped.
-struct TempFolder(PathBuf);
-
-impl TempFolder {
-    fn new() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-watch-test-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(name);
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
-}
 
 /// A watched home: the files at `paths` (a path ending in `/` is a
 /// folder) crawled, saved and watched.
@@ -58,25 +38,19 @@ impl Watched {
 
     /// As [`Watched::new`], with `extra` run after each batch too.
     fn with_callback(paths: &[&str], extra: impl Fn(&Path) + Send + 'static) -> Self {
-        let home = TempFolder::new();
-        for path in paths {
-            let full = home.0.join(path);
-            if path.ends_with('/') {
-                fs::create_dir_all(&full).unwrap();
-            } else {
-                fs::create_dir_all(full.parent().unwrap()).unwrap();
-                fs::write(&full, b"").unwrap();
-            }
-        }
+        let home = TempFolder::new().with(paths);
         let cache = TempFolder::new();
-        let index_path = cache.0.join("index");
-        crawl(&home.0, || false).unwrap().save(&index_path).unwrap();
+        let index_path = cache.path().join("index");
+        crawl(home.path(), || false)
+            .unwrap()
+            .save(&index_path)
+            .unwrap();
         let index = Index::open(&index_path).unwrap();
-        let log_path = cache.0.join("changes");
+        let log_path = cache.path().join("changes");
         let log = ChangeLog::create(&log_path, index.crawled()).unwrap();
         let reader = LogReader::open(&log_path).unwrap();
         let (tell, woken) = mpsc::channel();
-        let root = home.0.clone();
+        let root = home.path().to_owned();
         let watcher = Watcher::start(&index, log, move || {
             tell.send(()).ok();
             extra(&root);
@@ -93,7 +67,7 @@ impl Watched {
     }
 
     fn path(&self, relative: &str) -> PathBuf {
-        self.home.0.join(relative)
+        self.home.path().join(relative)
     }
 
     /// Waits until a change `wanted` accepts has been logged, and returns
@@ -226,10 +200,10 @@ fn a_move_out_of_home_is_a_removal() {
     let mut watched = Watched::new(&["leaving/file.txt"]);
     let outside = TempFolder::new();
     let path = watched.path("leaving");
-    fs::rename(&path, outside.0.join("gone")).unwrap();
+    fs::rename(&path, outside.path().join("gone")).unwrap();
     watched.until(removed(&path));
     // Its watches went with it: changes out there aren't logged.
-    fs::write(outside.0.join("gone/after.txt"), b"").unwrap();
+    fs::write(outside.path().join("gone/after.txt"), b"").unwrap();
     assert_eq!(watched.settle(), []);
 }
 
@@ -317,7 +291,7 @@ fn stopping_ends_the_thread() {
 fn a_file_moved_onto_the_way_to_an_allowed_place_is_not_added() {
     let mut watched = Watched::new(&[".local/bin/"]);
     let outside = TempFolder::new();
-    let file = outside.0.join("note.txt");
+    let file = outside.path().join("note.txt");
     fs::write(&file, b"").unwrap();
     fs::rename(&file, watched.path(".local/note.txt")).unwrap();
     // A file that is kept, so the test knows the watcher has caught up.
@@ -338,7 +312,7 @@ fn a_marker_in_home_itself_removes_nothing() {
     fs::write(&marker, b"").unwrap();
     watched.until(added(&marker));
     let changes = watched.settle();
-    let root = watched.home.0.clone();
+    let root = watched.home.path().to_owned();
     assert!(!changes.iter().any(removed(&root)), "{changes:?}");
 }
 
@@ -368,8 +342,14 @@ fn a_failing_thread_is_reported_on_stop() {
     let mut watched = Watched::with_callback(&[], |root| {
         assert!(!root.join("boom").exists(), "on_change failed");
     });
+    assert!(watched.watcher.as_ref().unwrap().is_running());
     fs::write(watched.path("boom"), b"").unwrap();
     watched.until(added(&watched.path("boom")));
+    let deadline = Instant::now() + WAIT;
+    while watched.watcher.as_ref().unwrap().is_running() {
+        assert!(Instant::now() < deadline, "the thread didn't end");
+        std::thread::yield_now();
+    }
     assert!(watched.watcher.take().unwrap().stop().is_err());
 }
 

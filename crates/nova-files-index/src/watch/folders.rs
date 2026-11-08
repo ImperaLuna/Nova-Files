@@ -35,6 +35,8 @@ use crate::policy::{self, Zone};
 use crate::reader::Index;
 use crate::{Details, Flags, Kind, RowId};
 
+mod catch_up;
+
 /// What a watch reports: everything that changes what a folder holds or
 /// an entry's details. Links aren't followed, the target is a folder, and
 /// a deleted file still open elsewhere stops reporting.
@@ -110,12 +112,7 @@ impl Folders {
     pub fn watch_index(&mut self, index: &Index) -> Vec<Change> {
         let mut unwatched = Vec::new();
         for row in (0..index.rows()).map(RowId) {
-            let Some(entry) = index.entry(row) else {
-                continue;
-            };
-            let not_read =
-                entry.flags.contains(Flags::UNREADABLE) || entry.flags.contains(Flags::OTHER_DRIVE);
-            if entry.kind != Kind::Folder || not_read {
+            if !index.entry(row).is_some_and(|entry| was_read(&entry)) {
                 continue;
             }
             let Some(path) = index.path(row) else {
@@ -591,6 +588,13 @@ impl Folders {
             }
         }
     }
+}
+
+/// Whether the crawl read this folder: the ones to watch and compare.
+const fn was_read(entry: &crate::Entry) -> bool {
+    matches!(entry.kind, Kind::Folder)
+        && !entry.flags.contains(Flags::UNREADABLE)
+        && !entry.flags.contains(Flags::OTHER_DRIVE)
 }
 
 /// Whether the folder at `path`, holding `children`, says it isn't worth

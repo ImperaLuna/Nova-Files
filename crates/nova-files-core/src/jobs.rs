@@ -39,6 +39,8 @@ pub struct Client {
     events: Arc<dyn EventSink>,
     /// The id of the listing that counts, or [`NO_LISTING`].
     current_listing: Arc<AtomicU64>,
+    /// The id of the search that counts, or [`NO_LISTING`].
+    current_search: Arc<AtomicU64>,
     /// `None` when its thread couldn't start: rows then show no details.
     details: Option<Arc<details_queue::Queue>>,
     /// `None` without a cache folder, or when its thread couldn't start.
@@ -55,6 +57,7 @@ impl Client {
             events,
             details,
             current_listing: Arc::new(AtomicU64::new(NO_LISTING)),
+            current_search: Arc::new(AtomicU64::new(NO_LISTING)),
             thumbnails,
         }
     }
@@ -74,6 +77,15 @@ impl Client {
         self.events.deliver(event)
     }
 
+    pub const fn events(&self) -> &Arc<dyn EventSink> {
+        &self.events
+    }
+
+    /// The id of the client's search that counts.
+    pub const fn current_search(&self) -> &Arc<AtomicU64> {
+        &self.current_search
+    }
+
     /// Stops the client's listing, if one is running.
     fn cancel_listing(&self) {
         self.current_listing.store(NO_LISTING, Ordering::SeqCst);
@@ -81,10 +93,11 @@ impl Client {
 }
 
 /// A client the core forgets (it left, or stopped listening) needs no more
-/// answers, so its listing stops too.
+/// answers, so its listing and search stop too.
 impl Drop for Client {
     fn drop(&mut self) {
         self.cancel_listing();
+        self.current_search.store(NO_LISTING, Ordering::SeqCst);
     }
 }
 

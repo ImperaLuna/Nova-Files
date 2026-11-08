@@ -1,10 +1,10 @@
 //! The watcher: follows every indexed folder with inotify and appends what
 //! changes to the change log.
 //!
-//! [`Watcher::start`] installs a watch on each folder the index holds
-//! before it returns, so a change made after that is never missed; what
-//! changed between the crawl and the watches is the start-up catch-up's
-//! job. Its thread then sleeps in `poll` until the kernel has events or
+//! [`Watcher::start`] installs a watch on each folder the index holds,
+//! then catches up with what changed since the crawl (`folders::catch_up`),
+//! before it returns: a change made after the watches went in is never
+//! missed, and one made before is found by the catch-up. Its thread then sleeps in `poll` until the kernel has events or
 //! [`Watcher::stop`] wakes it through an eventfd: no polling loop. Each
 //! batch of events becomes [`Change`]s (`folders` decides which), written
 //! to the log before `on_change` is called, so a reader woken by it finds
@@ -47,8 +47,9 @@ pub struct Watcher {
 }
 
 impl Watcher {
-    /// Watches every folder in `index`, appending changes to `log` and
-    /// calling `on_change` after each batch.
+    /// Watches every folder in `index`, catches up with what changed
+    /// since it was crawled, then appends changes to `log` and calls
+    /// `on_change` after each batch, the catch-up's included.
     ///
     /// # Errors
     /// When inotify, the eventfd or the thread can't be set up.
@@ -62,9 +63,13 @@ impl Watcher {
         let asked = Arc::clone(&stop);
         let stopping = Box::new(move || is_readable(&asked));
         let mut folders = Folders::new(inotify, index.root().to_owned(), stopping);
-        let unwatched = folders.watch_index(index);
-        for change in &unwatched {
+        let mut caught = folders.watch_index(index);
+        caught.extend(folders.catch_up(index));
+        for change in &caught {
             log.append(change)?;
+        }
+        if !caught.is_empty() {
+            on_change();
         }
         let woken = Arc::clone(&stop);
         let thread = thread::Builder::new()
@@ -83,6 +88,15 @@ impl Watcher {
     /// while writing the log.
     pub fn stop(mut self) -> io::Result<()> {
         self.finish()
+    }
+
+    /// Whether the thread still follows the folders. It ends early only
+    /// on an error, such as a full disk while writing the log; changes
+    /// after that are missed until the index is crawled anew.
+    pub fn is_running(&self) -> bool {
+        self.thread
+            .as_ref()
+            .is_some_and(|thread| !thread.is_finished())
     }
 
     fn finish(&mut self) -> io::Result<()> {
