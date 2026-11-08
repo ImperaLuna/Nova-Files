@@ -824,3 +824,19 @@ async fn no_types_means_no_menu_and_nothing_dimmed(cx: &mut TestAppContext) {
     assert_eq!(dimmed(&view, cx, 3), [0_usize; 0]);
     assert!(!shown(cx, "pick-filter"));
 }
+
+#[gpui::test]
+async fn an_app_that_offers_every_file_gets_no_second_all_files(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (_view, cx, _answers) = picker_with(cx, &tree, tree.path(), FILES, |request| {
+        request.filters = vec![
+            filter("All Files", vec![glob("*")]),
+            filter("Text", vec![glob("*.txt")]),
+        ];
+    })
+    .await;
+    click(cx, "pick-filter");
+    assert!(shown(cx, "pick-filter-1"));
+    assert!(!shown(cx, "pick-filter-all"));
+}

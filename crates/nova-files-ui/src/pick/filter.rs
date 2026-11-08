@@ -1,4 +1,5 @@
-//! The picker's type filter: the app's file types, plus All files, in a
+//! The picker's type filter: the app's file types, plus All files unless
+//! one of them already takes every file, in a
 //! menu that opens up from the pick bar. Files the chosen type leaves out
 //! are dimmed, not hidden, and can still be picked; a folder picker dims
 //! every file. Each menu item carries a debug selector: `pick-filter`
@@ -10,13 +11,15 @@ use gpui::{
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, anchored,
     deferred, div, prelude::FluentBuilder as _, rgb,
 };
-use nova_files_api::{Entry, EntryKind, PickRequest};
+use nova_files_api::{Entry, EntryKind, FilterRule, PickRequest};
 
 use super::{Mode, Picker};
 use crate::theme::{color, radius, size};
 use crate::window::MainWindow;
 
 const ALL_FILES_LABEL: &str = "All files";
+/// The glob that matches every name.
+const EVERY_NAME: &str = "*";
 /// The menu draws over the list.
 const MENU_PRIORITY: usize = 1;
 
@@ -28,6 +31,17 @@ pub fn first(request: &PickRequest) -> Option<usize> {
         .filter
         .filter(|&filter| filter < count)
         .or_else(|| (count > 0).then_some(0))
+}
+
+/// Whether one of the app's own types already takes every file, as
+/// browsers' "All Files" does; then the menu adds no All files of its own.
+pub fn offers_all(request: &PickRequest) -> bool {
+    request.filters.iter().any(|filter| {
+        filter
+            .rules
+            .iter()
+            .any(|rule| matches!(rule, FilterRule::Glob(glob) if glob == EVERY_NAME))
+    })
 }
 
 impl Picker {
@@ -98,9 +112,10 @@ impl MainWindow {
                 cx.notify();
             }));
         let menu = pick.filter_menu.then(|| {
+            let all = (!offers_all(&pick.request)).then_some(None);
             let items: Vec<AnyElement> = (0..pick.request.filters.len())
                 .map(Some)
-                .chain([None])
+                .chain(all)
                 .map(|filter| menu_item(pick, filter, cx))
                 .collect();
             // Pinned to the button's top left, opening upward.
