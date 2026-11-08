@@ -24,10 +24,12 @@
 //! driver (see `restart_with_every_driver`).
 //!
 //! It also hands the core a way to give freed memory back to the system
-//! after heavy work (see `memory`).
+//! after heavy work (see `memory`), and the D-Bus service a way to open
+//! picker windows for other apps (see `picker`).
 
 mod memory;
 mod mode;
+mod picker;
 
 use std::cell::Cell;
 use std::error::Error;
@@ -42,9 +44,10 @@ use std::time::Duration;
 
 use nova_files_api::Connector;
 use nova_files_dbus::{Bus, Service, Started};
-use nova_files_ui::{Ended, RecoverGpu, Request, RequestSender, Requests};
+use nova_files_ui::{Ended, Opening, RecoverGpu, Request, RequestSender, Requests};
 
 use crate::mode::Mode;
+use crate::picker::UiPicker;
 
 const CORE_WATCH_THREAD: &str = "nova-files-core-watch";
 
@@ -136,7 +139,10 @@ fn run() -> Result<(), Box<dyn Error>> {
     let started =
         nova_files_dbus::start_waiting(Bus::Session, core.connector.clone(), on_open, name_wait());
     let service = match started {
-        Ok(Started::Service(service)) => Some(service),
+        Ok(Started::Service(mut service)) => {
+            service.serve_file_picker(core.connector.clone(), UiPicker(requests.clone()));
+            Some(service)
+        }
         Ok(Started::AlreadyRunning(running)) => {
             match &mode {
                 Mode::Window(Some(folder)) => running.open(folder)?,
@@ -158,8 +164,9 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Opens the first window in window mode. Then each `OpenWindow` while no
-/// window is open starts the UI again, until something asks it to quit.
+/// Opens the first window in window mode. Then each `OpenWindow` or `Pick`
+/// while no window is open starts the UI again, until something asks it to
+/// quit.
 ///
 /// Holds the bus name (`service`) until the program ends or restarts.
 fn show_windows(
@@ -188,8 +195,15 @@ fn show_windows(
     if let Mode::Window(folder) = mode {
         requests.send(Request::OpenWindow(folder));
     }
-    while let Some(Request::OpenWindow(folder)) = received.wait() {
-        if nova_files_ui::run(connector, received, folder, &restart) == Ended::Quit {
+    loop {
+        let first = match received.wait() {
+            Some(Request::OpenWindow(folder)) => Opening::Folder(folder),
+            Some(Request::Pick(request)) => Opening::Pick(request),
+            // No window is open, so no picker is left to close.
+            Some(Request::ClosePick(_)) => continue,
+            Some(Request::Quit) | None => break,
+        };
+        if nova_files_ui::run(connector, received, first, &restart) == Ended::Quit {
             break;
         }
     }

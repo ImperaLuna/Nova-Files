@@ -72,10 +72,10 @@ impl Holds {
     /// leaves `bus`.
     ///
     /// # Errors
-    /// When the bus can't be reached, refuses the signal subscription, or
-    /// the watching thread can't start.
+    /// When the bus can't be reached within [`crate::CALL_TIMEOUT`],
+    /// refuses the signal subscription, or the watching thread can't start.
     pub fn new(connector: Connector, bus: &Bus) -> zbus::Result<Self> {
-        let connection = bus.builder()?.build()?;
+        let connection = crate::connect_within_timeout(bus.clone(), Ok)?;
         let changes = DBusProxy::new(&connection)?.receive_name_owner_changed()?;
         let proxy = zbus::block_on(zbus::fdo::DBusProxy::new(connection.inner()))?;
         let holds = Self {

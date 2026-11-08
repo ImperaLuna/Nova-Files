@@ -18,10 +18,11 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::Connector;
+use nova_files_api::{Connector, PickId, PickRequest};
 use nova_files_dbus::{
     APP_ID, APPLICATION_INTERFACE, FILE_CHOOSER_INTERFACE, FILES_INTERFACE, HoldError, Holds,
-    PORTAL_BUS_NAME, PORTAL_OBJECT_PATH, RunningInstance, SEARCH_INTERFACE, Started,
+    PORTAL_BUS_NAME, PORTAL_OBJECT_PATH, Picker, RunningInstance, SEARCH_INTERFACE, Service,
+    Started,
 };
 use zbus::blocking::{Connection, Proxy};
 
@@ -218,11 +219,7 @@ fn a_waiting_start_gives_up_after_its_wait() {
 fn the_running_instance_serves_search_and_the_file_picker() {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn().unwrap();
-    let Started::Service(service) =
-        nova_files_dbus::start(bus.bus(), core.connector.clone(), |_| {}).unwrap()
-    else {
-        panic!("the first start owns the name");
-    };
+    let service = picker_service(&bus, &core.connector);
     assert!(service.serves_portal());
 
     let app = introspect(
@@ -243,18 +240,10 @@ fn the_running_instance_serves_search_and_the_file_picker() {
 fn a_release_frees_the_portal_name_too() {
     let bus = PrivateBus::start();
     let core = nova_files_core::spawn().unwrap();
-    let Started::Service(first) =
-        nova_files_dbus::start(bus.bus(), core.connector.clone(), |_| {}).unwrap()
-    else {
-        panic!("the first start owns the name");
-    };
+    let first = picker_service(&bus, &core.connector);
     first.release().unwrap();
 
-    let Started::Service(again) =
-        nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
-    else {
-        panic!("the name was released");
-    };
+    let again = picker_service(&bus, &core.connector);
     assert!(again.serves_portal());
     drop(first);
 }
@@ -265,11 +254,7 @@ fn the_app_waits_for_the_portal_name_while_another_program_holds_it() {
     let other = client(&bus);
     other.request_name(PORTAL_BUS_NAME).unwrap();
     let core = nova_files_core::spawn().unwrap();
-    let Started::Service(service) =
-        nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
-    else {
-        panic!("the application name is free");
-    };
+    let service = picker_service(&bus, &core.connector);
     assert!(!service.serves_portal());
     let watcher = client(&bus);
     let mut changes = zbus::blocking::fdo::DBusProxy::new(&watcher)
@@ -298,16 +283,50 @@ fn a_release_leaves_another_programs_portal_name_alone() {
     let other = client(&bus);
     other.request_name(PORTAL_BUS_NAME).unwrap();
     let core = nova_files_core::spawn().unwrap();
+    let service = picker_service(&bus, &core.connector);
+
+    service.release().unwrap();
+    other.release_name(PORTAL_BUS_NAME).unwrap();
+
+    // Out of the queue too: nobody takes the name over.
+    let has_owner = zbus::blocking::fdo::DBusProxy::new(&client(&bus))
+        .unwrap()
+        .name_has_owner(PORTAL_BUS_NAME.try_into().unwrap())
+        .unwrap();
+    assert!(!has_owner);
+}
+
+/// A first start that also serves a file picker which shows nothing.
+fn picker_service(bus: &PrivateBus, connector: &Connector) -> Service {
+    let Started::Service(mut service) =
+        nova_files_dbus::start(bus.bus(), connector.clone(), |_| {}).unwrap()
+    else {
+        panic!("the application name is free");
+    };
+    service.serve_file_picker(connector.clone(), NoPicker);
+    service
+}
+
+struct NoPicker;
+
+impl Picker for NoPicker {
+    fn pick(&self, request: PickRequest) {
+        drop(request);
+    }
+    fn close(&self, _id: PickId) {}
+}
+
+#[test]
+fn a_plain_start_serves_no_file_picker() {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn().unwrap();
     let Started::Service(service) =
         nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
     else {
         panic!("the application name is free");
     };
 
-    service.release().unwrap();
-    other.release_name(PORTAL_BUS_NAME).unwrap();
-
-    // Out of the queue too: nobody takes the name over.
+    assert!(!service.serves_portal());
     let has_owner = zbus::blocking::fdo::DBusProxy::new(&client(&bus))
         .unwrap()
         .name_has_owner(PORTAL_BUS_NAME.try_into().unwrap())
