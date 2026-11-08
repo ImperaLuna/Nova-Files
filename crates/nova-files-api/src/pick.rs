@@ -129,6 +129,11 @@ mod tests {
     }
 
     #[test]
+    fn a_reply_shows_only_its_name_in_debug_output() {
+        assert_eq!(format!("{:?}", PickReply::new(drop)), "PickReply");
+    }
+
+    #[test]
     fn a_reply_dropped_unanswered_cancels() {
         let (sender, answers) = mpsc::channel();
         drop(PickReply::new(move |answer| sender.send(answer).unwrap()));
