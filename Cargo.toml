@@ -47,7 +47,8 @@ gpui = { git = "https://github.com/ImperaLuna/zed", rev = "7332108fb30888158d22e
 gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "7332108fb30888158d22ec43b1136de9662759cf", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
-# Denied, not forbidden, so nova-files-index can opt in per site with
+# Denied, not forbidden, so nova-files-index and the nova-files binary (one
+# environment variable set before any thread starts) can opt in per site with
 # `#[expect(unsafe_code, reason = "...")]`. Every other crate root forbids it.
 unsafe_code = "deny"
 unused_qualifications = "deny"
