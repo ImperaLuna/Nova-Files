@@ -23,9 +23,9 @@ nova-files-index = { path = "crates/nova-files-index" }
 nova-files-ui = { path = "crates/nova-files-ui" }
 
 # GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds fixes
-# on top of a Zed stable release (FIL-42, FIL-44, FIL-65, FIL-68, FIL-71, FIL-70). Each pin is its
-# own branch, `nova/<tag>` (with a suffix when fixes are added to a pin), so
-# older pins stay buildable:
+# on top of a Zed stable release (FIL-42, FIL-44, FIL-65, FIL-68, FIL-71, FIL-70,
+# FIL-78). Each pin is its own branch, `nova/<tag>` (with a suffix when fixes
+# are added to a pin), so older pins stay buildable:
 # - zed-industries/zed#63289: make the path (MSAA) textures only when a frame
 #   draws a path.
 # - zed-industries/zed#65755: load OpenGL only when hardware Vulkan fails.
@@ -42,16 +42,18 @@ nova-files-ui = { path = "crates/nova-files-ui" }
 # - FIL-70: remember what each font resolved to, so a missing font (the
 #   default one, on most Linux systems) doesn't walk the fallback stack on
 #   every text run of every frame.
+# - FIL-78: read fonts through fontconfig only when text needs them (the UI
+#   font at start, others on first use), instead of every system font.
 # When all are merged upstream, point these back at zed-industries/zed.
 #
 # The crates.io release (0.2.2) draws through blade, which turns on ray
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "d16fec7d78dc81d50ec0bfde332700a5108d39e1", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "1059616cf68a8ef2062875eced54e7c3be94d41b", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "d16fec7d78dc81d50ec0bfde332700a5108d39e1", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "1059616cf68a8ef2062875eced54e7c3be94d41b", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index and the nova-files binary (one
