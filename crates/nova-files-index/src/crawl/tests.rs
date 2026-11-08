@@ -2,7 +2,6 @@
 //! with its own device number that isn't a mount (a btrfs subvolume) is.
 
 use std::collections::HashSet;
-use std::os::unix::fs::MetadataExt as _;
 
 use super::*;
 

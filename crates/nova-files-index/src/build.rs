@@ -212,7 +212,7 @@ mod tests {
         let long = vec![b'a'; usize::from(u16::MAX) + 1];
         assert_eq!(built.push(None, &long, facts(Kind::File)), Err(TooBig));
         assert!(built.is_empty());
-        assert!(built.names.is_empty());
+        assert_eq!(built.names, Vec::<u8>::new());
     }
 
     #[test]
