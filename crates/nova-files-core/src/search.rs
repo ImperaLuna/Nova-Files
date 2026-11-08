@@ -61,7 +61,7 @@ struct Live {
     changes: usize,
     /// Changes were lost, so the overlay no longer matches the disk.
     lost: bool,
-    _watcher: Watcher,
+    watcher: Watcher,
 }
 
 impl Searcher {
@@ -220,12 +220,16 @@ impl Live {
             log: reader,
             changes: 0,
             lost: false,
-            _watcher: watcher,
+            watcher,
         })
     }
 
     /// Takes in what the watcher logged since the last call.
     fn read_log(&mut self) {
+        if !self.watcher.is_running() {
+            // Nothing logs changes any more.
+            self.lost = true;
+        }
         let Ok(changes) = self.log.read_new() else {
             self.lost = true;
             return;
