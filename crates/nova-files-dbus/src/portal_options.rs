@@ -56,8 +56,8 @@ pub fn save(title: String, options: &Options) -> Parsed {
     let name = file
         .as_ref()
         .and_then(|file| file.file_name())
-        .map(|name| name.to_string_lossy().into_owned())
-        .or_else(|| get(options, "current_name"))
+        .map(ToOwned::to_owned)
+        .or_else(|| get::<String>(options, "current_name").map(OsString::from))
         .unwrap_or_default();
     let folder = file
         .as_ref()
@@ -165,6 +165,8 @@ fn owned(value: Value<'_>) -> Option<OwnedValue> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt as _;
     use std::path::PathBuf;
 
     use nova_files_api::{FileFilter, FilterRule, PickAnswer, PickKind};
@@ -301,7 +303,7 @@ mod tests {
         assert_eq!(
             parsed.kind,
             PickKind::Save {
-                name: "invoice.pdf".to_owned()
+                name: "invoice.pdf".into()
             }
         );
         assert_eq!(parsed.folder, Some(PathBuf::from("/srv/docs")));
@@ -323,10 +325,26 @@ mod tests {
         assert_eq!(
             parsed.kind,
             PickKind::Save {
-                name: "report.odt".to_owned()
+                name: "report.odt".into()
             }
         );
         assert_eq!(parsed.folder, Some(PathBuf::from("/srv/docs")));
+    }
+
+    #[test]
+    fn a_save_keeps_a_name_that_is_not_utf8() {
+        let mut file = b"/srv/caf\xe9.txt".to_vec();
+        file.push(0);
+        let parsed = save(
+            String::new(),
+            &options(vec![("current_file", Value::from(file))]),
+        );
+        assert_eq!(
+            parsed.kind,
+            PickKind::Save {
+                name: OsString::from_vec(b"caf\xe9.txt".to_vec())
+            }
+        );
     }
 
     #[test]
@@ -339,7 +357,7 @@ mod tests {
         assert_eq!(
             parsed.kind,
             PickKind::Save {
-                name: String::new()
+                name: OsString::new()
             }
         );
     }

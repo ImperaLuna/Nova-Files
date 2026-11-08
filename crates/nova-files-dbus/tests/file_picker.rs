@@ -188,7 +188,7 @@ fn save_file_answers_the_path_to_save_at() {
     assert_eq!(
         request.kind,
         PickKind::Save {
-            name: "invoice.pdf".to_owned()
+            name: "invoice.pdf".into()
         }
     );
     request.reply.answer(PickAnswer::Picked {

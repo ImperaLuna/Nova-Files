@@ -8,6 +8,7 @@
 //! hears back. The portal may also close a request first; the UI then gets
 //! the request's [`PickId`] to close its window.
 
+use std::ffi::OsString;
 use std::fmt;
 use std::path::PathBuf;
 
@@ -21,8 +22,9 @@ pub enum PickKind {
     /// Files to open, or folders when `folders` is set; more than one when
     /// `multiple` is.
     Open { multiple: bool, folders: bool },
-    /// A path to save one file at, suggested `name` first.
-    Save { name: String },
+    /// A path to save one file at, suggested `name` first. A file name
+    /// on Linux is any bytes, so the name an app suggests keeps its own.
+    Save { name: OsString },
 }
 
 /// One rule of a [`FileFilter`].
