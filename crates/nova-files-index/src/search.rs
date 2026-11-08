@@ -60,6 +60,9 @@ pub struct Search<'a> {
     stage: Stage,
 }
 
+/// How many stages a search yields at most: as typed, then loose.
+pub const STAGES: usize = 2;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stage {
     AsTyped,
@@ -97,14 +100,15 @@ impl Index {
         limit: usize,
         overlay: Option<&'a Overlay>,
     ) -> Search<'a> {
-        let words: Vec<Vec<u8>> = query
-            .split_whitespace()
-            .map(|word| {
-                let mut folded = Vec::new();
-                fold::fold_into(word.as_bytes(), &mut folded);
-                folded
-            })
-            .collect();
+        let mut words: Vec<Vec<u8>> = Vec::new();
+        for word in query.split_whitespace() {
+            let mut folded = Vec::new();
+            fold::fold_into(word.as_bytes(), &mut folded);
+            // A word of accents alone folds to nothing.
+            if !folded.is_empty() {
+                words.push(folded);
+            }
+        }
         let stage = if words.is_empty() || limit == 0 {
             Stage::Done
         } else {
@@ -241,6 +245,9 @@ impl Search<'_> {
     /// The best `limit` of `ranked` that are still there, best first, each
     /// path once.
     fn best(&mut self, mut ranked: Vec<Rank>) -> Vec<Hit> {
+        if self.overlay.is_some_and(Overlay::moves) {
+            return self.best_moved(ranked);
+        }
         let changed = self.overlay.is_some_and(|overlay| !overlay.is_empty());
         if !changed && ranked.len() > self.limit {
             // Without changes every match is still there: the best `limit`
@@ -257,6 +264,38 @@ impl Search<'_> {
             let Some(path) = self.path(source) else {
                 continue;
             };
+            if self.shown.insert(path.clone()) {
+                hits.push(Hit { path, kind });
+            }
+        }
+        hits
+    }
+
+    /// [`Search::best`] when entries moved: a move can take a row into or
+    /// out of a hidden folder, so every match is placed first and ranked
+    /// by where it is now.
+    fn best_moved(&mut self, ranked: Vec<Rank>) -> Vec<Hit> {
+        let root = self.index.root();
+        let mut placed: Vec<(Rank, PathBuf)> = ranked
+            .into_iter()
+            .filter_map(|(kind, _, cost, length, source)| {
+                let path = self.path(source)?;
+                // With hidden rows ranked like the rest, every row is
+                // "not hidden" and no path needs walking.
+                let hidden = if self.hidden_last {
+                    is_hidden(root, &path)
+                } else {
+                    false
+                };
+                Some(((kind, hidden, cost, length, source), path))
+            })
+            .collect();
+        placed.sort_unstable_by_key(|(rank, _)| *rank);
+        let mut hits = Vec::new();
+        for ((kind, ..), path) in placed {
+            if hits.len() == self.limit {
+                break;
+            }
             if self.shown.insert(path.clone()) {
                 hits.push(Hit { path, kind });
             }

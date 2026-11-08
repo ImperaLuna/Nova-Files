@@ -22,7 +22,7 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 
 use nova_files_api::{Event, Hit, MAX_HITS, Matched, SearchFailed, SearchId};
-use nova_files_index::{Change, ChangeLog, Index, LogReader, MatchKind, Overlay, Watcher};
+use nova_files_index::{Change, ChangeLog, Index, LogReader, MatchKind, Overlay, STAGES, Watcher};
 
 use crate::index::IndexPlace;
 use crate::jobs::Client;
@@ -153,7 +153,11 @@ impl Searcher {
             // Nothing to look for: no stages, one answer with no hits.
             answer(Vec::new(), true);
         }
-        while wanted() {
+        // Never more than its stages, so a search can't keep the lock.
+        for _ in 0..STAGES {
+            if !wanted() {
+                break;
+            }
             let Some(hits) = search.next() else {
                 break;
             };

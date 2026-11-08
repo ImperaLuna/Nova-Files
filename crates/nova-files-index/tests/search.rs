@@ -8,7 +8,7 @@ mod support;
 use std::path::PathBuf;
 
 use nova_files_index::{
-    Change, Details, FileId, Flags, Hit, Index, Kind, MatchKind, Overlay, crawl,
+    Change, Details, FileId, Flags, Hit, Index, Kind, MatchKind, Overlay, STAGES, crawl,
 };
 use support::TempFolder;
 
@@ -247,11 +247,20 @@ fn a_search_knows_when_its_last_stage_ran() {
 }
 
 #[test]
+fn a_search_yields_no_more_than_its_stages() {
+    let home = Home::new();
+    assert_eq!(home.index.search("tax", LIMIT).count(), STAGES);
+}
+
+#[test]
 fn nothing_to_look_for_finds_nothing() {
     let home = Home::new();
     let none: Vec<Vec<(PathBuf, MatchKind)>> = Vec::new();
     assert_eq!(home.stages("   ", LIMIT), none);
     assert_eq!(home.stages("tax", 0), none);
+    // A lone accent folds to nothing, so it is no word to look for.
+    assert_eq!(home.stages("\u{301}", LIMIT), none);
+    assert_eq!(home.stages("tax \u{301}", LIMIT), home.stages("tax", LIMIT));
     // Home itself is never a result.
     let root = home
         .folder
@@ -268,6 +277,27 @@ fn nothing_to_look_for_finds_nothing() {
 fn without_changes_a_live_search_finds_the_same() {
     let home = Home::new();
     assert_eq!(home.stages_now("tax", FEW, &[]), home.stages("tax", FEW));
+}
+
+#[test]
+fn moved_entries_rank_by_where_they_are_now() {
+    let home = Home::new();
+    // Out of a hidden folder: no longer ranked after visible names.
+    let changes = [home.moved(".config/tax-tool", "Documents/tax-tool")];
+    assert_eq!(
+        home.stages_now("tax", 1, &changes).remove(0),
+        [at("Documents/tax-tool", MatchKind::WordStart)]
+    );
+    // Into one: ranked after visible names of the same kind, so with both
+    // visible ones moved in, the shortest hidden name comes first.
+    let changes = [
+        home.moved("Documents/taxes 2024.pdf", ".config/taxes 2024.pdf"),
+        home.moved("Documents/tax return.pdf", ".config/tax return.pdf"),
+    ];
+    assert_eq!(
+        home.stages_now("tax", 1, &changes).remove(0),
+        [at(".config/tax-tool", MatchKind::WordStart)]
+    );
 }
 
 #[test]

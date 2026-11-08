@@ -129,6 +129,53 @@ fn steps_apply_in_order() {
 }
 
 #[test]
+fn a_removal_takes_only_what_is_inside() {
+    let overlay = after(&[
+        added("/h/d/x"),
+        added("/h/d x"),
+        added("/h/d.txt"),
+        added("/h/c"),
+        removed("/h/d"),
+    ]);
+    assert_eq!(
+        added_paths(&overlay),
+        [
+            Path::new("/h/c"),
+            Path::new("/h/d x"),
+            Path::new("/h/d.txt")
+        ]
+    );
+}
+
+#[test]
+fn only_a_move_can_put_paths_elsewhere() {
+    let overlay = after(&[added("/h/a"), removed("/h/b")]);
+    assert!(!overlay.moves());
+    let overlay = after(&[removed("/h/b"), moved("/h/c", "/h/d/c")]);
+    assert!(overlay.moves());
+}
+
+#[test]
+fn removals_between_moves_keep_their_place_in_order() {
+    let mut changes: Vec<Change> = (0..1_000)
+        .map(|n| removed(&format!("/h/gone/{n}")))
+        .collect();
+    changes.push(moved("/h/d", "/h/gone/7/d"));
+    changes.push(removed("/h/e"));
+    changes.push(moved("/h/f", "/h/e/f"));
+    let overlay = after(&changes);
+    assert_eq!(place(&overlay, "/h/gone/3/x"), None);
+    // Moved in after its folder went: there again.
+    assert_eq!(
+        place(&overlay, "/h/d/x"),
+        Some(PathBuf::from("/h/gone/7/d/x"))
+    );
+    assert_eq!(place(&overlay, "/h/e/old"), None);
+    assert_eq!(place(&overlay, "/h/f/x"), Some(PathBuf::from("/h/e/f/x")));
+    assert_eq!(place(&overlay, "/h/kept"), Some(PathBuf::from("/h/kept")));
+}
+
+#[test]
 fn rebase_swaps_only_a_leading_folder() {
     let (from, to) = (Path::new("/h/d"), Path::new("/x"));
     assert_eq!(

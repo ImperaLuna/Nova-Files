@@ -11,7 +11,7 @@
 //! A [`Change::Rescan`] means changes were lost: the overlay can't tell
 //! what they were, so its owner reads the folder again or crawls anew.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::changes::Change;
@@ -21,6 +21,8 @@ use crate::changes::Change;
 #[derive(Debug, Default)]
 pub struct Overlay {
     steps: Vec<Step>,
+    /// What went since the last move, not yet a step.
+    gone: Gone,
     /// Entries the index doesn't hold under their current path and name.
     added: BTreeSet<PathBuf>,
 }
@@ -29,12 +31,33 @@ pub struct Overlay {
 #[derive(Debug)]
 enum Step {
     /// Everything at or under `from` is now under `to`.
-    Moved { from: PathBuf, to: PathBuf },
-    /// Everything at or under the path is gone.
-    Removed(PathBuf),
-    /// Only this path is gone from the index's view: its row's name is out
-    /// of date, and it is kept under `added` instead.
-    Renamed(PathBuf),
+    Moved {
+        from: PathBuf,
+        to: PathBuf,
+    },
+    Gone(Gone),
+}
+
+/// Paths gone between two moves. Their order among themselves doesn't
+/// matter, so they are kept in sets: a path is looked up once per folder
+/// it is in, however many went.
+#[derive(Debug, Default)]
+struct Gone {
+    /// Everything at or under each of these is gone.
+    removed: HashSet<PathBuf>,
+    /// Only these paths are gone from the index's view: their rows' names
+    /// are out of date, and they are kept under `added` instead.
+    renamed: HashSet<PathBuf>,
+}
+
+impl Gone {
+    fn is_empty(&self) -> bool {
+        self.removed.is_empty() && self.renamed.is_empty()
+    }
+
+    fn holds(&self, path: &Path) -> bool {
+        self.renamed.contains(path) || path.ancestors().any(|folder| self.removed.contains(folder))
+    }
 }
 
 impl Overlay {
@@ -44,7 +67,12 @@ impl Overlay {
 
     /// Whether nothing changed since the crawl.
     pub fn is_empty(&self) -> bool {
-        self.steps.is_empty() && self.added.is_empty()
+        self.steps.is_empty() && self.gone.is_empty() && self.added.is_empty()
+    }
+
+    /// Whether some indexed paths may be elsewhere now.
+    pub const fn moves(&self) -> bool {
+        !self.steps.is_empty()
     }
 
     /// Takes in one change, in log order.
@@ -54,8 +82,10 @@ impl Overlay {
                 self.added.insert(path.clone());
             }
             Change::Removed { path } => {
-                self.added.retain(|added| !added.starts_with(path));
-                self.steps.push(Step::Removed(path.clone()));
+                for gone in self.added_under(path) {
+                    self.added.remove(&gone);
+                }
+                self.gone.removed.insert(path.clone());
             }
             Change::Moved { from, to } => self.moved(from, to),
             // Names and places stay; a rescan is its owner's to handle.
@@ -64,21 +94,34 @@ impl Overlay {
     }
 
     fn moved(&mut self, from: &Path, to: &Path) {
-        let moved: Vec<PathBuf> = self
-            .added
-            .extract_if(.., |added| added.starts_with(from))
-            .filter_map(|added| rebase(&added, from, to))
-            .collect();
-        self.added.extend(moved);
+        let under = self.added_under(from);
+        for added in &under {
+            self.added.remove(added);
+        }
+        self.added
+            .extend(under.iter().filter_map(|added| rebase(added, from, to)));
+        if !self.gone.is_empty() {
+            self.steps.push(Step::Gone(std::mem::take(&mut self.gone)));
+        }
         self.steps.push(Step::Moved {
             from: from.to_owned(),
             to: to.to_owned(),
         });
         if from.file_name() != to.file_name() {
             // The moved entry's own row still has its old name.
-            self.steps.push(Step::Renamed(to.to_owned()));
+            self.gone.renamed.insert(to.to_owned());
             self.added.insert(to.to_owned());
         }
+    }
+
+    /// The added entries at or under `path`. Paths sort by their parts,
+    /// so they sit together from `path` on.
+    fn added_under(&self, path: &Path) -> Vec<PathBuf> {
+        self.added
+            .range(path.to_owned()..)
+            .take_while(|added| added.starts_with(path))
+            .cloned()
+            .collect()
     }
 
     /// Where the entry indexed at `path` is now, or `None` when it is gone
@@ -92,12 +135,11 @@ impl Overlay {
                         path = moved;
                     }
                 }
-                Step::Removed(gone) if path.starts_with(gone) => return None,
-                Step::Renamed(renamed) if path == *renamed => return None,
-                Step::Removed(_) | Step::Renamed(_) => {}
+                Step::Gone(gone) if gone.holds(&path) => return None,
+                Step::Gone(_) => {}
             }
         }
-        Some(path)
+        (!self.gone.holds(&path)).then_some(path)
     }
 
     /// The entries the index doesn't hold, by their current path.
