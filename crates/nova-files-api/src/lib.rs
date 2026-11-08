@@ -4,13 +4,15 @@
 //! A client (a window, the D-Bus service) gets a [`Connection`] from a
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
 //! through the [`EventSink`] it handed over. The core reads the other end
-//! of the channel as [`CoreMessage`]s.
+//! of the channel as [`CoreMessage`]s. A [`PickRequest`] carries another
+//! app's file picker request from D-Bus to the UI.
 
 #![forbid(unsafe_code)]
 
 mod connection;
 mod folder;
 mod message;
+mod pick;
 mod search;
 pub mod uri;
 
@@ -21,6 +23,7 @@ pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable,
 };
 pub use message::{ClientId, Command, Event, MAX_HITS, MAX_ROWS};
+pub use pick::{FileFilter, FilterRule, PickAnswer, PickId, PickKind, PickReply, PickRequest};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 
 /// The application id: the D-Bus name, the Wayland app id and the name of

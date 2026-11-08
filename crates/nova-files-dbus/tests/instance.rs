@@ -1,7 +1,10 @@
 //! Against a private D-Bus daemon: the first start serves `Ping` through
 //! the real core, and a second start finds it and hands over a window
 //! request through `org.freedesktop.Application.Activate`. `Ping` fails
-//! once the core has stopped. `Open` hands a folder over the same way.
+//! once the core has stopped. `Open` hands a folder over the same way. The
+//! running instance serves search and the file picker, and owns the portal
+//! name unless another program does. A hold keeps a real core with a short
+//! idle time up, and ends when it is dropped or its caller leaves the bus.
 
 #![expect(
     clippy::unwrap_used,
@@ -15,8 +18,12 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::Connector;
-use nova_files_dbus::{APP_ID, APPLICATION_INTERFACE, FILES_INTERFACE, RunningInstance, Started};
+use nova_files_api::{Connector, PickId, PickRequest};
+use nova_files_dbus::{
+    APP_ID, APPLICATION_INTERFACE, FILE_CHOOSER_INTERFACE, FILES_INTERFACE, HoldError, Holds,
+    PORTAL_BUS_NAME, PORTAL_OBJECT_PATH, Picker, RunningInstance, SEARCH_INTERFACE, Service,
+    Started,
+};
 use zbus::blocking::{Connection, Proxy};
 
 mod support;
@@ -206,4 +213,258 @@ fn a_waiting_start_gives_up_after_its_wait() {
 
     let again = nova_files_dbus::start_waiting(bus.bus(), core.connector, |_| {}, QUIET).unwrap();
     assert!(matches!(again, Started::AlreadyRunning(_)));
+}
+
+#[test]
+fn the_running_instance_serves_search_and_the_file_picker() {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn().unwrap();
+    let service = picker_service(&bus, &core.connector);
+    assert!(service.serves_portal());
+
+    let app = introspect(
+        &bus,
+        APP_ID,
+        nova_files_dbus::object_path().unwrap().as_str(),
+    );
+    assert!(app.contains(SEARCH_INTERFACE), "{app}");
+    let portal = introspect(&bus, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH);
+    assert!(portal.contains(FILE_CHOOSER_INTERFACE), "{portal}");
+
+    // A second start leaves the portal name with the first.
+    drop(second(&bus, &core.connector));
+    assert!(introspect(&bus, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH).contains(FILE_CHOOSER_INTERFACE));
+}
+
+#[test]
+fn a_release_frees_the_portal_name_too() {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn().unwrap();
+    let first = picker_service(&bus, &core.connector);
+    first.release().unwrap();
+
+    let again = picker_service(&bus, &core.connector);
+    assert!(again.serves_portal());
+    drop(first);
+}
+
+#[test]
+fn the_app_waits_for_the_portal_name_while_another_program_holds_it() {
+    let bus = PrivateBus::start();
+    let other = client(&bus);
+    other.request_name(PORTAL_BUS_NAME).unwrap();
+    let core = nova_files_core::spawn().unwrap();
+    let service = picker_service(&bus, &core.connector);
+    assert!(!service.serves_portal());
+    let watcher = client(&bus);
+    let mut changes = zbus::blocking::fdo::DBusProxy::new(&watcher)
+        .unwrap()
+        .receive_name_owner_changed_with_args(&[(0, PORTAL_BUS_NAME)])
+        .unwrap();
+
+    other.release_name(PORTAL_BUS_NAME).unwrap();
+
+    let (sender, owned) = mpsc::channel();
+    std::thread::spawn(move || {
+        let change = changes.next().unwrap();
+        sender
+            .send(change.args().unwrap().new_owner().is_some())
+            .ok();
+    });
+    assert_eq!(owned.recv_timeout(WAIT), Ok(true));
+    let portal = introspect(&bus, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH);
+    assert!(portal.contains(FILE_CHOOSER_INTERFACE), "{portal}");
+    drop(service);
+}
+
+#[test]
+fn a_release_leaves_another_programs_portal_name_alone() {
+    let bus = PrivateBus::start();
+    let other = client(&bus);
+    other.request_name(PORTAL_BUS_NAME).unwrap();
+    let core = nova_files_core::spawn().unwrap();
+    let service = picker_service(&bus, &core.connector);
+
+    service.release().unwrap();
+    other.release_name(PORTAL_BUS_NAME).unwrap();
+
+    // Out of the queue too: nobody takes the name over.
+    let has_owner = zbus::blocking::fdo::DBusProxy::new(&client(&bus))
+        .unwrap()
+        .name_has_owner(PORTAL_BUS_NAME.try_into().unwrap())
+        .unwrap();
+    assert!(!has_owner);
+}
+
+/// A first start that also serves a file picker which shows nothing.
+fn picker_service(bus: &PrivateBus, connector: &Connector) -> Service {
+    let Started::Service(mut service) =
+        nova_files_dbus::start(bus.bus(), connector.clone(), |_| {}).unwrap()
+    else {
+        panic!("the application name is free");
+    };
+    service.serve_file_picker(connector.clone(), NoPicker);
+    service
+}
+
+struct NoPicker;
+
+impl Picker for NoPicker {
+    fn pick(&self, request: PickRequest) {
+        drop(request);
+    }
+    fn close(&self, _id: PickId) {}
+}
+
+#[test]
+fn a_plain_start_serves_no_file_picker() {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn().unwrap();
+    let Started::Service(service) =
+        nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
+    else {
+        panic!("the application name is free");
+    };
+
+    assert!(!service.serves_portal());
+    let has_owner = zbus::blocking::fdo::DBusProxy::new(&client(&bus))
+        .unwrap()
+        .name_has_owner(PORTAL_BUS_NAME.try_into().unwrap())
+        .unwrap();
+    assert!(!has_owner);
+}
+
+/// The introspection XML of `path` on the service owning `name`.
+fn introspect(bus: &PrivateBus, name: &str, path: &str) -> String {
+    let client = client(bus);
+    let proxy = Proxy::new(&client, name, path, "org.freedesktop.DBus.Introspectable").unwrap();
+    proxy.call::<_, _, String>("Introspect", &()).unwrap()
+}
+
+// Holds.
+
+/// The core's idle time in these tests.
+const IDLE: Duration = Duration::from_millis(300);
+/// Long enough that an unheld core would have stopped.
+const PAST_IDLE: Duration = Duration::from_millis(900);
+
+struct Setup {
+    bus: PrivateBus,
+    holds: Holds,
+    /// Gets a message once the core has stopped.
+    core_ended: Receiver<()>,
+}
+
+fn setup() -> Setup {
+    let bus = PrivateBus::start();
+    let core = nova_files_core::spawn_with_idle_exit(IDLE).unwrap();
+    let holds = Holds::new(core.connector, &bus.bus()).unwrap();
+    let (ended, core_ended) = mpsc::channel();
+    let thread = core.thread;
+    std::thread::spawn(move || {
+        thread.join().ok();
+        ended.send(()).ok();
+    });
+    Setup {
+        bus,
+        holds,
+        core_ended,
+    }
+}
+
+fn take(setup: &Setup, caller: &Connection) -> Result<nova_files_dbus::Hold, HoldError> {
+    let name = caller.unique_name().unwrap().to_owned();
+    zbus::block_on(setup.holds.take(&name.as_ref()))
+}
+
+#[test]
+fn a_hold_keeps_the_core_up_until_its_caller_leaves_the_bus() {
+    let setup = setup();
+    let caller = client(&setup.bus);
+    let name = caller.unique_name().unwrap().to_owned();
+    let hold = take(&setup, &caller).unwrap();
+
+    assert!(setup.core_ended.recv_timeout(PAST_IDLE).is_err());
+    assert_eq!(setup.holds.count(&name.as_ref()), 1);
+
+    // The caller crashes: it never drops its hold, it just leaves the bus.
+    drop(caller);
+
+    setup.core_ended.recv_timeout(WAIT).unwrap();
+    assert_eq!(setup.holds.count(&name.as_ref()), 0);
+    drop(hold);
+}
+
+#[test]
+fn a_dropped_hold_lets_the_core_stop() {
+    let setup = setup();
+    let caller = client(&setup.bus);
+    let first = take(&setup, &caller).unwrap();
+    let second = take(&setup, &caller).unwrap();
+    drop(first);
+
+    assert!(setup.core_ended.recv_timeout(PAST_IDLE).is_err());
+
+    drop(second);
+    setup.core_ended.recv_timeout(WAIT).unwrap();
+    drop(caller);
+}
+
+#[test]
+fn a_caller_already_gone_gets_no_hold() {
+    let setup = setup();
+    let caller = client(&setup.bus);
+    let name = caller.unique_name().unwrap().to_owned();
+    leave(&setup.bus, caller);
+
+    let taken = zbus::block_on(setup.holds.take(&name.as_ref()));
+
+    let Err(error) = taken else {
+        panic!("a caller that left gets no hold");
+    };
+    assert!(matches!(error, HoldError::CallerGone));
+    assert_eq!(error.to_string(), "the caller has left the bus");
+    assert_eq!(setup.holds.count(&name.as_ref()), 0);
+    setup.core_ended.recv_timeout(WAIT).unwrap();
+}
+
+#[test]
+fn every_hold_ends_when_the_bus_goes() {
+    let setup = setup();
+    let caller = client(&setup.bus);
+    let hold = take(&setup, &caller).unwrap();
+
+    drop(setup.bus);
+
+    setup.core_ended.recv_timeout(WAIT).unwrap();
+    drop(hold);
+    drop(caller);
+}
+
+#[test]
+fn no_hold_once_the_core_has_stopped() {
+    let setup = setup();
+    setup.core_ended.recv_timeout(WAIT).unwrap();
+    let caller = client(&setup.bus);
+
+    assert!(matches!(take(&setup, &caller), Err(HoldError::CoreGone)));
+}
+
+/// Drops `caller` and waits until the bus has seen it leave.
+fn leave(bus: &PrivateBus, caller: Connection) {
+    let name = caller.unique_name().unwrap().to_string();
+    let watcher = client(bus);
+    let mut changes = zbus::blocking::fdo::DBusProxy::new(&watcher)
+        .unwrap()
+        .receive_name_owner_changed_with_args(&[(0, name.as_str())])
+        .unwrap();
+    drop(caller);
+    let (sender, gone) = mpsc::channel();
+    std::thread::spawn(move || {
+        let change = changes.next().unwrap();
+        sender
+            .send(change.args().unwrap().new_owner().is_none())
+            .ok();
+    });
+    assert_eq!(gone.recv_timeout(WAIT), Ok(true));
 }

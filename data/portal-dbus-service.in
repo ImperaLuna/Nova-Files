@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=@portal_bus_name@
+Exec=@bin@ --service
