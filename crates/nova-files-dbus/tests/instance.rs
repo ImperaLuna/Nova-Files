@@ -396,7 +396,7 @@ fn a_caller_already_gone_gets_no_hold() {
     let setup = setup();
     let caller = client(&setup.bus);
     let name = caller.unique_name().unwrap().to_owned();
-    drop(caller);
+    leave(&setup.bus, caller);
 
     let taken = zbus::block_on(setup.holds.take(&name.as_ref()));
 
@@ -429,4 +429,23 @@ fn no_hold_once_the_core_has_stopped() {
     let caller = client(&setup.bus);
 
     assert!(matches!(take(&setup, &caller), Err(HoldError::CoreGone)));
+}
+
+/// Drops `caller` and waits until the bus has seen it leave.
+fn leave(bus: &PrivateBus, caller: Connection) {
+    let name = caller.unique_name().unwrap().to_string();
+    let watcher = client(bus);
+    let mut changes = zbus::blocking::fdo::DBusProxy::new(&watcher)
+        .unwrap()
+        .receive_name_owner_changed_with_args(&[(0, name.as_str())])
+        .unwrap();
+    drop(caller);
+    let (sender, gone) = mpsc::channel();
+    std::thread::spawn(move || {
+        let change = changes.next().unwrap();
+        sender
+            .send(change.args().unwrap().new_owner().is_none())
+            .ok();
+    });
+    assert_eq!(gone.recv_timeout(WAIT), Ok(true));
 }
