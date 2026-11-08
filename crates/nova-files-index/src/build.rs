@@ -140,7 +140,10 @@ impl Built {
     ///
     /// # Errors
     /// When the folder or file can't be written, for example on a full or
-    /// read-only disk. The old index, if any, is left as it was.
+    /// read-only disk, or [`io::ErrorKind::WouldBlock`] when another save
+    /// of the same index is running: waiting could take as long as that
+    /// save, or forever if its process hangs. The old index, if any, is
+    /// left as it was.
     pub fn save(&self, path: &Path) -> io::Result<()> {
         if let Some(folder) = path.parent() {
             DirBuilder::new()
@@ -154,7 +157,7 @@ impl Built {
             .truncate(false)
             .mode(FILE_MODE)
             .open(beside(path, LOCK_SUFFIX))?;
-        lock.lock()?;
+        lock.try_lock()?;
         let temp = beside(path, TEMP_SUFFIX);
         let written = self
             .write_temp(&temp)
