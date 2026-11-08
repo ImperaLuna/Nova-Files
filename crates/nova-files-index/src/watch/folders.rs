@@ -297,20 +297,15 @@ impl Folders {
         // folder.
         let is_folder = from.is_folder;
         let kept = policy::keeps(&folder.zone, name, is_folder);
-        if is_folder && self.swapped(&from.path, &to) {
-            // Exchanged with the folder at `to` (`RENAME_EXCHANGE`): two
-            // moves that each land on the other, so both are read again.
+        if from.kept && kept && fs::symlink_metadata(&from.path).is_ok() {
+            // Something still stands where it left: swapped with what was
+            // at `to` (`RENAME_EXCHANGE`), file or folder. Two moves that
+            // each land on the other would lose one, so both paths are
+            // read again; the exchange's second pair does it once more.
             self.read_again(&[from.path, to], changes);
             return;
         }
         match (from.kept, kept) {
-            (true, true) if !is_folder && fs::symlink_metadata(&from.path).is_ok() => {
-                // Something still stands where it left: swapped with the
-                // file it landed on (`RENAME_EXCHANGE`). A move would lose
-                // one of them, so both are added as they are now.
-                self.add(&folder.zone, name, to, changes);
-                self.add_again(&from.path, changes);
-            }
             (true, true) if !is_folder => {
                 changes.push(Change::Moved {
                     from: from.path,
@@ -351,16 +346,6 @@ impl Folders {
     }
 
     /// The zone of the watch on the folder at `path`, if it has one.
-    /// Whether a folder moved from `from` to `to` swapped places with the
-    /// one there: `to` is still watched as another folder, and a folder
-    /// still stands at `from`.
-    fn swapped(&self, from: &Path, to: &Path) -> bool {
-        let (Some(moving), Some(there)) = (self.by_path.get(from), self.by_path.get(to)) else {
-            return false;
-        };
-        moving != there && fs::symlink_metadata(from).is_ok_and(|details| details.is_dir())
-    }
-
     /// Adds the entry at `path` as it is now, in the zone of its folder.
     fn add_again(&mut self, path: &Path, changes: &mut Vec<Change>) {
         let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {

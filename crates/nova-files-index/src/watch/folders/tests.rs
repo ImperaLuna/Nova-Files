@@ -344,6 +344,53 @@ fn swapped_files_are_both_added_as_they_are() {
 }
 
 #[test]
+fn a_file_and_a_folder_swapped_are_both_read_again() {
+    let (root, mut folders) =
+        watched_folder("swap-mixed", &["a.txt", "b/inner.txt"], Box::new(|| false));
+    let (a, b) = (root.join("a.txt"), root.join("b"));
+    let zone = policy::enters(&Zone::Home, OsStr::new("b")).unwrap();
+    assert_eq!(folders.watch(b.clone(), zone), None);
+    rustix::fs::renameat_with(
+        rustix::fs::CWD,
+        &a,
+        rustix::fs::CWD,
+        &b,
+        rustix::fs::RenameFlags::EXCHANGE,
+    )
+    .unwrap();
+    // The file moves first, then the folder.
+    let changes = folders.handle(&[
+        event(&folders, &root, ReadFlags::MOVED_FROM, 18, "a.txt"),
+        event(&folders, &root, ReadFlags::MOVED_TO, 18, "b"),
+        event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 19, "b"),
+        event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 19, "a.txt"),
+    ]);
+    // What is logged last for each path is what stands there now.
+    let last = |path: &Path| {
+        changes
+            .iter()
+            .rev()
+            .find(|change| match change {
+                Change::Added { path: at, .. } | Change::Removed { path: at } => at == path,
+                _ => false,
+            })
+            .cloned()
+    };
+    assert!(matches!(last(&b), Some(Change::Added { details, .. }) if details.kind == Kind::File));
+    assert!(
+        matches!(last(&a), Some(Change::Added { details, .. }) if details.kind == Kind::Folder)
+    );
+    assert!(matches!(
+        last(&a.join("inner.txt")),
+        Some(Change::Added { .. })
+    ));
+    let wd = folders.by_path[&a];
+    assert_eq!(inotify::add_watch(&folders.inotify, &a, WATCHED), Ok(wd));
+    assert!(!folders.by_path.contains_key(&b));
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn a_profile_moved_over_a_folder_removes_it() {
     let (root, mut folders) = watched_folder(
         "profile-over",
