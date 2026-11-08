@@ -45,6 +45,10 @@ pub mod size {
     pub const TEXT_SMALL: Pixels = px(13.0);
     /// A text field's line.
     pub const FIELD_LINE: Pixels = px(20.0);
+    /// A text field's caret.
+    pub const CARET_WIDTH: Pixels = px(1.5);
+    /// The underline under text an input method is composing.
+    pub const COMPOSING_UNDERLINE: Pixels = px(1.0);
     /// One row of the entries list or the places list.
     pub const ROW_HEIGHT: Pixels = px(32.0);
     /// A row's icon.

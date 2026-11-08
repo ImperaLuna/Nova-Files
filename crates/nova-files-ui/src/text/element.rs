@@ -12,9 +12,7 @@ use gpui::{
 
 use super::field::TextField;
 use crate::theme::color;
-
-/// The caret's width.
-const CARET_WIDTH: Pixels = px(1.5);
+use crate::theme::size::{CARET_WIDTH, COMPOSING_UNDERLINE};
 
 pub struct TextElement {
     field: Entity<TextField>,
@@ -187,7 +185,7 @@ fn runs(run: TextRun, marked: Option<Range<usize>>) -> Vec<TextRun> {
     };
     let underline = UnderlineStyle {
         color: Some(run.color),
-        thickness: px(1.0),
+        thickness: COMPOSING_UNDERLINE,
         wavy: false,
     };
     [
