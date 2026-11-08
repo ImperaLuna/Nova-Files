@@ -15,6 +15,7 @@ mod columns;
 mod pick;
 mod requests;
 mod shown_thumbnails;
+mod text;
 mod theme;
 mod thumbnail;
 mod view;
@@ -31,6 +32,7 @@ use nova_files_api::{Connector, PickRequest};
 pub use columns::ColumnText;
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
+pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
 
 /// Why [`run`] returned.
@@ -72,6 +74,7 @@ pub fn run(
     gpui_platform::application()
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
+            text::bind_keys(cx);
             open_window(&connector, first, &recover_gpu, cx);
             let follow = cx.spawn(async move |cx| {
                 loop {

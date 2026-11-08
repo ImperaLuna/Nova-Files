@@ -29,6 +29,10 @@ pub mod color {
     pub const FOLDER: u32 = 0x0000_adb5;
     /// File icons.
     pub const FILE: u32 = 0x00a8_a296;
+    /// A text field's caret.
+    pub const CARET: u32 = 0x00d8_ccb0;
+    /// Selected text in a text field.
+    pub const SELECTION: u32 = 0x003d_3a35;
 }
 
 /// Sizes and spacing.
@@ -39,6 +43,8 @@ pub mod size {
     pub const TEXT: Pixels = px(14.0);
     /// The path in the toolbar.
     pub const TEXT_SMALL: Pixels = px(13.0);
+    /// A text field's line.
+    pub const FIELD_LINE: Pixels = px(20.0);
     /// One row of the entries list or the places list.
     pub const ROW_HEIGHT: Pixels = px(32.0);
     /// A row's icon.
