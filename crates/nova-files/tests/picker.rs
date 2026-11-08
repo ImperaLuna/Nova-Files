@@ -2,7 +2,8 @@
 //! driven through its pick bar: clicks copy a file's name into the name
 //! box, Enter and the Open or Save button do what the box says, typed
 //! paths go there, folders can be picked, a save onto a file that is there
-//! asks Replace or Keep both, and Cancel or Escape answers cancelled.
+//! asks Replace or Keep both, Cancel or Escape answers cancelled, and the
+//! app's file types dim the files they leave out.
 
 #![expect(
     clippy::unwrap_used,
@@ -16,10 +17,13 @@ use std::ffi::OsString;
 use std::fs;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
-use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
+use nova_files_api::{
+    EntryId, FileFilter, FilterRule, PickAnswer, PickId, PickKind, PickReply, PickRequest,
+};
 use nova_files_ui::{MainWindow, WindowEvent};
 
 use common::{TempFolder, Watchdog, double_click};
@@ -63,6 +67,21 @@ async fn picker<'a>(
     &'a mut VisualTestContext,
     Receiver<PickAnswer>,
 ) {
+    picker_with(cx, tree, folder, kind, |_| {}).await
+}
+
+/// [`picker`], with `ask` filling in more of the request.
+async fn picker_with<'a>(
+    cx: &'a mut TestAppContext,
+    tree: &TempFolder,
+    folder: &Path,
+    kind: PickKind,
+    ask: impl FnOnce(&mut PickRequest),
+) -> (
+    Entity<MainWindow>,
+    &'a mut VisualTestContext,
+    Receiver<PickAnswer>,
+) {
     cx.update(nova_files_ui::bind_text_keys);
     // The core answers from its own threads.
     cx.executor().allow_parking();
@@ -78,7 +97,7 @@ async fn picker<'a>(
         cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx));
     wait_for_folder(&view, cx, folder).await;
     let (sender, answers) = mpsc::channel();
-    let request = Box::new(PickRequest {
+    let mut request = Box::new(PickRequest {
         id: PickId(9),
         kind,
         title: String::new(),
@@ -86,10 +105,12 @@ async fn picker<'a>(
         filters: Vec::new(),
         filter: None,
         folder: None,
+        types: None,
         reply: PickReply::new(move |answer| {
             sender.send(answer).ok();
         }),
     });
+    ask(&mut request);
     view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
     cx.run_until_parked();
     (view, cx, answers)
@@ -655,4 +676,151 @@ async fn a_suggested_path_is_read_as_typed_not_saved_blindly(cx: &mut TestAppCon
     wait_for_name(&view, cx, "notes.txt").await;
     assert!(answers.try_recv().is_err());
     assert!(!closed(cx));
+}
+
+fn filter(name: &str, rules: Vec<FilterRule>) -> FileFilter {
+    FileFilter {
+        name: name.to_owned(),
+        rules,
+    }
+}
+
+fn glob(pattern: &str) -> FilterRule {
+    FilterRule::Glob(pattern.to_owned())
+}
+
+/// Which rows on screen the picker dims, of the first `rows`.
+fn dimmed(view: &Entity<MainWindow>, cx: &VisualTestContext, rows: usize) -> Vec<usize> {
+    view.read_with(cx, |view, _| {
+        (0..rows).filter(|&row| view.pick_dims(row)).collect()
+    })
+}
+
+fn shown(cx: &mut VisualTestContext, selector: &'static str) -> bool {
+    cx.run_until_parked();
+    cx.debug_bounds(selector).is_some()
+}
+
+fn picked_with(path: PathBuf, filter: Option<usize>) -> PickAnswer {
+    PickAnswer::Picked {
+        paths: vec![path],
+        filter,
+    }
+}
+
+/// Text first and PDFs second, as an app lists them.
+fn text_and_pdfs(request: &mut PickRequest) {
+    request.filters = vec![
+        filter("Text", vec![glob("*.TXT")]),
+        filter("PDF documents", vec![glob("*.pdf")]),
+    ];
+}
+
+// With `report.pdf` added, rows on screen: 0 `Projects`, 1 `notes (2).txt`,
+// 2 `notes.txt`, 3 `report.pdf`.
+
+#[gpui::test]
+async fn the_first_type_dims_the_files_it_leaves_out(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    fs::write(tree.path().join("report.pdf"), "").unwrap();
+    let (view, cx, answers) = picker_with(cx, &tree, tree.path(), FILES, text_and_pdfs).await;
+    assert_eq!(view.read_with(cx, |view, _| view.pick_filter()), Some(0));
+    assert_eq!(dimmed(&view, cx, 4), [3]);
+
+    // A dimmed file can still be picked.
+    click(cx, "entry-3");
+    click(cx, "pick-accept");
+    assert_eq!(
+        answers.try_recv(),
+        Ok(picked_with(tree.path().join("report.pdf"), Some(0)))
+    );
+}
+
+#[gpui::test]
+async fn the_menu_chooses_another_type_or_all_files(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    fs::write(tree.path().join("report.pdf"), "").unwrap();
+    let (view, cx, answers) = picker_with(cx, &tree, tree.path(), FILES, text_and_pdfs).await;
+    assert!(!shown(cx, "pick-filter-1"));
+
+    click(cx, "pick-filter");
+    click(cx, "pick-filter-1");
+    assert!(!shown(cx, "pick-filter-1"));
+    assert_eq!(dimmed(&view, cx, 4), [1, 2]);
+
+    click(cx, "pick-filter");
+    click(cx, "pick-filter-all");
+    assert_eq!(view.read_with(cx, |view, _| view.pick_filter()), None);
+    assert_eq!(dimmed(&view, cx, 4), [0_usize; 0]);
+    double_click(cx, "entry-2");
+    assert_eq!(
+        answers.try_recv(),
+        Ok(picked(tree.path().join("notes.txt")))
+    );
+}
+
+#[gpui::test]
+async fn a_click_elsewhere_closes_the_menu(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, _answers) = picker_with(cx, &tree, tree.path(), FILES, text_and_pdfs).await;
+    click(cx, "pick-filter");
+    assert!(shown(cx, "pick-filter-all"));
+
+    click(cx, "entry-1");
+    assert!(!shown(cx, "pick-filter-all"));
+    assert_eq!(view.read_with(cx, |view, _| view.pick_filter()), Some(0));
+}
+
+#[gpui::test]
+async fn a_mime_type_admits_its_kinds_and_files_it_cant_judge(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    fs::write(tree.path().join("photo.png"), "").unwrap();
+    fs::write(tree.path().join("README"), "").unwrap();
+    let data = tree.path().join("Projects").join("share");
+    fs::create_dir_all(data.join("mime")).unwrap();
+    fs::write(
+        data.join("mime").join("globs2"),
+        "50:text/x-notes:*.txt\n50:image/png:*.png\n",
+    )
+    .unwrap();
+    fs::write(
+        data.join("mime").join("subclasses"),
+        "text/x-notes text/plain\n",
+    )
+    .unwrap();
+    let types = Arc::new(nova_files_core::MimeTypes::load(&[data]));
+    let (view, cx, _answers) = picker_with(cx, &tree, tree.path(), FILES, |request| {
+        request.filters = vec![filter(
+            "Plain text",
+            vec![FilterRule::MimeType("text/plain".to_owned())],
+        )];
+        request.types = Some(types);
+    })
+    .await;
+
+    // Rows: 0 `Projects`, 1 `notes (2).txt`, 2 `notes.txt`, 3 `photo.png`,
+    // 4 `README`.
+    assert_eq!(dimmed(&view, cx, 5), [3]);
+}
+
+#[gpui::test]
+async fn a_folder_picker_dims_every_file_and_offers_no_types(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, _answers) = picker_with(cx, &tree, tree.path(), FOLDERS, text_and_pdfs).await;
+    assert_eq!(dimmed(&view, cx, 3), [1, 2]);
+    assert!(!shown(cx, "pick-filter"));
+}
+
+#[gpui::test]
+async fn no_types_means_no_menu_and_nothing_dimmed(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), FILES).await;
+    assert_eq!(dimmed(&view, cx, 3), [0_usize; 0]);
+    assert!(!shown(cx, "pick-filter"));
 }
