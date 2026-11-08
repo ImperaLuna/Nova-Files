@@ -6,7 +6,8 @@
 # (tools/ci-needs-run.sh) and, when nothing is there for them, report
 # success in seconds without setting anything up.
 #
-# A new push cancels the run it replaces. Built Nix store paths come from
+# A new push cancels the run it replaces, and a failed job cancels the
+# rest of its run. Built Nix store paths come from
 # Cachix when the CACHIX_AUTH_TOKEN secret is set, otherwise from the
 # GitHub Actions cache, so a run only rebuilds what changed.
 name: CI
@@ -95,6 +96,13 @@ jobs:
       - name: Disk space left
         if: steps.changes.outputs.run == 'true'
         run: df -h /
+      - name: Stop the rest of the run
+        # One failed check already fails the pull request, so the other
+        # jobs would only burn minutes. Cancelling the run stops them.
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   # On pull requests: mutation tests on the changed lines. On main: only a
   # build, to save the cargo cache. GitHub lets a PR restore caches saved on
@@ -175,3 +183,10 @@ jobs:
       - name: Disk space left
         if: steps.changes.outputs.run == 'true'
         run: df -h /
+      - name: Stop the rest of the run
+        # One failed check already fails the pull request, so the other
+        # jobs would only burn minutes. Cancelling the run stops them.
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
