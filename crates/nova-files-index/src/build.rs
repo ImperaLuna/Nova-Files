@@ -15,24 +15,13 @@ use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
 
 use crate::format::{self, Header, NO_PARENT, Row};
-use crate::{FileId, Flags, Kind, RowId, Stamp};
+use crate::{Details, Flags, RowId, Stamp};
 
 /// The index file and its folder are the user's alone.
 const FILE_MODE: u32 = 0o600;
 const FOLDER_MODE: u32 = 0o700;
 /// Added to the index file's name for the file being written.
 const TEMP_SUFFIX: &str = ".new";
-
-/// What the crawl learned about one entry, apart from its name and place.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Facts {
-    pub kind: Kind,
-    pub flags: Flags,
-    pub id: FileId,
-    pub size: u64,
-    pub modified: Option<Stamp>,
-    pub created: Option<Stamp>,
-}
 
 /// The index can't hold more: more rows than a row number counts, more
 /// name bytes than a name offset reaches, or a name longer than its length
@@ -64,7 +53,7 @@ impl Built {
         &mut self,
         parent: Option<RowId>,
         name: &[u8],
-        facts: Facts,
+        facts: Details,
     ) -> Result<RowId, TooBig> {
         let at = u32::try_from(self.rows.len()).map_err(|_| TooBig)?;
         let end = at
@@ -179,9 +168,10 @@ fn temp_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{FileId, Kind};
 
-    fn facts(kind: Kind) -> Facts {
-        Facts {
+    fn facts(kind: Kind) -> Details {
+        Details {
             kind,
             flags: Flags::default(),
             id: FileId {

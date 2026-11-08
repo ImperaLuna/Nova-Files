@@ -187,7 +187,7 @@ pub const fn stored(stamp: Option<Stamp>) -> i64 {
     }
 }
 
-const fn kind_byte(kind: Kind) -> u8 {
+pub const fn kind_byte(kind: Kind) -> u8 {
     match kind {
         Kind::Folder => KIND_FOLDER,
         Kind::File => KIND_FILE,
@@ -195,7 +195,7 @@ const fn kind_byte(kind: Kind) -> u8 {
     }
 }
 
-const fn kind_from(byte: u8) -> Option<Kind> {
+pub const fn kind_from(byte: u8) -> Option<Kind> {
     match byte {
         KIND_FOLDER => Some(Kind::Folder),
         KIND_FILE => Some(Kind::File),
@@ -204,25 +204,25 @@ const fn kind_from(byte: u8) -> Option<Kind> {
     }
 }
 
-fn put(out: &mut [u8], at: usize, bytes: &[u8]) {
+pub fn put(out: &mut [u8], at: usize, bytes: &[u8]) {
     if let Some(slot) = out.get_mut(at..at + bytes.len()) {
         slot.copy_from_slice(bytes);
     }
 }
 
-fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
+pub fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
     Some(u32::from_le_bytes(
         bytes.get(at..at + size_of::<u32>())?.try_into().ok()?,
     ))
 }
 
-fn u64_at(bytes: &[u8], at: usize) -> Option<u64> {
+pub fn u64_at(bytes: &[u8], at: usize) -> Option<u64> {
     Some(u64::from_le_bytes(
         bytes.get(at..at + size_of::<u64>())?.try_into().ok()?,
     ))
 }
 
-fn i64_at(bytes: &[u8], at: usize) -> Option<i64> {
+pub fn i64_at(bytes: &[u8], at: usize) -> Option<i64> {
     Some(i64::from_le_bytes(
         bytes.get(at..at + size_of::<i64>())?.try_into().ok()?,
     ))

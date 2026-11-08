@@ -8,19 +8,27 @@
 //! checks it once, so every lookup after that is plain reads of the map.
 //! The layout is in `format`.
 //!
+//! While Nova Files runs, a [`Watcher`] follows every indexed folder with
+//! inotify and appends what changes to a [`ChangeLog`], which any number
+//! of [`LogReader`]s follow.
+//!
 //! The index is a rebuildable cache, not a database: an index that is
 //! missing, out of date or damaged is crawled again.
 
 mod build;
+mod changes;
 mod crawl;
 mod format;
 mod mounts;
 mod policy;
 mod reader;
+mod watch;
 
 pub use build::Built;
+pub use changes::{Change, ChangeLog, LogReader};
 pub use crawl::{CrawlError, crawl};
 pub use reader::{Index, OpenError};
+pub use watch::Watcher;
 
 /// A row's position in the index. Row 0 is the crawled folder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -46,7 +54,7 @@ pub enum Kind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Stamp(pub i64);
 
-/// Facts about a row that aren't its kind.
+/// Details about a row that aren't its kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Flags(pub u8);
 
@@ -66,6 +74,19 @@ impl Flags {
     pub const fn with(self, other: Self) -> Self {
         Self(self.0 | other.0)
     }
+}
+
+/// What is known about one entry, apart from its name and place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Details {
+    pub kind: Kind,
+    pub flags: Flags,
+    pub id: FileId,
+    /// In bytes, as the filesystem reports it.
+    pub size: u64,
+    pub modified: Option<Stamp>,
+    /// Where the filesystem records it.
+    pub created: Option<Stamp>,
 }
 
 /// One indexed entry, as [`Index::entry`] reads it.

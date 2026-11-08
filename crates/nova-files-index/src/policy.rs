@@ -98,6 +98,32 @@ pub fn enters(zone: &Zone, name: &OsStr) -> Option<Zone> {
     }
 }
 
+/// The zone of the folder at `relative`, a path inside the crawled
+/// folder, or `None` when the folder isn't indexed. The empty path is the
+/// crawled folder.
+pub fn zone_of(relative: &Path) -> Option<Zone> {
+    relative
+        .iter()
+        .try_fold(Zone::Home, |zone, name| enters(&zone, name))
+}
+
+/// Whether an entry named `name` in a folder of `zone` is indexed.
+pub fn keeps(zone: &Zone, name: &OsStr, is_folder: bool) -> bool {
+    if is_folder {
+        enters(zone, name).is_some()
+    } else {
+        keeps_file(zone)
+    }
+}
+
+/// Whether a file named `name` is one that can make its folder
+/// [`marked`] or a cache.
+pub fn is_marker(name: &OsStr) -> bool {
+    name == CACHE_TAG
+        || MARKERS.iter().any(|marker| name == *marker)
+        || WINE_PREFIX.iter().any(|file| name == *file)
+}
+
 /// Whether a folder holding `names` says it isn't worth indexing.
 pub fn marked(names: &[OsString]) -> bool {
     let holds = |wanted: &str| names.iter().any(|name| name == wanted);
@@ -146,6 +172,37 @@ mod tests {
         names
             .iter()
             .try_fold(zone.clone(), |zone, name| enters(&zone, OsStr::new(name)))
+    }
+
+    #[test]
+    fn a_folder_s_zone_follows_its_path() {
+        assert_eq!(zone_of(Path::new("")), Some(Zone::Home));
+        assert_eq!(zone_of(Path::new("Documents/Taxes")), Some(OPEN));
+        assert_eq!(zone_of(Path::new(".config/app")), Some(ALLOWED_PLACE));
+        assert_eq!(zone_of(Path::new(".ssh/keys")), None);
+    }
+
+    #[test]
+    fn keeps_asks_the_rule_for_its_kind() {
+        let toward = Zone::Toward(PathBuf::from(".local"));
+        assert!(keeps(&OPEN, OsStr::new("a.txt"), false));
+        assert!(!keeps(&toward, OsStr::new("a.txt"), false));
+        assert!(keeps(&toward, OsStr::new("bin"), true));
+        assert!(!keeps(&OPEN, OsStr::new(".git"), true));
+    }
+
+    #[test]
+    fn markers_are_the_files_that_can_mark_a_folder() {
+        for name in [
+            "CACHEDIR.TAG",
+            "Local State",
+            "profiles.ini",
+            "drive_c",
+            "system.reg",
+        ] {
+            assert!(is_marker(OsStr::new(name)), "{name}");
+        }
+        assert!(!is_marker(OsStr::new("notes.txt")));
     }
 
     #[test]
