@@ -23,7 +23,7 @@ use crate::window::MainWindow;
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.set_scale_factor(window.scale_factor());
+        self.set_scale_factor(window.scale_factor(), window, cx);
         div()
             .size_full()
             .flex()
