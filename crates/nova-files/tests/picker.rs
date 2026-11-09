@@ -75,8 +75,8 @@ async fn picker<'a>(
         folder: home.clone(),
         config: home.join(".config"),
     };
-    let core =
-        nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None).unwrap();
+    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None, None)
+        .unwrap();
     let start = folder.to_owned();
     let (view, cx) =
         cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx));
