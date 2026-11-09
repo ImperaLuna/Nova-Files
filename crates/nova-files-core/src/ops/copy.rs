@@ -55,8 +55,10 @@ enum Placed {
 }
 
 /// Where the plan's paths really go: items renamed to keep both, and
-/// folders skipped with everything in them. Looking a path up costs as
-/// many lookups as it is deep, however many were answered.
+/// folders skipped with everything in them, within one source's tree:
+/// two sources may plan the same target (`/a/photos` and `/b/photos`),
+/// and each gets its own answers. Looking a path up costs as many
+/// lookups as it is deep, however many were answered.
 #[derive(Default)]
 struct Detours {
     renamed: HashMap<PathBuf, PathBuf>,
@@ -99,6 +101,10 @@ pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
     let mut touched = BTreeSet::new();
     let mut result = Ok(());
     for (index, item) in plan.items.iter().enumerate() {
+        // A source's tree starts: the last one's answers were its own.
+        if item.to.parent() == Some(into) {
+            detours = Detours::default();
+        }
         let Some(planned) = detours.target(&item.to) else {
             running.reporter.item(size(item));
             continue;
@@ -235,6 +241,8 @@ fn conflict(kind: ConflictKind, item: &Item, target: &Path) -> Conflict {
         kind,
         source: item.from.clone(),
         target: target.to_path_buf(),
+        // Numbered when asked.
+        number: 0,
     }
 }
 

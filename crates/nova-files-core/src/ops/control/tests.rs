@@ -55,6 +55,7 @@ fn conflict(kind: ConflictKind) -> Conflict {
         kind,
         source: "/a".into(),
         target: "/b".into(),
+        number: 1,
     }
 }
 
@@ -75,6 +76,12 @@ fn takes_only_answers_the_open_conflict_accepts() {
     assert!(
         !control.answer(&other, Answer::Merge, Scope::ThisOne, || {}),
         "not the one open"
+    );
+    let mut earlier = folder.clone();
+    earlier.number = 0;
+    assert!(
+        !control.answer(&earlier, Answer::Merge, Scope::ThisOne, || {}),
+        "a late answer to an earlier one that looked the same"
     );
     assert!(control.answer(&folder, Answer::Merge, Scope::AllOfThisKind, || {}));
     assert_eq!(control.open(), None);

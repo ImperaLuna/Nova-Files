@@ -2,6 +2,7 @@
 //! name, and which failed steps are the user's to decide rather than the
 //! job's end.
 
+use std::fs::Metadata;
 use std::io;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::Path;
@@ -21,13 +22,16 @@ pub fn clash(source: &Path, kind: Kind, target: &Path) -> io::Result<Option<Conf
     let there = match target.symlink_metadata() {
         Ok(there) => there,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            let gone = kind == Kind::Folder && source.symlink_metadata().is_err();
-            return Ok(gone.then_some(ConflictKind::SourceGone));
+            if kind != Kind::Folder {
+                return Ok(None);
+            }
+            return Ok(look_at(source)?.err());
         }
         Err(error) => return Err(error),
     };
-    let Ok(source) = source.symlink_metadata() else {
-        return Ok(Some(ConflictKind::SourceGone));
+    let source = match look_at(source)? {
+        Ok(source) => source,
+        Err(gone) => return Ok(Some(gone)),
     };
     let folder_over_folder = (kind == Kind::Folder, there.is_dir());
     Ok(Some(
@@ -41,6 +45,17 @@ pub fn clash(source: &Path, kind: Kind, target: &Path) -> io::Result<Option<Conf
             }
         },
     ))
+}
+
+/// What is at `source`, or [`ConflictKind::SourceGone`] when nothing is.
+/// Any other failure to look, such as a folder above it the user may no
+/// longer enter, is an error, which the user can fix and retry.
+fn look_at(source: &Path) -> io::Result<Result<Metadata, ConflictKind>> {
+    match source.symlink_metadata() {
+        Ok(there) => Ok(Ok(there)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Err(ConflictKind::SourceGone)),
+        Err(error) => Err(error),
+    }
 }
 
 /// The conflict a step that failed at `path` for `reason` raises, or
@@ -147,5 +162,15 @@ mod tests {
         let file = folder.file("a", "");
 
         assert!(clash(&file, FILE, &file.join("b")).is_err());
+    }
+
+    #[test]
+    fn a_source_that_cant_be_looked_at_is_an_error_not_gone() {
+        let folder = TestFolder::new("clash-source-not-a-folder");
+        let file = folder.file("a", "");
+        let unreachable = file.join("b");
+
+        assert!(clash(&unreachable, FILE, &file).is_err());
+        assert!(clash(&unreachable, Kind::Folder, &folder.path().join("free")).is_err());
     }
 }

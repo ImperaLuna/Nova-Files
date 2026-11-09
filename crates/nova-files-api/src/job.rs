@@ -101,6 +101,9 @@ pub struct Conflict {
     pub source: PathBuf,
     /// Where it was going.
     pub target: PathBuf,
+    /// Which of the job's conflicts it is, counting from 1, so an answer
+    /// to an earlier one never settles a later one that looks the same.
+    pub number: u64,
 }
 
 /// What stands in a job's way.

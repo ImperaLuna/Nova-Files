@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::ffi::OsStr;
 use std::fs;
 use std::io;
@@ -303,4 +304,59 @@ fn a_swap_that_fails_for_any_other_reason_replaces_nothing() {
     assert_eq!(error.raw_os_error(), Some(Errno::XDEV.raw_os_error()));
     assert_eq!(fs::read_to_string(&old).unwrap(), "old");
     assert_eq!(fs::read_to_string(&new).unwrap(), "new");
+}
+
+#[test]
+fn a_folder_that_took_the_name_is_swapped_back_never_replaced() {
+    let folder = TestFolder::new("place-swap-folder");
+    let new = folder.file(".part", "new");
+    let old = folder.path().join("a");
+    fs::create_dir(&old).unwrap();
+    fs::write(old.join("kept"), "kept").unwrap();
+
+    let error = replace(&new, &old, &folder.path().join(".backup")).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+    assert_eq!(fs::read_to_string(old.join("kept")).unwrap(), "kept");
+    assert_eq!(fs::read_to_string(&new).unwrap(), "new");
+}
+
+#[test]
+fn without_a_swap_a_folder_that_took_the_name_steps_back() {
+    let folder = TestFolder::new("place-backup-folder");
+    let new = folder.file(".part", "new");
+    let old = folder.path().join("a");
+    fs::create_dir(&old).unwrap();
+    let backup = folder.path().join(".backup");
+    let refused = |_: &Path, _: &Path| Err(Errno::INVAL);
+
+    let error = replace_or_fall_back(&new, &old, &backup, refused).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+    assert!(old.is_dir());
+    assert!(!backup.exists());
+    assert_eq!(fs::read_to_string(&new).unwrap(), "new");
+}
+
+#[test]
+fn a_file_saved_while_a_folder_is_swapped_back_stays() {
+    let folder = TestFolder::new("place-swap-saved");
+    let new = folder.file(".part", "new");
+    let old = folder.path().join("a");
+    fs::create_dir(&old).unwrap();
+    let saved = folder.file(".saved", "theirs");
+    let swaps = Cell::new(0);
+    // The swap, then another program saving over the name at once.
+    let swap_then_save = |new: &Path, old: &Path| {
+        swaps.set(swaps.get() + 1);
+        renameat_with(CWD, new, CWD, old, RenameFlags::EXCHANGE)?;
+        fs::rename(&saved, old).map_err(|_| Errno::IO)
+    };
+
+    let error = replace_or_fall_back(&new, &old, &folder.path().join(".b"), swap_then_save);
+
+    assert!(error.is_err());
+    assert_eq!(swaps.get(), 1, "never swapped back");
+    assert_eq!(fs::read_to_string(&old).unwrap(), "theirs");
+    assert!(new.is_dir(), "the folder waits at the part's name");
 }
