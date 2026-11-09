@@ -33,12 +33,13 @@ use std::mem;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
+use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 
 use nova_files_api::{ClientId, Event, EventSink, SettingChange, Settings};
 
 use crate::config_watch::{self, ConfigWatch};
+use crate::hand_edited::{self, Reread, lock};
 use crate::private_file::{self, Read};
 
 /// The file, in the config folder.
@@ -177,6 +178,18 @@ impl Shared {
                 .is_ok()
         });
     }
+}
+
+impl Reread for Shared {
+    type Read = Settings;
+
+    fn path(&self) -> Option<PathBuf> {
+        self.path.clone()
+    }
+
+    fn version(&self) -> u64 {
+        self.version
+    }
 
     /// Takes `settings`, read from the file at `version`; says whether the
     /// read was stale (the settings changed while it ran) and must be done
@@ -200,50 +213,16 @@ impl Shared {
     }
 }
 
-fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
-    // A panic while holding the lock left whole values behind: each field
-    // is replaced in one step.
-    shared.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
 /// Reads the file again and takes what it says, unless saves are queued;
 /// then it is read once they're done.
 fn reload(weak: &Weak<Mutex<Shared>>) {
-    let Some(shared) = weak.upgrade() else {
-        return;
-    };
-    loop {
-        let (path, version) = {
-            let locked = lock(&shared);
-            let Some(path) = locked.path.clone() else {
-                return;
-            };
-            (path, locked.version)
-        };
-        // Read outside the lock: a slow disk never holds up the core.
-        let settings = read(&path);
-        if !lock(&shared).take(settings, version) {
-            return;
-        }
-    }
+    hand_edited::reload(weak, read);
 }
 
 /// The settings in the file at `path`; defaults for what it lacks.
 fn read(path: &Path) -> Settings {
-    let text = match private_file::read(path, MAX_BYTES) {
-        Read::Bytes(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
-        Read::Missing => return Settings::default(),
-        Read::TooBig => {
-            log::warn!(
-                "{} is over {MAX_BYTES} bytes, using defaults",
-                path.display()
-            );
-            return Settings::default();
-        }
-        Read::Failed(error) => {
-            log::warn!("can't read {}, using defaults: {error}", path.display());
-            return Settings::default();
-        }
+    let Some(text) = hand_edited::read_text(path, MAX_BYTES) else {
+        return Settings::default();
     };
     let (settings, problems) = file::read(&text);
     for problem in problems {

@@ -10,6 +10,7 @@
 mod config_watch;
 mod details;
 mod details_queue;
+mod hand_edited;
 mod index;
 mod jobs;
 mod list;
