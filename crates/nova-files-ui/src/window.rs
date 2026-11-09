@@ -41,7 +41,7 @@ use gpui::{
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
-    Listing, ListingId, Place,
+    Listing, ListingId, Place, Settings, Thumbnails,
 };
 
 use crate::band::Band;
@@ -79,6 +79,8 @@ pub enum WindowEvent {
     Refused(PathBuf),
     /// The places list changed.
     Places,
+    /// The settings changed.
+    Settings,
 }
 
 pub struct MainWindow {
@@ -124,6 +126,8 @@ pub struct MainWindow {
     pub(crate) pick: Option<Picker>,
     /// The home folder, which `~` names in a picker's name box.
     pub(crate) home: PathBuf,
+    /// The settings as the core last sent them.
+    settings: Settings,
     /// Focus for the window's own keys (see `commands`).
     pub(crate) focus: FocusHandle,
     _events: Task<()>,
@@ -167,6 +171,7 @@ impl MainWindow {
             .and_then(|connection| {
                 connection.send(Command::Ping)?;
                 connection.send(Command::Places)?;
+                connection.send(Command::Settings)?;
                 Ok(connection)
             })
             .ok();
@@ -211,6 +216,7 @@ impl MainWindow {
             history: History::default(),
             scroll: UniformListScrollHandle::new(),
             pick: None,
+            settings: Settings::default(),
             focus: cx.focus_handle(),
             _events: events,
         };
@@ -453,22 +459,23 @@ impl MainWindow {
             Event::Thumbnail { id, entry, png } => {
                 if let Ok(index) = usize::try_from(entry.0)
                     && self.rows_wanted.contains(&index)
+                    && self.settings.thumbnails == Thumbnails::Shown
                 {
                     self.shrink_thumbnail(id, index, png, cx);
                 }
             }
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
-            // The window never searches, opens files or starts jobs yet,
+            Event::Settings(settings) => self.settings_arrived(settings, cx),
+            // The window never searches, opens files or starts jobs yet, and
             // only a picker's opening asks for the window state (see
-            // `window_state`), and no setting changes the window yet.
+            // `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)
-            | Event::Settings(_)
             | Event::JobStarted { .. }
             | Event::JobRunning { .. }
             | Event::JobConflict { .. }
@@ -483,6 +490,29 @@ impl MainWindow {
                 cx.notify();
             }
         }
+    }
+
+    /// The settings as the core last sent them.
+    pub const fn settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    /// Takes the settings the core sent, which it sends again whenever
+    /// they change. Hiding thumbnails lets go of the ones held; showing
+    /// them again asks for the rows on screen anew, so theirs arrive.
+    fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
+        let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
+        self.settings = Arc::unwrap_or_clone(settings);
+        if thumbnails_changed {
+            if self.settings.thumbnails == Thumbnails::Hidden {
+                release(self.thumbnails.take_all(), None, cx);
+            }
+            // Hidden and shown again before a frame, the core would still
+            // count the dropped thumbnails as sent.
+            self.forget_rows();
+        }
+        cx.emit(WindowEvent::Settings);
+        cx.notify();
     }
 
     /// The window dropped listing `id`, which it no longer wanted. One newer
@@ -512,6 +542,13 @@ impl MainWindow {
             return;
         }
         release(self.thumbnails.take_all(), Some(window), cx);
+        self.forget_rows();
+    }
+
+    /// Tells the core no rows are wanted, so it counts every thumbnail as
+    /// not sent and makes them again when the next frame asks for its
+    /// rows.
+    fn forget_rows(&mut self) {
         if let Some(listing) = &self.listing
             && !self.rows_wanted.is_empty()
             && let Some(connection) = &self.connection
@@ -557,6 +594,8 @@ impl MainWindow {
         if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
             && self.rows_wanted.contains(&made.index)
             && made.side == self.thumbnail_side()
+            // Hidden while it was being shrunk.
+            && self.settings.thumbnails == Thumbnails::Shown
         {
             let replaced = self.thumbnails.insert(made.index, Arc::new(made.image));
             release(replaced, None, cx);

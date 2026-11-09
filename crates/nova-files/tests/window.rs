@@ -29,7 +29,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
-use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
+use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest, Thumbnails};
 use nova_files_ui::{CoreStatus, MainWindow, WindowEvent};
 
 use common::{TempFolder, Watchdog, click_with, double_click};
@@ -371,4 +371,18 @@ async fn closing_a_picker_answers_cancelled(cx: &mut TestAppContext) {
     assert_eq!(app.update(|cx| cx.windows().len()), 0);
     assert_eq!(answers.try_recv(), Ok(PickAnswer::Cancelled));
     drop(view);
+}
+
+#[gpui::test]
+async fn a_hand_edit_to_the_settings_file_reaches_the_window(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("settings-edit");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let folder = tree.path().join(".config/nova-files");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("settings.toml"), "thumbnails = false\n").unwrap();
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.settings().thumbnails == Thumbnails::Hidden
+    })
+    .await;
 }

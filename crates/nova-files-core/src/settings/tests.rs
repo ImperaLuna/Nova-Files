@@ -140,3 +140,15 @@ fn the_file_is_read_once_the_last_queued_save_is_done() {
     drop(locked);
     fs::remove_dir_all(folder).ok();
 }
+
+#[test]
+fn the_store_holds_what_the_file_says() {
+    let config = temp("current");
+    let folder = config_watch::folder(&config);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join(FILE), "thumbnails = false\n").unwrap();
+    let store = Store::open(Some(&config));
+    assert_eq!(store.current().thumbnails, Thumbnails::Hidden);
+    drop(store);
+    fs::remove_dir_all(config).ok();
+}
