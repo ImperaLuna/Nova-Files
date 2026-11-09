@@ -28,12 +28,14 @@ pub trait Reread {
     fn take(&mut self, read: Self::Read, version: u64) -> bool;
 }
 
-/// Reads the store's file with `read` until a read is taken.
+/// Reads the store's file with `read` until a read is taken, giving up
+/// after [`MAX_READS`] stale ones: the store is changing faster than the
+/// file can be read, and the change still to come reads it again.
 pub fn reload<S: Reread>(weak: &Weak<Mutex<S>>, read: impl Fn(&Path) -> S::Read) {
     let Some(shared) = weak.upgrade() else {
         return;
     };
-    loop {
+    for _ in 0..MAX_READS {
         let (path, version) = {
             let locked = lock(&shared);
             let Some(path) = locked.path() else {
@@ -46,7 +48,11 @@ pub fn reload<S: Reread>(weak: &Weak<Mutex<S>>, read: impl Fn(&Path) -> S::Read)
             return;
         }
     }
+    log::warn!("a hand-edited file kept changing while being read; read it next change");
 }
+
+/// How many reads in a row may come back stale before [`reload`] stops.
+const MAX_READS: usize = 8;
 
 /// The file at `path` as text, or `None` when it is missing or can't be
 /// read (logged): the store then uses its defaults.
@@ -72,4 +78,39 @@ pub fn lock<T>(shared: &Mutex<T>) -> MutexGuard<'_, T> {
     // A panic while holding the lock left whole values behind: each field
     // is replaced in one step.
     shared.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+    use std::sync::Arc;
+
+    use super::*;
+
+    /// A store that moves on before every read lands.
+    struct Restless;
+
+    impl Reread for Restless {
+        type Read = ();
+
+        fn path(&self) -> Option<PathBuf> {
+            Some(PathBuf::from("restless.toml"))
+        }
+
+        fn version(&self) -> u64 {
+            0
+        }
+
+        fn take(&mut self, (): (), _: u64) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn reads_that_keep_coming_back_stale_stop() {
+        let shared = Arc::new(Mutex::new(Restless));
+        let reads = Cell::new(0);
+        reload(&Arc::downgrade(&shared), |_| reads.set(reads.get() + 1));
+        assert_eq!(reads.get(), MAX_READS);
+    }
 }
