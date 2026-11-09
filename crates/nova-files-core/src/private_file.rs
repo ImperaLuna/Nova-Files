@@ -6,9 +6,9 @@
 //! with its mode from the start, and renames it over the old one, so a crash
 //! never leaves half a file and a reader sees the old file or the new one.
 
-use std::fs::{self, DirBuilder, OpenOptions};
+use std::fs::{self, DirBuilder, OpenOptions, Permissions};
 use std::io::{self, Read as _, Write as _};
-use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
+use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _, PermissionsExt as _};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -61,6 +61,11 @@ pub fn replace(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
         .create_new(true)
         .mode(mode)
         .open(&temporary)
+        // The umask took bits off `mode`; they are put back.
+        .and_then(|file| {
+            file.set_permissions(Permissions::from_mode(mode))
+                .map(|()| file)
+        })
         .and_then(|mut file| file.write_all(bytes))
         .and_then(|()| fs::rename(&temporary, path));
     if written.is_err() {
@@ -71,7 +76,6 @@ pub fn replace(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::fs::PermissionsExt as _;
     use std::path::PathBuf;
 
     use super::*;
@@ -106,6 +110,18 @@ mod tests {
         assert_eq!(mode(path.parent().unwrap()), FOLDER_MODE);
         let left: Vec<_> = fs::read_dir(path.parent().unwrap()).unwrap().collect();
         assert_eq!(left.len(), 1);
+        fs::remove_dir_all(home).ok();
+    }
+
+    #[test]
+    fn a_replace_keeps_bits_the_umask_would_take() {
+        let home = temp("umask");
+        let path = home.join("folder/file");
+        // Group write: the usual umask takes it off a new file.
+        let shared = 0o664;
+        replace(&path, b"shared", shared).unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & ALL_MODE_BITS;
+        assert_eq!(mode, shared);
         fs::remove_dir_all(home).ok();
     }
 
