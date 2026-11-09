@@ -1,18 +1,21 @@
 //! Carbonfox, Nova's own theme: the colors for every key a theme file
-//! leaves out.
+//! leaves out, and what a window draws with before the core's theme
+//! arrives.
 
 #![expect(
     clippy::unreadable_literal,
     reason = "colors are written as 0xRRGGBB, as in a theme file"
 )]
 
-use nova_files_api::{Color, Mode, Palette};
+use super::{Color, Mode, Palette};
 
-/// Carbonfox's palette for `mode`.
-pub const fn carbonfox(mode: Mode) -> Palette {
-    match mode {
-        Mode::Dark => DARK,
-        Mode::Light => LIGHT,
+impl Palette {
+    /// Carbonfox's palette for `mode`.
+    pub const fn carbonfox(mode: Mode) -> Self {
+        match mode {
+            Mode::Dark => DARK,
+            Mode::Light => LIGHT,
+        }
     }
 }
 

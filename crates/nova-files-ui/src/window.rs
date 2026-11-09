@@ -41,7 +41,7 @@ use gpui::{
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
-    Listing, ListingId, Place, Settings, Thumbnails,
+    Listing, ListingId, Place, Settings, Theme, Thumbnails,
 };
 
 use crate::band::Band;
@@ -51,7 +51,7 @@ use crate::jump::TypeJump;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
-use crate::theme::size;
+use crate::theme::{Colors, size};
 use crate::thumbnail;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
@@ -81,6 +81,8 @@ pub enum WindowEvent {
     Places,
     /// The settings changed.
     Settings,
+    /// The theme the app draws with changed.
+    Theme,
 }
 
 pub struct MainWindow {
@@ -172,6 +174,7 @@ impl MainWindow {
                 connection.send(Command::Ping)?;
                 connection.send(Command::Places)?;
                 connection.send(Command::Settings)?;
+                connection.send(Command::Theme)?;
                 Ok(connection)
             })
             .ok();
@@ -467,16 +470,16 @@ impl MainWindow {
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
-            // The window never searches, opens files or starts jobs yet, only
-            // a picker's opening asks for the window state (see
-            // `window_state`), and nothing draws from the theme yet.
+            Event::Theme(theme) => Self::theme_arrived(&theme, cx),
+            // The window never searches, opens files or starts jobs yet, and
+            // only a picker's opening asks for the window state (see
+            // `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)
-            | Event::Theme(_)
             | Event::JobStarted { .. }
             | Event::JobRunning { .. }
             | Event::JobConflict { .. }
@@ -514,6 +517,18 @@ impl MainWindow {
         }
         cx.emit(WindowEvent::Settings);
         cx.notify();
+    }
+
+    /// Draws every window with `theme` from now on. Each window hears it,
+    /// so the first to see a change redraws them all and the rest find
+    /// nothing new.
+    fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
+        let colors = Colors::new(theme);
+        if Colors::of(cx) != colors {
+            cx.set_global(colors);
+            cx.refresh_windows();
+            cx.emit(WindowEvent::Theme);
+        }
     }
 
     /// The window dropped listing `id`, which it no longer wanted. One newer

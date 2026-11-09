@@ -6,11 +6,11 @@
 
 use gpui::{
     ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _, rgb,
+    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
 };
 
 use super::Picker;
-use crate::theme::{color, radius, size};
+use crate::theme::{Colors, radius, size};
 use crate::window::MainWindow;
 
 const CANCEL_LABEL: &str = "Cancel";
@@ -19,6 +19,7 @@ const KEEP_BOTH_LABEL: &str = "Keep both";
 
 impl MainWindow {
     pub fn pick_bar(pick: &Picker, cx: &Context<Self>) -> impl IntoElement {
+        let colors = Colors::of(cx);
         let name = div()
             .debug_selector(|| "pick-name".to_owned())
             .flex()
@@ -29,8 +30,8 @@ impl MainWindow {
             .px(size::PAD)
             .rounded(radius::BUTTON)
             .border(size::DIVIDER)
-            .border_color(rgb(color::DIVIDER))
-            .bg(rgb(color::FIELD))
+            .border_color(colors.divider)
+            .bg(colors.surface)
             .child(pick.name.clone());
         let controls = div()
             .flex()
@@ -39,7 +40,7 @@ impl MainWindow {
             .child(name)
             .children(Self::filter_button(pick, cx))
             .child(
-                button("pick-cancel", CANCEL_LABEL.into(), false)
+                button("pick-cancel", CANCEL_LABEL.into(), false, colors)
                     .on_click(cx.listener(|this, _: &ClickEvent, window, _| this.cancel(window))),
             )
             .child(
@@ -47,6 +48,7 @@ impl MainWindow {
                     "pick-accept",
                     super::accept_label(&pick.request).into(),
                     true,
+                    colors,
                 )
                 .on_click(cx.listener(|this, _: &ClickEvent, window, cx| this.accept(window, cx))),
             );
@@ -61,12 +63,12 @@ impl MainWindow {
                 .justify_end()
                 .gap(size::GAP)
                 .child(
-                    button("pick-replace", REPLACE_LABEL.into(), false).on_click(
+                    button("pick-replace", REPLACE_LABEL.into(), false, colors).on_click(
                         cx.listener(|this, _: &ClickEvent, window, _| this.replace(window)),
                     ),
                 )
                 .child(
-                    button("pick-keep-both", keep_both.into(), true).on_click(cx.listener(
+                    button("pick-keep-both", keep_both.into(), true, colors).on_click(cx.listener(
                         |this, _: &ClickEvent, _, cx| {
                             this.keep_both();
                             cx.notify();
@@ -80,16 +82,21 @@ impl MainWindow {
             .flex_none()
             .gap(size::QUESTION_GAP)
             .p(size::PAD)
-            .bg(rgb(color::SURFACE_SUNK))
+            .bg(colors.surface_sunk)
             .border_t(size::DIVIDER)
-            .border_color(rgb(color::DIVIDER))
+            .border_color(colors.divider)
             .child(controls)
             .children(question)
     }
 }
 
 /// A bar button; `accept` marks the one Enter does.
-pub fn button(id: &'static str, label: SharedString, accept: bool) -> gpui::Stateful<gpui::Div> {
+pub fn button(
+    id: &'static str,
+    label: SharedString,
+    accept: bool,
+    colors: Colors,
+) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .debug_selector(move || id.to_owned())
@@ -102,14 +109,12 @@ pub fn button(id: &'static str, label: SharedString, accept: bool) -> gpui::Stat
         .cursor_pointer()
         .map(|button| {
             if accept {
-                button
-                    .bg(rgb(color::ACCEPT))
-                    .text_color(rgb(color::ON_ACCEPT))
+                button.bg(colors.accept).text_color(colors.on_accept)
             } else {
                 button
                     .border(size::DIVIDER)
-                    .border_color(rgb(color::DIVIDER))
-                    .hover(|button| button.bg(rgb(color::ROW_HIGHLIGHT)))
+                    .border_color(colors.divider)
+                    .hover(|button| button.bg(colors.hover))
             }
         })
         .child(div().min_w_0().truncate().child(label))

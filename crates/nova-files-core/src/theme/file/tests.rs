@@ -93,7 +93,7 @@ fn overrides_replace_only_what_they_name() {
     let base = Palette {
         primary: Color(0x111111),
         bg: Color(0x222222),
-        ..crate::theme::defaults::carbonfox(Mode::Light)
+        ..Palette::carbonfox(Mode::Light)
     };
     let mixed = theme.dark.over(base.clone());
     assert_eq!(mixed.primary, Color(0xFD7014));

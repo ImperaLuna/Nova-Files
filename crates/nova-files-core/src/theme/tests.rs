@@ -49,7 +49,7 @@ fn next(events: &Receiver<Event>) -> Arc<Theme> {
 fn carbonfox(mode: Mode) -> Theme {
     Theme {
         mode,
-        palette: defaults::carbonfox(mode),
+        palette: Palette::carbonfox(mode),
     }
 }
 
@@ -104,7 +104,7 @@ fn the_appearance_setting_picks_dark_or_light() {
     assert_eq!(light.mode, Mode::Light);
     let expected = Palette {
         primary: Color(0xABCDEF),
-        ..defaults::carbonfox(Mode::Light)
+        ..Palette::carbonfox(Mode::Light)
     };
     assert_eq!(light.palette, expected);
 
@@ -144,7 +144,7 @@ fn system_follows_the_desktop_and_its_accent_is_primary_unless_the_file_sets_one
     assert_eq!(light.mode, Mode::Light);
     let expected = Palette {
         primary: accent,
-        ..defaults::carbonfox(Mode::Light)
+        ..Palette::carbonfox(Mode::Light)
     };
     assert_eq!(light.palette, expected);
 

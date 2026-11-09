@@ -10,6 +10,8 @@
 //! only, under the names Nova's theme file uses; the UI works out the
 //! shades it draws with from them.
 
+mod carbonfox;
+
 /// A color, as 0xRRGGBB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Color(pub u32);

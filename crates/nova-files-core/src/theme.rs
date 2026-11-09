@@ -1,6 +1,6 @@
 //! The theme: the colors every window draws with, worked out from
 //! `$XDG_CONFIG_HOME/nova-files/theme.toml` (see `file`), the appearance
-//! setting, what the desktop asks for and Carbonfox (see `defaults`), and
+//! setting, what the desktop asks for and Carbonfox ([`Palette::carbonfox`]), and
 //! sent to the clients that
 //! asked for it each time it changes.
 //!
@@ -16,7 +16,6 @@
 //! settings tell the theme while holding theirs, and the theme never calls
 //! into the settings.
 
-mod defaults;
 mod file;
 
 use std::collections::BTreeMap;
@@ -24,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
 
 use nova_files_api::{
-    Appearance, ClientGone, ClientId, DesktopLook, Event, EventSink, Mode, Theme,
+    Appearance, ClientGone, ClientId, DesktopLook, Event, EventSink, Mode, Palette, Theme,
 };
 
 use crate::config_watch::{self, ConfigWatch};
@@ -169,7 +168,7 @@ fn resolve(file: &ThemeFile, appearance: Appearance, desktop: DesktopLook) -> Th
         // Carbonfox is dark, so a desktop that doesn't say gets dark.
         Appearance::System => desktop.mode.unwrap_or(Mode::Dark),
     };
-    let mut palette = defaults::carbonfox(mode);
+    let mut palette = Palette::carbonfox(mode);
     if let Some(accent) = desktop.accent {
         palette.primary = accent;
     }
