@@ -133,9 +133,9 @@ pub struct Picker {
     /// while the box still holds that text, it means that entry, whatever
     /// its name's bytes or spaces.
     copied: Option<(EntryId, String)>,
-    /// The last part of a typed path that the window put in the name box:
-    /// while the box still shows it, it is that exact name, never typed
-    /// text to read again.
+    /// A name the window put in the box, the app's suggestion or a typed
+    /// path's last part: until the user edits the box, it is that exact
+    /// name, never typed text to read again.
     placed: Option<OsString>,
     /// A save waiting for a fresh listing of its folder (see `save`).
     recheck: Option<save::Recheck>,
@@ -165,25 +165,12 @@ struct Jump {
 }
 
 impl Picker {
-    /// The name the box holds exactly: the last part of a typed path the
-    /// window put there, or the app's suggested save name as it came.
-    /// Only a plain suggestion counts: one with a `/`, or `.` or `..`, is read
-    /// as typed, so a save never lands outside the folder on screen
-    /// unasked.
+    /// The exact name the window put in the box, while the box still
+    /// shows it unedited.
     fn exact_name(&self, text: &str) -> Option<OsString> {
-        if let Some(placed) = self
-            .placed
-            .as_ref()
+        self.placed
+            .clone()
             .filter(|placed| placed.to_string_lossy() == text)
-        {
-            return Some(placed.clone());
-        }
-        match &self.request.kind {
-            PickKind::Save { name } if is_plain_name(name) && name.to_string_lossy() == text => {
-                Some(name.clone())
-            }
-            _ => None,
-        }
     }
 }
 
@@ -243,6 +230,13 @@ impl MainWindow {
                     cx.notify();
                 }
             });
+        // Only a plain suggestion is taken as it came: one with a `/`, or
+        // `.` or `..`, is read as typed, so a save never lands outside the
+        // folder on screen unasked.
+        let placed = match &request.kind {
+            PickKind::Save { name } if is_plain_name(name) => Some(name.clone()),
+            _ => None,
+        };
         let focus = name.read(cx).focus_handle(cx);
         window.focus(&focus, cx);
         self.pick = Some(Picker {
@@ -253,7 +247,7 @@ impl MainWindow {
             conflict: None,
             jump: None,
             copied: None,
-            placed: None,
+            placed,
             recheck: None,
             window: window.window_handle(),
             _name_events: name_events,

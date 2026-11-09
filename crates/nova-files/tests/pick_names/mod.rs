@@ -137,3 +137,18 @@ async fn a_suggested_path_is_read_as_typed_not_saved_blindly(cx: &mut TestAppCon
     assert!(answers.try_recv().is_err());
     assert!(!closed(cx));
 }
+
+#[gpui::test]
+async fn a_suggestion_typed_over_means_what_was_typed(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let suggested = OsString::from_vec(b"caf\x80.txt".to_vec());
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested)).await;
+    cx.simulate_keystrokes("ctrl-a");
+    cx.simulate_input("caf\u{fffd}.txt");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join("caf\u{fffd}.txt")))
+    );
+}
