@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::ffi::OsStr;
 use std::fs;
 use std::io;
@@ -335,4 +336,27 @@ fn without_a_swap_a_folder_that_took_the_name_steps_back() {
     assert!(old.is_dir());
     assert!(!backup.exists());
     assert_eq!(fs::read_to_string(&new).unwrap(), "new");
+}
+
+#[test]
+fn a_file_saved_while_a_folder_is_swapped_back_stays() {
+    let folder = TestFolder::new("place-swap-saved");
+    let new = folder.file(".part", "new");
+    let old = folder.path().join("a");
+    fs::create_dir(&old).unwrap();
+    let saved = folder.file(".saved", "theirs");
+    let swaps = Cell::new(0);
+    // The swap, then another program saving over the name at once.
+    let swap_then_save = |new: &Path, old: &Path| {
+        swaps.set(swaps.get() + 1);
+        renameat_with(CWD, new, CWD, old, RenameFlags::EXCHANGE)?;
+        fs::rename(&saved, old).map_err(|_| Errno::IO)
+    };
+
+    let error = replace_or_fall_back(&new, &old, &folder.path().join(".b"), swap_then_save);
+
+    assert!(error.is_err());
+    assert_eq!(swaps.get(), 1, "never swapped back");
+    assert_eq!(fs::read_to_string(&old).unwrap(), "theirs");
+    assert!(new.is_dir(), "the folder waits at the part's name");
 }

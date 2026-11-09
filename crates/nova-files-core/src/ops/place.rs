@@ -63,12 +63,22 @@ fn replace_or_fall_back(
     backup: &Path,
     exchange: impl Fn(&Path, &Path) -> rustix::io::Result<()>,
 ) -> io::Result<()> {
+    let ours = new.symlink_metadata()?;
     // A folder that took the name since it was looked at is never
     // replaced: it goes back, and the name counts as taken.
     match exchange(new, old) {
         // `new` now holds what was `old`.
         Ok(()) if is_folder(new) => {
-            let back = exchange(new, old).map_err(io::Error::from);
+            // Swapped back only while `old` holds what `new` put there:
+            // a file saved there since is another program's, and stays.
+            let still_ours = old
+                .symlink_metadata()
+                .is_ok_and(|there| same_entry(&ours, &there));
+            let back = if still_ours {
+                exchange(new, old).map_err(io::Error::from)
+            } else {
+                Err(io::ErrorKind::AlreadyExists.into())
+            };
             Err(taken_back(back, old, new))
         }
         Ok(()) => fs::remove_file(new),

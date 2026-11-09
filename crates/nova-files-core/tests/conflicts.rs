@@ -432,3 +432,25 @@ fn two_folders_of_the_same_name_are_each_asked_about() {
     assert!(!into.join("photos/a").exists());
     assert_eq!(text(into.join("photos/b")), "b");
 }
+
+#[test]
+fn a_source_inside_another_gets_its_own_answers() {
+    let bench = Bench::new("conflict-nested-source");
+    let into = bench.at("into");
+    fs::create_dir_all(into.join("photos")).unwrap();
+    let photos = bench.at("photos");
+    let child = photos.join("child");
+    fs::create_dir_all(&child).unwrap();
+    fs::write(child.join("c"), "c").unwrap();
+    let client = bench.client();
+
+    let job = client.start(copy(vec![photos, child], &into));
+    let folder = held(&client, job);
+    answer(&client, job, &folder, Answer::Skip, Scope::ThisOne);
+    let (outcome, _) = client.ended(job);
+
+    assert_eq!(folder.kind, ConflictKind::FolderExists);
+    assert_eq!(outcome, Outcome::Done);
+    assert!(!into.join("photos/child").exists());
+    assert_eq!(text(into.join("child/c")), "c");
+}

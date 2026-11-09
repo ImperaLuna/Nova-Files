@@ -54,32 +54,31 @@ enum Placed {
     Merged,
 }
 
-/// Where the plan's items really go: items renamed to keep both, and
-/// folders skipped with everything in them. Both are kept by source, as
-/// two sources of the same name plan the same target and each gets its
-/// own answer. Looking an item up costs as many lookups as its source is
-/// deep, however many were answered.
+/// Where the plan's paths really go: items renamed to keep both, and
+/// folders skipped with everything in them, within one source's tree:
+/// two sources may plan the same target (`/a/photos` and `/b/photos`),
+/// and each gets its own answers. Looking a path up costs as many
+/// lookups as it is deep, however many were answered.
 #[derive(Default)]
 struct Detours {
-    /// Where each source renamed went.
     renamed: HashMap<PathBuf, PathBuf>,
     skipped: HashSet<PathBuf>,
 }
 
 impl Detours {
-    /// Where `item` really goes, or `None` when it was skipped.
-    fn target(&self, item: &Item) -> Option<PathBuf> {
+    /// Where `planned` really goes, or `None` when it was skipped.
+    fn target(&self, planned: &Path) -> Option<PathBuf> {
         // The deepest renamed folder holding it, found first.
         let mut renamed = None;
-        for above in item.from.ancestors() {
+        for above in planned.ancestors() {
             if self.skipped.contains(above) {
                 return None;
             }
             renamed = renamed.or_else(|| self.renamed.get(above).map(|to| (above, to)));
         }
         Some(renamed.map_or_else(
-            || item.to.clone(),
-            |(from, to)| to.join(item.from.strip_prefix(from).unwrap_or(&item.from)),
+            || planned.to_path_buf(),
+            |(from, to)| to.join(planned.strip_prefix(from).unwrap_or(planned)),
         ))
     }
 }
@@ -102,7 +101,11 @@ pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
     let mut touched = BTreeSet::new();
     let mut result = Ok(());
     for (index, item) in plan.items.iter().enumerate() {
-        let Some(planned) = detours.target(item) else {
+        // A source's tree starts: the last one's answers were its own.
+        if item.to.parent() == Some(into) {
+            detours = Detours::default();
+        }
+        let Some(planned) = detours.target(&item.to) else {
             running.reporter.item(size(item));
             continue;
         };
@@ -115,7 +118,7 @@ pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
         };
         let folder = item.kind == Kind::Folder;
         if target != planned {
-            detours.renamed.insert(item.from.clone(), target.clone());
+            detours.renamed.insert(item.to.clone(), target.clone());
         }
         match placed {
             Placed::Made { left } => {
@@ -129,7 +132,7 @@ pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
             }
             Placed::Skipped => {
                 if folder {
-                    detours.skipped.insert(item.from.clone());
+                    detours.skipped.insert(item.to.clone());
                 }
                 running.reporter.item(size(item));
             }
