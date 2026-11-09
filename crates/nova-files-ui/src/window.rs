@@ -383,14 +383,17 @@ impl MainWindow {
             }
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
-            // The window never searches or opens files, and only a picker's
-            // opening asks for the window state (see `window_state`).
+            // The window never searches, opens files or starts jobs yet, and
+            // only a picker's opening asks for the window state (see
+            // `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FileOpened
             | Event::FileNotOpened
-            | Event::WindowState(_) => {}
+            | Event::WindowState(_)
+            | Event::JobStarted { .. }
+            | Event::JobFinished { .. } => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

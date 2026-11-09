@@ -19,8 +19,9 @@ workspace = true
 
 [dependencies]
 # Kills the thumbnail helper's process group when a batch runs out of time,
-# and reads the monotonic clock for the frame trace.
-rustix = { version = "1.1.6", default-features = false, features = ["process", "std", "time"] }
+# reads the monotonic clock for the frame trace, and renames without
+# replacing for file operations.
+rustix = { version = "1.1.6", default-features = false, features = ["fs", "process", "std", "time"] }
 # Receives GPUI's start-up phases and frame times for the traces; GPUI already builds it.
 log = { version = "0.4.35", features = ["std"] }
 # Read the library path out of Vulkan driver manifests (vulkan_drivers.rs).
