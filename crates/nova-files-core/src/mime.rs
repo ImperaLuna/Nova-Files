@@ -11,6 +11,7 @@
 //! `text/*` type is also plain text, and every type is a kind of
 //! `application/octet-stream`. The file's content is never read.
 
+use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -54,6 +55,9 @@ struct Glob {
     mime: String,
     pattern: String,
     case_sensitive: bool,
+    /// Its place in reading order: the first data folder's patterns come
+    /// first and win a tie.
+    order: usize,
 }
 
 /// The MIME database, read once.
@@ -80,11 +84,14 @@ impl MimeTypes {
     /// Reads the database in each of `dirs`.
     pub fn load(dirs: &[PathBuf]) -> Self {
         let mut types = Self::default();
+        let mut order = 0;
         for dir in dirs {
             if let Some(text) = read_capped(&dir.join(GLOBS_FILE)) {
-                text.lines()
-                    .filter_map(glob)
-                    .for_each(|glob| types.add(glob));
+                for mut glob in text.lines().filter_map(glob) {
+                    glob.order = order;
+                    order += 1;
+                    types.add(glob);
+                }
             }
             for (child, parent) in pairs(&dir.join(SUBCLASSES_FILE)) {
                 types.parents.entry(child).or_default().push(parent);
@@ -98,7 +105,7 @@ impl MimeTypes {
         let suffix = glob
             .pattern
             .strip_prefix(ANY_RUN)
-            .filter(|rest| !rest.contains(WILDCARDS));
+            .filter(|rest| !rest.is_empty() && !rest.contains(WILDCARDS));
         match suffix {
             Some(suffix) => self.suffixes.entry(suffix.to_lowercase()),
             None if glob.pattern.contains(WILDCARDS) => {
@@ -154,6 +161,7 @@ impl FileTypes for MimeTypes {
                     glob.weight,
                     glob.case_sensitive,
                     glob.pattern.chars().count(),
+                    Reverse(glob.order),
                 )
             })
             .map(|glob| self.canonical(&glob.mime))
@@ -194,6 +202,7 @@ fn glob(line: &str) -> Option<Glob> {
         mime,
         pattern,
         case_sensitive,
+        order: 0,
     })
 }
 

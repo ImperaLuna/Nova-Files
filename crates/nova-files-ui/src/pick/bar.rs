@@ -112,5 +112,5 @@ pub fn button(id: &'static str, label: SharedString, accept: bool) -> gpui::Stat
                     .hover(|button| button.bg(rgb(color::ROW_HIGHLIGHT)))
             }
         })
-        .child(label)
+        .child(div().min_w_0().truncate().child(label))
 }

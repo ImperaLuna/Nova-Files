@@ -170,3 +170,35 @@ async fn an_app_that_offers_every_file_gets_no_second_all_files(cx: &mut TestApp
     assert!(shown(cx, "pick-filter-1"));
     assert!(!shown(cx, "pick-filter-all"));
 }
+
+#[gpui::test]
+async fn a_long_type_name_leaves_room_for_the_buttons(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (_view, cx, _answers) = picker_with(cx, &tree, tree.path(), FILES, |request| {
+        request.filters = vec![filter(&"Very long type name ".repeat(40), vec![glob("*")])];
+    })
+    .await;
+    let width = cx.update(|window, _| window.viewport_size().width);
+    let name = cx.debug_bounds("pick-name").unwrap();
+    let accept = cx.debug_bounds("pick-accept").unwrap();
+    assert!(name.size.width > gpui::Pixels::ZERO, "{name:?}");
+    assert!(accept.right() <= width, "{accept:?} past {width:?}");
+}
+
+#[gpui::test]
+async fn many_types_scroll_inside_the_window(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (_view, cx, _answers) = picker_with(cx, &tree, tree.path(), FILES, |request| {
+        request.filters = (0..60)
+            .map(|at| filter(&format!("Type {at}"), vec![glob("*")]))
+            .collect();
+    })
+    .await;
+    click(cx, "pick-filter");
+    let height = cx.update(|window, _| window.viewport_size().height);
+    let menu = cx.debug_bounds("pick-filter-menu").unwrap();
+    assert!(menu.top() >= gpui::Pixels::ZERO, "{menu:?}");
+    assert!(menu.bottom() <= height, "{menu:?} past {height:?}");
+}

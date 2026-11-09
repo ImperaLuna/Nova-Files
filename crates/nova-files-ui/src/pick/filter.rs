@@ -114,6 +114,10 @@ impl MainWindow {
             return None;
         }
         let button = super::bar::button("pick-filter", label(&pick.request, pick.filter), false)
+            // A long name gives way to the name box and the other buttons.
+            .flex_shrink()
+            .min_w_0()
+            .max_w_full()
             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
                 this.toggle_filter_menu();
                 cx.notify();
@@ -133,8 +137,13 @@ impl MainWindow {
                         .snap_to_window()
                         .child(
                             div()
+                                .id("pick-filter-menu")
+                                .debug_selector(|| "pick-filter-menu".to_owned())
                                 .flex()
                                 .flex_col()
+                                // Many types scroll rather than run off the window.
+                                .max_h(size::FILTER_MENU_MAX_HEIGHT)
+                                .overflow_y_scroll()
                                 .p(size::ROW_GAP)
                                 .rounded(radius::BUTTON)
                                 .border(size::DIVIDER)
@@ -152,7 +161,16 @@ impl MainWindow {
                 .with_priority(MENU_PRIORITY),
             )
         });
-        Some(div().relative().flex_none().child(button).children(menu))
+        Some(
+            div()
+                .relative()
+                .flex()
+                .flex_shrink()
+                .min_w_0()
+                .max_w(size::FILTER_MAX_WIDTH)
+                .child(button)
+                .children(menu),
+        )
     }
 }
 

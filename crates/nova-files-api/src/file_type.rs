@@ -110,10 +110,12 @@ fn matches(pattern: &[char], name: &[char]) -> bool {
 /// How far a `[...]` set at the start of `pattern` reaches if it holds
 /// `c`, or `None` if it doesn't. An unclosed `[` matches only itself.
 fn set(pattern: &[char], c: char) -> Option<usize> {
+    // After `[!`, too, a `]` first in the set is one of its members.
+    let first_close = FIRST_CLOSE_AT + usize::from(pattern.get(1) == Some(&SET_NOT));
     let Some(close) = pattern
         .iter()
         .enumerate()
-        .skip(FIRST_CLOSE_AT)
+        .skip(first_close)
         .find_map(|(at, &item)| (item == SET_CLOSE).then_some(at))
     else {
         return (c == SET_OPEN).then_some(1);

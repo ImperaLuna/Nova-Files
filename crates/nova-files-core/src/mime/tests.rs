@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::PathBuf;
 
+use nova_files_api::{FileFilter, FilterRule};
+
 use super::*;
 
 /// A data folder of its own, removed afterwards.
@@ -222,4 +224,66 @@ fn the_environment_names_the_data_folders() {
         .status()
         .unwrap();
     assert!(status.success());
+}
+
+fn filter(rules: &[FilterRule]) -> FileFilter {
+    FileFilter {
+        name: "Some".to_owned(),
+        rules: rules.to_vec(),
+    }
+}
+
+#[test]
+fn a_glob_rule_admits_by_name_alone() {
+    let (_dir, types) = types("filter-glob");
+    let pdfs = filter(&[FilterRule::Glob("*.pdf".to_owned())]);
+    assert!(pdfs.admits(OsStr::new("a.PDF"), Some(&types)));
+    assert!(!pdfs.admits(OsStr::new("a.md"), Some(&types)));
+    // A name the database doesn't know is judged by the glob alone.
+    assert!(!pdfs.admits(OsStr::new("a.xyz"), Some(&types)));
+}
+
+#[test]
+fn a_mime_rule_admits_the_type_and_its_kinds() {
+    let (_dir, types) = types("filter-mime");
+    let text = filter(&[FilterRule::MimeType("text/plain".to_owned())]);
+    assert!(text.admits(OsStr::new("notes.md"), Some(&types)));
+    assert!(text.admits(OsStr::new("main.c"), Some(&types)));
+    assert!(!text.admits(OsStr::new("photo.png"), Some(&types)));
+    // Nothing known about the name: let it through.
+    assert!(text.admits(OsStr::new("blob"), Some(&types)));
+}
+
+#[test]
+fn any_rule_admits() {
+    let (_dir, types) = types("filter-any");
+    let both = filter(&[
+        FilterRule::MimeType("image/png".to_owned()),
+        FilterRule::Glob("*.pdf".to_owned()),
+    ]);
+    assert!(both.admits(OsStr::new("a.pdf"), Some(&types)));
+    assert!(both.admits(OsStr::new("a.png"), Some(&types)));
+    assert!(!both.admits(OsStr::new("a.md"), Some(&types)));
+}
+
+#[test]
+fn a_bare_star_matches_every_name() {
+    let dir = Dir::new("bare-star");
+    dir.write(GLOBS_FILE, "80:text/plain:*\n50:image/png:*.png\n");
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0));
+    assert_eq!(types.of(OsStr::new("notes")), Some("text/plain"));
+    assert_eq!(types.of(OsStr::new("a.png")), Some("text/plain"));
+}
+
+#[test]
+fn on_a_tie_the_first_data_folder_wins() {
+    let user = Dir::new("tie-user");
+    user.write(GLOBS_FILE, "50:text/x-personal:*.foo\n");
+    let system = Dir::new("tie-system");
+    system.write(GLOBS_FILE, "50:application/x-system:*.foo\n");
+    let types = MimeTypes::load(&[user.0.clone(), system.0.clone()]);
+    assert_eq!(
+        types.of(OsStr::new("document.foo")),
+        Some("text/x-personal")
+    );
 }

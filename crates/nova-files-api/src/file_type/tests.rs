@@ -1,5 +1,4 @@
 use std::ffi::OsStr;
-use std::path::Path;
 
 use super::*;
 
@@ -43,62 +42,11 @@ fn case_folds_unless_asked_not_to() {
     assert!(!glob_matches("*.C", "main.c", true));
 }
 
-/// A database that knows `.md` as Markdown, a kind of plain text.
-#[derive(Debug)]
-struct Types;
-
-impl FileTypes for Types {
-    fn of(&self, name: &OsStr) -> Option<&str> {
-        match Path::new(name).extension()?.to_str()? {
-            "md" => Some("text/markdown"),
-            "png" => Some("image/png"),
-            _ => None,
-        }
-    }
-
-    fn is_a(&self, mime: &str, wanted: &str) -> bool {
-        mime == wanted || (mime == "text/markdown" && wanted == "text/plain")
-    }
-}
-
 fn filter(rules: &[FilterRule]) -> FileFilter {
     FileFilter {
         name: "Some".to_owned(),
         rules: rules.to_vec(),
     }
-}
-
-fn admits(filter: &FileFilter, name: &str) -> bool {
-    filter.admits(OsStr::new(name), Some(&Types))
-}
-
-#[test]
-fn a_glob_rule_admits_by_name_alone() {
-    let pdfs = filter(&[FilterRule::Glob("*.pdf".to_owned())]);
-    assert!(admits(&pdfs, "a.PDF"));
-    assert!(!admits(&pdfs, "a.md"));
-    // A name the database doesn't know is judged by the glob alone.
-    assert!(!admits(&pdfs, "a.xyz"));
-}
-
-#[test]
-fn a_mime_rule_admits_the_type_and_its_kinds() {
-    let text = filter(&[FilterRule::MimeType("text/plain".to_owned())]);
-    assert!(admits(&text, "notes.md"));
-    assert!(!admits(&text, "photo.png"));
-    // Nothing known about the name: let it through.
-    assert!(admits(&text, "README"));
-}
-
-#[test]
-fn any_rule_admits() {
-    let both = filter(&[
-        FilterRule::MimeType("image/png".to_owned()),
-        FilterRule::Glob("*.pdf".to_owned()),
-    ]);
-    assert!(admits(&both, "a.pdf"));
-    assert!(admits(&both, "a.png"));
-    assert!(!admits(&both, "a.md"));
 }
 
 #[test]
@@ -107,4 +55,12 @@ fn without_a_database_mime_rules_admit_everything() {
     assert!(text.admits(OsStr::new("photo.png"), None));
     let none = filter(&[]);
     assert!(!none.admits(OsStr::new("photo.png"), None));
+}
+
+#[test]
+fn a_negated_set_can_hold_a_closing_bracket() {
+    // `]` right after `[!` is in the set, as in fnmatch.
+    assert!(glob_matches("[!]]*.txt", "notes.txt", true));
+    assert!(!glob_matches("[!]]*.txt", "]notes.txt", true));
+    assert!(glob_matches("[]]x", "]x", true));
 }

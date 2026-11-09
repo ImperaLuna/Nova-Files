@@ -89,6 +89,10 @@ pub mod size {
     pub const ROW_GAP: Pixels = px(2.0);
     /// Hairline width.
     pub const DIVIDER: Pixels = px(1.0);
+    /// The widest the type filter's button gets; a longer name is cut.
+    pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
+    /// The tallest the type menu gets before it scrolls.
+    pub const FILTER_MENU_MAX_HEIGHT: Pixels = px(320.0);
 }
 
 /// How much of an element shows through.
