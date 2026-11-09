@@ -387,32 +387,37 @@ impl MainWindow {
         }
     }
 
+    /// The folder the window asked for arrived.
+    fn listed(&mut self, listing: Listing, cx: &mut Context<Self>) {
+        self.asked = None;
+        let path = listing.path.clone();
+        self.history.arrived(&path);
+        // Read again in place: keep the scroll position.
+        let same_folder = self.folder() == Some(path.as_path());
+        self.selection = self.selection_for(&listing);
+        self.listing = Some(listing);
+        self.core_moved = false;
+        self.details = HashMap::new();
+        release(self.thumbnails.take_all(), None, cx);
+        self.rows_wanted = 0..0;
+        if !same_folder {
+            self.scroll = UniformListScrollHandle::new();
+            self.jump = TypeJump::default();
+            self.band = None;
+        }
+        self.pick_folder_opened(cx);
+        if !same_folder && let Some(cursor) = self.cursor() {
+            self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
+        }
+        cx.emit(WindowEvent::Opened(path));
+        cx.notify();
+    }
+
     fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
             Event::Pong => self.set_status(CoreStatus::Connected, cx),
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
-                self.asked = None;
-                let path = listing.path.clone();
-                self.history.arrived(&path);
-                // Read again in place: keep the scroll position.
-                let same_folder = self.folder() == Some(path.as_path());
-                self.selection = self.selection_for(&listing);
-                self.listing = Some(listing);
-                self.core_moved = false;
-                self.details = HashMap::new();
-                release(self.thumbnails.take_all(), None, cx);
-                self.rows_wanted = 0..0;
-                if !same_folder {
-                    self.scroll = UniformListScrollHandle::new();
-                    self.jump = TypeJump::default();
-                    self.band = None;
-                }
-                self.pick_folder_opened(cx);
-                if !same_folder && let Some(cursor) = self.cursor() {
-                    self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
-                }
-                cx.emit(WindowEvent::Opened(path));
-                cx.notify();
+                self.listed(listing, cx);
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
                 self.asked = None;
