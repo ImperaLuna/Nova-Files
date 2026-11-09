@@ -29,7 +29,7 @@ mod typed;
 
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write as _};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use gpui::{
     AnyWindowHandle, App, AppContext as _, ClickEvent, Context, Entity, Focusable as _,
@@ -160,14 +160,26 @@ struct Jump {
 
 impl Picker {
     /// The app's suggested save name, if the box still shows it as it came.
+    /// Only a plain name counts: one with a `/`, or `.` or `..`, is read
+    /// as typed, so a save never lands outside the folder on screen
+    /// unasked.
     fn unchanged_suggestion(&self, text: &str) -> Option<OsString> {
         match &self.request.kind {
-            PickKind::Save { name } if !name.is_empty() && name.to_string_lossy() == text => {
+            PickKind::Save { name } if is_plain_name(name) && name.to_string_lossy() == text => {
                 Some(name.clone())
             }
             _ => None,
         }
     }
+}
+
+/// Whether `name` is one file name, not a path or a folder's dots.
+fn is_plain_name(name: &OsStr) -> bool {
+    let mut parts = Path::new(name).components();
+    matches!(
+        (parts.next(), parts.next()),
+        (Some(Component::Normal(part)), None) if part == name
+    )
 }
 
 impl MainWindow {
@@ -632,6 +644,24 @@ mod tests {
             name: "a.txt".into(),
         };
         assert_eq!(accept_label(&request("", save)), "Save");
+    }
+
+    #[test]
+    fn only_a_plain_name_is_taken_as_it_came() {
+        for plain in ["notes.txt", " notes.txt", "~", "..notes"] {
+            assert!(is_plain_name(OsStr::new(plain)), "{plain:?}");
+        }
+        for path in [
+            "",
+            ".",
+            "..",
+            "../notes.txt",
+            "/etc/passwd",
+            "a/b",
+            "notes.txt/",
+        ] {
+            assert!(!is_plain_name(OsStr::new(path)), "{path:?}");
+        }
     }
 
     #[test]

@@ -642,3 +642,17 @@ async fn a_suggested_name_keeps_its_outer_spaces(cx: &mut TestAppContext) {
 async fn a_suggested_tilde_is_a_name_not_home(cx: &mut TestAppContext) {
     saves_as_suggested(cx, "~").await;
 }
+
+#[gpui::test]
+async fn a_suggested_path_is_read_as_typed_not_saved_blindly(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let projects = tree.path().join("Projects");
+    let (view, cx, answers) = picker(cx, &tree, &projects, save("../notes.txt")).await;
+    cx.simulate_keystrokes("enter");
+    // It goes to the folder the path names, with the name to save in the box.
+    wait_for_folder(&view, cx, tree.path()).await;
+    wait_for_name(&view, cx, "notes.txt").await;
+    assert!(answers.try_recv().is_err());
+    assert!(!closed(cx));
+}
