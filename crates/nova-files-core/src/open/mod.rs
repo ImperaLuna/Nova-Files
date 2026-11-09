@@ -16,7 +16,8 @@ mod exec;
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
 use std::thread;
 
 use defaults::{App, Places};
@@ -115,7 +116,9 @@ fn command(app: &App, file: &Path) -> Option<Vec<OsString>> {
     exec::command_line(&app.entry.exec, file, fields)
 }
 
-/// Starts `line` on its own, and reaps it on a thread when it exits.
+/// Starts `line` on its own, and reaps it on a thread when it exits. The
+/// thread starts first, so an app that runs is always reaped and reported
+/// as started.
 fn launch(
     line: &[OsString],
     working_dir: Option<&Path>,
@@ -125,10 +128,14 @@ fn launch(
         .split_first()
         .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
     let mut command = prepare(program, args, working_dir, activation);
-    let mut child = command.spawn()?;
+    let (hand_over, started) = mpsc::channel::<Child>();
+    // Without the app, the sender is dropped and the thread ends at once.
     thread::Builder::new()
         .name(REAPER_THREAD.to_owned())
-        .spawn(move || child.wait())?;
+        .spawn(move || started.recv().map(|mut child| child.wait()))?;
+    let child = command.spawn()?;
+    // The thread only ends once it has the child, so this can't fail.
+    hand_over.send(child).ok();
     Ok(())
 }
 
