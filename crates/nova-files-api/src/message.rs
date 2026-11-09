@@ -65,9 +65,14 @@ pub enum Command {
     /// core never reads them; the UI owns what they say. Bytes over the
     /// core's cap (64 KiB) are dropped.
     SaveWindowState(Vec<u8>),
+    /// Hear about every job from now on: each [`Event::JobFinished`].
+    /// A client that only asks one question and waits for its answer
+    /// leaves this out, so no job's news comes in between.
+    WatchJobs,
     /// Start `operation` as a job. The answer is [`Event::JobStarted`]
-    /// with the same `tag`, to this client; every client then hears
-    /// [`Event::JobFinished`] once it ends.
+    /// with the same `tag`; this client then watches jobs (see
+    /// [`Command::WatchJobs`]) and hears [`Event::JobFinished`] once it
+    /// ends.
     StartJob { tag: JobTag, operation: Operation },
 }
 
@@ -123,8 +128,8 @@ pub enum Event {
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },
     /// Job `job` has ended. `changed` names the folders whose entries it
-    /// changed, so a window showing one reads it again. Every client hears
-    /// it.
+    /// changed, so a window showing one reads it again. Every client that
+    /// watches jobs hears it.
     JobFinished {
         job: JobId,
         outcome: Outcome,

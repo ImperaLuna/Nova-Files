@@ -5,7 +5,8 @@
 //! window about to open) starts the wait again, and silence ends the loop.
 //!
 //! Commands that touch the disk run as jobs on threads of their own (see
-//! `jobs`), so a slow disk never holds up the loop or other clients.
+//! `jobs`, and `ops` for file operations), so a slow disk never holds up
+//! the loop or other clients.
 
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
@@ -16,6 +17,7 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::jobs::{self, Client};
 use crate::mime::MimeTypes;
+use crate::ops::Jobs;
 use crate::places::Home;
 use crate::search::Searcher;
 use crate::thumbs::Thumbnails;
@@ -30,6 +32,8 @@ pub struct Setup {
     /// The MIME database, read at the first [`Command::OpenFile`] and kept
     /// while the core runs.
     pub mime_types: Arc<OnceLock<MimeTypes>>,
+    /// File operations, and the clients that hear about them.
+    pub jobs: Jobs,
 }
 
 /// Runs until idle.
@@ -60,6 +64,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
         CoreMessage::Disconnected { client } => {
             // Dropping the client stops its listing.
             clients.remove(&client);
+            setup.jobs.audience().leave(client);
         }
         // Receiving it already restarted the idle wait.
         CoreMessage::Activity => {}
@@ -67,8 +72,9 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             let Some(target) = clients.get(&client) else {
                 return;
             };
-            if answer(target, command, setup).is_err() {
+            if answer(client, target, command, setup).is_err() {
                 clients.remove(&client);
+                setup.jobs.audience().leave(client);
             }
         }
     }
@@ -79,6 +85,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
 /// # Errors
 /// [`nova_files_api::ClientGone`] when the client stopped listening.
 fn answer(
+    id: ClientId,
     client: &Client,
     command: Command,
     setup: &Setup,
@@ -109,6 +116,14 @@ fn answer(
         Command::SaveWindowState(bytes) => {
             setup.window_state.save(bytes);
             Ok(())
+        }
+        Command::WatchJobs => {
+            setup.jobs.audience().join(id, Arc::clone(client.events()));
+            Ok(())
+        }
+        Command::StartJob { tag, operation } => {
+            setup.jobs.audience().join(id, Arc::clone(client.events()));
+            setup.jobs.start(client, tag, operation)
         }
     }
 }

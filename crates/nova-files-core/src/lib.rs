@@ -15,6 +15,7 @@ mod list;
 mod memory;
 mod mime;
 mod open;
+mod ops;
 mod places;
 mod run;
 mod search;
@@ -98,6 +99,7 @@ pub fn spawn_with(
         thumbnails,
         searcher,
         mime_types: Arc::default(),
+        jobs: ops::Jobs::default(),
     };
     let thread = thread::Builder::new()
         .name(THREAD_NAME.to_owned())

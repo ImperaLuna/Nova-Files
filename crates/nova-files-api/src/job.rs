@@ -4,11 +4,12 @@
 //! A client starts a job with [`Command::StartJob`], tagging it with a
 //! [`JobTag`] of its own choosing. The core answers that client with
 //! [`Event::JobStarted`], naming the [`JobId`] it gave the job. Everything
-//! after that is about the job, not the client, so every connected client
-//! hears it: a job keeps running when the window that started it closes,
-//! and another window can follow it.
+//! after that is about the job, not the client, so every client that
+//! watches jobs ([`Command::WatchJobs`]) hears it: a job keeps running when
+//! the window that started it closes, and another window can follow it.
 //!
 //! [`Command::StartJob`]: crate::Command::StartJob
+//! [`Command::WatchJobs`]: crate::Command::WatchJobs
 //! [`Event::JobStarted`]: crate::Event::JobStarted
 
 use std::ffi::OsString;
@@ -48,7 +49,8 @@ pub enum Outcome {
 pub enum Failure {
     /// Something else already has the name.
     NameTaken,
-    /// The name is empty, `.` or `..`, or holds a `/` or a NUL byte.
+    /// The name is empty, `.` or `..`, or holds a `/` or a NUL byte, or
+    /// a path isn't absolute.
     InvalidName,
     /// The file or folder isn't there any more.
     NotFound,
