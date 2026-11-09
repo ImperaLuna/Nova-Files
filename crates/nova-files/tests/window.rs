@@ -249,6 +249,7 @@ fn pick_request(kind: PickKind) -> (Box<PickRequest>, mpsc::Receiver<PickAnswer>
         filters: Vec::new(),
         filter: None,
         folder: None,
+        types: None,
         reply: PickReply::new(move |answer| {
             sender.send(answer).ok();
         }),

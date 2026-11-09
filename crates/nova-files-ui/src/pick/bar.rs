@@ -37,6 +37,7 @@ impl MainWindow {
             .items_center()
             .gap(size::GAP)
             .child(name)
+            .children(Self::filter_button(pick, cx))
             .child(
                 button("pick-cancel", CANCEL_LABEL.into(), false)
                     .on_click(cx.listener(|this, _: &ClickEvent, window, _| this.cancel(window))),
@@ -88,7 +89,7 @@ impl MainWindow {
 }
 
 /// A bar button; `accept` marks the one Enter does.
-fn button(id: &'static str, label: SharedString, accept: bool) -> gpui::Stateful<gpui::Div> {
+pub fn button(id: &'static str, label: SharedString, accept: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .debug_selector(move || id.to_owned())
@@ -111,5 +112,5 @@ fn button(id: &'static str, label: SharedString, accept: bool) -> gpui::Stateful
                     .hover(|button| button.bg(rgb(color::ROW_HIGHLIGHT)))
             }
         })
-        .child(label)
+        .child(div().min_w_0().truncate().child(label))
 }

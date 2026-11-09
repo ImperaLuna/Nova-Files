@@ -24,6 +24,7 @@
 //! the entry clicked, until the box is edited.
 
 mod bar;
+mod filter;
 mod save;
 mod typed;
 
@@ -142,6 +143,11 @@ pub struct Picker {
     /// The picker's window, to close once a save is answered from a
     /// listing.
     window: AnyWindowHandle,
+    /// The type filter chosen, as an index into the app's filters; `None`
+    /// for All files.
+    filter: Option<usize>,
+    /// Whether the filter menu is open.
+    filter_menu: bool,
     _name_events: Subscription,
 }
 
@@ -193,6 +199,7 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         let mode = Mode::of(&request.kind);
+        let first_filter = filter::first(&request);
         let name = cx.new(TextField::new);
         if let PickKind::Save { name: suggested } = &request.kind {
             let text = suggested.to_string_lossy();
@@ -250,6 +257,8 @@ impl MainWindow {
             placed,
             recheck: None,
             window: window.window_handle(),
+            filter: first_filter,
+            filter_menu: false,
             _name_events: name_events,
         });
     }
@@ -580,7 +589,7 @@ impl MainWindow {
         let Some(pick) = self.pick.take() else {
             return false;
         };
-        let filter = pick.request.filter;
+        let filter = pick.filter;
         pick.request.reply.answer(PickAnswer::Picked {
             paths: vec![path],
             filter,
@@ -629,6 +638,7 @@ mod tests {
             filters: Vec::new(),
             filter: None,
             folder: None,
+            types: None,
             reply: PickReply::new(|_| {}),
         }
     }
@@ -692,6 +702,42 @@ mod tests {
         ] {
             assert!(!is_plain_name(OsStr::new(path)), "{path:?}");
         }
+    }
+
+    #[test]
+    fn a_picker_starts_on_the_type_the_app_asks_for_or_its_first() {
+        let with = |count: usize, chosen| PickRequest {
+            filters: (0..count)
+                .map(|at| nova_files_api::FileFilter {
+                    name: at.to_string(),
+                    rules: Vec::new(),
+                })
+                .collect(),
+            filter: chosen,
+            ..request("", FILES)
+        };
+        assert_eq!(filter::first(&with(3, Some(2))), Some(2));
+        assert_eq!(filter::first(&with(3, None)), Some(0));
+        assert_eq!(filter::first(&with(3, Some(3))), Some(0));
+        assert_eq!(filter::first(&with(0, None)), None);
+        assert_eq!(filter::first(&with(0, Some(0))), None);
+    }
+
+    #[test]
+    fn the_menu_names_each_type_and_marks_the_one_chosen() {
+        let request = PickRequest {
+            filters: vec![nova_files_api::FileFilter {
+                name: "Text".to_owned(),
+                rules: Vec::new(),
+            }],
+            ..request("", FILES)
+        };
+        assert_eq!(filter::label(&request, Some(0)), "Text");
+        assert_eq!(filter::label(&request, None), "All files");
+        assert_eq!(filter::label(&request, Some(1)), "All files");
+        assert!(filter::is_chosen(Some(0), Some(0)));
+        assert!(filter::is_chosen(None, None));
+        assert!(!filter::is_chosen(Some(0), None));
     }
 
     #[test]

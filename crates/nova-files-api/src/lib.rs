@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 mod connection;
+mod file_type;
 mod folder;
 mod message;
 mod pick;
@@ -19,6 +20,7 @@ pub mod uri;
 pub use connection::{
     ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
 };
+pub use file_type::{FileTypes, glob_matches};
 pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable,
 };

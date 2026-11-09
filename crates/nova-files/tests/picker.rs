@@ -2,7 +2,8 @@
 //! driven through its pick bar: clicks copy a file's name into the name
 //! box, Enter and the Open or Save button do what the box says, typed
 //! paths go there, folders can be picked, a save onto a file that is there
-//! asks Replace or Keep both, and Cancel or Escape answers cancelled.
+//! asks Replace or Keep both, Cancel or Escape answers cancelled, and the
+//! app's file types dim the files they leave out.
 
 #![expect(
     clippy::unwrap_used,
@@ -11,6 +12,7 @@
 )]
 
 mod common;
+mod pick_filter;
 mod pick_names;
 
 use std::ffi::OsString;
@@ -67,6 +69,21 @@ async fn picker<'a>(
     &'a mut VisualTestContext,
     Receiver<PickAnswer>,
 ) {
+    picker_with(cx, tree, folder, kind, |_| {}).await
+}
+
+/// [`picker`], with `ask` filling in more of the request.
+async fn picker_with<'a>(
+    cx: &'a mut TestAppContext,
+    tree: &TempFolder,
+    folder: &Path,
+    kind: PickKind,
+    ask: impl FnOnce(&mut PickRequest),
+) -> (
+    Entity<MainWindow>,
+    &'a mut VisualTestContext,
+    Receiver<PickAnswer>,
+) {
     cx.update(nova_files_ui::bind_text_keys);
     // The core answers from its own threads.
     cx.executor().allow_parking();
@@ -82,7 +99,7 @@ async fn picker<'a>(
         cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx));
     wait_for_folder(&view, cx, folder).await;
     let (sender, answers) = mpsc::channel();
-    let request = Box::new(PickRequest {
+    let mut request = Box::new(PickRequest {
         id: PickId(9),
         kind,
         title: String::new(),
@@ -90,10 +107,12 @@ async fn picker<'a>(
         filters: Vec::new(),
         filter: None,
         folder: None,
+        types: None,
         reply: PickReply::new(move |answer| {
             sender.send(answer).ok();
         }),
     });
+    ask(&mut request);
     view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
     cx.run_until_parked();
     (view, cx, answers)
