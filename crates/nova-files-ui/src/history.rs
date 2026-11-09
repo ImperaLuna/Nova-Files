@@ -222,6 +222,16 @@ mod tests {
         history.refused(Path::new("/elsewhere"));
         history.arrived(Path::new("/a"));
         assert_eq!(history.forward_target(), Some(Path::new("/b")));
+
+        let mut history = walked(&["/a", "/b", "/c"]);
+        for place in ["/b", "/a"] {
+            history.back();
+            history.arrived(Path::new(place));
+        }
+        history.forward();
+        history.refused(Path::new("/elsewhere"));
+        history.arrived(Path::new("/b"));
+        assert_eq!(history.forward_target(), Some(Path::new("/c")));
     }
 
     #[test]
