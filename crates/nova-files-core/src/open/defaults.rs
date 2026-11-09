@@ -7,7 +7,8 @@
 //! for every name in `XDG_CURRENT_DESKTOP` comes before the plain one. The
 //! first `Default Applications` entry that is installed wins. Without one,
 //! `Added Associations` follow in the same order, then each data folder's
-//! `mimeinfo.cache`, skipping apps a `Removed Associations` entry took off.
+//! `mimeinfo.cache`. A `Removed Associations` entry hides the app from its
+//! own list and every lower one, defaults included.
 
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -71,23 +72,40 @@ pub fn default_app(types: &[&str], places: &Places) -> Option<App> {
 
 fn for_type(mime: &str, lists: &[String], caches: &[String], places: &Places) -> Option<App> {
     let install = |id: &str| installed(id, places);
-    let defaults = lists.iter().flat_map(|text| ids(text, DEFAULTS, mime));
-    if let Some(app) = defaults.into_iter().find_map(install) {
+    if let Some(app) = first_listed(lists, DEFAULTS, mime, install) {
         return Some(app);
     }
-    let mut removed = HashSet::new();
-    for text in lists {
-        removed.extend(ids(text, REMOVED, mime));
-        let added = ids(text, ADDED, mime).into_iter();
-        if let Some(app) = added.filter(|id| !removed.contains(id)).find_map(install) {
-            return Some(app);
-        }
+    if let Some(app) = first_listed(lists, ADDED, mime, install) {
+        return Some(app);
     }
+    let removed: HashSet<&str> = lists
+        .iter()
+        .flat_map(|text| ids(text, REMOVED, mime))
+        .collect();
     caches
         .iter()
         .flat_map(|text| ids(text, CACHE_GROUP, mime))
         .filter(|id| !removed.contains(id))
         .find_map(install)
+}
+
+/// The first installed app `group` lists for `mime`, list by list,
+/// skipping any that list or a higher one removed.
+fn first_listed(
+    lists: &[String],
+    group: &str,
+    mime: &str,
+    install: impl Fn(&str) -> Option<App>,
+) -> Option<App> {
+    let mut removed = HashSet::new();
+    for text in lists {
+        removed.extend(ids(text, REMOVED, mime));
+        let listed = ids(text, group, mime).into_iter();
+        if let Some(app) = listed.filter(|id| !removed.contains(id)).find_map(&install) {
+            return Some(app);
+        }
+    }
+    None
 }
 
 /// Every `mimeapps.list` place, highest precedence first.
@@ -330,6 +348,25 @@ mod tests {
         assert_eq!(
             tree.default_for(&["image/png"]).as_deref(),
             Some("share/applications/added.desktop")
+        );
+    }
+
+    #[test]
+    fn a_removed_app_is_no_lower_lists_default() {
+        let tree = Tree::new("removed-default");
+        tree.app("share/applications/a.desktop")
+            .app("share/applications/b.desktop")
+            .write(
+                "config/mimeapps.list",
+                "[Removed Associations]\nimage/png=a.desktop\n[Added Associations]\nimage/png=b.desktop\n",
+            )
+            .write(
+                "etc/mimeapps.list",
+                "[Default Applications]\nimage/png=a.desktop\n",
+            );
+        assert_eq!(
+            tree.default_for(&["image/png"]).as_deref(),
+            Some("share/applications/b.desktop")
         );
     }
 

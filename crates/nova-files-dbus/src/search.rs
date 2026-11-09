@@ -14,8 +14,8 @@
 //!
 //! `Open` opens a folder in a Nova Files window and a file with the user's
 //! default app. The core starts that app itself when it can (see
-//! `Command::OpenFile`); otherwise, as in a sandbox or for a type it finds
-//! no app for, the desktop portal's `OpenFile` does. `ShowInFolder` opens
+//! `Command::OpenFile`); when it says it can't, as in a sandbox or for a
+//! type it finds no app for, the desktop portal's `OpenFile` does. `ShowInFolder` opens
 //! a window on the folder that holds the path. Both take the launcher's
 //! `platform_data`, as `org.freedesktop.Application.Open` does, and pass
 //! its `activation-token` on, so the compositor lets the opened app take
@@ -232,11 +232,14 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
                     path,
                     activation: token.clone(),
                 };
-                // Any other answer leaves it to the portal.
-                if ask_core(&self.connector, command).await == Ok(Event::FileOpened) {
-                    return Ok(());
+                // Only a sure "not opened" goes to the portal: past the
+                // wait, the core may still start the app, and it would
+                // open twice.
+                match ask_core(&self.connector, command).await? {
+                    Event::FileOpened => Ok(()),
+                    Event::FileNotOpened => open_file(bus, file, token).await,
+                    _ => Err(failed("the core gave an unexpected answer")),
                 }
-                open_file(bus, file, token).await
             }
         }
     }
