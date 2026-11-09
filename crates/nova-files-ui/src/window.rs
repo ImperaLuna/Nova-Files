@@ -410,6 +410,8 @@ impl MainWindow {
                 }
                 self.pick_folder_refused(id, &path);
                 cx.emit(WindowEvent::Refused(path));
+                // Back or Forward may have nowhere left to go.
+                cx.notify();
             }
             Event::DetailsRead { id, first, details } => {
                 if let Some(listing) = &self.listing
