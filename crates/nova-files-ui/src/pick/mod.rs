@@ -23,9 +23,12 @@
 //! listing of its folder (see `save`). A name a click put in the box means
 //! the entry clicked, until the box is edited.
 //!
-//! When the app asks for several entries, Ctrl+click and Shift+click
-//! select more (see `select`). The box then shows each file's name in
-//! quotes, and Open, while the box is unchanged, picks them all.
+//! The arrow keys, which the name box passes on, move through the
+//! entries as in a main window, and Enter with nothing typed goes into a
+//! folder they landed on. When the app asks for several entries,
+//! Ctrl+click and Shift+click select more (see `select`). The box then
+//! shows each file's name in quotes, and Open, while the box is
+//! unchanged, picks them all.
 
 mod bar;
 mod filter;
@@ -47,12 +50,10 @@ use nova_files_api::{
 };
 
 pub use self::opening::foreign_parent;
-use self::select::{Click, Selection};
+use crate::selecting::DOUBLE_CLICK;
+use crate::selection::Click;
 use crate::text::{TextField, TextFieldEvent};
 use crate::window::{MainWindow, tidy};
-
-/// The clicks in a double-click.
-const DOUBLE_CLICK: usize = 2;
 
 /// What a picker is for, from what the app asked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,8 +133,6 @@ pub struct Picker {
     mode: Mode,
     /// The name box.
     pub name: Entity<TextField>,
-    /// The entries clicked, in the listing they belong to.
-    selected: Option<Selection>,
     /// A save onto a file that is there, waiting for Replace or Keep both.
     pub conflict: Option<Conflict>,
     /// A typed path the window is going to.
@@ -182,8 +181,16 @@ struct Jump {
 }
 
 impl Picker {
+    /// What the picker picks: a range holds only these.
+    pub const fn wanted(&self) -> EntryKind {
+        match self.mode {
+            Mode::Folders => EntryKind::Folder,
+            Mode::Files | Mode::Save => EntryKind::File,
+        }
+    }
+
     /// Whether the app takes more than one entry.
-    const fn several(&self) -> bool {
+    pub(crate) const fn several(&self) -> bool {
         matches!(self.request.kind, PickKind::Open { multiple: true, .. })
     }
 
@@ -267,7 +274,6 @@ impl MainWindow {
             request,
             mode,
             name,
-            selected: None,
             conflict: None,
             jump: None,
             copied: None,
@@ -292,22 +298,6 @@ impl MainWindow {
         self.listing.as_ref().map(|listing| listing.id)
     }
 
-    /// The entries a picker has selected, in the listing they belong to,
-    /// while there are any.
-    pub fn pick_selection(&self) -> Option<(ListingId, Vec<EntryId>)> {
-        let selection = self.pick.as_ref()?.selected.as_ref()?;
-        let ids = selection.ids();
-        (!ids.is_empty()).then(|| (selection.listing, ids.to_vec()))
-    }
-
-    /// Whether the row `entry` shows as one of the picker's selection.
-    pub fn pick_selects(&self, (listing, id): (ListingId, EntryId)) -> bool {
-        self.pick
-            .as_ref()
-            .and_then(|pick| pick.selected.as_ref())
-            .is_some_and(|selection| selection.listing == listing && selection.contains(id))
-    }
-
     /// The text in the picker's name box.
     pub fn pick_name(&self, cx: &App) -> Option<String> {
         let pick = self.pick.as_ref()?;
@@ -322,7 +312,7 @@ impl MainWindow {
     }
 
     /// A click on the entry `id` of `listing`. Outside a picker a click
-    /// goes into a folder and leaves a file alone.
+    /// selects and a double-click opens (see `selecting`).
     pub fn entry_clicked(
         &mut self,
         (listing, id): (ListingId, EntryId),
@@ -336,9 +326,7 @@ impl MainWindow {
         };
         let kind = entry.kind;
         let Some(pick) = &mut self.pick else {
-            if kind == EntryKind::Folder {
-                self.open_entry(id);
-            }
+            self.main_clicked((listing, id), event, cx);
             return;
         };
         let click = Click::of(event.modifiers(), pick.several());
@@ -453,20 +441,28 @@ impl MainWindow {
             Mode::Folders => EntryKind::Folder,
             Mode::Save => return false,
         };
-        let paths: Vec<PathBuf> = pick
-            .selected
+        let selected = self
+            .selection
             .as_ref()
             .filter(|selection| self.listing_id() == Some(selection.listing))
             .map(|selection| self.shown_entries(selection.ids()))
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|&(kind, _, _)| kind == wanted)
+            .unwrap_or_default();
+        let paths: Vec<PathBuf> = selected
+            .iter()
+            .filter(|&&(kind, _, _)| kind == wanted)
             .map(|(_, _, name)| folder.join(name))
             .collect();
         match (mode, paths.is_empty()) {
             (_, false) => self.answer_all(paths),
             (Mode::Folders, true) => self.answer(folder.to_path_buf()),
-            (Mode::Files | Mode::Save, true) => false,
+            // A folder the keys moved to, in a picker for files: Enter
+            // goes into it.
+            (Mode::Files | Mode::Save, true) => {
+                if let [(EntryKind::Folder, id, _)] = selected[..] {
+                    self.open_entry(id);
+                }
+                false
+            }
         }
     }
 
@@ -563,8 +559,11 @@ impl MainWindow {
     /// its name in the box.
     pub fn pick_folder_opened(&mut self, cx: &mut Context<Self>) {
         let listed = self.listing_id();
+        if self.pick.is_none() {
+            return;
+        }
+        self.selection = None;
         let Some(pick) = &mut self.pick else { return };
-        pick.selected = None;
         pick.conflict = None;
         pick.copied = None;
         if let Some(jump) = pick.jump.take()
