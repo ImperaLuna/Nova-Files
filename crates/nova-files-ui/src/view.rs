@@ -6,7 +6,9 @@
 //! and a name, then Modified, Type and Size; Modified and Size stay empty
 //! until the core has read that entry's details. A thumbnail, once it
 //! arrives, takes the icon's place. In pick mode a click selects an entry
-//! and the pick bar runs along the bottom (see `pick`). Every element a test clicks carries a debug selector:
+//! and the pick bar runs along the bottom (see `pick`). The window sets
+//! the key context its actions are bound in and handles each action it
+//! takes; buttons send actions rather than doing the work (see `commands`). Every element a test clicks carries a debug selector:
 //! `up`, `place-<n>` and `entry-<n>`, counted from 0. Each line's Modified
 //! cell carries one too, `modified-header` and `modified-<n>`, so a test can
 //! check the columns line up.
@@ -25,20 +27,31 @@ use gpui::{
 use nova_files_api::{EntryKind, Place, PlaceKind};
 
 use crate::assets::Icon;
+use crate::commands::{self, GoUp};
 use crate::theme::{color, opacity, radius, size};
 use crate::window::MainWindow;
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
+        // A main window takes focus itself, and a click inside gives it
+        // back; a picker keeps it in its name box, whose keys pass the
+        // window's on.
+        let main = self.pick.is_none();
+        if main && window.focused(cx).is_none() {
+            window.focus(&self.focus, cx);
+        }
         div()
+            .key_context(commands::KEY_CONTEXT)
+            .when(main, |root| root.track_focus(&self.focus))
+            .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .size_full()
             .flex()
             .flex_col()
             .bg(rgb(color::SURFACE))
             .text_color(rgb(color::TEXT))
             .text_size(size::TEXT)
-            .child(self.toolbar(cx))
+            .child(self.toolbar())
             .child(
                 div()
                     .flex()
@@ -61,7 +74,7 @@ impl Render for MainWindow {
 }
 
 impl MainWindow {
-    fn toolbar(&self, cx: &Context<Self>) -> impl IntoElement {
+    fn toolbar(&self) -> impl IntoElement {
         let can_go_up = self.parent().is_some();
         let tone = if can_go_up {
             color::TEXT
@@ -81,12 +94,14 @@ impl MainWindow {
             .border_color(rgb(color::DIVIDER))
             .text_color(rgb(tone))
             .child(icon(Icon::Up, size::BUTTON_ICON, rgb(tone).into()))
-            .child("Up")
+            .child(commands::UP.label)
             .when(can_go_up, |button| {
                 button
                     .cursor_pointer()
                     .hover(|button| button.bg(rgb(color::ROW_HIGHLIGHT)))
-                    .on_click(cx.listener(|this, _: &ClickEvent, _, _| this.go_up()))
+                    .on_click(|_: &ClickEvent, window, cx| {
+                        window.dispatch_action(Box::new(GoUp), cx);
+                    })
             });
         let path = self
             .folder()

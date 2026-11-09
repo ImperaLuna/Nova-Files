@@ -15,7 +15,9 @@
 //!
 //! The core's events arrive through an async channel the window's own task
 //! reads; closing the window drops the connection, which tells the core
-//! one client fewer is using it. Drawing lives in `view`.
+//! one client fewer is using it. Drawing lives in `view`; the actions a
+//! key or button sends are handled in `view` too, each by one method here
+//! (see `commands`).
 //!
 //! As the list draws, the window tells the core which rows are on screen,
 //! plus one screen either side. The core answers with those rows' details
@@ -31,7 +33,10 @@ use std::sync::Arc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{App, Context, EventEmitter, RenderImage, Task, UniformListScrollHandle, Window};
+use gpui::{
+    App, Context, EventEmitter, FocusHandle, Focusable, RenderImage, Task, UniformListScrollHandle,
+    Window,
+};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
     Listing, ListingId, Place,
@@ -103,6 +108,8 @@ pub struct MainWindow {
     pub(crate) pick: Option<Picker>,
     /// The home folder, which `~` names in a picker's name box.
     pub(crate) home: PathBuf,
+    /// Focus for the window's own keys (see `commands`).
+    pub(crate) focus: FocusHandle,
     _events: Task<()>,
 }
 
@@ -183,6 +190,7 @@ impl MainWindow {
             places: Vec::new(),
             scroll: UniformListScrollHandle::new(),
             pick: None,
+            focus: cx.focus_handle(),
             _events: events,
         };
         window.open(folder);
@@ -488,6 +496,12 @@ impl MainWindow {
 }
 
 impl EventEmitter<WindowEvent> for MainWindow {}
+
+impl Focusable for MainWindow {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus.clone()
+    }
+}
 
 /// Drops `images` from GPUI's image atlas. `window` is the window being
 /// drawn or updated, if any: GPUI takes it out of its list meanwhile, so
