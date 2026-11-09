@@ -624,6 +624,22 @@ async fn editing_the_name_before_a_save_is_checked_drops_it(cx: &mut TestAppCont
     assert!(!closed(cx));
 }
 
+#[gpui::test]
+async fn editing_the_name_before_a_typed_folder_opens_keeps_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let projects = tree.path().join("Projects");
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), save("plan.txt")).await;
+    cx.simulate_keystrokes("ctrl-a");
+    cx.simulate_input("Projects/");
+    view.update_in(cx, MainWindow::accept);
+    // Typed before the folder is on screen.
+    cx.simulate_input("x");
+    wait_for_folder(&view, cx, &projects).await;
+    cx.run_until_parked();
+    assert_eq!(name(&view, cx).as_deref(), Some("Projects/x"));
+}
+
 /// Save with the app's `suggested` name as it came answers that name.
 async fn saves_as_suggested(cx: &mut TestAppContext, suggested: &str) {
     let _watchdog = Watchdog::start();

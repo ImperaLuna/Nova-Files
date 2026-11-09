@@ -218,11 +218,13 @@ impl MainWindow {
                     cx.notify();
                 }
                 TextFieldEvent::Changed => {
-                    // A new name takes back the question, and any save
-                    // still waiting on the old one.
+                    // A new name takes back the question, any save still
+                    // waiting on the old one, and the name a typed path
+                    // would leave in the box.
                     if let Some(pick) = &mut this.pick {
                         pick.conflict = None;
                         pick.recheck = None;
+                        pick.jump = None;
                     }
                     cx.notify();
                 }
