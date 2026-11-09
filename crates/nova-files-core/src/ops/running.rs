@@ -23,6 +23,8 @@ pub struct Running {
     journal: Option<Journal>,
     /// Answers given for every conflict of their kind.
     answers: HashMap<ConflictKind, Answer>,
+    /// How many conflicts it asked about.
+    asked: u64,
 }
 
 impl Running {
@@ -39,6 +41,7 @@ impl Running {
             journals,
             journal: None,
             answers: HashMap::new(),
+            asked: 0,
         }
     }
 
@@ -48,10 +51,12 @@ impl Running {
     ///
     /// # Errors
     /// [`Cancelled`] when a client cancels the job instead.
-    pub fn ask(&mut self, conflict: Conflict) -> Result<Answer, Cancelled> {
+    pub fn ask(&mut self, mut conflict: Conflict) -> Result<Answer, Cancelled> {
         if let Some(&answer) = self.answers.get(&conflict.kind) {
             return Ok(answer);
         }
+        self.asked += 1;
+        conflict.number = self.asked;
         let kind = conflict.kind;
         self.reporter.conflict(conflict);
         let (answer, scope) = self.shared.control.answer_to()?;

@@ -105,6 +105,7 @@ fn copying_again_asks_and_skip_keeps_the_first_copy() {
             kind: ConflictKind::FileExists,
             source,
             target: into.join("a.txt"),
+            number: 1,
         }
     );
     assert_eq!(outcome, Outcome::Done);
@@ -391,6 +392,7 @@ fn an_answer_for_this_one_is_asked_again_and_skip_skips_a_gone_source() {
     answer(&client, job, &gone, Answer::Skip, Scope::ThisOne);
     let (outcome, _) = client.ended(job);
 
+    assert_eq!([first.number, second.number, gone.number], [1, 2, 3]);
     assert_eq!(
         [first.kind, second.kind, gone.kind],
         [
@@ -403,4 +405,30 @@ fn an_answer_for_this_one_is_asked_again_and_skip_skips_a_gone_source() {
     assert_eq!(text(into.join("a")), "old");
     assert_eq!(text(into.join("b")), "new");
     assert!(!into.join("c").exists());
+}
+
+#[test]
+fn two_folders_of_the_same_name_are_each_asked_about() {
+    let bench = Bench::new("conflict-same-name");
+    let into = bench.at("into");
+    fs::create_dir_all(into.join("photos")).unwrap();
+    let sources = ["a", "b"].map(|from| {
+        let photos = bench.at(from).join("photos");
+        fs::create_dir_all(&photos).unwrap();
+        fs::write(photos.join(from), from).unwrap();
+        photos
+    });
+    let client = bench.client();
+
+    let job = client.start(copy(sources.to_vec(), &into));
+    let first = held(&client, job);
+    answer(&client, job, &first, Answer::Skip, Scope::ThisOne);
+    let second = held(&client, job);
+    answer(&client, job, &second, Answer::Merge, Scope::ThisOne);
+    let (outcome, _) = client.ended(job);
+
+    assert_eq!([first.source, second.source], sources);
+    assert_eq!(outcome, Outcome::Done);
+    assert!(!into.join("photos/a").exists());
+    assert_eq!(text(into.join("photos/b")), "b");
 }

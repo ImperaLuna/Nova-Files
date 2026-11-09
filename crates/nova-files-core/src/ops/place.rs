@@ -61,29 +61,57 @@ fn replace_or_fall_back(
     new: &Path,
     old: &Path,
     backup: &Path,
-    exchange: impl FnOnce(&Path, &Path) -> rustix::io::Result<()>,
+    exchange: impl Fn(&Path, &Path) -> rustix::io::Result<()>,
 ) -> io::Result<()> {
+    // A folder that took the name since it was looked at is never
+    // replaced: it goes back, and the name counts as taken.
     match exchange(new, old) {
         // `new` now holds what was `old`.
+        Ok(()) if is_folder(new) => {
+            let back = exchange(new, old).map_err(io::Error::from);
+            Err(taken_back(back, old, new))
+        }
         Ok(()) => fs::remove_file(new),
         Err(errno) if refuses_flag(errno) => {
             rename_no_replace(old, backup)?;
+            if is_folder(backup) {
+                return Err(taken_back(rename_no_replace(backup, old), old, backup));
+            }
             if let Err(error) = rename_no_replace(new, old) {
-                if let Err(stuck) = rename_no_replace(backup, old) {
-                    // Not a name to look at again: the job ends here, and
-                    // its journal says where the file is.
-                    return Err(io::Error::other(format!(
-                        "{} is left at {} ({error}, then {stuck})",
-                        old.display(),
-                        backup.display()
-                    )));
-                }
-                return Err(error);
+                return Err(match rename_no_replace(backup, old) {
+                    Ok(()) => error,
+                    Err(stuck) => left_at(old, backup, &error, &stuck),
+                });
             }
             fs::remove_file(backup)
         }
         Err(errno) => Err(errno.into()),
     }
+}
+
+/// Whether a folder, not a link to one, is at `path`.
+fn is_folder(path: &Path) -> bool {
+    path.symlink_metadata().is_ok_and(|there| there.is_dir())
+}
+
+/// The error for a folder at `old` that stepped to `at` and went `back`.
+fn taken_back(back: io::Result<()>, old: &Path, at: &Path) -> io::Error {
+    let taken = io::ErrorKind::AlreadyExists.into();
+    match back {
+        Ok(()) => taken,
+        Err(stuck) => left_at(old, at, &taken, &stuck),
+    }
+}
+
+/// What was at `old` is stuck at `at`: `error`, then `stuck` on the way
+/// back. Not a name to look at again: the job ends here, and its journal
+/// says where it is.
+fn left_at(old: &Path, at: &Path, error: &io::Error, stuck: &io::Error) -> io::Error {
+    io::Error::other(format!(
+        "{} is left at {} ({error}, then {stuck})",
+        old.display(),
+        at.display()
+    ))
 }
 
 /// Whether `errno` says the filesystem can't rename without replacing,
