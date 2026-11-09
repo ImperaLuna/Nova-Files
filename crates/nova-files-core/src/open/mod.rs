@@ -101,13 +101,27 @@ pub fn open_in_default_app(
         return Err(NotOpened::Sandboxed);
     }
     let places = places_from(|name| std::env::var_os(name));
-    let app = defaults::default_app(types, &places).ok_or(NotOpened::NoApp)?;
+    open_from(file, types, activation, &places)
+}
+
+/// [`open_in_default_app`] with the apps and lists in `places`.
+fn open_from(
+    file: &Path,
+    types: &[&str],
+    activation: Option<&str>,
+    places: &Places,
+) -> Result<(), NotOpened> {
+    let app = defaults::default_app(types, places).ok_or(NotOpened::NoApp)?;
     let line = command(&app, file).ok_or(NotOpened::NoApp)?;
     launch(&line, app.entry.working_dir.as_deref(), activation).map_err(|_| NotOpened::Failed)
 }
 
-/// The app's command line for `file`.
+/// The app's command line for `file`; `None` when its `Exec` can't take
+/// a file, or it needs a terminal, which the portal can start.
 fn command(app: &App, file: &Path) -> Option<Vec<OsString>> {
+    if app.entry.terminal {
+        return None;
+    }
     let fields = Fields {
         name: &app.entry.name,
         icon: app.entry.icon.as_deref(),
@@ -320,17 +334,12 @@ mod tests {
 
     #[test]
     fn a_type_nothing_opens_is_left_to_the_portal() {
-        let opened =
-            open_in_default_app(Path::new("/h/a"), &["application/x-nova-files-test"], None);
-        assert!(
-            matches!(opened, Err(NotOpened::Sandboxed | NotOpened::NoApp)),
-            "{opened:?}"
-        );
-        let opened = open_in_default_app(Path::new("/h/a"), &[], None);
-        assert!(
-            matches!(opened, Err(NotOpened::Sandboxed | NotOpened::NoApp)),
-            "{opened:?}"
-        );
+        // No folders, so none of the machine's own apps or lists are read.
+        let places = Places::default();
+        let opened = open_from(Path::new("/h/a"), &["image/png"], None, &places);
+        assert!(matches!(opened, Err(NotOpened::NoApp)), "{opened:?}");
+        let opened = open_from(Path::new("/h/a"), &[], None, &places);
+        assert!(matches!(opened, Err(NotOpened::NoApp)), "{opened:?}");
     }
 
     #[test]
@@ -341,6 +350,7 @@ mod tests {
                 name: String::new(),
                 icon: None,
                 working_dir: None,
+                terminal: false,
             },
             file: PathBuf::from("/a.desktop"),
         };
@@ -360,5 +370,13 @@ mod tests {
                 OsString::from("/h/a")
             ])
         );
+        let app = App {
+            entry: entry::Entry {
+                terminal: true,
+                ..app.entry
+            },
+            ..app
+        };
+        assert_eq!(command(&app, Path::new("/h/a")), None);
     }
 }

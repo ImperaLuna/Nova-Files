@@ -580,7 +580,11 @@ fn open_in_the_default_app(apps: &Path) {
     let (_portal, opened) = portal(&service.bus);
     let launcher = Launcher::new(&service.bus);
     launcher.call("Open", &scratch.file(), Some(TOKEN)).unwrap();
-    let written = fs::read_to_string(apps.join("out")).unwrap();
+    // On a thread, so a viewer that never runs fails the test, not hangs it.
+    let out = apps.join("out");
+    let (sender, written) = mpsc::channel();
+    std::thread::spawn(move || sender.send(fs::read_to_string(out).unwrap()));
+    let written = written.recv_timeout(WAIT).unwrap();
     assert_eq!(written, format!("{} {TOKEN}", scratch.file().display()));
     assert!(opened.recv_timeout(QUIET).is_err());
 }

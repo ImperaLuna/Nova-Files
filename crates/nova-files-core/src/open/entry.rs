@@ -28,11 +28,12 @@ pub struct Entry {
     pub icon: Option<String>,
     /// The folder to run it in.
     pub working_dir: Option<PathBuf>,
+    /// It runs in a terminal, which only the portal knows how to start.
+    pub terminal: bool,
 }
 
 /// The entry at `path`, or `None` when it is missing, isn't an app, is
-/// hidden, needs a terminal, has no `Exec`, or its `TryExec` program isn't
-/// installed. `search_path` is `PATH`, for `TryExec`.
+/// hidden, has no `Exec`, or its `TryExec` program isn't installed. `search_path` is `PATH`, for `TryExec`.
 pub fn read(path: &Path, search_path: Option<&OsStr>) -> Option<Entry> {
     let mut text = String::new();
     File::open(path)
@@ -84,7 +85,7 @@ fn parse(text: &str) -> Option<Parsed> {
             _ => {}
         }
     }
-    if kind.as_deref() != Some(APPLICATION) || hidden || terminal {
+    if kind.as_deref() != Some(APPLICATION) || hidden {
         return None;
     }
     Some(Parsed {
@@ -93,6 +94,7 @@ fn parse(text: &str) -> Option<Parsed> {
             name: name.unwrap_or_default(),
             icon: icon.filter(|icon| !icon.is_empty()),
             working_dir: working_dir.filter(|dir| dir.is_absolute()),
+            terminal,
         },
         try_exec: try_exec.filter(|program| !program.is_empty()),
     })
@@ -151,6 +153,7 @@ mod tests {
             name: String::new(),
             icon: None,
             working_dir: None,
+            terminal: false,
         }
     }
 
@@ -179,6 +182,7 @@ Name=New
                     name: "Image Viewer".to_owned(),
                     icon: Some("viewer".to_owned()),
                     working_dir: Some(PathBuf::from("/opt/viewer")),
+                    terminal: false,
                 },
                 try_exec: None,
             })
@@ -195,7 +199,6 @@ Name=New
             "[Desktop Entry]\nType=Application\n",
             "[Desktop Entry]\nType=Application\nExec=\n",
             "[Desktop Entry]\nType=Application\nExec=a %f\nHidden=true\n",
-            "[Desktop Entry]\nType=Application\nExec=a %f\nTerminal=true\n",
             "[Other]\nType=Application\nExec=a %f\n",
             "Type=Application\nExec=a %f\n",
         ] {
@@ -203,6 +206,13 @@ Name=New
         }
         let shown = "[Desktop Entry]\nType=Application\nExec=a %f\nHidden=false\nTerminal=false\n";
         assert_eq!(parse(shown).map(|p| p.entry), Some(entry("a %f")));
+        // Still the user's app, so it isn't passed over for another.
+        let in_terminal = "[Desktop Entry]\nType=Application\nExec=a %f\nTerminal=true\n";
+        let terminal = Entry {
+            terminal: true,
+            ..entry("a %f")
+        };
+        assert_eq!(parse(in_terminal).map(|p| p.entry), Some(terminal));
     }
 
     #[test]

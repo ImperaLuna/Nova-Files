@@ -112,7 +112,11 @@ fn open_through_the_core(root: &Path) {
     assert_eq!(open(root.join("plain")), Event::FileNotOpened);
     let file = root.join("a.novatest");
     assert_eq!(open(file.clone()), Event::FileOpened);
-    let written = fs::read_to_string(root.join("out")).unwrap();
+    // On a thread, so a viewer that never runs fails the test, not hangs it.
+    let out = root.join("out");
+    let (sender, written) = mpsc::channel();
+    std::thread::spawn(move || sender.send(fs::read_to_string(out).unwrap()));
+    let written = written.recv_timeout(ANSWER_TIMEOUT).unwrap();
     assert_eq!(written, format!("{} tok", file.display()));
 }
 

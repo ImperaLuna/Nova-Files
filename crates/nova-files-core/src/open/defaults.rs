@@ -352,6 +352,28 @@ mod tests {
     }
 
     #[test]
+    fn a_terminal_default_is_still_the_default() {
+        let tree = Tree::new("terminal-default");
+        tree.write(
+            "share/applications/vim.desktop",
+            "[Desktop Entry]\nType=Application\nExec=vim %f\nTerminal=true\n",
+        )
+        .app("share/applications/gui.desktop")
+        .write(
+            "config/mimeapps.list",
+            "[Default Applications]\ntext/plain=vim.desktop\n",
+        )
+        .write(
+            "share/applications/mimeinfo.cache",
+            "[MIME Cache]\ntext/plain=gui.desktop;\n",
+        );
+        assert_eq!(
+            tree.default_for(&["text/plain"]).as_deref(),
+            Some("share/applications/vim.desktop")
+        );
+    }
+
+    #[test]
     fn a_removed_app_is_no_lower_lists_default() {
         let tree = Tree::new("removed-default");
         tree.app("share/applications/a.desktop")
