@@ -14,6 +14,7 @@
 mod common;
 mod pick_filter;
 mod pick_names;
+mod pick_several;
 
 use std::ffi::OsString;
 use std::fs;
@@ -178,7 +179,7 @@ async fn a_click_puts_the_name_in_the_box_and_open_picks_it(cx: &mut TestAppCont
     assert_eq!(name(&view, cx).as_deref(), Some("notes.txt"));
     let shown = view.read_with(cx, |view, _| view.listing_id()).unwrap();
     let selection = view.read_with(cx, |view, _| view.pick_selection());
-    assert_eq!(selection, Some((shown, EntryId(2))));
+    assert_eq!(selection, Some((shown, vec![EntryId(2)])));
     assert!(answers.try_recv().is_err());
 
     click(cx, "pick-accept");
@@ -375,8 +376,8 @@ async fn a_folder_picker_picks_the_folder_clicked(cx: &mut TestAppContext) {
     // A click selects; it doesn't go in.
     cx.run_until_parked();
     assert!(!view.read_with(cx, |view, _| view.waiting()));
-    let selection = view.read_with(cx, |view, _| view.pick_selection().map(|(_, id)| id));
-    assert_eq!(selection, Some(EntryId(0)));
+    let selection = view.read_with(cx, |view, _| view.pick_selection().map(|(_, ids)| ids));
+    assert_eq!(selection, Some(vec![EntryId(0)]));
     click(cx, "pick-accept");
     assert_eq!(
         answers.try_recv().ok(),

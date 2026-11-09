@@ -20,6 +20,7 @@ use gpui::{Context, Window};
 
 use nova_files_api::ListingId;
 
+use super::select::Selection;
 use super::{Conflict, typed};
 use crate::window::MainWindow;
 
@@ -79,7 +80,7 @@ impl MainWindow {
             Some((listing.id, entry.id))
         });
         if let Some(pick) = &mut self.pick {
-            pick.selected = there;
+            pick.selected = there.map(|(listing, id)| Selection::only(listing, id));
             pick.conflict = Some(Conflict {
                 path: folder.join(name),
                 keep_both,
