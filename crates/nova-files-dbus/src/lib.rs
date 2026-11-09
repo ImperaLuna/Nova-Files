@@ -36,7 +36,7 @@ mod search;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -56,7 +56,9 @@ pub use file_chooser::{
 pub use files::INTERFACE as FILES_INTERFACE;
 pub use holds::{Hold, HoldError, Holds};
 pub use nova_files_api::APP_ID;
-pub use search::INTERFACE as SEARCH_INTERFACE;
+pub use search::{
+    ACTIVATION_TOKEN, INTERFACE as SEARCH_INTERFACE, OPEN_URI_INTERFACE, PORTAL_NAME, PORTAL_PATH,
+};
 
 /// The longest any D-Bus call made from here may take, and the longest
 /// connecting to the bus may take.
@@ -64,6 +66,7 @@ pub const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 
 const CONNECT_THREAD: &str = "nova-files-dbus-connect";
 const NAME_WATCH_THREAD: &str = "nova-files-dbus-name-watch";
+const BUS_WATCH_THREAD: &str = "nova-files-dbus-bus-watch";
 
 /// Which bus to claim the name on.
 #[derive(Clone)]
@@ -118,6 +121,26 @@ impl Service {
     pub fn serve_file_picker(&mut self, connector: Connector, picker: impl Picker) {
         self.portal = Holds::new(connector, &self.bus)
             .is_ok_and(|holds| queue_for_portal(&self.connection, picker, holds));
+    }
+
+    /// Runs `on_lost` once the connection to the bus closes, as when the
+    /// bus daemon stops. Nothing can reach this process then, and the
+    /// names it held are free for a new instance on the next bus.
+    ///
+    /// The watching thread stays blocked until then, holding a clone of the
+    /// connection.
+    ///
+    /// # Errors
+    /// When the watching thread can't start.
+    pub fn on_bus_lost(&self, on_lost: impl FnOnce() + Send + 'static) -> std::io::Result<()> {
+        let connection = self.connection.clone();
+        thread::Builder::new()
+            .name(BUS_WATCH_THREAD.to_owned())
+            .spawn(move || {
+                zbus::block_on(connection.inner().closed());
+                on_lost();
+            })
+            .map(drop)
     }
 
     /// Gives the bus names up and waits for the bus to confirm, so a
@@ -286,11 +309,19 @@ fn connect(
     connector: Connector,
     on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
 ) -> zbus::Result<Connection> {
+    let holds = Holds::new(connector.clone(), &bus)?;
+    let on_open = Arc::new(on_open);
+    let search_open = Arc::clone(&on_open);
+    let searches = search::Searches::new(connector.clone(), holds, move |folder| {
+        search_open(folder);
+    });
+    let application =
+        application::Application::new(connector.clone(), move |folder| on_open(folder));
     connect_within_timeout(bus, move |builder| {
         builder
-            .serve_at(path.clone(), files::Files::new(connector.clone()))?
-            .serve_at(path.clone(), search::Search)?
-            .serve_at(path, application::Application::new(connector, on_open))
+            .serve_at(path.clone(), files::Files::new(connector))?
+            .serve_at(path.clone(), searches)?
+            .serve_at(path, application)
     })
 }
 

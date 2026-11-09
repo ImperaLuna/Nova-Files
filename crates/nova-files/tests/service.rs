@@ -1,7 +1,7 @@
 //! The built program against a private D-Bus daemon, without a display:
 //! service mode answers `Ping`, a later launch hands its window (and its
-//! folder) to the first instance (or, in service mode, leaves it alone), and bad starts
-//! exit with an error.
+//! folder) to the first instance (or, in service mode, leaves it alone), the
+//! service stops when its bus does, and bad starts exit with an error.
 
 #![expect(
     clippy::unwrap_used,
@@ -12,6 +12,7 @@
 #[path = "../../nova-files-dbus/tests/support/mod.rs"]
 mod support;
 
+use std::io;
 use std::path::PathBuf;
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::mpsc;
@@ -107,6 +108,24 @@ fn service_mode_answers_ping() {
     )
     .unwrap();
     files.call::<_, _, ()>("Ping", &()).unwrap();
+}
+
+#[test]
+fn service_mode_exits_when_its_bus_stops() {
+    let bus = PrivateBus::start();
+    let mut service = start_service(&bus);
+    // Its stderr closes when it exits.
+    let stderr = service.0.stderr.take().unwrap();
+    let (sender, closed) = mpsc::channel();
+    thread::spawn(move || {
+        io::read_to_string(stderr).ok();
+        sender.send(()).ok();
+    });
+
+    drop(bus);
+
+    closed.recv_timeout(WAIT).expect("the service exits");
+    assert!(service.0.wait().unwrap().success());
 }
 
 #[test]

@@ -6,11 +6,16 @@
 //! starts it for a launcher, runs only the core until something asks for a
 //! window. Either way the first process claims the bus name; a later launch
 //! asks that process for a window (on its folder) and exits.
+//! `nova-files --index <folder>` only builds that folder's file index, in
+//! the user's cache folder, and exits.
 //!
 //! Windows come and go: GPUI ends its run when the last one closes, and the
 //! process carries on without a GPU, waiting for the next window request.
 //! The process ends when the core stops, which it does once idle (see
-//! `nova_files_core::IDLE_EXIT`).
+//! `nova_files_core::IDLE_EXIT`), or when its bus connection closes, as
+//! when the session bus stops: nothing can reach it any more, and a new bus
+//! would start an instance of its own. Open windows close with it, as a
+//! `GApplication`'s do.
 //!
 //! With `NOVA_FILES_STARTUP_TRACE` or `NOVA_FILES_FRAME_TRACE` set, it
 //! first starts the start-up or frame trace (see
@@ -50,6 +55,7 @@ use crate::mode::Mode;
 use crate::picker::UiPicker;
 
 const CORE_WATCH_THREAD: &str = "nova-files-core-watch";
+const NO_CACHE_FOLDER: &str = "no cache folder: set XDG_CACHE_HOME or HOME";
 
 /// Set on a restart that gives the Vulkan loader every driver, so the new
 /// process doesn't filter them again.
@@ -129,6 +135,10 @@ fn restart_with_every_driver(folder: &Path) -> Option<Command> {
 
 fn run() -> Result<(), Box<dyn Error>> {
     let mode = Mode::from_args(std::env::args_os().skip(1))?.resolve(std::env::current_dir)?;
+    if let Mode::Index(folder) = &mode {
+        let place = nova_files_core::IndexPlace::from_env().ok_or(NO_CACHE_FOLDER)?;
+        return Ok(place.build(folder)?);
+    }
     let core = nova_files_core::spawn()?;
     let (requests, received) = nova_files_ui::channel();
 
@@ -141,13 +151,21 @@ fn run() -> Result<(), Box<dyn Error>> {
     let service = match started {
         Ok(Started::Service(mut service)) => {
             service.serve_file_picker(core.connector.clone(), UiPicker::new(requests.clone()));
+            let quit = requests.clone();
+            let watched = service.on_bus_lost(move || {
+                report("the D-Bus session ended; stopping");
+                quit.send(Request::Quit);
+            });
+            if let Err(error) = watched {
+                report(&format!("can't watch the D-Bus session: {error}"));
+            }
             Some(service)
         }
         Ok(Started::AlreadyRunning(running)) => {
             match &mode {
                 Mode::Window(Some(folder)) => running.open(folder)?,
                 Mode::Window(None) => running.activate()?,
-                Mode::Service => {}
+                Mode::Service | Mode::Index(_) => {}
             }
             return Ok(());
         }

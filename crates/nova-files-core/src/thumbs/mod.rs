@@ -29,8 +29,6 @@ use nova_files_api::{Entry, EntryId, EntryKind, Event, EventSink, ListingId, MAX
 
 /// The thumbnails folder under the cache folder.
 const THUMBNAILS_FOLDER: &str = "thumbnails";
-const CACHE_HOME_VAR: &str = "XDG_CACHE_HOME";
-const CACHE_IN_HOME: &str = ".cache";
 /// The helper ships next to the program.
 const HELPER_NAME: &str = "nova-files-thumbnailer";
 /// Files per helper run: enough to spread the start-up cost, few enough
@@ -51,10 +49,7 @@ impl Thumbnails {
     /// helper next to the running program. `None` without a cache folder or
     /// a program path.
     pub fn from_env() -> Option<Self> {
-        let cache = env::var_os(CACHE_HOME_VAR)
-            .map(PathBuf::from)
-            .filter(|path| path.is_absolute())
-            .or_else(|| env::home_dir().map(|home| home.join(CACHE_IN_HOME)))?;
+        let cache = crate::places::cache_home()?;
         let helper = env::current_exe().ok()?.parent()?.join(HELPER_NAME);
         Some(Self {
             folder: cache.join(THUMBNAILS_FOLDER),
