@@ -475,6 +475,13 @@ fn portal(bus: &PrivateBus) -> (Connection, Receiver<Opened>) {
 
 #[test]
 fn open_hands_a_file_to_the_portal_with_the_token() {
+    with_apps_of_its_own(
+        "open_hands_a_file_to_the_portal_with_the_token",
+        portal_gets_the_file_with_the_token,
+    );
+}
+
+fn portal_gets_the_file_with_the_token(_apps: &Path) {
     let scratch = Scratch::new();
     let service = service(&scratch, true);
     let (_portal, opened) = portal(&service.bus);
@@ -494,6 +501,10 @@ fn open_hands_a_file_to_the_portal_with_the_token() {
 
 #[test]
 fn open_never_waits_on_what_it_opens() {
+    with_apps_of_its_own("open_never_waits_on_what_it_opens", never_waits_on_the_file);
+}
+
+fn never_waits_on_the_file(_apps: &Path) {
     let scratch = Scratch::new();
     let service = service(&scratch, true);
     let (_portal, opened) = portal(&service.bus);
@@ -508,6 +519,13 @@ fn open_never_waits_on_what_it_opens() {
 
 #[test]
 fn open_fails_for_a_missing_file_or_without_a_portal() {
+    with_apps_of_its_own(
+        "open_fails_for_a_missing_file_or_without_a_portal",
+        fails_for_a_missing_file_or_without_a_portal,
+    );
+}
+
+fn fails_for_a_missing_file_or_without_a_portal(_apps: &Path) {
     let scratch = Scratch::new();
     let service = service(&scratch, true);
     let launcher = Launcher::new(&service.bus);
@@ -520,20 +538,30 @@ fn open_fails_for_a_missing_file_or_without_a_portal() {
 
 /// Set in the run with apps of its own: their folder.
 const APPS_VAR: &str = "NOVA_FILES_DBUS_TEST_APPS";
-const OPENS_IN_THE_APP: &str = "open_starts_the_default_app_without_the_portal";
 
-/// The core reads the default apps from the environment, so the test runs
-/// itself again with the environment pointed at apps of its own.
 #[test]
 fn open_starts_the_default_app_without_the_portal() {
+    with_apps_of_its_own(
+        "open_starts_the_default_app_without_the_portal",
+        open_in_the_default_app,
+    );
+}
+
+/// Runs `run` with the MIME database and default apps of its own: the core
+/// reads them from the environment, so test `name` runs itself again with
+/// the environment pointed at them, and never sees the machine's own apps.
+fn with_apps_of_its_own(name: &str, run: fn(&Path)) {
     match std::env::var_os(APPS_VAR) {
-        Some(apps) => open_in_the_default_app(Path::new(&apps)),
-        None => run_again_with_apps_of_its_own(),
+        Some(apps) => run(Path::new(&apps)),
+        None => run_again_with_apps_of_its_own(name),
     }
 }
 
-fn run_again_with_apps_of_its_own() {
-    let root = std::env::temp_dir().join(format!("nova-files-dbus-apps-{}", std::process::id()));
+fn run_again_with_apps_of_its_own(name: &str) {
+    let root = std::env::temp_dir().join(format!(
+        "nova-files-dbus-apps-{}-{name}",
+        std::process::id()
+    ));
     let data = root.join("data");
     let config = root.join("config");
     fs::create_dir_all(data.join("mime")).unwrap();
@@ -560,7 +588,7 @@ fn run_again_with_apps_of_its_own() {
     // Reading a FIFO waits for the viewer to write it, with no polling.
     fifo_at(&root.join("out"));
     let status = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", OPENS_IN_THE_APP, "--test-threads=1"])
+        .args(["--exact", name, "--test-threads=1"])
         .env(APPS_VAR, &root)
         .env("HOME", &root)
         .env("XDG_DATA_HOME", &data)
