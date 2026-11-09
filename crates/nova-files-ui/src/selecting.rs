@@ -9,14 +9,17 @@
 //! keeps at most one selected whatever the keys; a main window picks
 //! anything.
 //!
+//! Letters typed in a main window jump to a name (see `jump`).
+//!
 //! When a listing arrives, a fresh read of the same folder keeps the
 //! selection by name; arriving in the folder that holds the one just left
 //! (Up, Back, or any other way) selects the folder left, so the keyboard
 //! carries on from there. Anything else starts with nothing selected.
 
-use gpui::{ClickEvent, Context, ScrollStrategy};
+use gpui::{ClickEvent, Context, KeyDownEvent, ScrollStrategy};
 use nova_files_api::{Command, EntryId, EntryKind, Listing, ListingId};
 
+use crate::jump;
 use crate::selection::{Click, Move, Selection, entry_at};
 use crate::window::MainWindow;
 
@@ -126,6 +129,46 @@ impl MainWindow {
             },
             cx,
         );
+    }
+
+    /// A key typed in a main window: a letter (or a space inside a name)
+    /// moves the cursor to the next name starting with what was typed
+    /// (see `jump`). Whether it was taken.
+    pub(crate) fn jump_typed(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
+        let held = event.keystroke.modifiers;
+        if self.pick.is_some() || held.control || held.alt || held.platform || held.function {
+            return false;
+        }
+        let Some(typed) = event.keystroke.key_char.as_deref() else {
+            return false;
+        };
+        let now = cx.background_executor().now();
+        let blank = typed.chars().all(char::is_whitespace);
+        if typed.chars().any(char::is_control) || (blank && !self.jump.continues(now)) {
+            return false;
+        }
+        let Some(listing) = &self.listing else {
+            return false;
+        };
+        let (prefix, past) = self.jump.typed(typed, now);
+        let names = listing.entries.iter().map(|entry| entry.name.as_os_str());
+        let found = jump::find(names, &prefix, self.cursor(), past);
+        let listing = listing.id;
+        if let Some(row) = found.and_then(|row| u32::try_from(row).ok()) {
+            self.reselect(
+                |before, picks| {
+                    Some(Selection::moved(
+                        before,
+                        listing,
+                        EntryId(row),
+                        false,
+                        picks,
+                    ))
+                },
+                cx,
+            );
+        }
+        true
     }
 
     /// Selects every entry the view picks.
