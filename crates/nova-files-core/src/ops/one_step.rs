@@ -4,19 +4,17 @@
 use std::ffi::OsStr;
 use std::fs::DirBuilder;
 use std::os::unix::fs::DirBuilderExt as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use nova_files_api::{Failure, Outcome};
 
+use super::Ended;
 use super::failure::failure;
 use super::name::is_plain_name;
 use super::place::rename_no_replace;
 
 /// A new folder's mode before the user's umask, as `mkdir` gives it.
 const FOLDER_MODE: u32 = 0o777;
-
-/// What a job ended with, and the folders whose entries it changed.
-pub type Ended = (Outcome, Vec<PathBuf>);
 
 /// Gives `path` the name `name` in its own folder.
 pub fn rename(path: &Path, name: &OsStr) -> Ended {

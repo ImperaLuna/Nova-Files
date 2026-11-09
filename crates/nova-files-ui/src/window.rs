@@ -393,6 +393,10 @@ impl MainWindow {
             | Event::FileNotOpened
             | Event::WindowState(_)
             | Event::JobStarted { .. }
+            | Event::JobRunning { .. }
+            | Event::JobProgress { .. }
+            | Event::JobPaused(_)
+            | Event::JobResumed(_)
             | Event::JobFinished { .. } => {}
             Event::Places(places) => {
                 self.places = places;
