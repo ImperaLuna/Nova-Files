@@ -8,6 +8,9 @@
 //! - the standard `org.freedesktop.Application`, whose `Activate` and
 //!   `Open` ask for a new window.
 //!
+//! [`Service::follow_desktop_look`] reads the desktop's light or dark
+//! preference and accent from the settings portal for the theme.
+//!
 //! [`Service::serve_file_picker`] then serves the portal's `FileChooser`
 //! interface at the portal path (`file_chooser`) and asks for the file
 //! picker's portal bus name, waiting in the bus's queue if another program
@@ -28,6 +31,7 @@
 #![forbid(unsafe_code)]
 
 mod application;
+mod desktop_look;
 mod file_chooser;
 mod files;
 mod holds;
@@ -49,6 +53,9 @@ use zbus::fdo::{RequestNameFlags, RequestNameReply};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
 
 pub use application::INTERFACE as APPLICATION_INTERFACE;
+pub use desktop_look::{
+    ACCENT_COLOR, COLOR_SCHEME, INTERFACE as SETTINGS_INTERFACE, NAMESPACE as APPEARANCE_NAMESPACE,
+};
 pub use file_chooser::{
     BUS_NAME as PORTAL_BUS_NAME, INTERFACE as FILE_CHOOSER_INTERFACE,
     OBJECT_PATH as PORTAL_OBJECT_PATH, Picker,
@@ -121,6 +128,17 @@ impl Service {
     pub fn serve_file_picker(&mut self, connector: Connector, picker: impl Picker) {
         self.portal = Holds::new(connector, &self.bus)
             .is_ok_and(|holds| queue_for_portal(&self.connection, picker, holds));
+    }
+
+    /// Tells the core `connector` reaches what the desktop asks apps to
+    /// look like, from the settings portal, and again each time that
+    /// changes. Optional: on failure the theme stays Carbonfox's.
+    ///
+    /// # Errors
+    /// When the portal's signal can't be listened to or the thread can't
+    /// start.
+    pub fn follow_desktop_look(&self, connector: Connector) -> zbus::Result<()> {
+        desktop_look::follow(&self.connection, connector)
     }
 
     /// Runs `on_lost` once the connection to the bus closes, as when the

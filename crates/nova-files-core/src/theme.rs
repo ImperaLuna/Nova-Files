@@ -1,10 +1,12 @@
 //! The theme: the colors every window draws with, worked out from
 //! `$XDG_CONFIG_HOME/nova-files/theme.toml` (see `file`), the appearance
-//! setting and Carbonfox (see `defaults`), and sent to the clients that
+//! setting, what the desktop asks for and Carbonfox (see `defaults`), and
+//! sent to the clients that
 //! asked for it each time it changes.
 //!
 //! The store follows the theme file through its own config watch, and the
-//! settings by listening to them like a client does. Both come in on other
+//! settings by listening to them like a client does; the desktop's look
+//! arrives as a command from the D-Bus side. Each comes in on other
 //! threads; each takes the store's lock, works the theme out again and
 //! tells the clients only when it differs, so a save that changes another
 //! setting sends nothing. The file is read as the settings' is (see
@@ -21,7 +23,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
 
-use nova_files_api::{Appearance, ClientGone, ClientId, Event, EventSink, Mode, Theme};
+use nova_files_api::{
+    Appearance, ClientGone, ClientId, DesktopLook, Event, EventSink, Mode, Theme,
+};
 
 use crate::config_watch::{self, ConfigWatch};
 use crate::hand_edited::{self, Reread, lock};
@@ -48,6 +52,7 @@ struct Shared {
     /// What the theme file sets.
     file: ThemeFile,
     appearance: Appearance,
+    desktop: DesktopLook,
     /// The clients that asked for the theme.
     listeners: BTreeMap<ClientId, Arc<dyn EventSink>>,
     /// The theme file; `None` without a config folder.
@@ -64,9 +69,14 @@ impl Store {
         let folder = config.map(config_watch::folder);
         let path = folder.as_ref().map(|folder| folder.join(FILE));
         let shared = Arc::new(Mutex::new(Shared {
-            theme: Arc::new(resolve(&ThemeFile::default(), Appearance::default())),
+            theme: Arc::new(resolve(
+                &ThemeFile::default(),
+                Appearance::default(),
+                DesktopLook::default(),
+            )),
             file: ThemeFile::default(),
             appearance: Appearance::default(),
+            desktop: DesktopLook::default(),
             listeners: BTreeMap::new(),
             path,
             version: 0,
@@ -96,6 +106,13 @@ impl Store {
         settings.listen(SETTINGS_LISTENER, &follower);
     }
 
+    /// Takes `look` as what the desktop now asks for.
+    pub fn follow_desktop(&self, look: DesktopLook) {
+        let mut shared = lock(&self.shared);
+        shared.desktop = look;
+        shared.update();
+    }
+
     /// Sends the theme to `client` now and each time it changes.
     pub fn listen(&self, client: ClientId, events: &Arc<dyn EventSink>) {
         let mut shared = lock(&self.shared);
@@ -117,7 +134,7 @@ impl Shared {
     /// Works the theme out again, and tells every listening client when it
     /// changed; a client that stopped listening is dropped.
     fn update(&mut self) {
-        let theme = resolve(&self.file, self.appearance);
+        let theme = resolve(&self.file, self.appearance, self.desktop);
         if theme == *self.theme {
             return;
         }
@@ -143,16 +160,22 @@ impl EventSink for Follower {
     }
 }
 
-/// The theme for `appearance` with what `file` sets over Carbonfox.
-fn resolve(file: &ThemeFile, appearance: Appearance) -> Theme {
+/// The theme for `appearance`: what `file` sets, over the desktop's
+/// accent, over Carbonfox.
+fn resolve(file: &ThemeFile, appearance: Appearance, desktop: DesktopLook) -> Theme {
     let mode = match appearance {
         Appearance::Light => Mode::Light,
-        // The desktop's preference isn't known yet: Carbonfox is dark.
-        Appearance::Dark | Appearance::System => Mode::Dark,
+        Appearance::Dark => Mode::Dark,
+        // Carbonfox is dark, so a desktop that doesn't say gets dark.
+        Appearance::System => desktop.mode.unwrap_or(Mode::Dark),
     };
+    let mut palette = defaults::carbonfox(mode);
+    if let Some(accent) = desktop.accent {
+        palette.primary = accent;
+    }
     Theme {
         mode,
-        palette: file.for_mode(mode).over(defaults::carbonfox(mode)),
+        palette: file.for_mode(mode).over(palette),
     }
 }
 
