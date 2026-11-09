@@ -380,7 +380,10 @@ async fn a_folder_picker_goes_into_a_folder_double_clicked(cx: &mut TestAppConte
     let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FOLDERS).await;
     double_click(cx, "entry-0");
-    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+    view.condition::<WindowEvent>(cx, |view, _| !view.waiting())
+        .await;
+    let folder = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
+    assert_eq!(folder, Some(tree.path().join("Projects")));
     // The folder it left took its selection along.
     assert_eq!(view.read_with(cx, |view, _| view.pick_selection()), None);
     click(cx, "pick-accept");
@@ -592,16 +595,16 @@ async fn the_question_selects_the_file_in_the_way(cx: &mut TestAppContext) {
     let (view, cx, _answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
     cx.simulate_keystrokes("enter");
     asked(&view, cx).await;
+    assert_selects(&view, cx, "notes.txt");
+}
+
+/// Only the row named `selected` shows as the picker's selection.
+fn assert_selects(view: &Entity<MainWindow>, cx: &VisualTestContext, selected: &str) {
     view.read_with(cx, |view, _| {
-        let names = view.entry_names();
         let listing = view.listing_id().unwrap();
-        for (index, name) in names.iter().enumerate() {
+        for (index, name) in view.entry_names().iter().enumerate() {
             let id = EntryId(u32::try_from(index).unwrap());
-            assert_eq!(
-                view.pick_selects((listing, id)),
-                name == "notes.txt",
-                "{name}"
-            );
+            assert_eq!(view.pick_selects((listing, id)), name == selected, "{name}");
         }
     });
 }
@@ -669,6 +672,8 @@ async fn a_name_that_differs_only_in_case_asks_first(cx: &mut TestAppContext) {
         Some(OsString::from("NOTES (3).txt"))
     );
     assert!(answers.try_recv().is_err());
+    // The file in the way shows as selected.
+    assert_selects(&view, cx, "notes.txt");
 }
 
 #[gpui::test]
