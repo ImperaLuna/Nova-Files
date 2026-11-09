@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::os::unix::ffi::OsStrExt as _;
+use std::os::unix::fs::symlink;
 
 use rustix::io::Errno;
 
@@ -174,4 +175,69 @@ fn set_writable(folder: &Path, writable: bool) {
     use std::os::unix::fs::PermissionsExt as _;
     let mode = if writable { OPEN } else { LOCKED };
     fs::set_permissions(folder, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+#[test]
+fn a_file_saved_anew_after_the_link_is_never_removed() {
+    let folder = TestFolder::new("place-saved-anew");
+    let from = folder.file("a", "old");
+    let to = folder.path().join("b");
+    fs::hard_link(&from, &to).unwrap();
+    // An editor saves a new `a` by renaming over it.
+    let saved = folder.file(".a.tmp", "new");
+    fs::rename(&saved, &from).unwrap();
+
+    let error = unlink_or_take_back(&from, &to).unwrap_err();
+
+    assert_eq!(error.raw_os_error(), Some(Errno::AGAIN.raw_os_error()));
+    assert_eq!(fs::read_to_string(&from).unwrap(), "new");
+    assert!(!to.exists(), "the link is taken back");
+}
+
+#[test]
+fn the_check_fallback_moves_each_kind_and_never_replaces() {
+    let folder = TestFolder::new("place-reserve");
+    let file = folder.file("f", "file");
+    let link = folder.path().join("l");
+    symlink("f", &link).unwrap();
+    let taken = folder.file("taken", "old");
+
+    for from in [&file, &link] {
+        let error = check_then_rename(from, &taken).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+    }
+    assert_eq!(fs::read_to_string(&taken).unwrap(), "old");
+
+    check_then_rename(&link, &folder.path().join("l2")).unwrap();
+    assert_eq!(
+        fs::read_link(folder.path().join("l2")).unwrap(),
+        Path::new("f")
+    );
+    check_then_rename(&file, &folder.path().join("f2")).unwrap();
+    assert_eq!(
+        fs::read_to_string(folder.path().join("f2")).unwrap(),
+        "file"
+    );
+    assert!(!file.exists() && link.symlink_metadata().is_err());
+}
+
+#[test]
+fn a_failed_rename_gives_the_name_back() {
+    let folder = TestFolder::new("place-reserve-fail");
+    let from = folder.path().join("dir");
+    fs::create_dir_all(from.join("inside")).unwrap();
+    // A folder can't go into itself: the rename fails after the name is
+    // taken.
+    let to = from.join("inside/dir");
+
+    assert!(check_then_rename(&from, &to).is_err());
+    assert!(!to.exists());
+    let gone = folder.path().join("gone");
+    assert_eq!(
+        check_then_rename(&gone, &folder.path().join("x"))
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::NotFound
+    );
+    assert!(!folder.path().join("x").exists());
 }

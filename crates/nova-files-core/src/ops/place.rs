@@ -4,16 +4,19 @@
 //! The kernel does it in one step with `renameat2(RENAME_NOREPLACE)`. Some
 //! filesystems (some FUSE ones, NFS, exFAT) refuse the flag. Then a file is
 //! hard-linked to its new name, which fails on a taken name just the same,
-//! and its old name removed. A folder can't be linked, nor can anything on
-//! a filesystem without links; for those the new name is checked and then
-//! renamed to, which leaves a moment in which another program could take
-//! the name, so it is logged.
+//! and its old name removed, only while it still names the same file. A
+//! folder can't be linked, nor can anything on a filesystem without links;
+//! for those the new name is first taken with an empty entry of our own,
+//! made only if the name is free (`O_EXCL`, or a new folder), and the
+//! rename then replaces just that. Only a program that removed our empty
+//! entry and put its own there in that moment could lose it, so the
+//! fallback is logged.
 //!
 //! On a filesystem that ignores case, a new name that differs from the old
 //! only in case finds the entry itself taking it. That is no clash: the
 //! entry is renamed in place.
 
-use std::fs::{self, Metadata};
+use std::fs::{self, Metadata, OpenOptions};
 use std::io;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::Path;
@@ -57,10 +60,21 @@ fn link_or_check(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-/// Removes `from`, now linked to `to`. When it can't be removed the link
-/// is taken back, so the file doesn't end up under both names.
+/// Removes `from`, now linked to `to`. When it can't be removed, or no
+/// longer names the linked file (another program saved a new one there
+/// since), the link is taken back: the file doesn't end up under both
+/// names, and a newer file at `from` is never removed.
 fn unlink_or_take_back(from: &Path, to: &Path) -> io::Result<()> {
-    let Err(errno) = unlinkat(CWD, from, AtFlags::empty()) else {
+    let still_linked = match (from.symlink_metadata(), to.symlink_metadata()) {
+        (Ok(from), Ok(to)) => same_entry(&from, &to),
+        _ => false,
+    };
+    let unlinked = if still_linked {
+        unlinkat(CWD, from, AtFlags::empty())
+    } else {
+        Err(Errno::AGAIN)
+    };
+    let Err(errno) = unlinked else {
         return Ok(());
     };
     if let Err(stuck) = unlinkat(CWD, to, AtFlags::empty()) {
@@ -73,19 +87,36 @@ fn unlink_or_take_back(from: &Path, to: &Path) -> io::Result<()> {
     Err(errno.into())
 }
 
-/// Renames `from` to `to` once `to` is found free, or to be `from` itself.
+/// Renames `from` to `to` once an empty entry of our own holds `to`, or
+/// when `to` is `from` itself.
 fn check_then_rename(from: &Path, to: &Path) -> io::Result<()> {
-    // A name that can't be looked at can't be renamed to either; the
-    // rename says why.
-    if to.symlink_metadata().is_ok() && !is_case_change(from, to) {
-        return Err(io::ErrorKind::AlreadyExists.into());
+    if is_case_change(from, to) {
+        return fs::rename(from, to);
+    }
+    let folder = from.symlink_metadata()?.is_dir();
+    // Fails on a taken name, as the rename would have.
+    if folder {
+        fs::create_dir(to)?;
+    } else {
+        OpenOptions::new().write(true).create_new(true).open(to)?;
     }
     log::warn!(
-        "{} can't be renamed without replacing on its filesystem; checked {} is free first",
+        "{} can't be renamed without replacing on its filesystem; took {} empty first",
         from.display(),
         to.display()
     );
-    fs::rename(from, to)
+    let renamed = fs::rename(from, to);
+    if renamed.is_err() {
+        let removed = if folder {
+            fs::remove_dir(to)
+        } else {
+            fs::remove_file(to)
+        };
+        if let Err(error) = removed {
+            log::warn!("can't remove the empty {}: {error}", to.display());
+        }
+    }
+    renamed
 }
 
 /// Whether `to` is `from` under a name that differs only in case, as a
