@@ -73,10 +73,6 @@ impl Picker {
             .and_then(|filter| self.request.filters.get(filter))
             .is_some_and(|filter| !filter.admits(&entry.name, self.request.types.as_deref()))
     }
-
-    fn filter_label(&self, filter: Option<usize>) -> SharedString {
-        label(&self.request, filter)
-    }
 }
 
 impl MainWindow {
@@ -117,7 +113,7 @@ impl MainWindow {
         if pick.request.filters.is_empty() || pick.mode == Mode::Folders {
             return None;
         }
-        let button = super::bar::button("pick-filter", pick.filter_label(pick.filter), false)
+        let button = super::bar::button("pick-filter", label(&pick.request, pick.filter), false)
             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
                 this.toggle_filter_menu();
                 cx.notify();
@@ -182,6 +178,6 @@ fn menu_item(pick: &Picker, filter: Option<usize>, cx: &Context<MainWindow>) -> 
             this.choose_filter(filter);
             cx.notify();
         }))
-        .child(pick.filter_label(filter))
+        .child(label(&pick.request, filter))
         .into_any_element()
 }
