@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
-use crate::job::{JobId, JobTag, Operation, Outcome};
+use crate::job::{JobId, JobTag, Operation, Outcome, Progress};
 use crate::search::{Hit, SearchFailed, SearchId};
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -65,15 +65,24 @@ pub enum Command {
     /// core never reads them; the UI owns what they say. Bytes over the
     /// core's cap (64 KiB) are dropped.
     SaveWindowState(Vec<u8>),
-    /// Hear about every job from now on: each [`Event::JobFinished`].
-    /// A client that only asks one question and waits for its answer
-    /// leaves this out, so no job's news comes in between.
+    /// Hear about every job from now on: first an [`Event::JobRunning`]
+    /// for each job already running or paused, then each job's news. A
+    /// client that only asks one question and waits for its answer leaves
+    /// this out, so no job's news comes in between.
     WatchJobs,
     /// Start `operation` as a job. The answer is [`Event::JobStarted`]
     /// with the same `tag`; this client then watches jobs (see
     /// [`Command::WatchJobs`]) and hears [`Event::JobFinished`] once it
     /// ends.
     StartJob { tag: JobTag, operation: Operation },
+    /// Hold job `job` before its next change to the disk. Every client
+    /// hears [`Event::JobPaused`].
+    PauseJob(JobId),
+    /// Let a paused job go on. Every client hears [`Event::JobResumed`].
+    ResumeJob(JobId),
+    /// Stop job `job` before its next change to the disk, paused or not.
+    /// It ends with [`Outcome::Cancelled`].
+    CancelJob(JobId),
 }
 
 /// Something the core tells one client.
@@ -127,6 +136,22 @@ pub enum Event {
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },
+    /// Job `job`, started before this client watched jobs, runs (or holds,
+    /// when `paused`) doing `operation`, this far along. Answers
+    /// [`Command::WatchJobs`].
+    JobRunning {
+        job: JobId,
+        operation: Operation,
+        progress: Progress,
+        paused: bool,
+    },
+    /// How far job `job` has got, a few times a second while it runs.
+    /// Every client hears it.
+    JobProgress { job: JobId, progress: Progress },
+    /// Job `job` holds until resumed or cancelled. Every client hears it.
+    JobPaused(JobId),
+    /// Job `job` goes on. Every client hears it.
+    JobResumed(JobId),
     /// Job `job` has ended. `changed` names the folders whose entries it
     /// changed, so a window showing one reads it again. Every client that
     /// watches jobs hears it.

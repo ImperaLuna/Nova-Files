@@ -20,7 +20,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct JobTag(pub u64);
 
-/// Names one job. The core picks it, unique while the core runs.
+/// Names one job. The core picks it, unique across the core's runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct JobId(pub u64);
 
@@ -33,6 +33,24 @@ pub enum Operation {
     /// Make an empty folder named `name` in the folder `inside`. A name
     /// already taken fails the job.
     NewFolder { inside: PathBuf, name: OsString },
+    /// Copy each of `sources` (files, folders with all they hold, links as
+    /// links) into the folder `into`, under its own name. Each file is
+    /// written under a hidden name and only takes its own once whole.
+    Copy {
+        sources: Vec<PathBuf>,
+        into: PathBuf,
+    },
+}
+
+/// How far a job has got. Totals are known once the job has looked at
+/// everything it will do, before it changes anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Progress {
+    pub done_bytes: u64,
+    pub total_bytes: u64,
+    /// Files, folders and links.
+    pub done_items: u64,
+    pub total_items: u64,
 }
 
 /// How a job ended.
@@ -40,6 +58,9 @@ pub enum Operation {
 pub enum Outcome {
     /// It did everything it was asked to.
     Done,
+    /// A client cancelled it. What it finished before stays; nothing is
+    /// left half-written.
+    Cancelled,
     /// It stopped at `path` for `reason`. What it finished before stays.
     Failed { path: PathBuf, reason: Failure },
 }
@@ -60,6 +81,12 @@ pub enum Failure {
     NoSpace,
     /// The drive is mounted read-only.
     ReadOnly,
+    /// A folder can't go inside itself.
+    IntoItself,
+    /// A socket, device or pipe, which a copy can't carry.
+    Unsupported,
+    /// The file changed while it was copied, so the copy isn't kept.
+    SourceChanged,
     /// Anything else the system refused.
     Other,
 }

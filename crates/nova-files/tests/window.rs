@@ -83,6 +83,7 @@ async fn window_connects_to_the_core(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn window_without_a_core_still_opens(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let core = nova_files_core::spawn_with_idle_exit(Duration::ZERO).unwrap();
     core.thread.join().unwrap();
 
