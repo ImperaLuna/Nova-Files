@@ -51,6 +51,7 @@ fn window_on<'a>(
     let core_home = nova_files_core::Home {
         folder: home.to_owned(),
         config: home.join(".config"),
+        state: home.join(".local/state"),
     };
     let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None, None)
         .unwrap();

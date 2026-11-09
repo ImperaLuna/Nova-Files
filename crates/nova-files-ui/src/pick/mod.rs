@@ -40,7 +40,7 @@ use std::path::{Component, Path, PathBuf};
 
 use gpui::{
     AnyWindowHandle, App, AppContext as _, ClickEvent, Context, Entity, Focusable as _, Pixels,
-    Size, Subscription, TitlebarOptions, Window, size,
+    Size, Subscription, TitlebarOptions, Window,
 };
 use nova_files_api::{
     Entry, EntryId, EntryKind, ListingId, PickAnswer, PickId, PickKind, PickRequest,
@@ -49,8 +49,8 @@ use nova_files_api::{
 pub use self::opening::foreign_parent;
 use self::select::{Click, Selection};
 use crate::text::{TextField, TextFieldEvent};
-use crate::theme;
 use crate::window::{MainWindow, tidy};
+use crate::window_state::WindowState;
 
 /// The clicks in a double-click.
 const DOUBLE_CLICK: usize = 2;
@@ -96,12 +96,6 @@ pub fn titlebar(request: &PickRequest) -> TitlebarOptions {
         title: Some(title.to_owned().into()),
         ..TitlebarOptions::default()
     }
-}
-
-/// A picker window's starting size, a dialog's rather than the main
-/// window's.
-pub const fn window_size() -> Size<Pixels> {
-    size(theme::window::PICK_WIDTH, theme::window::PICK_HEIGHT)
 }
 
 /// The label on the Open or Save button: the app's, or what it is for.
@@ -163,7 +157,13 @@ pub struct Picker {
     filter: Option<usize>,
     /// Whether the filter menu is open.
     filter_menu: bool,
+    /// The windows' state as the picker opened, which its size joins
+    /// when it closes.
+    window_state: WindowState,
+    /// The window's size, kept as it changes.
+    size: Size<Pixels>,
     _name_events: Subscription,
+    _bounds: Subscription,
 }
 
 /// A save onto a file the folder on screen has.
@@ -266,6 +266,7 @@ impl MainWindow {
         };
         let focus = name.read(cx).focus_handle(cx);
         window.focus(&focus, cx);
+        let (size, bounds) = opening::watch_size(window, cx);
         self.pick = Some(Picker {
             request,
             mode,
@@ -279,7 +280,10 @@ impl MainWindow {
             window: window.window_handle(),
             filter: first_filter,
             filter_menu: false,
+            window_state: WindowState::default(),
+            size,
             _name_events: name_events,
+            _bounds: bounds,
         });
     }
 
@@ -616,7 +620,7 @@ impl MainWindow {
     /// Cancel, or Escape in the name box: answers cancelled and closes.
     pub fn cancel(&mut self, window: &mut Window) {
         // Answered now, not when the window's view is freed.
-        self.pick = None;
+        drop(self.take_pick());
         window.remove_window();
     }
 
@@ -628,7 +632,7 @@ impl MainWindow {
 
     /// Answers the app with `paths`. Whether it answered.
     fn answer_all(&mut self, paths: Vec<PathBuf>) -> bool {
-        let Some(pick) = self.pick.take() else {
+        let Some(pick) = self.take_pick() else {
             return false;
         };
         let filter = pick.filter;
@@ -780,14 +784,6 @@ mod tests {
         assert!(filter::is_chosen(Some(0), Some(0)));
         assert!(filter::is_chosen(None, None));
         assert!(!filter::is_chosen(Some(0), None));
-    }
-
-    #[test]
-    fn a_picker_starts_dialog_sized() {
-        let picker = window_size();
-        let main = size(theme::window::WIDTH, theme::window::HEIGHT);
-        assert!(picker.width < main.width && picker.height < main.height);
-        assert_eq!(picker, size(gpui::px(900.0), gpui::px(600.0)));
     }
 
     #[test]

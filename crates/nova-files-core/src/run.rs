@@ -19,10 +19,12 @@ use crate::mime::MimeTypes;
 use crate::places::Home;
 use crate::search::Searcher;
 use crate::thumbs::Thumbnails;
+use crate::window_state::Store as WindowStateStore;
 
 /// Where the core finds and keeps things.
 pub struct Setup {
     pub home: Option<Home>,
+    pub window_state: WindowStateStore,
     pub thumbnails: Option<Thumbnails>,
     pub searcher: Searcher,
     /// The MIME database, read at the first [`Command::OpenFile`] and kept
@@ -101,6 +103,11 @@ fn answer(
         }
         Command::OpenFile { path, activation } => {
             jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
+            Ok(())
+        }
+        Command::WindowState => client.deliver(Event::WindowState(setup.window_state.bytes())),
+        Command::SaveWindowState(bytes) => {
+            setup.window_state.save(bytes);
             Ok(())
         }
     }

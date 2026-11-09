@@ -58,6 +58,12 @@ pub enum Command {
         path: PathBuf,
         activation: Option<String>,
     },
+    /// Ask for the UI's window state; the answer is [`Event::WindowState`].
+    WindowState,
+    /// Keep these bytes as the UI's window state, between runs too. The
+    /// core never reads them; the UI owns what they say. Bytes over the
+    /// core's cap (64 KiB) are dropped.
+    SaveWindowState(Vec<u8>),
 }
 
 /// Something the core tells one client.
@@ -105,6 +111,9 @@ pub enum Event {
     /// [`Command::OpenFile`] started nothing: sandboxed, no default app for
     /// the file's type, or the app's program couldn't start.
     FileNotOpened,
+    /// The UI's window state as last saved, empty when there is none,
+    /// answering [`Command::WindowState`].
+    WindowState(Vec<u8>),
 }
 
 /// Names one connected client, so the core can answer the right one.

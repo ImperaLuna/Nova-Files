@@ -65,6 +65,7 @@ fn client_at(home: &Path) -> Client {
     let home = nova_files_core::Home {
         folder: home.to_owned(),
         config: home.join(".config"),
+        state: home.join(".local/state"),
     };
     let core =
         nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home), None, None).unwrap();

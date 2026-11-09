@@ -73,7 +73,7 @@ pub enum WindowEvent {
 pub struct MainWindow {
     status: CoreStatus,
     /// Held so the core counts this window until it closes.
-    connection: Option<Connection>,
+    pub(crate) connection: Option<Connection>,
     /// The folder on screen, once its first listing has arrived.
     pub(crate) listing: Option<Listing>,
     /// The details the core has read so far, by row. Rows never shown have
@@ -383,12 +383,14 @@ impl MainWindow {
             }
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
-            // The window never searches or opens files.
+            // The window never searches or opens files, and only a picker's
+            // opening asks for the window state (see `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FileOpened
-            | Event::FileNotOpened => {}
+            | Event::FileNotOpened
+            | Event::WindowState(_) => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

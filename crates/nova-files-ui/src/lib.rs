@@ -20,6 +20,7 @@ mod theme;
 mod thumbnail;
 mod view;
 mod window;
+mod window_state;
 
 use std::cell::Cell;
 use std::io::{self, Write as _};
@@ -34,6 +35,7 @@ pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
+pub use window_state::{WindowState, fetch as fetch_window_state};
 
 /// Why [`run`] returned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,12 +132,16 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
     let recovers = pick.is_none();
     let main_size = size(theme::window::WIDTH, theme::window::HEIGHT);
     let mut options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, main_size, cx))),
+        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+            None, main_size, cx,
+        ))),
         app_id: Some(nova_files_api::APP_ID.to_owned()),
         ..WindowOptions::default()
     };
-    if let Some(request) = &pick {
-        let bounds = Bounds::centered(None, pick::window_size(), cx);
+    let window_state = pick.as_ref().map(|_| window_state::fetch(connector));
+    if let (Some(request), Some(state)) = (&pick, &window_state) {
+        let display = cx.primary_display().map(|display| display.bounds().size);
+        let bounds = Bounds::centered(None, state.picker_size(display), cx);
         options.window_bounds = Some(WindowBounds::Windowed(bounds));
         options.titlebar = Some(pick::titlebar(request));
         options.foreign_parent = request.parent.as_ref().map(pick::foreign_parent);
@@ -148,6 +154,7 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
             let mut view = MainWindow::new(&connector, &folder, cx);
             if let Some(request) = pick {
                 view.set_pick(request, window, cx);
+                view.set_pick_window_state(window_state.unwrap_or_default());
             }
             view
         })
