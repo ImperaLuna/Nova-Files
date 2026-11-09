@@ -11,9 +11,15 @@
 #![forbid(unsafe_code)]
 
 mod assets;
+mod band;
 mod columns;
+mod commands;
+mod history;
+mod jump;
 mod pick;
 mod requests;
+mod selecting;
+mod selection;
 mod shown_thumbnails;
 mod text;
 mod theme;
@@ -31,6 +37,7 @@ use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptio
 use nova_files_api::{Connector, PickRequest};
 
 pub use columns::ColumnText;
+pub use commands::{ACTIONS, ActionSpec, bind_keys as bind_window_keys};
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
@@ -77,6 +84,7 @@ pub fn run(
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
             text::bind_keys(cx);
+            commands::bind_keys(cx);
             open_window(&connector, first, &recover_gpu, cx);
             let follow = cx.spawn(async move |cx| {
                 loop {

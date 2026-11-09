@@ -1,5 +1,5 @@
 //! What the window tests share: a temp folder tree, a watchdog for waits
-//! on the real core, and a double-click.
+//! on the real core, a click with keys held, and a double-click.
 
 use std::fs;
 use std::io::{self, Write as _};
@@ -71,6 +71,13 @@ impl Drop for Watchdog {
     fn drop(&mut self) {
         self.0.send(()).ok();
     }
+}
+
+/// Clicks the element drawn with `selector` with `modifiers` held.
+pub fn click_with(cx: &mut VisualTestContext, selector: &'static str, modifiers: Modifiers) {
+    cx.run_until_parked();
+    let bounds = cx.debug_bounds(selector).unwrap();
+    cx.simulate_click(bounds.center(), modifiers);
 }
 
 /// Double-clicks the element drawn with `selector`.

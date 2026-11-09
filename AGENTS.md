@@ -89,7 +89,9 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
   (parse `.desktop` `Exec` keys properly); never `sh -c` with file names,
   config or `.desktop` data.
 - Config and state files reject unknown fields (`deny_unknown_fields` on
-  each struct and enum) and cap their size.
+  each struct and enum) and cap their size. Exception: files people edit by
+  hand (`settings.toml`, `theme.toml`) are read key by key; an unknown key
+  or bad value is logged and skipped, and the other keys still apply.
 - Paths from config, `.desktop` files or other outside data must stay inside
   the folder they're meant for: no `..`, no absolute paths.
 - Child processes get the environment they need, are always waited on, and

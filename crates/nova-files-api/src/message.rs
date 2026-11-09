@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
+use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
 
@@ -73,6 +74,34 @@ pub enum Command {
     /// settings, this one included, then gets [`Event::Settings`]; nothing
     /// is sent when the value was already set.
     ChangeSetting(SettingChange),
+    /// Hear about every job from now on: first an [`Event::JobRunning`]
+    /// for each job already running or paused, then each job's news. A
+    /// client that only asks one question and waits for its answer leaves
+    /// this out, so no job's news comes in between.
+    WatchJobs,
+    /// Start `operation` as a job. The answer is [`Event::JobStarted`]
+    /// with the same `tag`; this client then watches jobs (see
+    /// [`Command::WatchJobs`]) and hears [`Event::JobFinished`] once it
+    /// ends.
+    StartJob { tag: JobTag, operation: Operation },
+    /// Hold job `job` before its next change to the disk. Every client
+    /// hears [`Event::JobPaused`].
+    PauseJob(JobId),
+    /// Let a paused job go on. Every client hears [`Event::JobResumed`].
+    ResumeJob(JobId),
+    /// Stop job `job` before its next change to the disk, paused or not.
+    /// It ends with [`Outcome::Cancelled`].
+    CancelJob(JobId),
+    /// Answer `conflict`, the one job `job` holds at. An answer to a
+    /// conflict no longer open (another window answered it first), or one
+    /// its kind doesn't accept, is ignored. Every client hears
+    /// [`Event::ConflictAnswered`].
+    AnswerConflict {
+        job: JobId,
+        conflict: Conflict,
+        answer: Answer,
+        scope: Scope,
+    },
 }
 
 /// Something the core tells one client.
@@ -127,6 +156,41 @@ pub enum Event {
     /// each client that asked whenever one changes: from a client, or from
     /// the settings file.
     Settings(Arc<Settings>),
+    /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
+    /// asked hears it, and before anything else about the job.
+    JobStarted { tag: JobTag, job: JobId },
+    /// Job `job`, started before this client watched jobs, runs (or holds,
+    /// when `paused`) doing `operation`, this far along. Answers
+    /// [`Command::WatchJobs`].
+    JobRunning {
+        job: JobId,
+        operation: Operation,
+        progress: Progress,
+        paused: bool,
+        /// The conflict it holds at, if any.
+        conflict: Option<Conflict>,
+    },
+    /// Job `job` holds at `conflict` until a client answers it. Every
+    /// client that watches jobs hears it.
+    JobConflict { job: JobId, conflict: Conflict },
+    /// A client answered job `job`'s conflict, so it goes on. Every client
+    /// that watches jobs hears it, so other windows close their question.
+    ConflictAnswered { job: JobId, answer: Answer },
+    /// How far job `job` has got, a few times a second while it runs.
+    /// Every client hears it.
+    JobProgress { job: JobId, progress: Progress },
+    /// Job `job` holds until resumed or cancelled. Every client hears it.
+    JobPaused(JobId),
+    /// Job `job` goes on. Every client hears it.
+    JobResumed(JobId),
+    /// Job `job` has ended. `changed` names the folders whose entries it
+    /// changed, so a window showing one reads it again. Every client that
+    /// watches jobs hears it.
+    JobFinished {
+        job: JobId,
+        outcome: Outcome,
+        changed: Vec<PathBuf>,
+    },
 }
 
 /// Names one connected client, so the core can answer the right one.
