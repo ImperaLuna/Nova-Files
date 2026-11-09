@@ -18,7 +18,8 @@
 //! What was made before a failure or a cancel stays, whole.
 
 use std::collections::BTreeSet;
-use std::fs::{self, File};
+use std::fs::{self, File, Metadata};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::{Answer, Conflict, ConflictKind, Failure, Outcome};
@@ -95,7 +96,9 @@ struct Done {
     how: How,
     detours: Detours,
     /// Folders made, and their sources, in the order made.
-    folders: Vec<(PathBuf, PathBuf)>,
+    /// With the source's mode and times as they were then: a move changes
+    /// them as it takes things out.
+    folders: Vec<(PathBuf, PathBuf, io::Result<Metadata>)>,
     /// Source folders a move took everything out of, in the order met.
     emptied: Vec<PathBuf>,
     /// Folders whose entries changed.
@@ -127,7 +130,8 @@ impl Done {
                 if made.carried {
                     self.detours.settled = Some(item.to.clone());
                 } else if folder {
-                    self.folders.push((item.from.clone(), target));
+                    let times = item.from.symlink_metadata();
+                    self.folders.push((item.from.clone(), target, times));
                     if moving {
                         self.emptied.push(item.from.clone());
                     }
@@ -190,15 +194,20 @@ pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: Ho
         mut touched,
         ..
     } = done;
-    for (from, to) in folders.iter().rev() {
+    for (from, to, times) in folders.into_iter().rev() {
         // Held while paused; a cancel leaves the rest as they are.
         if let Err(cancelled) = running.shared.control.checkpoint() {
             result = Err(cancelled.into());
             break;
         }
-        finish_folder(from, to);
+        finish_folder(&from, &to, times);
     }
     for folder in emptied.iter().rev() {
+        // A cancel leaves the user's folders as they are.
+        if let Err(cancelled) = running.shared.control.checkpoint() {
+            result = Err(cancelled.into());
+            break;
+        }
         remove_if_empty(folder, &mut touched);
     }
     // So what the job reports made is on the disk. A failure means only
@@ -230,16 +239,26 @@ fn move_whole(
     check(sources, into)?;
     let outermost: Vec<_> = sources
         .iter()
-        .filter(|source| {
-            !sources
-                .iter()
-                .any(|other| other != *source && source.starts_with(other))
-        })
+        .filter(|source| !sources.iter().any(|other| carried(source, other)))
         .cloned()
         .collect();
     let rest = rename_whole(running, &outermost, into, touched)?;
     let renamed = outermost.len() - rest.len();
     Ok((rest, renamed))
+}
+
+/// Whether renaming `other` takes `source` along: `other` is a folder,
+/// not a link to one, and `source` is inside it without passing through
+/// a link on the way.
+fn carried(source: &Path, other: &Path) -> bool {
+    let real = |path: &Path| path.parent().and_then(|parent| parent.canonicalize().ok());
+    let folder = other.symlink_metadata().is_ok_and(|other| other.is_dir());
+    match (real(source), real(other), other.file_name()) {
+        (Some(above), Some(other_above), Some(name)) if folder => {
+            above.starts_with(other_above.join(name))
+        }
+        _ => false,
+    }
 }
 
 /// Renames each of `sources`, all checked, into `into` whole where its
@@ -424,14 +443,14 @@ const fn naming(kind: Kind) -> Naming {
     }
 }
 
-/// Gives the folder made at `to` the attributes, mode and times of its
-/// source `from`. The copy is whole without them, so a failure is only
-/// logged.
-fn finish_folder(from: &Path, to: &Path) {
+/// Gives the folder made at `to` the attributes of its source `from`, and
+/// the mode and times `times` read from it when the folder was made. The
+/// copy is whole without them, so a failure is only logged.
+fn finish_folder(from: &Path, to: &Path, times: io::Result<Metadata>) {
     let finished = File::open(from).and_then(|source| {
         let target = File::open(to)?;
         copy_xattrs(&source, &target)?;
-        copy_mode_and_times(&source.metadata()?, &target)
+        copy_mode_and_times(&times?, &target)
     });
     if let Err(error) = finished {
         log::warn!(

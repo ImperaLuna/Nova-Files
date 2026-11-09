@@ -4,7 +4,7 @@
 //! removes the source, once the copy is whole and only if the source is
 //! still what was copied.
 
-use std::fs::{self, DirBuilder, Metadata};
+use std::fs::{self, DirBuilder, File, Metadata};
 use std::io;
 use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _, symlink};
 use std::path::Path;
@@ -114,7 +114,7 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
     }
     if let Some(before) = before {
         // The copy is whole and has its name: only now may the source go.
-        if let Err(stop) = remove_source(running, item, target, &before) {
+        if let Err(stop) = remove_source(running, making, &before) {
             running.reporter.take_back(size(item).saturating_sub(left));
             return Err(stop);
         }
@@ -201,23 +201,26 @@ fn removable(from: &Path) -> Result<Metadata, Stop> {
     Ok(metadata)
 }
 
-/// Removes the source of `item`, now copied whole to `target`, unless it
-/// changed since `before` was looked at: the copy may then hold an older
-/// version, and the source is the only one of the newer. When it can't
-/// go, the copy goes instead, so a retry starts afresh and nothing is
-/// left twice.
-fn remove_source(
-    running: &Running,
-    item: &Item,
-    target: &Path,
-    before: &Metadata,
-) -> Result<(), Stop> {
+/// Removes the source of the item `making` copied whole to its target,
+/// unless it changed since `before` was looked at: the copy may then hold
+/// an older version, and the source is the only one of the newer. The
+/// copy's name is on the disk first, so a power cut between the two
+/// drives can't lose both. When the source can't go, the copy goes
+/// instead, so a retry starts afresh and nothing is left twice; unless it
+/// replaced a file, which is gone already: then the copy stays.
+fn remove_source(running: &Running, making: &Making<'_>, before: &Metadata) -> Result<(), Stop> {
+    let Making { item, target, .. } = *making;
     let removed = running
         .shared
         .control
         .checkpoint()
         .map_err(Stop::from)
         .and_then(|()| {
+            if let Some(folder) = target.parent() {
+                File::open(folder)
+                    .and_then(|folder| folder.sync_all())
+                    .map_err(|error| Stop::at(target, &error))?;
+            }
             let now = item
                 .from
                 .symlink_metadata()
@@ -228,6 +231,7 @@ fn remove_source(
             fs::remove_file(&item.from).map_err(|error| Stop::at(&item.from, &error))
         });
     if removed.is_err()
+        && !making.replacing
         && let Err(error) = fs::remove_file(target)
     {
         log::warn!("{} is left twice: {error}", target.display());

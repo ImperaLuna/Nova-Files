@@ -56,3 +56,25 @@ fn only_a_taken_target_is_looked_at_again() {
     ));
     assert_eq!(tries, 1);
 }
+
+#[test]
+fn only_what_a_folder_rename_takes_along_is_carried() {
+    let folder = TestFolder::new("transfer-carried");
+    let a = folder.path().join("a");
+    let elsewhere = folder.path().join("e");
+    fs::create_dir_all(a.join("b")).unwrap();
+    fs::create_dir(&elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, a.join("link")).unwrap();
+    let alias = folder.path().join("alias");
+    std::os::unix::fs::symlink(&a, &alias).unwrap();
+
+    assert!(carried(&a.join("b/f"), &a));
+    assert!(carried(&a.join("b"), &a));
+    assert!(!carried(&a, &a), "not itself");
+    assert!(!carried(&a, &a.join("b")));
+    assert!(!carried(&a.join("link/f"), &a), "through a link inside");
+    assert!(
+        !carried(&alias.join("b"), &alias),
+        "inside a link to a folder"
+    );
+}

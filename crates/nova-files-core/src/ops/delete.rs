@@ -154,7 +154,9 @@ impl Folders<'_> {
         if self.open.contains_key(folder) {
             return Ok(());
         }
-        let flags = OFlags::DIRECTORY.union(OFlags::CLOEXEC);
+        // Only found, never read: removing needs a folder's write and
+        // search permission, not leave to list it.
+        let flags = OFlags::PATH.union(OFlags::DIRECTORY).union(OFlags::CLOEXEC);
         let inside = self.trees.iter().any(|tree| folder.starts_with(tree));
         let fd = match (inside, folder.parent(), folder.file_name()) {
             (true, Some(above), Some(name)) => {

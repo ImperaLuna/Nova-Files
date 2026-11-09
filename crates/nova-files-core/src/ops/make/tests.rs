@@ -93,3 +93,33 @@ fn only_the_same_entry_at_the_same_version_is_unchanged() {
     assert!(unchanged(&a, &a));
     assert!(!unchanged(&a, &b));
 }
+
+#[test]
+fn a_source_that_cant_go_takes_its_copy_along_unless_the_copy_replaced_a_file() {
+    let folder = TestFolder::new("make-source-stays");
+    let running = Running::for_test();
+    running.shared.control.cancel();
+    for replacing in [false, true] {
+        let source = folder.file("a", "moved");
+        let target = folder.file("b", "moved");
+        let before = source.symlink_metadata().unwrap();
+        let item = Item {
+            from: source.clone(),
+            to: target.clone(),
+            kind: Kind::File { size: 5 },
+        };
+        let making = Making {
+            item: &item,
+            target: &target,
+            index: 0,
+            replacing,
+            how: How::Move,
+        };
+
+        let removed = remove_source(&running, &making, &before);
+
+        assert!(matches!(removed, Err(Stop::Cancelled)));
+        assert!(source.exists());
+        assert_eq!(target.exists(), replacing, "replacing: {replacing}");
+    }
+}

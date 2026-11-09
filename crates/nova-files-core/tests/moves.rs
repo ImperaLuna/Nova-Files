@@ -14,9 +14,10 @@ mod common;
 #[path = "common/files.rs"]
 mod files;
 
-use std::fs;
+use std::fs::{self, File};
 use std::os::unix::fs::{MetadataExt as _, symlink};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use nova_files_api::{Answer, ConflictKind, Event, Failure, JobId, Operation, Outcome, Scope};
 
@@ -236,4 +237,31 @@ fn a_bad_source_moves_nothing() {
     assert_eq!(changed, Vec::<PathBuf>::new());
     assert!(source.exists());
     assert_eq!(tree(&into), Vec::new());
+}
+
+/// When a folder was last changed, in a test that keeps it.
+const LONG_AGO: Duration = Duration::from_secs(1_000_000_000);
+
+#[test]
+fn a_folder_moved_across_drives_keeps_its_times() {
+    let bench = Bench::new("move-across-times");
+    let other = Path::new(OTHER_DRIVE).join(format!("nova-files-times-{}", std::process::id()));
+    fs::remove_dir_all(&other).ok();
+    if fs::create_dir(&other).is_err() {
+        eprintln!("no {OTHER_DRIVE} here, so nothing moves across drives");
+        return;
+    }
+    let source = small_tree(&other);
+    let then = SystemTime::UNIX_EPOCH + LONG_AGO;
+    File::open(&source).unwrap().set_modified(then).unwrap();
+    let into = bench.at("into");
+    fs::create_dir(&into).unwrap();
+    let client = bench.client();
+
+    let (_, outcome, _) = client.run(moving(vec![source], &into));
+    fs::remove_dir_all(&other).ok();
+
+    assert_eq!(outcome, Outcome::Done);
+    let moved = fs::metadata(into.join("src")).unwrap();
+    assert_eq!(moved.modified().unwrap(), then);
 }
