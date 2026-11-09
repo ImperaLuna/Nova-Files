@@ -6,9 +6,11 @@
 //! A press on a name is left for dragging files (later). The box's start is
 //! kept in the list's content, so it stays put on its row while the list
 //! scrolls; the row under the mouse is the cursor, which `reselect` scrolls
-//! into view, so dragging past an edge scrolls. Moves and the release are
-//! taken on the window's root, so the box follows the mouse outside the
-//! list; a move with the button up (released outside the window) ends it.
+//! into view, so dragging past an edge scrolls, and a scroll while the box
+//! is held selects what it covers then. Moves and the release are taken on
+//! the window's root, so the box follows the mouse outside the list; a move
+//! with the button up (released outside the window) ends it, and so does a
+//! new folder.
 //!
 //! The list's rows are all one height, so a row is found from a position
 //! by sharing the list's content height out among its rows, whatever is
@@ -71,7 +73,39 @@ impl MainWindow {
             return;
         }
         band.dragging = true;
+        self.band_select(cx);
+    }
+
+    /// The list scrolled: a box being dragged now covers other rows.
+    pub(crate) fn band_scrolled(&mut self, cx: &mut Context<Self>) {
+        if self.band_dragged() {
+            self.band_select(cx);
+        }
+    }
+
+    /// The button came up anywhere in the window: a box selects what it
+    /// covers there, and a press on empty space that wasn't dragged
+    /// selects nothing.
+    pub(crate) fn band_released(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
+        let Some(band) = &mut self.band else { return };
+        band.to = event.position;
+        let (dragging, add) = (band.dragging, band.add);
+        if dragging {
+            self.band_select(cx);
+        }
+        self.band = None;
+        cx.notify();
+        if !dragging && !add && self.row_at(event.position).is_none() {
+            self.clear_selection(cx);
+        }
+    }
+
+    /// Selects the rows the box covers, from its start in the content to
+    /// the mouse where the list is scrolled now.
+    fn band_select(&mut self, cx: &mut Context<Self>) {
+        let Some(band) = &self.band else { return };
         let (from, add, before) = (band.from, band.add, band.before.clone());
+        let to = self.in_content(band.to);
         let Some(listing) = self.listing_id() else {
             return;
         };
@@ -89,17 +123,6 @@ impl MainWindow {
             },
             cx,
         );
-    }
-
-    /// The button came up anywhere in the window: a press on empty space
-    /// that wasn't dragged selects nothing.
-    pub(crate) fn band_released(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
-        let Some(band) = self.band.take() else { return };
-        cx.notify();
-        let row = self.row_at(event.position);
-        if !band.dragging && !band.add && row.is_none() {
-            self.clear_selection(cx);
-        }
     }
 
     /// A click on the entry `id` of `listing`, unless it ends a box

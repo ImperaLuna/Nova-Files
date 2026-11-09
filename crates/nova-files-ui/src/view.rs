@@ -29,7 +29,7 @@ use std::sync::Arc;
 use gpui::{
     Action, AnyElement, ClickEvent, Context, Div, Focusable as _, Hsla, InteractiveElement as _,
     IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    NavigationDirection, ParentElement as _, Render, RenderImage, SharedString,
+    NavigationDirection, ParentElement as _, Render, RenderImage, ScrollWheelEvent, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div, img, prelude::FluentBuilder as _,
     rgb, svg, uniform_list,
 };
@@ -73,6 +73,9 @@ impl Render for MainWindow {
             }))
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 this.band_moved(event, cx);
+            }))
+            .on_scroll_wheel(cx.listener(|this, _: &ScrollWheelEvent, _, cx| {
+                this.band_scrolled(cx);
             }))
             .on_mouse_up(
                 MouseButton::Left,

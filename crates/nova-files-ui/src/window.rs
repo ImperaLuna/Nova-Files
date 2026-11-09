@@ -405,6 +405,7 @@ impl MainWindow {
                 if !same_folder {
                     self.scroll = UniformListScrollHandle::new();
                     self.jump = TypeJump::default();
+                    self.band = None;
                 }
                 self.pick_folder_opened(cx);
                 if !same_folder && let Some(cursor) = self.cursor() {

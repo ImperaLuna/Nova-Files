@@ -193,13 +193,7 @@ async fn a_box_in_a_scrolled_list_selects_the_rows_under_it(cx: &mut TestAppCont
     }
     let (view, cx) = open_on(cx, tree.path()).await;
     let list = bounds(cx, "entry-1").center();
-    cx.simulate_event(ScrollWheelEvent {
-        position: list,
-        delta: ScrollDelta::Pixels(point(px(0.0), px(-320.0))),
-        modifiers: Modifiers::none(),
-        touch_phase: TouchPhase::Moved,
-    });
-    cx.run_until_parked();
+    scroll(cx, list, px(-320.0));
     assert_eq!(cx.debug_bounds("entry-1"), None, "the list scrolled");
 
     let from = bounds(cx, "modified-15").center();
@@ -207,4 +201,50 @@ async fn a_box_in_a_scrolled_list_selects_the_rows_under_it(cx: &mut TestAppCont
     drag_drawn(cx, from, to);
     // Row 0 is `Projects`, so row 15 is `f14`.
     assert_eq!(selected(&view, cx), ["f14", "f15", "f16"]);
+
+    // Scrolling while the box is held selects what it covers then, and
+    // letting go keeps that.
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+    let row = bounds(cx, "entry-15").size.height;
+    scroll(cx, to, -row * 2.0);
+    assert_eq!(selected(&view, cx), ["f14", "f15", "f16", "f17", "f18"]);
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(selected(&view, cx), ["f14", "f15", "f16", "f17", "f18"]);
+}
+
+/// Scrolls the list under `position` by `by` (down when negative).
+fn scroll(cx: &mut VisualTestContext, position: Point<Pixels>, by: Pixels) {
+    cx.simulate_event(ScrollWheelEvent {
+        position,
+        delta: ScrollDelta::Pixels(point(px(0.0), by)),
+        modifiers: Modifiers::none(),
+        touch_phase: TouchPhase::Moved,
+    });
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+async fn a_new_folder_ends_the_box(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("band");
+    let projects = tree.path().join("Projects");
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        fs::write(projects.join(name), "").unwrap();
+    }
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx) = open_on(cx, &projects).await;
+    cx.run_until_parked();
+
+    let from = bounds(cx, "modified-1").center();
+    let to = bounds(cx, "modified-2").center() + point(px(40.0), px(0.0));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+    cx.simulate_keystrokes("alt-up");
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.simulate_mouse_move(from, Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(cx.debug_bounds("band"), None);
+    assert_eq!(selected(&view, cx), ["Projects"]);
 }
