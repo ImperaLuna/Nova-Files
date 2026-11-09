@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod config_watch;
 mod details;
 mod details_queue;
 mod index;
@@ -19,6 +20,7 @@ mod places;
 mod private_file;
 mod run;
 mod search;
+mod settings;
 mod thumbs;
 mod trace;
 mod vulkan_drivers;
@@ -93,15 +95,21 @@ pub fn spawn_with(
     let (connector, receiver) = nova_files_api::channel();
     let searcher = Searcher::new(index, home.as_ref().map(|home| home.folder.clone()));
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
-    let setup = run::Setup {
-        home,
-        window_state,
-        thumbnails,
-        searcher,
-        mime_types: Arc::default(),
-    };
     let thread = thread::Builder::new()
         .name(THREAD_NAME.to_owned())
-        .spawn(move || run::run(&receiver, idle_exit, &setup))?;
+        .spawn(move || {
+            // Read on the core's thread, so a slow disk never holds up the
+            // caller (the window, at start-up).
+            let settings = settings::Store::open(home.as_ref().map(|home| home.config.as_path()));
+            let setup = run::Setup {
+                home,
+                window_state,
+                settings,
+                thumbnails,
+                searcher,
+                mime_types: Arc::default(),
+            };
+            run::run(&receiver, idle_exit, &setup);
+        })?;
     Ok(RunningCore { connector, thread })
 }

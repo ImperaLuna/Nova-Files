@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::search::{Hit, SearchFailed, SearchId};
+use crate::settings::{SettingChange, Settings};
 
 /// The most entries one [`Command::Rows`] may name: several screens of
 /// rows. The core leaves out any past it.
@@ -64,6 +65,14 @@ pub enum Command {
     /// core never reads them; the UI owns what they say. Bytes over the
     /// core's cap (64 KiB) are dropped.
     SaveWindowState(Vec<u8>),
+    /// Ask for the settings; the answer is [`Event::Settings`], and from
+    /// then on the client gets [`Event::Settings`] again each time one
+    /// changes. Clients that never ask never get them.
+    Settings,
+    /// Change one setting and save it. Every client that asked for the
+    /// settings, this one included, then gets [`Event::Settings`]; nothing
+    /// is sent when the value was already set.
+    ChangeSetting(SettingChange),
 }
 
 /// Something the core tells one client.
@@ -114,6 +123,10 @@ pub enum Event {
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),
+    /// The settings, answering [`Command::Settings`], and sent again to
+    /// each client that asked whenever one changes: from a client, or from
+    /// the settings file.
+    Settings(Arc<Settings>),
 }
 
 /// Names one connected client, so the core can answer the right one.
