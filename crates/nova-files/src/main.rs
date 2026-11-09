@@ -150,7 +150,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         nova_files_dbus::start_waiting(Bus::Session, core.connector.clone(), on_open, name_wait());
     let service = match started {
         Ok(Started::Service(mut service)) => {
-            service.serve_file_picker(core.connector.clone(), UiPicker(requests.clone()));
+            service.serve_file_picker(core.connector.clone(), UiPicker::new(requests.clone()));
             let quit = requests.clone();
             let watched = service.on_bus_lost(move || {
                 report("the D-Bus session ended; stopping");

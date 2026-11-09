@@ -113,6 +113,7 @@ impl<P: Picker> FileChooser<P> {
             filters: parsed.filters,
             filter: parsed.filter,
             folder: parsed.folder,
+            types: None,
             reply: PickReply::new(move |answer| {
                 sender.send(answer).ok();
             }),
@@ -267,6 +268,7 @@ mod tests {
             filters: Vec::new(),
             filter: None,
             folder: None,
+            types: None,
             reply: PickReply::new(drop),
         }
     }

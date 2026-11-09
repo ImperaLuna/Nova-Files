@@ -13,6 +13,7 @@ mod index;
 mod jobs;
 mod list;
 mod memory;
+mod mime;
 mod places;
 mod run;
 mod search;
@@ -30,6 +31,7 @@ use search::Searcher;
 
 pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
+pub use mime::MimeTypes;
 pub use places::Home;
 pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};

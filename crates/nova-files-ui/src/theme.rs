@@ -29,6 +29,18 @@ pub mod color {
     pub const FOLDER: u32 = 0x0000_adb5;
     /// File icons.
     pub const FILE: u32 = 0x00a8_a296;
+    /// A text field's caret.
+    pub const CARET: u32 = 0x00d8_ccb0;
+    /// Selected text in a text field.
+    pub const SELECTION: u32 = 0x003d_3a35;
+    /// The entry selected in a picker.
+    pub const ROW_SELECTED: u32 = 0x0019_3a3b;
+    /// A text field's box.
+    pub const FIELD: u32 = 0x001a_1918;
+    /// The button that does what the bar is for: Open, Save, Keep both.
+    pub const ACCEPT: u32 = 0x00fd_7014;
+    /// Text on [`ACCEPT`].
+    pub const ON_ACCEPT: u32 = 0x001d_1d1d;
 }
 
 /// Sizes and spacing.
@@ -39,6 +51,12 @@ pub mod size {
     pub const TEXT: Pixels = px(14.0);
     /// The path in the toolbar.
     pub const TEXT_SMALL: Pixels = px(13.0);
+    /// A text field's line.
+    pub const FIELD_LINE: Pixels = px(20.0);
+    /// A text field's caret.
+    pub const CARET_WIDTH: Pixels = px(1.5);
+    /// The underline under text an input method is composing.
+    pub const COMPOSING_UNDERLINE: Pixels = px(1.0);
     /// One row of the entries list or the places list.
     pub const ROW_HEIGHT: Pixels = px(32.0);
     /// A row's icon.
@@ -57,6 +75,10 @@ pub mod size {
     pub const PLACES_WIDTH: Pixels = px(200.0);
     /// The toolbar above both columns.
     pub const TOOLBAR_HEIGHT: Pixels = px(48.0);
+    /// A button or text field in a bar.
+    pub const CONTROL_HEIGHT: Pixels = px(34.0);
+    /// The pick bar's question line, under its controls.
+    pub const QUESTION_GAP: Pixels = px(8.0);
     /// Space around a column's rows and inside a row.
     pub const PAD: Pixels = px(10.0);
     /// Space between an icon and its label.
@@ -67,6 +89,16 @@ pub mod size {
     pub const ROW_GAP: Pixels = px(2.0);
     /// Hairline width.
     pub const DIVIDER: Pixels = px(1.0);
+    /// The widest the type filter's button gets; a longer name is cut.
+    pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
+    /// The tallest the type menu gets before it scrolls.
+    pub const FILTER_MENU_MAX_HEIGHT: Pixels = px(320.0);
+}
+
+/// How much of an element shows through.
+pub mod opacity {
+    /// A file the picker's type filter leaves out: still there, set back.
+    pub const DIMMED: f32 = 0.4;
 }
 
 /// Corner radii.
