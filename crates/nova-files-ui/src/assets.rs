@@ -11,16 +11,27 @@ const FOLDER_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 const FILE_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.6" stroke-linejoin="round"><path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5"/></svg>"##;
 const UP_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"##;
 
+const BACK_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>"##;
+const FORWARD_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>"##;
+
 /// The icons the UI draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Icon {
     Folder,
     File,
     Up,
+    Back,
+    Forward,
 }
 
 impl Icon {
-    const ALL: [Self; 3] = [Self::Folder, Self::File, Self::Up];
+    const ALL: [Self; 5] = [
+        Self::Folder,
+        Self::File,
+        Self::Up,
+        Self::Back,
+        Self::Forward,
+    ];
 
     /// The path GPUI asks the asset source for.
     pub const fn path(self) -> &'static str {
@@ -28,6 +39,8 @@ impl Icon {
             Self::Folder => "icons/folder.svg",
             Self::File => "icons/file.svg",
             Self::Up => "icons/up.svg",
+            Self::Back => "icons/back.svg",
+            Self::Forward => "icons/forward.svg",
         }
     }
 
@@ -36,6 +49,8 @@ impl Icon {
             Self::Folder => FOLDER_SVG.as_bytes(),
             Self::File => FILE_SVG.as_bytes(),
             Self::Up => UP_SVG.as_bytes(),
+            Self::Back => BACK_SVG.as_bytes(),
+            Self::Forward => FORWARD_SVG.as_bytes(),
         }
     }
 }

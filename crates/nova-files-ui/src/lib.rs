@@ -13,6 +13,7 @@
 mod assets;
 mod columns;
 mod commands;
+mod history;
 mod pick;
 mod requests;
 mod shown_thumbnails;

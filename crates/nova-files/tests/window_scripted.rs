@@ -3,7 +3,9 @@
 
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 
@@ -253,6 +255,28 @@ fn details_after_a_gap_fill_their_own_rows(cx: &mut TestAppContext) {
         assert_eq!(view.columns(1).unwrap().size, "");
         assert_eq!(view.columns(2).unwrap().size, "5 B");
     });
+}
+
+#[gpui::test]
+fn skipping_a_place_gone_redraws_the_window(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    view.update(cx, |view, _| view.open(Path::new(OTHER)));
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    view.update(cx, |view, _| view.go_back());
+    let (id, path) = core.next_listing().unwrap();
+    let redraws = Rc::new(Cell::new(0));
+    let counted = Rc::clone(&redraws);
+    let _watch = cx.update(|_, cx| cx.observe(&view, move |_, _| counted.set(counted.get() + 1)));
+
+    core.refuse(id, &path);
+    cx.run_until_parked();
+
+    // The Back button has to grey out: nothing is left behind.
+    view.read_with(cx, |view, _| assert_eq!(view.back_target(), None));
+    assert!(redraws.get() > 0);
 }
 
 const SCROLLED: Point<gpui::Pixels> = point(px(0.0), px(-240.0));

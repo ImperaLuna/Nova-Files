@@ -22,10 +22,10 @@ pub const KEY_CONTEXT: &str = "MainWindow";
     reason = "GPUI's actions! macro derives PartialEq only"
 )]
 mod actions {
-    gpui::actions!(nova_files, [GoUp]);
+    gpui::actions!(nova_files, [GoUp, GoBack, GoForward]);
 }
 
-pub use actions::GoUp;
+pub use actions::{GoBack, GoForward, GoUp};
 
 /// One action the window can take.
 pub struct ActionSpec {
@@ -47,7 +47,7 @@ impl ActionSpec {
 }
 
 /// Every action the window can take.
-pub const ACTIONS: &[ActionSpec] = &[UP];
+pub const ACTIONS: &[ActionSpec] = &[UP, BACK, FORWARD];
 
 /// Goes to the parent of the folder on screen.
 pub const UP: ActionSpec = ActionSpec {
@@ -55,6 +55,22 @@ pub const UP: ActionSpec = ActionSpec {
     label: "Up",
     keys: &["alt-up"],
     bind: |keys, context| KeyBinding::new(keys, GoUp, context),
+};
+
+/// Goes back to the place before this one.
+pub const BACK: ActionSpec = ActionSpec {
+    id: "go.back",
+    label: "Back",
+    keys: &["alt-left", "backspace"],
+    bind: |keys, context| KeyBinding::new(keys, GoBack, context),
+};
+
+/// Goes forward again after Back.
+pub const FORWARD: ActionSpec = ActionSpec {
+    id: "go.forward",
+    label: "Forward",
+    keys: &["alt-right"],
+    bind: |keys, context| KeyBinding::new(keys, GoForward, context),
 };
 
 /// Binds every action's default keys.
