@@ -1,17 +1,21 @@
-//! Draws the main window: a toolbar with Up and the folder's path, the
-//! places column, and the folder's entries under a column header.
+//! Draws the main window: a toolbar with Back, Forward, Up and the
+//! folder's path, the places column, and the folder's entries under a
+//! column header.
 //!
 //! The entries are a `uniform_list`, which builds only the rows on screen,
 //! so a folder of any size costs the same to draw. Each row is an icon slot
 //! and a name, then Modified, Type and Size; Modified and Size stay empty
 //! until the core has read that entry's details. A thumbnail, once it
 //! arrives, takes the icon's place. In pick mode a click selects an entry
-//! and the pick bar runs along the bottom (see `pick`). The window sets
-//! the key context its actions are bound in and handles each action it
-//! takes; buttons send actions rather than doing the work (see `commands`). Every element a test clicks carries a debug selector:
-//! `up`, `place-<n>` and `entry-<n>`, counted from 0. Each line's Modified
-//! cell carries one too, `modified-header` and `modified-<n>`, so a test can
-//! check the columns line up.
+//! and the pick bar runs along the bottom (see `pick`).
+//!
+//! The window sets the key context its actions are bound in and handles
+//! each action it takes; buttons and the mouse's side buttons send actions
+//! rather than doing the work (see `commands`). Every element a test
+//! clicks carries a debug selector: `back`, `forward`, `up`, `place-<n>`
+//! and `entry-<n>`, counted from 0. Each line's Modified cell carries one
+//! too, `modified-header` and `modified-<n>`, so a test can check the
+//! columns line up.
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -20,14 +24,15 @@
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, ClickEvent, Context, Focusable as _, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, RenderImage, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window, div, img, prelude::FluentBuilder as _, rgb, svg, uniform_list,
+    Action, AnyElement, ClickEvent, Context, Focusable as _, Hsla, InteractiveElement as _,
+    IntoElement, MouseButton, MouseDownEvent, NavigationDirection, ParentElement as _, Render,
+    RenderImage, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, img,
+    prelude::FluentBuilder as _, rgb, svg, uniform_list,
 };
 use nova_files_api::{EntryKind, Place, PlaceKind};
 
 use crate::assets::Icon;
-use crate::commands::{self, GoUp};
+use crate::commands::{self, GoBack, GoForward, GoUp};
 use crate::theme::{color, opacity, radius, size};
 use crate::window::MainWindow;
 
@@ -49,6 +54,16 @@ impl Render for MainWindow {
             .key_context(commands::KEY_CONTEXT)
             .when(main, |root| root.track_focus(&self.focus))
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
+            .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
+            .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
+            .on_mouse_down(
+                MouseButton::Navigate(NavigationDirection::Back),
+                cx.listener(|this, _: &MouseDownEvent, _, _| this.go_back()),
+            )
+            .on_mouse_down(
+                MouseButton::Navigate(NavigationDirection::Forward),
+                cx.listener(|this, _: &MouseDownEvent, _, _| this.go_forward()),
+            )
             .size_full()
             .flex()
             .flex_col()
@@ -79,34 +94,27 @@ impl Render for MainWindow {
 
 impl MainWindow {
     fn toolbar(&self) -> impl IntoElement {
-        let can_go_up = self.parent().is_some();
-        let tone = if can_go_up {
-            color::TEXT
-        } else {
-            color::TEXT_DIM
-        };
-        let up = div()
-            .id("up")
-            .debug_selector(|| "up".to_owned())
-            .flex()
-            .items_center()
-            .gap(size::BUTTON_GAP)
-            .h(size::ROW_HEIGHT)
-            .px(size::PAD)
-            .rounded(radius::BUTTON)
-            .border(size::DIVIDER)
-            .border_color(rgb(color::DIVIDER))
-            .text_color(rgb(tone))
-            .child(icon(Icon::Up, size::BUTTON_ICON, rgb(tone).into()))
-            .child(commands::UP.label)
-            .when(can_go_up, |button| {
-                button
-                    .cursor_pointer()
-                    .hover(|button| button.bg(rgb(color::ROW_HIGHLIGHT)))
-                    .on_click(|_: &ClickEvent, window, cx| {
-                        window.dispatch_action(Box::new(GoUp), cx);
-                    })
-            });
+        let back = button(
+            "back",
+            Icon::Back,
+            None,
+            self.back_target().is_some(),
+            &GoBack,
+        );
+        let forward = button(
+            "forward",
+            Icon::Forward,
+            None,
+            self.forward_target().is_some(),
+            &GoForward,
+        );
+        let up = button(
+            "up",
+            Icon::Up,
+            Some(commands::UP.label),
+            self.parent().is_some(),
+            &GoUp,
+        );
         let path = self
             .folder()
             .map(|folder| SharedString::from(folder.to_string_lossy().into_owned()))
@@ -121,6 +129,8 @@ impl MainWindow {
             .bg(rgb(color::SURFACE_SUNK))
             .border_b(size::DIVIDER)
             .border_color(rgb(color::DIVIDER))
+            .child(back)
+            .child(forward)
             .child(up)
             .child(
                 div()
@@ -270,6 +280,46 @@ fn cells(
         .child(column(size::MODIFIED_WIDTH, modified.into()).debug_selector(|| modified_selector))
         .child(column(size::TYPE_WIDTH, type_name.into()))
         .child(column(size::SIZE_WIDTH, size_text.into()).text_right())
+}
+
+/// A toolbar button with selector `name`: an icon, and `label` beside it
+/// when the icon alone isn't enough. When `enabled`, a click sends
+/// `action`; otherwise the button is dimmed and does nothing.
+fn button(
+    name: &'static str,
+    glyph: Icon,
+    label: Option<&'static str>,
+    enabled: bool,
+    action: &dyn Action,
+) -> impl IntoElement {
+    let tone = if enabled {
+        color::TEXT
+    } else {
+        color::TEXT_DIM
+    };
+    let action = action.boxed_clone();
+    div()
+        .id(name)
+        .debug_selector(|| name.to_owned())
+        .flex()
+        .items_center()
+        .gap(size::BUTTON_GAP)
+        .h(size::ROW_HEIGHT)
+        .px(size::PAD)
+        .rounded(radius::BUTTON)
+        .border(size::DIVIDER)
+        .border_color(rgb(color::DIVIDER))
+        .text_color(rgb(tone))
+        .child(icon(glyph, size::BUTTON_ICON, rgb(tone).into()))
+        .children(label)
+        .when(enabled, |button| {
+            button
+                .cursor_pointer()
+                .hover(|button| button.bg(rgb(color::ROW_HIGHLIGHT)))
+                .on_click(move |_: &ClickEvent, window, cx| {
+                    window.dispatch_action(action.boxed_clone(), cx);
+                })
+        })
 }
 
 /// One row of either list, as wide as the list: icon slot and label,

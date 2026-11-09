@@ -10,7 +10,9 @@
 //! a newer listing it no longer wanted, the folder on screen is read again
 //! (once, and not when it is the folder just refused) to get its rows
 //! served: at the refusal, or at once if the refusal came first.
-//! Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
+//! Back and Forward follow the window's history (see `history`); a
+//! folder joins it once its listing is on screen. Re-reads and fallbacks
+//! leave the history alone. Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
 //! them, so Up goes where the path on screen says.
 //!
 //! The core's events arrive through an async channel the window's own task
@@ -43,6 +45,7 @@ use nova_files_api::{
 };
 
 use crate::columns::{self, ColumnText};
+use crate::history::History;
 use crate::pick::Picker;
 use crate::shown_thumbnails::ShownThumbnails;
 use crate::theme::size;
@@ -103,6 +106,8 @@ pub struct MainWindow {
     /// asked for can't be read.
     fallbacks: Vec<PathBuf>,
     pub(crate) places: Vec<Place>,
+    /// Where the window has been, for Back and Forward.
+    pub(crate) history: History,
     pub(crate) scroll: UniformListScrollHandle,
     /// Another app's request, while the window is its picker (see `pick`).
     pub(crate) pick: Option<Picker>,
@@ -188,6 +193,7 @@ impl MainWindow {
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
             home,
             places: Vec::new(),
+            history: History::default(),
             scroll: UniformListScrollHandle::new(),
             pick: None,
             focus: cx.focus_handle(),
@@ -294,8 +300,40 @@ impl MainWindow {
         &self.places
     }
 
-    /// Asks the core for `folder`; the window moves there once it answers.
+    /// Goes to `folder`, a new place in the history: asks the core for it,
+    /// and the window moves there once it answers.
     pub fn open(&mut self, folder: &Path) {
+        self.history.leave();
+        self.request(folder);
+    }
+
+    /// Goes back to the place before this one, if there is one.
+    pub fn go_back(&mut self) {
+        if let Some(place) = self.history.back() {
+            self.request(&place);
+        }
+    }
+
+    /// Goes forward again after Back, if there is somewhere to go.
+    pub fn go_forward(&mut self) {
+        if let Some(place) = self.history.forward() {
+            self.request(&place);
+        }
+    }
+
+    /// Where Back goes, if anywhere.
+    pub fn back_target(&self) -> Option<&Path> {
+        self.history.back_target()
+    }
+
+    /// Where Forward goes, if anywhere.
+    pub fn forward_target(&self) -> Option<&Path> {
+        self.history.forward_target()
+    }
+
+    /// Asks the core for `folder`, leaving the history as it is: the
+    /// window moves there once it answers.
+    fn request(&mut self, folder: &Path) {
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
         let path = tidy(folder);
@@ -340,6 +378,7 @@ impl MainWindow {
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
                 self.asked = None;
                 let path = listing.path.clone();
+                self.history.arrived(&path);
                 // Read again in place: keep the scroll position.
                 let same_folder = self.folder() == Some(path.as_path());
                 self.listing = Some(listing);
@@ -356,15 +395,16 @@ impl MainWindow {
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
                 self.asked = None;
+                self.history.refused(&path);
                 match &self.listing {
                     None => {
                         if let Some(fallback) = self.fallbacks.pop() {
-                            self.open(&fallback);
+                            self.request(&fallback);
                         }
                     }
                     Some(listing) if self.core_moved && listing.path != path => {
                         let shown = listing.path.clone();
-                        self.open(&shown);
+                        self.request(&shown);
                     }
                     Some(_) => {}
                 }
@@ -420,7 +460,7 @@ impl MainWindow {
         self.core_moved = true;
         if self.asked.is_none() {
             let shown = listing.path.clone();
-            self.open(&shown);
+            self.request(&shown);
         }
     }
 
