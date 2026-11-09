@@ -138,5 +138,14 @@ fn answer(
             setup.jobs.cancel(job);
             Ok(())
         }
+        Command::AnswerConflict {
+            job,
+            conflict,
+            answer,
+            scope,
+        } => {
+            setup.jobs.answer(job, &conflict, answer, scope);
+            Ok(())
+        }
     }
 }

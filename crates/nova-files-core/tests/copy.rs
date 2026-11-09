@@ -1,7 +1,6 @@
 //! Copying through the real core, against real temp folders: whole trees
 //! arrive identical, progress adds up, a paused job holds and keeps the
-//! core up, a cancelled one leaves nothing half-written, and nothing is
-//! ever replaced.
+//! core up, and a cancelled one leaves nothing half-written.
 
 #![expect(
     clippy::unwrap_used,
@@ -10,18 +9,21 @@
 )]
 
 mod common;
+#[path = "common/files.rs"]
+mod files;
 
 use std::ffi::OsStr;
 use std::fs;
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{PermissionsExt as _, symlink};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, SystemTime};
 
-use nova_files_api::{Command, Event, Failure, JobId, Operation, Outcome, Progress};
+use nova_files_api::{Command, Event, Failure, JobId, Outcome, Progress};
 
 use common::{Bench, Client};
+use files::{copy, hidden, tree};
 
 /// Files in a tree big enough that a job is still running when a client
 /// answers its start.
@@ -31,13 +33,6 @@ const FILE_BYTES: usize = 16 * 1024;
 const FOLDER_MODE: u32 = 0o750;
 /// Long enough for a paused job to have moved, were it not paused.
 const HOLD: Duration = Duration::from_millis(300);
-
-fn copy(sources: Vec<PathBuf>, into: &Path) -> Operation {
-    Operation::Copy {
-        sources,
-        into: into.to_owned(),
-    }
-}
 
 /// A folder `src` holding files, an empty folder, a nested folder, a link
 /// and a name that isn't UTF-8.
@@ -94,18 +89,6 @@ fn settle(client: &Client) {
             "unexpected {event:?}"
         );
     }
-}
-
-/// Hidden part files left anywhere under `root`.
-fn parts(root: &Path) -> Vec<PathBuf> {
-    tree(root)
-        .into_iter()
-        .map(|(path, _)| path)
-        .filter(|path| {
-            path.file_name()
-                .is_some_and(|name| name.as_bytes().starts_with(b".nova-part-"))
-        })
-        .collect()
 }
 
 #[test]
@@ -175,37 +158,6 @@ fn a_copy_into_its_own_folder_is_refused() {
 }
 
 #[test]
-fn a_taken_name_fails_and_replaces_nothing() {
-    let bench = Bench::new("copy-taken");
-    let source = small_tree(&bench);
-    let into = bench.at("into");
-    fs::create_dir_all(into.join("src")).unwrap();
-    fs::write(bench.at("a.txt"), "old").unwrap();
-    let client = bench.client();
-
-    let (_, folder, _) = client.run(copy(vec![source], &into));
-    let (_, file, _) = client.run(copy(vec![bench.at("src/a.txt")], &bench.root));
-
-    assert_eq!(
-        folder,
-        Outcome::Failed {
-            path: into.join("src"),
-            reason: Failure::NameTaken
-        }
-    );
-    assert_eq!(tree(&into.join("src")), Vec::new());
-    assert_eq!(
-        file,
-        Outcome::Failed {
-            path: bench.at("a.txt"),
-            reason: Failure::NameTaken
-        }
-    );
-    assert_eq!(fs::read_to_string(bench.at("a.txt")).unwrap(), "old");
-    assert_eq!(parts(&bench.root), Vec::<PathBuf>::new());
-}
-
-#[test]
 fn a_paused_copy_holds_until_resumed() {
     let bench = Bench::new("copy-pause");
     let source = big_tree(&bench);
@@ -259,7 +211,7 @@ fn a_cancelled_copy_leaves_only_whole_files() {
     assert!(copied.len() < MANY);
     let whole = format!("file {:?}", vec![b'x'; FILE_BYTES]);
     assert!(copied.iter().all(|(_, what)| *what == whole));
-    assert_eq!(parts(&bench.root), Vec::<PathBuf>::new());
+    assert_eq!(hidden(&bench.root), Vec::<PathBuf>::new());
     assert!(!journal(&bench, job).exists());
 }
 
@@ -308,11 +260,15 @@ fn a_paused_job_keeps_the_core_up_after_its_window_closes() {
         operation: doing,
         progress,
         paused,
+        conflict,
     } = client.next()
     else {
         panic!("the held job comes first");
     };
-    assert_eq!((heard, doing, paused), (job, operation, true));
+    assert_eq!(
+        (heard, doing, paused, conflict),
+        (job, operation, true, None)
+    );
     // Held while planning, it has no totals yet.
     assert!([0, MANY as u64 + 1].contains(&progress.total_items));
     client.send(Command::CancelJob(job));
@@ -333,28 +289,4 @@ fn journal(bench: &Bench, job: JobId) -> PathBuf {
     bench
         .at("home/.local/state/nova-files/jobs")
         .join(job.0.to_string())
-}
-
-/// Every path under `root`, relative to it, with what each holds: a
-/// folder, a link's target or a file's bytes.
-pub fn tree(root: &Path) -> Vec<(PathBuf, String)> {
-    let mut found = Vec::new();
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(folder) = pending.pop() {
-        for entry in fs::read_dir(&folder).unwrap() {
-            let path = entry.unwrap().path();
-            let kind = path.symlink_metadata().unwrap().file_type();
-            let what = if kind.is_symlink() {
-                format!("link {}", fs::read_link(&path).unwrap().display())
-            } else if kind.is_dir() {
-                pending.push(path.clone());
-                "folder".to_owned()
-            } else {
-                format!("file {:?}", fs::read(&path).unwrap())
-            };
-            found.push((path.strip_prefix(root).unwrap().to_path_buf(), what));
-        }
-    }
-    found.sort();
-    found
 }

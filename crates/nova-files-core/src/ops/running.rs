@@ -1,11 +1,14 @@
 //! What a job's thread holds while it runs: its id, its switch, its
-//! progress, and its journal once it has one.
+//! progress, its journal once it has one, and the answers a client gave
+//! for all conflicts of a kind.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use nova_files_api::JobId;
+use nova_files_api::{Answer, Conflict, ConflictKind, JobId, Scope};
 
+use super::control::Cancelled;
 use super::job::Job;
 use super::journal::{Journal, Record};
 use super::progress::Reporter;
@@ -18,10 +21,12 @@ pub struct Running {
     /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
     journal: Option<Journal>,
+    /// Answers given for every conflict of their kind.
+    answers: HashMap<ConflictKind, Answer>,
 }
 
 impl Running {
-    pub const fn new(
+    pub fn new(
         job: JobId,
         shared: Arc<Job>,
         reporter: Reporter,
@@ -33,7 +38,27 @@ impl Running {
             reporter,
             journals,
             journal: None,
+            answers: HashMap::new(),
         }
+    }
+
+    /// Holds at `conflict` until a client answers, unless one already
+    /// answered for all of its kind. Retry is never kept for a kind: what
+    /// still fails would be retried for ever.
+    ///
+    /// # Errors
+    /// [`Cancelled`] when a client cancels the job instead.
+    pub fn ask(&mut self, conflict: Conflict) -> Result<Answer, Cancelled> {
+        if let Some(&answer) = self.answers.get(&conflict.kind) {
+            return Ok(answer);
+        }
+        let kind = conflict.kind;
+        self.reporter.conflict(conflict);
+        let (answer, scope) = self.shared.control.answer_to()?;
+        if scope == Scope::AllOfThisKind && answer != Answer::Retry {
+            self.answers.insert(kind, answer);
+        }
+        Ok(answer)
     }
 
     /// Adds `record` to the job's journal, starting the journal with the

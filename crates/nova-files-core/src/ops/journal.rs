@@ -3,14 +3,15 @@
 //! one undone.
 //!
 //! Each job writes one file, `<state>/nova-files/jobs/<id>`, readable by
-//! the user alone. It is a list of lines, each a record word and maybe a
-//! path. Paths are written byte by byte, with `%`, spaces, control bytes
+//! the user alone. It is a list of lines, each a record word and the
+//! paths it is about. Paths are written byte by byte, with `%`, spaces, control bytes
 //! and bytes outside ASCII as `%` and two hex digits, so any name, UTF-8
 //! or not, fits on one line. A part file is recorded before it is made
 //! and a copy after it is made, so the journal may miss a copy but never
 //! claims one the job didn't make: undo can't remove what isn't the job's.
 //! Records reach the disk at most a second late, so a crash may leave the
-//! last part files hidden and unrecorded, but costs no data. The file is
+//! last part files hidden and unrecorded, but costs no data; a backup,
+//! the user's own file stepping aside, is on the disk before it happens. The file is
 //! removed when the job ends.
 //!
 //! ```text
@@ -58,20 +59,25 @@ pub enum Record<'a> {
     Part(&'a Path),
     /// Something the job made, which undo would remove.
     Made(&'a Path),
+    /// The user's file at the second path is about to step aside to the
+    /// first while its replacement takes its name. Left behind by a
+    /// crash, it goes back if its name is free.
+    Backup(&'a Path, &'a Path),
 }
 
 impl Record<'_> {
     /// The record as a line, newline included.
     fn line(self) -> Vec<u8> {
-        let (word, path) = match self {
-            Self::Operation(name) => (name, None),
-            Self::Into(path) => ("into", Some(path)),
-            Self::Source(path) => ("source", Some(path)),
-            Self::Part(path) => ("part", Some(path)),
-            Self::Made(path) => ("made", Some(path)),
+        let (word, paths): (&str, &[&Path]) = match &self {
+            Self::Operation(name) => (name, &[]),
+            Self::Into(path) => ("into", std::slice::from_ref(path)),
+            Self::Source(path) => ("source", std::slice::from_ref(path)),
+            Self::Part(path) => ("part", std::slice::from_ref(path)),
+            Self::Made(path) => ("made", std::slice::from_ref(path)),
+            Self::Backup(backup, of) => ("backup", &[*backup, *of]),
         };
         let mut line = word.as_bytes().to_vec();
-        if let Some(path) = path {
+        for path in paths {
             line.push(b' ');
             line.extend(escape(path.as_os_str().as_bytes()));
         }
@@ -142,14 +148,15 @@ impl Journal {
     }
 
     /// Adds `record`, syncing the journal when it was last synced more
-    /// than [`SYNC_EVERY`] ago.
+    /// than [`SYNC_EVERY`] ago, or at once for a backup: the user's file
+    /// is about to leave its name, and a crash must not lose where to.
     ///
     /// # Errors
     /// When it can't be written.
     pub fn record(&mut self, record: Record<'_>) -> io::Result<()> {
         self.file.write_all(&record.line())?;
         let now = Instant::now();
-        if sync_due(self.synced, now) {
+        if matches!(record, Record::Backup(..)) || sync_due(self.synced, now) {
             self.file.sync_data()?;
             self.synced = now;
         }

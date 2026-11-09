@@ -45,6 +45,47 @@ fn rename_or_fall_back(
     }
 }
 
+/// Puts `new` in the place of `old`, which is removed only once `new`
+/// holds its name, and never a folder. Where the filesystem can swap two
+/// names in one step it does; elsewhere `old` steps aside to `backup`
+/// first, and comes back if `new` can't take its name. Should it not
+/// come back either, the error says where it was left.
+pub fn replace(new: &Path, old: &Path, backup: &Path) -> io::Result<()> {
+    replace_or_fall_back(new, old, backup, |new, old| {
+        renameat_with(CWD, new, CWD, old, RenameFlags::EXCHANGE)
+    })
+}
+
+/// Tries `exchange`, and the backup route when the filesystem refuses.
+fn replace_or_fall_back(
+    new: &Path,
+    old: &Path,
+    backup: &Path,
+    exchange: impl FnOnce(&Path, &Path) -> rustix::io::Result<()>,
+) -> io::Result<()> {
+    match exchange(new, old) {
+        // `new` now holds what was `old`.
+        Ok(()) => fs::remove_file(new),
+        Err(errno) if refuses_flag(errno) => {
+            rename_no_replace(old, backup)?;
+            if let Err(error) = rename_no_replace(new, old) {
+                if let Err(stuck) = rename_no_replace(backup, old) {
+                    // Not a name to look at again: the job ends here, and
+                    // its journal says where the file is.
+                    return Err(io::Error::other(format!(
+                        "{} is left at {} ({error}, then {stuck})",
+                        old.display(),
+                        backup.display()
+                    )));
+                }
+                return Err(error);
+            }
+            fs::remove_file(backup)
+        }
+        Err(errno) => Err(errno.into()),
+    }
+}
+
 /// Whether `errno` says the filesystem can't rename without replacing,
 /// rather than that this rename is wrong.
 const fn refuses_flag(errno: Errno) -> bool {

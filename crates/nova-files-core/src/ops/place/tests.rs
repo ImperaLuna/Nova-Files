@@ -241,3 +241,66 @@ fn a_failed_rename_gives_the_name_back() {
     );
     assert!(!folder.path().join("x").exists());
 }
+
+#[test]
+fn a_replace_swaps_then_removes_the_old() {
+    let folder = TestFolder::new("place-replace");
+    let new = folder.file(".part", "new");
+    let old = folder.file("a", "old");
+    let backup = folder.path().join(".backup");
+
+    replace(&new, &old, &backup).unwrap();
+
+    assert_eq!(fs::read_to_string(&old).unwrap(), "new");
+    assert!(!new.exists());
+    assert!(!backup.exists());
+}
+
+#[test]
+fn without_a_swap_the_old_steps_aside_and_goes_last() {
+    let folder = TestFolder::new("place-backup");
+    let new = folder.file(".part", "new");
+    let old = folder.file("a", "old");
+    let backup = folder.path().join(".backup");
+    let refused = |_: &Path, _: &Path| Err(Errno::INVAL);
+
+    replace_or_fall_back(&new, &old, &backup, refused).unwrap();
+
+    assert_eq!(fs::read_to_string(&old).unwrap(), "new");
+    assert!(!new.exists());
+    assert!(!backup.exists());
+}
+
+#[test]
+fn a_failed_replace_puts_the_old_back() {
+    let folder = TestFolder::new("place-restore");
+    let gone = folder.path().join(".part");
+    let old = folder.file("a", "old");
+    let backup = folder.path().join(".backup");
+    let refused = |_: &Path, _: &Path| Err(Errno::INVAL);
+
+    let error = replace_or_fall_back(&gone, &old, &backup, refused).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert_eq!(fs::read_to_string(&old).unwrap(), "old");
+    assert!(!backup.exists());
+
+    let failed = |_: &Path, _: &Path| Err(Errno::NOENT);
+    let error = replace_or_fall_back(&gone, &old, &backup, failed).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    assert_eq!(fs::read_to_string(&old).unwrap(), "old");
+}
+
+#[test]
+fn a_swap_that_fails_for_any_other_reason_replaces_nothing() {
+    let folder = TestFolder::new("place-swap-fails");
+    let new = folder.file(".part", "new");
+    let old = folder.file("a", "old");
+    let backup = folder.path().join(".backup");
+    let elsewhere = |_: &Path, _: &Path| Err(Errno::XDEV);
+
+    let error = replace_or_fall_back(&new, &old, &backup, elsewhere).unwrap_err();
+
+    assert_eq!(error.raw_os_error(), Some(Errno::XDEV.raw_os_error()));
+    assert_eq!(fs::read_to_string(&old).unwrap(), "old");
+    assert_eq!(fs::read_to_string(&new).unwrap(), "new");
+}

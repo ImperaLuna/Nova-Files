@@ -465,6 +465,8 @@ impl MainWindow {
             | Event::WindowState(_)
             | Event::JobStarted { .. }
             | Event::JobRunning { .. }
+            | Event::JobConflict { .. }
+            | Event::ConflictAnswered { .. }
             | Event::JobProgress { .. }
             | Event::JobPaused(_)
             | Event::JobResumed(_)
