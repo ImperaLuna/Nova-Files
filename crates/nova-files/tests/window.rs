@@ -6,7 +6,8 @@
 //! them, lined up under their headers whatever the length of each name. A
 //! picker window picks the file double-clicked when it asks for files,
 //! and answers cancelled when it is closed. Its own keys are tested in
-//! `window_keys`, and selecting in `window_select`.
+//! `window_keys`, selecting in `window_select`, and type to jump in
+//! `window_jump`.
 
 #![expect(
     clippy::unwrap_used,
@@ -15,6 +16,7 @@
 )]
 
 mod common;
+mod window_jump;
 mod window_keys;
 mod window_select;
 

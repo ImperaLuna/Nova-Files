@@ -14,6 +14,7 @@ mod assets;
 mod columns;
 mod commands;
 mod history;
+mod jump;
 mod pick;
 mod requests;
 mod selecting;

@@ -46,6 +46,7 @@ use nova_files_api::{
 
 use crate::columns::{self, ColumnText};
 use crate::history::History;
+use crate::jump::TypeJump;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
@@ -99,6 +100,8 @@ pub struct MainWindow {
     pub(crate) rows_drawn: Range<usize>,
     /// What is selected, and the row the keyboard is on (see `selecting`).
     pub(crate) selection: Option<Selection>,
+    /// The letters typed to jump to a name (see `jump`).
+    pub(crate) jump: TypeJump,
     /// The listing asked for most recently; only its answer counts.
     pub(crate) asked: Option<ListingId>,
     /// Whether the core sent a listing since the one on screen, which the
@@ -189,6 +192,7 @@ impl MainWindow {
             rows_wanted: 0..0,
             rows_drawn: 0..0,
             selection: None,
+            jump: TypeJump::default(),
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
             core_moved: false,

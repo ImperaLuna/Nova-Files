@@ -26,9 +26,9 @@ use std::sync::Arc;
 
 use gpui::{
     Action, AnyElement, ClickEvent, Context, Div, Focusable as _, Hsla, InteractiveElement as _,
-    IntoElement, MouseButton, MouseDownEvent, NavigationDirection, ParentElement as _, Render,
-    RenderImage, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, img,
-    prelude::FluentBuilder as _, rgb, svg, uniform_list,
+    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, NavigationDirection,
+    ParentElement as _, Render, RenderImage, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Window, div, img, prelude::FluentBuilder as _, rgb, svg, uniform_list,
 };
 use nova_files_api::{EntryKind, Place, PlaceKind};
 
@@ -63,6 +63,11 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
             .map(|root| Self::selection_keys(root, cx))
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                if this.jump_typed(event, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),
                 cx.listener(|this, _: &MouseDownEvent, _, _| this.go_back()),
