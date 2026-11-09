@@ -313,6 +313,39 @@ fn nothing_is_reported_once_the_watch_is_dropped() {
 }
 
 #[test]
+fn lost_events_move_the_watch_to_where_the_folder_is_now() {
+    let home = temp("overflow");
+    let config = home.join("nova-files");
+    let (old, new) = (home.join("old"), home.join("new"));
+    fs::create_dir_all(&old).unwrap();
+    fs::create_dir_all(&new).unwrap();
+    std::os::unix::fs::symlink(&old, &config).unwrap();
+    let mut watched = Watched {
+        inotify: inotify::init(CreateFlags::CLOEXEC.union(CreateFlags::NONBLOCK)).unwrap(),
+        target: config.clone(),
+        files: Vec::new(),
+        current: None,
+        links: BTreeMap::new(),
+    };
+    watched.arm().unwrap();
+    fs::remove_file(&config).unwrap();
+    std::os::unix::fs::symlink(&new, &config).unwrap();
+    // The swap's events were lost; only the overflow arrives.
+    let lost = Event {
+        wd: -1,
+        mask: ReadFlags::QUEUE_OVERFLOW,
+        name: None,
+    };
+    assert_eq!(watched.handle(&[lost]).unwrap(), Changed::All);
+    let mut buffer = vec![MaybeUninit::uninit(); READ_BUFFER];
+    read_events(&watched.inotify, &mut buffer).unwrap();
+    fs::write(new.join("settings.toml"), "").unwrap();
+    let events = read_events(&watched.inotify, &mut buffer).unwrap();
+    assert_eq!(watched.handle(&events).unwrap(), files(&["settings.toml"]));
+    fs::remove_dir_all(home).ok();
+}
+
+#[test]
 fn bursts_add_up_and_everything_wins() {
     let mut changed = files(&["a"]);
     changed.add(files(&["b"]));

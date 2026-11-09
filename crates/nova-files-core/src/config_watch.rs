@@ -353,6 +353,8 @@ impl Watched {
         let mut moved = false;
         for event in events {
             if event.mask.contains(ReadFlags::QUEUE_OVERFLOW) {
+                // A lost event may have moved the folder: watch it afresh.
+                moved = true;
                 changed.add(Changed::All);
             }
             changed.add(self.linked(event));
