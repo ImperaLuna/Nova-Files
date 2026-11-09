@@ -125,24 +125,22 @@ impl Global for RequestLoop {}
 /// folder. A picker that fails to open answers cancelled: restarting
 /// would lose the asking app's call.
 fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu, cx: &mut App) {
+    let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
     let (folder, pick) = match opening {
         Opening::Folder(folder) => (folder, None),
         Opening::Pick(mut request) => (request.folder.take(), Some(request)),
     };
     let recovers = pick.is_none();
-    let main_size = size(theme::window::WIDTH, theme::window::HEIGHT);
     let mut options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-            None, main_size, cx,
-        ))),
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
         app_id: Some(nova_files_api::APP_ID.to_owned()),
         ..WindowOptions::default()
     };
     let window_state = pick.as_ref().map(|_| window_state::fetch(connector));
     if let (Some(request), Some(state)) = (&pick, &window_state) {
         let display = cx.primary_display().map(|display| display.bounds().size);
-        let bounds = Bounds::centered(None, state.picker_size(display), cx);
-        options.window_bounds = Some(WindowBounds::Windowed(bounds));
+        let picker_bounds = Bounds::centered(None, state.picker_size(display), cx);
+        options.window_bounds = Some(WindowBounds::Windowed(picker_bounds));
         options.titlebar = Some(pick::titlebar(request));
         options.foreign_parent = request.parent.as_ref().map(pick::foreign_parent);
     }
