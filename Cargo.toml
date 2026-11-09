@@ -24,8 +24,8 @@ nova-files-ui = { path = "crates/nova-files-ui" }
 
 # GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds fixes
 # on top of a Zed stable release (FIL-42, FIL-44, FIL-65, FIL-68, FIL-71, FIL-70,
-# FIL-78). Each pin is its own branch, `nova/<tag>` (with a suffix when fixes
-# are added to a pin), so older pins stay buildable:
+# FIL-78, FIL-36). Each pin is its own branch, `nova/<tag>` (with a suffix
+# when fixes are added to a pin), so older pins stay buildable:
 # - zed-industries/zed#63289: make the path (MSAA) textures only when a frame
 #   draws a path.
 # - zed-industries/zed#65755: load OpenGL only when hardware Vulkan fails.
@@ -44,16 +44,18 @@ nova-files-ui = { path = "crates/nova-files-ui" }
 #   every text run of every frame.
 # - FIL-78: read fonts through fontconfig only when text needs them (the UI
 #   font at start, others on first use), instead of every system font.
+# - FIL-36: open a window over another program's window (xdg-foreign on
+#   Wayland, WM_TRANSIENT_FOR on X11), so a picker sits over its app.
 # When all are merged upstream, point these back at zed-industries/zed.
 #
 # The crates.io release (0.2.2) draws through blade, which turns on ray
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "1059616cf68a8ef2062875eced54e7c3be94d41b", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "6e0ad33287d4e1865c1c2a24defbcdd1717076e5", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "1059616cf68a8ef2062875eced54e7c3be94d41b", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "6e0ad33287d4e1865c1c2a24defbcdd1717076e5", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index and the nova-files binary (one

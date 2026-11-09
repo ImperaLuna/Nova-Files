@@ -29,6 +29,7 @@
 
 mod bar;
 mod filter;
+mod opening;
 mod save;
 mod select;
 mod typed;
@@ -45,6 +46,7 @@ use nova_files_api::{
     Entry, EntryId, EntryKind, ListingId, PickAnswer, PickId, PickKind, PickRequest,
 };
 
+pub use self::opening::foreign_parent;
 use self::select::{Click, Selection};
 use crate::text::{TextField, TextFieldEvent};
 use crate::window::{MainWindow, tidy};
@@ -670,6 +672,7 @@ mod tests {
             filters: Vec::new(),
             filter: None,
             folder: None,
+            parent: None,
             types: None,
             reply: PickReply::new(|_| {}),
         }

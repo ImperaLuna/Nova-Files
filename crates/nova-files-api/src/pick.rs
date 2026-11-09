@@ -30,6 +30,33 @@ pub enum PickKind {
     Save { name: OsString },
 }
 
+/// The asking app's window, which a picker opens over, as the portal names
+/// it in `parent_window`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParentWindow {
+    /// A handle the app exported through Wayland's xdg-foreign protocol.
+    Wayland(String),
+    /// An X11 window id.
+    X11(u32),
+}
+
+impl ParentWindow {
+    /// The portal's `parent_window` string: `wayland:` and a handle, or
+    /// `x11:` and the window id in hex. Empty or anything else names no
+    /// window, which the portal allows.
+    pub fn parse(text: &str) -> Option<Self> {
+        if let Some(handle) = text.strip_prefix("wayland:") {
+            return (!handle.is_empty()).then(|| Self::Wayland(handle.to_owned()));
+        }
+        let id = text.strip_prefix("x11:")?;
+        let id = id.strip_prefix("0x").unwrap_or(id);
+        u32::from_str_radix(id, HEX).ok().map(Self::X11)
+    }
+}
+
+/// The base of an X11 window id in `parent_window`.
+const HEX: u32 = 16;
+
 /// One rule of a [`FileFilter`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterRule {
@@ -105,6 +132,8 @@ pub struct PickRequest {
     pub filter: Option<usize>,
     /// Where to start; the home folder when `None`.
     pub folder: Option<PathBuf>,
+    /// The app's window to open over, when it names one.
+    pub parent: Option<ParentWindow>,
     /// The MIME database for the filters' MIME rules, once it is read.
     pub types: Option<Arc<dyn FileTypes>>,
     pub reply: PickReply,
@@ -114,7 +143,34 @@ pub struct PickRequest {
 mod tests {
     use std::sync::mpsc;
 
-    use super::{PickAnswer, PickReply};
+    use super::{ParentWindow, PickAnswer, PickReply};
+
+    #[test]
+    fn the_portal_names_a_wayland_or_x11_window() {
+        assert_eq!(
+            ParentWindow::parse("wayland:2a9c-handle"),
+            Some(ParentWindow::Wayland("2a9c-handle".to_owned()))
+        );
+        assert_eq!(
+            ParentWindow::parse("x11:4a00007"),
+            Some(ParentWindow::X11(0x04a0_0007))
+        );
+        assert_eq!(
+            ParentWindow::parse("x11:0x1F"),
+            Some(ParentWindow::X11(0x1f))
+        );
+        for none in [
+            "",
+            "wayland:",
+            "x11:",
+            "x11:zz",
+            "x11:100000000",
+            "4a00007",
+            "mir:1",
+        ] {
+            assert_eq!(ParentWindow::parse(none), None, "{none:?}");
+        }
+    }
 
     #[test]
     fn a_reply_answers_once() {

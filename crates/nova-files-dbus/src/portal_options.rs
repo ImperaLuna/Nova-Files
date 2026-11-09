@@ -11,7 +11,7 @@ use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::PathBuf;
 
-use nova_files_api::{FileFilter, FilterRule, PickAnswer, PickKind, uri};
+use nova_files_api::{FileFilter, FilterRule, ParentWindow, PickAnswer, PickKind, uri};
 use zbus::zvariant::{OwnedValue, Value};
 
 /// The portal's response codes.
@@ -37,6 +37,8 @@ pub struct Parsed {
     pub filters: Vec<FileFilter>,
     pub filter: Option<usize>,
     pub folder: Option<PathBuf>,
+    /// The app's window, which comes beside the options.
+    pub parent: Option<ParentWindow>,
 }
 
 /// An `OpenFile` request's title and options.
@@ -93,6 +95,7 @@ fn parsed(title: String, options: &Options, kind: PickKind, folder: Option<PathB
         filters,
         filter,
         folder,
+        parent: None,
     }
 }
 
