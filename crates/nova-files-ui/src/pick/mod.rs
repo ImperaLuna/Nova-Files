@@ -22,10 +22,15 @@
 //! with its last part as the name. A save answers only from a fresh
 //! listing of its folder (see `save`). A name a click put in the box means
 //! the entry clicked, until the box is edited.
+//!
+//! When the app asks for several entries, Ctrl+click and Shift+click
+//! select more (see `select`). The box then shows each file's name in
+//! quotes, and Open, while the box is unchanged, picks them all.
 
 mod bar;
 mod filter;
 mod save;
+mod select;
 mod typed;
 
 use std::ffi::{OsStr, OsString};
@@ -40,6 +45,7 @@ use nova_files_api::{
     Entry, EntryId, EntryKind, ListingId, PickAnswer, PickId, PickKind, PickRequest,
 };
 
+use self::select::{Click, Selection};
 use crate::text::{TextField, TextFieldEvent};
 use crate::window::{MainWindow, tidy};
 
@@ -124,16 +130,16 @@ pub struct Picker {
     mode: Mode,
     /// The name box.
     pub name: Entity<TextField>,
-    /// The entry clicked last, in the listing it belongs to.
-    selected: Option<(ListingId, EntryId)>,
+    /// The entries clicked, in the listing they belong to.
+    selected: Option<Selection>,
     /// A save onto a file that is there, waiting for Replace or Keep both.
     pub conflict: Option<Conflict>,
     /// A typed path the window is going to.
     jump: Option<Jump>,
-    /// The entry a click put in the name box and the text it put there:
-    /// while the box still holds that text, it means that entry, whatever
-    /// its name's bytes or spaces.
-    copied: Option<(EntryId, String)>,
+    /// The entries clicks put in the name box and the text they put
+    /// there: while the box still holds that text, it means those entries,
+    /// whatever their names' bytes or spaces.
+    copied: Option<(Vec<EntryId>, String)>,
     /// A name the window put in the box, the app's suggestion or a typed
     /// path's last part: until the user edits the box, it is that exact
     /// name, never typed text to read again.
@@ -171,6 +177,11 @@ struct Jump {
 }
 
 impl Picker {
+    /// Whether the app takes more than one entry.
+    const fn several(&self) -> bool {
+        matches!(self.request.kind, PickKind::Open { multiple: true, .. })
+    }
+
     /// The exact name the window put in the box, while the box still
     /// shows it unedited.
     fn exact_name(&self, text: &str) -> Option<OsString> {
@@ -273,14 +284,20 @@ impl MainWindow {
         self.listing.as_ref().map(|listing| listing.id)
     }
 
-    /// The entry a picker has selected, in the listing it belongs to.
-    pub fn pick_selection(&self) -> Option<(ListingId, EntryId)> {
-        self.pick.as_ref()?.selected
+    /// The entries a picker has selected, in the listing they belong to,
+    /// while there are any.
+    pub fn pick_selection(&self) -> Option<(ListingId, Vec<EntryId>)> {
+        let selection = self.pick.as_ref()?.selected.as_ref()?;
+        let ids = selection.ids();
+        (!ids.is_empty()).then(|| (selection.listing, ids.to_vec()))
     }
 
-    /// Whether the row `entry` shows as the picker's selection.
-    pub fn pick_selects(&self, entry: (ListingId, EntryId)) -> bool {
-        self.pick_selection() == Some(entry)
+    /// Whether the row `entry` shows as one of the picker's selection.
+    pub fn pick_selects(&self, (listing, id): (ListingId, EntryId)) -> bool {
+        self.pick
+            .as_ref()
+            .and_then(|pick| pick.selected.as_ref())
+            .is_some_and(|selection| selection.listing == listing && selection.contains(id))
     }
 
     /// The text in the picker's name box.
@@ -310,32 +327,26 @@ impl MainWindow {
             return;
         };
         let kind = entry.kind;
-        let name = entry.name.to_string_lossy().into_owned();
         let Some(pick) = &mut self.pick else {
             if kind == EntryKind::Folder {
                 self.open_entry(id);
             }
             return;
         };
-        match (kind, pick.mode) {
-            (EntryKind::Folder, Mode::Folders) if !double => pick.selected = Some((listing, id)),
-            (EntryKind::Folder, _) => self.open_entry(id),
-            (EntryKind::File, Mode::Files) if double => {
+        let click = Click::of(event.modifiers(), pick.several());
+        match (kind, pick.mode, click) {
+            (EntryKind::Folder, Mode::Folders, Click::Only) if double => self.open_entry(id),
+            (EntryKind::Folder, Mode::Folders, _) => self.select(listing, id, click, cx),
+            (EntryKind::Folder, _, Click::Only) => self.open_entry(id),
+            // Ctrl or Shift on a folder in a picker for files would lose
+            // the files selected, so it does nothing.
+            (EntryKind::Folder, _, _) | (EntryKind::File, Mode::Folders, _) => {}
+            (EntryKind::File, Mode::Files, Click::Only) if double => {
                 if self.pick_entry(listing, id) {
                     window.remove_window();
                 }
             }
-            (EntryKind::File, Mode::Folders) => {}
-            (EntryKind::File, Mode::Files | Mode::Save) => {
-                pick.selected = Some((listing, id));
-                pick.name.update(cx, |field, cx| field.set_text(&name, cx));
-                pick.copied = Some((id, name));
-                // A new name, as when typed: no question, and no save or
-                // jump still waiting on the old one.
-                pick.conflict = None;
-                pick.recheck = None;
-                pick.jump = None;
-            }
+            (EntryKind::File, Mode::Files | Mode::Save, _) => self.select(listing, id, click, cx),
         }
         cx.notify();
     }
@@ -385,12 +396,19 @@ impl MainWindow {
             .copied
             .as_ref()
             .filter(|(_, copied)| *copied == text)
-            .and_then(|&(id, _)| {
-                let entry = self.entry(self.listing_id()?, id)?;
-                Some((entry.kind, id, entry.name.clone()))
-            });
-        if let Some(found) = clicked {
-            if self.accept_found(&folder, found) {
+            .map(|(ids, _)| self.shown_entries(ids))
+            .filter(|found| !found.is_empty());
+        if let Some(mut found) = clicked {
+            let answered = if found.len() == 1 {
+                found
+                    .pop()
+                    .is_some_and(|found| self.accept_found(&folder, found))
+            } else {
+                // Only files are copied into the box.
+                let paths = found.into_iter().map(|(_, _, name)| folder.join(name));
+                self.answer_all(paths.collect())
+            };
+            if answered {
                 window.remove_window();
             }
             cx.notify();
@@ -417,20 +435,30 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// With nothing typed: picks the file or folder selected, or for
+    /// With nothing typed: picks the files or folders selected, or for
     /// folders the folder on screen. Whether it answered.
     fn accept_selection(&mut self, folder: &Path) -> bool {
         let Some(pick) = &self.pick else { return false };
         let mode = pick.mode;
-        let selected = pick
+        let wanted = match mode {
+            Mode::Files => EntryKind::File,
+            Mode::Folders => EntryKind::Folder,
+            Mode::Save => return false,
+        };
+        let paths: Vec<PathBuf> = pick
             .selected
-            .and_then(|(listing, id)| self.entry(listing, id))
-            .map(|entry| (entry.kind, folder.join(&entry.name)));
-        match (mode, selected) {
-            (Mode::Files, Some((EntryKind::File, path)))
-            | (Mode::Folders, Some((EntryKind::Folder, path))) => self.answer(path),
-            (Mode::Folders, _) => self.answer(folder.to_path_buf()),
-            (Mode::Files | Mode::Save, _) => false,
+            .as_ref()
+            .filter(|selection| self.listing_id() == Some(selection.listing))
+            .map(|selection| self.shown_entries(selection.ids()))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|&(kind, _, _)| kind == wanted)
+            .map(|(_, _, name)| folder.join(name))
+            .collect();
+        match (mode, paths.is_empty()) {
+            (_, false) => self.answer_all(paths),
+            (Mode::Folders, true) => self.answer(folder.to_path_buf()),
+            (Mode::Files | Mode::Save, true) => false,
         }
     }
 
@@ -586,14 +614,18 @@ impl MainWindow {
     /// Answers the app with `path`. Whether it answered, so the window can
     /// close.
     pub fn answer(&mut self, path: PathBuf) -> bool {
+        self.answer_all(vec![path])
+    }
+
+    /// Answers the app with `paths`. Whether it answered.
+    fn answer_all(&mut self, paths: Vec<PathBuf>) -> bool {
         let Some(pick) = self.pick.take() else {
             return false;
         };
         let filter = pick.filter;
-        pick.request.reply.answer(PickAnswer::Picked {
-            paths: vec![path],
-            filter,
-        });
+        pick.request
+            .reply
+            .answer(PickAnswer::Picked { paths, filter });
         true
     }
 }
