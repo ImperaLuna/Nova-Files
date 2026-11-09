@@ -10,12 +10,16 @@
 //! a newer listing it no longer wanted, the folder on screen is read again
 //! (once, and not when it is the folder just refused) to get its rows
 //! served: at the refusal, or at once if the refusal came first.
-//! Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
+//! Back and Forward follow the window's history (see `history`); a
+//! folder joins it once its listing is on screen. Re-reads and fallbacks
+//! leave the history alone. Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
 //! them, so Up goes where the path on screen says.
 //!
 //! The core's events arrive through an async channel the window's own task
 //! reads; closing the window drops the connection, which tells the core
-//! one client fewer is using it. Drawing lives in `view`.
+//! one client fewer is using it. Drawing lives in `view`; the actions a
+//! key or button sends are handled in `view` too, each by one method here
+//! (see `commands`).
 //!
 //! As the list draws, the window tells the core which rows are on screen,
 //! plus one screen either side. The core answers with those rows' details
@@ -31,14 +35,21 @@ use std::sync::Arc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{App, Context, EventEmitter, RenderImage, Task, UniformListScrollHandle, Window};
+use gpui::{
+    App, Context, EventEmitter, FocusHandle, Focusable, RenderImage, ScrollStrategy, Task,
+    UniformListScrollHandle, Window,
+};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
     Listing, ListingId, Place, Settings, Theme, Thumbnails,
 };
 
+use crate::band::Band;
 use crate::columns::{self, ColumnText};
+use crate::history::History;
+use crate::jump::TypeJump;
 use crate::pick::Picker;
+use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
 use crate::theme::{Colors, size};
 use crate::thumbnail;
@@ -91,7 +102,15 @@ pub struct MainWindow {
     /// either side.
     rows_wanted: Range<usize>,
     /// The rows the list drew last; see [`Self::rows_drawn`].
-    rows_drawn: Range<usize>,
+    pub(crate) rows_drawn: Range<usize>,
+    /// What is selected, and the row the keyboard is on (see `selecting`).
+    pub(crate) selection: Option<Selection>,
+    /// The letters typed to jump to a name (see `jump`).
+    pub(crate) jump: TypeJump,
+    /// A press on the entries list being dragged (see `band`).
+    pub(crate) band: Option<Band>,
+    /// Whether the press under way began on an entry's name.
+    pub(crate) pressed_name: bool,
     /// The listing asked for most recently; only its answer counts.
     pub(crate) asked: Option<ListingId>,
     /// Whether the core sent a listing since the one on screen, which the
@@ -102,6 +121,8 @@ pub struct MainWindow {
     /// asked for can't be read.
     fallbacks: Vec<PathBuf>,
     pub(crate) places: Vec<Place>,
+    /// Where the window has been, for Back and Forward.
+    pub(crate) history: History,
     pub(crate) scroll: UniformListScrollHandle,
     /// Another app's request, while the window is its picker (see `pick`).
     pub(crate) pick: Option<Picker>,
@@ -109,6 +130,8 @@ pub struct MainWindow {
     pub(crate) home: PathBuf,
     /// The settings as the core last sent them.
     settings: Settings,
+    /// Focus for the window's own keys (see `commands`).
+    pub(crate) focus: FocusHandle,
     _events: Task<()>,
 }
 
@@ -181,6 +204,10 @@ impl MainWindow {
             thumbnails: ShownThumbnails::default(),
             rows_wanted: 0..0,
             rows_drawn: 0..0,
+            selection: None,
+            jump: TypeJump::default(),
+            band: None,
+            pressed_name: false,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
             core_moved: false,
@@ -189,9 +216,11 @@ impl MainWindow {
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
             home,
             places: Vec::new(),
+            history: History::default(),
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
+            focus: cx.focus_handle(),
             _events: events,
         };
         window.open(folder);
@@ -295,8 +324,40 @@ impl MainWindow {
         &self.places
     }
 
-    /// Asks the core for `folder`; the window moves there once it answers.
+    /// Goes to `folder`, a new place in the history: asks the core for it,
+    /// and the window moves there once it answers.
     pub fn open(&mut self, folder: &Path) {
+        self.history.leave();
+        self.request(folder);
+    }
+
+    /// Goes back to the place before this one, if there is one.
+    pub fn go_back(&mut self) {
+        if let Some(place) = self.history.back() {
+            self.request(&place);
+        }
+    }
+
+    /// Goes forward again after Back, if there is somewhere to go.
+    pub fn go_forward(&mut self) {
+        if let Some(place) = self.history.forward() {
+            self.request(&place);
+        }
+    }
+
+    /// Where Back goes, if anywhere.
+    pub fn back_target(&self) -> Option<&Path> {
+        self.history.back_target()
+    }
+
+    /// Where Forward goes, if anywhere.
+    pub fn forward_target(&self) -> Option<&Path> {
+        self.history.forward_target()
+    }
+
+    /// Asks the core for `folder`, leaving the history as it is: the
+    /// window moves there once it answers.
+    fn request(&mut self, folder: &Path) {
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
         let path = tidy(folder);
@@ -335,42 +396,57 @@ impl MainWindow {
         }
     }
 
+    /// Shows `listing`, the folder the window last asked for.
+    fn listing_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
+        self.asked = None;
+        let path = listing.path.clone();
+        self.history.arrived(&path);
+        // Read again in place: keep the scroll position.
+        let same_folder = self.folder() == Some(path.as_path());
+        self.selection = self.selection_for(&listing);
+        self.listing = Some(listing);
+        self.core_moved = false;
+        self.details = HashMap::new();
+        release(self.thumbnails.take_all(), None, cx);
+        self.rows_wanted = 0..0;
+        if !same_folder {
+            self.scroll = UniformListScrollHandle::new();
+            self.jump = TypeJump::default();
+            self.band = None;
+        }
+        self.pick_folder_opened(cx);
+        if !same_folder && let Some(cursor) = self.cursor() {
+            self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
+        }
+        cx.emit(WindowEvent::Opened(path));
+        cx.notify();
+    }
+
     fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
             Event::Pong => self.set_status(CoreStatus::Connected, cx),
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
-                self.asked = None;
-                let path = listing.path.clone();
-                // Read again in place: keep the scroll position.
-                let same_folder = self.folder() == Some(path.as_path());
-                self.listing = Some(listing);
-                self.core_moved = false;
-                self.details = HashMap::new();
-                release(self.thumbnails.take_all(), None, cx);
-                self.rows_wanted = 0..0;
-                if !same_folder {
-                    self.scroll = UniformListScrollHandle::new();
-                }
-                self.pick_folder_opened(cx);
-                cx.emit(WindowEvent::Opened(path));
-                cx.notify();
+                self.listing_arrived(listing, cx);
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
                 self.asked = None;
+                self.history.refused(&path);
                 match &self.listing {
                     None => {
                         if let Some(fallback) = self.fallbacks.pop() {
-                            self.open(&fallback);
+                            self.request(&fallback);
                         }
                     }
                     Some(listing) if self.core_moved && listing.path != path => {
                         let shown = listing.path.clone();
-                        self.open(&shown);
+                        self.request(&shown);
                     }
                     Some(_) => {}
                 }
                 self.pick_folder_refused(id, &path);
                 cx.emit(WindowEvent::Refused(path));
+                // Back or Forward may have nowhere left to go.
+                cx.notify();
             }
             Event::DetailsRead { id, first, details } => {
                 if let Some(listing) = &self.listing
@@ -395,14 +471,23 @@ impl MainWindow {
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            // The window never searches or opens files, and only a picker's
-            // opening asks for the window state (see `window_state`).
+            // The window never searches, opens files or starts jobs yet, and
+            // only a picker's opening asks for the window state (see
+            // `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FileOpened
             | Event::FileNotOpened
-            | Event::WindowState(_) => {}
+            | Event::WindowState(_)
+            | Event::JobStarted { .. }
+            | Event::JobRunning { .. }
+            | Event::JobConflict { .. }
+            | Event::ConflictAnswered { .. }
+            | Event::JobProgress { .. }
+            | Event::JobPaused(_)
+            | Event::JobResumed(_)
+            | Event::JobFinished { .. } => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);
@@ -459,7 +544,7 @@ impl MainWindow {
         self.core_moved = true;
         if self.asked.is_none() {
             let shown = listing.path.clone();
-            self.open(&shown);
+            self.request(&shown);
         }
     }
 
@@ -544,6 +629,12 @@ impl MainWindow {
 }
 
 impl EventEmitter<WindowEvent> for MainWindow {}
+
+impl Focusable for MainWindow {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus.clone()
+    }
+}
 
 /// Drops `images` from GPUI's image atlas. `window` is the window being
 /// drawn or updated, if any: GPUI takes it out of its list meanwhile, so

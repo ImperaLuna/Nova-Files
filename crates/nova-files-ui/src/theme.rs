@@ -25,8 +25,10 @@ pub struct Colors {
     pub hover: Rgba,
     /// The place that is open.
     pub open: Rgba,
-    /// The entry selected in a picker.
+    /// Selected entries, and the band dragged to select.
     pub selected: Rgba,
+    /// The ring around the row the keyboard is on, and the band's edge.
+    pub cursor: Rgba,
     /// Names.
     pub text: Rgba,
     /// The path, the columns, and buttons that do nothing right now.
@@ -55,6 +57,7 @@ mod share {
     pub const HOVER: f32 = 0.08;
     pub const DIVIDER: f32 = 0.10;
     pub const SELECTED: f32 = 0.13;
+    pub const CURSOR: f32 = 0.45;
     pub const DIM: f32 = 0.62;
 }
 
@@ -71,6 +74,7 @@ impl Colors {
             hover: over_bg(share::HOVER),
             open: over_bg(share::OPEN),
             selected: over_bg(share::SELECTED),
+            cursor: over_bg(share::CURSOR),
             text: color(palette.fg),
             text_dim: dim,
             folder: color(palette.swatches[0]),
@@ -186,6 +190,8 @@ pub mod size {
 pub mod opacity {
     /// A file the picker's type filter leaves out: still there, set back.
     pub const DIMMED: f32 = 0.4;
+    /// The fill of the box dragged to select.
+    pub const BAND: f32 = 0.6;
 }
 
 /// Corner radii.
@@ -198,6 +204,8 @@ pub mod radius {
     pub const THUMBNAIL: Pixels = px(4.0);
     /// A toolbar button.
     pub const BUTTON: Pixels = px(12.0);
+    /// The box dragged to select.
+    pub const BAND: Pixels = px(4.0);
 }
 
 #[cfg(test)]
@@ -227,6 +235,7 @@ mod tests {
         assert_eq!(colors.text_dim, grey(share::DIM));
         assert_eq!(colors.selected, grey(share::SELECTED));
         assert_eq!(colors.hover, grey(share::HOVER));
+        assert_eq!(colors.cursor, grey(share::CURSOR));
         // The sunk surface mixes bg over the backdrop instead.
         assert!((colors.surface_sunk.r - (1.0 - share::SUNK)).abs() < f32::EPSILON);
     }

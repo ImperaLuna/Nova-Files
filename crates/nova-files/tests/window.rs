@@ -1,11 +1,13 @@
 //! A window and the real core, wired as the program wires them, against a
-//! real temp folder tree: the window connects, opens its folder, and goes
-//! into a folder, up, or to a place when clicked. A folder that can't be
-//! read leaves it where it was. Each entry's Modified, Type and Size fill
-//! in once the core has read them, lined up under their headers whatever
-//! the length of each name. A picker window picks the file
-//! double-clicked when it asks for files, and answers cancelled when it
-//! is closed.
+//! real temp folder tree: the window connects, opens its folder, selects
+//! an entry clicked, and goes into a folder double-clicked, up, or to a
+//! place clicked. A folder that can't be read leaves it where it was.
+//! Each entry's Modified, Type and Size fill in once the core has read
+//! them, lined up under their headers whatever the length of each name. A
+//! picker window picks the file double-clicked when it asks for files,
+//! and answers cancelled when it is closed. Its own keys are tested in
+//! `window_keys`, selecting in `window_select`, and type to jump in
+//! `window_jump`.
 
 #![expect(
     clippy::unwrap_used,
@@ -14,6 +16,10 @@
 )]
 
 mod common;
+mod window_band;
+mod window_jump;
+mod window_keys;
+mod window_select;
 
 use std::cell::RefCell;
 use std::fs;
@@ -28,7 +34,7 @@ use nova_files_api::{
 };
 use nova_files_ui::{Colors, CoreStatus, MainWindow, WindowEvent};
 
-use common::{TempFolder, Watchdog, double_click};
+use common::{TempFolder, Watchdog, click_with, double_click};
 
 /// Opens a window on `folder` with a running core, and waits until the
 /// folder is on screen.
@@ -85,6 +91,7 @@ async fn window_connects_to_the_core(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn window_without_a_core_still_opens(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
     let core = nova_files_core::spawn_with_idle_exit(Duration::ZERO).unwrap();
     core.thread.join().unwrap();
 
@@ -106,12 +113,12 @@ async fn shows_the_folder_it_opened_on(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-async fn clicking_a_folder_goes_into_it_and_up_comes_back(cx: &mut TestAppContext) {
+async fn double_clicking_a_folder_goes_into_it_and_up_comes_back(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
 
-    click(cx, "entry-0");
+    double_click(cx, "entry-0");
     let projects = tree.path().join("Projects");
     wait_for_folder(&view, cx, &projects).await;
     view.read_with(cx, |view, _| assert_eq!(view.entry_names(), ["nova"]));
@@ -121,7 +128,7 @@ async fn clicking_a_folder_goes_into_it_and_up_comes_back(cx: &mut TestAppContex
 }
 
 #[gpui::test]
-async fn clicking_a_file_stays_put(cx: &mut TestAppContext) {
+async fn clicking_a_file_selects_it_and_stays_put(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
@@ -129,7 +136,10 @@ async fn clicking_a_file_stays_put(cx: &mut TestAppContext) {
     click(cx, "entry-1");
     cx.run_until_parked();
 
-    view.read_with(cx, |view, _| assert_eq!(view.folder(), Some(tree.path())));
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.folder(), Some(tree.path()));
+        assert_eq!(view.selected_names(), ["notes.txt"]);
+    });
 }
 
 #[gpui::test]
@@ -151,7 +161,7 @@ async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContex
     });
 
     // The listing still shows Projects; the folder vanished meanwhile.
-    click(cx, "entry-0");
+    double_click(cx, "entry-0");
     let seen = Rc::clone(&refused);
     view.condition::<WindowEvent>(cx, move |_, _| !seen.borrow().is_empty())
         .await;
