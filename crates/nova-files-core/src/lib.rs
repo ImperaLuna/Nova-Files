@@ -23,6 +23,7 @@ mod trace;
 mod vulkan_drivers;
 
 use std::io;
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -33,7 +34,6 @@ use search::Searcher;
 pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
 pub use mime::MimeTypes;
-pub use open::{NotOpened, open_in_default_app};
 pub use places::Home;
 pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
@@ -94,6 +94,7 @@ pub fn spawn_with(
         home,
         thumbnails,
         searcher,
+        mime_types: Arc::default(),
     };
     let thread = thread::Builder::new()
         .name(THREAD_NAME.to_owned())

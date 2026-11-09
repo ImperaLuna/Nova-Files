@@ -13,11 +13,13 @@
 //! results, since a launcher couldn't hand it back.
 //!
 //! `Open` opens a folder in a Nova Files window and a file with the user's
-//! default app, through the desktop portal's `OpenFile`. `ShowInFolder`
-//! opens a window on the folder that holds the path. Both take the
-//! launcher's `platform_data`, as `org.freedesktop.Application.Open` does,
-//! and pass its `activation-token` to the portal, so the compositor lets
-//! the opened app take focus.
+//! default app. The core starts that app itself when it can (see
+//! `Command::OpenFile`); otherwise, as in a sandbox or for a type it finds
+//! no app for, the desktop portal's `OpenFile` does. `ShowInFolder` opens
+//! a window on the folder that holds the path. Both take the launcher's
+//! `platform_data`, as `org.freedesktop.Application.Open` does, and pass
+//! its `activation-token` on, so the compositor lets the opened app take
+//! focus.
 
 use std::collections::HashMap;
 use std::os::fd::OwnedFd;
@@ -38,6 +40,7 @@ use zbus::message::Header;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{Fd, OwnedValue, Value};
 
+use crate::files::ask_core;
 use crate::holds::{Hold, Holds};
 
 /// The interface name. The `#[zbus::interface]` attribute needs the literal
@@ -223,7 +226,18 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
         let path = absolute(path)?;
         match look_at(path.clone()).await? {
             Target::Folder => self.open_window(path),
-            Target::File(file) => open_file(bus, file, token(&platform_data)).await,
+            Target::File(file) => {
+                let token = token(&platform_data);
+                let command = Command::OpenFile {
+                    path,
+                    activation: token.clone(),
+                };
+                // Any other answer leaves it to the portal.
+                if ask_core(&self.connector, command).await == Ok(Event::FileOpened) {
+                    return Ok(());
+                }
+                open_file(bus, file, token).await
+            }
         }
     }
 

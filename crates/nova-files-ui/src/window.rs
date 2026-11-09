@@ -383,8 +383,12 @@ impl MainWindow {
             }
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
-            // The window never searches.
-            Event::FolderUnreadable { .. } | Event::Found { .. } | Event::SearchFailed { .. } => {}
+            // The window never searches or opens files.
+            Event::FolderUnreadable { .. }
+            | Event::Found { .. }
+            | Event::SearchFailed { .. }
+            | Event::FileOpened
+            | Event::FileNotOpened => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

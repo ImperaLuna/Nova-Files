@@ -13,8 +13,8 @@
 //! client shows. The listing itself reads names and kinds only.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
@@ -26,10 +26,13 @@ use crate::thumbs::{Queue, Thumbnails};
 
 use crate::list::{self, Stopped};
 use crate::memory;
+use crate::mime::MimeTypes;
+use crate::open;
 use crate::places::{self, Home};
 
 const LIST_THREAD: &str = "nova-files-list";
 const PLACES_THREAD: &str = "nova-files-places";
+const OPEN_THREAD: &str = "nova-files-open";
 
 /// No listing counts: the client never asked, cancelled, or left.
 const NO_LISTING: u64 = u64::MAX;
@@ -178,5 +181,30 @@ pub fn places(client: &Client, home: Option<Home>) {
         // Without a thread there are no places to offer; the list is empty
         // rather than missing.
         client.deliver(Event::Places(Vec::new())).ok();
+    }
+}
+
+/// Opens `path` in its default app, reading the MIME database into `types`
+/// first if no open has yet, and answers whether the app started.
+pub fn open_file(
+    client: &Client,
+    types: Arc<OnceLock<MimeTypes>>,
+    path: PathBuf,
+    activation: Option<String>,
+) {
+    let events = Arc::clone(&client.events);
+    let spawned = thread::Builder::new()
+        .name(OPEN_THREAD.to_owned())
+        .spawn(move || {
+            let types = types.get_or_init(MimeTypes::from_env);
+            let event = match open::open_file(&path, types, activation.as_deref()) {
+                Ok(()) => Event::FileOpened,
+                Err(_) => Event::FileNotOpened,
+            };
+            events.deliver(event).ok();
+        });
+    if spawned.is_err() {
+        // The portal can still open it.
+        client.deliver(Event::FileNotOpened).ok();
     }
 }

@@ -49,6 +49,15 @@ pub enum Command {
         query: String,
         limit: u32,
     },
+    /// Open the file at `path` in the user's default app for its type.
+    /// `activation` is the caller's activation token, so the app may take
+    /// focus. The answer is [`Event::FileOpened`] or
+    /// [`Event::FileNotOpened`], when the client should ask the desktop
+    /// portal instead.
+    OpenFile {
+        path: PathBuf,
+        activation: Option<String>,
+    },
 }
 
 /// Something the core tells one client.
@@ -91,6 +100,11 @@ pub enum Event {
     },
     /// [`Command::Search`] `id` couldn't run.
     SearchFailed { id: SearchId, reason: SearchFailed },
+    /// [`Command::OpenFile`]'s app has started.
+    FileOpened,
+    /// [`Command::OpenFile`] started nothing: sandboxed, no default app for
+    /// the file's type, or the app's program couldn't start.
+    FileNotOpened,
 }
 
 /// Names one connected client, so the core can answer the right one.

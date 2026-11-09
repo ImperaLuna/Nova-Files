@@ -34,22 +34,23 @@ impl Files {
     pub const fn new(connector: Connector) -> Self {
         Self { connector }
     }
+}
 
-    /// Sends `command` to the core and waits up to [`CORE_ANSWER_TIMEOUT`]
-    /// for its answer, without blocking the D-Bus executor.
-    async fn ask_core(&self, command: Command) -> fdo::Result<Event> {
-        let connector = self.connector.clone();
-        let (answer_sender, answer) = oneshot::channel();
-        thread::Builder::new()
-            .name(WAIT_THREAD.to_owned())
-            .spawn(move || {
-                answer_sender.send(wait_for_core(&connector, command)).ok();
-            })
-            .map_err(|error| fdo::Error::Failed(error.to_string()))?;
-        answer
-            .await
-            .map_err(|_| fdo::Error::Failed("the core stopped".to_owned()))?
-    }
+/// Sends `command` to the core on a connection of its own and waits up to
+/// [`CORE_ANSWER_TIMEOUT`] for its answer, without blocking the D-Bus
+/// executor.
+pub async fn ask_core(connector: &Connector, command: Command) -> fdo::Result<Event> {
+    let connector = connector.clone();
+    let (answer_sender, answer) = oneshot::channel();
+    thread::Builder::new()
+        .name(WAIT_THREAD.to_owned())
+        .spawn(move || {
+            answer_sender.send(wait_for_core(&connector, command)).ok();
+        })
+        .map_err(|error| fdo::Error::Failed(error.to_string()))?;
+    answer
+        .await
+        .map_err(|_| fdo::Error::Failed("the core stopped".to_owned()))?
 }
 
 fn wait_for_core(connector: &Connector, command: Command) -> fdo::Result<Event> {
@@ -69,7 +70,7 @@ fn wait_for_core(connector: &Connector, command: Command) -> fdo::Result<Event> 
 impl Files {
     /// Returns once the core has answered.
     async fn ping(&self) -> fdo::Result<()> {
-        match self.ask_core(Command::Ping).await? {
+        match ask_core(&self.connector, Command::Ping).await? {
             Event::Pong => Ok(()),
             _ => Err(fdo::Error::Failed(
                 "the core gave an unexpected answer".to_owned(),

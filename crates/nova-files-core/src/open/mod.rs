@@ -21,6 +21,9 @@ use std::thread;
 
 use defaults::{App, Places};
 use exec::Fields;
+use nova_files_api::FileTypes as _;
+
+use crate::mime::MimeTypes;
 
 /// Present inside a Flatpak sandbox, where the host's apps can't be run.
 const FLATPAK_INFO: &str = "/.flatpak-info";
@@ -51,7 +54,35 @@ pub enum NotOpened {
     /// `Exec` line can't take a file.
     NoApp,
     /// The app's program couldn't start.
-    Failed(io::Error),
+    Failed,
+}
+
+/// Opens `file` in the default app for its type, as `types` tells it from
+/// the file's name, or for the nearest type that one is a kind of.
+///
+/// # Errors
+/// [`NotOpened`] says why nothing started; [`NotOpened::NoApp`] when the
+/// name says no type, which the portal may still tell from the contents.
+pub fn open_file(
+    file: &Path,
+    types: &MimeTypes,
+    activation: Option<&str>,
+) -> Result<(), NotOpened> {
+    let ancestry = types_of(file, types);
+    let ancestry: Vec<&str> = ancestry.iter().map(String::as_str).collect();
+    if ancestry.is_empty() {
+        return Err(NotOpened::NoApp);
+    }
+    open_in_default_app(file, &ancestry, activation)
+}
+
+/// `file`'s type and the types it is a kind of, nearest first; none when
+/// its name says no type.
+fn types_of(file: &Path, types: &MimeTypes) -> Vec<String> {
+    file.file_name()
+        .and_then(|name| types.of(name))
+        .map(|mime| types.ancestry(mime))
+        .unwrap_or_default()
 }
 
 /// Opens `file` in the default app for the first of `types` (its MIME
@@ -71,7 +102,7 @@ pub fn open_in_default_app(
     let places = places_from(|name| std::env::var_os(name));
     let app = defaults::default_app(types, &places).ok_or(NotOpened::NoApp)?;
     let line = command(&app, file).ok_or(NotOpened::NoApp)?;
-    launch(&line, app.entry.working_dir.as_deref(), activation).map_err(NotOpened::Failed)
+    launch(&line, app.entry.working_dir.as_deref(), activation).map_err(|_| NotOpened::Failed)
 }
 
 /// The app's command line for `file`.
