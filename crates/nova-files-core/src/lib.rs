@@ -16,6 +16,7 @@ mod list;
 mod memory;
 mod mime;
 mod open;
+mod ops;
 mod places;
 mod private_file;
 mod run;
@@ -95,6 +96,10 @@ pub fn spawn_with(
     let (connector, receiver) = nova_files_api::channel();
     let searcher = Searcher::new(index, home.as_ref().map(|home| home.folder.clone()));
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
+    let jobs = ops::Jobs::new(
+        home.as_ref().map(|home| home.state.as_path()),
+        connector.clone(),
+    );
     let thread = thread::Builder::new()
         .name(THREAD_NAME.to_owned())
         .spawn(move || {
@@ -108,6 +113,7 @@ pub fn spawn_with(
                 thumbnails,
                 searcher,
                 mime_types: Arc::default(),
+                jobs,
             };
             run::run(&receiver, idle_exit, &setup);
         })?;

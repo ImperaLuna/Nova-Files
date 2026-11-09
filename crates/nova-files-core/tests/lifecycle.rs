@@ -2,6 +2,7 @@
 //! once it has been idle.
 
 use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
 use nova_files_api::{Command, Event};
@@ -47,7 +48,12 @@ fn stops_when_idle_after_the_last_client_leaves() {
     let connection = core.connector.connect(events).unwrap();
 
     drop(connection);
-    core.thread.join().unwrap();
+    // Joined on another thread, so a core that never stops fails the
+    // test instead of hanging it.
+    let (stopped, joined) = mpsc::channel();
+    let core_thread = core.thread;
+    thread::spawn(move || stopped.send(core_thread.join().is_ok()));
+    assert_eq!(joined.recv_timeout(ANSWER_TIMEOUT), Ok(true));
 
     let (events, _received) = mpsc::channel();
     assert!(core.connector.connect(events).is_err());

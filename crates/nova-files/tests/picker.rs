@@ -3,7 +3,8 @@
 //! box, Enter and the Open or Save button do what the box says, typed
 //! paths go there, folders can be picked, a save onto a file that is there
 //! asks Replace or Keep both, Cancel or Escape answers cancelled, and the
-//! app's file types dim the files they leave out.
+//! app's file types dim the files they leave out. The arrow keys are
+//! tested in `pick_keys`.
 
 #![expect(
     clippy::unwrap_used,
@@ -13,6 +14,7 @@
 
 mod common;
 mod pick_filter;
+mod pick_keys;
 mod pick_names;
 mod pick_several;
 mod pick_state;
@@ -30,7 +32,7 @@ use gpui::{
 use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_ui::{MainWindow, WindowEvent};
 
-use common::{TempFolder, Watchdog, double_click};
+use common::{TempFolder, Watchdog, click_with, double_click};
 
 /// The shared tree plus `notes (2).txt`.
 fn picker_tree() -> TempFolder {
@@ -181,7 +183,7 @@ async fn a_click_puts_the_name_in_the_box_and_open_picks_it(cx: &mut TestAppCont
     click(cx, "entry-2");
     assert_eq!(name(&view, cx).as_deref(), Some("notes.txt"));
     let shown = view.read_with(cx, |view, _| view.listing_id()).unwrap();
-    let selection = view.read_with(cx, |view, _| view.pick_selection());
+    let selection = view.read_with(cx, |view, _| view.selection());
     assert_eq!(selection, Some((shown, vec![EntryId(2)])));
     assert!(answers.try_recv().is_err());
 
@@ -220,6 +222,28 @@ async fn a_typed_folder_name_goes_into_it(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("enter");
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
     assert!(answers.try_recv().is_err());
+}
+
+#[gpui::test]
+async fn the_window_keys_work_from_the_name_box(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    cx.update(nova_files_ui::bind_window_keys);
+    let projects = tree.path().join("Projects");
+    let (view, cx, _answers) = picker(cx, &tree, &projects, FILES).await;
+    cx.simulate_keystrokes("alt-up");
+    wait_for_folder(&view, cx, tree.path()).await;
+}
+
+#[gpui::test]
+async fn typing_goes_to_the_name_box_after_focus_is_lost(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), FILES).await;
+    cx.update(|window, _| window.blur());
+    cx.run_until_parked();
+    cx.simulate_input("plan");
+    assert_eq!(name(&view, cx).as_deref(), Some("plan"));
 }
 
 #[gpui::test]
@@ -379,7 +403,7 @@ async fn a_folder_picker_picks_the_folder_clicked(cx: &mut TestAppContext) {
     // A click selects; it doesn't go in.
     cx.run_until_parked();
     assert!(!view.read_with(cx, |view, _| view.waiting()));
-    let selection = view.read_with(cx, |view, _| view.pick_selection().map(|(_, ids)| ids));
+    let selection = view.read_with(cx, |view, _| view.selection().map(|(_, ids)| ids));
     assert_eq!(selection, Some(vec![EntryId(0)]));
     click(cx, "pick-accept");
     assert_eq!(
@@ -399,7 +423,7 @@ async fn a_folder_picker_goes_into_a_folder_double_clicked(cx: &mut TestAppConte
     let folder = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
     assert_eq!(folder, Some(tree.path().join("Projects")));
     // The folder it left took its selection along.
-    assert_eq!(view.read_with(cx, |view, _| view.pick_selection()), None);
+    assert_eq!(view.read_with(cx, |view, _| view.selection()), None);
     click(cx, "pick-accept");
     assert_eq!(
         answers.try_recv().ok(),
@@ -630,7 +654,7 @@ fn assert_selects(view: &Entity<MainWindow>, cx: &VisualTestContext, selected: &
         let listing = view.listing_id().unwrap();
         for (index, name) in view.entry_names().iter().enumerate() {
             let id = EntryId(u32::try_from(index).unwrap());
-            assert_eq!(view.pick_selects((listing, id)), name == selected, "{name}");
+            assert_eq!(view.selects((listing, id)), name == selected, "{name}");
         }
     });
 }

@@ -43,12 +43,6 @@ async fn several<'a>(
 
 // Rows on screen: 0 `docs`, 1 `Projects`, 2 `a.txt`, 3 `b.txt`, 4 `notes.txt`.
 
-fn click_with(cx: &mut VisualTestContext, selector: &'static str, modifiers: Modifiers) {
-    cx.run_until_parked();
-    let bounds = cx.debug_bounds(selector).unwrap();
-    cx.simulate_click(bounds.center(), modifiers);
-}
-
 fn ctrl_click(cx: &mut VisualTestContext, selector: &'static str) {
     click_with(cx, selector, Modifiers::control());
 }
@@ -59,7 +53,7 @@ fn shift_click(cx: &mut VisualTestContext, selector: &'static str) {
 
 /// The rows selected, by index.
 fn selected(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<u32> {
-    let selection = view.read_with(cx, |view, _| view.pick_selection());
+    let selection = view.read_with(cx, |view, _| view.selection());
     selection
         .map(|(_, ids)| ids.iter().map(|id| id.0).collect())
         .unwrap_or_default()
@@ -84,10 +78,10 @@ async fn ctrl_click_adds_files_and_open_picks_them_all(cx: &mut TestAppContext) 
     view.read_with(cx, |view, _| {
         let listing = view.listing_id().unwrap();
         let shown: Vec<bool> = (0..5)
-            .map(|row| view.pick_selects((listing, EntryId(row))))
+            .map(|row| view.selects((listing, EntryId(row))))
             .collect();
         assert_eq!(shown, [false, false, true, false, true]);
-        assert!(!view.pick_selects((ListingId(listing.0 + 1), EntryId(2))));
+        assert!(!view.selects((ListingId(listing.0 + 1), EntryId(2))));
     });
     click(cx, "pick-accept");
     assert_eq!(
@@ -127,7 +121,7 @@ async fn ctrl_click_takes_a_file_back_out(cx: &mut TestAppContext) {
     assert_eq!(selected(&view, cx), [3]);
     assert_eq!(name(&view, cx).as_deref(), Some("b.txt"));
     ctrl_click(cx, "entry-3");
-    assert_eq!(view.read_with(cx, |view, _| view.pick_selection()), None);
+    assert_eq!(view.read_with(cx, |view, _| view.selection()), None);
     assert_eq!(name(&view, cx).as_deref(), Some(""));
     // Nothing selected and nothing typed: nothing to open.
     cx.simulate_keystrokes("enter");
