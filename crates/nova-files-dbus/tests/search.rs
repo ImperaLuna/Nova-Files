@@ -1,7 +1,8 @@
 //! The search interface against a private D-Bus daemon and a real core
 //! whose home and index are temp folders: stages arrive as signals for the
 //! caller only, `Open`
-//! hands folders to a window and files to a stand-in portal, and
+//! hands folders to a window and files it finds no app for to a stand-in
+//! portal, and
 //! `ShowInFolder` opens the holding folder.
 
 #![expect(
@@ -51,6 +52,7 @@ impl Scratch {
         let scratch = Self(std::env::temp_dir().join(name));
         fs::create_dir_all(scratch.home().join("Documents")).unwrap();
         fs::write(scratch.file(), b"report").unwrap();
+        fs::write(scratch.untyped(), b"notes").unwrap();
         scratch
     }
 
@@ -60,6 +62,13 @@ impl Scratch {
 
     fn file(&self) -> PathBuf {
         self.home().join("Documents/report.pdf")
+    }
+
+    /// A file whose name says no type, so the core finds no app for it and
+    /// leaves it to the portal, whatever apps the machine running the test
+    /// has.
+    fn untyped(&self) -> PathBuf {
+        self.home().join("Documents/notes")
     }
 
     fn core(&self, indexed: bool, idle_exit: Duration) -> RunningCore {
@@ -466,23 +475,36 @@ fn portal(bus: &PrivateBus) -> (Connection, Receiver<Opened>) {
 
 #[test]
 fn open_hands_a_file_to_the_portal_with_the_token() {
+    with_apps_of_its_own(
+        "open_hands_a_file_to_the_portal_with_the_token",
+        portal_gets_the_file_with_the_token,
+    );
+}
+
+fn portal_gets_the_file_with_the_token(_apps: &Path) {
     let scratch = Scratch::new();
     let service = service(&scratch, true);
     let (_portal, opened) = portal(&service.bus);
     let launcher = Launcher::new(&service.bus);
-    let inode = fs::metadata(scratch.file()).unwrap().ino();
-    launcher.call("Open", &scratch.file(), Some(TOKEN)).unwrap();
+    let inode = fs::metadata(scratch.untyped()).unwrap().ino();
+    launcher
+        .call("Open", &scratch.untyped(), Some(TOKEN))
+        .unwrap();
     assert_eq!(
         opened.recv_timeout(WAIT),
         Ok((inode, Some(TOKEN.to_owned())))
     );
-    launcher.call("Open", &scratch.file(), None).unwrap();
+    launcher.call("Open", &scratch.untyped(), None).unwrap();
     assert_eq!(opened.recv_timeout(WAIT), Ok((inode, None)));
     assert!(service.windows.recv_timeout(QUIET).is_err());
 }
 
 #[test]
 fn open_never_waits_on_what_it_opens() {
+    with_apps_of_its_own("open_never_waits_on_what_it_opens", never_waits_on_the_file);
+}
+
+fn never_waits_on_the_file(_apps: &Path) {
     let scratch = Scratch::new();
     let service = service(&scratch, true);
     let (_portal, opened) = portal(&service.bus);
@@ -497,12 +519,100 @@ fn open_never_waits_on_what_it_opens() {
 
 #[test]
 fn open_fails_for_a_missing_file_or_without_a_portal() {
+    with_apps_of_its_own(
+        "open_fails_for_a_missing_file_or_without_a_portal",
+        fails_for_a_missing_file_or_without_a_portal,
+    );
+}
+
+fn fails_for_a_missing_file_or_without_a_portal(_apps: &Path) {
     let scratch = Scratch::new();
     let service = service(&scratch, true);
     let launcher = Launcher::new(&service.bus);
-    assert!(launcher.call("Open", &scratch.file(), None).is_err());
+    assert!(launcher.call("Open", &scratch.untyped(), None).is_err());
     let (_portal, opened) = portal(&service.bus);
     let missing = scratch.home().join("missing.pdf");
     assert!(launcher.call("Open", &missing, None).is_err());
+    assert!(opened.recv_timeout(QUIET).is_err());
+}
+
+/// Set in the run with apps of its own: their folder.
+const APPS_VAR: &str = "NOVA_FILES_DBUS_TEST_APPS";
+
+#[test]
+fn open_starts_the_default_app_without_the_portal() {
+    with_apps_of_its_own(
+        "open_starts_the_default_app_without_the_portal",
+        open_in_the_default_app,
+    );
+}
+
+/// Runs `run` with the MIME database and default apps of its own: the core
+/// reads them from the environment, so test `name` runs itself again with
+/// the environment pointed at them, and never sees the machine's own apps.
+fn with_apps_of_its_own(name: &str, run: fn(&Path)) {
+    match std::env::var_os(APPS_VAR) {
+        Some(apps) => run(Path::new(&apps)),
+        None => run_again_with_apps_of_its_own(name),
+    }
+}
+
+fn run_again_with_apps_of_its_own(name: &str) {
+    let root = std::env::temp_dir().join(format!(
+        "nova-files-dbus-apps-{}-{name}",
+        std::process::id()
+    ));
+    let data = root.join("data");
+    let config = root.join("config");
+    fs::create_dir_all(data.join("mime")).unwrap();
+    fs::create_dir_all(data.join("applications")).unwrap();
+    fs::create_dir_all(&config).unwrap();
+    fs::write(data.join("mime/globs2"), "50:application/pdf:*.pdf\n").unwrap();
+    fs::write(
+        config.join("mimeapps.list"),
+        "[Default Applications]\napplication/pdf=nova-test-viewer.desktop\n",
+    )
+    .unwrap();
+    let viewer = root.join("viewer");
+    let script = format!(
+        "#!/bin/sh\nprintf '%s %s' \"$1\" \"$XDG_ACTIVATION_TOKEN\" > '{}'\n",
+        root.join("out").display()
+    );
+    fs::write(&viewer, script).unwrap();
+    fs::set_permissions(&viewer, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let entry = format!(
+        "[Desktop Entry]\nType=Application\nName=Viewer\nExec={} %f\n",
+        viewer.display()
+    );
+    fs::write(data.join("applications/nova-test-viewer.desktop"), entry).unwrap();
+    // Reading a FIFO waits for the viewer to write it, with no polling.
+    fifo_at(&root.join("out"));
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", name, "--test-threads=1"])
+        .env(APPS_VAR, &root)
+        .env("HOME", &root)
+        .env("XDG_DATA_HOME", &data)
+        .env("XDG_DATA_DIRS", &data)
+        .env("XDG_CONFIG_HOME", &config)
+        .env("XDG_CONFIG_DIRS", &config)
+        .env_remove("XDG_CURRENT_DESKTOP")
+        .status()
+        .unwrap();
+    fs::remove_dir_all(&root).unwrap();
+    assert!(status.success());
+}
+
+fn open_in_the_default_app(apps: &Path) {
+    let scratch = Scratch::new();
+    let service = service(&scratch, true);
+    let (_portal, opened) = portal(&service.bus);
+    let launcher = Launcher::new(&service.bus);
+    launcher.call("Open", &scratch.file(), Some(TOKEN)).unwrap();
+    // On a thread, so a viewer that never runs fails the test, not hangs it.
+    let out = apps.join("out");
+    let (sender, written) = mpsc::channel();
+    std::thread::spawn(move || sender.send(fs::read_to_string(out).unwrap()));
+    let written = written.recv_timeout(WAIT).unwrap();
+    assert_eq!(written, format!("{} {TOKEN}", scratch.file().display()));
     assert!(opened.recv_timeout(QUIET).is_err());
 }

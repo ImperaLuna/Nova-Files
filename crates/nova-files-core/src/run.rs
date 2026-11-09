@@ -8,13 +8,14 @@
 //! `jobs`), so a slow disk never holds up the loop or other clients.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::jobs::{self, Client};
+use crate::mime::MimeTypes;
 use crate::places::Home;
 use crate::search::Searcher;
 use crate::thumbs::Thumbnails;
@@ -24,6 +25,9 @@ pub struct Setup {
     pub home: Option<Home>,
     pub thumbnails: Option<Thumbnails>,
     pub searcher: Searcher,
+    /// The MIME database, read at the first [`Command::OpenFile`] and kept
+    /// while the core runs.
+    pub mime_types: Arc<OnceLock<MimeTypes>>,
 }
 
 /// Runs until idle.
@@ -93,6 +97,10 @@ fn answer(
         }
         Command::Search { id, query, limit } => {
             setup.searcher.search(client, id, query, limit);
+            Ok(())
+        }
+        Command::OpenFile { path, activation } => {
+            jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
             Ok(())
         }
     }

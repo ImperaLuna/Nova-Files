@@ -14,6 +14,7 @@ mod jobs;
 mod list;
 mod memory;
 mod mime;
+mod open;
 mod places;
 mod run;
 mod search;
@@ -22,6 +23,7 @@ mod trace;
 mod vulkan_drivers;
 
 use std::io;
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -92,6 +94,7 @@ pub fn spawn_with(
         home,
         thumbnails,
         searcher,
+        mime_types: Arc::default(),
     };
     let thread = thread::Builder::new()
         .name(THREAD_NAME.to_owned())
