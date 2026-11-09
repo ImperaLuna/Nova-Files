@@ -133,6 +133,10 @@ pub struct Picker {
     /// while the box still holds that text, it means that entry, whatever
     /// its name's bytes or spaces.
     copied: Option<(EntryId, String)>,
+    /// The last part of a typed path that the window put in the name box:
+    /// while the box still shows it, it is that exact name, never typed
+    /// text to read again.
+    placed: Option<OsString>,
     /// A save waiting for a fresh listing of its folder (see `save`).
     recheck: Option<save::Recheck>,
     /// The picker's window, to close once a save is answered from a
@@ -154,18 +158,26 @@ struct Jump {
     /// Whether a refusal goes to the folder the path is in instead.
     fallback: bool,
     /// What the name box holds once the window is there.
-    name: String,
+    name: OsString,
     /// The listing it asked for; any other one means the user went
     /// somewhere else, which drops it.
     listing: Option<ListingId>,
 }
 
 impl Picker {
-    /// The app's suggested save name, if the box still shows it as it came.
-    /// Only a plain name counts: one with a `/`, or `.` or `..`, is read
+    /// The name the box holds exactly: the last part of a typed path the
+    /// window put there, or the app's suggested save name as it came.
+    /// Only a plain suggestion counts: one with a `/`, or `.` or `..`, is read
     /// as typed, so a save never lands outside the folder on screen
     /// unasked.
-    fn unchanged_suggestion(&self, text: &str) -> Option<OsString> {
+    fn exact_name(&self, text: &str) -> Option<OsString> {
+        if let Some(placed) = self
+            .placed
+            .as_ref()
+            .filter(|placed| placed.to_string_lossy() == text)
+        {
+            return Some(placed.clone());
+        }
         match &self.request.kind {
             PickKind::Save { name } if is_plain_name(name) && name.to_string_lossy() == text => {
                 Some(name.clone())
@@ -225,6 +237,7 @@ impl MainWindow {
                         pick.conflict = None;
                         pick.recheck = None;
                         pick.jump = None;
+                        pick.placed = None;
                     }
                     cx.notify();
                 }
@@ -239,6 +252,7 @@ impl MainWindow {
             conflict: None,
             jump: None,
             copied: None,
+            placed: None,
             recheck: None,
             window: window.window_handle(),
             _name_events: name_events,
@@ -378,9 +392,9 @@ impl MainWindow {
             cx.notify();
             return;
         }
-        // The app's own name, unchanged, is a name with its exact bytes,
-        // never a path to read.
-        if let Some(suggested) = pick.unchanged_suggestion(&text) {
+        // The app's own name, or one the window put there, unchanged, is a
+        // name with its exact bytes, never a path to read.
+        if let Some(suggested) = pick.exact_name(&text) {
             if self.accept_exact(&folder, suggested) {
                 window.remove_window();
             }
@@ -497,7 +511,7 @@ impl MainWindow {
         if let Some(pick) = &mut self.pick {
             pick.jump = Some(Jump {
                 fallback,
-                name: String::new(),
+                name: OsString::new(),
                 listing,
             });
         }
@@ -516,8 +530,10 @@ impl MainWindow {
         if let Some(jump) = pick.jump.take()
             && jump.listing == listed
         {
-            pick.name
-                .update(cx, |field, cx| field.set_text(&jump.name, cx));
+            pick.name.update(cx, |field, cx| {
+                field.set_text(&jump.name.to_string_lossy(), cx);
+            });
+            pick.placed = Some(jump.name).filter(|name| !name.is_empty());
         }
         // Only the listing a save asked for answers it; any other one came
         // from going somewhere else, which drops the save.
@@ -544,7 +560,7 @@ impl MainWindow {
         if !jump.fallback {
             return;
         }
-        let name = name.to_string_lossy().into_owned();
+        let name = name.to_owned();
         self.open(parent);
         let listing = self.asked;
         if let Some(pick) = &mut self.pick {

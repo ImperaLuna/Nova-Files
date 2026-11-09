@@ -613,6 +613,23 @@ async fn a_typed_name_means_the_file_with_those_bytes(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn a_typed_paths_file_name_keeps_its_spaces(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    fs::write(tree.path().join(" notes.txt"), "").unwrap();
+    let projects = tree.path().join("Projects");
+    let (view, cx, answers) = picker(cx, &tree, &projects, FILES).await;
+    cx.simulate_input("../ notes.txt");
+    cx.simulate_keystrokes("enter");
+    wait_for_name(&view, cx, " notes.txt").await;
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join(" notes.txt")))
+    );
+}
+
+#[gpui::test]
 async fn clicking_a_file_before_a_save_is_checked_drops_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
