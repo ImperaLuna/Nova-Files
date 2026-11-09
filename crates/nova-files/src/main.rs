@@ -151,6 +151,11 @@ fn run() -> Result<(), Box<dyn Error>> {
     let service = match started {
         Ok(Started::Service(mut service)) => {
             service.serve_file_picker(core.connector.clone(), UiPicker::new(requests.clone()));
+            if let Err(error) = service.follow_desktop_look(core.connector.clone()) {
+                report(&format!(
+                    "can't follow the desktop's light or dark: {error}"
+                ));
+            }
             let quit = requests.clone();
             let watched = service.on_bus_lost(move || {
                 report("the D-Bus session ended; stopping");

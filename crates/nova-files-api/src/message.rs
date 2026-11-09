@@ -7,7 +7,7 @@ use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
-use crate::theme::Theme;
+use crate::theme::{DesktopLook, Theme};
 
 /// The most entries one [`Command::Rows`] may name: several screens of
 /// rows. The core leaves out any past it.
@@ -79,6 +79,11 @@ pub enum Command {
     /// the client gets [`Event::Theme`] again each time it changes. Clients
     /// that never ask never get it.
     Theme,
+    /// Tell the core what the desktop asks apps to look like; sent by the
+    /// D-Bus side each time the desktop changes it. Clients that asked for
+    /// the theme get [`Event::Theme`] if the theme changed; nothing
+    /// answers the sender.
+    DesktopLook(DesktopLook),
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused, then each job's news. A
     /// client that only asks one question and waits for its answer leaves

@@ -5,8 +5,8 @@
 //! preference on `System`), takes each color from the theme file, then the
 //! desktop's accent for [`PaletteKey::Primary`], then Carbonfox, and sends
 //! the result as [`crate::Event::Theme`]: when a client asks, and from
-//! then on to that client each time it changes. (The desktop's preference
-//! and accent come later; until then `System` means dark.) These are the base colors
+//! then on to that client each time it changes. The desktop's preference
+//! and accent reach the core as [`DesktopLook`]. These are the base colors
 //! only, under the names Nova's theme file uses; the UI works out the
 //! shades it draws with from them.
 
@@ -40,6 +40,16 @@ pub enum Mode {
     #[default]
     Dark,
     Light,
+}
+
+/// What the desktop asks apps to look like, as the freedesktop settings
+/// portal says. Each part is `None` when the desktop doesn't say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DesktopLook {
+    /// Dark or light, for the `System` appearance.
+    pub mode: Option<Mode>,
+    /// The accent, the primary color unless the theme file sets one.
+    pub accent: Option<Color>,
 }
 
 /// The theme every window draws with.

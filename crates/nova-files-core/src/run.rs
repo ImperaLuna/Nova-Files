@@ -138,6 +138,10 @@ fn answer(
             setup.theme.listen(id, client.events());
             Ok(())
         }
+        Command::DesktopLook(look) => {
+            setup.theme.follow_desktop(look);
+            Ok(())
+        }
         Command::WatchJobs => {
             setup.jobs.watch(id, client.events());
             Ok(())

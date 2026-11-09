@@ -9,7 +9,7 @@ use std::fs;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
-use nova_files_api::{Color, Palette, SettingChange, Settings};
+use nova_files_api::{Color, DesktopLook, Palette, SettingChange, Settings};
 
 use super::*;
 
@@ -112,9 +112,59 @@ fn the_appearance_setting_picks_dark_or_light() {
     settings.change(SettingChange::Thumbnails(
         nova_files_api::Thumbnails::Hidden,
     ));
-    // System is dark until the desktop's preference is known.
+    // System is dark while the desktop doesn't say.
     settings.change(SettingChange::Appearance(Appearance::System));
     assert_eq!(next(&received).mode, Mode::Dark);
+    assert!(received.recv_timeout(config_watch::QUIET * 3).is_err());
+    drop(settings);
+    fs::remove_dir_all(config).ok();
+}
+
+#[test]
+fn system_follows_the_desktop_and_its_accent_is_primary_unless_the_file_sets_one() {
+    let config = temp("desktop");
+    fs::write(
+        config_watch::folder(&config).join(FILE),
+        "[dark]\nprimary = \"#ABCDEF\"\n",
+    )
+    .unwrap();
+    let store = Store::open(Some(&config));
+    let settings = SettingsStore::open(Some(&config));
+    store.follow(&settings);
+    let (events, received) = inbox();
+    store.listen(ClientId(0), &events);
+    next(&received);
+    settings.change(SettingChange::Appearance(Appearance::System));
+    let accent = Color(0x3584E4);
+    store.follow_desktop(DesktopLook {
+        mode: Some(Mode::Light),
+        accent: Some(accent),
+    });
+    let light = next(&received);
+    assert_eq!(light.mode, Mode::Light);
+    let expected = Palette {
+        primary: accent,
+        ..defaults::carbonfox(Mode::Light)
+    };
+    assert_eq!(light.palette, expected);
+
+    // The file's own primary wins over the accent.
+    store.follow_desktop(DesktopLook {
+        mode: Some(Mode::Dark),
+        accent: Some(accent),
+    });
+    let dark = next(&received);
+    assert_eq!(dark.mode, Mode::Dark);
+    assert_eq!(dark.palette.primary, Color(0xABCDEF));
+
+    // A set appearance doesn't follow the desktop, and the same look
+    // again sends nothing.
+    settings.change(SettingChange::Appearance(Appearance::Light));
+    assert_eq!(next(&received).mode, Mode::Light);
+    store.follow_desktop(DesktopLook {
+        mode: Some(Mode::Dark),
+        accent: Some(accent),
+    });
     assert!(received.recv_timeout(config_watch::QUIET * 3).is_err());
     drop(settings);
     fs::remove_dir_all(config).ok();
