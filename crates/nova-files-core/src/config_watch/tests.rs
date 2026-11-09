@@ -16,7 +16,7 @@ fn temp(name: &str) -> PathBuf {
 
 fn watch(folder: &Path) -> (ConfigWatch, Receiver<Changed>) {
     let (sender, reports) = mpsc::channel();
-    let watch = ConfigWatch::start(folder.to_owned(), move |changed| {
+    let watch = ConfigWatch::start(folder.to_owned(), &["settings.toml"], move |changed| {
         sender.send(changed.clone()).ok();
     })
     .unwrap();
@@ -110,6 +110,133 @@ fn a_folder_that_goes_away_reports_everything_and_is_found_again() {
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
         files(&["settings.toml"])
     );
+    fs::remove_dir_all(home).ok();
+}
+
+/// The first report other than `Changed::All`: a move and the save after
+/// it may land in one burst or two.
+fn first_files(reports: &Receiver<Changed>) -> Changed {
+    loop {
+        let changed = reports.recv_timeout(REPORT_TIMEOUT).unwrap();
+        if changed != Changed::All {
+            return changed;
+        }
+    }
+}
+
+#[test]
+fn a_linked_file_saved_where_it_lives_is_reported_under_its_link() {
+    let home = temp("linked");
+    let config = home.join("nova-files");
+    let dotfiles = home.join("dotfiles");
+    fs::create_dir_all(&config).unwrap();
+    fs::create_dir_all(&dotfiles).unwrap();
+    fs::write(dotfiles.join("nova-settings.toml"), "").unwrap();
+    std::os::unix::fs::symlink(
+        dotfiles.join("nova-settings.toml"),
+        config.join("settings.toml"),
+    )
+    .unwrap();
+    let (_watch, reports) = watch(&config);
+    // Another file next to it says nothing.
+    fs::write(dotfiles.join("other.toml"), "").unwrap();
+    assert!(reports.recv_timeout(QUIET * 3).is_err());
+    fs::write(dotfiles.join("nova-settings.toml"), "appearance = \"dark\"").unwrap();
+    assert_eq!(
+        reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
+        files(&["settings.toml"])
+    );
+    fs::remove_dir_all(home).ok();
+}
+
+#[test]
+fn a_link_pointed_elsewhere_is_followed_to_its_new_file() {
+    let home = temp("relinked");
+    let config = home.join("nova-files");
+    let (old, new) = (home.join("old"), home.join("new"));
+    for folder in [&config, &old, &new] {
+        fs::create_dir_all(folder).unwrap();
+        fs::write(folder.join("s.toml"), "").unwrap();
+    }
+    let link = config.join("settings.toml");
+    std::os::unix::fs::symlink(old.join("s.toml"), &link).unwrap();
+    let (_watch, reports) = watch(&config);
+    fs::remove_file(&link).unwrap();
+    std::os::unix::fs::symlink(new.join("s.toml"), &link).unwrap();
+    assert!(
+        reports
+            .recv_timeout(REPORT_TIMEOUT)
+            .unwrap()
+            .touches("settings.toml")
+    );
+    fs::write(old.join("s.toml"), "x").unwrap();
+    assert!(reports.recv_timeout(QUIET * 3).is_err());
+    fs::write(new.join("s.toml"), "x").unwrap();
+    assert_eq!(
+        reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
+        files(&["settings.toml"])
+    );
+    fs::remove_dir_all(home).ok();
+}
+
+#[test]
+fn a_link_within_the_folder_leaves_the_folder_watched() {
+    let config = temp("link-within");
+    fs::create_dir_all(&config).unwrap();
+    fs::write(config.join("real.toml"), "").unwrap();
+    std::os::unix::fs::symlink(config.join("real.toml"), config.join("settings.toml")).unwrap();
+    let (_watch, reports) = watch(&config);
+    fs::write(config.join("real.toml"), "x").unwrap();
+    assert_eq!(
+        reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
+        files(&["real.toml", "settings.toml"])
+    );
+    // Following the link again kept the folder's own watch.
+    fs::write(config.join("theme.toml"), "").unwrap();
+    assert_eq!(
+        reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
+        files(&["theme.toml"])
+    );
+    fs::remove_dir_all(config).ok();
+}
+
+#[test]
+fn a_link_to_the_folder_above_leaves_its_watch_for_a_swap() {
+    let home = temp("link-above");
+    let config = home.join("nova-files");
+    let (old, new) = (home.join("old"), home.join("new"));
+    fs::create_dir_all(&old).unwrap();
+    fs::create_dir_all(&new).unwrap();
+    fs::write(home.join("shared.toml"), "").unwrap();
+    std::os::unix::fs::symlink(&old, &config).unwrap();
+    std::os::unix::fs::symlink(home.join("shared.toml"), old.join("settings.toml")).unwrap();
+    let (_watch, reports) = watch(&config);
+    fs::write(home.join("shared.toml"), "x").unwrap();
+    assert_eq!(
+        reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
+        files(&["settings.toml"])
+    );
+    // Following the link again kept the watch for the folder's swap.
+    fs::remove_file(&config).unwrap();
+    std::os::unix::fs::symlink(&new, &config).unwrap();
+    assert_eq!(reports.recv_timeout(REPORT_TIMEOUT).unwrap(), Changed::All);
+    fs::remove_dir_all(home).ok();
+}
+
+#[test]
+fn a_linked_folder_pointed_elsewhere_is_watched_there() {
+    let home = temp("linked-folder");
+    let config = home.join("nova-files");
+    let (old, new) = (home.join("old"), home.join("new"));
+    fs::create_dir_all(&old).unwrap();
+    fs::create_dir_all(&new).unwrap();
+    std::os::unix::fs::symlink(&old, &config).unwrap();
+    let (_watch, reports) = watch(&config);
+    fs::remove_file(&config).unwrap();
+    std::os::unix::fs::symlink(&new, &config).unwrap();
+    assert_eq!(reports.recv_timeout(REPORT_TIMEOUT).unwrap(), Changed::All);
+    fs::write(new.join("settings.toml"), "").unwrap();
+    assert_eq!(first_files(&reports), files(&["settings.toml"]));
     fs::remove_dir_all(home).ok();
 }
 

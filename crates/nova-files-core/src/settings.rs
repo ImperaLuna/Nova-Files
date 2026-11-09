@@ -92,7 +92,7 @@ impl Store {
         // The watch goes in before the first read, so no change is missed.
         let watch = folder.and_then(|folder| {
             let weak = Arc::downgrade(&shared);
-            let started = ConfigWatch::start(folder, move |changed| {
+            let started = ConfigWatch::start(folder, &[FILE], move |changed| {
                 if changed.touches(FILE) {
                     reload(&weak);
                 }
