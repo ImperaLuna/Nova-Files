@@ -5,8 +5,10 @@
 //! `$XDG_STATE_HOME/nova-files/window-state` between runs. The file is read
 //! once, when the core starts; a missing, unreadable or oversized one reads
 //! as empty. A save replaces the file whole, through a temporary file and a
-//! rename, on a thread of its own, so a crash never leaves half a file and
-//! a slow disk never holds up the core.
+//! rename, so a crash never leaves half a file. Saves go to one writer
+//! thread in the order they came, so the file always ends with the last
+//! one, and a slow disk never holds up the core. A save that fails is
+//! logged and the state stays in memory for this run.
 
 use std::cell::RefCell;
 use std::fs;
@@ -14,6 +16,7 @@ use std::io::{self, Read as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 /// The file, under the state folder.
@@ -31,6 +34,8 @@ pub struct Store {
     /// memory only.
     path: Option<PathBuf>,
     bytes: RefCell<Arc<[u8]>>,
+    /// The writer thread's queue, started on the first save.
+    writer: RefCell<Option<Sender<Arc<[u8]>>>>,
 }
 
 impl Store {
@@ -41,6 +46,7 @@ impl Store {
         Self {
             path,
             bytes: RefCell::new(bytes.into()),
+            writer: RefCell::default(),
         }
     }
 
@@ -57,14 +63,44 @@ impl Store {
         }
         let bytes: Arc<[u8]> = bytes.into();
         *self.bytes.borrow_mut() = Arc::clone(&bytes);
-        let Some(path) = self.path.clone() else {
+        let Some(path) = &self.path else {
             return;
         };
-        let wrote = thread::Builder::new()
-            .name(SAVE_THREAD.to_owned())
-            .spawn(move || write(&path, &bytes));
-        // Without a thread the state stays in memory for this run.
-        drop(wrote);
+        let mut writer = self.writer.borrow_mut();
+        if writer.is_none() {
+            *writer = start_writer(path.clone());
+        }
+        let sent = writer.as_ref().map(|queue| queue.send(bytes));
+        if let Some(Err(_)) = sent {
+            log::warn!("the window state writer stopped; the state isn't saved");
+            *writer = None;
+        }
+    }
+}
+
+/// Starts the thread that writes each state it is sent to `path`, in order,
+/// or none when no thread can start.
+fn start_writer(path: PathBuf) -> Option<Sender<Arc<[u8]>>> {
+    let (queue, saves) = mpsc::channel();
+    let started = thread::Builder::new()
+        .name(SAVE_THREAD.to_owned())
+        .spawn(move || write_each(&path, &saves));
+    match started {
+        Ok(_) => Some(queue),
+        Err(error) => {
+            log::warn!("can't start the window state writer, the state isn't saved: {error}");
+            None
+        }
+    }
+}
+
+/// Writes each state from `saves` to `path`, in order, until the store is
+/// gone.
+fn write_each(path: &Path, saves: &Receiver<Arc<[u8]>>) {
+    for bytes in saves {
+        if let Err(error) = write(path, &bytes) {
+            log::warn!("can't save the window state to {}: {error}", path.display());
+        }
     }
 }
 
@@ -97,6 +133,9 @@ fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Saves queued before the writer runs.
+    const SAVES_IN_A_ROW: u32 = 20;
 
     fn temp(name: &str) -> PathBuf {
         let path =
@@ -156,5 +195,36 @@ mod tests {
         memory_only.save(b"main 1x1".to_vec());
         assert_eq!(memory_only.bytes(), b"main 1x1");
         fs::remove_dir_all(home).ok();
+    }
+
+    #[test]
+    fn the_writer_writes_saves_in_order_and_goes_on_past_a_failure() {
+        let home = temp("order");
+        let path = home.join(FILE);
+        let (queue, saves) = mpsc::channel();
+        for save in 0..=SAVES_IN_A_ROW {
+            queue.send(save.to_string().into_bytes().into()).unwrap();
+        }
+        drop(queue);
+        write_each(&path, &saves);
+        assert_eq!(read(&path), SAVES_IN_A_ROW.to_string().as_bytes());
+        // A failed write is logged and the writer stops only with the store.
+        let blocked = temp("order-blocked");
+        fs::write(&blocked, b"").unwrap();
+        let (queue, saves) = mpsc::channel();
+        queue.send(b"x".to_vec().into()).unwrap();
+        drop(queue);
+        write_each(&blocked.join(FILE), &saves);
+        fs::remove_file(blocked).ok();
+        fs::remove_dir_all(home).ok();
+    }
+
+    #[test]
+    fn a_failed_write_is_an_error() {
+        let home = temp("blocked");
+        // A file where the state folder should be.
+        fs::write(&home, b"").unwrap();
+        assert!(write(&home.join(FILE), b"picker 900x600").is_err());
+        fs::remove_file(home).ok();
     }
 }
