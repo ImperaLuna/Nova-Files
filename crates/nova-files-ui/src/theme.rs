@@ -1,6 +1,121 @@
 //! Design tokens. Every color and size the UI draws with is named here and
-//! nowhere else. The theme file and portal colors replace these defaults
-//! later.
+//! nowhere else. The colors come from the core's theme (see [`Colors`]);
+//! sizes and corners are fixed.
+
+use gpui::{App, Global, Rgba, rgb};
+use nova_files_api::{Color, Mode, Palette, Theme};
+
+/// The colors the UI draws with, worked out from the core's theme.
+///
+/// As on the design page: a quiet window of `fg` mixed over `bg`, the
+/// primary color only for what acts and the open place, and the first
+/// swatch for folders. One for the whole app, since every window shows the
+/// same theme.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Colors {
+    /// The window's base surface, behind the folder's entries; also a
+    /// text field's box.
+    pub surface: Rgba,
+    /// The places column, the toolbar and the pick bar, one step below the
+    /// surface.
+    pub surface_sunk: Rgba,
+    /// Hairlines between the toolbar, the places and the entries.
+    pub divider: Rgba,
+    /// A row or button under the pointer.
+    pub hover: Rgba,
+    /// The place that is open.
+    pub open: Rgba,
+    /// The entry selected in a picker.
+    pub selected: Rgba,
+    /// Names.
+    pub text: Rgba,
+    /// The path, the columns, and buttons that do nothing right now.
+    pub text_dim: Rgba,
+    /// Folder icons among the entries.
+    pub folder: Rgba,
+    /// File icons, and the icons of places not open.
+    pub icon: Rgba,
+    /// The open place's icon.
+    pub open_icon: Rgba,
+    /// A text field's caret.
+    pub caret: Rgba,
+    /// Selected text in a text field.
+    pub selection: Rgba,
+    /// The button that does what the bar is for: Open, Save, Keep both.
+    pub accept: Rgba,
+    /// Text on [`Self::accept`].
+    pub on_accept: Rgba,
+}
+
+/// How much of `fg` each shade mixes over `bg`, and of `bg` over
+/// `backdrop` for the sunk surface.
+mod share {
+    pub const SUNK: f32 = 0.82;
+    pub const OPEN: f32 = 0.06;
+    pub const HOVER: f32 = 0.08;
+    pub const DIVIDER: f32 = 0.10;
+    pub const SELECTED: f32 = 0.13;
+    pub const DIM: f32 = 0.62;
+}
+
+impl Colors {
+    /// The colors for `theme`.
+    pub fn new(theme: &Theme) -> Self {
+        let palette = &theme.palette;
+        let over_bg = |share| mix(palette.fg, share, palette.bg);
+        let dim = over_bg(share::DIM);
+        Self {
+            surface: color(palette.bg),
+            surface_sunk: mix(palette.bg, share::SUNK, palette.backdrop),
+            divider: over_bg(share::DIVIDER),
+            hover: over_bg(share::HOVER),
+            open: over_bg(share::OPEN),
+            selected: over_bg(share::SELECTED),
+            text: color(palette.fg),
+            text_dim: dim,
+            folder: color(palette.swatches[0]),
+            icon: dim,
+            open_icon: color(palette.primary),
+            caret: color(palette.fg),
+            selection: color(palette.bg_alt),
+            accept: color(palette.primary),
+            on_accept: color(palette.on_accent),
+        }
+    }
+
+    /// The colors the app draws with now: the core's theme once a window
+    /// has it, Carbonfox's dark until then.
+    pub fn of(cx: &App) -> Self {
+        cx.try_global::<Self>().copied().unwrap_or_default()
+    }
+}
+
+impl Default for Colors {
+    fn default() -> Self {
+        Self::new(&Theme {
+            mode: Mode::Dark,
+            palette: Palette::carbonfox(Mode::Dark),
+        })
+    }
+}
+
+impl Global for Colors {}
+
+fn color(color: Color) -> Rgba {
+    rgb(color.0)
+}
+
+/// `share` of `top` over the rest `under`, channel by channel.
+fn mix(top: Color, share: f32, under: Color) -> Rgba {
+    let (top, under) = (color(top), color(under));
+    let blend = |top: f32, under: f32| top.mul_add(share, under * (1.0 - share));
+    Rgba {
+        r: blend(top.r, under.r),
+        g: blend(top.g, under.g),
+        b: blend(top.b, under.b),
+        a: 1.0,
+    }
+}
 
 /// The main window.
 pub mod window {
@@ -13,38 +128,6 @@ pub mod window {
     /// smaller than the main window.
     pub const PICK_WIDTH: Pixels = px(900.0);
     pub const PICK_HEIGHT: Pixels = px(600.0);
-}
-
-/// Colors, as 0xRRGGBB.
-pub mod color {
-    /// The window's base surface, behind the folder's entries.
-    pub const SURFACE: u32 = 0x001a_1918;
-    /// The places column and the toolbar, one step below the surface.
-    pub const SURFACE_SUNK: u32 = 0x0016_1514;
-    /// Hairlines between the toolbar, the places and the entries.
-    pub const DIVIDER: u32 = 0x002a_2724;
-    /// A row under the pointer, and the place that is open.
-    pub const ROW_HIGHLIGHT: u32 = 0x002a_2724;
-    /// Names.
-    pub const TEXT: u32 = 0x00d8_ccb0;
-    /// The path, and buttons that do nothing right now.
-    pub const TEXT_DIM: u32 = 0x008a_857c;
-    /// Folder icons.
-    pub const FOLDER: u32 = 0x0000_adb5;
-    /// File icons.
-    pub const FILE: u32 = 0x00a8_a296;
-    /// A text field's caret.
-    pub const CARET: u32 = 0x00d8_ccb0;
-    /// Selected text in a text field.
-    pub const SELECTION: u32 = 0x003d_3a35;
-    /// The entry selected in a picker.
-    pub const ROW_SELECTED: u32 = 0x0019_3a3b;
-    /// A text field's box.
-    pub const FIELD: u32 = 0x001a_1918;
-    /// The button that does what the bar is for: Open, Save, Keep both.
-    pub const ACCEPT: u32 = 0x00fd_7014;
-    /// Text on [`ACCEPT`].
-    pub const ON_ACCEPT: u32 = 0x001d_1d1d;
 }
 
 /// Sizes and spacing.
@@ -110,9 +193,56 @@ pub mod radius {
     use gpui::{Pixels, px};
 
     /// A row in either list.
-    pub const ROW: Pixels = px(10.0);
+    pub const ROW: Pixels = px(14.0);
     /// A thumbnail in a row.
     pub const THUMBNAIL: Pixels = px(4.0);
     /// A toolbar button.
-    pub const BUTTON: Pixels = px(10.0);
+    pub const BUTTON: Pixels = px(12.0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shades_mix_fg_over_bg() {
+        let theme = Theme {
+            mode: Mode::Dark,
+            palette: Palette {
+                fg: Color(0xFF_FF_FF),
+                bg: Color(0x00_00_00),
+                backdrop: Color(0xFF_FF_FF),
+                ..Palette::carbonfox(Mode::Dark)
+            },
+        };
+        let colors = Colors::new(&theme);
+        let grey = |level: f32| Rgba {
+            r: level,
+            g: level,
+            b: level,
+            a: 1.0,
+        };
+        assert_eq!(colors.surface, grey(0.0));
+        assert_eq!(colors.text, grey(1.0));
+        assert_eq!(colors.text_dim, grey(share::DIM));
+        assert_eq!(colors.selected, grey(share::SELECTED));
+        assert_eq!(colors.hover, grey(share::HOVER));
+        // The sunk surface mixes bg over the backdrop instead.
+        assert!((colors.surface_sunk.r - (1.0 - share::SUNK)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn roles_take_their_palette_colors() {
+        let palette = Palette::carbonfox(Mode::Light);
+        let colors = Colors::new(&Theme {
+            mode: Mode::Light,
+            palette: palette.clone(),
+        });
+        assert_eq!(colors.accept, color(palette.primary));
+        assert_eq!(colors.open_icon, color(palette.primary));
+        assert_eq!(colors.on_accept, color(palette.on_accent));
+        assert_eq!(colors.folder, color(palette.swatches[0]));
+        assert_eq!(colors.selection, color(palette.bg_alt));
+        assert_ne!(colors, Colors::default());
+    }
 }

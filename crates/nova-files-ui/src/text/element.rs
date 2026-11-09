@@ -7,11 +7,11 @@ use std::ops::Range;
 use gpui::{
     App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity, Focusable,
     GlobalElementId, InspectorElementId, IntoElement, LayoutId, PaintQuad, Pixels, ShapedLine,
-    Style, TextAlign, TextRun, UnderlineStyle, Window, fill, point, px, relative, rgb,
+    Style, TextAlign, TextRun, UnderlineStyle, Window, fill, point, px, relative,
 };
 
 use super::field::TextField;
-use crate::theme::color;
+use crate::theme::Colors;
 use crate::theme::size::{CARET_WIDTH, COMPOSING_UNDERLINE};
 
 pub struct TextElement {
@@ -49,10 +49,10 @@ impl Mark {
 
     /// What to paint: the selection always, the caret only while the
     /// field has focus.
-    fn quad(self, focused: bool) -> Option<PaintQuad> {
+    fn quad(self, focused: bool, colors: Colors) -> Option<PaintQuad> {
         match self {
-            Self::Caret(caret) => focused.then(|| fill(caret, rgb(color::CARET))),
-            Self::Selection(selected) => Some(fill(selected, rgb(color::SELECTION))),
+            Self::Caret(caret) => focused.then(|| fill(caret, colors.caret)),
+            Self::Selection(selected) => Some(fill(selected, colors.selection)),
         }
     }
 }
@@ -102,10 +102,11 @@ impl Element for TextElement {
         let field = self.field.read(cx);
         let edit = &field.edit;
         let style = window.text_style();
+        let colors = Colors::of(cx);
         let (shown, text_color) = if edit.text().is_empty() {
-            (field.placeholder.clone(), rgb(color::TEXT_DIM).into())
+            (field.placeholder.clone(), colors.text_dim.into())
         } else {
-            (edit.text().to_owned().into(), rgb(color::TEXT).into())
+            (edit.text().to_owned().into(), colors.text.into())
         };
         let run = TextRun {
             len: shown.len(),
@@ -154,8 +155,9 @@ impl Element for TextElement {
         let focused = focus.is_focused(window);
         let scroll = self.field.read(cx).scroll;
         let line = prepainted.line.clone();
+        let colors = Colors::of(cx);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            if let Some(quad) = prepainted.mark.quad(focused) {
+            if let Some(quad) = prepainted.mark.quad(focused, colors) {
                 window.paint_quad(quad);
             }
             let origin = span(bounds, scroll, px(0.0), px(0.0)).origin;

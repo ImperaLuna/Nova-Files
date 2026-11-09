@@ -34,6 +34,7 @@ pub use columns::ColumnText;
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
+pub use theme::Colors;
 pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
 pub use window_state::{WindowState, fetch as fetch_window_state};
 

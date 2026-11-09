@@ -10,9 +10,9 @@ use std::sync::mpsc::Receiver;
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
     Appearance, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink,
-    Listing, ListingId, SettingChange, Settings, Thumbnails, Unreadable,
+    Listing, ListingId, Mode, Palette, SettingChange, Settings, Theme, Thumbnails, Unreadable,
 };
-use nova_files_ui::MainWindow;
+use nova_files_ui::{Colors, MainWindow};
 
 const SHOWN: &str = "/shown";
 const MISSING: &str = "/shown/missing";
@@ -403,10 +403,25 @@ fn a_thumbnail_arriving_asks_for_nothing_new(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn the_window_asks_for_the_settings(cx: &mut TestAppContext) {
+fn the_window_asks_for_the_settings_and_the_theme(cx: &mut TestAppContext) {
     let (_view, _cx, core) = window(cx);
     let commands = core.commands();
     assert!(commands.contains(&Command::Settings), "{commands:?}");
+    assert!(commands.contains(&Command::Theme), "{commands:?}");
+}
+
+#[gpui::test]
+fn the_window_draws_with_the_theme_the_core_sends(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = window(cx);
+    core.next_listing();
+    assert_eq!(cx.update(|_, cx| Colors::of(cx)), Colors::default());
+    let light = Theme {
+        mode: Mode::Light,
+        palette: Palette::carbonfox(Mode::Light),
+    };
+    core.send(Event::Theme(Arc::new(light.clone())));
+    cx.run_until_parked();
+    assert_eq!(cx.update(|_, cx| Colors::of(cx)), Colors::new(&light));
 }
 
 #[gpui::test]
