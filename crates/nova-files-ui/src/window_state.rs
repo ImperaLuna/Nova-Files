@@ -4,9 +4,10 @@
 //!
 //! The core keeps the state as bytes it never reads; this module owns what
 //! they say. The first line names the format and its version, then each
-//! line is one window's entry, such as `picker 900x600`. Lines it doesn't
-//! know are kept as they are, so a later version's entries survive an older
-//! one. Anything else reads as no state, and the theme's sizes apply.
+//! line is one window's entry, such as `picker 900x600`. A state with an
+//! entry this version doesn't know, or anything else it can't read, reads
+//! as no state, and the theme's sizes apply; a later version that adds
+//! entries raises the version.
 
 use std::sync::mpsc;
 use std::time::Duration;
@@ -35,8 +36,6 @@ const FETCH_WAIT: Duration = Duration::from_millis(100);
 pub struct WindowState {
     /// A picker's size, in whole logical pixels.
     picker: Option<(f32, f32)>,
-    /// Lines of entries this version doesn't know, kept as they came.
-    kept: Vec<String>,
 }
 
 impl WindowState {
@@ -53,7 +52,7 @@ impl WindowState {
         for line in lines.filter(|line| !line.is_empty()) {
             match line.split_once(' ') {
                 Some((PICKER, value)) => state.picker = parse_size(value),
-                _ => state.kept.push(line.to_owned()),
+                _ => return Self::default(),
             }
         }
         state
@@ -64,9 +63,7 @@ impl WindowState {
         let picker = self
             .picker
             .map(|(width, height)| format!("{PICKER} {width}{BY}{height}"));
-        let lines = std::iter::once(HEADER.to_owned())
-            .chain(picker)
-            .chain(self.kept.iter().cloned());
+        let lines = std::iter::once(HEADER.to_owned()).chain(picker);
         lines
             .map(|line| line + "\n")
             .collect::<String>()
@@ -127,16 +124,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_state_reads_back_what_it_wrote_and_keeps_lines_it_doesnt_know() {
-        let state =
-            WindowState::parse(b"nova-files window-state 1\nmain 1200x800\n\npicker 900x600\n");
+    fn a_state_reads_back_what_it_wrote() {
+        let state = WindowState::parse(b"nova-files window-state 1\n\npicker 900x600\n");
         assert_eq!(state.picker, Some((900.0, 600.0)));
-        assert_eq!(state.kept, ["main 1200x800"]);
         let written = state.with_picker(size(px(1000.4), px(700.6))).to_bytes();
-        assert_eq!(
-            written,
-            b"nova-files window-state 1\npicker 1000x701\nmain 1200x800\n"
-        );
+        assert_eq!(written, b"nova-files window-state 1\npicker 1000x701\n");
         assert_eq!(WindowState::parse(&written).picker, Some((1000.0, 701.0)));
         assert_eq!(
             WindowState::default().to_bytes(),
@@ -150,6 +142,8 @@ mod tests {
             &b""[..],
             b"picker 900x600\n",
             b"nova-files window-state 2\npicker 900x600\n",
+            b"nova-files window-state 1\npicker 900x600\nmain 1200x800\n",
+            b"nova-files window-state 1\npicker\n",
             b"\xff\xfe",
         ] {
             assert_eq!(
@@ -171,7 +165,6 @@ mod tests {
         assert_eq!(WindowState::default().picker_size(None), theme);
         let saved = |width, height| WindowState {
             picker: Some((width, height)),
-            kept: Vec::new(),
         };
         assert_eq!(
             saved(1000.0, 700.0).picker_size(None),

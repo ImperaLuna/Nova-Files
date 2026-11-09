@@ -36,7 +36,7 @@ pub(super) fn watch_size(
 impl MainWindow {
     /// The windows' state as a picker opens, which its size joins when it
     /// closes.
-    pub fn set_pick_window_state(&mut self, state: WindowState) {
+    pub const fn set_pick_window_state(&mut self, state: WindowState) {
         if let Some(pick) = &mut self.pick {
             pick.window_state = state;
         }
