@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, ClickEvent, Context, Hsla, InteractiveElement as _, IntoElement,
+    AnyElement, ClickEvent, Context, Focusable as _, Hsla, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, RenderImage, SharedString, StatefulInteractiveElement as _,
     Styled as _, Window, div, img, prelude::FluentBuilder as _, rgb, svg, uniform_list,
 };
@@ -34,12 +34,16 @@ use crate::window::MainWindow;
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
-        // A main window takes focus itself, and a click inside gives it
-        // back; a picker keeps it in its name box, whose keys pass the
-        // window's on.
+        // Keys always land somewhere: in a main window on the window
+        // itself, which a click inside takes focus back to; in a picker in
+        // its name box, whose keys pass the window's on.
         let main = self.pick.is_none();
-        if main && window.focused(cx).is_none() {
-            window.focus(&self.focus, cx);
+        if window.focused(cx).is_none() {
+            let focus = self.pick.as_ref().map_or_else(
+                || self.focus.clone(),
+                |pick| pick.name.read(cx).focus_handle(cx),
+            );
+            window.focus(&focus, cx);
         }
         div()
             .key_context(commands::KEY_CONTEXT)
