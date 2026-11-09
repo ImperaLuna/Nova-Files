@@ -6,8 +6,9 @@
 //! so a folder of any size costs the same to draw. Each row is an icon slot
 //! and a name, then Modified, Type and Size; Modified and Size stay empty
 //! until the core has read that entry's details. A thumbnail, once it
-//! arrives, takes the icon's place. In pick mode a click selects an entry
-//! and the pick bar runs along the bottom (see `pick`).
+//! arrives, takes the icon's place. Selected rows are tinted, and the
+//! row the keyboard is on has a ring (see `selecting`). In pick mode the
+//! pick bar runs along the bottom (see `pick`).
 //!
 //! The window sets the key context its actions are bound in and handles
 //! each action it takes; buttons and the mouse's side buttons send actions
@@ -24,7 +25,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    Action, AnyElement, ClickEvent, Context, Focusable as _, Hsla, InteractiveElement as _,
+    Action, AnyElement, ClickEvent, Context, Div, Focusable as _, Hsla, InteractiveElement as _,
     IntoElement, MouseButton, MouseDownEvent, NavigationDirection, ParentElement as _, Render,
     RenderImage, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, img,
     prelude::FluentBuilder as _, rgb, svg, uniform_list,
@@ -32,7 +33,12 @@ use gpui::{
 use nova_files_api::{EntryKind, Place, PlaceKind};
 
 use crate::assets::Icon;
-use crate::commands::{self, GoBack, GoForward, GoUp};
+use crate::commands::{
+    self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
+    CursorUp, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown, SelectFirst,
+    SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
+};
+use crate::selection::Move;
 use crate::theme::{color, opacity, radius, size};
 use crate::window::MainWindow;
 
@@ -56,6 +62,7 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
+            .map(|root| Self::selection_keys(root, cx))
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),
                 cx.listener(|this, _: &MouseDownEvent, _, _| this.go_back()),
@@ -93,6 +100,50 @@ impl Render for MainWindow {
 }
 
 impl MainWindow {
+    /// The selection's actions on the window's root (see `selecting`).
+    fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
+        root.on_action(cx.listener(|this, _: &OpenSelected, _, _| this.open_selected()))
+            .on_action(cx.listener(|this, _: &CursorUp, _, cx| {
+                this.move_cursor(Move::Up, false, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CursorDown, _, cx| {
+                this.move_cursor(Move::Down, false, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CursorPageUp, _, cx| {
+                this.move_cursor(Move::PageUp, false, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CursorPageDown, _, cx| {
+                this.move_cursor(Move::PageDown, false, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CursorFirst, _, cx| {
+                this.move_cursor(Move::First, false, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CursorLast, _, cx| {
+                this.move_cursor(Move::Last, false, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SelectUp, _, cx| {
+                this.move_cursor(Move::Up, true, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SelectDown, _, cx| {
+                this.move_cursor(Move::Down, true, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SelectPageUp, _, cx| {
+                this.move_cursor(Move::PageUp, true, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SelectPageDown, _, cx| {
+                this.move_cursor(Move::PageDown, true, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SelectFirst, _, cx| {
+                this.move_cursor(Move::First, true, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SelectLast, _, cx| {
+                this.move_cursor(Move::Last, true, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SelectAll, _, cx| this.select_all(cx)))
+            .on_action(cx.listener(|this, _: &ToggleSelected, _, cx| this.toggle_cursor(cx)))
+            .on_action(cx.listener(|this, _: &ClearSelection, _, cx| this.clear_selection(cx)))
+    }
+
     fn toolbar(&self) -> impl IntoElement {
         let back = button(
             "back",
@@ -215,8 +266,10 @@ impl MainWindow {
                             text.size,
                             format!("modified-{index}"),
                         ));
-                        let selected = this.pick_selects((listing_id, id));
+                        let selected = this.selects((listing_id, id));
+                        let cursor = this.cursor() == Some(index);
                         row.when(selected, |row| row.bg(rgb(color::ROW_SELECTED)))
+                            .when(cursor, |row| row.relative().child(cursor_ring()))
                             .when(this.pick_dims(index), |row| row.opacity(opacity::DIMMED))
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
@@ -324,7 +377,7 @@ fn button(
 
 /// One row of either list, as wide as the list: icon slot and label,
 /// highlighted under the pointer.
-fn row(id: (&'static str, usize), selector: String) -> gpui::Stateful<gpui::Div> {
+fn row(id: (&'static str, usize), selector: String) -> gpui::Stateful<Div> {
     div()
         .id(id)
         .debug_selector(|| selector)
@@ -337,6 +390,17 @@ fn row(id: (&'static str, usize), selector: String) -> gpui::Stateful<gpui::Div>
         .px(size::PAD)
         .rounded(radius::ROW)
         .hover(|row| row.bg(rgb(color::ROW_HIGHLIGHT)))
+}
+
+/// The ring around the row the keyboard is on, laid over the row so it
+/// shifts nothing.
+fn cursor_ring() -> impl IntoElement {
+    div()
+        .absolute()
+        .inset_0()
+        .rounded(radius::ROW)
+        .border(size::DIVIDER)
+        .border_color(rgb(color::ROW_CURSOR))
 }
 
 /// The icon slot of an entry row: its thumbnail if it has one, otherwise

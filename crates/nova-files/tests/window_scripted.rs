@@ -1,7 +1,10 @@
 //! The window against a scripted core: the test reads each command the
 //! window sends and answers it by hand, so the order of events is exact.
+//! Selecting is tested in `scripted_select`.
 
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
+
+mod scripted_select;
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};

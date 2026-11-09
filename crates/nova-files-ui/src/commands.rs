@@ -22,10 +22,33 @@ pub const KEY_CONTEXT: &str = "MainWindow";
     reason = "GPUI's actions! macro derives PartialEq only"
 )]
 mod actions {
-    gpui::actions!(nova_files, [GoUp, GoBack, GoForward]);
+    gpui::actions!(
+        nova_files,
+        [
+            GoUp,
+            GoBack,
+            GoForward,
+            OpenSelected,
+            CursorUp,
+            CursorDown,
+            CursorPageUp,
+            CursorPageDown,
+            CursorFirst,
+            CursorLast,
+            SelectUp,
+            SelectDown,
+            SelectPageUp,
+            SelectPageDown,
+            SelectFirst,
+            SelectLast,
+            SelectAll,
+            ToggleSelected,
+            ClearSelection,
+        ]
+    );
 }
 
-pub use actions::{GoBack, GoForward, GoUp};
+pub use actions::*;
 
 /// One action the window can take.
 pub struct ActionSpec {
@@ -46,32 +69,136 @@ impl ActionSpec {
     }
 }
 
+/// Defines one [`ActionSpec`] constant for `$action`.
+macro_rules! spec {
+    ($(#[$doc:meta])* $name:ident, $action:ident, $id:literal, $label:literal, [$($keys:literal),*]) => {
+        $(#[$doc])*
+        pub const $name: ActionSpec = ActionSpec {
+            id: $id,
+            label: $label,
+            keys: &[$($keys),*],
+            bind: |keys, context| KeyBinding::new(keys, $action, context),
+        };
+    };
+}
+
 /// Every action the window can take.
-pub const ACTIONS: &[ActionSpec] = &[UP, BACK, FORWARD];
+pub const ACTIONS: &[ActionSpec] = &[
+    UP,
+    BACK,
+    FORWARD,
+    OPEN,
+    CURSOR_UP,
+    CURSOR_DOWN,
+    CURSOR_PAGE_UP,
+    CURSOR_PAGE_DOWN,
+    CURSOR_FIRST,
+    CURSOR_LAST,
+    SELECT_UP,
+    SELECT_DOWN,
+    SELECT_PAGE_UP,
+    SELECT_PAGE_DOWN,
+    SELECT_FIRST,
+    SELECT_LAST,
+    SELECT_ALL,
+    TOGGLE_SELECTED,
+    CLEAR_SELECTION,
+];
 
-/// Goes to the parent of the folder on screen.
-pub const UP: ActionSpec = ActionSpec {
-    id: "go.up",
-    label: "Up",
-    keys: &["alt-up"],
-    bind: |keys, context| KeyBinding::new(keys, GoUp, context),
-};
-
-/// Goes back to the place before this one.
-pub const BACK: ActionSpec = ActionSpec {
-    id: "go.back",
-    label: "Back",
-    keys: &["alt-left", "backspace"],
-    bind: |keys, context| KeyBinding::new(keys, GoBack, context),
-};
-
-/// Goes forward again after Back.
-pub const FORWARD: ActionSpec = ActionSpec {
-    id: "go.forward",
-    label: "Forward",
-    keys: &["alt-right"],
-    bind: |keys, context| KeyBinding::new(keys, GoForward, context),
-};
+spec!(
+    /// Goes to the parent of the folder on screen.
+    UP, GoUp, "go.up", "Up", ["alt-up"]
+);
+spec!(
+    /// Goes back to the place before this one.
+    BACK, GoBack, "go.back", "Back", ["alt-left", "backspace"]
+);
+spec!(
+    /// Goes forward again after Back.
+    FORWARD, GoForward, "go.forward", "Forward", ["alt-right"]
+);
+spec!(
+    /// Goes into the folder selected, or opens the files selected.
+    OPEN, OpenSelected, "entry.open", "Open", ["enter"]
+);
+spec!(CURSOR_UP, CursorUp, "cursor.up", "Previous", ["up"]);
+spec!(CURSOR_DOWN, CursorDown, "cursor.down", "Next", ["down"]);
+spec!(
+    CURSOR_PAGE_UP,
+    CursorPageUp,
+    "cursor.page-up",
+    "Page up",
+    ["pageup"]
+);
+spec!(
+    CURSOR_PAGE_DOWN,
+    CursorPageDown,
+    "cursor.page-down",
+    "Page down",
+    ["pagedown"]
+);
+spec!(CURSOR_FIRST, CursorFirst, "cursor.first", "First", ["home"]);
+spec!(CURSOR_LAST, CursorLast, "cursor.last", "Last", ["end"]);
+spec!(
+    SELECT_UP,
+    SelectUp,
+    "select.up",
+    "Select previous",
+    ["shift-up"]
+);
+spec!(
+    SELECT_DOWN,
+    SelectDown,
+    "select.down",
+    "Select next",
+    ["shift-down"]
+);
+spec!(
+    SELECT_PAGE_UP,
+    SelectPageUp,
+    "select.page-up",
+    "Select page up",
+    ["shift-pageup"]
+);
+spec!(
+    SELECT_PAGE_DOWN,
+    SelectPageDown,
+    "select.page-down",
+    "Select page down",
+    ["shift-pagedown"]
+);
+spec!(
+    SELECT_FIRST,
+    SelectFirst,
+    "select.first",
+    "Select to first",
+    ["shift-home"]
+);
+spec!(
+    SELECT_LAST,
+    SelectLast,
+    "select.last",
+    "Select to last",
+    ["shift-end"]
+);
+spec!(
+    SELECT_ALL,
+    SelectAll,
+    "select.all",
+    "Select all",
+    ["ctrl-a"]
+);
+spec!(
+    /// Adds the entry at the cursor to the selection or takes it out.
+    TOGGLE_SELECTED, ToggleSelected, "select.toggle", "Select or unselect", ["ctrl-space"]
+);
+spec!(
+    CLEAR_SELECTION,
+    ClearSelection,
+    "select.none",
+    "Select none",
+    ["escape"]
+);
 
 /// Binds every action's default keys.
 pub fn bind_keys(cx: &mut App) {

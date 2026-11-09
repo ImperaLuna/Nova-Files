@@ -16,6 +16,8 @@ mod commands;
 mod history;
 mod pick;
 mod requests;
+mod selecting;
+mod selection;
 mod shown_thumbnails;
 mod text;
 mod theme;

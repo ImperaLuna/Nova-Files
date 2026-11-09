@@ -36,8 +36,8 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, RenderImage, Task, UniformListScrollHandle,
-    Window,
+    App, Context, EventEmitter, FocusHandle, Focusable, RenderImage, ScrollStrategy, Task,
+    UniformListScrollHandle, Window,
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
@@ -47,6 +47,7 @@ use nova_files_api::{
 use crate::columns::{self, ColumnText};
 use crate::history::History;
 use crate::pick::Picker;
+use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
 use crate::theme::size;
 use crate::thumbnail;
@@ -95,7 +96,9 @@ pub struct MainWindow {
     /// either side.
     rows_wanted: Range<usize>,
     /// The rows the list drew last; see [`Self::rows_drawn`].
-    rows_drawn: Range<usize>,
+    pub(crate) rows_drawn: Range<usize>,
+    /// What is selected, and the row the keyboard is on (see `selecting`).
+    pub(crate) selection: Option<Selection>,
     /// The listing asked for most recently; only its answer counts.
     pub(crate) asked: Option<ListingId>,
     /// Whether the core sent a listing since the one on screen, which the
@@ -185,6 +188,7 @@ impl MainWindow {
             thumbnails: ShownThumbnails::default(),
             rows_wanted: 0..0,
             rows_drawn: 0..0,
+            selection: None,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
             core_moved: false,
@@ -381,6 +385,7 @@ impl MainWindow {
                 self.history.arrived(&path);
                 // Read again in place: keep the scroll position.
                 let same_folder = self.folder() == Some(path.as_path());
+                self.selection = self.selection_for(&listing);
                 self.listing = Some(listing);
                 self.core_moved = false;
                 self.details = HashMap::new();
@@ -390,6 +395,9 @@ impl MainWindow {
                     self.scroll = UniformListScrollHandle::new();
                 }
                 self.pick_folder_opened(cx);
+                if !same_folder && let Some(cursor) = self.cursor() {
+                    self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
+                }
                 cx.emit(WindowEvent::Opened(path));
                 cx.notify();
             }

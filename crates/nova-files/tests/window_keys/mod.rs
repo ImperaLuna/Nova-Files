@@ -28,11 +28,12 @@ async fn alt_up_goes_up(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, tree.path()).await;
 }
 
-/// Goes into `Projects`, then `nova`, from the tree's top, by clicks.
+/// Goes into `Projects`, then `nova`, from the tree's top, by
+/// double-clicks.
 async fn walk_in(view: &Entity<MainWindow>, cx: &mut VisualTestContext, tree: &TempFolder) {
-    click(cx, "entry-0");
+    double_click(cx, "entry-0");
     wait_for_folder(view, cx, &tree.path().join("Projects")).await;
-    click(cx, "entry-0");
+    double_click(cx, "entry-0");
     wait_for_folder(view, cx, &tree.path().join("Projects/nova")).await;
 }
 
