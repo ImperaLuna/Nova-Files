@@ -39,8 +39,8 @@ use std::io::{self, Write as _};
 use std::path::{Component, Path, PathBuf};
 
 use gpui::{
-    AnyWindowHandle, App, AppContext as _, ClickEvent, Context, Entity, Focusable as _,
-    Subscription, TitlebarOptions, Window,
+    AnyWindowHandle, App, AppContext as _, ClickEvent, Context, Entity, Focusable as _, Pixels,
+    Size, Subscription, TitlebarOptions, Window, size,
 };
 use nova_files_api::{
     Entry, EntryId, EntryKind, ListingId, PickAnswer, PickId, PickKind, PickRequest,
@@ -49,6 +49,7 @@ use nova_files_api::{
 pub use self::opening::foreign_parent;
 use self::select::{Click, Selection};
 use crate::text::{TextField, TextFieldEvent};
+use crate::theme;
 use crate::window::{MainWindow, tidy};
 
 /// The clicks in a double-click.
@@ -95,6 +96,12 @@ pub fn titlebar(request: &PickRequest) -> TitlebarOptions {
         title: Some(title.to_owned().into()),
         ..TitlebarOptions::default()
     }
+}
+
+/// A picker window's starting size, a dialog's rather than the main
+/// window's.
+pub const fn window_size() -> Size<Pixels> {
+    size(theme::window::PICK_WIDTH, theme::window::PICK_HEIGHT)
 }
 
 /// The label on the Open or Save button: the app's, or what it is for.
@@ -773,6 +780,14 @@ mod tests {
         assert!(filter::is_chosen(Some(0), Some(0)));
         assert!(filter::is_chosen(None, None));
         assert!(!filter::is_chosen(Some(0), None));
+    }
+
+    #[test]
+    fn a_picker_starts_dialog_sized() {
+        let picker = window_size();
+        let main = size(theme::window::WIDTH, theme::window::HEIGHT);
+        assert!(picker.width < main.width && picker.height < main.height);
+        assert_eq!(picker, size(gpui::px(900.0), gpui::px(600.0)));
     }
 
     #[test]

@@ -9,6 +9,10 @@ pub mod window {
     /// Starting size; the user resizes from there.
     pub const WIDTH: Pixels = px(1100.0);
     pub const HEIGHT: Pixels = px(720.0);
+    /// A picker's starting size: a dialog over the app that asked, so
+    /// smaller than the main window.
+    pub const PICK_WIDTH: Pixels = px(900.0);
+    pub const PICK_HEIGHT: Pixels = px(600.0);
 }
 
 /// Colors, as 0xRRGGBB.
