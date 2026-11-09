@@ -13,6 +13,7 @@
 //! entries by name, as raw bytes, since names needn't be UTF-8; a cursor
 //! whose row is gone goes to the nearest row left.
 
+use std::collections::HashMap;
 use std::ffi::OsStr;
 
 use gpui::Modifiers;
@@ -203,27 +204,37 @@ impl Selection {
     /// listing `listing` of the same folder: the same names stay selected,
     /// and a cursor whose entry is gone goes to the nearest row left.
     pub fn carried(&self, before: &[Entry], listing: ListingId, after: &[Entry]) -> Option<Self> {
-        let name = |id: EntryId| entry_at(before, id).map(|entry| entry.name.as_os_str());
-        let ids: Vec<EntryId> = self
-            .ids
-            .iter()
-            .filter_map(|&id| find(after, name(id)?))
-            .collect();
         let last = u32::try_from(after.len().checked_sub(1)?).ok()?;
-        let cursor = name(self.cursor)
-            .and_then(|name| find(after, name))
-            .unwrap_or_else(|| EntryId(self.cursor.0.min(last)));
-        let anchor = name(self.anchor)
-            .and_then(|name| find(after, name))
-            .unwrap_or(cursor);
-        let mut ids = ids;
+        // One pass over the new listing, so carrying a large selection
+        // stays linear.
+        let by_name: HashMap<&OsStr, EntryId> = after
+            .iter()
+            .map(|entry| (entry.name.as_os_str(), entry.id))
+            .collect();
+        let carry = |id: EntryId| {
+            entry_at(before, id).and_then(|entry| by_name.get(entry.name.as_os_str()).copied())
+        };
+        let mut ids: Vec<EntryId> = self.ids.iter().filter_map(|&id| carry(id)).collect();
         ids.sort_unstable();
+        let cursor = carry(self.cursor).unwrap_or_else(|| EntryId(self.cursor.0.min(last)));
+        let anchor = carry(self.anchor).unwrap_or(cursor);
         Some(Self {
             listing,
             ids,
             anchor,
             cursor,
         })
+    }
+
+    /// At most one entry: the cursor's, if it was selected, for a view
+    /// that takes only one.
+    #[must_use]
+    pub fn at_most_one(mut self) -> Self {
+        if self.ids.len() > 1 {
+            self.ids = vec![self.cursor];
+            self.anchor = self.cursor;
+        }
+        self
     }
 
     /// Just the entry named `name` in `entries` of `listing`, if there is one.
@@ -400,6 +411,51 @@ mod tests {
         assert_eq!(carried.listing, NEXT);
         assert_eq!(ids(&carried), [2, 3]);
         assert_eq!(carried.cursor(), EntryId(3));
+    }
+
+    #[test]
+    fn a_fresh_listing_keeps_the_anchor_by_name() {
+        let before = entries(&[b"a", b"b", b"c"]);
+        let after = entries(&[b"0", b"a", b"b", b"c"]);
+        let range = Selection::clicked(
+            Some(Selection::only(SHOWN, EntryId(0))),
+            SHOWN,
+            EntryId(1),
+            Click::Range,
+            |_| true,
+        );
+        let carried = range.carried(&before, NEXT, &after).unwrap();
+        let extended = Selection::moved(Some(carried), NEXT, EntryId(3), true, |_| true);
+        assert_eq!(ids(&extended), [1, 2, 3]);
+    }
+
+    #[test]
+    fn at_most_one_keeps_the_cursor_of_several() {
+        let several = Selection::clicked(
+            Some(Selection::only(SHOWN, EntryId(0))),
+            SHOWN,
+            EntryId(2),
+            Click::Range,
+            |_| true,
+        );
+        let one = several.at_most_one();
+        assert_eq!(ids(&one), [2]);
+        let moved = Selection::moved(Some(one.clone()), SHOWN, EntryId(3), true, |_| true);
+        assert_eq!(ids(&moved), [2, 3]);
+        assert_eq!(one.clone().at_most_one(), one);
+        let mut none = one;
+        none.toggle_cursor();
+        assert_eq!(none.clone().at_most_one(), none);
+        // One entry away from the cursor stays as it is.
+        let mut away = Selection::clicked(
+            Some(Selection::only(SHOWN, EntryId(0))),
+            SHOWN,
+            EntryId(2),
+            Click::Toggle,
+            |_| true,
+        );
+        away.toggle_cursor();
+        assert_eq!(ids(&away.clone().at_most_one()), [0]);
     }
 
     #[test]

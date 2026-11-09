@@ -5,7 +5,9 @@
 //! Every change goes through [`MainWindow::reselect`], which works out
 //! the new selection from the old one, lets a picker update its name box
 //! (see `pick::select`), and scrolls the cursor's row into view. In a
-//! picker a range holds only what it picks; a main window picks anything.
+//! picker a range holds only what it picks, and a picker for one entry
+//! keeps at most one selected whatever the keys; a main window picks
+//! anything.
 //!
 //! When a listing arrives, a fresh read of the same folder keeps the
 //! selection by name; arriving in the folder that holds the one just left
@@ -64,7 +66,14 @@ impl MainWindow {
                 entry_at(entries, id).is_some_and(|entry| entry.kind == wanted)
             })
         };
-        self.selection = change(before, &picks);
+        let several = self.pick.as_ref().is_none_or(crate::pick::Picker::several);
+        self.selection = change(before, &picks).map(|selection| {
+            if several {
+                selection
+            } else {
+                selection.at_most_one()
+            }
+        });
         self.pick_selection_changed(cx);
         if let Some(cursor) = self.cursor() {
             self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);

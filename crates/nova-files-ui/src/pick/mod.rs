@@ -190,7 +190,7 @@ impl Picker {
     }
 
     /// Whether the app takes more than one entry.
-    const fn several(&self) -> bool {
+    pub(crate) const fn several(&self) -> bool {
         matches!(self.request.kind, PickKind::Open { multiple: true, .. })
     }
 
