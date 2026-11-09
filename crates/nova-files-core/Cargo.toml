@@ -3,7 +3,7 @@
 # The core. Index, search, folder listing, watching, jobs and settings. It
 # never draws anything.
 #
-# Allowed outside crates: log, rustix, serde, serde_json, toml
+# Allowed outside crates: log, rustix, serde, serde_json, toml, toml_edit
 # Allowed workspace crates: nova-files-api, nova-files-index
 
 [package]
@@ -19,13 +19,17 @@ workspace = true
 
 [dependencies]
 # Kills the thumbnail helper's process group when a batch runs out of time,
-# reads the monotonic clock for the frame trace, and renames without
-# replacing for file operations.
-rustix = { version = "1.1.6", default-features = false, features = ["fs", "process", "std", "time"] }
+# reads the monotonic clock for the frame trace, renames without replacing
+# for file operations, and watches the config folder (inotify, woken
+# through an eventfd).
+rustix = { version = "1.1.6", default-features = false, features = ["event", "fs", "process", "std", "time"] }
 # Receives GPUI's start-up phases and frame times for the traces; GPUI already builds it.
 log = { version = "0.4.35", features = ["std"] }
 # Read the library path out of Vulkan driver manifests (vulkan_drivers.rs).
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# Reads the settings file and edits it in place, keeping the user's
+# comments; already in the lock through zbus's macros.
+toml_edit = { version = "0.25.18", default-features = false, features = ["display", "parse"] }
 nova-files-api.workspace = true
 nova-files-index.workspace = true

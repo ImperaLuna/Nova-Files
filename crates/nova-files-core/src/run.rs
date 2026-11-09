@@ -21,6 +21,7 @@ use crate::mime::MimeTypes;
 use crate::ops::Jobs;
 use crate::places::Home;
 use crate::search::Searcher;
+use crate::settings::Store as SettingsStore;
 use crate::thumbs::Thumbnails;
 use crate::window_state::Store as WindowStateStore;
 
@@ -28,6 +29,7 @@ use crate::window_state::Store as WindowStateStore;
 pub struct Setup {
     pub home: Option<Home>,
     pub window_state: WindowStateStore,
+    pub settings: SettingsStore,
     pub thumbnails: Option<Thumbnails>,
     pub searcher: Searcher,
     /// The MIME database, read at the first [`Command::OpenFile`] and kept
@@ -65,6 +67,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
         CoreMessage::Disconnected { client } => {
             // Dropping the client stops its listing.
             clients.remove(&client);
+            setup.settings.forget(client);
             setup.jobs.audience().leave(client);
         }
         // Receiving it already restarted the idle wait.
@@ -75,6 +78,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             };
             if answer(client, target, command, setup).is_err() {
                 clients.remove(&client);
+                setup.settings.forget(client);
                 setup.jobs.audience().leave(client);
             }
         }
@@ -116,6 +120,14 @@ fn answer(
         Command::WindowState => client.deliver(Event::WindowState(setup.window_state.bytes())),
         Command::SaveWindowState(bytes) => {
             setup.window_state.save(bytes);
+            Ok(())
+        }
+        Command::Settings => {
+            setup.settings.listen(id, client.events());
+            Ok(())
+        }
+        Command::ChangeSetting(change) => {
+            setup.settings.change(change);
             Ok(())
         }
         Command::WatchJobs => {
