@@ -12,7 +12,7 @@
 //! the answer says so, and then only through a backup or an exchange.
 //! What was made before a failure or a cancel stays, whole.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::{self, DirBuilder, File};
 use std::io;
 use std::os::unix::fs::{DirBuilderExt as _, symlink};
@@ -40,6 +40,10 @@ const FILLING_MODE: u32 = 0o700;
 /// changing it.
 const LOOK_AGAIN: u32 = 3;
 
+/// Makes an item at a target, replacing what is there when told to: see
+/// [`make`]. A parameter, so tests can stand in for the disk.
+type Make<'a> = dyn FnMut(&mut Running, &Item, &Path, usize, bool) -> Result<u64, Stop> + 'a;
+
 /// What became of one planned item.
 enum Placed {
     /// Made at its target; `left` of its bytes were holes, never copied.
@@ -50,30 +54,26 @@ enum Placed {
     Merged,
 }
 
-/// Where the plan's paths really go: folders renamed to keep both, and
-/// folders skipped with everything in them. Only folders, so looking a
-/// path up costs as many folders as were answered, not files.
+/// Where the plan's paths really go: items renamed to keep both, and
+/// folders skipped with everything in them. Looking a path up costs as
+/// many lookups as it is deep, however many were answered.
 #[derive(Default)]
 struct Detours {
-    renamed: Vec<(PathBuf, PathBuf)>,
-    skipped: Vec<PathBuf>,
+    renamed: HashMap<PathBuf, PathBuf>,
+    skipped: HashSet<PathBuf>,
 }
 
 impl Detours {
     /// Where `planned` really goes, or `None` when it was skipped.
     fn target(&self, planned: &Path) -> Option<PathBuf> {
-        if self
-            .skipped
-            .iter()
-            .any(|skipped| planned.starts_with(skipped))
-        {
-            return None;
+        // The deepest renamed folder holding it, found first.
+        let mut renamed = None;
+        for above in planned.ancestors() {
+            if self.skipped.contains(above) {
+                return None;
+            }
+            renamed = renamed.or_else(|| self.renamed.get(above).map(|to| (above, to)));
         }
-        let renamed = self
-            .renamed
-            .iter()
-            .filter(|(from, _)| planned.starts_with(from))
-            .max_by_key(|(from, _)| from.components().count());
         Some(renamed.map_or_else(
             || planned.to_path_buf(),
             |(from, to)| to.join(planned.strip_prefix(from).unwrap_or(planned)),
@@ -103,17 +103,16 @@ pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
             running.reporter.item(size(item));
             continue;
         };
-        let (placed, target) = match place(running, item, &planned, index) {
+        let (placed, target) = match place(running, item, &planned, index, &mut make) {
             Ok(placed) => placed,
             Err(stop) => {
                 result = Err(stop);
                 break;
             }
         };
-        // Only a folder takes others along.
         let folder = item.kind == Kind::Folder;
-        if folder && target != planned {
-            detours.renamed.push((item.to.clone(), target.clone()));
+        if target != planned {
+            detours.renamed.insert(item.to.clone(), target.clone());
         }
         match placed {
             Placed::Made { left } => {
@@ -127,7 +126,7 @@ pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
             }
             Placed::Skipped => {
                 if folder {
-                    detours.skipped.push(item.to.clone());
+                    detours.skipped.insert(item.to.clone());
                 }
                 running.reporter.item(size(item));
             }
@@ -177,6 +176,7 @@ fn place(
     item: &Item,
     planned: &Path,
     index: usize,
+    make: &mut Make<'_>,
 ) -> Result<(Placed, PathBuf), Stop> {
     let mut target = planned.to_path_buf();
     // The user said to replace the file at `target`; still looked at
@@ -185,7 +185,7 @@ fn place(
     let mut looked_again = 0;
     loop {
         running.shared.control.checkpoint()?;
-        let made = match clash(&item.from, item.kind, &target) {
+        let tried = match clash(&item.from, item.kind, &target) {
             Err(error) => Err(Stop::at(&target, &error)),
             Ok(None) => make(running, item, &target, index, false),
             Ok(Some(ConflictKind::FileExists)) if replacing => {
@@ -206,7 +206,7 @@ fn place(
                 continue;
             }
         };
-        match made {
+        match tried {
             Ok(left) => return Ok((Placed::Made { left }, target)),
             // The name changed hands since it was looked at: look again.
             Err(Stop::Failed { path, reason })
@@ -338,3 +338,6 @@ fn finish_folder(from: &Path, to: &Path) {
         );
     }
 }
+
+#[cfg(test)]
+mod tests;

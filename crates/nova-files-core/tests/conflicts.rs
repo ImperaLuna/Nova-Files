@@ -366,3 +366,41 @@ fn replace_looks_again_at_what_has_the_name_now() {
     assert_eq!(outcome, Outcome::Done);
     assert_eq!(text(into.join("a (2).txt")), "new");
 }
+
+#[test]
+fn an_answer_for_this_one_is_asked_again_and_skip_skips_a_gone_source() {
+    let bench = Bench::new("conflict-this-one");
+    let into = bench.at("into");
+    fs::create_dir(&into).unwrap();
+    for name in ["a", "b", "c"] {
+        fs::write(bench.at(name), "new").unwrap();
+    }
+    for name in ["a", "b"] {
+        fs::write(into.join(name), "old").unwrap();
+    }
+    let client = bench.client();
+    let sources = ["a", "b", "c"].map(|name| bench.at(name)).to_vec();
+
+    let job = client.start(copy(sources, &into));
+    let first = held(&client, job);
+    answer(&client, job, &first, Answer::Skip, Scope::ThisOne);
+    let second = held(&client, job);
+    fs::remove_file(bench.at("c")).unwrap();
+    answer(&client, job, &second, Answer::Replace, Scope::ThisOne);
+    let gone = held(&client, job);
+    answer(&client, job, &gone, Answer::Skip, Scope::ThisOne);
+    let (outcome, _) = client.ended(job);
+
+    assert_eq!(
+        [first.kind, second.kind, gone.kind],
+        [
+            ConflictKind::FileExists,
+            ConflictKind::FileExists,
+            ConflictKind::SourceGone
+        ]
+    );
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(text(into.join("a")), "old");
+    assert_eq!(text(into.join("b")), "new");
+    assert!(!into.join("c").exists());
+}

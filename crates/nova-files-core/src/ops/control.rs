@@ -82,7 +82,7 @@ impl Control {
     pub fn checkpoint(&self) -> Result<(), Cancelled> {
         let state = self
             .changed
-            .wait_while(self.lock(), |state| state.wanted == Wanted::Pause)
+            .wait_while(self.lock(), |state| matches!(state.wanted, Wanted::Pause))
             .unwrap_or_else(PoisonError::into_inner);
         match state.wanted {
             Wanted::Cancel => Err(Cancelled),
@@ -141,7 +141,10 @@ impl Control {
         let mut state = self
             .changed
             .wait_while(self.lock(), |state| {
-                state.answer.is_none() && state.wanted != Wanted::Cancel
+                matches!(
+                    (&state.answer, state.wanted),
+                    (None, Wanted::Run | Wanted::Pause)
+                )
             })
             .unwrap_or_else(PoisonError::into_inner);
         state.open = None;

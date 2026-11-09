@@ -120,4 +120,12 @@ mod tests {
             io::ErrorKind::InvalidInput
         );
     }
+
+    #[test]
+    fn a_folder_that_cant_be_looked_in_is_an_error() {
+        let folder = TestFolder::new("keep-both-not-a-folder");
+        let file = folder.file("a", "");
+
+        assert!(free_path(&file.join("b"), Naming::File).is_err());
+    }
 }

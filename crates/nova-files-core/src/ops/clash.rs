@@ -140,4 +140,12 @@ mod tests {
         assert_eq!(ask(Failure::Other, source), None);
         assert_eq!(ask(Failure::NameTaken, target), None);
     }
+
+    #[test]
+    fn a_target_that_cant_be_looked_at_is_an_error() {
+        let folder = TestFolder::new("clash-not-a-folder");
+        let file = folder.file("a", "");
+
+        assert!(clash(&file, FILE, &file.join("b")).is_err());
+    }
 }

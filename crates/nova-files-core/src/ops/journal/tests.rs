@@ -58,3 +58,17 @@ fn syncs_once_a_second_at_most() {
     assert!(!sync_due(synced, synced + SYNC_EVERY / 2));
     assert!(sync_due(synced, synced + SYNC_EVERY));
 }
+
+#[test]
+fn a_backup_is_synced_at_once() {
+    let folder = TestFolder::new("journal-backup-sync");
+    let mut journal = Journal::start(folder.path(), JobId(1)).unwrap();
+    let started = journal.synced;
+
+    journal.record(Record::Made(Path::new("/a"))).unwrap();
+    assert_eq!(journal.synced, started, "not yet due");
+    journal
+        .record(Record::Backup(Path::new("/.b"), Path::new("/b")))
+        .unwrap();
+    assert!(journal.synced > started);
+}

@@ -143,4 +143,24 @@ mod tests {
         );
         assert_eq!(shared.progress(), progress(10, 2));
     }
+
+    #[test]
+    fn bytes_taken_back_are_no_longer_done() {
+        let shared = Arc::new(Job::new(Operation::Copy {
+            sources: Vec::new(),
+            into: "/".into(),
+        }));
+        let mut reporter = Reporter::new(
+            Audience::default(),
+            Arc::default(),
+            JobId(1),
+            Arc::clone(&shared),
+        );
+
+        reporter.bytes(5);
+        reporter.take_back(3);
+        assert_eq!(reporter.progress.done_bytes, 2);
+        reporter.take_back(3);
+        assert_eq!(reporter.progress.done_bytes, 0, "never below none");
+    }
 }

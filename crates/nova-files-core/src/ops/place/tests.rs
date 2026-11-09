@@ -289,3 +289,18 @@ fn a_failed_replace_puts_the_old_back() {
     assert_eq!(error.kind(), io::ErrorKind::NotFound);
     assert_eq!(fs::read_to_string(&old).unwrap(), "old");
 }
+
+#[test]
+fn a_swap_that_fails_for_any_other_reason_replaces_nothing() {
+    let folder = TestFolder::new("place-swap-fails");
+    let new = folder.file(".part", "new");
+    let old = folder.file("a", "old");
+    let backup = folder.path().join(".backup");
+    let elsewhere = |_: &Path, _: &Path| Err(Errno::XDEV);
+
+    let error = replace_or_fall_back(&new, &old, &backup, elsewhere).unwrap_err();
+
+    assert_eq!(error.raw_os_error(), Some(Errno::XDEV.raw_os_error()));
+    assert_eq!(fs::read_to_string(&old).unwrap(), "old");
+    assert_eq!(fs::read_to_string(&new).unwrap(), "new");
+}
