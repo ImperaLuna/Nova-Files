@@ -7,6 +7,10 @@
 //! taken by then asks Replace or Keep both, with a free numbered name
 //! worked out from the same listing. Replace answers straight away, since
 //! the user chose to save over the file.
+//!
+//! Names count as taken when they differ only in case: on a FAT drive
+//! `report.txt` is `REPORT.TXT`, and the window can't tell which file
+//! system a folder is on, so it asks rather than risk saving over a file.
 
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
@@ -52,16 +56,26 @@ impl MainWindow {
     /// Asks Replace or Keep both about the file `name` in `folder`, with
     /// that file selected.
     pub fn ask_over(&mut self, folder: &Path, name: OsString) {
-        let names: HashSet<&OsStr> = self
+        let names: HashSet<OsString> = self
             .listing
             .iter()
             .flat_map(|listing| listing.entries.iter())
-            .map(|entry| entry.name.as_os_str())
+            .map(|entry| folded(&entry.name))
             .collect();
-        let keep_both = typed::keep_both(&name, |candidate| names.contains(candidate));
+        let keep_both = typed::keep_both(&name, |candidate| names.contains(&folded(candidate)));
         // The file in the way shows as selected: that is the question.
         let there = self.listing.as_ref().and_then(|listing| {
-            let entry = listing.entries.iter().find(|entry| entry.name == name)?;
+            let entry = listing
+                .entries
+                .iter()
+                .find(|entry| entry.name == name)
+                .or_else(|| {
+                    let name = folded(&name);
+                    listing
+                        .entries
+                        .iter()
+                        .find(|entry| folded(&entry.name) == name)
+                })?;
             Some((listing.id, entry.id))
         });
         if let Some(pick) = &mut self.pick {
@@ -76,11 +90,12 @@ impl MainWindow {
     /// The fresh listing a save waited for is on screen: answers if its
     /// name is still free, and closes the window; otherwise asks.
     pub fn save_checked(&mut self, recheck: Recheck, cx: &mut Context<Self>) {
+        let name = folded(&recheck.name);
         let taken = self.listing.as_ref().is_some_and(|listing| {
             listing
                 .entries
                 .iter()
-                .any(|entry| entry.name == recheck.name)
+                .any(|entry| folded(&entry.name) == name)
         });
         if taken {
             let over = recheck.beside.unwrap_or(recheck.name);
@@ -127,4 +142,11 @@ impl MainWindow {
         };
         self.recheck(folder, conflict.keep_both, Some(beside.to_owned()));
     }
+}
+
+/// `name` as names are compared for a save: ignoring case. A name that
+/// isn't UTF-8 is compared by its bytes.
+fn folded(name: &OsStr) -> OsString {
+    name.to_str()
+        .map_or_else(|| name.to_owned(), |text| text.to_lowercase().into())
 }

@@ -13,6 +13,7 @@
 
 mod common;
 mod pick_filter;
+mod pick_names;
 
 use std::ffi::OsString;
 use std::fs;
@@ -20,7 +21,10 @@ use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 
-use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
+use gpui::{
+    Entity, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput, TestAppContext,
+    VisualTestContext,
+};
 use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_ui::{MainWindow, WindowEvent};
 
@@ -273,19 +277,6 @@ async fn a_save_selects_the_name_before_its_extension(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-async fn a_save_keeps_a_suggested_name_that_is_not_utf8(cx: &mut TestAppContext) {
-    let _watchdog = Watchdog::start();
-    let tree = picker_tree();
-    let suggested = OsString::from_vec(b"caf\xe9.txt".to_vec());
-    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested.clone())).await;
-    click(cx, "pick-accept");
-    assert_eq!(
-        answer(&view, cx, &answers).await,
-        Some(picked(tree.path().join(suggested)))
-    );
-}
-
-#[gpui::test]
 async fn a_save_onto_a_file_asks_and_enter_keeps_both(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
@@ -399,7 +390,10 @@ async fn a_folder_picker_goes_into_a_folder_double_clicked(cx: &mut TestAppConte
     let tree = picker_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FOLDERS).await;
     double_click(cx, "entry-0");
-    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+    view.condition::<WindowEvent>(cx, |view, _| !view.waiting())
+        .await;
+    let folder = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
+    assert_eq!(folder, Some(tree.path().join("Projects")));
     // The folder it left took its selection along.
     assert_eq!(view.read_with(cx, |view, _| view.pick_selection()), None);
     click(cx, "pick-accept");
@@ -585,23 +579,35 @@ async fn dots_typed_go_to_folders(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-async fn a_suggested_name_is_not_mistaken_for_one_that_looks_the_same(cx: &mut TestAppContext) {
+async fn clicking_a_file_before_a_save_is_checked_drops_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
-    // Shown the same way as the suggestion, but other bytes.
-    fs::write(
-        tree.path()
-            .join(OsString::from_vec(b"caf\xff.txt".to_vec())),
-        "",
-    )
-    .unwrap();
-    let suggested = OsString::from_vec(b"caf\xe9.txt".to_vec());
-    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested.clone())).await;
-    cx.simulate_keystrokes("enter");
-    assert_eq!(
-        answer(&view, cx, &answers).await,
-        Some(picked(tree.path().join(suggested)))
-    );
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("plan.txt")).await;
+    let position = cx.debug_bounds("entry-1").unwrap().center();
+    // Clicked before the fresh listing is back.
+    cx.update(|window, cx| {
+        view.update(cx, |view, cx| view.accept(window, cx));
+        let down = MouseDownEvent {
+            position,
+            modifiers: Modifiers::none(),
+            button: MouseButton::Left,
+            click_count: 1,
+            first_mouse: false,
+        };
+        let up = MouseUpEvent {
+            position,
+            modifiers: Modifiers::none(),
+            button: MouseButton::Left,
+            click_count: 1,
+        };
+        window.dispatch_event(PlatformInput::MouseDown(down), cx);
+        window.dispatch_event(PlatformInput::MouseUp(up), cx);
+    });
+    view.condition::<WindowEvent>(cx, |view, _| !view.waiting())
+        .await;
+    cx.run_until_parked();
+    assert!(answers.try_recv().is_err());
+    assert!(!closed(cx));
 }
 
 #[gpui::test]
@@ -611,16 +617,16 @@ async fn the_question_selects_the_file_in_the_way(cx: &mut TestAppContext) {
     let (view, cx, _answers) = picker(cx, &tree, tree.path(), save("notes.txt")).await;
     cx.simulate_keystrokes("enter");
     asked(&view, cx).await;
+    assert_selects(&view, cx, "notes.txt");
+}
+
+/// Only the row named `selected` shows as the picker's selection.
+fn assert_selects(view: &Entity<MainWindow>, cx: &VisualTestContext, selected: &str) {
     view.read_with(cx, |view, _| {
-        let names = view.entry_names();
         let listing = view.listing_id().unwrap();
-        for (index, name) in names.iter().enumerate() {
+        for (index, name) in view.entry_names().iter().enumerate() {
             let id = EntryId(u32::try_from(index).unwrap());
-            assert_eq!(
-                view.pick_selects((listing, id)),
-                name == "notes.txt",
-                "{name}"
-            );
+            assert_eq!(view.pick_selects((listing, id)), name == selected, "{name}");
         }
     });
 }
@@ -640,38 +646,58 @@ async fn editing_the_name_before_a_save_is_checked_drops_it(cx: &mut TestAppCont
     assert!(!closed(cx));
 }
 
-/// Save with the app's `suggested` name as it came answers that name.
-async fn saves_as_suggested(cx: &mut TestAppContext, suggested: &str) {
-    let _watchdog = Watchdog::start();
-    let tree = picker_tree();
-    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested)).await;
-    cx.simulate_keystrokes("enter");
-    assert_eq!(
-        answer(&view, cx, &answers).await,
-        Some(picked(tree.path().join(suggested)))
-    );
-}
-
 #[gpui::test]
-async fn a_suggested_name_keeps_its_outer_spaces(cx: &mut TestAppContext) {
-    saves_as_suggested(cx, " notes.txt").await;
-}
-
-#[gpui::test]
-async fn a_suggested_tilde_is_a_name_not_home(cx: &mut TestAppContext) {
-    saves_as_suggested(cx, "~").await;
-}
-
-#[gpui::test]
-async fn a_suggested_path_is_read_as_typed_not_saved_blindly(cx: &mut TestAppContext) {
+async fn editing_the_name_before_a_typed_folder_opens_keeps_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
     let projects = tree.path().join("Projects");
-    let (view, cx, answers) = picker(cx, &tree, &projects, save("../notes.txt")).await;
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), save("plan.txt")).await;
+    cx.simulate_keystrokes("ctrl-a");
+    cx.simulate_input("Projects/");
+    view.update_in(cx, MainWindow::accept);
+    // Typed before the folder is on screen.
+    cx.simulate_input("x");
+    wait_for_folder(&view, cx, &projects).await;
+    cx.run_until_parked();
+    assert_eq!(name(&view, cx).as_deref(), Some("Projects/x"));
+}
+
+#[gpui::test]
+async fn a_name_that_differs_only_in_case_asks_first(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("NOTES.txt")).await;
     cx.simulate_keystrokes("enter");
-    // It goes to the folder the path names, with the name to save in the box.
-    wait_for_folder(&view, cx, tree.path()).await;
-    wait_for_name(&view, cx, "notes.txt").await;
+    // `notes (2).txt` is taken too, whatever its case.
+    assert_eq!(
+        asked(&view, cx).await,
+        Some(OsString::from("NOTES (3).txt"))
+    );
     assert!(answers.try_recv().is_err());
-    assert!(!closed(cx));
+    // The file in the way shows as selected.
+    assert_selects(&view, cx, "notes.txt");
+}
+
+#[gpui::test]
+async fn going_elsewhere_before_a_typed_folder_opens_drops_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let projects = tree.path().join("Projects");
+    let nova = projects.join("nova");
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), save("plan.txt")).await;
+    cx.simulate_keystrokes("ctrl-a");
+    cx.simulate_input("Projects/");
+    view.update_in(cx, |view, window, cx| {
+        view.accept(window, cx);
+        view.open(&nova);
+    });
+    wait_for_folder(&view, cx, &nova).await;
+    cx.simulate_keystrokes("ctrl-a");
+    cx.simulate_input("mine.txt");
+
+    // Visiting the folder later leaves the new name alone.
+    view.update(cx, |view, _| view.go_up());
+    wait_for_folder(&view, cx, &projects).await;
+    cx.run_until_parked();
+    assert_eq!(name(&view, cx).as_deref(), Some("mine.txt"));
 }

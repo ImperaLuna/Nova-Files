@@ -342,7 +342,7 @@ impl MainWindow {
                 if !same_folder {
                     self.scroll = UniformListScrollHandle::new();
                 }
-                self.pick_folder_opened(&path, cx);
+                self.pick_folder_opened(cx);
                 cx.emit(WindowEvent::Opened(path));
                 cx.notify();
             }
@@ -360,7 +360,7 @@ impl MainWindow {
                     }
                     Some(_) => {}
                 }
-                self.pick_folder_refused(&path);
+                self.pick_folder_refused(id, &path);
                 cx.emit(WindowEvent::Refused(path));
             }
             Event::DetailsRead { id, first, details } => {

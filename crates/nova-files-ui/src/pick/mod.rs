@@ -134,6 +134,10 @@ pub struct Picker {
     /// while the box still holds that text, it means that entry, whatever
     /// its name's bytes or spaces.
     copied: Option<(EntryId, String)>,
+    /// A name the window put in the box, the app's suggestion or a typed
+    /// path's last part: until the user edits the box, it is that exact
+    /// name, never typed text to read again.
+    placed: Option<OsString>,
     /// A save waiting for a fresh listing of its folder (see `save`).
     recheck: Option<save::Recheck>,
     /// The picker's window, to close once a save is answered from a
@@ -157,25 +161,22 @@ pub struct Conflict {
 
 /// A typed path the window asked the core for.
 struct Jump {
-    path: PathBuf,
     /// Whether a refusal goes to the folder the path is in instead.
     fallback: bool,
     /// What the name box holds once the window is there.
-    name: String,
+    name: OsString,
+    /// The listing it asked for; any other one means the user went
+    /// somewhere else, which drops it.
+    listing: Option<ListingId>,
 }
 
 impl Picker {
-    /// The app's suggested save name, if the box still shows it as it came.
-    /// Only a plain name counts: one with a `/`, or `.` or `..`, is read
-    /// as typed, so a save never lands outside the folder on screen
-    /// unasked.
-    fn unchanged_suggestion(&self, text: &str) -> Option<OsString> {
-        match &self.request.kind {
-            PickKind::Save { name } if is_plain_name(name) && name.to_string_lossy() == text => {
-                Some(name.clone())
-            }
-            _ => None,
-        }
+    /// The exact name the window put in the box, while the box still
+    /// shows it unedited.
+    fn exact_name(&self, text: &str) -> Option<OsString> {
+        self.placed
+            .clone()
+            .filter(|placed| placed.to_string_lossy() == text)
     }
 }
 
@@ -223,15 +224,26 @@ impl MainWindow {
                     cx.notify();
                 }
                 TextFieldEvent::Changed => {
-                    // A new name takes back the question, and any save
-                    // still waiting on the old one.
+                    // A new name takes back the question, any save still
+                    // waiting on the old one, and the name a typed path
+                    // would leave in the box.
                     if let Some(pick) = &mut this.pick {
                         pick.conflict = None;
                         pick.recheck = None;
+                        pick.jump = None;
+                        pick.placed = None;
+                        pick.copied = None;
                     }
                     cx.notify();
                 }
             });
+        // Only a plain suggestion is taken as it came: one with a `/`, or
+        // `.` or `..`, is read as typed, so a save never lands outside the
+        // folder on screen unasked.
+        let placed = match &request.kind {
+            PickKind::Save { name } if is_plain_name(name) => Some(name.clone()),
+            _ => None,
+        };
         let focus = name.read(cx).focus_handle(cx);
         window.focus(&focus, cx);
         self.pick = Some(Picker {
@@ -242,6 +254,7 @@ impl MainWindow {
             conflict: None,
             jump: None,
             copied: None,
+            placed,
             recheck: None,
             window: window.window_handle(),
             filter: first_filter,
@@ -317,7 +330,11 @@ impl MainWindow {
                 pick.selected = Some((listing, id));
                 pick.name.update(cx, |field, cx| field.set_text(&name, cx));
                 pick.copied = Some((id, name));
+                // A new name, as when typed: no question, and no save or
+                // jump still waiting on the old one.
                 pick.conflict = None;
+                pick.recheck = None;
+                pick.jump = None;
             }
         }
         cx.notify();
@@ -379,9 +396,9 @@ impl MainWindow {
             cx.notify();
             return;
         }
-        // The app's own name, unchanged, is a name with its exact bytes,
-        // never a path to read.
-        if let Some(suggested) = pick.unchanged_suggestion(&text) {
+        // The app's own name, or one the window put there, unchanged, is a
+        // name with its exact bytes, never a path to read.
+        if let Some(suggested) = pick.exact_name(&text) {
             if self.accept_exact(&folder, suggested) {
                 window.remove_window();
             }
@@ -422,10 +439,18 @@ impl MainWindow {
     /// it answered.
     fn accept_name(&mut self, folder: &Path, name: &str) -> bool {
         let found = self.listing.as_ref().and_then(|listing| {
+            // A name shown the same way as another, but not its bytes,
+            // never stands in for the one typed.
             let entry = listing
                 .entries
                 .iter()
-                .find(|entry| entry.name.to_string_lossy() == name)?;
+                .find(|entry| entry.name == name)
+                .or_else(|| {
+                    listing
+                        .entries
+                        .iter()
+                        .find(|entry| entry.name.to_string_lossy() == name)
+                })?;
             Some((entry.kind, entry.id, entry.name.clone()))
         });
         match found {
@@ -486,28 +511,33 @@ impl MainWindow {
     fn jump(&mut self, path: &Path, fallback: bool) -> bool {
         let path = tidy(path);
         self.open(&path);
+        let listing = self.asked;
         if let Some(pick) = &mut self.pick {
             pick.jump = Some(Jump {
-                path,
                 fallback,
-                name: String::new(),
+                name: OsString::new(),
+                listing,
             });
         }
         false
     }
 
-    /// The folder `path` is now on screen: a new listing drops the
+    /// A folder is now on screen: a new listing drops the
     /// selection and any question, and a typed jump that led here leaves
     /// its name in the box.
-    pub fn pick_folder_opened(&mut self, path: &Path, cx: &mut Context<Self>) {
+    pub fn pick_folder_opened(&mut self, cx: &mut Context<Self>) {
         let listed = self.listing_id();
         let Some(pick) = &mut self.pick else { return };
         pick.selected = None;
         pick.conflict = None;
         pick.copied = None;
-        if let Some(jump) = pick.jump.take_if(|jump| jump.path == path) {
-            pick.name
-                .update(cx, |field, cx| field.set_text(&jump.name, cx));
+        if let Some(jump) = pick.jump.take()
+            && jump.listing == listed
+        {
+            pick.name.update(cx, |field, cx| {
+                field.set_text(&jump.name.to_string_lossy(), cx);
+            });
+            pick.placed = Some(jump.name).filter(|name| !name.is_empty());
         }
         // Only the listing a save asked for answers it; any other one came
         // from going somewhere else, which drops the save.
@@ -520,12 +550,12 @@ impl MainWindow {
 
     /// The core couldn't list `path`. A typed path that may name a file
     /// goes to the folder it is in instead.
-    pub fn pick_folder_refused(&mut self, path: &Path) {
+    pub fn pick_folder_refused(&mut self, id: ListingId, path: &Path) {
         let Some(pick) = &mut self.pick else { return };
         // A save whose folder is gone waits for the user again, and one
         // that going somewhere else replaced is dropped.
         pick.recheck = None;
-        let Some(jump) = pick.jump.take_if(|jump| jump.path == path) else {
+        let Some(jump) = pick.jump.take().filter(|jump| jump.listing == Some(id)) else {
             return;
         };
         let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
@@ -534,14 +564,14 @@ impl MainWindow {
         if !jump.fallback {
             return;
         }
-        let parent = parent.to_path_buf();
-        let name = name.to_string_lossy().into_owned();
-        self.open(&parent);
+        let name = name.to_owned();
+        self.open(parent);
+        let listing = self.asked;
         if let Some(pick) = &mut self.pick {
             pick.jump = Some(Jump {
-                path: parent,
                 fallback: false,
                 name,
+                listing,
             });
         }
     }
