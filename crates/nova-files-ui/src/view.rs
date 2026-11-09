@@ -31,7 +31,7 @@ use gpui::{
     IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
     NavigationDirection, ParentElement as _, Render, RenderImage, ScrollWheelEvent, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div, img, prelude::FluentBuilder as _,
-    rgb, svg, uniform_list,
+    svg, uniform_list,
 };
 use nova_files_api::{EntryKind, Place, PlaceKind};
 
@@ -42,12 +42,13 @@ use crate::commands::{
     SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
 };
 use crate::selection::Move;
-use crate::theme::{color, opacity, radius, size};
+use crate::theme::{Colors, opacity, radius, size};
 use crate::window::MainWindow;
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
+        let colors = Colors::of(cx);
         // Keys always land somewhere: in a main window on the window
         // itself, which a click inside takes focus back to; in a picker in
         // its name box, whose keys pass the window's on.
@@ -92,10 +93,10 @@ impl Render for MainWindow {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(color::SURFACE))
-            .text_color(rgb(color::TEXT))
+            .bg(colors.surface)
+            .text_color(colors.text)
             .text_size(size::TEXT)
-            .child(self.toolbar())
+            .child(self.toolbar(colors))
             .child(
                 div()
                     .flex()
@@ -109,7 +110,7 @@ impl Render for MainWindow {
                             .flex_1()
                             .min_w_0()
                             .p(size::PAD)
-                            .child(column_header())
+                            .child(column_header(colors))
                             .child(self.entries_area(cx)),
                     ),
             )
@@ -162,27 +163,27 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &ClearSelection, _, cx| this.clear_selection(cx)))
     }
 
-    fn toolbar(&self) -> impl IntoElement {
+    fn toolbar(&self, colors: Colors) -> impl IntoElement {
         let back = button(
             "back",
             Icon::Back,
             None,
-            self.back_target().is_some(),
-            &GoBack,
+            self.back_target().is_some().then_some(&GoBack),
+            colors,
         );
         let forward = button(
             "forward",
             Icon::Forward,
             None,
-            self.forward_target().is_some(),
-            &GoForward,
+            self.forward_target().is_some().then_some(&GoForward),
+            colors,
         );
         let up = button(
             "up",
             Icon::Up,
             Some(commands::UP.label),
-            self.parent().is_some(),
-            &GoUp,
+            self.parent().is_some().then_some(&GoUp),
+            colors,
         );
         let path = self
             .folder()
@@ -195,9 +196,9 @@ impl MainWindow {
             .gap(size::GAP)
             .h(size::TOOLBAR_HEIGHT)
             .px(size::PAD)
-            .bg(rgb(color::SURFACE_SUNK))
+            .bg(colors.surface_sunk)
             .border_b(size::DIVIDER)
-            .border_color(rgb(color::DIVIDER))
+            .border_color(colors.divider)
             .child(back)
             .child(forward)
             .child(up)
@@ -206,12 +207,13 @@ impl MainWindow {
                     .min_w_0()
                     .truncate()
                     .text_size(size::TEXT_SMALL)
-                    .text_color(rgb(color::TEXT_DIM))
+                    .text_color(colors.text_dim)
                     .child(path),
             )
     }
 
     fn places_column(&self, cx: &Context<Self>) -> impl IntoElement {
+        let colors = Colors::of(cx);
         let open = self.folder();
         let rows: Vec<AnyElement> = self
             .places()
@@ -220,17 +222,18 @@ impl MainWindow {
             .map(|(index, place)| {
                 let is_open = open == Some(place.path.as_path());
                 let target = place.path.clone();
-                row(("place", index), format!("place-{index}"))
-                    .when(is_open, |row| row.bg(rgb(color::ROW_HIGHLIGHT)))
+                let tint = if is_open {
+                    colors.open_icon
+                } else {
+                    colors.icon
+                };
+                row(("place", index), format!("place-{index}"), colors)
+                    .when(is_open, |row| row.bg(colors.open))
                     .cursor_pointer()
                     .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
                         this.open(&target);
                     }))
-                    .child(icon(
-                        Icon::Folder,
-                        size::ROW_ICON,
-                        rgb(color::FOLDER).into(),
-                    ))
+                    .child(icon(Icon::Folder, size::ROW_ICON, tint.into()))
                     .child(place_name(place))
                     .into_any_element()
             })
@@ -242,15 +245,16 @@ impl MainWindow {
             .gap(size::ROW_GAP)
             .w(size::PLACES_WIDTH)
             .p(size::PAD)
-            .bg(rgb(color::SURFACE_SUNK))
+            .bg(colors.surface_sunk)
             .border_r(size::DIVIDER)
-            .border_color(rgb(color::DIVIDER))
+            .border_color(colors.divider)
             .children(rows)
     }
 
     /// The entries, where a press that isn't on a name can drag a box
     /// (see `band`).
     fn entries_area(&self, cx: &Context<Self>) -> impl IntoElement {
+        let colors = Colors::of(cx);
         div()
             .relative()
             .flex_1()
@@ -273,9 +277,9 @@ impl MainWindow {
                     .w(band.size.width)
                     .h(band.size.height)
                     .rounded(radius::BAND)
-                    .bg(Hsla::from(rgb(color::ROW_SELECTED)).opacity(opacity::BAND))
+                    .bg(Hsla::from(colors.selected).opacity(opacity::BAND))
                     .border(size::DIVIDER)
-                    .border_color(rgb(color::ROW_CURSOR))
+                    .border_color(colors.cursor)
             }))
     }
 
@@ -293,6 +297,7 @@ impl MainWindow {
                     return Vec::new();
                 };
                 let listing_id = listing.id;
+                let colors = Colors::of(cx);
                 listing
                     .entries
                     .get(range.clone())
@@ -303,22 +308,25 @@ impl MainWindow {
                         let id = entry.id;
                         let text = this.columns(index).unwrap_or_default();
                         let name = SharedString::from(entry.name.to_string_lossy().into_owned());
-                        let row = row(("entry", index), format!("entry-{index}")).child(cells(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(size::GAP)
-                                .child(entry_icon(entry.kind, this.thumbnail(index)))
-                                .child(entry_name(name, index, cx)),
-                            text.modified,
-                            text.type_name,
-                            text.size,
-                            format!("modified-{index}"),
-                        ));
+                        let row = row(("entry", index), format!("entry-{index}"), colors)
+                            .text_color(colors.text_dim)
+                            .child(cells(
+                                div()
+                                    .text_color(colors.text)
+                                    .flex()
+                                    .items_center()
+                                    .gap(size::GAP)
+                                    .child(entry_icon(entry.kind, this.thumbnail(index), colors))
+                                    .child(entry_name(name, index, cx)),
+                                text.modified,
+                                text.type_name,
+                                text.size,
+                                format!("modified-{index}"),
+                            ));
                         let selected = this.selects((listing_id, id));
                         let cursor = this.cursor() == Some(index);
-                        row.when(selected, |row| row.bg(rgb(color::ROW_SELECTED)))
-                            .when(cursor, |row| row.relative().child(cursor_ring()))
+                        row.when(selected, |row| row.bg(colors.selected))
+                            .when(cursor, |row| row.relative().child(cursor_ring(colors)))
                             .when(this.pick_dims(index), |row| row.opacity(opacity::DIMMED))
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
@@ -349,7 +357,7 @@ fn entry_name(name: SharedString, index: usize, cx: &Context<MainWindow>) -> imp
 }
 
 /// The labels above the entries, lined up with [`cells`].
-fn column_header() -> impl IntoElement {
+fn column_header(colors: Colors) -> impl IntoElement {
     div()
         .flex()
         .flex_none()
@@ -357,9 +365,9 @@ fn column_header() -> impl IntoElement {
         .h(size::HEADER_HEIGHT)
         .px(size::PAD)
         .text_size(size::TEXT_SMALL)
-        .text_color(rgb(color::TEXT_DIM))
+        .text_color(colors.text_dim)
         .border_b(size::DIVIDER)
-        .border_color(rgb(color::DIVIDER))
+        .border_color(colors.divider)
         .child(cells(
             div().child(NAME_LABEL),
             MODIFIED_LABEL,
@@ -370,7 +378,8 @@ fn column_header() -> impl IntoElement {
 }
 
 /// One line of the columns: the name takes what the others leave. The
-/// Modified cell carries `modified_selector`.
+/// Modified cell carries `modified_selector`. The caller colors the line,
+/// and the name apart from it.
 fn cells(
     name: impl IntoElement,
     modified: impl Into<SharedString>,
@@ -378,14 +387,7 @@ fn cells(
     size_text: impl Into<SharedString>,
     modified_selector: String,
 ) -> impl IntoElement {
-    let column = |width, text: SharedString| {
-        div()
-            .flex_none()
-            .w(width)
-            .truncate()
-            .text_color(rgb(color::TEXT_DIM))
-            .child(text)
-    };
+    let column = |width, text: SharedString| div().flex_none().w(width).truncate().child(text);
     div()
         .flex()
         .flex_1()
@@ -399,21 +401,20 @@ fn cells(
 }
 
 /// A toolbar button with selector `name`: an icon, and `label` beside it
-/// when the icon alone isn't enough. When `enabled`, a click sends
-/// `action`; otherwise the button is dimmed and does nothing.
+/// when the icon alone isn't enough. A click sends `action`; without one
+/// the button is dimmed and does nothing.
 fn button(
     name: &'static str,
     glyph: Icon,
     label: Option<&'static str>,
-    enabled: bool,
-    action: &dyn Action,
+    action: Option<&dyn Action>,
+    colors: Colors,
 ) -> impl IntoElement {
-    let tone = if enabled {
-        color::TEXT
+    let tone = if action.is_some() {
+        colors.text
     } else {
-        color::TEXT_DIM
+        colors.text_dim
     };
-    let action = action.boxed_clone();
     div()
         .id(name)
         .debug_selector(|| name.to_owned())
@@ -424,14 +425,14 @@ fn button(
         .px(size::PAD)
         .rounded(radius::BUTTON)
         .border(size::DIVIDER)
-        .border_color(rgb(color::DIVIDER))
-        .text_color(rgb(tone))
-        .child(icon(glyph, size::BUTTON_ICON, rgb(tone).into()))
+        .border_color(colors.divider)
+        .text_color(tone)
+        .child(icon(glyph, size::BUTTON_ICON, tone.into()))
         .children(label)
-        .when(enabled, |button| {
+        .when_some(action.map(Action::boxed_clone), |button, action| {
             button
                 .cursor_pointer()
-                .hover(|button| button.bg(rgb(color::ROW_HIGHLIGHT)))
+                .hover(|button| button.bg(colors.hover))
                 .on_click(move |_: &ClickEvent, window, cx| {
                     window.dispatch_action(action.boxed_clone(), cx);
                 })
@@ -440,7 +441,7 @@ fn button(
 
 /// One row of either list, as wide as the list: icon slot and label,
 /// highlighted under the pointer.
-fn row(id: (&'static str, usize), selector: String) -> gpui::Stateful<Div> {
+fn row(id: (&'static str, usize), selector: String, colors: Colors) -> gpui::Stateful<Div> {
     div()
         .id(id)
         .debug_selector(|| selector)
@@ -452,24 +453,28 @@ fn row(id: (&'static str, usize), selector: String) -> gpui::Stateful<Div> {
         .h(size::ROW_HEIGHT)
         .px(size::PAD)
         .rounded(radius::ROW)
-        .hover(|row| row.bg(rgb(color::ROW_HIGHLIGHT)))
+        .hover(|row| row.bg(colors.hover))
 }
 
 /// The ring around the row the keyboard is on, laid over the row so it
 /// shifts nothing.
-fn cursor_ring() -> impl IntoElement {
+fn cursor_ring(colors: Colors) -> impl IntoElement {
     div()
         .absolute()
         .inset_0()
         .rounded(radius::ROW)
         .border(size::DIVIDER)
-        .border_color(rgb(color::ROW_CURSOR))
+        .border_color(colors.cursor)
 }
 
 /// The icon slot of an entry row: its thumbnail if it has one, otherwise
 /// its kind's icon, centred in the thumbnail's square so nothing shifts
 /// when the thumbnail arrives.
-fn entry_icon(kind: EntryKind, thumbnail: Option<&Arc<RenderImage>>) -> impl IntoElement {
+fn entry_icon(
+    kind: EntryKind,
+    thumbnail: Option<&Arc<RenderImage>>,
+    colors: Colors,
+) -> impl IntoElement {
     let slot = div()
         .flex()
         .flex_none()
@@ -482,14 +487,10 @@ fn entry_icon(kind: EntryKind, thumbnail: Option<&Arc<RenderImage>>) -> impl Int
                 .size(size::THUMBNAIL)
                 .rounded(radius::THUMBNAIL),
         ),
-        (None, EntryKind::Folder) => slot.child(icon(
-            Icon::Folder,
-            size::ROW_ICON,
-            rgb(color::FOLDER).into(),
-        )),
-        (None, EntryKind::File) => {
-            slot.child(icon(Icon::File, size::ROW_ICON, rgb(color::FILE).into()))
+        (None, EntryKind::Folder) => {
+            slot.child(icon(Icon::Folder, size::ROW_ICON, colors.folder.into()))
         }
+        (None, EntryKind::File) => slot.child(icon(Icon::File, size::ROW_ICON, colors.icon.into())),
     }
 }
 

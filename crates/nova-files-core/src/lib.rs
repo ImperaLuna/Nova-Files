@@ -1,4 +1,4 @@
-//! The core. Index, search, folder listing, watching, jobs and settings. It
+//! The core. Index, search, folder listing, watching, jobs, settings and theme. It
 //! never draws anything.
 //!
 //! [`spawn`] starts the core on its own thread and returns the
@@ -7,8 +7,10 @@
 
 #![forbid(unsafe_code)]
 
+mod config_watch;
 mod details;
 mod details_queue;
+mod hand_edited;
 mod index;
 mod jobs;
 mod list;
@@ -17,8 +19,11 @@ mod mime;
 mod open;
 mod ops;
 mod places;
+mod private_file;
 mod run;
 mod search;
+mod settings;
+mod theme;
 mod thumbs;
 mod trace;
 mod vulkan_drivers;
@@ -97,16 +102,26 @@ pub fn spawn_with(
         home.as_ref().map(|home| home.state.as_path()),
         connector.clone(),
     );
-    let setup = run::Setup {
-        home,
-        window_state,
-        thumbnails,
-        searcher,
-        mime_types: Arc::default(),
-        jobs,
-    };
     let thread = thread::Builder::new()
         .name(THREAD_NAME.to_owned())
-        .spawn(move || run::run(&receiver, idle_exit, &setup))?;
+        .spawn(move || {
+            // Read on the core's thread, so a slow disk never holds up the
+            // caller (the window, at start-up).
+            let config = home.as_ref().map(|home| home.config.as_path());
+            let settings = settings::Store::open(config);
+            let theme = theme::Store::open(config);
+            theme.follow(&settings);
+            let setup = run::Setup {
+                home,
+                window_state,
+                settings,
+                theme,
+                thumbnails,
+                searcher,
+                mime_types: Arc::default(),
+                jobs,
+            };
+            run::run(&receiver, idle_exit, &setup);
+        })?;
     Ok(RunningCore { connector, thread })
 }

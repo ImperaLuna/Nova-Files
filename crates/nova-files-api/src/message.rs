@@ -6,6 +6,8 @@ use std::sync::Arc;
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::search::{Hit, SearchFailed, SearchId};
+use crate::settings::{SettingChange, Settings};
+use crate::theme::{DesktopLook, Theme};
 
 /// The most entries one [`Command::Rows`] may name: several screens of
 /// rows. The core leaves out any past it.
@@ -65,6 +67,23 @@ pub enum Command {
     /// core never reads them; the UI owns what they say. Bytes over the
     /// core's cap (64 KiB) are dropped.
     SaveWindowState(Vec<u8>),
+    /// Ask for the settings; the answer is [`Event::Settings`], and from
+    /// then on the client gets [`Event::Settings`] again each time one
+    /// changes. Clients that never ask never get them.
+    Settings,
+    /// Change one setting and save it. Every client that asked for the
+    /// settings, this one included, then gets [`Event::Settings`]; nothing
+    /// is sent when the value was already set.
+    ChangeSetting(SettingChange),
+    /// Ask for the theme; the answer is [`Event::Theme`], and from then on
+    /// the client gets [`Event::Theme`] again each time it changes. Clients
+    /// that never ask never get it.
+    Theme,
+    /// Tell the core what the desktop asks apps to look like; sent by the
+    /// D-Bus side each time the desktop changes it. Clients that asked for
+    /// the theme get [`Event::Theme`] if the theme changed; nothing
+    /// answers the sender.
+    DesktopLook(DesktopLook),
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused, then each job's news. A
     /// client that only asks one question and waits for its answer leaves
@@ -143,6 +162,14 @@ pub enum Event {
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),
+    /// The settings, answering [`Command::Settings`], and sent again to
+    /// each client that asked whenever one changes: from a client, or from
+    /// the settings file.
+    Settings(Arc<Settings>),
+    /// The theme, answering [`Command::Theme`], and sent again to each
+    /// client that asked whenever it changes: from the theme file, or the
+    /// appearance setting.
+    Theme(Arc<Theme>),
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },

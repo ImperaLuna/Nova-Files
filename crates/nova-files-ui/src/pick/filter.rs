@@ -9,12 +9,12 @@
 use gpui::{
     AnyElement, ClickEvent, Context, Corner, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, anchored,
-    deferred, div, prelude::FluentBuilder as _, rgb,
+    deferred, div, prelude::FluentBuilder as _,
 };
 use nova_files_api::{Entry, EntryKind, FilterRule, PickRequest};
 
 use super::{Mode, Picker};
-use crate::theme::{color, radius, size};
+use crate::theme::{Colors, radius, size};
 use crate::window::MainWindow;
 
 const ALL_FILES_LABEL: &str = "All files";
@@ -113,15 +113,21 @@ impl MainWindow {
         if pick.request.filters.is_empty() || pick.mode == Mode::Folders {
             return None;
         }
-        let button = super::bar::button("pick-filter", label(&pick.request, pick.filter), false)
-            // A long name gives way to the name box and the other buttons.
-            .flex_shrink()
-            .min_w_0()
-            .max_w_full()
-            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                this.toggle_filter_menu();
-                cx.notify();
-            }));
+        let colors = Colors::of(cx);
+        let button = super::bar::button(
+            "pick-filter",
+            label(&pick.request, pick.filter),
+            false,
+            colors,
+        )
+        // A long name gives way to the name box and the other buttons.
+        .flex_shrink()
+        .min_w_0()
+        .max_w_full()
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+            this.toggle_filter_menu();
+            cx.notify();
+        }));
         let menu = pick.filter_menu.then(|| {
             let all = (!offers_all(&pick.request)).then_some(None);
             let items: Vec<AnyElement> = (0..pick.request.filters.len())
@@ -147,8 +153,8 @@ impl MainWindow {
                                 .p(size::ROW_GAP)
                                 .rounded(radius::BUTTON)
                                 .border(size::DIVIDER)
-                                .border_color(rgb(color::DIVIDER))
-                                .bg(rgb(color::SURFACE))
+                                .border_color(colors.divider)
+                                .bg(colors.surface)
                                 .on_mouse_down_out(cx.listener(|this, _, _, cx| {
                                     if let Some(pick) = &mut this.pick {
                                         pick.filter_menu = false;
@@ -179,6 +185,7 @@ fn menu_item(pick: &Picker, filter: Option<usize>, cx: &Context<MainWindow>) -> 
         || "pick-filter-all".to_owned(),
         |filter| format!("pick-filter-{filter}"),
     );
+    let colors = Colors::of(cx);
     div()
         .id(SharedString::from(selector.clone()))
         .debug_selector(move || selector)
@@ -189,9 +196,9 @@ fn menu_item(pick: &Picker, filter: Option<usize>, cx: &Context<MainWindow>) -> 
         .rounded(radius::ROW)
         .cursor_pointer()
         .when(is_chosen(pick.filter, filter), |item| {
-            item.bg(rgb(color::ROW_SELECTED))
+            item.bg(colors.selected)
         })
-        .hover(|item| item.bg(rgb(color::ROW_HIGHLIGHT)))
+        .hover(|item| item.bg(colors.hover))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
             this.choose_filter(filter);
             cx.notify();

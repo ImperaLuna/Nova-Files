@@ -4,33 +4,25 @@
 //! keeps the bytes, in memory while it runs and in
 //! `$XDG_STATE_HOME/nova-files/window-state` between runs. The file is read
 //! once, when the core starts; a missing, unreadable or oversized one reads
-//! as empty. A save replaces the file whole, through a temporary file and a
-//! rename, so a crash never leaves half a file. Saves go to one writer
+//! as empty. A save replaces the file whole (see `private_file`), so a
+//! crash never leaves half a file. Saves go to one writer
 //! thread in the order they came, so the file always ends with the last
 //! one, and a slow disk never holds up the core. A save that fails is
 //! logged and the state stays in memory for this run.
 
 use std::cell::RefCell;
-use std::fs::{self, DirBuilder, OpenOptions};
-use std::io::{self, Read as _, Write as _};
-use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
+
+use crate::private_file::{self, Read};
 
 /// The file, under the state folder.
 const FILE: &str = "nova-files/window-state";
 /// A state this big is not one the UI wrote; it is never read or kept.
 pub const MAX_BYTES: usize = 64 * 1024;
 const SAVE_THREAD: &str = "nova-files-state";
-/// The file and the folders made for it are the user's alone.
-const FILE_MODE: u32 = 0o600;
-const FOLDER_MODE: u32 = 0o700;
-
-/// Tells apart the temporary files of saves that overlap.
-static SAVES: AtomicU64 = AtomicU64::new(0);
 
 /// The window state, as the core keeps it.
 pub struct Store {
@@ -102,7 +94,7 @@ fn start_writer(path: PathBuf) -> Option<Sender<Arc<[u8]>>> {
 /// gone.
 fn write_each(path: &Path, saves: &Receiver<Arc<[u8]>>) {
     for bytes in saves {
-        if let Err(error) = write(path, &bytes) {
+        if let Err(error) = private_file::replace(path, &bytes, private_file::FILE_MODE) {
             log::warn!("can't save the window state to {}: {error}", path.display());
         }
     }
@@ -110,49 +102,17 @@ fn write_each(path: &Path, saves: &Receiver<Arc<[u8]>>) {
 
 /// The file's bytes, or none when it is missing, unreadable or oversized.
 fn read(path: &Path) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    let read = fs::File::open(path).and_then(|file| {
-        file.take(u64::try_from(MAX_BYTES).unwrap_or(u64::MAX) + 1)
-            .read_to_end(&mut bytes)
-    });
-    if read.is_err() || bytes.len() > MAX_BYTES {
-        return Vec::new();
+    match private_file::read(path, MAX_BYTES) {
+        Read::Bytes(bytes) => bytes,
+        Read::Missing | Read::TooBig | Read::Failed(_) => Vec::new(),
     }
-    bytes
-}
-
-/// Replaces the file at `path` with `bytes` whole, making its folder;
-/// both are private from the start.
-fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    if let Some(folder) = path.parent() {
-        DirBuilder::new()
-            .recursive(true)
-            .mode(FOLDER_MODE)
-            .create(folder)?;
-    }
-    let save = SAVES.fetch_add(1, Ordering::Relaxed);
-    let temporary = path.with_extension(format!("tmp-{}-{save}", std::process::id()));
-    let written = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(FILE_MODE)
-        .open(&temporary)
-        .and_then(|mut file| file.write_all(bytes))
-        .and_then(|()| fs::rename(&temporary, path));
-    if written.is_err() {
-        fs::remove_file(&temporary).ok();
-    }
-    written
 }
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::fs::PermissionsExt as _;
+    use std::fs;
 
     use super::*;
-
-    /// The permission bits of a mode.
-    const ALL_MODE_BITS: u32 = 0o777;
 
     /// Saves queued before the writer runs.
     const SAVES_IN_A_ROW: u32 = 20;
@@ -165,28 +125,13 @@ mod tests {
     }
 
     #[test]
-    fn a_write_replaces_the_file_whole_and_leaves_no_temporary() {
-        let home = temp("write");
-        let path = home.join(FILE);
-        write(&path, b"picker 900x600").unwrap();
-        write(&path, b"picker 1000x700").unwrap();
-        assert_eq!(read(&path), b"picker 1000x700");
-        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & ALL_MODE_BITS;
-        assert_eq!(mode(&path), FILE_MODE);
-        assert_eq!(mode(path.parent().unwrap()), FOLDER_MODE);
-        let left: Vec<_> = fs::read_dir(path.parent().unwrap()).unwrap().collect();
-        assert_eq!(left.len(), 1);
-        fs::remove_dir_all(home).ok();
-    }
-
-    #[test]
     fn a_missing_or_oversized_file_reads_as_empty() {
         let home = temp("read");
         let path = home.join(FILE);
         assert_eq!(read(&path), b"");
-        write(&path, &vec![b'x'; MAX_BYTES]).unwrap();
+        private_file::replace(&path, &vec![b'x'; MAX_BYTES], private_file::FILE_MODE).unwrap();
         assert_eq!(read(&path).len(), MAX_BYTES);
-        write(&path, &vec![b'x'; MAX_BYTES + 1]).unwrap();
+        private_file::replace(&path, &vec![b'x'; MAX_BYTES + 1], private_file::FILE_MODE).unwrap();
         assert_eq!(read(&path), b"");
         fs::remove_dir_all(home).ok();
     }
@@ -240,14 +185,5 @@ mod tests {
         write_each(&blocked.join(FILE), &saves);
         fs::remove_file(blocked).ok();
         fs::remove_dir_all(home).ok();
-    }
-
-    #[test]
-    fn a_failed_write_is_an_error() {
-        let home = temp("blocked");
-        // A file where the state folder should be.
-        fs::write(&home, b"").unwrap();
-        assert!(write(&home.join(FILE), b"picker 900x600").is_err());
-        fs::remove_file(home).ok();
     }
 }

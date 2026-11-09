@@ -41,7 +41,7 @@ use gpui::{
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
-    Listing, ListingId, Place,
+    Listing, ListingId, Place, Settings, Theme, Thumbnails,
 };
 
 use crate::band::Band;
@@ -51,7 +51,7 @@ use crate::jump::TypeJump;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
-use crate::theme::size;
+use crate::theme::{Colors, size};
 use crate::thumbnail;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
@@ -79,6 +79,10 @@ pub enum WindowEvent {
     Refused(PathBuf),
     /// The places list changed.
     Places,
+    /// The settings changed.
+    Settings,
+    /// The theme the app draws with changed.
+    Theme,
 }
 
 pub struct MainWindow {
@@ -124,6 +128,8 @@ pub struct MainWindow {
     pub(crate) pick: Option<Picker>,
     /// The home folder, which `~` names in a picker's name box.
     pub(crate) home: PathBuf,
+    /// The settings as the core last sent them.
+    settings: Settings,
     /// Focus for the window's own keys (see `commands`).
     pub(crate) focus: FocusHandle,
     _events: Task<()>,
@@ -167,6 +173,8 @@ impl MainWindow {
             .and_then(|connection| {
                 connection.send(Command::Ping)?;
                 connection.send(Command::Places)?;
+                connection.send(Command::Settings)?;
+                connection.send(Command::Theme)?;
                 Ok(connection)
             })
             .ok();
@@ -211,6 +219,7 @@ impl MainWindow {
             history: History::default(),
             scroll: UniformListScrollHandle::new(),
             pick: None,
+            settings: Settings::default(),
             focus: cx.focus_handle(),
             _events: events,
         };
@@ -387,8 +396,8 @@ impl MainWindow {
         }
     }
 
-    /// The folder the window asked for arrived.
-    fn listed(&mut self, listing: Listing, cx: &mut Context<Self>) {
+    /// Shows `listing`, the folder the window last asked for.
+    fn listing_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
         self.asked = None;
         let path = listing.path.clone();
         self.history.arrived(&path);
@@ -417,7 +426,7 @@ impl MainWindow {
         match event {
             Event::Pong => self.set_status(CoreStatus::Connected, cx),
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
-                self.listed(listing, cx);
+                self.listing_arrived(listing, cx);
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
                 self.asked = None;
@@ -453,12 +462,15 @@ impl MainWindow {
             Event::Thumbnail { id, entry, png } => {
                 if let Ok(index) = usize::try_from(entry.0)
                     && self.rows_wanted.contains(&index)
+                    && self.settings.thumbnails == Thumbnails::Shown
                 {
                     self.shrink_thumbnail(id, index, png, cx);
                 }
             }
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
+            Event::Settings(settings) => self.settings_arrived(settings, cx),
+            Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             // The window never searches, opens files or starts jobs yet, and
             // only a picker's opening asks for the window state (see
             // `window_state`).
@@ -481,6 +493,41 @@ impl MainWindow {
                 cx.emit(WindowEvent::Places);
                 cx.notify();
             }
+        }
+    }
+
+    /// The settings as the core last sent them.
+    pub const fn settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    /// Takes the settings the core sent, which it sends again whenever
+    /// they change. Hiding thumbnails lets go of the ones held; showing
+    /// them again asks for the rows on screen anew, so theirs arrive.
+    fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
+        let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
+        self.settings = Arc::unwrap_or_clone(settings);
+        if thumbnails_changed {
+            if self.settings.thumbnails == Thumbnails::Hidden {
+                release(self.thumbnails.take_all(), None, cx);
+            }
+            // Hidden and shown again before a frame, the core would still
+            // count the dropped thumbnails as sent.
+            self.forget_rows();
+        }
+        cx.emit(WindowEvent::Settings);
+        cx.notify();
+    }
+
+    /// Draws every window with `theme` from now on. Each window hears it,
+    /// so the first to see a change redraws them all and the rest find
+    /// nothing new.
+    fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
+        let colors = Colors::new(theme);
+        if Colors::of(cx) != colors {
+            cx.set_global(colors);
+            cx.refresh_windows();
+            cx.emit(WindowEvent::Theme);
         }
     }
 
@@ -511,6 +558,13 @@ impl MainWindow {
             return;
         }
         release(self.thumbnails.take_all(), Some(window), cx);
+        self.forget_rows();
+    }
+
+    /// Tells the core no rows are wanted, so it counts every thumbnail as
+    /// not sent and makes them again when the next frame asks for its
+    /// rows.
+    fn forget_rows(&mut self) {
         if let Some(listing) = &self.listing
             && !self.rows_wanted.is_empty()
             && let Some(connection) = &self.connection
@@ -556,6 +610,8 @@ impl MainWindow {
         if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
             && self.rows_wanted.contains(&made.index)
             && made.side == self.thumbnail_side()
+            // Hidden while it was being shrunk.
+            && self.settings.thumbnails == Thumbnails::Shown
         {
             let replaced = self.thumbnails.insert(made.index, Arc::new(made.image));
             release(replaced, None, cx);

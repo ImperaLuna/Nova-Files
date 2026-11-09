@@ -21,6 +21,8 @@ use crate::mime::MimeTypes;
 use crate::ops::Jobs;
 use crate::places::Home;
 use crate::search::Searcher;
+use crate::settings::Store as SettingsStore;
+use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
 use crate::window_state::Store as WindowStateStore;
 
@@ -28,6 +30,8 @@ use crate::window_state::Store as WindowStateStore;
 pub struct Setup {
     pub home: Option<Home>,
     pub window_state: WindowStateStore,
+    pub settings: SettingsStore,
+    pub theme: ThemeStore,
     pub thumbnails: Option<Thumbnails>,
     pub searcher: Searcher,
     /// The MIME database, read at the first [`Command::OpenFile`] and kept
@@ -65,6 +69,8 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
         CoreMessage::Disconnected { client } => {
             // Dropping the client stops its listing.
             clients.remove(&client);
+            setup.settings.forget(client);
+            setup.theme.forget(client);
             setup.jobs.audience().leave(client);
         }
         // Receiving it already restarted the idle wait.
@@ -75,6 +81,8 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             };
             if answer(client, target, command, setup).is_err() {
                 clients.remove(&client);
+                setup.settings.forget(client);
+                setup.theme.forget(client);
                 setup.jobs.audience().leave(client);
             }
         }
@@ -102,7 +110,7 @@ fn answer(
             Ok(())
         }
         Command::Rows { id, first, count } => {
-            client.want_rows(id, first, count);
+            client.want_rows(id, first, count, setup.settings.current().thumbnails);
             Ok(())
         }
         Command::Search { id, query, limit } => {
@@ -116,6 +124,22 @@ fn answer(
         Command::WindowState => client.deliver(Event::WindowState(setup.window_state.bytes())),
         Command::SaveWindowState(bytes) => {
             setup.window_state.save(bytes);
+            Ok(())
+        }
+        Command::Settings => {
+            setup.settings.listen(id, client.events());
+            Ok(())
+        }
+        Command::ChangeSetting(change) => {
+            setup.settings.change(change);
+            Ok(())
+        }
+        Command::Theme => {
+            setup.theme.listen(id, client.events());
+            Ok(())
+        }
+        Command::DesktopLook(look) => {
+            setup.theme.follow_desktop(look);
             Ok(())
         }
         Command::WatchJobs => {
