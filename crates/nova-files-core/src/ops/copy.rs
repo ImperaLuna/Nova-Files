@@ -56,6 +56,11 @@ pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
         }
     }
     for folder in folders.iter().rev() {
+        // Held while paused; a cancel leaves the rest as they are.
+        if let Err(cancelled) = running.shared.control.checkpoint() {
+            result = Err(cancelled.into());
+            break;
+        }
         finish_folder(folder);
     }
     // So what the job reports made is on the disk. A failure means only

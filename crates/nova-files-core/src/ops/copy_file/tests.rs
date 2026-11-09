@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::{Seek as _, SeekFrom as StdSeekFrom, Write as _};
-use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+use std::os::unix::fs::PermissionsExt as _;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -433,4 +433,70 @@ fn a_kernel_copy_stops_at_the_end_of_its_range() {
 
     assert_eq!(copied, 3);
     assert_eq!(fs::read(&to).unwrap(), [0, 0, b'2', b'3', b'4']);
+}
+
+#[test]
+fn a_file_rewritten_in_place_with_its_time_set_back_isnt_kept() {
+    let folder = TestFolder::new("copy-rewritten");
+    let from = folder.file("a", "before");
+    let modified = fs::metadata(&from).unwrap().modified().unwrap();
+    let to = folder.path().join("b");
+    let part = folder.path().join(".part");
+    let mut written = false;
+
+    let result = copy_file(&from, &to, &part, &Control::default(), &mut |_| {
+        if !written {
+            // Same length, same modified time: only the change time tells.
+            let file = File::options().write(true).open(&from).unwrap();
+            file.write_all_at(b"AFTER!", 0).unwrap();
+            file.set_modified(modified).unwrap();
+            written = true;
+        }
+    });
+
+    assert_eq!(result, Err(Stop::because(&from, Failure::SourceChanged)));
+    assert!(!to.exists());
+}
+
+#[test]
+fn a_file_that_says_its_empty_is_read_to_its_end() {
+    let folder = TestFolder::new("copy-proc");
+    let from = Path::new("/proc/version");
+    if fs::metadata(from).map_or(true, |metadata| metadata.len() != 0) {
+        return;
+    }
+    let to = folder.path().join("version");
+    let part = folder.path().join(".part");
+    let mut copied = 0;
+
+    copy_file(from, &to, &part, &Control::default(), &mut |n| copied += n).unwrap();
+
+    let text = fs::read_to_string(&to).unwrap();
+    assert_ne!(text, "");
+    assert_eq!(copied, text.len() as u64);
+    assert_eq!(text, fs::read_to_string(from).unwrap());
+}
+
+#[test]
+fn a_pipe_where_a_file_was_planned_is_refused_without_waiting() {
+    let folder = TestFolder::new("copy-fifo");
+    let from = folder.path().join("pipe");
+    rustix::fs::mknodat(
+        rustix::fs::CWD,
+        &from,
+        rustix::fs::FileType::Fifo,
+        Mode::from_raw_mode(MODE),
+        0,
+    )
+    .unwrap();
+    let to = folder.path().join("b");
+    let (paths, checked) = ((from.clone(), to.clone()), to);
+
+    let result = within(move || {
+        let part = paths.1.with_file_name(".part");
+        copy_file(&paths.0, &paths.1, &part, &Control::default(), &mut |_| {})
+    });
+
+    assert_eq!(result, Err(Stop::because(&from, Failure::Unsupported)));
+    assert!(!checked.exists());
 }

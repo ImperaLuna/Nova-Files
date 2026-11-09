@@ -11,9 +11,9 @@
 //! anything (see `place`). A failure or a cancel anywhere removes the part
 //! file, so a real name never holds half a file.
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, Metadata, OpenOptions};
 use std::io;
-use std::os::unix::fs::{FileExt as _, OpenOptionsExt as _};
+use std::os::unix::fs::{FileExt as _, MetadataExt as _, OpenOptionsExt as _};
 use std::path::Path;
 
 use rustix::fs::{Mode, OFlags, SeekFrom, copy_file_range, ioctl_ficlone, seek};
@@ -79,6 +79,10 @@ pub fn copy_file(
 ) -> Result<(), Stop> {
     control.checkpoint()?;
     let source = open_source(from).map_err(|error| Stop::at(from, &error))?;
+    // Planned as a file, but anything may stand there by now.
+    if !source.metadata().is_ok_and(|metadata| metadata.is_file()) {
+        return Err(Stop::because(from, Failure::Unsupported));
+    }
     let target = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -101,10 +105,12 @@ pub fn copy_file(
     done
 }
 
-/// Opens `from` for reading without following a link it may have become.
+/// Opens `from` for reading without following a link it may have become,
+/// and without waiting for a writer should it have become a pipe.
 fn open_source(from: &Path) -> io::Result<File> {
     let flags = OFlags::RDONLY
         .union(OFlags::NOFOLLOW)
+        .union(OFlags::NONBLOCK)
         .union(OFlags::CLOEXEC);
     Ok(File::from(rustix::fs::open(from, flags, Mode::empty())?))
 }
@@ -115,7 +121,10 @@ fn fill(ends: &Ends<'_>, control: &Control, copied: &mut dyn FnMut(u64)) -> Resu
     let (source, target) = (ends.source, ends.target);
     let metadata = source.metadata().map_err(|error| ends.reading(&error))?;
     let size = metadata.len();
-    if ioctl_ficlone(target, source).is_ok() {
+    if size == 0 {
+        // Some say they're empty and aren't, like those under /proc.
+        read_to_end(ends, control, copied)?;
+    } else if ioctl_ficlone(target, source).is_ok() {
         copied(size);
     } else {
         for (start, end) in data_ranges(source, size) {
@@ -132,11 +141,49 @@ fn fill(ends: &Ends<'_>, control: &Control, copied: &mut dyn FnMut(u64)) -> Resu
     }
     // A file written to while it was copied may be torn; it isn't kept.
     let after = source.metadata().map_err(|error| ends.reading(&error))?;
-    if after.len() != size || after.modified().ok() != metadata.modified().ok() {
+    if version(&after) != version(&metadata) {
         return Err(Stop::because(ends.from, Failure::SourceChanged));
     }
     copy_mode_and_times(&metadata, target).map_err(|error| ends.writing(&error))?;
     target.sync_all().map_err(|error| ends.writing(&error))
+}
+
+/// What tells one version of a file from another: its size, and when its
+/// contents and its inode last changed. A writer can set the first time
+/// back, but not the second.
+fn version(metadata: &Metadata) -> (u64, i64, i64, i64, i64) {
+    (
+        metadata.len(),
+        metadata.mtime(),
+        metadata.mtime_nsec(),
+        metadata.ctime(),
+        metadata.ctime_nsec(),
+    )
+}
+
+/// Copies all `source` holds, however long it said it was.
+fn read_to_end(
+    ends: &Ends<'_>,
+    control: &Control,
+    copied: &mut dyn FnMut(u64),
+) -> Result<(), Stop> {
+    let mut buffer = vec![0; BUFFER];
+    let mut at = 0_u64;
+    loop {
+        control.checkpoint()?;
+        let read = ends
+            .source
+            .read_at(&mut buffer, at)
+            .map_err(|error| ends.reading(&error))?;
+        if read == 0 {
+            return Ok(());
+        }
+        ends.target
+            .write_all_at(&buffer[..read], at)
+            .map_err(|error| ends.writing(&error))?;
+        copied(read as u64);
+        at = at.saturating_add(read as u64);
+    }
 }
 
 /// The ranges of `source` that hold data, in order. A filesystem that
