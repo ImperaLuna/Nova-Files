@@ -18,7 +18,10 @@ use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 
-use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
+use gpui::{
+    Entity, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput, TestAppContext,
+    VisualTestContext,
+};
 use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_ui::{MainWindow, WindowEvent};
 
@@ -586,6 +589,59 @@ async fn a_suggested_name_is_not_mistaken_for_one_that_looks_the_same(cx: &mut T
         answer(&view, cx, &answers).await,
         Some(picked(tree.path().join(suggested)))
     );
+}
+
+#[gpui::test]
+async fn a_typed_name_means_the_file_with_those_bytes(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    // Shown as `caf\u{fffd}.txt` too, and listed first.
+    fs::write(
+        tree.path()
+            .join(OsString::from_vec(b"caf\x80.txt".to_vec())),
+        "",
+    )
+    .unwrap();
+    fs::write(tree.path().join("caf\u{fffd}.txt"), "").unwrap();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
+    cx.simulate_input("caf\u{fffd}.txt");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join("caf\u{fffd}.txt")))
+    );
+}
+
+#[gpui::test]
+async fn clicking_a_file_before_a_save_is_checked_drops_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("plan.txt")).await;
+    let position = cx.debug_bounds("entry-1").unwrap().center();
+    // Clicked before the fresh listing is back.
+    cx.update(|window, cx| {
+        view.update(cx, |view, cx| view.accept(window, cx));
+        let down = MouseDownEvent {
+            position,
+            modifiers: Modifiers::none(),
+            button: MouseButton::Left,
+            click_count: 1,
+            first_mouse: false,
+        };
+        let up = MouseUpEvent {
+            position,
+            modifiers: Modifiers::none(),
+            button: MouseButton::Left,
+            click_count: 1,
+        };
+        window.dispatch_event(PlatformInput::MouseDown(down), cx);
+        window.dispatch_event(PlatformInput::MouseUp(up), cx);
+    });
+    view.condition::<WindowEvent>(cx, |view, _| !view.waiting())
+        .await;
+    cx.run_until_parked();
+    assert!(answers.try_recv().is_err());
+    assert!(!closed(cx));
 }
 
 #[gpui::test]

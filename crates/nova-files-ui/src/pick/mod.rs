@@ -312,7 +312,11 @@ impl MainWindow {
                 pick.selected = Some((listing, id));
                 pick.name.update(cx, |field, cx| field.set_text(&name, cx));
                 pick.copied = Some((id, name));
+                // A new name, as when typed: no question, and no save or
+                // jump still waiting on the old one.
                 pick.conflict = None;
+                pick.recheck = None;
+                pick.jump = None;
             }
         }
         cx.notify();
@@ -417,10 +421,18 @@ impl MainWindow {
     /// it answered.
     fn accept_name(&mut self, folder: &Path, name: &str) -> bool {
         let found = self.listing.as_ref().and_then(|listing| {
+            // A name shown the same way as another, but not its bytes,
+            // never stands in for the one typed.
             let entry = listing
                 .entries
                 .iter()
-                .find(|entry| entry.name.to_string_lossy() == name)?;
+                .find(|entry| entry.name == name)
+                .or_else(|| {
+                    listing
+                        .entries
+                        .iter()
+                        .find(|entry| entry.name.to_string_lossy() == name)
+                })?;
             Some((entry.kind, entry.id, entry.name.clone()))
         });
         match found {
