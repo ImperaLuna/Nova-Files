@@ -605,3 +605,40 @@ async fn the_question_selects_the_file_in_the_way(cx: &mut TestAppContext) {
         }
     });
 }
+
+#[gpui::test]
+async fn editing_the_name_before_a_save_is_checked_drops_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("plan.txt")).await;
+    view.update_in(cx, MainWindow::accept);
+    // Typed before the fresh listing is back.
+    cx.simulate_input("x");
+    view.condition::<WindowEvent>(cx, |view, _| !view.waiting())
+        .await;
+    cx.run_until_parked();
+    assert!(answers.try_recv().is_err());
+    assert!(!closed(cx));
+}
+
+/// Save with the app's `suggested` name as it came answers that name.
+async fn saves_as_suggested(cx: &mut TestAppContext, suggested: &str) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested)).await;
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join(suggested)))
+    );
+}
+
+#[gpui::test]
+async fn a_suggested_name_keeps_its_outer_spaces(cx: &mut TestAppContext) {
+    saves_as_suggested(cx, " notes.txt").await;
+}
+
+#[gpui::test]
+async fn a_suggested_tilde_is_a_name_not_home(cx: &mut TestAppContext) {
+    saves_as_suggested(cx, "~").await;
+}

@@ -158,6 +158,18 @@ struct Jump {
     name: String,
 }
 
+impl Picker {
+    /// The app's suggested save name, if the box still shows it as it came.
+    fn unchanged_suggestion(&self, text: &str) -> Option<OsString> {
+        match &self.request.kind {
+            PickKind::Save { name } if !name.is_empty() && name.to_string_lossy() == text => {
+                Some(name.clone())
+            }
+            _ => None,
+        }
+    }
+}
+
 impl MainWindow {
     /// Puts the window in pick mode for `request`. A save starts with the
     /// app's name in the box, the part before its extension selected.
@@ -192,8 +204,11 @@ impl MainWindow {
                     cx.notify();
                 }
                 TextFieldEvent::Changed => {
+                    // A new name takes back the question, and any save
+                    // still waiting on the old one.
                     if let Some(pick) = &mut this.pick {
                         pick.conflict = None;
+                        pick.recheck = None;
                     }
                     cx.notify();
                 }
@@ -343,6 +358,15 @@ impl MainWindow {
             cx.notify();
             return;
         }
+        // The app's own name, unchanged, is a name with its exact bytes,
+        // never a path to read.
+        if let Some(suggested) = pick.unchanged_suggestion(&text) {
+            if self.accept_exact(&folder, suggested) {
+                window.remove_window();
+            }
+            cx.notify();
+            return;
+        }
         let answered = match typed::read(&text, &self.home, &folder) {
             typed::Typed::Nothing => self.accept_selection(&folder),
             typed::Typed::Folder(path) => self.jump(&path, false),
@@ -376,32 +400,43 @@ impl MainWindow {
     /// folder there; otherwise opens it as a file, or saves at it. Whether
     /// it answered.
     fn accept_name(&mut self, folder: &Path, name: &str) -> bool {
-        let Some(pick) = &self.pick else { return false };
-        // The app's own name, unchanged, means its exact bytes, even when
-        // the box can only show them lossily.
-        let suggested = match &pick.request.kind {
-            PickKind::Save { name: suggested } if suggested.to_string_lossy() == name => {
-                Some(suggested.clone())
-            }
-            _ => None,
-        };
         let found = self.listing.as_ref().and_then(|listing| {
-            let entry = listing.entries.iter().find(|entry| {
-                suggested.as_ref().map_or_else(
-                    || entry.name.to_string_lossy() == name,
-                    |suggested| entry.name == *suggested,
-                )
-            })?;
+            let entry = listing
+                .entries
+                .iter()
+                .find(|entry| entry.name.to_string_lossy() == name)?;
             Some((entry.kind, entry.id, entry.name.clone()))
         });
-        let Some(found) = found else {
-            if pick.mode != Mode::Save {
-                return false;
-            }
-            self.save_new(folder, suggested.unwrap_or_else(|| OsString::from(name)));
-            return false;
-        };
-        self.accept_found(folder, found)
+        match found {
+            Some(found) => self.accept_found(folder, found),
+            None => self.save_at(folder, OsString::from(name)),
+        }
+    }
+
+    /// The app's suggested `name`, unchanged: the entry with exactly that
+    /// name, or a save under it. Whether it answered.
+    fn accept_exact(&mut self, folder: &Path, name: OsString) -> bool {
+        let found = self.listing.as_ref().and_then(|listing| {
+            let entry = listing.entries.iter().find(|entry| entry.name == name)?;
+            Some((entry.kind, entry.id, entry.name.clone()))
+        });
+        match found {
+            Some(found) => self.accept_found(folder, found),
+            None => self.save_at(folder, name),
+        }
+    }
+
+    /// A save under `name`, free in the listing on screen, once a fresh
+    /// listing agrees. Never answers now.
+    fn save_at(&mut self, folder: &Path, name: OsString) -> bool {
+        if self
+            .pick
+            .as_ref()
+            .is_some_and(|pick| pick.mode == Mode::Save)
+        {
+            self.save_new(folder, name);
+        }
+        false
     }
 
     /// The entry `found` of the folder on screen, named or clicked: goes
