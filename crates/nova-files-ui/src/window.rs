@@ -487,6 +487,7 @@ impl MainWindow {
             | Event::JobProgress { .. }
             | Event::JobPaused(_)
             | Event::JobResumed(_)
+            | Event::JobInterrupted { .. }
             | Event::JobFinished { .. } => {}
             Event::Places(places) => {
                 self.places = places;

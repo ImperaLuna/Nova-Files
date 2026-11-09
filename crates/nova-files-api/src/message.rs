@@ -85,7 +85,9 @@ pub enum Command {
     /// answers the sender.
     DesktopLook(DesktopLook),
     /// Hear about every job from now on: first an [`Event::JobRunning`]
-    /// for each job already running or paused, then each job's news. A
+    /// for each job already running or paused and an
+    /// [`Event::JobInterrupted`] for each a crash cut short, then each
+    /// job's news. A
     /// client that only asks one question and waits for its answer leaves
     /// this out, so no job's news comes in between.
     WatchJobs,
@@ -97,8 +99,13 @@ pub enum Command {
     /// Hold job `job` before its next change to the disk. Every client
     /// hears [`Event::JobPaused`].
     PauseJob(JobId),
-    /// Let a paused job go on. Every client hears [`Event::JobResumed`].
+    /// Let a paused job go on, or start an interrupted one again where it
+    /// left off. Every client hears [`Event::JobResumed`].
     ResumeJob(JobId),
+    /// Drop an interrupted job: it isn't resumed, and what it finished
+    /// before the crash stays. Every client hears it end as
+    /// [`Outcome::Cancelled`].
+    ForgetJob(JobId),
     /// Stop job `job` before its next change to the disk, paused or not.
     /// It ends with [`Outcome::Cancelled`].
     CancelJob(JobId),
@@ -197,6 +204,11 @@ pub enum Event {
     JobPaused(JobId),
     /// Job `job` goes on. Every client hears it.
     JobResumed(JobId),
+    /// Job `job`, doing `operation`, was cut short when the core last
+    /// stopped (a crash, or the power going). What it finished stays and
+    /// nothing is left half-written; it waits for a client to resume or
+    /// forget it. Answers [`Command::WatchJobs`].
+    JobInterrupted { job: JobId, operation: Operation },
     /// Job `job` has ended. `changed` names the folders whose entries it
     /// changed, so a window showing one reads it again. Every client that
     /// watches jobs hears it.
