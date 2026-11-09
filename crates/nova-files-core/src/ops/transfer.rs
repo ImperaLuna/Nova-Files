@@ -247,16 +247,14 @@ fn move_whole(
     Ok((rest, renamed))
 }
 
-/// Whether renaming `other` takes `source` along: `other` is a folder,
-/// not a link to one, and `source` is inside it without passing through
-/// a link on the way.
+/// Whether renaming `other` takes `source` along: `source` is inside it
+/// without passing through a link on the way. The real path of the folder
+/// holding `source` has no links in it, so it can only start with `other`
+/// when `other` is a real folder.
 fn carried(source: &Path, other: &Path) -> bool {
     let real = |path: &Path| path.parent().and_then(|parent| parent.canonicalize().ok());
-    let folder = other.symlink_metadata().is_ok_and(|other| other.is_dir());
     match (real(source), real(other), other.file_name()) {
-        (Some(above), Some(other_above), Some(name)) if folder => {
-            above.starts_with(other_above.join(name))
-        }
+        (Some(above), Some(other_above), Some(name)) => above.starts_with(other_above.join(name)),
         _ => false,
     }
 }
