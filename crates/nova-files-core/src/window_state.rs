@@ -136,9 +136,12 @@ mod tests {
         assert_eq!(store.bytes(), b"");
         store.save(b"picker 900x600".to_vec());
         assert_eq!(store.bytes(), b"picker 900x600");
-        // An oversized state is not kept.
+        // An oversized state is not kept; one at the cap, 64 KiB, is.
         store.save(vec![b'x'; MAX_BYTES + 1]);
         assert_eq!(store.bytes(), b"picker 900x600");
+        store.save(vec![b'x'; 64 * 1024]);
+        assert_eq!(store.bytes().len(), 64 * 1024);
+        store.save(b"picker 900x600".to_vec());
         let path = home.join(FILE);
         let wait = std::time::Instant::now();
         while read(&path) != b"picker 900x600" {
