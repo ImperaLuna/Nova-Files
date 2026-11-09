@@ -109,3 +109,15 @@ async fn a_tab_or_a_leading_space_is_not_part_of_a_name(cx: &mut TestAppContext)
     cx.simulate_keystrokes("b tab l");
     assert_eq!(selected(&view, cx), ["blue.txt"]);
 }
+
+#[gpui::test]
+async fn a_new_folder_starts_a_new_prefix(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("jump");
+    let (view, cx) = named(cx, &tree).await;
+
+    cx.simulate_keystrokes("p enter");
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+    cx.simulate_keystrokes("n");
+    assert_eq!(selected(&view, cx), ["nova"]);
+}

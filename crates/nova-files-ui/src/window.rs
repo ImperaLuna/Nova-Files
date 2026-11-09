@@ -397,6 +397,7 @@ impl MainWindow {
                 self.rows_wanted = 0..0;
                 if !same_folder {
                     self.scroll = UniformListScrollHandle::new();
+                    self.jump = TypeJump::default();
                 }
                 self.pick_folder_opened(cx);
                 if !same_folder && let Some(cursor) = self.cursor() {

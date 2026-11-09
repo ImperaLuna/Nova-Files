@@ -41,7 +41,7 @@ impl TypeJump {
         if fresh {
             self.prefix.clear();
         }
-        self.prefix.push_str(&typed.to_lowercase());
+        self.prefix.extend(fold(typed));
         self.last = Some(now);
         let mut letters = self.prefix.chars();
         let first = letters.next();
@@ -73,8 +73,21 @@ pub fn find<'a>(
         .cycle()
         .skip(start)
         .take(len)
-        .find(|(_, name)| name.to_string_lossy().to_lowercase().starts_with(prefix))
+        .find(|(_, name)| starts_with(&name.to_string_lossy(), prefix))
         .map(|(row, _)| row)
+}
+
+/// `text` in lower case letter by letter, so a prefix typed a key at a
+/// time folds the same as a whole name (no context-dependent forms such as
+/// a final sigma).
+fn fold(text: &str) -> impl Iterator<Item = char> + '_ {
+    text.chars().flat_map(char::to_lowercase)
+}
+
+/// Whether `name`, folded, starts with the folded `prefix`.
+fn starts_with(name: &str, prefix: &str) -> bool {
+    let mut name = fold(name);
+    prefix.chars().all(|letter| name.next() == Some(letter))
 }
 
 #[cfg(test)]
@@ -119,6 +132,18 @@ mod tests {
         jump.typed("m", start);
         assert!(jump.continues(start + PAUSE / 2));
         assert!(!jump.continues(start + PAUSE));
+    }
+
+    #[test]
+    fn a_name_typed_letter_by_letter_matches_itself() {
+        let names = ["ΟΣΑ", "ΟΣ"];
+        let start = Instant::now();
+        let mut jump = TypeJump::default();
+        jump.typed("Ο", start);
+        let (prefix, past) = jump.typed("Σ", start);
+        let found = find(names.iter().map(OsStr::new), &prefix, Some(1), past);
+        assert_eq!(found, Some(1));
+        assert!(!starts_with("ab", "abc"));
     }
 
     #[test]
