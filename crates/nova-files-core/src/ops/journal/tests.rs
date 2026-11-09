@@ -30,11 +30,14 @@ fn writes_each_record_as_a_line_and_goes_when_finished() {
     journal
         .record(Record::Backup(Path::new("/into/.b"), Path::new("/into/y")))
         .unwrap();
+    journal
+        .record(Record::Moved(Path::new("/z"), Path::new("/into/z")))
+        .unwrap();
 
     let file = jobs.join("4");
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
-        "nova-files-job 1\ncopy\ninto /into\nsource /a%20b/%FF\npart /into/.p\nmade /into/x\nbackup /into/.b /into/y\n"
+        "nova-files-job 1\ncopy\ninto /into\nsource /a%20b/%FF\npart /into/.p\nmade /into/x\nbackup /into/.b /into/y\nmoved /z /into/z\n"
     );
     assert_eq!(
         fs::metadata(&file).unwrap().permissions().mode() & 0o777,

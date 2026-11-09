@@ -1,5 +1,5 @@
-//! A copy's plan: everything it will make, found before it changes
-//! anything. Its totals are known up front, and since links are never
+//! A job's plan: everything a copy or move will make, or a delete will
+//! remove, found before it changes anything. Its totals are known up front, and since links are never
 //! followed and nothing is read twice, a tree that holds a link to itself
 //! can't make it loop.
 //!
@@ -27,7 +27,8 @@ pub enum Kind {
     Special,
 }
 
-/// One thing to make: `to`, a copy of `from`.
+/// One thing to make: `to`, a copy of `from`. In a delete's plan, `to`
+/// is `from`, the thing to remove.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
     pub from: PathBuf,
@@ -45,21 +46,57 @@ pub struct Plan {
 /// Plans copying each of `sources` into `into`, under its own name.
 ///
 /// # Errors
-/// [`Stop`] when cancelled, or when a path isn't absolute, or a source
-/// can't be read, has no name, or is a folder `into` is inside of.
+/// [`Stop`] when cancelled, or when [`check`] refuses, or a source can't
+/// be read.
 pub fn plan(sources: &[PathBuf], into: &Path, control: &Control) -> Result<Plan, Stop> {
+    check(sources, into)?;
     let mut plan = Plan::default();
+    for source in sources {
+        if let Some(name) = source.file_name() {
+            add_tree(&mut plan, source, &into.join(name), control)?;
+        }
+    }
+    Ok(plan)
+}
+
+/// Checks that each of `sources` can go into `into` before anything is
+/// changed, so a bad one fails the job with nothing done.
+///
+/// # Errors
+/// [`Stop`] when a path isn't absolute, or a source has no name, isn't
+/// there, or is a folder `into` is inside of.
+pub fn check(sources: &[PathBuf], into: &Path) -> Result<(), Stop> {
     if !into.is_absolute() {
         return Err(Stop::because(into, Failure::InvalidName));
     }
     for source in sources {
-        let (true, Some(name)) = (source.is_absolute(), source.file_name()) else {
+        if !source.is_absolute() || source.file_name().is_none() {
             return Err(Stop::because(source, Failure::InvalidName));
-        };
+        }
         if into.starts_with(source) {
             return Err(Stop::because(source, Failure::IntoItself));
         }
-        add_tree(&mut plan, source, &into.join(name), control)?;
+        source
+            .symlink_metadata()
+            .map_err(|error| Stop::at(source, &error))?;
+    }
+    Ok(())
+}
+
+/// Plans deleting each of `paths`, folders with all they hold. Each item's
+/// `to` is its `from`; a folder comes before what it holds, so the items
+/// are deleted last to first.
+///
+/// # Errors
+/// [`Stop`] when cancelled, or when a path isn't absolute or has no name,
+/// or can't be read.
+pub fn plan_delete(paths: &[PathBuf], control: &Control) -> Result<Plan, Stop> {
+    let mut plan = Plan::default();
+    for path in paths {
+        if !path.is_absolute() || path.file_name().is_none() {
+            return Err(Stop::because(path, Failure::InvalidName));
+        }
+        add_tree(&mut plan, path, path, control)?;
     }
     Ok(plan)
 }

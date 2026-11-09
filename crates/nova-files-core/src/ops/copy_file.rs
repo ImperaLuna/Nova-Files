@@ -160,7 +160,7 @@ fn fill(ends: &Ends<'_>, control: &Control, copied: &mut dyn FnMut(u64)) -> Resu
 /// What tells one version of a file from another: its size, and when its
 /// contents and its inode last changed. A writer can set the first time
 /// back, but not the second.
-fn version(metadata: &Metadata) -> (u64, i64, i64, i64, i64) {
+pub fn version(metadata: &Metadata) -> (u64, i64, i64, i64, i64) {
     (
         metadata.len(),
         metadata.mtime(),

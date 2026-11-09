@@ -1,12 +1,6 @@
 use std::path::PathBuf;
-use std::sync::Arc;
-
-use nova_files_api::{JobId, Operation};
 
 use super::*;
-use crate::ops::audience::Audience;
-use crate::ops::job::Job;
-use crate::ops::progress::Reporter;
 use crate::ops::test_folder::TestFolder;
 
 /// Places a file whose every try finds a name taken, at the path `taken`
@@ -14,32 +8,29 @@ use crate::ops::test_folder::TestFolder;
 /// and how often it tried. Past the most tries it may take, the stand-in
 /// stops the job instead.
 fn place_with_name_taken(taken: impl Fn(&Item) -> PathBuf) -> (Result<PathBuf, Stop>, u32) {
-    let folder = TestFolder::new("copy-look-again");
+    let folder = TestFolder::new("transfer-look-again");
     let item = Item {
         from: folder.file("a", "a"),
         to: folder.path().join("b"),
         kind: Kind::File { size: 1 },
     };
-    let shared = Arc::new(Job::new(Operation::Copy {
-        sources: Vec::new(),
-        into: folder.path().to_path_buf(),
-    }));
-    let reporter = Reporter::new(
-        Audience::default(),
-        Arc::default(),
-        JobId(1),
-        Arc::clone(&shared),
-    );
-    let mut running = Running::new(JobId(1), shared, reporter, None);
+    let mut running = Running::for_test();
     let mut tries = 0;
-    let mut make = |_: &mut Running, item: &Item, _: &Path, _: usize, _: bool| {
+    let mut make = |_: &mut Running, making: &Making<'_>| {
         tries += 1;
         if tries > LOOK_AGAIN + 1 {
             return Err(Stop::Cancelled);
         }
-        Err(Stop::because(&taken(item), Failure::NameTaken))
+        Err(Stop::because(&taken(making.item), Failure::NameTaken))
     };
-    let placed = place(&mut running, &item, &item.to, 0, &mut make).map(|(_, at)| at);
+    let planned = Making {
+        item: &item,
+        target: &item.to,
+        index: 0,
+        replacing: false,
+        how: How::Copy,
+    };
+    let placed = place(&mut running, &planned, &mut make).map(|(_, at)| at);
     assert!(!item.to.exists());
     (placed, tries)
 }

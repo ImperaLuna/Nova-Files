@@ -16,14 +16,21 @@ use std::ffi::OsStr;
 use std::fs;
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{PermissionsExt as _, symlink};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, SystemTime};
 
-use nova_files_api::{Command, Event, Failure, JobId, Outcome, Progress};
+use nova_files_api::{Command, Event, Failure, JobId, Operation, Outcome, Progress};
 
 use common::{Bench, Client};
-use files::{copy, hidden, tree};
+use files::{hidden, tree};
+
+fn copy(sources: Vec<PathBuf>, into: &Path) -> Operation {
+    Operation::Copy {
+        sources,
+        into: into.to_owned(),
+    }
+}
 
 /// Files in a tree big enough that a job is still running when a client
 /// answers its start.

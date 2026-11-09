@@ -1,9 +1,14 @@
-//! The copy job: plan everything first, then make each item in order
-//! (folders, files through part files, links as links), recording each in
-//! the journal, and last give each folder made its source's mode, times
-//! and attributes, deepest first, so a read-only folder can still be
-//! filled. Before the job says it is done, every folder it added entries
-//! to is synced, so what it reports made is on the disk.
+//! Copy and move jobs: plan everything first, then make each item in
+//! order (see `make`), recording each in the journal, and last give each
+//! folder made its source's mode, times and attributes, deepest first, so
+//! a read-only folder can still be filled. Before the job says it is
+//! done, every folder it added entries to is synced, so what it reports
+//! made is on the disk.
+//!
+//! A move first tries renaming each source whole, which on one drive is
+//! all it takes, and plans only what that can't place. A folder it has to
+//! make anew (across drives, or merged into one there) is removed from
+//! the source once empty, after all it held has moved.
 //!
 //! Whatever stands in an item's way (a name taken, a full drive, a
 //! source gone) is a conflict: the job pauses on it until a client
@@ -12,10 +17,8 @@
 //! the answer says so, and then only through a backup or an exchange.
 //! What was made before a failure or a cancel stays, whole.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fs::{self, DirBuilder, File};
-use std::io;
-use std::os::unix::fs::{DirBuilderExt as _, symlink};
+use std::collections::BTreeSet;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
 use nova_files_api::{Answer, Conflict, ConflictKind, Failure, Outcome};
@@ -23,122 +26,170 @@ use nova_files_api::{Answer, Conflict, ConflictKind, Failure, Outcome};
 use super::Ended;
 use super::attrs::{copy_mode_and_times, copy_xattrs};
 use super::clash::{clash, conflict_for};
-use super::copy_file::{FileCopy, copy_file};
 use super::journal::Record;
 use super::keep_both::{Naming, free_path};
-use super::place::{rename_no_replace, replace};
-use super::plan::{Item, Kind, plan};
+use super::make::{How, Made, Making, make, size};
+use super::place::rename_no_replace;
+use super::plan::{Item, Kind, Plan, check, plan};
 use super::running::Running;
 use super::stop::Stop;
-
-/// A folder being filled is the user's alone; it gets its source's mode
-/// once full.
-const FILLING_MODE: u32 = 0o700;
 
 /// How many times a target may change hands between being looked at and
 /// being made before the job gives up on it: another program keeps
 /// changing it.
 const LOOK_AGAIN: u32 = 3;
 
-/// Makes an item at a target, replacing what is there when told to: see
-/// [`make`]. A parameter, so tests can stand in for the disk.
-type Make<'a> = dyn FnMut(&mut Running, &Item, &Path, usize, bool) -> Result<u64, Stop> + 'a;
+/// Makes an item at its target: see [`make`]. A parameter, so tests can
+/// stand in for the disk.
+type Make<'a> = dyn FnMut(&mut Running, &Making<'_>) -> Result<Made, Stop> + 'a;
 
 /// What became of one planned item.
+#[derive(Clone, Copy)]
 enum Placed {
-    /// Made at its target; `left` of its bytes were holes, never copied.
-    Made { left: u64 },
+    /// Made at its target.
+    Made(Made),
     /// Left out, with all it holds.
     Skipped,
     /// A folder already there that its contents go into.
     Merged,
 }
 
-/// Where the plan's paths really go: items renamed to keep both, and
-/// folders skipped with everything in them, within one source's tree:
-/// two sources may plan the same target (`/a/photos` and `/b/photos`),
-/// and each gets its own answers. Looking a path up costs as many
-/// lookups as it is deep, however many were answered.
+/// Where the plan's paths really go: folders renamed to keep both, and
+/// the folder settled with everything in it (skipped, or moved whole),
+/// within one source's tree: two sources may plan the same target
+/// (`/a/photos` and `/b/photos`), and each gets its own answers. The plan
+/// lists a folder's contents right after it, so once a path is outside a
+/// detour, no later one is inside: each is dropped then, and a lookup
+/// costs only the folders it is in.
 #[derive(Default)]
 struct Detours {
-    renamed: HashMap<PathBuf, PathBuf>,
-    skipped: HashSet<PathBuf>,
+    /// Innermost last.
+    renamed: Vec<(PathBuf, PathBuf)>,
+    settled: Option<PathBuf>,
 }
 
 impl Detours {
-    /// Where `planned` really goes, or `None` when it was skipped.
-    fn target(&self, planned: &Path) -> Option<PathBuf> {
-        // The deepest renamed folder holding it, found first.
-        let mut renamed = None;
-        for above in planned.ancestors() {
-            if self.skipped.contains(above) {
+    /// Where `planned` really goes, or `None` when it needs nothing more.
+    fn target(&mut self, planned: &Path) -> Option<PathBuf> {
+        if let Some(settled) = &self.settled {
+            if planned.starts_with(settled) {
                 return None;
             }
-            renamed = renamed.or_else(|| self.renamed.get(above).map(|to| (above, to)));
+            self.settled = None;
         }
-        Some(renamed.map_or_else(
+        while let Some((from, _)) = self.renamed.last()
+            && !planned.starts_with(from)
+        {
+            self.renamed.pop();
+        }
+        Some(self.renamed.last().map_or_else(
             || planned.to_path_buf(),
             |(from, to)| to.join(planned.strip_prefix(from).unwrap_or(planned)),
         ))
     }
 }
 
-/// Copies each of `sources` into `into`.
-pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
-    running.record(Record::Operation("copy"));
+/// What a transfer has done so far that is still to be finished.
+#[derive(Default)]
+struct Done {
+    how: How,
+    detours: Detours,
+    /// Folders made, and their sources, in the order made.
+    folders: Vec<(PathBuf, PathBuf)>,
+    /// Source folders a move took everything out of, in the order met.
+    emptied: Vec<PathBuf>,
+    /// Folders whose entries changed.
+    touched: BTreeSet<PathBuf>,
+}
+
+impl Done {
+    /// `item`, planned for `planned`, was `placed` at `target`.
+    fn note(
+        &mut self,
+        running: &mut Running,
+        item: &Item,
+        planned: &Path,
+        (placed, target): (Placed, PathBuf),
+    ) {
+        let folder = item.kind == Kind::Folder;
+        let moving = self.how.moves();
+        // Only a folder takes others along, but a file's entry harms
+        // nothing: the next item drops it.
+        if target != planned {
+            self.detours.renamed.push((item.to.clone(), target.clone()));
+        }
+        match placed {
+            Placed::Made(made) => {
+                let left = moving.then(|| item.from.parent()).flatten();
+                for parent in [target.parent(), left].into_iter().flatten() {
+                    self.touched.insert(parent.to_path_buf());
+                }
+                if made.carried {
+                    self.detours.settled = Some(item.to.clone());
+                } else if folder {
+                    self.folders.push((item.from.clone(), target));
+                    if moving {
+                        self.emptied.push(item.from.clone());
+                    }
+                }
+                running.reporter.item(made.left);
+            }
+            Placed::Skipped => {
+                if folder {
+                    self.detours.settled = Some(item.to.clone());
+                }
+                running.reporter.item(size(item));
+            }
+            Placed::Merged => {
+                if moving {
+                    self.emptied.push(item.from.clone());
+                }
+                running.reporter.item(0);
+            }
+        }
+    }
+}
+
+/// Copies or moves, as `how` says, each of `sources` into `into`.
+pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: How) -> Ended {
+    running.record(Record::Operation(match how {
+        How::Copy => "copy",
+        How::Move => "move",
+    }));
     running.record(Record::Into(into));
     for source in sources {
         running.record(Record::Source(source));
     }
-    let plan = match plan(sources, into, &running.shared.control) {
-        Ok(plan) => plan,
-        Err(stop) => return (stop.outcome(), Vec::new()),
-    };
-    let items = u64::try_from(plan.items.len()).unwrap_or(u64::MAX);
-    running.reporter.planned(plan.bytes, items);
-    let mut detours = Detours::default();
-    let mut folders = Vec::new();
     let mut touched = BTreeSet::new();
-    let mut result = Ok(());
-    for (index, item) in plan.items.iter().enumerate() {
-        // A source's tree starts: the last one's answers were its own.
-        if item.to.parent() == Some(into) {
-            detours = Detours::default();
+    let (rest, renamed) = if how.moves() {
+        match move_whole(running, sources, into, &mut touched) {
+            Ok(left) => left,
+            Err(stop) => return (stop.outcome(), changed(into, sources, how, &touched)),
         }
-        let Some(planned) = detours.target(&item.to) else {
-            running.reporter.item(size(item));
-            continue;
-        };
-        let (placed, target) = match place(running, item, &planned, index, &mut make) {
-            Ok(placed) => placed,
-            Err(stop) => {
-                result = Err(stop);
-                break;
-            }
-        };
-        let folder = item.kind == Kind::Folder;
-        if target != planned {
-            detours.renamed.insert(item.to.clone(), target.clone());
-        }
-        match placed {
-            Placed::Made { left } => {
-                if let Some(parent) = target.parent() {
-                    touched.insert(parent.to_path_buf());
-                }
-                if folder {
-                    folders.push((item.from.clone(), target));
-                }
-                running.reporter.item(left);
-            }
-            Placed::Skipped => {
-                if folder {
-                    detours.skipped.insert(item.to.clone());
-                }
-                running.reporter.item(size(item));
-            }
-            Placed::Merged => running.reporter.item(0),
-        }
+    } else {
+        (sources.to_vec(), 0)
+    };
+    let plan = match plan(&rest, into, &running.shared.control) {
+        Ok(plan) => plan,
+        Err(stop) => return (stop.outcome(), changed(into, sources, how, &touched)),
+    };
+    let items = u64::try_from(plan.items.len() + renamed).unwrap_or(u64::MAX);
+    running.reporter.planned(plan.bytes, items);
+    for _ in 0..renamed {
+        running.reporter.item(0);
     }
+    let mut done = Done {
+        how,
+        touched,
+        ..Done::default()
+    };
+    let mut result = place_each(running, &plan, into, &mut done);
+    let Done {
+        folders,
+        emptied,
+        mut touched,
+        ..
+    } = done;
     for (from, to) in folders.iter().rev() {
         // Held while paused; a cancel leaves the rest as they are.
         if let Err(cancelled) = running.shared.control.checkpoint() {
@@ -146,6 +197,9 @@ pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
             break;
         }
         finish_folder(from, to);
+    }
+    for folder in emptied.iter().rev() {
+        remove_if_empty(folder, &mut touched);
     }
     // So what the job reports made is on the disk. A failure means only
     // that a crash right now could lose an entry, so it is logged.
@@ -155,47 +209,165 @@ pub fn copy(running: &mut Running, sources: &[PathBuf], into: &Path) -> Ended {
         }
     }
     running.reporter.tell();
-    let changed = if touched.is_empty() {
-        Vec::new()
-    } else {
-        vec![into.to_path_buf()]
-    };
     (
         result.map_or_else(Stop::outcome, |()| Outcome::Done),
-        changed,
+        changed(into, sources, how, &touched),
     )
 }
 
-/// The bytes `item` counts for in the job's progress.
-const fn size(item: &Item) -> u64 {
-    match item.kind {
-        Kind::File { size } => size,
-        Kind::Folder | Kind::Link | Kind::Special => 0,
+/// Checks every one of a move's `sources` first, then renames each into
+/// `into` whole where it can. Returns those it couldn't, and how many it
+/// did; a source inside another moves with it.
+///
+/// # Errors
+/// [`Stop`] when cancelled, or a source is refused.
+fn move_whole(
+    running: &mut Running,
+    sources: &[PathBuf],
+    into: &Path,
+    touched: &mut BTreeSet<PathBuf>,
+) -> Result<(Vec<PathBuf>, usize), Stop> {
+    check(sources, into)?;
+    let outermost: Vec<_> = sources
+        .iter()
+        .filter(|source| {
+            !sources
+                .iter()
+                .any(|other| other != *source && source.starts_with(other))
+        })
+        .cloned()
+        .collect();
+    let rest = rename_whole(running, &outermost, into, touched)?;
+    let renamed = outermost.len() - rest.len();
+    Ok((rest, renamed))
+}
+
+/// Renames each of `sources`, all checked, into `into` whole where its
+/// name there is free and the drive is the same, and returns those it
+/// couldn't.
+///
+/// # Errors
+/// [`Stop`] when cancelled.
+fn rename_whole(
+    running: &mut Running,
+    sources: &[PathBuf],
+    into: &Path,
+    touched: &mut BTreeSet<PathBuf>,
+) -> Result<Vec<PathBuf>, Stop> {
+    let mut rest = Vec::new();
+    for source in sources {
+        running.shared.control.checkpoint()?;
+        let (Some(name), Some(parent)) = (source.file_name(), source.parent()) else {
+            rest.push(source.clone());
+            continue;
+        };
+        let target = into.join(name);
+        // Anything at the target, even the source itself or a hard link
+        // to it (which a rename would leave in place, saying it moved),
+        // is the plan's to ask about.
+        let free = target.symlink_metadata().is_err();
+        if free && rename_no_replace(source, &target).is_ok() {
+            running.record(Record::Moved(source, &target));
+            touched.insert(into.to_path_buf());
+            touched.insert(parent.to_path_buf());
+        } else {
+            rest.push(source.clone());
+        }
+    }
+    Ok(rest)
+}
+
+/// Removes the source folder `folder` a move emptied. Anything still in
+/// it (skipped, or added since) keeps it.
+fn remove_if_empty(folder: &Path, touched: &mut BTreeSet<PathBuf>) {
+    match fs::remove_dir(folder) {
+        Ok(()) => {
+            if let Some(parent) = folder.parent() {
+                touched.insert(parent.to_path_buf());
+            }
+        }
+        Err(error) => log::info!("{} stays: {error}", folder.display()),
     }
 }
 
-/// Puts `item`, the `index`th of its job, at `planned` or wherever the
-/// user's answers to what stands in its way say, and returns what became
-/// of it and where.
+/// The folders whose entries a job changed: `into` once anything went
+/// there, and, for a move, each source's folder.
+fn changed(
+    into: &Path,
+    sources: &[PathBuf],
+    how: How,
+    touched: &BTreeSet<PathBuf>,
+) -> Vec<PathBuf> {
+    if touched.is_empty() {
+        return Vec::new();
+    }
+    let mut changed = vec![into.to_path_buf()];
+    if how.moves() {
+        for parent in sources.iter().filter_map(|source| source.parent()) {
+            if !changed.iter().any(|known| known == parent) {
+                changed.push(parent.to_path_buf());
+            }
+        }
+    }
+    changed
+}
+
+/// Places each item of `plan`, a transfer into `into`, in turn, noting in
+/// `done` what became of it.
+fn place_each(
+    running: &mut Running,
+    plan: &Plan,
+    into: &Path,
+    done: &mut Done,
+) -> Result<(), Stop> {
+    for (index, item) in plan.items.iter().enumerate() {
+        // A source's tree starts: the last one's answers were its own.
+        if item.to.parent() == Some(into) {
+            done.detours = Detours::default();
+        }
+        let Some(planned) = done.detours.target(&item.to) else {
+            running.reporter.item(size(item));
+            continue;
+        };
+        let making = Making {
+            item,
+            target: &planned,
+            index,
+            replacing: false,
+            how: done.how,
+        };
+        let placed = place(running, &making, &mut make)?;
+        done.note(running, item, &planned, placed);
+    }
+    Ok(())
+}
+
+/// Puts the item `planned` names at its target, or wherever the user's
+/// answers to what stands in its way say, and returns what became of it
+/// and where.
 fn place(
     running: &mut Running,
-    item: &Item,
-    planned: &Path,
-    index: usize,
+    planned: &Making<'_>,
     make: &mut Make<'_>,
 ) -> Result<(Placed, PathBuf), Stop> {
-    let mut target = planned.to_path_buf();
+    let item = planned.item;
+    let mut target = planned.target.to_path_buf();
     // The user said to replace the file at `target`; still looked at
     // before each try, as the name may have changed hands since.
     let mut replacing = false;
     let mut looked_again = 0;
     loop {
         running.shared.control.checkpoint()?;
+        let mut making = Making {
+            target: &target,
+            ..*planned
+        };
         let tried = match clash(&item.from, item.kind, &target) {
             Err(error) => Err(Stop::at(&target, &error)),
-            Ok(None) => make(running, item, &target, index, false),
+            Ok(None) => make(running, &making),
             Ok(Some(ConflictKind::FileExists)) if replacing => {
-                make(running, item, &target, index, true)
+                making.replacing = true;
+                make(running, &making)
             }
             Ok(Some(kind)) => {
                 replacing = false;
@@ -213,7 +385,7 @@ fn place(
             }
         };
         match tried {
-            Ok(left) => return Ok((Placed::Made { left }, target)),
+            Ok(it) => return Ok((Placed::Made(it), target)),
             // The name changed hands since it was looked at: look again.
             Err(Stop::Failed { path, reason })
                 if looked_again < LOOK_AGAIN
@@ -226,8 +398,7 @@ fn place(
                 let Some(kind) = conflict_for(reason, &path, &item.from) else {
                     return Err(Stop::Failed { path, reason });
                 };
-                // Skip, or Retry: the only answers these kinds take.
-                if running.ask(conflict(kind, item, &target))? == Answer::Skip {
+                if running.skips(conflict(kind, item, &target))? {
                     return Ok((Placed::Skipped, target));
                 }
             }
@@ -250,83 +421,6 @@ const fn naming(kind: Kind) -> Naming {
     match kind {
         Kind::Folder => Naming::Folder,
         Kind::File { .. } | Kind::Link | Kind::Special => Naming::File,
-    }
-}
-
-/// Makes `item`, the `index`th of its job, at `target`, in the place of
-/// what is there when `replacing`. Returns how many of its bytes were
-/// holes, never copied.
-fn make(
-    running: &mut Running,
-    item: &Item,
-    target: &Path,
-    index: usize,
-    replacing: bool,
-) -> Result<u64, Stop> {
-    let job = running.job.0;
-    let hidden = |what: &str| target.with_file_name(format!(".nova-{what}-{job}-{index}"));
-    let (part, backup) = (hidden("part"), hidden("backup"));
-    let mut left = 0;
-    match item.kind {
-        Kind::Folder => DirBuilder::new()
-            .mode(FILLING_MODE)
-            .create(target)
-            .map_err(|error| Stop::at(target, &error))?,
-        Kind::File { size } => {
-            running.record(Record::Part(&part));
-            if replacing {
-                running.record(Record::Backup(&backup, target));
-            }
-            let mut copied = 0;
-            let reporter = &mut running.reporter;
-            let paths = FileCopy {
-                from: &item.from,
-                to: target,
-                part: &part,
-            };
-            let copying = copy_file(
-                &paths,
-                &running.shared.control,
-                &mut |bytes| {
-                    copied += bytes;
-                    reporter.bytes(bytes);
-                },
-                |part, to| put(part, to, &backup, replacing),
-            );
-            if let Err(stop) = copying {
-                // The item is skipped or tried again from the start.
-                running.reporter.take_back(copied);
-                return Err(stop);
-            }
-            left = size.saturating_sub(copied);
-        }
-        Kind::Link => {
-            let points_to =
-                fs::read_link(&item.from).map_err(|error| Stop::at(&item.from, &error))?;
-            if replacing {
-                running.record(Record::Part(&part));
-                running.record(Record::Backup(&backup, target));
-            }
-            let made = if replacing { &part } else { target };
-            symlink(points_to, made).map_err(|error| Stop::at(target, &error))?;
-            if replacing && let Err(error) = put(&part, target, &backup, replacing) {
-                fs::remove_file(&part).ok();
-                return Err(Stop::at(target, &error));
-            }
-        }
-        Kind::Special => return Err(Stop::because(&item.from, Failure::Unsupported)),
-    }
-    running.record(Record::Made(target));
-    Ok(left)
-}
-
-/// Gives the whole part file `part` the name `to`, replacing what has it
-/// only when `replacing`.
-fn put(part: &Path, to: &Path, backup: &Path, replacing: bool) -> io::Result<()> {
-    if replacing {
-        replace(part, to, backup)
-    } else {
-        rename_no_replace(part, to)
     }
 }
 

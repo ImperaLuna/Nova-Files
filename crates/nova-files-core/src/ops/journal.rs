@@ -22,6 +22,9 @@
 //! part /home/me/Backup/.nova-part-4-0
 //! made /home/me/Backup/My%20Photos
 //! ```
+//!
+//! A move records each item it moved, from and to, instead; a delete
+//! records only what it was asked to delete.
 
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{self, Write as _};
@@ -51,7 +54,7 @@ const LOW_MASK: u8 = 0x0F;
 pub enum Record<'a> {
     /// The operation's name, the first record after the header.
     Operation(&'static str),
-    /// The folder a copy goes into.
+    /// The folder a copy or move goes into.
     Into(&'a Path),
     /// One of the operation's sources.
     Source(&'a Path),
@@ -59,6 +62,9 @@ pub enum Record<'a> {
     Part(&'a Path),
     /// Something the job made, which undo would remove.
     Made(&'a Path),
+    /// Something the job moved from the first path to the second, which
+    /// undo would move back.
+    Moved(&'a Path, &'a Path),
     /// The user's file at the second path is about to step aside to the
     /// first while its replacement takes its name. Left behind by a
     /// crash, it goes back if its name is free.
@@ -74,6 +80,7 @@ impl Record<'_> {
             Self::Source(path) => ("source", std::slice::from_ref(path)),
             Self::Part(path) => ("part", std::slice::from_ref(path)),
             Self::Made(path) => ("made", std::slice::from_ref(path)),
+            Self::Moved(from, to) => ("moved", &[*from, *to]),
             Self::Backup(backup, of) => ("backup", &[*backup, *of]),
         };
         let mut line = word.as_bytes().to_vec();
