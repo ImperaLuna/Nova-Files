@@ -184,7 +184,11 @@ impl Shared {
         if self.version != version {
             return true;
         }
-        if settings != *self.settings {
+        // Every read taken is newer than any read that started before it,
+        // even one that changed nothing.
+        if settings == *self.settings {
+            self.version += 1;
+        } else {
             self.set(settings);
         }
         false

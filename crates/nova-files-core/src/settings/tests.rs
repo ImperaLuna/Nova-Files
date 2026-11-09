@@ -67,6 +67,18 @@ fn a_read_older_than_the_settings_is_done_again() {
 }
 
 #[test]
+fn a_read_that_changed_nothing_still_outdates_older_reads() {
+    let shared = shared(None);
+    let mut locked = lock(&shared);
+    // The file was removed: defaults, as held.
+    assert!(!locked.take(Settings::default(), 0));
+    // A read from before the removal comes in late: stale.
+    assert!(locked.take(dark(), 0));
+    assert_eq!(*locked.settings, Settings::default());
+    drop(locked);
+}
+
+#[test]
 fn a_queued_change_counts_as_unsaved() {
     let shared = shared(Some(PathBuf::from("settings.toml")));
     let (queue, queued): (Sender<SettingChange>, Receiver<SettingChange>) = mpsc::channel();
