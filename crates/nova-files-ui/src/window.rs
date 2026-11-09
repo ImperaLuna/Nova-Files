@@ -467,15 +467,16 @@ impl MainWindow {
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
-            // The window never searches, opens files or starts jobs yet, and
-            // only a picker's opening asks for the window state (see
-            // `window_state`).
+            // The window never searches, opens files or starts jobs yet, only
+            // a picker's opening asks for the window state (see
+            // `window_state`), and nothing draws from the theme yet.
             Event::FolderUnreadable { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)
+            | Event::Theme(_)
             | Event::JobStarted { .. }
             | Event::JobRunning { .. }
             | Event::JobConflict { .. }

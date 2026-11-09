@@ -22,6 +22,7 @@ use crate::ops::Jobs;
 use crate::places::Home;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
+use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
 use crate::window_state::Store as WindowStateStore;
 
@@ -30,6 +31,7 @@ pub struct Setup {
     pub home: Option<Home>,
     pub window_state: WindowStateStore,
     pub settings: SettingsStore,
+    pub theme: ThemeStore,
     pub thumbnails: Option<Thumbnails>,
     pub searcher: Searcher,
     /// The MIME database, read at the first [`Command::OpenFile`] and kept
@@ -68,6 +70,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             // Dropping the client stops its listing.
             clients.remove(&client);
             setup.settings.forget(client);
+            setup.theme.forget(client);
             setup.jobs.audience().leave(client);
         }
         // Receiving it already restarted the idle wait.
@@ -79,6 +82,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             if answer(client, target, command, setup).is_err() {
                 clients.remove(&client);
                 setup.settings.forget(client);
+                setup.theme.forget(client);
                 setup.jobs.audience().leave(client);
             }
         }
@@ -128,6 +132,10 @@ fn answer(
         }
         Command::ChangeSetting(change) => {
             setup.settings.change(change);
+            Ok(())
+        }
+        Command::Theme => {
+            setup.theme.listen(id, client.events());
             Ok(())
         }
         Command::WatchJobs => {

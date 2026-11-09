@@ -1,4 +1,4 @@
-//! The core. Index, search, folder listing, watching, jobs and settings. It
+//! The core. Index, search, folder listing, watching, jobs, settings and theme. It
 //! never draws anything.
 //!
 //! [`spawn`] starts the core on its own thread and returns the
@@ -10,6 +10,7 @@
 mod config_watch;
 mod details;
 mod details_queue;
+mod hand_edited;
 mod index;
 mod jobs;
 mod list;
@@ -22,6 +23,7 @@ mod private_file;
 mod run;
 mod search;
 mod settings;
+mod theme;
 mod thumbs;
 mod trace;
 mod vulkan_drivers;
@@ -105,11 +107,15 @@ pub fn spawn_with(
         .spawn(move || {
             // Read on the core's thread, so a slow disk never holds up the
             // caller (the window, at start-up).
-            let settings = settings::Store::open(home.as_ref().map(|home| home.config.as_path()));
+            let config = home.as_ref().map(|home| home.config.as_path());
+            let settings = settings::Store::open(config);
+            let theme = theme::Store::open(config);
+            theme.follow(&settings);
             let setup = run::Setup {
                 home,
                 window_state,
                 settings,
+                theme,
                 thumbnails,
                 searcher,
                 mime_types: Arc::default(),
