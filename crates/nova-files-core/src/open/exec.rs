@@ -119,7 +119,7 @@ fn expand(word: &str, file: &Path, fields: Fields<'_>) -> Option<(OsString, bool
     let mut chars = word.chars();
     while let Some(c) = chars.next() {
         if c != FIELD {
-            expanded.push(c.encode_utf8(&mut [0; 4]));
+            expanded.push(c.encode_utf8(&mut [0; char::MAX_LEN_UTF8]));
             continue;
         }
         match chars.next()? {
