@@ -44,6 +44,22 @@ pub fn offers_all(request: &PickRequest) -> bool {
     })
 }
 
+/// What the menu and its button call `filter`: the app's name for it, or
+/// All files.
+pub fn label(request: &PickRequest, filter: Option<usize>) -> SharedString {
+    filter
+        .and_then(|filter| request.filters.get(filter))
+        .map_or_else(
+            || ALL_FILES_LABEL.into(),
+            |filter| filter.name.clone().into(),
+        )
+}
+
+/// Whether the menu item for `filter` shows as the one `chosen`.
+pub fn is_chosen(chosen: Option<usize>, filter: Option<usize>) -> bool {
+    chosen == filter
+}
+
 impl Picker {
     /// Whether the chosen type leaves `entry` out.
     pub fn dims(&self, entry: &Entry) -> bool {
@@ -59,12 +75,7 @@ impl Picker {
     }
 
     fn filter_label(&self, filter: Option<usize>) -> SharedString {
-        filter
-            .and_then(|filter| self.request.filters.get(filter))
-            .map_or_else(
-                || ALL_FILES_LABEL.into(),
-                |filter| filter.name.clone().into(),
-            )
+        label(&self.request, filter)
     }
 }
 
@@ -163,7 +174,7 @@ fn menu_item(pick: &Picker, filter: Option<usize>, cx: &Context<MainWindow>) -> 
         .px(size::PAD)
         .rounded(radius::ROW)
         .cursor_pointer()
-        .when(pick.filter == filter, |item| {
+        .when(is_chosen(pick.filter, filter), |item| {
             item.bg(rgb(color::ROW_SELECTED))
         })
         .hover(|item| item.bg(rgb(color::ROW_HIGHLIGHT)))

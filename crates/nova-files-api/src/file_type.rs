@@ -96,10 +96,10 @@ fn matches(pattern: &[char], name: &[char]) -> bool {
                 p += width;
                 n += 1;
             }
+            // Back to the `*`, which takes one more character this time.
             (None, Some((star_p, star_n))) => {
-                p = star_p + 1;
+                p = star_p;
                 n = star_n + 1;
-                star = Some((star_p, n));
             }
             (None, None) => return false,
         }

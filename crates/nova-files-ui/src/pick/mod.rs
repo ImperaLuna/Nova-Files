@@ -694,6 +694,23 @@ mod tests {
     }
 
     #[test]
+    fn the_menu_names_each_type_and_marks_the_one_chosen() {
+        let request = PickRequest {
+            filters: vec![nova_files_api::FileFilter {
+                name: "Text".to_owned(),
+                rules: Vec::new(),
+            }],
+            ..request("", FILES)
+        };
+        assert_eq!(filter::label(&request, Some(0)), "Text");
+        assert_eq!(filter::label(&request, None), "All files");
+        assert_eq!(filter::label(&request, Some(1)), "All files");
+        assert!(filter::is_chosen(Some(0), Some(0)));
+        assert!(filter::is_chosen(None, None));
+        assert!(!filter::is_chosen(Some(0), None));
+    }
+
+    #[test]
     fn the_mode_follows_what_the_app_asked() {
         assert_eq!(Mode::of(&FILES), Mode::Files);
         assert_eq!(Mode::of(&FOLDERS), Mode::Folders);

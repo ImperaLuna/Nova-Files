@@ -179,3 +179,47 @@ fn ancestry_lists_the_type_then_its_parents_nearest_first() {
     );
     assert_eq!(types.ancestry("text/x-csrc"), ["text/x-csrc", "text/plain"]);
 }
+
+#[test]
+fn a_type_with_no_globs_matches_no_name() {
+    let (_dir, types) = types("no-globs");
+    assert_eq!(types.of(OsStr::new("__NOGLOBS__")), None);
+}
+
+#[test]
+fn plain_names_are_looked_up_not_matched() {
+    let (_dir, types) = types("literals");
+    assert!(types.literals.contains_key("makefile"));
+    assert!(types.others.iter().all(|glob| glob.pattern != "Makefile"));
+}
+
+#[test]
+fn a_large_globs_file_is_read_to_its_end() {
+    let dir = Dir::new("large");
+    let padding = "# padding\n".repeat(200_000);
+    dir.write(GLOBS_FILE, &format!("{padding}50:application/pdf:*.pdf\n"));
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0));
+    assert_eq!(types.of(OsStr::new("a.pdf")), Some("application/pdf"));
+}
+
+/// Run by `the_environment_names_the_data_folders`, in a process of its
+/// own with the environment set, since a test can't safely change its own.
+#[test]
+#[ignore = "run by the_environment_names_the_data_folders"]
+fn from_env_child() {
+    let types = MimeTypes::from_env();
+    assert_eq!(types.of(OsStr::new("a.pdf")), Some("application/pdf"));
+}
+
+#[test]
+fn the_environment_names_the_data_folders() {
+    let dir = Dir::new("env");
+    dir.write(GLOBS_FILE, GLOBS);
+    let status = std::process::Command::new(env::current_exe().unwrap())
+        .args(["--exact", "mime::tests::from_env_child", "--ignored"])
+        .env(DATA_HOME_VAR, &dir.0)
+        .env(DATA_DIRS_VAR, dir.0.join("none"))
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
