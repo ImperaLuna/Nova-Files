@@ -428,6 +428,14 @@ fn place(
     let mut looked_again = 0;
     loop {
         running.shared.control.checkpoint()?;
+        // Made before a crash cut the job short.
+        if running.made_before.contains(&target) {
+            let made = Made {
+                left: size(item),
+                carried: false,
+            };
+            return Ok((Placed::Made(made), target));
+        }
         let mut making = Making {
             target: &target,
             ..*planned

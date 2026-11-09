@@ -26,6 +26,7 @@ mod failure;
 mod job;
 mod journal;
 mod keep_both;
+mod left;
 mod make;
 mod name;
 mod one_step;
@@ -39,6 +40,7 @@ mod test_folder;
 mod transfer;
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -55,6 +57,7 @@ pub use audience::Audience;
 use crate::jobs::Client;
 use delete::delete;
 use job::Job;
+use left::Left;
 use make::How;
 use progress::Reporter;
 use running::Running;
@@ -77,18 +80,31 @@ pub struct Jobs {
     running: Registry,
     /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
+    /// Jobs a crash cut short, waiting to be resumed or forgotten.
+    interrupted: Mutex<HashMap<JobId, Left>>,
     /// Wakes the core's loop when a job ends.
     wake: Connector,
 }
 
 impl Jobs {
-    /// Jobs whose journals go under the state folder `state`.
+    /// Jobs whose journals go under the state folder `state`. Jobs a
+    /// crash cut short are found there, cleaned up, and wait as
+    /// interrupted.
     pub fn new(state: Option<&Path>, wake: Connector) -> Self {
+        let journals = state.map(|state| state.join(journal::FOLDER));
+        let interrupted = journals
+            .as_deref()
+            .map(left::recover)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|left| (left.job, left))
+            .collect();
         Self {
             next: AtomicU64::new(first_id()),
             audience: Audience::default(),
             running: Registry::default(),
-            journals: state.map(|state| state.join(journal::FOLDER)),
+            journals,
+            interrupted: Mutex::new(interrupted),
             wake,
         }
     }
@@ -111,6 +127,13 @@ impl Jobs {
                 progress: shared.progress(),
                 paused: shared.control.paused(),
                 conflict: shared.control.open(),
+            };
+            events.deliver(event).ok();
+        }
+        for left in lock(&self.interrupted).values() {
+            let event = Event::JobInterrupted {
+                job: left.job,
+                operation: left.operation.clone(),
             };
             events.deliver(event).ok();
         }
@@ -137,6 +160,13 @@ impl Jobs {
         // Before the thread starts, so the client hears of the job before
         // it can end.
         let told = client.deliver(Event::JobStarted { tag, job });
+        self.spawn(job, operation, None);
+        told
+    }
+
+    /// Runs `operation` as job `job` on a thread of its own, resuming it
+    /// after a crash when it `left` something.
+    fn spawn(&self, job: JobId, operation: Operation, left: Option<Left>) {
         let shared = Arc::new(Job::new(operation.clone()));
         lock(&self.running).insert(job, Arc::clone(&shared));
         let failed_path = first_path(&operation);
@@ -147,6 +177,9 @@ impl Jobs {
             Arc::clone(&shared),
         );
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
+        if let Some(left) = left {
+            running.resuming(left.made);
+        }
         let (registry, audience, wake) = (
             Arc::clone(&self.running),
             self.audience.clone(),
@@ -168,7 +201,6 @@ impl Jobs {
             };
             finish(&self.running, &self.audience, job, (outcome, Vec::new()));
         }
-        told
     }
 
     /// Holds job `job` before its next change to the disk.
@@ -182,7 +214,7 @@ impl Jobs {
         }
     }
 
-    /// Lets held job `job` go on.
+    /// Lets held job `job` go on, or starts interrupted job `job` again.
     pub fn resume(&self, job: JobId) {
         let running = lock(&self.running);
         if running
@@ -190,7 +222,32 @@ impl Jobs {
             .is_some_and(|shared| shared.control.resume())
         {
             self.audience.tell(&Event::JobResumed(job));
+            return;
         }
+        let Some(left) = lock(&self.interrupted).remove(&job) else {
+            return;
+        };
+        self.audience.tell(&Event::JobResumed(job));
+        drop(running);
+        let operation = still_to_do(&left.operation);
+        self.spawn(job, operation, Some(left));
+    }
+
+    /// Drops interrupted job `job`, and its journal.
+    pub fn forget(&self, job: JobId) {
+        let running = lock(&self.running);
+        let Some(left) = lock(&self.interrupted).remove(&job) else {
+            return;
+        };
+        if let Err(error) = fs::remove_file(&left.journal) {
+            log::warn!("can't remove {}: {error}", left.journal.display());
+        }
+        self.audience.tell(&Event::JobFinished {
+            job,
+            outcome: Outcome::Cancelled,
+            changed: Vec::new(),
+        });
+        drop(running);
     }
 
     /// Answers `conflict`, which job `job` holds at, with `answer`, for
@@ -236,6 +293,29 @@ fn run(running: &mut Running, operation: &Operation) -> Ended {
     }
 }
 
+/// What is left of `operation` after a crash: a move or delete leaves
+/// out the sources already gone (moved whole, or deleted); a copy does
+/// all of it again, taking what it made as done.
+fn still_to_do(operation: &Operation) -> Operation {
+    let there = |paths: &[PathBuf]| -> Vec<PathBuf> {
+        paths
+            .iter()
+            .filter(|path| path.symlink_metadata().is_ok())
+            .cloned()
+            .collect()
+    };
+    match operation {
+        Operation::Move { sources, into } => Operation::Move {
+            sources: there(sources),
+            into: into.clone(),
+        },
+        Operation::Delete { paths } => Operation::Delete {
+            paths: there(paths),
+        },
+        other => other.clone(),
+    }
+}
+
 /// The path a job that couldn't start failed at.
 fn first_path(operation: &Operation) -> PathBuf {
     match operation {
@@ -263,8 +343,8 @@ fn finish(registry: &Registry, audience: &Audience, job: JobId, (outcome, change
     });
 }
 
-fn lock(registry: &Registry) -> MutexGuard<'_, HashMap<JobId, Arc<Job>>> {
-    registry.lock().unwrap_or_else(PoisonError::into_inner)
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 #[cfg(test)]

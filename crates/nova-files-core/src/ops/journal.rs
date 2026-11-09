@@ -154,6 +154,21 @@ impl Journal {
         })
     }
 
+    /// Opens job `job`'s journal in `folder` again, left by a crash, to
+    /// add to it as the job resumes.
+    ///
+    /// # Errors
+    /// When it isn't there or can't be opened.
+    pub fn reopen(folder: &Path, job: JobId) -> io::Result<Self> {
+        let path = folder.join(job.0.to_string());
+        let file = OpenOptions::new().append(true).open(&path)?;
+        Ok(Self {
+            file,
+            path,
+            synced: Instant::now(),
+        })
+    }
+
     /// Adds `record`, syncing the journal when it was last synced more
     /// than [`SYNC_EVERY`] ago, or at once for a backup: the user's file
     /// is about to leave its name, and a crash must not lose where to.
@@ -181,5 +196,6 @@ impl Journal {
     }
 }
 
+pub mod read;
 #[cfg(test)]
 mod tests;

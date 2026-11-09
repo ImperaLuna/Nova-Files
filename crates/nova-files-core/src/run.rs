@@ -158,6 +158,10 @@ fn answer(
             setup.jobs.resume(job);
             Ok(())
         }
+        Command::ForgetJob(job) => {
+            setup.jobs.forget(job);
+            Ok(())
+        }
         Command::CancelJob(job) => {
             setup.jobs.cancel(job);
             Ok(())

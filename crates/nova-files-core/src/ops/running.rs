@@ -2,7 +2,7 @@
 //! progress, its journal once it has one, and the answers a client gave
 //! for all conflicts of a kind.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -25,6 +25,11 @@ pub struct Running {
     answers: HashMap<ConflictKind, Answer>,
     /// How many conflicts it asked about.
     asked: u64,
+    /// What the job made before a crash cut it short, taken as done now
+    /// that it resumes.
+    pub made_before: HashSet<PathBuf>,
+    /// Whether the job resumes, adding to the journal it already has.
+    resumes: bool,
 }
 
 impl Running {
@@ -42,6 +47,21 @@ impl Running {
             journal: None,
             answers: HashMap::new(),
             asked: 0,
+            made_before: HashSet::new(),
+            resumes: false,
+        }
+    }
+
+    /// The job resumes after a crash, having made `made` before it: its
+    /// journal, which already says what the job does, is added to.
+    pub fn resuming(&mut self, made: HashSet<PathBuf>) {
+        self.made_before = made;
+        self.resumes = true;
+        if let Some(folder) = self.journals.take() {
+            match Journal::reopen(&folder, self.job) {
+                Ok(journal) => self.journal = Some(journal),
+                Err(error) => log::warn!("job {} resumes without its journal: {error}", self.job.0),
+            }
         }
     }
 
@@ -80,6 +100,13 @@ impl Running {
     /// are hidden and a real name never holds half a file, so only a
     /// resume after a crash is lost. That is logged once.
     pub fn record(&mut self, record: Record<'_>) {
+        let says_what = matches!(
+            record,
+            Record::Operation(_) | Record::Into(_) | Record::Source(_)
+        );
+        if self.resumes && says_what {
+            return;
+        }
         if self.journal.is_none() {
             let Some(folder) = self.journals.take() else {
                 return;
