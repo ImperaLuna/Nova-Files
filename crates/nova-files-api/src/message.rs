@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
+use crate::job::{JobId, JobTag, Operation, Outcome};
 use crate::search::{Hit, SearchFailed, SearchId};
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -64,6 +65,10 @@ pub enum Command {
     /// core never reads them; the UI owns what they say. Bytes over the
     /// core's cap (64 KiB) are dropped.
     SaveWindowState(Vec<u8>),
+    /// Start `operation` as a job. The answer is [`Event::JobStarted`]
+    /// with the same `tag`, to this client; every client then hears
+    /// [`Event::JobFinished`] once it ends.
+    StartJob { tag: JobTag, operation: Operation },
 }
 
 /// Something the core tells one client.
@@ -114,6 +119,17 @@ pub enum Event {
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),
+    /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
+    /// asked hears it, and before anything else about the job.
+    JobStarted { tag: JobTag, job: JobId },
+    /// Job `job` has ended. `changed` names the folders whose entries it
+    /// changed, so a window showing one reads it again. Every client hears
+    /// it.
+    JobFinished {
+        job: JobId,
+        outcome: Outcome,
+        changed: Vec<PathBuf>,
+    },
 }
 
 /// Names one connected client, so the core can answer the right one.
