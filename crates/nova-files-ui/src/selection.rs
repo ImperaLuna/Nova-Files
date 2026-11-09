@@ -176,6 +176,34 @@ impl Selection {
         Self::clicked(selection, listing, id, click, picks)
     }
 
+    /// A box dragged from the row `from` to the row `to` of `listing`: the rows
+    /// it touches that `picks` allows, added to `before` with `add`.
+    #[must_use]
+    pub fn banded(
+        before: Option<&Self>,
+        listing: ListingId,
+        (from, to): (EntryId, EntryId),
+        add: bool,
+        picks: impl Fn(EntryId) -> bool,
+    ) -> Self {
+        let (low, high) = if from <= to { (from, to) } else { (to, from) };
+        let mut ids: Vec<EntryId> = (low.0..=high.0)
+            .map(EntryId)
+            .filter(|&id| picks(id))
+            .collect();
+        if let Some(before) = before.filter(|before| add && before.listing == listing) {
+            ids.extend_from_slice(&before.ids);
+            ids.sort_unstable();
+            ids.dedup();
+        }
+        Self {
+            listing,
+            ids,
+            anchor: from,
+            cursor: to,
+        }
+    }
+
     /// Ctrl+Space: adds the entry at the cursor or takes it out.
     pub fn toggle_cursor(&mut self) {
         self.toggle(self.cursor);

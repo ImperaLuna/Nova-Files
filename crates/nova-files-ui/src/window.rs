@@ -44,6 +44,7 @@ use nova_files_api::{
     Listing, ListingId, Place,
 };
 
+use crate::band::Band;
 use crate::columns::{self, ColumnText};
 use crate::history::History;
 use crate::jump::TypeJump;
@@ -102,6 +103,10 @@ pub struct MainWindow {
     pub(crate) selection: Option<Selection>,
     /// The letters typed to jump to a name (see `jump`).
     pub(crate) jump: TypeJump,
+    /// A press on the entries list being dragged (see `band`).
+    pub(crate) band: Option<Band>,
+    /// Whether the press under way began on an entry's name.
+    pub(crate) pressed_name: bool,
     /// The listing asked for most recently; only its answer counts.
     pub(crate) asked: Option<ListingId>,
     /// Whether the core sent a listing since the one on screen, which the
@@ -193,6 +198,8 @@ impl MainWindow {
             rows_drawn: 0..0,
             selection: None,
             jump: TypeJump::default(),
+            band: None,
+            pressed_name: false,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
             core_moved: false,

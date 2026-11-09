@@ -12,11 +12,13 @@
 //!
 //! The window sets the key context its actions are bound in and handles
 //! each action it takes; buttons and the mouse's side buttons send actions
-//! rather than doing the work (see `commands`). Every element a test
-//! clicks carries a debug selector: `back`, `forward`, `up`, `place-<n>`
-//! and `entry-<n>`, counted from 0. Each line's Modified cell carries one
-//! too, `modified-header` and `modified-<n>`, so a test can check the
-//! columns line up.
+//! rather than doing the work (see `commands`). A press on the entries
+//! that isn't on a name can drag a box to select (see `band`). Every
+//! element a test clicks carries a debug selector: `back`, `forward`, `up`,
+//! `place-<n>`, `entry-<n>` and its name `name-<n>`, counted from 0, and
+//! the box `band`. Each
+//! line's Modified cell carries one too, `modified-header` and
+//! `modified-<n>`, so a test can check the columns line up.
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -26,9 +28,10 @@ use std::sync::Arc;
 
 use gpui::{
     Action, AnyElement, ClickEvent, Context, Div, Focusable as _, Hsla, InteractiveElement as _,
-    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, NavigationDirection,
-    ParentElement as _, Render, RenderImage, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window, div, img, prelude::FluentBuilder as _, rgb, svg, uniform_list,
+    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    NavigationDirection, ParentElement as _, Render, RenderImage, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, img, prelude::FluentBuilder as _,
+    rgb, svg, uniform_list,
 };
 use nova_files_api::{EntryKind, Place, PlaceKind};
 
@@ -68,6 +71,13 @@ impl Render for MainWindow {
                     cx.stop_propagation();
                 }
             }))
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                this.band_moved(event, cx);
+            }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
+            )
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),
                 cx.listener(|this, _: &MouseDownEvent, _, _| this.go_back()),
@@ -97,7 +107,7 @@ impl Render for MainWindow {
                             .min_w_0()
                             .p(size::PAD)
                             .child(column_header())
-                            .child(self.entries(cx)),
+                            .child(self.entries_area(cx)),
                     ),
             )
             .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
@@ -235,6 +245,37 @@ impl MainWindow {
             .children(rows)
     }
 
+    /// The entries, where a press that isn't on a name can drag a box
+    /// (see `band`).
+    fn entries_area(&self, cx: &Context<Self>) -> impl IntoElement {
+        div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .overflow_hidden()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseDownEvent, _, _| {
+                    let on_name = std::mem::take(&mut this.pressed_name);
+                    this.band_pressed(event, on_name);
+                }),
+            )
+            .child(self.entries(cx))
+            .children(self.band_box().map(|band| {
+                div()
+                    .debug_selector(|| "band".to_owned())
+                    .absolute()
+                    .left(band.origin.x)
+                    .top(band.origin.y)
+                    .w(band.size.width)
+                    .h(band.size.height)
+                    .rounded(radius::BAND)
+                    .bg(Hsla::from(rgb(color::ROW_SELECTED)).opacity(opacity::BAND))
+                    .border(size::DIVIDER)
+                    .border_color(rgb(color::ROW_CURSOR))
+            }))
+    }
+
     fn entries(&self, cx: &Context<Self>) -> impl IntoElement {
         let count = self
             .listing
@@ -265,7 +306,7 @@ impl MainWindow {
                                 .items_center()
                                 .gap(size::GAP)
                                 .child(entry_icon(entry.kind, this.thumbnail(index)))
-                                .child(div().min_w_0().truncate().child(name)),
+                                .child(entry_name(name, index, cx)),
                             text.modified,
                             text.type_name,
                             text.size,
@@ -278,7 +319,7 @@ impl MainWindow {
                             .when(this.pick_dims(index), |row| row.opacity(opacity::DIMMED))
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
-                                this.entry_clicked((listing_id, id), event, window, cx);
+                                this.row_clicked((listing_id, id), event, window, cx);
                             }))
                             .into_any_element()
                     })
@@ -286,8 +327,22 @@ impl MainWindow {
             }),
         )
         .track_scroll(&self.scroll)
-        .flex_1()
+        .size_full()
     }
+}
+
+/// An entry's name. A press on it is left for dragging files, so it
+/// marks itself for `band`.
+fn entry_name(name: SharedString, index: usize, cx: &Context<MainWindow>) -> impl IntoElement {
+    div()
+        .debug_selector(move || format!("name-{index}"))
+        .min_w_0()
+        .truncate()
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _: &MouseDownEvent, _, _| this.pressed_name = true),
+        )
+        .child(name)
 }
 
 /// The labels above the entries, lined up with [`cells`].

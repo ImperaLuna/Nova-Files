@@ -105,6 +105,8 @@ pub mod size {
 pub mod opacity {
     /// A file the picker's type filter leaves out: still there, set back.
     pub const DIMMED: f32 = 0.4;
+    /// The fill of the box dragged to select.
+    pub const BAND: f32 = 0.6;
 }
 
 /// Corner radii.
@@ -117,4 +119,6 @@ pub mod radius {
     pub const THUMBNAIL: Pixels = px(4.0);
     /// A toolbar button.
     pub const BUTTON: Pixels = px(10.0);
+    /// The box dragged to select.
+    pub const BAND: Pixels = px(4.0);
 }
