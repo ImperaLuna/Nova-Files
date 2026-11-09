@@ -1,6 +1,6 @@
 //! Selecting against a scripted core: a fresh read of the same folder
-//! keeps the names selected, Enter opens the files selected, and a page
-//! move steps by the rows on screen.
+//! keeps the names selected, Enter opens the files selected, a page move
+//! steps by the rows on screen, and the folder left is scrolled to.
 
 use super::*;
 
@@ -100,4 +100,26 @@ fn page_keys_step_by_the_rows_on_screen(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("shift-pageup");
     assert_eq!(selected(&view, cx).len(), on_screen + 1);
     view.read_with(cx, |view, _| assert_eq!(view.cursor(), Some(0)));
+}
+
+#[gpui::test]
+fn the_folder_left_is_scrolled_into_view(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = keyed(cx, &["a"]);
+    let names: Vec<String> = (0..MANY)
+        .map(|index| {
+            if index == MANY - 1 {
+                "shown".to_owned()
+            } else {
+                format!("{index:03}")
+            }
+        })
+        .collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+
+    cx.simulate_keystrokes("alt-up");
+    answer_names(&mut core, &names);
+    cx.run_until_parked();
+
+    assert_eq!(selected(&view, cx), ["shown"]);
+    assert!(offset(&view, cx).y < px(0.0));
 }
