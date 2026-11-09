@@ -445,3 +445,32 @@ fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppC
     cx.run_until_parked();
     view.read_with(cx, |view, _| assert!(view.thumbnail(2).is_some()));
 }
+
+#[gpui::test]
+fn hiding_and_showing_before_a_frame_still_asks_for_thumbnails_anew(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+    core.send(thumbnail(id, 1));
+    cx.run_until_parked();
+    core.thumbnail_requests();
+    let hidden = Settings::default().with(SettingChange::Thumbnails(Thumbnails::Hidden));
+    core.send(Event::Settings(Arc::new(hidden)));
+    core.send(Event::Settings(Arc::default()));
+    cx.run_until_parked();
+    // The core is told to forget what it sent, then asked again.
+    let requests = core.thumbnail_requests();
+    let forgot = requests.iter().position(|&request| request == (0, 0));
+    let asked = requests.iter().rposition(|&(_, count)| count > 0);
+    assert!(forgot < asked && forgot.is_some(), "{requests:?}");
+    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+}
+
+#[gpui::test]
+fn a_thumbnail_shrunk_after_hiding_is_not_kept(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+    let hidden = Settings::default().with(SettingChange::Thumbnails(Thumbnails::Hidden));
+    // On its way when thumbnails are hidden.
+    core.send(thumbnail(id, 1));
+    core.send(Event::Settings(Arc::new(hidden)));
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+}

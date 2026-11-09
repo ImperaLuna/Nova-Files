@@ -422,8 +422,9 @@ impl MainWindow {
             if self.settings.thumbnails == Thumbnails::Hidden {
                 release(self.thumbnails.take_all(), None, cx);
             }
-            // The next frame tells the core about the rows again.
-            self.rows_wanted = 0..0;
+            // Hidden and shown again before a frame, the core would still
+            // count the dropped thumbnails as sent.
+            self.forget_rows();
         }
         cx.emit(WindowEvent::Settings);
         cx.notify();
@@ -456,6 +457,13 @@ impl MainWindow {
             return;
         }
         release(self.thumbnails.take_all(), Some(window), cx);
+        self.forget_rows();
+    }
+
+    /// Tells the core no rows are wanted, so it counts every thumbnail as
+    /// not sent and makes them again when the next frame asks for its
+    /// rows.
+    fn forget_rows(&mut self) {
         if let Some(listing) = &self.listing
             && !self.rows_wanted.is_empty()
             && let Some(connection) = &self.connection
@@ -501,6 +509,8 @@ impl MainWindow {
         if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
             && self.rows_wanted.contains(&made.index)
             && made.side == self.thumbnail_side()
+            // Hidden while it was being shrunk.
+            && self.settings.thumbnails == Thumbnails::Shown
         {
             let replaced = self.thumbnails.insert(made.index, Arc::new(made.image));
             release(replaced, None, cx);
