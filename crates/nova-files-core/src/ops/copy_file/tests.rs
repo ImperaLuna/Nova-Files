@@ -393,9 +393,10 @@ fn a_copy_between_two_kinds_of_filesystem_reads_and_writes() {
     assert_eq!(fs::read_to_string(&to).unwrap(), "across");
 }
 
-#[test]
-fn a_file_that_grew_but_kept_its_time_isnt_kept() {
-    let folder = TestFolder::new("copy-grew");
+/// Copies a file that `change` writes to, with its modified time set
+/// back, once the copy has begun, and checks the copy isn't kept.
+fn changed_while_copied(test: &str, change: impl Fn(&Path)) {
+    let folder = TestFolder::new(test);
     let from = folder.file("a", "before");
     let modified = fs::metadata(&from).unwrap().modified().unwrap();
     let to = folder.path().join("b");
@@ -404,15 +405,27 @@ fn a_file_that_grew_but_kept_its_time_isnt_kept() {
 
     let result = copy_file(&from, &to, &part, &Control::default(), &mut |_| {
         if !written {
-            let mut file = File::options().append(true).open(&from).unwrap();
-            file.write_all(b" and after").unwrap();
-            file.set_modified(modified).unwrap();
+            change(&from);
+            File::options()
+                .write(true)
+                .open(&from)
+                .unwrap()
+                .set_modified(modified)
+                .unwrap();
             written = true;
         }
     });
 
     assert_eq!(result, Err(Stop::because(&from, Failure::SourceChanged)));
     assert!(!to.exists());
+}
+
+#[test]
+fn a_file_that_grew_but_kept_its_time_isnt_kept() {
+    changed_while_copied("copy-grew", |from| {
+        let mut file = File::options().append(true).open(from).unwrap();
+        file.write_all(b" and after").unwrap();
+    });
 }
 
 #[test]
@@ -437,25 +450,11 @@ fn a_kernel_copy_stops_at_the_end_of_its_range() {
 
 #[test]
 fn a_file_rewritten_in_place_with_its_time_set_back_isnt_kept() {
-    let folder = TestFolder::new("copy-rewritten");
-    let from = folder.file("a", "before");
-    let modified = fs::metadata(&from).unwrap().modified().unwrap();
-    let to = folder.path().join("b");
-    let part = folder.path().join(".part");
-    let mut written = false;
-
-    let result = copy_file(&from, &to, &part, &Control::default(), &mut |_| {
-        if !written {
-            // Same length, same modified time: only the change time tells.
-            let file = File::options().write(true).open(&from).unwrap();
-            file.write_all_at(b"AFTER!", 0).unwrap();
-            file.set_modified(modified).unwrap();
-            written = true;
-        }
+    // Same length, same modified time: only the change time tells.
+    changed_while_copied("copy-rewritten", |from| {
+        let file = File::options().write(true).open(from).unwrap();
+        file.write_all_at(b"AFTER!", 0).unwrap();
     });
-
-    assert_eq!(result, Err(Stop::because(&from, Failure::SourceChanged)));
-    assert!(!to.exists());
 }
 
 #[test]
