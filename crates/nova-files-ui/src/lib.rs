@@ -136,8 +136,8 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
         app_id: Some(nova_files_api::APP_ID.to_owned()),
         ..WindowOptions::default()
     };
-    let window_state = pick.as_ref().map(|_| window_state::fetch(connector));
-    if let (Some(request), Some(state)) = (&pick, &window_state) {
+    if let Some(request) = &pick {
+        let state = window_state::fetch(connector);
         let display = cx.primary_display().map(|display| display.bounds().size);
         let picker_bounds = Bounds::centered(None, state.picker_size(display), cx);
         options.window_bounds = Some(WindowBounds::Windowed(picker_bounds));
@@ -152,7 +152,6 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
             let mut view = MainWindow::new(&connector, &folder, cx);
             if let Some(request) = pick {
                 view.set_pick(request, window, cx);
-                view.set_pick_window_state(window_state.unwrap_or_default());
             }
             view
         })

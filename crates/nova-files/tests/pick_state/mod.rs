@@ -1,5 +1,5 @@
-//! A picker's size between runs: however a picker closes, its size joins
-//! the windows' state, which the core writes to the state folder and hands
+//! A picker's size between runs: however a picker closes, its size goes
+//! into the windows' state, which the core writes to the state folder and hands
 //! back to the next picker.
 
 use std::time::{Duration, Instant};
@@ -33,16 +33,17 @@ fn window_size(cx: &mut VisualTestContext) -> Size<Pixels> {
 }
 
 #[gpui::test]
-async fn cancelling_saves_the_size_over_the_earlier_one(cx: &mut TestAppContext) {
+async fn cancelling_saves_the_size(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
-    let (view, cx, _answers) = picker(cx, &tree, tree.path(), FILES).await;
-    let earlier = WindowState::parse(b"nova-files window-state 1\npicker 1200x800\n");
-    view.update(cx, |view, _| view.set_pick_window_state(earlier.clone()));
+    let (_view, cx, _answers) = picker(cx, &tree, tree.path(), FILES).await;
     cx.simulate_resize(size(px(700.0), px(500.0)));
     cx.run_until_parked();
     cx.simulate_keystrokes("escape");
-    wait_for_state(&tree, &earlier.with_picker(size(px(700.0), px(500.0))));
+    wait_for_state(
+        &tree,
+        &WindowState::default().with_picker(size(px(700.0), px(500.0))),
+    );
 }
 
 #[gpui::test]

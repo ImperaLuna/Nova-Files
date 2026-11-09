@@ -50,7 +50,6 @@ pub use self::opening::foreign_parent;
 use self::select::{Click, Selection};
 use crate::text::{TextField, TextFieldEvent};
 use crate::window::{MainWindow, tidy};
-use crate::window_state::WindowState;
 
 /// The clicks in a double-click.
 const DOUBLE_CLICK: usize = 2;
@@ -157,9 +156,6 @@ pub struct Picker {
     filter: Option<usize>,
     /// Whether the filter menu is open.
     filter_menu: bool,
-    /// The windows' state as the picker opened, which its size joins
-    /// when it closes.
-    window_state: WindowState,
     /// The window's size, kept as it changes.
     size: Size<Pixels>,
     _name_events: Subscription,
@@ -280,7 +276,6 @@ impl MainWindow {
             window: window.window_handle(),
             filter: first_filter,
             filter_menu: false,
-            window_state: WindowState::default(),
             size,
             _name_events: name_events,
             _bounds: bounds,

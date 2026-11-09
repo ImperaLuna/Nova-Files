@@ -34,19 +34,11 @@ pub(super) fn watch_size(
 }
 
 impl MainWindow {
-    /// The windows' state as a picker opens, which its size joins when it
-    /// closes.
-    pub const fn set_pick_window_state(&mut self, state: WindowState) {
-        if let Some(pick) = &mut self.pick {
-            pick.window_state = state;
-        }
-    }
-
     /// Ends pick mode and saves the picker's size for the next one. The
     /// caller answers the request, or drops it to answer cancelled.
     pub(super) fn take_pick(&mut self) -> Option<Picker> {
         let pick = self.pick.take()?;
-        let state = pick.window_state.clone().with_picker(pick.size);
+        let state = WindowState::default().with_picker(pick.size);
         if let Some(connection) = &self.connection {
             // A core that is gone keeps nothing anyway.
             connection
