@@ -176,6 +176,34 @@ impl Selection {
         Self::clicked(selection, listing, id, click, picks)
     }
 
+    /// A box dragged from the row `from` to the row `to` of `listing`: the rows
+    /// it touches that `picks` allows, added to `before` with `add`.
+    #[must_use]
+    pub fn banded(
+        before: Option<&Self>,
+        listing: ListingId,
+        (from, to): (EntryId, EntryId),
+        add: bool,
+        picks: impl Fn(EntryId) -> bool,
+    ) -> Self {
+        let (low, high) = if from <= to { (from, to) } else { (to, from) };
+        let mut ids: Vec<EntryId> = (low.0..=high.0)
+            .map(EntryId)
+            .filter(|&id| picks(id))
+            .collect();
+        if let Some(before) = before.filter(|before| add && before.listing == listing) {
+            ids.extend_from_slice(&before.ids);
+            ids.sort_unstable();
+            ids.dedup();
+        }
+        Self {
+            listing,
+            ids,
+            anchor: from,
+            cursor: to,
+        }
+    }
+
     /// Ctrl+Space: adds the entry at the cursor or takes it out.
     pub fn toggle_cursor(&mut self) {
         self.toggle(self.cursor);
@@ -226,13 +254,20 @@ impl Selection {
         })
     }
 
-    /// At most one entry: the cursor's, if it was selected, for a view
-    /// that takes only one.
+    /// At most one entry, for a view that takes only one: the cursor's if
+    /// it is selected, otherwise the selected one nearest it (a box can end
+    /// on a row the view doesn't pick).
     #[must_use]
     pub fn at_most_one(mut self) -> Self {
-        if self.ids.len() > 1 {
-            self.ids = vec![self.cursor];
-            self.anchor = self.cursor;
+        let cursor = self.cursor;
+        let nearest = self
+            .ids
+            .iter()
+            .copied()
+            .min_by_key(|id| id.0.abs_diff(cursor.0));
+        if let Some(keep) = nearest {
+            self.ids = vec![keep];
+            self.anchor = keep;
         }
         self
     }
@@ -427,6 +462,16 @@ mod tests {
         let carried = range.carried(&before, NEXT, &after).unwrap();
         let extended = Selection::moved(Some(carried), NEXT, EntryId(3), true, |_| true);
         assert_eq!(ids(&extended), [1, 2, 3]);
+    }
+
+    #[test]
+    fn at_most_one_keeps_the_nearest_selected_when_the_cursor_is_not() {
+        let not_picked = |id: EntryId| id != EntryId(3);
+        let band = Selection::banded(None, SHOWN, (EntryId(0), EntryId(3)), false, not_picked);
+        assert_eq!(ids(&band), [0, 1, 2]);
+        assert_eq!(ids(&band.at_most_one()), [2]);
+        let up = Selection::banded(None, SHOWN, (EntryId(3), EntryId(0)), false, not_picked);
+        assert_eq!(ids(&up.at_most_one()), [0]);
     }
 
     #[test]

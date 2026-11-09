@@ -16,6 +16,7 @@
 )]
 
 mod common;
+mod window_band;
 mod window_jump;
 mod window_keys;
 mod window_select;
