@@ -26,6 +26,8 @@ const STANDARD: [(PlaceKind, &str, &str); 3] = [
 const USER_DIRS_FILE: &str = "user-dirs.dirs";
 const CONFIG_HOME_VAR: &str = "XDG_CONFIG_HOME";
 const CONFIG_IN_HOME: &str = ".config";
+const STATE_HOME_VAR: &str = "XDG_STATE_HOME";
+const STATE_IN_HOME: &str = ".local/state";
 const CACHE_HOME_VAR: &str = "XDG_CACHE_HOME";
 const CACHE_IN_HOME: &str = ".cache";
 /// `user-dirs.dirs` is a few lines; anything bigger isn't one.
@@ -33,21 +35,30 @@ const USER_DIRS_MAX_BYTES: u64 = 64 * 1024;
 const HOME_PREFIX: &str = "$HOME/";
 const ESCAPE: char = '\\';
 
-/// The user's home folder and config folder, where the places come from.
+/// The user's home folder, its config folder, where the places come from,
+/// and its state folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Home {
     pub folder: PathBuf,
     /// Holds `user-dirs.dirs`.
     pub config: PathBuf,
+    /// Holds the UI's window state.
+    pub state: PathBuf,
 }
 
 impl Home {
-    /// The home and config folders the environment names (`HOME`,
-    /// `XDG_CONFIG_HOME`), or `None` without a home folder.
+    /// The home, config and state folders the environment names (`HOME`,
+    /// `XDG_CONFIG_HOME`, `XDG_STATE_HOME`), or `None` without a home
+    /// folder.
     pub fn from_env() -> Option<Self> {
         let folder = env::home_dir()?;
-        let config = config_home(&folder, env::var_os(CONFIG_HOME_VAR));
-        Some(Self { folder, config })
+        let config = xdg_home(&folder, env::var_os(CONFIG_HOME_VAR), CONFIG_IN_HOME);
+        let state = xdg_home(&folder, env::var_os(STATE_HOME_VAR), STATE_IN_HOME);
+        Some(Self {
+            folder,
+            config,
+            state,
+        })
     }
 }
 
@@ -95,13 +106,13 @@ fn places_in(home: &Path, user_dirs: &str) -> Vec<Place> {
         .collect()
 }
 
-/// The config folder: `XDG_CONFIG_HOME` (`from_env`) when it is absolute,
-/// which the spec requires, else `.config` in Home.
-fn config_home(home: &Path, from_env: Option<OsString>) -> PathBuf {
+/// An XDG folder: its variable's value (`from_env`) when it is absolute,
+/// which the spec requires, else `in_home` in Home.
+fn xdg_home(home: &Path, from_env: Option<OsString>, in_home: &str) -> PathBuf {
     from_env
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
-        .unwrap_or_else(|| home.join(CONFIG_IN_HOME))
+        .unwrap_or_else(|| home.join(in_home))
 }
 
 /// The file's text, or empty when it is missing, unreadable or too big.
@@ -240,19 +251,19 @@ mod tests {
     }
 
     #[test]
-    fn config_folder_comes_from_an_absolute_env_value_only() {
+    fn xdg_folders_come_from_an_absolute_env_value_only() {
         let home = Path::new(HOME);
         assert_eq!(
-            config_home(home, Some(OsString::from("/etc/xdg-me"))),
+            xdg_home(home, Some(OsString::from("/etc/xdg-me")), CONFIG_IN_HOME),
             PathBuf::from("/etc/xdg-me")
         );
         assert_eq!(
-            config_home(home, Some(OsString::from("relative"))),
+            xdg_home(home, Some(OsString::from("relative")), CONFIG_IN_HOME),
             PathBuf::from("/home/someone/.config")
         );
         assert_eq!(
-            config_home(home, None),
-            PathBuf::from("/home/someone/.config")
+            xdg_home(home, None, STATE_IN_HOME),
+            PathBuf::from("/home/someone/.local/state")
         );
     }
 

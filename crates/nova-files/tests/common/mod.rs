@@ -26,6 +26,10 @@ impl TempFolder {
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
         let path = std::env::temp_dir().join(name);
+        // A core's state writer can finish after an earlier test's tree is
+        // gone and make its state folder again; a later test given the same
+        // process id would find it.
+        fs::remove_dir_all(&path).ok();
         fs::create_dir_all(path.join("Projects").join("nova")).unwrap();
         fs::write(path.join("notes.txt"), "").unwrap();
         Self(path)

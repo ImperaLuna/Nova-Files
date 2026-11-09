@@ -21,6 +21,7 @@ mod search;
 mod thumbs;
 mod trace;
 mod vulkan_drivers;
+mod window_state;
 
 use std::io;
 use std::sync::Arc;
@@ -90,8 +91,10 @@ pub fn spawn_with(
 ) -> io::Result<RunningCore> {
     let (connector, receiver) = nova_files_api::channel();
     let searcher = Searcher::new(index, home.as_ref().map(|home| home.folder.clone()));
+    let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
     let setup = run::Setup {
         home,
+        window_state,
         thumbnails,
         searcher,
         mime_types: Arc::default(),

@@ -20,6 +20,7 @@ mod theme;
 mod thumbnail;
 mod view;
 mod window;
+mod window_state;
 
 use std::cell::Cell;
 use std::io::{self, Write as _};
@@ -34,6 +35,7 @@ pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
+pub use window_state::{WindowState, fetch as fetch_window_state};
 
 /// Why [`run`] returned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -117,8 +119,8 @@ struct RequestLoop {
 impl Global for RequestLoop {}
 
 /// Opens a main window on its folder (or the home folder), or a picker
-/// window titled as the asking app wants, over the app's window when it
-/// names one, else centred on the main display.
+/// window titled as the asking app wants and dialog-sized, over the app's
+/// window when it names one, else centred on the main display.
 /// When a main window fails with no window open, `recover_gpu` gets the
 /// folder. A picker that fails to open answers cancelled: restarting
 /// would lose the asking app's call.
@@ -135,6 +137,10 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
         ..WindowOptions::default()
     };
     if let Some(request) = &pick {
+        let state = window_state::fetch(connector);
+        let display = cx.primary_display().map(|display| display.bounds().size);
+        let picker_bounds = Bounds::centered(None, state.picker_size(display), cx);
+        options.window_bounds = Some(WindowBounds::Windowed(picker_bounds));
         options.titlebar = Some(pick::titlebar(request));
         options.foreign_parent = request.parent.as_ref().map(pick::foreign_parent);
     }

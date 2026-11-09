@@ -39,8 +39,8 @@ use std::io::{self, Write as _};
 use std::path::{Component, Path, PathBuf};
 
 use gpui::{
-    AnyWindowHandle, App, AppContext as _, ClickEvent, Context, Entity, Focusable as _,
-    Subscription, TitlebarOptions, Window,
+    AnyWindowHandle, App, AppContext as _, ClickEvent, Context, Entity, Focusable as _, Pixels,
+    Size, Subscription, TitlebarOptions, Window,
 };
 use nova_files_api::{
     Entry, EntryId, EntryKind, ListingId, PickAnswer, PickId, PickKind, PickRequest,
@@ -156,7 +156,10 @@ pub struct Picker {
     filter: Option<usize>,
     /// Whether the filter menu is open.
     filter_menu: bool,
+    /// The window's size, kept as it changes.
+    size: Size<Pixels>,
     _name_events: Subscription,
+    _bounds: Subscription,
 }
 
 /// A save onto a file the folder on screen has.
@@ -259,6 +262,7 @@ impl MainWindow {
         };
         let focus = name.read(cx).focus_handle(cx);
         window.focus(&focus, cx);
+        let (size, bounds) = opening::watch_size(window, cx);
         self.pick = Some(Picker {
             request,
             mode,
@@ -272,7 +276,9 @@ impl MainWindow {
             window: window.window_handle(),
             filter: first_filter,
             filter_menu: false,
+            size,
             _name_events: name_events,
+            _bounds: bounds,
         });
     }
 
@@ -609,7 +615,7 @@ impl MainWindow {
     /// Cancel, or Escape in the name box: answers cancelled and closes.
     pub fn cancel(&mut self, window: &mut Window) {
         // Answered now, not when the window's view is freed.
-        self.pick = None;
+        drop(self.take_pick());
         window.remove_window();
     }
 
@@ -621,7 +627,7 @@ impl MainWindow {
 
     /// Answers the app with `paths`. Whether it answered.
     fn answer_all(&mut self, paths: Vec<PathBuf>) -> bool {
-        let Some(pick) = self.pick.take() else {
+        let Some(pick) = self.take_pick() else {
             return false;
         };
         let filter = pick.filter;
