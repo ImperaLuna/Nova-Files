@@ -5,7 +5,8 @@
 //!
 //! The portal is read once, then followed through its `SettingChanged`
 //! signal on a thread of its own, which stays blocked until the next
-//! change. A change that alters the look reaches the core on a connection
+//! change. A portal that takes the bus name later, or again after a
+//! restart, says nothing of what it holds, so it is read again then. A change that alters the look reaches the core on a connection
 //! made for it, so following the desktop never keeps the core awake.
 //! Without the portal, or with a value the portal spec doesn't define, the
 //! look says nothing there and the core keeps Carbonfox.
@@ -13,9 +14,12 @@
 use std::sync::mpsc;
 use std::thread;
 
+use futures::{Stream, StreamExt as _, future, stream};
 use nova_files_api::{Color, Command, Connector, CoreGone, DesktopLook, Event, Mode};
-use zbus::blocking::{Connection, Proxy};
+use zbus::blocking::Connection;
+use zbus::fdo::DBusProxy;
 use zbus::zvariant::{OwnedValue, Value};
+use zbus::{Message, Proxy};
 
 use crate::search::{PORTAL_NAME, PORTAL_PATH};
 
@@ -44,52 +48,98 @@ const CHANNEL_MAX: f64 = 255.0;
 /// keeps telling it each time the look changes.
 ///
 /// # Errors
-/// When the signal can't be listened to or the thread can't start.
+/// When the signals can't be listened to or the thread can't start.
 pub fn follow(connection: &Connection, connector: Connector) -> zbus::Result<()> {
-    let proxy = Proxy::new(connection, PORTAL_NAME, PORTAL_PATH, INTERFACE)?;
+    let connection = connection.inner().clone();
     // Listened to before the first read, so no change slips in between.
-    let signals = proxy.receive_signal(CHANGED)?;
+    let (portal, heard) = zbus::block_on(async {
+        let portal = Proxy::new(&connection, PORTAL_NAME, PORTAL_PATH, INTERFACE).await?;
+        let changes = portal.receive_signal(CHANGED).await?.map(Heard::Changed);
+        let owners = DBusProxy::new(&connection)
+            .await?
+            .receive_name_owner_changed_with_args(&[(0, PORTAL_NAME)])
+            .await?
+            .filter_map(|change| {
+                let started = change.args().is_ok_and(|args| args.new_owner().is_some());
+                future::ready(started.then_some(Heard::Started))
+            });
+        Ok::<_, zbus::Error>((portal, stream::select(changes, owners)))
+    })?;
     thread::Builder::new()
         .name(THREAD.to_owned())
-        .spawn(move || {
-            let mut look = DesktopLook::default();
-            for key in [COLOR_SCHEME, ACCENT_COLOR] {
-                if let Some(value) = read(&proxy, key) {
-                    look = with(look, key, &value);
-                }
-            }
-            // The core starts with the default, so it needs no word of it.
-            if look != DesktopLook::default() && tell(&connector, look).is_err() {
-                return;
-            }
-            for message in signals {
-                let Ok((namespace, key, value)) =
-                    message.body().deserialize::<(String, String, OwnedValue)>()
-                else {
-                    continue;
-                };
-                if namespace != NAMESPACE {
-                    continue;
-                }
-                let changed = with(look, &key, &value);
-                if changed != look {
-                    look = changed;
-                    if tell(&connector, look).is_err() {
-                        return;
-                    }
-                }
-            }
-        })
+        .spawn(move || zbus::block_on(watch(&portal, heard, &connector)))
         .map(drop)
         .map_err(|error| zbus::Error::Failure(error.to_string()))
 }
 
+/// What the watching thread hears from the bus.
+enum Heard {
+    /// The portal says a setting changed.
+    Changed(Message),
+    /// A portal took the name: started late, or started again, without
+    /// saying what it holds.
+    Started,
+}
+
+/// Reads the look, then follows what `heard` brings until the core stops.
+async fn watch(
+    portal: &Proxy<'_>,
+    mut heard: impl Stream<Item = Heard> + Unpin,
+    connector: &Connector,
+) {
+    let mut look = DesktopLook::default();
+    let mut started = true;
+    loop {
+        let changed = if started {
+            started = false;
+            read_all(portal).await
+        } else {
+            match heard.next().await {
+                None => return,
+                Some(Heard::Started) => {
+                    started = true;
+                    continue;
+                }
+                Some(Heard::Changed(message)) => {
+                    let Ok((namespace, key, value)) =
+                        message.body().deserialize::<(String, String, OwnedValue)>()
+                    else {
+                        continue;
+                    };
+                    if namespace != NAMESPACE {
+                        continue;
+                    }
+                    with(look, &key, &value)
+                }
+            }
+        };
+        // The core starts with the default, so it needs no word of it.
+        if changed != look {
+            look = changed;
+            if tell(connector, look).is_err() {
+                return;
+            }
+        }
+    }
+}
+
+/// The look as the portal holds it now; nothing without a portal.
+async fn read_all(portal: &Proxy<'_>) -> DesktopLook {
+    let mut look = DesktopLook::default();
+    for key in [COLOR_SCHEME, ACCENT_COLOR] {
+        if let Some(value) = read(portal, key).await {
+            look = with(look, key, &value);
+        }
+    }
+    look
+}
+
 /// The portal's value for `key`; `None` without a portal.
-fn read(proxy: &Proxy<'_>, key: &str) -> Option<OwnedValue> {
-    proxy
-        .call(READ_ONE, &(NAMESPACE, key))
-        .or_else(|_| proxy.call(READ, &(NAMESPACE, key)))
-        .ok()
+async fn read(portal: &Proxy<'_>, key: &str) -> Option<OwnedValue> {
+    match portal.call(READ_ONE, &(NAMESPACE, key)).await {
+        Ok(value) => Some(value),
+        Err(_) => portal.call(READ, &(NAMESPACE, key)).await.ok(),
+    }
 }
 
 /// `look` with `key` set to `value`; a key that isn't the look's leaves

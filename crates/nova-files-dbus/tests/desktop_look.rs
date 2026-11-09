@@ -82,6 +82,39 @@ fn a_version_1_portal_is_read_too() {
 }
 
 #[test]
+fn a_portal_that_starts_later_or_again_is_read_then() {
+    let bus = PrivateBus::start();
+    let (connector, core) = nova_files_api::channel();
+    let _service = follow(&bus, connector);
+    let first = serve_portal(
+        &bus,
+        Portal {
+            scheme: PREFERS_LIGHT,
+        },
+    );
+    let light = DesktopLook {
+        mode: Some(Mode::Light),
+        accent: Some(ACCENT_RGB),
+    };
+    assert_eq!(next_look(&core), light);
+
+    // Started again with another preference, and no signal about it.
+    first.release_name(PORTAL_NAME).unwrap();
+    drop(first);
+    let _second = serve_portal(
+        &bus,
+        Portal {
+            scheme: PREFERS_DARK,
+        },
+    );
+    let dark = DesktopLook {
+        mode: Some(Mode::Dark),
+        ..light
+    };
+    assert_eq!(next_look(&core), dark);
+}
+
+#[test]
 fn the_portal_name_matches_the_constant() {
     assert_eq!(
         <Portal as zbus::object_server::Interface>::name().as_str(),
