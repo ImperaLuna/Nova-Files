@@ -5,7 +5,7 @@
 //! in once the core has read them, lined up under their headers whatever
 //! the length of each name. A picker window picks the file
 //! double-clicked when it asks for files, and answers cancelled when it
-//! is closed.
+//! is closed. Its own keys are tested in `window_keys`.
 
 #![expect(
     clippy::unwrap_used,
@@ -14,6 +14,7 @@
 )]
 
 mod common;
+mod window_keys;
 
 use std::cell::RefCell;
 use std::fs;

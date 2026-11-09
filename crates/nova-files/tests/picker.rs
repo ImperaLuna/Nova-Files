@@ -223,6 +223,28 @@ async fn a_typed_folder_name_goes_into_it(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn the_window_keys_work_from_the_name_box(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    cx.update(nova_files_ui::bind_window_keys);
+    let projects = tree.path().join("Projects");
+    let (view, cx, _answers) = picker(cx, &tree, &projects, FILES).await;
+    cx.simulate_keystrokes("alt-up");
+    wait_for_folder(&view, cx, tree.path()).await;
+}
+
+#[gpui::test]
+async fn typing_goes_to_the_name_box_after_focus_is_lost(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), FILES).await;
+    cx.update(|window, _| window.blur());
+    cx.run_until_parked();
+    cx.simulate_input("plan");
+    assert_eq!(name(&view, cx).as_deref(), Some("plan"));
+}
+
+#[gpui::test]
 async fn typed_paths_go_there(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
