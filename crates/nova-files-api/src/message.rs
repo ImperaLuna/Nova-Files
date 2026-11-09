@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
-use crate::job::{JobId, JobTag, Operation, Outcome, Progress};
+use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::search::{Hit, SearchFailed, SearchId};
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -83,6 +83,16 @@ pub enum Command {
     /// Stop job `job` before its next change to the disk, paused or not.
     /// It ends with [`Outcome::Cancelled`].
     CancelJob(JobId),
+    /// Answer `conflict`, the one job `job` holds at. An answer to a
+    /// conflict no longer open (another window answered it first), or one
+    /// its kind doesn't accept, is ignored. Every client hears
+    /// [`Event::ConflictAnswered`].
+    AnswerConflict {
+        job: JobId,
+        conflict: Conflict,
+        answer: Answer,
+        scope: Scope,
+    },
 }
 
 /// Something the core tells one client.
@@ -144,7 +154,15 @@ pub enum Event {
         operation: Operation,
         progress: Progress,
         paused: bool,
+        /// The conflict it holds at, if any.
+        conflict: Option<Conflict>,
     },
+    /// Job `job` holds at `conflict` until a client answers it. Every
+    /// client that watches jobs hears it.
+    JobConflict { job: JobId, conflict: Conflict },
+    /// A client answered job `job`'s conflict, so it goes on. Every client
+    /// that watches jobs hears it, so other windows close their question.
+    ConflictAnswered { job: JobId, answer: Answer },
     /// How far job `job` has got, a few times a second while it runs.
     /// Every client hears it.
     JobProgress { job: JobId, progress: Progress },

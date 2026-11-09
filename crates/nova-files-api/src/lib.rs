@@ -26,7 +26,9 @@ pub use file_type::{FileTypes, glob_matches};
 pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable,
 };
-pub use job::{Failure, JobId, JobTag, Operation, Outcome, Progress};
+pub use job::{
+    Answer, Conflict, ConflictKind, Failure, JobId, JobTag, Operation, Outcome, Progress, Scope,
+};
 pub use message::{ClientId, Command, Event, MAX_HITS, MAX_ROWS};
 pub use pick::{
     FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,

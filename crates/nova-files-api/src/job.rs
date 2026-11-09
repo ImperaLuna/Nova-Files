@@ -90,3 +90,85 @@ pub enum Failure {
     /// Anything else the system refused.
     Other,
 }
+
+/// Something in a job's way that the user decides: the job holds at it
+/// until a client answers with one of the answers its kind accepts (see
+/// [`ConflictKind::accepts`]), or cancels the job.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Conflict {
+    pub kind: ConflictKind,
+    /// What the job was copying.
+    pub source: PathBuf,
+    /// Where it was going.
+    pub target: PathBuf,
+}
+
+/// What stands in a job's way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ConflictKind {
+    /// A file or link has the name a file or link was going to take.
+    FileExists,
+    /// A folder has the name a folder was going to take.
+    FolderExists,
+    /// A folder has the name a file was going to take, or the reverse.
+    KindMismatch,
+    /// The target is the source itself, or a hard link to it.
+    SameFile,
+    /// The target's drive is full.
+    NoSpace,
+    /// The user may not read the source or write the target.
+    PermissionDenied,
+    /// The source isn't there any more.
+    SourceGone,
+    /// The source changed while it was copied, so the copy wasn't kept.
+    SourceChanged,
+    /// A socket, device or pipe, which a copy can't carry.
+    Unsupported,
+}
+
+impl ConflictKind {
+    /// Whether a conflict of this kind takes `answer`. Skip always does;
+    /// nothing replaces a folder, the same file, or something of another
+    /// kind.
+    pub const fn accepts(self, answer: Answer) -> bool {
+        match answer {
+            Answer::Skip => true,
+            Answer::Replace => matches!(self, Self::FileExists),
+            Answer::Merge => matches!(self, Self::FolderExists),
+            Answer::KeepBoth => matches!(
+                self,
+                Self::FileExists | Self::FolderExists | Self::KindMismatch | Self::SameFile
+            ),
+            Answer::Retry => matches!(
+                self,
+                Self::NoSpace | Self::PermissionDenied | Self::SourceChanged
+            ),
+        }
+    }
+}
+
+/// What the user chose for a conflict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Answer {
+    /// Leave this one out (a folder with everything in it) and go on.
+    Skip,
+    /// Put the source in the target's place. The target is removed only
+    /// once its replacement is whole.
+    Replace,
+    /// Copy the folder's contents into the folder already there; each
+    /// clash inside is asked about on its own.
+    Merge,
+    /// Give the copy the next free name, "name (2).ext".
+    KeepBoth,
+    /// Try the same step again, once space is freed or rights fixed.
+    Retry,
+}
+
+/// Which conflicts an answer covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Scope {
+    /// Only the one asked about.
+    ThisOne,
+    /// It and every later conflict of the same kind in this job.
+    AllOfThisKind,
+}
