@@ -238,6 +238,7 @@ impl MainWindow {
                         pick.recheck = None;
                         pick.jump = None;
                         pick.placed = None;
+                        pick.copied = None;
                     }
                     cx.notify();
                 }
