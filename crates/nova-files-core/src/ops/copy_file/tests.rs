@@ -9,6 +9,7 @@ use nova_files_api::Failure;
 use rustix::fs::{XattrFlags, getxattr, setxattr};
 
 use super::*;
+use crate::ops::place::rename_no_replace;
 use crate::ops::test_folder::TestFolder;
 
 const MODE: u32 = 0o640;
@@ -40,9 +41,19 @@ fn copy(from: &Path, to: &Path, cancelled: bool) -> (Result<(), Stop>, u64) {
             control.cancel();
         }
         let mut copied = 0;
-        let result = copy_file(&from, &to, &part, &control, &mut |bytes| {
-            copied += bytes;
-        });
+        let paths = FileCopy {
+            from: &from,
+            to: &to,
+            part: &part,
+        };
+        let result = copy_file(
+            &paths,
+            &control,
+            &mut |bytes| {
+                copied += bytes;
+            },
+            rename_no_replace,
+        );
         (result, copied)
     });
     assert!(!checked.exists(), "the part file is gone");
@@ -156,9 +167,18 @@ fn a_missing_source_or_folder_fails_at_its_end() {
     let part = folder.path().join("no/.part");
     let mut copied = 0;
     assert_eq!(
-        copy_file(&from, &nowhere, &part, &Control::default(), &mut |bytes| {
-            copied += bytes;
-        }),
+        copy_file(
+            &FileCopy {
+                from: &from,
+                to: &nowhere,
+                part: &part,
+            },
+            &Control::default(),
+            &mut |bytes| {
+                copied += bytes;
+            },
+            rename_no_replace,
+        ),
         Err(Stop::because(&nowhere, Failure::NotFound))
     );
 }
@@ -239,12 +259,22 @@ fn a_file_written_while_copied_isnt_kept() {
     let mut written = false;
 
     // The first bytes copied are the moment another program writes.
-    let result = copy_file(&from, &to, &part, &Control::default(), &mut |_| {
-        if !written {
-            fs::write(&from, "after, and longer").unwrap();
-            written = true;
-        }
-    });
+    let paths = FileCopy {
+        from: &from,
+        to: &to,
+        part: &part,
+    };
+    let result = copy_file(
+        &paths,
+        &Control::default(),
+        &mut |_| {
+            if !written {
+                fs::write(&from, "after, and longer").unwrap();
+                written = true;
+            }
+        },
+        rename_no_replace,
+    );
 
     assert_eq!(result, Err(Stop::because(&from, Failure::SourceChanged)));
     assert!(!to.exists());
@@ -403,18 +433,28 @@ fn changed_while_copied(test: &str, change: impl Fn(&Path)) {
     let part = folder.path().join(".part");
     let mut written = false;
 
-    let result = copy_file(&from, &to, &part, &Control::default(), &mut |_| {
-        if !written {
-            change(&from);
-            File::options()
-                .write(true)
-                .open(&from)
-                .unwrap()
-                .set_modified(modified)
-                .unwrap();
-            written = true;
-        }
-    });
+    let paths = FileCopy {
+        from: &from,
+        to: &to,
+        part: &part,
+    };
+    let result = copy_file(
+        &paths,
+        &Control::default(),
+        &mut |_| {
+            if !written {
+                change(&from);
+                File::options()
+                    .write(true)
+                    .open(&from)
+                    .unwrap()
+                    .set_modified(modified)
+                    .unwrap();
+                written = true;
+            }
+        },
+        rename_no_replace,
+    );
 
     assert_eq!(result, Err(Stop::because(&from, Failure::SourceChanged)));
     assert!(!to.exists());
@@ -468,7 +508,18 @@ fn a_file_that_says_its_empty_is_read_to_its_end() {
     let part = folder.path().join(".part");
     let mut copied = 0;
 
-    copy_file(from, &to, &part, &Control::default(), &mut |n| copied += n).unwrap();
+    let paths = FileCopy {
+        from,
+        to: &to,
+        part: &part,
+    };
+    copy_file(
+        &paths,
+        &Control::default(),
+        &mut |n| copied += n,
+        rename_no_replace,
+    )
+    .unwrap();
 
     let text = fs::read_to_string(&to).unwrap();
     assert_ne!(text, "");
@@ -493,7 +544,12 @@ fn a_pipe_where_a_file_was_planned_is_refused_without_waiting() {
 
     let result = within(move || {
         let part = paths.1.with_file_name(".part");
-        copy_file(&paths.0, &paths.1, &part, &Control::default(), &mut |_| {})
+        let copy = FileCopy {
+            from: &paths.0,
+            to: &paths.1,
+            part: &part,
+        };
+        copy_file(&copy, &Control::default(), &mut |_| {}, rename_no_replace)
     });
 
     assert_eq!(result, Err(Stop::because(&from, Failure::Unsupported)));

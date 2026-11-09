@@ -7,8 +7,9 @@
 //! `control`); the job checks before each change to the disk. When it
 //! ends, every client hears how and which folders changed (see
 //! `audience`). Nothing a job does ever replaces an existing entry unless
-//! the user chose that, and a copy writes a journal of its steps (see
-//! `journal`).
+//! the user chose that: what stands in a copy's way is a conflict the job
+//! holds at until a client answers it. A copy writes a journal of its
+//! steps (see `journal`).
 //!
 //! A job running or paused keeps the core up: the core's loop asks
 //! [`Jobs::busy`], and a job that ends wakes the loop so its idle wait
@@ -16,12 +17,14 @@
 
 mod attrs;
 mod audience;
+mod clash;
 mod control;
 mod copy;
 mod copy_file;
 mod failure;
 mod job;
 mod journal;
+mod keep_both;
 mod name;
 mod one_step;
 mod place;
@@ -40,7 +43,8 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nova_files_api::{
-    ClientGone, ClientId, Connector, Event, EventSink, Failure, JobId, JobTag, Operation, Outcome,
+    Answer, ClientGone, ClientId, Conflict, Connector, Event, EventSink, Failure, JobId, JobTag,
+    Operation, Outcome, Scope,
 };
 
 pub use audience::Audience;
@@ -100,6 +104,7 @@ impl Jobs {
                 operation: shared.operation.clone(),
                 progress: shared.progress(),
                 paused: shared.control.paused(),
+                conflict: shared.control.open(),
             };
             events.deliver(event).ok();
         }
@@ -129,7 +134,12 @@ impl Jobs {
         let shared = Arc::new(Job::new(operation.clone()));
         lock(&self.running).insert(job, Arc::clone(&shared));
         let failed_path = first_path(&operation);
-        let reporter = Reporter::new(self.audience.clone(), job, Arc::clone(&shared));
+        let reporter = Reporter::new(
+            self.audience.clone(),
+            Arc::clone(&self.running),
+            job,
+            Arc::clone(&shared),
+        );
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
         let (registry, audience, wake) = (
             Arc::clone(&self.running),
@@ -175,6 +185,20 @@ impl Jobs {
         {
             self.audience.tell(&Event::JobResumed(job));
         }
+    }
+
+    /// Answers `conflict`, which job `job` holds at, with `answer`, for
+    /// that conflict alone or for all of its kind as `scope` says. An
+    /// answer the conflict doesn't take, or to a conflict not open, is
+    /// dropped.
+    pub fn answer(&self, job: JobId, conflict: &Conflict, answer: Answer, scope: Scope) {
+        let running = lock(&self.running);
+        if let Some(shared) = running.get(&job) {
+            shared.control.answer(conflict, answer, scope, || {
+                self.audience.tell(&Event::ConflictAnswered { job, answer });
+            });
+        }
+        drop(running);
     }
 
     /// Stops job `job` before its next change to the disk.

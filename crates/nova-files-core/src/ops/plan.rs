@@ -18,8 +18,13 @@ use super::stop::Stop;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Folder,
-    File { size: u64 },
+    File {
+        size: u64,
+    },
     Link,
+    /// A socket, device or pipe: the copy asks to skip it when it gets
+    /// there.
+    Special,
 }
 
 /// One thing to make: `to`, a copy of `from`.
@@ -41,8 +46,7 @@ pub struct Plan {
 ///
 /// # Errors
 /// [`Stop`] when cancelled, or when a path isn't absolute, or a source
-/// can't be read, has no name, is a folder `into` is inside of, or is
-/// something a copy can't carry.
+/// can't be read, has no name, or is a folder `into` is inside of.
 pub fn plan(sources: &[PathBuf], into: &Path, control: &Control) -> Result<Plan, Stop> {
     let mut plan = Plan::default();
     if !into.is_absolute() {
@@ -68,7 +72,7 @@ fn add_tree(plan: &mut Plan, from: &Path, to: &Path, control: &Control) -> Resul
         let metadata = from
             .symlink_metadata()
             .map_err(|error| Stop::at(&from, &error))?;
-        let kind = kind(&metadata).ok_or_else(|| Stop::because(&from, Failure::Unsupported))?;
+        let kind = kind(&metadata);
         if let Kind::File { size } = kind {
             plan.bytes += size;
         }
@@ -86,19 +90,19 @@ fn add_tree(plan: &mut Plan, from: &Path, to: &Path, control: &Control) -> Resul
     Ok(())
 }
 
-/// What `metadata` describes, or `None` for a socket, device or pipe.
-fn kind(metadata: &fs::Metadata) -> Option<Kind> {
+/// What `metadata` describes.
+fn kind(metadata: &fs::Metadata) -> Kind {
     let file_type = metadata.file_type();
     if file_type.is_dir() {
-        Some(Kind::Folder)
+        Kind::Folder
     } else if file_type.is_file() {
-        Some(Kind::File {
+        Kind::File {
             size: metadata.size(),
-        })
+        }
     } else if file_type.is_symlink() {
-        Some(Kind::Link)
+        Kind::Link
     } else {
-        None
+        Kind::Special
     }
 }
 

@@ -1,12 +1,16 @@
-//! Pausing and cancelling a running job.
+//! Pausing, cancelling and answering a running job.
 //!
 //! The core's loop sets what a client wants; the job's thread calls
 //! [`Control::checkpoint`] before each change to the disk, which waits
-//! there while the job is paused and stops it once cancelled. A paused job
-//! waits without a deadline: it holds only until a client resumes or
-//! cancels it, which may be much later.
+//! there while the job is paused and stops it once cancelled. At a
+//! conflict the thread raises it ([`Control::raise`]) and waits for an
+//! answer ([`Control::answer_to`]); a client's answer counts only when the
+//! conflict's kind accepts it. Waits have no deadline: a job holds until a
+//! client resumes, answers or cancels it, which may be much later.
 
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+
+use nova_files_api::{Answer, Conflict, Scope};
 
 /// What clients last asked of a job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,20 +20,31 @@ enum Wanted {
     Cancel,
 }
 
+struct State {
+    wanted: Wanted,
+    /// The conflict the job holds at, until answered.
+    open: Option<Conflict>,
+    answer: Option<(Answer, Scope)>,
+}
+
 /// A job was cancelled; returned by [`Control::checkpoint`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cancelled;
 
 /// One job's switch, shared by the core's loop and the job's thread.
 pub struct Control {
-    wanted: Mutex<Wanted>,
+    state: Mutex<State>,
     changed: Condvar,
 }
 
 impl Default for Control {
     fn default() -> Self {
         Self {
-            wanted: Mutex::new(Wanted::Run),
+            state: Mutex::new(State {
+                wanted: Wanted::Run,
+                open: None,
+                answer: None,
+            }),
             changed: Condvar::new(),
         }
     }
@@ -49,12 +64,13 @@ impl Control {
 
     /// Whether the job is held.
     pub fn paused(&self) -> bool {
-        *self.lock() == Wanted::Pause
+        self.lock().wanted == Wanted::Pause
     }
 
-    /// Stops the job before its next change, held or not.
+    /// Stops the job before its next change, held or not, and wakes it
+    /// from a conflict.
     pub fn cancel(&self) {
-        *self.lock() = Wanted::Cancel;
+        self.lock().wanted = Wanted::Cancel;
         self.changed.notify_all();
     }
 
@@ -64,83 +80,91 @@ impl Control {
     /// # Errors
     /// [`Cancelled`] when a client cancelled the job.
     pub fn checkpoint(&self) -> Result<(), Cancelled> {
-        let wanted = self
+        let state = self
             .changed
-            .wait_while(self.lock(), |wanted| matches!(wanted, Wanted::Pause))
+            .wait_while(self.lock(), |state| state.wanted == Wanted::Pause)
             .unwrap_or_else(PoisonError::into_inner);
-        match *wanted {
+        match state.wanted {
             Wanted::Cancel => Err(Cancelled),
             Wanted::Run | Wanted::Pause => Ok(()),
         }
     }
 
+    /// The job holds at `conflict` from now on, until answered.
+    pub fn raise(&self, conflict: Conflict) {
+        let mut state = self.lock();
+        state.open = Some(conflict);
+        state.answer = None;
+    }
+
+    /// The conflict the job holds at, if any.
+    pub fn open(&self) -> Option<Conflict> {
+        self.lock().open.clone()
+    }
+
+    /// Answers `conflict`, calling `heard` before the job can go on, so
+    /// the answer is told before any news of what follows; `false` when
+    /// it isn't the one open, or its kind doesn't take `answer`.
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "telling under the lock keeps the job from going on unheard"
+    )]
+    pub fn answer(
+        &self,
+        conflict: &Conflict,
+        answer: Answer,
+        scope: Scope,
+        heard: impl FnOnce(),
+    ) -> bool {
+        let taken = {
+            let mut state = self.lock();
+            let takes = state
+                .open
+                .as_ref()
+                .is_some_and(|open| open == conflict && open.kind.accepts(answer));
+            if takes {
+                state.open = None;
+                state.answer = Some((answer, scope));
+                heard();
+            }
+            takes
+        };
+        self.changed.notify_all();
+        taken
+    }
+
+    /// Waits for the answer to the conflict raised last.
+    ///
+    /// # Errors
+    /// [`Cancelled`] when a client cancelled the job instead.
+    pub fn answer_to(&self) -> Result<(Answer, Scope), Cancelled> {
+        let mut state = self
+            .changed
+            .wait_while(self.lock(), |state| {
+                state.answer.is_none() && state.wanted != Wanted::Cancel
+            })
+            .unwrap_or_else(PoisonError::into_inner);
+        state.open = None;
+        state.answer.take().ok_or(Cancelled)
+    }
+
     /// Moves from `from` to `to`, and only from `from`.
     fn set(&self, from: Wanted, to: Wanted) -> bool {
         {
-            let mut wanted = self.lock();
-            if *wanted != from {
+            let mut state = self.lock();
+            if state.wanted != from {
                 return false;
             }
-            *wanted = to;
+            state.wanted = to;
         }
         self.changed.notify_all();
         true
     }
 
-    fn lock(&self) -> MutexGuard<'_, Wanted> {
-        self.wanted.lock().unwrap_or_else(PoisonError::into_inner)
+    fn lock(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-    use std::sync::mpsc;
-    use std::thread;
-    use std::time::Duration;
-
-    use super::*;
-
-    const SHORT: Duration = Duration::from_millis(50);
-    const LONG: Duration = Duration::from_secs(5);
-
-    #[test]
-    fn runs_until_cancelled() {
-        let control = Control::default();
-        assert_eq!(control.checkpoint(), Ok(()));
-        control.cancel();
-        assert_eq!(control.checkpoint(), Err(Cancelled));
-        assert!(!control.pause());
-        assert!(!control.resume());
-    }
-
-    #[test]
-    fn a_held_job_waits_until_resumed() {
-        let control = Arc::new(Control::default());
-        assert!(!control.paused());
-        assert!(control.pause());
-        assert!(control.paused());
-        assert!(!control.pause());
-        let (passed, reached) = mpsc::channel();
-        let job = Arc::clone(&control);
-        thread::spawn(move || passed.send(job.checkpoint()).unwrap());
-
-        assert!(reached.recv_timeout(SHORT).is_err());
-        assert!(control.resume());
-        assert_eq!(reached.recv_timeout(LONG), Ok(Ok(())));
-        assert!(!control.resume());
-    }
-
-    #[test]
-    fn a_held_job_can_be_cancelled() {
-        let control = Arc::new(Control::default());
-        control.pause();
-        let (passed, reached) = mpsc::channel();
-        let job = Arc::clone(&control);
-        thread::spawn(move || passed.send(job.checkpoint()).unwrap());
-
-        assert!(reached.recv_timeout(SHORT).is_err());
-        control.cancel();
-        assert_eq!(reached.recv_timeout(LONG), Ok(Err(Cancelled)));
-    }
-}
+mod tests;

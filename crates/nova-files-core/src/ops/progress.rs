@@ -2,18 +2,22 @@
 
 use std::time::{Duration, Instant};
 
-use nova_files_api::{Event, JobId, Progress};
+use nova_files_api::{Conflict, Event, JobId, Progress};
 
 use std::sync::Arc;
 
 use super::audience::Audience;
 use super::job::Job;
+use super::{Registry, lock};
 
 /// The least time between two progress events of one job.
 const EVERY: Duration = Duration::from_millis(100);
 
 pub struct Reporter {
     audience: Audience,
+    /// Held while a conflict is raised and told, as while a job pauses or
+    /// ends, so no client hears of it out of order.
+    registry: Registry,
     /// Where the latest progress is kept for windows that watch later.
     shared: Arc<Job>,
     job: JobId,
@@ -22,9 +26,10 @@ pub struct Reporter {
 }
 
 impl Reporter {
-    pub const fn new(audience: Audience, job: JobId, shared: Arc<Job>) -> Self {
+    pub const fn new(audience: Audience, registry: Registry, job: JobId, shared: Arc<Job>) -> Self {
         Self {
             audience,
+            registry,
             shared,
             job,
             progress: Progress {
@@ -49,6 +54,12 @@ impl Reporter {
         self.tell_if_due();
     }
 
+    /// `bytes` reported done weren't kept after all: the step that copied
+    /// them failed, and it is skipped or tried again.
+    pub const fn take_back(&mut self, bytes: u64) {
+        self.progress.done_bytes = self.progress.done_bytes.saturating_sub(bytes);
+    }
+
     /// One more item is done; `left` of its bytes were never copied (holes
     /// in a sparse file) but count as done.
     pub fn item(&mut self, left: u64) {
@@ -61,6 +72,19 @@ impl Reporter {
         if self.told.is_none_or(|told| told.elapsed() >= EVERY) {
             self.tell();
         }
+    }
+
+    /// The job holds at `conflict` from now on: every client hears it,
+    /// with how far the job got.
+    pub fn conflict(&mut self, conflict: Conflict) {
+        self.tell();
+        let registry = lock(&self.registry);
+        self.shared.control.raise(conflict.clone());
+        self.audience.tell(&Event::JobConflict {
+            job: self.job,
+            conflict,
+        });
+        drop(registry);
     }
 
     /// Tells every client how far the job got, now.
@@ -91,7 +115,7 @@ mod tests {
             sources: Vec::new(),
             into: "/".into(),
         }));
-        let mut reporter = Reporter::new(audience, JobId(1), Arc::clone(&shared));
+        let mut reporter = Reporter::new(audience, Arc::default(), JobId(1), Arc::clone(&shared));
         let progress = |done_bytes, done_items| Progress {
             done_bytes,
             total_bytes: 10,

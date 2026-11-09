@@ -7,9 +7,10 @@
 //! filesystem copy without the bytes passing through here, or else with
 //! plain reads and writes. Only ranges that hold data are copied, so a
 //! sparse file stays sparse. Then it gets the source's attributes, mode
-//! and times, is synced, and takes its real name without replacing
-//! anything (see `place`). A failure or a cancel anywhere removes the part
-//! file, so a real name never holds half a file.
+//! and times, is synced, and takes its real name the way the caller says
+//! (see `place`: never replacing, or replacing once whole). A failure or a
+//! cancel anywhere removes the part file, so a real name never holds half
+//! a file.
 
 use std::fs::{self, File, Metadata, OpenOptions};
 use std::io;
@@ -23,7 +24,6 @@ use nova_files_api::Failure;
 
 use super::attrs::{copy_mode_and_times, copy_xattrs};
 use super::control::Control;
-use super::place::rename_no_replace;
 use super::stop::Stop;
 
 /// A part file is the user's alone until it is whole.
@@ -64,19 +64,28 @@ impl Ends<'_> {
     }
 }
 
+/// The paths of one file's copy.
+pub struct FileCopy<'a> {
+    pub from: &'a Path,
+    pub to: &'a Path,
+    /// The hidden name the copy is written under until whole.
+    pub part: &'a Path,
+}
+
 /// Copies the file `from` to `to` through the part file `part`, calling
-/// `copied` with each count of bytes copied.
+/// `copied` with each count of bytes copied, and has `place` give the
+/// whole part file the name `to`.
 ///
 /// # Errors
 /// [`Stop`] when cancelled, or failed at `from` or `to`. The part file is
 /// gone either way.
 pub fn copy_file(
-    from: &Path,
-    to: &Path,
-    part: &Path,
+    paths: &FileCopy<'_>,
     control: &Control,
     copied: &mut dyn FnMut(u64),
+    place: impl FnOnce(&Path, &Path) -> io::Result<()>,
 ) -> Result<(), Stop> {
+    let FileCopy { from, to, part } = *paths;
     control.checkpoint()?;
     let source = open_source(from).map_err(|error| Stop::at(from, &error))?;
     // Planned as a file, but anything may stand there by now.
@@ -97,7 +106,7 @@ pub fn copy_file(
     };
     let done = fill(&ends, control, copied).and_then(|()| {
         control.checkpoint()?;
-        rename_no_replace(part, to).map_err(|error| ends.writing(&error))
+        place(part, to).map_err(|error| ends.writing(&error))
     });
     if done.is_err() {
         fs::remove_file(part).ok();

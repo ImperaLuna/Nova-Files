@@ -64,7 +64,7 @@ fn a_folder_cant_go_inside_itself() {
 }
 
 #[test]
-fn refuses_what_it_cant_copy() {
+fn refuses_what_it_cant_plan_and_notes_what_it_cant_copy() {
     let folder = TestFolder::new("plan-refused");
     let socket = folder.path().join("socket");
     let _listener = UnixListener::bind(&socket).unwrap();
@@ -72,8 +72,11 @@ fn refuses_what_it_cant_copy() {
     let control = Control::default();
 
     assert_eq!(
-        plan(std::slice::from_ref(&socket), &into, &control),
-        Err(Stop::because(&socket, Failure::Unsupported))
+        plan(std::slice::from_ref(&socket), &into, &control)
+            .unwrap()
+            .items[0]
+            .kind,
+        Kind::Special
     );
     assert_eq!(
         plan(&[PathBuf::from("/")], &into, &control),
