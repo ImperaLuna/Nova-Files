@@ -13,79 +13,20 @@
     reason = "test setup should fail loudly; GPUI test contexts live on one thread"
 )]
 
+mod common;
+
 use std::cell::RefCell;
 use std::fs;
-use std::io::{self, Write as _};
-use std::path::{Path, PathBuf};
-use std::process;
+use std::path::Path;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{self, RecvTimeoutError, Sender};
-use std::thread;
+use std::sync::mpsc;
 use std::time::Duration;
 
-use gpui::{
-    Entity, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, TestAppContext, VisualTestContext,
-};
+use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_ui::{CoreStatus, MainWindow, WindowEvent};
 
-/// A folder under the system temp folder, removed when dropped.
-struct TempFolder(PathBuf);
-
-impl TempFolder {
-    /// A tree with a folder `Projects` (holding `nova`) and a file
-    /// `notes.txt`.
-    fn tree() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-window-test-{}-{}",
-            process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(name);
-        fs::create_dir_all(path.join("Projects").join("nova")).unwrap();
-        fs::write(path.join("notes.txt"), "").unwrap();
-        Self(path)
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
-}
-
-/// How long a test may wait for the core before it fails.
-const WAIT: Duration = Duration::from_secs(10);
-
-/// Fails the test process if the test is still running after [`WAIT`].
-/// GPUI's waits have no deadline of their own while the core answers from
-/// real threads, so a window that never gets there would hang.
-struct Watchdog(Sender<()>);
-
-impl Watchdog {
-    fn start() -> Self {
-        let (done, finished) = mpsc::channel();
-        thread::spawn(move || {
-            if finished.recv_timeout(WAIT) == Err(RecvTimeoutError::Timeout) {
-                writeln!(io::stderr(), "the window never got there within {WAIT:?}").ok();
-                process::exit(1);
-            }
-        });
-        Self(done)
-    }
-}
-
-impl Drop for Watchdog {
-    fn drop(&mut self) {
-        self.0.send(()).ok();
-    }
-}
+use common::{TempFolder, Watchdog, double_click};
 
 /// Opens a window on `folder` with a running core, and waits until the
 /// folder is on screen.
@@ -132,7 +73,7 @@ fn click(cx: &mut VisualTestContext, selector: &'static str) {
 #[gpui::test]
 async fn window_connects_to_the_core(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
 
     view.condition::<WindowEvent>(cx, |view, _| view.status() == CoreStatus::Connected)
@@ -153,7 +94,7 @@ fn window_without_a_core_still_opens(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn shows_the_folder_it_opened_on(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
 
     view.read_with(cx, |view, _| {
@@ -164,7 +105,7 @@ async fn shows_the_folder_it_opened_on(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn clicking_a_folder_goes_into_it_and_up_comes_back(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
 
     click(cx, "entry-0");
@@ -179,7 +120,7 @@ async fn clicking_a_folder_goes_into_it_and_up_comes_back(cx: &mut TestAppContex
 #[gpui::test]
 async fn clicking_a_file_stays_put(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
 
     click(cx, "entry-1");
@@ -191,7 +132,7 @@ async fn clicking_a_file_stays_put(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
     let gone = tree.path().join("Projects");
     fs::remove_dir_all(&gone).unwrap();
@@ -222,7 +163,7 @@ async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContex
 #[gpui::test]
 async fn unreadable_start_folder_falls_back_to_home(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let missing = tree.path().join("missing");
     let (view, cx) = window_on(cx, &missing, tree.path());
 
@@ -232,7 +173,7 @@ async fn unreadable_start_folder_falls_back_to_home(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn dots_in_a_path_are_tidied(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let dotted = tree.path().join("Projects").join("..");
     let (view, cx) = window_on(cx, &dotted, tree.path());
 
@@ -242,7 +183,7 @@ async fn dots_in_a_path_are_tidied(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn clicking_a_place_opens_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let home = tree.path().join("Projects");
     let (view, cx) = window_on(cx, tree.path(), &home);
     wait_for_folder(&view, cx, tree.path()).await;
@@ -257,7 +198,7 @@ async fn clicking_a_place_opens_it(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn columns_fill_in_after_the_names(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
 
     view.condition::<WindowEvent>(cx, |view, _| {
@@ -284,7 +225,7 @@ async fn columns_fill_in_after_the_names(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn columns_line_up_under_their_headers(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     fs::write(tree.path().join("a much longer name.txt"), "").unwrap();
     let (_view, cx) = open_on(cx, tree.path()).await;
     cx.run_until_parked();
@@ -308,6 +249,7 @@ fn pick_request(kind: PickKind) -> (Box<PickRequest>, mpsc::Receiver<PickAnswer>
         filters: Vec::new(),
         filter: None,
         folder: None,
+        types: None,
         reply: PickReply::new(move |answer| {
             sender.send(answer).ok();
         }),
@@ -320,34 +262,13 @@ const OPEN_ONE: PickKind = PickKind::Open {
     folders: false,
 };
 
-/// Double-clicks the element drawn with `selector`.
-fn double_click(cx: &mut VisualTestContext, selector: &'static str) {
-    cx.run_until_parked();
-    let position = cx.debug_bounds(selector).unwrap().center();
-    for click_count in 1..=2 {
-        cx.simulate_event(MouseDownEvent {
-            position,
-            modifiers: Modifiers::none(),
-            button: MouseButton::Left,
-            click_count,
-            first_mouse: false,
-        });
-        cx.simulate_event(MouseUpEvent {
-            position,
-            modifiers: Modifiers::none(),
-            button: MouseButton::Left,
-            click_count,
-        });
-    }
-}
-
 #[gpui::test]
 async fn a_picker_picks_the_file_double_clicked(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(OPEN_ONE);
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
     click(cx, "entry-1");
     assert!(answers.try_recv().is_err());
@@ -365,10 +286,10 @@ async fn a_picker_picks_the_file_double_clicked(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn a_picker_still_goes_into_folders(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(OPEN_ONE);
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
     click(cx, "entry-0");
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
@@ -380,10 +301,10 @@ async fn a_picker_still_goes_into_folders(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn a_picker_picks_nothing_from_a_listing_it_has_left(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(OPEN_ONE);
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
     let first = view.read_with(cx, |view, _| view.listing_id()).unwrap();
     let notes = EntryId(1);
 
@@ -405,12 +326,12 @@ async fn a_picker_picks_nothing_from_a_listing_it_has_left(cx: &mut TestAppConte
 #[gpui::test]
 async fn a_save_picker_leaves_double_clicked_files_alone(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(PickKind::Save {
         name: "a.txt".into(),
     });
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
     double_click(cx, "entry-1");
 
@@ -421,10 +342,10 @@ async fn a_save_picker_leaves_double_clicked_files_alone(cx: &mut TestAppContext
 #[gpui::test]
 async fn closing_a_picker_answers_cancelled(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree();
+    let tree = TempFolder::tree("window");
     let (view, cx) = open_on(cx, tree.path()).await;
     let (request, answers) = pick_request(OPEN_ONE);
-    view.update(cx, |view, _| view.set_pick(request));
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
     // From the app, not a window: the UI closes pickers from its request
     // loop, with no window borrowed.

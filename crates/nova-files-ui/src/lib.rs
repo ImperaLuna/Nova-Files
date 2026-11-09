@@ -119,13 +119,12 @@ impl Global for RequestLoop {}
 /// Opens a main window on its folder (or the home folder), or a picker
 /// window titled as the asking app wants, centred on the main display.
 /// When a main window fails with no window open, `recover_gpu` gets the
-/// folder. A picker that fails to open, or that can't answer its request
-/// yet, answers cancelled: restarting would lose the asking app's call.
+/// folder. A picker that fails to open answers cancelled: restarting
+/// would lose the asking app's call.
 fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu, cx: &mut App) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
     let (folder, pick) = match opening {
         Opening::Folder(folder) => (folder, None),
-        Opening::Pick(request) if !pick::can_answer(&request) => return,
         Opening::Pick(mut request) => (request.folder.take(), Some(request)),
     };
     let recovers = pick.is_none();
@@ -135,18 +134,18 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
         ..WindowOptions::default()
     };
     if let Some(request) = &pick {
-        options.titlebar = Some(pick::titlebar(&request.title));
+        options.titlebar = Some(pick::titlebar(request));
     }
     let connector = connector.clone();
     let folder = folder.unwrap_or_else(home_folder);
     let recover_folder = folder.clone();
-    let opened = cx.open_window(options, move |_window, cx| {
+    let opened = cx.open_window(options, move |window, cx| {
         cx.new(|cx| {
-            let mut window = MainWindow::new(&connector, &folder, cx);
+            let mut view = MainWindow::new(&connector, &folder, cx);
             if let Some(request) = pick {
-                window.set_pick(request);
+                view.set_pick(request, window, cx);
             }
-            window
+            view
         })
     });
     if let Err(error) = opened {
