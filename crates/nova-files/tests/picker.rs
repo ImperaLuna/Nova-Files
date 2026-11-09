@@ -656,3 +656,41 @@ async fn a_suggested_path_is_read_as_typed_not_saved_blindly(cx: &mut TestAppCon
     assert!(answers.try_recv().is_err());
     assert!(!closed(cx));
 }
+
+#[gpui::test]
+async fn a_name_that_differs_only_in_case_asks_first(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save("NOTES.txt")).await;
+    cx.simulate_keystrokes("enter");
+    // `notes (2).txt` is taken too, whatever its case.
+    assert_eq!(
+        asked(&view, cx).await,
+        Some(OsString::from("NOTES (3).txt"))
+    );
+    assert!(answers.try_recv().is_err());
+}
+
+#[gpui::test]
+async fn going_elsewhere_before_a_typed_folder_opens_drops_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let projects = tree.path().join("Projects");
+    let nova = projects.join("nova");
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), save("plan.txt")).await;
+    cx.simulate_keystrokes("ctrl-a");
+    cx.simulate_input("Projects/");
+    view.update_in(cx, |view, window, cx| {
+        view.accept(window, cx);
+        view.open(&nova);
+    });
+    wait_for_folder(&view, cx, &nova).await;
+    cx.simulate_keystrokes("ctrl-a");
+    cx.simulate_input("mine.txt");
+
+    // Visiting the folder later leaves the new name alone.
+    view.update(cx, |view, _| view.go_up());
+    wait_for_folder(&view, cx, &projects).await;
+    cx.run_until_parked();
+    assert_eq!(name(&view, cx).as_deref(), Some("mine.txt"));
+}

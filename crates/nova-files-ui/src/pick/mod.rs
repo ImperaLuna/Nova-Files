@@ -151,11 +151,13 @@ pub struct Conflict {
 
 /// A typed path the window asked the core for.
 struct Jump {
-    path: PathBuf,
     /// Whether a refusal goes to the folder the path is in instead.
     fallback: bool,
     /// What the name box holds once the window is there.
     name: String,
+    /// The listing it asked for; any other one means the user went
+    /// somewhere else, which drops it.
+    listing: Option<ListingId>,
 }
 
 impl Picker {
@@ -477,26 +479,29 @@ impl MainWindow {
     fn jump(&mut self, path: &Path, fallback: bool) -> bool {
         let path = tidy(path);
         self.open(&path);
+        let listing = self.asked;
         if let Some(pick) = &mut self.pick {
             pick.jump = Some(Jump {
-                path,
                 fallback,
                 name: String::new(),
+                listing,
             });
         }
         false
     }
 
-    /// The folder `path` is now on screen: a new listing drops the
+    /// A folder is now on screen: a new listing drops the
     /// selection and any question, and a typed jump that led here leaves
     /// its name in the box.
-    pub fn pick_folder_opened(&mut self, path: &Path, cx: &mut Context<Self>) {
+    pub fn pick_folder_opened(&mut self, cx: &mut Context<Self>) {
         let listed = self.listing_id();
         let Some(pick) = &mut self.pick else { return };
         pick.selected = None;
         pick.conflict = None;
         pick.copied = None;
-        if let Some(jump) = pick.jump.take_if(|jump| jump.path == path) {
+        if let Some(jump) = pick.jump.take()
+            && jump.listing == listed
+        {
             pick.name
                 .update(cx, |field, cx| field.set_text(&jump.name, cx));
         }
@@ -511,12 +516,12 @@ impl MainWindow {
 
     /// The core couldn't list `path`. A typed path that may name a file
     /// goes to the folder it is in instead.
-    pub fn pick_folder_refused(&mut self, path: &Path) {
+    pub fn pick_folder_refused(&mut self, id: ListingId, path: &Path) {
         let Some(pick) = &mut self.pick else { return };
         // A save whose folder is gone waits for the user again, and one
         // that going somewhere else replaced is dropped.
         pick.recheck = None;
-        let Some(jump) = pick.jump.take_if(|jump| jump.path == path) else {
+        let Some(jump) = pick.jump.take().filter(|jump| jump.listing == Some(id)) else {
             return;
         };
         let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
@@ -525,14 +530,14 @@ impl MainWindow {
         if !jump.fallback {
             return;
         }
-        let parent = parent.to_path_buf();
         let name = name.to_string_lossy().into_owned();
-        self.open(&parent);
+        self.open(parent);
+        let listing = self.asked;
         if let Some(pick) = &mut self.pick {
             pick.jump = Some(Jump {
-                path: parent,
                 fallback: false,
                 name,
+                listing,
             });
         }
     }
