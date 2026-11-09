@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
+use crate::theme::Theme;
 
 /// The most entries one [`Command::Rows`] may name: several screens of
 /// rows. The core leaves out any past it.
@@ -73,6 +74,10 @@ pub enum Command {
     /// settings, this one included, then gets [`Event::Settings`]; nothing
     /// is sent when the value was already set.
     ChangeSetting(SettingChange),
+    /// Ask for the theme; the answer is [`Event::Theme`], and from then on
+    /// the client gets [`Event::Theme`] again each time it changes. Clients
+    /// that never ask never get it.
+    Theme,
 }
 
 /// Something the core tells one client.
@@ -127,6 +132,10 @@ pub enum Event {
     /// each client that asked whenever one changes: from a client, or from
     /// the settings file.
     Settings(Arc<Settings>),
+    /// The theme, answering [`Command::Theme`], and sent again to each
+    /// client that asked whenever it changes: from the theme file, or the
+    /// appearance setting.
+    Theme(Arc<Theme>),
 }
 
 /// Names one connected client, so the core can answer the right one.

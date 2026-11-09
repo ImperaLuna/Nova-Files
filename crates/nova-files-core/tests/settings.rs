@@ -1,5 +1,6 @@
-//! Settings through the core: read from the file, changed by a client or
-//! on disk, and sent to every client that asked, in a temp home.
+//! Settings and the theme through the core: read from their files, changed
+//! by a client or on disk, and sent to every client that asked, in a temp
+//! home.
 
 #![expect(
     clippy::unwrap_used,
@@ -14,7 +15,9 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::{Appearance, Command, Connection, Event, SettingChange, Settings, Thumbnails};
+use nova_files_api::{
+    Appearance, Color, Command, Connection, Event, Mode, SettingChange, Settings, Theme, Thumbnails,
+};
 use nova_files_core::{Home, IDLE_EXIT, RunningCore};
 
 /// How long a test waits for the core before it counts as a failure.
@@ -220,4 +223,40 @@ fn a_linked_file_is_saved_where_it_points() {
     // The user's file keeps its mode.
     let mode = fs::metadata(&real).unwrap().permissions().mode() & PERMISSION_BITS;
     assert_eq!(mode, SHARED_MODE);
+}
+
+fn next_theme(events: &Receiver<Event>) -> Arc<Theme> {
+    match events.recv_timeout(ANSWER_TIMEOUT) {
+        Ok(Event::Theme(theme)) => theme,
+        other => panic!("expected the theme, got {other:?}"),
+    }
+}
+
+#[test]
+fn the_theme_follows_its_file_and_the_appearance_setting() {
+    let home = TempHome::new("theme");
+    let theme_file = home.file().with_file_name("theme.toml");
+    fs::create_dir_all(theme_file.parent().unwrap()).unwrap();
+    fs::write(&theme_file, "[light]\nprimary = \"#C0FFEE\"\n").unwrap();
+    let core = home.core();
+    let (themes, theme_events) = mpsc::channel();
+    let theme_client = core.connector.connect(themes).unwrap();
+    theme_client.send(Command::Theme).unwrap();
+    assert_eq!(next_theme(&theme_events).mode, Mode::Dark);
+
+    let (settings_client, settings_events, _) = listen(&core);
+    settings_client
+        .send(Command::ChangeSetting(SettingChange::Appearance(
+            Appearance::Light,
+        )))
+        .unwrap();
+    let light = next_theme(&theme_events);
+    assert_eq!(light.mode, Mode::Light);
+    assert_eq!(light.palette.primary, Color(0x00C0_FFEE));
+    // Only clients that asked hear about the theme.
+    assert!(
+        !settings_events
+            .try_iter()
+            .any(|event| matches!(event, Event::Theme(_)))
+    );
 }

@@ -4,7 +4,7 @@
 //! A client (a window, the D-Bus service) gets a [`Connection`] from a
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
 //! through the [`EventSink`] it handed over. A client that asks for the
-//! [`Settings`] gets them again whenever they change. The core reads the other end
+//! [`Settings`] or the [`Theme`] gets them again whenever they change. The core reads the other end
 //! of the channel as [`CoreMessage`]s. A [`PickRequest`] carries another
 //! app's file picker request from D-Bus to the UI.
 
@@ -17,6 +17,7 @@ mod message;
 mod pick;
 mod search;
 mod settings;
+mod theme;
 pub mod uri;
 
 pub use connection::{
@@ -32,6 +33,7 @@ pub use pick::{
 };
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
+pub use theme::{Color, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 
 /// The application id: the D-Bus name, the Wayland app id and the name of
 /// the D-Bus service file. Set once, in `.cargo/config.toml`.
