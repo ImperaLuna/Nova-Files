@@ -37,8 +37,10 @@ pub mod color {
     pub const CARET: u32 = 0x00d8_ccb0;
     /// Selected text in a text field.
     pub const SELECTION: u32 = 0x003d_3a35;
-    /// The entry selected in a picker.
+    /// Selected entries.
     pub const ROW_SELECTED: u32 = 0x0019_3a3b;
+    /// The ring around the row the keyboard is on.
+    pub const ROW_CURSOR: u32 = 0x0035_7a7d;
     /// A text field's box.
     pub const FIELD: u32 = 0x001a_1918;
     /// The button that does what the bar is for: Open, Save, Keep both.
