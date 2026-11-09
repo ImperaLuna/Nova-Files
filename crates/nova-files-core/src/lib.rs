@@ -16,6 +16,7 @@ mod memory;
 mod mime;
 mod open;
 mod places;
+mod private_file;
 mod run;
 mod search;
 mod thumbs;
