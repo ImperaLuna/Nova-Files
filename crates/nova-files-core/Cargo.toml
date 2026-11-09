@@ -19,8 +19,9 @@ workspace = true
 
 [dependencies]
 # Kills the thumbnail helper's process group when a batch runs out of time,
-# reads the monotonic clock for the frame trace, and watches the config
-# folder (inotify, woken through an eventfd).
+# reads the monotonic clock for the frame trace, renames without replacing
+# for file operations, and watches the config folder (inotify, woken
+# through an eventfd).
 rustix = { version = "1.1.6", default-features = false, features = ["event", "fs", "process", "std", "time"] }
 # Receives GPUI's start-up phases and frame times for the traces; GPUI already builds it.
 log = { version = "0.4.35", features = ["std"] }

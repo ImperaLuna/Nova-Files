@@ -20,8 +20,8 @@ use gpui::{Context, Window};
 
 use nova_files_api::ListingId;
 
-use super::select::Selection;
 use super::{Conflict, typed};
+use crate::selection::Selection;
 use crate::window::MainWindow;
 
 /// A save waiting for a fresh listing of `folder`.
@@ -79,8 +79,8 @@ impl MainWindow {
                 })?;
             Some((listing.id, entry.id))
         });
+        self.selection = there.map(|(listing, id)| Selection::only(listing, id));
         if let Some(pick) = &mut self.pick {
-            pick.selected = there.map(|(listing, id)| Selection::only(listing, id));
             pick.conflict = Some(Conflict {
                 path: folder.join(name),
                 keep_both,

@@ -1,11 +1,13 @@
 //! The core's loop: read one message at a time and answer it.
 //!
-//! While any client is connected the loop waits without a deadline. With
-//! none, it waits at most the idle time; any message (a D-Bus ping, a
-//! window about to open) starts the wait again, and silence ends the loop.
+//! While any client is connected or any job runs or is paused, the loop
+//! waits without a deadline. Otherwise it waits at most the idle time; any
+//! message (a D-Bus ping, a window about to open, a job ending) starts the
+//! wait again, and silence ends the loop.
 //!
 //! Commands that touch the disk run as jobs on threads of their own (see
-//! `jobs`), so a slow disk never holds up the loop or other clients.
+//! `jobs`, and `ops` for file operations), so a slow disk never holds up
+//! the loop or other clients.
 
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
@@ -16,6 +18,7 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::jobs::{self, Client};
 use crate::mime::MimeTypes;
+use crate::ops::Jobs;
 use crate::places::Home;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
@@ -34,13 +37,15 @@ pub struct Setup {
     /// The MIME database, read at the first [`Command::OpenFile`] and kept
     /// while the core runs.
     pub mime_types: Arc<OnceLock<MimeTypes>>,
+    /// File operations, and the clients that hear about them.
+    pub jobs: Jobs,
 }
 
 /// Runs until idle.
 pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup) {
     let mut clients: HashMap<ClientId, Client> = HashMap::new();
     loop {
-        let message = if clients.is_empty() {
+        let message = if clients.is_empty() && !setup.jobs.busy() {
             match receiver.recv_timeout(idle_exit) {
                 Ok(message) => message,
                 Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => return,
@@ -66,6 +71,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             clients.remove(&client);
             setup.settings.forget(client);
             setup.theme.forget(client);
+            setup.jobs.audience().leave(client);
         }
         // Receiving it already restarted the idle wait.
         CoreMessage::Activity => {}
@@ -77,6 +83,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
                 clients.remove(&client);
                 setup.settings.forget(client);
                 setup.theme.forget(client);
+                setup.jobs.audience().leave(client);
             }
         }
     }
@@ -129,6 +136,35 @@ fn answer(
         }
         Command::Theme => {
             setup.theme.listen(id, client.events());
+            Ok(())
+        }
+        Command::WatchJobs => {
+            setup.jobs.watch(id, client.events());
+            Ok(())
+        }
+        Command::StartJob { tag, operation } => {
+            setup.jobs.audience().join(id, Arc::clone(client.events()));
+            setup.jobs.start(client, tag, operation)
+        }
+        Command::PauseJob(job) => {
+            setup.jobs.pause(job);
+            Ok(())
+        }
+        Command::ResumeJob(job) => {
+            setup.jobs.resume(job);
+            Ok(())
+        }
+        Command::CancelJob(job) => {
+            setup.jobs.cancel(job);
+            Ok(())
+        }
+        Command::AnswerConflict {
+            job,
+            conflict,
+            answer,
+            scope,
+        } => {
+            setup.jobs.answer(job, &conflict, answer, scope);
             Ok(())
         }
     }
