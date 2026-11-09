@@ -108,6 +108,11 @@ impl Store {
         }
     }
 
+    /// The settings as they are now.
+    pub fn current(&self) -> Arc<Settings> {
+        Arc::clone(&lock(&self.shared).settings)
+    }
+
     /// Sends the settings to `client` now and each time they change.
     pub fn listen(&self, client: ClientId, events: &Arc<dyn EventSink>) {
         let mut shared = lock(&self.shared);

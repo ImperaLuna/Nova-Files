@@ -34,7 +34,7 @@ use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{App, Context, EventEmitter, RenderImage, Task, UniformListScrollHandle, Window};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
-    Listing, ListingId, Place,
+    Listing, ListingId, Place, Settings, Thumbnails,
 };
 
 use crate::columns::{self, ColumnText};
@@ -68,6 +68,8 @@ pub enum WindowEvent {
     Refused(PathBuf),
     /// The places list changed.
     Places,
+    /// The settings changed.
+    Settings,
 }
 
 pub struct MainWindow {
@@ -103,6 +105,8 @@ pub struct MainWindow {
     pub(crate) pick: Option<Picker>,
     /// The home folder, which `~` names in a picker's name box.
     pub(crate) home: PathBuf,
+    /// The settings as the core last sent them.
+    settings: Settings,
     _events: Task<()>,
 }
 
@@ -144,6 +148,7 @@ impl MainWindow {
             .and_then(|connection| {
                 connection.send(Command::Ping)?;
                 connection.send(Command::Places)?;
+                connection.send(Command::Settings)?;
                 Ok(connection)
             })
             .ok();
@@ -183,6 +188,7 @@ impl MainWindow {
             places: Vec::new(),
             scroll: UniformListScrollHandle::new(),
             pick: None,
+            settings: Settings::default(),
             _events: events,
         };
         window.open(folder);
@@ -377,28 +383,50 @@ impl MainWindow {
             Event::Thumbnail { id, entry, png } => {
                 if let Ok(index) = usize::try_from(entry.0)
                     && self.rows_wanted.contains(&index)
+                    && self.settings.thumbnails == Thumbnails::Shown
                 {
                     self.shrink_thumbnail(id, index, png, cx);
                 }
             }
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
-            // The window never searches or opens files, only a picker's
-            // opening asks for the window state (see `window_state`), and
-            // no setting changes the window yet.
+            Event::Settings(settings) => self.settings_arrived(settings, cx),
+            // The window never searches or opens files, and only a picker's
+            // opening asks for the window state (see `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FileOpened
             | Event::FileNotOpened
-            | Event::WindowState(_)
-            | Event::Settings(_) => {}
+            | Event::WindowState(_) => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);
                 cx.notify();
             }
         }
+    }
+
+    /// The settings as the core last sent them.
+    pub const fn settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    /// Takes the settings the core sent, which it sends again whenever
+    /// they change. Hiding thumbnails lets go of the ones held; showing
+    /// them again asks for the rows on screen anew, so theirs arrive.
+    fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
+        let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
+        self.settings = Arc::unwrap_or_clone(settings);
+        if thumbnails_changed {
+            if self.settings.thumbnails == Thumbnails::Hidden {
+                release(self.thumbnails.take_all(), None, cx);
+            }
+            // The next frame tells the core about the rows again.
+            self.rows_wanted = 0..0;
+        }
+        cx.emit(WindowEvent::Settings);
+        cx.notify();
     }
 
     /// The window dropped listing `id`, which it no longer wanted. One newer

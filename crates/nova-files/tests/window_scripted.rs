@@ -9,8 +9,8 @@ use std::sync::mpsc::Receiver;
 
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
-    Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink, Listing, ListingId,
-    Unreadable,
+    Appearance, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink,
+    Listing, ListingId, SettingChange, Settings, Thumbnails, Unreadable,
 };
 use nova_files_ui::MainWindow;
 
@@ -56,6 +56,17 @@ impl Core {
             }
         }
         requests
+    }
+
+    /// Every command the window has sent since last asked.
+    fn commands(&self) -> Vec<Command> {
+        let mut commands = Vec::new();
+        while let Ok(message) = self.messages.try_recv() {
+            if let CoreMessage::Command { command, .. } = message {
+                commands.push(command);
+            }
+        }
+        commands
     }
 
     fn send(&self, event: Event) {
@@ -389,4 +400,48 @@ fn a_thumbnail_arriving_asks_for_nothing_new(cx: &mut TestAppContext) {
         assert!(view.thumbnail(usize::try_from(row).unwrap()).is_some());
     });
     assert_eq!(core.thumbnail_requests(), []);
+}
+
+#[gpui::test]
+fn the_window_asks_for_the_settings(cx: &mut TestAppContext) {
+    let (_view, _cx, core) = window(cx);
+    let commands = core.commands();
+    assert!(commands.contains(&Command::Settings), "{commands:?}");
+}
+
+#[gpui::test]
+fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+    core.send(thumbnail(id, 1));
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_some()));
+
+    let hidden = Settings::default().with(SettingChange::Thumbnails(Thumbnails::Hidden));
+    core.send(Event::Settings(Arc::new(hidden.clone())));
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+    // One already on its way is ignored.
+    core.send(thumbnail(id, 2));
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert!(view.thumbnail(2).is_none()));
+
+    // Settings that leave thumbnails alone don't ask for rows again.
+    core.commands();
+    core.send(Event::Settings(Arc::new(
+        hidden.with(SettingChange::Appearance(Appearance::Dark)),
+    )));
+    cx.run_until_parked();
+    let asks_rows = |commands: Vec<Command>| {
+        commands
+            .iter()
+            .any(|command| matches!(command, Command::Rows { .. }))
+    };
+    assert!(!asks_rows(core.commands()));
+
+    core.send(Event::Settings(Arc::default()));
+    cx.run_until_parked();
+    assert!(asks_rows(core.commands()));
+    core.send(thumbnail(id, 2));
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert!(view.thumbnail(2).is_some()));
 }

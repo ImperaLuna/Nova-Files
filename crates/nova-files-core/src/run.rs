@@ -99,7 +99,7 @@ fn answer(
             Ok(())
         }
         Command::Rows { id, first, count } => {
-            client.want_rows(id, first, count);
+            client.want_rows(id, first, count, setup.settings.current().thumbnails);
             Ok(())
         }
         Command::Search { id, query, limit } => {
