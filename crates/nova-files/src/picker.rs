@@ -14,13 +14,22 @@ use nova_files_ui::{Request, RequestSender};
 
 pub struct UiPicker {
     requests: RequestSender,
+    load: fn() -> MimeTypes,
     types: OnceLock<Arc<dyn FileTypes>>,
 }
 
 impl UiPicker {
+    /// Reads the system's MIME database when a pick first needs it.
     pub const fn new(requests: RequestSender) -> Self {
+        Self::with_loader(requests, MimeTypes::from_env)
+    }
+
+    /// Gets the MIME database from `load` instead, which tests point at
+    /// a temporary folder.
+    pub const fn with_loader(requests: RequestSender, load: fn() -> MimeTypes) -> Self {
         Self {
             requests,
+            load,
             types: OnceLock::new(),
         }
     }
@@ -34,7 +43,7 @@ impl Picker for UiPicker {
             .flat_map(|filter| &filter.rules)
             .any(|rule| matches!(rule, FilterRule::MimeType(_)));
         if wants_types {
-            let types = self.types.get_or_init(|| Arc::new(MimeTypes::from_env()));
+            let types = self.types.get_or_init(|| Arc::new((self.load)()));
             request.types = Some(Arc::clone(types));
         }
         self.requests.send(Request::Pick(Box::new(request)));
@@ -48,6 +57,7 @@ impl Picker for UiPicker {
 #[cfg(test)]
 mod tests {
     use nova_files_api::{FileFilter, FilterRule, PickId, PickKind, PickReply, PickRequest};
+    use nova_files_core::MimeTypes;
     use nova_files_dbus::Picker as _;
     use nova_files_ui::Request;
 
@@ -105,7 +115,8 @@ mod tests {
     #[test]
     fn only_a_pick_with_mime_rules_gets_the_database() {
         let (sender, received) = nova_files_ui::channel();
-        let picker = UiPicker::new(sender);
+        // No data folders, so nothing outside the test is read.
+        let picker = UiPicker::with_loader(sender, || MimeTypes::load(&[]));
 
         picker.pick(open_with(vec![FilterRule::Glob("*.pdf".to_owned())]));
         picker.pick(open_with(vec![FilterRule::MimeType("image/*".to_owned())]));
