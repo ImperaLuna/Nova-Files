@@ -293,10 +293,40 @@ fn plain_reads_and_writes_stop_at_the_end_of_their_range() {
     };
     let mut copied = 0;
 
-    read_and_write(&ends, (0, 5), &Control::default(), &mut |n| copied += n).unwrap();
+    read_and_write(&ends, (2, 5), &Control::default(), &mut |n| copied += n).unwrap();
 
-    assert_eq!(copied, 5);
-    assert_eq!(fs::read_to_string(&to).unwrap(), "01234");
+    assert_eq!(copied, 3);
+    assert_eq!(fs::read(&to).unwrap(), [0, 0, b'2', b'3', b'4']);
+}
+
+#[test]
+fn a_kernel_copy_moves_more_than_a_buffer_at_a_time() {
+    let folder = TestFolder::new("copy-range-chunks");
+    let bytes = BUFFER * 3;
+    let from = folder.path().join("a");
+    fs::write(&from, vec![b'x'; bytes]).unwrap();
+    let to = folder.path().join("b");
+    let (source, target) = ends_of(&from, &to, File::options().write(true).create(true));
+    let ends = Ends {
+        source: &source,
+        target: &target,
+        from: &from,
+        to: &to,
+    };
+    let mut chunks = Vec::new();
+    let end = u64::try_from(bytes).unwrap();
+
+    copy_range(&ends, (0, end), &Control::default(), &mut |n| {
+        chunks.push(n);
+    })
+    .unwrap();
+
+    assert_eq!(chunks.iter().sum::<u64>(), end);
+    assert!(
+        chunks.iter().any(|&chunk| chunk > BUFFER as u64),
+        "plain reads would move a buffer at a time: {chunks:?}"
+    );
+    assert_eq!(fs::read(&to).unwrap().len(), bytes);
 }
 
 #[test]

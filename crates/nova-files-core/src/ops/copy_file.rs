@@ -194,7 +194,8 @@ fn copy_range(
             return read_and_write(ends, (at, end), control, copied);
         }
         copied(moved);
-        at += moved;
+        // The kernel moved the offset past what it copied.
+        at = read_at;
     }
 }
 
@@ -231,7 +232,7 @@ fn read_and_write(
             .write_all_at(&buffer[..read], at)
             .map_err(|error| ends.writing(&error))?;
         copied(read as u64);
-        at += read as u64;
+        at = at.saturating_add(read as u64);
     }
     Ok(())
 }
