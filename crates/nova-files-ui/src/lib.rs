@@ -117,7 +117,8 @@ struct RequestLoop {
 impl Global for RequestLoop {}
 
 /// Opens a main window on its folder (or the home folder), or a picker
-/// window titled as the asking app wants, centred on the main display.
+/// window titled as the asking app wants, over the app's window when it
+/// names one, else centred on the main display.
 /// When a main window fails with no window open, `recover_gpu` gets the
 /// folder. A picker that fails to open answers cancelled: restarting
 /// would lose the asking app's call.
@@ -135,6 +136,7 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
     };
     if let Some(request) = &pick {
         options.titlebar = Some(pick::titlebar(request));
+        options.foreign_parent = request.parent.as_ref().map(pick::foreign_parent);
     }
     let connector = connector.clone();
     let folder = folder.unwrap_or_else(home_folder);

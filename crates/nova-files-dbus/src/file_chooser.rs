@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use futures::channel::oneshot;
-use nova_files_api::{PickAnswer, PickId, PickReply, PickRequest};
+use nova_files_api::{ParentWindow, PickAnswer, PickId, PickReply, PickRequest};
 use zbus::message::Header;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -113,6 +113,7 @@ impl<P: Picker> FileChooser<P> {
             filters: parsed.filters,
             filter: parsed.filter,
             folder: parsed.folder,
+            parent: parsed.parent,
             types: None,
             reply: PickReply::new(move |answer| {
                 sender.send(answer).ok();
@@ -164,8 +165,9 @@ impl<P: Picker> FileChooser<P> {
         title: String,
         options: HashMap<String, OwnedValue>,
     ) -> (u32, HashMap<String, OwnedValue>) {
-        drop((app_id, parent_window));
-        let parsed = portal_options::open(title, &options);
+        drop(app_id);
+        let mut parsed = portal_options::open(title, &options);
+        parsed.parent = ParentWindow::parse(&parent_window);
         self.pick(&header, server, handle, parsed).await
     }
 
@@ -184,8 +186,9 @@ impl<P: Picker> FileChooser<P> {
         title: String,
         options: HashMap<String, OwnedValue>,
     ) -> (u32, HashMap<String, OwnedValue>) {
-        drop((app_id, parent_window));
-        let parsed = portal_options::save(title, &options);
+        drop(app_id);
+        let mut parsed = portal_options::save(title, &options);
+        parsed.parent = ParentWindow::parse(&parent_window);
         self.pick(&header, server, handle, parsed).await
     }
 }
@@ -268,6 +271,7 @@ mod tests {
             filters: Vec::new(),
             filter: None,
             folder: None,
+            parent: None,
             types: None,
             reply: PickReply::new(drop),
         }

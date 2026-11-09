@@ -78,6 +78,7 @@ mod tests {
             filters: Vec::new(),
             filter: None,
             folder: None,
+            parent: None,
             types: None,
             reply: PickReply::new(drop),
         });
@@ -107,6 +108,7 @@ mod tests {
             }],
             filter: None,
             folder: None,
+            parent: None,
             types: None,
             reply: PickReply::new(drop),
         }

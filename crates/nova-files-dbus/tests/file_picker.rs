@@ -19,7 +19,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::{
-    Connector, FileFilter, FilterRule, PickAnswer, PickId, PickKind, PickRequest,
+    Connector, FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickRequest,
 };
 use nova_files_dbus::{
     FILE_CHOOSER_INTERFACE, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH, Picker, Service, Started,
@@ -104,6 +104,17 @@ fn call(
     title: &'static str,
     options: Vec<(&'static str, OwnedValue)>,
 ) -> JoinHandle<Answer> {
+    call_from(bus, method, "", title, options)
+}
+
+/// [`call`] from the app window `parent`, as the portal names it.
+fn call_from(
+    bus: &PrivateBus,
+    method: &'static str,
+    parent: &'static str,
+    title: &'static str,
+    options: Vec<(&'static str, OwnedValue)>,
+) -> JoinHandle<Answer> {
     let client = client(bus);
     thread::spawn(move || {
         let chooser = Proxy::new(
@@ -116,7 +127,7 @@ fn call(
         let handle = zbus::zvariant::ObjectPath::try_from(HANDLE).unwrap();
         let options: HashMap<&str, OwnedValue> = options.into_iter().collect();
         chooser
-            .call(method, &(handle, "org.example.App", "", title, options))
+            .call(method, &(handle, "org.example.App", parent, title, options))
             .unwrap()
     })
 }
@@ -127,6 +138,31 @@ fn value(value: Value<'_>) -> OwnedValue {
 
 fn uris(answer: &Answer) -> Vec<String> {
     answer.1["uris"].try_clone().unwrap().try_into().unwrap()
+}
+
+#[test]
+fn the_apps_window_comes_with_the_request() {
+    let core = nova_files_core::spawn().unwrap();
+    let setup = setup(&core.connector);
+    for (method, parent, expected) in [
+        (
+            "OpenFile",
+            "wayland:2a9c",
+            Some(ParentWindow::Wayland("2a9c".to_owned())),
+        ),
+        (
+            "SaveFile",
+            "x11:4a00007",
+            Some(ParentWindow::X11(0x04a0_0007)),
+        ),
+        ("OpenFile", "", None),
+    ] {
+        let pending = call_from(&setup.bus, method, parent, "Pick", Vec::new());
+        let request = setup.requests.recv_timeout(WAIT).unwrap();
+        assert_eq!(request.parent, expected, "{parent:?}");
+        drop(request);
+        assert_eq!(pending.join().unwrap().0, 1);
+    }
 }
 
 #[test]

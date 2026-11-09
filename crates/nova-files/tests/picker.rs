@@ -108,6 +108,7 @@ async fn picker_with<'a>(
         filters: Vec::new(),
         filter: None,
         folder: None,
+        parent: None,
         types: None,
         reply: PickReply::new(move |answer| {
             sender.send(answer).ok();

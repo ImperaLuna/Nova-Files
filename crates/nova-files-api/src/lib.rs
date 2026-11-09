@@ -25,7 +25,9 @@ pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable,
 };
 pub use message::{ClientId, Command, Event, MAX_HITS, MAX_ROWS};
-pub use pick::{FileFilter, FilterRule, PickAnswer, PickId, PickKind, PickReply, PickRequest};
+pub use pick::{
+    FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,
+};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 
 /// The application id: the D-Bus name, the Wayland app id and the name of
