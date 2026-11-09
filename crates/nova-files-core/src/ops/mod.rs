@@ -64,11 +64,13 @@ use running::Running;
 use transfer::transfer;
 
 const JOB_THREAD: &str = "nova-files-job";
+const RECOVER_THREAD: &str = "nova-files-recover";
 
 /// What a job ended with, and the folders whose entries it changed.
 pub type Ended = (Outcome, Vec<PathBuf>);
 
 type Registry = Arc<Mutex<HashMap<JobId, Arc<Job>>>>;
+type Interrupted = Arc<Mutex<HashMap<JobId, Left>>>;
 
 /// The core's jobs.
 pub struct Jobs {
@@ -80,8 +82,9 @@ pub struct Jobs {
     running: Registry,
     /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
-    /// Jobs a crash cut short, waiting to be resumed or forgotten.
-    interrupted: Mutex<HashMap<JobId, Left>>,
+    /// Jobs a crash cut short, waiting to be resumed or forgotten. Added
+    /// to under the lock of `running`, so a client never misses one.
+    interrupted: Interrupted,
     /// Wakes the core's loop when a job ends.
     wake: Connector,
 }
@@ -89,23 +92,49 @@ pub struct Jobs {
 impl Jobs {
     /// Jobs whose journals go under the state folder `state`. Jobs a
     /// crash cut short are found there, cleaned up, and wait as
-    /// interrupted.
+    /// interrupted; on a thread of their own, as the disk may be slow.
     pub fn new(state: Option<&Path>, wake: Connector) -> Self {
         let journals = state.map(|state| state.join(journal::FOLDER));
-        let interrupted = journals
-            .as_deref()
-            .map(left::recover)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|left| (left.job, left))
-            .collect();
-        Self {
+        let jobs = Self {
             next: AtomicU64::new(first_id()),
             audience: Audience::default(),
             running: Registry::default(),
             journals,
-            interrupted: Mutex::new(interrupted),
+            interrupted: Interrupted::default(),
             wake,
+        };
+        if let Some(folder) = jobs.journals.clone() {
+            jobs.recover(folder);
+        }
+        jobs
+    }
+
+    /// Finds the jobs a crash cut short in `folder`, cleans them up, and
+    /// tells clients of each.
+    fn recover(&self, folder: PathBuf) {
+        let (running, interrupted, audience) = (
+            Arc::clone(&self.running),
+            Arc::clone(&self.interrupted),
+            self.audience.clone(),
+        );
+        let spawned = thread::Builder::new()
+            .name(RECOVER_THREAD.to_owned())
+            .spawn(move || {
+                let found = left::recover(&folder);
+                let running = lock(&running);
+                let mut interrupted = lock(&interrupted);
+                for left in found {
+                    audience.tell(&Event::JobInterrupted {
+                        job: left.job,
+                        operation: left.operation.clone(),
+                    });
+                    interrupted.insert(left.job, left);
+                }
+                drop(interrupted);
+                drop(running);
+            });
+        if let Err(error) = spawned {
+            log::warn!("can't look for jobs a crash cut short: {error}");
         }
     }
 
@@ -160,15 +189,23 @@ impl Jobs {
         // Before the thread starts, so the client hears of the job before
         // it can end.
         let told = client.deliver(Event::JobStarted { tag, job });
-        self.spawn(job, operation, None);
+        self.spawn(lock(&self.running), job, operation, None);
         told
     }
 
     /// Runs `operation` as job `job` on a thread of its own, resuming it
-    /// after a crash when it `left` something.
-    fn spawn(&self, job: JobId, operation: Operation, left: Option<Left>) {
+    /// after a crash when it `left` something. The job joins `registry`,
+    /// the jobs' lock held, before that is let go.
+    fn spawn(
+        &self,
+        mut registry: MutexGuard<'_, HashMap<JobId, Arc<Job>>>,
+        job: JobId,
+        operation: Operation,
+        left: Option<Left>,
+    ) {
         let shared = Arc::new(Job::new(operation.clone()));
-        lock(&self.running).insert(job, Arc::clone(&shared));
+        registry.insert(job, Arc::clone(&shared));
+        drop(registry);
         let failed_path = first_path(&operation);
         let reporter = Reporter::new(
             self.audience.clone(),
@@ -177,9 +214,8 @@ impl Jobs {
             Arc::clone(&shared),
         );
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
-        if let Some(left) = left {
-            running.resuming(left.made);
-        }
+        // New hidden names for a resumed job, never a crash's.
+        let resume = left.map(|left| (left, self.next.fetch_add(1, Ordering::Relaxed)));
         let (registry, audience, wake) = (
             Arc::clone(&self.running),
             self.audience.clone(),
@@ -188,6 +224,14 @@ impl Jobs {
         let spawned = thread::Builder::new()
             .name(JOB_THREAD.to_owned())
             .spawn(move || {
+                let operation = match resume {
+                    Some((left, names)) => {
+                        let rest = still_to_do(&left.operation);
+                        running.resuming(left, names);
+                        rest
+                    }
+                    None => operation,
+                };
                 let ended = run(&mut running, &operation);
                 running.finish();
                 finish(&registry, &audience, job, ended);
@@ -228,9 +272,8 @@ impl Jobs {
             return;
         };
         self.audience.tell(&Event::JobResumed(job));
-        drop(running);
-        let operation = still_to_do(&left.operation);
-        self.spawn(job, operation, Some(left));
+        let operation = left.operation.clone();
+        self.spawn(running, job, operation, Some(left));
     }
 
     /// Drops interrupted job `job`, and its journal.

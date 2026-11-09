@@ -75,3 +75,91 @@ fn a_backup_is_synced_at_once() {
         .unwrap();
     assert!(journal.synced > started);
 }
+
+#[test]
+fn records_what_resumes_need() {
+    let folder = TestFolder::new("journal-resume-records");
+    let jobs = folder.path().join("jobs");
+    let mut journal = Journal::start(&jobs, JobId(5)).unwrap();
+
+    journal
+        .record(Record::Instead(Path::new("/a (2)"), Path::new("/a")))
+        .unwrap();
+    journal.record(Record::Planned(Path::new("/t"))).unwrap();
+
+    assert_eq!(
+        fs::read_to_string(jobs.join("5")).unwrap(),
+        "nova-files-job 1\ninstead /a%20(2) /a\nplanned /t\n"
+    );
+}
+
+#[test]
+fn a_journal_is_held_while_open() {
+    let folder = TestFolder::new("journal-held");
+    let jobs = folder.path().join("jobs");
+    let journal = Journal::start(&jobs, JobId(6)).unwrap();
+
+    let other = File::open(jobs.join("6")).unwrap();
+    let error = hold(&other).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+
+    drop(journal);
+    hold(&other).unwrap();
+}
+
+#[test]
+fn a_reopened_journal_drops_a_line_cut_short_first() {
+    let folder = TestFolder::new("journal-reopen");
+    let path = folder.path().join("7");
+    fs::write(&path, "nova-files-job 1\ncopy\npart /into/.nova-pa").unwrap();
+    let file = OpenOptions::new()
+        .read(true)
+        .append(true)
+        .open(&path)
+        .unwrap();
+    let written = read::read(&file, &path).unwrap();
+    assert_eq!(written.lines.len(), 1, "the cut line is left out");
+
+    let mut journal = Journal::reopen(file, path.clone(), written.whole).unwrap();
+    journal.record(Record::Made(Path::new("/into/x"))).unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        "nova-files-job 1\ncopy\nmade /into/x\n"
+    );
+}
+
+#[test]
+fn reads_back_what_it_wrote() {
+    let folder = TestFolder::new("journal-read");
+    let jobs = folder.path().join("jobs");
+    let mut journal = Journal::start(&jobs, JobId(8)).unwrap();
+    let odd = Path::new(OsStr::from_bytes(b"/a b/%\xff"));
+    journal
+        .record(Record::Moved(odd, Path::new("/to")))
+        .unwrap();
+    let path = jobs.join("8");
+
+    let written = read::read(&File::open(&path).unwrap(), &path).unwrap();
+
+    assert_eq!(
+        written.lines,
+        [read::Line {
+            word: word::MOVED.to_owned(),
+            paths: vec![odd.to_path_buf(), PathBuf::from("/to")],
+        }]
+    );
+    assert_eq!(written.whole, fs::metadata(&path).unwrap().len());
+    drop(journal);
+}
+
+#[test]
+fn a_file_that_is_not_a_journal_is_refused() {
+    let folder = TestFolder::new("journal-not");
+    let path = folder.path().join("9");
+    for text in ["not a journal\n", "nova-files-job 1\nmade /a%zz\n"] {
+        fs::write(&path, text).unwrap();
+        let error = read::read(&File::open(&path).unwrap(), &path).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+}

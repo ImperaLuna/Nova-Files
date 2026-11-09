@@ -23,8 +23,14 @@
 //! made /home/me/Backup/My%20Photos
 //! ```
 //!
-//! A move records each item it moved, from and to, instead; a delete
-//! records only what it was asked to delete.
+//! A copy or move that put an item under another name than planned (the
+//! user kept both) says so with `instead`, the name used then the one
+//! planned. A move records each item it moved, from and to, instead of
+//! `made`; a delete records what it was asked to delete, then each entry
+//! it planned to, before it removes any.
+//!
+//! A running job holds a lock on its journal, so a second core never
+//! takes a live job for one a crash cut short.
 
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{self, Write as _};
@@ -34,6 +40,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use nova_files_api::JobId;
+use rustix::fs::{FlockOperation, flock};
 
 /// The journals' folder, under the state folder.
 pub const FOLDER: &str = "nova-files/jobs";
@@ -49,6 +56,27 @@ const HEX: &[u8; 16] = b"0123456789ABCDEF";
 const HIGH: u8 = 4;
 const LOW_MASK: u8 = 0x0F;
 
+/// The start of the hidden name of a part file a job writes, followed by
+/// the job's id for names and the item's index.
+pub const PART_PREFIX: &str = ".nova-part-";
+/// The start of the hidden name a user's file steps aside to.
+pub const BACKUP_PREFIX: &str = ".nova-backup-";
+
+/// The record words, as written and read back.
+pub mod word {
+    pub const COPY: &str = "copy";
+    pub const MOVE: &str = "move";
+    pub const DELETE: &str = "delete";
+    pub const INTO: &str = "into";
+    pub const SOURCE: &str = "source";
+    pub const PART: &str = "part";
+    pub const MADE: &str = "made";
+    pub const INSTEAD: &str = "instead";
+    pub const MOVED: &str = "moved";
+    pub const BACKUP: &str = "backup";
+    pub const PLANNED: &str = "planned";
+}
+
 /// One line of a journal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Record<'a> {
@@ -62,6 +90,8 @@ pub enum Record<'a> {
     Part(&'a Path),
     /// Something the job made, which undo would remove.
     Made(&'a Path),
+    /// What the job made at the first path was planned for the second.
+    Instead(&'a Path, &'a Path),
     /// Something the job moved from the first path to the second, which
     /// undo would move back.
     Moved(&'a Path, &'a Path),
@@ -69,6 +99,9 @@ pub enum Record<'a> {
     /// first while its replacement takes its name. Left behind by a
     /// crash, it goes back if its name is free.
     Backup(&'a Path, &'a Path),
+    /// An entry a delete planned to remove. A resumed delete removes only
+    /// these, never what came after.
+    Planned(&'a Path),
 }
 
 impl Record<'_> {
@@ -76,12 +109,14 @@ impl Record<'_> {
     fn line(self) -> Vec<u8> {
         let (word, paths): (&str, &[&Path]) = match &self {
             Self::Operation(name) => (name, &[]),
-            Self::Into(path) => ("into", std::slice::from_ref(path)),
-            Self::Source(path) => ("source", std::slice::from_ref(path)),
-            Self::Part(path) => ("part", std::slice::from_ref(path)),
-            Self::Made(path) => ("made", std::slice::from_ref(path)),
-            Self::Moved(from, to) => ("moved", &[*from, *to]),
-            Self::Backup(backup, of) => ("backup", &[*backup, *of]),
+            Self::Into(path) => (word::INTO, std::slice::from_ref(path)),
+            Self::Source(path) => (word::SOURCE, std::slice::from_ref(path)),
+            Self::Part(path) => (word::PART, std::slice::from_ref(path)),
+            Self::Made(path) => (word::MADE, std::slice::from_ref(path)),
+            Self::Instead(made, planned) => (word::INSTEAD, &[*made, *planned]),
+            Self::Moved(from, to) => (word::MOVED, &[*from, *to]),
+            Self::Backup(backup, of) => (word::BACKUP, &[*backup, *of]),
+            Self::Planned(path) => (word::PLANNED, std::slice::from_ref(path)),
         };
         let mut line = word.as_bytes().to_vec();
         for path in paths {
@@ -142,6 +177,8 @@ impl Journal {
             .create_new(true)
             .mode(FILE_MODE)
             .open(&path)?;
+        // Before the header, so a journal that says anything is held.
+        hold(&file)?;
         file.write_all(HEADER.as_bytes())?;
         file.write_all(b"\n")?;
         file.sync_data()?;
@@ -154,14 +191,15 @@ impl Journal {
         })
     }
 
-    /// Opens job `job`'s journal in `folder` again, left by a crash, to
-    /// add to it as the job resumes.
+    /// Adds to the journal at `path` again, left by a crash and held
+    /// through `file` since, as its job resumes. What follows its first
+    /// `whole` bytes, a last line the crash cut short, goes first, so
+    /// the next record starts a line of its own.
     ///
     /// # Errors
-    /// When it isn't there or can't be opened.
-    pub fn reopen(folder: &Path, job: JobId) -> io::Result<Self> {
-        let path = folder.join(job.0.to_string());
-        let file = OpenOptions::new().append(true).open(&path)?;
+    /// When it can't be cut back.
+    pub fn reopen(file: File, path: PathBuf, whole: u64) -> io::Result<Self> {
+        file.set_len(whole)?;
         Ok(Self {
             file,
             path,
@@ -185,6 +223,16 @@ impl Journal {
         Ok(())
     }
 
+    /// Syncs what is written so far to the disk.
+    ///
+    /// # Errors
+    /// When it can't be synced.
+    pub fn sync(&mut self) -> io::Result<()> {
+        self.file.sync_data()?;
+        self.synced = Instant::now();
+        Ok(())
+    }
+
     /// The job is over: its journal goes.
     pub fn finish(self) {
         if let Err(error) = fs::remove_file(&self.path) {
@@ -194,6 +242,15 @@ impl Journal {
             );
         }
     }
+}
+
+/// Holds `journal` for as long as it is open, so no other core takes its
+/// job for one a crash cut short.
+///
+/// # Errors
+/// [`io::ErrorKind::WouldBlock`] when another holds it.
+pub fn hold(journal: &File) -> io::Result<()> {
+    flock(journal, FlockOperation::NonBlockingLockExclusive).map_err(io::Error::from)
 }
 
 pub mod read;

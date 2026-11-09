@@ -14,7 +14,7 @@ use rustix::fs::{Access, access};
 use rustix::io::Errno;
 
 use super::copy_file::{FileCopy, copy_file, version};
-use super::journal::Record;
+use super::journal::{BACKUP_PREFIX, PART_PREFIX, Record};
 use super::place::{rename_no_replace, replace, replace_through, same_entry};
 use super::plan::{Item, Kind};
 use super::running::Running;
@@ -65,9 +65,9 @@ pub struct Making<'a> {
 /// [`Stop`] when cancelled, or at the path a step failed at.
 pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
     let Making { item, target, .. } = *making;
-    let job = running.job.0;
-    let hidden = |what: &str| target.with_file_name(format!(".nova-{what}-{job}-{}", making.index));
-    let (part, backup) = (hidden("part"), hidden("backup"));
+    let names = running.names;
+    let hidden = |prefix: &str| target.with_file_name(format!("{prefix}{names}-{}", making.index));
+    let (part, backup) = (hidden(PART_PREFIX), hidden(BACKUP_PREFIX));
     if making.how == How::Move {
         if making.replacing {
             running.record(Record::Backup(&backup, target));

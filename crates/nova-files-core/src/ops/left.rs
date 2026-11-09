@@ -4,70 +4,110 @@
 //! replace), and a file that stepped aside for a replacement comes back
 //! when its replacement never took its name. The job itself then waits,
 //! interrupted, until a client resumes or forgets it.
+//!
+//! A journal another core holds belongs to a job still running there,
+//! and is left alone. One that is read is held from then on, until its
+//! job resumes, is forgotten, or the core stops.
 
-use std::collections::HashSet;
-use std::fs;
+use std::collections::{HashMap, HashSet};
+use std::fs::{self, File, OpenOptions};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::{JobId, Operation};
 
-use super::journal::read::{Line, lines};
+use super::journal::read::{Line, read};
+use super::journal::{BACKUP_PREFIX, PART_PREFIX, hold, word};
 use super::place::rename_no_replace;
 
-/// The hidden names a job gives its part files and backups. Nothing else
-/// is ever removed on a journal's word.
-const PART: &str = ".nova-part-";
-const BACKUP: &str = ".nova-backup-";
-
 /// A job a crash cut short.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Left {
     pub job: JobId,
     pub operation: Operation,
-    /// What it made, which a resume takes as done.
-    pub made: HashSet<PathBuf>,
+    pub done: Done,
     pub journal: PathBuf,
+    /// The journal, held.
+    pub file: File,
+    /// How many of the journal's bytes are whole lines.
+    pub whole: u64,
+}
+
+/// What a job did before a crash cut it short, which a resume takes as
+/// done.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Done {
+    /// What it made, by where it was planned to go, at where it went.
+    pub made: HashMap<PathBuf, PathBuf>,
+    /// For a delete, what it planned to remove, when it got that far.
+    pub planned: Option<HashSet<PathBuf>>,
 }
 
 /// The jobs whose journals are in `folder`, each cleaned up. A journal
-/// that can't be read is logged and left alone.
+/// that can't be read is logged and left alone; one whose job can't be
+/// resumed is cleaned up and removed.
 pub fn recover(folder: &Path) -> Vec<Left> {
     let Ok(entries) = fs::read_dir(folder) else {
         return Vec::new();
     };
-    let mut left = Vec::new();
-    for entry in entries.flatten() {
-        let journal = entry.path();
-        let job = entry
-            .file_name()
-            .to_str()
-            .and_then(|name| name.parse().ok());
-        let read = lines(&journal).map(|lines| (job, operation(&lines), lines));
-        match read {
-            Ok((Some(job), Some(operation), lines)) => {
-                left.push(Left {
-                    job: JobId(job),
-                    operation,
-                    made: clean(&lines),
-                    journal,
-                });
-            }
-            Ok(_) => log::warn!("{} names no job it can resume", journal.display()),
-            Err(error) => log::warn!("can't read {}: {error}", journal.display()),
-        }
-    }
+    let mut left: Vec<_> = entries
+        .flatten()
+        .filter_map(|entry| look_at(entry.path(), entry.file_name().to_str()))
+        .collect();
     left.sort_by_key(|left| left.job);
     left
 }
 
+/// The job the journal at `journal`, named `name`, left, cleaned up.
+fn look_at(journal: PathBuf, name: Option<&str>) -> Option<Left> {
+    let file = match open(&journal) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+            log::info!("{} belongs to a running core", journal.display());
+            return None;
+        }
+        Err(error) => {
+            log::warn!("can't read {}: {error}", journal.display());
+            return None;
+        }
+    };
+    let written = read(&file, &journal)
+        .inspect_err(|error| log::warn!("can't read {}: {error}", journal.display()))
+        .ok()?;
+    let done = clean(&written.lines);
+    let job = name.and_then(|name| name.parse().ok());
+    let (Some(job), Some(operation)) = (job, operation(&written.lines)) else {
+        log::warn!("{} names no job it can resume", journal.display());
+        if let Err(error) = fs::remove_file(&journal) {
+            log::warn!("can't remove {}: {error}", journal.display());
+        }
+        return None;
+    };
+    Some(Left {
+        job: JobId(job),
+        operation,
+        done,
+        journal,
+        file,
+        whole: written.whole,
+    })
+}
+
+/// Opens the journal at `path` and holds it.
+fn open(path: &Path) -> io::Result<File> {
+    let file = OpenOptions::new().read(true).append(true).open(path)?;
+    hold(&file)?;
+    Ok(file)
+}
+
 /// The operation `lines` record: its word, then where to and from what.
 fn operation(lines: &[Line]) -> Option<Operation> {
-    let sources: Vec<_> = first_paths(lines, "source").collect();
-    let into = first_paths(lines, "into").next();
+    let sources: Vec<_> = first_paths(lines, word::SOURCE).collect();
+    let into = first_paths(lines, word::INTO).next();
     match (lines.first()?.word.as_str(), into) {
-        ("copy", Some(into)) => Some(Operation::Copy { sources, into }),
-        ("move", Some(into)) => Some(Operation::Move { sources, into }),
-        ("delete", None) => Some(Operation::Delete { paths: sources }),
+        (word::COPY, Some(into)) => Some(Operation::Copy { sources, into }),
+        (word::MOVE, Some(into)) => Some(Operation::Move { sources, into }),
+        (word::DELETE, None) => Some(Operation::Delete { paths: sources }),
         _ => None,
     }
 }
@@ -82,38 +122,71 @@ fn first_paths<'a>(lines: &'a [Line], word: &'a str) -> impl Iterator<Item = Pat
 
 /// Removes the part files `lines` name, brings back each backup whose
 /// replacement never took its name (and removes those whose did), and
-/// returns what the job made.
-fn clean(lines: &[Line]) -> HashSet<PathBuf> {
-    let mut made = HashSet::new();
+/// returns what the job did.
+fn clean(lines: &[Line]) -> Done {
+    let mut done = Done::default();
+    // The names the job's own copies took.
+    let mut placed = HashSet::new();
     for line in lines {
         match (line.word.as_str(), line.paths.as_slice()) {
-            ("part", [part]) if hidden(part, PART) => {
-                if let Err(error) = fs::remove_file(part)
-                    && part.symlink_metadata().is_ok()
-                {
-                    log::warn!("can't remove {}: {error}", part.display());
-                }
+            (word::MADE, [path]) => {
+                done.made.insert(path.clone(), path.clone());
+                placed.insert(path.clone());
             }
-            ("backup", [backup, of]) if hidden(backup, BACKUP) => restore(backup, of),
-            ("made", [path]) => {
-                made.insert(path.clone());
+            (word::INSTEAD, [made, planned]) => {
+                done.made.remove(made);
+                done.made.insert(planned.clone(), made.clone());
+            }
+            (word::MOVED, [_, to]) => {
+                placed.insert(to.clone());
+            }
+            (word::PLANNED, [path]) => {
+                done.planned
+                    .get_or_insert_with(HashSet::new)
+                    .insert(path.clone());
             }
             _ => {}
         }
     }
-    made
+    for line in lines {
+        match (line.word.as_str(), line.paths.as_slice()) {
+            (word::PART, [part]) if hidden(part, PART_PREFIX) => remove_part(part),
+            (word::BACKUP, [backup, of]) if hidden(backup, BACKUP_PREFIX) => {
+                restore(backup, of, placed.contains(of));
+            }
+            _ => {}
+        }
+    }
+    done
 }
 
-/// Brings `backup` back to `of` if nothing took that name, else removes
-/// it: its replacement is in, as the user chose.
-fn restore(backup: &Path, of: &Path) {
+fn remove_part(part: &Path) {
+    if let Err(error) = fs::remove_file(part)
+        && part.symlink_metadata().is_ok()
+    {
+        log::warn!("can't remove {}: {error}", part.display());
+    }
+}
+
+/// Brings `backup` back to `of` if nothing took that name. It is removed
+/// only when the job's own replacement is known to hold the name, as the
+/// user chose; when anything else does, it stays where it is, as the
+/// only copy of the user's file.
+fn restore(backup: &Path, of: &Path, replaced: bool) {
     if backup.symlink_metadata().is_err() {
         return;
     }
     let restored = if of.symlink_metadata().is_err() {
         rename_no_replace(backup, of)
-    } else {
+    } else if replaced {
         fs::remove_file(backup)
+    } else {
+        log::warn!(
+            "{} keeps the file that stood at {}, which something else holds now",
+            backup.display(),
+            of.display()
+        );
+        return;
     };
     if let Err(error) = restored {
         log::warn!("{} is left at {}: {error}", of.display(), backup.display());

@@ -22,20 +22,20 @@ use rustix::io::Errno;
 use super::Ended;
 use super::clash::conflict_for;
 use super::failure::failure;
-use super::journal::Record;
+use super::journal::{Record, word};
 use super::make::size;
-use super::plan::{Item, Kind, plan_delete};
+use super::plan::{Item, Kind, Plan, plan_delete};
 use super::running::Running;
 use super::stop::Stop;
 
 /// Deletes each of `paths` for good.
 pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
-    running.record(Record::Operation("delete"));
+    running.record(Record::Operation(word::DELETE));
     for path in paths {
         running.record(Record::Source(path));
     }
     let plan = match plan_delete(paths, &running.shared.control) {
-        Ok(plan) => plan,
+        Ok(plan) => planned(running, plan),
         Err(stop) => return (stop.outcome(), Vec::new()),
     };
     let items = u64::try_from(plan.items.len()).unwrap_or(u64::MAX);
@@ -79,6 +79,23 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
         .map(PathBuf::from)
         .collect();
     (result.map_or_else(Stop::outcome, |()| Outcome::Done), shown)
+}
+
+/// `plan` as the journal keeps it. A delete that resumes keeps only what
+/// it planned before the crash: what was added since, nobody chose to
+/// delete. One that starts records its plan, on the disk before anything
+/// goes.
+fn planned(running: &mut Running, mut plan: Plan) -> Plan {
+    if let Some(before) = &running.before.planned {
+        plan.items.retain(|item| before.contains(&item.from));
+        plan.bytes = plan.items.iter().map(size).sum();
+    } else {
+        for item in &plan.items {
+            running.record(Record::Planned(&item.from));
+        }
+        running.settle();
+    }
+    plan
 }
 
 /// Removes `item`, asking what to do when it may not, and returns whether

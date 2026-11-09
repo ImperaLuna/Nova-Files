@@ -30,7 +30,7 @@ use super::attrs::{copy_mode_and_times, copy_xattrs};
 use super::clash::{clash, conflict_for};
 use super::control::{Cancelled, Control};
 use super::failure::failure;
-use super::journal::Record;
+use super::journal::{Record, word};
 use super::keep_both::{Naming, free_path};
 use super::make::{How, Made, Making, make, size};
 use super::place::rename_no_replace;
@@ -160,8 +160,8 @@ impl Done {
 /// Copies or moves, as `how` says, each of `sources` into `into`.
 pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: How) -> Ended {
     running.record(Record::Operation(match how {
-        How::Copy => "copy",
-        How::Move => "move",
+        How::Copy => word::COPY,
+        How::Move => word::MOVE,
     }));
     running.record(Record::Into(into));
     for source in sources {
@@ -426,16 +426,16 @@ fn place(
     // before each try, as the name may have changed hands since.
     let mut replacing = false;
     let mut looked_again = 0;
+    // Made before a crash cut the job short.
+    if let Some(made) = running.made_before(planned.target) {
+        let made_before = Made {
+            left: size(item),
+            carried: false,
+        };
+        return Ok((Placed::Made(made_before), made.to_path_buf()));
+    }
     loop {
         running.shared.control.checkpoint()?;
-        // Made before a crash cut the job short.
-        if running.made_before.contains(&target) {
-            let made = Made {
-                left: size(item),
-                carried: false,
-            };
-            return Ok((Placed::Made(made), target));
-        }
         let mut making = Making {
             target: &target,
             ..*planned
@@ -463,7 +463,12 @@ fn place(
             }
         };
         match tried {
-            Ok(it) => return Ok((Placed::Made(it), target)),
+            Ok(it) => {
+                if target != planned.target {
+                    running.record(Record::Instead(&target, planned.target));
+                }
+                return Ok((Placed::Made(it), target));
+            }
             // The name changed hands since it was looked at: look again.
             Err(Stop::Failed { path, reason })
                 if looked_again < LOOK_AGAIN

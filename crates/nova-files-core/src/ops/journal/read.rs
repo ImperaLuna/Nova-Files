@@ -2,8 +2,8 @@
 //! and the paths it is about. A last line the crash cut short (no
 //! newline) is left out, as its path may be cut short too.
 
-use std::fs;
-use std::io;
+use std::fs::File;
+use std::io::{self, Read as _};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
@@ -21,16 +21,34 @@ pub struct Line {
     pub paths: Vec<PathBuf>,
 }
 
-/// The whole lines of the journal at `path`, after its header.
+/// A journal read back: its whole lines after the header, and how many
+/// bytes they take, header included.
+#[derive(Debug)]
+pub struct Written {
+    pub lines: Vec<Line>,
+    pub whole: u64,
+}
+
+/// The journal at `path`, open as `file`, read from its start.
 ///
 /// # Errors
 /// When it can't be read, or isn't a journal this version wrote.
-pub fn lines(path: &Path) -> io::Result<Vec<Line>> {
-    let bytes = fs::read(path)?;
-    let whole = bytes
-        .iter()
-        .rposition(|&byte| byte == b'\n')
-        .map_or(&bytes[..0], |end| &bytes[..end]);
+pub fn read(mut file: &File, path: &Path) -> io::Result<Written> {
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let end = bytes.iter().rposition(|&byte| byte == b'\n');
+    let whole = end.map_or(&bytes[..0], |end| &bytes[..end]);
+    let lines = parse(whole, path)?;
+    let whole = end.map_or(0, |end| end + 1);
+    Ok(Written {
+        lines,
+        whole: u64::try_from(whole).unwrap_or(u64::MAX),
+    })
+}
+
+/// The lines of `whole`, a journal's whole lines without the last
+/// newline, after its header.
+fn parse(whole: &[u8], path: &Path) -> io::Result<Vec<Line>> {
     let mut lines = whole.split(|&byte| byte == b'\n');
     if lines.next() != Some(HEADER.as_bytes()) {
         return Err(not_a_journal(path));

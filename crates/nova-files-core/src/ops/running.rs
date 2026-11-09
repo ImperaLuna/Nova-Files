@@ -2,8 +2,9 @@
 //! progress, its journal once it has one, and the answers a client gave
 //! for all conflicts of a kind.
 
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use nova_files_api::{Answer, Conflict, ConflictKind, JobId, Scope};
@@ -11,10 +12,14 @@ use nova_files_api::{Answer, Conflict, ConflictKind, JobId, Scope};
 use super::control::Cancelled;
 use super::job::Job;
 use super::journal::{Journal, Record};
+use super::left::{Done, Left};
 use super::progress::Reporter;
 
 pub struct Running {
     pub job: JobId,
+    /// The id in the names of the job's part files and backups: the job's
+    /// own, or, once resumed, a new one, so none is a name a crash left.
+    pub names: u64,
     /// What the core keeps of the job while it runs.
     pub shared: Arc<Job>,
     pub reporter: Reporter,
@@ -25,9 +30,9 @@ pub struct Running {
     answers: HashMap<ConflictKind, Answer>,
     /// How many conflicts it asked about.
     asked: u64,
-    /// What the job made before a crash cut it short, taken as done now
+    /// What the job did before a crash cut it short, taken as done now
     /// that it resumes.
-    pub made_before: HashSet<PathBuf>,
+    pub before: Done,
     /// Whether the job resumes, adding to the journal it already has.
     resumes: bool,
 }
@@ -41,27 +46,57 @@ impl Running {
     ) -> Self {
         Self {
             job,
+            names: job.0,
             shared,
             reporter,
             journals,
             journal: None,
             answers: HashMap::new(),
             asked: 0,
-            made_before: HashSet::new(),
+            before: Done::default(),
             resumes: false,
         }
     }
 
-    /// The job resumes after a crash, having made `made` before it: its
-    /// journal, which already says what the job does, is added to.
-    pub fn resuming(&mut self, made: HashSet<PathBuf>) {
-        self.made_before = made;
+    /// The job resumes after a crash, which `left` it as it was: its
+    /// journal, which already says what the job does, is added to, and
+    /// its hidden names take the id `names`.
+    pub fn resuming(&mut self, left: Left, names: u64) {
+        self.before = left.done;
+        self.names = names;
         self.resumes = true;
-        if let Some(folder) = self.journals.take() {
-            match Journal::reopen(&folder, self.job) {
-                Ok(journal) => self.journal = Some(journal),
-                Err(error) => log::warn!("job {} resumes without its journal: {error}", self.job.0),
-            }
+        self.journals = None;
+        match Journal::reopen(left.file, left.journal, left.whole) {
+            Ok(journal) => self.journal = Some(journal),
+            Err(error) => log::warn!("job {} resumes without its journal: {error}", self.job.0),
+        }
+    }
+
+    /// Where an item planned for `planned` went before a crash, if it is
+    /// still there.
+    pub fn made_before(&self, planned: &Path) -> Option<&Path> {
+        self.before
+            .made
+            .get(planned)
+            .map(PathBuf::as_path)
+            .filter(|made| made.symlink_metadata().is_ok())
+    }
+
+    /// Makes sure what the journal says so far is on the disk.
+    pub fn settle(&mut self) {
+        if let Some(journal) = &mut self.journal
+            && let Err(error) = journal.sync()
+        {
+            self.drop_journal(&error);
+        }
+    }
+
+    /// The journal failed with `error`. A journal that misses a step
+    /// would mislead a resume, so it goes.
+    fn drop_journal(&mut self, error: &io::Error) {
+        log::warn!("job {} drops its journal: {error}", self.job.0);
+        if let Some(journal) = self.journal.take() {
+            journal.finish();
         }
     }
 
@@ -122,11 +157,7 @@ impl Running {
         if let Some(journal) = &mut self.journal
             && let Err(error) = journal.record(record)
         {
-            // A journal that misses a step would mislead a resume.
-            log::warn!("job {} drops its journal: {error}", self.job.0);
-            if let Some(journal) = self.journal.take() {
-                journal.finish();
-            }
+            self.drop_journal(&error);
         }
     }
 
