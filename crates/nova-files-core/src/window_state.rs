@@ -11,8 +11,9 @@
 //! logged and the state stays in memory for this run.
 
 use std::cell::RefCell;
-use std::fs;
-use std::io::{self, Read as _};
+use std::fs::{self, DirBuilder, OpenOptions};
+use std::io::{self, Read as _, Write as _};
+use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -24,6 +25,9 @@ const FILE: &str = "nova-files/window-state";
 /// A state this big is not one the UI wrote; it is never read or kept.
 pub const MAX_BYTES: usize = 64 * 1024;
 const SAVE_THREAD: &str = "nova-files-state";
+/// The file and the folders made for it are the user's alone.
+const FILE_MODE: u32 = 0o600;
+const FOLDER_MODE: u32 = 0o700;
 
 /// Tells apart the temporary files of saves that overlap.
 static SAVES: AtomicU64 = AtomicU64::new(0);
@@ -117,22 +121,38 @@ fn read(path: &Path) -> Vec<u8> {
     bytes
 }
 
-/// Replaces the file at `path` with `bytes` whole, making its folder.
+/// Replaces the file at `path` with `bytes` whole, making its folder;
+/// both are private from the start.
 fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if let Some(folder) = path.parent() {
-        fs::create_dir_all(folder)?;
+        DirBuilder::new()
+            .recursive(true)
+            .mode(FOLDER_MODE)
+            .create(folder)?;
     }
     let save = SAVES.fetch_add(1, Ordering::Relaxed);
     let temporary = path.with_extension(format!("tmp-{}-{save}", std::process::id()));
-    fs::write(&temporary, bytes)?;
-    fs::rename(&temporary, path).inspect_err(|_| {
+    let written = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(FILE_MODE)
+        .open(&temporary)
+        .and_then(|mut file| file.write_all(bytes))
+        .and_then(|()| fs::rename(&temporary, path));
+    if written.is_err() {
         fs::remove_file(&temporary).ok();
-    })
+    }
+    written
 }
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt as _;
+
     use super::*;
+
+    /// The permission bits of a mode.
+    const ALL_MODE_BITS: u32 = 0o777;
 
     /// Saves queued before the writer runs.
     const SAVES_IN_A_ROW: u32 = 20;
@@ -151,6 +171,9 @@ mod tests {
         write(&path, b"picker 900x600").unwrap();
         write(&path, b"picker 1000x700").unwrap();
         assert_eq!(read(&path), b"picker 1000x700");
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & ALL_MODE_BITS;
+        assert_eq!(mode(&path), FILE_MODE);
+        assert_eq!(mode(path.parent().unwrap()), FOLDER_MODE);
         let left: Vec<_> = fs::read_dir(path.parent().unwrap()).unwrap().collect();
         assert_eq!(left.len(), 1);
         fs::remove_dir_all(home).ok();
