@@ -9,7 +9,7 @@ use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, 
 use crate::properties::{Properties, PropertiesId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
-use crate::size::{MeasureId, ScanState, Size};
+use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::theme::{DesktopLook, Theme};
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -141,7 +141,16 @@ pub enum Command {
     /// scan at a time: a newer `Measure` from it stops this one, which then
     /// says nothing more.
     Measure { id: MeasureId, paths: Vec<PathBuf> },
-    /// Stop the client's scan `id`, if it still runs. It says nothing more.
+    /// Measure what each entry of `folder` (an absolute path) takes. The
+    /// answer is [`Event::SpaceMeasured`] with the same `id`, a few times a
+    /// second while the scan runs, then once more when it ends; or
+    /// [`Event::SpaceUnreadable`]. A client has one space scan at a time,
+    /// beside its one `Measure`: a newer `Space` from it stops this one,
+    /// which then says nothing more.
+    Space { id: MeasureId, folder: PathBuf },
+    /// Stop the client's scan `id`, a `Measure` or a `Space`, if it still
+    /// runs (both, when the client gave them the same id). It says nothing
+    /// more.
     StopMeasure(MeasureId),
 }
 
@@ -268,6 +277,16 @@ pub enum Event {
         size: Size,
         state: ScanState,
     },
+    /// What the entries of [`Command::Space`] `id`'s folder take so far:
+    /// the first answer names every entry, later ones only those whose
+    /// totals changed since. `state` says whether it ended.
+    SpaceMeasured {
+        id: MeasureId,
+        shares: Vec<Share>,
+        state: ScanState,
+    },
+    /// [`Command::Space`] `id`'s folder couldn't be listed.
+    SpaceUnreadable { id: MeasureId, reason: Unreadable },
 }
 
 /// Names one connected client, so the core can answer the right one.

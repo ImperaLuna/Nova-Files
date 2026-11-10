@@ -73,7 +73,11 @@ fn a_stopped_scan_is_not_cut_short_later() {
     let id = MeasureId(3);
     let client = ClientId(1);
     measurer.measure(client, &sink, id, vec![folder.path().to_owned()]);
-    let shared = Arc::clone(lock(&measurer.scans).get(&client).unwrap());
+    let shared = Arc::clone(
+        lock(&measurer.scans)
+            .get(&(client, Purpose::Total))
+            .unwrap(),
+    );
 
     measurer.stop(client, id);
     measurer.stop_under(folder.path());
@@ -103,13 +107,7 @@ fn waiting_for_a_scan_that_never_ends_gives_up_at_the_deadline() {
 }
 
 fn running(id: MeasureId) -> Arc<Shared> {
-    Arc::new(Shared {
-        id,
-        roots: Vec::new(),
-        state: AtomicU8::new(RUNNING),
-        ended: Mutex::new(false),
-        ended_signal: Condvar::new(),
-    })
+    Arc::new(Shared::new(id, Vec::new()))
 }
 
 #[test]
@@ -118,18 +116,18 @@ fn a_scan_tells_its_client_only_while_it_runs() {
     let (sink, events) = client();
     let client = ClientId(1);
     let shared = running(MeasureId(5));
-    lock(&measurer.scans).insert(client, Arc::clone(&shared));
+    lock(&measurer.scans).insert((client, Purpose::Total), Arc::clone(&shared));
     let scan = Scan {
         scans: Arc::clone(&measurer.scans),
-        client,
+        key: (client, Purpose::Total),
         shared,
         events: sink,
     };
 
-    scan.tell(Event::Pong).unwrap();
+    scan.tell(|| Event::Pong).unwrap();
     let while_running: Vec<Event> = events.try_iter().collect();
     measurer.forget(client);
-    scan.tell(Event::Pong).unwrap();
+    scan.tell(|| Event::Pong).unwrap();
     let once_stopped: Vec<Event> = events.try_iter().collect();
 
     assert_eq!(while_running, vec![Event::Pong]);
@@ -165,4 +163,43 @@ fn a_scan_reports_at_most_every_tenth_of_a_second() {
 
     let most = started.elapsed().as_millis() / EVERY.as_millis() + 2;
     assert!(reports <= most, "{reports} reports, at most {most}");
+}
+
+#[test]
+fn stopping_by_id_stops_only_the_scan_with_that_id() {
+    let measurer = Measurer::default();
+    let client = ClientId(1);
+    let (total, space) = (running(MeasureId(1)), running(MeasureId(2)));
+    let mut scans = lock(&measurer.scans);
+    scans.insert((client, Purpose::Total), Arc::clone(&total));
+    scans.insert((client, Purpose::Space), Arc::clone(&space));
+    drop(scans);
+
+    measurer.stop(client, MeasureId(2));
+
+    assert!(total.running());
+    assert!(!space.running());
+    assert_eq!(lock(&measurer.scans).len(), 1);
+}
+
+#[test]
+fn a_client_leaving_stops_all_its_scans_and_no_one_else_s() {
+    let measurer = Measurer::default();
+    let (leaving, staying) = (ClientId(1), ClientId(2));
+    let scans = [
+        running(MeasureId(1)),
+        running(MeasureId(2)),
+        running(MeasureId(1)),
+    ];
+    let mut map = lock(&measurer.scans);
+    map.insert((leaving, Purpose::Total), Arc::clone(&scans[0]));
+    map.insert((leaving, Purpose::Space), Arc::clone(&scans[1]));
+    map.insert((staying, Purpose::Total), Arc::clone(&scans[2]));
+    drop(map);
+
+    measurer.forget(leaving);
+
+    assert!(!scans[0].running() && !scans[1].running());
+    assert!(scans[2].running());
+    assert_eq!(lock(&measurer.scans).len(), 1);
 }

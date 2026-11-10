@@ -37,10 +37,15 @@ impl Slot {
 }
 
 impl Tally {
-    /// `slots` slots, all at zero.
+    /// `slots` slots, all at zero, and all changed: the first report
+    /// names every slot, even one nothing is ever added to.
     pub fn new(slots: usize) -> Self {
+        let fresh = || Slot {
+            changed: AtomicBool::new(true),
+            ..Slot::default()
+        };
         Self {
-            slots: (0..slots).map(|_| Slot::default()).collect(),
+            slots: (0..slots).map(|_| fresh()).collect(),
         }
     }
 
@@ -79,10 +84,6 @@ impl Tally {
     }
 
     /// Each slot that changed since the last call, with its totals now.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the space scan (FIL-33) reports by slot")
-    )]
     pub fn take_changed(&self) -> Vec<(usize, Size)> {
         self.slots
             .iter()
@@ -126,6 +127,7 @@ mod tests {
     #[test]
     fn only_slots_that_moved_since_the_last_take_come_back() {
         let tally = Tally::new(3);
+        assert_eq!(tally.take_changed().len(), 3);
         tally.file(0, 1, 1);
         tally.take_changed();
 
