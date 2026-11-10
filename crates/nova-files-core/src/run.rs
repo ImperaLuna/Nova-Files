@@ -115,6 +115,7 @@ fn answer(
             jobs::places(client, setup.home.clone());
             Ok(())
         }
+        Command::ListTrash => jobs::list_trash(client, setup.home.clone()),
         Command::Rows { id, first, count } => {
             client.want_rows(id, first, count, setup.settings.current().thumbnails);
             Ok(())

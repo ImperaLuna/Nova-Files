@@ -27,16 +27,16 @@ use crate::percent;
 
 /// The end of every info file's name.
 pub const INFO_SUFFIX: &str = ".trashinfo";
-const HEADER: &str = "[Trash Info]";
-const PATH_KEY: &str = "Path=";
-const DATE_KEY: &str = "DeletionDate=";
+pub(super) const HEADER: &str = "[Trash Info]";
+pub(super) const PATH_KEY: &str = "Path=";
+pub(super) const DATE_KEY: &str = "DeletionDate=";
 /// The longest name most filesystems take, in bytes.
 const MAX_NAME: usize = 255;
 /// Bytes a path keeps as themselves, besides letters and digits.
 const PLAIN_MARKS: &[u8] = b"-._~/";
 
 /// How `DeletionDate` is written: local time, without a zone.
-const DATE_FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
+pub(super) const DATE_FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
 
 /// The info file's text for an entry from `path`, as the trash writes
 /// paths (see `TrashFolder::path_field`), trashed at `when`.

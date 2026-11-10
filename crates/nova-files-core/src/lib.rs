@@ -103,7 +103,7 @@ pub fn spawn_with(
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
     let jobs = ops::Jobs::new(
         home.as_ref().map(|home| home.state.as_path()),
-        home.as_ref().map(|home| home.data.as_path()),
+        trash::Trashes::of(home.as_ref()),
         connector.clone(),
     );
     let thread = thread::Builder::new()

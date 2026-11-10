@@ -82,6 +82,7 @@ fn the_next_picker_gets_the_state_the_core_kept() {
         config: tree.path().join(".config"),
         state: tree.path().join(".local/state"),
         data: tree.path().join(".local/share"),
+        drive_trashes: false,
     };
     let saved = WindowState::default().with_picker(size(px(800.0), px(500.0)));
     let core =

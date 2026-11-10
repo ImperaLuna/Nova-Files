@@ -7,7 +7,8 @@
 //! [`Settings`], the [`Theme`] or the [`DriveList`] gets them again
 //! whenever they change. The core reads the other end of the channel as
 //! [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
-//! operations run as jobs (see [`Operation`]). A [`PickRequest`] carries
+//! operations run as jobs (see [`Operation`]); what is in the desktop's
+//! trash is listed as [`Trashed`] entries. A [`PickRequest`] carries
 //! another app's file picker request from D-Bus to the UI.
 
 #![forbid(unsafe_code)]
@@ -22,6 +23,7 @@ mod pick;
 mod search;
 mod settings;
 mod theme;
+mod trash;
 pub mod uri;
 
 pub use connection::{
@@ -42,6 +44,7 @@ pub use pick::{
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
+pub use trash::Trashed;
 
 /// The application id: the D-Bus name, the Wayland app id and the name of
 /// the D-Bus service file. Set once, in `.cargo/config.toml`.

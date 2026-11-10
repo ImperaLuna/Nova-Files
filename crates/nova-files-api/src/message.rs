@@ -9,6 +9,7 @@ use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, 
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
 use crate::theme::{DesktopLook, Theme};
+use crate::trash::Trashed;
 
 /// The most entries one [`Command::Rows`] may name: several screens of
 /// rows. The core leaves out any past it.
@@ -89,6 +90,9 @@ pub enum Command {
     /// and from then on the client gets [`Event::Drives`] again each time
     /// one comes, goes or changes. Clients that never ask never get them.
     Drives,
+    /// Ask what is in the desktop's trash: in the home trash and in each
+    /// mounted drive's. The answer is [`Event::Trash`].
+    ListTrash,
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -186,6 +190,9 @@ pub enum Event {
     /// again to each client that asked whenever one comes, goes or
     /// changes.
     Drives(Arc<DriveList>),
+    /// What is in the trash, answering [`Command::ListTrash`], in no
+    /// particular order.
+    Trash(Vec<Trashed>),
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },

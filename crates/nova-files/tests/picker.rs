@@ -97,6 +97,7 @@ async fn picker_with<'a>(
         config: home.join(".config"),
         state: home.join(".local/state"),
         data: home.join(".local/share"),
+        drive_trashes: false,
     };
     let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None, None)
         .unwrap();

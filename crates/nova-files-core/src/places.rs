@@ -48,6 +48,10 @@ pub struct Home {
     pub state: PathBuf,
     /// Holds the home trash.
     pub data: PathBuf,
+    /// Whether the trashes at the top of other drives count, found from
+    /// the system's mount table. Tests leave them out, so they never
+    /// touch the real ones.
+    pub drive_trashes: bool,
 }
 
 impl Home {
@@ -64,6 +68,7 @@ impl Home {
             config,
             state,
             data,
+            drive_trashes: true,
         })
     }
 }

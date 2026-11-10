@@ -90,6 +90,9 @@ pub mod word {
     pub const TRASH: &str = "trash";
     pub const TRASH_INFO: &str = "trash-info";
     pub const TRASHED: &str = "trashed";
+    pub const RESTORE: &str = "restore";
+    pub const DELETE_FROM_TRASH: &str = "delete-from-trash";
+    pub const EMPTY_TRASH: &str = "empty-trash";
 
     /// The fields of a record about two paths, or a path and its entry.
     const PAIR: usize = 2;
@@ -101,7 +104,8 @@ pub mod word {
     /// doesn't write.
     pub fn fields(word: &str) -> Option<usize> {
         match word {
-            COPY | MOVE | DELETE | TRASH | PLAN_DONE | SOURCES_DONE => Some(0),
+            COPY | MOVE | DELETE | TRASH | RESTORE | DELETE_FROM_TRASH | EMPTY_TRASH
+            | PLAN_DONE | SOURCES_DONE => Some(0),
             INTO | SOURCE | PART => Some(1),
             MADE | MOVED | BACKUP | PLANNED | TRASHED => Some(PAIR),
             TRASH_INFO => Some(TRIPLE),
@@ -157,11 +161,11 @@ pub enum Record<'a> {
     /// Every source is recorded: the job says all it was asked to do,
     /// so it may resume.
     SourcesDone,
-    /// An info file the job is about to put in a trash, which entry it is
-    /// (made first under a part file's name), and the entry it is for,
-    /// before that goes there. Left behind by a crash without that entry
-    /// in the trash, it goes; under that name, any other info file is
-    /// another app's and stays.
+    /// An info file in a trash, which entry it is, and the entry it is
+    /// for, before that entry moves in (the info file made first under a
+    /// part file's name) or out (restored, or deleted). Left behind by a
+    /// crash without that entry in the trash, it goes; under that name,
+    /// any other info file is another app's and stays.
     TrashInfo(&'a Path, Entry, Entry),
     /// Something the job moved from the first path into a trash, at the
     /// second, which undo would restore.

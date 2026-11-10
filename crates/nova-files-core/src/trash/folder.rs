@@ -26,9 +26,9 @@ use crate::private_file::FOLDER_MODE;
 /// The sticky bit, which a shared `.Trash` must have.
 const STICKY: u32 = 0o1000;
 /// The shared trash folder an admin may make at a mount's top.
-const SHARED: &str = ".Trash";
+pub(super) const SHARED: &str = ".Trash";
 /// The start of a user's own trash folder at a mount's top.
-const OWN_PREFIX: &str = ".Trash-";
+pub(super) const OWN_PREFIX: &str = ".Trash-";
 
 /// One trash: its folder, and the top folder of its mount for a trash
 /// that isn't the home trash, which its info files' paths are relative

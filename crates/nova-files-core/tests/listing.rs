@@ -67,6 +67,7 @@ fn client_at(home: &Path) -> Client {
         config: home.join(".config"),
         state: home.join(".local/state"),
         data: home.join(".local/share"),
+        drive_trashes: false,
     };
     let core =
         nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home), None, None).unwrap();

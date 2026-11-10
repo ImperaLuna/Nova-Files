@@ -12,15 +12,19 @@
 
 mod folder;
 mod info;
+mod read;
 mod sizes;
 
 pub use folder::{TrashFolder, folder_for};
 pub use info::{INFO_SUFFIX, info_text, stored_name};
+pub use read::{find, info_of, list};
 pub use sizes::{add_folder_sizes, folder_size};
 
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
+
+use crate::places::Home;
 
 /// The home trash's folder, under the user's data folder.
 pub const HOME_TRASH: &str = "Trash";
@@ -28,6 +32,32 @@ pub const HOME_TRASH: &str = "Trash";
 pub const FILES: &str = "files";
 /// The folder of a trash that holds the info files.
 pub const INFO: &str = "info";
+
+/// Where the user's trashes are.
+#[derive(Debug, Clone, Default)]
+pub struct Trashes {
+    /// The home trash, made when first needed; `None` without a data
+    /// folder.
+    pub home: Option<PathBuf>,
+    /// Whether the trashes at the top of other drives count.
+    pub drives: bool,
+}
+
+impl Trashes {
+    /// The trashes of the user `home` names.
+    pub fn of(home: Option<&Home>) -> Self {
+        Self {
+            home: home.map(|home| home.data.join(HOME_TRASH)),
+            drives: home.is_some_and(|home| home.drive_trashes),
+        }
+    }
+
+    /// Each trash there is now: the home trash, when it is there, and,
+    /// when they count, each mounted drive's.
+    pub fn all(&self) -> Vec<TrashFolder> {
+        read::trashes(self.home.as_deref(), self.drives)
+    }
+}
 
 /// Where the entry an info file at `info` describes sits in its trash,
 /// or `None` when `info` isn't an info file in a trash's `info` folder.

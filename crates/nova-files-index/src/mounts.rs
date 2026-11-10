@@ -8,7 +8,8 @@
 //! `/proc/self/mountinfo`, read once, on first need.
 //!
 //! The crawl takes any [`MountCheck`], so tests can say which folders are
-//! mounts without mounting anything.
+//! mounts without mounting anything. [`system_mount_points`] lists every
+//! mount point, for the core's trash listing.
 
 use std::cell::OnceCell;
 use std::collections::HashSet;
@@ -47,10 +48,7 @@ impl MountCheck for SystemMounts {
             .and_then(|answer| mount_root(answer.stx_attributes_mask, answer.stx_attributes))
             .unwrap_or_else(|| {
                 self.listed
-                    .get_or_init(|| {
-                        fs::read(MOUNTINFO)
-                            .map_or_else(|_| HashSet::new(), |text| mount_points(&text))
-                    })
+                    .get_or_init(system_mount_points)
                     .contains(folder)
             })
     }
@@ -61,6 +59,12 @@ impl MountCheck for SystemMounts {
 fn mount_root(mask: StatxAttributes, attributes: StatxAttributes) -> Option<bool> {
     mask.contains(StatxAttributes::MOUNT_ROOT)
         .then(|| attributes.contains(StatxAttributes::MOUNT_ROOT))
+}
+
+/// The mount points the running system has, from mountinfo; none when it
+/// can't be read.
+pub fn system_mount_points() -> HashSet<PathBuf> {
+    fs::read(MOUNTINFO).map_or_else(|_| HashSet::new(), |text| mount_points(&text))
 }
 
 /// The mount points a mountinfo file lists.
