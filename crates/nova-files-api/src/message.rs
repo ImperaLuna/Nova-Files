@@ -9,6 +9,7 @@ use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, 
 use crate::properties::{Properties, PropertiesId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
+use crate::size::{MeasureId, ScanState, Size};
 use crate::theme::{DesktopLook, Theme};
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -133,6 +134,15 @@ pub enum Command {
         answer: Answer,
         scope: Scope,
     },
+    /// Measure how much space everything under `paths` (absolute paths)
+    /// takes, together: what two paths share counts once. The answer is
+    /// [`Event::SizeMeasured`] with the same `id`, a few times a second
+    /// while the scan runs, then once more when it ends. A client has one
+    /// scan at a time: a newer `Measure` from it stops this one, which then
+    /// says nothing more.
+    Measure { id: MeasureId, paths: Vec<PathBuf> },
+    /// Stop the client's scan `id`, if it still runs. It says nothing more.
+    StopMeasure(MeasureId),
 }
 
 /// Something the core tells one client.
@@ -251,6 +261,12 @@ pub enum Event {
         job: JobId,
         outcome: Outcome,
         changed: Vec<PathBuf>,
+    },
+    /// What [`Command::Measure`] `id` counted so far, and whether it ended.
+    SizeMeasured {
+        id: MeasureId,
+        size: Size,
+        state: ScanState,
     },
 }
 
