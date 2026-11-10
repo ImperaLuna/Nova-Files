@@ -56,4 +56,16 @@ exclude_re = [
     # Only which error a failed make reports (a full drive), which no test
     # can cause.
     "nova-files-core/src/trash/folder\\.rs:.*match guard error\\.kind\\(\\) != io::ErrorKind::AlreadyExists with false in own_folder$",
+    # Listing and restoring (FIL-21). A drive's trash must sit at the top
+    # of a real mount, which tests can't make; its name rules are tested
+    # in trash_top.
+    "nova-files-core/src/trash/folder\\.rs:.*\\bmount_trash_at\\b",
+    # Read the real system's mountinfo; tests hand the parser recorded
+    # text instead.
+    "nova-files-index/src/mounts\\.rs:.*\\b(system|local)_mount_points\\b",
+    # A restore's info records are read only after a crash cuts it short.
+    "nova-files-core/src/ops/restore\\.rs:.*replace note_infos with \\(\\)",
+    # The open flags share no bits, so ^ is |; & leaves none, and the test
+    # with a pipe then waits forever, a timeout rather than a catch.
+    "nova-files-core/src/trash/read\\.rs:.*replace \\| with [&^] in read_info$",
 ]
