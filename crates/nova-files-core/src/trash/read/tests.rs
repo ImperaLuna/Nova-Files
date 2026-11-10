@@ -1,6 +1,6 @@
 use super::*;
 use crate::ops::TestFolder;
-use crate::trash::info_text;
+use crate::trash::{Trashes, info_text};
 use std::time::{Duration, UNIX_EPOCH};
 
 /// A trash at `folder/name` with `files/` and `info/`, for a drive
@@ -168,10 +168,38 @@ fn an_info_file_too_big_is_left_out() {
     let folder = TestFolder::new("read-big");
     let home = trash(&folder, "Trash", None);
     let mut text = b"[Trash Info]\nPath=/a\n".to_vec();
-    text.resize(MAX_INFO_BYTES + 1, b'\n');
+    text.resize(usize::try_from(MAX_INFO_BYTES).unwrap() + 1, b'\n');
     put(&home, "a", &text);
 
     assert_eq!(list(&home), vec![]);
+}
+
+#[test]
+fn an_info_file_of_the_most_bytes_is_read() {
+    let folder = TestFolder::new("read-most");
+    let home = trash(&folder, "Trash", None);
+    let mut text = b"[Trash Info]\nPath=/a\n".to_vec();
+    // A long path's worth, and the most there may be.
+    text.resize(4096, b'\n');
+    put(&home, "a", &text);
+    text.resize(usize::try_from(MAX_INFO_BYTES).unwrap(), b'\n');
+    put(&home, "b", &text);
+
+    assert_eq!(list(&home).len(), 2);
+}
+
+#[test]
+fn a_trash_found_twice_counts_once() {
+    let at = |root: &str| TrashFolder {
+        root: root.into(),
+        topdir: Some("/mnt".into()),
+    };
+    let mut found = vec![at("/mnt/.Trash-1")];
+
+    add_new(&mut found, at("/mnt/.Trash-1"));
+    add_new(&mut found, at("/usb/.Trash-1"));
+
+    assert_eq!(found, vec![at("/mnt/.Trash-1"), at("/usb/.Trash-1")]);
 }
 
 #[test]
@@ -181,7 +209,10 @@ fn finds_an_entry_only_in_a_known_trash() {
     let other = trash(&folder, "Other", None);
     let item = put(&home, "a", b"[Trash Info]\nPath=/a\n");
     let stray = put(&other, "a", b"[Trash Info]\nPath=/a\n");
-    let trashes = vec![home.clone()];
+    let trashes = Trashes {
+        home: Some(home.root.clone()),
+        drives: true,
+    };
 
     let (found_in, found) = find(&item, &trashes).unwrap();
 
@@ -190,6 +221,62 @@ fn finds_an_entry_only_in_a_known_trash() {
     assert!(find(&stray, &trashes).is_none());
     assert!(find(&home.files().join("missing"), &trashes).is_none());
     assert!(find(&home.files(), &trashes).is_none());
+    assert!(find(&home.info().join("a.trashinfo"), &trashes).is_none());
+}
+
+#[test]
+fn an_info_file_that_is_a_link_or_no_file_is_left_out() {
+    let folder = TestFolder::new("read-odd-info");
+    let home = trash(&folder, "Trash", None);
+    let real = folder.file("real", "[Trash Info]\nPath=/a\n");
+    fs::write(home.files().join("link"), "x").unwrap();
+    std::os::unix::fs::symlink(&real, info_of(&home, OsStr::new("link"))).unwrap();
+    fs::write(home.files().join("pipe"), "x").unwrap();
+    rustix::fs::mknodat(
+        rustix::fs::CWD,
+        info_of(&home, OsStr::new("pipe")),
+        rustix::fs::FileType::Fifo,
+        rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
+        0,
+    )
+    .unwrap();
+
+    assert_eq!(list(&home), vec![], "never blocks on the pipe either");
+}
+
+#[test]
+fn a_home_trash_through_a_link_inside_it_is_not_one() {
+    let folder = TestFolder::new("read-linked-files");
+    let elsewhere = folder.path().join("elsewhere");
+    fs::create_dir(&elsewhere).unwrap();
+    let root = folder.path().join("Trash");
+    fs::create_dir_all(root.join("info")).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, root.join("files")).unwrap();
+
+    assert_eq!(trashes(Some(&root), false), vec![]);
+}
+
+#[test]
+fn a_drive_trash_whole_path_must_stay_on_the_drive() {
+    let folder = TestFolder::new("read-drive-whole");
+    let top = folder.path().join("drive");
+    let drive = trash(&folder, "drive/.Trash-1000", Some(&top));
+    put(
+        &drive,
+        "in",
+        format!("[Trash Info]\nPath={}/a\n", top.display()).as_bytes(),
+    );
+    put(&drive, "out", b"[Trash Info]\nPath=/home/me/a\n");
+    put(
+        &drive,
+        "up",
+        format!("[Trash Info]\nPath={}/../a\n", top.display()).as_bytes(),
+    );
+
+    let listed = list(&drive);
+
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    assert_eq!(listed[0].original, top.join("a"));
 }
 
 #[test]

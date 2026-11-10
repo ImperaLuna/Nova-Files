@@ -367,3 +367,51 @@ fn a_crash_before_the_entry_went_back_keeps_it_listed_and_resumes() {
     assert_eq!(fs::read_to_string(bench.at("a")).unwrap(), "trashed");
     assert!(!item.exists() && !info_of(&item).exists());
 }
+
+#[test]
+fn a_folder_and_what_was_in_it_go_back_together() {
+    let bench = Bench::new("restore-nested");
+    fs::create_dir(bench.at("a")).unwrap();
+    fs::write(bench.at("a/b.txt"), "b").unwrap();
+    fs::write(bench.at("a/c.txt"), "c").unwrap();
+    let client = bench.client();
+    trashed(&client, &[bench.at("a/b.txt")]);
+    let items = trashed(&client, &[bench.at("a")]);
+
+    let (_, outcome, _) = client.run(Operation::Restore {
+        items: items.into_iter().rev().collect(),
+    });
+
+    assert_eq!(outcome, Outcome::Done, "nothing to ask about");
+    assert_eq!(fs::read_to_string(bench.at("a/b.txt")).unwrap(), "b");
+    assert_eq!(fs::read_to_string(bench.at("a/c.txt")).unwrap(), "c");
+    assert_eq!(listed(&client), vec![]);
+}
+
+#[test]
+fn a_resumed_restore_leaves_what_took_a_freed_name_since() {
+    let bench = crashed_restore("restore-crash-newcomer", true);
+    let trash = home_trash(&bench.root).canonicalize().unwrap();
+    let client = bench.client();
+    client.send(Command::WatchJobs);
+    assert!(matches!(client.next(), Event::JobInterrupted { .. }));
+    // Trashed by another app after the crash, under the freed name.
+    fs::write(trash.join("files/a"), "newcomer").unwrap();
+    fs::write(
+        trash.join("info/a.trashinfo"),
+        format!("[Trash Info]\nPath={}\n", bench.at("b").display()),
+    )
+    .unwrap();
+
+    client.send(Command::ResumeJob(JobId(42)));
+
+    assert_eq!(client.next(), Event::JobResumed(JobId(42)));
+    assert_eq!(client.ended(JobId(42)).0, Outcome::Done);
+    assert_eq!(
+        fs::read_to_string(trash.join("files/a")).unwrap(),
+        "newcomer"
+    );
+    assert!(trash.join("info/a.trashinfo").exists());
+    assert_eq!(fs::read_to_string(bench.at("a")).unwrap(), "trashed");
+    assert!(!bench.at("b").exists());
+}

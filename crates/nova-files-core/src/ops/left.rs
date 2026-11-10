@@ -49,6 +49,10 @@ pub struct Done {
     /// For a trash job, the paths it moved to the trash: whatever has
     /// their name now came after, and nobody chose to trash it.
     pub trashed: HashSet<PathBuf>,
+    /// For a job taking entries out of the trash, each entry it was about
+    /// to take, by where it sat, and which entry it was: whatever sits
+    /// there now in its place came after, and nobody chose it.
+    pub leaving: HashMap<PathBuf, Entry>,
 }
 
 /// The jobs whose journals are in `folder`, each cleaned up. A journal
@@ -151,6 +155,11 @@ fn clean(lines: &[Line]) -> Done {
             }
             (word::TRASHED, [from, _]) => {
                 done.trashed.insert(from.clone());
+            }
+            (word::TRASH_INFO, [info, _, item]) => {
+                if let (Some(stored), Some(item)) = (trash::item_of_info(info), entry_from(item)) {
+                    done.leaving.insert(stored, item);
+                }
             }
             (word::PLANNED, [path, entry]) => {
                 if let Some(entry) = entry_from(entry) {

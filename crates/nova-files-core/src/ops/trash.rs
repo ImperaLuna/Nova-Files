@@ -70,11 +70,7 @@ struct Trashed {
 /// Moves each of `paths` to its trash; `home_trash` is the home trash's
 /// folder.
 pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>) -> Ended {
-    running.record(Record::Operation(word::TRASH));
-    for path in paths {
-        running.record(Record::Source(path));
-    }
-    running.record(Record::SourcesDone);
+    running.record_job(word::TRASH, None, paths);
     if let Err(stop) = check(paths) {
         return (stop.outcome(), Vec::new());
     }

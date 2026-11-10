@@ -30,11 +30,7 @@ use super::stop::Stop;
 
 /// Deletes each of `paths` for good.
 pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
-    running.record(Record::Operation(word::DELETE));
-    for path in paths {
-        running.record(Record::Source(path));
-    }
-    running.record(Record::SourcesDone);
+    running.record_job(word::DELETE, None, paths);
     let (result, shown) = delete_paths(running, paths);
     (result.map_or_else(Stop::outcome, |()| Outcome::Done), shown)
 }

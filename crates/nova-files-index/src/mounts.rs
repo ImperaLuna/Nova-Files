@@ -8,8 +8,10 @@
 //! `/proc/self/mountinfo`, read once, on first need.
 //!
 //! The crawl takes any [`MountCheck`], so tests can say which folders are
-//! mounts without mounting anything. [`system_mount_points`] lists every
-//! mount point, for the core's trash listing.
+//! mounts without mounting anything. [`local_mount_points`] lists the
+//! mount points of local drives, for the core's trash listing: never a
+//! network or FUSE mount, where a look can hang, an automount, which a
+//! look would mount, or the kernel's own filesystems.
 
 use std::cell::OnceCell;
 use std::collections::HashSet;
@@ -28,6 +30,49 @@ const MOUNT_POINT_FIELD: usize = 4;
 const ESCAPE: u8 = b'\\';
 const OCTAL_DIGITS: usize = 3;
 const OCTAL: u32 = 8;
+/// Ends a mountinfo line's optional fields; the filesystem type follows.
+const SEPARATOR: &[u8] = b"-";
+/// FUSE filesystems' types (`fuse.sshfs`, `fuse.rclone`): often over the
+/// network. A local drive through FUSE is `fuseblk`.
+const FUSE_PREFIX: &[u8] = b"fuse.";
+/// Filesystem types that aren't local drives.
+const NOT_LOCAL: &[&[u8]] = &[
+    // Over the network.
+    b"nfs",
+    b"nfs4",
+    b"cifs",
+    b"smb3",
+    b"smbfs",
+    b"9p",
+    b"afs",
+    b"ceph",
+    b"glusterfs",
+    b"sshfs",
+    b"davfs",
+    b"fuse",
+    // Mounted when looked at.
+    b"autofs",
+    // The kernel's own.
+    b"proc",
+    b"sysfs",
+    b"devpts",
+    b"devtmpfs",
+    b"cgroup",
+    b"cgroup2",
+    b"mqueue",
+    b"debugfs",
+    b"tracefs",
+    b"securityfs",
+    b"pstore",
+    b"bpf",
+    b"configfs",
+    b"fusectl",
+    b"hugetlbfs",
+    b"binfmt_misc",
+    b"efivarfs",
+    b"rpc_pipefs",
+    b"nsfs",
+];
 
 /// Answers whether a folder is where a filesystem is mounted.
 pub trait MountCheck {
@@ -63,16 +108,40 @@ fn mount_root(mask: StatxAttributes, attributes: StatxAttributes) -> Option<bool
 
 /// The mount points the running system has, from mountinfo; none when it
 /// can't be read.
-pub fn system_mount_points() -> HashSet<PathBuf> {
+fn system_mount_points() -> HashSet<PathBuf> {
     fs::read(MOUNTINFO).map_or_else(|_| HashSet::new(), |text| mount_points(&text))
+}
+
+/// The mount points of the running system's local drives, from
+/// mountinfo; none when it can't be read.
+pub fn local_mount_points() -> HashSet<PathBuf> {
+    fs::read(MOUNTINFO).map_or_else(|_| HashSet::new(), |text| local_points(&text))
 }
 
 /// The mount points a mountinfo file lists.
 fn mount_points(mountinfo: &[u8]) -> HashSet<PathBuf> {
+    points_where(mountinfo, |_| true)
+}
+
+/// The mount points of local drives a mountinfo file lists.
+fn local_points(mountinfo: &[u8]) -> HashSet<PathBuf> {
+    points_where(mountinfo, |kind| {
+        !NOT_LOCAL.contains(&kind) && !kind.starts_with(FUSE_PREFIX)
+    })
+}
+
+/// The mount points a mountinfo file lists whose filesystem type `keep`
+/// takes.
+fn points_where(mountinfo: &[u8], keep: impl Fn(&[u8]) -> bool) -> HashSet<PathBuf> {
     mountinfo
         .split(|&byte| byte == b'\n')
-        .filter_map(|line| line.split(|&byte| byte == b' ').nth(MOUNT_POINT_FIELD))
-        .map(|field| PathBuf::from(OsString::from_vec(unescape(field))))
+        .filter_map(|line| {
+            let fields: Vec<_> = line.split(|&byte| byte == b' ').collect();
+            let separator = fields.iter().position(|field| *field == SEPARATOR)?;
+            let kind = fields.get(separator + 1)?;
+            let point = fields.get(MOUNT_POINT_FIELD).filter(|_| keep(kind))?;
+            Some(PathBuf::from(OsString::from_vec(unescape(point))))
+        })
         .collect()
 }
 
@@ -112,6 +181,24 @@ mod tests {
             .map(PathBuf::from)
             .collect();
         assert_eq!(points, expected);
+    }
+
+    #[test]
+    fn local_drives_leave_out_network_fuse_automount_and_kernel_mounts() {
+        let mountinfo = b"22 1 0:21 / /proc rw,nosuid - proc proc rw\n\
+            36 25 0:33 / /home/me/NAS rw - cifs //nas/share rw\n\
+            37 25 0:34 / /home/me/ssh rw - fuse.sshfs me@host: rw\n\
+            38 25 0:35 / /mnt/auto rw - autofs systemd-1 rw\n\
+            39 25 8:1 / /run/media/me/USB rw shared:5 - fuseblk /dev/sdb1 rw\n\
+            40 1 8:2 / / rw - ext4 /dev/sda2 rw\n\
+            bad line\n";
+        let points = local_points(mountinfo);
+        let expected: HashSet<PathBuf> = ["/run/media/me/USB", "/"]
+            .iter()
+            .map(PathBuf::from)
+            .collect();
+        assert_eq!(points, expected);
+        assert_eq!(mount_points(mountinfo).len(), 6);
     }
 
     #[test]

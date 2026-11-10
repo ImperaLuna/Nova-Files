@@ -160,15 +160,11 @@ impl Done {
 
 /// Copies or moves, as `how` says, each of `sources` into `into`.
 pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: How) -> Ended {
-    running.record(Record::Operation(match how {
+    let name = match how {
         How::Copy => word::COPY,
         How::Move => word::MOVE,
-    }));
-    running.record(Record::Into(into));
-    for source in sources {
-        running.record(Record::Source(source));
-    }
-    running.record(Record::SourcesDone);
+    };
+    running.record_job(name, Some(into), sources);
     if let Err(stop) = check(sources, into) {
         return (stop.outcome(), Vec::new());
     }

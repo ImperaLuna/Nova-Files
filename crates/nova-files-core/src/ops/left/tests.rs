@@ -166,7 +166,9 @@ fn a_trash_job_cleans_up_only_its_last_info_file() {
         trashed("files/finished"),
     ]);
     assert!(finished.exists());
+}
 
+#[test]
 fn jobs_out_of_the_trash_resume_with_what_they_were_given() {
     let a = Path::new("/t/files/a");
     let given = |name: &str, sources: &[&Path]| {
