@@ -123,3 +123,11 @@ fn a_source_that_cant_go_takes_its_copy_along_unless_the_copy_replaced_a_file() 
         assert_eq!(target.exists(), replacing, "replacing: {replacing}");
     }
 }
+
+#[test]
+fn a_folder_that_cant_be_synced_stops_the_step() {
+    let folder = TestFolder::new("make-sync-folder");
+    let file = folder.file("a", "a");
+    assert!(sync_folder_of(&file).is_ok());
+    assert!(sync_folder_of(&folder.path().join("gone/a")).is_err());
+}
