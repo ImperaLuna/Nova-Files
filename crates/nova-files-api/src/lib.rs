@@ -14,6 +14,7 @@
 
 #![forbid(unsafe_code)]
 
+mod access;
 mod clipboard;
 mod connection;
 mod drive;
@@ -28,6 +29,7 @@ mod settings;
 mod theme;
 pub mod uri;
 
+pub use access::{AccessChange, MODE_BITS, ModeChange, Reach};
 pub use clipboard::{
     ClipboardAction, FileClipboard, GNOME_COPIED_FILES, KDE_CUT_SELECTION, Offer, PLAIN_TEXT,
     PLAIN_TEXT_UTF8, URI_LIST,
