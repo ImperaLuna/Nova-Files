@@ -43,6 +43,7 @@ mod sync;
 pub mod test_folder;
 mod transfer;
 mod trash;
+mod undo;
 
 use std::collections::HashMap;
 use std::fs;
@@ -74,6 +75,7 @@ use restore::{delete_from_trash, empty_trash, restore};
 use running::Running;
 use transfer::transfer;
 use trash::trash;
+use undo::{History, Undo, Undoable, undo_of};
 
 const JOB_THREAD: &str = "nova-files-job";
 const RECOVER_THREAD: &str = "nova-files-recover";
@@ -102,6 +104,8 @@ pub struct Jobs {
     interrupted: Interrupted,
     /// Wakes the core's loop when a job ends.
     wake: Connector,
+    /// The jobs that can be undone.
+    history: Arc<History>,
 }
 
 impl Jobs {
@@ -119,6 +123,7 @@ impl Jobs {
             trashes,
             interrupted: Interrupted::default(),
             wake,
+            history: Arc::default(),
         };
         if let Some(folder) = jobs.journals.clone() {
             jobs.recover(folder);
@@ -183,7 +188,12 @@ impl Jobs {
             };
             events.deliver(event).ok();
         }
-        self.audience.join(client, Arc::clone(events));
+        self.history.told(|undoable| {
+            for event in undoable {
+                events.deliver(event).ok();
+            }
+            self.audience.join(client, Arc::clone(events));
+        });
         drop(running);
     }
 
@@ -233,11 +243,19 @@ impl Jobs {
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
         // New hidden names for a resumed job, never a crash's.
         let resume = left.map(|left| (left, self.next.fetch_add(1, Ordering::Relaxed)));
-        let (registry, audience, wake, trashes) = (
+        // Taken now, so an undo runs once however often it is asked for;
+        // put back unless it ends done.
+        let taken = match &operation {
+            Operation::Undo { job } => self.history.take(*job, &self.audience),
+            _ => None,
+        };
+        let not_spawned = taken.clone();
+        let (registry, audience, wake, trashes, history) = (
             Arc::clone(&self.running),
             self.audience.clone(),
             self.wake.clone(),
             self.trashes.clone(),
+            Arc::clone(&self.history),
         );
         let spawned = thread::Builder::new()
             .name(JOB_THREAD.to_owned())
@@ -250,8 +268,37 @@ impl Jobs {
                     }
                     None => operation,
                 };
-                let ended = run(&mut running, &operation, &trashes);
+                let undo = taken.as_ref().map(|taken| taken.undo.clone());
+                let ended = run(&mut running, &operation, &trashes, undo);
+                let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
+                let undoable = (!running.resumed())
+                    .then(|| undo_of(&operation, &steps, &ended.0, &trashes))
+                    .flatten();
                 running.finish();
+                // Before clients hear the job ended, so an undo asked for
+                // then finds it.
+                if let Some(undo) = undoable {
+                    history.add(
+                        Undoable {
+                            job,
+                            operation,
+                            undo,
+                        },
+                        &audience,
+                    );
+                }
+                // Back unless done, or nothing was left to take back.
+                let spent = matches!(
+                    ended.0,
+                    Outcome::Done
+                        | Outcome::Failed {
+                            reason: Failure::NotFound,
+                            ..
+                        }
+                );
+                if let Some(taken) = taken.filter(|_| !spent) {
+                    history.add(taken, &audience);
+                }
                 finish(&registry, &audience, job, ended);
                 // Into the loop's queue, so its idle wait starts again now.
                 wake.activity().ok();
@@ -261,6 +308,9 @@ impl Jobs {
                 path: failed_path,
                 reason: Failure::Other,
             };
+            if let Some(taken) = not_spawned {
+                self.history.add(taken, &self.audience);
+            }
             finish(&self.running, &self.audience, job, (outcome, Vec::new()));
         }
     }
@@ -372,7 +422,13 @@ fn first_id() -> u64 {
         })
 }
 
-fn run(running: &mut Running, operation: &Operation, trashes: &Trashes) -> Ended {
+/// Runs `operation`; an undo runs `undo`, the one it took.
+fn run(
+    running: &mut Running,
+    operation: &Operation,
+    trashes: &Trashes,
+    undo: Option<Undo>,
+) -> Ended {
     match operation {
         Operation::Rename { path, name } => one_step::rename(path, name),
         Operation::NewFolder { inside, name } => one_step::new_folder(inside, name),
@@ -384,6 +440,7 @@ fn run(running: &mut Running, operation: &Operation, trashes: &Trashes) -> Ended
         Operation::Restore { items } => restore(running, items, trashes),
         Operation::DeleteFromTrash { items } => delete_from_trash(running, items, trashes),
         Operation::EmptyTrash => empty_trash(running, trashes),
+        Operation::Undo { .. } => undo::run(running, undo, trashes),
     }
 }
 
@@ -439,7 +496,7 @@ fn first_path(operation: &Operation) -> PathBuf {
         | Operation::ChangeAccess { paths, .. }
         | Operation::Restore { items: paths }
         | Operation::DeleteFromTrash { items: paths } => paths.first().cloned().unwrap_or_default(),
-        Operation::EmptyTrash => PathBuf::new(),
+        Operation::EmptyTrash | Operation::Undo { .. } => PathBuf::new(),
     }
 }
 

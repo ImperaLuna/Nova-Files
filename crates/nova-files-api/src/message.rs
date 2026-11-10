@@ -294,6 +294,14 @@ pub enum Event {
         outcome: Outcome,
         changed: Vec<PathBuf>,
     },
+    /// Job `job`, which did `operation`, can be undone with
+    /// [`Operation::Undo`]. Every client that watches jobs hears it just
+    /// before the job ends, and on [`Command::WatchJobs`] for each job that still
+    /// can, oldest first. The core keeps the last 50 while it runs; they
+    /// are lost when it exits.
+    Undoable { job: JobId, operation: Operation },
+    /// Job `job` can no longer be undone: it was, or it is too old.
+    UndoGone(JobId),
     /// What [`Command::Measure`] `id` counted so far, and whether it ended.
     SizeMeasured {
         id: MeasureId,

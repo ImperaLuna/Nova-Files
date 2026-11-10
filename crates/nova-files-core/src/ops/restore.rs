@@ -61,7 +61,8 @@ pub fn restore(running: &mut Running, items: &[PathBuf], trashes: &Trashes) -> E
     // A folder goes back before what was in it.
     leaving.sort_by_key(|left| left.original.components().count());
     let mut touched = BTreeSet::new();
-    if let Err(stop) = make_folders(running, &leaving, &mut touched) {
+    let originals: Vec<_> = leaving.iter().map(|left| left.original.as_path()).collect();
+    if let Err(stop) = make_folders(running, &originals, &mut touched) {
         return (stop.outcome(), touched.into_iter().collect());
     }
     note_infos(running, &leaving);
@@ -183,21 +184,19 @@ fn leave(running: &Running, trash: TrashFolder, listed: Trashed) -> io::Result<O
     }))
 }
 
-/// Makes the folders each restored entry was in, when they are gone and
-/// no other entry of `leaving` is one of them, and notes in `touched` the
-/// folder each first one was made in.
+/// Makes the folders each of `targets`, shallowest first, goes back
+/// into, when they are gone and no other of `targets` is one of them,
+/// and notes in `touched` the folder each first one was made in.
 ///
 /// # Errors
 /// [`Stop`] when cancelled, or when one can't be made.
-fn make_folders(
+pub fn make_folders(
     running: &Running,
-    leaving: &[Leaving],
+    targets: &[&Path],
     touched: &mut BTreeSet<PathBuf>,
 ) -> Result<(), Stop> {
-    for parent in leaving.iter().filter_map(|left| left.original.parent()) {
-        let restored = leaving
-            .iter()
-            .any(|other| parent.starts_with(&other.original));
+    for parent in targets.iter().filter_map(|target| target.parent()) {
+        let restored = targets.iter().any(|other| parent.starts_with(other));
         if restored || parent.symlink_metadata().is_ok() {
             continue;
         }

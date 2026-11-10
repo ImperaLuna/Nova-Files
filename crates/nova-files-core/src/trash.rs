@@ -17,7 +17,7 @@ mod sizes;
 
 pub use folder::{TrashFolder, folder_for};
 pub use info::{INFO_SUFFIX, info_text, stored_name};
-pub use read::{find, info_of, list};
+pub use read::{find, info_of, list, trash_of};
 pub use sizes::{add_folder_sizes, folder_size};
 
 use std::ffi::OsStr;

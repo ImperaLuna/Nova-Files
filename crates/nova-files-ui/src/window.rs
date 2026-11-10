@@ -498,7 +498,9 @@ impl MainWindow {
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
             | Event::SpaceUnreadable { .. }
-            | Event::Trash(_) => {}
+            | Event::Trash(_)
+            | Event::Undoable { .. }
+            | Event::UndoGone(_) => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

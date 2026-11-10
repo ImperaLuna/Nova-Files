@@ -76,8 +76,19 @@ impl Client {
         }
     }
 
-    /// The next event, failing the test after [`ANSWER_TIMEOUT`].
+    /// The next event but what says which jobs can be undone, failing
+    /// the test after [`ANSWER_TIMEOUT`].
     pub fn next(&self) -> Event {
+        loop {
+            match self.any_next() {
+                Event::Undoable { .. } | Event::UndoGone(_) => {}
+                event => return event,
+            }
+        }
+    }
+
+    /// The next event, failing the test after [`ANSWER_TIMEOUT`].
+    pub fn any_next(&self) -> Event {
         self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
     }
 

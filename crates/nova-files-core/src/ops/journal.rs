@@ -93,6 +93,7 @@ pub mod word {
     pub const RESTORE: &str = "restore";
     pub const DELETE_FROM_TRASH: &str = "delete-from-trash";
     pub const EMPTY_TRASH: &str = "empty-trash";
+    pub const UNDO: &str = "undo";
 
     /// The fields of a record about two paths, or a path and its entry.
     const PAIR: usize = 2;
@@ -104,7 +105,7 @@ pub mod word {
     /// doesn't write.
     pub fn fields(word: &str) -> Option<usize> {
         match word {
-            COPY | MOVE | DELETE | TRASH | RESTORE | DELETE_FROM_TRASH | EMPTY_TRASH
+            COPY | MOVE | DELETE | TRASH | RESTORE | DELETE_FROM_TRASH | EMPTY_TRASH | UNDO
             | PLAN_DONE | SOURCES_DONE => Some(0),
             INTO | SOURCE | PART => Some(1),
             MADE | MOVED | BACKUP | PLANNED | TRASHED => Some(PAIR),

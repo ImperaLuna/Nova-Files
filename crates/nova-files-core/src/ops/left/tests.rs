@@ -192,3 +192,18 @@ fn jobs_out_of_the_trash_resume_with_what_they_were_given() {
     );
     assert_eq!(given(word::EMPTY_TRASH, &[]), Some(Operation::EmptyTrash));
 }
+
+#[test]
+fn an_undo_moving_entries_back_is_never_resumed() {
+    let a = Path::new("/a");
+    let b = Path::new("/b");
+
+    assert_eq!(
+        operation(&[line(word::UNDO, &[]), line(word::MOVED, &[a, b])]),
+        None
+    );
+    assert_eq!(
+        operation(&[line(word::UNDO, &[]), line(word::SOURCES_DONE, &[])]),
+        None
+    );
+}
