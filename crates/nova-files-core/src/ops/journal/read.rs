@@ -15,7 +15,8 @@ use super::{ESCAPE, HEADER, HIGH};
 const HEX_RADIX: u32 = 16;
 /// The most a journal may hold to be read. A job writes far less; a file
 /// bigger than this is left alone rather than read into memory.
-const MAX_BYTES: u64 = 256 * 1024 * 1024;
+/// 256 MiB.
+const MAX_BYTES: u64 = 268_435_456;
 
 /// One whole line of a journal.
 #[derive(Debug, Clone, PartialEq, Eq)]
