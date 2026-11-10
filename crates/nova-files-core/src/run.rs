@@ -17,6 +17,7 @@ use std::time::Duration;
 use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::jobs::{self, Client};
+use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::ops::Jobs;
 use crate::places::Home;
@@ -39,6 +40,8 @@ pub struct Setup {
     pub mime_types: Arc<OnceLock<MimeTypes>>,
     /// File operations, and the clients that hear about them.
     pub jobs: Jobs,
+    /// Size scans, each for the client that asked.
+    pub measurer: Measurer,
 }
 
 /// Runs until idle.
@@ -72,6 +75,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             setup.settings.forget(client);
             setup.theme.forget(client);
             setup.jobs.audience().leave(client);
+            setup.measurer.forget(client);
         }
         // Receiving it already restarted the idle wait.
         CoreMessage::Activity => {}
@@ -84,6 +88,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
                 setup.settings.forget(client);
                 setup.theme.forget(client);
                 setup.jobs.audience().leave(client);
+                setup.measurer.forget(client);
             }
         }
     }
@@ -93,6 +98,10 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
 ///
 /// # Errors
 /// [`nova_files_api::ClientGone`] when the client stopped listening.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one short arm per command, each handing it on"
+)]
 fn answer(
     id: ClientId,
     client: &Client,
@@ -173,6 +182,10 @@ fn answer(
             scope,
         } => {
             setup.jobs.answer(job, &conflict, answer, scope);
+            Ok(())
+        }
+        command @ (Command::Measure { .. } | Command::StopMeasure(_)) => {
+            setup.measurer.answer(id, client.events(), command);
             Ok(())
         }
     }

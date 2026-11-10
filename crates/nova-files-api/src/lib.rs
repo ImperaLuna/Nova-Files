@@ -7,7 +7,8 @@
 //! [`Settings`] or the [`Theme`] gets them again whenever they change. The
 //! core reads the other end of the channel as [`CoreMessage`]s. File
 //! operations run as jobs (see [`Operation`]). A [`PickRequest`] carries
-//! another app's file picker request from D-Bus to the UI.
+//! another app's file picker request from D-Bus to the UI. A [`Size`] is
+//! what a scan of files and folders counted.
 
 #![forbid(unsafe_code)]
 
@@ -19,6 +20,7 @@ mod message;
 mod pick;
 mod search;
 mod settings;
+mod size;
 mod theme;
 pub mod uri;
 
@@ -38,6 +40,7 @@ pub use pick::{
 };
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
+pub use size::{MeasureId, ScanState, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 
 /// The application id: the D-Bus name, the Wayland app id and the name of
