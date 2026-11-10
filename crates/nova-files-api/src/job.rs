@@ -15,6 +15,8 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use crate::access::AccessChange;
+
 /// Names one job request, so a client can tell which [`JobId`] is the job
 /// it asked for. The client picks it; the core only echoes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -51,6 +53,16 @@ pub enum Operation {
     /// Delete each of `paths`, folders with all they hold, for good: not
     /// to the trash. A link goes, never what it points to.
     Delete { paths: Vec<PathBuf> },
+    /// Change the owner, group or permissions of each of `paths`, and,
+    /// as `change` reaches, of what the folders among them hold. A link
+    /// is never changed or followed. Running it again does nothing more,
+    /// so a crash leaves no job to resume: the user may simply ask again.
+    /// Its progress counts what it looked at, without totals: it changes
+    /// as it goes rather than looking at everything first.
+    ChangeAccess {
+        paths: Vec<PathBuf>,
+        change: AccessChange,
+    },
 }
 
 /// How far a job has got. Totals are known once the job has looked at

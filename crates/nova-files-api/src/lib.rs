@@ -11,6 +11,7 @@
 
 #![forbid(unsafe_code)]
 
+mod access;
 mod connection;
 mod file_type;
 mod folder;
@@ -23,6 +24,7 @@ mod settings;
 mod theme;
 pub mod uri;
 
+pub use access::{AccessChange, MODE_BITS, ModeChange, Reach};
 pub use connection::{
     ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
 };
