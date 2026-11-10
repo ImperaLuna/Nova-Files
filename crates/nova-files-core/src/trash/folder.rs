@@ -189,6 +189,28 @@ mod tests {
     use crate::ops::TestFolder;
 
     #[test]
+    fn the_top_of_a_mount_is_where_the_mount_changes() {
+        let folder = TestFolder::new("trash-topdir");
+        let mount = mount_of(folder.path(), AtFlags::SYMLINK_NOFOLLOW).unwrap();
+
+        let top = topdir(folder.path(), mount).unwrap();
+
+        assert!(folder.path().starts_with(&top), "{}", top.display());
+        assert_eq!(mount_of(&top, AtFlags::SYMLINK_NOFOLLOW).unwrap(), mount);
+        if let Some(above) = top.parent() {
+            assert_ne!(mount_of(above, AtFlags::SYMLINK_NOFOLLOW).unwrap(), mount);
+        }
+    }
+
+    #[test]
+    fn the_kernel_names_the_mount() {
+        // Linux 5.8 and later give the mount id.
+        let mount = mount_of(Path::new("/"), AtFlags::empty()).unwrap();
+
+        assert!(mount.id.is_some());
+    }
+
+    #[test]
     fn an_entry_on_the_home_trash_mount_goes_to_the_home_trash() {
         let folder = TestFolder::new("trash-home");
         let home = folder.path().join("share/Trash");

@@ -21,6 +21,7 @@ use super::journal::read::{Line, read};
 use super::journal::{BACKUP_PREFIX, PART_PREFIX, entry_from, hold, word};
 use super::place::rename_no_replace;
 use super::plan::Entry;
+use super::trash::remove;
 use crate::trash;
 
 /// A job a crash cut short.
@@ -205,10 +206,8 @@ fn remove_lone_info(info: &Path, entry: Entry, item: Entry) {
             Ok(there) => Entry::of(&there) != item,
             Err(error) => error.kind() == io::ErrorKind::NotFound,
         }
-        && let Err(error) = fs::remove_file(info)
-        && error.kind() != io::ErrorKind::NotFound
     {
-        log::warn!("can't remove {}: {error}", info.display());
+        remove(info);
     }
 }
 

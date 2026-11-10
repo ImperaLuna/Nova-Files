@@ -130,6 +130,24 @@ mod tests {
     }
 
     #[test]
+    fn a_cache_up_to_four_mib_is_kept_and_a_bigger_one_started_anew() {
+        let folder = TestFolder::new("trash-sizes-big");
+        let info = folder.file("a.trashinfo", "");
+        let line = "1 2 other\n";
+        let kept = line.repeat(2 * 1024 * 1024 / line.len());
+        fs::write(folder.path().join(FILE), &kept).unwrap();
+
+        add_folder_sizes(folder.path(), &[(OsStr::new("a"), &info, 1)]).unwrap();
+
+        let cache = fs::read_to_string(folder.path().join(FILE)).unwrap();
+        assert!(cache.starts_with(&kept), "a 2 MiB cache is kept");
+        fs::write(folder.path().join(FILE), "x".repeat(MAX_BYTES + 1)).unwrap();
+        add_folder_sizes(folder.path(), &[(OsStr::new("a"), &info, 1)]).unwrap();
+        let cache = fs::read_to_string(folder.path().join(FILE)).unwrap();
+        assert!(cache.ends_with(" a\n") && cache.lines().count() == 1);
+    }
+
+    #[test]
     fn a_stopped_walk_has_no_size() {
         let folder = TestFolder::new("trash-size-stop");
         fs::create_dir(folder.path().join("tree")).unwrap();

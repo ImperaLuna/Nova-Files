@@ -219,13 +219,15 @@ fn send(
             });
             Ok(Some((trash, folder)))
         }
-        Err(error)
-            if error.kind() == io::ErrorKind::NotFound && original.symlink_metadata().is_err() =>
-        {
-            Ok(None)
-        }
+        Err(error) if gone_meanwhile(&error, &original) => Ok(None),
         Err(error) => Err(refused(&error)),
     }
+}
+
+/// Whether `error`, from moving `original` to the trash, means it was
+/// removed meanwhile.
+fn gone_meanwhile(error: &io::Error, original: &Path) -> bool {
+    error.kind() == io::ErrorKind::NotFound && original.symlink_metadata().is_err()
 }
 
 /// Puts the info file written as `part`, the entry `entry`, and then
@@ -244,8 +246,9 @@ fn take_names(
         let stored = stored_name(name, attempt);
         let info = info_path(trash, &stored);
         let target = trash.files().join(&stored);
-        // Taken: on to the next name, with nothing to record.
-        if info.symlink_metadata().is_ok() || target.symlink_metadata().is_ok() {
+        // An info file has it: on to the next name, with nothing to
+        // record. A stray entry without one is found below.
+        if info.symlink_metadata().is_ok() {
             continue;
         }
         running.record(Record::TrashInfo(&info, entry, item));
@@ -318,7 +321,8 @@ fn write_part(running: &mut Running, part: &Path, text: &[u8]) -> io::Result<Ent
     Ok(Entry::of(&file.metadata()?))
 }
 
-fn remove(path: &Path) {
+/// Removes the file at `path`, when it is there.
+pub(super) fn remove(path: &Path) {
     if let Err(error) = fs::remove_file(path)
         && error.kind() != io::ErrorKind::NotFound
     {
@@ -352,5 +356,43 @@ fn note_sizes(running: &Running, folders: Vec<Trashed>) {
         if let Err(error) = add_folder_sizes(trash, &lines) {
             log::info!("{} keeps no sizes: {error}", trash.display());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustix::io::Errno;
+
+    fn os_error(errno: Errno) -> io::Error {
+        io::Error::from_raw_os_error(errno.raw_os_error())
+    }
+
+    #[test]
+    fn a_full_drive_is_the_users_to_free_not_a_missing_trash() {
+        let path = Path::new("/a");
+
+        assert!(matches!(
+            no_trash(path, &os_error(Errno::NOSPC)),
+            Refused::Failed(Failure::NoSpace)
+        ));
+        assert!(matches!(
+            no_trash(path, &os_error(Errno::ACCESS)),
+            Refused::NoTrash
+        ));
+    }
+
+    #[test]
+    fn a_move_refused_across_drives_or_as_busy_is_unsupported() {
+        for errno in [Errno::XDEV, Errno::BUSY] {
+            assert!(matches!(
+                refused(&os_error(errno)),
+                Refused::Failed(Failure::Unsupported)
+            ));
+        }
+        assert!(matches!(
+            refused(&os_error(Errno::ACCESS)),
+            Refused::Failed(Failure::PermissionDenied)
+        ));
     }
 }
