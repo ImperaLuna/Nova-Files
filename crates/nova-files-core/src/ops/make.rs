@@ -4,7 +4,7 @@
 //! removes the source, once the copy is whole and only if the source is
 //! still what was copied.
 
-use std::fs::{self, DirBuilder, File, Metadata};
+use std::fs::{self, DirBuilder, Metadata};
 use std::io;
 use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _, symlink};
 use std::path::Path;
@@ -19,6 +19,7 @@ use super::place::{rename_no_replace, replace, replace_through, same_entry};
 use super::plan::{Item, Kind};
 use super::running::Running;
 use super::stop::Stop;
+use super::sync::sync_folder;
 
 /// A folder being filled is the user's alone; it gets its source's mode
 /// once full.
@@ -258,9 +259,7 @@ fn remove_source(
 /// [`Stop`] at `target` when the folder can't be synced.
 fn sync_folder_of(target: &Path) -> Result<(), Stop> {
     target.parent().map_or(Ok(()), |folder| {
-        File::open(folder)
-            .and_then(|folder| folder.sync_all())
-            .map_err(|error| Stop::at(target, &error))
+        sync_folder(folder).map_err(|error| Stop::at(target, &error))
     })
 }
 
