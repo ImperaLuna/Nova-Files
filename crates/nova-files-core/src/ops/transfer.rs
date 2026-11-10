@@ -167,6 +167,7 @@ pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: Ho
     for source in sources {
         running.record(Record::Source(source));
     }
+    running.record(Record::SourcesDone);
     let mut touched = BTreeSet::new();
     let (rest, renamed) = if how.moves() {
         match move_whole(running, sources, into, &mut touched) {

@@ -95,8 +95,14 @@ fn open(path: &Path) -> io::Result<File> {
     Ok(file)
 }
 
-/// The operation `lines` record: its word, then where to and from what.
+/// The operation `lines` record: its word, then where to and from what,
+/// once every source is recorded.
 fn operation(lines: &[Line]) -> Option<Operation> {
+    // A crash while the sources were written leaves only some: the job
+    // can't say what it was asked to do.
+    if !lines.iter().any(|line| line.word == word::SOURCES_DONE) {
+        return None;
+    }
     let sources: Vec<_> = first_paths(lines, word::SOURCE).collect();
     let into = first_paths(lines, word::INTO).next();
     match (lines.first()?.word.as_str(), into) {

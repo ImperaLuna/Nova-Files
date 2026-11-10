@@ -19,6 +19,7 @@
 //! copy
 //! into /home/me/Backup
 //! source /home/me/My%20Photos
+//! sources-done
 //! part /home/me/Backup/.nova-part-4-0
 //! made /home/me/Backup/My%20Photos /home/me/My%20Photos
 //! ```
@@ -28,6 +29,10 @@
 //! item it moved, from and to, instead of `made`; a delete records what
 //! it was asked to delete, then each entry it planned to, with its
 //! device and inode, before it removes any.
+//!
+//! `sources-done` follows the last source: a journal cut short before it
+//! doesn't say all the job was asked to do, so it is cleaned up but not
+//! resumed.
 //!
 //! A line with a word this version doesn't write, or with the wrong
 //! number of fields, makes the whole journal unreadable: it is left
@@ -81,6 +86,7 @@ pub mod word {
     pub const BACKUP: &str = "backup";
     pub const PLANNED: &str = "planned";
     pub const PLAN_DONE: &str = "plan-done";
+    pub const SOURCES_DONE: &str = "sources-done";
 
     /// The fields of a record about two paths, or a path and its entry.
     const PAIR: usize = 2;
@@ -89,7 +95,7 @@ pub mod word {
     /// doesn't write.
     pub fn fields(word: &str) -> Option<usize> {
         match word {
-            COPY | MOVE | DELETE | PLAN_DONE => Some(0),
+            COPY | MOVE | DELETE | PLAN_DONE | SOURCES_DONE => Some(0),
             INTO | SOURCE | PART => Some(1),
             MADE | MOVED | BACKUP | PLANNED => Some(PAIR),
             _ => None,
@@ -141,6 +147,9 @@ pub enum Record<'a> {
     Planned(&'a Path, Entry),
     /// The delete's whole plan is recorded: a resume may keep to it.
     PlanDone,
+    /// Every source is recorded: the job says all it was asked to do,
+    /// so it may resume.
+    SourcesDone,
 }
 
 impl Record<'_> {
@@ -160,6 +169,7 @@ impl Record<'_> {
                 (word::PLANNED, &[*path, entry.as_path()])
             }
             Self::PlanDone => (word::PLAN_DONE, &[]),
+            Self::SourcesDone => (word::SOURCES_DONE, &[]),
         };
         let mut line = word.as_bytes().to_vec();
         for path in paths {

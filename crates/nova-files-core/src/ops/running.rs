@@ -143,7 +143,7 @@ impl Running {
     pub fn record(&mut self, record: Record<'_>) {
         let says_what = matches!(
             record,
-            Record::Operation(_) | Record::Into(_) | Record::Source(_)
+            Record::Operation(_) | Record::Into(_) | Record::Source(_) | Record::SourcesDone
         );
         if self.resumes && says_what {
             return;

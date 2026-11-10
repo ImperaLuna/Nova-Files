@@ -32,16 +32,33 @@ fn crashed_job(root: &Path, lines: &[String]) -> PathBuf {
     crashed(root, CRASHED, lines)
 }
 
-/// Leaves a journal of `lines` under `root` for job `job`.
+/// Leaves a journal of `lines` under `root` for job `job`, with
+/// `sources-done` after the operation, where to and its sources, as a
+/// job writes it.
 fn crashed(root: &Path, job: JobId, lines: &[String]) -> PathBuf {
-    fs::create_dir_all(journals(root)).unwrap();
-    let journal = journals(root).join(job.0.to_string());
-    let mut text = String::from("nova-files-job 1\n");
-    for line in lines {
+    let says_what = |line: &String| {
+        ["copy", "move", "delete"].contains(&line.as_str())
+            || line.starts_with("into ")
+            || line.starts_with("source ")
+    };
+    let last_said = lines.iter().rposition(says_what);
+    let mut text = String::new();
+    for (at, line) in lines.iter().enumerate() {
         text.push_str(line);
         text.push('\n');
+        if Some(at) == last_said {
+            text.push_str("sources-done\n");
+        }
     }
-    fs::write(&journal, text).unwrap();
+    written(root, job, &text)
+}
+
+/// Leaves a journal of `text`, after its header, under `root` for job
+/// `job`.
+fn written(root: &Path, job: JobId, text: &str) -> PathBuf {
+    fs::create_dir_all(journals(root)).unwrap();
+    let journal = journals(root).join(job.0.to_string());
+    fs::write(&journal, format!("nova-files-job 1\n{text}")).unwrap();
     journal
 }
 
@@ -188,6 +205,36 @@ fn a_forgotten_job_ends_and_its_journal_goes() {
     );
     assert!(!journals(&bench.root).join("42").exists());
     assert!(bench.at("kept").exists(), "forgetting does nothing more");
+}
+
+#[test]
+fn a_job_whose_sources_were_cut_short_is_cleaned_up_not_resumed() {
+    let (bench, client) = restart("resume-sources-cut", |root| {
+        fs::write(root.join("a"), "a").unwrap();
+        let part = root.join(".nova-part-42-0");
+        fs::write(&part, "half").unwrap();
+        let text = format!(
+            "delete\n{}\n{}\n",
+            line("source", &[&root.join("a")]),
+            line("part", &[&part])
+        );
+        written(root, CRASHED, &text);
+        // A whole one, listed once every journal is cleaned up.
+        crashed(
+            root,
+            JobId(43),
+            &["delete".to_owned(), line("source", &[&root.join("a")])],
+        );
+    });
+
+    // Only the whole job is listed.
+    assert!(matches!(
+        client.next(),
+        Event::JobInterrupted { job: JobId(43), .. }
+    ));
+    assert!(!bench.at(".nova-part-42-0").exists());
+    assert!(bench.at("a").exists());
+    assert!(!journals(&bench.root).join("42").exists());
 }
 
 #[test]

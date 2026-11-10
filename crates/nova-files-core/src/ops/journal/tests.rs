@@ -97,10 +97,11 @@ fn records_what_resumes_need() {
         .record(Record::Planned(Path::new("/t"), entry))
         .unwrap();
     journal.record(Record::PlanDone).unwrap();
+    journal.record(Record::SourcesDone).unwrap();
 
     assert_eq!(
         fs::read_to_string(jobs.join("5")).unwrap(),
-        "nova-files-job 1\nmade /a%20(2) /b/a\nplanned /t 2049:77\nplan-done\n"
+        "nova-files-job 1\nmade /a%20(2) /b/a\nplanned /t 2049:77\nplan-done\nsources-done\n"
     );
     let path = jobs.join("5");
     let written = read::read(&File::open(&path).unwrap(), &path).unwrap();
