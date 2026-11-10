@@ -68,13 +68,56 @@ fn only_what_a_folder_rename_takes_along_is_carried() {
     let alias = folder.path().join("alias");
     std::os::unix::fs::symlink(&a, &alias).unwrap();
 
-    assert!(carried(&a.join("b/f"), &a));
-    assert!(carried(&a.join("b"), &a));
-    assert!(!carried(&a, &a), "not itself");
-    assert!(!carried(&a, &a.join("b")));
-    assert!(!carried(&a.join("link/f"), &a), "through a link inside");
-    assert!(
-        !carried(&alias.join("b"), &alias),
+    let kept = |sources: &[PathBuf]| outermost(sources, &Control::default()).unwrap();
+    let inside = [a.clone(), a.join("b"), a.join("b/f"), a.join("link/f")];
+    assert_eq!(
+        kept(&inside),
+        [a.clone(), a.join("link/f")],
+        "through a link inside"
+    );
+    assert_eq!(kept(&[a.clone(), a]).len(), 2, "not itself");
+    let through_alias = [alias.clone(), alias.join("b")];
+    assert_eq!(
+        kept(&through_alias),
+        through_alias,
         "inside a link to a folder"
     );
+    let control = Control::default();
+    control.cancel();
+    assert!(outermost(&inside, &control).is_err());
+}
+
+#[test]
+fn a_folder_a_move_emptied_goes_unless_something_keeps_it() {
+    let folder = TestFolder::new("transfer-emptied");
+    let mut running = Running::for_test();
+    let mut touched = BTreeSet::new();
+    let empty = folder.path().join("empty");
+    fs::create_dir(&empty).unwrap();
+    remove_if_empty(&mut running, &empty, &mut touched).unwrap();
+    assert!(!empty.exists());
+    assert_eq!(touched, BTreeSet::from([folder.path().to_path_buf()]));
+
+    let full = folder.path().join("full");
+    fs::create_dir(&full).unwrap();
+    folder.file("full/f", "f");
+    let gone = folder.path().join("gone");
+    let mut nothing = BTreeSet::new();
+    remove_if_empty(&mut running, &full, &mut nothing).unwrap();
+    remove_if_empty(&mut running, &gone, &mut nothing).unwrap();
+    assert!(full.exists());
+    assert!(nothing.is_empty());
+
+    let file = folder.file("file", "f");
+    assert!(matches!(
+        remove_if_empty(&mut running, &file, &mut nothing),
+        Err(Stop::Failed {
+            reason: Failure::Other,
+            ..
+        })
+    ));
+    fs::create_dir(&empty).unwrap();
+    running.shared.control.cancel();
+    assert!(remove_if_empty(&mut running, &empty, &mut nothing).is_err());
+    assert!(empty.exists(), "a cancel leaves it");
 }

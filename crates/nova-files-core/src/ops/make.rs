@@ -101,10 +101,16 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
     };
     let mut left = 0;
     match item.kind {
-        Kind::Folder => DirBuilder::new()
-            .mode(FILLING_MODE)
-            .create(target)
-            .map_err(|error| Stop::at(target, &error))?,
+        Kind::Folder => {
+            DirBuilder::new()
+                .mode(FILLING_MODE)
+                .create(target)
+                .map_err(|error| Stop::at(target, &error))?;
+            // Its name is on the disk before any source inside it goes.
+            if making.how.moves() {
+                sync_folder_of(target)?;
+            }
+        }
         Kind::File { size } => {
             let copied = copy_whole(running, making, &part, &backup)?;
             left = size.saturating_sub(copied);
@@ -216,11 +222,7 @@ fn remove_source(running: &Running, making: &Making<'_>, before: &Metadata) -> R
         .checkpoint()
         .map_err(Stop::from)
         .and_then(|()| {
-            if let Some(folder) = target.parent() {
-                File::open(folder)
-                    .and_then(|folder| folder.sync_all())
-                    .map_err(|error| Stop::at(target, &error))?;
-            }
+            sync_folder_of(target)?;
             let now = item
                 .from
                 .symlink_metadata()
@@ -237,6 +239,18 @@ fn remove_source(running: &Running, making: &Making<'_>, before: &Metadata) -> R
         log::warn!("{} is left twice: {error}", target.display());
     }
     removed
+}
+
+/// Puts the entry of `target` in its folder on the disk.
+///
+/// # Errors
+/// [`Stop`] at `target` when the folder can't be synced.
+fn sync_folder_of(target: &Path) -> Result<(), Stop> {
+    target.parent().map_or(Ok(()), |folder| {
+        File::open(folder)
+            .and_then(|folder| folder.sync_all())
+            .map_err(|error| Stop::at(target, &error))
+    })
 }
 
 /// Whether `now` is still the entry `before` described.

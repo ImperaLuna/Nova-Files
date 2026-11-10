@@ -143,9 +143,9 @@ impl Folders<'_> {
             .open
             .get(folder)
             .map_or(Err(Errno::NOENT), |fd| unlinkat(fd, name, flags));
-        if removed.is_ok() {
-            self.open.remove(&item.from);
-        }
+        // Only the folders on the way to this one stay open, so a delete
+        // across many folders never holds more than one path's worth.
+        self.open.retain(|open, _| folder.starts_with(open));
         removed
     }
 
@@ -213,5 +213,28 @@ mod tests {
             [Err(Errno::NOTDIR), Err(Errno::NOTDIR), Err(Errno::NOTEMPTY)],
             "f, then sub (now a link), then the tree that still holds it"
         );
+    }
+
+    #[test]
+    fn only_the_folders_on_the_way_stay_open() {
+        let folder = TestFolder::new("delete-open");
+        let paths: Vec<_> = ["a", "b", "c"]
+            .iter()
+            .map(|name| {
+                fs::create_dir_all(folder.path().join(name).join("in")).unwrap();
+                folder.file(&format!("{name}/in/f"), "f")
+            })
+            .collect();
+        let plan = plan_delete(&paths, &Control::default()).unwrap();
+        let mut folders = Folders {
+            trees: &paths,
+            open: HashMap::new(),
+        };
+        for item in plan.items.iter().rev() {
+            folders.remove(item).unwrap();
+            let above = item.from.parent().unwrap();
+            assert!(folders.open.keys().all(|open| above.starts_with(open)));
+        }
+        assert!(paths.iter().all(|path| !path.exists()));
     }
 }
