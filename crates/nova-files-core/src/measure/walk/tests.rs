@@ -397,3 +397,44 @@ fn a_listed_entry_that_vanished_is_left_out_and_a_named_path_is_not() {
     assert_eq!(slots[0].1, Size::default());
     assert_eq!(slots[1].1.unreadable, 1);
 }
+
+#[test]
+fn a_folder_of_only_files_reports_as_its_entries_are_counted() {
+    let folder = TestFolder::new("walk-files");
+    let root = folder.path();
+    let device = device_of(root);
+    let roots: Vec<Root> = (0..REPORT_EVERY * 2 + 10)
+        .map(|name| {
+            let path = root.join(name.to_string());
+            File::create(&path).unwrap();
+            Root {
+                path,
+                slot: 0,
+                listed_in: device,
+            }
+        })
+        .collect();
+    let reports = AtomicUsize::new(0);
+    let tally = Tally::new(1);
+
+    walk_within(&roots, &tally, &|| false, &|| {
+        reports.fetch_add(1, Ordering::SeqCst);
+    });
+
+    assert_eq!(reports.load(Ordering::SeqCst), 2);
+    assert_eq!(tally.take_changed()[0].1.files, 2010);
+}
+
+#[test]
+fn a_folder_is_on_the_drive_the_system_says() {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let folder = TestFolder::new("walk-device");
+    let dev = fs::metadata(folder.path()).unwrap().dev();
+
+    assert_eq!(
+        device_of(folder.path()),
+        Some((rustix::fs::major(dev), rustix::fs::minor(dev)))
+    );
+    assert_eq!(device_of(&folder.path().join("missing")), None);
+}

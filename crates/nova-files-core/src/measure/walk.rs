@@ -146,11 +146,15 @@ pub fn walk(
         ready: Condvar::new(),
         seen: Mutex::default(),
     };
-    for root in roots {
+    for (counted, root) in roots.iter().enumerate() {
         if stopped() {
             return;
         }
         walk.root(root);
+        // A folder of many files has them all as roots.
+        if (counted + 1).is_multiple_of(REPORT_EVERY) {
+            progress();
+        }
     }
     thread::scope(|scope| {
         for _ in 1..THREADS {

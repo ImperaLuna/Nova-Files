@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use nova_files_api::{Entry, Event, MeasureId, Share, Unreadable};
+use nova_files_api::{Entry, Event, MeasureId, ScanState, Share, Unreadable};
 
 use super::Scan;
 use super::tally::Tally;
@@ -19,8 +19,16 @@ use crate::list::{self, Stopped};
 
 /// Runs `scan`, scan `id` of the entries of `folder`.
 pub fn run(scan: &Scan, id: MeasureId, folder: &Path) {
+    // A scan cut short still ends with that, whatever stopped it.
     let unreadable = |reason| {
-        scan.tell(|| Event::SpaceUnreadable { id, reason }).ok();
+        scan.last(|state| match state {
+            ScanState::CutShort => Event::SpaceMeasured {
+                id,
+                shares: Vec::new(),
+                state,
+            },
+            _ => Event::SpaceUnreadable { id, reason },
+        });
     };
     if !folder.is_absolute() {
         unreadable(Unreadable::Failed);
@@ -82,9 +90,52 @@ fn changed(entries: &[Entry], tally: &Tally) -> Vec<Share> {
 
 #[cfg(test)]
 mod tests {
-    use nova_files_api::{EntryId, EntryKind, Size};
+    use std::sync::Arc;
+    use std::sync::mpsc;
+
+    use nova_files_api::{ClientId, EntryId, EntryKind, Size};
 
     use super::*;
+    use crate::measure::{CUT, Measurer, Purpose, RUNNING, Shared};
+
+    /// What a space scan of `folder` says, run as scan 7 and first moved
+    /// to `state`.
+    fn space_in(state: u8, folder: &Path) -> Vec<Event> {
+        let (sink, events) = mpsc::channel();
+        let shared = Arc::new(Shared::new(MeasureId(7), Vec::new()));
+        shared.halt(state);
+        let scan = Scan {
+            scans: Arc::clone(&Measurer::default().scans),
+            key: (ClientId(1), Purpose::Space),
+            shared,
+            events: Arc::new(sink),
+        };
+
+        run(&scan, MeasureId(7), folder);
+
+        events.try_iter().collect()
+    }
+
+    #[test]
+    fn a_folder_that_cant_be_read_says_so_unless_the_scan_was_cut_short() {
+        let relative = Path::new("relative");
+
+        assert_eq!(
+            space_in(CUT, relative),
+            vec![Event::SpaceMeasured {
+                id: MeasureId(7),
+                shares: Vec::new(),
+                state: ScanState::CutShort,
+            }]
+        );
+        assert_eq!(
+            space_in(RUNNING, relative),
+            vec![Event::SpaceUnreadable {
+                id: MeasureId(7),
+                reason: Unreadable::Failed,
+            }]
+        );
+    }
 
     #[test]
     fn a_report_names_only_the_entries_that_changed() {
