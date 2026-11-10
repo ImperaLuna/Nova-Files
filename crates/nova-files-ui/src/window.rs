@@ -479,6 +479,8 @@ impl MainWindow {
             | Event::DriveDone { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
+            | Event::Properties { .. }
+            | Event::PropertiesUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)

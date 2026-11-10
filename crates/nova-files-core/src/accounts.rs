@@ -2,10 +2,6 @@
 //! so users from LDAP, systemd-homed and the like are named as well as
 //! those in `/etc/passwd`. And the groups the core's user is in, which are
 //! the groups it may give its own files.
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "properties (FIL-32) names owners with it")
-)]
 
 use std::ffi::OsString;
 

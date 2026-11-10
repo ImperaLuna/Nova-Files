@@ -38,7 +38,7 @@ mod running;
 mod stop;
 mod sync;
 #[cfg(test)]
-mod test_folder;
+pub mod test_folder;
 mod transfer;
 mod trash;
 
@@ -56,6 +56,7 @@ use nova_files_api::{
     Operation, Outcome, Scope,
 };
 
+pub use attrs::MODE_BITS;
 pub use audience::Audience;
 #[cfg(test)]
 pub use test_folder::TestFolder;
