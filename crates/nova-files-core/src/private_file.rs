@@ -1,5 +1,5 @@
 //! Reading and saving the small files the core keeps for the user: the
-//! window state and the settings.
+//! window state, the settings and the pinned folders.
 //!
 //! [`read`] reads a file up to a cap, so a huge file is never loaded.
 //! [`replace`] saves one whole: it writes a temporary file beside it,
@@ -9,7 +9,7 @@
 use std::fs::{self, DirBuilder, OpenOptions, Permissions};
 use std::io::{self, Read as _, Write as _};
 use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _, PermissionsExt as _};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// The files and the folders made for them are the user's alone.
@@ -74,10 +74,31 @@ pub fn replace(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
     written
 }
 
+/// The permission bits of a file's mode, kept across a save.
+const PERMISSION_BITS: u32 = 0o7777;
+
+/// The mode a save of `path` gives the new file: the old file's own, so a
+/// file the user made keeps it; [`FILE_MODE`] for a new one.
+pub fn mode_to_keep(path: &Path) -> u32 {
+    fs::metadata(path).map_or(FILE_MODE, |metadata| {
+        metadata.permissions().mode() & PERMISSION_BITS
+    })
+}
+
+/// Where a save of `path` goes: the file a symlink points to, so a linked
+/// file stays linked; `path` itself otherwise.
+pub fn saved_at(path: &Path) -> PathBuf {
+    let is_link = fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_symlink());
+    if is_link {
+        // A link to nowhere is saved over: there is nothing to keep.
+        fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
+    } else {
+        path.to_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use super::*;
 
     /// The permission bits of a mode.

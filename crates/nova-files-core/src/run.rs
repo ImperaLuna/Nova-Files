@@ -21,7 +21,7 @@ use crate::jobs::{self, Client};
 use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::ops::Jobs;
-use crate::places::Home;
+use crate::places::Store as PlacesStore;
 use crate::properties;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
@@ -31,7 +31,8 @@ use crate::window_state::Store as WindowStateStore;
 
 /// Where the core finds and keeps things.
 pub struct Setup {
-    pub home: Option<Home>,
+    /// The places list and the pinned folders.
+    pub places: PlacesStore,
     pub window_state: WindowStateStore,
     pub settings: SettingsStore,
     pub theme: ThemeStore,
@@ -76,11 +77,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
         CoreMessage::Disconnected { client } => {
             // Dropping the client stops its listing.
             clients.remove(&client);
-            setup.settings.forget(client);
-            setup.theme.forget(client);
-            setup.drives.forget(client);
-            setup.jobs.audience().leave(client);
-            setup.measurer.forget(client);
+            forget(client, setup);
         }
         // Receiving it already restarted the idle wait.
         CoreMessage::Activity => {}
@@ -91,14 +88,20 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             };
             if answer(client, target, command, setup).is_err() {
                 clients.remove(&client);
-                setup.settings.forget(client);
-                setup.theme.forget(client);
-                setup.drives.forget(client);
-                setup.jobs.audience().leave(client);
-                setup.measurer.forget(client);
+                forget(client, setup);
             }
         }
     }
+}
+
+/// Stops telling `client` about anything it asked to hear about.
+fn forget(client: ClientId, setup: &Setup) {
+    setup.settings.forget(client);
+    setup.theme.forget(client);
+    setup.places.forget(client);
+    setup.drives.forget(client);
+    setup.jobs.audience().leave(client);
+    setup.measurer.forget(client);
 }
 
 /// Answers `command`, at once or through a job.
@@ -107,7 +110,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
 /// [`nova_files_api::ClientGone`] when the client stopped listening.
 #[expect(
     clippy::too_many_lines,
-    reason = "one short arm per command, each handing it on"
+    reason = "one short arm per command; splitting it would hide a missed one"
 )]
 fn answer(
     id: ClientId,
@@ -122,7 +125,11 @@ fn answer(
             Ok(())
         }
         Command::Places => {
-            jobs::places(client, setup.home.clone());
+            setup.places.listen(id, client.events());
+            Ok(())
+        }
+        Command::ChangeBookmark(change) => {
+            setup.places.change(change);
             Ok(())
         }
         Command::Rows { id, first, count } => {
