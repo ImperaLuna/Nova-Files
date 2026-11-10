@@ -30,7 +30,7 @@ use super::attrs::{copy_mode_and_times, copy_xattrs};
 use super::clash::{clash, conflict_for};
 use super::control::{Cancelled, Control};
 use super::failure::failure;
-use super::journal::Record;
+use super::journal::{Record, word};
 use super::keep_both::{Naming, free_path};
 use super::make::{How, Made, Making, make, size};
 use super::place::rename_no_replace;
@@ -160,13 +160,14 @@ impl Done {
 /// Copies or moves, as `how` says, each of `sources` into `into`.
 pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: How) -> Ended {
     running.record(Record::Operation(match how {
-        How::Copy => "copy",
-        How::Move => "move",
+        How::Copy => word::COPY,
+        How::Move => word::MOVE,
     }));
     running.record(Record::Into(into));
     for source in sources {
         running.record(Record::Source(source));
     }
+    running.record(Record::SourcesDone);
     let mut touched = BTreeSet::new();
     let (rest, renamed) = if how.moves() {
         match move_whole(running, sources, into, &mut touched) {
@@ -426,6 +427,21 @@ fn place(
     // before each try, as the name may have changed hands since.
     let mut replacing = false;
     let mut looked_again = 0;
+    // Made before a crash cut the job short; still held or stopped first,
+    // like any other item.
+    running.shared.control.checkpoint()?;
+    // Only where it goes now: a parent that went elsewhere since (kept
+    // both) takes it again.
+    if let Some(made) = running
+        .made_before(&item.from, item.kind)
+        .filter(|made| made.parent() == target.parent())
+    {
+        let made_before = Made {
+            left: size(item),
+            carried: false,
+        };
+        return Ok((Placed::Made(made_before), made.to_path_buf()));
+    }
     loop {
         running.shared.control.checkpoint()?;
         let mut making = Making {

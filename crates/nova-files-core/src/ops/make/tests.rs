@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use rustix::fs::{CWD, FileType, Mode, mknodat};
 
 use super::*;
+use crate::ops::plan::Entry;
 use crate::ops::test_folder::TestFolder;
 
 /// Another drive than the scratch folders', where the system has one.
@@ -15,6 +16,7 @@ fn move_to(from: PathBuf, kind: Kind, target: &Path) -> Result<Made, Stop> {
         from,
         to: target.to_path_buf(),
         kind,
+        entry: Entry::default(),
     };
     let making = Making {
         item: &item,
@@ -107,6 +109,7 @@ fn a_source_that_cant_go_takes_its_copy_along_unless_the_copy_replaced_a_file() 
             from: source.clone(),
             to: target.clone(),
             kind: Kind::File { size: 5 },
+            entry: Entry::default(),
         };
         let making = Making {
             item: &item,
@@ -142,6 +145,7 @@ fn a_target_saved_over_since_the_copy_stays() {
         from: source,
         to: target.clone(),
         kind: Kind::File { size: 5 },
+        entry: Entry::default(),
     };
     let making = Making {
         item: &item,

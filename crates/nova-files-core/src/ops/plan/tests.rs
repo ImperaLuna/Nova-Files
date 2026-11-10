@@ -109,3 +109,19 @@ fn stops_when_cancelled() {
         Err(Stop::Cancelled)
     );
 }
+
+#[test]
+fn a_delete_within_leaves_out_what_it_doesnt_want_unread() {
+    let folder = TestFolder::new("plan-within");
+    let tree = folder.path().join("tree");
+    fs::create_dir_all(tree.join("new")).unwrap();
+    fs::write(tree.join("new/x"), "x").unwrap();
+    fs::write(tree.join("a"), "a").unwrap();
+    let new = tree.join("new");
+    let paths = [tree.clone()];
+
+    let plan = plan_delete(&paths, &Control::default(), &|path| path != new).unwrap();
+
+    let planned: Vec<_> = plan.items.iter().map(|item| item.from.clone()).collect();
+    assert_eq!(planned, [tree.clone(), tree.join("a")]);
+}

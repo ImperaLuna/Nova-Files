@@ -2,7 +2,7 @@
 //! inside it, and a client that starts jobs and waits for them.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
@@ -19,14 +19,17 @@ pub struct Bench {
 
 impl Bench {
     pub fn new(test: &str) -> Self {
-        Self::with_idle_exit(test, nova_files_core::IDLE_EXIT)
+        Self::with(test, nova_files_core::IDLE_EXIT, |_| {})
     }
 
-    pub fn with_idle_exit(test: &str, idle_exit: Duration) -> Self {
+    /// A bench whose core exits after `idle_exit` idle, started once
+    /// `prepare` has had the fresh scratch folder.
+    pub fn with(test: &str, idle_exit: Duration, prepare: impl FnOnce(&Path)) -> Self {
         let root =
             std::env::temp_dir().join(format!("nova-files-jobs-{test}-{}", std::process::id()));
         fs::remove_dir_all(&root).ok();
         fs::create_dir_all(root.join("home")).unwrap();
+        prepare(&root);
         let home = nova_files_core::Home {
             folder: root.join("home"),
             config: root.join("home/.config"),

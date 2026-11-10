@@ -3,7 +3,8 @@
 //! for all conflicts of a kind.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use nova_files_api::{Answer, Conflict, ConflictKind, JobId, Scope};
@@ -11,10 +12,15 @@ use nova_files_api::{Answer, Conflict, ConflictKind, JobId, Scope};
 use super::control::Cancelled;
 use super::job::Job;
 use super::journal::{Journal, Record};
+use super::left::{Done, Left};
+use super::plan::{Kind, kind};
 use super::progress::Reporter;
 
 pub struct Running {
     pub job: JobId,
+    /// The id in the names of the job's part files and backups: the job's
+    /// own, or, once resumed, a new one, so none is a name a crash left.
+    pub names: u64,
     /// What the core keeps of the job while it runs.
     pub shared: Arc<Job>,
     pub reporter: Reporter,
@@ -25,6 +31,11 @@ pub struct Running {
     answers: HashMap<ConflictKind, Answer>,
     /// How many conflicts it asked about.
     asked: u64,
+    /// What the job did before a crash cut it short, taken as done now
+    /// that it resumes.
+    pub before: Done,
+    /// Whether the job resumes, adding to the journal it already has.
+    resumes: bool,
 }
 
 impl Running {
@@ -36,12 +47,62 @@ impl Running {
     ) -> Self {
         Self {
             job,
+            names: job.0,
             shared,
             reporter,
             journals,
             journal: None,
             answers: HashMap::new(),
             asked: 0,
+            before: Done::default(),
+            resumes: false,
+        }
+    }
+
+    /// The job resumes after a crash, which `left` it as it was: its
+    /// journal, which already says what the job does, is added to, and
+    /// its hidden names take the id `names`.
+    pub fn resuming(&mut self, left: Left, names: u64) {
+        self.before = left.done;
+        self.names = names;
+        self.resumes = true;
+        self.journals = None;
+        match Journal::reopen(left.file, left.journal, left.whole) {
+            Ok(journal) => self.journal = Some(journal),
+            Err(error) => log::warn!("job {} resumes without its journal: {error}", self.job.0),
+        }
+    }
+
+    /// Where the item from `from`, a `planned` kind, went before a crash,
+    /// if it is still there as that kind. A folder swapped for a link
+    /// since is not the job's, so it goes through the conflicts again.
+    pub fn made_before(&self, from: &Path, planned: Kind) -> Option<&Path> {
+        self.before
+            .made
+            .get(from)
+            .map(PathBuf::as_path)
+            .filter(|made| {
+                made.symlink_metadata().is_ok_and(|there| {
+                    std::mem::discriminant(&kind(&there)) == std::mem::discriminant(&planned)
+                })
+            })
+    }
+
+    /// Makes sure what the journal says so far is on the disk.
+    pub fn settle(&mut self) {
+        if let Some(journal) = &mut self.journal
+            && let Err(error) = journal.sync()
+        {
+            self.drop_journal(&error);
+        }
+    }
+
+    /// The journal failed with `error`. A journal that misses a step
+    /// would mislead a resume, so it goes.
+    fn drop_journal(&mut self, error: &io::Error) {
+        log::warn!("job {} drops its journal: {error}", self.job.0);
+        if let Some(journal) = self.journal.take() {
+            journal.finish();
         }
     }
 
@@ -80,6 +141,13 @@ impl Running {
     /// are hidden and a real name never holds half a file, so only a
     /// resume after a crash is lost. That is logged once.
     pub fn record(&mut self, record: Record<'_>) {
+        let says_what = matches!(
+            record,
+            Record::Operation(_) | Record::Into(_) | Record::Source(_) | Record::SourcesDone
+        );
+        if self.resumes && says_what {
+            return;
+        }
         if self.journal.is_none() {
             let Some(folder) = self.journals.take() else {
                 return;
@@ -95,11 +163,7 @@ impl Running {
         if let Some(journal) = &mut self.journal
             && let Err(error) = journal.record(record)
         {
-            // A journal that misses a step would mislead a resume.
-            log::warn!("job {} drops its journal: {error}", self.job.0);
-            if let Some(journal) = self.journal.take() {
-                journal.finish();
-            }
+            self.drop_journal(&error);
         }
     }
 
@@ -128,3 +192,6 @@ impl Running {
         Self::new(JobId(1), shared, reporter, None)
     }
 }
+
+#[cfg(test)]
+mod tests;

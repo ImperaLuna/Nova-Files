@@ -19,12 +19,27 @@
 //! copy
 //! into /home/me/Backup
 //! source /home/me/My%20Photos
+//! sources-done
 //! part /home/me/Backup/.nova-part-4-0
-//! made /home/me/Backup/My%20Photos
+//! made /home/me/Backup/My%20Photos /home/me/My%20Photos
 //! ```
 //!
-//! A move records each item it moved, from and to, instead; a delete
-//! records only what it was asked to delete.
+//! `made` names what was made, then its source, so a copy made under
+//! another name (the user kept both) is found again. A move records each
+//! item it moved, from and to, instead of `made`; a delete records what
+//! it was asked to delete, then each entry it planned to, with its
+//! device and inode, before it removes any.
+//!
+//! `sources-done` follows the last source: a journal cut short before it
+//! doesn't say all the job was asked to do, so it is cleaned up but not
+//! resumed.
+//!
+//! A line with a word this version doesn't write, or with the wrong
+//! number of fields, makes the whole journal unreadable: it is left
+//! alone rather than half understood.
+//!
+//! A running job holds a lock on its journal, so a second core never
+//! takes a live job for one a crash cut short.
 
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{self, Write as _};
@@ -34,6 +49,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use nova_files_api::JobId;
+use rustix::fs::{FlockOperation, flock};
+
+use super::plan::Entry;
 
 /// The journals' folder, under the state folder.
 pub const FOLDER: &str = "nova-files/jobs";
@@ -49,6 +67,59 @@ const HEX: &[u8; 16] = b"0123456789ABCDEF";
 const HIGH: u8 = 4;
 const LOW_MASK: u8 = 0x0F;
 
+/// The start of the hidden name of a part file a job writes, followed by
+/// the job's id for names and the item's index.
+pub const PART_PREFIX: &str = ".nova-part-";
+/// The start of the hidden name a user's file steps aside to.
+pub const BACKUP_PREFIX: &str = ".nova-backup-";
+
+/// The record words, as written and read back.
+pub mod word {
+    pub const COPY: &str = "copy";
+    pub const MOVE: &str = "move";
+    pub const DELETE: &str = "delete";
+    pub const INTO: &str = "into";
+    pub const SOURCE: &str = "source";
+    pub const PART: &str = "part";
+    pub const MADE: &str = "made";
+    pub const MOVED: &str = "moved";
+    pub const BACKUP: &str = "backup";
+    pub const PLANNED: &str = "planned";
+    pub const PLAN_DONE: &str = "plan-done";
+    pub const SOURCES_DONE: &str = "sources-done";
+
+    /// The fields of a record about two paths, or a path and its entry.
+    const PAIR: usize = 2;
+
+    /// How many fields follow `word`, or `None` for a word this version
+    /// doesn't write.
+    pub fn fields(word: &str) -> Option<usize> {
+        match word {
+            COPY | MOVE | DELETE | PLAN_DONE | SOURCES_DONE => Some(0),
+            INTO | SOURCE | PART => Some(1),
+            MADE | MOVED | BACKUP | PLANNED => Some(PAIR),
+            _ => None,
+        }
+    }
+}
+
+/// Splits an entry's device and inode in its field.
+const ENTRY_SPLIT: char = ':';
+
+/// `entry` as a journal field: its device, then its inode.
+fn entry_field(entry: Entry) -> PathBuf {
+    PathBuf::from(format!("{}{ENTRY_SPLIT}{}", entry.device, entry.inode))
+}
+
+/// The entry `field` names, or `None` when it names none.
+pub fn entry_from(field: &Path) -> Option<Entry> {
+    let (device, inode) = field.to_str()?.split_once(ENTRY_SPLIT)?;
+    Some(Entry {
+        device: device.parse().ok()?,
+        inode: inode.parse().ok()?,
+    })
+}
+
 /// One line of a journal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Record<'a> {
@@ -60,8 +131,9 @@ pub enum Record<'a> {
     Source(&'a Path),
     /// A part file about to be written. Left behind by a crash, it goes.
     Part(&'a Path),
-    /// Something the job made, which undo would remove.
-    Made(&'a Path),
+    /// Something the job made at the first path, from the source at the
+    /// second, which undo would remove.
+    Made(&'a Path, &'a Path),
     /// Something the job moved from the first path to the second, which
     /// undo would move back.
     Moved(&'a Path, &'a Path),
@@ -69,19 +141,35 @@ pub enum Record<'a> {
     /// first while its replacement takes its name. Left behind by a
     /// crash, it goes back if its name is free.
     Backup(&'a Path, &'a Path),
+    /// An entry a delete planned to remove, and which entry it was. A
+    /// resumed delete removes only these, never what came after, even
+    /// under the same name.
+    Planned(&'a Path, Entry),
+    /// The delete's whole plan is recorded: a resume may keep to it.
+    PlanDone,
+    /// Every source is recorded: the job says all it was asked to do,
+    /// so it may resume.
+    SourcesDone,
 }
 
 impl Record<'_> {
     /// The record as a line, newline included.
     fn line(self) -> Vec<u8> {
+        let entry;
         let (word, paths): (&str, &[&Path]) = match &self {
             Self::Operation(name) => (name, &[]),
-            Self::Into(path) => ("into", std::slice::from_ref(path)),
-            Self::Source(path) => ("source", std::slice::from_ref(path)),
-            Self::Part(path) => ("part", std::slice::from_ref(path)),
-            Self::Made(path) => ("made", std::slice::from_ref(path)),
-            Self::Moved(from, to) => ("moved", &[*from, *to]),
-            Self::Backup(backup, of) => ("backup", &[*backup, *of]),
+            Self::Into(path) => (word::INTO, std::slice::from_ref(path)),
+            Self::Source(path) => (word::SOURCE, std::slice::from_ref(path)),
+            Self::Part(path) => (word::PART, std::slice::from_ref(path)),
+            Self::Made(made, from) => (word::MADE, &[*made, *from]),
+            Self::Moved(from, to) => (word::MOVED, &[*from, *to]),
+            Self::Backup(backup, of) => (word::BACKUP, &[*backup, *of]),
+            Self::Planned(path, planned) => {
+                entry = entry_field(*planned);
+                (word::PLANNED, &[*path, entry.as_path()])
+            }
+            Self::PlanDone => (word::PLAN_DONE, &[]),
+            Self::SourcesDone => (word::SOURCES_DONE, &[]),
         };
         let mut line = word.as_bytes().to_vec();
         for path in paths {
@@ -142,11 +230,29 @@ impl Journal {
             .create_new(true)
             .mode(FILE_MODE)
             .open(&path)?;
+        // Before the header, so a journal that says anything is held.
+        hold(&file)?;
         file.write_all(HEADER.as_bytes())?;
         file.write_all(b"\n")?;
         file.sync_data()?;
         // The journal's own entry in its folder, so a crash can't lose it.
         File::open(folder)?.sync_all()?;
+        Ok(Self {
+            file,
+            path,
+            synced: Instant::now(),
+        })
+    }
+
+    /// Adds to the journal at `path` again, left by a crash and held
+    /// through `file` since, as its job resumes. What follows its first
+    /// `whole` bytes, a last line the crash cut short, goes first, so
+    /// the next record starts a line of its own.
+    ///
+    /// # Errors
+    /// When it can't be cut back.
+    pub fn reopen(file: File, path: PathBuf, whole: u64) -> io::Result<Self> {
+        file.set_len(whole)?;
         Ok(Self {
             file,
             path,
@@ -170,6 +276,16 @@ impl Journal {
         Ok(())
     }
 
+    /// Syncs what is written so far to the disk.
+    ///
+    /// # Errors
+    /// When it can't be synced.
+    pub fn sync(&mut self) -> io::Result<()> {
+        self.file.sync_data()?;
+        self.synced = Instant::now();
+        Ok(())
+    }
+
     /// The job is over: its journal goes.
     pub fn finish(self) {
         if let Err(error) = fs::remove_file(&self.path) {
@@ -178,6 +294,33 @@ impl Journal {
                 self.path.display()
             );
         }
+    }
+}
+
+/// Holds `journal` for as long as it is open, so no other core takes its
+/// job for one a crash cut short.
+///
+/// # Errors
+/// [`io::ErrorKind::WouldBlock`] when another holds it.
+pub fn hold(journal: &File) -> io::Result<()> {
+    flock(journal, FlockOperation::NonBlockingLockExclusive).map_err(io::Error::from)
+}
+
+pub mod read;
+#[cfg(test)]
+impl Journal {
+    /// A journal written through `file`, which may refuse writes.
+    pub fn over(file: File, path: PathBuf) -> Self {
+        Self {
+            file,
+            path,
+            synced: Instant::now(),
+        }
+    }
+
+    /// When it was last synced.
+    pub const fn synced(&self) -> Instant {
+        self.synced
     }
 }
 

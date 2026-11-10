@@ -247,7 +247,7 @@ fn pausing_or_resuming_twice_tells_once() {
 #[test]
 fn a_paused_job_keeps_the_core_up_after_its_window_closes() {
     let idle_exit = Duration::from_millis(200);
-    let bench = Bench::with_idle_exit("copy-alive", idle_exit);
+    let bench = Bench::with("copy-alive", idle_exit, |_| {});
     // Connected first: making the tree may take longer than the idle exit.
     let client = bench.client();
     let source = big_tree(&bench);
