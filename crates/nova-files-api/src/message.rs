@@ -3,11 +3,15 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::drive::DriveList;
+use crate::bookmark::{Bookmark, BookmarkChange};
+use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
+use crate::open_with::{OpenWith, OpenWithAnswer};
+use crate::properties::{Properties, PropertiesId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
+use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::theme::{DesktopLook, Theme};
 use crate::trash::Trashed;
 
@@ -28,8 +32,15 @@ pub enum Command {
     /// [`Event::FolderUnreadable`] with the same `id`. A newer `ListFolder`
     /// from the same client cancels this one, which then may never answer.
     ListFolder { id: ListingId, path: PathBuf },
-    /// Ask which standard folders exist; the answer is [`Event::Places`].
+    /// Ask for the places list: the answer is [`Event::Places`] and
+    /// [`Event::Bookmarks`], and from then on the client gets each again
+    /// whenever it changes (a folder made or removed, the bookmarks file
+    /// edited). Clients that never ask never get them.
     Places,
+    /// Pin, unpin, rename or move a pinned folder and save it. Every client
+    /// that asked for the places, this one included, then gets
+    /// [`Event::Bookmarks`]; nothing is sent when nothing changed.
+    ChangeBookmark(BookmarkChange),
     /// The entries of listing `id` the client shows or is about to show:
     /// `count` entries from `first`. The core reads the details of those it
     /// hasn't read yet, answering with [`Event::DetailsRead`], and makes
@@ -54,6 +65,10 @@ pub enum Command {
         query: String,
         limit: u32,
     },
+    /// Read the properties of what is at `path`, without following a link.
+    /// The answer is [`Event::Properties`] or [`Event::PropertiesUnreadable`]
+    /// with the same `id`.
+    Properties { id: PropertiesId, path: PathBuf },
     /// Open the file at `path` in the user's default app for its type.
     /// `activation` is the caller's activation token, so the app may take
     /// focus. The answer is [`Event::FileOpened`] or
@@ -63,6 +78,9 @@ pub enum Command {
         path: PathBuf,
         activation: Option<String>,
     },
+    /// List the apps that open some files, open them in one, or make one
+    /// the default (see [`OpenWith`]).
+    OpenWith(OpenWith),
     /// Ask for the UI's window state; the answer is [`Event::WindowState`].
     WindowState,
     /// Keep these bytes as the UI's window state, between runs too. The
@@ -93,6 +111,10 @@ pub enum Command {
     /// Ask what is in the desktop's trash: in the home trash and in each
     /// mounted drive's. The answer is [`Event::Trash`].
     ListTrash,
+    /// Mount, unmount or eject. The answer, once it is done, is
+    /// [`Event::DriveDone`]; the change itself reaches every client that
+    /// asked for the drives as [`Event::Drives`].
+    Drive(DriveAction),
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -128,6 +150,24 @@ pub enum Command {
         answer: Answer,
         scope: Scope,
     },
+    /// Measure how much space everything under `paths` (absolute paths)
+    /// takes, together: what two paths share counts once. The answer is
+    /// [`Event::SizeMeasured`] with the same `id`, a few times a second
+    /// while the scan runs, then once more when it ends. A client has one
+    /// scan at a time: a newer `Measure` from it stops this one, which then
+    /// says nothing more.
+    Measure { id: MeasureId, paths: Vec<PathBuf> },
+    /// Measure what each entry of `folder` (an absolute path) takes. The
+    /// answer is [`Event::SpaceMeasured`] with the same `id`, a few times a
+    /// second while the scan runs, then once more when it ends; or
+    /// [`Event::SpaceUnreadable`]. A client has one space scan at a time,
+    /// beside its one `Measure`: a newer `Space` from it stops this one,
+    /// which then says nothing more.
+    Space { id: MeasureId, folder: PathBuf },
+    /// Stop the client's scan `id`, a `Measure` or a `Space`, if it still
+    /// runs (both, when the client gave them the same id). It says nothing
+    /// more.
+    StopMeasure(MeasureId),
 }
 
 /// Something the core tells one client.
@@ -160,6 +200,8 @@ pub enum Event {
     },
     /// The standard folders that exist, in places-list order.
     Places(Vec<Place>),
+    /// The pinned folders, in the user's order.
+    Bookmarks(Arc<[Bookmark]>),
     /// One stage of [`Command::Search`] `id`: names as typed come first,
     /// then letters in order and typos. `done` marks the last stage. A path
     /// shows at most once per search.
@@ -170,11 +212,24 @@ pub enum Event {
     },
     /// [`Command::Search`] `id` couldn't run.
     SearchFailed { id: SearchId, reason: SearchFailed },
+    /// The properties of [`Command::Properties`] `id`'s path.
+    Properties {
+        id: PropertiesId,
+        properties: Arc<Properties>,
+    },
+    /// [`Command::Properties`] `id`'s path couldn't be looked at.
+    PropertiesUnreadable {
+        id: PropertiesId,
+        path: PathBuf,
+        reason: Unreadable,
+    },
     /// [`Command::OpenFile`]'s app has started.
     FileOpened,
     /// [`Command::OpenFile`] started nothing: sandboxed, no default app for
     /// the file's type, or the app's program couldn't start.
     FileNotOpened,
+    /// The answer to a [`Command::OpenWith`] request.
+    OpenWith(OpenWithAnswer),
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),
@@ -193,6 +248,12 @@ pub enum Event {
     /// What is in the trash, answering [`Command::ListTrash`], in no
     /// particular order.
     Trash(Vec<Trashed>),
+    /// [`Command::Drive`] `action` is done: for a mount, with where the
+    /// volume is now. Only the client that asked hears it.
+    DriveDone {
+        action: DriveAction,
+        result: Result<Option<PathBuf>, DriveFailure>,
+    },
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },
@@ -241,6 +302,22 @@ pub enum Event {
     Undoable { job: JobId, operation: Operation },
     /// Job `job` can no longer be undone: it was, or it is too old.
     UndoGone(JobId),
+    /// What [`Command::Measure`] `id` counted so far, and whether it ended.
+    SizeMeasured {
+        id: MeasureId,
+        size: Size,
+        state: ScanState,
+    },
+    /// What the entries of [`Command::Space`] `id`'s folder take so far:
+    /// the first answer names every entry, later ones only those whose
+    /// totals changed since. `state` says whether it ended.
+    SpaceMeasured {
+        id: MeasureId,
+        shares: Vec<Share>,
+        state: ScanState,
+    },
+    /// [`Command::Space`] `id`'s folder couldn't be listed.
+    SpaceUnreadable { id: MeasureId, reason: Unreadable },
 }
 
 /// Names one connected client, so the core can answer the right one.

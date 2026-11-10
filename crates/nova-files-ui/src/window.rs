@@ -476,8 +476,11 @@ impl MainWindow {
             // window state (see `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Drives(_)
+            | Event::DriveDone { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
+            | Event::Properties { .. }
+            | Event::PropertiesUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)
@@ -490,6 +493,11 @@ impl MainWindow {
             | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
             | Event::JobFinished { .. }
+            | Event::Bookmarks(_)
+            | Event::OpenWith(_)
+            | Event::SizeMeasured { .. }
+            | Event::SpaceMeasured { .. }
+            | Event::SpaceUnreadable { .. }
             | Event::Trash(_)
             | Event::Undoable { .. }
             | Event::UndoGone(_) => {}

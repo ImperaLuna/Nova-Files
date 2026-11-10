@@ -1,6 +1,7 @@
 //! The store's bookkeeping: versions, queued saves and reads put off
 //! while saves are queued.
 
+use std::fs;
 use std::sync::mpsc::Receiver;
 
 use nova_files_api::{Appearance, Thumbnails};
