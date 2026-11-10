@@ -17,6 +17,7 @@
 //! the answer says so, and then only through a backup or an exchange.
 //! What was made before a failure or a cancel stays, whole.
 
+use std::cmp::Reverse;
 use std::collections::{BTreeSet, HashSet};
 use std::fs::{self, File, Metadata};
 use std::io;
@@ -238,7 +239,10 @@ fn move_whole(
     touched: &mut BTreeSet<PathBuf>,
 ) -> Result<(Vec<PathBuf>, usize), Stop> {
     check(sources, into)?;
-    let outermost = outermost(sources, &running.shared.control)?;
+    let mut outermost = outermost(sources, &running.shared.control)?;
+    // Deepest first: a source reached through a link among the sources
+    // goes before that link's rename takes its path away.
+    outermost.sort_by_key(|source| Reverse(source.components().count()));
     let rest = rename_whole(running, &outermost, into, touched)?;
     let renamed = outermost.len() - rest.len();
     Ok((rest, renamed))

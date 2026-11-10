@@ -218,6 +218,26 @@ fn a_source_inside_another_moves_with_it() {
 }
 
 #[test]
+fn a_file_reached_through_a_moved_link_moves_too() {
+    let bench = Bench::new("move-through-link");
+    let real = bench.at("real");
+    fs::create_dir(&real).unwrap();
+    fs::write(real.join("f"), "f").unwrap();
+    let alias = bench.at("alias");
+    symlink(&real, &alias).unwrap();
+    let into = bench.at("into");
+    fs::create_dir(&into).unwrap();
+    let client = bench.client();
+
+    let (_, outcome, _) = client.run(moving(vec![alias.clone(), alias.join("f")], &into));
+
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(fs::read_to_string(into.join("f")).unwrap(), "f");
+    assert!(into.join("alias").symlink_metadata().unwrap().is_symlink());
+    assert!(!real.join("f").exists());
+}
+
+#[test]
 fn a_bad_source_moves_nothing() {
     let bench = Bench::new("move-bad");
     let source = small_tree(&bench.root);
