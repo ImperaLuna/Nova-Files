@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
+use crate::properties::{Properties, PropertiesId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
 use crate::theme::{DesktopLook, Theme};
@@ -53,6 +54,10 @@ pub enum Command {
         query: String,
         limit: u32,
     },
+    /// Read the properties of what is at `path`, without following a link.
+    /// The answer is [`Event::Properties`] or [`Event::PropertiesUnreadable`]
+    /// with the same `id`.
+    Properties { id: PropertiesId, path: PathBuf },
     /// Open the file at `path` in the user's default app for its type.
     /// `activation` is the caller's activation token, so the app may take
     /// focus. The answer is [`Event::FileOpened`] or
@@ -170,6 +175,17 @@ pub enum Event {
     },
     /// [`Command::Search`] `id` couldn't run.
     SearchFailed { id: SearchId, reason: SearchFailed },
+    /// The properties of [`Command::Properties`] `id`'s path.
+    Properties {
+        id: PropertiesId,
+        properties: Arc<Properties>,
+    },
+    /// [`Command::Properties`] `id`'s path couldn't be looked at.
+    PropertiesUnreadable {
+        id: PropertiesId,
+        path: PathBuf,
+        reason: Unreadable,
+    },
     /// [`Command::OpenFile`]'s app has started.
     FileOpened,
     /// [`Command::OpenFile`] started nothing: sandboxed, no default app for

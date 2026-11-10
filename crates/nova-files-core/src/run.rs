@@ -21,6 +21,7 @@ use crate::jobs::{self, Client};
 use crate::mime::MimeTypes;
 use crate::ops::Jobs;
 use crate::places::Home;
+use crate::properties;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
@@ -99,6 +100,10 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
 ///
 /// # Errors
 /// [`nova_files_api::ClientGone`] when the client stopped listening.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one short arm per command, each handing it on"
+)]
 fn answer(
     id: ClientId,
     client: &Client,
@@ -121,6 +126,10 @@ fn answer(
         }
         Command::Search { id, query, limit } => {
             setup.searcher.search(client, id, query, limit);
+            Ok(())
+        }
+        Command::Properties { id, path } => {
+            properties::answer(client.events(), id, path);
             Ok(())
         }
         Command::OpenFile { path, activation } => {
