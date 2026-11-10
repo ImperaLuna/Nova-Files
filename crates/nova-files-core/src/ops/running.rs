@@ -13,6 +13,7 @@ use super::control::Cancelled;
 use super::job::Job;
 use super::journal::{Journal, Record};
 use super::left::{Done, Left};
+use super::plan::{Kind, kind};
 use super::progress::Reporter;
 
 pub struct Running {
@@ -72,14 +73,19 @@ impl Running {
         }
     }
 
-    /// Where the item from `from` went before a crash, if it is still
-    /// there.
-    pub fn made_before(&self, from: &Path) -> Option<&Path> {
+    /// Where the item from `from`, a `planned` kind, went before a crash,
+    /// if it is still there as that kind. A folder swapped for a link
+    /// since is not the job's, so it goes through the conflicts again.
+    pub fn made_before(&self, from: &Path, planned: Kind) -> Option<&Path> {
         self.before
             .made
             .get(from)
             .map(PathBuf::as_path)
-            .filter(|made| made.symlink_metadata().is_ok())
+            .filter(|made| {
+                made.symlink_metadata().is_ok_and(|there| {
+                    std::mem::discriminant(&kind(&there)) == std::mem::discriminant(&planned)
+                })
+            })
     }
 
     /// Makes sure what the journal says so far is on the disk.

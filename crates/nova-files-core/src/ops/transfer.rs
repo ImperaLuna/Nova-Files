@@ -427,7 +427,7 @@ fn place(
     let mut replacing = false;
     let mut looked_again = 0;
     // Made before a crash cut the job short.
-    if let Some(made) = running.made_before(&item.from) {
+    if let Some(made) = running.made_before(&item.from, item.kind) {
         let made_before = Made {
             left: size(item),
             carried: false,

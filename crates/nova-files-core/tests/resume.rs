@@ -191,6 +191,31 @@ fn a_forgotten_job_ends_and_its_journal_goes() {
 }
 
 #[test]
+fn a_journal_that_cant_be_removed_keeps_its_job() {
+    let (bench, client) = restart("resume-forget-fails", |root| {
+        crashed_job(
+            root,
+            &["delete".to_owned(), line("source", &[&root.join("gone")])],
+        );
+    });
+    assert!(matches!(client.next(), Event::JobInterrupted { .. }));
+    // A folder where the journal was: removing it as a file fails.
+    let journal = journals(&bench.root).join("42");
+    fs::remove_file(&journal).unwrap();
+    fs::create_dir(&journal).unwrap();
+
+    client.send(Command::ForgetJob(CRASHED));
+
+    assert!(matches!(
+        client.next(),
+        Event::JobInterrupted { job: CRASHED, .. }
+    ));
+    fs::remove_dir(&journal).unwrap();
+    client.send(Command::ForgetJob(CRASHED));
+    assert_eq!(client.ended(CRASHED).0, Outcome::Cancelled);
+}
+
+#[test]
 fn a_resumed_move_moves_only_what_is_still_there() {
     let (bench, client) = restart("resume-move", |root| {
         let into = root.join("into");
@@ -276,6 +301,43 @@ fn a_resumed_copy_finds_what_it_made_under_another_name() {
     assert_eq!(client.ended(CRASHED).0, Outcome::Done);
     assert_eq!(fs::read_to_string(into.join("a")).unwrap(), "old");
     assert!(!into.join("a (3)").exists());
+}
+
+#[test]
+fn a_folder_made_before_and_swapped_for_a_link_is_asked_about() {
+    let (bench, client) = restart("resume-swapped", |root| {
+        let (source, into, other) = (root.join("src"), root.join("into"), root.join("other"));
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("f"), "f").unwrap();
+        fs::create_dir_all(&into).unwrap();
+        fs::create_dir(&other).unwrap();
+        // The job made `into/src`; since, it became a link to `other`.
+        std::os::unix::fs::symlink(&other, into.join("src")).unwrap();
+        crashed_job(
+            root,
+            &[
+                "copy".to_owned(),
+                line("into", &[&into]),
+                line("source", &[&source]),
+                line("made", &[&into.join("src"), &source]),
+            ],
+        );
+    });
+
+    assert!(matches!(client.next(), Event::JobInterrupted { .. }));
+    client.send(Command::ResumeJob(CRASHED));
+    assert_eq!(client.next(), Event::JobResumed(CRASHED));
+    let conflict = loop {
+        match client.next() {
+            Event::JobConflict { conflict, .. } => break conflict,
+            Event::JobProgress { .. } => {}
+            other => panic!("the link is asked about, got {other:?}"),
+        }
+    };
+    assert_eq!(conflict.target, bench.at("into/src"));
+    client.send(Command::CancelJob(CRASHED));
+    assert_eq!(client.ended(CRASHED).0, Outcome::Cancelled);
+    assert_eq!(fs::read_dir(bench.at("other")).unwrap().count(), 0);
 }
 
 #[test]

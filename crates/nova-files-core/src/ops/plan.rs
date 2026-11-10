@@ -147,7 +147,7 @@ fn add_tree(plan: &mut Plan, from: &Path, to: &Path, control: &Control) -> Resul
 }
 
 /// What `metadata` describes.
-fn kind(metadata: &fs::Metadata) -> Kind {
+pub fn kind(metadata: &fs::Metadata) -> Kind {
     let file_type = metadata.file_type();
     if file_type.is_dir() {
         Kind::Folder

@@ -280,24 +280,40 @@ impl Jobs {
 
     /// Drops interrupted job `job`, and its journal. The journal goes on
     /// a thread of its own, so a slow disk never holds up the core's
-    /// loop; clients hear the job ended once it has.
+    /// loop; clients hear the job ended once it has. A journal that
+    /// can't be removed keeps its job, interrupted, and clients hear so
+    /// again.
     pub fn forget(&self, job: JobId) {
         let Some(left) = lock(&self.interrupted).remove(&job) else {
             return;
         };
-        let (registry, audience) = (Arc::clone(&self.running), self.audience.clone());
+        let (registry, interrupted, audience) = (
+            Arc::clone(&self.running),
+            Arc::clone(&self.interrupted),
+            self.audience.clone(),
+        );
         let forgotten = move || {
-            if let Err(error) = fs::remove_file(&left.journal) {
-                log::warn!("can't remove {}: {error}", left.journal.display());
-            }
-            // Held until now, so no other core takes the job meanwhile.
-            drop(left);
+            let removed = fs::remove_file(&left.journal);
             let running = lock(&registry);
-            audience.tell(&Event::JobFinished {
-                job,
-                outcome: Outcome::Cancelled,
-                changed: Vec::new(),
-            });
+            match removed {
+                Err(error) if error.kind() != io::ErrorKind::NotFound => {
+                    log::warn!("can't remove {}: {error}", left.journal.display());
+                    audience.tell(&Event::JobInterrupted {
+                        job,
+                        operation: left.operation.clone(),
+                    });
+                    lock(&interrupted).insert(job, left);
+                }
+                // Held until now, so no other core takes the job meanwhile.
+                _ => {
+                    drop(left);
+                    audience.tell(&Event::JobFinished {
+                        job,
+                        outcome: Outcome::Cancelled,
+                        changed: Vec::new(),
+                    });
+                }
+            }
             drop(running);
         };
         if let Err(error) = thread::Builder::new()
