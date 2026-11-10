@@ -14,17 +14,24 @@
 //! udisks2's own job objects report progress many times a second and say
 //! nothing about drives, so the rules leave them out.
 //!
+//! Mounting, unmounting and ejecting are in `act`.
+//!
 //! Without a system bus or udisks2 the list is empty; udisks2 starting
 //! later sends the full list, and the bus closing empties it. A read that
 //! fails while udisks2 runs (busy with a slow disk) keeps the last list.
 
+mod act;
 mod objects;
 
+pub use act::ACTION_TIMEOUT;
+
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 
 use futures::{FutureExt as _, Stream, StreamExt as _, stream};
-use nova_files_api::{DriveList, DriveService};
+
+use nova_files_api::{DriveAction, DriveFailure, DriveList, DriveService};
 use zbus::fdo::{DBusProxy, ObjectManagerProxy};
 use zbus::message::Type;
 use zbus::names::BusName;
@@ -74,6 +81,10 @@ impl DriveService for Udisks {
         if spawned.is_err() {
             seen(DriveList::default());
         }
+    }
+
+    fn act(&self, action: &DriveAction) -> Result<Option<PathBuf>, DriveFailure> {
+        act::act(self.bus.clone(), action)
     }
 }
 

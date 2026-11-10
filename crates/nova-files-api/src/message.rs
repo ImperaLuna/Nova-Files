@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::drive::DriveList;
+use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::search::{Hit, SearchFailed, SearchId};
@@ -90,6 +90,10 @@ pub enum Command {
     /// and from then on the client gets [`Event::Drives`] again each time
     /// one comes, goes or changes. Clients that never ask never get them.
     Drives,
+    /// Mount, unmount or eject. The answer, once it is done, is
+    /// [`Event::DriveDone`]; the change itself reaches every client that
+    /// asked for the drives as [`Event::Drives`].
+    Drive(DriveAction),
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -205,6 +209,12 @@ pub enum Event {
     /// again to each client that asked whenever one comes, goes or
     /// changes.
     Drives(Arc<DriveList>),
+    /// [`Command::Drive`] `action` is done: for a mount, with where the
+    /// volume is now. Only the client that asked hears it.
+    DriveDone {
+        action: DriveAction,
+        result: Result<Option<PathBuf>, DriveFailure>,
+    },
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },
