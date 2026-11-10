@@ -4,8 +4,9 @@
 //! A client (a window, the D-Bus service) gets a [`Connection`] from a
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
 //! through the [`EventSink`] it handed over. A client that asks for the
-//! [`Settings`] or the [`Theme`] gets them again whenever they change. The
-//! core reads the other end of the channel as [`CoreMessage`]s. File
+//! [`Settings`], the [`Theme`] or the [`DriveList`] gets them again
+//! whenever they change. The core reads the other end of the channel as
+//! [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
 //! operations run as jobs (see [`Operation`]). A [`PickRequest`] carries
 //! another app's file picker request from D-Bus to the UI.
 
@@ -13,6 +14,7 @@
 
 mod access;
 mod connection;
+mod drive;
 mod file_type;
 mod folder;
 mod job;
@@ -28,6 +30,7 @@ pub use access::{AccessChange, MODE_BITS, ModeChange, Reach};
 pub use connection::{
     ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
 };
+pub use drive::{Drive, DriveId, DriveList, DriveService, Volume, VolumeId};
 pub use file_type::{FileTypes, glob_matches};
 pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable,

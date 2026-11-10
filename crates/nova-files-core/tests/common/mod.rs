@@ -34,6 +34,7 @@ impl Bench {
             folder: root.join("home"),
             config: root.join("home/.config"),
             state: root.join("home/.local/state"),
+            data: root.join("home/.local/share"),
         };
         let core = nova_files_core::spawn_with(idle_exit, Some(home), None, None).unwrap();
         Self { root, core }

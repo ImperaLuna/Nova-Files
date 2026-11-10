@@ -59,6 +59,7 @@ impl TempHome {
             folder: self.0.clone(),
             config: self.0.join("config"),
             state: self.0.join("state"),
+            data: self.0.join("share"),
         };
         nova_files_core::spawn_with(IDLE_EXIT, Some(home), None, None).unwrap()
     }

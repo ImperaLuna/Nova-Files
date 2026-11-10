@@ -37,6 +37,7 @@ use super::place::rename_no_replace;
 use super::plan::{Item, Kind, Plan, check, plan};
 use super::running::Running;
 use super::stop::Stop;
+use super::sync::sync_folders;
 
 /// How many times a target may change hands between being looked at and
 /// being made before the job gives up on it: another program keeps
@@ -213,13 +214,8 @@ pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: Ho
             break;
         }
     }
-    // So what the job reports made is on the disk. A failure means only
-    // that a crash right now could lose an entry, so it is logged.
-    for folder in &touched {
-        if let Err(error) = File::open(folder).and_then(|folder| folder.sync_all()) {
-            log::warn!("can't sync the folder {}: {error}", folder.display());
-        }
-    }
+    // So what the job reports made is on the disk.
+    sync_folders(touched.iter().map(PathBuf::as_path));
     running.reporter.tell();
     (
         result.map_or_else(Stop::outcome, |()| Outcome::Done),

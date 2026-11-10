@@ -471,10 +471,11 @@ impl MainWindow {
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            // The window never searches, opens files or starts jobs yet, and
-            // only a picker's opening asks for the window state (see
-            // `window_state`).
+            // The window never searches, opens files, starts jobs or asks
+            // for drives yet, and only a picker's opening asks for the
+            // window state (see `window_state`).
             Event::FolderUnreadable { .. }
+            | Event::Drives(_)
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::Properties { .. }
