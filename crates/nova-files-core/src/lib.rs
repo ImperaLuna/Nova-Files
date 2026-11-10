@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod accounts;
 mod config_watch;
 mod details;
 mod details_queue;
