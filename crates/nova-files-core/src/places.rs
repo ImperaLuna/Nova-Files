@@ -28,6 +28,8 @@ const CONFIG_HOME_VAR: &str = "XDG_CONFIG_HOME";
 const CONFIG_IN_HOME: &str = ".config";
 const STATE_HOME_VAR: &str = "XDG_STATE_HOME";
 const STATE_IN_HOME: &str = ".local/state";
+const DATA_HOME_VAR: &str = "XDG_DATA_HOME";
+const DATA_IN_HOME: &str = ".local/share";
 const CACHE_HOME_VAR: &str = "XDG_CACHE_HOME";
 const CACHE_IN_HOME: &str = ".cache";
 /// `user-dirs.dirs` is a few lines; anything bigger isn't one.
@@ -36,7 +38,7 @@ const HOME_PREFIX: &str = "$HOME/";
 const ESCAPE: char = '\\';
 
 /// The user's home folder, its config folder, where the places come from,
-/// and its state folder.
+/// its state folder and its data folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Home {
     pub folder: PathBuf,
@@ -44,20 +46,24 @@ pub struct Home {
     pub config: PathBuf,
     /// Holds the UI's window state.
     pub state: PathBuf,
+    /// Holds the home trash.
+    pub data: PathBuf,
 }
 
 impl Home {
-    /// The home, config and state folders the environment names (`HOME`,
-    /// `XDG_CONFIG_HOME`, `XDG_STATE_HOME`), or `None` without a home
-    /// folder.
+    /// The home, config, state and data folders the environment names
+    /// (`HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_DATA_HOME`), or
+    /// `None` without a home folder.
     pub fn from_env() -> Option<Self> {
         let folder = env::home_dir()?;
         let config = xdg_home(&folder, env::var_os(CONFIG_HOME_VAR), CONFIG_IN_HOME);
         let state = xdg_home(&folder, env::var_os(STATE_HOME_VAR), STATE_IN_HOME);
+        let data = xdg_home(&folder, env::var_os(DATA_HOME_VAR), DATA_IN_HOME);
         Some(Self {
             folder,
             config,
             state,
+            data,
         })
     }
 }

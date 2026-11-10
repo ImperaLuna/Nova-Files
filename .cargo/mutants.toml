@@ -39,4 +39,21 @@ exclude_re = [
     # Only changes which row a picker highlights (FIL-36); the picker tests
     # check the selection itself.
     "nova-files-ui/src/view\\.rs:.*replace == with != in MainWindow::entries",
+    # The trash (FIL-21). A folder sync only matters across a power cut.
+    "nova-files-core/src/ops/sync\\.rs:.*replace sync_folders with \\(\\)",
+    # Only picks what is logged when a leftover can't be removed.
+    "nova-files-core/src/ops/sync\\.rs:.*replace != with == in remove$",
+    # Another program removing the entry, or taking a name in the trash,
+    # between the trash job's look and its rename: a race no test can time.
+    "nova-files-core/src/ops/trash\\.rs:.*replace match guard error\\.kind\\(\\) == io::ErrorKind::NotFound with true in send$",
+    "nova-files-core/src/ops/trash\\.rs:.*\\bgone_meanwhile\\b",
+    "nova-files-core/src/ops/trash\\.rs:.*(match guard error\\.kind\\(\\) == io::ErrorKind::AlreadyExists|== with !=).* in take_names$",
+    # A home trash path that can't be looked at for a reason other than
+    # missing leads to the trash at the top of the real root drive.
+    "nova-files-core/src/trash/folder\\.rs:.*NotFound with true in home_mount$",
+    # Every kernel since 5.8 gives the mount id, so the mask test is true.
+    "nova-files-core/src/trash/folder\\.rs:.*replace & with [|^] in mount_of$",
+    # Only which error a failed make reports (a full drive), which no test
+    # can cause.
+    "nova-files-core/src/trash/folder\\.rs:.*match guard error\\.kind\\(\\) != io::ErrorKind::AlreadyExists with false in own_folder$",
 ]

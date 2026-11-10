@@ -51,6 +51,10 @@ pub enum Operation {
     /// Delete each of `paths`, folders with all they hold, for good: not
     /// to the trash. A link goes, never what it points to.
     Delete { paths: Vec<PathBuf> },
+    /// Move each of `paths` to the desktop's trash, the one every app
+    /// shares, where it can be restored from. Each goes to the trash on
+    /// its own drive; nothing is copied across drives.
+    Trash { paths: Vec<PathBuf> },
 }
 
 /// How far a job has got. Totals are known once the job has looked at
@@ -138,6 +142,9 @@ pub enum ConflictKind {
     SourceChanged,
     /// A socket, device or pipe, which a copy can't carry.
     Unsupported,
+    /// The source's drive has no trash it may use, so it can't go to the
+    /// trash; a client may offer to delete it for good instead.
+    NoTrash,
 }
 
 impl ConflictKind {
@@ -155,7 +162,7 @@ impl ConflictKind {
             ),
             Answer::Retry => matches!(
                 self,
-                Self::NoSpace | Self::PermissionDenied | Self::SourceChanged
+                Self::NoSpace | Self::PermissionDenied | Self::SourceChanged | Self::NoTrash
             ),
         }
     }
