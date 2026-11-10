@@ -29,12 +29,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use rustix::fs::{
-    AtFlags, CWD, Dir, FileType, Mode, OFlags, Statx, StatxAttributes, StatxFlags, openat, statx,
-};
+use rustix::fs::{AtFlags, CWD, Dir, FileType, Mode, OFlags, Statx, StatxFlags, openat, statx};
 use rustix::io::{Errno, fcntl_dupfd_cloexec};
 
 use super::tally::Tally;
+pub use crate::mount_root::Device;
+use crate::mount_root::is_mount_root;
 
 /// How many threads walk at once: enough to keep a fast drive busy,
 /// few enough that a scan of all of home leaves the desktop alone.
@@ -72,9 +72,6 @@ pub struct Root {
     /// out, and another drive mounted there is not entered.
     pub listed_in: Option<Device>,
 }
-
-/// A drive, as `statx` names it.
-pub type Device = (u32, u32);
 
 /// The drive `folder` is on, or `None` when it can't be looked at.
 pub fn device_of(folder: &Path) -> Option<Device> {
@@ -318,23 +315,6 @@ impl Walk<'_> {
     fn lock_queue(&self) -> MutexGuard<'_, Queue> {
         self.queue.lock().unwrap_or_else(PoisonError::into_inner)
     }
-}
-
-/// Whether a folder on drive `own`, inside a folder on drive `parent`, is
-/// where another filesystem is mounted. The kernel says so in the folder's
-/// `statx` attributes (Linux 5.8+); a changed drive alone would also stop
-/// at a btrfs subvolume, which is no mount, so it only answers on older
-/// kernels, whose `mask` lacks the attribute.
-fn is_mount_root(
-    mask: StatxAttributes,
-    attributes: StatxAttributes,
-    own: Device,
-    parent: Device,
-) -> bool {
-    if mask.contains(StatxAttributes::MOUNT_ROOT) {
-        return attributes.contains(StatxAttributes::MOUNT_ROOT);
-    }
-    own != parent
 }
 
 /// Whether `name` is `.` or `..`, which every folder lists.

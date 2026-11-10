@@ -315,19 +315,6 @@ fn a_change_that_shuts_the_owner_out_does_what_is_inside_first() {
     assert_eq!(mode(&tree.join("sub/b")), 0o444);
 }
 
-#[test]
-fn the_kernel_says_where_a_drive_is_mounted_and_older_kernels_go_by_the_drive() {
-    let root = StatxAttributes::MOUNT_ROOT;
-    let none = StatxAttributes::empty();
-    let (one, other) = ((8, 1), (8, 2));
-
-    assert!(is_mount_root(root, root, one, one));
-    // A btrfs subvolume: another drive number, but no mount.
-    assert!(!is_mount_root(root, none, other, one));
-    assert!(is_mount_root(none, none, other, one));
-    assert!(!is_mount_root(none, none, one, one));
-}
-
 /// Visits `path`, chosen, as `change` says; returns whether anything was
 /// left to change last, once what it holds is done.
 fn visit_chosen(path: &Path, change: &AccessChange) -> bool {

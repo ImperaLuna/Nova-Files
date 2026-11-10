@@ -360,19 +360,6 @@ fn entries_that_cannot_be_looked_at_count_as_unreadable() {
 }
 
 #[test]
-fn the_kernel_says_where_a_drive_is_mounted_and_older_kernels_go_by_the_drive() {
-    let root = StatxAttributes::MOUNT_ROOT;
-    let none = StatxAttributes::empty();
-    let (one, other) = ((8, 1), (8, 2));
-
-    assert!(is_mount_root(root, root, one, one));
-    // A btrfs subvolume: another drive number, but no mount.
-    assert!(!is_mount_root(root, none, other, one));
-    assert!(is_mount_root(none, none, other, one));
-    assert!(!is_mount_root(none, none, one, one));
-}
-
-#[test]
 fn a_listed_entry_that_vanished_is_left_out_and_a_named_path_is_not() {
     let folder = TestFolder::new("walk-vanished");
     let gone = folder.path().join("gone");
