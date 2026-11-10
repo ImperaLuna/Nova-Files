@@ -4,13 +4,15 @@
 //! A client (a window, the D-Bus service) gets a [`Connection`] from a
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
 //! through the [`EventSink`] it handed over. A client that asks for the
-//! [`Settings`] or the [`Theme`] gets them again whenever they change. The
+//! [`Settings`], the [`Theme`] or the places gets them again whenever they
+//! change. The
 //! core reads the other end of the channel as [`CoreMessage`]s. File
 //! operations run as jobs (see [`Operation`]). A [`PickRequest`] carries
 //! another app's file picker request from D-Bus to the UI.
 
 #![forbid(unsafe_code)]
 
+mod bookmark;
 mod connection;
 mod file_type;
 mod folder;
@@ -22,6 +24,7 @@ mod settings;
 mod theme;
 pub mod uri;
 
+pub use bookmark::{Bookmark, BookmarkChange};
 pub use connection::{
     ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
 };

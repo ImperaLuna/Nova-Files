@@ -111,8 +111,9 @@ pub fn spawn_with(
             let settings = settings::Store::open(config);
             let theme = theme::Store::open(config);
             theme.follow(&settings);
+            let places = places::Store::open(home);
             let setup = run::Setup {
-                home,
+                places,
                 window_state,
                 settings,
                 theme,

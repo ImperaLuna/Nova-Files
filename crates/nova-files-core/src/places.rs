@@ -1,11 +1,17 @@
 //! The standard folders for the places list: Home, then the user's
-//! Documents, Pictures and Downloads folders, each shown only if it exists.
+//! Desktop, Documents, Downloads, Music, Pictures and Videos folders, each
+//! shown only if it exists. The pinned folders are read from the shared
+//! bookmarks file (`bookmarks`), and `store` keeps both lists, follows them
+//! on disk and tells the clients that asked.
 //!
 //! Where those folders are comes from the system's `user-dirs.dirs` file
 //! (the freedesktop xdg-user-dirs format), which every desktop writes and
 //! which follows the user's language. A folder the file doesn't mention is
 //! looked for under its usual name in Home; one it disables (`"$HOME/"`) or
 //! puts outside Home is left out.
+
+mod bookmarks;
+mod store;
 
 use std::env;
 use std::ffi::OsString;
@@ -17,10 +23,13 @@ use nova_files_api::{Place, PlaceKind};
 
 /// The places, in list order, with the `user-dirs.dirs` key and the folder
 /// name used when that file doesn't say.
-const STANDARD: [(PlaceKind, &str, &str); 3] = [
+const STANDARD: [(PlaceKind, &str, &str); 6] = [
+    (PlaceKind::Desktop, "XDG_DESKTOP_DIR", "Desktop"),
     (PlaceKind::Documents, "XDG_DOCUMENTS_DIR", "Documents"),
-    (PlaceKind::Pictures, "XDG_PICTURES_DIR", "Pictures"),
     (PlaceKind::Downloads, "XDG_DOWNLOAD_DIR", "Downloads"),
+    (PlaceKind::Music, "XDG_MUSIC_DIR", "Music"),
+    (PlaceKind::Pictures, "XDG_PICTURES_DIR", "Pictures"),
+    (PlaceKind::Videos, "XDG_VIDEOS_DIR", "Videos"),
 ];
 
 const USER_DIRS_FILE: &str = "user-dirs.dirs";
@@ -75,18 +84,33 @@ fn cache_home_from(variable: Option<OsString>, home: Option<PathBuf>) -> Option<
         .or_else(|| home.map(|home| home.join(CACHE_IN_HOME)))
 }
 
-/// The places that exist under `home`, in list order. Empty without a
-/// home folder.
-pub fn places(home: Option<&Home>) -> Vec<Place> {
+pub use store::Store;
+
+/// The places that exist under `home`, in list order, and every place
+/// whether it exists or not (to watch for it). Both empty without a home
+/// folder.
+fn places(home: Option<&Home>) -> (Vec<Place>, Vec<Place>) {
     let Some(home) = home else {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     };
     let user_dirs = read_user_dirs(&home.config.join(USER_DIRS_FILE));
-    places_in(&home.folder, &user_dirs)
+    let wanted = places_in(&home.folder, &user_dirs);
+    let existing = wanted
+        .iter()
+        .filter(|place| fs::metadata(&place.path).is_ok_and(|found| found.is_dir()))
+        .cloned()
+        .collect();
+    (existing, wanted)
+}
+
+/// Whether `name` is the usual name of a standard folder in Home, which it
+/// has until `user-dirs.dirs` says otherwise.
+fn usual_name(name: &str) -> bool {
+    STANDARD.iter().any(|&(_, _, usual)| usual == name)
 }
 
 /// The places under `home`, given the text of `user-dirs.dirs` (empty when
-/// there is none).
+/// there is none), whether they exist or not.
 fn places_in(home: &Path, user_dirs: &str) -> Vec<Place> {
     let home_place = Place {
         kind: PlaceKind::Home,
@@ -100,10 +124,7 @@ fn places_in(home: &Path, user_dirs: &str) -> Vec<Place> {
         };
         Some(Place { kind, path })
     });
-    std::iter::once(home_place)
-        .chain(standard)
-        .filter(|place| fs::metadata(&place.path).is_ok_and(|found| found.is_dir()))
-        .collect()
+    std::iter::once(home_place).chain(standard).collect()
 }
 
 /// An XDG folder: its variable's value (`from_env`) when it is absolute,
@@ -296,20 +317,49 @@ mod tests {
         fs::create_dir_all(home.0.join("Downloads")).unwrap();
         let user_dirs = "XDG_PICTURES_DIR=\"$HOME/Bilder\"\nXDG_DOWNLOAD_DIR=\"$HOME/\"\n";
 
-        let places = places_in(&home.0, user_dirs);
+        let home_folder = Home {
+            folder: home.0.clone(),
+            config: home.0.join(".config"),
+            state: home.0.join(".local/state"),
+        };
+        fs::create_dir_all(&home_folder.config).unwrap();
+        fs::write(home_folder.config.join(USER_DIRS_FILE), user_dirs).unwrap();
 
-        let found: Vec<(PlaceKind, PathBuf)> = places
-            .into_iter()
-            .map(|place| (place.kind, place.path))
-            .collect();
+        let (existing, wanted) = places(Some(&home_folder));
+
+        let found = |places: Vec<Place>| -> Vec<(PlaceKind, PathBuf)> {
+            places
+                .into_iter()
+                .map(|place| (place.kind, place.path))
+                .collect()
+        };
         assert_eq!(
-            found,
+            found(existing),
             [
                 (PlaceKind::Home, home.0.clone()),
                 (PlaceKind::Documents, home.0.join("Documents")),
                 (PlaceKind::Pictures, home.0.join("Bilder")),
             ]
         );
+        // Downloads is turned off; the others are looked for.
+        assert_eq!(
+            found(wanted),
+            [
+                (PlaceKind::Home, home.0.clone()),
+                (PlaceKind::Desktop, home.0.join("Desktop")),
+                (PlaceKind::Documents, home.0.join("Documents")),
+                (PlaceKind::Music, home.0.join("Music")),
+                (PlaceKind::Pictures, home.0.join("Bilder")),
+                (PlaceKind::Videos, home.0.join("Videos")),
+            ]
+        );
+        assert_eq!(places(None), (Vec::new(), Vec::new()));
+    }
+
+    #[test]
+    fn usual_names_are_the_standard_folders() {
+        assert!(usual_name("Music"));
+        assert!(!usual_name("Musik"));
     }
 
     #[test]
