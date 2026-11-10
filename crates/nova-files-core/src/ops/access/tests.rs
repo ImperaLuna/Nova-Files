@@ -265,7 +265,9 @@ fn visit_chosen(path: &Path, change: &AccessChange) -> bool {
     };
     let mut waiting = Vec::new();
     assert!(visit(&mut Running::for_test(), change, next, &mut waiting).is_ok());
-    waiting.iter().any(|task| matches!(task, Task::Close { .. }))
+    waiting
+        .iter()
+        .any(|task| matches!(task, Task::Close { .. }))
 }
 
 #[test]
