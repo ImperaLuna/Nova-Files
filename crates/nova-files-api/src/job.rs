@@ -66,6 +66,13 @@ pub enum Operation {
     DeleteFromTrash { items: Vec<PathBuf> },
     /// Delete everything in every trash the user has, for good.
     EmptyTrash,
+    /// Undo job `job`, one [`Event::Undoable`] named: copies go to the
+    /// trash, moves go back, trashed entries are restored, restored ones
+    /// go back to the trash, a rename is renamed back and a new folder
+    /// still empty goes. What changed since that job is left alone.
+    ///
+    /// [`Event::Undoable`]: crate::Event::Undoable
+    Undo { job: JobId },
 }
 
 /// How far a job has got. Totals are known once the job has looked at

@@ -2,8 +2,9 @@
 //! progress, its journal once it has one, and the answers a client gave
 //! for all conflicts of a kind.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io;
+use std::ops::Bound;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -11,7 +12,7 @@ use nova_files_api::{Answer, Conflict, ConflictKind, JobId, Scope};
 
 use super::control::Cancelled;
 use super::job::Job;
-use super::journal::{Journal, Record};
+use super::journal::{Journal, Record, word};
 use super::left::{Done, Left};
 use super::plan::{Kind, kind};
 use super::progress::Reporter;
@@ -36,6 +37,13 @@ pub struct Running {
     pub before: Done,
     /// Whether the job resumes, adding to the journal it already has.
     resumes: bool,
+    /// What the job was given, from its record, when it can be undone.
+    sources: HashSet<PathBuf>,
+    /// What an undo takes back: where the job made, moved or trashed
+    /// entries from what it was given in this run, by where from, each
+    /// the outermost such entry. A folder merged into one already there
+    /// was never moved itself, so its entries are.
+    pub steps: BTreeMap<PathBuf, PathBuf>,
 }
 
 impl Running {
@@ -56,6 +64,8 @@ impl Running {
             asked: 0,
             before: Done::default(),
             resumes: false,
+            sources: HashSet::new(),
+            steps: BTreeMap::new(),
         }
     }
 
@@ -141,6 +151,10 @@ impl Running {
     /// are hidden and a real name never holds half a file, so only a
     /// resume after a crash is lost. That is logged once.
     pub fn record(&mut self, record: Record<'_>) {
+        if let Record::Made(to, from) | Record::Moved(from, to) | Record::Trashed(from, to) = record
+        {
+            self.step(from, to);
+        }
         let says_what = matches!(
             record,
             Record::Operation(_) | Record::Into(_) | Record::Source(_) | Record::SourcesDone
@@ -177,7 +191,40 @@ impl Running {
         for source in sources {
             self.record(Record::Source(source));
         }
+        if matches!(name, word::COPY | word::MOVE | word::TRASH | word::RESTORE) {
+            self.sources = sources.iter().cloned().collect();
+        }
         self.record(Record::SourcesDone);
+    }
+
+    /// Keeps `from` going to `to` as a step to take back, when it is one
+    /// of the sources or inside one, and not inside an entry already kept;
+    /// the entries kept inside it go.
+    fn step(&mut self, from: &Path, to: &Path) {
+        if !from.ancestors().any(|path| self.sources.contains(path))
+            || from
+                .ancestors()
+                .skip(1)
+                .any(|path| self.steps.contains_key(path))
+        {
+            return;
+        }
+        let inside: Vec<_> = self
+            .steps
+            .range::<Path, _>((Bound::Excluded(from), Bound::Unbounded))
+            .map(|(kept, _)| kept)
+            .take_while(|kept| kept.starts_with(from))
+            .cloned()
+            .collect();
+        for kept in inside {
+            self.steps.remove(&kept);
+        }
+        self.steps.insert(from.to_path_buf(), to.to_path_buf());
+    }
+
+    /// Whether the job resumed after a crash.
+    pub const fn resumed(&self) -> bool {
+        self.resumes
     }
 
     /// The job is over: its journal goes.

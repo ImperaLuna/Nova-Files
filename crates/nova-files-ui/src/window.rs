@@ -490,7 +490,9 @@ impl MainWindow {
             | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
             | Event::JobFinished { .. }
-            | Event::Trash(_) => {}
+            | Event::Trash(_)
+            | Event::Undoable { .. }
+            | Event::UndoGone(_) => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

@@ -211,9 +211,8 @@ fn every_watching_client_hears_a_job_end_but_only_the_asker_hears_it_start() {
         name: "x".into(),
     });
 
-    let Event::JobFinished { job: heard, .. } =
-        watcher.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
-    else {
+    // Hearing too, before, that the job can be undone.
+    let Event::JobFinished { job: heard, .. } = watcher.next() else {
         panic!("the watcher heard the job end, and nothing before");
     };
     assert_eq!(heard, job);
