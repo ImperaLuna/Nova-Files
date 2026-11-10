@@ -507,7 +507,12 @@ fn icon(icon: Icon, side: gpui::Pixels, tint: Hsla) -> impl IntoElement {
 fn place_name(place: &Place) -> SharedString {
     match place.kind {
         PlaceKind::Home => SharedString::from(HOME_LABEL),
-        PlaceKind::Documents | PlaceKind::Pictures | PlaceKind::Downloads => place
+        PlaceKind::Desktop
+        | PlaceKind::Documents
+        | PlaceKind::Downloads
+        | PlaceKind::Music
+        | PlaceKind::Pictures
+        | PlaceKind::Videos => place
             .path
             .file_name()
             .map(|name| SharedString::from(name.to_string_lossy().into_owned()))

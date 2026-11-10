@@ -15,12 +15,11 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Conflict, Outcome};
+use nova_files_api::Outcome;
 use rustix::fs::{AtFlags, Mode, OFlags, open, openat, unlinkat};
 use rustix::io::Errno;
 
 use super::Ended;
-use super::clash::conflict_for;
 use super::failure::failure;
 use super::journal::{Record, word};
 use super::make::size;
@@ -131,42 +130,26 @@ fn planned(running: &mut Running, mut plan: Plan) -> Result<Plan, Stop> {
 /// # Errors
 /// [`Stop`] when cancelled, or when a failure isn't the user's to answer.
 fn remove(running: &mut Running, folders: &mut Folders<'_>, item: &Item) -> Result<bool, Stop> {
-    loop {
-        running.shared.control.checkpoint()?;
-        let errno = match folders.remove(item) {
-            Ok(()) => return Ok(true),
-            // Gone already: what the user wanted.
-            Err(Errno::NOENT) => return Ok(false),
-            Err(Errno::NOTEMPTY | Errno::EXIST) => {
-                log::info!("{} still holds something, so it stays", item.from.display());
-                return Ok(false);
-            }
-            // A folder on the way became a link or a file since the plan:
-            // what is there now isn't what the user chose.
-            Err(Errno::LOOP | Errno::NOTDIR) => {
-                log::info!(
-                    "{} changed since it was planned, so it stays",
-                    item.from.display()
-                );
-                return Ok(false);
-            }
-            Err(errno) => errno,
-        };
-        let reason = failure(&errno.into());
-        let Some(kind) = conflict_for(reason, &item.from, &item.from) else {
-            return Err(Stop::because(&item.from, reason));
-        };
-        let conflict = Conflict {
-            kind,
-            source: item.from.clone(),
-            target: item.from.clone(),
-            // Numbered when asked.
-            number: 0,
-        };
-        if running.skips(conflict)? {
-            return Ok(false);
+    let went = running.retry_or_skip(&item.from, || match folders.remove(item) {
+        Ok(()) => Ok(true),
+        // Gone already: what the user wanted.
+        Err(Errno::NOENT) => Ok(false),
+        Err(Errno::NOTEMPTY | Errno::EXIST) => {
+            log::info!("{} still holds something, so it stays", item.from.display());
+            Ok(false)
         }
-    }
+        // A folder on the way became a link or a file since the plan:
+        // what is there now isn't what the user chose.
+        Err(Errno::LOOP | Errno::NOTDIR) => {
+            log::info!(
+                "{} changed since it was planned, so it stays",
+                item.from.display()
+            );
+            Ok(false)
+        }
+        Err(errno) => Err(failure(&errno.into())),
+    })?;
+    Ok(went.unwrap_or(false))
 }
 
 /// The open folders of the trees being deleted. Each folder inside a tree

@@ -7,6 +7,8 @@
 //! `%U` the same as whole arguments. `%i` becomes `--icon` and the entry's
 //! icon, `%c` its name, `%k` the entry's own path and `%%` a percent sign.
 //! The deprecated codes are dropped. Codes inside quotes stay as written.
+//! A line with `%F` or `%U` opens many files at once; any other opens one
+//! per run.
 
 use std::ffi::OsString;
 use std::path::Path;
@@ -21,6 +23,8 @@ const QUOTED_ESCAPES: [char; 4] = ['"', '`', '$', '\\'];
 /// Codes the spec deprecates; they expand to nothing.
 const DEPRECATED: [char; 6] = ['d', 'D', 'n', 'N', 'v', 'm'];
 const ICON_OPTION: &str = "--icon";
+/// Codes that take every file, as whole arguments.
+const LIST_CODES: [&str; 2] = ["%F", "%U"];
 
 /// What the field codes besides the file stand for.
 #[derive(Debug, Clone, Copy)]
@@ -38,27 +42,63 @@ struct Word {
     quoted: bool,
 }
 
-/// The program and its arguments for opening `file`, or `None` when the
-/// line is malformed, names no program, or takes no file at all.
-pub fn command_line(exec: &str, file: &Path, fields: Fields<'_>) -> Option<Vec<OsString>> {
+/// The command lines that open `files`: one taking them all when the line
+/// has `%F` or `%U` as a whole argument, else one per file. `None` when
+/// there are no files, or when the line is malformed, names no program,
+/// or takes no file at all.
+pub fn command_lines(
+    exec: &str,
+    files: &[&Path],
+    fields: Fields<'_>,
+) -> Option<Vec<Vec<OsString>>> {
     let words = split(exec)?;
-    let mut line = Vec::with_capacity(words.len());
+    if files.is_empty() {
+        return None;
+    }
+    let takes_many = words
+        .iter()
+        .any(|word| !word.quoted && LIST_CODES.contains(&word.text.as_str()));
+    if takes_many {
+        return Some(vec![line_for(&words, files, fields)?]);
+    }
+    files
+        .iter()
+        .map(|file| line_for(&words, &[file], fields))
+        .collect()
+}
+
+/// The line for `words` with `files`: all of them for `%F` and `%U` as a
+/// whole argument, the first for any other file code.
+fn line_for(words: &[Word], files: &[&Path], fields: Fields<'_>) -> Option<Vec<OsString>> {
+    let first = files.first()?;
+    let mut line = Vec::with_capacity(words.len() + files.len());
     let mut took_file = false;
     for word in words {
         if word.quoted {
-            line.push(OsString::from(word.text));
+            line.push(OsString::from(&word.text));
             continue;
         }
-        if word.text == "%i" {
-            if let Some(icon) = fields.icon {
-                line.extend([OsString::from(ICON_OPTION), OsString::from(icon)]);
+        match word.text.as_str() {
+            "%i" => {
+                if let Some(icon) = fields.icon {
+                    line.extend([OsString::from(ICON_OPTION), OsString::from(icon)]);
+                }
             }
-            continue;
-        }
-        let (expanded, file_in_word) = expand(&word.text, file, fields)?;
-        took_file |= file_in_word;
-        if !expanded.is_empty() {
-            line.push(expanded);
+            "%F" => {
+                line.extend(files.iter().map(|file| file.as_os_str().to_owned()));
+                took_file = true;
+            }
+            "%U" => {
+                line.extend(files.iter().map(|file| OsString::from(file_uri(file))));
+                took_file = true;
+            }
+            text => {
+                let (expanded, file_in_word) = expand(text, first, fields)?;
+                took_file |= file_in_word;
+                if !expanded.is_empty() {
+                    line.push(expanded);
+                }
+            }
         }
     }
     (took_file && !line.is_empty()).then_some(line)
@@ -157,6 +197,10 @@ mod tests {
         }
     }
 
+    fn command_line(exec: &str, file: &Path, fields: Fields<'_>) -> Option<Vec<OsString>> {
+        command_lines(exec, &[file], fields).map(|mut lines| lines.remove(0))
+    }
+
     fn line(exec: &str, file: &str) -> Option<Vec<String>> {
         command_line(exec, Path::new(file), fields()).map(|line| {
             line.into_iter()
@@ -187,6 +231,74 @@ mod tests {
                 "file:///h/a.png".into()
             ])
         );
+    }
+
+    fn lines(exec: &str, files: &[&str]) -> Option<Vec<Vec<String>>> {
+        let files: Vec<&Path> = files.iter().map(Path::new).collect();
+        command_lines(exec, &files, fields()).map(|lines| {
+            lines
+                .into_iter()
+                .map(|line| {
+                    line.into_iter()
+                        .map(|arg| arg.to_string_lossy().into_owned())
+                        .collect()
+                })
+                .collect()
+        })
+    }
+
+    #[test]
+    fn a_list_code_takes_every_file_in_one_line() {
+        assert_eq!(
+            lines("view %F", &["/h/a", "/h/b c"]),
+            Some(vec![vec!["view".into(), "/h/a".into(), "/h/b c".into()]])
+        );
+        assert_eq!(
+            lines("view %U --x", &["/h/a", "/h/b c"]),
+            Some(vec![vec![
+                "view".into(),
+                "file:///h/a".into(),
+                "file:///h/b%20c".into(),
+                "--x".into()
+            ]])
+        );
+        // Inside quotes it is only text.
+        assert_eq!(
+            lines(r#"view "%F" %f"#, &["/h/a", "/h/b"]),
+            Some(vec![
+                vec!["view".into(), "%F".into(), "/h/a".into()],
+                vec!["view".into(), "%F".into(), "/h/b".into()],
+            ])
+        );
+    }
+
+    #[test]
+    fn a_single_file_code_runs_once_per_file() {
+        assert_eq!(
+            lines("view %u", &["/h/a", "/h/b"]),
+            Some(vec![
+                vec!["view".into(), "file:///h/a".into()],
+                vec!["view".into(), "file:///h/b".into()],
+            ])
+        );
+        assert_eq!(
+            lines("view %i %f", &["/h/a"]),
+            Some(vec![vec![
+                "view".into(),
+                "--icon".into(),
+                "viewer".into(),
+                "/h/a".into()
+            ]])
+        );
+    }
+
+    #[test]
+    fn no_files_or_a_bad_line_gives_no_lines() {
+        assert_eq!(lines("view %F", &[]), None);
+        assert_eq!(lines("view %f", &[]), None);
+        assert_eq!(lines("view", &["/h/a"]), None);
+        assert_eq!(lines("view %F %x", &["/h/a"]), None);
+        assert_eq!(lines(r#"view "open %f"#, &["/h/a"]), None);
     }
 
     #[test]

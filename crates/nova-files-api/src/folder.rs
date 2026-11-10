@@ -76,9 +76,12 @@ pub enum Unreadable {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PlaceKind {
     Home,
+    Desktop,
     Documents,
-    Pictures,
     Downloads,
+    Music,
+    Pictures,
+    Videos,
 }
 
 /// A standard folder that exists on this system, and where it is.

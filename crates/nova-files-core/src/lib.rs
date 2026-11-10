@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod accounts;
 mod config_watch;
 mod details;
 mod details_queue;
@@ -15,13 +16,16 @@ mod hand_edited;
 mod index;
 mod jobs;
 mod list;
+mod measure;
 mod memory;
 mod mime;
+mod mount_root;
 mod open;
 mod ops;
 mod percent;
 mod places;
 mod private_file;
+mod properties;
 mod run;
 mod search;
 mod settings;
@@ -115,15 +119,20 @@ pub fn spawn_with(
             let settings = settings::Store::open(config);
             let theme = theme::Store::open(config);
             theme.follow(&settings);
+            let places = places::Store::open(home.clone());
+            let mime_types = Arc::default();
             let setup = run::Setup {
                 home,
+                places,
                 window_state,
                 settings,
                 theme,
                 thumbnails,
                 searcher,
-                mime_types: Arc::default(),
+                open_with: open::OpenWithWorker::new(Arc::clone(&mime_types)),
+                mime_types,
                 jobs,
+                measurer: measure::Measurer::default(),
                 drives: drives::Store::default(),
             };
             run::run(&receiver, idle_exit, &setup);

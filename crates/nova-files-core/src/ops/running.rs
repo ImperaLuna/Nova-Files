@@ -7,14 +7,16 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use nova_files_api::{Answer, Conflict, ConflictKind, JobId, Scope};
+use nova_files_api::{Answer, Conflict, ConflictKind, Failure, JobId, Scope};
 
+use super::clash::conflict_for;
 use super::control::Cancelled;
 use super::job::Job;
 use super::journal::{Journal, Record};
 use super::left::{Done, Left};
 use super::plan::{Kind, kind};
 use super::progress::Reporter;
+use super::stop::Stop;
 
 pub struct Running {
     pub job: JobId,
@@ -134,6 +136,40 @@ impl Running {
     /// [`Cancelled`] when a client cancels the job instead.
     pub fn skips(&mut self, conflict: Conflict) -> Result<bool, Cancelled> {
         Ok(self.ask(conflict)? == Answer::Skip)
+    }
+
+    /// Takes `step` on `path` until it works, asking the user what to do
+    /// each time it fails for a reason theirs to answer. `None` when they
+    /// skip it.
+    ///
+    /// # Errors
+    /// [`Stop`] when a client cancels the job, or when the failure isn't
+    /// the user's to answer.
+    pub fn retry_or_skip<T>(
+        &mut self,
+        path: &Path,
+        mut step: impl FnMut() -> Result<T, Failure>,
+    ) -> Result<Option<T>, Stop> {
+        loop {
+            self.shared.control.checkpoint()?;
+            let reason = match step() {
+                Ok(done) => return Ok(Some(done)),
+                Err(reason) => reason,
+            };
+            let Some(kind) = conflict_for(reason, path, path) else {
+                return Err(Stop::because(path, reason));
+            };
+            let conflict = Conflict {
+                kind,
+                source: path.to_path_buf(),
+                target: path.to_path_buf(),
+                // Numbered when asked.
+                number: 0,
+            };
+            if self.skips(conflict)? {
+                return Ok(None);
+            }
+        }
     }
 
     /// Adds `record` to the job's journal, starting the journal with the
