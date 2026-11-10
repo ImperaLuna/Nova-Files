@@ -20,9 +20,11 @@
 #![expect(dead_code, reason = "each test file uses part of it")]
 
 use std::collections::HashMap;
+use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 
-use nova_files_dbus::{UDISKS, UDISKS_PATH};
+use nova_files_api::Event;
+use nova_files_dbus::{Bus, UDISKS, UDISKS_PATH, Udisks};
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder;
 use zbus::object_server::SignalEmitter;
@@ -630,6 +632,16 @@ impl StandIn {
     pub fn stop(self) {
         drop(self.connection);
     }
+}
+
+/// A client of a real core that watches udisks2 on `bus`: its connection
+/// and the events it hears. The core has no home, so it touches none of
+/// the real person's files.
+pub fn core_client(bus: Bus) -> (nova_files_api::Connection, Receiver<Event>) {
+    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, None, None, None).unwrap();
+    core.connector.offer_drives(Udisks::new(bus)).unwrap();
+    let (events, received) = mpsc::channel();
+    (core.connector.connect(events).unwrap(), received)
 }
 
 /// `objects` with the filesystem at `path` answering `failure` to every

@@ -11,7 +11,6 @@
 )]
 
 use std::path::PathBuf;
-use std::sync::mpsc;
 
 use nova_files_api::{
     Command, DriveAction, DriveFailure, DriveId, DriveService as _, Event, VolumeId,
@@ -26,8 +25,8 @@ const STICK_INNER: &str = "/org/freedesktop/UDisks2/block_devices/sdb2";
 
 use support::{PrivateBus, WAIT};
 use udisks::{
-    EXT4_LOOP, FAT_LOOP, Failure, NVME, NVME_WINDOWS, STICK, STICK_VOLUME, StandIn, failing,
-    laptop_disk, mounted_at, recorded, stick,
+    EXT4_LOOP, FAT_LOOP, Failure, NVME, NVME_WINDOWS, STICK, STICK_VOLUME, StandIn, core_client,
+    failing, laptop_disk, mounted_at, recorded, stick,
 };
 
 fn mount(volume: &str) -> DriveAction {
@@ -238,11 +237,7 @@ fn a_drive_with_a_system_volume_is_ejected_but_never_switched_off() {
 fn a_client_of_the_core_hears_how_its_action_went() {
     let bus = PrivateBus::start();
     let _udisks = StandIn::start(&bus.address, &stick());
-    // No home: the core touches none of the real person's files.
-    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, None, None, None).unwrap();
-    core.connector.offer_drives(Udisks::new(bus.bus())).unwrap();
-    let (events, received) = mpsc::channel();
-    let connection = core.connector.connect(events).unwrap();
+    let (connection, received) = core_client(bus.bus());
     connection
         .send(Command::Drive(unmount(STICK_VOLUME)))
         .unwrap();

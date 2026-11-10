@@ -28,7 +28,7 @@ mod udisks;
 use support::{PrivateBus, WAIT};
 use udisks::{
     EXT4_LOOP, FAT_LOOP, GPT_PHOTOS, GPT_UNNAMED, NVME, NVME_WINDOWS, STICK, STICK_VOLUME, StandIn,
-    laptop_disk, recorded, stick,
+    core_client, laptop_disk, recorded, stick,
 };
 
 /// How long a test waits for a list that should not come.
@@ -309,11 +309,7 @@ fn without_a_bus_the_list_is_empty() {
 fn a_client_of_the_core_gets_the_drives() {
     let bus = PrivateBus::start();
     let _udisks = StandIn::start(&bus.address, &stick());
-    // No home: the core touches none of the real person's files.
-    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, None, None, None).unwrap();
-    core.connector.offer_drives(Udisks::new(bus.bus())).unwrap();
-    let (events, received) = mpsc::channel();
-    let connection = core.connector.connect(events).unwrap();
+    let (connection, received) = core_client(bus.bus());
     connection.send(Command::Drives).unwrap();
     match received.recv_timeout(WAIT).unwrap() {
         Event::Drives(list) => assert_eq!(ids(&list), vec![STICK_VOLUME]),
