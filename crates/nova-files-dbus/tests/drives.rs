@@ -243,6 +243,27 @@ fn without_udisks_the_list_is_empty_until_it_starts() {
 }
 
 #[test]
+fn a_udisks_that_cannot_answer_still_gives_a_first_list() {
+    let bus = PrivateBus::start();
+    let _udisks = StandIn::mute(&bus.address);
+    assert_eq!(next(&follow(&bus)), DriveList::default());
+}
+
+#[test]
+fn a_read_that_fails_while_udisks_runs_keeps_the_last_list() {
+    let bus = PrivateBus::start();
+    let udisks = StandIn::start(&bus.address, &stick());
+    let lists = follow(&bus);
+    next(&lists);
+    udisks.stop_answering();
+    udisks.poke(STICK_VOLUME);
+    assert!(
+        lists.recv_timeout(QUIET).is_err(),
+        "no empty list flashes by"
+    );
+}
+
+#[test]
 fn udisks_stopping_empties_the_list() {
     let bus = PrivateBus::start();
     let udisks = StandIn::start(&bus.address, &stick());

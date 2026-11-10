@@ -187,3 +187,25 @@ impl Drop for Connection {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::DriveList;
+
+    struct NoDrives;
+
+    impl DriveService for NoDrives {
+        fn follow(&self, seen: Box<dyn Fn(DriveList) + Send + Sync>) {
+            seen(DriveList::default());
+        }
+    }
+
+    #[test]
+    fn a_drive_service_debugs_by_name() {
+        let message = CoreMessage::DriveService(Arc::new(NoDrives));
+        assert_eq!(format!("{message:?}"), "DriveService");
+    }
+}

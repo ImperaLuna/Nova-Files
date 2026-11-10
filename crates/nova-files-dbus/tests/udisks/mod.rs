@@ -239,6 +239,7 @@ pub const NVME: &str = "/org/freedesktop/UDisks2/drives/Samsung_SSD_980_S64DNX0R
 pub const NVME_BOOT: &str = "/org/freedesktop/UDisks2/block_devices/nvme0n1p1";
 pub const NVME_ROOT: &str = "/org/freedesktop/UDisks2/block_devices/nvme0n1p2";
 pub const NVME_WINDOWS: &str = "/org/freedesktop/UDisks2/block_devices/nvme0n1p3";
+pub const NVME_RECOVERY: &str = "/org/freedesktop/UDisks2/block_devices/nvme0n1p4";
 
 /// What udisksd 2.10.1 held with the loop disks set up and two of them
 /// mounted, as recorded.
@@ -341,7 +342,8 @@ pub fn stick() -> Vec<Object> {
 }
 
 /// A laptop's `NVMe` disk: the boot and root volumes the system runs from,
-/// and an unmounted Windows partition.
+/// an unmounted Windows partition, and a recovery partition a system rule
+/// hides.
 pub fn laptop_disk() -> Vec<Object> {
     let system = |device: &str, kind: &str| Block {
         drive: NVME.to_owned(),
@@ -376,6 +378,15 @@ pub fn laptop_disk() -> Vec<Object> {
             }),
             filesystem: Some(mounted(&[])),
             ..Object::empty(NVME_WINDOWS)
+        },
+        Object {
+            block: Some(Block {
+                drive: NVME.to_owned(),
+                hint_ignore: true,
+                ..with_filesystem(block("/dev/nvme0n1p4", 1_073_741_824), "ntfs", "Recovery")
+            }),
+            filesystem: Some(mounted(&[])),
+            ..Object::empty(NVME_RECOVERY)
         },
     ]
 }
@@ -443,6 +454,42 @@ impl StandIn {
                 .mount_points_changed(filesystem.signal_emitter()),
         )
         .unwrap();
+    }
+
+    /// Stops serving the object manager while keeping udisks2's name, so
+    /// reading the objects fails as when udisks2 is stuck.
+    pub fn stop_answering(&self) {
+        self.connection
+            .object_server()
+            .remove::<zbus::fdo::ObjectManager, _>(UDISKS_PATH)
+            .unwrap();
+    }
+
+    /// Says the block device at `path` changed, without changing it.
+    pub fn poke(&self, path: &str) {
+        let nothing: std::collections::HashMap<String, zbus::zvariant::Value<'_>> =
+            std::collections::HashMap::new();
+        self.connection
+            .emit_signal(
+                None::<()>,
+                path,
+                "org.freedesktop.DBus.Properties",
+                "PropertiesChanged",
+                &(
+                    "org.freedesktop.UDisks2.Block",
+                    nothing,
+                    Vec::<String>::new(),
+                ),
+            )
+            .unwrap();
+    }
+
+    /// Takes udisks2's name without serving anything, as a udisks2 that
+    /// can't answer yet.
+    pub fn mute(address: &str) -> Self {
+        let connection = Builder::address(address).unwrap().build().unwrap();
+        connection.request_name(UDISKS).unwrap();
+        Self { connection }
     }
 
     /// Lets udisks2's name go, as when it stops.
