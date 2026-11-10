@@ -11,7 +11,7 @@
 //! skipped, or what was added since the plan) stays, as nobody chose to
 //! delete what is in it now.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 
@@ -34,20 +34,26 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
     for path in paths {
         running.record(Record::Source(path));
     }
-    let plan =
-        match plan_delete(paths, &running.shared.control).and_then(|plan| planned(running, plan)) {
-            Ok(plan) => plan,
-            Err(stop) => return (stop.outcome(), Vec::new()),
-        };
+    // Shallowest first, so removing last to first takes a path chosen
+    // through a chosen link before the link, whatever order they came in.
+    let mut ordered = paths.to_vec();
+    ordered.sort_by_key(|path| path.components().count());
+    let plan = match plan_delete(&ordered, &running.shared.control)
+        .and_then(|plan| planned(running, plan))
+    {
+        Ok(plan) => plan,
+        Err(stop) => return (stop.outcome(), Vec::new()),
+    };
     let items = u64::try_from(plan.items.len()).unwrap_or(u64::MAX);
     running.reporter.planned(plan.bytes, items);
     let mut changed = BTreeSet::new();
     // Only the chosen folders are walked; a chosen link is removed as a
     // link, and a path chosen through it is reached as the user named it.
-    let trees: Vec<_> = plan
+    let chosen: HashSet<_> = paths.iter().collect();
+    let trees: HashSet<_> = plan
         .items
         .iter()
-        .filter(|item| item.kind == Kind::Folder && paths.contains(&item.from))
+        .filter(|item| item.kind == Kind::Folder && chosen.contains(&item.from))
         .map(|item| item.from.clone())
         .collect();
     let mut folders = Folders {
@@ -156,7 +162,7 @@ fn remove(running: &mut Running, folders: &mut Folders<'_>, item: &Item) -> Resu
 /// tree the user chose.
 struct Folders<'a> {
     /// The folders the user chose.
-    trees: &'a [PathBuf],
+    trees: &'a HashSet<PathBuf>,
     open: HashMap<PathBuf, OwnedFd>,
 }
 
@@ -190,7 +196,9 @@ impl Folders<'_> {
         // Only found, never read: removing needs a folder's write and
         // search permission, not leave to list it.
         let flags = OFlags::PATH.union(OFlags::DIRECTORY).union(OFlags::CLOEXEC);
-        let inside = self.trees.iter().any(|tree| folder.starts_with(tree));
+        // By the folder's own ancestors, so a selection of many folders
+        // costs one lookup each, not a scan of them all.
+        let inside = folder.ancestors().any(|above| self.trees.contains(above));
         let fd = match (inside, folder.parent(), folder.file_name()) {
             (true, Some(above), Some(name)) => {
                 self.reach(above)?;
@@ -230,7 +238,7 @@ mod tests {
         symlink(&outside, tree.join("sub")).unwrap();
 
         let mut folders = Folders {
-            trees: &paths,
+            trees: &paths.iter().cloned().collect(),
             open: HashMap::new(),
         };
         let removed: Vec<_> = plan
@@ -291,7 +299,7 @@ mod tests {
             .collect();
         let plan = plan_delete(&paths, &Control::default()).unwrap();
         let mut folders = Folders {
-            trees: &paths,
+            trees: &paths.iter().cloned().collect(),
             open: HashMap::new(),
         };
         for item in plan.items.iter().rev() {
