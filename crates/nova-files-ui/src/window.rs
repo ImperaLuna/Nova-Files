@@ -477,6 +477,8 @@ impl MainWindow {
             Event::FolderUnreadable { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
+            | Event::Properties { .. }
+            | Event::PropertiesUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)

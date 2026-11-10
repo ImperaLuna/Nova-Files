@@ -21,6 +21,7 @@ mod open;
 mod ops;
 mod places;
 mod private_file;
+mod properties;
 mod run;
 mod search;
 mod settings;

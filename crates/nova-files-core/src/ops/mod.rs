@@ -36,7 +36,7 @@ mod progress;
 mod running;
 mod stop;
 #[cfg(test)]
-mod test_folder;
+pub mod test_folder;
 mod transfer;
 
 use std::collections::HashMap;
@@ -53,6 +53,7 @@ use nova_files_api::{
     Operation, Outcome, Scope,
 };
 
+pub use attrs::MODE_BITS;
 pub use audience::Audience;
 
 use crate::jobs::Client;

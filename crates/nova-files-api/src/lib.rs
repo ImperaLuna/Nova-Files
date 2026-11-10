@@ -17,6 +17,7 @@ mod folder;
 mod job;
 mod message;
 mod pick;
+mod properties;
 mod search;
 mod settings;
 mod theme;
@@ -36,6 +37,7 @@ pub use message::{ClientId, Command, Event, MAX_HITS, MAX_ROWS};
 pub use pick::{
     FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,
 };
+pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
