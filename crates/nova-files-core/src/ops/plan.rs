@@ -46,6 +46,16 @@ pub struct Entry {
     pub inode: u64,
 }
 
+impl Entry {
+    /// The entry `metadata` describes.
+    pub fn of(metadata: &fs::Metadata) -> Self {
+        Self {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        }
+    }
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Plan {
     pub items: Vec<Item>,
@@ -147,10 +157,7 @@ fn add_tree(
             // Reversed, so the stack hands them out in the folder's order.
             pending.extend(children.into_iter().rev());
         }
-        let entry = Entry {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-        };
+        let entry = Entry::of(&metadata);
         plan.items.push(Item {
             from,
             to,

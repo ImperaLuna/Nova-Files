@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::drive::DriveList;
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::search::{Hit, SearchFailed, SearchId};
@@ -85,6 +86,10 @@ pub enum Command {
     /// the theme get [`Event::Theme`] if the theme changed; nothing
     /// answers the sender.
     DesktopLook(DesktopLook),
+    /// Ask for the drives and volumes; the answer is [`Event::Drives`],
+    /// and from then on the client gets [`Event::Drives`] again each time
+    /// one comes, goes or changes. Clients that never ask never get them.
+    Drives,
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -196,6 +201,10 @@ pub enum Event {
     /// client that asked whenever it changes: from the theme file, or the
     /// appearance setting.
     Theme(Arc<Theme>),
+    /// The drives and volumes, answering [`Command::Drives`], and sent
+    /// again to each client that asked whenever one comes, goes or
+    /// changes.
+    Drives(Arc<DriveList>),
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },
