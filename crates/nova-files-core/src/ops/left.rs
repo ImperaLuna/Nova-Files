@@ -60,17 +60,10 @@ pub fn recover(folder: &Path) -> Vec<Left> {
 
 /// The job the journal at `journal`, named `name`, left, cleaned up.
 fn look_at(journal: PathBuf, name: Option<&str>) -> Option<Left> {
-    let file = match open(&journal) {
-        Ok(file) => file,
-        Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-            log::info!("{} belongs to a running core", journal.display());
-            return None;
-        }
-        Err(error) => {
-            log::warn!("can't read {}: {error}", journal.display());
-            return None;
-        }
-    };
+    // Held already (it would block): its job runs in another core.
+    let file = open(&journal)
+        .inspect_err(|error| log::info!("{} is left alone: {error}", journal.display()))
+        .ok()?;
     let written = read(&file, &journal)
         .inspect_err(|error| log::warn!("can't read {}: {error}", journal.display()))
         .ok()?;
@@ -200,3 +193,6 @@ fn hidden(path: &Path, prefix: &str) -> bool {
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.starts_with(prefix))
 }
+
+#[cfg(test)]
+mod tests;

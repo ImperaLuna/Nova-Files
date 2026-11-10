@@ -185,4 +185,17 @@ impl Running {
         );
         Self::new(JobId(1), shared, reporter, None)
     }
+
+    /// Starts the job's journal in `folder` with its first record.
+    pub fn journal_in(&mut self, folder: PathBuf) {
+        self.journals = Some(folder);
+    }
+
+    /// Takes `answer` for every conflict of `kind` without asking.
+    pub fn answer_all(&mut self, kind: ConflictKind, answer: Answer) {
+        self.answers.insert(kind, answer);
+    }
 }
+
+#[cfg(test)]
+mod tests;

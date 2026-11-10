@@ -80,7 +80,7 @@ fn unescape(field: &[u8]) -> Option<PathBuf> {
         if byte == ESCAPE {
             let high = char::from(*rest.next()?).to_digit(HEX_RADIX)?;
             let low = char::from(*rest.next()?).to_digit(HEX_RADIX)?;
-            bytes.push(u8::try_from(high << HIGH | low).ok()?);
+            bytes.push(u8::try_from((high << HIGH) + low).ok()?);
         } else {
             bytes.push(byte);
         }

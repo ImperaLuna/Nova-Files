@@ -255,4 +255,21 @@ pub fn hold(journal: &File) -> io::Result<()> {
 
 pub mod read;
 #[cfg(test)]
+impl Journal {
+    /// A journal written through `file`, which may refuse writes.
+    pub fn over(file: File, path: PathBuf) -> Self {
+        Self {
+            file,
+            path,
+            synced: Instant::now(),
+        }
+    }
+
+    /// When it was last synced.
+    pub const fn synced(&self) -> Instant {
+        self.synced
+    }
+}
+
+#[cfg(test)]
 mod tests;
