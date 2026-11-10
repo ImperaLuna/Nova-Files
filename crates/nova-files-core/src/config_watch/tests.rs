@@ -5,8 +5,6 @@ use std::sync::mpsc::{self, Receiver};
 
 use super::*;
 
-/// Saves in a busy burst per report, at the least.
-const SAVES_PER_REPORT: u32 = 4;
 /// How long a test waits for a report before it counts as a failure.
 const REPORT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -242,18 +240,25 @@ fn a_linked_folder_pointed_elsewhere_is_watched_there() {
     fs::remove_dir_all(home).ok();
 }
 
-/// Saves `file` every `gap` for `how_long`; says how many saves it made.
+/// Saves `file` every `gap` for `how_long`; says how many times the
+/// machine held a save back past the quiet time, which may end a burst.
 fn keep_saving(file: &Path, gap: Duration, how_long: Duration) -> u32 {
     // Never sent to: waiting on it is a pause.
     let (_never_sent, pause) = mpsc::channel::<()>();
     let start = Instant::now();
     let mut count = 0_u32;
+    let mut late = 0_u32;
+    let mut last = Instant::now();
     while start.elapsed() < how_long {
         count += 1;
         fs::write(file, count.to_string()).unwrap();
+        if last.elapsed() >= QUIET {
+            late += 1;
+        }
+        last = Instant::now();
         pause.recv_timeout(gap).ok();
     }
-    count
+    late
 }
 
 #[test]
@@ -261,7 +266,7 @@ fn saves_closer_than_the_quiet_time_are_one_report() {
     let config = temp("busy");
     fs::create_dir_all(&config).unwrap();
     let (_watch, reports) = watch(&config);
-    let saves = keep_saving(&config.join("settings.toml"), QUIET / 4, LONGEST_WAIT / 3);
+    let late = keep_saving(&config.join("settings.toml"), QUIET / 4, LONGEST_WAIT / 3);
     let mut bursts = vec![reports.recv_timeout(REPORT_TIMEOUT).unwrap()];
     bursts.extend(std::iter::from_fn(|| reports.recv_timeout(QUIET * 3).ok()));
     assert!(
@@ -269,11 +274,11 @@ fn saves_closer_than_the_quiet_time_are_one_report() {
             .iter()
             .all(|burst| *burst == files(&["settings.toml"]))
     );
-    // Mostly one report; a busy machine may pause past the quiet time
-    // now and then, but never between most saves.
+    // One report, and one more only where a busy machine held a save
+    // back past the quiet time.
     assert!(
-        u32::try_from(bursts.len()).unwrap() * SAVES_PER_REPORT <= saves,
-        "{} reports for {saves} saves",
+        u32::try_from(bursts.len()).unwrap() <= 1 + late,
+        "{} reports, {late} saves held back",
         bursts.len()
     );
     fs::remove_dir_all(config).ok();

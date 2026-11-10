@@ -20,7 +20,10 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, SystemTime};
 
-use nova_files_api::{Command, Event, Failure, JobId, Operation, Outcome, Progress};
+use nova_files_api::uri::file_uri;
+use nova_files_api::{
+    Command, Event, Failure, FileClipboard, JobId, Offer, Operation, Outcome, Progress, URI_LIST,
+};
 
 use common::{Bench, Client};
 use files::{hidden, tree};
@@ -296,4 +299,23 @@ fn journal(bench: &Bench, job: JobId) -> PathBuf {
     bench
         .at("home/.local/state/nova-files/jobs")
         .join(job.0.to_string())
+}
+
+#[test]
+fn a_copy_pastes_as_a_copy_and_leaves_the_files() {
+    let bench = Bench::new("clipboard-copy");
+    fs::create_dir(bench.at("from")).unwrap();
+    fs::write(bench.at("from/a"), b"a").unwrap();
+    fs::create_dir(bench.at("into")).unwrap();
+    // What Dolphin puts on the clipboard for a copy.
+    let list = format!("{}\r\n", file_uri(&bench.at("from/a")));
+    let files = FileClipboard::from_offers(&[Offer::new(URI_LIST, list)]).unwrap();
+
+    let (_, outcome, _) = bench
+        .client()
+        .run(files.paste_into(bench.at("into")).unwrap());
+
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(fs::read(bench.at("from/a")).unwrap(), b"a");
+    assert_eq!(fs::read(bench.at("into/a")).unwrap(), b"a");
 }
