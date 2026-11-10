@@ -48,7 +48,7 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
     // Only the chosen folders are walked; a chosen link is removed as a
     // link, and a path chosen through it is reached as the user named it.
     let chosen: HashSet<_> = paths.iter().collect();
-    let trees: Vec<_> = plan
+    let trees: HashSet<_> = plan
         .items
         .iter()
         .filter(|item| item.kind == Kind::Folder && chosen.contains(&item.from))
@@ -136,7 +136,7 @@ fn remove(running: &mut Running, folders: &mut Folders<'_>, item: &Item) -> Resu
 /// tree the user chose.
 struct Folders<'a> {
     /// The folders the user chose.
-    trees: &'a [PathBuf],
+    trees: &'a HashSet<PathBuf>,
     open: HashMap<PathBuf, OwnedFd>,
 }
 
@@ -170,7 +170,9 @@ impl Folders<'_> {
         // Only found, never read: removing needs a folder's write and
         // search permission, not leave to list it.
         let flags = OFlags::PATH.union(OFlags::DIRECTORY).union(OFlags::CLOEXEC);
-        let inside = self.trees.iter().any(|tree| folder.starts_with(tree));
+        // By the folder's own ancestors, so a selection of many folders
+        // costs one lookup each, not a scan of them all.
+        let inside = folder.ancestors().any(|above| self.trees.contains(above));
         let fd = match (inside, folder.parent(), folder.file_name()) {
             (true, Some(above), Some(name)) => {
                 self.reach(above)?;
@@ -210,7 +212,7 @@ mod tests {
         symlink(&outside, tree.join("sub")).unwrap();
 
         let mut folders = Folders {
-            trees: &paths,
+            trees: &paths.iter().cloned().collect(),
             open: HashMap::new(),
         };
         let removed: Vec<_> = plan
@@ -240,7 +242,7 @@ mod tests {
             .collect();
         let plan = plan_delete(&paths, &Control::default()).unwrap();
         let mut folders = Folders {
-            trees: &paths,
+            trees: &paths.iter().cloned().collect(),
             open: HashMap::new(),
         };
         for item in plan.items.iter().rev() {
