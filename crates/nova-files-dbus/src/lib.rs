@@ -371,7 +371,7 @@ pub(crate) fn connect_within_timeout(
         .map_err(|error| zbus::Error::Failure(error.to_string()))?;
     result
         .recv_timeout(CALL_TIMEOUT)
-        .map_err(|_| zbus::Error::Failure("the D-Bus session bus did not answer".to_owned()))?
+        .map_err(|_| zbus::Error::Failure("the D-Bus bus did not answer".to_owned()))?
 }
 
 /// The object path the application id implies, as the freedesktop

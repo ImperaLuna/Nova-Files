@@ -4,8 +4,8 @@
 //!
 //! A volume is shown when udisks2 says it holds a filesystem and no rule
 //! asks to hide it (`HintIgnore`), unless it is part of the system (the
-//! root, `/boot`, `/nix`...): a system volume mounted outside the folders
-//! removable media mount in. An unmounted internal partition shows, so it
+//! root, `/boot`, `/nix`...): a system volume mounted anywhere outside the
+//! folders removable media mount in. An unmounted internal partition shows, so it
 //! can be mounted. A drive is shown when it holds a shown volume, so an
 //! empty card reader or a disk of system volumes stays out.
 //!
@@ -103,14 +103,14 @@ fn drive(path: &OwnedObjectPath, interfaces: &Interfaces) -> Option<Drive> {
 }
 
 /// Whether a volume mounted at `mount_points` is part of the running
-/// system: mounted, and nowhere a person's volumes go.
+/// system: mounted somewhere a person's volumes don't go, even if also
+/// somewhere they do (a root filesystem bind-mounted under /mnt).
 fn is_system_mount(mount_points: &[PathBuf]) -> bool {
-    !mount_points.is_empty()
-        && !mount_points.iter().any(|point| {
-            USER_MOUNT_FOLDERS
-                .iter()
-                .any(|folder| point.starts_with(Path::new(folder)))
-        })
+    mount_points.iter().any(|point| {
+        !USER_MOUNT_FOLDERS
+            .iter()
+            .any(|folder| point.starts_with(Path::new(folder)))
+    })
 }
 
 /// A volume's name: the one an admin set (`HintName`), else the

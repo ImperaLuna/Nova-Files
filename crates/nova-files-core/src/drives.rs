@@ -5,7 +5,8 @@
 //! first client asks ([`Store::listen`]); the core then starts it
 //! following the system's drives. Until its first list arrives, clients
 //! that ask wait for it, so none sees an empty list flash by. Without a
-//! service, a client gets an empty list at once.
+//! service, a client gets an empty list at once, and the real one if a
+//! service arrives later.
 //!
 //! The service's thread hands each list to [`seen`], which keeps it and
 //! tells every listening client under one lock, so a client that asks at
@@ -36,13 +37,29 @@ struct Shared {
 }
 
 impl Store {
-    /// Keeps `service` to watch the drives with. Only the first one
-    /// counts; a later one is dropped.
+    /// Keeps `service` to watch the drives with, and starts it following
+    /// them if a client already asked. Only the first one counts; a later
+    /// one is dropped.
     pub fn offer(&self, service: Arc<dyn DriveService>) {
-        let mut shared = lock(&self.shared);
-        if shared.service.is_none() {
+        let start = {
+            let mut shared = lock(&self.shared);
+            if shared.service.is_some() {
+                return;
+            }
             shared.service = Some(service);
+            shared.following = !shared.listeners.is_empty();
+            shared.following.then(|| shared.service.clone()).flatten()
+        };
+        if let Some(service) = start {
+            self.start(&service);
         }
+    }
+
+    /// Has `service` send its lists here, outside the lock, in case it
+    /// reports its first list before it returns.
+    fn start(&self, service: &Arc<dyn DriveService>) {
+        let shared = Arc::downgrade(&self.shared);
+        service.follow(Box::new(move |list| seen(&shared, list)));
     }
 
     /// Sends `client` the drives through `events`, and again each time
@@ -60,7 +77,7 @@ impl Store {
                     events.deliver(Event::Drives(Arc::clone(list)))?;
                 }
                 (None, None) => {
-                    // Nothing will ever report drives, so there are none.
+                    // No service to ask yet, so no drives known.
                     events.deliver(Event::Drives(Arc::new(DriveList::default())))?;
                 }
                 // The first list is on its way; it goes to every listener.
@@ -74,11 +91,8 @@ impl Store {
                 shared.service.clone()
             }
         };
-        // Outside the lock, in case the service reports its first list
-        // before it returns.
         if let Some(service) = start {
-            let shared = Arc::downgrade(&self.shared);
-            service.follow(Box::new(move |list| seen(&shared, list)));
+            self.start(&service);
         }
         Ok(())
     }
@@ -265,6 +279,24 @@ mod tests {
         drop(receiver);
         assert_eq!(store.listen(ClientId(1), &events), Err(ClientGone));
         assert!(lock(&store.shared).listeners.is_empty());
+    }
+
+    #[test]
+    fn a_service_offered_late_reaches_clients_that_already_asked() {
+        let store = Store::default();
+        let (events, receiver) = client();
+        store.listen(ClientId(1), &events).unwrap();
+        let hand = Arc::new(Hand::default());
+        store.offer(Arc::new(Handle(Arc::clone(&hand))));
+        assert_eq!(hand.follows(), 1);
+        hand.report(&stick());
+        assert_eq!(drives(&receiver), vec![DriveList::default(), stick()]);
+    }
+
+    #[test]
+    fn a_service_offered_before_anyone_asks_waits() {
+        let (_store, hand) = with_hand();
+        assert_eq!(hand.follows(), 0);
     }
 
     #[test]

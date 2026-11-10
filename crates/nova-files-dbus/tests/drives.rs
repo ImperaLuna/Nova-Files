@@ -222,6 +222,17 @@ fn a_system_volume_mounted_elsewhere_leaves_the_list() {
 }
 
 #[test]
+fn a_system_volume_also_mounted_under_mnt_stays_out() {
+    let bus = PrivateBus::start();
+    let udisks = StandIn::start(&bus.address, &recorded());
+    let lists = follow(&bus);
+    next(&lists);
+    udisks.set_mount_points(FAT_LOOP, &[b"/", b"/mnt/snapshots"]);
+    let list = until(&lists, |list| !ids(list).contains(&FAT_LOOP));
+    assert_eq!(ids(&list), vec![EXT4_LOOP, GPT_PHOTOS, GPT_UNNAMED]);
+}
+
+#[test]
 fn without_udisks_the_list_is_empty_until_it_starts() {
     let bus = PrivateBus::start();
     let lists = follow(&bus);

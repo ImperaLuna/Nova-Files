@@ -55,8 +55,9 @@ pub struct Volume {
     /// The drive it is on; `None` for a volume with no device behind it,
     /// such as a disk image set up as a loop device.
     pub drive: Option<DriveId>,
-    /// Its name: the filesystem's label, else the partition's name. Empty
-    /// when it has neither, so a client names it by size.
+    /// Its name: the one the system's rules give it, else the
+    /// filesystem's label, else the partition's name. Empty when it has
+    /// none, so a client names it by size.
     pub label: String,
     /// Its size in bytes.
     pub size: u64,
