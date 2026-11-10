@@ -40,7 +40,7 @@ pub use pick::{
 };
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
-pub use size::{MeasureId, ScanState, Size};
+pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 
 /// The application id: the D-Bus name, the Wayland app id and the name of

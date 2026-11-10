@@ -489,7 +489,9 @@ impl MainWindow {
             | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
             | Event::JobFinished { .. }
-            | Event::SizeMeasured { .. } => {}
+            | Event::SizeMeasured { .. }
+            | Event::SpaceMeasured { .. }
+            | Event::SpaceUnreadable { .. } => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

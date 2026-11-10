@@ -9,6 +9,11 @@
 //! [`Command::StopMeasure`] ends a scan early, and so do a newer scan from
 //! the same client and the client leaving.
 //!
+//! [`Command::Space`] scans one folder the same way but answers with
+//! [`Event::SpaceMeasured`]: each entry's own totals, as [`Share`]s, only
+//! those that changed since the answer before. A client can run one space
+//! scan alongside its one size scan.
+//!
 //! A scan never follows a link and never goes into another drive mounted
 //! inside the folder. A folder or a file reached twice (two paths, one
 //! inside the other, or a file with several hard links) counts once.
@@ -16,6 +21,12 @@
 //! [`Command::Measure`]: crate::Command::Measure
 //! [`Command::StopMeasure`]: crate::Command::StopMeasure
 //! [`Event::SizeMeasured`]: crate::Event::SizeMeasured
+//! [`Command::Space`]: crate::Command::Space
+//! [`Event::SpaceMeasured`]: crate::Event::SpaceMeasured
+
+use std::ffi::OsString;
+
+use crate::folder::EntryKind;
 
 /// Names one scan. The client picks it; the core echoes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -61,6 +72,17 @@ impl Size {
             unreadable: self.unreadable.saturating_add(other.unreadable),
         }
     }
+}
+
+/// One entry of a folder a space scan measures, and what it takes so far.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Share {
+    /// The entry's name exactly as the disk has it.
+    pub name: OsString,
+    /// As the folder's listing has it: a link to a folder is a folder,
+    /// though the scan counts only the link itself.
+    pub kind: EntryKind,
+    pub size: Size,
 }
 
 #[cfg(test)]

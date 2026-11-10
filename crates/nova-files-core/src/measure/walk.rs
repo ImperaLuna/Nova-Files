@@ -1,7 +1,8 @@
 //! Walking folder trees on a few threads at once, adding up what they hold.
 //!
 //! [`walk`] takes roots, each naming the tally slot its totals go to. Each
-//! root (an absolute path) is looked at without following a link; a folder
+//! root (an absolute path) is looked at without following a link, as a
+//! path a client named or as an entry of a listed folder (see [`Root`]); a folder
 //! root goes on a queue of folders that [`THREADS`] threads share. A thread
 //! takes a folder, opens it through its parent's open handle (never through
 //! a link, and never by a long path), and looks at each entry with
@@ -24,7 +25,7 @@
 use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::os::fd::OwnedFd;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
@@ -65,10 +66,22 @@ const OPEN_FOLDER: OFlags = OFlags::RDONLY
 pub struct Root {
     pub path: PathBuf,
     pub slot: usize,
+    /// `None` for a path the client named, which is measured whatever it
+    /// is. The drive of its folder for an entry of a listed folder, which
+    /// is treated as an entry met in the walk: one that vanished is left
+    /// out, and another drive mounted there is not entered.
+    pub listed_in: Option<Device>,
 }
 
 /// A drive, as `statx` names it.
-type Device = (u32, u32);
+pub type Device = (u32, u32);
+
+/// The drive `folder` is on, or `None` when it can't be looked at.
+pub fn device_of(folder: &Path) -> Option<Device> {
+    statx(CWD, folder, AtFlags::SYMLINK_NOFOLLOW, StatxFlags::empty())
+        .ok()
+        .map(|stat| (stat.stx_dev_major, stat.stx_dev_minor))
+}
 
 /// A folder waiting to be read.
 struct Folder {
@@ -159,7 +172,10 @@ impl Walk<'_> {
             return;
         }
         match statx(CWD, &root.path, AtFlags::SYMLINK_NOFOLLOW, WANTED) {
-            Ok(stat) => self.count(root.slot, &stat, None, || Place::Root(root.path.clone())),
+            Ok(stat) => self.count(root.slot, &stat, root.listed_in, || {
+                Place::Root(root.path.clone())
+            }),
+            Err(Errno::NOENT) if root.listed_in.is_some() => {}
             Err(_) => self.tally.unreadable(root.slot),
         }
     }

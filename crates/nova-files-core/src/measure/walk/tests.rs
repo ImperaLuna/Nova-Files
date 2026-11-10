@@ -57,6 +57,7 @@ fn one(path: &Path) -> Size {
         &[Root {
             path: path.to_owned(),
             slot: 0,
+            listed_in: None,
         }],
         1,
     )
@@ -139,10 +140,12 @@ fn hard_links_count_once_however_many_roots_reach_them() {
         Root {
             path: root.join("a"),
             slot: 0,
+            listed_in: None,
         },
         Root {
             path: root.join("again"),
             slot: 1,
+            listed_in: None,
         },
     ];
 
@@ -167,6 +170,7 @@ fn a_big_flat_folder_reports_as_it_goes() {
         &[Root {
             path: root.to_owned(),
             slot: 0,
+            listed_in: None,
         }],
         &tally,
         &|| false,
@@ -190,10 +194,12 @@ fn each_root_adds_to_its_own_slot() {
         Root {
             path: root.join("a"),
             slot: 0,
+            listed_in: None,
         },
         Root {
             path: root.join("b"),
             slot: 1,
+            listed_in: None,
         },
     ];
 
@@ -251,6 +257,7 @@ fn a_walk_stopped_before_it_starts_reads_nothing() {
     let roots = [Root {
         path: folder.path().to_owned(),
         slot: 0,
+        listed_in: None,
     }];
 
     walk_within(&roots, &tally, &|| true, &|| ());
@@ -269,6 +276,7 @@ fn a_walk_stopped_midway_reads_no_more_folders() {
     let roots = [Root {
         path: root.to_owned(),
         slot: 0,
+        listed_in: None,
     }];
 
     // Stops once the root's folder "a" is counted, before it is queued.
@@ -286,6 +294,7 @@ fn every_folder_reports_when_it_is_done() {
     let roots = [Root {
         path: folder.path().to_owned(),
         slot: 0,
+        listed_in: None,
     }];
 
     walk_within(&roots, &Tally::new(1), &|| false, &|| {
@@ -361,4 +370,30 @@ fn the_kernel_says_where_a_drive_is_mounted_and_older_kernels_go_by_the_drive() 
     assert!(!is_mount_root(root, none, other, one));
     assert!(is_mount_root(none, none, other, one));
     assert!(!is_mount_root(none, none, one, one));
+}
+
+#[test]
+fn a_listed_entry_that_vanished_is_left_out_and_a_named_path_is_not() {
+    let folder = TestFolder::new("walk-vanished");
+    let gone = folder.path().join("gone");
+    let device = device_of(folder.path());
+    let roots = [
+        Root {
+            path: gone.clone(),
+            slot: 0,
+            listed_in: device,
+        },
+        Root {
+            path: gone,
+            slot: 1,
+            listed_in: None,
+        },
+    ];
+
+    let tally = measure(&roots, 2);
+    let slots = tally.take_changed();
+
+    assert!(device.is_some());
+    assert_eq!(slots[0].1, Size::default());
+    assert_eq!(slots[1].1.unreadable, 1);
 }
