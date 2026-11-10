@@ -291,7 +291,8 @@ fn without_a_bus_the_list_is_empty() {
 fn a_client_of_the_core_gets_the_drives() {
     let bus = PrivateBus::start();
     let _udisks = StandIn::start(&bus.address, &stick());
-    let core = nova_files_core::spawn().unwrap();
+    // No home: the core touches none of the real person's files.
+    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, None, None, None).unwrap();
     core.connector.offer_drives(Udisks::new(bus.bus())).unwrap();
     let (events, received) = mpsc::channel();
     let connection = core.connector.connect(events).unwrap();
