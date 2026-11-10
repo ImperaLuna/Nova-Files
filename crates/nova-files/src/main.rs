@@ -28,7 +28,8 @@
 //! set up its GPU, the program starts again on that folder with every
 //! driver (see `restart_with_every_driver`).
 //!
-//! It also hands the core a way to give freed memory back to the system
+//! It hands the core the D-Bus watcher of the system's drives (see
+//! `nova_files_dbus::Udisks`). It also hands the core a way to give freed memory back to the system
 //! after heavy work (see `memory`), and the D-Bus service a way to open
 //! picker windows for other apps (see `picker`).
 
@@ -140,6 +141,10 @@ fn run() -> Result<(), Box<dyn Error>> {
         return Ok(place.build(folder)?);
     }
     let core = nova_files_core::spawn()?;
+    // Before anything connects, so the first client to ask finds it. It
+    // reads nothing until then.
+    core.connector
+        .offer_drives(nova_files_dbus::Udisks::new(Bus::System))?;
     let (requests, received) = nova_files_ui::channel();
 
     let on_open = {

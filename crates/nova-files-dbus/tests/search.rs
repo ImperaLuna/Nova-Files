@@ -76,6 +76,7 @@ impl Scratch {
             folder: self.home(),
             config: self.0.join("config"),
             state: self.0.join("state"),
+            data: self.0.join("share"),
         };
         let place = indexed.then(|| IndexPlace {
             folder: self.0.join("cache"),

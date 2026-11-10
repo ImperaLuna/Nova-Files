@@ -3512,6 +3512,7 @@ version = "0.1.0"
 name = "nova-files-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "log",
  "nova-files-api",
  "nova-files-index",

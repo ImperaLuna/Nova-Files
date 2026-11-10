@@ -81,6 +81,7 @@ fn the_next_picker_gets_the_state_the_core_kept() {
         folder: tree.path().to_owned(),
         config: tree.path().join(".config"),
         state: tree.path().join(".local/state"),
+        data: tree.path().join(".local/share"),
     };
     let saved = WindowState::default().with_picker(size(px(800.0), px(500.0)));
     let core =

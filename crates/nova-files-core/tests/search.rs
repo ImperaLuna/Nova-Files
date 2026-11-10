@@ -70,6 +70,7 @@ impl Scratch {
             folder: self.home(),
             config: self.0.join("config"),
             state: self.0.join("state"),
+            data: self.0.join("share"),
         };
         let core = nova_files_core::spawn_with(IDLE_EXIT, Some(home), None, place).unwrap();
         let (sink, events) = mpsc::channel();

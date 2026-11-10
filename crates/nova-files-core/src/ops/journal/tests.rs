@@ -190,6 +190,8 @@ fn a_file_that_is_not_a_journal_is_refused() {
         "nova-files-job 1\nplanned /a 1-2\n",
         "nova-files-job 1\nplanned /a 1:x\n",
         "nova-files-job 1\nplanned /a x:2\n",
+        "nova-files-job 1\ntrash-info /a 1:2 x\n",
+        "nova-files-job 1\ntrash-info /a x 1:2\n",
     ] {
         fs::write(&path, text).unwrap();
         let error = read::read(&File::open(&path).unwrap(), &path).unwrap_err();

@@ -18,6 +18,9 @@
 //! the application's name taken and gets a [`RunningInstance`] to hand its
 //! launch over to; it never serves the picker or asks for its name.
 //!
+//! [`Udisks`] watches the drives and volumes on the system bus for the
+//! core.
+//!
 //! Each module is one interface, so search and the picker grow in files of
 //! their own. Our own interfaces are named `io.github.ImperaLuna.NovaFiles*`
 //! and carry a version number: a change that breaks callers gets a new
@@ -32,6 +35,7 @@
 
 mod application;
 mod desktop_look;
+mod drives;
 mod file_chooser;
 mod files;
 mod holds;
@@ -56,6 +60,7 @@ pub use application::INTERFACE as APPLICATION_INTERFACE;
 pub use desktop_look::{
     ACCENT_COLOR, COLOR_SCHEME, INTERFACE as SETTINGS_INTERFACE, NAMESPACE as APPEARANCE_NAMESPACE,
 };
+pub use drives::{UDISKS, UDISKS_PATH, Udisks};
 pub use file_chooser::{
     BUS_NAME as PORTAL_BUS_NAME, INTERFACE as FILE_CHOOSER_INTERFACE,
     OBJECT_PATH as PORTAL_OBJECT_PATH, Picker,
@@ -75,11 +80,13 @@ const CONNECT_THREAD: &str = "nova-files-dbus-connect";
 const NAME_WATCH_THREAD: &str = "nova-files-dbus-name-watch";
 const BUS_WATCH_THREAD: &str = "nova-files-dbus-bus-watch";
 
-/// Which bus to claim the name on.
+/// Which bus to connect to.
 #[derive(Clone)]
 pub enum Bus {
     /// The user's session bus, as the program uses.
     Session,
+    /// The system bus, where the mount service is.
+    System,
     /// The bus at this address, such as a private one for tests.
     Address(String),
 }
@@ -88,6 +95,7 @@ impl Bus {
     pub(crate) fn builder(&self) -> zbus::Result<Builder<'static>> {
         let builder = match self {
             Self::Session => Builder::session()?,
+            Self::System => Builder::system()?,
             Self::Address(address) => Builder::address(address.as_str())?,
         };
         Ok(builder.method_timeout(CALL_TIMEOUT))
@@ -363,7 +371,7 @@ pub(crate) fn connect_within_timeout(
         .map_err(|error| zbus::Error::Failure(error.to_string()))?;
     result
         .recv_timeout(CALL_TIMEOUT)
-        .map_err(|_| zbus::Error::Failure("the D-Bus session bus did not answer".to_owned()))?
+        .map_err(|_| zbus::Error::Failure("the D-Bus bus did not answer".to_owned()))?
 }
 
 /// The object path the application id implies, as the freedesktop
