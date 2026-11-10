@@ -4,6 +4,7 @@
 
 use std::fs::File;
 use std::io::{self, Read as _};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use super::{HEADER, entry_from, word};
@@ -86,12 +87,18 @@ fn parse(whole: &[u8], path: &Path) -> io::Result<Vec<Line>> {
         .collect()
 }
 
+/// The fields of a `planned` record that name an entry: its second.
+const PLANNED_ENTRIES: Range<usize> = 1..2;
+/// The fields of a `trash-info` record that name an entry: the info
+/// file's and the trashed entry's, after the info file's path.
+const TRASH_INFO_ENTRIES: Range<usize> = 1..3;
+
 /// Whether `name` is a word this version writes, with `fields` as it
 /// writes them.
 fn fits(name: &str, fields: &[PathBuf]) -> bool {
     let entries = match name {
-        word::PLANNED => 1..2,
-        word::TRASH_INFO => 1..3,
+        word::PLANNED => PLANNED_ENTRIES,
+        word::TRASH_INFO => TRASH_INFO_ENTRIES,
         _ => 0..0,
     };
     let entry_fits = fields
