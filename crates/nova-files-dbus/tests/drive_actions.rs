@@ -21,10 +21,13 @@ use nova_files_dbus::{Bus, Udisks};
 mod support;
 mod udisks;
 
+/// A second volume on the stick, mounted inside the first.
+const STICK_INNER: &str = "/org/freedesktop/UDisks2/block_devices/sdb2";
+
 use support::{PrivateBus, WAIT};
 use udisks::{
     EXT4_LOOP, FAT_LOOP, Failure, NVME, NVME_WINDOWS, STICK, STICK_VOLUME, StandIn, failing,
-    laptop_disk, recorded, stick,
+    laptop_disk, mounted_at, recorded, stick,
 };
 
 fn mount(volume: &str) -> DriveAction {
@@ -118,6 +121,10 @@ fn without_udisks_there_is_no_service() {
         Udisks::new(bus.bus()).act(&mount(FAT_LOOP)),
         Err(DriveFailure::NoService)
     );
+    assert_eq!(
+        Udisks::new(bus.bus()).act(&eject(STICK)),
+        Err(DriveFailure::NoService)
+    );
     let gone = Bus::Address("unix:path=/nonexistent/nova-files-bus".to_owned());
     assert_eq!(
         Udisks::new(gone).act(&mount(FAT_LOOP)),
@@ -135,6 +142,26 @@ fn ejecting_a_stick_unmounts_it_then_switches_it_off() {
         vec![
             format!("unmount {STICK_VOLUME}"),
             format!("power off {STICK}")
+        ]
+    );
+}
+
+#[test]
+fn a_volume_mounted_inside_another_is_unmounted_first() {
+    let bus = PrivateBus::start();
+    let mut objects = stick();
+    let mut inner = objects[1].clone();
+    inner.path = STICK_INNER.to_owned();
+    inner.filesystem = Some(mounted_at(b"/run/media/me/STICK/inner"));
+    objects.insert(1, inner);
+    let udisks = StandIn::start(&bus.address, &objects);
+    assert_eq!(Udisks::new(bus.bus()).act(&eject(STICK)), Ok(None));
+    assert_eq!(
+        udisks.calls(),
+        vec![
+            format!("unmount {STICK_INNER}"),
+            format!("unmount {STICK_VOLUME}"),
+            format!("power off {STICK}"),
         ]
     );
 }

@@ -329,6 +329,11 @@ fn mounted(points: &[&[u8]]) -> Filesystem {
     }
 }
 
+/// A filesystem mounted at `point`.
+pub fn mounted_at(point: &[u8]) -> Filesystem {
+    mounted(&[point])
+}
+
 /// A drive; the stand-in fills in its path and call log when it is added.
 fn drive(vendor: &str, model: &str) -> Drive {
     Drive {

@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use nova_files_api::{DriveAction, DriveFailure, DriveId, VolumeId};
+use zbus::DBusError as _;
 use zbus::blocking::fdo::ObjectManagerProxy;
 use zbus::blocking::{Connection, Proxy, proxy};
 use zbus::proxy::CacheProperties;
@@ -42,7 +43,6 @@ const BUSY: [&str; 1] = ["org.freedesktop.UDisks2.Error.DeviceBusy"];
 /// isn't: what was asked is already so.
 const ALREADY_MOUNTED: &str = "org.freedesktop.UDisks2.Error.AlreadyMounted";
 const NOT_MOUNTED: &str = "org.freedesktop.UDisks2.Error.NotMounted";
-const MOUNT_POINTS: &str = "MountPoints";
 const NOT_AUTHORIZED: [&str; 2] = [
     "org.freedesktop.UDisks2.Error.NotAuthorized",
     "org.freedesktop.UDisks2.Error.NotAuthorizedCanObtain",
@@ -60,9 +60,10 @@ const NO_SERVICE: [&str; 2] = [
     "org.freedesktop.DBus.Error.ServiceUnknown",
     "org.freedesktop.DBus.Error.NameHasNoOwner",
 ];
-const TIMED_OUT: [&str; 2] = [
+const TIMED_OUT: [&str; 3] = [
     "org.freedesktop.DBus.Error.NoReply",
     "org.freedesktop.DBus.Error.Timeout",
+    "org.freedesktop.DBus.Error.TimedOut",
 ];
 
 /// No options: udisks2's defaults.
@@ -88,9 +89,10 @@ fn mount(connection: &Connection, volume: &VolumeId) -> Result<PathBuf, DriveFai
     match filesystem.call::<_, _, String>(MOUNT, &(Options::new(),)) {
         Ok(point) => Ok(PathBuf::from(point)),
         Err(error) if is(&error, ALREADY_MOUNTED) => {
-            let points: Vec<Vec<u8>> = filesystem.get_property(MOUNT_POINTS).map_err(failure)?;
-            let point = points.into_iter().next().ok_or_else(|| failure(error))?;
-            Ok(objects::path_from_bytes(point))
+            let points = filesystem
+                .get_property(objects::MOUNT_POINTS)
+                .map_err(failure)?;
+            objects::first_mount_point(points).ok_or_else(|| failure(error))
         }
         Err(error) => Err(failure(error)),
     }
@@ -106,7 +108,22 @@ fn unmount(connection: &Connection, volume: &OwnedObjectPath) -> Result<(), Driv
 
 /// Whether `error` is the D-Bus error `name`.
 fn is(error: &zbus::Error, name: &str) -> bool {
-    matches!(error, zbus::Error::MethodError(error_name, _, _) if error_name.as_str() == name)
+    named(error).is_some_and(|(error_name, _)| error_name == name)
+}
+
+/// A D-Bus error's name and text, however zbus carries it: as the reply
+/// to a call, or already read as a standard (`org.freedesktop.DBus`) one.
+fn named(error: &zbus::Error) -> Option<(String, String)> {
+    match error {
+        zbus::Error::MethodError(name, text, _) => {
+            Some((name.to_string(), text.clone().unwrap_or_default()))
+        }
+        zbus::Error::FDO(error) => Some((
+            error.name().to_string(),
+            error.description().unwrap_or_default().to_owned(),
+        )),
+        _ => None,
+    }
 }
 
 fn eject(connection: &Connection, drive: &DriveId) -> Result<(), DriveFailure> {
@@ -117,7 +134,7 @@ fn eject(connection: &Connection, drive: &DriveId) -> Result<(), DriveFailure> {
         .and_then(|builder| builder.cache_properties(CacheProperties::No).build())
         .and_then(|udisks| udisks.get_managed_objects().map_err(zbus::Error::from))
         .map_err(failure)?;
-    let plan = objects::eject_plan(&objects, path.as_str())?;
+    let plan = objects::eject_plan(&objects, &path)?;
     for volume in &plan.mounted {
         unmount(connection, volume)?;
     }
@@ -156,8 +173,12 @@ fn proxy<'a>(
 
 /// What `error` means for a client, by its D-Bus name.
 fn failure(error: zbus::Error) -> DriveFailure {
-    let zbus::Error::MethodError(name, text, _) = &error else {
+    let Some((name, text)) = named(&error) else {
         return match error {
+            // The connection's own limit, ACTION_TIMEOUT.
+            zbus::Error::InputOutput(io) if io.kind() == std::io::ErrorKind::TimedOut => {
+                DriveFailure::TimedOut
+            }
             zbus::Error::InputOutput(_) => DriveFailure::NoService,
             other => DriveFailure::Failed(other.to_string()),
         };
@@ -175,7 +196,48 @@ fn failure(error: zbus::Error) -> DriveFailure {
         DriveFailure::NoService
     } else if TIMED_OUT.contains(&name) {
         DriveFailure::TimedOut
+    } else if text.is_empty() {
+        DriveFailure::Failed(name.to_owned())
     } else {
-        DriveFailure::Failed(text.clone().unwrap_or_else(|| name.to_owned()))
+        DriveFailure::Failed(text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    use std::sync::Arc;
+
+    use zbus::fdo;
+
+    use super::*;
+
+    #[test]
+    fn the_connection_s_own_time_limit_is_a_timeout() {
+        let timed_out =
+            zbus::Error::InputOutput(Arc::new(io::Error::from(io::ErrorKind::TimedOut)));
+        assert_eq!(failure(timed_out), DriveFailure::TimedOut);
+        let closed = zbus::Error::InputOutput(Arc::new(io::Error::from(io::ErrorKind::BrokenPipe)));
+        assert_eq!(failure(closed), DriveFailure::NoService);
+    }
+
+    #[test]
+    fn standard_errors_zbus_already_read_keep_their_meaning() {
+        let cases = [
+            (
+                fdo::Error::ServiceUnknown(String::new()),
+                DriveFailure::NoService,
+            ),
+            (fdo::Error::NoReply(String::new()), DriveFailure::TimedOut),
+            (fdo::Error::TimedOut(String::new()), DriveFailure::TimedOut),
+            (fdo::Error::UnknownObject(String::new()), DriveFailure::Gone),
+            (
+                fdo::Error::Failed("udisks2 says no".to_owned()),
+                DriveFailure::Failed("udisks2 says no".to_owned()),
+            ),
+        ];
+        for (error, expected) in cases {
+            assert_eq!(failure(zbus::Error::from(error)), expected);
+        }
     }
 }

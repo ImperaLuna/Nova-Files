@@ -35,6 +35,8 @@ pub const BLOCK: &str = "org.freedesktop.UDisks2.Block";
 pub const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
 pub const PARTITION: &str = "org.freedesktop.UDisks2.Partition";
 pub const DRIVE: &str = "org.freedesktop.UDisks2.Drive";
+/// The Filesystem property that says where it is mounted.
+pub const MOUNT_POINTS: &str = "MountPoints";
 
 /// `Block.IdUsage` for a block that holds a filesystem.
 const FILESYSTEM_USAGE: &str = "filesystem";
@@ -54,7 +56,7 @@ pub fn drive_list(objects: &ManagedObjects) -> DriveList {
     let used: BTreeSet<&DriveId> = volumes.iter().filter_map(|v| v.drive.as_ref()).collect();
     let mut drives: Vec<Drive> = objects
         .iter()
-        .filter_map(|(path, interfaces)| drive(path, interfaces))
+        .filter_map(|(path, interfaces)| drive(objects, path, interfaces))
         .filter(|drive| used.contains(&drive.id))
         .collect();
     drives.sort_by(|a, b| a.id.cmp(&b.id));
@@ -84,8 +86,13 @@ fn volume(path: &OwnedObjectPath, interfaces: &Interfaces) -> Option<Volume> {
     })
 }
 
-/// The drive `path` is, if it is one.
-fn drive(path: &OwnedObjectPath, interfaces: &Interfaces) -> Option<Drive> {
+/// The drive `path` is, if it is one. It counts as ejectable when ejecting
+/// it would eject its media or switch it off (see [`eject_plan`]).
+fn drive(
+    objects: &ManagedObjects,
+    path: &OwnedObjectPath,
+    interfaces: &Interfaces,
+) -> Option<Drive> {
     let drive = interface(interfaces, DRIVE)?;
     let name = [text(drive, "Vendor"), text(drive, "Model")]
         .iter()
@@ -97,27 +104,34 @@ fn drive(path: &OwnedObjectPath, interfaces: &Interfaces) -> Option<Drive> {
         id: DriveId(path.as_str().to_owned()),
         name,
         removable: flag(drive, "Removable") || flag(drive, "MediaRemovable"),
-        ejectable: flag(drive, "Ejectable") || flag(drive, "CanPowerOff"),
+        ejectable: eject_plan(objects, path).is_ok_and(|plan| plan.eject || plan.power_off),
     })
 }
 
 /// Where a filesystem is mounted, in udisks2's order.
 fn mount_points(filesystem: &Properties) -> Vec<PathBuf> {
-    byte_strings(filesystem, "MountPoints")
-        .into_iter()
-        .map(path_from_bytes)
-        .collect()
+    paths(property(filesystem, MOUNT_POINTS).unwrap_or_default())
 }
 
-/// A path udisks2 sent as bytes, without the NUL it ends with.
-pub fn path_from_bytes(bytes: Vec<u8>) -> PathBuf {
-    PathBuf::from(OsString::from_vec(without_nul(bytes)))
+/// The first of the mount points udisks2 sent, if any.
+pub fn first_mount_point(points: Vec<Vec<u8>>) -> Option<PathBuf> {
+    paths(points).into_iter().next()
+}
+
+/// Paths udisks2 sent as bytes, each ending in a NUL; empty ones left out.
+fn paths(sent: Vec<Vec<u8>>) -> Vec<PathBuf> {
+    sent.into_iter()
+        .map(without_nul)
+        .filter(|bytes| !bytes.is_empty())
+        .map(|bytes| PathBuf::from(OsString::from_vec(bytes)))
+        .collect()
 }
 
 /// What ejecting a drive takes, read from udisks2's objects.
 #[derive(Debug, PartialEq, Eq)]
 pub struct EjectPlan {
-    /// The drive's filesystems that are mounted, to unmount first, by id.
+    /// The drive's filesystems that are mounted, to unmount first: one
+    /// mounted inside another comes before it.
     pub mounted: Vec<OwnedObjectPath>,
     /// Whether its media can be ejected.
     pub eject: bool,
@@ -131,22 +145,26 @@ pub struct EjectPlan {
 /// [`DriveFailure::Gone`] when udisks2 has no such drive;
 /// [`DriveFailure::System`] when one of its volumes is mounted as part of
 /// the running system, which nothing may unmount.
-pub fn eject_plan(objects: &ManagedObjects, drive: &str) -> Result<EjectPlan, DriveFailure> {
+pub fn eject_plan(
+    objects: &ManagedObjects,
+    drive: &OwnedObjectPath,
+) -> Result<EjectPlan, DriveFailure> {
     let properties = objects
-        .iter()
-        .find(|(path, _)| path.as_str() == drive)
-        .and_then(|(_, interfaces)| interface(interfaces, DRIVE))
+        .get(drive)
+        .and_then(|interfaces| interface(interfaces, DRIVE))
         .ok_or(DriveFailure::Gone)?;
     let mut plan = EjectPlan {
         mounted: Vec::new(),
         eject: flag(properties, "Ejectable"),
         power_off: flag(properties, "CanPowerOff"),
     };
+    // Each mounted volume with its deepest mount point's depth.
+    let mut mounted = Vec::new();
     for (path, interfaces) in objects {
         let Some(block) = interface(interfaces, BLOCK) else {
             continue;
         };
-        if object(block, "Drive").as_deref() != Some(drive) {
+        if object(block, "Drive").as_deref() != Some(drive.as_str()) {
             continue;
         }
         let system = flag(block, "HintSystem");
@@ -160,9 +178,16 @@ pub fn eject_plan(objects: &ManagedObjects, drive: &str) -> Result<EjectPlan, Dr
         if system && is_system_mount(&points) {
             return Err(DriveFailure::System);
         }
-        plan.mounted.push(path.clone());
+        let depth = points.iter().map(|point| point.components().count()).max();
+        mounted.push((depth, path.clone()));
     }
-    plan.mounted.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+    // Deepest first, so a volume mounted inside another goes before it.
+    mounted.sort_by(|(a_depth, a), (b_depth, b)| {
+        b_depth
+            .cmp(a_depth)
+            .then_with(|| a.as_str().cmp(b.as_str()))
+    });
+    plan.mounted = mounted.into_iter().map(|(_, path)| path).collect();
     Ok(plan)
 }
 
@@ -225,15 +250,6 @@ fn object(properties: &Properties, key: &str) -> Option<String> {
 /// A path property, without the NUL udisks2 ends it with.
 fn byte_string(properties: &Properties, key: &str) -> Vec<u8> {
     without_nul(property(properties, key).unwrap_or_default())
-}
-
-fn byte_strings(properties: &Properties, key: &str) -> Vec<Vec<u8>> {
-    property::<Vec<Vec<u8>>>(properties, key)
-        .unwrap_or_default()
-        .into_iter()
-        .map(without_nul)
-        .filter(|bytes| !bytes.is_empty())
-        .collect()
 }
 
 fn without_nul(mut bytes: Vec<u8>) -> Vec<u8> {
