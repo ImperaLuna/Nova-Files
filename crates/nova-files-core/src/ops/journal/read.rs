@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use std::ffi::OsStr;
 
-use super::{ESCAPE, HEADER, HIGH};
+use super::{ESCAPE, HEADER, HIGH, entry_from, word};
 
 /// Radix of the two digits after an escape.
 const HEX_RADIX: u32 = 16;
@@ -80,7 +80,7 @@ fn parse(whole: &[u8], path: &Path) -> io::Result<Vec<Line>> {
                 .and_then(|word| std::str::from_utf8(word).ok());
             let paths: Option<Vec<_>> = fields.map(unescape).collect();
             match (word, paths) {
-                (Some(word), Some(paths)) => Ok(Line {
+                (Some(word), Some(paths)) if fits(word, &paths) => Ok(Line {
                     word: word.to_owned(),
                     paths,
                 }),
@@ -88,6 +88,16 @@ fn parse(whole: &[u8], path: &Path) -> io::Result<Vec<Line>> {
             }
         })
         .collect()
+}
+
+/// Whether `name` is a word this version writes, with `fields` as it
+/// writes them.
+fn fits(name: &str, fields: &[PathBuf]) -> bool {
+    let entry_fits = name != word::PLANNED
+        || fields
+            .get(1)
+            .is_some_and(|field| entry_from(field).is_some());
+    word::fields(name) == Some(fields.len()) && entry_fits
 }
 
 /// The path `field` was escaped from, or `None` when it isn't escaped

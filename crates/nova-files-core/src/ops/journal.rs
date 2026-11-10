@@ -20,14 +20,18 @@
 //! into /home/me/Backup
 //! source /home/me/My%20Photos
 //! part /home/me/Backup/.nova-part-4-0
-//! made /home/me/Backup/My%20Photos
+//! made /home/me/Backup/My%20Photos /home/me/My%20Photos
 //! ```
 //!
-//! A copy or move that put an item under another name than planned (the
-//! user kept both) says so with `instead`, the name used then the one
-//! planned. A move records each item it moved, from and to, instead of
-//! `made`; a delete records what it was asked to delete, then each entry
-//! it planned to, before it removes any.
+//! `made` names what was made, then its source, so a copy made under
+//! another name (the user kept both) is found again. A move records each
+//! item it moved, from and to, instead of `made`; a delete records what
+//! it was asked to delete, then each entry it planned to, with its
+//! device and inode, before it removes any.
+//!
+//! A line with a word this version doesn't write, or with the wrong
+//! number of fields, makes the whole journal unreadable: it is left
+//! alone rather than half understood.
 //!
 //! A running job holds a lock on its journal, so a second core never
 //! takes a live job for one a crash cut short.
@@ -41,6 +45,8 @@ use std::time::{Duration, Instant};
 
 use nova_files_api::JobId;
 use rustix::fs::{FlockOperation, flock};
+
+use super::plan::Entry;
 
 /// The journals' folder, under the state folder.
 pub const FOLDER: &str = "nova-files/jobs";
@@ -75,6 +81,37 @@ pub mod word {
     pub const BACKUP: &str = "backup";
     pub const PLANNED: &str = "planned";
     pub const PLAN_DONE: &str = "plan-done";
+
+    /// The fields of a record about two paths, or a path and its entry.
+    const PAIR: usize = 2;
+
+    /// How many fields follow `word`, or `None` for a word this version
+    /// doesn't write.
+    pub fn fields(word: &str) -> Option<usize> {
+        match word {
+            COPY | MOVE | DELETE | PLAN_DONE => Some(0),
+            INTO | SOURCE | PART => Some(1),
+            MADE | MOVED | BACKUP | PLANNED => Some(PAIR),
+            _ => None,
+        }
+    }
+}
+
+/// Splits an entry's device and inode in its field.
+const ENTRY_SPLIT: char = ':';
+
+/// `entry` as a journal field: its device, then its inode.
+fn entry_field(entry: Entry) -> PathBuf {
+    PathBuf::from(format!("{}{ENTRY_SPLIT}{}", entry.device, entry.inode))
+}
+
+/// The entry `field` names, or `None` when it names none.
+pub fn entry_from(field: &Path) -> Option<Entry> {
+    let (device, inode) = field.to_str()?.split_once(ENTRY_SPLIT)?;
+    Some(Entry {
+        device: device.parse().ok()?,
+        inode: inode.parse().ok()?,
+    })
 }
 
 /// One line of a journal.
@@ -98,9 +135,10 @@ pub enum Record<'a> {
     /// first while its replacement takes its name. Left behind by a
     /// crash, it goes back if its name is free.
     Backup(&'a Path, &'a Path),
-    /// An entry a delete planned to remove. A resumed delete removes only
-    /// these, never what came after.
-    Planned(&'a Path),
+    /// An entry a delete planned to remove, and which entry it was. A
+    /// resumed delete removes only these, never what came after, even
+    /// under the same name.
+    Planned(&'a Path, Entry),
     /// The delete's whole plan is recorded: a resume may keep to it.
     PlanDone,
 }
@@ -108,6 +146,7 @@ pub enum Record<'a> {
 impl Record<'_> {
     /// The record as a line, newline included.
     fn line(self) -> Vec<u8> {
+        let entry;
         let (word, paths): (&str, &[&Path]) = match &self {
             Self::Operation(name) => (name, &[]),
             Self::Into(path) => (word::INTO, std::slice::from_ref(path)),
@@ -116,7 +155,10 @@ impl Record<'_> {
             Self::Made(made, from) => (word::MADE, &[*made, *from]),
             Self::Moved(from, to) => (word::MOVED, &[*from, *to]),
             Self::Backup(backup, of) => (word::BACKUP, &[*backup, *of]),
-            Self::Planned(path) => (word::PLANNED, std::slice::from_ref(path)),
+            Self::Planned(path, planned) => {
+                entry = entry_field(*planned);
+                (word::PLANNED, &[*path, entry.as_path()])
+            }
             Self::PlanDone => (word::PLAN_DONE, &[]),
         };
         let mut line = word.as_bytes().to_vec();

@@ -34,10 +34,11 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
     for path in paths {
         running.record(Record::Source(path));
     }
-    let plan = match plan_delete(paths, &running.shared.control) {
-        Ok(plan) => planned(running, plan),
-        Err(stop) => return (stop.outcome(), Vec::new()),
-    };
+    let plan =
+        match plan_delete(paths, &running.shared.control).and_then(|plan| planned(running, plan)) {
+            Ok(plan) => plan,
+            Err(stop) => return (stop.outcome(), Vec::new()),
+        };
     let items = u64::try_from(plan.items.len()).unwrap_or(u64::MAX);
     running.reporter.planned(plan.bytes, items);
     let mut changed = BTreeSet::new();
@@ -82,21 +83,27 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
 }
 
 /// `plan` as the journal keeps it. A delete that resumes keeps only what
-/// it planned before the crash: what was added since, nobody chose to
-/// delete. One that starts records its plan, on the disk before anything
-/// goes.
-fn planned(running: &mut Running, mut plan: Plan) -> Plan {
+/// it planned before the crash, entry for entry: what was added since,
+/// even under a planned name, nobody chose to delete. One that starts
+/// records its plan, on the disk before anything goes.
+///
+/// # Errors
+/// [`Stop`] when cancelled while the plan is recorded.
+fn planned(running: &mut Running, mut plan: Plan) -> Result<Plan, Stop> {
     if let Some(before) = &running.before.planned {
-        plan.items.retain(|item| before.contains(&item.from));
+        plan.items
+            .retain(|item| before.get(&item.from) == Some(&item.entry));
         plan.bytes = plan.items.iter().map(size).sum();
     } else {
         for item in &plan.items {
-            running.record(Record::Planned(&item.from));
+            running.shared.control.checkpoint()?;
+            running.record(Record::Planned(&item.from, item.entry));
         }
+        running.shared.control.checkpoint()?;
         running.record(Record::PlanDone);
         running.settle();
     }
-    plan
+    Ok(plan)
 }
 
 /// Removes `item`, asking what to do when it may not, and returns whether
@@ -239,6 +246,37 @@ mod tests {
             [Err(Errno::NOTDIR), Err(Errno::NOTDIR), Err(Errno::NOTEMPTY)],
             "f, then sub (now a link), then the tree that still holds it"
         );
+    }
+
+    #[test]
+    fn a_delete_cancelled_while_its_plan_is_recorded_stops() {
+        let folder = TestFolder::new("delete-plan-cancel");
+        let paths = [folder.file("a", "a")];
+        let plan = plan_delete(&paths, &Control::default()).unwrap();
+        let mut running = Running::for_test();
+        running.shared.control.cancel();
+
+        assert!(planned(&mut running, plan).is_err());
+    }
+
+    #[test]
+    fn a_resumed_delete_keeps_to_the_entries_it_planned() {
+        let folder = TestFolder::new("delete-plan-entries");
+        let paths = [folder.file("same", "a"), folder.file("other", "b")];
+        let plan = plan_delete(&paths, &Control::default()).unwrap();
+        let mut running = Running::for_test();
+        let mut other = plan.items[1].entry;
+        other.inode += 1;
+        running.before.planned = Some(HashMap::from([
+            (paths[0].clone(), plan.items[0].entry),
+            (paths[1].clone(), other),
+        ]));
+
+        let kept = planned(&mut running, plan).unwrap();
+
+        assert_eq!(kept.items.len(), 1);
+        assert_eq!(kept.items[0].from, paths[0]);
+        assert_eq!(kept.bytes, 1);
     }
 
     #[test]

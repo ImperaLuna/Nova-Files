@@ -17,8 +17,9 @@ use std::path::{Path, PathBuf};
 use nova_files_api::{JobId, Operation};
 
 use super::journal::read::{Line, read};
-use super::journal::{BACKUP_PREFIX, PART_PREFIX, hold, word};
+use super::journal::{BACKUP_PREFIX, PART_PREFIX, entry_from, hold, word};
 use super::place::rename_no_replace;
+use super::plan::Entry;
 
 /// A job a crash cut short.
 #[derive(Debug)]
@@ -39,8 +40,9 @@ pub struct Left {
 pub struct Done {
     /// What it made, by its source, at where it went.
     pub made: HashMap<PathBuf, PathBuf>,
-    /// For a delete, what it planned to remove, when it got that far.
-    pub planned: Option<HashSet<PathBuf>>,
+    /// For a delete, what it planned to remove, and which entry each
+    /// was, when it got that far.
+    pub planned: Option<HashMap<PathBuf, Entry>>,
 }
 
 /// The jobs whose journals are in `folder`, each cleaned up. A journal
@@ -120,7 +122,7 @@ fn clean(lines: &[Line]) -> Done {
     let mut done = Done::default();
     // The names the job's own copies took.
     let mut placed = HashSet::new();
-    let mut planned = HashSet::new();
+    let mut planned = HashMap::new();
     let mut whole_plan = false;
     for line in lines {
         match (line.word.as_str(), line.paths.as_slice()) {
@@ -131,8 +133,10 @@ fn clean(lines: &[Line]) -> Done {
             (word::MOVED, [_, to]) => {
                 placed.insert(to.clone());
             }
-            (word::PLANNED, [path]) => {
-                planned.insert(path.clone());
+            (word::PLANNED, [path, entry]) => {
+                if let Some(entry) = entry_from(entry) {
+                    planned.insert(path.clone(), entry);
+                }
             }
             // Only a plan recorded whole is kept to: a crash while it was
             // written leaves just its start.

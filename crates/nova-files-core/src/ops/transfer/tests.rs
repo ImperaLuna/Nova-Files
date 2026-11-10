@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use super::*;
+use crate::ops::plan::Entry;
 use crate::ops::test_folder::TestFolder;
 
 /// Places a file whose every try finds a name taken, at the path `taken`
@@ -13,6 +14,7 @@ fn place_with_name_taken(taken: impl Fn(&Item) -> PathBuf) -> (Result<PathBuf, S
         from: folder.file("a", "a"),
         to: folder.path().join("b"),
         kind: Kind::File { size: 1 },
+        entry: Entry::default(),
     };
     let mut running = Running::for_test();
     let mut tries = 0;

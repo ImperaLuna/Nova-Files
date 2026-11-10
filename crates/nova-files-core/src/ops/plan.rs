@@ -34,6 +34,16 @@ pub struct Item {
     pub from: PathBuf,
     pub to: PathBuf,
     pub kind: Kind,
+    /// Which entry `from` was when planned.
+    pub entry: Entry,
+}
+
+/// Which entry on the disk a path names: its device and inode, which a
+/// new entry under the same name doesn't share.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Entry {
+    pub device: u64,
+    pub inode: u64,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -122,7 +132,16 @@ fn add_tree(plan: &mut Plan, from: &Path, to: &Path, control: &Control) -> Resul
             // Reversed, so the stack hands them out in the folder's order.
             pending.extend(children.into_iter().rev());
         }
-        plan.items.push(Item { from, to, kind });
+        let entry = Entry {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        };
+        plan.items.push(Item {
+            from,
+            to,
+            kind,
+            entry,
+        });
     }
     Ok(())
 }

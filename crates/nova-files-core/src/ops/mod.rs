@@ -66,6 +66,7 @@ use transfer::transfer;
 
 const JOB_THREAD: &str = "nova-files-job";
 const RECOVER_THREAD: &str = "nova-files-recover";
+const FORGET_THREAD: &str = "nova-files-forget";
 
 /// What a job ended with, and the folders whose entries it changed.
 pub type Ended = (Outcome, Vec<PathBuf>);
@@ -277,21 +278,34 @@ impl Jobs {
         self.spawn(running, job, operation, Some(left));
     }
 
-    /// Drops interrupted job `job`, and its journal.
+    /// Drops interrupted job `job`, and its journal. The journal goes on
+    /// a thread of its own, so a slow disk never holds up the core's
+    /// loop; clients hear the job ended once it has.
     pub fn forget(&self, job: JobId) {
-        let running = lock(&self.running);
         let Some(left) = lock(&self.interrupted).remove(&job) else {
             return;
         };
-        if let Err(error) = fs::remove_file(&left.journal) {
-            log::warn!("can't remove {}: {error}", left.journal.display());
+        let (registry, audience) = (Arc::clone(&self.running), self.audience.clone());
+        let forgotten = move || {
+            if let Err(error) = fs::remove_file(&left.journal) {
+                log::warn!("can't remove {}: {error}", left.journal.display());
+            }
+            // Held until now, so no other core takes the job meanwhile.
+            drop(left);
+            let running = lock(&registry);
+            audience.tell(&Event::JobFinished {
+                job,
+                outcome: Outcome::Cancelled,
+                changed: Vec::new(),
+            });
+            drop(running);
+        };
+        if let Err(error) = thread::Builder::new()
+            .name(FORGET_THREAD.to_owned())
+            .spawn(forgotten)
+        {
+            log::warn!("can't forget job {}: {error}", job.0);
         }
-        self.audience.tell(&Event::JobFinished {
-            job,
-            outcome: Outcome::Cancelled,
-            changed: Vec::new(),
-        });
-        drop(running);
     }
 
     /// Answers `conflict`, which job `job` holds at, with `answer`, for

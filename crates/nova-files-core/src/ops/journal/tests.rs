@@ -89,13 +89,22 @@ fn records_what_resumes_need() {
     journal
         .record(Record::Made(Path::new("/a (2)"), Path::new("/b/a")))
         .unwrap();
-    journal.record(Record::Planned(Path::new("/t"))).unwrap();
+    let entry = Entry {
+        device: 2049,
+        inode: 77,
+    };
+    journal
+        .record(Record::Planned(Path::new("/t"), entry))
+        .unwrap();
     journal.record(Record::PlanDone).unwrap();
 
     assert_eq!(
         fs::read_to_string(jobs.join("5")).unwrap(),
-        "nova-files-job 1\nmade /a%20(2) /b/a\nplanned /t\nplan-done\n"
+        "nova-files-job 1\nmade /a%20(2) /b/a\nplanned /t 2049:77\nplan-done\n"
     );
+    let path = jobs.join("5");
+    let written = read::read(&File::open(&path).unwrap(), &path).unwrap();
+    assert_eq!(entry_from(&written.lines[1].paths[1]), Some(entry));
 }
 
 #[test]
@@ -170,7 +179,17 @@ fn reads_back_what_it_wrote() {
 fn a_file_that_is_not_a_journal_is_refused() {
     let folder = TestFolder::new("journal-not");
     let path = folder.path().join("9");
-    for text in ["not a journal\n", "nova-files-job 1\nmade /a%zz\n"] {
+    for text in [
+        "not a journal\n",
+        "nova-files-job 1\nmade /a%zz /b\n",
+        "nova-files-job 1\nundo /a\n",
+        "nova-files-job 1\nplan-done /a\n",
+        "nova-files-job 1\nmade /a\n",
+        "nova-files-job 1\nplanned /a\n",
+        "nova-files-job 1\nplanned /a 1-2\n",
+        "nova-files-job 1\nplanned /a 1:x\n",
+        "nova-files-job 1\nplanned /a x:2\n",
+    ] {
         fs::write(&path, text).unwrap();
         let error = read::read(&File::open(&path).unwrap(), &path).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);

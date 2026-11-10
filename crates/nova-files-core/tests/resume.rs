@@ -11,6 +11,7 @@
 mod common;
 
 use std::fs;
+use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::{Command, Event, JobId, Operation, Outcome};
@@ -61,6 +62,13 @@ fn line(word: &str, paths: &[&Path]) -> String {
         line.push_str(&path.replace('%', "%25").replace(' ', "%20"));
     }
     line
+}
+
+/// The `planned` line for `path`, as the entry it is now.
+fn planned(path: &Path) -> String {
+    let metadata = path.symlink_metadata().unwrap();
+    let entry = format!("{}:{}", metadata.dev(), metadata.ino());
+    format!("{} {entry}", line("planned", &[path]))
 }
 
 #[test]
@@ -302,17 +310,23 @@ fn a_resumed_delete_keeps_what_was_added_since() {
         let tree = root.join("tree");
         fs::create_dir(&tree).unwrap();
         fs::write(tree.join("planned"), "x").unwrap();
+        fs::write(tree.join("replaced"), "x").unwrap();
         crashed_job(
             root,
             &[
                 "delete".to_owned(),
                 line("source", &[&tree]),
-                line("planned", &[&tree]),
-                line("planned", &[&tree.join("planned")]),
+                planned(&tree),
+                planned(&tree.join("planned")),
+                planned(&tree.join("replaced")),
                 "plan-done".to_owned(),
             ],
         );
         fs::write(tree.join("added"), "new").unwrap();
+        // A new file under a planned name, made while the old one was
+        // still there, so it can't take the old one's inode.
+        fs::write(tree.join("new"), "new").unwrap();
+        fs::rename(tree.join("new"), tree.join("replaced")).unwrap();
     });
 
     assert!(matches!(client.next(), Event::JobInterrupted { .. }));
@@ -322,6 +336,10 @@ fn a_resumed_delete_keeps_what_was_added_since() {
     assert_eq!(client.ended(CRASHED).0, Outcome::Done);
     assert!(!bench.at("tree/planned").exists());
     assert_eq!(fs::read_to_string(bench.at("tree/added")).unwrap(), "new");
+    assert_eq!(
+        fs::read_to_string(bench.at("tree/replaced")).unwrap(),
+        "new"
+    );
 }
 
 #[test]
@@ -374,7 +392,7 @@ fn a_delete_plan_cut_short_is_planned_again() {
             &[
                 "delete".to_owned(),
                 line("source", &[&tree]),
-                line("planned", &[&tree]),
+                planned(&tree),
             ],
         );
     });
