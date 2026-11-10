@@ -29,12 +29,12 @@ fn walk_within(
     roots: &[Root],
     tally: &Tally,
     stopped: &(dyn Fn() -> bool + Sync),
-    after_folder: &(dyn Fn() + Sync),
+    progress: &(dyn Fn() + Sync),
 ) {
     let (done, finished) = mpsc::channel();
     thread::scope(|scope| {
         scope.spawn(|| {
-            walk(roots, tally, stopped, after_folder);
+            walk(roots, tally, stopped, progress);
             done.send(()).ok();
         });
         if finished.recv_timeout(WALK_DEADLINE).is_err() {
@@ -150,6 +150,33 @@ fn hard_links_count_once_however_many_roots_reach_them() {
 
     assert_eq!(tally.total().files, 1);
     assert_eq!(tally.total().bytes, 700);
+}
+
+#[test]
+fn a_big_flat_folder_reports_as_it_goes() {
+    let folder = TestFolder::new("walk-flat");
+    let root = folder.path();
+    // Two dot entries, then enough files for two reports inside.
+    for name in 0..REPORT_EVERY * 2 + 10 {
+        File::create(root.join(name.to_string())).unwrap();
+    }
+    let reports = AtomicUsize::new(0);
+    let tally = Tally::new(1);
+
+    walk_within(
+        &[Root {
+            path: root.to_owned(),
+            slot: 0,
+        }],
+        &tally,
+        &|| false,
+        &|| {
+            reports.fetch_add(1, Ordering::SeqCst);
+        },
+    );
+
+    // Two inside the folder, one once it is read.
+    assert_eq!(reports.load(Ordering::SeqCst), 3);
 }
 
 #[test]

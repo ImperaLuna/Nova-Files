@@ -16,7 +16,8 @@
 //! totals say they miss something.
 //!
 //! The walk asks `stopped` before each read from the disk, and calls
-//! `after_folder` each time a folder is done, so the caller can report.
+//! `progress` each time a folder is done, and every [`REPORT_EVERY`]
+//! entries of a big folder, so the caller can report.
 //! It returns once the queue is empty and no thread is busy, or once
 //! `stopped` says so.
 
@@ -30,7 +31,7 @@ use std::thread;
 use rustix::fs::{
     AtFlags, CWD, Dir, FileType, Mode, OFlags, Statx, StatxAttributes, StatxFlags, openat, statx,
 };
-use rustix::io::Errno;
+use rustix::io::{Errno, fcntl_dupfd_cloexec};
 
 use super::tally::Tally;
 
@@ -42,6 +43,10 @@ pub const THREADS: usize = 4;
 const BLOCK: u64 = 512;
 
 const THREAD_NAME: &str = "nova-files-measure-walk";
+
+/// How many entries of one folder a thread reads between two calls of
+/// `progress`, so a big flat folder still reports as it goes.
+const REPORT_EVERY: usize = 1000;
 
 /// The fields a walk reads about each entry.
 const WANTED: StatxFlags = StatxFlags::TYPE
@@ -97,7 +102,7 @@ impl Place {
 struct Walk<'a> {
     tally: &'a Tally,
     stopped: &'a (dyn Fn() -> bool + Sync),
-    after_folder: &'a (dyn Fn() + Sync),
+    progress: &'a (dyn Fn() + Sync),
     queue: Mutex<Queue>,
     /// Signalled when a folder joins the queue, or the walk ends.
     ready: Condvar,
@@ -118,12 +123,12 @@ pub fn walk(
     roots: &[Root],
     tally: &Tally,
     stopped: &(dyn Fn() -> bool + Sync),
-    after_folder: &(dyn Fn() + Sync),
+    progress: &(dyn Fn() + Sync),
 ) {
     let walk = Walk {
         tally,
         stopped,
-        after_folder,
+        progress,
         queue: Mutex::default(),
         ready: Condvar::new(),
         seen: Mutex::default(),
@@ -163,7 +168,7 @@ impl Walk<'_> {
     fn work(&self) {
         while let Some(folder) = self.next() {
             self.read(folder);
-            (self.after_folder)();
+            (self.progress)();
             self.lock_queue().busy -= 1;
             // Those waiting see whether the walk is over, or stopped.
             self.ready.notify_all();
@@ -204,14 +209,25 @@ impl Walk<'_> {
         };
         // Its own handle may close now: this one reads the folder.
         drop(folder.at);
-        let Ok(entries) = Dir::read_from(&handle) else {
+        // Reads through a copy of the handle: opening the folder again
+        // would need leave to enter it, which a folder that may only be
+        // listed lacks.
+        let Ok(mut entries) = fcntl_dupfd_cloexec(&handle, 0).and_then(Dir::new) else {
             self.tally.unreadable(folder.slot);
             return;
         };
         let handle = Arc::new(handle);
-        for entry in entries {
+        let mut read = 0_usize;
+        loop {
             if (self.stopped)() {
                 return;
+            }
+            let Some(entry) = entries.next() else {
+                return;
+            };
+            read += 1;
+            if read.is_multiple_of(REPORT_EVERY) {
+                (self.progress)();
             }
             let Ok(entry) = entry else {
                 // The rest of the folder can't be read.

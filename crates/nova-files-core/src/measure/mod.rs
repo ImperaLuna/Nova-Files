@@ -148,7 +148,7 @@ impl Measurer {
         let spawned = thread::Builder::new()
             .name(THREAD_NAME.to_owned())
             .spawn(move || {
-                let roots: Vec<Root> = paths
+                let roots: Vec<Root> = outermost(paths)
                     .into_iter()
                     .map(|path| Root { path, slot: 0 })
                     .collect();
@@ -236,7 +236,7 @@ impl Scan {
         // Also held while a report goes out, so two threads never send
         // theirs out of order.
         let told: Mutex<Option<Instant>> = Mutex::new(None);
-        let after_folder = || {
+        let progress = || {
             let mut told = told.lock().unwrap_or_else(PoisonError::into_inner);
             let due = told.is_none_or(|told| told.elapsed() >= EVERY);
             if due {
@@ -247,7 +247,7 @@ impl Scan {
             }
             drop(told);
         };
-        walk(roots, tally, &|| !self.shared.running(), &after_folder);
+        walk(roots, tally, &|| !self.shared.running(), &progress);
         let scans = lock(&self.scans);
         let state = match self.shared.state.load(Ordering::SeqCst) {
             RUNNING => Some(ScanState::Done),
@@ -273,6 +273,23 @@ impl Scan {
         drop(scans);
         self.shared.end();
     }
+}
+
+/// `paths` less any named twice or inside another, which a walk of that
+/// other counts already: it never follows a link, so that is the only way
+/// one path reaches another's files.
+fn outermost(mut paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    paths.sort();
+    paths.dedup();
+    paths
+        .iter()
+        .filter(|path| {
+            !paths
+                .iter()
+                .any(|outer| outer != *path && path.starts_with(outer))
+        })
+        .cloned()
+        .collect()
 }
 
 fn lock(scans: &Mutex<Scans>) -> MutexGuard<'_, Scans> {

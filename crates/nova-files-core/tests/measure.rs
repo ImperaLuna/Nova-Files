@@ -177,7 +177,13 @@ fn paths_inside_each_other_count_once() {
     measure(
         &client,
         id,
-        vec![bench.at("a"), bench.at("a/b"), bench.at("a")],
+        vec![
+            bench.at("a/b/file"),
+            bench.at("a"),
+            bench.at("a/b"),
+            bench.at("a"),
+            bench.at("a/b/file"),
+        ],
     );
     let size = measured(&client, id);
 
