@@ -21,6 +21,7 @@ use crate::jobs::{self, Client};
 use crate::mime::MimeTypes;
 use crate::ops::Jobs;
 use crate::places::Store as PlacesStore;
+use crate::properties;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
@@ -135,6 +136,10 @@ fn answer(
             setup.searcher.search(client, id, query, limit);
             Ok(())
         }
+        Command::Properties { id, path } => {
+            properties::answer(client.events(), id, path);
+            Ok(())
+        }
         Command::OpenFile { path, activation } => {
             jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
             Ok(())
@@ -153,6 +158,7 @@ fn answer(
             Ok(())
         }
         Command::Drives => setup.drives.listen(id, client.events()),
+        Command::Drive(action) => setup.drives.act(client.events(), action),
         Command::Theme => {
             setup.theme.listen(id, client.events());
             Ok(())

@@ -4,9 +4,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::bookmark::{Bookmark, BookmarkChange};
-use crate::drive::DriveList;
+use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
+use crate::properties::{Properties, PropertiesId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
 use crate::theme::{DesktopLook, Theme};
@@ -61,6 +62,10 @@ pub enum Command {
         query: String,
         limit: u32,
     },
+    /// Read the properties of what is at `path`, without following a link.
+    /// The answer is [`Event::Properties`] or [`Event::PropertiesUnreadable`]
+    /// with the same `id`.
+    Properties { id: PropertiesId, path: PathBuf },
     /// Open the file at `path` in the user's default app for its type.
     /// `activation` is the caller's activation token, so the app may take
     /// focus. The answer is [`Event::FileOpened`] or
@@ -97,6 +102,10 @@ pub enum Command {
     /// and from then on the client gets [`Event::Drives`] again each time
     /// one comes, goes or changes. Clients that never ask never get them.
     Drives,
+    /// Mount, unmount or eject. The answer, once it is done, is
+    /// [`Event::DriveDone`]; the change itself reaches every client that
+    /// asked for the drives as [`Event::Drives`].
+    Drive(DriveAction),
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -176,6 +185,17 @@ pub enum Event {
     },
     /// [`Command::Search`] `id` couldn't run.
     SearchFailed { id: SearchId, reason: SearchFailed },
+    /// The properties of [`Command::Properties`] `id`'s path.
+    Properties {
+        id: PropertiesId,
+        properties: Arc<Properties>,
+    },
+    /// [`Command::Properties`] `id`'s path couldn't be looked at.
+    PropertiesUnreadable {
+        id: PropertiesId,
+        path: PathBuf,
+        reason: Unreadable,
+    },
     /// [`Command::OpenFile`]'s app has started.
     FileOpened,
     /// [`Command::OpenFile`] started nothing: sandboxed, no default app for
@@ -196,6 +216,12 @@ pub enum Event {
     /// again to each client that asked whenever one comes, goes or
     /// changes.
     Drives(Arc<DriveList>),
+    /// [`Command::Drive`] `action` is done: for a mount, with where the
+    /// volume is now. Only the client that asked hears it.
+    DriveDone {
+        action: DriveAction,
+        result: Result<Option<PathBuf>, DriveFailure>,
+    },
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },

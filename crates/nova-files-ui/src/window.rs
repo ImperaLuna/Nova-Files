@@ -476,8 +476,11 @@ impl MainWindow {
             // window state (see `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Drives(_)
+            | Event::DriveDone { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
+            | Event::Properties { .. }
+            | Event::PropertiesUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)

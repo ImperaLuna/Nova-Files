@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod accounts;
 mod config_watch;
 mod details;
 mod details_queue;
@@ -22,6 +23,7 @@ mod ops;
 mod percent;
 mod places;
 mod private_file;
+mod properties;
 mod run;
 mod search;
 mod settings;
