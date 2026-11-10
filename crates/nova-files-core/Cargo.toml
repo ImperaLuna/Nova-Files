@@ -3,7 +3,7 @@
 # The core. Index, search, folder listing, watching, jobs and settings. It
 # never draws anything.
 #
-# Allowed outside crates: log, rustix, serde, serde_json, toml, toml_edit
+# Allowed outside crates: chrono, log, rustix, serde, serde_json, toml, toml_edit
 # Allowed workspace crates: nova-files-api, nova-files-index
 
 [package]
@@ -18,6 +18,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# The trash spec's DeletionDate is local time: the system time zone.
+chrono = "0.4.45"
 # Kills the thumbnail helper's process group when a batch runs out of time,
 # reads the monotonic clock for the frame trace, renames without replacing
 # for file operations, and watches the config folder (inotify, woken

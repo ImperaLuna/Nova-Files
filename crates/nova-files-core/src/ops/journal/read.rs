@@ -4,15 +4,12 @@
 
 use std::fs::File;
 use std::io::{self, Read as _};
-use std::os::unix::ffi::OsStrExt as _;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use std::ffi::OsStr;
+use super::{HEADER, entry_from, word};
+use crate::percent::unescape;
 
-use super::{ESCAPE, HEADER, HIGH, entry_from, word};
-
-/// Radix of the two digits after an escape.
-const HEX_RADIX: u32 = 16;
 /// The most a journal may hold to be read. A job writes far less; a file
 /// bigger than this is left alone rather than read into memory.
 /// 256 MiB.
@@ -90,31 +87,24 @@ fn parse(whole: &[u8], path: &Path) -> io::Result<Vec<Line>> {
         .collect()
 }
 
+/// The fields of a `planned` record that name an entry: its second.
+const PLANNED_ENTRIES: Range<usize> = 1..2;
+/// The fields of a `trash-info` record that name an entry: the info
+/// file's and the trashed entry's, after the info file's path.
+const TRASH_INFO_ENTRIES: Range<usize> = 1..3;
+
 /// Whether `name` is a word this version writes, with `fields` as it
 /// writes them.
 fn fits(name: &str, fields: &[PathBuf]) -> bool {
-    let entry_fits = name != word::PLANNED
-        || fields
-            .get(1)
-            .is_some_and(|field| entry_from(field).is_some());
+    let entries = match name {
+        word::PLANNED => PLANNED_ENTRIES,
+        word::TRASH_INFO => TRASH_INFO_ENTRIES,
+        _ => 0..0,
+    };
+    let entry_fits = fields
+        .get(entries)
+        .is_some_and(|entries| entries.iter().all(|field| entry_from(field).is_some()));
     word::fields(name) == Some(fields.len()) && entry_fits
-}
-
-/// The path `field` was escaped from, or `None` when it isn't escaped
-/// right.
-fn unescape(field: &[u8]) -> Option<PathBuf> {
-    let mut bytes = Vec::with_capacity(field.len());
-    let mut rest = field.iter();
-    while let Some(&byte) = rest.next() {
-        if byte == ESCAPE {
-            let high = char::from(*rest.next()?).to_digit(HEX_RADIX)?;
-            let low = char::from(*rest.next()?).to_digit(HEX_RADIX)?;
-            bytes.push(u8::try_from((high << HIGH) + low).ok()?);
-        } else {
-            bytes.push(byte);
-        }
-    }
-    Some(PathBuf::from(OsStr::from_bytes(&bytes)))
 }
 
 fn not_a_journal(path: &Path) -> io::Error {
