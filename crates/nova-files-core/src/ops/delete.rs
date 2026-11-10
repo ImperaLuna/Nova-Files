@@ -11,7 +11,7 @@
 //! skipped, or what was added since the plan) stays, as nobody chose to
 //! delete what is in it now.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 
@@ -47,10 +47,11 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
     let mut changed = BTreeSet::new();
     // Only the chosen folders are walked; a chosen link is removed as a
     // link, and a path chosen through it is reached as the user named it.
+    let chosen: HashSet<_> = paths.iter().collect();
     let trees: Vec<_> = plan
         .items
         .iter()
-        .filter(|item| item.kind == Kind::Folder && paths.contains(&item.from))
+        .filter(|item| item.kind == Kind::Folder && chosen.contains(&item.from))
         .map(|item| item.from.clone())
         .collect();
     let mut folders = Folders {
