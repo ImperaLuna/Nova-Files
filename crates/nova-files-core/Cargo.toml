@@ -3,7 +3,7 @@
 # The core. Index, search, folder listing, watching, jobs and settings. It
 # never draws anything.
 #
-# Allowed outside crates: log, rustix, serde, serde_json, toml, toml_edit
+# Allowed outside crates: chrono, log, rustix, serde, serde_json, toml, toml_edit
 # Allowed workspace crates: nova-files-api, nova-files-index
 
 [package]
