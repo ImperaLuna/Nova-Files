@@ -197,7 +197,7 @@ fn answer(
             setup.jobs.answer(job, &conflict, answer, scope);
             Ok(())
         }
-        command @ (Command::Measure { .. } | Command::StopMeasure(_)) => {
+        command @ (Command::Measure { .. } | Command::Space { .. } | Command::StopMeasure(_)) => {
             setup.measurer.answer(id, client.events(), command);
             Ok(())
         }

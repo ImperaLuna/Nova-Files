@@ -7,9 +7,13 @@
 //! [`EVERY`], then once more when the scan ends. A scan changes nothing on
 //! the disk, so it is not a job: only its client hears of it.
 //!
-//! A client has at most one scan, like one search: asking again stops the
-//! one before, and so do [`Command::StopMeasure`] and the client leaving;
-//! such a scan says nothing more. [`Measurer::stop_under`] stops the scans
+//! [`Measurer::space`] scans one folder's entries the same way, each into
+//! a slot of its own (see `space`), and reports only the entries whose
+//! totals changed since the report before.
+//!
+//! A client has at most one scan of each kind, like one search: asking
+//! again stops the one before, and so do [`Command::StopMeasure`] and the
+//! client leaving; such a scan says nothing more. [`Measurer::stop_under`] stops the scans
 //! under a folder (a drive about to be unmounted) and waits until they
 //! have let go of it; their clients hear [`ScanState::CutShort`].
 //!
@@ -18,6 +22,7 @@
 //! same lock after asking it, so a stopped scan never says more than it
 //! should.
 
+mod space;
 mod tally;
 mod walk;
 
@@ -28,7 +33,9 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use nova_files_api::{ClientGone, ClientId, Command, Event, EventSink, MeasureId, ScanState, Size};
+use nova_files_api::{
+    ClientGone, ClientId, Command, Event, EventSink, MeasureId, ScanState, Size, Unreadable,
+};
 
 use tally::Tally;
 use walk::{Root, walk};
@@ -70,6 +77,17 @@ struct Shared {
 }
 
 impl Shared {
+    /// Scan `id` of `roots`, running.
+    const fn new(id: MeasureId, roots: Vec<PathBuf>) -> Self {
+        Self {
+            id,
+            roots,
+            state: AtomicU8::new(RUNNING),
+            ended: Mutex::new(false),
+            ended_signal: Condvar::new(),
+        }
+    }
+
     fn running(&self) -> bool {
         self.state.load(Ordering::SeqCst) == RUNNING
     }
@@ -98,28 +116,39 @@ impl Shared {
     }
 }
 
-/// Each client's scan.
-type Scans = HashMap<ClientId, Arc<Shared>>;
+/// What a scan answers with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Purpose {
+    /// One total for all its paths: [`Command::Measure`].
+    Total,
+    /// A total for each entry of one folder: [`Command::Space`].
+    Space,
+}
 
-/// The scans running, one per client at most.
+/// Each client's scans, one of each purpose at most.
+type Scans = HashMap<(ClientId, Purpose), Arc<Shared>>;
+
+/// The scans running.
 #[derive(Default)]
 pub struct Measurer {
     scans: Arc<Mutex<Scans>>,
 }
 
 impl Measurer {
-    /// Answers `client`'s [`Command::Measure`] or [`Command::StopMeasure`];
-    /// any other command is not a scan's and is left alone.
+    /// Answers `client`'s [`Command::Measure`], [`Command::Space`] or
+    /// [`Command::StopMeasure`]; any other command is not a scan's and is
+    /// left alone.
     pub fn answer(&self, client: ClientId, events: &Arc<dyn EventSink>, command: Command) {
         match command {
             Command::Measure { id, paths } => self.measure(client, events, id, paths),
+            Command::Space { id, folder } => self.space(client, events, id, folder),
             Command::StopMeasure(id) => self.stop(client, id),
             _ => {}
         }
     }
 
     /// Measures everything under `paths` together for `client`, as scan
-    /// `id`, stopping the client's scan before.
+    /// `id`, stopping the client's size scan before.
     pub fn measure(
         &self,
         client: ClientId,
@@ -127,20 +156,63 @@ impl Measurer {
         id: MeasureId,
         paths: Vec<PathBuf>,
     ) {
-        let shared = Arc::new(Shared {
-            id,
-            roots: paths.clone(),
-            state: AtomicU8::new(RUNNING),
-            ended: Mutex::new(false),
-            ended_signal: Condvar::new(),
+        let key = (client, Purpose::Total);
+        self.start(key, events, Shared::new(id, paths.clone()), move |scan| {
+            let roots: Vec<Root> = outermost(paths)
+                .into_iter()
+                .map(|path| Root {
+                    path,
+                    slot: 0,
+                    listed_in: None,
+                })
+                .collect();
+            let tally = Tally::new(1);
+            let report = |state| Event::SizeMeasured {
+                id,
+                size: tally.total(),
+                state,
+            };
+            scan.run(&roots, &tally, report);
         });
-        let old = lock(&self.scans).insert(client, Arc::clone(&shared));
+    }
+
+    /// Measures each entry of `folder` for `client`, as scan `id`,
+    /// stopping the client's space scan before.
+    pub fn space(
+        &self,
+        client: ClientId,
+        events: &Arc<dyn EventSink>,
+        id: MeasureId,
+        folder: PathBuf,
+    ) {
+        let key = (client, Purpose::Space);
+        self.start(
+            key,
+            events,
+            Shared::new(id, vec![folder.clone()]),
+            move |scan| {
+                space::run(scan, id, &folder);
+            },
+        );
+    }
+
+    /// Registers the scan `shared` under `key`, stopping the one there
+    /// before, and runs `work` on a thread of its own.
+    fn start(
+        &self,
+        key: (ClientId, Purpose),
+        events: &Arc<dyn EventSink>,
+        shared: Shared,
+        work: impl FnOnce(&Scan) + Send + 'static,
+    ) {
+        let shared = Arc::new(shared);
+        let old = lock(&self.scans).insert(key, Arc::clone(&shared));
         if let Some(old) = old {
             old.halt(STOPPED);
         }
         let scan = Scan {
             scans: Arc::clone(&self.scans),
-            client,
+            key,
             shared,
             events: Arc::clone(events),
         };
@@ -148,22 +220,11 @@ impl Measurer {
         let spawned = thread::Builder::new()
             .name(THREAD_NAME.to_owned())
             .spawn(move || {
-                let roots: Vec<Root> = outermost(paths)
-                    .into_iter()
-                    .map(|path| Root { path, slot: 0 })
-                    .collect();
-                let tally = Tally::new(1);
-                let report = |state| Event::SizeMeasured {
-                    id,
-                    size: tally.total(),
-                    state,
-                };
-                scan.run(&roots, &tally, report);
+                work(&scan);
                 scan.finish();
             });
         if spawned.is_err() {
-            let (size, state) = (UNMEASURED, ScanState::Done);
-            fallback.tell(Event::SizeMeasured { id, size, state }).ok();
+            fallback.tell(|| fallback.unstarted()).ok();
             fallback.finish();
         }
     }
@@ -171,18 +232,23 @@ impl Measurer {
     /// Stops `client`'s scan `id`, if it still runs. It says nothing more.
     pub fn stop(&self, client: ClientId, id: MeasureId) {
         let mut scans = lock(&self.scans);
-        let current = scans.get(&client).is_some_and(|scan| scan.id == id);
-        if current && let Some(scan) = scans.remove(&client) {
-            scan.halt(STOPPED);
+        for purpose in [Purpose::Total, Purpose::Space] {
+            let key = (client, purpose);
+            let current = scans.get(&key).is_some_and(|scan| scan.id == id);
+            if current && let Some(scan) = scans.remove(&key) {
+                scan.halt(STOPPED);
+            }
         }
     }
 
-    /// Stops the scan of `client`, which left.
+    /// Stops the scans of `client`, which left.
     pub fn forget(&self, client: ClientId) {
-        let scan = lock(&self.scans).remove(&client);
-        if let Some(scan) = scan {
-            scan.halt(STOPPED);
-        }
+        lock(&self.scans).retain(|&(owner, _), scan| {
+            if owner == client {
+                scan.halt(STOPPED);
+            }
+            owner != client
+        });
     }
 
     /// Cuts short every scan of a path under `folder` (a drive about to be
@@ -211,22 +277,56 @@ impl Measurer {
 #[derive(Clone)]
 struct Scan {
     scans: Arc<Mutex<Scans>>,
-    client: ClientId,
+    key: (ClientId, Purpose),
     shared: Arc<Shared>,
     events: Arc<dyn EventSink>,
 }
 
 impl Scan {
-    /// Hands `event` to the client while the scan runs; under the scans'
-    /// lock, so a stop set before can't be missed.
-    fn tell(&self, event: Event) -> Result<(), ClientGone> {
+    /// What a scan that couldn't start says: nothing could be read.
+    fn unstarted(&self) -> Event {
+        let (id, state) = (self.shared.id, ScanState::Done);
+        match self.key.1 {
+            Purpose::Total => Event::SizeMeasured {
+                id,
+                size: UNMEASURED,
+                state,
+            },
+            Purpose::Space => Event::SpaceUnreadable {
+                id,
+                reason: Unreadable::Failed,
+            },
+        }
+    }
+
+    /// Hands the client what `event` makes while the scan runs; under the
+    /// scans' lock, so a stop set before can't be missed. A stopped scan
+    /// never makes it, so nothing the report takes (changed entries) is
+    /// lost.
+    fn tell(&self, event: impl FnOnce() -> Event) -> Result<(), ClientGone> {
         let scans = lock(&self.scans);
         if !self.shared.running() {
             return Ok(());
         }
-        let told = self.events.deliver(event);
+        let told = self.events.deliver(event());
         drop(scans);
         told
+    }
+
+    /// Tells the client how the scan ended, with what `report` makes of
+    /// it: done, or cut short by the core. A scan its client stopped says
+    /// nothing.
+    fn last(&self, report: impl FnOnce(ScanState) -> Event) {
+        let scans = lock(&self.scans);
+        let state = match self.shared.state.load(Ordering::SeqCst) {
+            RUNNING => Some(ScanState::Done),
+            CUT => Some(ScanState::CutShort),
+            _ => None,
+        };
+        if let Some(state) = state {
+            self.events.deliver(report(state)).ok();
+        }
+        drop(scans);
     }
 
     /// Walks `roots` into `tally`, telling the client what `report` makes
@@ -241,23 +341,14 @@ impl Scan {
             let due = told.is_none_or(|told| told.elapsed() >= EVERY);
             if due {
                 *told = Some(Instant::now());
-                if self.tell(report(ScanState::Counting)).is_err() {
+                if self.tell(|| report(ScanState::Counting)).is_err() {
                     self.shared.halt(STOPPED);
                 }
             }
             drop(told);
         };
         walk(roots, tally, &|| !self.shared.running(), &progress);
-        let scans = lock(&self.scans);
-        let state = match self.shared.state.load(Ordering::SeqCst) {
-            RUNNING => Some(ScanState::Done),
-            CUT => Some(ScanState::CutShort),
-            _ => None,
-        };
-        if let Some(state) = state {
-            self.events.deliver(report(state)).ok();
-        }
-        drop(scans);
+        self.last(report);
     }
 
     /// Forgets this scan, unless a newer one of the client took its place,
@@ -265,10 +356,10 @@ impl Scan {
     fn finish(&self) {
         let mut scans = lock(&self.scans);
         if scans
-            .get(&self.client)
+            .get(&self.key)
             .is_some_and(|current| Arc::ptr_eq(current, &self.shared))
         {
-            scans.remove(&self.client);
+            scans.remove(&self.key);
         }
         drop(scans);
         self.shared.end();
