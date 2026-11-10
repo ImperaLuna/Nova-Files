@@ -319,17 +319,40 @@ fn a_crash_before_the_entry_moved_leaves_no_info_file_and_resumes() {
 }
 
 #[test]
-fn an_entry_inside_a_folder_trashed_before_it_counts_as_gone() {
+fn each_path_chosen_goes_as_its_own_entry_even_through_a_chosen_link() {
     let bench = Bench::new("trash-inside");
-    let folder = bench.at("dir");
-    fs::create_dir(&folder).unwrap();
-    fs::write(folder.join("file"), "f").unwrap();
+    fs::create_dir_all(bench.at("dir")).unwrap();
+    fs::write(bench.at("dir/file"), "f").unwrap();
+    fs::create_dir_all(bench.at("real")).unwrap();
+    fs::write(bench.at("real/inner"), "i").unwrap();
+    symlink(bench.at("real"), bench.at("link")).unwrap();
     let client = bench.client();
 
-    let (_, outcome, _) = client.run(trash(vec![folder.clone(), folder.join("file")]));
+    let (_, outcome, _) = client.run(trash(vec![
+        bench.at("dir"),
+        bench.at("dir/file"),
+        bench.at("link"),
+        bench.at("link/inner"),
+    ]));
 
     assert_eq!(outcome, Outcome::Done);
-    assert!(home_trash(&bench.root).join("files/dir/file").exists());
+    let files = home_trash(&bench.root).join("files");
+    assert!(files.join("dir").is_dir() && files.join("file").exists());
+    assert!(!bench.at("real/inner").exists(), "never left behind");
+    assert!(files.join("inner").exists() && bench.at("real").is_dir());
+}
+
+#[test]
+fn a_path_given_twice_goes_once() {
+    let bench = Bench::new("trash-twice-given");
+    fs::write(bench.at("a"), "a").unwrap();
+    let client = bench.client();
+
+    let (_, outcome, _) = client.run(trash(vec![bench.at("a"), bench.at("a")]));
+
+    assert_eq!(outcome, Outcome::Done);
+    let files = home_trash(&bench.root).join("files");
+    assert!(files.join("a").exists() && !files.join("a.2").exists());
 }
 
 #[test]

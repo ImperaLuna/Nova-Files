@@ -19,9 +19,9 @@
 //! denied permission. An entry gone since the job started is taken as
 //! gone where the user wanted: inside a folder trashed before it, say.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{self, Write as _};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
@@ -37,12 +37,16 @@ use super::place::rename_no_replace;
 use super::plan::Entry;
 use super::running::Running;
 use super::stop::Stop;
-use super::sync::{sync_folder, sync_folders};
+use super::sync::{remove, sync_folder, sync_folders};
 use crate::private_file::FILE_MODE;
 use crate::trash::{
     FILES, INFO_SUFFIX, TrashFolder, add_folder_sizes, folder_for, folder_size, info_text,
     stored_name,
 };
+
+/// The trash found for each folder entries went from, so each folder's is
+/// looked for once.
+type Known = HashMap<PathBuf, TrashFolder>;
 
 /// How many names an entry tries in the trash before the job gives up
 /// on it: something keeps taking them.
@@ -79,10 +83,16 @@ pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>
     let mut touched = BTreeSet::new();
     let mut folders = Vec::new();
     let mut result = Ok(());
-    for (index, path) in paths.iter().enumerate() {
+    // Deepest first, so a path chosen through a chosen link goes before
+    // the link, and each path chosen goes as its own entry.
+    let mut ordered: Vec<_> = paths.iter().collect();
+    ordered.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+    let mut known = Known::new();
+    for (index, path) in ordered.into_iter().enumerate() {
         // Trashed before a crash: what has its name now came since.
         if !running.before.trashed.contains(path) {
-            match trash_one(running, (index, path), home_trash, &mut touched) {
+            let at = (index, path.as_path());
+            match trash_one(running, at, (home_trash, &mut known), &mut touched) {
                 Ok(folder) => folders.extend(folder),
                 Err(stop) => {
                     result = Err(stop);
@@ -127,12 +137,12 @@ fn check(paths: &[PathBuf]) -> Result<(), Stop> {
 fn trash_one(
     running: &mut Running,
     (index, path): (usize, &Path),
-    home_trash: Option<&Path>,
+    (home_trash, known): (Option<&Path>, &mut Known),
     touched: &mut BTreeSet<PathBuf>,
 ) -> Result<Option<Trashed>, Stop> {
     loop {
         running.shared.control.checkpoint()?;
-        let refused = match send(running, (index, path), home_trash) {
+        let refused = match send(running, (index, path), (home_trash, known)) {
             Ok(Some((trash, folder))) => {
                 touched.extend(path.parent().map(Path::to_path_buf));
                 touched.insert(trash.files());
@@ -140,7 +150,11 @@ fn trash_one(
                 return Ok(folder);
             }
             Ok(None) => return Ok(None),
-            Err(refused) => refused,
+            Err(refused) => {
+                // Looked for again on a retry: the trash may have changed.
+                known.clear();
+                refused
+            }
         };
         let kind = match refused {
             Refused::NoTrash => ConflictKind::NoTrash,
@@ -173,7 +187,7 @@ type Sent = Option<(TrashFolder, Option<Trashed>)>;
 fn send(
     running: &mut Running,
     (index, path): (usize, &Path),
-    home_trash: Option<&Path>,
+    (home_trash, known): (Option<&Path>, &mut Known),
 ) -> Result<Sent, Refused> {
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
         return Err(Refused::Failed(Failure::InvalidName));
@@ -190,7 +204,13 @@ fn send(
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(Refused::Failed(failure(&error))),
     };
-    let trash = folder_for(&parent, home_trash).map_err(|error| no_trash(&original, &error))?;
+    let trash = if let Some(trash) = known.get(&parent) {
+        trash.clone()
+    } else {
+        let trash = folder_for(&parent, home_trash).map_err(|error| no_trash(&original, &error))?;
+        known.insert(parent, trash.clone());
+        trash
+    };
     // Already in the trash: only a delete takes it further.
     if original.starts_with(&trash.root) {
         return Err(Refused::NoTrash);
@@ -282,12 +302,14 @@ fn info_path(trash: &TrashFolder, stored: &OsStr) -> PathBuf {
     trash.info().join(name)
 }
 
-/// Why the trash for `original` couldn't be used or made: a full drive
-/// is the user's to free; anything else means there is no trash there.
+/// Why the trash for `original` couldn't be used or made: a full or
+/// read-only drive is that; anything else means there is no trash there.
 fn no_trash(original: &Path, error: &io::Error) -> Refused {
     log::info!("{} has no trash: {error}", original.display());
     match failure(error) {
-        Failure::NoSpace => Refused::Failed(Failure::NoSpace),
+        // The user's to free, or the drive's whole state: no delete would
+        // do there either.
+        reason @ (Failure::NoSpace | Failure::ReadOnly) => Refused::Failed(reason),
         _ => Refused::NoTrash,
     }
 }
@@ -319,15 +341,6 @@ fn write_part(running: &mut Running, part: &Path, text: &[u8]) -> io::Result<Ent
     file.write_all(text)?;
     file.sync_data()?;
     Ok(Entry::of(&file.metadata()?))
-}
-
-/// Removes the file at `path`, when it is there.
-pub(super) fn remove(path: &Path) {
-    if let Err(error) = fs::remove_file(path)
-        && error.kind() != io::ErrorKind::NotFound
-    {
-        log::warn!("can't remove {}: {error}", path.display());
-    }
 }
 
 /// Adds the size of each folder in `folders` to its trash's cache, one
@@ -379,6 +392,10 @@ mod tests {
         assert!(matches!(
             no_trash(path, &os_error(Errno::ACCESS)),
             Refused::NoTrash
+        ));
+        assert!(matches!(
+            no_trash(path, &os_error(Errno::ROFS)),
+            Refused::Failed(Failure::ReadOnly)
         ));
     }
 

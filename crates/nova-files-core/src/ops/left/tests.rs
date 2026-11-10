@@ -132,3 +132,38 @@ fn a_trash_job_remembers_what_it_trashed() {
 
     assert!(done.trashed.contains(a));
 }
+
+#[test]
+fn a_trash_job_cleans_up_only_its_last_info_file() {
+    let folder = TestFolder::new("left-trash-last");
+    let trash = folder.path().join("Trash");
+    fs::create_dir_all(trash.join("info")).unwrap();
+    fs::create_dir_all(trash.join("files")).unwrap();
+    let info = |name: &str| {
+        let path = trash.join(format!("info/{name}.trashinfo"));
+        fs::write(&path, "[Trash Info]\n").unwrap();
+        path
+    };
+    let (earlier, done, last) = (info("earlier"), info("done"), info("last"));
+    let never = PathBuf::from("0:0");
+    let trashed = |name: &str| line(word::TRASHED, &[Path::new("/x"), &trash.join(name)]);
+
+    clean(&[
+        line(word::TRASH, &[]),
+        // Settled by the job, its inode since another info file's.
+        line(word::TRASH_INFO, &[&earlier, &entry_of(&earlier), &never]),
+        line(word::TRASH_INFO, &[&done, &entry_of(&done), &never]),
+        trashed("files/done"),
+        line(word::TRASH_INFO, &[&last, &entry_of(&last), &never]),
+    ]);
+
+    assert!(earlier.exists() && done.exists());
+    assert!(!last.exists(), "in flight when the crash came");
+    let finished = info("finished");
+    clean(&[
+        line(word::TRASH, &[]),
+        line(word::TRASH_INFO, &[&finished, &entry_of(&finished), &never]),
+        trashed("files/finished"),
+    ]);
+    assert!(finished.exists());
+}

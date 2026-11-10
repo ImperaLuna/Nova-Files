@@ -18,6 +18,7 @@ mod memory;
 mod mime;
 mod open;
 mod ops;
+mod percent;
 mod places;
 mod private_file;
 mod run;

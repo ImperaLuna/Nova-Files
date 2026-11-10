@@ -56,6 +56,7 @@ use nova_files_api::JobId;
 use rustix::fs::{FlockOperation, flock};
 
 use super::plan::Entry;
+use crate::percent;
 
 /// The journals' folder, under the state folder.
 pub const FOLDER: &str = "nova-files/jobs";
@@ -65,11 +66,6 @@ const FILE_MODE: u32 = 0o600;
 const FOLDER_MODE: u32 = 0o700;
 /// Bytes written as themselves: printable ASCII but `%` and the space.
 const PLAIN: std::ops::RangeInclusive<u8> = b'!'..=b'~';
-const ESCAPE: u8 = b'%';
-const HEX: &[u8; 16] = b"0123456789ABCDEF";
-/// How far a byte's high hex digit is shifted.
-const HIGH: u8 = 4;
-const LOW_MASK: u8 = 0x0F;
 
 /// The start of the hidden name of a part file a job writes, followed by
 /// the job's id for names and the item's index.
@@ -212,19 +208,7 @@ impl Record<'_> {
 
 /// `bytes` with every byte outside [`PLAIN`] escaped.
 fn escape(bytes: &[u8]) -> Vec<u8> {
-    let mut escaped = Vec::with_capacity(bytes.len());
-    for &byte in bytes {
-        if PLAIN.contains(&byte) && byte != ESCAPE {
-            escaped.push(byte);
-        } else {
-            escaped.extend([
-                ESCAPE,
-                HEX[usize::from(byte >> HIGH)],
-                HEX[usize::from(byte & LOW_MASK)],
-            ]);
-        }
-    }
-    escaped
+    percent::escape(bytes, |byte| PLAIN.contains(&byte))
 }
 
 /// The longest a record waits to be synced to the disk.

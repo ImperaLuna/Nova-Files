@@ -21,7 +21,7 @@ use super::journal::read::{Line, read};
 use super::journal::{BACKUP_PREFIX, PART_PREFIX, entry_from, hold, word};
 use super::place::rename_no_replace;
 use super::plan::Entry;
-use super::trash::remove;
+use super::sync::remove;
 use crate::trash;
 
 /// A job a crash cut short.
@@ -163,13 +163,22 @@ fn clean(lines: &[Line]) -> Done {
     if whole_plan {
         done.planned = Some(planned);
     }
-    for line in lines {
+    // A trash job takes one entry at a time, settling each info file
+    // before the next: only its last can be in flight. An earlier one's
+    // inode may since have gone to another info file.
+    let trashing = lines.first().is_some_and(|line| line.word == word::TRASH);
+    let last_info = lines.iter().rposition(|line| line.word == word::TRASH_INFO);
+    let settled = |at: usize| {
+        trashing
+            && (Some(at) != last_info || lines[at..].iter().any(|line| line.word == word::TRASHED))
+    };
+    for (at, line) in lines.iter().enumerate() {
         match (line.word.as_str(), line.paths.as_slice()) {
-            (word::PART, [part]) if hidden(part, PART_PREFIX) => remove_part(part),
+            (word::PART, [part]) if hidden(part, PART_PREFIX) => remove(part),
             (word::BACKUP, [backup, of]) if hidden(backup, BACKUP_PREFIX) => {
                 restore(backup, of, placed.contains(of));
             }
-            (word::TRASH_INFO, [info, entry, item]) => {
+            (word::TRASH_INFO, [info, entry, item]) if !settled(at) => {
                 if let (Some(entry), Some(item)) = (entry_from(entry), entry_from(item)) {
                     remove_lone_info(info, entry, item);
                 }
@@ -178,14 +187,6 @@ fn clean(lines: &[Line]) -> Done {
         }
     }
     done
-}
-
-fn remove_part(part: &Path) {
-    if let Err(error) = fs::remove_file(part)
-        && part.symlink_metadata().is_ok()
-    {
-        log::warn!("can't remove {}: {error}", part.display());
-    }
 }
 
 /// Removes the info file at `info`, the job's own `entry`, when `item`,

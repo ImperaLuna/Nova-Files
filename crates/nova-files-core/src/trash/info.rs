@@ -23,6 +23,8 @@ use std::time::SystemTime;
 
 use chrono::{DateTime, Local};
 
+use crate::percent;
+
 /// The end of every info file's name.
 pub const INFO_SUFFIX: &str = ".trashinfo";
 const HEADER: &str = "[Trash Info]";
@@ -30,11 +32,6 @@ const PATH_KEY: &str = "Path=";
 const DATE_KEY: &str = "DeletionDate=";
 /// The longest name most filesystems take, in bytes.
 const MAX_NAME: usize = 255;
-const HEX: &[u8; 16] = b"0123456789ABCDEF";
-/// How far a byte's high hex digit is shifted.
-const HIGH: u8 = 4;
-const LOW_MASK: u8 = 0x0F;
-const ESCAPE: u8 = b'%';
 /// Bytes a path keeps as themselves, besides letters and digits.
 const PLAIN_MARKS: &[u8] = b"-._~/";
 
@@ -59,19 +56,9 @@ pub fn info_text(path: &Path, when: SystemTime) -> Vec<u8> {
 /// `bytes` with every byte but letters, digits and [`PLAIN_MARKS`]
 /// escaped.
 pub(super) fn escape(bytes: &[u8]) -> Vec<u8> {
-    let mut escaped = Vec::with_capacity(bytes.len());
-    for &byte in bytes {
-        if byte.is_ascii_alphanumeric() || PLAIN_MARKS.contains(&byte) {
-            escaped.push(byte);
-        } else {
-            escaped.extend([
-                ESCAPE,
-                HEX[usize::from(byte >> HIGH)],
-                HEX[usize::from(byte & LOW_MASK)],
-            ]);
-        }
-    }
-    escaped
+    percent::escape(bytes, |byte| {
+        byte.is_ascii_alphanumeric() || PLAIN_MARKS.contains(&byte)
+    })
 }
 
 /// `when` as `YYYY-MM-DDThh:mm:ss` in local time. Without the system's
@@ -94,9 +81,7 @@ pub fn stored_name(name: &OsStr, attempt: u32) -> OsString {
     let mut room = MAX_NAME - INFO_SUFFIX.len() - number.len();
     // A name in UTF-8 is cut between characters, so it stays UTF-8.
     if let Ok(text) = str::from_utf8(name.as_bytes()) {
-        while !text.is_char_boundary(room) {
-            room -= 1;
-        }
+        room = text.floor_char_boundary(room);
     }
     let mut bytes = name.as_bytes().to_vec();
     bytes.truncate(room);
