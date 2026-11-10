@@ -240,7 +240,21 @@ fn an_undo_runs_once_and_a_watcher_hears_what_can_be_undone() {
         watcher.any_next(),
         Event::Undoable { job: heard, .. } if heard == job
     ));
-    assert_eq!(undo(&client, job), Outcome::Done);
+    let first = client.start(Operation::Undo { job });
+    assert_eq!(client.any_next(), Event::UndoGone(job));
+    // A done undo is spent: never offered again before it ends.
+    loop {
+        match client.any_next() {
+            Event::JobProgress { .. } => {}
+            heard => {
+                assert!(
+                    matches!(heard, Event::JobFinished { job: ended, outcome: Outcome::Done, .. } if ended == first),
+                    "expected the undo to end, got {heard:?}"
+                );
+                break;
+            }
+        }
+    }
     assert_eq!(watcher.any_next(), Event::UndoGone(job));
     let again = client.start(Operation::Undo { job });
     assert!(matches!(
