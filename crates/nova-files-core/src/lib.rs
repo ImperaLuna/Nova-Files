@@ -1,5 +1,5 @@
-//! The core. Index, search, folder listing, watching, jobs, settings and theme. It
-//! never draws anything.
+//! The core. Index, search, folder listing, watching, jobs, settings, theme
+//! and drives. It never draws anything.
 //!
 //! [`spawn`] starts the core on its own thread and returns the
 //! [`Connector`] clients use to reach it. The core stops by itself once no
@@ -10,6 +10,7 @@
 mod config_watch;
 mod details;
 mod details_queue;
+mod drives;
 mod hand_edited;
 mod index;
 mod jobs;
@@ -18,6 +19,7 @@ mod memory;
 mod mime;
 mod open;
 mod ops;
+mod percent;
 mod places;
 mod private_file;
 mod run;
@@ -26,6 +28,7 @@ mod settings;
 mod theme;
 mod thumbs;
 mod trace;
+mod trash;
 mod vulkan_drivers;
 mod window_state;
 
@@ -100,6 +103,7 @@ pub fn spawn_with(
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
     let jobs = ops::Jobs::new(
         home.as_ref().map(|home| home.state.as_path()),
+        home.as_ref().map(|home| home.data.as_path()),
         connector.clone(),
     );
     let thread = thread::Builder::new()
@@ -123,6 +127,7 @@ pub fn spawn_with(
                 open_with: open::OpenWithWorker::new(Arc::clone(&mime_types)),
                 mime_types,
                 jobs,
+                drives: drives::Store::default(),
             };
             run::run(&receiver, idle_exit, &setup);
         })?;

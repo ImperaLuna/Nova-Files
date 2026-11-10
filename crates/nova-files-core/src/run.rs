@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
+use crate::drives::Store as DrivesStore;
 use crate::jobs::{self, Client};
 use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
@@ -43,6 +44,8 @@ pub struct Setup {
     pub open_with: OpenWithWorker,
     /// File operations, and the clients that hear about them.
     pub jobs: Jobs,
+    /// The drives, and the clients that hear about them.
+    pub drives: DrivesStore,
 }
 
 /// Runs until idle.
@@ -77,6 +80,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
         }
         // Receiving it already restarted the idle wait.
         CoreMessage::Activity => {}
+        CoreMessage::DriveService(service) => setup.drives.offer(service),
         CoreMessage::Command { client, command } => {
             let Some(target) = clients.get(&client) else {
                 return;
@@ -94,6 +98,7 @@ fn forget(client: ClientId, setup: &Setup) {
     setup.settings.forget(client);
     setup.theme.forget(client);
     setup.places.forget(client);
+    setup.drives.forget(client);
     setup.jobs.audience().leave(client);
 }
 
@@ -154,6 +159,7 @@ fn answer(
             setup.settings.change(change);
             Ok(())
         }
+        Command::Drives => setup.drives.listen(id, client.events()),
         Command::Theme => {
             setup.theme.listen(id, client.events());
             Ok(())

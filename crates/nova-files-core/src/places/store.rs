@@ -389,6 +389,7 @@ mod tests {
                 folder: self.0.clone(),
                 config: self.0.join("config"),
                 state: self.0.join("state"),
+                data: self.0.join("share"),
             }
         }
 

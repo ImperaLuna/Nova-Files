@@ -9,8 +9,9 @@
 //! `audience`). Nothing a job does ever replaces an existing entry unless
 //! the user chose that: what stands in a copy's or move's way, or what a
 //! delete may not remove, is a conflict the job holds at until a client
-//! answers it. Copies, moves and deletes write a journal of their steps
-//! (see `journal`).
+//! answers it. Copies, moves, deletes and trashing write a journal of
+//! their steps (see `journal`); trashing moves entries to the desktop's
+//! trash (see `trash`).
 //!
 //! A job running or paused keeps the core up: the core's loop asks
 //! [`Jobs::busy`], and a job that ends wakes the loop so its idle wait
@@ -35,9 +36,11 @@ mod plan;
 mod progress;
 mod running;
 mod stop;
+mod sync;
 #[cfg(test)]
 mod test_folder;
 mod transfer;
+mod trash;
 
 use std::collections::HashMap;
 use std::fs;
@@ -54,6 +57,8 @@ use nova_files_api::{
 };
 
 pub use audience::Audience;
+#[cfg(test)]
+pub use test_folder::TestFolder;
 
 use crate::jobs::Client;
 use delete::delete;
@@ -63,6 +68,7 @@ use make::How;
 use progress::Reporter;
 use running::Running;
 use transfer::transfer;
+use trash::trash;
 
 const JOB_THREAD: &str = "nova-files-job";
 const RECOVER_THREAD: &str = "nova-files-recover";
@@ -84,6 +90,8 @@ pub struct Jobs {
     running: Registry,
     /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
+    /// The home trash's folder; `None` without a data folder.
+    home_trash: Option<PathBuf>,
     /// Jobs a crash cut short, waiting to be resumed or forgotten. Added
     /// to under the lock of `running`, so a client never misses one.
     interrupted: Interrupted,
@@ -92,16 +100,19 @@ pub struct Jobs {
 }
 
 impl Jobs {
-    /// Jobs whose journals go under the state folder `state`. Jobs a
-    /// crash cut short are found there, cleaned up, and wait as
-    /// interrupted; on a thread of their own, as the disk may be slow.
-    pub fn new(state: Option<&Path>, wake: Connector) -> Self {
+    /// Jobs whose journals go under the state folder `state` and whose
+    /// home trash is under the data folder `data`. Jobs a crash cut
+    /// short are found there, cleaned up, and wait as interrupted; on a
+    /// thread of their own, as the disk may be slow.
+    pub fn new(state: Option<&Path>, data: Option<&Path>, wake: Connector) -> Self {
         let journals = state.map(|state| state.join(journal::FOLDER));
+        let home_trash = data.map(|data| data.join(crate::trash::HOME_TRASH));
         let jobs = Self {
             next: AtomicU64::new(first_id()),
             audience: Audience::default(),
             running: Registry::default(),
             journals,
+            home_trash,
             interrupted: Interrupted::default(),
             wake,
         };
@@ -218,10 +229,11 @@ impl Jobs {
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
         // New hidden names for a resumed job, never a crash's.
         let resume = left.map(|left| (left, self.next.fetch_add(1, Ordering::Relaxed)));
-        let (registry, audience, wake) = (
+        let (registry, audience, wake, home_trash) = (
             Arc::clone(&self.running),
             self.audience.clone(),
             self.wake.clone(),
+            self.home_trash.clone(),
         );
         let spawned = thread::Builder::new()
             .name(JOB_THREAD.to_owned())
@@ -234,7 +246,7 @@ impl Jobs {
                     }
                     None => operation,
                 };
-                let ended = run(&mut running, &operation);
+                let ended = run(&mut running, &operation, home_trash.as_deref());
                 running.finish();
                 finish(&registry, &audience, job, ended);
                 // Into the loop's queue, so its idle wait starts again now.
@@ -356,18 +368,20 @@ fn first_id() -> u64 {
         })
 }
 
-fn run(running: &mut Running, operation: &Operation) -> Ended {
+fn run(running: &mut Running, operation: &Operation, home_trash: Option<&Path>) -> Ended {
     match operation {
         Operation::Rename { path, name } => one_step::rename(path, name),
         Operation::NewFolder { inside, name } => one_step::new_folder(inside, name),
         Operation::Copy { sources, into } => transfer(running, sources, into, How::Copy),
         Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
         Operation::Delete { paths } => delete(running, paths),
+        Operation::Trash { paths } => trash(running, paths, home_trash),
     }
 }
 
-/// What is left of `operation` after a crash: a move or delete leaves
-/// out the sources already gone (moved whole, or deleted); a copy does
+/// What is left of `operation` after a crash: a move, delete or trash
+/// leaves out the sources already gone (moved whole, deleted, or in the
+/// trash); a copy does
 /// all of it again, taking what it made as done. A source that can't be
 /// looked at stays, so the job reports it.
 fn still_to_do(operation: &Operation) -> Operation {
@@ -391,6 +405,9 @@ fn still_to_do(operation: &Operation) -> Operation {
         Operation::Delete { paths } => Operation::Delete {
             paths: there(paths),
         },
+        Operation::Trash { paths } => Operation::Trash {
+            paths: there(paths),
+        },
         other => other.clone(),
     }
 }
@@ -403,7 +420,9 @@ fn first_path(operation: &Operation) -> PathBuf {
         Operation::Copy { sources, into } | Operation::Move { sources, into } => {
             sources.first().unwrap_or(into).clone()
         }
-        Operation::Delete { paths } => paths.first().cloned().unwrap_or_default(),
+        Operation::Delete { paths } | Operation::Trash { paths } => {
+            paths.first().cloned().unwrap_or_default()
+        }
     }
 }
 
