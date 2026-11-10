@@ -104,6 +104,17 @@ fn udisks_errors_become_failures_a_client_can_tell_apart() {
 }
 
 #[test]
+fn a_mounted_volume_that_refuses_says_why_rather_than_where_it_is() {
+    let bus = PrivateBus::start();
+    let refused = Failure::NotAuthorized("not allowed".to_owned());
+    let _udisks = StandIn::start(&bus.address, &failing(recorded(), EXT4_LOOP, &refused));
+    assert_eq!(
+        Udisks::new(bus.bus()).act(&mount(EXT4_LOOP)),
+        Err(DriveFailure::NotAuthorized)
+    );
+}
+
+#[test]
 fn a_volume_that_is_not_there_is_gone() {
     let bus = PrivateBus::start();
     let _udisks = StandIn::start(&bus.address, &recorded());
@@ -167,6 +178,22 @@ fn a_volume_mounted_inside_another_is_unmounted_first() {
 }
 
 #[test]
+fn a_stick_mounted_outside_the_usual_folders_is_still_ejected() {
+    let bus = PrivateBus::start();
+    let mut objects = stick();
+    objects[1].filesystem = Some(mounted_at(b"/srv/stick"));
+    let udisks = StandIn::start(&bus.address, &objects);
+    assert_eq!(Udisks::new(bus.bus()).act(&eject(STICK)), Ok(None));
+    assert_eq!(
+        udisks.calls(),
+        vec![
+            format!("unmount {STICK_VOLUME}"),
+            format!("power off {STICK}")
+        ]
+    );
+}
+
+#[test]
 fn a_busy_volume_stops_the_eject_before_the_drive_is_touched() {
     let bus = PrivateBus::start();
     let udisks = StandIn::start(&bus.address, &failing(stick(), STICK_VOLUME, &busy()));
@@ -211,7 +238,8 @@ fn a_drive_with_a_system_volume_is_ejected_but_never_switched_off() {
 fn a_client_of_the_core_hears_how_its_action_went() {
     let bus = PrivateBus::start();
     let _udisks = StandIn::start(&bus.address, &stick());
-    let core = nova_files_core::spawn().unwrap();
+    // No home: the core touches none of the real person's files.
+    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, None, None, None).unwrap();
     core.connector.offer_drives(Udisks::new(bus.bus())).unwrap();
     let (events, received) = mpsc::channel();
     let connection = core.connector.connect(events).unwrap();
