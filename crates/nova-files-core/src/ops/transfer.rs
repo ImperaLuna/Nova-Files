@@ -429,7 +429,12 @@ fn place(
     // Made before a crash cut the job short; still held or stopped first,
     // like any other item.
     running.shared.control.checkpoint()?;
-    if let Some(made) = running.made_before(&item.from, item.kind) {
+    // Only where it goes now: a parent that went elsewhere since (kept
+    // both) takes it again.
+    if let Some(made) = running
+        .made_before(&item.from, item.kind)
+        .filter(|made| made.parent() == target.parent())
+    {
         let made_before = Made {
             left: size(item),
             carried: false,

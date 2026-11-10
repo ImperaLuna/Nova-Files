@@ -14,7 +14,7 @@ use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Command, Event, JobId, Operation, Outcome};
+use nova_files_api::{Answer, Command, Event, JobId, Operation, Outcome, Scope};
 
 use common::{Bench, Client};
 
@@ -310,8 +310,10 @@ fn a_folder_made_before_and_swapped_for_a_link_is_asked_about() {
         fs::create_dir_all(&source).unwrap();
         fs::write(source.join("f"), "f").unwrap();
         fs::create_dir_all(&into).unwrap();
+        // The job made `into/src` and `f` in it; since, the folder went to
+        // `other` and a link to it took its name.
         fs::create_dir(&other).unwrap();
-        // The job made `into/src`; since, it became a link to `other`.
+        fs::write(other.join("f"), "f").unwrap();
         std::os::unix::fs::symlink(&other, into.join("src")).unwrap();
         crashed_job(
             root,
@@ -320,6 +322,7 @@ fn a_folder_made_before_and_swapped_for_a_link_is_asked_about() {
                 line("into", &[&into]),
                 line("source", &[&source]),
                 line("made", &[&into.join("src"), &source]),
+                line("made", &[&into.join("src/f"), &source.join("f")]),
             ],
         );
     });
@@ -335,9 +338,18 @@ fn a_folder_made_before_and_swapped_for_a_link_is_asked_about() {
         }
     };
     assert_eq!(conflict.target, bench.at("into/src"));
-    client.send(Command::CancelJob(CRASHED));
-    assert_eq!(client.ended(CRASHED).0, Outcome::Cancelled);
-    assert_eq!(fs::read_dir(bench.at("other")).unwrap().count(), 0);
+    client.send(Command::AnswerConflict {
+        job: CRASHED,
+        conflict,
+        answer: Answer::KeepBoth,
+        scope: Scope::ThisOne,
+    });
+    assert!(matches!(client.next(), Event::ConflictAnswered { .. }));
+
+    assert_eq!(client.ended(CRASHED).0, Outcome::Done);
+    // What went into the old folder doesn't count for the new one.
+    assert_eq!(fs::read_to_string(bench.at("into/src (2)/f")).unwrap(), "f");
+    assert_eq!(fs::read_dir(bench.at("other")).unwrap().count(), 1);
 }
 
 #[test]
