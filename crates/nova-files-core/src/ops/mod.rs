@@ -298,11 +298,10 @@ impl Jobs {
             match removed {
                 Err(error) if error.kind() != io::ErrorKind::NotFound => {
                     log::warn!("can't remove {}: {error}", left.journal.display());
-                    audience.tell(&Event::JobInterrupted {
-                        job,
-                        operation: left.operation.clone(),
-                    });
+                    // Back before clients hear, so an answer finds it.
+                    let operation = left.operation.clone();
                     lock(&interrupted).insert(job, left);
+                    audience.tell(&Event::JobInterrupted { job, operation });
                 }
                 // Held until now, so no other core takes the job meanwhile.
                 _ => {
