@@ -233,14 +233,18 @@ pub fn run(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ende
             }
             move_back(running, &pairs)
         }
-        Undo::Rename(path, was, name) if same(&path, was) => match checkpoint(running) {
-            Ok(()) => one_step::rename(&path, &name),
-            Err(stop) => (stop.outcome(), Vec::new()),
-        },
-        Undo::RemoveFolder(path, was) if same(&path, was) => match checkpoint(running) {
-            Ok(()) => remove_folder(&path),
-            Err(stop) => (stop.outcome(), Vec::new()),
-        },
+        Undo::Rename(path, was, name) if same(&path, was) => {
+            match running.shared.control.checkpoint().map_err(Stop::from) {
+                Ok(()) => one_step::rename(&path, &name),
+                Err(stop) => (stop.outcome(), Vec::new()),
+            }
+        }
+        Undo::RemoveFolder(path, was) if same(&path, was) => {
+            match running.shared.control.checkpoint().map_err(Stop::from) {
+                Ok(()) => remove_folder(&path),
+                Err(stop) => (stop.outcome(), Vec::new()),
+            }
+        }
         Undo::Rename(..) | Undo::RemoveFolder(..) => gone(),
     }
 }
@@ -271,14 +275,6 @@ fn move_back(running: &mut Running, pairs: &[(PathBuf, PathBuf)]) -> Ended {
         result.map_or_else(Stop::outcome, |()| Outcome::Done),
         shown.into_iter().collect(),
     )
-}
-
-/// Holds while the job is paused.
-///
-/// # Errors
-/// [`Stop`] when it is cancelled.
-fn checkpoint(running: &Running) -> Result<(), Stop> {
-    Ok(running.shared.control.checkpoint()?)
 }
 
 /// Removes the empty folder at `path`.

@@ -221,6 +221,66 @@ fn what_changed_since_is_left_alone() {
     );
 }
 
+/// Whether `outcome` says there was nothing left to take back.
+const fn found_nothing(outcome: &Outcome) -> bool {
+    matches!(
+        outcome,
+        Outcome::Failed {
+            reason: Failure::NotFound,
+            ..
+        }
+    )
+}
+
+#[test]
+fn an_undo_with_nothing_left_to_take_back_finds_nothing() {
+    let bench = Bench::new("undo-nothing-left");
+    fs::write(bench.at("a"), "a").unwrap();
+    fs::write(bench.at("b"), "b").unwrap();
+    fs::create_dir(bench.at("into")).unwrap();
+    let client = bench.client();
+    let copied = undoable(
+        &client,
+        Operation::Copy {
+            sources: vec![bench.at("a")],
+            into: bench.at("into"),
+        },
+    );
+    let trashed = undoable(
+        &client,
+        Operation::Trash {
+            paths: vec![bench.at("b")],
+        },
+    );
+    let made = undoable(
+        &client,
+        Operation::NewFolder {
+            inside: bench.root.clone(),
+            name: "made".into(),
+        },
+    );
+    // The copy replaced by another file, the trashed entry gone from the
+    // trash, and the new folder replaced by another, made while it was
+    // still there.
+    fs::write(bench.at("other"), "someone else's").unwrap();
+    fs::rename(bench.at("other"), bench.at("into/a")).unwrap();
+    fs::remove_file(home_trash_files(&bench.root).join("b")).unwrap();
+    fs::create_dir(bench.at("other-folder")).unwrap();
+    fs::remove_dir(bench.at("made")).unwrap();
+    fs::rename(bench.at("other-folder"), bench.at("made")).unwrap();
+
+    assert!(found_nothing(&undo(&client, copied)));
+    assert!(found_nothing(&undo(&client, trashed)));
+    assert!(found_nothing(&undo(&client, made)));
+
+    assert_eq!(
+        fs::read_to_string(bench.at("into/a")).unwrap(),
+        "someone else's"
+    );
+    assert!(!bench.at("b").exists());
+    assert!(bench.at("made").is_dir());
+}
+
 #[test]
 fn an_undo_runs_once_and_a_watcher_hears_what_can_be_undone() {
     let bench = Bench::new("undo-once");
