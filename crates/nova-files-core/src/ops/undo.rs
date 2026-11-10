@@ -99,12 +99,14 @@ impl History {
             job: undoable.job,
             operation: undoable.operation.clone(),
         });
-        let at = jobs.partition_point(|kept| kept.job < undoable.job);
+        // Job ids are never the same, so it is never found.
+        let (Ok(at) | Err(at)) = jobs.binary_search_by_key(&undoable.job, |kept| kept.job);
         jobs.insert(at, undoable);
-        while jobs.len() > KEPT {
-            if let Some(gone) = jobs.pop_front() {
-                audience.tell(&Event::UndoGone(gone.job));
-            }
+        // One at a time: at most one too many.
+        if jobs.len() > KEPT
+            && let Some(gone) = jobs.pop_front()
+        {
+            audience.tell(&Event::UndoGone(gone.job));
         }
         drop(jobs);
     }

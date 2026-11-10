@@ -14,7 +14,7 @@ use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Answer, Command, Event, JobId, Operation, Outcome, Scope};
+use nova_files_api::{Answer, Command, Event, Failure, JobId, Operation, Outcome, Scope};
 
 use common::{Bench, Client};
 
@@ -137,6 +137,15 @@ fn a_crashed_copy_is_cleaned_up_and_resumes_where_it_left_off() {
         !journals(&bench.root).join("42").exists(),
         "a finished job's journal goes"
     );
+    // What it did before the crash is unknown, so it can't be undone.
+    let undo = client.start(Operation::Undo { job: CRASHED });
+    assert!(matches!(
+        client.ended(undo).0,
+        Outcome::Failed {
+            reason: Failure::NotFound,
+            ..
+        }
+    ));
 }
 
 #[test]

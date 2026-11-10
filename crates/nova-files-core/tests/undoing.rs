@@ -51,24 +51,26 @@ fn home_trash_files(root: &Path) -> PathBuf {
 fn undoing_a_copy_sends_the_copies_to_the_trash() {
     let bench = Bench::new("undo-copy");
     fs::write(bench.at("a"), "a").unwrap();
+    fs::create_dir(bench.at("dir")).unwrap();
+    fs::write(bench.at("dir/in"), "in").unwrap();
     fs::create_dir(bench.at("into")).unwrap();
     let client = bench.client();
     let job = undoable(
         &client,
         Operation::Copy {
-            sources: vec![bench.at("a")],
+            sources: vec![bench.at("a"), bench.at("dir")],
             into: bench.at("into"),
         },
     );
 
+    // The folder goes whole, with what it holds.
     assert_eq!(undo(&client, job), Outcome::Done);
 
-    assert!(!bench.at("into/a").exists());
-    assert!(bench.at("a").exists());
-    assert_eq!(
-        fs::read_to_string(home_trash_files(&bench.root).join("a")).unwrap(),
-        "a"
-    );
+    assert!(!bench.at("into/a").exists() && !bench.at("into/dir").exists());
+    assert!(bench.at("a").exists() && bench.at("dir/in").exists());
+    let trash = home_trash_files(&bench.root);
+    assert_eq!(fs::read_to_string(trash.join("a")).unwrap(), "a");
+    assert_eq!(fs::read_to_string(trash.join("dir/in")).unwrap(), "in");
 }
 
 #[test]
