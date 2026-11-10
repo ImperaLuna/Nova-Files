@@ -8,10 +8,13 @@
 //! whenever they change. The core reads the other end of the channel as
 //! [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
 //! operations run as jobs (see [`Operation`]). A [`PickRequest`] carries
-//! another app's file picker request from D-Bus to the UI.
+//! another app's file picker request from D-Bus to the UI. Files cut or
+//! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
+//! a paste is a job.
 
 #![forbid(unsafe_code)]
 
+mod clipboard;
 mod connection;
 mod drive;
 mod file_type;
@@ -24,6 +27,10 @@ mod settings;
 mod theme;
 pub mod uri;
 
+pub use clipboard::{
+    ClipboardAction, FileClipboard, GNOME_COPIED_FILES, KDE_CUT_SELECTION, Offer, PLAIN_TEXT,
+    PLAIN_TEXT_UTF8, URI_LIST,
+};
 pub use connection::{
     ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
 };
