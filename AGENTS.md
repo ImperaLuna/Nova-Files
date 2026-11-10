@@ -123,7 +123,12 @@ Work inside `nix develop`. `just` lists one command per job (`just test`,
 `just clippy nova-files-core`); most take an optional crate. Run
 `just check` (`nix flake check`) before every push. Run `just mutants` once
 per PR, after `just check` passes and before asking Codex for review; later
-fix rounds only rerun `just check`. CI runs both. Paste the run's last line
+fix rounds only rerun `just check`. CI runs both. Before every Codex
+request, review the whole PR diff yourself with the `/code-review` skill
+(high effort) and fix what it finds, and again after any fix that changes
+logic: Codex is the last check, not the first reviewer. For crash recovery,
+races and file operations, list the edge cases (a crash between steps, a
+link swapped in, two processes at once) and test them first. Paste the run's last line
 (`N mutants tested in ...: ...`) into the PR description: CI's mutation job
 fails at once without it, or when it reports missed or timed-out mutants. A mutant no test
 can ever catch goes in `exclude_re` in `.cargo/mutants.toml`, with a reason,
