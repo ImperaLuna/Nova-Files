@@ -104,18 +104,24 @@ fn a_window_watching_jobs_hears_which_folders_a_delete_changed() {
 
 #[test]
 fn a_file_chosen_through_a_chosen_link_goes_too() {
-    let bench = Bench::new("delete-through-link");
-    let real = bench.at("real");
-    fs::create_dir(&real).unwrap();
-    fs::write(real.join("f"), "f").unwrap();
-    let alias = bench.at("alias");
-    symlink(&real, &alias).unwrap();
-    let client = bench.client();
+    for (index, file_first) in [false, true].into_iter().enumerate() {
+        let bench = Bench::new(&format!("delete-through-link-{index}"));
+        let real = bench.at("real");
+        fs::create_dir(&real).unwrap();
+        fs::write(real.join("f"), "f").unwrap();
+        let alias = bench.at("alias");
+        symlink(&real, &alias).unwrap();
+        let client = bench.client();
+        let mut paths = vec![alias.clone(), alias.join("f")];
+        if file_first {
+            paths.reverse();
+        }
 
-    let (_, outcome, _) = client.run(delete(vec![alias.clone(), alias.join("f")]));
+        let (_, outcome, _) = client.run(delete(paths));
 
-    assert_eq!(outcome, Outcome::Done);
-    assert!(alias.symlink_metadata().is_err());
-    assert!(!real.join("f").exists());
-    assert!(real.exists());
+        assert_eq!(outcome, Outcome::Done);
+        assert!(alias.symlink_metadata().is_err());
+        assert!(!real.join("f").exists(), "file first: {file_first}");
+        assert!(real.exists());
+    }
 }

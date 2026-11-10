@@ -34,7 +34,11 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
     for path in paths {
         running.record(Record::Source(path));
     }
-    let plan = match plan_delete(paths, &running.shared.control) {
+    // Shallowest first, so removing last to first takes a path chosen
+    // through a chosen link before the link, whatever order they came in.
+    let mut ordered = paths.to_vec();
+    ordered.sort_by_key(|path| path.components().count());
+    let plan = match plan_delete(&ordered, &running.shared.control) {
         Ok(plan) => plan,
         Err(stop) => return (stop.outcome(), Vec::new()),
     };
