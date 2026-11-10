@@ -127,7 +127,7 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
         }
         running.record(Record::Moved(&item.from, target));
     } else {
-        running.record(Record::Made(target));
+        running.record(Record::Made(target, &item.from));
     }
     Ok(Made {
         left,

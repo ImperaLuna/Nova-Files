@@ -427,7 +427,7 @@ fn place(
     let mut replacing = false;
     let mut looked_again = 0;
     // Made before a crash cut the job short.
-    if let Some(made) = running.made_before(planned.target) {
+    if let Some(made) = running.made_before(&item.from) {
         let made_before = Made {
             left: size(item),
             carried: false,
@@ -463,12 +463,7 @@ fn place(
             }
         };
         match tried {
-            Ok(it) => {
-                if target != planned.target {
-                    running.record(Record::Instead(&target, planned.target));
-                }
-                return Ok((Placed::Made(it), target));
-            }
+            Ok(it) => return Ok((Placed::Made(it), target)),
             // The name changed hands since it was looked at: look again.
             Err(Stop::Failed { path, reason })
                 if looked_again < LOOK_AGAIN

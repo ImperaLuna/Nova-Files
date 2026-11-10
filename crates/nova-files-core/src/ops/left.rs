@@ -37,7 +37,7 @@ pub struct Left {
 /// done.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Done {
-    /// What it made, by where it was planned to go, at where it went.
+    /// What it made, by its source, at where it went.
     pub made: HashMap<PathBuf, PathBuf>,
     /// For a delete, what it planned to remove, when it got that far.
     pub planned: Option<HashSet<PathBuf>>,
@@ -120,26 +120,28 @@ fn clean(lines: &[Line]) -> Done {
     let mut done = Done::default();
     // The names the job's own copies took.
     let mut placed = HashSet::new();
+    let mut planned = HashSet::new();
+    let mut whole_plan = false;
     for line in lines {
         match (line.word.as_str(), line.paths.as_slice()) {
-            (word::MADE, [path]) => {
-                done.made.insert(path.clone(), path.clone());
-                placed.insert(path.clone());
-            }
-            (word::INSTEAD, [made, planned]) => {
-                done.made.remove(made);
-                done.made.insert(planned.clone(), made.clone());
+            (word::MADE, [made, from]) => {
+                done.made.insert(from.clone(), made.clone());
+                placed.insert(made.clone());
             }
             (word::MOVED, [_, to]) => {
                 placed.insert(to.clone());
             }
             (word::PLANNED, [path]) => {
-                done.planned
-                    .get_or_insert_with(HashSet::new)
-                    .insert(path.clone());
+                planned.insert(path.clone());
             }
+            // Only a plan recorded whole is kept to: a crash while it was
+            // written leaves just its start.
+            (word::PLAN_DONE, []) => whole_plan = true,
             _ => {}
         }
+    }
+    if whole_plan {
+        done.planned = Some(planned);
     }
     for line in lines {
         match (line.word.as_str(), line.paths.as_slice()) {

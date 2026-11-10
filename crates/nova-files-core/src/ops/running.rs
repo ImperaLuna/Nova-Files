@@ -72,12 +72,12 @@ impl Running {
         }
     }
 
-    /// Where an item planned for `planned` went before a crash, if it is
-    /// still there.
-    pub fn made_before(&self, planned: &Path) -> Option<&Path> {
+    /// Where the item from `from` went before a crash, if it is still
+    /// there.
+    pub fn made_before(&self, from: &Path) -> Option<&Path> {
         self.before
             .made
-            .get(planned)
+            .get(from)
             .map(PathBuf::as_path)
             .filter(|made| made.symlink_metadata().is_ok())
     }
@@ -184,16 +184,6 @@ impl Running {
             Arc::clone(&shared),
         );
         Self::new(JobId(1), shared, reporter, None)
-    }
-
-    /// Starts the job's journal in `folder` with its first record.
-    pub fn journal_in(&mut self, folder: PathBuf) {
-        self.journals = Some(folder);
-    }
-
-    /// Takes `answer` for every conflict of `kind` without asking.
-    pub fn answer_all(&mut self, kind: ConflictKind, answer: Answer) {
-        self.answers.insert(kind, answer);
     }
 }
 

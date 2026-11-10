@@ -93,6 +93,7 @@ fn planned(running: &mut Running, mut plan: Plan) -> Plan {
         for item in &plan.items {
             running.record(Record::Planned(&item.from));
         }
+        running.record(Record::PlanDone);
         running.settle();
     }
     plan

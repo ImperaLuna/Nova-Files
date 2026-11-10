@@ -71,10 +71,10 @@ pub mod word {
     pub const SOURCE: &str = "source";
     pub const PART: &str = "part";
     pub const MADE: &str = "made";
-    pub const INSTEAD: &str = "instead";
     pub const MOVED: &str = "moved";
     pub const BACKUP: &str = "backup";
     pub const PLANNED: &str = "planned";
+    pub const PLAN_DONE: &str = "plan-done";
 }
 
 /// One line of a journal.
@@ -88,10 +88,9 @@ pub enum Record<'a> {
     Source(&'a Path),
     /// A part file about to be written. Left behind by a crash, it goes.
     Part(&'a Path),
-    /// Something the job made, which undo would remove.
-    Made(&'a Path),
-    /// What the job made at the first path was planned for the second.
-    Instead(&'a Path, &'a Path),
+    /// Something the job made at the first path, from the source at the
+    /// second, which undo would remove.
+    Made(&'a Path, &'a Path),
     /// Something the job moved from the first path to the second, which
     /// undo would move back.
     Moved(&'a Path, &'a Path),
@@ -102,6 +101,8 @@ pub enum Record<'a> {
     /// An entry a delete planned to remove. A resumed delete removes only
     /// these, never what came after.
     Planned(&'a Path),
+    /// The delete's whole plan is recorded: a resume may keep to it.
+    PlanDone,
 }
 
 impl Record<'_> {
@@ -112,11 +113,11 @@ impl Record<'_> {
             Self::Into(path) => (word::INTO, std::slice::from_ref(path)),
             Self::Source(path) => (word::SOURCE, std::slice::from_ref(path)),
             Self::Part(path) => (word::PART, std::slice::from_ref(path)),
-            Self::Made(path) => (word::MADE, std::slice::from_ref(path)),
-            Self::Instead(made, planned) => (word::INSTEAD, &[*made, *planned]),
+            Self::Made(made, from) => (word::MADE, &[*made, *from]),
             Self::Moved(from, to) => (word::MOVED, &[*from, *to]),
             Self::Backup(backup, of) => (word::BACKUP, &[*backup, *of]),
             Self::Planned(path) => (word::PLANNED, std::slice::from_ref(path)),
+            Self::PlanDone => (word::PLAN_DONE, &[]),
         };
         let mut line = word.as_bytes().to_vec();
         for path in paths {

@@ -12,7 +12,7 @@ fn a_journal_that_cant_be_written_goes() {
     let mut running = Running::for_test();
     running.journal = Some(Journal::over(file, path.clone()));
 
-    running.record(Record::Made(Path::new("/a")));
+    running.record(Record::Made(Path::new("/a"), Path::new("/b")));
 
     assert!(running.journal.is_none());
     assert!(!path.exists());

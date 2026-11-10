@@ -41,6 +41,7 @@ mod transfer;
 
 use std::collections::HashMap;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -338,12 +339,18 @@ fn run(running: &mut Running, operation: &Operation) -> Ended {
 
 /// What is left of `operation` after a crash: a move or delete leaves
 /// out the sources already gone (moved whole, or deleted); a copy does
-/// all of it again, taking what it made as done.
+/// all of it again, taking what it made as done. A source that can't be
+/// looked at stays, so the job reports it.
 fn still_to_do(operation: &Operation) -> Operation {
     let there = |paths: &[PathBuf]| -> Vec<PathBuf> {
         paths
             .iter()
-            .filter(|path| path.symlink_metadata().is_ok())
+            .filter(|path| {
+                !matches!(
+                    path.symlink_metadata(),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound
+                )
+            })
             .cloned()
             .collect()
     };
@@ -393,6 +400,28 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ops::test_folder::TestFolder;
+
+    #[test]
+    fn a_resumed_delete_keeps_a_source_it_cant_look_at() {
+        let folder = TestFolder::new("ops-still-to-do");
+        let file = folder.file("file", "f");
+        // Under a file: not missing, but it can't be looked at.
+        let unreachable = file.join("x");
+        let gone = folder.path().join("gone");
+        let delete = Operation::Delete {
+            paths: vec![file.clone(), unreachable.clone(), gone],
+        };
+
+        let left = still_to_do(&delete);
+
+        assert_eq!(
+            left,
+            Operation::Delete {
+                paths: vec![file, unreachable]
+            }
+        );
+    }
 
     #[test]
     fn ids_start_from_the_time_so_no_run_repeats_another() {

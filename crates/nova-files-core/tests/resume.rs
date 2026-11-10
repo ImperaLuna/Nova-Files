@@ -80,8 +80,8 @@ fn a_crashed_copy_is_cleaned_up_and_resumes_where_it_left_off() {
                 "copy".to_owned(),
                 line("into", &[&into]),
                 line("source", &[&source]),
-                line("made", &[&into.join("src")]),
-                line("made", &[&into.join("src/a")]),
+                line("made", &[&into.join("src"), &source]),
+                line("made", &[&into.join("src/a"), &source.join("a")]),
                 line("part", &[&into.join("src/.nova-part-42-2")]),
             ],
         );
@@ -138,7 +138,7 @@ fn a_file_that_stepped_aside_comes_back_unless_its_replacement_is_in() {
                     "backup",
                     &[&into.join(".nova-backup-42-1"), &into.join("replaced")],
                 ),
-                line("made", &[&into.join("replaced")]),
+                line("made", &[&into.join("replaced"), &root.join("replaced")]),
                 line(
                     "backup",
                     &[&into.join(".nova-backup-42-2"), &into.join("taken")],
@@ -254,8 +254,7 @@ fn a_resumed_copy_finds_what_it_made_under_another_name() {
                 "copy".to_owned(),
                 line("into", &[&into]),
                 line("source", &[&source.join("a")]),
-                line("made", &[&into.join("a (2)")]),
-                line("instead", &[&into.join("a (2)"), &into.join("a")]),
+                line("made", &[&into.join("a (2)"), &source.join("a")]),
             ],
         );
     });
@@ -284,7 +283,7 @@ fn a_resumed_copy_makes_again_what_was_removed_since() {
                 "copy".to_owned(),
                 line("into", &[&into]),
                 line("source", &[&source.join("a")]),
-                line("made", &[&into.join("a")]),
+                line("made", &[&into.join("a"), &source.join("a")]),
             ],
         );
     });
@@ -310,6 +309,7 @@ fn a_resumed_delete_keeps_what_was_added_since() {
                 line("source", &[&tree]),
                 line("planned", &[&tree]),
                 line("planned", &[&tree.join("planned")]),
+                "plan-done".to_owned(),
             ],
         );
         fs::write(tree.join("added"), "new").unwrap();
@@ -322,6 +322,69 @@ fn a_resumed_delete_keeps_what_was_added_since() {
     assert_eq!(client.ended(CRASHED).0, Outcome::Done);
     assert!(!bench.at("tree/planned").exists());
     assert_eq!(fs::read_to_string(bench.at("tree/added")).unwrap(), "new");
+}
+
+#[test]
+fn a_resumed_copy_skips_only_the_source_it_made() {
+    let (bench, client) = restart("resume-same-name", |root| {
+        let into = root.join("into");
+        for (folder, text) in [("a", "first"), ("b", "second")] {
+            fs::create_dir(root.join(folder)).unwrap();
+            fs::write(root.join(folder).join("report"), text).unwrap();
+        }
+        fs::create_dir(&into).unwrap();
+        fs::write(into.join("report"), "first").unwrap();
+        crashed_job(
+            root,
+            &[
+                "copy".to_owned(),
+                line("into", &[&into]),
+                line("source", &[&root.join("a/report")]),
+                line("source", &[&root.join("b/report")]),
+                line("made", &[&into.join("report"), &root.join("a/report")]),
+            ],
+        );
+    });
+    let job = CRASHED;
+
+    assert!(matches!(client.next(), Event::JobInterrupted { .. }));
+    client.send(Command::ResumeJob(job));
+    assert_eq!(client.next(), Event::JobResumed(job));
+    // The second report still meets the first one's name.
+    let conflict = loop {
+        match client.next() {
+            Event::JobConflict { conflict, .. } => break conflict,
+            Event::JobProgress { .. } => {}
+            other => panic!("the second source is asked about, got {other:?}"),
+        }
+    };
+    assert_eq!(conflict.source, bench.at("b/report"));
+    client.send(Command::CancelJob(job));
+    assert_eq!(client.ended(job).0, Outcome::Cancelled);
+}
+
+#[test]
+fn a_delete_plan_cut_short_is_planned_again() {
+    let (bench, client) = restart("resume-plan-cut", |root| {
+        let tree = root.join("tree");
+        fs::create_dir(&tree).unwrap();
+        fs::write(tree.join("a"), "a").unwrap();
+        crashed_job(
+            root,
+            &[
+                "delete".to_owned(),
+                line("source", &[&tree]),
+                line("planned", &[&tree]),
+            ],
+        );
+    });
+
+    assert!(matches!(client.next(), Event::JobInterrupted { .. }));
+    client.send(Command::ResumeJob(CRASHED));
+
+    assert_eq!(client.next(), Event::JobResumed(CRASHED));
+    assert_eq!(client.ended(CRASHED).0, Outcome::Done);
+    assert!(!bench.at("tree").exists());
 }
 
 #[test]

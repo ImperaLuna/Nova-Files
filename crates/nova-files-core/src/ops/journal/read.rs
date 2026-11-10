@@ -13,6 +13,9 @@ use super::{ESCAPE, HEADER, HIGH};
 
 /// Radix of the two digits after an escape.
 const HEX_RADIX: u32 = 16;
+/// The most a journal may hold to be read. A job writes far less; a file
+/// bigger than this is left alone rather than read into memory.
+const MAX_BYTES: u64 = 256 * 1024 * 1024;
 
 /// One whole line of a journal.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,9 +36,24 @@ pub struct Written {
 ///
 /// # Errors
 /// When it can't be read, or isn't a journal this version wrote.
-pub fn read(mut file: &File, path: &Path) -> io::Result<Written> {
+pub fn read(file: &File, path: &Path) -> io::Result<Written> {
+    read_at_most(file, path, MAX_BYTES)
+}
+
+/// [`read`], refusing a journal over `limit` bytes.
+///
+/// # Errors
+/// When it can't be read, is too big, or isn't a journal this version
+/// wrote.
+pub(super) fn read_at_most(file: &File, path: &Path, limit: u64) -> io::Result<Written> {
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)?;
+    file.take(limit.saturating_add(1)).read_to_end(&mut bytes)?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > limit {
+        return Err(io::Error::new(
+            io::ErrorKind::FileTooLarge,
+            format!("{} is over {limit} bytes", path.display()),
+        ));
+    }
     let end = bytes.iter().rposition(|&byte| byte == b'\n');
     let whole = end.map_or(&bytes[..0], |end| &bytes[..end]);
     let lines = parse(whole, path)?;
