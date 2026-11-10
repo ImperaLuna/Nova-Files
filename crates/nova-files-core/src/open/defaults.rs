@@ -18,26 +18,29 @@ use std::path::{Path, PathBuf};
 
 use super::entry::{self, Entry};
 
-const LIST: &str = "mimeapps.list";
-const DESKTOP_LIST_SUFFIX: &str = "-mimeapps.list";
+pub const LIST: &str = "mimeapps.list";
+pub const DESKTOP_LIST_SUFFIX: &str = "-mimeapps.list";
 const APPLICATIONS: &str = "applications";
 const CACHE: &str = "mimeinfo.cache";
-const DEFAULTS: &str = "Default Applications";
-const ADDED: &str = "Added Associations";
-const REMOVED: &str = "Removed Associations";
+pub const DEFAULTS: &str = "Default Applications";
+pub const ADDED: &str = "Added Associations";
+pub const REMOVED: &str = "Removed Associations";
 const CACHE_GROUP: &str = "MIME Cache";
-const ID_SEPARATOR: char = ';';
+pub const ID_SEPARATOR: char = ';';
 /// A desktop ID names `applications/a/b.desktop` as `a-b.desktop`.
 const ID_FOLDER_SEPARATOR: char = '-';
 /// Big systems have a cache of a few hundred KB.
 /// 4 MiB.
-const MAX_LIST_BYTES: u64 = 4_194_304;
+pub const MAX_LIST_BYTES: u64 = 4_194_304;
 
 /// Where to look.
 #[derive(Debug, Clone, Default)]
 pub struct Places {
     /// The config home, then the config folders.
     pub config: Vec<PathBuf>,
+    /// The config home alone, where this user's choices are saved; `None`
+    /// without a home folder.
+    pub config_home: Option<PathBuf>,
     /// The data home, then the data folders.
     pub data: Vec<PathBuf>,
     /// `XDG_CURRENT_DESKTOP`'s names, lower case, in order.
@@ -46,66 +49,102 @@ pub struct Places {
     pub search_path: Option<OsString>,
 }
 
-/// An app that opens files, and the desktop entry it came from.
+/// An app that opens files, its desktop ID and the desktop entry it came
+/// from.
 #[derive(Debug, PartialEq, Eq)]
 pub struct App {
+    pub id: String,
     pub entry: Entry,
     pub file: PathBuf,
+}
+
+/// The association lists as read once: every `mimeapps.list`, highest
+/// first, and every `mimeinfo.cache`.
+pub struct Associations {
+    lists: Vec<String>,
+    caches: Vec<String>,
+}
+
+impl Associations {
+    /// Reads the lists and caches in `places`.
+    pub fn read(places: &Places) -> Self {
+        Self {
+            lists: list_files(places)
+                .iter()
+                .filter_map(|file| read_capped(file))
+                .collect(),
+            caches: places
+                .data
+                .iter()
+                .filter_map(|dir| read_capped(&dir.join(APPLICATIONS).join(CACHE)))
+                .collect(),
+        }
+    }
+
+    /// The default app for the first of `types` (a type, then the types
+    /// it is a kind of) that has one.
+    pub fn default_app(&self, types: &[&str], places: &Places) -> Option<App> {
+        types.iter().find_map(|mime| self.default_for(mime, places))
+    }
+
+    fn default_for(&self, mime: &str, places: &Places) -> Option<App> {
+        let install = |id: &str| installed(id, places);
+        listed(&self.lists, DEFAULTS, mime)
+            .into_iter()
+            .chain(listed(&self.lists, ADDED, mime))
+            .chain(self.cached(mime))
+            .find_map(install)
+    }
+
+    /// Every app ID associated with `mime`, best first: the defaults, then
+    /// the added associations, list by list, then the caches. Each shows
+    /// once; removed ones are left out the way [`Self::default_app`] skips
+    /// them. Not checked for being installed.
+    pub fn ids_for(&self, mime: &str) -> Vec<&str> {
+        let mut seen = HashSet::new();
+        listed(&self.lists, DEFAULTS, mime)
+            .into_iter()
+            .chain(listed(&self.lists, ADDED, mime))
+            .chain(self.cached(mime))
+            .filter(|id| seen.insert(*id))
+            .collect()
+    }
+
+    /// The cache's apps for `mime` that no list removed.
+    fn cached(&self, mime: &str) -> Vec<&str> {
+        let removed: HashSet<&str> = self
+            .lists
+            .iter()
+            .flat_map(|text| ids(text, REMOVED, mime))
+            .collect();
+        self.caches
+            .iter()
+            .flat_map(|text| ids(text, CACHE_GROUP, mime))
+            .filter(|id| !removed.contains(id))
+            .collect()
+    }
 }
 
 /// The default app for the first of `types` (a type, then the types it
 /// is a kind of) that has one.
 pub fn default_app(types: &[&str], places: &Places) -> Option<App> {
-    let lists: Vec<String> = list_files(places)
-        .iter()
-        .filter_map(|file| read_capped(file))
-        .collect();
-    let caches: Vec<String> = places
-        .data
-        .iter()
-        .filter_map(|dir| read_capped(&dir.join(APPLICATIONS).join(CACHE)))
-        .collect();
-    types
-        .iter()
-        .find_map(|mime| for_type(mime, &lists, &caches, places))
+    Associations::read(places).default_app(types, places)
 }
 
-fn for_type(mime: &str, lists: &[String], caches: &[String], places: &Places) -> Option<App> {
-    let install = |id: &str| installed(id, places);
-    if let Some(app) = first_listed(lists, DEFAULTS, mime, install) {
-        return Some(app);
-    }
-    if let Some(app) = first_listed(lists, ADDED, mime, install) {
-        return Some(app);
-    }
-    let removed: HashSet<&str> = lists
-        .iter()
-        .flat_map(|text| ids(text, REMOVED, mime))
-        .collect();
-    caches
-        .iter()
-        .flat_map(|text| ids(text, CACHE_GROUP, mime))
-        .filter(|id| !removed.contains(id))
-        .find_map(install)
-}
-
-/// The first installed app `group` lists for `mime`, list by list,
-/// skipping any that list or a higher one removed.
-fn first_listed(
-    lists: &[String],
-    group: &str,
-    mime: &str,
-    install: impl Fn(&str) -> Option<App>,
-) -> Option<App> {
+/// The apps `group` lists for `mime`, list by list, skipping any that
+/// list or a higher one removed.
+fn listed<'a>(lists: &'a [String], group: &str, mime: &str) -> Vec<&'a str> {
     let mut removed = HashSet::new();
+    let mut found = Vec::new();
     for text in lists {
         removed.extend(ids(text, REMOVED, mime));
-        let listed = ids(text, group, mime).into_iter();
-        if let Some(app) = listed.filter(|id| !removed.contains(id)).find_map(&install) {
-            return Some(app);
-        }
+        found.extend(
+            ids(text, group, mime)
+                .into_iter()
+                .filter(|id| !removed.contains(id)),
+        );
     }
-    None
+    found
 }
 
 /// Every `mimeapps.list` place, highest precedence first.
@@ -158,13 +197,17 @@ fn ids<'a>(text: &'a str, group: &str, mime: &str) -> Vec<&'a str> {
 
 /// The app desktop ID `id` names, from the first data folder that has it.
 /// A hidden or broken entry there hides the ones below it.
-fn installed(id: &str, places: &Places) -> Option<App> {
+pub fn installed(id: &str, places: &Places) -> Option<App> {
     let file = places
         .data
         .iter()
         .find_map(|dir| find_entry(&dir.join(APPLICATIONS), id))?;
     let entry = entry::read(&file, places.search_path.as_deref())?;
-    Some(App { entry, file })
+    Some(App {
+        id: id.to_owned(),
+        entry,
+        file,
+    })
 }
 
 /// `id` under `apps`, as a file or, where its dashes may stand for
@@ -198,44 +241,29 @@ fn read_capped(path: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
 
     use super::*;
 
-    struct Tree(PathBuf);
+    use crate::open::tree::Tree;
 
-    impl Tree {
-        fn new(name: &str) -> Self {
-            let root =
-                std::env::temp_dir().join(format!("nova-defaults-{name}-{}", std::process::id()));
-            fs::remove_dir_all(&root).ok();
-            fs::create_dir_all(&root).unwrap();
-            Self(root)
-        }
+    trait Defaults {
+        fn app(&self, path: &str) -> &Self;
+        fn all_places(&self) -> Places;
+        fn default_for(&self, types: &[&str]) -> Option<String>;
+    }
 
-        fn write(&self, path: &str, text: &str) -> &Self {
-            let path = self.0.join(path);
-            fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(path, text).unwrap();
-            self
-        }
-
+    impl Defaults for Tree {
         fn app(&self, path: &str) -> &Self {
             self.write(path, "[Desktop Entry]\nType=Application\nExec=app %f\n")
         }
 
-        fn places(&self) -> Places {
-            Places {
-                config: vec![self.0.join("config"), self.0.join("etc")],
-                data: vec![self.0.join("local"), self.0.join("share")],
-                desktops: vec!["nova".to_owned(), "gnome".to_owned()],
-                search_path: None,
-            }
+        fn all_places(&self) -> Places {
+            self.places_in(&["config", "etc"], &["local", "share"], &["nova", "gnome"])
         }
 
         /// Where the default for `types` comes from, relative to the tree.
         fn default_for(&self, types: &[&str]) -> Option<String> {
-            default_app(types, &self.places()).map(|app| {
+            default_app(types, &self.all_places()).map(|app| {
                 app.file
                     .strip_prefix(&self.0)
                     .unwrap()
@@ -245,16 +273,10 @@ mod tests {
         }
     }
 
-    impl Drop for Tree {
-        fn drop(&mut self) {
-            fs::remove_dir_all(&self.0).ok();
-        }
-    }
-
     #[test]
     fn lists_are_read_in_the_specs_order() {
-        let tree = Tree::new("order");
-        let places = tree.places();
+        let tree = Tree::new("defaults-order");
+        let places = tree.all_places();
         let names: Vec<String> = list_files(&places)
             .iter()
             .map(|file| {
@@ -285,7 +307,7 @@ mod tests {
 
     #[test]
     fn the_first_installed_default_wins() {
-        let tree = Tree::new("defaults");
+        let tree = Tree::new("defaults-defaults");
         tree.app("share/applications/b.desktop")
             .app("share/applications/c.desktop")
             .write(
@@ -301,7 +323,7 @@ mod tests {
 
     #[test]
     fn the_desktops_own_list_comes_first() {
-        let tree = Tree::new("desktop");
+        let tree = Tree::new("defaults-desktop");
         tree.app("share/applications/b.desktop")
             .app("share/applications/c.desktop")
             .write(
@@ -320,7 +342,7 @@ mod tests {
 
     #[test]
     fn without_a_default_added_then_cached_apps_count_unless_removed() {
-        let tree = Tree::new("added");
+        let tree = Tree::new("defaults-added");
         tree.app("share/applications/added.desktop")
             .app("share/applications/cached.desktop")
             .app("share/applications/other.desktop")
@@ -353,7 +375,7 @@ mod tests {
 
     #[test]
     fn a_terminal_default_is_still_the_default() {
-        let tree = Tree::new("terminal-default");
+        let tree = Tree::new("defaults-terminal-default");
         tree.write(
             "share/applications/vim.desktop",
             "[Desktop Entry]\nType=Application\nExec=vim %f\nTerminal=true\n",
@@ -375,7 +397,7 @@ mod tests {
 
     #[test]
     fn a_removed_app_is_no_lower_lists_default() {
-        let tree = Tree::new("removed-default");
+        let tree = Tree::new("defaults-removed-default");
         tree.app("share/applications/a.desktop")
             .app("share/applications/b.desktop")
             .write(
@@ -394,7 +416,7 @@ mod tests {
 
     #[test]
     fn a_removal_only_hides_lower_lists() {
-        let tree = Tree::new("removal");
+        let tree = Tree::new("defaults-removal");
         tree.app("share/applications/a.desktop")
             .write(
                 "config/mimeapps.list",
@@ -412,7 +434,7 @@ mod tests {
 
     #[test]
     fn the_first_type_with_an_app_wins() {
-        let tree = Tree::new("types");
+        let tree = Tree::new("defaults-types");
         tree.app("share/applications/text.desktop").write(
             "config/mimeapps.list",
             "[Default Applications]\ntext/plain=text.desktop\n",
@@ -427,7 +449,7 @@ mod tests {
 
     #[test]
     fn a_higher_data_folder_hides_the_same_id_below() {
-        let tree = Tree::new("shadow");
+        let tree = Tree::new("defaults-shadow");
         tree.app("share/applications/a.desktop")
             .write(
                 "local/applications/a.desktop",
@@ -442,7 +464,7 @@ mod tests {
 
     #[test]
     fn dashes_in_an_id_may_be_folders() {
-        let tree = Tree::new("folders");
+        let tree = Tree::new("defaults-folders");
         tree.app("share/applications/kde/org-viewer.desktop")
             .app("share/applications/org-other.desktop")
             .app("share/applications/org/one.desktop")
@@ -466,7 +488,7 @@ mod tests {
 
     #[test]
     fn an_id_cannot_leave_the_applications_folder() {
-        let tree = Tree::new("escape");
+        let tree = Tree::new("defaults-escape");
         tree.app("share/evil.desktop")
             .app("share/applications/sub/x.desktop")
             .app("share/applications/x.desktop").write(

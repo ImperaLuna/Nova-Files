@@ -20,6 +20,7 @@ use crate::drives::Store as DrivesStore;
 use crate::jobs::{self, Client};
 use crate::measure::Measurer;
 use crate::mime::MimeTypes;
+use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
 use crate::places::Store as PlacesStore;
 use crate::properties;
@@ -38,9 +39,11 @@ pub struct Setup {
     pub theme: ThemeStore,
     pub thumbnails: Option<Thumbnails>,
     pub searcher: Searcher,
-    /// The MIME database, read at the first [`Command::OpenFile`] and kept
-    /// while the core runs.
+    /// The MIME database, read at the first [`Command::OpenFile`] or
+    /// [`Command::OpenWith`] and kept while the core runs.
     pub mime_types: Arc<OnceLock<MimeTypes>>,
+    /// Answers Open With requests, in order.
+    pub open_with: OpenWithWorker,
     /// File operations, and the clients that hear about them.
     pub jobs: Jobs,
     /// Size scans, each for the client that asked.
@@ -146,6 +149,10 @@ fn answer(
         }
         Command::OpenFile { path, activation } => {
             jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
+            Ok(())
+        }
+        Command::OpenWith(request) => {
+            setup.open_with.answer(client.events(), request);
             Ok(())
         }
         Command::WindowState => client.deliver(Event::WindowState(setup.window_state.bytes())),

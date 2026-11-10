@@ -494,6 +494,7 @@ impl MainWindow {
             | Event::JobInterrupted { .. }
             | Event::JobFinished { .. }
             | Event::Bookmarks(_)
+            | Event::OpenWith(_)
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
             | Event::SpaceUnreadable { .. } => {}

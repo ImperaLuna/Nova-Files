@@ -7,6 +7,7 @@ use crate::bookmark::{Bookmark, BookmarkChange};
 use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
+use crate::open_with::{OpenWith, OpenWithAnswer};
 use crate::properties::{Properties, PropertiesId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
@@ -76,6 +77,9 @@ pub enum Command {
         path: PathBuf,
         activation: Option<String>,
     },
+    /// List the apps that open some files, open them in one, or make one
+    /// the default (see [`OpenWith`]).
+    OpenWith(OpenWith),
     /// Ask for the UI's window state; the answer is [`Event::WindowState`].
     WindowState,
     /// Keep these bytes as the UI's window state, between runs too. The
@@ -220,6 +224,8 @@ pub enum Event {
     /// [`Command::OpenFile`] started nothing: sandboxed, no default app for
     /// the file's type, or the app's program couldn't start.
     FileNotOpened,
+    /// The answer to a [`Command::OpenWith`] request.
+    OpenWith(OpenWithAnswer),
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),

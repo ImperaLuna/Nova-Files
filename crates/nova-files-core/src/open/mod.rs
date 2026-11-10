@@ -8,10 +8,18 @@
 //! The app starts in its own process group with no input or output, and
 //! gets the caller's activation token, so the compositor lets it take
 //! focus.
+//!
+//! Open With (`with`) lists the other apps for some files (`apps`), opens
+//! them in one, and makes one the user's default (`associate`).
 
+mod apps;
+mod associate;
 mod defaults;
 mod entry;
 mod exec;
+#[cfg(test)]
+mod tree;
+mod with;
 
 use std::ffi::{OsStr, OsString};
 use std::io;
@@ -25,6 +33,8 @@ use exec::Fields;
 use nova_files_api::FileTypes as _;
 
 use crate::mime::MimeTypes;
+
+pub use with::Worker as OpenWithWorker;
 
 /// Present inside a Flatpak sandbox, where the host's apps can't be run.
 const FLATPAK_INFO: &str = "/.flatpak-info";
@@ -45,6 +55,8 @@ const DATA_IN_HOME: &str = ".local/share";
 const DEFAULT_CONFIG_DIRS: &str = "/etc/xdg";
 const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 const REAPER_THREAD: &str = "nova-files-opened-app";
+/// A file to try an app's command line with.
+const ANY_FILE: &str = "/";
 
 /// Why a file wasn't opened here; the caller can still ask the portal.
 #[derive(Debug)]
@@ -100,8 +112,12 @@ pub fn open_in_default_app(
     if Path::new(FLATPAK_INFO).exists() {
         return Err(NotOpened::Sandboxed);
     }
-    let places = places_from(|name| std::env::var_os(name));
-    open_from(file, types, activation, &places)
+    open_from(file, types, activation, &environment_places())
+}
+
+/// The folders and desktop names this process's environment names.
+fn environment_places() -> Places {
+    places_from(|name| std::env::var_os(name))
 }
 
 /// [`open_in_default_app`] with the apps and lists in `places`.
@@ -112,13 +128,16 @@ fn open_from(
     places: &Places,
 ) -> Result<(), NotOpened> {
     let app = defaults::default_app(types, places).ok_or(NotOpened::NoApp)?;
-    let line = command(&app, file).ok_or(NotOpened::NoApp)?;
+    let line = commands(&app, &[file])
+        .and_then(|mut lines| lines.pop())
+        .ok_or(NotOpened::NoApp)?;
     launch(&line, app.entry.working_dir.as_deref(), activation).map_err(|_| NotOpened::Failed)
 }
 
-/// The app's command line for `file`; `None` when its `Exec` can't take
-/// a file, or it needs a terminal, which the portal can start.
-fn command(app: &App, file: &Path) -> Option<Vec<OsString>> {
+/// The app's command lines for `files`: one for all of them, or one per
+/// file (see `exec`). `None` when its `Exec` can't take a file, or it needs
+/// a terminal, which the portal can start.
+fn commands(app: &App, files: &[&Path]) -> Option<Vec<Vec<OsString>>> {
     if app.entry.terminal {
         return None;
     }
@@ -127,7 +146,13 @@ fn command(app: &App, file: &Path) -> Option<Vec<OsString>> {
         icon: app.entry.icon.as_deref(),
         entry: &app.file,
     };
-    exec::command_line(&app.entry.exec, file, fields)
+    exec::command_lines(&app.entry.exec, files, fields)
+}
+
+/// Whether the app can be started here on files: it takes a file and
+/// needs no terminal.
+fn opens_files(app: &App) -> bool {
+    commands(app, &[Path::new(ANY_FILE)]).is_some()
 }
 
 /// Starts `line` on its own, and reaps it on a thread when it exits. The
@@ -213,11 +238,14 @@ fn places_from(var: impl Fn(&str) -> Option<OsString>) -> Places {
                 .collect()
         })
         .unwrap_or_default();
+    let config_home = one(CONFIG_HOME_VAR, CONFIG_IN_HOME);
     Places {
-        config: one(CONFIG_HOME_VAR, CONFIG_IN_HOME)
-            .into_iter()
+        config: config_home
+            .iter()
+            .cloned()
             .chain(list(CONFIG_DIRS_VAR, DEFAULT_CONFIG_DIRS))
             .collect(),
+        config_home,
         data: one(DATA_HOME_VAR, DATA_IN_HOME)
             .into_iter()
             .chain(list(DATA_DIRS_VAR, DEFAULT_DATA_DIRS))
@@ -255,6 +283,7 @@ mod tests {
             ("PATH", "/bin"),
         ]);
         assert_eq!(found.config, paths(&["/cfg", "/etc/a", "/etc/b"]));
+        assert_eq!(found.config_home, Some(PathBuf::from("/cfg")));
         assert_eq!(found.data, paths(&["/data", "/run/share", "/usr/share"]));
         assert_eq!(found.desktops, ["hyprland", "gnome"]);
         assert_eq!(found.search_path, Some(OsString::from("/bin")));
@@ -268,6 +297,7 @@ mod tests {
             ("XDG_DATA_DIRS", ""),
         ]);
         assert_eq!(found.config, paths(&["/home/me/.config", "/etc/xdg"]));
+        assert_eq!(found.config_home, Some(PathBuf::from("/home/me/.config")));
         assert_eq!(
             found.data,
             paths(&["/home/me/.local/share", "/usr/local/share", "/usr/share"])
@@ -276,6 +306,7 @@ mod tests {
         assert_eq!(found.search_path, None);
         let homeless = places(&[("HOME", "rel")]);
         assert_eq!(homeless.config, paths(&["/etc/xdg"]));
+        assert_eq!(homeless.config_home, None);
         assert_eq!(homeless.data, paths(&["/usr/local/share", "/usr/share"]));
     }
 
@@ -342,9 +373,14 @@ mod tests {
         assert!(matches!(opened, Err(NotOpened::NoApp)), "{opened:?}");
     }
 
+    fn command(app: &App, file: &Path) -> Option<Vec<OsString>> {
+        commands(app, &[file]).map(|mut lines| lines.remove(0))
+    }
+
     #[test]
     fn an_app_without_a_file_code_is_no_app() {
         let app = App {
+            id: "viewer.desktop".to_owned(),
             entry: entry::Entry {
                 exec: "viewer --new".to_owned(),
                 name: String::new(),
@@ -355,6 +391,7 @@ mod tests {
             file: PathBuf::from("/a.desktop"),
         };
         assert_eq!(command(&app, Path::new("/h/a")), None);
+        assert!(!opens_files(&app));
         let app = App {
             entry: entry::Entry {
                 exec: "viewer %k %f".to_owned(),
@@ -370,6 +407,7 @@ mod tests {
                 OsString::from("/h/a")
             ])
         );
+        assert!(opens_files(&app));
         let app = App {
             entry: entry::Entry {
                 terminal: true,
@@ -378,5 +416,6 @@ mod tests {
             ..app
         };
         assert_eq!(command(&app, Path::new("/h/a")), None);
+        assert!(!opens_files(&app));
     }
 }
