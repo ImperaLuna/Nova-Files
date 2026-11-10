@@ -25,8 +25,8 @@ use std::sync::Arc;
 
 use nova_files_api::{AccessChange, Failure, MODE_BITS, ModeChange, Outcome, Reach};
 use rustix::fs::{
-    AtFlags, CWD, Dir, FileType, Gid, Mode, OFlags, Statx, StatxAttributes, StatxFlags, Uid,
-    chmodat, chownat, openat, statx,
+    AtFlags, CWD, Dir, FileType, Gid, Mode, OFlags, Statx, StatxFlags, Uid, chmodat, chownat,
+    openat, statx,
 };
 use rustix::io::Errno;
 
@@ -34,6 +34,7 @@ use super::Ended;
 use super::failure::failure;
 use super::running::Running;
 use super::stop::Stop;
+use crate::mount_root::{Device, is_mount_root};
 
 /// Reaching a thing only to change it: never its target, nothing read.
 const AT_PATH: OFlags = OFlags::PATH.union(OFlags::NOFOLLOW).union(OFlags::CLOEXEC);
@@ -54,9 +55,6 @@ const WANTED: StatxFlags = StatxFlags::TYPE
 const OWNER_LIST_AND_ENTER: u32 = 0o500;
 /// The number the system reads as "keep the owner (or group) it has".
 const KEEP: u32 = u32::MAX;
-
-/// A drive, as `statx` names it.
-type Device = (u32, u32);
 
 /// A thing waiting to be changed.
 struct Next {
@@ -313,23 +311,6 @@ fn names(at: &OwnedFd) -> rustix::io::Result<Vec<CString>> {
         }
     }
     Ok(names)
-}
-
-/// Whether a folder on drive `own` is where another drive is mounted
-/// inside a folder on drive `parent`. The kernel says so in its `statx`
-/// `attributes` where its `mask` has room for it (Linux 5.8+); a changed
-/// drive alone would also stop at a btrfs subvolume, which is no mount,
-/// so it only answers on older kernels.
-fn is_mount_root(
-    mask: StatxAttributes,
-    attributes: StatxAttributes,
-    own: Device,
-    parent: Device,
-) -> bool {
-    if mask.contains(StatxAttributes::MOUNT_ROOT) {
-        return attributes.contains(StatxAttributes::MOUNT_ROOT);
-    }
-    own != parent
 }
 
 #[cfg(test)]

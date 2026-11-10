@@ -19,6 +19,7 @@ mod list;
 mod measure;
 mod memory;
 mod mime;
+mod mount_root;
 mod open;
 mod ops;
 mod percent;
