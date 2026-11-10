@@ -13,6 +13,7 @@ use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
 use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::theme::{DesktopLook, Theme};
+use crate::trash::Trashed;
 
 /// The most entries one [`Command::Rows`] may name: several screens of
 /// rows. The core leaves out any past it.
@@ -107,6 +108,9 @@ pub enum Command {
     /// and from then on the client gets [`Event::Drives`] again each time
     /// one comes, goes or changes. Clients that never ask never get them.
     Drives,
+    /// Ask what is in the desktop's trash: in the home trash and in each
+    /// mounted drive's. The answer is [`Event::Trash`].
+    ListTrash,
     /// Mount, unmount or eject. The answer, once it is done, is
     /// [`Event::DriveDone`]; the change itself reaches every client that
     /// asked for the drives as [`Event::Drives`].
@@ -241,6 +245,9 @@ pub enum Event {
     /// again to each client that asked whenever one comes, goes or
     /// changes.
     Drives(Arc<DriveList>),
+    /// What is in the trash, answering [`Command::ListTrash`], in no
+    /// particular order.
+    Trash(Vec<Trashed>),
     /// [`Command::Drive`] `action` is done: for a mount, with where the
     /// volume is now. Only the client that asked hears it.
     DriveDone {

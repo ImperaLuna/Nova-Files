@@ -22,7 +22,7 @@ use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
-use crate::places::Store as PlacesStore;
+use crate::places::{Home, Store as PlacesStore};
 use crate::properties;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
@@ -32,6 +32,8 @@ use crate::window_state::Store as WindowStateStore;
 
 /// Where the core finds and keeps things.
 pub struct Setup {
+    /// The user's folders, for the trash listing.
+    pub home: Option<Home>,
     /// The places list and the pinned folders.
     pub places: PlacesStore,
     pub window_state: WindowStateStore,
@@ -135,6 +137,7 @@ fn answer(
             setup.places.change(change);
             Ok(())
         }
+        Command::ListTrash => jobs::list_trash(client, setup.home.clone()),
         Command::Rows { id, first, count } => {
             client.want_rows(id, first, count, setup.settings.current().thumbnails);
             Ok(())

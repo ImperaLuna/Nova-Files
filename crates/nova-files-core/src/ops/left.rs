@@ -49,6 +49,10 @@ pub struct Done {
     /// For a trash job, the paths it moved to the trash: whatever has
     /// their name now came after, and nobody chose to trash it.
     pub trashed: HashSet<PathBuf>,
+    /// For a job taking entries out of the trash, each entry it was about
+    /// to take, by where it sat, and which entry it was: whatever sits
+    /// there now in its place came after, and nobody chose it.
+    pub leaving: HashMap<PathBuf, Entry>,
 }
 
 /// The jobs whose journals are in `folder`, each cleaned up. A journal
@@ -116,6 +120,9 @@ fn operation(lines: &[Line]) -> Option<Operation> {
         (word::MOVE, Some(into)) => Some(Operation::Move { sources, into }),
         (word::DELETE, None) => Some(Operation::Delete { paths: sources }),
         (word::TRASH, None) => Some(Operation::Trash { paths: sources }),
+        (word::RESTORE, None) => Some(Operation::Restore { items: sources }),
+        (word::DELETE_FROM_TRASH, None) => Some(Operation::DeleteFromTrash { items: sources }),
+        (word::EMPTY_TRASH, None) => Some(Operation::EmptyTrash),
         _ => None,
     }
 }
@@ -148,6 +155,11 @@ fn clean(lines: &[Line]) -> Done {
             }
             (word::TRASHED, [from, _]) => {
                 done.trashed.insert(from.clone());
+            }
+            (word::TRASH_INFO, [info, _, item]) => {
+                if let (Some(stored), Some(item)) = (trash::item_of_info(info), entry_from(item)) {
+                    done.leaving.insert(stored, item);
+                }
             }
             (word::PLANNED, [path, entry]) => {
                 if let Some(entry) = entry_from(entry) {
@@ -195,7 +207,7 @@ fn clean(lines: &[Line]) -> Done {
 /// user's (nothing, or another app's entry). Another app's info file
 /// under that name, or a path that isn't a trash's info file, is left
 /// alone.
-fn remove_lone_info(info: &Path, entry: Entry, item: Entry) {
+pub(super) fn remove_lone_info(info: &Path, entry: Entry, item: Entry) {
     let Some(stored) = trash::item_of_info(info) else {
         return;
     };

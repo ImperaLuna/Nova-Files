@@ -33,6 +33,7 @@ mod watch;
 pub use build::Built;
 pub use changes::{Change, ChangeLog, LogReader};
 pub use crawl::{CrawlError, crawl};
+pub use mounts::local_mount_points;
 pub use overlay::Overlay;
 pub use reader::{Index, OpenError};
 pub use search::{Hit, MatchKind, STAGES, Search};

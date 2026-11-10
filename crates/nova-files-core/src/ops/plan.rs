@@ -68,15 +68,65 @@ pub struct Plan {
 /// # Errors
 /// [`Stop`] when cancelled, or when [`check`] refuses, or a source can't
 /// be read.
+#[cfg(test)]
 pub fn plan(sources: &[PathBuf], into: &Path, control: &Control) -> Result<Plan, Stop> {
     check(sources, into)?;
+    add_pairs(&pairs_into(sources, into), control)
+}
+
+/// Each of `sources` with where it goes in `into`: there, under its own
+/// name. A source without a name has nowhere to go.
+pub fn pairs_into(sources: &[PathBuf], into: &Path) -> Vec<(PathBuf, PathBuf)> {
+    sources
+        .iter()
+        .filter_map(|source| Some((source.clone(), into.join(source.file_name()?))))
+        .collect()
+}
+
+/// Plans copying each source of `pairs` to its target.
+///
+/// # Errors
+/// [`Stop`] when cancelled, or when [`check_pairs`] refuses, or a source
+/// can't be read.
+pub fn plan_pairs(pairs: &[(PathBuf, PathBuf)], control: &Control) -> Result<Plan, Stop> {
+    check_pairs(pairs)?;
+    add_pairs(pairs, control)
+}
+
+fn add_pairs(pairs: &[(PathBuf, PathBuf)], control: &Control) -> Result<Plan, Stop> {
     let mut plan = Plan::default();
-    for source in sources {
-        if let Some(name) = source.file_name() {
-            add_tree(&mut plan, source, &into.join(name), control, &|_| true)?;
-        }
+    for (source, target) in pairs {
+        add_tree(&mut plan, source, target, control, &|_| true)?;
     }
     Ok(plan)
+}
+
+/// Checks that each source of `pairs` can go to its target before
+/// anything is changed, so a bad one fails the job with nothing done.
+///
+/// # Errors
+/// [`Stop`] when a path isn't absolute, or a source has no name, isn't
+/// there, or is a folder its target is inside of.
+pub fn check_pairs(pairs: &[(PathBuf, PathBuf)]) -> Result<(), Stop> {
+    for (source, target) in pairs {
+        if !target.is_absolute() || target.file_name().is_none() {
+            return Err(Stop::because(target, Failure::InvalidName));
+        }
+        if !source.is_absolute() || source.file_name().is_none() {
+            return Err(Stop::because(source, Failure::InvalidName));
+        }
+        // Onto itself is a name taken; into itself, never.
+        if target
+            .parent()
+            .is_some_and(|parent| parent.starts_with(source))
+        {
+            return Err(Stop::because(source, Failure::IntoItself));
+        }
+        source
+            .symlink_metadata()
+            .map_err(|error| Stop::at(source, &error))?;
+    }
+    Ok(())
 }
 
 /// Checks that each of `sources` can go into `into` before anything is

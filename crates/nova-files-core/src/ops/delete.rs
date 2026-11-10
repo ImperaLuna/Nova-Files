@@ -29,11 +29,15 @@ use super::stop::Stop;
 
 /// Deletes each of `paths` for good.
 pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
-    running.record(Record::Operation(word::DELETE));
-    for path in paths {
-        running.record(Record::Source(path));
-    }
-    running.record(Record::SourcesDone);
+    running.record_job(word::DELETE, None, paths);
+    let (result, shown) = delete_paths(running, paths);
+    (result.map_or_else(Stop::outcome, |()| Outcome::Done), shown)
+}
+
+/// Deletes each of `paths` for good, and returns how that went and the
+/// folders that held them whose entries changed. The caller records
+/// what the job does.
+pub fn delete_paths(running: &mut Running, paths: &[PathBuf]) -> (Result<(), Stop>, Vec<PathBuf>) {
     // Shallowest first, so removing last to first takes a path chosen
     // through a chosen link before the link, whatever order they came in.
     let mut ordered = paths.to_vec();
@@ -50,7 +54,7 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
         .and_then(|plan| planned(running, plan))
     {
         Ok(plan) => plan,
-        Err(stop) => return (stop.outcome(), Vec::new()),
+        Err(stop) => return (Err(stop), Vec::new()),
     };
     let items = u64::try_from(plan.items.len()).unwrap_or(u64::MAX);
     running.reporter.planned(plan.bytes, items);
@@ -93,7 +97,7 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
         .into_iter()
         .map(PathBuf::from)
         .collect();
-    (result.map_or_else(Stop::outcome, |()| Outcome::Done), shown)
+    (result, shown)
 }
 
 /// `plan` as the journal keeps it. A delete that resumes keeps only what

@@ -67,6 +67,17 @@ pub enum Operation {
     /// shares, where it can be restored from. Each goes to the trash on
     /// its own drive; nothing is copied across drives.
     Trash { paths: Vec<PathBuf> },
+    /// Put each of `items`, entries in a trash (see [`Trashed::item`]),
+    /// back where it was trashed from, making the folders it was in when
+    /// they are gone. What stands in the way there is asked about as for
+    /// a move.
+    ///
+    /// [`Trashed::item`]: crate::Trashed::item
+    Restore { items: Vec<PathBuf> },
+    /// Delete each of `items`, entries in a trash, for good.
+    DeleteFromTrash { items: Vec<PathBuf> },
+    /// Delete everything in every trash the user has, for good.
+    EmptyTrash,
 }
 
 /// How far a job has got. Totals are known once the job has looked at

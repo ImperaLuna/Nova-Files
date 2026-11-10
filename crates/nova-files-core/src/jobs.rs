@@ -30,9 +30,12 @@ use crate::list::{self, Stopped};
 use crate::memory;
 use crate::mime::MimeTypes;
 use crate::open;
+use crate::places::Home;
+use crate::trash;
 
 const LIST_THREAD: &str = "nova-files-list";
 const OPEN_THREAD: &str = "nova-files-open";
+const TRASH_THREAD: &str = "nova-files-trash";
 
 /// No listing counts: the client never asked, cancelled, or left.
 const NO_LISTING: u64 = u64::MAX;
@@ -177,6 +180,29 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
             })
             .ok();
     }
+}
+
+/// Answers with what is in each trash `home`'s user has.
+///
+/// # Errors
+/// [`ClientGone`] when the client stopped listening.
+pub fn list_trash(client: &Client, home: Option<Home>) -> Result<(), ClientGone> {
+    let events = Arc::clone(&client.events);
+    let spawned = thread::Builder::new()
+        .name(TRASH_THREAD.to_owned())
+        .spawn(move || {
+            let listed = trash::Trashes::of(home.as_ref())
+                .all()
+                .iter()
+                .flat_map(trash::list)
+                .collect();
+            events.deliver(Event::Trash(listed)).ok();
+        });
+    if spawned.is_err() {
+        // As for places: an empty trash rather than no answer.
+        return client.deliver(Event::Trash(Vec::new()));
+    }
+    Ok(())
 }
 
 /// Opens `path` in its default app, reading the MIME database into `types`

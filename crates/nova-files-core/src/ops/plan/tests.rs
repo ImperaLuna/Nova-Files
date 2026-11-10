@@ -4,6 +4,45 @@ use std::os::unix::net::UnixListener;
 
 use super::*;
 use crate::ops::test_folder::TestFolder;
+use nova_files_api::Outcome;
+
+#[test]
+fn pairs_must_be_whole_paths_and_never_into_themselves() {
+    let pair = |source: &str, target: &str| (PathBuf::from(source), PathBuf::from(target));
+    let refused = |pairs: &[(PathBuf, PathBuf)]| check_pairs(pairs).err().map(Stop::outcome);
+    let failed = |path: &str, reason| {
+        Some(Outcome::Failed {
+            path: path.into(),
+            reason,
+        })
+    };
+
+    let folder = TestFolder::new("plan-pairs");
+    let there = folder.file("a", "a");
+    let whole = (there, folder.path().join("b"));
+    assert_eq!(refused(&[whole]), None);
+    assert_eq!(
+        refused(&[pair("/a", "b")]),
+        failed("b", Failure::InvalidName)
+    );
+    assert_eq!(
+        refused(&[pair("/a", "/")]),
+        failed("/", Failure::InvalidName)
+    );
+    assert_eq!(
+        refused(&[pair("a", "/b")]),
+        failed("a", Failure::InvalidName)
+    );
+    assert_eq!(
+        refused(&[pair("/", "/b")]),
+        failed("/", Failure::InvalidName)
+    );
+    assert_eq!(
+        refused(&[pair("/a", "/a/b/c")]),
+        failed("/a", Failure::IntoItself)
+    );
+    assert!(refused(&[pair("/gone", "/b")]).is_some());
+}
 
 #[test]
 fn plans_folders_before_what_they_hold() {

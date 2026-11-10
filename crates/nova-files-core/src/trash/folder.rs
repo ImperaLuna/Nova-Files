@@ -26,9 +26,9 @@ use crate::private_file::FOLDER_MODE;
 /// The sticky bit, which a shared `.Trash` must have.
 const STICKY: u32 = 0o1000;
 /// The shared trash folder an admin may make at a mount's top.
-const SHARED: &str = ".Trash";
+pub(super) const SHARED: &str = ".Trash";
 /// The start of a user's own trash folder at a mount's top.
-const OWN_PREFIX: &str = ".Trash-";
+pub(super) const OWN_PREFIX: &str = ".Trash-";
 
 /// One trash: its folder, and the top folder of its mount for a trash
 /// that isn't the home trash, which its info files' paths are relative
@@ -128,6 +128,51 @@ fn mount_of(path: &Path, flags: AtFlags) -> io::Result<Mount> {
     })
 }
 
+/// The trash `root` is, when it is a mount's: `.Trash-<uid>`, or
+/// `<uid>` in a fit shared `.Trash`, at the top of its mount, as
+/// [`folder_for`] would pick it, and the user's own. Nothing is made.
+pub fn mount_trash_at(root: &Path) -> Option<TrashFolder> {
+    let top = trash_top(root)?;
+    let mount = mount_of(top, AtFlags::SYMLINK_NOFOLLOW).ok()?;
+    let at_top = topdir(top, mount).ok()? == top;
+    (at_top && is_own(root)).then(|| TrashFolder {
+        root: root.to_path_buf(),
+        topdir: Some(top.to_path_buf()),
+    })
+}
+
+/// Where the mount top would be were `root` a mount's trash, by its
+/// name: above `.Trash-<uid>`, or above a fit shared `.Trash` that holds
+/// `<uid>`.
+fn trash_top(root: &Path) -> Option<&Path> {
+    let uid = getuid().as_raw().to_string();
+    let name = root.file_name()?;
+    let above = root.parent()?;
+    if name.to_str() == Some(&format!("{OWN_PREFIX}{uid}")) {
+        Some(above)
+    } else if name.to_str() == Some(&uid) && above.file_name()? == SHARED && shared_fit(above) {
+        above.parent()
+    } else {
+        None
+    }
+}
+
+/// Whether `root`, its `files` and its `info` are each a real folder the
+/// user owns, never reached through a link.
+pub fn is_own(root: &Path) -> bool {
+    [root.to_path_buf(), root.join(FILES), root.join(INFO)]
+        .iter()
+        .all(|folder| fs::symlink_metadata(folder).is_ok_and(|there| owned_folder(&there).is_ok()))
+}
+
+/// Whether `shared`, a mount's `.Trash`, is one the admin made for every
+/// user: a real folder with the sticky bit.
+fn shared_fit(shared: &Path) -> bool {
+    shared
+        .symlink_metadata()
+        .is_ok_and(|there| there.is_dir() && there.mode() & STICKY != 0)
+}
+
 /// The top folder of `mount`, which `folder` is on.
 fn topdir(folder: &Path, mount: Mount) -> io::Result<PathBuf> {
     let mut top = folder;
@@ -145,10 +190,7 @@ fn topdir(folder: &Path, mount: Mount) -> io::Result<PathBuf> {
 fn mount_trash(top: &Path) -> io::Result<PathBuf> {
     let uid = getuid().as_raw();
     let shared = top.join(SHARED);
-    let fit = shared
-        .symlink_metadata()
-        .is_ok_and(|there| there.is_dir() && there.mode() & STICKY != 0);
-    if fit {
+    if shared_fit(&shared) {
         let own = shared.join(uid.to_string());
         match own_folder(&own) {
             Ok(()) => return Ok(own),
@@ -283,6 +325,26 @@ mod tests {
 
         assert_eq!(root, shared.join(getuid().as_raw().to_string()));
         assert!(root.join(FILES).is_dir());
+    }
+
+    #[test]
+    fn a_mount_trash_is_known_by_its_name_and_a_fit_shared_trash() {
+        let folder = TestFolder::new("trash-top-name");
+        let uid = getuid().as_raw().to_string();
+        let shared = folder.path().join(SHARED);
+        fs::create_dir(&shared).unwrap();
+        let own = folder.path().join(format!("{OWN_PREFIX}{uid}"));
+
+        assert_eq!(trash_top(&own), Some(folder.path()));
+        assert_eq!(trash_top(&shared.join(&uid)), None, "not sticky");
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o1777)).unwrap();
+        assert_eq!(trash_top(&shared.join(&uid)), Some(folder.path()));
+        assert_eq!(trash_top(&folder.path().join(&uid)), None, "not in .Trash");
+        assert_eq!(
+            trash_top(&shared.join("0")),
+            (uid == "0").then_some(folder.path())
+        );
+        assert_eq!(trash_top(&folder.path().join(".Trash-x")), None);
     }
 
     #[test]

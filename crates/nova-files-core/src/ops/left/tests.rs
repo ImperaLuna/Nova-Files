@@ -167,3 +167,28 @@ fn a_trash_job_cleans_up_only_its_last_info_file() {
     ]);
     assert!(finished.exists());
 }
+
+#[test]
+fn jobs_out_of_the_trash_resume_with_what_they_were_given() {
+    let a = Path::new("/t/files/a");
+    let given = |name: &str, sources: &[&Path]| {
+        let mut lines = vec![line(name, &[])];
+        lines.extend(sources.iter().map(|source| line(word::SOURCE, &[source])));
+        lines.push(line(word::SOURCES_DONE, &[]));
+        operation(&lines)
+    };
+
+    assert_eq!(
+        given(word::RESTORE, &[a]),
+        Some(Operation::Restore {
+            items: vec![a.into()]
+        })
+    );
+    assert_eq!(
+        given(word::DELETE_FROM_TRASH, &[a]),
+        Some(Operation::DeleteFromTrash {
+            items: vec![a.into()]
+        })
+    );
+    assert_eq!(given(word::EMPTY_TRASH, &[]), Some(Operation::EmptyTrash));
+}

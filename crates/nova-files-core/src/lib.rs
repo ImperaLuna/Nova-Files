@@ -107,7 +107,7 @@ pub fn spawn_with(
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
     let jobs = ops::Jobs::new(
         home.as_ref().map(|home| home.state.as_path()),
-        home.as_ref().map(|home| home.data.as_path()),
+        trash::Trashes::of(home.as_ref()),
         connector.clone(),
     );
     let thread = thread::Builder::new()
@@ -119,9 +119,10 @@ pub fn spawn_with(
             let settings = settings::Store::open(config);
             let theme = theme::Store::open(config);
             theme.follow(&settings);
-            let places = places::Store::open(home);
+            let places = places::Store::open(home.clone());
             let mime_types = Arc::default();
             let setup = run::Setup {
+                home,
                 places,
                 window_state,
                 settings,

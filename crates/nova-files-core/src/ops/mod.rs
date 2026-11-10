@@ -35,6 +35,7 @@ mod one_step;
 mod place;
 mod plan;
 mod progress;
+mod restore;
 mod running;
 mod stop;
 mod sync;
@@ -62,12 +63,14 @@ pub use audience::Audience;
 pub use test_folder::TestFolder;
 
 use crate::jobs::Client;
+use crate::trash::Trashes;
 use access::change_access;
 use delete::delete;
 use job::Job;
 use left::Left;
 use make::How;
 use progress::Reporter;
+use restore::{delete_from_trash, empty_trash, restore};
 use running::Running;
 use transfer::transfer;
 use trash::trash;
@@ -92,8 +95,8 @@ pub struct Jobs {
     running: Registry,
     /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
-    /// The home trash's folder; `None` without a data folder.
-    home_trash: Option<PathBuf>,
+    /// Where the user's trashes are.
+    trashes: Trashes,
     /// Jobs a crash cut short, waiting to be resumed or forgotten. Added
     /// to under the lock of `running`, so a client never misses one.
     interrupted: Interrupted,
@@ -102,19 +105,18 @@ pub struct Jobs {
 }
 
 impl Jobs {
-    /// Jobs whose journals go under the state folder `state` and whose
-    /// home trash is under the data folder `data`. Jobs a crash cut
+    /// Jobs whose journals go under the state folder `state` and that
+    /// use the trashes `trashes`. Jobs a crash cut
     /// short are found there, cleaned up, and wait as interrupted; on a
     /// thread of their own, as the disk may be slow.
-    pub fn new(state: Option<&Path>, data: Option<&Path>, wake: Connector) -> Self {
+    pub fn new(state: Option<&Path>, trashes: Trashes, wake: Connector) -> Self {
         let journals = state.map(|state| state.join(journal::FOLDER));
-        let home_trash = data.map(|data| data.join(crate::trash::HOME_TRASH));
         let jobs = Self {
             next: AtomicU64::new(first_id()),
             audience: Audience::default(),
             running: Registry::default(),
             journals,
-            home_trash,
+            trashes,
             interrupted: Interrupted::default(),
             wake,
         };
@@ -231,11 +233,11 @@ impl Jobs {
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
         // New hidden names for a resumed job, never a crash's.
         let resume = left.map(|left| (left, self.next.fetch_add(1, Ordering::Relaxed)));
-        let (registry, audience, wake, home_trash) = (
+        let (registry, audience, wake, trashes) = (
             Arc::clone(&self.running),
             self.audience.clone(),
             self.wake.clone(),
-            self.home_trash.clone(),
+            self.trashes.clone(),
         );
         let spawned = thread::Builder::new()
             .name(JOB_THREAD.to_owned())
@@ -248,7 +250,7 @@ impl Jobs {
                     }
                     None => operation,
                 };
-                let ended = run(&mut running, &operation, home_trash.as_deref());
+                let ended = run(&mut running, &operation, &trashes);
                 running.finish();
                 finish(&registry, &audience, job, ended);
                 // Into the loop's queue, so its idle wait starts again now.
@@ -370,7 +372,7 @@ fn first_id() -> u64 {
         })
 }
 
-fn run(running: &mut Running, operation: &Operation, home_trash: Option<&Path>) -> Ended {
+fn run(running: &mut Running, operation: &Operation, trashes: &Trashes) -> Ended {
     match operation {
         Operation::Rename { path, name } => one_step::rename(path, name),
         Operation::NewFolder { inside, name } => one_step::new_folder(inside, name),
@@ -378,7 +380,10 @@ fn run(running: &mut Running, operation: &Operation, home_trash: Option<&Path>) 
         Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
         Operation::Delete { paths } => delete(running, paths),
         Operation::ChangeAccess { paths, change } => change_access(running, paths, change),
-        Operation::Trash { paths } => trash(running, paths, home_trash),
+        Operation::Trash { paths } => trash(running, paths, trashes.home.as_deref()),
+        Operation::Restore { items } => restore(running, items, trashes),
+        Operation::DeleteFromTrash { items } => delete_from_trash(running, items, trashes),
+        Operation::EmptyTrash => empty_trash(running, trashes),
     }
 }
 
@@ -411,6 +416,12 @@ fn still_to_do(operation: &Operation) -> Operation {
         Operation::Trash { paths } => Operation::Trash {
             paths: there(paths),
         },
+        Operation::Restore { items } => Operation::Restore {
+            items: there(items),
+        },
+        Operation::DeleteFromTrash { items } => Operation::DeleteFromTrash {
+            items: there(items),
+        },
         other => other.clone(),
     }
 }
@@ -425,7 +436,10 @@ fn first_path(operation: &Operation) -> PathBuf {
         }
         Operation::Delete { paths }
         | Operation::Trash { paths }
-        | Operation::ChangeAccess { paths, .. } => paths.first().cloned().unwrap_or_default(),
+        | Operation::ChangeAccess { paths, .. }
+        | Operation::Restore { items: paths }
+        | Operation::DeleteFromTrash { items: paths } => paths.first().cloned().unwrap_or_default(),
+        Operation::EmptyTrash => PathBuf::new(),
     }
 }
 

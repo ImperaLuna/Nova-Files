@@ -34,7 +34,7 @@ use super::journal::{Record, word};
 use super::keep_both::{Naming, free_path};
 use super::make::{How, Made, Making, make, size};
 use super::place::rename_no_replace;
-use super::plan::{Item, Kind, Plan, check, plan};
+use super::plan::{Item, Kind, Plan, check, check_pairs, pairs_into, plan_pairs};
 use super::running::Running;
 use super::stop::Stop;
 use super::sync::sync_folders;
@@ -160,27 +160,41 @@ impl Done {
 
 /// Copies or moves, as `how` says, each of `sources` into `into`.
 pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: How) -> Ended {
-    running.record(Record::Operation(match how {
+    let name = match how {
         How::Copy => word::COPY,
         How::Move => word::MOVE,
-    }));
-    running.record(Record::Into(into));
-    for source in sources {
-        running.record(Record::Source(source));
+    };
+    running.record_job(name, Some(into), sources);
+    if let Err(stop) = check(sources, into) {
+        return (stop.outcome(), Vec::new());
     }
-    running.record(Record::SourcesDone);
+    let (result, touched) = transfer_to(running, &pairs_into(sources, into), how);
+    (
+        result.map_or_else(Stop::outcome, |()| Outcome::Done),
+        changed(into, sources, how, &touched),
+    )
+}
+
+/// Copies or moves, as `how` says, each source of `pairs` to its target,
+/// and returns how that went and the folders whose entries changed. The
+/// caller records what the job does.
+pub fn transfer_to(
+    running: &mut Running,
+    pairs: &[(PathBuf, PathBuf)],
+    how: How,
+) -> (Result<(), Stop>, BTreeSet<PathBuf>) {
     let mut touched = BTreeSet::new();
     let (rest, renamed) = if how.moves() {
-        match move_whole(running, sources, into, &mut touched) {
+        match move_whole(running, pairs, &mut touched) {
             Ok(left) => left,
-            Err(stop) => return (stop.outcome(), changed(into, sources, how, &touched)),
+            Err(stop) => return (Err(stop), touched),
         }
     } else {
-        (sources.to_vec(), 0)
+        (pairs.to_vec(), 0)
     };
-    let plan = match plan(&rest, into, &running.shared.control) {
+    let plan = match plan_pairs(&rest, &running.shared.control) {
         Ok(plan) => plan,
-        Err(stop) => return (stop.outcome(), changed(into, sources, how, &touched)),
+        Err(stop) => return (Err(stop), touched),
     };
     let items = u64::try_from(plan.items.len() + renamed).unwrap_or(u64::MAX);
     running.reporter.planned(plan.bytes, items);
@@ -192,7 +206,7 @@ pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: Ho
         touched,
         ..Done::default()
     };
-    let mut result = place_each(running, &plan, into, &mut done);
+    let mut result = place_each(running, &plan, &rest, &mut done);
     let Done {
         folders,
         emptied,
@@ -217,30 +231,34 @@ pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: Ho
     // So what the job reports made is on the disk.
     sync_folders(touched.iter().map(PathBuf::as_path));
     running.reporter.tell();
-    (
-        result.map_or_else(Stop::outcome, |()| Outcome::Done),
-        changed(into, sources, how, &touched),
-    )
+    (result, touched)
 }
 
-/// Checks every one of a move's `sources` first, then renames each into
-/// `into` whole where it can. Returns those it couldn't, and how many it
-/// did; a source inside another moves with it.
+/// Checks every one of a move's `pairs` first, then renames each source
+/// to its target whole where it can. Returns those it couldn't, and how
+/// many it did; a source inside another moves with it.
 ///
 /// # Errors
 /// [`Stop`] when cancelled, or a source is refused.
 fn move_whole(
     running: &mut Running,
-    sources: &[PathBuf],
-    into: &Path,
+    pairs: &[(PathBuf, PathBuf)],
     touched: &mut BTreeSet<PathBuf>,
-) -> Result<(Vec<PathBuf>, usize), Stop> {
-    check(sources, into)?;
-    let mut outermost = outermost(sources, &running.shared.control)?;
+) -> Result<(Vec<(PathBuf, PathBuf)>, usize), Stop> {
+    check_pairs(pairs)?;
+    let sources: Vec<_> = pairs.iter().map(|(source, _)| source.clone()).collect();
+    let outermost: HashSet<_> = outermost(&sources, &running.shared.control)?
+        .into_iter()
+        .collect();
+    let mut outermost: Vec<_> = pairs
+        .iter()
+        .filter(|(source, _)| outermost.contains(source))
+        .cloned()
+        .collect();
     // Deepest first: a source reached through a link among the sources
     // goes before that link's rename takes its path away.
-    outermost.sort_by_key(|source| Reverse(source.components().count()));
-    let rest = rename_whole(running, &outermost, into, touched)?;
+    outermost.sort_by_key(|(source, _)| Reverse(source.components().count()));
+    let rest = rename_whole(running, &outermost, touched)?;
     let renamed = outermost.len() - rest.len();
     Ok((rest, renamed))
 }
@@ -279,36 +297,34 @@ fn outermost(sources: &[PathBuf], control: &Control) -> Result<Vec<PathBuf>, Can
         .collect())
 }
 
-/// Renames each of `sources`, all checked, into `into` whole where its
-/// name there is free and the drive is the same, and returns those it
-/// couldn't.
+/// Renames each source of `pairs`, all checked, to its target whole
+/// where that name is free and the drive is the same, and returns those
+/// it couldn't.
 ///
 /// # Errors
 /// [`Stop`] when cancelled.
 fn rename_whole(
     running: &mut Running,
-    sources: &[PathBuf],
-    into: &Path,
+    pairs: &[(PathBuf, PathBuf)],
     touched: &mut BTreeSet<PathBuf>,
-) -> Result<Vec<PathBuf>, Stop> {
+) -> Result<Vec<(PathBuf, PathBuf)>, Stop> {
     let mut rest = Vec::new();
-    for source in sources {
+    for (source, target) in pairs {
         running.shared.control.checkpoint()?;
-        let (Some(name), Some(parent)) = (source.file_name(), source.parent()) else {
-            rest.push(source.clone());
+        let (Some(into), Some(parent)) = (target.parent(), source.parent()) else {
+            rest.push((source.clone(), target.clone()));
             continue;
         };
-        let target = into.join(name);
         // Anything at the target, even the source itself or a hard link
         // to it (which a rename would leave in place, saying it moved),
         // is the plan's to ask about.
         let free = target.symlink_metadata().is_err();
-        if free && rename_no_replace(source, &target).is_ok() {
-            running.record(Record::Moved(source, &target));
+        if free && rename_no_replace(source, target).is_ok() {
+            running.record(Record::Moved(source, target));
             touched.insert(into.to_path_buf());
             touched.insert(parent.to_path_buf());
         } else {
-            rest.push(source.clone());
+            rest.push((source.clone(), target.clone()));
         }
     }
     Ok(rest)
@@ -366,17 +382,21 @@ fn changed(
     changed
 }
 
-/// Places each item of `plan`, a transfer into `into`, in turn, noting in
+/// Places each item of `plan`, a transfer of `pairs`, in turn, noting in
 /// `done` what became of it.
 fn place_each(
     running: &mut Running,
     plan: &Plan,
-    into: &Path,
+    pairs: &[(PathBuf, PathBuf)],
     done: &mut Done,
 ) -> Result<(), Stop> {
+    let tops: HashSet<(&Path, &Path)> = pairs
+        .iter()
+        .map(|(source, target)| (source.as_path(), target.as_path()))
+        .collect();
     for (index, item) in plan.items.iter().enumerate() {
         // A source's tree starts: the last one's answers were its own.
-        if item.to.parent() == Some(into) {
+        if tops.contains(&(item.from.as_path(), item.to.as_path())) {
             done.detours = Detours::default();
         }
         let Some(planned) = done.detours.target(&item.to) else {

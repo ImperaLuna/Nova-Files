@@ -203,6 +203,19 @@ impl Running {
         }
     }
 
+    /// Records what the job is asked to do: operation `name`, the folder
+    /// `into` when it has one, and each of `sources`.
+    pub fn record_job(&mut self, name: &'static str, into: Option<&Path>, sources: &[PathBuf]) {
+        self.record(Record::Operation(name));
+        if let Some(into) = into {
+            self.record(Record::Into(into));
+        }
+        for source in sources {
+            self.record(Record::Source(source));
+        }
+        self.record(Record::SourcesDone);
+    }
+
     /// The job is over: its journal goes.
     pub fn finish(mut self) {
         if let Some(journal) = self.journal.take() {

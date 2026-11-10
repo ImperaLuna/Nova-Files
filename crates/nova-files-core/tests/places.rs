@@ -62,6 +62,7 @@ impl TempHome {
             config: self.at(".config"),
             state: self.at(".local/state"),
             data: self.at(".local/share"),
+            drive_trashes: false,
         };
         nova_files_core::spawn_with(IDLE_EXIT, Some(home), None, None).unwrap()
     }

@@ -57,6 +57,10 @@ pub struct Home {
     pub state: PathBuf,
     /// Holds the home trash.
     pub data: PathBuf,
+    /// Whether the trashes at the top of other drives count, found from
+    /// the system's mount table. Tests leave them out, so they never
+    /// touch the real ones.
+    pub drive_trashes: bool,
 }
 
 impl Home {
@@ -73,6 +77,7 @@ impl Home {
             config,
             state,
             data,
+            drive_trashes: true,
         })
     }
 }
@@ -328,6 +333,7 @@ mod tests {
             config: home.0.join(".config"),
             state: home.0.join(".local/state"),
             data: home.0.join(".local/share"),
+            drive_trashes: false,
         };
         fs::create_dir_all(&home_folder.config).unwrap();
         fs::write(home_folder.config.join(USER_DIRS_FILE), user_dirs).unwrap();
