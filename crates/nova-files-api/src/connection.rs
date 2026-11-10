@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 
+use crate::drive::DriveService;
 use crate::message::{ClientId, Command, Event};
 
 /// Where the core delivers one client's events. Shared between threads:
@@ -61,6 +62,9 @@ pub enum CoreMessage {
     /// Something is about to use the core (a window is being opened), so
     /// its idle wait starts again.
     Activity,
+    /// What watches the drives for the core, handed over once at
+    /// start-up (see [`Connector::offer_drives`]).
+    DriveService(Arc<dyn DriveService>),
 }
 
 impl std::fmt::Debug for CoreMessage {
@@ -80,6 +84,7 @@ impl std::fmt::Debug for CoreMessage {
                 .field("client", client)
                 .finish(),
             Self::Activity => f.write_str("Activity"),
+            Self::DriveService(_) => f.write_str("DriveService"),
         }
     }
 }
@@ -112,6 +117,18 @@ impl Connector {
     pub fn activity(&self) -> Result<(), CoreGone> {
         self.sender
             .send(CoreMessage::Activity)
+            .map_err(|_| CoreGone)
+    }
+
+    /// Hands the core what watches the drives. The core uses only the
+    /// first one it gets; send it before any client connects, so the
+    /// first [`crate::Command::Drives`] finds it.
+    ///
+    /// # Errors
+    /// [`CoreGone`] when the core has stopped.
+    pub fn offer_drives(&self, service: impl DriveService) -> Result<(), CoreGone> {
+        self.sender
+            .send(CoreMessage::DriveService(Arc::new(service)))
             .map_err(|_| CoreGone)
     }
 
