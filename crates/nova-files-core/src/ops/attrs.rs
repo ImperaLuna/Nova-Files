@@ -9,13 +9,10 @@ use std::fs::{File, FileTimes, Metadata, Permissions};
 use std::io;
 use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 
+use nova_files_api::MODE_BITS;
 use rustix::buffer::{SpareCapacity, spare_capacity};
 use rustix::fs::{XattrFlags, fgetxattr, fgetxattr_query, flistxattr, flistxattr_query, fsetxattr};
 use rustix::io::Errno;
-
-/// The permission bits a copy keeps: read, write and run for each, plus
-/// set-id and sticky.
-const MODE_BITS: u32 = 0o7777;
 
 /// Gives `to` the permission bits and times of `from`.
 pub fn copy_mode_and_times(metadata: &Metadata, to: &File) -> io::Result<()> {

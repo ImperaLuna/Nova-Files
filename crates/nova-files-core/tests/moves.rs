@@ -19,7 +19,11 @@ use std::os::unix::fs::{MetadataExt as _, symlink};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use nova_files_api::{Answer, ConflictKind, Event, Failure, JobId, Operation, Outcome, Scope};
+use nova_files_api::uri::file_uri;
+use nova_files_api::{
+    Answer, ConflictKind, Event, Failure, FileClipboard, GNOME_COPIED_FILES, JobId, Offer,
+    Operation, Outcome, Scope,
+};
 
 use answers::{answer, held};
 use common::{Bench, Client};
@@ -284,4 +288,30 @@ fn a_folder_moved_across_drives_keeps_its_times() {
     assert_eq!(outcome, Outcome::Done);
     let moved = fs::metadata(into.join("src")).unwrap();
     assert_eq!(moved.modified().unwrap(), then);
+}
+
+#[test]
+fn a_cut_from_another_file_manager_pastes_as_a_move() {
+    let bench = Bench::new("clipboard-cut");
+    fs::create_dir_all(bench.at("from/folder")).unwrap();
+    fs::write(bench.at("from/folder/inside"), b"kept").unwrap();
+    fs::write(bench.at("from/a b.txt"), b"a").unwrap();
+    fs::create_dir(bench.at("into")).unwrap();
+    // What Nautilus puts on the clipboard for a cut.
+    let gnome = format!(
+        "cut\n{}\n{}",
+        file_uri(&bench.at("from/a b.txt")),
+        file_uri(&bench.at("from/folder"))
+    );
+    let files = FileClipboard::from_offers(&[Offer::new(GNOME_COPIED_FILES, gnome)]).unwrap();
+
+    let (_, outcome, _) = bench
+        .client()
+        .run(files.paste_into(bench.at("into")).unwrap());
+
+    assert_eq!(outcome, Outcome::Done);
+    assert!(!bench.at("from/a b.txt").exists());
+    assert!(!bench.at("from/folder").exists());
+    assert_eq!(fs::read(bench.at("into/a b.txt")).unwrap(), b"a");
+    assert_eq!(fs::read(bench.at("into/folder/inside")).unwrap(), b"kept");
 }

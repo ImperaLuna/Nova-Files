@@ -8,6 +8,11 @@
 //! service, a client gets an empty list at once, and the real one if a
 //! service arrives later.
 //!
+//! A client's mount, unmount or eject runs on a thread of its own, since
+//! it may wait on a person typing a password; only that client hears how
+//! it went, while the change itself reaches every listener in the next
+//! list.
+//!
 //! The service's thread hands each list to [`seen`], which keeps it and
 //! tells every listening client under one lock, so a client that asks at
 //! that moment gets either the old list and then the new one, or the new
@@ -15,8 +20,13 @@
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError, Weak};
+use std::thread;
 
-use nova_files_api::{ClientGone, ClientId, DriveList, DriveService, Event, EventSink};
+use nova_files_api::{
+    ClientGone, ClientId, DriveAction, DriveFailure, DriveList, DriveService, Event, EventSink,
+};
+
+const ACTION_THREAD: &str = "nova-files-drive-action";
 
 /// The drives and who hears about them.
 #[derive(Default)]
@@ -97,6 +107,43 @@ impl Store {
         Ok(())
     }
 
+    /// Does `action` on a thread of its own and tells the client through
+    /// `events` once it is done.
+    ///
+    /// # Errors
+    /// [`ClientGone`] when the client stopped listening before it could be
+    /// told there is no service to ask.
+    pub fn act(&self, events: &Arc<dyn EventSink>, action: DriveAction) -> Result<(), ClientGone> {
+        let Some(service) = lock(&self.shared).service.clone() else {
+            return events.deliver(Event::DriveDone {
+                action,
+                result: Err(DriveFailure::NoService),
+            });
+        };
+        let answer = Arc::clone(events);
+        let asked = action.clone();
+        let spawned = thread::Builder::new()
+            .name(ACTION_THREAD.to_owned())
+            .spawn(move || {
+                let result = service.act(&asked);
+                // A client gone meanwhile hears nothing; the change still
+                // reaches the others in the next list.
+                answer
+                    .deliver(Event::DriveDone {
+                        action: asked,
+                        result,
+                    })
+                    .ok();
+            });
+        match spawned {
+            Ok(_) => Ok(()),
+            Err(error) => events.deliver(Event::DriveDone {
+                action,
+                result: Err(DriveFailure::Failed(error.to_string())),
+            }),
+        }
+    }
+
     /// Stops sending `client` the drives.
     pub fn forget(&self, client: ClientId) {
         lock(&self.shared).listeners.remove(&client);
@@ -140,6 +187,8 @@ mod tests {
     #[derive(Default)]
     struct Hand {
         seen: Mutex<Vec<Seen>>,
+        /// The actions asked for, in order.
+        acted: Mutex<Vec<DriveAction>>,
     }
 
     type Seen = Box<dyn Fn(DriveList) + Send + Sync>;
@@ -162,6 +211,15 @@ mod tests {
     impl DriveService for Handle {
         fn follow(&self, seen: Seen) {
             self.0.seen.lock().unwrap().push(seen);
+        }
+
+        fn act(&self, action: &DriveAction) -> Result<Option<PathBuf>, DriveFailure> {
+            self.0.acted.lock().unwrap().push(action.clone());
+            match action {
+                DriveAction::Mount(_) => Ok(Some(PathBuf::from("/run/media/me/Photos"))),
+                DriveAction::Unmount(_) => Err(DriveFailure::Busy),
+                DriveAction::Eject(_) => Ok(None),
+            }
         }
     }
 
@@ -189,6 +247,16 @@ mod tests {
                 read_only: false,
             }],
         }
+    }
+
+    fn mount() -> DriveAction {
+        DriveAction::Mount(VolumeId("stick1".to_owned()))
+    }
+
+    fn done(receiver: &Receiver<Event>) -> Event {
+        receiver
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap()
     }
 
     fn drives(receiver: &Receiver<Event>) -> Vec<DriveList> {
@@ -297,6 +365,46 @@ mod tests {
     fn a_service_offered_before_anyone_asks_waits() {
         let (_store, hand) = with_hand();
         assert_eq!(hand.follows(), 0);
+    }
+
+    #[test]
+    fn an_action_answers_the_client_that_asked_with_the_service_s_result() {
+        let (store, hand) = with_hand();
+        let (events, receiver) = client();
+        store.act(&events, mount()).unwrap();
+        assert_eq!(
+            done(&receiver),
+            Event::DriveDone {
+                action: mount(),
+                result: Ok(Some(PathBuf::from("/run/media/me/Photos"))),
+            }
+        );
+        let unmount = DriveAction::Unmount(VolumeId("stick1".to_owned()));
+        store.act(&events, unmount.clone()).unwrap();
+        assert_eq!(
+            done(&receiver),
+            Event::DriveDone {
+                action: unmount.clone(),
+                result: Err(DriveFailure::Busy),
+            }
+        );
+        assert_eq!(*hand.acted.lock().unwrap(), vec![mount(), unmount]);
+    }
+
+    #[test]
+    fn without_a_service_an_action_fails_at_once() {
+        let store = Store::default();
+        let (events, receiver) = client();
+        store.act(&events, mount()).unwrap();
+        assert_eq!(
+            receiver.try_recv().unwrap(),
+            Event::DriveDone {
+                action: mount(),
+                result: Err(DriveFailure::NoService),
+            }
+        );
+        drop(receiver);
+        assert_eq!(store.act(&events, mount()), Err(ClientGone));
     }
 
     #[test]

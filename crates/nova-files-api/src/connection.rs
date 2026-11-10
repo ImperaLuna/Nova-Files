@@ -190,16 +190,21 @@ impl Drop for Connection {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     use super::*;
-    use crate::DriveList;
+    use crate::{DriveAction, DriveFailure, DriveList};
 
     struct NoDrives;
 
     impl DriveService for NoDrives {
         fn follow(&self, seen: Box<dyn Fn(DriveList) + Send + Sync>) {
             seen(DriveList::default());
+        }
+
+        fn act(&self, _action: &DriveAction) -> Result<Option<PathBuf>, DriveFailure> {
+            Err(DriveFailure::NoService)
         }
     }
 

@@ -18,10 +18,12 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::drives::Store as DrivesStore;
 use crate::jobs::{self, Client};
+use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
 use crate::places::Store as PlacesStore;
+use crate::properties;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
@@ -44,6 +46,8 @@ pub struct Setup {
     pub open_with: OpenWithWorker,
     /// File operations, and the clients that hear about them.
     pub jobs: Jobs,
+    /// Size scans, each for the client that asked.
+    pub measurer: Measurer,
     /// The drives, and the clients that hear about them.
     pub drives: DrivesStore,
 }
@@ -100,6 +104,7 @@ fn forget(client: ClientId, setup: &Setup) {
     setup.places.forget(client);
     setup.drives.forget(client);
     setup.jobs.audience().leave(client);
+    setup.measurer.forget(client);
 }
 
 /// Answers `command`, at once or through a job.
@@ -138,6 +143,10 @@ fn answer(
             setup.searcher.search(client, id, query, limit);
             Ok(())
         }
+        Command::Properties { id, path } => {
+            properties::answer(client.events(), id, path);
+            Ok(())
+        }
         Command::OpenFile { path, activation } => {
             jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
             Ok(())
@@ -160,6 +169,7 @@ fn answer(
             Ok(())
         }
         Command::Drives => setup.drives.listen(id, client.events()),
+        Command::Drive(action) => setup.drives.act(client.events(), action),
         Command::Theme => {
             setup.theme.listen(id, client.events());
             Ok(())
@@ -199,6 +209,10 @@ fn answer(
             scope,
         } => {
             setup.jobs.answer(job, &conflict, answer, scope);
+            Ok(())
+        }
+        command @ (Command::Measure { .. } | Command::Space { .. } | Command::StopMeasure(_)) => {
+            setup.measurer.answer(id, client.events(), command);
             Ok(())
         }
     }
