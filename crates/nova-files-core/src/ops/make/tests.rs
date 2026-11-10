@@ -116,12 +116,45 @@ fn a_source_that_cant_go_takes_its_copy_along_unless_the_copy_replaced_a_file() 
             how: How::Move,
         };
 
-        let removed = remove_source(&running, &making, &before);
+        let copy = target.symlink_metadata().ok();
+
+        let removed = remove_source(&running, &making, &before, copy.as_ref());
 
         assert!(matches!(removed, Err(Stop::Cancelled)));
         assert!(source.exists());
         assert_eq!(target.exists(), replacing, "replacing: {replacing}");
     }
+}
+
+#[test]
+fn a_target_saved_over_since_the_copy_stays() {
+    let folder = TestFolder::new("make-target-saved");
+    let running = Running::for_test();
+    running.shared.control.cancel();
+    let source = folder.file("a", "moved");
+    let before = source.symlink_metadata().unwrap();
+    let copy = folder.file("b", "moved").symlink_metadata().unwrap();
+    // Another program saves over the copy.
+    let saved = folder.file("saved", "newer");
+    let target = folder.path().join("b");
+    fs::rename(&saved, &target).unwrap();
+    let item = Item {
+        from: source,
+        to: target.clone(),
+        kind: Kind::File { size: 5 },
+    };
+    let making = Making {
+        item: &item,
+        target: &target,
+        index: 0,
+        replacing: false,
+        how: How::Move,
+    };
+
+    assert!(remove_source(&running, &making, &before, Some(&copy)).is_err());
+    assert_eq!(fs::read_to_string(&target).unwrap(), "newer");
+    assert!(remove_source(&running, &making, &before, None).is_err());
+    assert!(target.exists());
 }
 
 #[test]

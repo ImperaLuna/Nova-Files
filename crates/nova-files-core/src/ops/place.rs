@@ -226,7 +226,7 @@ fn is_case_change(from: &Path, to: &Path) -> bool {
         }
 }
 
-fn same_entry(a: &Metadata, b: &Metadata) -> bool {
+pub fn same_entry(a: &Metadata, b: &Metadata) -> bool {
     a.dev() == b.dev() && a.ino() == b.ino()
 }
 

@@ -15,7 +15,7 @@ use rustix::io::Errno;
 
 use super::copy_file::{FileCopy, copy_file, version};
 use super::journal::Record;
-use super::place::{rename_no_replace, replace, replace_through};
+use super::place::{rename_no_replace, replace, replace_through, same_entry};
 use super::plan::{Item, Kind};
 use super::running::Running;
 use super::stop::Stop;
@@ -120,7 +120,8 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
     }
     if let Some(before) = before {
         // The copy is whole and has its name: only now may the source go.
-        if let Err(stop) = remove_source(running, making, &before) {
+        let copy = target.symlink_metadata().ok();
+        if let Err(stop) = remove_source(running, making, &before, copy.as_ref()) {
             running.reporter.take_back(size(item).saturating_sub(left));
             return Err(stop);
         }
@@ -213,8 +214,14 @@ fn removable(from: &Path) -> Result<Metadata, Stop> {
 /// copy's name is on the disk first, so a power cut between the two
 /// drives can't lose both. When the source can't go, the copy goes
 /// instead, so a retry starts afresh and nothing is left twice; unless it
-/// replaced a file, which is gone already: then the copy stays.
-fn remove_source(running: &Running, making: &Making<'_>, before: &Metadata) -> Result<(), Stop> {
+/// replaced a file, which is gone already, or the target is no longer
+/// `copy`, as something else saved there since: then it stays.
+fn remove_source(
+    running: &Running,
+    making: &Making<'_>,
+    before: &Metadata,
+    copy: Option<&Metadata>,
+) -> Result<(), Stop> {
     let Making { item, target, .. } = *making;
     let removed = running
         .shared
@@ -232,8 +239,12 @@ fn remove_source(running: &Running, making: &Making<'_>, before: &Metadata) -> R
             }
             fs::remove_file(&item.from).map_err(|error| Stop::at(&item.from, &error))
         });
+    let ours = target
+        .symlink_metadata()
+        .is_ok_and(|now| copy.is_some_and(|copy| same_entry(copy, &now)));
     if removed.is_err()
         && !making.replacing
+        && ours
         && let Err(error) = fs::remove_file(target)
     {
         log::warn!("{} is left twice: {error}", target.display());

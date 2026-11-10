@@ -41,8 +41,16 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
     let items = u64::try_from(plan.items.len()).unwrap_or(u64::MAX);
     running.reporter.planned(plan.bytes, items);
     let mut changed = BTreeSet::new();
+    // Only the chosen folders are walked; a chosen link is removed as a
+    // link, and a path chosen through it is reached as the user named it.
+    let trees: Vec<_> = plan
+        .items
+        .iter()
+        .filter(|item| item.kind == Kind::Folder && paths.contains(&item.from))
+        .map(|item| item.from.clone())
+        .collect();
     let mut folders = Folders {
-        trees: paths,
+        trees: &trees,
         open: HashMap::new(),
     };
     let mut result = Ok(());
@@ -122,7 +130,7 @@ fn remove(running: &mut Running, folders: &mut Folders<'_>, item: &Item) -> Resu
 /// swapped for a link after the plan can't lead the delete out of the
 /// tree the user chose.
 struct Folders<'a> {
-    /// The paths the user chose.
+    /// The folders the user chose.
     trees: &'a [PathBuf],
     open: HashMap<PathBuf, OwnedFd>,
 }

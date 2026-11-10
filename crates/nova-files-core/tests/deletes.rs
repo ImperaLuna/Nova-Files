@@ -101,3 +101,21 @@ fn a_window_watching_jobs_hears_which_folders_a_delete_changed() {
     };
     assert_eq!(changed, vec![bench.root.clone()]);
 }
+
+#[test]
+fn a_file_chosen_through_a_chosen_link_goes_too() {
+    let bench = Bench::new("delete-through-link");
+    let real = bench.at("real");
+    fs::create_dir(&real).unwrap();
+    fs::write(real.join("f"), "f").unwrap();
+    let alias = bench.at("alias");
+    symlink(&real, &alias).unwrap();
+    let client = bench.client();
+
+    let (_, outcome, _) = client.run(delete(vec![alias.clone(), alias.join("f")]));
+
+    assert_eq!(outcome, Outcome::Done);
+    assert!(alias.symlink_metadata().is_err());
+    assert!(!real.join("f").exists());
+    assert!(real.exists());
+}
