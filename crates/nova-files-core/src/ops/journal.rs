@@ -30,6 +30,10 @@
 //! it was asked to delete, then each entry it planned to, with its
 //! device and inode, before it removes any.
 //!
+//! A trash job writes each info file as a part file in the trash, then
+//! records it (`trash-info`, with its device and inode) before it takes
+//! its name, and records the entry once moved, from and to (`trashed`).
+//!
 //! `sources-done` follows the last source: a journal cut short before it
 //! doesn't say all the job was asked to do, so it is cleaned up but not
 //! resumed.
@@ -52,6 +56,7 @@ use nova_files_api::JobId;
 use rustix::fs::{FlockOperation, flock};
 
 use super::plan::Entry;
+use crate::percent;
 
 /// The journals' folder, under the state folder.
 pub const FOLDER: &str = "nova-files/jobs";
@@ -61,11 +66,6 @@ const FILE_MODE: u32 = 0o600;
 const FOLDER_MODE: u32 = 0o700;
 /// Bytes written as themselves: printable ASCII but `%` and the space.
 const PLAIN: std::ops::RangeInclusive<u8> = b'!'..=b'~';
-const ESCAPE: u8 = b'%';
-const HEX: &[u8; 16] = b"0123456789ABCDEF";
-/// How far a byte's high hex digit is shifted.
-const HIGH: u8 = 4;
-const LOW_MASK: u8 = 0x0F;
 
 /// The start of the hidden name of a part file a job writes, followed by
 /// the job's id for names and the item's index.
@@ -87,17 +87,24 @@ pub mod word {
     pub const PLANNED: &str = "planned";
     pub const PLAN_DONE: &str = "plan-done";
     pub const SOURCES_DONE: &str = "sources-done";
+    pub const TRASH: &str = "trash";
+    pub const TRASH_INFO: &str = "trash-info";
+    pub const TRASHED: &str = "trashed";
 
     /// The fields of a record about two paths, or a path and its entry.
     const PAIR: usize = 2;
+    /// The fields of a record about an info file, its entry, and the
+    /// entry it is for.
+    const TRIPLE: usize = 3;
 
     /// How many fields follow `word`, or `None` for a word this version
     /// doesn't write.
     pub fn fields(word: &str) -> Option<usize> {
         match word {
-            COPY | MOVE | DELETE | PLAN_DONE | SOURCES_DONE => Some(0),
+            COPY | MOVE | DELETE | TRASH | PLAN_DONE | SOURCES_DONE => Some(0),
             INTO | SOURCE | PART => Some(1),
-            MADE | MOVED | BACKUP | PLANNED => Some(PAIR),
+            MADE | MOVED | BACKUP | PLANNED | TRASHED => Some(PAIR),
+            TRASH_INFO => Some(TRIPLE),
             _ => None,
         }
     }
@@ -150,12 +157,22 @@ pub enum Record<'a> {
     /// Every source is recorded: the job says all it was asked to do,
     /// so it may resume.
     SourcesDone,
+    /// An info file the job is about to put in a trash, which entry it is
+    /// (made first under a part file's name), and the entry it is for,
+    /// before that goes there. Left behind by a crash without that entry
+    /// in the trash, it goes; under that name, any other info file is
+    /// another app's and stays.
+    TrashInfo(&'a Path, Entry, Entry),
+    /// Something the job moved from the first path into a trash, at the
+    /// second, which undo would restore.
+    Trashed(&'a Path, &'a Path),
 }
 
 impl Record<'_> {
     /// The record as a line, newline included.
     fn line(self) -> Vec<u8> {
         let entry;
+        let entries;
         let (word, paths): (&str, &[&Path]) = match &self {
             Self::Operation(name) => (name, &[]),
             Self::Into(path) => (word::INTO, std::slice::from_ref(path)),
@@ -170,6 +187,14 @@ impl Record<'_> {
             }
             Self::PlanDone => (word::PLAN_DONE, &[]),
             Self::SourcesDone => (word::SOURCES_DONE, &[]),
+            Self::TrashInfo(path, info, item) => {
+                entries = [entry_field(*info), entry_field(*item)];
+                (
+                    word::TRASH_INFO,
+                    &[*path, entries[0].as_path(), entries[1].as_path()],
+                )
+            }
+            Self::Trashed(from, to) => (word::TRASHED, &[*from, *to]),
         };
         let mut line = word.as_bytes().to_vec();
         for path in paths {
@@ -183,19 +208,7 @@ impl Record<'_> {
 
 /// `bytes` with every byte outside [`PLAIN`] escaped.
 fn escape(bytes: &[u8]) -> Vec<u8> {
-    let mut escaped = Vec::with_capacity(bytes.len());
-    for &byte in bytes {
-        if PLAIN.contains(&byte) && byte != ESCAPE {
-            escaped.push(byte);
-        } else {
-            escaped.extend([
-                ESCAPE,
-                HEX[usize::from(byte >> HIGH)],
-                HEX[usize::from(byte & LOW_MASK)],
-            ]);
-        }
-    }
-    escaped
+    percent::escape(bytes, |byte| PLAIN.contains(&byte))
 }
 
 /// The longest a record waits to be synced to the disk.

@@ -18,6 +18,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# The trash spec's DeletionDate is local time: the system time zone.
+chrono = "0.4.45"
 # Kills the thumbnail helper's process group when a batch runs out of time,
 # reads the monotonic clock for the frame trace, renames without replacing
 # for file operations, and watches the config folder (inotify, woken
