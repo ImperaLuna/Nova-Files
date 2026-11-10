@@ -60,6 +60,9 @@ exclude_re = [
     # of a real mount, which tests can't make; its name rules are tested
     # in trash_top.
     "nova-files-core/src/trash/folder\\.rs:.*\\bmount_trash_at\\b",
+    # Whether drives are looked at: with them, only the real system's
+    # mounts are read, and a CI runner's hold no trash to tell apart.
+    "nova-files-core/src/trash/read\\.rs:.*delete ! in trashes$",
     # Read the real system's mountinfo; tests hand the parser recorded
     # text instead.
     "nova-files-index/src/mounts\\.rs:.*\\b(system|local)_mount_points\\b",
