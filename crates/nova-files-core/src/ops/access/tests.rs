@@ -1,5 +1,8 @@
 use std::fs::{self, Permissions};
 use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _, symlink};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::thread;
+use std::time::Duration;
 
 use rustix::process::geteuid;
 
@@ -36,8 +39,27 @@ fn share(reach: Reach) -> AccessChange {
     }
 }
 
+/// The longest a job in these tests may take.
+const DEADLINE: Duration = Duration::from_secs(5);
+
+/// Does `work` with a job that is cancelled after [`DEADLINE`]: one that
+/// asks about a conflict no test answers fails instead of hanging.
+fn watched<T>(work: impl FnOnce(&mut Running) -> T) -> T {
+    let mut running = Running::for_test();
+    let job = Arc::clone(&running.shared);
+    let (done, over) = mpsc::channel::<()>();
+    thread::spawn(move || {
+        if over.recv_timeout(DEADLINE) == Err(RecvTimeoutError::Timeout) {
+            job.control.cancel();
+        }
+    });
+    let result = work(&mut running);
+    drop(done);
+    result
+}
+
 fn run(paths: &[PathBuf], change: &AccessChange) -> Ended {
-    change_access(&mut Running::for_test(), paths, change)
+    watched(|running| change_access(running, paths, change))
 }
 
 /// A folder `tree` holding a file, a folder with a file, and a link to a
@@ -315,7 +337,7 @@ fn visit_chosen(path: &Path, change: &AccessChange) -> bool {
         inside: None,
     };
     let mut waiting = Vec::new();
-    assert!(visit(&mut Running::for_test(), change, next, &mut waiting).is_ok());
+    assert!(watched(|running| visit(running, change, next, &mut waiting)).is_ok());
     waiting
         .iter()
         .any(|task| matches!(task, Task::Close { .. }))
@@ -381,4 +403,27 @@ fn a_new_owner_alone_is_given_or_refused() {
 fn only_a_missing_link_in_proc_means_no_proc() {
     assert_eq!(without_proc(Errno::NOENT), Errno::OPNOTSUPP);
     assert_eq!(without_proc(Errno::PERM), Errno::PERM);
+}
+
+#[test]
+fn the_owner_and_group_it_has_already_change_nothing() {
+    let folder = TestFolder::new("access-same");
+    let file = folder.file("file", "x");
+    let before = fs::metadata(&file).unwrap();
+    let same = AccessChange {
+        owner: Some(before.uid()),
+        group: Some(before.gid()),
+        ..AccessChange::default()
+    };
+    let group_only = AccessChange {
+        owner: None,
+        ..same
+    };
+
+    let (outcome, changed) = run(std::slice::from_ref(&file), &same);
+    let (_, changed_group) = run(std::slice::from_ref(&file), &group_only);
+
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(changed, Vec::<PathBuf>::new());
+    assert_eq!(changed_group, Vec::<PathBuf>::new());
 }
