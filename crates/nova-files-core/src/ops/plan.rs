@@ -63,7 +63,7 @@ pub fn plan(sources: &[PathBuf], into: &Path, control: &Control) -> Result<Plan,
     let mut plan = Plan::default();
     for source in sources {
         if let Some(name) = source.file_name() {
-            add_tree(&mut plan, source, &into.join(name), control)?;
+            add_tree(&mut plan, source, &into.join(name), control, &|_| true)?;
         }
     }
     Ok(plan)
@@ -95,27 +95,42 @@ pub fn check(sources: &[PathBuf], into: &Path) -> Result<(), Stop> {
 
 /// Plans deleting each of `paths`, folders with all they hold. Each item's
 /// `to` is its `from`; a folder comes before what it holds, so the items
-/// are deleted last to first.
+/// are deleted last to first. A path `wanted` refuses is left out with
+/// all it holds, unread.
 ///
 /// # Errors
 /// [`Stop`] when cancelled, or when a path isn't absolute or has no name,
 /// or can't be read.
-pub fn plan_delete(paths: &[PathBuf], control: &Control) -> Result<Plan, Stop> {
+pub fn plan_delete(
+    paths: &[PathBuf],
+    control: &Control,
+    wanted: &dyn Fn(&Path) -> bool,
+) -> Result<Plan, Stop> {
     let mut plan = Plan::default();
     for path in paths {
         if !path.is_absolute() || path.file_name().is_none() {
             return Err(Stop::because(path, Failure::InvalidName));
         }
-        add_tree(&mut plan, path, path, control)?;
+        add_tree(&mut plan, path, path, control, wanted)?;
     }
     Ok(plan)
 }
 
-/// Adds `from` and, for a folder, all it holds.
-fn add_tree(plan: &mut Plan, from: &Path, to: &Path, control: &Control) -> Result<(), Stop> {
+/// Adds `from` and, for a folder, all it holds, but for what `wanted`
+/// refuses.
+fn add_tree(
+    plan: &mut Plan,
+    from: &Path,
+    to: &Path,
+    control: &Control,
+    wanted: &dyn Fn(&Path) -> bool,
+) -> Result<(), Stop> {
     let mut pending = vec![(from.to_path_buf(), to.to_path_buf())];
     while let Some((from, to)) = pending.pop() {
         control.checkpoint()?;
+        if !wanted(&from) {
+            continue;
+        }
         let metadata = from
             .symlink_metadata()
             .map_err(|error| Stop::at(&from, &error))?;

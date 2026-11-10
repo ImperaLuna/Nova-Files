@@ -426,7 +426,9 @@ fn place(
     // before each try, as the name may have changed hands since.
     let mut replacing = false;
     let mut looked_again = 0;
-    // Made before a crash cut the job short.
+    // Made before a crash cut the job short; still held or stopped first,
+    // like any other item.
+    running.shared.control.checkpoint()?;
     if let Some(made) = running.made_before(&item.from, item.kind) {
         let made_before = Made {
             left: size(item),

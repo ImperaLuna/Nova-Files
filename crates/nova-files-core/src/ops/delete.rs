@@ -38,7 +38,15 @@ pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
     // through a chosen link before the link, whatever order they came in.
     let mut ordered = paths.to_vec();
     ordered.sort_by_key(|path| path.components().count());
-    let plan = match plan_delete(&ordered, &running.shared.control)
+    // A resumed delete looks only inside what it planned before, so
+    // nothing added since can stop it.
+    let before = running.before.planned.clone();
+    let wanted = |path: &Path| {
+        before
+            .as_ref()
+            .is_none_or(|before| before.contains_key(path))
+    };
+    let plan = match plan_delete(&ordered, &running.shared.control, &wanted)
         .and_then(|plan| planned(running, plan))
     {
         Ok(plan) => plan,
@@ -232,7 +240,7 @@ mod tests {
         fs::create_dir(&outside).unwrap();
         fs::write(outside.join("f"), "kept").unwrap();
         let paths = [tree.clone()];
-        let plan = plan_delete(&paths, &Control::default()).unwrap();
+        let plan = plan_delete(&paths, &Control::default(), &|_| true).unwrap();
         // After the plan, `sub` becomes a link to a folder outside.
         fs::remove_dir_all(tree.join("sub")).unwrap();
         symlink(&outside, tree.join("sub")).unwrap();
@@ -260,7 +268,7 @@ mod tests {
     fn a_delete_cancelled_while_its_plan_is_recorded_stops() {
         let folder = TestFolder::new("delete-plan-cancel");
         let paths = [folder.file("a", "a")];
-        let plan = plan_delete(&paths, &Control::default()).unwrap();
+        let plan = plan_delete(&paths, &Control::default(), &|_| true).unwrap();
         let mut running = Running::for_test();
         running.shared.control.cancel();
 
@@ -271,7 +279,7 @@ mod tests {
     fn a_resumed_delete_keeps_to_the_entries_it_planned() {
         let folder = TestFolder::new("delete-plan-entries");
         let paths = [folder.file("same", "a"), folder.file("other", "b")];
-        let plan = plan_delete(&paths, &Control::default()).unwrap();
+        let plan = plan_delete(&paths, &Control::default(), &|_| true).unwrap();
         let mut running = Running::for_test();
         let mut other = plan.items[1].entry;
         other.inode += 1;
@@ -297,7 +305,7 @@ mod tests {
                 folder.file(&format!("{name}/in/f"), "f")
             })
             .collect();
-        let plan = plan_delete(&paths, &Control::default()).unwrap();
+        let plan = plan_delete(&paths, &Control::default(), &|_| true).unwrap();
         let mut folders = Folders {
             trees: &paths.iter().cloned().collect(),
             open: HashMap::new(),
