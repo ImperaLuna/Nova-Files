@@ -141,6 +141,7 @@ fn answer(
             Ok(())
         }
         Command::Drives => setup.drives.listen(id, client.events()),
+        Command::Drive(action) => setup.drives.act(client.events(), action),
         Command::Theme => {
             setup.theme.listen(id, client.events());
             Ok(())
