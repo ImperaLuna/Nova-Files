@@ -3,7 +3,9 @@
 //!
 //! A client asks with [`crate::Command::Drives`] and gets the whole
 //! [`DriveList`] as [`crate::Event::Drives`], then again each time a drive
-//! or volume comes, goes or changes (plugged in, mounted, renamed).
+//! or volume comes, goes or changes (plugged in, mounted, renamed). It
+//! mounts, unmounts or ejects with [`crate::Command::Drive`] and hears how
+//! that went in [`crate::Event::DriveDone`].
 //!
 //! The core can't speak D-Bus, where the system's mount service
 //! (udisks2) lives, so the program hands it a [`DriveService`] that does.
@@ -74,6 +76,40 @@ pub struct Volume {
     pub read_only: bool,
 }
 
+/// Something a client asks done to a drive or volume.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DriveAction {
+    /// Mount the volume where the system mounts removable media.
+    Mount(VolumeId),
+    /// Unmount the volume.
+    Unmount(VolumeId),
+    /// Make the drive safe to unplug: unmount every volume on it, eject
+    /// its media and switch it off, whichever it supports.
+    Eject(DriveId),
+}
+
+/// Why a [`DriveAction`] didn't happen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DriveFailure {
+    /// Something still has files open on the volume.
+    Busy,
+    /// The system doesn't allow this person to do it.
+    NotAuthorized,
+    /// The person closed the password dialog.
+    Cancelled,
+    /// The drive or volume is no longer there.
+    Gone,
+    /// The drive holds a volume the running system is mounted from, so
+    /// nothing on it is unmounted.
+    System,
+    /// The system has no mount service (udisks2) to ask.
+    NoService,
+    /// The mount service didn't answer in time.
+    TimedOut,
+    /// Anything else, in the mount service's words.
+    Failed(String),
+}
+
 /// Watches the system's drives and volumes for the core. The program
 /// hands one to the core at start-up; without one, every client gets an
 /// empty list.
@@ -83,4 +119,13 @@ pub trait DriveService: Send + Sync + 'static {
     /// once, when the first client asks. A service that can't reach the
     /// system's mount service sends an empty list.
     fn follow(&self, seen: Box<dyn Fn(DriveList) + Send + Sync>);
+
+    /// Does `action` and waits until it is done, which may take as long as
+    /// a person takes to type a password. A mount answers with where the
+    /// volume is now; the others with `None`. Called on a thread of the
+    /// core's own.
+    ///
+    /// # Errors
+    /// Why the action didn't happen.
+    fn act(&self, action: &DriveAction) -> Result<Option<PathBuf>, DriveFailure>;
 }
