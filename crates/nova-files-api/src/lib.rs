@@ -27,7 +27,9 @@ pub mod uri;
 pub use connection::{
     ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
 };
-pub use drive::{Drive, DriveId, DriveList, DriveService, Volume, VolumeId};
+pub use drive::{
+    Drive, DriveAction, DriveFailure, DriveId, DriveList, DriveService, Volume, VolumeId,
+};
 pub use file_type::{FileTypes, glob_matches};
 pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable,

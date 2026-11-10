@@ -9,6 +9,8 @@
 //! can be mounted. A drive is shown when it holds a shown volume, so an
 //! empty card reader or a disk of system volumes stays out.
 //!
+//! [`eject_plan`] reads from the same objects what ejecting a drive takes.
+//!
 //! udisks2 sends paths (`Device`, `MountPoints`) as bytes ending in a NUL,
 //! which may not be UTF-8; they are kept as bytes. A property missing or of
 //! the wrong type reads as its empty value, so an older or newer udisks2
@@ -19,7 +21,7 @@ use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Drive, DriveId, DriveList, Volume, VolumeId};
+use nova_files_api::{Drive, DriveFailure, DriveId, DriveList, Volume, VolumeId};
 use zbus::fdo::ManagedObjects;
 use zbus::names::OwnedInterfaceName;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -66,10 +68,7 @@ fn volume(path: &OwnedObjectPath, interfaces: &Interfaces) -> Option<Volume> {
     if text(block, "IdUsage") != FILESYSTEM_USAGE || flag(block, "HintIgnore") {
         return None;
     }
-    let mount_points: Vec<PathBuf> = byte_strings(filesystem, "MountPoints")
-        .into_iter()
-        .map(|bytes| PathBuf::from(OsString::from_vec(bytes)))
-        .collect();
+    let mount_points = mount_points(filesystem);
     if flag(block, "HintSystem") && is_system_mount(&mount_points) {
         return None;
     }
@@ -100,6 +99,71 @@ fn drive(path: &OwnedObjectPath, interfaces: &Interfaces) -> Option<Drive> {
         removable: flag(drive, "Removable") || flag(drive, "MediaRemovable"),
         ejectable: flag(drive, "Ejectable") || flag(drive, "CanPowerOff"),
     })
+}
+
+/// Where a filesystem is mounted, in udisks2's order.
+fn mount_points(filesystem: &Properties) -> Vec<PathBuf> {
+    byte_strings(filesystem, "MountPoints")
+        .into_iter()
+        .map(path_from_bytes)
+        .collect()
+}
+
+/// A path udisks2 sent as bytes, without the NUL it ends with.
+pub fn path_from_bytes(bytes: Vec<u8>) -> PathBuf {
+    PathBuf::from(OsString::from_vec(without_nul(bytes)))
+}
+
+/// What ejecting a drive takes, read from udisks2's objects.
+#[derive(Debug, PartialEq, Eq)]
+pub struct EjectPlan {
+    /// The drive's filesystems that are mounted, to unmount first, by id.
+    pub mounted: Vec<OwnedObjectPath>,
+    /// Whether its media can be ejected.
+    pub eject: bool,
+    /// Whether to switch it off: it can be, and holds no system volume.
+    pub power_off: bool,
+}
+
+/// How to eject the drive at `drive`.
+///
+/// # Errors
+/// [`DriveFailure::Gone`] when udisks2 has no such drive;
+/// [`DriveFailure::System`] when one of its volumes is mounted as part of
+/// the running system, which nothing may unmount.
+pub fn eject_plan(objects: &ManagedObjects, drive: &str) -> Result<EjectPlan, DriveFailure> {
+    let properties = objects
+        .iter()
+        .find(|(path, _)| path.as_str() == drive)
+        .and_then(|(_, interfaces)| interface(interfaces, DRIVE))
+        .ok_or(DriveFailure::Gone)?;
+    let mut plan = EjectPlan {
+        mounted: Vec::new(),
+        eject: flag(properties, "Ejectable"),
+        power_off: flag(properties, "CanPowerOff"),
+    };
+    for (path, interfaces) in objects {
+        let Some(block) = interface(interfaces, BLOCK) else {
+            continue;
+        };
+        if object(block, "Drive").as_deref() != Some(drive) {
+            continue;
+        }
+        let system = flag(block, "HintSystem");
+        plan.power_off &= !system;
+        let points = interface(interfaces, FILESYSTEM)
+            .map(mount_points)
+            .unwrap_or_default();
+        if points.is_empty() {
+            continue;
+        }
+        if system && is_system_mount(&points) {
+            return Err(DriveFailure::System);
+        }
+        plan.mounted.push(path.clone());
+    }
+    plan.mounted.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+    Ok(plan)
 }
 
 /// Whether a volume mounted at `mount_points` is part of the running

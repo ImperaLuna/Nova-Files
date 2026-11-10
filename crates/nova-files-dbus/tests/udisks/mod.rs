@@ -5,6 +5,10 @@
 //! interfaces and properties Nova Files reads, under udisks2's own
 //! names. Adding or removing an object sends the object manager's signals
 //! and a changed mount point sends `PropertiesChanged`, as udisks2 does.
+//! Mounting, unmounting, ejecting and switching off do what udisks2 does
+//! to the properties (refusing, as udisks2 does, to mount a mounted volume
+//! or unmount one that isn't), or fail as set (`Filesystem::fails`), and each call
+//! is noted ([`StandIn::calls`]).
 //!
 //! The recordings ([`recorded`]) come from udisksd 2.10.1
 //! (`GetManagedObjects`, 2026-11-10) with loop disks: a FAT one, an ext4
@@ -15,10 +19,37 @@
 
 #![expect(dead_code, reason = "each test file uses part of it")]
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
 use nova_files_dbus::{UDISKS, UDISKS_PATH};
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::object_server::SignalEmitter;
+use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+
+/// Checks a call left udisks2's options at their defaults, as Nova Files
+/// does.
+fn no_options(options: HashMap<String, OwnedValue>) {
+    assert!(options.into_keys().next().is_none(), "options were set");
+}
+
+/// The calls made to the stand-in, such as `unmount <object path>`.
+pub type Calls = Arc<Mutex<Vec<String>>>;
+
+/// The errors udisks2 answers with, by their D-Bus names.
+#[derive(Clone, Debug, zbus::DBusError)]
+#[zbus(prefix = "org.freedesktop.UDisks2.Error")]
+pub enum Failure {
+    #[zbus(error)]
+    ZBus(zbus::Error),
+    DeviceBusy(String),
+    AlreadyMounted(String),
+    NotMounted(String),
+    NotAuthorizedDismissed(String),
+    NotAuthorized(String),
+    Failed(String),
+}
 
 /// udisks2's object path for "none".
 const NONE: &str = "/";
@@ -98,7 +129,13 @@ impl Block {
 
 #[derive(Clone)]
 pub struct Filesystem {
+    pub path: String,
     pub mount_points: Vec<Vec<u8>>,
+    /// Where `Mount` mounts it.
+    pub mounts_at: String,
+    /// What `Mount` and `Unmount` answer instead of doing it.
+    pub fails: Option<Failure>,
+    pub calls: Calls,
 }
 
 #[zbus::interface(name = "org.freedesktop.UDisks2.Filesystem")]
@@ -106,6 +143,48 @@ impl Filesystem {
     #[zbus(property)]
     fn mount_points(&self) -> Vec<Vec<u8>> {
         self.mount_points.clone()
+    }
+
+    async fn mount(
+        &mut self,
+        options: HashMap<String, OwnedValue>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> Result<String, Failure> {
+        no_options(options);
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("mount {}", self.path));
+        if let Some(failure) = &self.fails {
+            return Err(failure.clone());
+        }
+        if !self.mount_points.is_empty() {
+            return Err(Failure::AlreadyMounted("already mounted".to_owned()));
+        }
+        self.mount_points = vec![path_bytes(self.mounts_at.as_bytes())];
+        self.mount_points_changed(&emitter).await?;
+        Ok(self.mounts_at.clone())
+    }
+
+    async fn unmount(
+        &mut self,
+        options: HashMap<String, OwnedValue>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> Result<(), Failure> {
+        no_options(options);
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("unmount {}", self.path));
+        if let Some(failure) = &self.fails {
+            return Err(failure.clone());
+        }
+        if self.mount_points.is_empty() {
+            return Err(Failure::NotMounted("not mounted".to_owned()));
+        }
+        self.mount_points.clear();
+        self.mount_points_changed(&emitter).await?;
+        Ok(())
     }
 }
 
@@ -138,6 +217,8 @@ impl Partition {
     reason = "udisks2's own properties, one field each"
 )]
 pub struct Drive {
+    pub path: String,
+    pub calls: Calls,
     pub vendor: String,
     pub model: String,
     pub removable: bool,
@@ -171,6 +252,22 @@ impl Drive {
     #[zbus(property)]
     const fn can_power_off(&self) -> bool {
         self.can_power_off
+    }
+
+    fn eject(&self, options: HashMap<String, OwnedValue>) {
+        no_options(options);
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("eject {}", self.path));
+    }
+
+    fn power_off(&self, options: HashMap<String, OwnedValue>) {
+        no_options(options);
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("power off {}", self.path));
     }
 }
 
@@ -220,9 +317,29 @@ fn with_filesystem(mut block: Block, kind: &str, label: &str) -> Block {
     block
 }
 
+/// A filesystem mounted at `points`; the stand-in fills in the rest when
+/// it is added.
 fn mounted(points: &[&[u8]]) -> Filesystem {
     Filesystem {
+        path: String::new(),
         mount_points: points.iter().map(|point| path_bytes(point)).collect(),
+        mounts_at: String::new(),
+        fails: None,
+        calls: Calls::default(),
+    }
+}
+
+/// A drive; the stand-in fills in its path and call log when it is added.
+fn drive(vendor: &str, model: &str) -> Drive {
+    Drive {
+        path: String::new(),
+        calls: Calls::default(),
+        vendor: vendor.to_owned(),
+        model: model.to_owned(),
+        removable: false,
+        media_removable: false,
+        ejectable: false,
+        can_power_off: false,
     }
 }
 
@@ -315,12 +432,9 @@ pub fn stick() -> Vec<Object> {
     vec![
         Object {
             drive: Some(Drive {
-                vendor: "SanDisk".to_owned(),
-                model: "Ultra".to_owned(),
                 removable: true,
-                media_removable: false,
-                ejectable: false,
                 can_power_off: true,
+                ..drive("SanDisk", "Ultra")
             }),
             ..Object::empty(STICK)
         },
@@ -351,14 +465,7 @@ pub fn laptop_disk() -> Vec<Object> {
     };
     vec![
         Object {
-            drive: Some(Drive {
-                vendor: String::new(),
-                model: "Samsung SSD 980 1TB".to_owned(),
-                removable: false,
-                media_removable: false,
-                ejectable: false,
-                can_power_off: false,
-            }),
+            drive: Some(drive("", "Samsung SSD 980 1TB")),
             ..Object::empty(NVME)
         },
         Object {
@@ -394,6 +501,7 @@ pub fn laptop_disk() -> Vec<Object> {
 /// udisks2 on a private bus.
 pub struct StandIn {
     connection: Connection,
+    calls: Calls,
 }
 
 impl StandIn {
@@ -405,7 +513,10 @@ impl StandIn {
             .unwrap()
             .build()
             .unwrap();
-        let stand_in = Self { connection };
+        let stand_in = Self {
+            connection,
+            calls: Calls::default(),
+        };
         for object in objects {
             stand_in.add(object);
         }
@@ -421,13 +532,24 @@ impl StandIn {
             server.at(path, block.clone()).unwrap();
         }
         if let Some(filesystem) = &object.filesystem {
-            server.at(path, filesystem.clone()).unwrap();
+            let filesystem = Filesystem {
+                path: path.to_owned(),
+                mounts_at: format!("/run/media/me/{}", path.rsplit('/').next().unwrap()),
+                calls: Arc::clone(&self.calls),
+                ..filesystem.clone()
+            };
+            server.at(path, filesystem).unwrap();
         }
         if let Some(partition) = &object.partition {
             server.at(path, partition.clone()).unwrap();
         }
         if let Some(drive) = &object.drive {
-            server.at(path, drive.clone()).unwrap();
+            let drive = Drive {
+                path: path.to_owned(),
+                calls: Arc::clone(&self.calls),
+                ..drive.clone()
+            };
+            server.at(path, drive).unwrap();
         }
     }
 
@@ -467,8 +589,7 @@ impl StandIn {
 
     /// Says the block device at `path` changed, without changing it.
     pub fn poke(&self, path: &str) {
-        let nothing: std::collections::HashMap<String, zbus::zvariant::Value<'_>> =
-            std::collections::HashMap::new();
+        let nothing: HashMap<String, zbus::zvariant::Value<'_>> = HashMap::new();
         self.connection
             .emit_signal(
                 None::<()>,
@@ -489,11 +610,32 @@ impl StandIn {
     pub fn mute(address: &str) -> Self {
         let connection = Builder::address(address).unwrap().build().unwrap();
         connection.request_name(UDISKS).unwrap();
-        Self { connection }
+        Self {
+            connection,
+            calls: Calls::default(),
+        }
+    }
+
+    /// The calls made so far, in order.
+    pub fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
     }
 
     /// Lets udisks2's name go, as when it stops.
     pub fn stop(self) {
         drop(self.connection);
     }
+}
+
+/// `objects` with the filesystem at `path` answering `failure` to every
+/// mount and unmount.
+pub fn failing(mut objects: Vec<Object>, path: &str, failure: &Failure) -> Vec<Object> {
+    for object in &mut objects {
+        if object.path == path
+            && let Some(filesystem) = &mut object.filesystem
+        {
+            filesystem.fails = Some(failure.clone());
+        }
+    }
+    objects
 }
