@@ -26,6 +26,7 @@ mod settings;
 mod theme;
 mod thumbs;
 mod trace;
+mod trash;
 mod vulkan_drivers;
 mod window_state;
 
@@ -100,6 +101,7 @@ pub fn spawn_with(
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
     let jobs = ops::Jobs::new(
         home.as_ref().map(|home| home.state.as_path()),
+        home.as_ref().map(|home| home.data.as_path()),
         connector.clone(),
     );
     let thread = thread::Builder::new()

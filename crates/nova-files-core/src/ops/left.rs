@@ -2,7 +2,8 @@
 //! when the core starts. Each is cleaned up at once: its part files go
 //! (half a copy, or, after an exchange, a file the user chose to
 //! replace), and a file that stepped aside for a replacement comes back
-//! when its replacement never took its name. The job itself then waits,
+//! when its replacement never took its name, and an info file made in a
+//! trash goes when its entry never got there. The job itself then waits,
 //! interrupted, until a client resumes or forgets it.
 //!
 //! A journal another core holds belongs to a job still running there,
@@ -20,6 +21,7 @@ use super::journal::read::{Line, read};
 use super::journal::{BACKUP_PREFIX, PART_PREFIX, entry_from, hold, word};
 use super::place::rename_no_replace;
 use super::plan::Entry;
+use crate::trash;
 
 /// A job a crash cut short.
 #[derive(Debug)]
@@ -43,6 +45,9 @@ pub struct Done {
     /// For a delete, what it planned to remove, and which entry each
     /// was, when it got that far.
     pub planned: Option<HashMap<PathBuf, Entry>>,
+    /// For a trash job, the paths it moved to the trash: whatever has
+    /// their name now came after, and nobody chose to trash it.
+    pub trashed: HashSet<PathBuf>,
 }
 
 /// The jobs whose journals are in `folder`, each cleaned up. A journal
@@ -109,6 +114,7 @@ fn operation(lines: &[Line]) -> Option<Operation> {
         (word::COPY, Some(into)) => Some(Operation::Copy { sources, into }),
         (word::MOVE, Some(into)) => Some(Operation::Move { sources, into }),
         (word::DELETE, None) => Some(Operation::Delete { paths: sources }),
+        (word::TRASH, None) => Some(Operation::Trash { paths: sources }),
         _ => None,
     }
 }
@@ -139,6 +145,9 @@ fn clean(lines: &[Line]) -> Done {
             (word::MOVED, [_, to]) => {
                 placed.insert(to.clone());
             }
+            (word::TRASHED, [from, _]) => {
+                done.trashed.insert(from.clone());
+            }
             (word::PLANNED, [path, entry]) => {
                 if let Some(entry) = entry_from(entry) {
                     planned.insert(path.clone(), entry);
@@ -159,6 +168,11 @@ fn clean(lines: &[Line]) -> Done {
             (word::BACKUP, [backup, of]) if hidden(backup, BACKUP_PREFIX) => {
                 restore(backup, of, placed.contains(of));
             }
+            (word::TRASH_INFO, [info, entry, item]) => {
+                if let (Some(entry), Some(item)) = (entry_from(entry), entry_from(item)) {
+                    remove_lone_info(info, entry, item);
+                }
+            }
             _ => {}
         }
     }
@@ -170,6 +184,31 @@ fn remove_part(part: &Path) {
         && part.symlink_metadata().is_ok()
     {
         log::warn!("can't remove {}: {error}", part.display());
+    }
+}
+
+/// Removes the info file at `info`, the job's own `entry`, when `item`,
+/// the entry it is for, never got to its name in the trash: a trash
+/// lists what its info files name, and this one names nothing of the
+/// user's (nothing, or another app's entry). Another app's info file
+/// under that name, or a path that isn't a trash's info file, is left
+/// alone.
+fn remove_lone_info(info: &Path, entry: Entry, item: Entry) {
+    let Some(stored) = trash::item_of_info(info) else {
+        return;
+    };
+    let ours = info
+        .symlink_metadata()
+        .is_ok_and(|there| Entry::of(&there) == entry);
+    if ours
+        && match stored.symlink_metadata() {
+            Ok(there) => Entry::of(&there) != item,
+            Err(error) => error.kind() == io::ErrorKind::NotFound,
+        }
+        && let Err(error) = fs::remove_file(info)
+        && error.kind() != io::ErrorKind::NotFound
+    {
+        log::warn!("can't remove {}: {error}", info.display());
     }
 }
 

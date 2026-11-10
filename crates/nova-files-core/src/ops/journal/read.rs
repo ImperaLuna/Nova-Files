@@ -93,10 +93,14 @@ fn parse(whole: &[u8], path: &Path) -> io::Result<Vec<Line>> {
 /// Whether `name` is a word this version writes, with `fields` as it
 /// writes them.
 fn fits(name: &str, fields: &[PathBuf]) -> bool {
-    let entry_fits = name != word::PLANNED
-        || fields
-            .get(1)
-            .is_some_and(|field| entry_from(field).is_some());
+    let entries = match name {
+        word::PLANNED => 1..2,
+        word::TRASH_INFO => 1..3,
+        _ => 0..0,
+    };
+    let entry_fits = fields
+        .get(entries)
+        .is_some_and(|entries| entries.iter().all(|field| entry_from(field).is_some()));
     word::fields(name) == Some(fields.len()) && entry_fits
 }
 
