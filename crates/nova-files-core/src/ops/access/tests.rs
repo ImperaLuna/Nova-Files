@@ -96,11 +96,62 @@ fn a_chosen_link_is_passed_over() {
     let folder = TestFolder::new("access-link");
     let (tree, outside) = tree(&folder);
 
-    let (outcome, changed) = run(&[tree.join("link")], &share(Reach::Inside));
+    let to_sub = tree.join("to-sub");
+    symlink(tree.join("sub"), &to_sub).unwrap();
+    // A slash at the end would follow it.
+    let mut slashed = to_sub.into_os_string();
+    slashed.push("/");
+
+    let (outcome, changed) = run(
+        &[tree.join("link"), PathBuf::from(slashed)],
+        &share(Reach::Inside),
+    );
 
     assert_eq!(outcome, Outcome::Done);
     assert_eq!(changed, Vec::<PathBuf>::new());
     assert_eq!(mode(&outside), FILE);
+    assert_eq!(mode(&tree.join("sub")), FOLDER);
+    assert_eq!(mode(&tree.join("sub/b")), FILE);
+}
+
+#[test]
+fn the_number_the_system_reads_as_keep_changes_no_owner() {
+    let folder = TestFolder::new("access-keep");
+    let file = folder.file("file", "x");
+    let keep = AccessChange {
+        owner: Some(u32::MAX),
+        group: Some(u32::MAX),
+        ..AccessChange::default()
+    };
+    let before = fs::metadata(&file).unwrap();
+
+    let (outcome, changed) = run(std::slice::from_ref(&file), &keep);
+
+    let after = fs::metadata(&file).unwrap();
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(changed, Vec::<PathBuf>::new());
+    assert_eq!((after.uid(), after.gid()), (before.uid(), before.gid()));
+}
+
+#[test]
+fn a_path_chosen_inside_another_is_changed_first() {
+    let folder = TestFolder::new("access-nested");
+    let (tree, _) = tree(&folder);
+    let shut = AccessChange {
+        folders: ModeChange {
+            set: 0,
+            clear: 0o100,
+        },
+        files: SHARE_FILES,
+        ..AccessChange::default()
+    };
+
+    let (outcome, changed) = run(&[tree.clone(), tree.join("a")], &shut);
+    set_mode(&tree, FOLDER);
+
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(changed, vec![folder.path().to_path_buf(), tree.clone()]);
+    assert_eq!(mode(&tree.join("a")), 0o660);
 }
 
 #[test]
@@ -317,7 +368,12 @@ fn a_new_owner_alone_is_given_or_refused() {
         assert_eq!(given, Ok(true));
         assert_eq!(fs::metadata(&file).unwrap().uid(), 4242);
     } else {
-        assert_eq!(given, Err(Errno::PERM));
+        // Refused, or, in a sandbox that has no such user, not even a
+        // number the system knows.
+        assert!(
+            matches!(given, Err(Errno::PERM | Errno::INVAL)),
+            "{given:?}"
+        );
     }
 }
 

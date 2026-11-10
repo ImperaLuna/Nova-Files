@@ -329,36 +329,23 @@ fn remove_if_empty(
     folder: &Path,
     touched: &mut BTreeSet<PathBuf>,
 ) -> Result<(), Stop> {
-    loop {
-        running.shared.control.checkpoint()?;
-        let error = match fs::remove_dir(folder) {
-            Ok(()) => {
-                if let Some(parent) = folder.parent() {
-                    touched.insert(parent.to_path_buf());
-                }
-                return Ok(());
+    let removed = running.retry_or_skip(folder, || match fs::remove_dir(folder) {
+        Ok(()) => Ok(true),
+        Err(error) => {
+            let reason = failure(&error);
+            if matches!(reason, Failure::NameTaken | Failure::NotFound) {
+                log::info!("{} stays: {error}", folder.display());
+                return Ok(false);
             }
-            Err(error) => error,
-        };
-        let reason = failure(&error);
-        if matches!(reason, Failure::NameTaken | Failure::NotFound) {
-            log::info!("{} stays: {error}", folder.display());
-            return Ok(());
+            Err(reason)
         }
-        let Some(kind) = conflict_for(reason, folder, folder) else {
-            return Err(Stop::because(folder, reason));
-        };
-        let asked = Conflict {
-            kind,
-            source: folder.to_path_buf(),
-            target: folder.to_path_buf(),
-            // Numbered when asked.
-            number: 0,
-        };
-        if running.skips(asked)? {
-            return Ok(());
-        }
+    })?;
+    if removed == Some(true)
+        && let Some(parent) = folder.parent()
+    {
+        touched.insert(parent.to_path_buf());
     }
+    Ok(())
 }
 
 /// The folders whose entries a job changed: `into` once anything went

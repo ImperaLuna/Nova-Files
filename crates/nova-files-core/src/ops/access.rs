@@ -23,7 +23,7 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use nova_files_api::{AccessChange, Conflict, Failure, MODE_BITS, ModeChange, Outcome, Reach};
+use nova_files_api::{AccessChange, Failure, MODE_BITS, ModeChange, Outcome, Reach};
 use rustix::fs::{
     AtFlags, CWD, Dir, FileType, Gid, Mode, OFlags, Statx, StatxAttributes, StatxFlags, Uid,
     chmodat, chownat, openat, statx,
@@ -31,7 +31,6 @@ use rustix::fs::{
 use rustix::io::Errno;
 
 use super::Ended;
-use super::clash::conflict_for;
 use super::failure::failure;
 use super::running::Running;
 use super::stop::Stop;
@@ -53,6 +52,8 @@ const WANTED: StatxFlags = StatxFlags::TYPE
 /// The owner's leave to list a folder and to enter it: a change that
 /// takes either away changes a folder after what it holds.
 const OWNER_LIST_AND_ENTER: u32 = 0o500;
+/// The number the system reads as "keep the owner (or group) it has".
+const KEEP: u32 = u32::MAX;
 
 /// A drive, as `statx` names it.
 type Device = (u32, u32);
@@ -72,7 +73,7 @@ enum Task {
     Visit(Next),
     /// Change a folder already reached, once what it holds is done: the
     /// change takes away the owner's leave to list or enter it.
-    Close { path: PathBuf, at: OwnedFd },
+    Close { path: PathBuf, at: Arc<OwnedFd> },
 }
 
 /// Where a thing waiting to be changed is.
@@ -92,10 +93,12 @@ pub fn change_access(running: &mut Running, paths: &[PathBuf], change: &AccessCh
             Vec::new(),
         );
     }
-    // Last first, so the chosen paths are changed in the order given.
-    let mut waiting: Vec<Task> = paths
-        .iter()
-        .rev()
+    // Deepest last, as the job takes from the end: one chosen inside
+    // another is changed before the other can shut it away.
+    let mut chosen: Vec<&PathBuf> = paths.iter().collect();
+    chosen.sort_by_key(|path| path.components().count());
+    let mut waiting: Vec<Task> = chosen
+        .into_iter()
         .map(|path| {
             Task::Visit(Next {
                 path: path.clone(),
@@ -160,16 +163,16 @@ fn visit(
     let into = folder && change.reach == Reach::Inside;
     if into && modes.clear & OWNER_LIST_AND_ENTER != 0 {
         // Listed and gone into first, changed last.
-        let names = attempt(running, &next.path, || names(&at))?.unwrap_or_default();
-        let opened = Arc::new(
-            rustix::io::fcntl_dupfd_cloexec(&at, 0)
-                .map_err(|errno| Stop::at(&next.path, &errno.into()))?,
-        );
+        // Skipped (or gone): left as it is, with what it holds.
+        let Some(names) = attempt(running, &next.path, || names(&at))? else {
+            return Ok(None);
+        };
+        let at = Arc::new(at);
         waiting.push(Task::Close {
             path: next.path.clone(),
-            at,
+            at: Arc::clone(&at),
         });
-        queue(waiting, &next.path, &opened, names, own);
+        queue(waiting, &next.path, &at, names, own);
         return Ok(None);
     }
     let did = attempt(running, &next.path, || apply(&at, change, modes))?.unwrap_or(false);
@@ -211,47 +214,41 @@ fn attempt<T>(
     path: &Path,
     mut step: impl FnMut() -> rustix::io::Result<T>,
 ) -> Result<Option<T>, Stop> {
-    loop {
-        running.shared.control.checkpoint()?;
-        let errno = match step() {
-            Ok(done) => return Ok(Some(done)),
-            // Gone since it was listed: nothing left to change.
-            Err(Errno::NOENT) => return Ok(None),
-            Err(errno) => errno,
-        };
-        let reason = failure(&errno.into());
-        let Some(kind) = conflict_for(reason, path, path) else {
-            return Err(Stop::because(path, reason));
-        };
-        let conflict = Conflict {
-            kind,
-            source: path.to_path_buf(),
-            target: path.to_path_buf(),
-            // Numbered when asked.
-            number: 0,
-        };
-        if running.skips(conflict)? {
-            return Ok(None);
-        }
-    }
+    let done = running.retry_or_skip(path, || match step() {
+        Ok(done) => Ok(Some(done)),
+        // Gone since it was listed: nothing left to change.
+        Err(Errno::NOENT) => Ok(None),
+        Err(errno) => Err(failure(&errno.into())),
+    })?;
+    Ok(done.flatten())
 }
 
 /// Opens a handle on `next` and looks at it.
 fn reach(next: &Next) -> rustix::io::Result<(OwnedFd, Statx)> {
     let at = match &next.at {
-        Place::Chosen => openat(CWD, &next.path, AT_PATH, Mode::empty())?,
+        // Without a trailing slash, which would follow a link.
+        Place::Chosen => openat(CWD, without_slash(&next.path), AT_PATH, Mode::empty())?,
         Place::In { folder, name } => openat(&**folder, name.as_c_str(), AT_PATH, Mode::empty())?,
     };
     let stat = look(&at)?;
     Ok((at, stat))
 }
 
+/// `path` with no `/` at its end, so naming it never follows a link.
+fn without_slash(path: &Path) -> PathBuf {
+    path.components().collect()
+}
+
 /// Gives the thing `at` `change`'s owner and group and `modes`'
 /// permission bits. Whether anything changed.
 fn apply(at: &OwnedFd, change: &AccessChange, modes: ModeChange) -> rustix::io::Result<bool> {
     let mut stat = look(at)?;
-    let owner = change.owner.filter(|&owner| owner != stat.stx_uid);
-    let group = change.group.filter(|&group| group != stat.stx_gid);
+    let owner = change
+        .owner
+        .filter(|&owner| owner != stat.stx_uid && owner != KEEP);
+    let group = change
+        .group
+        .filter(|&group| group != stat.stx_gid && group != KEEP);
     let new_owner = owner.is_some() || group.is_some();
     if new_owner {
         chownat(

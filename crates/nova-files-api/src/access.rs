@@ -35,9 +35,11 @@ pub enum Reach {
 /// What to change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct AccessChange {
-    /// The new owner's user number; `None` keeps each one's own.
+    /// The new owner's user number; `None` keeps each one's own, as does
+    /// `u32::MAX`, which the system reads as "keep".
     pub owner: Option<u32>,
-    /// The new group's number; `None` keeps each one's own.
+    /// The new group's number; `None` keeps each one's own, as does
+    /// `u32::MAX`.
     pub group: Option<u32>,
     /// What changes on files (and devices, pipes and sockets).
     pub files: ModeChange,
