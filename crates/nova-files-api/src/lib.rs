@@ -10,7 +10,8 @@
 //! operations run as jobs (see [`Operation`]). A [`PickRequest`] carries
 //! another app's file picker request from D-Bus to the UI. Files cut or
 //! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
-//! a paste is a job.
+//! a paste is a job. A [`Size`] is what a scan of files and folders
+//! counted.
 
 #![forbid(unsafe_code)]
 
@@ -27,6 +28,7 @@ mod pick;
 mod properties;
 mod search;
 mod settings;
+mod size;
 mod theme;
 pub mod uri;
 
@@ -56,6 +58,7 @@ pub use pick::{
 pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
+pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 
 /// The application id: the D-Bus name, the Wayland app id and the name of

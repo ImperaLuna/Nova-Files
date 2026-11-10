@@ -16,6 +16,7 @@ mod hand_edited;
 mod index;
 mod jobs;
 mod list;
+mod measure;
 mod memory;
 mod mime;
 mod open;
@@ -127,6 +128,7 @@ pub fn spawn_with(
                 searcher,
                 mime_types: Arc::default(),
                 jobs,
+                measurer: measure::Measurer::default(),
                 drives: drives::Store::default(),
             };
             run::run(&receiver, idle_exit, &setup);
