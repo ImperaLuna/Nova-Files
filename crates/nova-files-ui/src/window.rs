@@ -489,7 +489,8 @@ impl MainWindow {
             | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
             | Event::JobFinished { .. }
-            | Event::Bookmarks(_) => {}
+            | Event::Bookmarks(_)
+            | Event::OpenWith(_) => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

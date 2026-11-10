@@ -112,6 +112,7 @@ pub fn spawn_with(
             let theme = theme::Store::open(config);
             theme.follow(&settings);
             let places = places::Store::open(home);
+            let mime_types = Arc::default();
             let setup = run::Setup {
                 places,
                 window_state,
@@ -119,7 +120,8 @@ pub fn spawn_with(
                 theme,
                 thumbnails,
                 searcher,
-                mime_types: Arc::default(),
+                open_with: open::OpenWithWorker::new(Arc::clone(&mime_types)),
+                mime_types,
                 jobs,
             };
             run::run(&receiver, idle_exit, &setup);

@@ -18,6 +18,7 @@ mod file_type;
 mod folder;
 mod job;
 mod message;
+mod open_with;
 mod pick;
 mod search;
 mod settings;
@@ -36,6 +37,7 @@ pub use job::{
     Answer, Conflict, ConflictKind, Failure, JobId, JobTag, Operation, Outcome, Progress, Scope,
 };
 pub use message::{ClientId, Command, Event, MAX_HITS, MAX_ROWS};
+pub use open_with::{App, OpenWith, OpenWithAnswer, OpenWithId};
 pub use pick::{
     FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,
 };

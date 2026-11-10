@@ -14,7 +14,12 @@ use std::process::Command as Process;
 use std::sync::mpsc;
 use std::time::Duration;
 
+#[path = "common/own_folders.rs"]
+mod own_folders;
+
 use nova_files_api::{Command, Event};
+
+use own_folders::run_again_in;
 
 /// Set in the run that talks to the core: the folder it was given.
 const ROOT_VAR: &str = "NOVA_FILES_OPEN_TEST_ROOT";
@@ -77,21 +82,7 @@ fn run_again_in_folders_of_its_own() {
         .unwrap();
     assert!(made.success());
 
-    let data = root.join("data");
-    let config = root.join("config");
-    let status = Process::new(std::env::current_exe().unwrap())
-        .args(["--exact", TEST_NAME, "--test-threads=1"])
-        .env(ROOT_VAR, &root)
-        .env("HOME", &root)
-        .env("XDG_DATA_HOME", &data)
-        .env("XDG_DATA_DIRS", &data)
-        .env("XDG_CONFIG_HOME", &config)
-        .env("XDG_CONFIG_DIRS", &config)
-        .env_remove("XDG_CURRENT_DESKTOP")
-        .status()
-        .unwrap();
-    fs::remove_dir_all(&root).unwrap();
-    assert!(status.success());
+    run_again_in(&root, ROOT_VAR, TEST_NAME);
 }
 
 fn open_through_the_core(root: &Path) {
