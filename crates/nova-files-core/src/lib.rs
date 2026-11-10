@@ -1,5 +1,5 @@
-//! The core. Index, search, folder listing, watching, jobs, settings and theme. It
-//! never draws anything.
+//! The core. Index, search, folder listing, watching, jobs, settings, theme
+//! and drives. It never draws anything.
 //!
 //! [`spawn`] starts the core on its own thread and returns the
 //! [`Connector`] clients use to reach it. The core stops by itself once no
@@ -10,6 +10,7 @@
 mod config_watch;
 mod details;
 mod details_queue;
+mod drives;
 mod hand_edited;
 mod index;
 mod jobs;
@@ -120,6 +121,7 @@ pub fn spawn_with(
                 searcher,
                 mime_types: Arc::default(),
                 jobs,
+                drives: drives::Store::default(),
             };
             run::run(&receiver, idle_exit, &setup);
         })?;
