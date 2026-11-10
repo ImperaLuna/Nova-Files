@@ -40,6 +40,17 @@ pub enum Operation {
         sources: Vec<PathBuf>,
         into: PathBuf,
     },
+    /// Move each of `sources` into the folder `into`, under its own name.
+    /// On one drive each is renamed; across drives it is copied as by
+    /// [`Operation::Copy`], and each source item goes only once its copy
+    /// is whole, folders last.
+    Move {
+        sources: Vec<PathBuf>,
+        into: PathBuf,
+    },
+    /// Delete each of `paths`, folders with all they hold, for good: not
+    /// to the trash. A link goes, never what it points to.
+    Delete { paths: Vec<PathBuf> },
 }
 
 /// How far a job has got. Totals are known once the job has looked at

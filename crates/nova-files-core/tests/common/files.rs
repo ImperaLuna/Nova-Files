@@ -4,15 +4,6 @@ use std::fs;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::Operation;
-
-pub fn copy(sources: Vec<PathBuf>, into: &Path) -> Operation {
-    Operation::Copy {
-        sources,
-        into: into.to_owned(),
-    }
-}
-
 /// Hidden part and backup files left anywhere under `root`.
 pub fn hidden(root: &Path) -> Vec<PathBuf> {
     tree(root)

@@ -7,9 +7,10 @@
 //! `control`); the job checks before each change to the disk. When it
 //! ends, every client hears how and which folders changed (see
 //! `audience`). Nothing a job does ever replaces an existing entry unless
-//! the user chose that: what stands in a copy's way is a conflict the job
-//! holds at until a client answers it. A copy writes a journal of its
-//! steps (see `journal`).
+//! the user chose that: what stands in a copy's or move's way, or what a
+//! delete may not remove, is a conflict the job holds at until a client
+//! answers it. Copies, moves and deletes write a journal of their steps
+//! (see `journal`).
 //!
 //! A job running or paused keeps the core up: the core's loop asks
 //! [`Jobs::busy`], and a job that ends wakes the loop so its idle wait
@@ -19,12 +20,13 @@ mod attrs;
 mod audience;
 mod clash;
 mod control;
-mod copy;
 mod copy_file;
+mod delete;
 mod failure;
 mod job;
 mod journal;
 mod keep_both;
+mod make;
 mod name;
 mod one_step;
 mod place;
@@ -34,6 +36,7 @@ mod running;
 mod stop;
 #[cfg(test)]
 mod test_folder;
+mod transfer;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -50,9 +53,12 @@ use nova_files_api::{
 pub use audience::Audience;
 
 use crate::jobs::Client;
+use delete::delete;
 use job::Job;
+use make::How;
 use progress::Reporter;
 use running::Running;
+use transfer::transfer;
 
 const JOB_THREAD: &str = "nova-files-job";
 
@@ -224,7 +230,9 @@ fn run(running: &mut Running, operation: &Operation) -> Ended {
     match operation {
         Operation::Rename { path, name } => one_step::rename(path, name),
         Operation::NewFolder { inside, name } => one_step::new_folder(inside, name),
-        Operation::Copy { sources, into } => copy::copy(running, sources, into),
+        Operation::Copy { sources, into } => transfer(running, sources, into, How::Copy),
+        Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
+        Operation::Delete { paths } => delete(running, paths),
     }
 }
 
@@ -233,7 +241,10 @@ fn first_path(operation: &Operation) -> PathBuf {
     match operation {
         Operation::Rename { path, .. } => path.clone(),
         Operation::NewFolder { inside, name } => inside.join(name),
-        Operation::Copy { sources, into } => sources.first().unwrap_or(into).clone(),
+        Operation::Copy { sources, into } | Operation::Move { sources, into } => {
+            sources.first().unwrap_or(into).clone()
+        }
+        Operation::Delete { paths } => paths.first().cloned().unwrap_or_default(),
     }
 }
 

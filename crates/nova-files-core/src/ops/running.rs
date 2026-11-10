@@ -66,6 +66,15 @@ impl Running {
         Ok(answer)
     }
 
+    /// Asks about `conflict`, of a kind that takes only Skip or Retry,
+    /// and returns whether the answer is to skip it.
+    ///
+    /// # Errors
+    /// [`Cancelled`] when a client cancels the job instead.
+    pub fn skips(&mut self, conflict: Conflict) -> Result<bool, Cancelled> {
+        Ok(self.ask(conflict)? == Answer::Skip)
+    }
+
     /// Adds `record` to the job's journal, starting the journal with the
     /// first record. Without a journal the job still runs: its part files
     /// are hidden and a real name never holds half a file, so only a
@@ -99,5 +108,23 @@ impl Running {
         if let Some(journal) = self.journal.take() {
             journal.finish();
         }
+    }
+}
+
+#[cfg(test)]
+impl Running {
+    /// A job of its own, without a journal, for unit tests.
+    pub fn for_test() -> Self {
+        let shared = Arc::new(Job::new(nova_files_api::Operation::Copy {
+            sources: Vec::new(),
+            into: PathBuf::from("/"),
+        }));
+        let reporter = Reporter::new(
+            super::audience::Audience::default(),
+            Arc::default(),
+            JobId(1),
+            Arc::clone(&shared),
+        );
+        Self::new(JobId(1), shared, reporter, None)
     }
 }

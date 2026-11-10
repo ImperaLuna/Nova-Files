@@ -82,21 +82,29 @@ fn replace_or_fall_back(
             Err(taken_back(back, old, new))
         }
         Ok(()) => fs::remove_file(new),
-        Err(errno) if refuses_flag(errno) => {
-            rename_no_replace(old, backup)?;
-            if is_folder(backup) {
-                return Err(taken_back(rename_no_replace(backup, old), old, backup));
-            }
-            if let Err(error) = rename_no_replace(new, old) {
-                return Err(match rename_no_replace(backup, old) {
-                    Ok(()) => error,
-                    Err(stuck) => left_at(old, backup, &error, &stuck),
-                });
-            }
-            fs::remove_file(backup)
-        }
+        Err(errno) if refuses_flag(errno) => replace_through(new, old, backup),
         Err(errno) => Err(errno.into()),
     }
+}
+
+/// Puts `new` in the place of `old` by way of `backup`: `old` steps aside
+/// to it, `new` takes the name, and the backup goes. If `new` can't take
+/// the name, `old` comes back; should it not come back either, the error
+/// says where it was left. Every step leaves both files under a name a
+/// journal knows, unlike an exchange, after which `new`'s name holds the
+/// old file.
+pub fn replace_through(new: &Path, old: &Path, backup: &Path) -> io::Result<()> {
+    rename_no_replace(old, backup)?;
+    if is_folder(backup) {
+        return Err(taken_back(rename_no_replace(backup, old), old, backup));
+    }
+    if let Err(error) = rename_no_replace(new, old) {
+        return Err(match rename_no_replace(backup, old) {
+            Ok(()) => error,
+            Err(stuck) => left_at(old, backup, &error, &stuck),
+        });
+    }
+    fs::remove_file(backup)
 }
 
 /// Whether a folder, not a link to one, is at `path`.
@@ -218,7 +226,7 @@ fn is_case_change(from: &Path, to: &Path) -> bool {
         }
 }
 
-fn same_entry(a: &Metadata, b: &Metadata) -> bool {
+pub fn same_entry(a: &Metadata, b: &Metadata) -> bool {
     a.dev() == b.dev() && a.ino() == b.ino()
 }
 
