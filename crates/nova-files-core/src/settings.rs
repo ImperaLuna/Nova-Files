@@ -28,9 +28,7 @@
 mod file;
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::mem;
-use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, Weak};
@@ -47,8 +45,6 @@ const FILE: &str = "settings.toml";
 /// A settings file this big is not one a person wrote; it is never read.
 const MAX_BYTES: usize = 64 * 1024;
 const SAVE_THREAD: &str = "nova-files-settings";
-/// The permission bits of a file's mode, kept across a save.
-const PERMISSION_BITS: u32 = 0o7777;
 
 /// The settings and who hears about them.
 pub struct Store {
@@ -269,7 +265,7 @@ fn save_each(path: &Path, changes: &Receiver<SettingChange>, shared: &Weak<Mutex
 
 /// Makes `change` in the file at `path`, or logs why it can't.
 fn save(path: &Path, change: &SettingChange) {
-    let target = where_saved(path);
+    let target = private_file::saved_at(path);
     let text = match private_file::read(&target, MAX_BYTES) {
         Read::Bytes(bytes) => {
             let Ok(text) = String::from_utf8(bytes) else {
@@ -301,24 +297,9 @@ fn save(path: &Path, change: &SettingChange) {
         log::warn!("{} isn't TOML; the change isn't saved", target.display());
         return;
     };
-    // A file the user made keeps its mode; a new one is private.
-    let mode = fs::metadata(&target).map_or(private_file::FILE_MODE, |metadata| {
-        metadata.permissions().mode() & PERMISSION_BITS
-    });
+    let mode = private_file::mode_to_keep(&target);
     if let Err(error) = private_file::replace(&target, edited.as_bytes(), mode) {
         log::warn!("can't save {}: {error}", target.display());
-    }
-}
-
-/// Where a save of `path` goes: the file a symlink points to, so a linked
-/// settings file stays linked; `path` itself otherwise.
-fn where_saved(path: &Path) -> PathBuf {
-    let is_link = fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_symlink());
-    if is_link {
-        // A link to nowhere is saved over: there is nothing to keep.
-        fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
-    } else {
-        path.to_owned()
     }
 }
 

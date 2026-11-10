@@ -493,6 +493,7 @@ impl MainWindow {
             | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
             | Event::JobFinished { .. }
+            | Event::Bookmarks(_)
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
             | Event::SpaceUnreadable { .. } => {}

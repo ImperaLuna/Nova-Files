@@ -30,10 +30,8 @@ use crate::list::{self, Stopped};
 use crate::memory;
 use crate::mime::MimeTypes;
 use crate::open;
-use crate::places::{self, Home};
 
 const LIST_THREAD: &str = "nova-files-list";
-const PLACES_THREAD: &str = "nova-files-places";
 const OPEN_THREAD: &str = "nova-files-open";
 
 /// No listing counts: the client never asked, cancelled, or left.
@@ -178,23 +176,6 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
                 reason: Unreadable::Failed,
             })
             .ok();
-    }
-}
-
-/// Finds the places under `home` for `client`.
-pub fn places(client: &Client, home: Option<Home>) {
-    let events = Arc::clone(&client.events);
-    let spawned = thread::Builder::new()
-        .name(PLACES_THREAD.to_owned())
-        .spawn(move || {
-            events
-                .deliver(Event::Places(places::places(home.as_ref())))
-                .ok();
-        });
-    if spawned.is_err() {
-        // Without a thread there are no places to offer; the list is empty
-        // rather than missing.
-        client.deliver(Event::Places(Vec::new())).ok();
     }
 }
 
