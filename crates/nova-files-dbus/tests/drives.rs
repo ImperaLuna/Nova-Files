@@ -149,6 +149,24 @@ fn the_system_volumes_stay_out_and_an_unmounted_partition_shows() {
 }
 
 #[test]
+fn a_drive_that_could_only_be_switched_off_with_a_system_volume_is_not_ejectable() {
+    let bus = PrivateBus::start();
+    let disk: Vec<_> = laptop_disk()
+        .into_iter()
+        .map(|mut object| {
+            if let Some(drive) = &mut object.drive {
+                drive.can_power_off = true;
+            }
+            object
+        })
+        .collect();
+    let _udisks = StandIn::start(&bus.address, &disk);
+    let list = next(&follow(&bus));
+    assert_eq!(list.drives.len(), 1);
+    assert!(!list.drives[0].ejectable);
+}
+
+#[test]
 fn a_drive_with_no_volume_to_show_stays_out() {
     let bus = PrivateBus::start();
     let disk: Vec<_> = laptop_disk()

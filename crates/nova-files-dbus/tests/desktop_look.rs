@@ -96,7 +96,9 @@ fn a_portal_that_starts_later_or_again_is_read_then() {
         mode: Some(Mode::Light),
         accent: Some(ACCENT_RGB),
     };
-    assert_eq!(next_look(&core), light);
+    // The first read can race the portal starting and see only part of
+    // it; the read the portal's start brings on sees all of it.
+    look_until(&core, light);
 
     // Started again with another preference, and no signal about it.
     first.release_name(PORTAL_NAME).unwrap();
@@ -111,7 +113,7 @@ fn a_portal_that_starts_later_or_again_is_read_then() {
         mode: Some(Mode::Dark),
         ..light
     };
-    assert_eq!(next_look(&core), dark);
+    look_until(&core, dark);
 }
 
 #[test]
@@ -208,6 +210,11 @@ fn changed_in(portal: &Connection, namespace: &str, key: &str, value: Value<'_>)
             &(namespace, key, value),
         )
         .unwrap();
+}
+
+/// Waits for the core to hear `wanted`, skipping the looks before it.
+fn look_until(core: &Receiver<CoreMessage>, wanted: DesktopLook) {
+    while next_look(core) != wanted {}
 }
 
 /// The next look sent to the core; other messages are skipped.

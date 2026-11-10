@@ -18,8 +18,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_api::{
-    Command, Connection, Details, EntryId, EntryKind, Event, Listing, ListingId, PlaceKind,
-    Unreadable,
+    Command, Connection, Details, EntryId, EntryKind, Event, Listing, ListingId, Unreadable,
 };
 
 /// How long a test waits for the core before it counts as a failure.
@@ -352,36 +351,4 @@ fn folder_without_permission_is_reported() {
             ..
         }
     ));
-}
-
-#[test]
-fn places_answers_with_existing_folders_only() {
-    let home = TempFolder::new();
-    fs::create_dir_all(home.path().join(".config")).unwrap();
-    fs::create_dir(home.path().join("Bilder")).unwrap();
-    fs::create_dir(home.path().join("Downloads")).unwrap();
-    fs::write(
-        home.path().join(".config").join("user-dirs.dirs"),
-        "XDG_PICTURES_DIR=\"$HOME/Bilder\"\n",
-    )
-    .unwrap();
-    let client = client_at(home.path());
-    client.connection.send(Command::Places).unwrap();
-
-    let Event::Places(places) = client.events.recv_timeout(ANSWER_TIMEOUT).unwrap() else {
-        panic!("expected places");
-    };
-
-    let found: Vec<(PlaceKind, PathBuf)> = places
-        .into_iter()
-        .map(|place| (place.kind, place.path))
-        .collect();
-    assert_eq!(
-        found,
-        [
-            (PlaceKind::Home, home.path().to_owned()),
-            (PlaceKind::Pictures, home.path().join("Bilder")),
-            (PlaceKind::Downloads, home.path().join("Downloads")),
-        ]
-    );
 }

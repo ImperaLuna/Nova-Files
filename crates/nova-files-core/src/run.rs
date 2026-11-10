@@ -18,9 +18,12 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::drives::Store as DrivesStore;
 use crate::jobs::{self, Client};
+use crate::measure::Measurer;
 use crate::mime::MimeTypes;
+use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
-use crate::places::Home;
+use crate::places::Store as PlacesStore;
+use crate::properties;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
@@ -29,17 +32,22 @@ use crate::window_state::Store as WindowStateStore;
 
 /// Where the core finds and keeps things.
 pub struct Setup {
-    pub home: Option<Home>,
+    /// The places list and the pinned folders.
+    pub places: PlacesStore,
     pub window_state: WindowStateStore,
     pub settings: SettingsStore,
     pub theme: ThemeStore,
     pub thumbnails: Option<Thumbnails>,
     pub searcher: Searcher,
-    /// The MIME database, read at the first [`Command::OpenFile`] and kept
-    /// while the core runs.
+    /// The MIME database, read at the first [`Command::OpenFile`] or
+    /// [`Command::OpenWith`] and kept while the core runs.
     pub mime_types: Arc<OnceLock<MimeTypes>>,
+    /// Answers Open With requests, in order.
+    pub open_with: OpenWithWorker,
     /// File operations, and the clients that hear about them.
     pub jobs: Jobs,
+    /// Size scans, each for the client that asked.
+    pub measurer: Measurer,
     /// The drives, and the clients that hear about them.
     pub drives: DrivesStore,
 }
@@ -72,10 +80,7 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
         CoreMessage::Disconnected { client } => {
             // Dropping the client stops its listing.
             clients.remove(&client);
-            setup.settings.forget(client);
-            setup.theme.forget(client);
-            setup.drives.forget(client);
-            setup.jobs.audience().leave(client);
+            forget(client, setup);
         }
         // Receiving it already restarted the idle wait.
         CoreMessage::Activity => {}
@@ -86,19 +91,30 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             };
             if answer(client, target, command, setup).is_err() {
                 clients.remove(&client);
-                setup.settings.forget(client);
-                setup.theme.forget(client);
-                setup.drives.forget(client);
-                setup.jobs.audience().leave(client);
+                forget(client, setup);
             }
         }
     }
+}
+
+/// Stops telling `client` about anything it asked to hear about.
+fn forget(client: ClientId, setup: &Setup) {
+    setup.settings.forget(client);
+    setup.theme.forget(client);
+    setup.places.forget(client);
+    setup.drives.forget(client);
+    setup.jobs.audience().leave(client);
+    setup.measurer.forget(client);
 }
 
 /// Answers `command`, at once or through a job.
 ///
 /// # Errors
 /// [`nova_files_api::ClientGone`] when the client stopped listening.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one short arm per command; splitting it would hide a missed one"
+)]
 fn answer(
     id: ClientId,
     client: &Client,
@@ -112,7 +128,11 @@ fn answer(
             Ok(())
         }
         Command::Places => {
-            jobs::places(client, setup.home.clone());
+            setup.places.listen(id, client.events());
+            Ok(())
+        }
+        Command::ChangeBookmark(change) => {
+            setup.places.change(change);
             Ok(())
         }
         Command::Rows { id, first, count } => {
@@ -123,8 +143,16 @@ fn answer(
             setup.searcher.search(client, id, query, limit);
             Ok(())
         }
+        Command::Properties { id, path } => {
+            properties::answer(client.events(), id, path);
+            Ok(())
+        }
         Command::OpenFile { path, activation } => {
             jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
+            Ok(())
+        }
+        Command::OpenWith(request) => {
+            setup.open_with.answer(client.events(), request);
             Ok(())
         }
         Command::WindowState => client.deliver(Event::WindowState(setup.window_state.bytes())),
@@ -141,6 +169,7 @@ fn answer(
             Ok(())
         }
         Command::Drives => setup.drives.listen(id, client.events()),
+        Command::Drive(action) => setup.drives.act(client.events(), action),
         Command::Theme => {
             setup.theme.listen(id, client.events());
             Ok(())
@@ -180,6 +209,10 @@ fn answer(
             scope,
         } => {
             setup.jobs.answer(job, &conflict, answer, scope);
+            Ok(())
+        }
+        command @ (Command::Measure { .. } | Command::Space { .. } | Command::StopMeasure(_)) => {
+            setup.measurer.answer(id, client.events(), command);
             Ok(())
         }
     }

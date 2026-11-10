@@ -17,6 +17,7 @@
 //! [`Jobs::busy`], and a job that ends wakes the loop so its idle wait
 //! starts from then.
 
+mod access;
 mod attrs;
 mod audience;
 mod clash;
@@ -38,7 +39,7 @@ mod running;
 mod stop;
 mod sync;
 #[cfg(test)]
-mod test_folder;
+pub mod test_folder;
 mod transfer;
 mod trash;
 
@@ -61,6 +62,7 @@ pub use audience::Audience;
 pub use test_folder::TestFolder;
 
 use crate::jobs::Client;
+use access::change_access;
 use delete::delete;
 use job::Job;
 use left::Left;
@@ -375,6 +377,7 @@ fn run(running: &mut Running, operation: &Operation, home_trash: Option<&Path>) 
         Operation::Copy { sources, into } => transfer(running, sources, into, How::Copy),
         Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
         Operation::Delete { paths } => delete(running, paths),
+        Operation::ChangeAccess { paths, change } => change_access(running, paths, change),
         Operation::Trash { paths } => trash(running, paths, home_trash),
     }
 }
@@ -420,9 +423,9 @@ fn first_path(operation: &Operation) -> PathBuf {
         Operation::Copy { sources, into } | Operation::Move { sources, into } => {
             sources.first().unwrap_or(into).clone()
         }
-        Operation::Delete { paths } | Operation::Trash { paths } => {
-            paths.first().cloned().unwrap_or_default()
-        }
+        Operation::Delete { paths }
+        | Operation::Trash { paths }
+        | Operation::ChangeAccess { paths, .. } => paths.first().cloned().unwrap_or_default(),
     }
 }
 
