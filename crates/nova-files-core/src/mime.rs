@@ -174,10 +174,10 @@ impl MimeTypes {
         if !part(media) || !part(subtype) {
             return None;
         }
+        // Appended whole: a subtype may hold dots ("vnd.oasis.opendocument.text").
         let file = Path::new(TYPES_FOLDER)
             .join(media)
-            .join(subtype)
-            .with_extension(TYPE_FILE_EXTENSION);
+            .join(format!("{subtype}.{TYPE_FILE_EXTENSION}"));
         self.dirs
             .iter()
             .find_map(|dir| read_capped(&dir.join(&file)))
