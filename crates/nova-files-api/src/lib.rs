@@ -62,7 +62,10 @@ pub use open_with::{App, OpenWith, OpenWithAnswer, OpenWithId};
 pub use pick::{
     FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,
 };
-pub use preview::{PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent, PreviewId};
+pub use preview::{
+    Fit, MAX_FIT_SIDE, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Picture, Preview, PreviewContent,
+    PreviewId,
+};
 pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
