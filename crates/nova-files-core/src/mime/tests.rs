@@ -308,6 +308,26 @@ fn a_type_is_called_by_its_untranslated_comment() {
 }
 
 #[test]
+fn a_subtype_with_dots_is_named_by_its_whole_file() {
+    let (dir, types) = types("dotted");
+    fs::create_dir_all(dir.0.join("mime/application")).unwrap();
+    dir.write(
+        "mime/application/vnd.oasis.opendocument.text.xml",
+        "<comment>ODT document</comment>",
+    );
+    dir.write(
+        "mime/application/vnd.oasis.opendocument.xml",
+        "<comment>Wrong file</comment>",
+    );
+    assert_eq!(
+        types
+            .name("application/vnd.oasis.opendocument.text")
+            .as_deref(),
+        Some("ODT document")
+    );
+}
+
+#[test]
 fn a_name_that_is_not_a_type_reads_no_file() {
     let (dir, types) = types("not-types");
     dir.write("mime/globs.xml", "<comment>Not a type</comment>");
