@@ -139,3 +139,30 @@ async fn a_double_click_in_the_field_stays_in_it(cx: &mut TestAppContext) {
     view.update(cx, |view, _| view.new_folder());
     assert_eq!(view.read_with(cx, |view, _| view.jobs_pending()), 0);
 }
+
+#[gpui::test]
+async fn a_rename_that_moves_the_entry_off_screen_scrolls_to_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("rename-far");
+    let home = TempFolder::tree("rename-far-home");
+    for index in 0..80 {
+        fs::write(tree.path().join(format!("file {index:02}")), "").unwrap();
+    }
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let offset = |view: &Entity<MainWindow>, cx: &VisualTestContext| {
+        view.read_with(cx, |view, _| view.scroll().0.borrow().base_handle.offset())
+    };
+    let top = offset(&view, cx);
+
+    click(cx, "name-2");
+    cx.simulate_keystrokes("f2");
+    cx.run_until_parked();
+    cx.simulate_input("zz last");
+    cx.simulate_keystrokes("enter");
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.entry_names().last().map(String::as_str) == Some("zz last")
+    })
+    .await;
+    cx.run_until_parked();
+    assert!(offset(&view, cx).y < top.y);
+}
