@@ -5,6 +5,7 @@
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 mod scripted_select;
+mod scripted_tree;
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -31,13 +32,16 @@ struct Core {
     messages: Receiver<CoreMessage>,
     events: Option<Box<dyn EventSink>>,
     /// The window's own connection: the first to arrive. The sidebar's
-    /// folder tree lists on a second one, which the tests leave alone.
+    /// folder tree lists on a second one (see `scripted_tree`).
     window: Option<ClientId>,
+    tree: Option<(ClientId, Box<dyn EventSink>)>,
+    /// The folders the tree asked for, oldest first, until taken.
+    tree_listings: Vec<(ListingId, PathBuf)>,
 }
 
 impl Core {
     /// The window's next message, if one is waiting; the window's own
-    /// arrival is taken in passing, and the tree's connection skipped.
+    /// arrival is taken in passing, and the tree's messages put aside.
     fn try_recv(&mut self) -> Option<CoreMessage> {
         while let Ok(message) = self.messages.try_recv() {
             match message {
@@ -45,7 +49,11 @@ impl Core {
                     self.window = Some(client);
                     self.events = Some(events);
                 }
-                CoreMessage::Connected { .. } => {}
+                CoreMessage::Connected { client, events } => self.tree = Some((client, events)),
+                CoreMessage::Command {
+                    command: Command::ListFolder { id, path, .. },
+                    client,
+                } if Some(client) != self.window => self.tree_listings.push((id, path)),
                 CoreMessage::Command { client, .. } | CoreMessage::Disconnected { client }
                     if Some(client) != self.window => {}
                 message => return Some(message),
@@ -118,6 +126,8 @@ fn window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContex
         messages,
         events: None,
         window: None,
+        tree: None,
+        tree_listings: Vec::new(),
     };
     (view, cx, core)
 }
