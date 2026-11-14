@@ -21,6 +21,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::f32::consts::FRAC_PI_2;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
@@ -62,6 +63,29 @@ pub struct TreeRow {
     /// How deep under the root: the root is 0.
     pub depth: usize,
     pub toggle: Toggle,
+}
+
+impl Toggle {
+    /// How far its arrow turns, in radians: down when open.
+    pub const fn angle(self) -> f32 {
+        match self {
+            Self::Open => FRAC_PI_2,
+            Self::Closed | Self::None => 0.0,
+        }
+    }
+}
+
+impl TreeRow {
+    /// Whether it is the tree's root, Home.
+    pub const fn is_root(&self) -> bool {
+        self.depth == 0
+    }
+
+    /// Whether the window is in its folder: `here` is the folder on
+    /// screen, if any.
+    pub fn is_here(&self, here: Option<&Path>) -> bool {
+        here == Some(self.path.as_path())
+    }
 }
 
 impl FolderTree {
@@ -351,6 +375,26 @@ mod tests {
         tree.toggle(root);
         assert_eq!(tree.next_to_list(), Some(root.to_owned()));
         assert_eq!(tree.next_to_list(), None);
+    }
+
+    #[test]
+    fn only_an_open_arrow_turns_down() {
+        assert!((Toggle::Open.angle() - FRAC_PI_2).abs() < f32::EPSILON);
+        assert!(Toggle::Closed.angle().abs() < f32::EPSILON);
+        assert!(Toggle::None.angle().abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn the_root_is_home_and_a_row_is_here_only_in_its_folder() {
+        let mut tree = home();
+        tree.toggle(Path::new("/home/me"));
+        tree.listed(Path::new("/home/me"), &entries(&["a"], &[]));
+        let rows = tree.rows();
+        assert!(rows[0].is_root());
+        assert!(!rows[1].is_root());
+        assert!(rows[1].is_here(Some(Path::new("/home/me/a"))));
+        assert!(!rows[1].is_here(Some(Path::new("/home/me"))));
+        assert!(!rows[1].is_here(None));
     }
 
     #[test]

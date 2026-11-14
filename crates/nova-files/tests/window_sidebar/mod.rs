@@ -183,6 +183,15 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     // nova holds no folders: no arrow.
     assert!(cx.debug_bounds("tree-toggle-1").is_some());
     assert!(cx.debug_bounds("tree-toggle-2").is_none());
+    // Each level steps in by one indent (22 px, past a 2 px pad), and
+    // each level's hairline runs 4 px before the rows inside it.
+    let from_row = |cx: &mut VisualTestContext, row: &'static str, part: &'static str| {
+        cx.debug_bounds(part).unwrap().left() - cx.debug_bounds(row).unwrap().left()
+    };
+    assert_eq!(from_row(cx, "tree-0", "tree-toggle-0"), px(2.0));
+    assert_eq!(from_row(cx, "tree-1", "tree-toggle-1"), px(24.0));
+    assert_eq!(from_row(cx, "tree-2", "tree-guide-2-1"), px(18.0));
+    assert_eq!(from_row(cx, "tree-2", "tree-guide-2-2"), px(40.0));
 
     // The arrow only opens and closes, and the folder on screen read again
     // in place leaves closed what the user closed.
