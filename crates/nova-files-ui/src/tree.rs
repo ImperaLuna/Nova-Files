@@ -367,6 +367,29 @@ mod tests {
     }
 
     #[test]
+    fn opening_a_folder_forgets_only_its_own_empty_subfolders() {
+        let mut tree = home();
+        let root = Path::new("/home/me");
+        let a = Path::new("/home/me/a");
+        tree.toggle(root);
+        tree.listed(root, &entries(&["a", "b"], &[]));
+        tree.toggle(a);
+        tree.listed(a, &entries(&["x"], &[]));
+        tree.listed(Path::new("/home/me/b"), &entries(&[], &[]));
+        tree.listed(Path::new("/home/me/a/x"), &entries(&[], &[]));
+        // Opening a again forgets x's emptiness, not b's.
+        tree.toggle(a);
+        tree.toggle(a);
+        let shown = shown(&tree);
+        assert_eq!(shown[2], ("x".to_owned(), 2, Toggle::Closed));
+        assert_eq!(shown[3], ("b".to_owned(), 1, Toggle::None));
+        // Opening the root again keeps what a holds.
+        tree.toggle(root);
+        tree.toggle(root);
+        assert_eq!(tree.rows().len(), 4);
+    }
+
+    #[test]
     fn a_folder_waits_once_however_often_it_is_asked_for() {
         let mut tree = home();
         let root = Path::new("/home/me");
