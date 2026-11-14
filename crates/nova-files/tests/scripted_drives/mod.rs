@@ -90,6 +90,8 @@ fn the_space_the_core_tells_is_kept_by_folder(cx: &mut TestAppContext) {
 fn a_volume_clicked_is_mounted_then_opened(cx: &mut TestAppContext) {
     let (view, cx, mut core) = with_drives(cx, vec![volume("stick", None), volume("card", None)]);
     let stick = view.read_with(cx, |view, _| view.shown_drives()[1].clone());
+    // Clicked twice while it mounts: one mount.
+    view.update(cx, |view, _| view.open_drive(stick.clone()));
     view.update(cx, |view, _| view.open_drive(stick));
     let stick_id = VolumeId("stick".to_owned());
     assert_eq!(
@@ -145,4 +147,30 @@ fn a_volume_still_mounted_keeps_the_window_in_it(cx: &mut TestAppContext) {
     ]));
     cx.run_until_parked();
     assert_eq!(core.next_listing(), None);
+}
+
+#[gpui::test]
+fn going_elsewhere_while_a_volume_mounts_keeps_the_window_there(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = with_drives(cx, vec![volume("stick", None)]);
+    let stick = view.read_with(cx, |view, _| view.shown_drives()[1].clone());
+    view.update(cx, |view, _| view.open_drive(stick));
+    view.update(cx, |view, _| view.open(Path::new(OTHER)));
+    assert_eq!(
+        core.next_listing().map(|(_, path)| path),
+        Some(PathBuf::from(OTHER))
+    );
+
+    core.send(Event::DriveDone {
+        action: DriveAction::Mount(VolumeId("stick".to_owned())),
+        result: Ok(Some(PathBuf::from(STICK))),
+    });
+    cx.run_until_parked();
+    assert_eq!(core.next_listing(), None);
+}
+
+#[gpui::test]
+fn the_drive_you_are_on_is_marked(cx: &mut TestAppContext) {
+    let (_view, cx, _core) = in_the_stick(cx);
+    assert!(cx.debug_bounds("drive-1-here").is_some());
+    assert!(cx.debug_bounds("drive-0-here").is_none());
 }
