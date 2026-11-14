@@ -250,7 +250,9 @@ pub mod size {
     pub const HEAD_HEIGHT: Pixels = px(38.0);
     pub const HEAD_TOP: Pixels = px(4.0);
     pub const HEAD_BOTTOM: Pixels = px(4.0);
-    /// A column head's sort arrow.
+    /// A column head's button and its sort arrow.
+    pub const HEAD_BUTTON_HEIGHT: Pixels = px(24.0);
+    pub const HEAD_BUTTON_PAD: Pixels = px(6.0);
     pub const HEAD_ARROW: Pixels = px(11.0);
     pub const HEAD_ARROW_GAP: Pixels = px(4.0);
     /// The sidebar, a place in it, its icon, and the space between places.

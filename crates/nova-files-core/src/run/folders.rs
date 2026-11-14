@@ -18,7 +18,7 @@ pub(super) fn answer(
     setup: &Setup,
 ) -> Result<(), ClientGone> {
     match command {
-        Command::ListFolder { id, path } => jobs::list_folder(client, id, path),
+        Command::ListFolder { id, path, order } => jobs::list_folder(client, id, path, order),
         Command::Places => setup.places.listen(id, client.events()),
         Command::ChangeBookmark(change) => setup.places.change(change),
         Command::ListTrash => return jobs::list_trash(client, setup.home.clone()),

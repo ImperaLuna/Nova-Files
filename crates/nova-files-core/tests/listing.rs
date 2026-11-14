@@ -18,7 +18,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_api::{
-    Command, Connection, Details, EntryId, EntryKind, Event, Listing, ListingId, Unreadable,
+    Command, Connection, Details, EntryId, EntryKind, Event, Listing, ListingId, Order, Unreadable,
 };
 
 /// How long a test waits for the core before it counts as a failure.
@@ -94,6 +94,7 @@ impl Client {
             .send(Command::ListFolder {
                 id: ListingId(id),
                 path: path.to_owned(),
+                order: Order::default(),
             })
             .unwrap();
         self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()

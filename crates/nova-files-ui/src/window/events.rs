@@ -22,6 +22,9 @@ impl MainWindow {
         self.history.arrived(&path);
         // Read again in place: keep the scroll position.
         let same_folder = self.folder() == Some(path.as_path());
+        // In a new order the cursor's entry has moved: bring it into view.
+        let reordered = same_folder && self.shown_order != self.asked_order;
+        self.shown_order = self.asked_order;
         self.selection = self.selection_for(&listing);
         self.listing = Some(listing);
         self.core_moved = false;
@@ -34,7 +37,9 @@ impl MainWindow {
             self.band = None;
         }
         self.pick_folder_opened(cx);
-        if !same_folder && let Some(cursor) = self.cursor() {
+        if (!same_folder || reordered)
+            && let Some(cursor) = self.cursor()
+        {
             self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
         }
         cx.emit(WindowEvent::Opened(path));

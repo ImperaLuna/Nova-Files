@@ -10,7 +10,9 @@
 //! Each client also has a details queue (see `details_queue`) and a
 //! thumbnail queue (see `thumbs`), both told which listing is on screen
 //! just before its listing is sent, and both told which of its rows the
-//! client shows. The listing itself reads names and kinds only.
+//! client shows. The listing itself reads names and kinds only, unless
+//! the client asked for an order by modified time or size: then it reads
+//! every entry's details before it answers (see `order`).
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -18,7 +20,7 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
-    ClientGone, Entry, EntryId, Event, EventSink, Listing, ListingId, Unreadable,
+    ClientGone, Entry, EntryId, Event, EventSink, Listing, ListingId, Order, Unreadable,
 };
 
 use nova_files_api::Thumbnails as ThumbnailsSetting;
@@ -30,6 +32,7 @@ use crate::list::{self, Stopped};
 use crate::memory;
 use crate::mime::MimeTypes;
 use crate::open;
+use crate::order;
 use crate::places::Home;
 use crate::trash;
 
@@ -119,8 +122,9 @@ impl Drop for Client {
     }
 }
 
-/// Lists `path` for `client` as listing `id`, replacing any listing before.
-pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
+/// Lists `path` for `client` as listing `id` in `order`, replacing any
+/// listing before.
+pub fn list_folder(client: &Client, id: ListingId, path: PathBuf, order: Order) {
     // The details and thumbnail queues keep the listing on screen until
     // this one is sent: a folder that can't be read leaves the client where
     // it was. A listing sent but dropped by the client as stale has moved
@@ -135,8 +139,10 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
         .name(LIST_THREAD.to_owned())
         .spawn(move || {
             let cancelled = || current.load(Ordering::SeqCst) != id.0;
-            let entries: Arc<[Entry]> = match list::read_folder(&job_path, cancelled) {
-                Ok(entries) => entries.into(),
+            let listed = list::read_folder(&job_path, cancelled)
+                .map(|entries| order::arrange(&job_path, entries, order, cancelled));
+            let entries: Arc<[Entry]> = match listed {
+                Ok(Some(entries)) => entries.into(),
                 Err(Stopped::Unreadable(reason)) => {
                     if !cancelled() {
                         events
@@ -149,7 +155,8 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf) {
                     }
                     return;
                 }
-                Err(Stopped::Cancelled) => return,
+                // Nobody wants the answer any more.
+                Ok(None) | Err(Stopped::Cancelled) => return,
             };
             if cancelled() {
                 return;

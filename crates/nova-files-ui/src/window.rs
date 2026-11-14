@@ -46,7 +46,7 @@ use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, Task, UniformListScrollHandle};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing, ListingId,
-    Place, Settings,
+    Order, Place, Settings,
 };
 
 use crate::band::Band;
@@ -115,6 +115,14 @@ pub struct MainWindow {
     pub(crate) pressed_name: bool,
     /// The listing asked for most recently; only its answer counts.
     pub(crate) asked: Option<ListingId>,
+    /// The folder asked for most recently.
+    requested: Option<PathBuf>,
+    /// The order the window asks for listings in (see `navigate`).
+    order: Order,
+    /// The order of the listing asked for most recently.
+    asked_order: Order,
+    /// The order of the listing on screen, which the column heads show.
+    shown_order: Order,
     /// Whether the core sent a listing since the one on screen, which the
     /// window dropped: the core now serves rows of that one, not this.
     core_moved: bool,
@@ -203,6 +211,10 @@ impl MainWindow {
             pressed_name: false,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
+            requested: None,
+            order: Order::default(),
+            asked_order: Order::default(),
+            shown_order: Order::default(),
             core_moved: false,
             next_listing: 0,
             // Popped from the end: home first, then the root.

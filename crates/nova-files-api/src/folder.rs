@@ -50,7 +50,27 @@ pub struct Details {
     pub modified: Option<SystemTime>,
 }
 
-/// A folder's entries: folders first, then files, each group A to Z.
+/// What a listing's entries are ordered by. Folders always come before
+/// files; within each group the entries follow the key, and entries the
+/// key can't tell apart (folders by size, say) stay A to Z.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SortKey {
+    #[default]
+    Name,
+    Modified,
+    Size,
+}
+
+/// How a client wants a folder's entries ordered: by `key`, smallest
+/// first (A to Z, oldest, smallest) unless `descending`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Order {
+    pub key: SortKey,
+    pub descending: bool,
+}
+
+/// A folder's entries, folders first, in the [`Order`] the client asked
+/// for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listing {
     pub id: ListingId,

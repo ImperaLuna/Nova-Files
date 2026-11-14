@@ -15,7 +15,8 @@ use std::sync::mpsc::Receiver;
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
     Appearance, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink,
-    Listing, ListingId, Mode, Palette, SettingChange, Settings, Theme, Thumbnails, Unreadable,
+    Listing, ListingId, Mode, Order, Palette, SettingChange, Settings, SortKey, Theme, Thumbnails,
+    Unreadable,
 };
 use nova_files_ui::{Colors, MainWindow};
 
@@ -38,7 +39,7 @@ impl Core {
             match message {
                 CoreMessage::Connected { events, .. } => self.events = Some(events),
                 CoreMessage::Command {
-                    command: Command::ListFolder { id, path },
+                    command: Command::ListFolder { id, path, .. },
                     ..
                 } => return Some((id, path)),
                 _ => {}
@@ -515,4 +516,72 @@ fn a_thumbnail_shrunk_after_hiding_is_not_kept(cx: &mut TestAppContext) {
     core.send(Event::Settings(Arc::new(hidden)));
     cx.run_until_parked();
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+}
+
+/// The one listing the window asked for since last asked: its id, folder
+/// and order.
+fn listing_asked(core: &mut Core) -> (ListingId, PathBuf, Order) {
+    let mut asked = Vec::new();
+    while let Ok(message) = core.messages.try_recv() {
+        match message {
+            CoreMessage::Connected { events, .. } => core.events = Some(events),
+            CoreMessage::Command {
+                command: Command::ListFolder { id, path, order },
+                ..
+            } => asked.push((id, path, order)),
+            _ => {}
+        }
+    }
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    asked.remove(0)
+}
+
+#[gpui::test]
+fn a_new_order_reads_again_the_folder_asked_for_last(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = window(cx);
+    cx.run_until_parked();
+    let shown = PathBuf::from(SHOWN);
+    let by_size = Order {
+        key: SortKey::Size,
+        descending: true,
+    };
+    let by_modified = Order {
+        key: SortKey::Modified,
+        descending: true,
+    };
+    let (_, path, order) = listing_asked(&mut core);
+    assert_eq!((path, order), (shown.clone(), Order::default()));
+    // Still on its way: the folder asked for is asked again, ordered.
+    view.update(cx, |view, _| view.sort_by(SortKey::Size));
+    let (id, path, order) = listing_asked(&mut core);
+    assert_eq!((&path, order), (&shown, by_size));
+    // Once it is on screen, the folder on screen is.
+    core.send(Event::FolderListed(Listing {
+        id,
+        path,
+        entries: Arc::from([]),
+    }));
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert_eq!(view.shown_order(), by_size));
+    view.update(cx, |view, _| view.sort_by(SortKey::Name));
+    let (_, path, order) = listing_asked(&mut core);
+    assert_eq!((&path, order), (&shown, Order::default()));
+    // A refused folder leaves the one on screen to read again.
+    view.update(cx, |view, _| view.open(Path::new(MISSING)));
+    let (id, path, _) = listing_asked(&mut core);
+    core.refuse(id, &path);
+    cx.run_until_parked();
+    view.update(cx, |view, _| view.sort_by(SortKey::Modified));
+    let (_, path, order) = listing_asked(&mut core);
+    assert_eq!((&path, order), (&shown, by_modified));
+    // Going elsewhere keeps the order, and none of it touched the history.
+    view.update(cx, |view, _| view.open(Path::new(OTHER)));
+    let (_, path, order) = listing_asked(&mut core);
+    assert_eq!((path, order), (PathBuf::from(OTHER), by_modified));
+    view.read_with(cx, |view, _| {
+        // The heads show the order of the listing on screen, not the one
+        // still on its way.
+        assert_eq!(view.shown_order(), by_size);
+        assert_eq!(view.back_target(), None);
+    });
 }

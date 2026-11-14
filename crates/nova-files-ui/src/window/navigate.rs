@@ -1,11 +1,12 @@
 //! Going places: a new folder, Back, Forward, Up and into an entry. Each
-//! asks the core for a listing with a new id; the window moves once that
-//! id answers (see `events`). Paths are tidied by their text alone, as a
-//! user reads them.
+//! asks the core for a listing with a new id, in the window's order; the
+//! window moves once that id answers (see `events`). Changing the order
+//! reads the folder again. Paths are tidied by their text alone, as a user
+//! reads them.
 
 use std::path::{Component, Path, PathBuf};
 
-use nova_files_api::{Command, EntryId, EntryKind, ListingId};
+use nova_files_api::{Command, EntryId, EntryKind, ListingId, Order, SortKey};
 
 use super::MainWindow;
 
@@ -42,17 +43,50 @@ impl MainWindow {
     }
 
     /// Asks the core for `folder`, leaving the history as it is: the
-    /// window moves there once it answers.
-    pub(super) fn request(&mut self, folder: &Path) {
+    /// window moves there once it answers. Whether the ask was sent.
+    pub(super) fn request(&mut self, folder: &Path) -> bool {
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
         let path = tidy(folder);
-        let sent = self
-            .connection
-            .as_ref()
-            .map(|connection| connection.send(Command::ListFolder { id, path }));
-        if matches!(sent, Some(Ok(()))) {
+        let order = self.order;
+        let sent = self.connection.as_ref().map(|connection| {
+            connection.send(Command::ListFolder {
+                id,
+                path: path.clone(),
+                order,
+            })
+        });
+        let sent = matches!(sent, Some(Ok(())));
+        if sent {
             self.asked = Some(id);
+            self.asked_order = order;
+            self.requested = Some(path);
+        }
+        sent
+    }
+
+    /// The order of the listing on screen. A new order shows once its
+    /// listing arrives.
+    pub const fn shown_order(&self) -> Order {
+        self.shown_order
+    }
+
+    /// Orders the list by `key`: the other way round when it already is,
+    /// otherwise A to Z by name and newest or largest first by the
+    /// others. The folder asked for last (the one on screen, or the one
+    /// still on its way) is read again in the new order; the window keeps
+    /// its place in the history.
+    pub fn sort_by(&mut self, key: SortKey) {
+        let folder = if self.waiting() {
+            self.requested.clone()
+        } else {
+            self.folder().map(Path::to_path_buf)
+        };
+        let Some(folder) = folder else { return };
+        let before = self.order;
+        self.order = next_order(before, key);
+        if !self.request(&folder) {
+            self.order = before;
         }
     }
 
@@ -81,6 +115,16 @@ impl MainWindow {
             self.open(&parent);
         }
     }
+}
+
+/// The order after a click on `key`'s column head, from `current`.
+fn next_order(current: Order, key: SortKey) -> Order {
+    let descending = if current.key == key {
+        !current.descending
+    } else {
+        key != SortKey::Name
+    };
+    Order { key, descending }
 }
 
 /// `path` with `.` dropped and each `..` taking off the part before it,
@@ -115,6 +159,35 @@ const CURRENT_FOLDER: &str = ".";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_click_on_the_column_in_use_turns_it_around() {
+        let name = Order::default();
+        let reversed = next_order(name, SortKey::Name);
+        assert_eq!(
+            reversed,
+            Order {
+                key: SortKey::Name,
+                descending: true
+            }
+        );
+        assert_eq!(next_order(reversed, SortKey::Name), name);
+    }
+
+    #[test]
+    fn a_new_column_starts_a_to_z_by_name_and_largest_or_newest_first_otherwise() {
+        let by_size = next_order(Order::default(), SortKey::Size);
+        assert_eq!(
+            by_size,
+            Order {
+                key: SortKey::Size,
+                descending: true
+            }
+        );
+        let by_modified = next_order(by_size, SortKey::Modified);
+        assert!(by_modified.descending);
+        assert_eq!(next_order(by_modified, SortKey::Name), Order::default());
+    }
 
     #[test]
     fn tidy_resolves_dots_by_text() {
