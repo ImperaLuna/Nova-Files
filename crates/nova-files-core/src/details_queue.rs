@@ -206,9 +206,8 @@ impl Shared {
 fn work(shared: &Shared, events: &dyn EventSink) {
     while let Some(run) = shared.next_run() {
         // `want` keeps the wanted entries inside the listing.
-        let Some(read) = details::read_listed(&run.listed, run.entries.clone(), || {
-            !shared.still_wanted(&run)
-        }) else {
+        let entries = details::listed(&run.listed, run.entries.clone());
+        let Some(read) = details::read_batch(entries, || !shared.still_wanted(&run)) else {
             continue;
         };
         if shared.send(&run, read, events).is_err() {

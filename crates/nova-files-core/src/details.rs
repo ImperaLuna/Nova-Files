@@ -9,37 +9,34 @@
 
 use std::fs;
 use std::ops::Range;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use nova_files_api::{Details, Entry, EntryKind, Listing};
+use nova_files_api::{Details, EntryKind, Listing};
 
-/// The details of each of `entries`, all in the folder at `folder`, in the
-/// same order. `None` when `cancelled` said so before the batch was done.
+/// The details of each entry `entries` names by its path and kind, in
+/// the same order. `None` when `cancelled` said so before the batch was
+/// done.
 pub fn read_batch(
-    folder: &Path,
-    entries: &[Entry],
+    entries: impl ExactSizeIterator<Item = (PathBuf, EntryKind)>,
     cancelled: impl Fn() -> bool,
 ) -> Option<Vec<Details>> {
     let mut details = Vec::with_capacity(entries.len());
-    for entry in entries {
-        details.push(read_one(&folder.join(&entry.name), entry.kind, &cancelled)?);
+    for (path, kind) in entries {
+        details.push(read_one(&path, kind, &cancelled)?);
     }
     Some(details)
 }
 
-/// Like [`read_batch`], for `listing`'s entries `range`, each in its own
-/// folder; entries past its end are left out.
-pub fn read_listed(
+/// `listing`'s entries `range` as [`read_batch`] takes them; entries past
+/// its end are left out.
+pub fn listed(
     listing: &Listing,
     range: Range<usize>,
-    cancelled: impl Fn() -> bool,
-) -> Option<Vec<Details>> {
+) -> impl ExactSizeIterator<Item = (PathBuf, EntryKind)> + '_ {
     let entries = listing.entries.get(range).unwrap_or_default();
-    let mut details = Vec::with_capacity(entries.len());
-    for entry in entries {
-        details.push(read_one(&listing.path_of(entry), entry.kind, &cancelled)?);
-    }
-    Some(details)
+    entries
+        .iter()
+        .map(|entry| (listing.path_of(entry), entry.kind))
 }
 
 /// One entry's details; `None` when `cancelled` said so before a read.
