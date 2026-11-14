@@ -267,6 +267,11 @@ async fn a_click_on_a_column_head_orders_the_list_by_it(cx: &mut TestAppContext)
     let head = cx.debug_bounds("head-modified").unwrap().left();
     let column = cx.debug_bounds("modified-header").unwrap().left();
     assert!(head < column, "{head:?} {column:?}");
+    // And the first and last heads sit as far in from the row's edges.
+    let row = cx.debug_bounds("entry-0").unwrap();
+    let first = cx.debug_bounds("head-name").unwrap().left() - row.left();
+    let last = row.right() - cx.debug_bounds("head-size").unwrap().right();
+    assert_eq!(first, last);
 
     click(cx, "head-size");
     shows(cx, ["Projects", "big.txt", "a.txt", "notes.txt"]).await;
