@@ -14,11 +14,11 @@ use std::sync::mpsc::Receiver;
 
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
-    Appearance, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event,
-    EventSink, Listing, ListingId, Mode, Order, Palette, SettingChange, Settings, SortKey, Theme,
-    Thumbnails, Unreadable,
+    Appearance, Bookmark, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind,
+    Event, EventSink, Listing, ListingId, Mode, Order, Palette, Place, PlaceKind, SettingChange,
+    Settings, SortKey, Theme, Thumbnails, Unreadable,
 };
-use nova_files_ui::{Colors, MainWindow};
+use nova_files_ui::{Colors, MainWindow, WindowEvent};
 
 const SHOWN: &str = "/shown";
 const MISSING: &str = "/shown/missing";
@@ -449,6 +449,36 @@ fn a_thumbnail_arriving_asks_for_nothing_new(cx: &mut TestAppContext) {
         assert!(view.thumbnail(usize::try_from(row).unwrap()).is_some());
     });
     assert_eq!(core.thumbnail_requests(), []);
+}
+
+#[gpui::test]
+fn new_places_and_pinned_folders_are_told(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    let told = Rc::new(Cell::new(0));
+    let _watch = cx.update(|_, cx| {
+        let told = Rc::clone(&told);
+        cx.subscribe(&view, move |_, event: &WindowEvent, _| {
+            if *event == WindowEvent::Places {
+                told.set(told.get() + 1);
+            }
+        })
+    });
+
+    core.send(Event::Places(vec![Place {
+        kind: PlaceKind::Home,
+        path: PathBuf::from(SHOWN),
+    }]));
+    cx.run_until_parked();
+    assert_eq!(told.get(), 1);
+    core.send(Event::Bookmarks(Arc::from([Bookmark {
+        path: PathBuf::from(OTHER),
+        label: None,
+    }])));
+    cx.run_until_parked();
+    assert_eq!(told.get(), 2);
+    view.read_with(cx, |view, _| assert_eq!(view.pinned().len(), 1));
 }
 
 #[gpui::test]
