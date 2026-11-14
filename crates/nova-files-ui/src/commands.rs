@@ -44,6 +44,9 @@ mod actions {
             SelectAll,
             ToggleSelected,
             ClearSelection,
+            TogglePreview,
+            PreviewPrevious,
+            PreviewNext,
         ]
     );
 }
@@ -103,6 +106,9 @@ pub const ACTIONS: &[ActionSpec] = &[
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
+    PREVIEW,
+    PREVIEW_PREVIOUS,
+    PREVIEW_NEXT,
 ];
 
 spec!(
@@ -198,6 +204,19 @@ spec!(
     "select.none",
     "Select none",
     ["escape"]
+);
+
+spec!(
+    /// Opens the quick look on the selected entry, or closes it.
+    PREVIEW, TogglePreview, "preview.toggle", "Preview", ["space"]
+);
+spec!(
+    /// Shows the entry before in the quick look.
+    PREVIEW_PREVIOUS, PreviewPrevious, "preview.previous", "Previous", ["left"]
+);
+spec!(
+    /// Shows the entry after in the quick look.
+    PREVIEW_NEXT, PreviewNext, "preview.next", "Next", ["right"]
 );
 
 /// Binds every action's default keys.

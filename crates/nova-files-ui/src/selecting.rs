@@ -131,6 +131,12 @@ impl MainWindow {
         );
     }
 
+    /// Whether letters typed to jump to a name are still being typed, so
+    /// a space now is part of the name.
+    pub(crate) fn jumping(&self, cx: &Context<Self>) -> bool {
+        self.pick.is_none() && self.jump.continues(cx.background_executor().now())
+    }
+
     /// A key typed in a main window: a letter (or a space inside a name)
     /// moves the cursor to the next name starting with what was typed
     /// (see `jump`). Whether it was taken.
@@ -217,7 +223,7 @@ impl MainWindow {
     /// Opens the entries `ids` of the listing on screen: a lone folder is
     /// gone into, and files open in their default apps; folders among
     /// several are left alone.
-    fn open_entries(&mut self, ids: &[EntryId]) {
+    pub(crate) fn open_entries(&mut self, ids: &[EntryId]) {
         let Some(listing) = &self.listing else { return };
         let entries: Vec<_> = ids
             .iter()

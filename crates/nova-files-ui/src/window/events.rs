@@ -1,5 +1,5 @@
 //! The core's events as the window takes them: a listing arriving or
-//! refused, details, thumbnails, places, settings and the theme. Listings
+//! refused, details, thumbnails, previews, places, settings and the theme. Listings
 //! the window no longer wants are dropped here too, and the folder on
 //! screen read again when the core moved on from it (see `window`).
 
@@ -26,7 +26,7 @@ impl MainWindow {
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
         self.selection = self.selection_for(&listing);
-        self.listing = Some(listing);
+        let before = self.listing.replace(listing);
         self.core_moved = false;
         self.details = HashMap::new();
         release(self.thumbnails.take_all(), None, cx);
@@ -36,6 +36,7 @@ impl MainWindow {
             self.jump = TypeJump::default();
             self.band = None;
         }
+        self.preview_listing_arrived(before.as_ref(), cx);
         self.pick_folder_opened(reordered, cx);
         if (!same_folder || reordered)
             && let Some(cursor) = self.cursor()
@@ -93,6 +94,8 @@ impl MainWindow {
             }
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
+            Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
+            Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             // The window never searches, opens files, starts jobs or asks
@@ -105,8 +108,6 @@ impl MainWindow {
             | Event::SearchFailed { .. }
             | Event::Properties { .. }
             | Event::PropertiesUnreadable { .. }
-            | Event::Previewed { .. }
-            | Event::PreviewUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)

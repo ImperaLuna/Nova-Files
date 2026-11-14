@@ -31,6 +31,8 @@ pub struct Colors {
     pub press: Rgba,
     /// Selected rows, and the band dragged to select.
     pub selected: Rgba,
+    /// Laid over the window under the quick look.
+    pub scrim: Rgba,
     /// Hairlines: under the column heads, around menus.
     pub line: Rgba,
     /// The ring around the row the keyboard is on, and the band's edge.
@@ -93,6 +95,7 @@ mod share {
     pub const FOLDER: f32 = 0.26;
     /// `secondary` laid over a text field, for its selected text.
     pub const SELECTION: f32 = 0.40;
+    pub const SCRIM: f32 = 0.72;
 }
 
 impl Colors {
@@ -113,6 +116,7 @@ impl Colors {
             hover: thin(palette.fg, share::HOVER),
             press: thin(palette.fg, share::PRESS),
             selected: thin(palette.fg, share::SELECTED),
+            scrim: thin(palette.bg, share::SCRIM),
             line: thin(palette.fg, share::LINE),
             ring: thin(palette.fg, share::RING),
             text: color(palette.fg),
@@ -303,6 +307,43 @@ pub mod opacity {
     pub const DIMMED: f32 = 0.4;
 }
 
+/// The quick look (see `view::preview`).
+pub mod preview {
+    use gpui::{Pixels, px};
+
+    /// Space between the quick look and the window's edges, and between
+    /// its parts.
+    pub const MARGIN: Pixels = px(16.0);
+    pub const GAP: Pixels = px(12.0);
+    /// The round Previous and Next buttons either side.
+    pub const NAV: Pixels = px(40.0);
+    /// The caption under what is shown, and the space at its ends.
+    pub const CAPTION_HEIGHT: Pixels = px(46.0);
+    pub const CAPTION_PAD_START: Pixels = px(16.0);
+    pub const CAPTION_PAD_END: Pixels = px(6.0);
+    pub const CAPTION_GAP: Pixels = px(4.0);
+    pub const CAPTION_TEXT_GAP: Pixels = px(10.0);
+    /// The caption's Open button.
+    pub const BUTTON_HEIGHT: Pixels = px(34.0);
+    pub const BUTTON_PAD: Pixels = px(12.0);
+    /// A text file's page, its padding and its lines.
+    pub const TEXT_WIDTH: Pixels = px(560.0);
+    pub const TEXT_PAD_X: Pixels = px(26.0);
+    pub const TEXT_PAD_Y: Pixels = px(22.0);
+    pub const TEXT_LINE: Pixels = px(22.0);
+    /// A folder's list of what it holds, its padding and rows.
+    pub const LIST_WIDTH: Pixels = px(400.0);
+    pub const LIST_PAD_X: Pixels = px(18.0);
+    pub const LIST_PAD_Y: Pixels = px(14.0);
+    pub const LIST_ROW: Pixels = px(32.0);
+    pub const LIST_GAP: Pixels = px(10.0);
+    /// The card a file with nothing to draw shows its icon on, and the
+    /// icon.
+    pub const CARD_WIDTH: Pixels = px(640.0);
+    pub const CARD_HEIGHT: Pixels = px(400.0);
+    pub const BIG_ICON: Pixels = px(96.0);
+}
+
 /// Corner radii. They nest: the sheet sits one gap inside the window,
 /// whose corner is 24, so its own corner is 24 less the gap.
 pub mod radius {
@@ -373,6 +414,7 @@ mod tests {
         assert!(near(colors.hover, grey(1.0, share::HOVER)));
         assert!(near(colors.press, grey(1.0, share::PRESS)));
         assert!(near(colors.selected, grey(1.0, share::SELECTED)));
+        assert!(near(colors.scrim, grey(0.0, share::SCRIM)));
         assert!(near(colors.line, grey(1.0, share::LINE)));
         assert!(near(colors.ring, grey(1.0, share::RING)));
     }

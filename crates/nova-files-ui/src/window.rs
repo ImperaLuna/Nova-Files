@@ -1,7 +1,8 @@
 //! The main window: the places on the left, the open folder's entries on
 //! the right, and an Up button. This file holds the window's state and
 //! opening it; the work is split by area: going places in `navigate`, the
-//! core's events in `events`, and the rows on screen in `rows`. Drawing
+//! core's events in `events`, the rows on screen in `rows`, and the quick
+//! look in `preview`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -33,9 +34,11 @@
 
 mod events;
 mod navigate;
+mod preview;
 mod rows;
 
 pub use navigate::tidy;
+pub use preview::{Previewed, Shown};
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -49,6 +52,7 @@ use nova_files_api::{
     Order, Place, Settings,
 };
 
+use self::preview::QuickLooks;
 use crate::band::Band;
 use crate::history::History;
 use crate::jump::TypeJump;
@@ -109,6 +113,8 @@ pub struct MainWindow {
     pub(crate) selection: Option<Selection>,
     /// The letters typed to jump to a name (see `jump`).
     pub(crate) jump: TypeJump,
+    /// The quick look, while it is open (see `preview`).
+    pub(crate) quick_looks: QuickLooks,
     /// A press on the entries list being dragged (see `band`).
     pub(crate) band: Option<Band>,
     /// Whether the press under way began on an entry's name.
@@ -207,6 +213,7 @@ impl MainWindow {
             rows_drawn: 0..0,
             selection: None,
             jump: TypeJump::default(),
+            quick_looks: QuickLooks::default(),
             band: None,
             pressed_name: false,
             scale_factor: DEFAULT_SCALE_FACTOR,
