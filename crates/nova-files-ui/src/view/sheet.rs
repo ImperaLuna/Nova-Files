@@ -45,6 +45,7 @@ impl MainWindow {
             .child(sheet_corner(&colors))
             .child(column_heads(self.shown_order(), &colors, cx))
             .child(self.entries_area(cx))
+            .child(self.island(cx))
     }
 
     /// The entries, where a press that isn't on a name can drag a box
@@ -146,6 +147,7 @@ impl MainWindow {
         )
         .track_scroll(&self.scroll)
         .size_full()
+        .pb(size::ISLAND_CLEARANCE)
     }
 }
 

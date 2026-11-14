@@ -44,6 +44,8 @@ mod actions {
             SelectAll,
             ToggleSelected,
             ClearSelection,
+            TrashSelected,
+            Undo,
         ]
     );
 }
@@ -103,6 +105,8 @@ pub const ACTIONS: &[ActionSpec] = &[
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
+    TRASH,
+    UNDO,
 ];
 
 spec!(
@@ -198,6 +202,19 @@ spec!(
     "select.none",
     "Select none",
     ["escape"]
+);
+
+spec!(
+    TRASH,
+    TrashSelected,
+    "file.trash",
+    "Move to Trash",
+    ["delete"]
+);
+spec!(
+    /// Undoes what the island's note names, or else the window's last
+    /// job that can still be undone.
+    UNDO, Undo, "edit.undo", "Undo", ["ctrl-z"]
 );
 
 /// Binds every action's default keys.

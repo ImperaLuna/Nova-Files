@@ -17,9 +17,11 @@
 //! the box `band`. Each line's Modified cell carries one too,
 //! `modified-header` and `modified-<n>`, so a test can check the columns
 //! line up. The slots later features fill carry one each: `sidebar`,
-//! `path`, `search` and `views`.
+//! `path`, `search` and `views`. The island over the bottom of the sheet
+//! is drawn in `island`.
 
 mod bar;
+mod island;
 mod row;
 mod sheet;
 mod sidebar;
@@ -35,6 +37,7 @@ use crate::commands::{
     CursorUp, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown, SelectFirst,
     SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
 };
+use crate::commands::{TrashSelected, Undo};
 use crate::selection::Move;
 use crate::theme::{Colors, size, text};
 use crate::window::MainWindow;
@@ -42,6 +45,7 @@ use crate::window::MainWindow;
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
+        self.count_entries();
         let colors = Colors::of(cx);
         // Keys always land somewhere: in a main window on the window
         // itself, which a click inside takes focus back to; in a picker in
@@ -61,21 +65,13 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
             .map(|root| Self::selection_keys(root, cx))
+            .map(|root| Self::file_keys(root, cx))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if this.jump_typed(event, cx) {
                     cx.stop_propagation();
                 }
             }))
-            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
-                this.band_moved(event, cx);
-            }))
-            .on_scroll_wheel(cx.listener(|this, _: &ScrollWheelEvent, _, cx| {
-                this.band_scrolled(cx);
-            }))
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
-            )
+            .map(|root| Self::band_events(root, cx))
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),
                 cx.listener(|this, _: &MouseDownEvent, _, _| this.go_back()),
@@ -131,6 +127,27 @@ impl Render for MainWindow {
 }
 
 impl MainWindow {
+    /// A box being dragged follows the pointer anywhere in the window
+    /// (see `band`).
+    fn band_events(root: Div, cx: &Context<Self>) -> Div {
+        root.on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+            this.band_moved(event, cx);
+        }))
+        .on_scroll_wheel(cx.listener(|this, _: &ScrollWheelEvent, _, cx| {
+            this.band_scrolled(cx);
+        }))
+        .on_mouse_up(
+            MouseButton::Left,
+            cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
+        )
+    }
+
+    /// The actions on the files selected (see `window::acting`).
+    fn file_keys(root: Div, cx: &Context<Self>) -> Div {
+        root.on_action(cx.listener(|this, _: &TrashSelected, _, _| this.trash_selected()))
+            .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
+    }
+
     /// The selection's actions on the window's root (see `selecting`).
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &OpenSelected, _, _| this.open_selected()))

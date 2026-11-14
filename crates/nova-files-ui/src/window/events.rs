@@ -1,5 +1,6 @@
 //! The core's events as the window takes them: a listing arriving or
-//! refused, details, thumbnails, places, settings and the theme. Listings
+//! refused, details, thumbnails, places, settings, the theme, and jobs
+//! (handed to `jobs`). Listings
 //! the window no longer wants are dropped here too, and the folder on
 //! screen read again when the core moved on from it (see `window`).
 
@@ -95,9 +96,14 @@ impl MainWindow {
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            // The window never searches, opens files, starts jobs or asks
-            // for drives yet, and only a picker's opening asks for the
-            // window state (see `window_state`).
+            event @ (Event::JobStarted { .. }
+            | Event::JobFinished { .. }
+            | Event::Undoable { .. }
+            | Event::UndoGone(_)) => self.job_event(event, cx),
+            // The window never searches or asks for drives yet, doesn't
+            // wait on a file opening, and doesn't show a job's progress
+            // yet; only a picker's opening asks for the window state (see
+            // `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Drives(_)
             | Event::DriveDone { .. }
@@ -108,7 +114,6 @@ impl MainWindow {
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)
-            | Event::JobStarted { .. }
             | Event::JobRunning { .. }
             | Event::JobConflict { .. }
             | Event::ConflictAnswered { .. }
@@ -116,15 +121,12 @@ impl MainWindow {
             | Event::JobPaused(_)
             | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
-            | Event::JobFinished { .. }
             | Event::Bookmarks(_)
             | Event::OpenWith(_)
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
             | Event::SpaceUnreadable { .. }
-            | Event::Trash(_)
-            | Event::Undoable { .. }
-            | Event::UndoGone(_) => {}
+            | Event::Trash(_) => {}
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);
@@ -183,6 +185,9 @@ impl MainWindow {
     pub(super) fn set_status(&mut self, status: CoreStatus, cx: &mut Context<Self>) {
         if self.status != status {
             self.status = status;
+            if status == CoreStatus::Gone {
+                self.jobs_gone();
+            }
             cx.emit(WindowEvent::Status(status));
             cx.notify();
         }

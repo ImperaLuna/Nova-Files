@@ -23,8 +23,10 @@ pub struct Colors {
     pub sheet: Rgba,
     /// The top bar's capsules and a text field's box.
     pub raised: Rgba,
-    /// What floats over the sheet: menus.
+    /// What floats over the sheet: menus and the island.
     pub lifted: Rgba,
+    /// The shadow under what floats.
+    pub shadow: Rgba,
     /// A row or button under the pointer.
     pub hover: Rgba,
     /// A button held down, and the place that is open.
@@ -56,6 +58,8 @@ pub struct Colors {
     pub accept: Rgba,
     /// Text on [`Self::accept`].
     pub on_accept: Rgba,
+    /// A step that can't be undone: Delete for good.
+    pub danger: Rgba,
     /// The tag on a file icon, by the file's kind (see `kind`).
     pub tags: Tags,
 }
@@ -93,6 +97,10 @@ mod share {
     pub const FOLDER: f32 = 0.26;
     /// `secondary` laid over a text field, for its selected text.
     pub const SELECTION: f32 = 0.40;
+    /// How dark the shadow under what floats is: black on a dark window,
+    /// `fg` on a light one, where black would read as dirt.
+    pub const SHADOW_DARK: f32 = 0.55;
+    pub const SHADOW_LIGHT: f32 = 0.22;
 }
 
 impl Colors {
@@ -104,12 +112,17 @@ impl Colors {
             Mode::Dark => share::DIM_DARK,
             Mode::Light => share::DIM_LIGHT,
         };
+        let shadow = match theme.mode {
+            Mode::Dark => thin(SHADOW_DARK_BASE, share::SHADOW_DARK),
+            Mode::Light => thin(palette.fg, share::SHADOW_LIGHT),
+        };
         let text_dim = into_bg(palette.fg, dim_share);
         Self {
             window: color(palette.bg),
             sheet: into_bg(palette.bg_alt, share::SHEET),
             raised: into_bg(palette.bg_alt, share::RAISED),
             lifted: into_bg(palette.bg_alt, share::LIFTED),
+            shadow,
             hover: thin(palette.fg, share::HOVER),
             press: thin(palette.fg, share::PRESS),
             selected: thin(palette.fg, share::SELECTED),
@@ -125,6 +138,7 @@ impl Colors {
             selection: thin(palette.secondary, share::SELECTION),
             accept: color(palette.primary),
             on_accept: color(palette.on_accent),
+            danger: color(palette.error),
             tags: Tags::new(palette, text_dim),
         }
     }
@@ -161,6 +175,9 @@ impl Default for Colors {
 }
 
 impl Global for Colors {}
+
+/// What the shadow is made of on a dark window.
+const SHADOW_DARK_BASE: Color = Color(0x00_00_00);
 
 fn color(color: Color) -> Rgba {
     rgb(color.0)
@@ -291,6 +308,31 @@ pub mod size {
     /// A row in a menu.
     pub const MENU_ROW_HEIGHT: Pixels = px(32.0);
     pub const MENU_PAD: Pixels = px(5.0);
+    /// The island: its height, the space inside it either side, between
+    /// its parts, after its text, and from the sheet's bottom edge, and the
+    /// least room it leaves either side of it on a narrow sheet.
+    pub const ISLAND_HEIGHT: Pixels = px(46.0);
+    pub const ISLAND_PAD_LEFT: Pixels = px(16.0);
+    pub const ISLAND_PAD_RIGHT: Pixels = px(6.0);
+    pub const ISLAND_GAP: Pixels = px(4.0);
+    pub const ISLAND_TEXT_GAP: Pixels = px(10.0);
+    pub const ISLAND_BOTTOM: Pixels = px(10.0);
+    pub const ISLAND_MARGIN: Pixels = px(8.0);
+    /// The shadow under the island: how far down it falls and its blur.
+    pub const ISLAND_SHADOW_Y: Pixels = px(14.0);
+    pub const ISLAND_SHADOW_BLUR: Pixels = px(34.0);
+    /// The line between the island's actions and Clear selection.
+    pub const ISLAND_DIVIDER_HEIGHT: Pixels = px(20.0);
+    /// Room under the last row, so the island never covers it.
+    pub const ISLAND_CLEARANCE: Pixels = px(68.0);
+    /// A worded button on the island (Undo).
+    pub const TEXT_BUTTON_PAD: Pixels = px(12.0);
+    /// The quiet count while the island is down: where it sits from the
+    /// sheet's corner, and the space in its backing.
+    pub const COUNT_LEFT: Pixels = px(6.0);
+    pub const COUNT_BOTTOM: Pixels = px(12.0);
+    pub const COUNT_PAD_X: Pixels = px(8.0);
+    pub const COUNT_PAD_Y: Pixels = px(3.0);
     /// The widest the type filter's button gets; a longer name is cut.
     pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
     /// The tallest the type menu gets before it scrolls.
@@ -399,6 +441,10 @@ mod tests {
         assert_eq!(colors.accept, color(palette.primary));
         assert_eq!(colors.caret, color(palette.primary));
         assert_eq!(colors.on_accept, color(palette.on_accent));
+        assert_eq!(colors.danger, color(palette.error));
+        assert_eq!(colors.shadow, thin(palette.fg, share::SHADOW_LIGHT));
+        let dark = Colors::default();
+        assert_eq!(dark.shadow, thin(SHADOW_DARK_BASE, share::SHADOW_DARK));
         assert_eq!(colors.selection, thin(palette.secondary, share::SELECTION));
         assert_eq!(colors.tags.image, color(palette.info));
         assert_eq!(colors.tags.document, color(palette.error));

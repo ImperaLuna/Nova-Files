@@ -1,7 +1,8 @@
 //! The main window: the places on the left, the open folder's entries on
 //! the right, and an Up button. This file holds the window's state and
 //! opening it; the work is split by area: going places in `navigate`, the
-//! core's events in `events`, and the rows on screen in `rows`. Drawing
+//! core's events in `events`, the rows on screen in `rows`, acting on the
+//! files selected in `acting`, and the jobs that does in `jobs`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -31,7 +32,9 @@
 //! to the size they're drawn (see `thumbnail`). A thumbnail it lets go of
 //! is dropped from GPUI's image atlas too (see `shown_thumbnails`).
 
+mod acting;
 mod events;
+mod jobs;
 mod navigate;
 mod rows;
 
@@ -43,7 +46,9 @@ use std::path::{Path, PathBuf};
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, Task, UniformListScrollHandle};
+use gpui::{
+    App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
+};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing, ListingId,
     Order, Place, Settings,
@@ -51,10 +56,12 @@ use nova_files_api::{
 
 use crate::band::Band;
 use crate::history::History;
+use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
+use jobs::Jobs;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
 /// which is never too small.
@@ -142,6 +149,13 @@ pub struct MainWindow {
     settings: Settings,
     /// Focus for the window's own keys (see `commands`).
     pub(crate) focus: FocusHandle,
+    /// What the island at the bottom of the sheet says (see `island`).
+    pub(crate) island: Island,
+    /// The jobs this window started (see `jobs`).
+    jobs: Jobs,
+    /// The quiet count of the listing it was worked out for (see
+    /// `view::island`).
+    pub(crate) counted: Option<(ListingId, SharedString)>,
     _events: Task<()>,
 }
 
@@ -226,6 +240,9 @@ impl MainWindow {
             pick: None,
             settings: Settings::default(),
             focus: cx.focus_handle(),
+            island: Island::default(),
+            jobs: Jobs::default(),
+            counted: None,
             _events: events,
         };
         window.open(folder);
