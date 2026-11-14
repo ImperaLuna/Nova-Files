@@ -47,8 +47,6 @@ impl MainWindow {
                 .w_full()
                 .items_center()
                 .gap(size::PLACE_GAP)
-                .pr(size::GAP)
-                .pb(size::GAP)
                 .overflow_x_scroll()
                 .child(open)
                 .child(places)
@@ -56,6 +54,8 @@ impl MainWindow {
         }
         sidebar
             .flex_col()
+            .flex_1()
+            .min_h_0()
             .w(size::SIDEBAR_WIDTH)
             .child(open.flex_col())
             .child(
