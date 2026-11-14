@@ -299,3 +299,24 @@ async fn two_jobs_asked_at_once_are_both_pending(cx: &mut TestAppContext) {
         assert_eq!(view.jobs_pending(), 2);
     });
 }
+
+#[gpui::test]
+async fn an_undone_job_is_not_undone_again(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island-again");
+    let home = TempFolder::tree("island-again-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("delete");
+    wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
+    cx.simulate_keystrokes("ctrl-z");
+    wait_for_names(&view, cx, &["Projects", "notes.txt"]).await;
+    view.condition::<WindowEvent>(cx, |view, _| view.jobs_pending() == 0)
+        .await;
+    // The core no longer offers it: another Ctrl+Z asks for nothing,
+    // rather than failing to undo it again.
+    cx.simulate_keystrokes("ctrl-z");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.note().is_none()));
+}
