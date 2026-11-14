@@ -7,8 +7,6 @@
 // Things: solid, two-tone.
 pub const FOLDER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".5" d="M2.5 7A2.5 2.5 0 0 1 5 4.5h3.6c.75 0 1.45.33 1.93.9l.92 1.1H19A2.5 2.5 0 0 1 21.5 9v3h-19z"/><rect x="2.5" y="8.6" width="19" height="11.4" rx="2.8"/></svg>"##;
 pub const FILE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".38" d="M6.5 2.5h6.8L19.5 8.7V19a2.5 2.5 0 0 1-2.5 2.5H6.5A2.5 2.5 0 0 1 4 19V5a2.5 2.5 0 0 1 2.5-2.5z"/><path opacity=".7" d="M13.3 2.5l6.2 6.2h-4a2.2 2.2 0 0 1-2.2-2.2z"/></svg>"##;
-/// The tag on a file icon, drawn over [`FILE`] in its kind's color.
-pub const FILE_TAG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><rect x="6.8" y="14.6" width="7.4" height="3.2" rx="1.6"/></svg>"##;
 pub const HOME: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".5" d="M3.5 10.6 12 3.4l8.5 7.2V18a2.6 2.6 0 0 1-2.6 2.6H6.1A2.6 2.6 0 0 1 3.5 18z"/><path d="M9.6 20.6v-5a1.6 1.6 0 0 1 1.6-1.6h1.6a1.6 1.6 0 0 1 1.6 1.6v5z"/></svg>"##;
 pub const DESKTOP: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><rect x="2.5" y="4" width="19" height="12.6" rx="2.8"/><path opacity=".5" d="M9.4 16.6h5.2l.9 3.6h-7z"/></svg>"##;
 pub const DOCUMENTS: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><rect opacity=".5" x="4.5" y="2.5" width="15" height="19" rx="2.8"/><rect x="7.6" y="7" width="8.8" height="1.9" rx=".95"/><rect x="7.6" y="11" width="8.8" height="1.9" rx=".95"/><rect x="7.6" y="15" width="5" height="1.9" rx=".95"/></svg>"##;
