@@ -286,6 +286,11 @@ impl MainWindow {
         }
     }
 
+    /// How many of this window's jobs were asked for and haven't ended.
+    pub fn jobs_pending(&self) -> usize {
+        self.jobs.asked.len() + self.jobs.running.len()
+    }
+
     /// The core has stopped: no job of this window will say more.
     pub(super) fn jobs_gone(&mut self) {
         self.jobs = Jobs::default();
