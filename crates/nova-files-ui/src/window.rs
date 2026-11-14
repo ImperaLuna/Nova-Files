@@ -2,7 +2,8 @@
 //! the right, and an Up button. This file holds the window's state and
 //! opening it; the work is split by area: going places in `navigate`, the
 //! core's events in `events`, the rows on screen in `rows`, acting on the
-//! files selected in `acting`, and the jobs that does in `jobs`. Drawing
+//! files selected in `acting` and `clipboard`, and the jobs that does in
+//! `jobs`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -33,6 +34,7 @@
 //! is dropped from GPUI's image atlas too (see `shown_thumbnails`).
 
 mod acting;
+mod clipboard;
 mod events;
 mod jobs;
 mod navigate;

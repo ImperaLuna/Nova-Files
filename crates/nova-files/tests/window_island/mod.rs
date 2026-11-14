@@ -1,7 +1,9 @@
 //! The island and what it acts on, on a real core and a temp folder
 //! tree: the quiet count while nothing is selected, the selection's
-//! line and buttons, moving to the trash by key or button, Undo, and a
-//! note going by itself.
+//! line and buttons, copy, cut and paste through the clipboard, moving
+//! to the trash by key or button, Undo, and a note going by itself.
+
+use std::fs;
 
 use super::*;
 
@@ -97,6 +99,62 @@ async fn the_island_trash_button_and_ctrl_z_do_the_same(cx: &mut TestAppContext)
     cx.simulate_keystrokes("ctrl-z");
     wait_for_names(&view, cx, &["Projects", "notes.txt"]).await;
     assert!(tree.path().join("Projects/nova").is_dir());
+}
+
+#[gpui::test]
+async fn copy_and_paste_copies_into_the_folder_on_screen(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island");
+    let home = TempFolder::tree("island-home");
+    fs::write(tree.path().join("notes.txt"), "kept").unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    click(cx, "island-copy");
+    wait_for_note(&view, cx, "Copied notes.txt").await;
+    double_click(cx, "entry-0");
+    let projects = tree.path().join("Projects");
+    wait_for_folder(&view, cx, &projects).await;
+
+    click(cx, "island-dismiss");
+    cx.simulate_keystrokes("ctrl-v");
+    wait_for_names(&view, cx, &["nova", "notes.txt"]).await;
+    assert_eq!(
+        fs::read_to_string(projects.join("notes.txt")).unwrap(),
+        "kept"
+    );
+    assert!(tree.path().join("notes.txt").exists());
+    wait_for_note(&view, cx, "Copied notes.txt").await;
+}
+
+#[gpui::test]
+async fn cut_and_paste_moves_and_undo_moves_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island");
+    let home = TempFolder::tree("island-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("ctrl-x");
+    wait_for_note(&view, cx, "Cut notes.txt").await;
+    // Pasting where the files already are does nothing.
+    cx.simulate_keystrokes("ctrl-v");
+    cx.run_until_parked();
+    double_click(cx, "entry-0");
+    let projects = tree.path().join("Projects");
+    wait_for_folder(&view, cx, &projects).await;
+
+    click(cx, "island-dismiss");
+    cx.simulate_keystrokes("ctrl-v");
+    wait_for_names(&view, cx, &["nova", "notes.txt"]).await;
+    assert!(!tree.path().join("notes.txt").exists());
+    wait_for_note(&view, cx, "Moved notes.txt to Projects").await;
+    // The cut pastes once.
+    assert_eq!(cx.read_from_clipboard().and_then(|item| item.text()), None);
+
+    click(cx, "island-undo");
+    wait_for_names(&view, cx, &["nova"]).await;
+    assert!(tree.path().join("notes.txt").exists());
 }
 
 #[gpui::test]

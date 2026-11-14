@@ -4,9 +4,9 @@
 //!
 //! Its buttons send the window's actions, as keys do (see `commands`);
 //! only closing a note, which no key does, is handled here. Each part a
-//! test clicks carries a debug selector: `island`, `island-trash`,
-//! `island-clear`, `island-undo`, `island-dismiss`, and the count,
-//! `count`.
+//! test clicks carries a debug selector: `island`, `island-copy`,
+//! `island-cut`, `island-trash`, `island-clear`, `island-undo`,
+//! `island-dismiss`, and the count, `count`.
 
 use gpui::{
     Action, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement as _, IntoElement,
@@ -17,7 +17,7 @@ use nova_files_api::EntryKind;
 
 use super::row::icon;
 use crate::assets::Icon;
-use crate::commands::{ClearSelection, TrashSelected, Undo};
+use crate::commands::{ClearSelection, CopySelected, CutSelected, TrashSelected, Undo};
 use crate::island::{self, Note};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
@@ -66,7 +66,7 @@ impl MainWindow {
         )
     }
 
-    /// "3 selected · 12 MB", then Move to Trash and Clear.
+    /// "3 selected · 12 MB", then Copy, Cut, Move to Trash and Clear.
     fn selection_parts(&self, colors: &Colors) -> Vec<gpui::AnyElement> {
         let (number, rest) = island::selection_line(self.selected_count(), self.selected_bytes());
         vec![
@@ -79,6 +79,8 @@ impl MainWindow {
                 )
                 .child(rest)
                 .into_any_element(),
+            icon_button("island-copy", Icon::Copy, &CopySelected, colors).into_any_element(),
+            icon_button("island-cut", Icon::Cut, &CutSelected, colors).into_any_element(),
             icon_button("island-trash", Icon::Trash, &TrashSelected, colors).into_any_element(),
             divider(colors).into_any_element(),
             icon_button("island-clear", Icon::Close, &ClearSelection, colors).into_any_element(),
