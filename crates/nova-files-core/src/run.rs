@@ -44,8 +44,9 @@ pub struct Setup {
     pub theme: ThemeStore,
     pub thumbnails: Option<Thumbnails>,
     pub searcher: Searcher,
-    /// The MIME database, read at the first [`Command::OpenFile`] or
-    /// [`Command::OpenWith`] and kept while the core runs.
+    /// The MIME database, read at the first [`Command::OpenFile`],
+    /// [`Command::OpenWith`] or [`Command::Preview`] and kept while the
+    /// core runs.
     pub mime_types: Arc<OnceLock<MimeTypes>>,
     /// Answers Open With requests, in order.
     pub open_with: OpenWithWorker,
@@ -135,6 +136,7 @@ fn answer(
         | Command::Rows { .. }
         | Command::Search { .. }
         | Command::Properties { .. }
+        | Command::Preview { .. }
         | Command::OpenFile { .. }
         | Command::OpenWith(_)) => folders::answer(id, client, command, setup),
         command @ (Command::WindowState

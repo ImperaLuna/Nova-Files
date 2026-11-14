@@ -1,6 +1,6 @@
 //! The commands about folders and the files in them: listing, rows,
-//! places, the trash, search, properties and opening files. `run` sends
-//! only these here.
+//! places, the trash, search, properties, previews and opening files.
+//! `run` sends only these here.
 
 use std::sync::Arc;
 
@@ -8,6 +8,7 @@ use nova_files_api::{ClientGone, ClientId, Command};
 
 use super::Setup;
 use crate::jobs::{self, Client};
+use crate::preview::{self, Request};
 use crate::properties;
 
 /// Answers one of the folder commands for client `id`.
@@ -27,6 +28,15 @@ pub(super) fn answer(
         }
         Command::Search { id, query, limit } => setup.searcher.search(client, id, query, limit),
         Command::Properties { id, path } => properties::answer(client.events(), id, path),
+        Command::Preview { id, path } => {
+            let request = Request {
+                id,
+                path,
+                current: Arc::clone(client.current_preview()),
+                types: Arc::clone(&setup.mime_types),
+            };
+            preview::answer(client.events(), request);
+        }
         Command::OpenFile { path, activation } => {
             jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
         }

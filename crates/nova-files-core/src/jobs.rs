@@ -34,6 +34,7 @@ use crate::mime::MimeTypes;
 use crate::open;
 use crate::order;
 use crate::places::Home;
+use crate::preview;
 use crate::trash;
 
 const LIST_THREAD: &str = "nova-files-list";
@@ -50,6 +51,8 @@ pub struct Client {
     current_listing: Arc<AtomicU64>,
     /// The id of the search that counts, or [`NO_LISTING`].
     current_search: Arc<AtomicU64>,
+    /// The preview that counts (see `preview`).
+    current_preview: Arc<preview::Current>,
     /// `None` when its thread couldn't start: rows then show no details.
     details: Option<Arc<details_queue::Queue>>,
     /// `None` without a cache folder, or when its thread couldn't start.
@@ -67,6 +70,7 @@ impl Client {
             details,
             current_listing: Arc::new(AtomicU64::new(NO_LISTING)),
             current_search: Arc::new(AtomicU64::new(NO_LISTING)),
+            current_preview: Arc::new(preview::Current::new()),
             thumbnails,
         }
     }
@@ -107,6 +111,11 @@ impl Client {
         &self.current_search
     }
 
+    /// The preview that counts.
+    pub const fn current_preview(&self) -> &Arc<preview::Current> {
+        &self.current_preview
+    }
+
     /// Stops the client's listing, if one is running.
     fn cancel_listing(&self) {
         self.current_listing.store(NO_LISTING, Ordering::SeqCst);
@@ -114,11 +123,12 @@ impl Client {
 }
 
 /// A client the core forgets (it left, or stopped listening) needs no more
-/// answers, so its listing and search stop too.
+/// answers, so its listing, search and preview stop too.
 impl Drop for Client {
     fn drop(&mut self) {
         self.cancel_listing();
         self.current_search.store(NO_LISTING, Ordering::SeqCst);
+        self.current_preview.cancel();
     }
 }
 

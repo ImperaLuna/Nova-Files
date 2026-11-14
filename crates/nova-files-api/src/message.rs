@@ -8,6 +8,7 @@ use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::open_with::{OpenWith, OpenWithAnswer};
+use crate::preview::{Preview, PreviewId};
 use crate::properties::{Properties, PropertiesId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
@@ -75,6 +76,11 @@ pub enum Command {
     /// The answer is [`Event::Properties`] or [`Event::PropertiesUnreadable`]
     /// with the same `id`.
     Properties { id: PropertiesId, path: PathBuf },
+    /// Look into what is at `path`, following a link, for a quick look.
+    /// The answer is [`Event::Previewed`] or [`Event::PreviewUnreadable`]
+    /// with the same `id`. A newer `Preview` from the same client cancels
+    /// this one, which then may never answer.
+    Preview { id: PreviewId, path: PathBuf },
     /// Open the file at `path` in the user's default app for its type.
     /// `activation` is the caller's activation token, so the app may take
     /// focus. The answer is [`Event::FileOpened`] or
@@ -226,6 +232,17 @@ pub enum Event {
     /// [`Command::Properties`] `id`'s path couldn't be looked at.
     PropertiesUnreadable {
         id: PropertiesId,
+        path: PathBuf,
+        reason: Unreadable,
+    },
+    /// What [`Command::Preview`] `id` shows.
+    Previewed {
+        id: PreviewId,
+        preview: Arc<Preview>,
+    },
+    /// [`Command::Preview`] `id`'s path couldn't be looked into.
+    PreviewUnreadable {
+        id: PreviewId,
         path: PathBuf,
         reason: Unreadable,
     },

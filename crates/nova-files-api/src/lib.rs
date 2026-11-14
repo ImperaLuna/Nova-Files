@@ -9,7 +9,8 @@
 //! as [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
 //! operations run as jobs (see [`Operation`]); what is in the desktop's
 //! trash is listed as [`Trashed`] entries. A [`PickRequest`] carries
-//! another app's file picker request from D-Bus to the UI. Files cut or
+//! another app's file picker request from D-Bus to the UI. A [`Preview`] is
+//! what a quick look shows of a file or folder. Files cut or
 //! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
 //! a paste is a job. A [`Size`] is what a scan of files and folders
 //! counted.
@@ -27,6 +28,7 @@ mod job;
 mod message;
 mod open_with;
 mod pick;
+mod preview;
 mod properties;
 mod search;
 mod settings;
@@ -60,6 +62,7 @@ pub use open_with::{App, OpenWith, OpenWithAnswer, OpenWithId};
 pub use pick::{
     FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,
 };
+pub use preview::{PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent, PreviewId};
 pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
