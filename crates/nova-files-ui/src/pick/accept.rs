@@ -211,10 +211,24 @@ impl MainWindow {
 
     /// A folder is now on screen: a new listing drops the
     /// selection and any question, and a typed jump that led here leaves
-    /// its name in the box.
-    pub fn pick_folder_opened(&mut self, cx: &mut Context<Self>) {
+    /// its name in the box. The same folder in a new order keeps them.
+    pub fn pick_folder_opened(&mut self, reordered: bool, cx: &mut Context<Self>) {
         let listed = self.listing_id();
-        if self.pick.is_none() {
+        let Some(pick) = &self.pick else { return };
+        // The same folder in a new order keeps its selection, which the
+        // window carried to the new ids; files copied into the name box
+        // and still there are copied again, so Open still answers them.
+        if reordered {
+            let text = pick.name.read(cx).text();
+            let unchanged = pick
+                .copied
+                .as_ref()
+                .is_some_and(|(_, copied)| copied == text);
+            if unchanged {
+                self.pick_selection_changed(cx);
+            } else if let Some(pick) = &mut self.pick {
+                pick.copied = None;
+            }
             return;
         }
         self.selection = None;

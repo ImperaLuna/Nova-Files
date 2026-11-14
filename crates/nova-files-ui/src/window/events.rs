@@ -36,7 +36,7 @@ impl MainWindow {
             self.jump = TypeJump::default();
             self.band = None;
         }
-        self.pick_folder_opened(cx);
+        self.pick_folder_opened(reordered, cx);
         if (!same_folder || reordered)
             && let Some(cursor) = self.cursor()
         {

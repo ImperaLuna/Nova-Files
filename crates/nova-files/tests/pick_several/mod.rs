@@ -227,3 +227,30 @@ async fn a_folder_picker_picks_several_folders(cx: &mut TestAppContext) {
         Some(picked_all(&tree, &["docs", "Projects"]))
     );
 }
+
+#[gpui::test]
+async fn files_selected_stay_picked_in_a_new_order(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = several_tree();
+    let (view, cx, answers) = several(cx, &tree, SEVERAL_FILES).await;
+    click(cx, "entry-2");
+    ctrl_click(cx, "entry-4");
+    // Name, the column in use, turns around: Z to A.
+    click(cx, "head-name");
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.entry_names().first().map(String::as_str) == Some("Projects")
+    })
+    .await;
+    cx.run_until_parked();
+    assert_eq!(
+        view.read_with(cx, |view, _| view.entry_names()),
+        ["Projects", "docs", "notes.txt", "b.txt", "a.txt"]
+    );
+    assert_eq!(selected(&view, cx), [2, 4]);
+    assert_eq!(name(&view, cx).as_deref(), Some("\"notes.txt\" \"a.txt\""));
+    click(cx, "pick-accept");
+    assert_eq!(
+        answers.try_recv().ok(),
+        Some(picked_all(&tree, &["notes.txt", "a.txt"]))
+    );
+}
