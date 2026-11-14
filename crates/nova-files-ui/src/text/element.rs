@@ -49,7 +49,7 @@ impl Mark {
 
     /// What to paint: the selection always, the caret only while the
     /// field has focus.
-    fn quad(self, focused: bool, colors: Colors) -> Option<PaintQuad> {
+    fn quad(self, focused: bool, colors: &Colors) -> Option<PaintQuad> {
         match self {
             Self::Caret(caret) => focused.then(|| fill(caret, colors.caret)),
             Self::Selection(selected) => Some(fill(selected, colors.selection)),
@@ -157,7 +157,7 @@ impl Element for TextElement {
         let line = prepainted.line.clone();
         let colors = Colors::of(cx);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            if let Some(quad) = prepainted.mark.quad(focused, colors) {
+            if let Some(quad) = prepainted.mark.quad(focused, &colors) {
                 window.paint_quad(quad);
             }
             let origin = span(bounds, scroll, px(0.0), px(0.0)).origin;

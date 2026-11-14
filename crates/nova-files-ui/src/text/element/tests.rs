@@ -84,15 +84,19 @@ fn a_span_sits_along_the_scrolled_line() {
 #[test]
 fn the_caret_shows_only_while_focused() {
     let bounds = Bounds::new(point(px(1.0), px(2.0)), size(px(3.0), px(4.0)));
-    assert!(Mark::Caret(bounds).quad(false, Colors::default()).is_none());
+    assert!(
+        Mark::Caret(bounds)
+            .quad(false, &Colors::default())
+            .is_none()
+    );
     assert_eq!(
         Mark::Caret(bounds)
-            .quad(true, Colors::default())
+            .quad(true, &Colors::default())
             .map(|quad| quad.bounds),
         Some(bounds)
     );
     for focused in [false, true] {
-        let quad = Mark::Selection(bounds).quad(focused, Colors::default());
+        let quad = Mark::Selection(bounds).quad(focused, &Colors::default());
         assert_eq!(quad.map(|quad| quad.bounds), Some(bounds));
     }
 }

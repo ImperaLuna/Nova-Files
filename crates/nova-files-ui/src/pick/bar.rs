@@ -10,7 +10,7 @@ use gpui::{
 };
 
 use super::Picker;
-use crate::theme::{Colors, radius, size};
+use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
 const CANCEL_LABEL: &str = "Cancel";
@@ -27,11 +27,9 @@ impl MainWindow {
             .min_w_0()
             .items_center()
             .h(size::CONTROL_HEIGHT)
-            .px(size::PAD)
-            .rounded(radius::BUTTON)
-            .border(size::DIVIDER)
-            .border_color(colors.divider)
-            .bg(colors.surface)
+            .px(size::PLACE_PAD)
+            .rounded(radius::CONTROL)
+            .bg(colors.raised)
             .child(pick.name.clone());
         let controls = div()
             .flex()
@@ -40,7 +38,7 @@ impl MainWindow {
             .child(name)
             .children(Self::filter_button(pick, cx))
             .child(
-                button("pick-cancel", CANCEL_LABEL.into(), false, colors)
+                button("pick-cancel", CANCEL_LABEL.into(), false, &colors)
                     .on_click(cx.listener(|this, _: &ClickEvent, window, _| this.cancel(window))),
             )
             .child(
@@ -48,7 +46,7 @@ impl MainWindow {
                     "pick-accept",
                     super::accept_label(&pick.request).into(),
                     true,
-                    colors,
+                    &colors,
                 )
                 .on_click(cx.listener(|this, _: &ClickEvent, window, cx| this.accept(window, cx))),
             );
@@ -63,17 +61,17 @@ impl MainWindow {
                 .justify_end()
                 .gap(size::GAP)
                 .child(
-                    button("pick-replace", REPLACE_LABEL.into(), false, colors).on_click(
+                    button("pick-replace", REPLACE_LABEL.into(), false, &colors).on_click(
                         cx.listener(|this, _: &ClickEvent, window, _| this.replace(window)),
                     ),
                 )
                 .child(
-                    button("pick-keep-both", keep_both.into(), true, colors).on_click(cx.listener(
-                        |this, _: &ClickEvent, _, cx| {
+                    button("pick-keep-both", keep_both.into(), true, &colors).on_click(
+                        cx.listener(|this, _: &ClickEvent, _, cx| {
                             this.keep_both();
                             cx.notify();
-                        },
-                    )),
+                        }),
+                    ),
                 )
         });
         div()
@@ -81,10 +79,8 @@ impl MainWindow {
             .flex_col()
             .flex_none()
             .gap(size::QUESTION_GAP)
-            .p(size::PAD)
-            .bg(colors.surface_sunk)
-            .border_t(size::DIVIDER)
-            .border_color(colors.divider)
+            .p(size::GAP)
+            .bg(colors.window)
             .child(controls)
             .children(question)
     }
@@ -95,7 +91,7 @@ pub fn button(
     id: &'static str,
     label: SharedString,
     accept: bool,
-    colors: Colors,
+    colors: &Colors,
 ) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
@@ -104,17 +100,17 @@ pub fn button(
         .flex_none()
         .items_center()
         .h(size::CONTROL_HEIGHT)
-        .px(size::PAD)
-        .rounded(radius::BUTTON)
+        .px(size::CONTROL_PAD)
+        .rounded(radius::CONTROL)
+        .font_weight(text::STRONG_WEIGHT)
         .cursor_pointer()
         .map(|button| {
             if accept {
                 button.bg(colors.accept).text_color(colors.on_accept)
             } else {
                 button
-                    .border(size::DIVIDER)
-                    .border_color(colors.divider)
-                    .hover(|button| button.bg(colors.hover))
+                    .bg(colors.raised)
+                    .hover(|button| button.bg(colors.lifted))
             }
         })
         .child(div().min_w_0().truncate().child(label))

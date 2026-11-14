@@ -118,7 +118,7 @@ impl MainWindow {
             "pick-filter",
             label(&pick.request, pick.filter),
             false,
-            colors,
+            &colors,
         )
         // A long name gives way to the name box and the other buttons.
         .flex_shrink()
@@ -150,11 +150,11 @@ impl MainWindow {
                                 // Many types scroll rather than run off the window.
                                 .max_h(size::FILTER_MENU_MAX_HEIGHT)
                                 .overflow_y_scroll()
-                                .p(size::ROW_GAP)
-                                .rounded(radius::BUTTON)
-                                .border(size::DIVIDER)
-                                .border_color(colors.divider)
-                                .bg(colors.surface)
+                                .p(size::MENU_PAD)
+                                .rounded(radius::CARD)
+                                .border(size::LINE)
+                                .border_color(colors.line)
+                                .bg(colors.lifted)
                                 .on_mouse_down_out(cx.listener(|this, _, _, cx| {
                                     if let Some(pick) = &mut this.pick {
                                         pick.filter_menu = false;
@@ -191,8 +191,8 @@ fn menu_item(pick: &Picker, filter: Option<usize>, cx: &Context<MainWindow>) -> 
         .debug_selector(move || selector)
         .flex()
         .items_center()
-        .h(size::ROW_HEIGHT)
-        .px(size::PAD)
+        .h(size::MENU_ROW_HEIGHT)
+        .px(size::PLACE_PAD)
         .rounded(radius::ROW)
         .cursor_pointer()
         .when(is_chosen(pick.filter, filter), |item| {

@@ -17,7 +17,7 @@ use super::{
     Left, Paste, Right, SelectAll, SelectEnd, SelectHome, SelectLeft, SelectRight, SelectWordLeft,
     SelectWordRight, Submit, WordLeft, WordRight,
 };
-use crate::theme::size;
+use crate::theme::{size, text as type_scale};
 
 /// The clicks in a double-click.
 const DOUBLE_CLICK: usize = 2;
@@ -255,7 +255,7 @@ impl Render for TextField {
             .track_focus(&self.focus)
             .cursor(CursorStyle::IBeam)
             .w_full()
-            .text_size(size::TEXT)
+            .text_size(type_scale::BODY)
             .line_height(size::FIELD_LINE)
             .on_action(cx.listener(Self::left))
             .on_action(cx.listener(Self::right))
