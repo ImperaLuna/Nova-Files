@@ -17,18 +17,21 @@ use std::time::Duration;
 use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::drives::Store as DrivesStore;
-use crate::jobs::{self, Client};
+use crate::jobs::Client;
 use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
-use crate::properties;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
 use crate::window_state::Store as WindowStateStore;
+
+mod folders;
+mod look;
+mod operations;
 
 /// Where the core finds and keeps things.
 pub struct Setup {
@@ -109,14 +112,14 @@ fn forget(client: ClientId, setup: &Setup) {
     setup.measurer.forget(client);
 }
 
-/// Answers `command`, at once or through a job.
+/// Answers `command`, at once or through a job. The folder, look and job
+/// commands are answered in a file each (see `folders`, `look` and
+/// `operations`); the few others here. This match is exhaustive, so a new
+/// command doesn't compile until it is sent somewhere; the area it goes to
+/// needs its arm too, as each area's own match passes over the rest.
 ///
 /// # Errors
 /// [`nova_files_api::ClientGone`] when the client stopped listening.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one short arm per command; splitting it would hide a missed one"
-)]
 fn answer(
     id: ClientId,
     client: &Client,
@@ -125,95 +128,30 @@ fn answer(
 ) -> Result<(), nova_files_api::ClientGone> {
     match command {
         Command::Ping => client.deliver(Event::Pong),
-        Command::ListFolder { id, path } => {
-            jobs::list_folder(client, id, path);
-            Ok(())
-        }
-        Command::Places => {
-            setup.places.listen(id, client.events());
-            Ok(())
-        }
-        Command::ChangeBookmark(change) => {
-            setup.places.change(change);
-            Ok(())
-        }
-        Command::ListTrash => jobs::list_trash(client, setup.home.clone()),
-        Command::Rows { id, first, count } => {
-            client.want_rows(id, first, count, setup.settings.current().thumbnails);
-            Ok(())
-        }
-        Command::Search { id, query, limit } => {
-            setup.searcher.search(client, id, query, limit);
-            Ok(())
-        }
-        Command::Properties { id, path } => {
-            properties::answer(client.events(), id, path);
-            Ok(())
-        }
-        Command::OpenFile { path, activation } => {
-            jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
-            Ok(())
-        }
-        Command::OpenWith(request) => {
-            setup.open_with.answer(client.events(), request);
-            Ok(())
-        }
-        Command::WindowState => client.deliver(Event::WindowState(setup.window_state.bytes())),
-        Command::SaveWindowState(bytes) => {
-            setup.window_state.save(bytes);
-            Ok(())
-        }
-        Command::Settings => {
-            setup.settings.listen(id, client.events());
-            Ok(())
-        }
-        Command::ChangeSetting(change) => {
-            setup.settings.change(change);
-            Ok(())
-        }
+        command @ (Command::ListFolder { .. }
+        | Command::Places
+        | Command::ChangeBookmark(_)
+        | Command::ListTrash
+        | Command::Rows { .. }
+        | Command::Search { .. }
+        | Command::Properties { .. }
+        | Command::OpenFile { .. }
+        | Command::OpenWith(_)) => folders::answer(id, client, command, setup),
+        command @ (Command::WindowState
+        | Command::SaveWindowState(_)
+        | Command::Settings
+        | Command::ChangeSetting(_)
+        | Command::Theme
+        | Command::DesktopLook(_)) => look::answer(id, client, command, setup),
+        command @ (Command::WatchJobs
+        | Command::StartJob { .. }
+        | Command::PauseJob(_)
+        | Command::ResumeJob(_)
+        | Command::ForgetJob(_)
+        | Command::CancelJob(_)
+        | Command::AnswerConflict { .. }) => operations::answer(id, client, command, setup),
         Command::Drives => setup.drives.listen(id, client.events()),
         Command::Drive(action) => setup.drives.act(client.events(), action),
-        Command::Theme => {
-            setup.theme.listen(id, client.events());
-            Ok(())
-        }
-        Command::DesktopLook(look) => {
-            setup.theme.follow_desktop(look);
-            Ok(())
-        }
-        Command::WatchJobs => {
-            setup.jobs.watch(id, client.events());
-            Ok(())
-        }
-        Command::StartJob { tag, operation } => {
-            setup.jobs.audience().join(id, Arc::clone(client.events()));
-            setup.jobs.start(client, tag, operation)
-        }
-        Command::PauseJob(job) => {
-            setup.jobs.pause(job);
-            Ok(())
-        }
-        Command::ResumeJob(job) => {
-            setup.jobs.resume(job);
-            Ok(())
-        }
-        Command::ForgetJob(job) => {
-            setup.jobs.forget(job);
-            Ok(())
-        }
-        Command::CancelJob(job) => {
-            setup.jobs.cancel(job);
-            Ok(())
-        }
-        Command::AnswerConflict {
-            job,
-            conflict,
-            answer,
-            scope,
-        } => {
-            setup.jobs.answer(job, &conflict, answer, scope);
-            Ok(())
-        }
         command @ (Command::Measure { .. } | Command::Space { .. } | Command::StopMeasure(_)) => {
             setup.measurer.answer(id, client.events(), command);
             Ok(())

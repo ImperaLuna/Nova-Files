@@ -1,5 +1,9 @@
 //! The main window: the places on the left, the open folder's entries on
-//! the right, and an Up button.
+//! the right, and an Up button. This file holds the window's state and
+//! opening it; the work is split by area: going places in `navigate`, the
+//! core's events in `events`, and the rows on screen in `rows`. Drawing
+//! lives in `view`; the actions a key or button sends are handled in
+//! `view` too, each by one method on the window (see `commands`).
 //!
 //! The window never touches the disk. Going somewhere sends the core a
 //! `ListFolder` with a new id and keeps showing the current folder until
@@ -12,14 +16,13 @@
 //! served: at the refusal, or at once if the refusal came first.
 //! Back and Forward follow the window's history (see `history`); a
 //! folder joins it once its listing is on screen. Re-reads and fallbacks
-//! leave the history alone. Paths are tidied by their text alone (`a/../b` is `b`), as a user reads
-//! them, so Up goes where the path on screen says.
+//! leave the history alone. Paths are tidied by their text alone
+//! (`a/../b` is `b`), as a user reads them, so Up goes where the path on
+//! screen says.
 //!
 //! The core's events arrive through an async channel the window's own task
 //! reads; closing the window drops the connection, which tells the core
-//! one client fewer is using it. Drawing lives in `view`; the actions a
-//! key or button sends are handled in `view` too, each by one method here
-//! (see `commands`).
+//! one client fewer is using it.
 //!
 //! As the list draws, the window tells the core which rows are on screen,
 //! plus one screen either side. The core answers with those rows' details
@@ -28,31 +31,30 @@
 //! to the size they're drawn (see `thumbnail`). A thumbnail it lets go of
 //! is dropped from GPUI's image atlas too (see `shown_thumbnails`).
 
+mod events;
+mod navigate;
+mod rows;
+
+pub use navigate::tidy;
+
 use std::collections::HashMap;
 use std::ops::Range;
-use std::path::{Component, Path, PathBuf};
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, RenderImage, ScrollStrategy, Task,
-    UniformListScrollHandle, Window,
-};
+use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, Task, UniformListScrollHandle};
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, Details, EntryId, EntryKind, Event, EventSink,
-    Listing, ListingId, Place, Settings, Theme, Thumbnails,
+    ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing, ListingId,
+    Place, Settings,
 };
 
 use crate::band::Band;
-use crate::columns::{self, ColumnText};
 use crate::history::History;
 use crate::jump::TypeJump;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
-use crate::theme::{Colors, size};
-use crate::thumbnail;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
 /// which is never too small.
@@ -133,15 +135,6 @@ pub struct MainWindow {
     /// Focus for the window's own keys (see `commands`).
     pub(crate) focus: FocusHandle,
     _events: Task<()>,
-}
-
-/// A thumbnail shrunk for row `index` of listing `id`, `side` device
-/// pixels across.
-struct Shrunk {
-    id: ListingId,
-    index: usize,
-    side: u32,
-    image: RenderImage,
 }
 
 /// Delivers the core's events into the window's async channel.
@@ -252,69 +245,6 @@ impl MainWindow {
         })
     }
 
-    /// The Modified, Type and Size text of entry `index` on screen. Modified
-    /// and Size are empty until the core has read that entry's details.
-    pub fn columns(&self, index: usize) -> Option<ColumnText> {
-        let entry = self.listing.as_ref()?.entries.get(index)?;
-        let details = self.details.get(&index).copied().unwrap_or_default();
-        Some(ColumnText {
-            modified: details.modified.map(columns::modified).unwrap_or_default(),
-            type_name: columns::type_name(&entry.name, entry.kind),
-            size: details.size.map(columns::size).unwrap_or_default(),
-        })
-    }
-
-    /// The thumbnail of row `index`, once the core has sent it.
-    pub fn thumbnail(&self, index: usize) -> Option<&Arc<RenderImage>> {
-        self.thumbnails.get(index)
-    }
-
-    /// The list drew rows `range`. It also draws its first row alone, each
-    /// frame, to measure it; asking for that row alone would swap
-    /// the request back and forth every frame, and each answer would draw
-    /// another frame. The rows on screen are the last range drawn, so the
-    /// request waits until the frame is done.
-    pub(crate) fn rows_drawn(
-        &mut self,
-        range: Range<usize>,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.rows_drawn = range;
-        cx.defer_in(window, |this, window, cx| {
-            this.show_rows(this.rows_drawn.clone(), window, cx);
-        });
-    }
-
-    /// Rows `visible` are on screen: asks for their details and thumbnails
-    /// and one screen either side, and forgets thumbnails now out of range.
-    fn show_rows(&mut self, visible: Range<usize>, window: &mut Window, cx: &mut App) {
-        let Some(listing) = &self.listing else { return };
-        let screen = visible.len();
-        let wanted = visible.start.saturating_sub(screen)
-            ..visible
-                .end
-                .saturating_add(screen)
-                .min(listing.entries.len());
-        if wanted == self.rows_wanted {
-            return;
-        }
-        let (Ok(first), Ok(count)) = (u32::try_from(wanted.start), u32::try_from(wanted.len()))
-        else {
-            return;
-        };
-        let command = Command::Rows {
-            id: listing.id,
-            first: EntryId(first),
-            count,
-        };
-        if let Some(connection) = &self.connection {
-            connection.send(command).ok();
-        }
-        release(self.thumbnails.keep_rows(&wanted), Some(window), cx);
-        self.rows_wanted = wanted;
-    }
-
     /// The scroll position of the list on screen.
     pub const fn scroll(&self) -> &UniformListScrollHandle {
         &self.scroll
@@ -324,320 +254,9 @@ impl MainWindow {
         &self.places
     }
 
-    /// Goes to `folder`, a new place in the history: asks the core for it,
-    /// and the window moves there once it answers.
-    pub fn open(&mut self, folder: &Path) {
-        self.history.leave();
-        self.request(folder);
-    }
-
-    /// Goes back to the place before this one, if there is one.
-    pub fn go_back(&mut self) {
-        if let Some(place) = self.history.back() {
-            self.request(&place);
-        }
-    }
-
-    /// Goes forward again after Back, if there is somewhere to go.
-    pub fn go_forward(&mut self) {
-        if let Some(place) = self.history.forward() {
-            self.request(&place);
-        }
-    }
-
-    /// Where Back goes, if anywhere.
-    pub fn back_target(&self) -> Option<&Path> {
-        self.history.back_target()
-    }
-
-    /// Where Forward goes, if anywhere.
-    pub fn forward_target(&self) -> Option<&Path> {
-        self.history.forward_target()
-    }
-
-    /// Asks the core for `folder`, leaving the history as it is: the
-    /// window moves there once it answers.
-    fn request(&mut self, folder: &Path) {
-        let id = ListingId(self.next_listing);
-        self.next_listing += 1;
-        let path = tidy(folder);
-        let sent = self
-            .connection
-            .as_ref()
-            .map(|connection| connection.send(Command::ListFolder { id, path }));
-        if matches!(sent, Some(Ok(()))) {
-            self.asked = Some(id);
-        }
-    }
-
-    /// Goes into the entry `id` of the folder on screen, if it is a folder.
-    pub fn open_entry(&mut self, id: EntryId) {
-        let Some(listing) = &self.listing else { return };
-        let entry = usize::try_from(id.0)
-            .ok()
-            .and_then(|index| listing.entries.get(index));
-        if let Some(entry) = entry
-            && entry.kind == EntryKind::Folder
-        {
-            let folder = listing.path.join(&entry.name);
-            self.open(&folder);
-        }
-    }
-
-    /// The folder Up goes to, if there is one.
-    pub fn parent(&self) -> Option<PathBuf> {
-        self.folder()?.parent().map(Path::to_path_buf)
-    }
-
-    /// Goes to the parent of the folder on screen.
-    pub fn go_up(&mut self) {
-        if let Some(parent) = self.parent() {
-            self.open(&parent);
-        }
-    }
-
-    /// Shows `listing`, the folder the window last asked for.
-    fn listing_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
-        self.asked = None;
-        let path = listing.path.clone();
-        self.history.arrived(&path);
-        // Read again in place: keep the scroll position.
-        let same_folder = self.folder() == Some(path.as_path());
-        self.selection = self.selection_for(&listing);
-        self.listing = Some(listing);
-        self.core_moved = false;
-        self.details = HashMap::new();
-        release(self.thumbnails.take_all(), None, cx);
-        self.rows_wanted = 0..0;
-        if !same_folder {
-            self.scroll = UniformListScrollHandle::new();
-            self.jump = TypeJump::default();
-            self.band = None;
-        }
-        self.pick_folder_opened(cx);
-        if !same_folder && let Some(cursor) = self.cursor() {
-            self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
-        }
-        cx.emit(WindowEvent::Opened(path));
-        cx.notify();
-    }
-
-    fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
-        match event {
-            Event::Pong => self.set_status(CoreStatus::Connected, cx),
-            Event::FolderListed(listing) if self.asked == Some(listing.id) => {
-                self.listing_arrived(listing, cx);
-            }
-            Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
-                self.asked = None;
-                self.history.refused(&path);
-                match &self.listing {
-                    None => {
-                        if let Some(fallback) = self.fallbacks.pop() {
-                            self.request(&fallback);
-                        }
-                    }
-                    Some(listing) if self.core_moved && listing.path != path => {
-                        let shown = listing.path.clone();
-                        self.request(&shown);
-                    }
-                    Some(_) => {}
-                }
-                self.pick_folder_refused(id, &path);
-                cx.emit(WindowEvent::Refused(path));
-                // Back or Forward may have nowhere left to go.
-                cx.notify();
-            }
-            Event::DetailsRead { id, first, details } => {
-                if let Some(listing) = &self.listing
-                    && listing.id == id
-                    && let Ok(first) = usize::try_from(first.0)
-                {
-                    let rows = first..listing.entries.len();
-                    self.details.extend(rows.zip(details.iter().copied()));
-                    cx.notify();
-                }
-            }
-            // Checked against the listing once shrunk, when it counts.
-            Event::Thumbnail { id, entry, png } => {
-                if let Ok(index) = usize::try_from(entry.0)
-                    && self.rows_wanted.contains(&index)
-                    && self.settings.thumbnails == Thumbnails::Shown
-                {
-                    self.shrink_thumbnail(id, index, png, cx);
-                }
-            }
-            // An answer for a folder the window has since moved away from.
-            Event::FolderListed(stale) => self.dropped_listing(stale.id),
-            Event::Settings(settings) => self.settings_arrived(settings, cx),
-            Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            // The window never searches, opens files, starts jobs or asks
-            // for drives yet, and only a picker's opening asks for the
-            // window state (see `window_state`).
-            Event::FolderUnreadable { .. }
-            | Event::Drives(_)
-            | Event::DriveDone { .. }
-            | Event::Found { .. }
-            | Event::SearchFailed { .. }
-            | Event::Properties { .. }
-            | Event::PropertiesUnreadable { .. }
-            | Event::FileOpened
-            | Event::FileNotOpened
-            | Event::WindowState(_)
-            | Event::JobStarted { .. }
-            | Event::JobRunning { .. }
-            | Event::JobConflict { .. }
-            | Event::ConflictAnswered { .. }
-            | Event::JobProgress { .. }
-            | Event::JobPaused(_)
-            | Event::JobResumed(_)
-            | Event::JobInterrupted { .. }
-            | Event::JobFinished { .. }
-            | Event::Bookmarks(_)
-            | Event::OpenWith(_)
-            | Event::SizeMeasured { .. }
-            | Event::SpaceMeasured { .. }
-            | Event::SpaceUnreadable { .. }
-            | Event::Trash(_)
-            | Event::Undoable { .. }
-            | Event::UndoGone(_) => {}
-            Event::Places(places) => {
-                self.places = places;
-                cx.emit(WindowEvent::Places);
-                cx.notify();
-            }
-        }
-    }
-
     /// The settings as the core last sent them.
     pub const fn settings(&self) -> &Settings {
         &self.settings
-    }
-
-    /// Takes the settings the core sent, which it sends again whenever
-    /// they change. Hiding thumbnails lets go of the ones held; showing
-    /// them again asks for the rows on screen anew, so theirs arrive.
-    fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
-        let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
-        self.settings = Arc::unwrap_or_clone(settings);
-        if thumbnails_changed {
-            if self.settings.thumbnails == Thumbnails::Hidden {
-                release(self.thumbnails.take_all(), None, cx);
-            }
-            // Hidden and shown again before a frame, the core would still
-            // count the dropped thumbnails as sent.
-            self.forget_rows();
-        }
-        cx.emit(WindowEvent::Settings);
-        cx.notify();
-    }
-
-    /// Draws every window with `theme` from now on. Each window hears it,
-    /// so the first to see a change redraws them all and the rest find
-    /// nothing new.
-    fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
-        let colors = Colors::new(theme);
-        if Colors::of(cx) != colors {
-            cx.set_global(colors);
-            cx.refresh_windows();
-            cx.emit(WindowEvent::Theme);
-        }
-    }
-
-    /// The window dropped listing `id`, which it no longer wanted. One newer
-    /// than the folder on screen moved the core's row queues to it. A
-    /// refusal still to come reads the folder on screen again (see
-    /// `on_event`); with nothing asked for, nothing would, so it is read
-    /// again now.
-    fn dropped_listing(&mut self, id: ListingId) {
-        let Some(listing) = &self.listing else { return };
-        if id <= listing.id {
-            return;
-        }
-        self.core_moved = true;
-        if self.asked.is_none() {
-            let shown = listing.path.clone();
-            self.request(&shown);
-        }
-    }
-
-    /// The window is drawing at `scale_factor`. Thumbnails shrunk for
-    /// another scale (the window moved to another screen) are dropped and
-    /// asked for again: an empty request first, so the core sends them anew.
-    pub fn set_scale_factor(&mut self, scale_factor: f32, window: &mut Window, cx: &mut App) {
-        let before = self.thumbnail_side();
-        self.scale_factor = scale_factor;
-        if self.thumbnail_side() == before {
-            return;
-        }
-        release(self.thumbnails.take_all(), Some(window), cx);
-        self.forget_rows();
-    }
-
-    /// Tells the core no rows are wanted, so it counts every thumbnail as
-    /// not sent and makes them again when the next frame asks for its
-    /// rows.
-    fn forget_rows(&mut self) {
-        if let Some(listing) = &self.listing
-            && !self.rows_wanted.is_empty()
-            && let Some(connection) = &self.connection
-        {
-            let forget = Command::Rows {
-                id: listing.id,
-                first: EntryId(0),
-                count: 0,
-            };
-            connection.send(forget).ok();
-        }
-        self.rows_wanted = 0..0;
-    }
-
-    /// A thumbnail's side in device pixels at the current scale.
-    fn thumbnail_side(&self) -> u32 {
-        thumbnail::device_side(size::THUMBNAIL, self.scale_factor)
-    }
-
-    /// Shrinks row `index`'s thumbnail off the UI thread, then keeps it.
-    fn shrink_thumbnail(&self, id: ListingId, index: usize, png: Arc<[u8]>, cx: &Context<Self>) {
-        let side = self.thumbnail_side();
-        let shrinking = cx
-            .background_executor()
-            .spawn(async move { thumbnail::shrink(&png, side) });
-        cx.spawn(async move |this, cx| {
-            let Some(image) = shrinking.await else { return };
-            let made = Shrunk {
-                id,
-                index,
-                side,
-                image,
-            };
-            this.update(cx, |this, cx| this.thumbnail_ready(made, cx))
-                .ok();
-        })
-        .detach();
-    }
-
-    /// Keeps a thumbnail shrunk to `side` if its row is still wanted and
-    /// the window still draws at that size.
-    fn thumbnail_ready(&mut self, made: Shrunk, cx: &mut Context<Self>) {
-        if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
-            && self.rows_wanted.contains(&made.index)
-            && made.side == self.thumbnail_side()
-            // Hidden while it was being shrunk.
-            && self.settings.thumbnails == Thumbnails::Shown
-        {
-            let replaced = self.thumbnails.insert(made.index, Arc::new(made.image));
-            release(replaced, None, cx);
-            cx.notify();
-        }
-    }
-
-    fn set_status(&mut self, status: CoreStatus, cx: &mut Context<Self>) {
-        if self.status != status {
-            self.status = status;
-            cx.emit(WindowEvent::Status(status));
-            cx.notify();
-        }
     }
 }
 
@@ -649,71 +268,10 @@ impl Focusable for MainWindow {
     }
 }
 
-/// Drops `images` from GPUI's image atlas. `window` is the window being
-/// drawn or updated, if any: GPUI takes it out of its list meanwhile, so
-/// it has to be named.
-fn release(
-    images: impl IntoIterator<Item = Arc<RenderImage>>,
-    mut window: Option<&mut Window>,
-    cx: &mut App,
-) {
-    for image in images {
-        cx.drop_image(image, window.as_deref_mut());
-    }
-}
-
 const ROOT_FOLDER: &str = "/";
 
 /// Where a window opens unless told otherwise: the home folder, or the
 /// root folder on a system without one.
 pub fn home_folder() -> PathBuf {
     std::env::home_dir().unwrap_or_else(|| PathBuf::from(ROOT_FOLDER))
-}
-
-/// `path` with `.` dropped and each `..` taking off the part before it,
-/// worked out from the text alone. `..` at the root stays at the root.
-pub fn tidy(path: &Path) -> PathBuf {
-    let mut tidy = PathBuf::new();
-    for part in path.components() {
-        match part {
-            Component::CurDir => {}
-            Component::ParentDir => match tidy.components().next_back() {
-                Some(Component::Normal(_)) => {
-                    tidy.pop();
-                }
-                // `..` at the root stays at the root.
-                Some(Component::RootDir | Component::Prefix(_)) => {}
-                // Nothing left to take off: the `..` stays.
-                Some(Component::ParentDir | Component::CurDir) | None => tidy.push(part),
-            },
-            Component::RootDir | Component::Prefix(_) | Component::Normal(_) => tidy.push(part),
-        }
-    }
-    if tidy.as_os_str().is_empty() {
-        PathBuf::from(CURRENT_FOLDER)
-    } else {
-        tidy
-    }
-}
-
-/// The relative path that names the folder it is relative to.
-const CURRENT_FOLDER: &str = ".";
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tidy_resolves_dots_by_text() {
-        assert_eq!(tidy(Path::new("/home/me/..")), PathBuf::from("/home"));
-        assert_eq!(tidy(Path::new("/a/./b/../c")), PathBuf::from("/a/c"));
-        assert_eq!(tidy(Path::new("/..")), PathBuf::from("/"));
-        assert_eq!(tidy(Path::new("/")), PathBuf::from("/"));
-        // A relative path keeps the `..` it can't take off.
-        assert_eq!(tidy(Path::new("..")), PathBuf::from(".."));
-        assert_eq!(tidy(Path::new("../../child")), PathBuf::from("../../child"));
-        assert_eq!(tidy(Path::new("a/../../b")), PathBuf::from("../b"));
-        assert_eq!(tidy(Path::new("a/..")), PathBuf::from("."));
-        assert_eq!(tidy(Path::new(".")), PathBuf::from("."));
-    }
 }
