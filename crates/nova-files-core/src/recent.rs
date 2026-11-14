@@ -246,6 +246,9 @@ mod tests {
         assert_eq!(parse(&to_bytes(&full)), full);
         let longest = PathBuf::from(format!("/{}", "a".repeat(MAX_PATH - 1)));
         assert!(fits(&longest));
+        // The most the core writes is exactly the most it reads.
+        let largest = to_bytes(&vec![longest; MAX_RECENT_FOLDERS]);
+        assert_eq!(largest.len(), MAX_BYTES);
         assert!(!fits(&PathBuf::from(format!("/{}", "a".repeat(MAX_PATH)))));
     }
 
