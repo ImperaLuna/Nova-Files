@@ -58,8 +58,8 @@ impl Render for MainWindow {
             .key_context(commands::KEY_CONTEXT)
             .when(main, |root| root.track_focus(&self.focus))
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
-            .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
-            .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
+            .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
+            .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .map(|root| Self::selection_keys(root, cx))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if this.jump_typed(event, cx) {
@@ -78,11 +78,11 @@ impl Render for MainWindow {
             )
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),
-                cx.listener(|this, _: &MouseDownEvent, _, _| this.go_back()),
+                cx.listener(|this, _: &MouseDownEvent, _, cx| this.go_back(cx)),
             )
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Forward),
-                cx.listener(|this, _: &MouseDownEvent, _, _| this.go_forward()),
+                cx.listener(|this, _: &MouseDownEvent, _, cx| this.go_forward(cx)),
             )
             .size_full()
             .flex()
