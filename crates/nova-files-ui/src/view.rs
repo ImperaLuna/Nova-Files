@@ -45,7 +45,6 @@ use crate::window::MainWindow;
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
-        self.count_entries();
         let colors = Colors::of(cx);
         // Keys always land somewhere: in a main window on the window
         // itself, which a click inside takes focus back to; in a picker in
