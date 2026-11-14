@@ -242,6 +242,8 @@ mod tests {
         ] {
             assert_eq!(parse(&bytes), Vec::<PathBuf>::new(), "{bytes:?}");
         }
+        let full = vec![PathBuf::from("/a"); MAX_RECENT_FOLDERS];
+        assert_eq!(parse(&to_bytes(&full)), full);
         let longest = PathBuf::from(format!("/{}", "a".repeat(MAX_PATH - 1)));
         assert!(fits(&longest));
         assert!(!fits(&PathBuf::from(format!("/{}", "a".repeat(MAX_PATH)))));
