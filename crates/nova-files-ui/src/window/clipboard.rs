@@ -20,11 +20,11 @@ use crate::island;
 impl MainWindow {
     /// Puts the files selected on the clipboard, to be moved when `cut`.
     pub(crate) fn copy_selected(&mut self, cut: bool, cx: &mut Context<Self>) {
-        let paths = self.selected_paths();
         // What is in the trash only goes back where it was.
-        if paths.is_empty() || self.pick.is_some() || self.in_trash() {
+        if self.pick.is_some() || self.in_trash() {
             return;
         }
+        let paths = self.selected_paths();
         let action = if cut {
             ClipboardAction::Cut
         } else {
@@ -34,6 +34,7 @@ impl MainWindow {
             action,
             paths: paths.clone(),
         };
+        // Nothing selected offers nothing.
         let Some(item) = clipboard_item(&files) else {
             return;
         };
@@ -110,6 +111,31 @@ mod tests {
     use std::path::Path;
 
     use super::*;
+
+    #[test]
+    fn files_dropped_in_as_paths_are_copied() {
+        let paths = gpui::ExternalPaths(vec![PathBuf::from("/tmp/a")].into());
+        let item = ClipboardItem {
+            entries: vec![ClipboardEntry::ExternalPaths(paths)],
+        };
+        let files = files_in(&item).unwrap();
+        assert_eq!(files.action, ClipboardAction::Copy);
+        assert_eq!(files.paths, [PathBuf::from("/tmp/a")]);
+    }
+
+    #[test]
+    fn no_paths_give_way_to_the_text_after_them() {
+        let cut = FileClipboard {
+            action: ClipboardAction::Cut,
+            paths: vec![PathBuf::from("/tmp/b")],
+        };
+        let mut item = clipboard_item(&cut).unwrap();
+        item.entries.insert(
+            0,
+            ClipboardEntry::ExternalPaths(gpui::ExternalPaths(Vec::new().into())),
+        );
+        assert_eq!(files_in(&item), Some(cut));
+    }
 
     #[test]
     fn files_go_through_the_clipboard_whole_and_keep_whether_they_were_cut() {

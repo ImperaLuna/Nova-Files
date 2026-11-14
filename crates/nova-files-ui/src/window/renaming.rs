@@ -137,11 +137,6 @@ impl MainWindow {
             .position(|entry| entry.name == renaming.name)
     }
 
-    /// Stops waiting for an entry a rename or new folder was to make.
-    pub(super) fn forget_wanted(&mut self) {
-        self.wanted = None;
-    }
-
     /// The text field of the rename under way on row `index` of the
     /// listing on screen, if there is one.
     pub fn rename_field(&self, index: usize) -> Option<&Entity<TextField>> {
@@ -155,7 +150,7 @@ impl MainWindow {
     }
 
     /// Makes a new folder in the folder on screen, then renames it.
-    pub(crate) fn new_folder(&mut self) {
+    pub fn new_folder(&mut self) {
         let Some(listing) = &self.listing else { return };
         if self.pick.is_some() || self.renaming.is_some() || self.in_trash() {
             return;

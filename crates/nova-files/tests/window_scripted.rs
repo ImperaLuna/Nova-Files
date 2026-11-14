@@ -4,6 +4,7 @@
 
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
+mod scripted_jobs;
 mod scripted_select;
 
 use std::cell::Cell;

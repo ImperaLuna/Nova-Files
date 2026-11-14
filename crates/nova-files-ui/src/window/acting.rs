@@ -54,7 +54,7 @@ impl MainWindow {
 
     /// Moves the files selected to the trash; in the trash, asks before
     /// deleting them for good.
-    pub(crate) fn trash_selected(&mut self, cx: &mut Context<Self>) {
+    pub fn trash_selected(&mut self, cx: &mut Context<Self>) {
         if self.in_trash() {
             self.delete_selected_for_good(cx);
             return;
@@ -102,26 +102,14 @@ impl MainWindow {
         undo: Option<NoteUndo>,
         cx: &mut Context<Self>,
     ) {
-        self.island.notes_shown += 1;
-        let serial = self.island.notes_shown;
         self.island.note = Some(Note {
             label: label.into(),
             undo,
-            serial,
         });
+        // A new note's timer replaces, and so cancels, the old one's.
         self.island.note_timer = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(NOTE_TIME).await;
-            this.update(cx, |this, cx| {
-                if this
-                    .island
-                    .note
-                    .as_ref()
-                    .is_some_and(|note| note.serial == serial)
-                {
-                    this.dismiss_note(cx);
-                }
-            })
-            .ok();
+            this.update(cx, Self::dismiss_note).ok();
         }));
         cx.notify();
     }

@@ -186,3 +186,32 @@ fn a_path_under_home_reads_from_the_tilde() {
     assert_eq!(short_path(Path::new("/home/ab"), home), "/home/ab");
     assert_eq!(short_path(Path::new("/srv"), home), "/srv");
 }
+
+#[test]
+fn a_listing_counts_its_folders_and_files() {
+    use nova_files_api::EntryId;
+    let entry = |id, name: &str, kind| Entry {
+        id: EntryId(id),
+        name: OsString::from(name),
+        kind,
+    };
+    let entries = [
+        entry(0, "a", EntryKind::Folder),
+        entry(1, "b", EntryKind::File),
+        entry(2, "c", EntryKind::File),
+    ];
+    assert_eq!(count_of(&entries), "1 folder, 2 files");
+}
+
+#[test]
+fn a_note_loses_only_its_own_undo() {
+    let mut note = Some(Note {
+        label: "Moved a to Trash".into(),
+        undo: Some(NoteUndo::Job(JobId(1))),
+    });
+    assert!(!drop_undo(&mut note, JobId(2)));
+    assert!(note.as_ref().is_some_and(|note| note.undo.is_some()));
+    assert!(drop_undo(&mut note, JobId(1)));
+    assert!(note.is_some_and(|note| note.undo.is_none()));
+    assert!(!drop_undo(&mut None, JobId(1)));
+}

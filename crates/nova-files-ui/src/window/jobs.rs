@@ -23,8 +23,7 @@ use std::time::{Duration, Instant};
 
 use gpui::{App, Context, Task};
 use nova_files_api::{
-    Answer, Command, Conflict, ConflictKind, Event, JobId, JobTag, Operation, Outcome, Progress,
-    Scope,
+    Answer, Command, Conflict, ConflictKind, Event, JobId, JobTag, Operation, Outcome, Scope,
 };
 
 use super::MainWindow;
@@ -75,6 +74,67 @@ impl Jobs {
     pub fn last_undoable(&self) -> Option<JobId> {
         self.undoable.last().copied()
     }
+
+    /// Takes how one of this window's jobs moves on, at `now`: its
+    /// progress, or its holding for a conflict or a pause. The folder a
+    /// copy or move goes into when files landed in it and it is due to be
+    /// read again (see [`READ_AGAIN_EVERY`]).
+    pub(super) fn moved(&mut self, event: &Event, now: Instant) -> Option<PathBuf> {
+        let (job, change): (_, fn(&mut Running)) = match *event {
+            Event::JobProgress { job, progress } => {
+                let running = self.running.get_mut(&job)?;
+                let landed = progress.done_items > running.progress.done_items;
+                running.advanced(progress, now);
+                let (Operation::Copy { into, .. } | Operation::Move { into, .. }) =
+                    &running.operation
+                else {
+                    return None;
+                };
+                let due = self
+                    .read_again
+                    .is_none_or(|last| now.saturating_duration_since(last) >= READ_AGAIN_EVERY);
+                return (landed && due).then(|| into.clone());
+            }
+            Event::ConflictAnswered { job, .. } => (job, |job| job.waiting = false),
+            Event::JobPaused(job) => (job, |job| job.paused = true),
+            Event::JobResumed(job) => (job, |job| job.paused = false),
+            _ => return None,
+        };
+        if let Some(running) = self.running.get_mut(&job) {
+            change(running);
+        }
+        None
+    }
+
+    /// A tag for the next job asked for, new each time.
+    const fn next_tag(&mut self) -> JobTag {
+        let tag = JobTag(self.next_tag);
+        self.next_tag = self.next_tag.wrapping_add(1);
+        tag
+    }
+
+    /// The core offers to undo `job`: kept when it is one of this
+    /// window's, running or offered before.
+    fn offered(&mut self, job: JobId) {
+        let before = self.undo_gone.len();
+        self.undo_gone.retain(|&gone| gone != job);
+        let offered_before = self.undo_gone.len() != before;
+        if offered_before || self.running.contains_key(&job) {
+            self.undoable.push(job);
+        }
+    }
+
+    /// The core no longer offers to undo `job`; it is kept, the newest
+    /// [`UNDO_KEPT`], in case it is offered again.
+    fn withdrawn(&mut self, job: JobId) {
+        let before = self.undoable.len();
+        self.undoable.retain(|&undoable| undoable != job);
+        if self.undoable.len() != before {
+            self.undo_gone.push(job);
+            let over = self.undo_gone.len().saturating_sub(UNDO_KEPT);
+            self.undo_gone.drain(..over);
+        }
+    }
 }
 
 impl MainWindow {
@@ -83,8 +143,7 @@ impl MainWindow {
         let Some(connection) = &self.connection else {
             return false;
         };
-        let tag = JobTag(self.jobs.next_tag);
-        self.jobs.next_tag += 1;
+        let tag = self.jobs.next_tag();
         let sent = connection
             .send(Command::StartJob {
                 tag,
@@ -95,6 +154,18 @@ impl MainWindow {
             self.jobs.asked.insert(tag, operation);
         }
         sent
+    }
+
+    /// Takes how a job moves on (see [`Jobs::moved`]), reading the folder
+    /// on screen again when files landed in it.
+    pub(super) fn job_moved(&mut self, event: &Event, cx: &mut Context<Self>) {
+        let now = cx.background_executor().now();
+        if let Some(into) = self.jobs.moved(event, now)
+            && self.read_again_if_changed(&[into])
+        {
+            self.jobs.read_again = Some(now);
+        }
+        cx.notify();
     }
 
     /// Takes one of the core's job events.
@@ -110,35 +181,11 @@ impl MainWindow {
                     }));
                 }
             }
-            Event::JobProgress { job, progress } => self.job_progressed(job, progress, cx),
             Event::JobConflict { job, conflict } => self.job_conflict(job, conflict, cx),
-            Event::ConflictAnswered { job, .. } => {
-                self.job_held(job, |job| job.waiting = false, cx);
-            }
-            Event::JobPaused(job) => self.job_held(job, |job| job.paused = true, cx),
-            Event::JobResumed(job) => self.job_held(job, |job| job.paused = false, cx),
-            Event::Undoable { job, .. } => {
-                let gone = self.jobs.undo_gone.iter().position(|&gone| gone == job);
-                if let Some(gone) = gone {
-                    self.jobs.undo_gone.remove(gone);
-                }
-                if gone.is_some() || self.jobs.running.contains_key(&job) {
-                    self.jobs.undoable.push(job);
-                }
-            }
+            Event::Undoable { job, .. } => self.jobs.offered(job),
             Event::UndoGone(job) => {
-                let before = self.jobs.undoable.len();
-                self.jobs.undoable.retain(|&undoable| undoable != job);
-                if self.jobs.undoable.len() < before {
-                    self.jobs.undo_gone.push(job);
-                    let over = self.jobs.undo_gone.len().saturating_sub(UNDO_KEPT);
-                    self.jobs.undo_gone.drain(..over);
-                }
-                let named = |note: &island::Note| note.undo == Some(NoteUndo::Job(job));
-                if self.island.note.as_ref().is_some_and(named) {
-                    if let Some(note) = &mut self.island.note {
-                        note.undo = None;
-                    }
+                self.jobs.withdrawn(job);
+                if island::drop_undo(&mut self.island.note, job) {
                     cx.notify();
                 }
             }
@@ -170,7 +217,7 @@ impl MainWindow {
             )
         {
             // Nothing was made to select.
-            self.forget_wanted();
+            self.wanted = None;
         }
         self.trash_maybe_changed(&operation);
         let undo = self
@@ -199,33 +246,6 @@ impl MainWindow {
         } else {
             false
         }
-    }
-
-    /// Takes the progress of job `job`; one of this window's copies or
-    /// moves into the folder on screen reads it again as files finish.
-    fn job_progressed(&mut self, job: JobId, progress: Progress, cx: &mut Context<Self>) {
-        let now = cx.background_executor().now();
-        let Some(running) = self.jobs.running.get_mut(&job) else {
-            return;
-        };
-        let landed = progress.done_items > running.progress.done_items;
-        running.advanced(progress, now);
-        let into = match &running.operation {
-            Operation::Copy { into, .. } | Operation::Move { into, .. } => Some(into.clone()),
-            _ => None,
-        };
-        let due = self
-            .jobs
-            .read_again
-            .is_none_or(|last| now.saturating_duration_since(last) >= READ_AGAIN_EVERY);
-        if landed
-            && due
-            && let Some(into) = into
-            && self.read_again_if_changed(&[into])
-        {
-            self.jobs.read_again = Some(now);
-        }
-        cx.notify();
     }
 
     /// Job `job` holds at `conflict`. A copy of a file onto itself (a
@@ -288,11 +308,136 @@ impl MainWindow {
 
     /// How many of this window's jobs were asked for and haven't ended.
     pub fn jobs_pending(&self) -> usize {
-        self.jobs.asked.len() + self.jobs.running.len()
+        self.jobs
+            .asked
+            .len()
+            .saturating_add(self.jobs.running.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use nova_files_api::Progress;
+
+    use super::*;
+
+    #[test]
+    fn each_job_asked_for_gets_its_own_tag() {
+        let mut jobs = Jobs::default();
+        assert_ne!(jobs.next_tag(), jobs.next_tag());
     }
 
-    /// The core has stopped: no job of this window will say more.
-    pub(super) fn jobs_gone(&mut self) {
-        self.jobs = Jobs::default();
+    #[test]
+    fn an_undo_withdrawn_comes_back_when_offered_again() {
+        let mut jobs = Jobs::default();
+        let (mine, other) = (JobId(1), JobId(2));
+        jobs.running
+            .insert(mine, Running::new(Operation::EmptyTrash, Instant::now()));
+        jobs.offered(mine);
+        // Another window's job isn't this window's to undo.
+        jobs.offered(other);
+        assert_eq!(jobs.undoable, [mine]);
+
+        jobs.running.remove(&mine);
+        jobs.withdrawn(other);
+        assert_eq!(jobs.undo_gone, []);
+        jobs.withdrawn(mine);
+        assert_eq!(jobs.last_undoable(), None);
+        assert_eq!(jobs.undo_gone, [mine]);
+        jobs.offered(mine);
+        assert_eq!(jobs.undoable, [mine]);
+        assert_eq!(jobs.undo_gone, []);
+    }
+
+    #[test]
+    fn only_the_newest_withdrawn_undos_are_kept() {
+        let mut jobs = Jobs::default();
+        let count = u64::try_from(UNDO_KEPT).unwrap_or(u64::MAX) + 1;
+        for id in 0..count {
+            let running = Running::new(Operation::EmptyTrash, Instant::now());
+            jobs.running.insert(JobId(id), running);
+            jobs.offered(JobId(id));
+            jobs.withdrawn(JobId(id));
+        }
+        assert_eq!(jobs.undo_gone.len(), UNDO_KEPT);
+        assert_eq!(jobs.undo_gone.first(), Some(&JobId(1)));
+    }
+
+    fn items(done_items: u64) -> Progress {
+        Progress {
+            done_items,
+            total_items: 3,
+            ..Progress::default()
+        }
+    }
+
+    fn progress(job: JobId, done: u64) -> Event {
+        Event::JobProgress {
+            job,
+            progress: items(done),
+        }
+    }
+
+    #[test]
+    fn a_copy_reads_its_folder_again_as_files_land_but_not_too_often() {
+        let start = Instant::now();
+        let mut jobs = Jobs::default();
+        let job = JobId(1);
+        let into = PathBuf::from("/b");
+        let copy = Operation::Copy {
+            sources: vec![PathBuf::from("/a/x")],
+            into: into.clone(),
+        };
+        jobs.running.insert(job, Running::new(copy, start));
+        // Nothing landed yet.
+        assert_eq!(jobs.moved(&progress(job, 0), start), None);
+        assert_eq!(jobs.moved(&progress(job, 1), start), Some(into.clone()));
+        jobs.read_again = Some(start);
+        let soon = start + READ_AGAIN_EVERY / 2;
+        assert_eq!(jobs.moved(&progress(job, 2), soon), None);
+        // Nothing more landed.
+        let later = start + READ_AGAIN_EVERY;
+        assert_eq!(jobs.moved(&progress(job, 2), later), None);
+        assert_eq!(jobs.moved(&progress(job, 3), later), Some(into));
+        assert_eq!(jobs.running[&job].progress, items(3));
+        // Another window's job.
+        assert_eq!(jobs.moved(&progress(JobId(2), 3), later), None);
+    }
+
+    #[test]
+    fn other_jobs_read_nothing_again() {
+        let start = Instant::now();
+        let mut jobs = Jobs::default();
+        let trash = Operation::Trash {
+            paths: vec![PathBuf::from("/a/x")],
+        };
+        jobs.running.insert(JobId(1), Running::new(trash, start));
+        let later = start + Duration::from_secs(1);
+        assert_eq!(jobs.moved(&progress(JobId(1), 1), later), None);
+        assert_eq!(jobs.running[&JobId(1)].progress, items(1));
+    }
+
+    #[test]
+    fn a_job_holds_while_paused_or_waiting() {
+        let start = Instant::now();
+        let mut jobs = Jobs::default();
+        let job = JobId(1);
+        let empty = Operation::EmptyTrash;
+        jobs.running.insert(job, Running::new(empty, start));
+        jobs.running.get_mut(&job).unwrap().waiting = true;
+        jobs.moved(&Event::JobPaused(job), start);
+        assert!(jobs.running[&job].paused);
+        jobs.moved(&Event::JobResumed(job), start);
+        assert!(!jobs.running[&job].paused);
+        let answer = Event::ConflictAnswered {
+            job,
+            answer: Answer::KeepBoth,
+        };
+        jobs.moved(&answer, start);
+        assert!(!jobs.running[&job].waiting);
+        // Another window's job.
+        assert_eq!(jobs.moved(&Event::JobPaused(JobId(2)), start), None);
     }
 }

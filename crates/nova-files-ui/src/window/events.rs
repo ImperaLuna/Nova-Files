@@ -13,6 +13,7 @@ use nova_files_api::{Event, Listing, ListingId, Settings, Theme, Thumbnails, Unr
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
+use crate::island;
 use crate::jump::TypeJump;
 use crate::theme::Colors;
 
@@ -31,6 +32,7 @@ impl MainWindow {
         let wanted = self.wanted_selection(&listing);
         let made = wanted.is_some();
         self.selection = wanted.or_else(|| self.selection_for(&listing));
+        self.counted = island::count_of(&listing.entries).into();
         self.listing = Some(listing);
         self.core_moved = false;
         self.details = HashMap::new();
@@ -124,13 +126,13 @@ impl MainWindow {
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            event @ (Event::JobStarted { .. }
-            | Event::JobFinished { .. }
-            | Event::JobProgress { .. }
-            | Event::JobConflict { .. }
+            event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)
-            | Event::JobResumed(_)
+            | Event::JobResumed(_)) => self.job_moved(&event, cx),
+            event @ (Event::JobStarted { .. }
+            | Event::JobFinished { .. }
+            | Event::JobConflict { .. }
             | Event::Undoable { .. }
             | Event::UndoGone(_)) => self.job_event(event, cx),
             // The window never searches or asks for drives yet, doesn't
@@ -213,8 +215,9 @@ impl MainWindow {
     pub(super) fn set_status(&mut self, status: CoreStatus, cx: &mut Context<Self>) {
         if self.status != status {
             self.status = status;
-            if status == CoreStatus::Gone {
-                self.jobs_gone();
+            if matches!(status, CoreStatus::Gone) {
+                // No job of this window will say more.
+                self.jobs = super::jobs::Jobs::default();
             }
             cx.emit(WindowEvent::Status(status));
             cx.notify();

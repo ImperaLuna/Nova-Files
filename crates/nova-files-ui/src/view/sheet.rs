@@ -208,9 +208,11 @@ fn sheet_corner(colors: &Colors) -> impl IntoElement {
 }
 
 /// The rename field over an entry's name, its text where the name was.
+/// A press in it stays in it: it neither clicks the row nor starts a box.
 fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> impl IntoElement {
     div()
         .debug_selector(|| "rename".to_owned())
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .flex()
         .flex_1()
         .items_center()
