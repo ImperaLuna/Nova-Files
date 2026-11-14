@@ -1,6 +1,7 @@
 //! The path bar: a crumb for each level from Home down to the folder on
-//! screen, each going to its folder; a long path folding its middle into
-//! a "…" menu; and a narrow window keeping the folder on screen in view.
+//! screen, each going to its folder; an arrow after each opening a menu
+//! of the folders in it; a long path folding its middle into a "…" menu;
+//! and a narrow window keeping the folder on screen in view.
 
 use gpui::{px, size};
 
@@ -61,6 +62,72 @@ async fn menu_closed(view: &Entity<MainWindow>, cx: &mut VisualTestContext) {
         .await;
     cx.run_until_parked();
     assert!(!drawn(cx, "path-menu"));
+}
+
+#[gpui::test]
+async fn an_arrow_lists_the_folders_in_the_crumb_before_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    fs::create_dir(tree.path().join("Music")).unwrap();
+    let nova = tree.path().join("Projects/nova");
+    let (view, cx) = path_window(cx, &tree, &nova).await;
+
+    click(cx, "arrow-0");
+    assert_eq!(menu_names(&view, cx).await, ["Music", "Projects"]);
+    assert!(drawn(cx, "path-menu-1"));
+    click(cx, "path-menu-0");
+    wait_for_folder(&view, cx, &tree.path().join("Music")).await;
+    menu_closed(&view, cx).await;
+}
+
+#[gpui::test]
+async fn a_press_on_an_open_arrow_closes_its_menu(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let nova = tree.path().join("Projects/nova");
+    let (view, cx) = path_window(cx, &tree, &nova).await;
+
+    click(cx, "arrow-1");
+    assert_eq!(menu_names(&view, cx).await, ["nova"]);
+    click(cx, "arrow-1");
+    menu_closed(&view, cx).await;
+    // Another arrow opens its own menu in its place.
+    click(cx, "arrow-1");
+    menu_names(&view, cx).await;
+    click(cx, "arrow-0");
+    assert_eq!(menu_names(&view, cx).await, ["Projects"]);
+}
+
+#[gpui::test]
+async fn the_folder_on_screen_has_an_arrow_only_when_it_holds_folders(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = path_window(cx, &tree, &projects).await;
+
+    assert!(drawn(cx, "arrow-1"));
+    click(cx, "arrow-1");
+    assert_eq!(menu_names(&view, cx).await, ["nova"]);
+    click(cx, "path-menu-0");
+    wait_for_folder(&view, cx, &projects.join("nova")).await;
+    cx.run_until_parked();
+    assert!(!drawn(cx, "arrow-2"));
+}
+
+#[gpui::test]
+async fn a_menu_whose_folder_is_gone_or_holds_no_folders_closes(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let deep = tree.path().join("a/b/c");
+    fs::create_dir_all(&deep).unwrap();
+    let (view, cx) = path_window(cx, &tree, &deep).await;
+
+    fs::remove_dir(&deep).unwrap();
+    click(cx, "arrow-2");
+    menu_closed(&view, cx).await;
+    fs::remove_dir_all(tree.path().join("a")).unwrap();
+    click(cx, "arrow-1");
+    menu_closed(&view, cx).await;
 }
 
 #[gpui::test]

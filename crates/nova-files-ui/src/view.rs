@@ -26,6 +26,8 @@ mod row;
 mod sheet;
 mod sidebar;
 
+pub use sidebar::place_icon;
+
 use gpui::{
     Context, Div, Focusable as _, InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection, ParentElement as _, Render,

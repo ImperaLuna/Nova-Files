@@ -2,7 +2,9 @@
 //! Home or Computer down to the folder on screen (see `crumbs`), with an
 //! arrow between each two. A click on a crumb goes to its folder. The
 //! folder on screen is pressed in, strong, with its icon in orange; the
-//! root shows its icon too. A long path folds its middle into a "…" crumb
+//! root shows its icon too. A press on an arrow opens a menu of the
+//! folders in the crumb before it; the folder on screen has an arrow only
+//! when it holds folders. A long path folds its middle into a "…" crumb
 //! whose menu lists the folders it hides (see `path_menu`).
 //!
 //! The crumbs sit at the bar's right end of their own box, so a narrow
@@ -14,6 +16,8 @@
 //! whether shown or folded, `arrow-<n>` for the arrow after it, and
 //! `crumb-more` for the "…" crumb.
 
+use std::path::PathBuf;
+
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
     ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
@@ -21,8 +25,8 @@ use gpui::{
 };
 
 use super::bar::capsule;
+use super::place_icon;
 use super::row::icon;
-use super::sidebar::place_icon;
 use crate::assets::Icon;
 use crate::crumbs::{self, Crumb, Shown};
 use crate::path_bar::{MenuItem, MenuOwner};
@@ -46,10 +50,8 @@ impl MainWindow {
                 Shown::Crumb(index) => {
                     let crumb = &crumbs[index];
                     row = row.child(crumb_button(index, crumb, colors, cx));
-                    if !crumb.here {
-                        row = row.child(
-                            chevron(colors).debug_selector(move || format!("arrow-{index}")),
-                        );
+                    if !crumb.here || self.has_folders() {
+                        row = row.child(self.arrow(index, crumb.path.clone(), colors, cx));
                     }
                 }
                 Shown::Folded(hidden) => {
@@ -96,6 +98,31 @@ impl MainWindow {
                 }),
             )
             .child(FOLDED_LABEL);
+        div()
+            .relative()
+            .flex_none()
+            .child(button)
+            .when(open, |slot| slot.child(self.path_menu_card(cx)))
+    }
+
+    /// The arrow after the `index`th crumb, whose menu lists the folders
+    /// in `folder`.
+    fn arrow(&self, index: usize, folder: PathBuf, colors: &Colors, cx: &Context<Self>) -> Div {
+        let open = self.menu_open(MenuOwner::Arrow(index));
+        let button = chevron(colors)
+            .id(("arrow", index))
+            .debug_selector(move || format!("arrow-{index}"))
+            .rounded(radius::SMALL)
+            .cursor_pointer()
+            .hover(|button| button.bg(colors.press))
+            .when(open, |button| button.bg(colors.press))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    this.press_arrow(index, &folder, event.position, cx);
+                    cx.notify();
+                }),
+            );
         div()
             .relative()
             .flex_none()
