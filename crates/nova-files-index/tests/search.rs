@@ -418,3 +418,42 @@ fn a_search_within_a_folder_follows_moves() {
     );
     assert_eq!(search(&pictures), []);
 }
+
+#[test]
+fn a_search_within_a_hidden_folder_or_one_not_indexed() {
+    let home = Home::new();
+    let stages = home.named(
+        home.index
+            .search("settings", LIMIT)
+            .within(&home.at(".config")),
+    );
+    assert_eq!(
+        stages[0],
+        [at(".config/tax-tool/settings.toml", MatchKind::Exact)]
+    );
+    let nowhere = home.named(home.index.search("tax", LIMIT).within(&home.at("Missing")));
+    assert_eq!(nowhere, [vec![], vec![]]);
+}
+
+#[test]
+fn a_search_within_a_folder_finds_entries_added_there_only() {
+    let home = Home::new();
+    let changes = [
+        home.added("Documents/tax 2025.pdf"),
+        home.added("Pictures/tax.png"),
+    ];
+    let mut overlay = Overlay::new();
+    for change in &changes {
+        overlay.apply(change);
+    }
+    let first = home
+        .named(
+            home.index
+                .search_now("tax", LIMIT, &overlay)
+                .within(&home.at("Documents")),
+        )
+        .remove(0);
+    let paths: Vec<PathBuf> = first.into_iter().map(|(path, _)| path).collect();
+    assert!(paths.contains(&PathBuf::from("Documents/tax 2025.pdf")));
+    assert!(!paths.contains(&PathBuf::from("Pictures/tax.png")));
+}
