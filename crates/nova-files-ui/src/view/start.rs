@@ -427,6 +427,11 @@ mod tests {
             hero_subtitle(&newest, home),
             format!("~/Projects{SEPARATOR}{}", columns::modified(time))
         );
+        // A date past what can be written shows no date.
+        let unwritable = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1 << 62);
+        assert_eq!(columns::modified(unwritable), "");
+        newest.modified = Some(unwritable);
+        assert_eq!(hero_subtitle(&newest, home), "~/Projects");
     }
 
     #[test]
