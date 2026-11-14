@@ -242,6 +242,12 @@ pub mod size {
     /// A file or folder icon in a row, and a thumbnail in its place.
     pub const ROW_ICON: Pixels = px(22.0);
     pub const THUMBNAIL: Pixels = px(22.0);
+    /// The colored tag on a file icon: where it sits in the icon's box,
+    /// and its size. A plain box, so a row draws one icon, not two.
+    pub const TAG_LEFT: Pixels = px(6.2);
+    pub const TAG_TOP: Pixels = px(13.4);
+    pub const TAG_WIDTH: Pixels = px(6.8);
+    pub const TAG_HEIGHT: Pixels = px(2.9);
     /// The Modified and Size columns; Name takes the rest.
     pub const MODIFIED_WIDTH: Pixels = px(150.0);
     pub const SIZE_WIDTH: Pixels = px(92.0);

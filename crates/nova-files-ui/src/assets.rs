@@ -14,7 +14,6 @@ use gpui::{AssetSource, Result, SharedString};
 pub enum Icon {
     Folder,
     File,
-    FileTag,
     Home,
     Desktop,
     Documents,
@@ -33,10 +32,9 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 18] = [
+    const ALL: [Self; 17] = [
         Self::Folder,
         Self::File,
-        Self::FileTag,
         Self::Home,
         Self::Desktop,
         Self::Documents,
@@ -59,7 +57,6 @@ impl Icon {
         match self {
             Self::Folder => "icons/folder.svg",
             Self::File => "icons/file.svg",
-            Self::FileTag => "icons/file-tag.svg",
             Self::Home => "icons/home.svg",
             Self::Desktop => "icons/desktop.svg",
             Self::Documents => "icons/documents.svg",
@@ -82,7 +79,6 @@ impl Icon {
         let source = match self {
             Self::Folder => svg::FOLDER,
             Self::File => svg::FILE,
-            Self::FileTag => svg::FILE_TAG,
             Self::Home => svg::HOME,
             Self::Desktop => svg::DESKTOP,
             Self::Documents => svg::DOCUMENTS,

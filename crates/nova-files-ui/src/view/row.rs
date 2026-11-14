@@ -122,11 +122,16 @@ pub fn entry_icon(
         (None, EntryKind::Folder) => slot.child(icon(Icon::Folder, size::ROW_ICON, colors.folder)),
         (None, EntryKind::File) => slot
             .child(icon(Icon::File, size::ROW_ICON, colors.text_soft))
-            .child(div().absolute().inset_0().child(icon(
-                Icon::FileTag,
-                size::ROW_ICON,
-                FileKind::of(name).tag(colors.tags),
-            ))),
+            .child(
+                div()
+                    .absolute()
+                    .left(size::TAG_LEFT)
+                    .top(size::TAG_TOP)
+                    .w(size::TAG_WIDTH)
+                    .h(size::TAG_HEIGHT)
+                    .rounded_full()
+                    .bg(FileKind::of(name).tag(colors.tags)),
+            ),
     }
 }
 
