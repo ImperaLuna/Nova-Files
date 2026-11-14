@@ -227,6 +227,8 @@ pub mod text {
     /// A card's name on the Start page, and the large card's.
     pub const CARD_NAME: Pixels = px(13.5);
     pub const HERO_NAME: Pixels = px(16.0);
+    /// How full a drive is, large on its Start card.
+    pub const PERCENT: Pixels = px(26.0);
 }
 
 /// Sizes and spacing.
@@ -376,6 +378,10 @@ pub mod start {
     /// is downward).
     pub const GLOW_END: f32 = 0.46;
     pub const GLOW_ANGLE: f32 = 180.0;
+    /// A drive card's icon, the space after it, and its bar's height.
+    pub const DRIVE_ICON: Pixels = px(22.0);
+    pub const DRIVE_HEAD_GAP: Pixels = px(10.0);
+    pub const BAR: Pixels = px(6.0);
 }
 
 /// How much of an element shows through.

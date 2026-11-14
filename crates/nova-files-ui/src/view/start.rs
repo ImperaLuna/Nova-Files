@@ -7,7 +7,10 @@
 //! up to four smaller cards beside it show each folder's icon with a fan
 //! of three entries and where the folder is. A click on a card opens its
 //! folder. With no recent folders the group isn't drawn. Each card
-//! carries a debug selector, `recent-<n>`, counted from 0.
+//! carries a debug selector, `recent-<n>`, counted from 0. Under them,
+//! "Drives": how full each mounted drive is (see `drives`).
+
+mod drives;
 
 use std::path::{Path, PathBuf};
 
@@ -26,6 +29,7 @@ use crate::theme::{Colors, radius, size, start, text};
 use crate::window::MainWindow;
 
 const RECENT_LABEL: &str = "Jump back in";
+const DRIVES_LABEL: &str = "Drives";
 /// Between the folder and its date under the large card's name.
 const SEPARATOR: &str = " · ";
 /// The small cards sit two by two beside the large one.
@@ -61,6 +65,9 @@ impl MainWindow {
                     .gap(start::GROUP_GAP)
                     .when(!self.recent.is_empty(), |page| {
                         page.child(group(RECENT_LABEL, self.recent_cards(cx), &colors))
+                    })
+                    .when_some(self.drive_cards(cx), |page, cards| {
+                        page.child(group(DRIVES_LABEL, cards, &colors))
                     }),
             )
     }

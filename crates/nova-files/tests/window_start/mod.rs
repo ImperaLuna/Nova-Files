@@ -160,3 +160,17 @@ async fn a_fallback_folder_isnt_counted_as_used(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, tree.path()).await;
     assert_eq!(recent_folders(&connector), Vec::<PathBuf>::new());
 }
+
+#[gpui::test]
+async fn a_drive_card_shows_how_full_it_is_and_opens_the_drive(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("start-drives");
+    let (view, cx, _connector) = start_window(cx, tree.path());
+    let root = Path::new("/");
+    view.condition::<WindowEvent>(cx, |view, _| view.disk_space(root).is_some())
+        .await;
+    cx.run_until_parked();
+    let card = cx.debug_bounds("drive-card-0").unwrap();
+    cx.simulate_click(card.center(), Modifiers::none());
+    wait_for_folder(&view, cx, root).await;
+}
