@@ -28,3 +28,15 @@ impl From<&Path> for Location {
         Self::Folder(path.to_owned())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_folder_has_one() {
+        let path = Path::new("/home/me");
+        assert_eq!(Location::from(path).folder(), Some(path));
+        assert_eq!(Location::Start.folder(), None);
+    }
+}
