@@ -23,7 +23,7 @@ impl MainWindow {
         let path = listing.path.clone();
         // Read again in place: keep the scroll position.
         let same_folder = self.folder() == Some(path.as_path());
-        if !same_folder {
+        if !same_folder && !std::mem::take(&mut self.falling_back) {
             self.used(&path);
         }
         self.history.arrived(&Location::from(path.as_path()));
@@ -82,7 +82,7 @@ impl MainWindow {
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
-            Event::RecentFolders(recent) => self.recent_arrived(recent, cx),
+            Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             // The window never searches, opens files, starts jobs or asks
             // for drives yet, and only a picker's opening asks for the
@@ -139,7 +139,7 @@ impl MainWindow {
                 if self.history.here().is_none()
                     && let Some(fallback) = self.fallbacks.pop()
                 {
-                    self.request(&fallback);
+                    self.falling_back = self.request(&fallback);
                 }
             }
             Some(listing) if self.core_moved && listing.path != path => {
@@ -147,6 +147,10 @@ impl MainWindow {
                 self.request(&shown);
             }
             Some(_) => {}
+        }
+        // A recent folder's card that can't be opened goes from Start.
+        if self.is_on_start() {
+            self.ask_for_recent();
         }
         self.pick_folder_refused(id, &path);
         cx.emit(WindowEvent::Refused(path));

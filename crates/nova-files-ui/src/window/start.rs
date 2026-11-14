@@ -7,14 +7,16 @@
 //! nothing on Start acts on entries no longer shown.
 //!
 //! Each arrival asks the core for the recent folders again, leaving out
-//! the ones the sidebar already shows. Until the answer comes, the page
-//! shows the ones from last time, so it draws at once.
+//! the ones the sidebar already shows, and so does a change to the places
+//! or a card's folder that can't be read. Each ask has a new id and only
+//! the newest one's answer is kept, whichever arrives last. Until it
+//! comes, the page shows the folders from last time, so it draws at once.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use gpui::{Context, UniformListScrollHandle};
-use nova_files_api::{Command, RecentFolder};
+use nova_files_api::{Command, RecentFolder, RecentId};
 
 use super::rows::release;
 use super::{MainWindow, WindowEvent};
@@ -56,26 +58,37 @@ impl MainWindow {
 
     /// Asks the core for the recent folders the Start page has room for,
     /// leaving out home and the places.
-    pub(super) fn ask_for_recent(&self) {
+    pub(super) fn ask_for_recent(&mut self) {
         let Some(connection) = &self.connection else {
             return;
         };
+        self.recent_asked = RecentId(self.recent_asked.0 + 1);
+        let id = self.recent_asked;
         let skip: Vec<PathBuf> = std::iter::once(self.home.clone())
             .chain(self.places.iter().map(|place| place.path.clone()))
             .collect();
         // A core gone ends the window's events, which shows it.
         connection
             .send(Command::RecentFolders {
+                id,
                 count: RECENT_CARDS,
                 skip,
             })
             .ok();
     }
 
-    /// Takes the recent folders the core sent.
-    pub(super) fn recent_arrived(&mut self, recent: Vec<RecentFolder>, cx: &mut Context<Self>) {
-        self.recent = recent;
-        cx.notify();
+    /// Takes the recent folders the core sent for ask `id`, if it is the
+    /// newest.
+    pub(super) fn recent_arrived(
+        &mut self,
+        id: RecentId,
+        recent: Vec<RecentFolder>,
+        cx: &mut Context<Self>,
+    ) {
+        if id == self.recent_asked {
+            self.recent = recent;
+            cx.notify();
+        }
     }
 
     /// Tells the core a person opened `folder` in a main window. What a

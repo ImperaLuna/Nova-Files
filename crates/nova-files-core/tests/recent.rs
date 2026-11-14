@@ -18,14 +18,18 @@ mod common;
 use std::fs;
 use std::path::PathBuf;
 
-use nova_files_api::{Command, EntryKind, Event, PEEK_ENTRIES, RecentFolder};
+use nova_files_api::{Command, EntryKind, Event, PEEK_ENTRIES, RecentFolder, RecentId};
 
 use common::{Bench, Client};
 
 fn recent(client: &Client, count: u32, skip: Vec<PathBuf>) -> Vec<RecentFolder> {
-    client.send(Command::RecentFolders { count, skip });
+    let id = RecentId(u64::from(count));
+    client.send(Command::RecentFolders { id, count, skip });
     match client.next() {
-        Event::RecentFolders(folders) => folders,
+        Event::RecentFolders {
+            id: answered,
+            folders,
+        } if answered == id => folders,
         other => panic!("expected the recent folders, got {other:?}"),
     }
 }

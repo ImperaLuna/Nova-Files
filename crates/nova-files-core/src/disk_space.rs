@@ -1,18 +1,27 @@
 //! Answers [`Command::DiskSpace`]: `statvfs` on each path asked, in order.
 //!
-//! Each request reads on a thread of its own: a network drive that stopped
-//! answering holds up only that answer, never the core or other clients.
+//! Each request reads on a thread of its own, and each path within
+//! [`READ_WAIT`] (see `timed`): a network drive that stopped answering
+//! answers `None` after that wait, and never holds up the core, other
+//! clients or the other paths' answers for longer.
 //!
 //! [`Command::DiskSpace`]: nova_files_api::Command::DiskSpace
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use nova_files_api::{DiskSpace, Event, EventSink, MAX_DISK_SPACE_PATHS, PathSpace};
 use rustix::fs::statvfs;
 
+use crate::timed;
+
 const THREAD_NAME: &str = "nova-files-disk-space";
+const READ_THREAD: &str = "nova-files-statvfs";
+/// How long one path's `statvfs` may take before it answers `None`. A
+/// local drive answers in microseconds.
+pub const READ_WAIT: Duration = Duration::from_secs(2);
 
 /// Reads the space of the drives holding `paths` on a thread of its own
 /// and hands the answer to `events`. When no thread can start, every path
@@ -26,9 +35,13 @@ pub fn answer(events: &Arc<dyn EventSink>, mut paths: Vec<PathBuf>) {
         .spawn(move || {
             let spaces = paths
                 .into_iter()
-                .map(|path| PathSpace {
-                    space: read(&path),
-                    path,
+                .map(|path| {
+                    let asked = path.clone();
+                    PathSpace {
+                        space: timed::within(READ_WAIT, READ_THREAD, move || read(&asked))
+                            .flatten(),
+                        path,
+                    }
                 })
                 .collect();
             sink.deliver(Event::DiskSpace(spaces)).ok();

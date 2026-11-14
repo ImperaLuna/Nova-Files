@@ -10,7 +10,7 @@ use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadab
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::open_with::{OpenWith, OpenWithAnswer};
 use crate::properties::{Properties, PropertiesId};
-use crate::recent::RecentFolder;
+use crate::recent::{RecentFolder, RecentId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
 use crate::size::{MeasureId, ScanState, Share, Size};
@@ -132,8 +132,13 @@ pub enum Command {
     FolderUsed(PathBuf),
     /// Ask for the newest `count` recent folders that can still be read,
     /// leaving out those in `skip` (the ones a client already shows
-    /// elsewhere). The answer is [`Event::RecentFolders`].
-    RecentFolders { count: u32, skip: Vec<PathBuf> },
+    /// elsewhere). The answer is [`Event::RecentFolders`] with the same
+    /// `id`.
+    RecentFolders {
+        id: RecentId,
+        count: u32,
+        skip: Vec<PathBuf>,
+    },
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -276,9 +281,12 @@ pub enum Event {
     /// How full the drives are, answering [`Command::DiskSpace`]: one
     /// entry per path asked, in the same order.
     DiskSpace(Vec<PathSpace>),
-    /// The recent folders, answering [`Command::RecentFolders`], newest
-    /// first.
-    RecentFolders(Vec<RecentFolder>),
+    /// The recent folders, answering [`Command::RecentFolders`] `id`,
+    /// newest first.
+    RecentFolders {
+        id: RecentId,
+        folders: Vec<RecentFolder>,
+    },
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },

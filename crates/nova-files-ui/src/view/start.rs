@@ -18,15 +18,14 @@ use gpui::{
 };
 use nova_files_api::{EntryKind, Peeked, RecentFolder};
 
-use super::row::{entry_icon, icon};
+use super::row::{entry_icon, icon, kind_glyph};
 use crate::assets::Icon;
 use crate::columns;
+use crate::location::HOME_MARK;
 use crate::theme::{Colors, radius, size, start, text};
 use crate::window::MainWindow;
 
 const RECENT_LABEL: &str = "Jump back in";
-/// How a path under home starts.
-const HOME_MARK: &str = "~";
 /// Between the folder and its date under the large card's name.
 const SEPARATOR: &str = " · ";
 /// The small cards sit two by two beside the large one.
@@ -283,10 +282,7 @@ fn fan(entries: &[Peeked], colors: &Colors) -> impl IntoElement {
         .flex()
         .flex_none()
         .children(shown.enumerate().map(|(index, entry)| {
-            let (glyph, tint) = match entry.kind {
-                EntryKind::Folder => (Icon::Folder, colors.folder),
-                EntryKind::File => (Icon::File, colors.text_soft),
-            };
+            let (glyph, tint) = kind_glyph(entry.kind, colors);
             svg()
                 .path(glyph.path())
                 .flex_none()

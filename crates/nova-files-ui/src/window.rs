@@ -51,7 +51,7 @@ use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, Task, UniformListScrollHandle};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing, ListingId,
-    Order, Place, RecentFolder, Settings,
+    Order, Place, RecentFolder, RecentId, Settings,
 };
 
 use crate::band::Band;
@@ -138,12 +138,17 @@ pub struct MainWindow {
     /// Where to go, in order, while the window has no folder and the one
     /// asked for can't be read.
     fallbacks: Vec<PathBuf>,
+    /// Whether the folder asked for is a fallback, which nobody chose, so
+    /// it doesn't count as used.
+    pub(crate) falling_back: bool,
     pub(crate) places: Vec<Place>,
     /// Where the window has been, for Back and Forward.
     pub(crate) history: History,
     /// The recent folders the Start page shows, newest first, as the core
     /// last sent them (see `start`).
     pub(crate) recent: Vec<RecentFolder>,
+    /// The newest ask for the recent folders; only its answer counts.
+    pub(crate) recent_asked: RecentId,
     pub(crate) scroll: UniformListScrollHandle,
     /// Another app's request, while the window is its picker (see `pick`).
     pub(crate) pick: Option<Picker>,
@@ -169,11 +174,6 @@ impl MainWindow {
     /// Opens a window on `folder`.
     pub fn new(connector: &Connector, folder: &Path, cx: &mut Context<Self>) -> Self {
         Self::with_home(connector, folder, home_folder(), cx)
-    }
-
-    /// Opens a window on the Start page.
-    pub fn on_start(connector: &Connector, cx: &mut Context<Self>) -> Self {
-        Self::at(connector, &Location::Start, home_folder(), cx)
     }
 
     /// Opens a window on `folder` that falls back to `home` instead of the
@@ -245,10 +245,12 @@ impl MainWindow {
             next_listing: 0,
             // Popped from the end: home first, then the root.
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
+            falling_back: false,
             home,
             places: Vec::new(),
             history: History::default(),
             recent: Vec::new(),
+            recent_asked: RecentId(0),
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
