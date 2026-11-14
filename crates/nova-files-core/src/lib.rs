@@ -29,6 +29,7 @@ mod places;
 mod private_file;
 mod properties;
 mod run;
+mod saver;
 mod search;
 mod settings;
 mod theme;
