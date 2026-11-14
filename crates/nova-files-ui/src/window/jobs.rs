@@ -42,6 +42,36 @@ impl Jobs {
     pub fn last_undoable(&self) -> Option<JobId> {
         self.undoable.last().copied()
     }
+
+    /// A tag for the next job asked for, new each time.
+    const fn next_tag(&mut self) -> JobTag {
+        let tag = JobTag(self.next_tag);
+        self.next_tag = self.next_tag.wrapping_add(1);
+        tag
+    }
+
+    /// The core offers to undo `job`: kept when it is one of this
+    /// window's, running or offered before.
+    fn offered(&mut self, job: JobId) {
+        let before = self.undo_gone.len();
+        self.undo_gone.retain(|&gone| gone != job);
+        let offered_before = self.undo_gone.len() != before;
+        if offered_before || self.running.contains_key(&job) {
+            self.undoable.push(job);
+        }
+    }
+
+    /// The core no longer offers to undo `job`; it is kept, the newest
+    /// [`UNDO_KEPT`], in case it is offered again.
+    fn withdrawn(&mut self, job: JobId) {
+        let before = self.undoable.len();
+        self.undoable.retain(|&undoable| undoable != job);
+        if self.undoable.len() != before {
+            self.undo_gone.push(job);
+            let over = self.undo_gone.len().saturating_sub(UNDO_KEPT);
+            self.undo_gone.drain(..over);
+        }
+    }
 }
 
 impl MainWindow {
@@ -50,8 +80,7 @@ impl MainWindow {
         let Some(connection) = &self.connection else {
             return false;
         };
-        let tag = JobTag(self.jobs.next_tag);
-        self.jobs.next_tag += 1;
+        let tag = self.jobs.next_tag();
         let sent = connection
             .send(Command::StartJob {
                 tag,
@@ -72,28 +101,10 @@ impl MainWindow {
                     self.jobs.running.insert(job, operation);
                 }
             }
-            Event::Undoable { job, .. } => {
-                let gone = self.jobs.undo_gone.iter().position(|&gone| gone == job);
-                if let Some(gone) = gone {
-                    self.jobs.undo_gone.remove(gone);
-                }
-                if gone.is_some() || self.jobs.running.contains_key(&job) {
-                    self.jobs.undoable.push(job);
-                }
-            }
+            Event::Undoable { job, .. } => self.jobs.offered(job),
             Event::UndoGone(job) => {
-                let before = self.jobs.undoable.len();
-                self.jobs.undoable.retain(|&undoable| undoable != job);
-                if self.jobs.undoable.len() < before {
-                    self.jobs.undo_gone.push(job);
-                    let over = self.jobs.undo_gone.len().saturating_sub(UNDO_KEPT);
-                    self.jobs.undo_gone.drain(..over);
-                }
-                let named = |note: &island::Note| note.undo == Some(NoteUndo::Job(job));
-                if self.island.note.as_ref().is_some_and(named) {
-                    if let Some(note) = &mut self.island.note {
-                        note.undo = None;
-                    }
+                self.jobs.withdrawn(job);
+                if island::drop_undo(&mut self.island.note, job) {
                     cx.notify();
                 }
             }
@@ -144,11 +155,54 @@ impl MainWindow {
 
     /// How many of this window's jobs were asked for and haven't ended.
     pub fn jobs_pending(&self) -> usize {
-        self.jobs.asked.len() + self.jobs.running.len()
+        self.jobs
+            .asked
+            .len()
+            .saturating_add(self.jobs.running.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_job_asked_for_gets_its_own_tag() {
+        let mut jobs = Jobs::default();
+        assert_ne!(jobs.next_tag(), jobs.next_tag());
     }
 
-    /// The core has stopped: no job of this window will say more.
-    pub(super) fn jobs_gone(&mut self) {
-        self.jobs = Jobs::default();
+    #[test]
+    fn an_undo_withdrawn_comes_back_when_offered_again() {
+        let mut jobs = Jobs::default();
+        let (mine, other) = (JobId(1), JobId(2));
+        jobs.running.insert(mine, Operation::EmptyTrash);
+        jobs.offered(mine);
+        // Another window's job isn't this window's to undo.
+        jobs.offered(other);
+        assert_eq!(jobs.undoable, [mine]);
+
+        jobs.running.remove(&mine);
+        jobs.withdrawn(other);
+        assert_eq!(jobs.undo_gone, []);
+        jobs.withdrawn(mine);
+        assert_eq!(jobs.last_undoable(), None);
+        assert_eq!(jobs.undo_gone, [mine]);
+        jobs.offered(mine);
+        assert_eq!(jobs.undoable, [mine]);
+        assert_eq!(jobs.undo_gone, []);
+    }
+
+    #[test]
+    fn only_the_newest_withdrawn_undos_are_kept() {
+        let mut jobs = Jobs::default();
+        let count = u64::try_from(UNDO_KEPT).unwrap_or(u64::MAX) + 1;
+        for id in 0..count {
+            jobs.running.insert(JobId(id), Operation::EmptyTrash);
+            jobs.offered(JobId(id));
+            jobs.withdrawn(JobId(id));
+        }
+        assert_eq!(jobs.undo_gone.len(), UNDO_KEPT);
+        assert_eq!(jobs.undo_gone.first(), Some(&JobId(1)));
     }
 }

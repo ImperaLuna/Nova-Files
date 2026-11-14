@@ -13,7 +13,6 @@ use gpui::{
     ParentElement as _, Rgba, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
     div, point, prelude::FluentBuilder as _, px,
 };
-use nova_files_api::EntryKind;
 
 use super::row::icon;
 use crate::assets::Icon;
@@ -25,29 +24,6 @@ use crate::window::MainWindow;
 const UNDO_LABEL: &str = "Undo";
 
 impl MainWindow {
-    /// Works out the quiet count for the listing on screen, once per
-    /// listing, so a frame never walks a long folder.
-    pub(super) fn count_entries(&mut self) {
-        let Some(listing) = &self.listing else {
-            self.counted = None;
-            return;
-        };
-        if self
-            .counted
-            .as_ref()
-            .is_some_and(|(id, _)| *id == listing.id)
-        {
-            return;
-        }
-        let folders = listing
-            .entries
-            .iter()
-            .filter(|entry| entry.kind == EntryKind::Folder)
-            .count();
-        let files = listing.entries.len() - folders;
-        self.counted = Some((listing.id, island::quiet_count(folders, files).into()));
-    }
-
     /// The island, or the quiet count while the island is down.
     pub(super) fn island(&self, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
@@ -88,11 +64,7 @@ impl MainWindow {
     }
 
     fn quiet_count(&self, colors: &Colors) -> impl IntoElement {
-        let line = self
-            .counted
-            .as_ref()
-            .map(|(_, line)| line.clone())
-            .filter(|line| !line.is_empty());
+        let line = Some(self.counted.clone()).filter(|line| !line.is_empty());
         div().when_some(line, |slot, line| {
             slot.child(
                 div()

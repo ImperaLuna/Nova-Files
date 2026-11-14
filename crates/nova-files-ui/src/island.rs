@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use gpui::{SharedString, Task};
-use nova_files_api::{Command, Failure, JobId, Operation, Outcome};
+use nova_files_api::{Command, Entry, EntryKind, Failure, JobId, Operation, Outcome};
 
 /// How long a note stays up.
 pub const NOTE_TIME: Duration = Duration::from_secs(6);
@@ -27,8 +27,6 @@ pub struct Island {
     /// Takes the note down once [`NOTE_TIME`] has passed; replaced with
     /// each new note, which cancels the old one's.
     pub(crate) note_timer: Option<Task<()>>,
-    /// Counts notes, so a timer only takes down the note it was set for.
-    pub(crate) notes_shown: u64,
 }
 
 /// A line said after an action, maybe with a way to undo it.
@@ -36,8 +34,6 @@ pub struct Island {
 pub struct Note {
     pub label: SharedString,
     pub undo: Option<NoteUndo>,
-    /// Which note this is (see [`Island::notes_shown`]).
-    pub serial: u64,
 }
 
 /// What a note's Undo does.
@@ -48,6 +44,18 @@ pub enum NoteUndo {
     /// Send these commands to the core: for a change that isn't a job,
     /// such as taking a folder out of Places.
     Send(Vec<Command>),
+}
+
+/// Takes the Undo off `note` when it undoes `job`, which can no longer
+/// be undone. Whether it did.
+pub fn drop_undo(note: &mut Option<Note>, job: JobId) -> bool {
+    match note {
+        Some(note) if note.undo == Some(NoteUndo::Job(job)) => {
+            note.undo = None;
+            true
+        }
+        _ => false,
+    }
 }
 
 /// "1 item", "3 items".
@@ -95,6 +103,15 @@ pub fn selection_line(selected: usize, bytes: Option<u64>) -> (String, String) {
         |bytes| format!(" {SELECTED}{PART_GAP}{}", crate::columns::size(bytes)),
     );
     (selected.to_string(), rest)
+}
+
+/// The quiet count of `entries`: "4 folders, 9 files".
+pub fn count_of(entries: &[Entry]) -> String {
+    let folders = entries
+        .iter()
+        .filter(|entry| entry.kind == EntryKind::Folder)
+        .count();
+    quiet_count(folders, entries.len() - folders)
 }
 
 /// The quiet count under the list: "4 folders, 9 files"; empty for an
