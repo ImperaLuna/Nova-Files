@@ -121,18 +121,24 @@ real home. A bug fix comes with a test that fails without it.
 
 Work inside `nix develop`. `just` lists one command per job (`just test`,
 `just clippy nova-files-core`); most take an optional crate. Run
-`just check` (`nix flake check`) before every push. Run `just mutants` once
-per PR, after `just check` passes and before asking Codex for review; later
-fix rounds only rerun `just check`. CI runs both. Before every Codex
-request, review the whole PR diff yourself with the `/code-review` skill
-(high effort) and fix what it finds, and again after any fix that changes
-logic: Codex is the last check, not the first reviewer. For crash recovery,
-races and file operations, list the edge cases (a crash between steps, a
-link swapped in, two processes at once) and test them first. Paste the run's last line
-(`N mutants tested in ...: ...`) into the PR description: CI's mutation job
-fails at once without it, or when it reports missed or timed-out mutants. A mutant no test
-can ever catch goes in `exclude_re` in `.cargo/mutants.toml`, with a reason,
-through its own PR off main.
+`just check` (`nix flake check`) before every push. CI runs the mutation
+tests on the changed lines, split over up to four runners, and lists any
+missed mutants: add tests for them and push again. `just mutants` runs the
+same tests locally when you want them, but a PR doesn't need a local run. A
+mutant no test can ever catch goes in `exclude_re` in `.cargo/mutants.toml`,
+with a reason, through its own PR off main.
+
+Before asking Codex for review, review the whole PR diff yourself with the
+`/code-review` skill (high effort) and fix what it finds: Codex is the last
+check, not the first reviewer. For crash recovery, races and file
+operations, list the edge cases (a crash between steps, a link swapped in,
+two processes at once) and test them first. Ask Codex once per PR. Fix only
+findings that crash, lose or damage data, or that a user hits in normal
+use; answer the rest in their thread and resolve it, without a push.
+
+Scratch output (results, logs, traces, scripts, dumps) goes in
+`.claude/<ticket>/` inside this checkout, never in the home folder. Work in
+the one checkout of each repo; don't clone extra copies.
 
 Every change goes through a pull request. Push with `git push`, never
 through GitHub's file API, so the repo's pre-push hook runs (`nix develop`
@@ -144,8 +150,11 @@ Everything else goes in its own pull request off main.
 
 ## Review guidelines
 
-- Check the rules above, and look hardest for UI-thread blocking, races,
-  lost updates, missed file changes, data loss in file operations and
-  waits without a timeout.
-- Each finding names the steps that trigger it, and says when they're rare.
+- Check the rules above. Report only bugs that crash, lose or damage data,
+  or that a user hits in normal use, such as UI-thread blocking, lost
+  updates, missed file changes, data loss in file operations and waits
+  without a timeout.
+- A race that needs another program to act inside a narrow window goes in
+  the summary as a note, not as a finding.
+- Each finding names the steps that trigger it.
 - Don't flag ratios derived from theme values.
