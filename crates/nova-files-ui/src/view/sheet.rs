@@ -1,4 +1,5 @@
-//! The sheet the folder's entries sit on: the column heads, then the rows.
+//! The sheet the folder's entries sit on: the column heads, then the rows;
+//! on Start, the Start page instead (see `start`).
 //!
 //! The rows are a `uniform_list`, which builds only the rows on screen, so
 //! a folder of any size costs the same to draw. Each row is an icon and a
@@ -43,8 +44,16 @@ impl MainWindow {
             .px(size::SHEET_PAD)
             .bg(colors.sheet)
             .rounded_tl(radius::SHEET)
-            .child(column_heads(self.shown_order(), &colors, cx))
-            .child(self.entries_area(cx))
+            .map(|sheet| {
+                if self.is_on_start() {
+                    // The page runs to the sheet's edges, glow and all.
+                    sheet.px_0().child(self.start_page(cx))
+                } else {
+                    sheet
+                        .child(column_heads(self.shown_order(), &colors, cx))
+                        .child(self.entries_area(cx))
+                }
+            })
     }
 
     /// The entries, where a press that isn't on a name can drag a box

@@ -6,7 +6,8 @@
 //!
 //! Each part is drawn in a file of its own, so a feature changes only its
 //! part: the top bar in `bar`, the sidebar in `sidebar`, the sheet with its
-//! column heads and rows in `sheet`, and the pieces of one row in `row`.
+//! column heads and rows in `sheet`, the pieces of one row in `row`, and
+//! the Start page, drawn on the sheet in place of the rows, in `start`.
 //!
 //! The window sets the key context its actions are bound in and handles
 //! each action it takes; buttons and the mouse's side buttons send actions
@@ -23,6 +24,7 @@ mod bar;
 mod row;
 mod sheet;
 mod sidebar;
+mod start;
 
 use gpui::{
     Context, Div, Focusable as _, InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton,

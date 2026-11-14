@@ -116,3 +116,25 @@ fn going_to_start_drops_the_folder_on_its_way(cx: &mut TestAppContext) {
     });
     assert_eq!(recent_folders(&connector), Vec::<PathBuf>::new());
 }
+
+#[gpui::test]
+async fn a_recent_folder_card_opens_its_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("start-cards");
+    let projects = tree.path().join("Projects");
+    let (view, cx, _connector) = start_window(cx, tree.path());
+    view.update(cx, |view, _| view.open(&projects));
+    wait_for_folder(&view, cx, &projects).await;
+    view.update(cx, MainWindow::go_back);
+    view.condition::<WindowEvent>(cx, |view, _| !view.recent_folders().is_empty())
+        .await;
+    view.read_with(cx, |view, _| {
+        let newest = &view.recent_folders()[0];
+        assert_eq!(newest.path, projects);
+        assert_eq!(newest.entries, 1);
+    });
+    cx.run_until_parked();
+    let card = cx.debug_bounds("recent-0").unwrap();
+    cx.simulate_click(card.center(), Modifiers::none());
+    wait_for_folder(&view, cx, &projects).await;
+}

@@ -82,6 +82,7 @@ impl MainWindow {
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
+            Event::RecentFolders(recent) => self.recent_arrived(recent, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             // The window never searches, opens files, starts jobs or asks
             // for drives yet, and only a picker's opening asks for the
@@ -89,7 +90,6 @@ impl MainWindow {
             Event::FolderUnreadable { .. }
             | Event::Drives(_)
             | Event::DiskSpace(_)
-            | Event::RecentFolders(_)
             | Event::DriveDone { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
@@ -117,6 +117,10 @@ impl MainWindow {
             | Event::UndoGone(_) => {}
             Event::Places(places) => {
                 self.places = places;
+                // Start leaves out the places, which may have changed.
+                if self.is_on_start() {
+                    self.ask_for_recent();
+                }
                 cx.emit(WindowEvent::Places);
                 cx.notify();
             }

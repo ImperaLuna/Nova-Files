@@ -51,7 +51,7 @@ use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, Task, UniformListScrollHandle};
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing, ListingId,
-    Order, Place, Settings,
+    Order, Place, RecentFolder, Settings,
 };
 
 use crate::band::Band;
@@ -141,6 +141,9 @@ pub struct MainWindow {
     pub(crate) places: Vec<Place>,
     /// Where the window has been, for Back and Forward.
     pub(crate) history: History,
+    /// The recent folders the Start page shows, newest first, as the core
+    /// last sent them (see `start`).
+    pub(crate) recent: Vec<RecentFolder>,
     pub(crate) scroll: UniformListScrollHandle,
     /// Another app's request, while the window is its picker (see `pick`).
     pub(crate) pick: Option<Picker>,
@@ -245,6 +248,7 @@ impl MainWindow {
             home,
             places: Vec::new(),
             history: History::default(),
+            recent: Vec::new(),
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
