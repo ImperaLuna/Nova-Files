@@ -93,39 +93,56 @@ impl Render for MainWindow {
             .size_full()
             .flex()
             .flex_col()
-            .bg(colors.window)
+            // The sheet's color fills the window once, and the window's
+            // own color is painted only around the sheet: a software
+            // renderer pays for every layer it fills.
+            .bg(colors.sheet)
             .text_color(colors.text_soft)
             .font_family(text::FAMILY)
             .text_size(text::BODY)
             .font_weight(text::BODY_WEIGHT)
+            .child(self.body(narrow, &colors, cx))
+            .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
+            .children(self.menu_overlay(cx))
+    }
+}
+
+impl MainWindow {
+    /// The sidebar beside the bar and sheet; above them when `narrow`.
+    /// Only the strips around the sheet are painted the window's color.
+    fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {
+        div()
+            .flex()
+            .flex_1()
+            .min_h_0()
+            .when(narrow, gpui::Styled::flex_col)
             .child(
                 div()
                     .flex()
-                    .flex_1()
-                    .min_h_0()
+                    .flex_col()
+                    .flex_none()
+                    .px(size::GAP)
                     .pt(size::GAP)
-                    .pl(size::GAP)
-                    .map(|body| {
-                        if narrow {
-                            body.flex_col()
-                        } else {
-                            body.gap(size::GAP)
-                        }
-                    })
-                    .child(self.sidebar(narrow, cx))
+                    .bg(colors.window)
+                    .child(self.sidebar(narrow, cx)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_w_0()
+                    .min_h_0()
                     .child(
                         div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .min_w_0()
-                            .min_h_0()
-                            .child(self.top_bar(&colors))
-                            .child(self.sheet(cx)),
-                    ),
+                            .flex_none()
+                            .pt(size::GAP)
+                            .when(narrow, |bar| bar.pl(size::GAP))
+                            .bg(colors.window)
+                            .child(self.top_bar(colors)),
+                    )
+                    .child(self.sheet(cx)),
             )
-            .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
-            .children(self.menu_overlay(cx))
     }
 }
 
