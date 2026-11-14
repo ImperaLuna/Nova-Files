@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
+use crate::disk_space;
 use crate::drives::Store as DrivesStore;
 use crate::jobs::Client;
 use crate::measure::Measurer;
@@ -152,6 +153,10 @@ fn answer(
         | Command::AnswerConflict { .. }) => operations::answer(id, client, command, setup),
         Command::Drives => setup.drives.listen(id, client.events()),
         Command::Drive(action) => setup.drives.act(client.events(), action),
+        Command::DiskSpace(paths) => {
+            disk_space::answer(client.events(), paths);
+            Ok(())
+        }
         command @ (Command::Measure { .. } | Command::Space { .. } | Command::StopMeasure(_)) => {
             setup.measurer.answer(id, client.events(), command);
             Ok(())

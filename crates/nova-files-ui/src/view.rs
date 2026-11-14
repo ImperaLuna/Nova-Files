@@ -88,7 +88,10 @@ impl Render for MainWindow {
             .size_full()
             .flex()
             .flex_col()
-            .bg(colors.window)
+            // The sheet's color fills the window once, and the window's
+            // own color is painted only around the sheet: a software
+            // renderer pays for every layer it fills.
+            .bg(colors.sheet)
             .text_color(colors.text_soft)
             .font_family(text::FAMILY)
             .text_size(text::BODY)
@@ -98,17 +101,29 @@ impl Render for MainWindow {
                     .flex()
                     .flex_1()
                     .min_h_0()
-                    .gap(size::GAP)
-                    .pt(size::GAP)
-                    .pl(size::GAP)
-                    .child(self.sidebar(cx))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_none()
+                            .px(size::GAP)
+                            .pt(size::GAP)
+                            .bg(colors.window)
+                            .child(self.sidebar(cx)),
+                    )
                     .child(
                         div()
                             .flex()
                             .flex_col()
                             .flex_1()
                             .min_w_0()
-                            .child(self.top_bar(&colors, cx))
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .pt(size::GAP)
+                                    .bg(colors.window)
+                                    .child(self.top_bar(&colors, cx)),
+                            )
                             .child(self.sheet(cx)),
                     ),
             )
