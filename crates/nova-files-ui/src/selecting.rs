@@ -9,7 +9,8 @@
 //! keeps at most one selected whatever the keys; a main window picks
 //! anything.
 //!
-//! Letters typed in a main window jump to a name (see `jump`).
+//! Letters typed in a main window jump to a name (see `jump`), except
+//! while a rename's field takes them.
 //!
 //! When a listing arrives, a fresh read of the same folder keeps the
 //! selection by name; arriving in the folder that holds the one just left
@@ -136,7 +137,13 @@ impl MainWindow {
     /// (see `jump`). Whether it was taken.
     pub(crate) fn jump_typed(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
         let held = event.keystroke.modifiers;
-        if self.pick.is_some() || held.control || held.alt || held.platform || held.function {
+        if self.pick.is_some()
+            || self.renaming()
+            || held.control
+            || held.alt
+            || held.platform
+            || held.function
+        {
             return false;
         }
         let Some(typed) = event.keystroke.key_char.as_deref() else {

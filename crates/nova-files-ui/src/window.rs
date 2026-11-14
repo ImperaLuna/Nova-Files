@@ -2,8 +2,8 @@
 //! the right, and an Up button. This file holds the window's state and
 //! opening it; the work is split by area: going places in `navigate`, the
 //! core's events in `events`, the rows on screen in `rows`, acting on the
-//! files selected in `acting` and `clipboard`, and the jobs that does in
-//! `jobs`. Drawing
+//! files selected in `acting` and `clipboard`, renaming and New folder
+//! in `renaming`, and the jobs they start in `jobs`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -38,6 +38,7 @@ mod clipboard;
 mod events;
 mod jobs;
 mod navigate;
+mod renaming;
 mod rows;
 
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
@@ -65,6 +66,7 @@ use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
 use jobs::Jobs;
+use renaming::{Renaming, Wanted};
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
 /// which is never too small.
@@ -159,6 +161,13 @@ pub struct MainWindow {
     /// The quiet count of the listing it was worked out for (see
     /// `view::island`).
     pub(crate) counted: Option<(ListingId, SharedString)>,
+    /// The rename under way (see `renaming`).
+    renaming: Option<Renaming>,
+    /// The entry to select once a listing holds it, after a rename or a
+    /// new folder.
+    wanted: Option<Wanted>,
+    /// Start renaming what is selected when the window next draws.
+    rename_next_frame: bool,
     _events: Task<()>,
 }
 
@@ -246,6 +255,9 @@ impl MainWindow {
             island: Island::default(),
             jobs: Jobs::default(),
             counted: None,
+            renaming: None,
+            wanted: None,
+            rename_next_frame: false,
             _events: events,
         };
         window.open(folder);

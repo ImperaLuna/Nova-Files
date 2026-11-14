@@ -6,7 +6,7 @@
 //! Its buttons send the window's actions, as keys do (see `commands`);
 //! only closing a note, which no key does, is handled here. Each part a
 //! test clicks carries a debug selector: `island`, `island-copy`,
-//! `island-cut`, `island-trash`, `island-clear`, `island-undo`,
+//! `island-cut`, `island-rename`, `island-trash`, `island-clear`, `island-undo`,
 //! `island-dismiss`, `island-progress`, `island-cancel`, and the count, `count`.
 
 use gpui::{
@@ -18,7 +18,9 @@ use nova_files_api::EntryKind;
 
 use super::row::icon;
 use crate::assets::Icon;
-use crate::commands::{ClearSelection, CopySelected, CutSelected, TrashSelected, Undo};
+use crate::commands::{
+    ClearSelection, CopySelected, CutSelected, RenameSelected, TrashSelected, Undo,
+};
 use crate::island::progress::Running;
 use crate::island::{self, Note};
 use crate::theme::{Colors, radius, size, text};
@@ -71,10 +73,12 @@ impl MainWindow {
         )
     }
 
-    /// "3 selected · 12 MB", then Copy, Cut, Move to Trash and Clear.
+    /// "3 selected · 12 MB", then Copy, Cut, Rename (for one), Move to
+    /// Trash and Clear.
     fn selection_parts(&self, colors: &Colors) -> Vec<gpui::AnyElement> {
-        let (number, rest) = island::selection_line(self.selected_count(), self.selected_bytes());
-        vec![
+        let count = self.selected_count();
+        let (number, rest) = island::selection_line(count, self.selected_bytes());
+        let mut parts = vec![
             label(colors)
                 .child(
                     div()
@@ -86,10 +90,19 @@ impl MainWindow {
                 .into_any_element(),
             icon_button("island-copy", Icon::Copy, &CopySelected, colors).into_any_element(),
             icon_button("island-cut", Icon::Cut, &CutSelected, colors).into_any_element(),
+        ];
+        if count == 1 {
+            parts.push(
+                icon_button("island-rename", Icon::Rename, &RenameSelected, colors)
+                    .into_any_element(),
+            );
+        }
+        parts.extend([
             icon_button("island-trash", Icon::Trash, &TrashSelected, colors).into_any_element(),
             divider(colors).into_any_element(),
             icon_button("island-clear", Icon::Close, &ClearSelection, colors).into_any_element(),
-        ]
+        ]);
+        parts
     }
 
     fn quiet_count(&self, colors: &Colors) -> impl IntoElement {

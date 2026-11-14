@@ -37,7 +37,9 @@ use crate::commands::{
     CursorUp, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown, SelectFirst,
     SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
 };
-use crate::commands::{CopySelected, CutSelected, Paste, TrashSelected, Undo};
+use crate::commands::{
+    CopySelected, CutSelected, NewFolder, Paste, RenameSelected, TrashSelected, Undo,
+};
 use crate::selection::Move;
 use crate::theme::{Colors, size, text};
 use crate::window::MainWindow;
@@ -46,6 +48,7 @@ impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
         self.count_entries();
+        self.start_wanted_rename(window, cx);
         let colors = Colors::of(cx);
         // Keys always land somewhere: in a main window on the window
         // itself, which a click inside takes focus back to; in a picker in
@@ -149,6 +152,10 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &Paste, _, cx| this.paste(cx)))
             .on_action(cx.listener(|this, _: &TrashSelected, _, _| this.trash_selected()))
             .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
+            .on_action(cx.listener(|this, _: &RenameSelected, window, cx| {
+                this.start_rename(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &NewFolder, _, _| this.new_folder()))
     }
 
     /// The selection's actions on the window's root (see `selecting`).

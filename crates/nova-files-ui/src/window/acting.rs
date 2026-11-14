@@ -64,6 +64,10 @@ impl MainWindow {
     /// Undoes what the note names, or else this window's newest job that
     /// can still be undone.
     pub(crate) fn undo(&mut self, cx: &mut Context<Self>) {
+        // In a rename's field, Ctrl+Z is the field's.
+        if self.renaming() {
+            return;
+        }
         let undo = self
             .island
             .note

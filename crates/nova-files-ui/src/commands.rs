@@ -48,6 +48,8 @@ mod actions {
             CutSelected,
             Paste,
             TrashSelected,
+            RenameSelected,
+            NewFolder,
             Undo,
         ]
     );
@@ -112,6 +114,8 @@ pub const ACTIONS: &[ActionSpec] = &[
     CUT,
     PASTE,
     TRASH,
+    RENAME,
+    NEW_FOLDER,
     UNDO,
 ];
 
@@ -229,6 +233,14 @@ spec!(
     "file.trash",
     "Move to Trash",
     ["delete"]
+);
+spec!(
+    /// Renames the one entry selected, in place.
+    RENAME, RenameSelected, "file.rename", "Rename", ["f2"]
+);
+spec!(
+    /// Makes a new folder in the folder on screen and renames it.
+    NEW_FOLDER, NewFolder, "file.new-folder", "New folder", ["ctrl-shift-n"]
 );
 spec!(
     /// Undoes what the island's note names, or else the window's last
