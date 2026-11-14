@@ -8,8 +8,8 @@ use std::ops::Range;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
-/// The home folder's short form.
-const HOME: &str = "~";
+use crate::location::HOME_MARK;
+
 /// What separates folders in a typed path.
 const SEPARATOR: char = '/';
 /// What starts an extension.
@@ -43,7 +43,7 @@ pub fn read(text: &str, home: &Path, folder: &Path) -> Typed {
     if text.is_empty() {
         return Typed::Nothing;
     }
-    let expanded = match text.strip_prefix(HOME) {
+    let expanded = match text.strip_prefix(HOME_MARK) {
         Some("") => return Typed::Folder(home.to_path_buf()),
         Some(rest) if rest.starts_with(SEPARATOR) => home.join(rest.trim_start_matches(SEPARATOR)),
         _ if text.contains(SEPARATOR) || DOT_FOLDERS.contains(&text) => folder.join(text),

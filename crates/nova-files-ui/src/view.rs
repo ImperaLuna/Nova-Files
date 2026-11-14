@@ -9,8 +9,9 @@
 //!
 //! Each part is drawn in a file of its own, so a feature changes only its
 //! part: the top bar in `bar`, the sidebar in `sidebar`, the sheet with its
-//! column heads and rows in `sheet`, and the pieces of one row in `row`, and a
-//! right-click menu in `menu`.
+//! column heads and rows in `sheet`, the pieces of one row in `row`, a
+//! right-click menu in `menu`, and the Start page, drawn on the sheet in
+//! place of the rows, in `start`.
 //!
 //! The window sets the key context its actions are bound in and handles
 //! each action it takes; buttons and the mouse's side buttons send actions
@@ -28,6 +29,7 @@ mod menu;
 mod row;
 mod sheet;
 mod sidebar;
+mod start;
 
 use gpui::{
     Context, Div, Focusable as _, InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton,
@@ -64,8 +66,8 @@ impl Render for MainWindow {
             .key_context(commands::KEY_CONTEXT)
             .when(main, |root| root.track_focus(&self.focus))
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
-            .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
-            .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
+            .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
+            .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .map(|root| Self::selection_keys(root, cx))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if this.jump_typed(event, cx) {
@@ -84,11 +86,11 @@ impl Render for MainWindow {
             )
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),
-                cx.listener(|this, _: &MouseDownEvent, _, _| this.go_back()),
+                cx.listener(|this, _: &MouseDownEvent, _, cx| this.go_back(cx)),
             )
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Forward),
-                cx.listener(|this, _: &MouseDownEvent, _, _| this.go_forward()),
+                cx.listener(|this, _: &MouseDownEvent, _, cx| this.go_forward(cx)),
             )
             .size_full()
             .flex()

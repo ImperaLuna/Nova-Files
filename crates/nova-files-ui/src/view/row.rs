@@ -119,10 +119,13 @@ pub fn entry_icon(
                 .size(size::THUMBNAIL)
                 .rounded(radius::SMALL),
         ),
-        (None, EntryKind::Folder) => slot.child(icon(Icon::Folder, size::ROW_ICON, colors.folder)),
-        (None, EntryKind::File) => slot
-            .child(icon(Icon::File, size::ROW_ICON, colors.text_soft))
-            .child(
+        (None, EntryKind::Folder) => {
+            let (glyph, tint) = kind_glyph(EntryKind::Folder, colors);
+            slot.child(icon(glyph, size::ROW_ICON, tint))
+        }
+        (None, EntryKind::File) => {
+            let (glyph, tint) = kind_glyph(EntryKind::File, colors);
+            slot.child(icon(glyph, size::ROW_ICON, tint)).child(
                 div()
                     .absolute()
                     .left(size::TAG_LEFT)
@@ -131,7 +134,16 @@ pub fn entry_icon(
                     .h(size::TAG_HEIGHT)
                     .rounded_full()
                     .bg(FileKind::of(name).tag(colors.tags)),
-            ),
+            )
+        }
+    }
+}
+
+/// The icon and tint an entry of `kind` is drawn with.
+pub const fn kind_glyph(kind: EntryKind, colors: &Colors) -> (Icon, Rgba) {
+    match kind {
+        EntryKind::Folder => (Icon::Folder, colors.folder),
+        EntryKind::File => (Icon::File, colors.text_soft),
     }
 }
 
