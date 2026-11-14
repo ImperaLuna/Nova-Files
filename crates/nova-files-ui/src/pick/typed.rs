@@ -9,7 +9,7 @@ use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
 /// The home folder's short form.
-const HOME: &str = "~";
+pub const HOME: &str = "~";
 /// What separates folders in a typed path.
 const SEPARATOR: char = '/';
 /// What starts an extension.

@@ -37,6 +37,7 @@ impl MainWindow {
             self.band = None;
         }
         self.pick_folder_opened(reordered, cx);
+        self.typed_path_arrived(same_folder);
         if (!same_folder || reordered)
             && let Some(cursor) = self.cursor()
         {
@@ -68,6 +69,7 @@ impl MainWindow {
                     Some(_) => {}
                 }
                 self.pick_folder_refused(id, &path);
+                self.typed_path_refused(id, cx);
                 cx.emit(WindowEvent::Refused(path));
                 // Back or Forward may have nowhere left to go.
                 cx.notify();

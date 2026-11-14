@@ -9,12 +9,14 @@
 //!
 //! The crumbs sit at the bar's right end of their own box, so a narrow
 //! window cuts the root side off and keeps the folder on screen in view.
-//! The empty part of the bar after them is kept free; a feature's button
-//! (search scope, Empty Trash) goes after it, at the bar's right end.
+//! The empty part of the bar after them always shows; a click there turns
+//! the bar into a text field to type a path in (see `path_bar`). A
+//! feature's button (search scope, Empty Trash) goes after it, at the
+//! bar's right end.
 //!
 //! Debug selectors: `crumb-<n>` for each crumb, counted from the root
 //! whether shown or folded, `arrow-<n>` for the arrow after it, and
-//! `crumb-more` for the "…" crumb.
+//! `crumb-more` for the "…" crumb, and `path-fill` for the empty part.
 
 use std::path::PathBuf;
 
@@ -37,6 +39,23 @@ const FOLDED_LABEL: &str = "…";
 
 impl MainWindow {
     pub(super) fn path_bar(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
+        let bar = capsule(colors)
+            .debug_selector(|| "path".to_owned())
+            .flex_1()
+            .min_w(size::PATH_MIN_WIDTH)
+            .px(size::CAPSULE_PAD);
+        if let Some(typing) = &self.path_bar.field {
+            return bar.child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .px(size::PATH_FIELD_PAD)
+                    .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                        this.stop_typing_path(Some(window), cx);
+                    }))
+                    .child(typing.field.clone()),
+            );
+        }
         let crumbs = self.crumbs();
         let mut row = div()
             .flex()
@@ -62,13 +81,17 @@ impl MainWindow {
                 }
             }
         }
-        capsule(colors)
-            .debug_selector(|| "path".to_owned())
+        let fill = div()
+            .id("path-fill")
+            .debug_selector(|| "path-fill".to_owned())
             .flex_1()
-            .min_w(size::PATH_MIN_WIDTH)
-            .px(size::CAPSULE_PAD)
-            .child(row)
-            .child(div().flex_1().self_stretch().min_w(size::PATH_FILL_MIN))
+            .self_stretch()
+            .min_w(size::PATH_FILL_MIN)
+            .cursor_text()
+            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                this.start_typing_path(window, cx);
+            }));
+        bar.child(row).child(fill)
     }
 
     /// The crumbs of the folder on screen; none before one arrives.

@@ -29,9 +29,10 @@ mod sidebar;
 pub use sidebar::place_icon;
 
 use gpui::{
-    Context, Div, Focusable as _, InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection, ParentElement as _, Render,
-    ScrollWheelEvent, Styled as _, Window, div, prelude::FluentBuilder as _,
+    App, Context, Div, FocusHandle, Focusable as _, InteractiveElement as _, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection,
+    ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::commands::{
@@ -47,16 +48,10 @@ impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
         let colors = Colors::of(cx);
-        // Keys always land somewhere: in a main window on the window
-        // itself, which a click inside takes focus back to; in a picker in
-        // its name box, whose keys pass the window's on.
+        // Keys always land somewhere (see `keys_home`).
         let main = self.pick.is_none();
         if window.focused(cx).is_none() {
-            let focus = self.pick.as_ref().map_or_else(
-                || self.focus.clone(),
-                |pick| pick.name.read(cx).focus_handle(cx),
-            );
-            window.focus(&focus, cx);
+            window.focus(&self.keys_home(cx), cx);
         }
         div()
             .key_context(commands::KEY_CONTEXT)
@@ -65,8 +60,9 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
             .map(|root| Self::selection_keys(root, cx))
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                if this.jump_typed(event, cx) {
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                // Letters typed into a text field are the field's.
+                if this.focus.is_focused(window) && this.jump_typed(event, cx) {
                     cx.stop_propagation();
                 }
             }))
@@ -120,6 +116,16 @@ impl Render for MainWindow {
 }
 
 impl MainWindow {
+    /// Where the keys go when nothing else holds them: in a main window
+    /// the window itself, which a click inside takes focus back to; in a
+    /// picker its name box, whose keys pass the window's on.
+    pub fn keys_home(&self, cx: &App) -> FocusHandle {
+        self.pick.as_ref().map_or_else(
+            || self.focus.clone(),
+            |pick| pick.name.read(cx).focus_handle(cx),
+        )
+    }
+
     /// The selection's actions on the window's root (see `selecting`).
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &OpenSelected, _, _| this.open_selected()))

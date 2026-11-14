@@ -4,6 +4,7 @@
 //! and a narrow window keeping the folder on screen in view.
 
 use gpui::{px, size};
+use nova_files_ui::TextField;
 
 use super::*;
 
@@ -186,4 +187,142 @@ async fn a_narrow_window_keeps_the_folder_on_screen_in_view(cx: &mut TestAppCont
     assert!(here.left() >= path.left() && here.right() <= path.right());
     // The root side gives way first.
     assert!(home.left() < path.left());
+}
+
+/// [`path_window`], with the window's and the text field's keys bound.
+async fn typing_window<'a>(
+    cx: &'a mut TestAppContext,
+    tree: &TempFolder,
+    folder: &Path,
+) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
+    cx.update(|cx| {
+        nova_files_ui::bind_window_keys(cx);
+        nova_files_ui::bind_text_keys(cx);
+    });
+    path_window(cx, tree, folder).await
+}
+
+/// The path bar's text field, if it is one.
+fn path_field(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Option<Entity<TextField>> {
+    view.read_with(cx, |view, _| view.path_field().cloned())
+}
+
+/// The path bar's text and its selection.
+fn typed(view: &Entity<MainWindow>, cx: &VisualTestContext) -> (String, std::ops::Range<usize>) {
+    let field = path_field(view, cx).unwrap();
+    field.read_with(cx, |field, _| (field.text().to_owned(), field.selection()))
+}
+
+#[gpui::test]
+async fn a_click_on_the_empty_bar_types_a_path_from_the_folder_on_screen(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = typing_window(cx, &tree, &projects).await;
+
+    click(cx, "path-fill");
+    assert_eq!(typed(&view, cx), ("~/Projects".to_owned(), 0..10));
+    assert!(!drawn(cx, "crumb-0"));
+    // Letters go to the field, not to the list's type to jump.
+    cx.simulate_input("nova");
+    cx.simulate_keystrokes("enter");
+    wait_for_folder(&view, cx, &projects.join("nova")).await;
+    cx.run_until_parked();
+    assert!(path_field(&view, cx).is_none());
+    assert!(drawn(cx, "crumb-2"));
+}
+
+#[gpui::test]
+async fn a_typed_tilde_or_full_path_goes_there(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = typing_window(cx, &tree, &projects).await;
+
+    click(cx, "path-fill");
+    cx.simulate_input("~");
+    cx.simulate_keystrokes("enter");
+    wait_for_folder(&view, cx, tree.path()).await;
+
+    click(cx, "path-fill");
+    let nova = projects.join("nova");
+    cx.simulate_input(nova.to_str().unwrap());
+    cx.simulate_keystrokes("enter");
+    wait_for_folder(&view, cx, &nova).await;
+}
+
+#[gpui::test]
+async fn a_folder_that_cant_be_read_keeps_the_text_selected(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let (view, cx) = typing_window(cx, &tree, tree.path()).await;
+
+    click(cx, "path-fill");
+    cx.simulate_input("missing");
+    cx.simulate_keystrokes("enter");
+    view.condition::<WindowEvent>(cx, |view, _| !view.waiting())
+        .await;
+    cx.run_until_parked();
+    assert_eq!(typed(&view, cx), ("missing".to_owned(), 0..7));
+    assert_eq!(
+        view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf)),
+        Some(tree.path().to_path_buf())
+    );
+}
+
+#[gpui::test]
+async fn escape_or_enter_on_the_same_path_puts_the_crumbs_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = typing_window(cx, &tree, &projects).await;
+
+    click(cx, "path-fill");
+    cx.simulate_input("nova");
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(path_field(&view, cx).is_none());
+    // The window has the keys again: Backspace goes back up.
+    cx.simulate_keystrokes("alt-up");
+    wait_for_folder(&view, cx, tree.path()).await;
+
+    click(cx, "path-fill");
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert!(path_field(&view, cx).is_none());
+    assert!(!view.read_with(cx, |view, _| view.waiting()));
+}
+
+#[gpui::test]
+async fn typing_the_folder_on_screen_reads_it_again_and_puts_the_crumbs_back(
+    cx: &mut TestAppContext,
+) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let (view, cx) = typing_window(cx, &tree, tree.path()).await;
+
+    click(cx, "path-fill");
+    cx.simulate_input(".");
+    cx.simulate_keystrokes("enter");
+    view.condition::<WindowEvent>(cx, |view, _| view.path_field().is_none())
+        .await;
+}
+
+#[gpui::test]
+async fn going_elsewhere_or_clicking_away_puts_the_crumbs_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = typing_window(cx, &tree, &projects).await;
+
+    click(cx, "path-fill");
+    cx.simulate_keystrokes("alt-up");
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+    assert!(path_field(&view, cx).is_none());
+
+    click(cx, "path-fill");
+    click(cx, "entry-1");
+    cx.run_until_parked();
+    assert!(path_field(&view, cx).is_none());
 }
