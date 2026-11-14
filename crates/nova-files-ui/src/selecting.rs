@@ -108,13 +108,34 @@ impl MainWindow {
     /// Moves the cursor as `step` says and selects the row it lands on,
     /// or with `extend` the range from the anchor to it.
     pub(crate) fn move_cursor(&mut self, step: Move, extend: bool, cx: &mut Context<Self>) {
+        self.move_cursor_to(self.cursor(), step, extend, cx);
+    }
+
+    /// Moves as `step` says from row `from` rather than the cursor, and
+    /// selects the row it lands on alone.
+    pub(crate) fn move_cursor_from(
+        &mut self,
+        from: Option<usize>,
+        step: Move,
+        cx: &mut Context<Self>,
+    ) {
+        self.move_cursor_to(from, step, false, cx);
+    }
+
+    fn move_cursor_to(
+        &mut self,
+        from: Option<usize>,
+        step: Move,
+        extend: bool,
+        cx: &mut Context<Self>,
+    ) {
         let Some(listing) = self.listing_id() else {
             return;
         };
         let len = self.entry_count();
         let page = self.rows_on_screen();
         let Some(to) = step
-            .to(self.cursor(), len, page)
+            .to(from, len, page)
             .and_then(|to| u32::try_from(to).ok())
         else {
             return;

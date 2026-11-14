@@ -48,7 +48,7 @@ impl Render for MainWindow {
         self.set_scale_factor(scale_factor, window, cx);
         let viewport = window.viewport_size();
         let room = preview::room(viewport.width, viewport.height);
-        self.set_preview_room(room, scale_factor);
+        self.set_preview_room(room, scale_factor, cx);
         let colors = Colors::of(cx);
         // Keys always land somewhere: in a main window on the window
         // itself, which a click inside takes focus back to; in a picker in
@@ -185,21 +185,26 @@ impl MainWindow {
     }
 
     /// The quick look's actions on the window's root (see
-    /// `window::preview`). A space typed inside a name being jumped to
-    /// stays part of the name.
+    /// `window::preview`). A key it doesn't take goes on as typed: a space
+    /// inside a name being jumped to stays part of the name, and in a
+    /// picker Space and the arrows edit its name box.
     fn preview_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &TogglePreview, window, cx| {
-            if this.jumping(cx) {
+            if this.pick.is_some() || this.jumping(cx) {
                 cx.propagate();
             } else {
                 this.toggle_preview(window, cx);
             }
         }))
         .on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
-            this.step_preview(Move::Up, cx);
+            if !this.step_preview(Move::Up, cx) {
+                cx.propagate();
+            }
         }))
         .on_action(cx.listener(|this, _: &PreviewNext, _, cx| {
-            this.step_preview(Move::Down, cx);
+            if !this.step_preview(Move::Down, cx) {
+                cx.propagate();
+            }
         }))
     }
 }

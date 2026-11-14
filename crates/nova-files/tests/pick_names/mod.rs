@@ -152,3 +152,20 @@ async fn a_suggestion_typed_over_means_what_was_typed(cx: &mut TestAppContext) {
         Some(picked(tree.path().join("caf\u{fffd}.txt")))
     );
 }
+
+#[gpui::test]
+async fn a_space_typed_into_the_name_stays_in_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    fs::write(tree.path().join("a b.txt"), "").unwrap();
+    // With the main window's keys too: Space is also the quick look's.
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
+    cx.simulate_keystrokes("a space");
+    cx.simulate_input("b.txt");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join("a b.txt")))
+    );
+}

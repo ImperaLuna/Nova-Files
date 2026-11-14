@@ -120,10 +120,12 @@ impl MainWindow {
     /// [`Self::preview_follow_cursor`]). Whether the quick look was open to
     /// take it.
     pub(crate) fn step_preview(&mut self, step: Move, cx: &mut Context<Self>) -> bool {
-        if self.quick_looks.open.is_none() {
+        let Some(open) = &self.quick_looks.open else {
             return false;
-        }
-        self.move_cursor(step, false, cx);
+        };
+        // From the entry shown, which may not be where the cursor was.
+        let shown = usize::try_from(open.entry.0).ok();
+        self.move_cursor_from(shown, step, cx);
         true
     }
 
@@ -186,13 +188,35 @@ impl MainWindow {
     }
 
     /// The room the quick look has this frame, `scale_factor` device
-    /// pixels to a pixel.
-    pub(crate) fn set_preview_room(&mut self, room: Size<Pixels>, scale_factor: f32) {
+    /// pixels to a pixel. When it changes under a picture, the picture is
+    /// asked for again at the new size; the old one stays until it comes.
+    pub(crate) fn set_preview_room(
+        &mut self,
+        room: Size<Pixels>,
+        scale_factor: f32,
+        cx: &mut Context<Self>,
+    ) {
         let device = |side: Pixels| crate::thumbnail::device_side(side, scale_factor);
-        self.quick_looks.fit = Some(Fit {
+        let fit = Some(Fit {
             width: device(room.width),
             height: device(room.height),
         });
+        if self.quick_looks.fit == fit {
+            return;
+        }
+        self.quick_looks.fit = fit;
+        let Some(open) = self.quick_looks.open.take() else {
+            return;
+        };
+        let picture = open
+            .shown
+            .as_ref()
+            .is_some_and(|shown| shown.entry == open.entry && shown.picture.is_some());
+        if picture {
+            self.preview_entry(open.listing, open.entry, open.shown, cx);
+        } else {
+            self.quick_looks.open = Some(open);
+        }
     }
 
     /// Shows entry `entry` of listing `listing`, keeping `shown` on screen

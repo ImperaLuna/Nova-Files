@@ -248,3 +248,21 @@ async fn a_fresh_read_shows_the_file_as_it_is_now(cx: &mut TestAppContext) {
     })
     .await;
 }
+
+#[gpui::test]
+async fn stepping_starts_from_the_entry_shown(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview");
+    let (view, cx) = with_text(cx, &tree).await;
+
+    // Projects selected, the cursor left on notes.txt, which isn't.
+    click(cx, "entry-0");
+    click_with(cx, "entry-2", Modifiers::control());
+    click_with(cx, "entry-2", Modifiers::control());
+    assert_eq!(selected(&view, cx), ["Projects"]);
+    cx.simulate_keystrokes("space");
+    wait_for_preview(&view, cx, "Projects").await;
+    cx.simulate_keystrokes("right");
+    wait_for_preview(&view, cx, "a.txt").await;
+    assert_eq!(selected(&view, cx), ["a.txt"]);
+}
