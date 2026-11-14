@@ -21,7 +21,7 @@ exclude_re = [
     # Dropping a client cancels its listing, for the same reason.
     "replace <impl Drop for Client>::drop with \\(\\)",
     # Only changes a highlight color; tests can't read colors back.
-    "nova-files-ui/src/view\\.rs:.*replace == with != in MainWindow::places_column",
+    "nova-files-ui/src/view/sidebar\\.rs:.*replace == with != in MainWindow::sidebar",
     # Open windows, so they need a display.
     "\\bshow_windows\\b",
     "nova-files-ui/src/lib\\.rs:.*\\brun\\b",
@@ -32,13 +32,13 @@ exclude_re = [
     "\\bwatch_core\\b",
     # Drops thumbnails from GPUI's image atlas (FIL-70), which no test can
     # read; the ShownThumbnails tests cover which images get dropped.
-    "nova-files-ui/src/window\\.rs:.*replace release with \\(\\)",
+    "nova-files-ui/src/window/rows\\.rs:.*replace release with \\(\\)",
     # The text field's selection (FIL-36): when its two ends meet, which
     # end is the caret makes no difference, so `<=` here is the same code.
     "nova-files-ui/src/text/edit\\.rs:.*replace < with <= in TextEdit::select_range",
     # Only changes which row a picker highlights (FIL-36); the picker tests
     # check the selection itself.
-    "nova-files-ui/src/view\\.rs:.*replace == with != in MainWindow::entries",
+    "nova-files-ui/src/view/sheet\\.rs:.*replace == with != in MainWindow::entries",
     # The trash (FIL-21). A folder sync only matters across a power cut.
     "nova-files-core/src/ops/sync\\.rs:.*replace sync_folders with \\(\\)",
     # Only picks what is logged when a leftover can't be removed.
