@@ -9,7 +9,8 @@
 //!
 //! Each part is drawn in a file of its own, so a feature changes only its
 //! part: the top bar in `bar`, the sidebar in `sidebar`, the sheet with its
-//! column heads and rows in `sheet`, and the pieces of one row in `row`.
+//! column heads and rows in `sheet`, and the pieces of one row in `row`, and a
+//! right-click menu in `menu`.
 //!
 //! The window sets the key context its actions are bound in and handles
 //! each action it takes; buttons and the mouse's side buttons send actions
@@ -23,6 +24,7 @@
 //! `path`, `search` and `views`.
 
 mod bar;
+mod menu;
 mod row;
 mod sheet;
 mod sidebar;
@@ -123,6 +125,7 @@ impl Render for MainWindow {
                     ),
             )
             .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
+            .children(self.menu_overlay(cx))
     }
 }
 

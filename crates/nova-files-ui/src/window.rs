@@ -1,6 +1,6 @@
 //! The main window: the places on the left, the open folder's entries on
 //! the right, and an Up button. This file holds the window's state and
-//! opening it; the work is split by area: going places in `navigate`, the
+//! opening it; the work is split by area: going places in `navigate`, pinning folders in `pin`, the
 //! core's events in `events`, and the rows on screen in `rows`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
@@ -33,6 +33,7 @@
 
 mod events;
 mod navigate;
+mod pin;
 mod rows;
 
 pub use navigate::tidy;
@@ -53,6 +54,7 @@ use nova_files_api::{
 use crate::band::Band;
 use crate::history::History;
 use crate::jump::TypeJump;
+use crate::menu::Menu;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
@@ -90,6 +92,8 @@ pub enum WindowEvent {
 
 pub struct MainWindow {
     status: CoreStatus,
+    /// What connects to the core, for the windows this one opens.
+    connector: Connector,
     /// Held so the core counts this window until it closes.
     pub(crate) connection: Option<Connection>,
     /// The folder on screen, once its first listing has arrived.
@@ -143,6 +147,8 @@ pub struct MainWindow {
     pub(crate) home: PathBuf,
     /// The settings as the core last sent them.
     settings: Settings,
+    /// The menu open over the window, if any (see `menu`).
+    pub(crate) menu: Option<Menu>,
     /// Focus for the window's own keys (see `commands`).
     pub(crate) focus: FocusHandle,
     _events: Task<()>,
@@ -201,6 +207,7 @@ impl MainWindow {
                 .ok();
         });
         let mut window = Self {
+            connector: connector.clone(),
             status,
             connection,
             listing: None,
@@ -229,6 +236,7 @@ impl MainWindow {
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
+            menu: None,
             focus: cx.focus_handle(),
             _events: events,
         };

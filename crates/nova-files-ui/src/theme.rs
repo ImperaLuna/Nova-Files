@@ -300,6 +300,11 @@ pub mod size {
     /// A row in a menu.
     pub const MENU_ROW_HEIGHT: Pixels = px(32.0);
     pub const MENU_PAD: Pixels = px(5.0);
+    pub const MENU_ICON: Pixels = px(16.0);
+    pub const MENU_MIN_WIDTH: Pixels = px(210.0);
+    /// The button on a sidebar section's head, and its icon.
+    pub const SECTION_BUTTON: Pixels = px(24.0);
+    pub const SECTION_BUTTON_ICON: Pixels = px(15.0);
     /// The widest the type filter's button gets; a longer name is cut.
     pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
     /// The tallest the type menu gets before it scrolls.

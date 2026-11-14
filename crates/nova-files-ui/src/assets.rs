@@ -29,10 +29,12 @@ pub enum Icon {
     Search,
     List,
     Tiles,
+    Plus,
+    Close,
 }
 
 impl Icon {
-    const ALL: [Self; 17] = [
+    const ALL: [Self; 19] = [
         Self::Folder,
         Self::File,
         Self::Home,
@@ -50,6 +52,8 @@ impl Icon {
         Self::Search,
         Self::List,
         Self::Tiles,
+        Self::Plus,
+        Self::Close,
     ];
 
     /// The path GPUI asks the asset source for.
@@ -72,6 +76,8 @@ impl Icon {
             Self::Search => "icons/search.svg",
             Self::List => "icons/list.svg",
             Self::Tiles => "icons/tiles.svg",
+            Self::Plus => "icons/plus.svg",
+            Self::Close => "icons/close.svg",
         }
     }
 
@@ -94,6 +100,8 @@ impl Icon {
             Self::Search => svg::SEARCH,
             Self::List => svg::LIST,
             Self::Tiles => svg::TILES,
+            Self::Plus => svg::PLUS,
+            Self::Close => svg::CLOSE,
         };
         source.as_bytes()
     }

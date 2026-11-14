@@ -1,8 +1,10 @@
 //! The sidebar on a real core: a folder pinned in the bookmarks file shows
 //! in Places after the home folder and opens when clicked, and a narrow
-//! window folds Places into one row.
+//! window folds Places into one row. The + on Places opens a folder picker
+//! that pins what it picks, and right-click on a pinned folder takes it
+//! out.
 
-use gpui::size;
+use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, size};
 
 use super::*;
 
@@ -63,4 +65,81 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     assert!(pinned.left() >= home.right());
     let header = cx.debug_bounds("modified-header").unwrap();
     assert!(header.top() >= home.bottom(), "narrow: above the sheet");
+}
+
+#[gpui::test]
+async fn right_click_on_a_pinned_folder_takes_it_out(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-unpin");
+    let (view, cx) = with_projects_pinned(cx, &tree).await;
+    // Home is a standard folder: no menu.
+    right_click(cx, "place-0");
+    view.read_with(cx, |view, _| assert!(view.menu().is_none()));
+
+    right_click(cx, "place-1");
+    view.read_with(cx, |view, _| {
+        let menu = view.menu().unwrap();
+        assert_eq!(menu.items.len(), 1);
+        assert_eq!(menu.items[0].label, "Remove from Places");
+    });
+    click(cx, "menu-0");
+
+    view.condition::<WindowEvent>(cx, |view, _| view.pinned().is_empty())
+        .await;
+    view.read_with(cx, |view, _| assert!(view.menu().is_none()));
+    let saved = fs::read_to_string(tree.path().join(".config/gtk-3.0/bookmarks")).unwrap();
+    assert_eq!(saved, "");
+}
+
+#[gpui::test]
+async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-pin");
+    let (view, cx) = window_on(cx, tree.path(), tree.path());
+    wait_for_folder(&view, cx, tree.path()).await;
+    let windows = cx.windows().len();
+
+    click(cx, "pin");
+    cx.run_until_parked();
+
+    let picker = cx
+        .windows()
+        .into_iter()
+        .filter_map(|handle| handle.downcast::<MainWindow>())
+        .find(|handle| {
+            handle
+                .read_with(cx, |view, _| view.pick_id().is_some())
+                .unwrap()
+        })
+        .unwrap();
+    assert_eq!(cx.windows().len(), windows + 1);
+    let projects = tree.path().join("Projects");
+    picker
+        .update(cx, |view, _, _| assert!(view.answer(projects.clone())))
+        .unwrap();
+
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.pinned().iter().any(|pin| pin.path == projects)
+    })
+    .await;
+}
+
+/// Right-clicks the element drawn with `selector`.
+fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
+    cx.run_until_parked();
+    let position = cx.debug_bounds(selector).unwrap().center();
+    cx.simulate_event(MouseDownEvent {
+        position,
+        modifiers: Modifiers::none(),
+        button: MouseButton::Right,
+        click_count: 1,
+        first_mouse: false,
+    });
+    cx.simulate_event(MouseUpEvent {
+        position,
+        modifiers: Modifiers::none(),
+        button: MouseButton::Right,
+        click_count: 1,
+    });
+    cx.run_until_parked();
 }
