@@ -128,12 +128,14 @@ fn a_small_picture_keeps_its_size() {
     orange_picture(&path, ImageFormat::Jpeg);
     let client = Client::new(&temp.0);
 
+    // A box only a little bigger: were the picture scaled to it, it would
+    // grow, and quickly.
     let shown = client.preview(
         1,
         &path,
         Fit {
-            width: 4000,
-            height: 3000,
+            width: WIDTH + 10,
+            height: HEIGHT + 10,
         },
     );
 
