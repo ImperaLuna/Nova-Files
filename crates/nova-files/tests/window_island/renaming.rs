@@ -112,3 +112,30 @@ async fn new_folder_makes_one_and_starts_renaming_it(cx: &mut TestAppContext) {
     wait_for_names(&view, cx, &["Music", "New folder", "Projects", "notes.txt"]).await;
     assert!(tree.path().join("Music").is_dir());
 }
+
+#[gpui::test]
+async fn a_double_click_in_the_field_stays_in_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("rename-press");
+    let home = TempFolder::tree("rename-press-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-0");
+    cx.simulate_keystrokes("f2");
+    cx.run_until_parked();
+    // Its text sits where the name was, as the other rows' names do.
+    let field = cx.debug_bounds("rename").unwrap();
+    let name = cx.debug_bounds("name-1").unwrap();
+    assert!(field.left() < name.left());
+    // Not opening the folder under it.
+    double_click(cx, "rename");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.renaming()));
+    assert_eq!(
+        view.read_with(cx, |view, _| view.entry_names()),
+        ["Projects", "notes.txt"]
+    );
+    // Nor making a new folder while it is open.
+    view.update(cx, |view, _| view.new_folder());
+    assert_eq!(view.read_with(cx, |view, _| view.jobs_pending()), 0);
+}

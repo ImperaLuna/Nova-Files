@@ -170,7 +170,7 @@ impl MainWindow {
             )
         {
             // Nothing was made to select.
-            self.forget_wanted();
+            self.wanted = None;
         }
         let undo = self
             .jobs
