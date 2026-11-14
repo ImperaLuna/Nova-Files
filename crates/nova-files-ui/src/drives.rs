@@ -166,6 +166,16 @@ mod tests {
     }
 
     #[test]
+    fn a_drive_needs_to_be_both_removable_and_ejectable_to_offer_eject() {
+        for (removable, ejectable) in [(true, false), (false, true)] {
+            let mut list = list();
+            list.drives[0].removable = removable;
+            list.drives[0].ejectable = ejectable;
+            assert_eq!(shown(&list)[1].eject, None, "{removable} {ejectable}");
+        }
+    }
+
+    #[test]
     fn you_are_on_the_drive_whose_folder_holds_yours_most_closely() {
         let rows = shown(&list());
         let home = Path::new("/home/me");
