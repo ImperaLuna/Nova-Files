@@ -103,6 +103,7 @@ impl MainWindow {
             | Event::DriveDone { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
+            | Event::FindFailed { .. }
             | Event::Properties { .. }
             | Event::PropertiesUnreadable { .. }
             | Event::FileOpened

@@ -122,53 +122,96 @@ impl Drop for Client {
     }
 }
 
+/// A job that answers with listing `id`, the client's listing that
+/// counts until another is asked for (see [`Client::start_listing`]).
+pub struct ListingJob {
+    id: ListingId,
+    events: Arc<dyn EventSink>,
+    current: Arc<AtomicU64>,
+    details: Option<Arc<details_queue::Queue>>,
+    thumbnails: Option<Arc<Queue>>,
+}
+
+impl ListingJob {
+    /// Whether a newer listing replaced this one, or the client left.
+    pub fn cancelled(&self) -> bool {
+        self.current.load(Ordering::SeqCst) != self.id.0
+    }
+
+    /// Sends `event` unless the job was cancelled.
+    pub fn answer(&self, event: Event) {
+        if !self.cancelled() {
+            self.events.deliver(event).ok();
+        }
+    }
+
+    /// Sends `listing` unless the job was cancelled, first telling the
+    /// details and thumbnail queues it is the one on screen, so the
+    /// client's first rows request finds it.
+    pub fn send(&self, listing: Listing) {
+        if self.cancelled() {
+            return;
+        }
+        let current = || !self.cancelled();
+        if let Some(queue) = &self.details {
+            queue.show(&listing, current);
+        }
+        if let Some(queue) = &self.thumbnails {
+            queue.show(&listing, current);
+        }
+        self.events.deliver(Event::FolderListed(listing)).ok();
+    }
+}
+
+impl Client {
+    /// Makes listing `id` the one that counts, cancelling the one before.
+    /// The details and thumbnail queues keep the listing on screen until
+    /// this one is sent: a folder that can't be read leaves the client
+    /// where it was. A listing sent but dropped by the client as stale
+    /// has moved them on; the window then reads its folder again (see its
+    /// module).
+    pub fn start_listing(&self, id: ListingId) -> ListingJob {
+        self.current_listing.store(id.0, Ordering::SeqCst);
+        ListingJob {
+            id,
+            events: Arc::clone(&self.events),
+            current: Arc::clone(&self.current_listing),
+            details: self.details.clone(),
+            thumbnails: self.thumbnails.clone(),
+        }
+    }
+}
+
 /// Lists `path` for `client` as listing `id` in `order`, replacing any
 /// listing before.
 pub fn list_folder(client: &Client, id: ListingId, path: PathBuf, order: Order) {
-    // The details and thumbnail queues keep the listing on screen until
-    // this one is sent: a folder that can't be read leaves the client where
-    // it was. A listing sent but dropped by the client as stale has moved
-    // them on; the window then reads its folder again (see its module).
-    client.current_listing.store(id.0, Ordering::SeqCst);
-    let details = client.details.clone();
-    let thumbnails = client.thumbnails.clone();
-    let events = Arc::clone(&client.events);
-    let current = Arc::clone(&client.current_listing);
+    let job = client.start_listing(id);
     let job_path = path.clone();
     let spawned = thread::Builder::new()
         .name(LIST_THREAD.to_owned())
         .spawn(move || {
-            let cancelled = || current.load(Ordering::SeqCst) != id.0;
+            let cancelled = || job.cancelled();
             let listed = list::read_folder(&job_path, cancelled)
                 .map(|entries| order::arrange(&job_path, entries, order, cancelled));
             let entries: Arc<[Entry]> = match listed {
                 Ok(Some(entries)) => entries.into(),
                 Err(Stopped::Unreadable(reason)) => {
-                    if !cancelled() {
-                        events
-                            .deliver(Event::FolderUnreadable {
-                                id,
-                                path: job_path,
-                                reason,
-                            })
-                            .ok();
-                    }
+                    job.answer(Event::FolderUnreadable {
+                        id,
+                        path: job_path,
+                        reason,
+                    });
                     return;
                 }
                 // Nobody wants the answer any more.
                 Ok(None) | Err(Stopped::Cancelled) => return,
             };
-            if cancelled() {
-                return;
-            }
-            let listing = Listing {
+            job.send(Listing {
                 id,
                 path: job_path,
                 entries: Arc::clone(&entries),
                 folders: None,
-            };
-            show(details.as_deref(), thumbnails.as_deref(), &listing, cancelled);
-            events.deliver(Event::FolderListed(listing)).ok();
+            });
             // Reading the folder is the heaviest work the core does; most
             // of what it built is free again now.
             drop(entries);
@@ -182,24 +225,6 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf, order: Order) 
                 reason: Unreadable::Failed,
             })
             .ok();
-    }
-}
-
-/// Tells the client's details and thumbnail queues that `listing` is the
-/// one on screen, unless `cancelled` says it was replaced meanwhile.
-/// Called just before the listing is sent, so the client's first rows
-/// request finds it.
-pub fn show(
-    details: Option<&details_queue::Queue>,
-    thumbnails: Option<&Queue>,
-    listing: &Listing,
-    cancelled: impl Fn() -> bool,
-) {
-    if let Some(queue) = details {
-        queue.show(listing, || !cancelled());
-    }
-    if let Some(queue) = thumbnails {
-        queue.show(listing, || !cancelled());
     }
 }
 
