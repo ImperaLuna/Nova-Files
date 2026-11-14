@@ -5,14 +5,19 @@
 //! section is drawn in a file of its own; this file lays them out and
 //! draws the section heads and the rows they share.
 //!
+//! Places and the folder tree ("This computer") scroll together.
+//!
 //! A narrow window folds the sidebar into one row above the bar: the
-//! section heads go, and the places sit side by side and scroll across.
+//! section heads and the tree go, and the places sit side by side and
+//! scroll across.
 //!
 //! A row is a place you can go: its icon, its name and, on the right, a
-//! number when it has one. The row you're in is pressed in, its name
-//! strong and its icon orange.
+//! number when it has one. The row you're in has its name strong and its
+//! icon orange; pressed-in rows are left for the Open list, as on the
+//! design page.
 
 mod places;
+mod tree;
 
 use gpui::{
     AnyElement, Context, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -68,7 +73,8 @@ impl MainWindow {
                     .gap(size::PLACE_GAP)
                     .pb(size::GAP)
                     .overflow_y_scroll()
-                    .child(places),
+                    .child(places)
+                    .when(!narrow, |scroll| scroll.child(self.tree_section(cx))),
             )
             .child(drives.flex_col())
     }
@@ -152,9 +158,7 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
             }
         })
         .when(here, |row| {
-            row.bg(colors.press)
-                .text_color(colors.text)
-                .font_weight(text::STRONG_WEIGHT)
+            row.text_color(colors.text).font_weight(text::STRONG_WEIGHT)
         })
         .child(icon(glyph, size::PLACE_ICON, tint))
         .child(div().flex_1().min_w_0().truncate().child(name))

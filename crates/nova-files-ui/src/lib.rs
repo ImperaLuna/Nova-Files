@@ -27,6 +27,7 @@ mod shown_thumbnails;
 mod text;
 mod theme;
 mod thumbnail;
+mod tree;
 mod view;
 mod window;
 mod window_state;

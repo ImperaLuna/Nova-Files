@@ -143,3 +143,39 @@ fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
     });
     cx.run_until_parked();
 }
+
+#[gpui::test]
+async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-tree");
+    fs::create_dir(tree.path().join(".hidden")).unwrap();
+    let (view, cx) = window_on(cx, tree.path(), tree.path());
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+    // Home, closed: only its own row.
+    assert!(cx.debug_bounds("tree-0").is_some());
+    assert!(cx.debug_bounds("tree-1").is_none());
+
+    click(cx, "tree-toggle-0");
+    cx.run_until_parked();
+    // Projects, but not the hidden folder or the file.
+    assert!(cx.debug_bounds("tree-1").is_some());
+    assert!(cx.debug_bounds("tree-2").is_none());
+
+    // Going into Projects/nova opens the tree down to it.
+    view.update(cx, |view, _| view.open(&tree.path().join("Projects/nova")));
+    wait_for_folder(&view, cx, &tree.path().join("Projects/nova")).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tree-2").is_some());
+    // nova holds no folders: no arrow.
+    assert!(cx.debug_bounds("tree-toggle-1").is_some());
+    assert!(cx.debug_bounds("tree-toggle-2").is_none());
+
+    // Clicking a row goes there; the arrow only opens and closes.
+    click(cx, "tree-0");
+    wait_for_folder(&view, cx, tree.path()).await;
+    click(cx, "tree-toggle-1");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tree-2").is_none());
+    view.read_with(cx, |view, _| assert_eq!(view.folder(), Some(tree.path())));
+}
