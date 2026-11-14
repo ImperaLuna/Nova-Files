@@ -336,6 +336,9 @@ pub mod start {
     pub const PEEK_ROW: Pixels = px(28.0);
     pub const PEEK_TOP: Pixels = px(12.0);
     pub const PEEK_GAP: Pixels = px(10.0);
+    /// The peek's "N more" line starts under the names: a row icon (22)
+    /// and the gap after it.
+    pub const PEEK_MORE_INSET: Pixels = px(32.0);
     /// One icon of a small card's fan, how far each overlaps the one
     /// before, and how far the outer two lean, in degrees.
     pub const FAN_ICON: Pixels = px(24.0);

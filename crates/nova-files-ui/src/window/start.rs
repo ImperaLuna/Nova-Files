@@ -62,7 +62,7 @@ impl MainWindow {
         let Some(connection) = &self.connection else {
             return;
         };
-        self.recent_asked = RecentId(self.recent_asked.0 + 1);
+        self.recent_asked = next_ask(self.recent_asked);
         let id = self.recent_asked;
         let skip: Vec<PathBuf> = std::iter::once(self.home.clone())
             .chain(self.places.iter().map(|place| place.path.clone()))
@@ -99,5 +99,20 @@ impl MainWindow {
         {
             connection.send(Command::FolderUsed(folder.to_owned())).ok();
         }
+    }
+}
+
+/// The id of the ask after `id`.
+const fn next_ask(id: RecentId) -> RecentId {
+    RecentId(id.0 + 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_ask_has_a_new_id() {
+        assert_eq!(next_ask(RecentId(4)), RecentId(5));
     }
 }

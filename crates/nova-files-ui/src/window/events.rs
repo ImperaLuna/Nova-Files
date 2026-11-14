@@ -118,9 +118,7 @@ impl MainWindow {
             Event::Places(places) => {
                 self.places = places;
                 // Start leaves out the places, which may have changed.
-                if self.is_on_start() {
-                    self.ask_for_recent();
-                }
+                self.ask_for_recent();
                 cx.emit(WindowEvent::Places);
                 cx.notify();
             }
@@ -149,9 +147,7 @@ impl MainWindow {
             Some(_) => {}
         }
         // A recent folder's card that can't be opened goes from Start.
-        if self.is_on_start() {
-            self.ask_for_recent();
-        }
+        self.ask_for_recent();
         self.pick_folder_refused(id, &path);
         cx.emit(WindowEvent::Refused(path));
         // Back or Forward may have nowhere left to go.
