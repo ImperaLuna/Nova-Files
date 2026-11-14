@@ -17,6 +17,11 @@ use std::time::SystemTime;
 
 use crate::folder::EntryKind;
 
+/// Names one ask for the recent folders. The client picks it; the core
+/// echoes it, so a client that asked twice keeps the newest answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RecentId(pub u64);
+
 /// The most folders the core remembers.
 pub const MAX_RECENT_FOLDERS: usize = 50;
 

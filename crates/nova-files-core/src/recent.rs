@@ -11,11 +11,12 @@
 //! holds each folder's path as raw bytes, ended by a NUL byte, which no
 //! path holds.
 //!
-//! An answer reads each folder on a thread of its own, so a drive that
-//! stopped answering never holds up the core: whether the folder is still
-//! there, what it holds and a peek at its first entries. A folder that
-//! can't be read is left out of the answer but kept in the list, since its
-//! drive may come back.
+//! An answer is read on a thread of its own, so the core never waits on
+//! it: for each folder in turn, whether it is still there, what it holds
+//! and a peek at its first entries. Each folder gets at most
+//! [`READ_WAIT`] (see `timed`), so a drive that stopped answering only
+//! leaves its folder out. A folder that can't be read is left out of the
+//! answer but kept in the list, since its drive may come back.
 //!
 //! [`Command::FolderUsed`]: nova_files_api::Command::FolderUsed
 //! [`Command::RecentFolders`]: nova_files_api::Command::RecentFolders
@@ -27,14 +28,16 @@ use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use nova_files_api::{
-    EntryKind, Event, EventSink, MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder,
+    EntryKind, Event, EventSink, MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId,
 };
 
 use crate::list;
 use crate::private_file::{self, Read};
 use crate::saver::Saver;
+use crate::timed;
 
 /// The file, under the state folder.
 const FILE: &str = "nova-files/recent-folders";
@@ -48,6 +51,10 @@ const MAX_PATH: usize = 4096;
 const MAX_BYTES: usize = HEADER.len() + MAX_RECENT_FOLDERS * (MAX_PATH + 1);
 const SAVE_THREAD: &str = "nova-files-recent";
 const READ_THREAD: &str = "nova-files-recent-read";
+const LOOK_THREAD: &str = "nova-files-recent-look";
+/// How long one folder's look may take before it is left out. A local
+/// folder of thousands of entries takes milliseconds.
+const READ_WAIT: Duration = Duration::from_secs(1);
 /// The file, as the log names it.
 const WHAT: &str = "recent folders";
 
@@ -93,23 +100,33 @@ impl Store {
 
     /// Sends `events` the newest `count` folders that are still there, can
     /// be read and aren't in `skip`, read on a thread of their own.
-    pub fn answer(&self, events: &Arc<dyn EventSink>, count: usize, skip: Vec<PathBuf>) {
+    pub fn answer(
+        &self,
+        events: &Arc<dyn EventSink>,
+        id: RecentId,
+        count: usize,
+        skip: Vec<PathBuf>,
+    ) {
         let folders = self.folders.borrow().clone();
         let sink = Arc::clone(events);
         let spawned = thread::Builder::new()
             .name(READ_THREAD.to_owned())
             .spawn(move || {
                 let found = folders
-                    .iter()
+                    .into_iter()
                     .filter(|folder| !skip.contains(folder))
-                    .filter_map(|folder| look(folder))
+                    .filter_map(|folder| {
+                        timed::within(READ_WAIT, LOOK_THREAD, move || look(&folder)).flatten()
+                    })
                     .take(count)
                     .collect();
-                sink.deliver(Event::RecentFolders(found)).ok();
+                sink.deliver(Event::RecentFolders { id, folders: found })
+                    .ok();
             });
         if spawned.is_err() {
             // Nothing could be read; the client can ask again.
-            events.deliver(Event::RecentFolders(Vec::new())).ok();
+            let folders = Vec::new();
+            events.deliver(Event::RecentFolders { id, folders }).ok();
         }
     }
 }

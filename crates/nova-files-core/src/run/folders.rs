@@ -32,9 +32,9 @@ pub(super) fn answer(
         }
         Command::OpenWith(request) => setup.open_with.answer(client.events(), request),
         Command::FolderUsed(folder) => setup.recent.used(folder),
-        Command::RecentFolders { count, skip } => {
+        Command::RecentFolders { id, count, skip } => {
             let count = usize::try_from(count).unwrap_or(usize::MAX);
-            setup.recent.answer(client.events(), count, skip);
+            setup.recent.answer(client.events(), id, count, skip);
         }
         // `run` sends the other commands elsewhere.
         _ => {}
