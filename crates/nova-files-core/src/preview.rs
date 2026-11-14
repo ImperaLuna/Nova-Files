@@ -5,8 +5,9 @@
 //! [`PREVIEW_TEXT_BYTES`]: when that is UTF-8 text (allowing a character
 //! cut at the end) with no NUL byte, it shows as text; anything else, and
 //! anything that isn't a regular file (a device, pipe or socket, which is
-//! never opened), shows as its icon. A link shows what it points to. The
-//! kind's name comes from the file's name, through the MIME database.
+//! never opened), shows as its icon. A link shows what it points to,
+//! named by its target's name too. The kind's name comes from the file's
+//! name, through the MIME database.
 //!
 //! Each request reads on a thread of its own, so a drive that stopped
 //! answering never holds up the core. A client's newer request cancels
@@ -125,13 +126,11 @@ fn event(request: &Request) -> Option<Event> {
             Err(error) => return Some(unreadable(list::unreadable(&error))),
         }
     };
-    let kind_name = (!metadata.is_dir())
-        .then(|| path.file_name())
-        .flatten()
-        .and_then(|name| {
-            let types = request.types.get_or_init(MimeTypes::from_env);
-            types.of(name).and_then(|mime| types.name(mime))
-        });
+    let named = (!metadata.is_dir()).then(|| target(path));
+    let kind_name = named.as_deref().and_then(Path::file_name).and_then(|name| {
+        let types = request.types.get_or_init(MimeTypes::from_env);
+        types.of(name).and_then(|mime| types.name(mime))
+    });
     let bytes = if metadata.is_dir() { 0 } else { metadata.len() };
     let preview = Preview {
         path: path.clone(),
@@ -143,6 +142,15 @@ fn event(request: &Request) -> Option<Event> {
         id: *id,
         preview: Arc::new(preview),
     })
+}
+
+/// What `path` leads to: the path itself, or a link's final target.
+fn target(path: &Path) -> PathBuf {
+    let is_link = fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_symlink());
+    is_link
+        .then(|| fs::canonicalize(path).ok())
+        .flatten()
+        .unwrap_or_else(|| path.to_owned())
 }
 
 /// A folder's first entries and how many it holds.
@@ -220,6 +228,21 @@ mod tests {
         assert!(event(&new).is_some());
         current.cancel();
         assert!(event(&new).is_none());
+    }
+
+    #[test]
+    fn a_link_is_named_by_its_target() {
+        let dir =
+            std::env::temp_dir().join(format!("nova-files-preview-target-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("photo.png");
+        fs::write(&photo, b"x").unwrap();
+        let link = dir.join("current");
+        std::os::unix::fs::symlink(&photo, &link).unwrap();
+        let (to_link, to_photo) = (target(&link), target(&photo));
+        fs::remove_dir_all(&dir).ok();
+        assert_eq!(to_link.file_name(), photo.file_name());
+        assert_eq!(to_photo, photo);
     }
 
     #[test]
