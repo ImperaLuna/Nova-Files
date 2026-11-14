@@ -280,7 +280,7 @@ fn skipping_a_place_gone_redraws_the_window(cx: &mut TestAppContext) {
     view.update(cx, |view, _| view.open(Path::new(OTHER)));
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
-    view.update(cx, |view, _| view.go_back());
+    view.update(cx, MainWindow::go_back);
     let (id, path) = core.next_listing().unwrap();
     let redraws = Rc::new(Cell::new(0));
     let counted = Rc::clone(&redraws);

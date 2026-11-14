@@ -1,14 +1,17 @@
 //! Going places: a new folder, Back, Forward, Up and into an entry. Each
-//! asks the core for a listing with a new id, in the window's order; the
-//! window moves once that id answers (see `events`). Changing the order
+//! folder asks the core for a listing with a new id, in the window's
+//! order; the window moves once that id answers (see `events`). Back or
+//! Forward to the Start page arrives at once (see `start`). Changing the order
 //! reads the folder again. Paths are tidied by their text alone, as a user
 //! reads them.
 
 use std::path::{Component, Path, PathBuf};
 
+use gpui::Context;
 use nova_files_api::{Command, EntryId, EntryKind, ListingId, Order, SortKey};
 
 use super::MainWindow;
+use crate::location::Location;
 
 impl MainWindow {
     /// Goes to `folder`, a new place in the history: asks the core for it,
@@ -19,26 +22,36 @@ impl MainWindow {
     }
 
     /// Goes back to the place before this one, if there is one.
-    pub fn go_back(&mut self) {
+    pub fn go_back(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.back() {
-            self.request(&place);
+            self.go_to(&place, cx);
         }
     }
 
     /// Goes forward again after Back, if there is somewhere to go.
-    pub fn go_forward(&mut self) {
+    pub fn go_forward(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.forward() {
-            self.request(&place);
+            self.go_to(&place, cx);
+        }
+    }
+
+    /// Goes to `place` without starting a new step in the history.
+    fn go_to(&mut self, place: &Location, cx: &mut Context<Self>) {
+        match place {
+            Location::Start => self.arrive_at_start(cx),
+            Location::Folder(folder) => {
+                self.request(folder);
+            }
         }
     }
 
     /// Where Back goes, if anywhere.
-    pub fn back_target(&self) -> Option<&Path> {
+    pub fn back_target(&self) -> Option<&Location> {
         self.history.back_target()
     }
 
     /// Where Forward goes, if anywhere.
-    pub fn forward_target(&self) -> Option<&Path> {
+    pub fn forward_target(&self) -> Option<&Location> {
         self.history.forward_target()
     }
 

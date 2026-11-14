@@ -1,6 +1,6 @@
 //! The window. It sends commands to the core and draws from its events; it
-//! never touches the disk. A window opens on the home folder unless the
-//! program names another. A picker window is the same window in pick mode,
+//! never touches the disk. A window opens on the Start page unless the
+//! program names a folder. A picker window is the same window in pick mode,
 //! opened for another app's request (see `pick`).
 //!
 //! [`run`] takes over the calling thread with a GPUI app, opens a window,
@@ -17,6 +17,7 @@ mod commands;
 mod history;
 mod jump;
 mod kind;
+mod location;
 mod pick;
 mod requests;
 mod selecting;
@@ -39,6 +40,7 @@ use nova_files_api::{Connector, PickRequest};
 
 pub use columns::ColumnText;
 pub use commands::{ACTIONS, ActionSpec, bind_keys as bind_window_keys};
+pub use location::Location;
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
@@ -58,7 +60,7 @@ pub enum Ended {
 /// What the first window of a run opens on.
 #[derive(Debug)]
 pub enum Opening {
-    /// A main window on this folder, or on the home folder.
+    /// A main window on this folder, or on the Start page.
     Folder(Option<PathBuf>),
     /// A picker window for another app's request.
     Pick(Box<PickRequest>),
@@ -128,7 +130,7 @@ struct RequestLoop {
 
 impl Global for RequestLoop {}
 
-/// Opens a main window on its folder (or the home folder), or a picker
+/// Opens a main window on its folder (or the Start page), or a picker
 /// window titled as the asking app wants and dialog-sized, over the app's
 /// window when it names one, else centred on the main display.
 /// When a main window fails with no window open, `recover_gpu` gets the
@@ -155,11 +157,18 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
         options.foreign_parent = request.parent.as_ref().map(pick::foreign_parent);
     }
     let connector = connector.clone();
-    let folder = folder.unwrap_or_else(home_folder);
-    let recover_folder = folder.clone();
+    // A picker always shows a folder: the one asked for, or home.
+    let location = match folder {
+        Some(folder) => Location::Folder(folder),
+        None if pick.is_some() => Location::Folder(home_folder()),
+        None => Location::Start,
+    };
+    let recover_folder = location
+        .folder()
+        .map_or_else(home_folder, Path::to_path_buf);
     let opened = cx.open_window(options, move |window, cx| {
         cx.new(|cx| {
-            let mut view = MainWindow::new(&connector, &folder, cx);
+            let mut view = MainWindow::at(&connector, &location, home_folder(), cx);
             if let Some(request) = pick {
                 view.set_pick(request, window, cx);
             }
