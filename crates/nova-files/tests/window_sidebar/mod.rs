@@ -2,9 +2,12 @@
 //! in Places after the home folder and opens when clicked, and a narrow
 //! window folds Places into one row.
 
-use gpui::size;
+use gpui::{Pixels, size};
 
 use super::*;
+
+/// The window's width from which the sidebar stands beside the sheet.
+const NARROWEST_WIDE: Pixels = px(720.0);
 
 /// A window whose home is `tree`, with `Projects` pinned; waits until the
 /// pinned folder is listed.
@@ -43,7 +46,8 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("sidebar-narrow");
     let (_view, cx) = with_projects_pinned(cx, &tree).await;
-    cx.simulate_resize(size(px(1000.0), px(600.0)));
+    // As narrow as a window gets with the sidebar still beside the sheet.
+    cx.simulate_resize(size(NARROWEST_WIDE, px(600.0)));
     cx.run_until_parked();
     let (home, pinned) = (
         cx.debug_bounds("place-0").unwrap(),
@@ -53,7 +57,7 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     let sheet_left = cx.debug_bounds("modified-header").unwrap().left();
     assert!(home.right() < sheet_left, "wide: beside the sheet");
 
-    cx.simulate_resize(size(px(600.0), px(600.0)));
+    cx.simulate_resize(size(NARROWEST_WIDE - px(1.0), px(600.0)));
     cx.run_until_parked();
     let (home, pinned) = (
         cx.debug_bounds("place-0").unwrap(),
