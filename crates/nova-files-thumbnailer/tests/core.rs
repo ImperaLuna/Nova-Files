@@ -14,7 +14,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use image::{ImageFormat, RgbImage};
-use nova_files_api::{Command, Connection, EntryId, Event, ListingId};
+use nova_files_api::{Command, Connection, EntryId, Event, ListingId, Order};
 use nova_files_core::{IDLE_EXIT, RunningCore, Thumbnails};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
@@ -74,6 +74,7 @@ fn first_thumbnail(client: &Client, folder: &Path) -> (EntryId, Vec<u8>) {
         .send(Command::ListFolder {
             id,
             path: folder.to_owned(),
+            order: Order::default(),
         })
         .unwrap();
     loop {
@@ -192,6 +193,7 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
         .send(Command::ListFolder {
             id: missing,
             path: temp.0.join("missing"),
+            order: Order::default(),
         })
         .unwrap();
     loop {
@@ -242,6 +244,7 @@ fn thumbnailed_entries(
         .send(Command::ListFolder {
             id,
             path: folder.to_owned(),
+            order: Order::default(),
         })
         .unwrap();
     let mut entries = Vec::new();

@@ -22,6 +22,7 @@ mod mime;
 mod mount_root;
 mod open;
 mod ops;
+mod order;
 mod percent;
 mod places;
 mod private_file;

@@ -49,7 +49,8 @@ pub use drive::{
 };
 pub use file_type::{FileTypes, glob_matches};
 pub use folder::{
-    Details, Entry, EntryId, EntryKind, Listing, ListingId, Place, PlaceKind, Unreadable,
+    Details, Entry, EntryId, EntryKind, Listing, ListingId, Order, Place, PlaceKind, SortKey,
+    Unreadable,
 };
 pub use job::{
     Answer, Conflict, ConflictKind, Failure, JobId, JobTag, Operation, Outcome, Progress, Scope,

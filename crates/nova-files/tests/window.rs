@@ -246,6 +246,46 @@ async fn columns_line_up_under_their_headers(cx: &mut TestAppContext) {
     }
 }
 
+#[gpui::test]
+async fn a_click_on_a_column_head_orders_the_list_by_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("window");
+    fs::write(tree.path().join("big.txt"), "a good deal of text").unwrap();
+    fs::write(tree.path().join("a.txt"), "a bit").unwrap();
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let shows = async |cx: &mut VisualTestContext, names: [&str; 4]| {
+        view.condition::<WindowEvent>(cx, move |view, _| view.entry_names() == names)
+            .await;
+    };
+
+    // Only the column in use carries the arrow.
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("arrow-name").is_some());
+    assert!(cx.debug_bounds("arrow-size").is_none());
+    // A head's highlight reaches past its text, which lines up with the
+    // column below.
+    let head = cx.debug_bounds("head-modified").unwrap().left();
+    let column = cx.debug_bounds("modified-header").unwrap().left();
+    assert!(head < column, "{head:?} {column:?}");
+    // And the first and last heads sit as far in from the row's edges.
+    let row = cx.debug_bounds("entry-0").unwrap();
+    let first = cx.debug_bounds("head-name").unwrap().left() - row.left();
+    let last = row.right() - cx.debug_bounds("head-size").unwrap().right();
+    assert_eq!(first, last);
+
+    click(cx, "head-size");
+    shows(cx, ["Projects", "big.txt", "a.txt", "notes.txt"]).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("arrow-size").is_some());
+    assert!(cx.debug_bounds("arrow-name").is_none());
+    click(cx, "head-size");
+    shows(cx, ["Projects", "notes.txt", "a.txt", "big.txt"]).await;
+    click(cx, "head-name");
+    shows(cx, ["Projects", "a.txt", "big.txt", "notes.txt"]).await;
+    click(cx, "head-name");
+    shows(cx, ["Projects", "notes.txt", "big.txt", "a.txt"]).await;
+}
+
 /// A pick request for files to open, or a place to save at, whose answer
 /// arrives on the receiver.
 fn pick_request(kind: PickKind) -> (Box<PickRequest>, mpsc::Receiver<PickAnswer>) {

@@ -6,20 +6,23 @@
 //! read that entry's details. Selected rows are grey, and selected rows
 //! that touch join into one block: a row squares the corners it shares
 //! with a selected neighbour. The row the keyboard is on has a ring (see
-//! `selecting`). The heads mark the column the list is ordered by: the
-//! core lists folders first, each group A to Z.
+//! `selecting`). A click on a column head orders the list by that column;
+//! folders always come first (see `navigate` and the core's `order`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
 //! by the width of its name.
 
 use gpui::{
-    Context, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
-    uniform_list,
+    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
+    prelude::FluentBuilder as _, uniform_list,
 };
 
+use nova_files_api::{Order, SortKey};
+
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
+
 use crate::assets::Icon;
 use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::MainWindow;
@@ -40,7 +43,7 @@ impl MainWindow {
             .px(size::SHEET_PAD)
             .bg(colors.sheet)
             .rounded_tl(radius::SHEET)
-            .child(column_heads(&colors))
+            .child(column_heads(self.shown_order(), &colors, cx))
             .child(self.entries_area(cx))
     }
 
@@ -148,7 +151,7 @@ impl MainWindow {
 
 /// Row `index`'s box, as wide as the list, highlighted under the pointer,
 /// with only the corners `corners` keeps rounded.
-fn entry_row(index: usize, corners: Corners, colors: &Colors) -> gpui::Stateful<gpui::Div> {
+fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
     div()
         .id(("entry", index))
         .debug_selector(move || format!("entry-{index}"))
@@ -167,11 +170,11 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> gpui::Stateful<
         .hover(|row| row.bg(colors.hover))
 }
 
-/// The heads above the entries, lined up with [`cells`]. The list is in
-/// the core's order, folders first and each group A to Z, so Name carries
-/// the arrow.
-fn column_heads(colors: &Colors) -> impl IntoElement {
-    let head = |label: &'static str| div().flex().items_center().child(label);
+/// The heads above the entries, lined up with [`cells`]. A click on one
+/// orders the list by it (see `navigate`); the one in use is bright and
+/// carries an arrow for its direction.
+fn column_heads(order: Order, colors: &Colors, cx: &Context<MainWindow>) -> impl IntoElement {
+    let head = |key, label| column_head(key, label, order, colors, cx);
     div()
         .flex()
         .flex_none()
@@ -193,13 +196,54 @@ fn column_heads(colors: &Colors) -> impl IntoElement {
                 .items_center()
                 .h_full()
                 .child(cells(
-                    head(NAME_LABEL)
-                        .gap(size::HEAD_ARROW_GAP)
-                        .text_color(colors.text)
-                        .child(icon(Icon::SortUp, size::HEAD_ARROW, colors.text)),
-                    head(MODIFIED_LABEL),
-                    head(SIZE_LABEL).justify_end(),
+                    head(SortKey::Name, NAME_LABEL),
+                    head(SortKey::Modified, MODIFIED_LABEL),
+                    head(SortKey::Size, SIZE_LABEL).mr(-size::HEAD_BUTTON_PAD),
                     MODIFIED_HEADER_SELECTOR.to_owned(),
                 )),
         )
+}
+
+/// The head of `key`'s column, with selector `head-<label>`.
+fn column_head(
+    key: SortKey,
+    label: &'static str,
+    order: Order,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> Stateful<Div> {
+    let in_use = order.key == key;
+    let arrow = if order.descending {
+        Icon::SortDown
+    } else {
+        Icon::SortUp
+    };
+    let selector = format!("head-{}", label.to_lowercase());
+    div()
+        .id(label)
+        .debug_selector(move || selector)
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(size::HEAD_ARROW_GAP)
+        .h(size::HEAD_BUTTON_HEIGHT)
+        .px(size::HEAD_BUTTON_PAD)
+        .ml(-size::HEAD_BUTTON_PAD)
+        .rounded(radius::SMALL)
+        .cursor_pointer()
+        .hover(|head| head.bg(colors.hover).text_color(colors.text))
+        .when(in_use, |head| head.text_color(colors.text))
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            this.sort_by(key);
+            cx.notify();
+        }))
+        .child(label)
+        .when(in_use, |head| {
+            let arrow_selector = format!("arrow-{}", label.to_lowercase());
+            head.child(div().debug_selector(move || arrow_selector).child(icon(
+                arrow,
+                size::HEAD_ARROW,
+                colors.text,
+            )))
+        })
 }

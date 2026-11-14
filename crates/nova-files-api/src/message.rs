@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::bookmark::{Bookmark, BookmarkChange};
 use crate::drive::{DriveAction, DriveFailure, DriveList};
-use crate::folder::{Details, EntryId, Listing, ListingId, Place, Unreadable};
+use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::open_with::{OpenWith, OpenWithAnswer};
 use crate::properties::{Properties, PropertiesId};
@@ -28,10 +28,16 @@ pub const MAX_HITS: u32 = 200;
 pub enum Command {
     /// Ask the core to answer with [`Event::Pong`], to show it is running.
     Ping,
-    /// List the folder at `path`. The answer is [`Event::FolderListed`] or
-    /// [`Event::FolderUnreadable`] with the same `id`. A newer `ListFolder`
-    /// from the same client cancels this one, which then may never answer.
-    ListFolder { id: ListingId, path: PathBuf },
+    /// List the folder at `path` in `order`. The answer is
+    /// [`Event::FolderListed`] or [`Event::FolderUnreadable`] with the same
+    /// `id`. A newer `ListFolder` from the same client cancels this one,
+    /// which then may never answer. An order by modified time or size reads
+    /// every entry's details before the listing goes out.
+    ListFolder {
+        id: ListingId,
+        path: PathBuf,
+        order: Order,
+    },
     /// Ask for the places list: the answer is [`Event::Places`] and
     /// [`Event::Bookmarks`], and from then on the client gets each again
     /// whenever it changes (a folder made or removed, the bookmarks file
