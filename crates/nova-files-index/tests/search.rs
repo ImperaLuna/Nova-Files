@@ -374,3 +374,47 @@ fn an_entry_is_shown_once() {
     let first = home.stages_now("report", LIMIT, &changes).remove(0);
     assert_eq!(first, [at("Documents/report.pdf", MatchKind::Exact)]);
 }
+
+#[test]
+fn a_search_within_a_folder_keeps_only_what_is_inside_it() {
+    let home = Home::new();
+    let documents = home.at("Documents");
+    let stages = home.named(home.index.search("tax", FEW).within(&documents));
+    // The best two inside Documents, though `.config/tax-tool` ranks
+    // above `syntax.txt` across home.
+    assert_eq!(
+        stages[0],
+        [
+            at("Documents/tax return.pdf", MatchKind::WordStart),
+            at("Documents/taxes 2024.pdf", MatchKind::WordStart),
+        ]
+    );
+    let stages = home.named(home.index.search("documents", LIMIT).within(&documents));
+    // Not the folder itself.
+    assert_eq!(stages, [vec![], vec![]]);
+}
+
+#[test]
+fn a_search_within_a_folder_follows_moves() {
+    let home = Home::new();
+    let changes = [home.moved("Pictures/Holiday", "Documents/Holiday")];
+    let mut overlay = Overlay::new();
+    for change in &changes {
+        overlay.apply(change);
+    }
+    let documents = home.at("Documents");
+    let pictures = home.at("Pictures");
+    let search = |folder| {
+        home.named(
+            home.index
+                .search_now("photos", LIMIT, &overlay)
+                .within(folder),
+        )
+        .remove(0)
+    };
+    assert_eq!(
+        search(&documents),
+        [at("Documents/Holiday/photos.txt", MatchKind::Exact)]
+    );
+    assert_eq!(search(&pictures), []);
+}

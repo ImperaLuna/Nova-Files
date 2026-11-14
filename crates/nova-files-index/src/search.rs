@@ -20,6 +20,9 @@
 //! is now: rows it says are gone are left out, moved ones are reported at
 //! their new place, and entries the index doesn't hold are searched too.
 //! A path is reported once per search.
+//!
+//! [`Search::within`] keeps only what is inside one folder, at any depth;
+//! the best `limit` are then taken from what is there.
 
 mod fold;
 mod matching;
@@ -57,6 +60,8 @@ pub struct Search<'a> {
     added_found: Vec<bool>,
     /// Paths already reported.
     shown: HashSet<PathBuf>,
+    /// Only hits inside this folder count.
+    within: Option<PathBuf>,
     stage: Stage,
 }
 
@@ -126,6 +131,7 @@ impl Index {
             rows_found: Vec::new(),
             added_found: Vec::new(),
             shown: HashSet::new(),
+            within: None,
             stage,
         }
     }
@@ -149,6 +155,13 @@ impl Iterator for Search<'_> {
 }
 
 impl Search<'_> {
+    /// Keeps only hits inside `folder`, at any depth (not `folder` itself).
+    #[must_use]
+    pub fn within(mut self, folder: &Path) -> Self {
+        self.within = Some(folder.to_owned());
+        self
+    }
+
     /// Whether every stage has run, so the next call yields `None`.
     pub fn is_done(&self) -> bool {
         self.stage == Stage::Done
@@ -245,8 +258,8 @@ impl Search<'_> {
     /// The best `limit` of `ranked` that are still there, best first, each
     /// path once.
     fn best(&mut self, mut ranked: Vec<Rank>) -> Vec<Hit> {
-        if self.overlay.is_some_and(Overlay::moves) {
-            return self.best_moved(ranked);
+        if self.within.is_some() || self.overlay.is_some_and(Overlay::moves) {
+            return self.best_placed(ranked);
         }
         let changed = self.overlay.is_some_and(|overlay| !overlay.is_empty());
         if !changed && ranked.len() > self.limit {
@@ -271,15 +284,20 @@ impl Search<'_> {
         hits
     }
 
-    /// [`Search::best`] when entries moved: a move can take a row into or
-    /// out of a hidden folder, so every match is placed first and ranked
-    /// by where it is now.
-    fn best_moved(&mut self, ranked: Vec<Rank>) -> Vec<Hit> {
+    /// [`Search::best`] when entries moved or only one folder counts: a
+    /// move can take a row into or out of a hidden folder or the folder
+    /// searched, so every match is placed first, kept if it is inside
+    /// that folder, and ranked by where it is now.
+    fn best_placed(&mut self, ranked: Vec<Rank>) -> Vec<Hit> {
         let root = self.index.root();
+        let within = self.within.as_deref();
         let mut placed: Vec<(Rank, PathBuf)> = ranked
             .into_iter()
             .filter_map(|(kind, _, cost, length, source)| {
                 let path = self.path(source)?;
+                if within.is_some_and(|folder| !is_inside(&path, folder)) {
+                    return None;
+                }
                 // With hidden rows ranked like the rest, every row is
                 // "not hidden" and no path needs walking.
                 let hidden = if self.hidden_last {
@@ -311,6 +329,11 @@ impl Search<'_> {
             (Source::Added(at), _) => self.added.get(at).map(|&path| path.to_owned()),
         }
     }
+}
+
+/// Whether `path` is inside `folder`, at any depth.
+fn is_inside(path: &Path, folder: &Path) -> bool {
+    path != folder && path.starts_with(folder)
 }
 
 /// Whether `path` or a folder it is in, below `root`, starts with a dot.
