@@ -270,6 +270,11 @@ mod tests {
         // The line must end within its longest length.
         let long = format!("{}2 3\n", "0".repeat(MAX_SIZE_LINE));
         assert!(parse(&answer(&long, 6), FIT).is_none());
+        // Its longest length counts the newline.
+        let longest = format!("{:0>width$}\n", "2 3", width = MAX_SIZE_LINE - 1);
+        assert!(parse(&answer(&longest, 6), FIT).is_some());
+        let over = format!("{:0>width$}\n", "2 3", width = MAX_SIZE_LINE);
+        assert!(parse(&answer(&over, 6), FIT).is_none());
     }
 
     #[test]

@@ -303,6 +303,56 @@ mod tests {
         assert!(event(&new).is_none());
     }
 
+    /// What request 1 for `path` answers, with a MIME database that knows
+    /// `*.txt` as "Plain text".
+    fn previewed(dir: &Path, path: &Path) -> Arc<Preview> {
+        fs::create_dir_all(dir.join("data/mime/text")).unwrap();
+        fs::write(dir.join("data/mime/globs2"), "50:text/plain:*.txt\n").unwrap();
+        fs::write(
+            dir.join("data/mime/text/plain.xml"),
+            "<comment>Plain text</comment>",
+        )
+        .unwrap();
+        let types = OnceLock::new();
+        types.get_or_init(|| MimeTypes::load(&[dir.join("data")]));
+        let current = Arc::new(Current::new());
+        current.set(PreviewId(1));
+        let request = Request {
+            id: PreviewId(1),
+            path: path.to_owned(),
+            fit: Fit {
+                width: 1,
+                height: 1,
+            },
+            current,
+            types: Arc::new(types),
+            helper: None,
+        };
+        match event(&request) {
+            Some(Event::Previewed { preview, .. }) => preview,
+            other => panic!("expected a preview, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_file_is_named_by_its_type_and_a_folder_is_not() {
+        let dir =
+            std::env::temp_dir().join(format!("nova-files-preview-named-{}", std::process::id()));
+        let file = dir.join("a.txt");
+        let folder = dir.join("b.txt");
+        fs::create_dir_all(&folder).unwrap();
+        // Longer than a few KiB, and still shown whole.
+        fs::write(&file, "a".repeat(4096)).unwrap();
+        let (file, folder) = (previewed(&dir, &file), previewed(&dir, &folder));
+        fs::remove_dir_all(&dir).ok();
+        assert_eq!(file.kind_name.as_deref(), Some("Plain text"));
+        assert!(matches!(
+            file.content,
+            PreviewContent::Text { cut: false, .. }
+        ));
+        assert_eq!(folder.kind_name, None);
+    }
+
     #[test]
     fn a_link_is_named_by_its_target() {
         let dir =
