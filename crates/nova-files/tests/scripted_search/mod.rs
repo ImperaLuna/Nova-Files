@@ -353,3 +353,36 @@ fn the_chip_switches_to_the_folder_searched_from_and_back(cx: &mut TestAppContex
     let (.., within) = next_find(&mut core).unwrap();
     assert_eq!(within, None);
 }
+
+#[gpui::test]
+fn escape_before_any_find_answers_reads_the_folder_again(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    cx.simulate_input("r");
+    cx.run_until_parked();
+    next_find(&mut core).unwrap();
+
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+
+    let (_, path) = core.next_listing().unwrap();
+    assert_eq!(path, Path::new(SHOWN));
+    view.read_with(cx, |view, _| assert!(!view.searching()));
+}
+
+#[gpui::test]
+fn clicking_a_result_takes_the_keys_from_the_box(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+
+    let row = cx.debug_bounds("entry-0").unwrap();
+    cx.simulate_click(row.center(), gpui::Modifiers::none());
+    cx.run_until_parked();
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+
+    let opened = core
+        .commands()
+        .into_iter()
+        .any(|command| matches!(command, Command::OpenFile { path, .. } if path == Path::new("/docs/report.pdf")));
+    assert!(opened);
+}
