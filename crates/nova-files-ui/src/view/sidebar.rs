@@ -158,7 +158,7 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         })
         .child(icon(glyph, size::PLACE_ICON, tint))
         .child(div().flex_1().min_w_0().truncate().child(name))
-        .children(number.filter(|_| !narrow).map(|(number, color)| {
+        .children(number.map(|(number, color)| {
             div()
                 .flex_none()
                 .text_size(text::LABEL)

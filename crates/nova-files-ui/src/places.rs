@@ -62,6 +62,14 @@ pub fn shown(places: &[Place], pinned: &[Bookmark]) -> Vec<Shown> {
     rows
 }
 
+impl Shown {
+    /// Whether the window is in this place: `here` is the folder on
+    /// screen, if any.
+    pub fn is_here(&self, here: Option<&Path>) -> bool {
+        here == Some(self.path.as_path())
+    }
+}
+
 /// The icon a standard folder is drawn with; `None` for one Places leaves
 /// out.
 const fn standard_icon(kind: PlaceKind) -> Option<Icon> {
@@ -180,5 +188,13 @@ mod tests {
     fn the_root_is_named_by_its_path() {
         assert_eq!(folder_name(Path::new("/")), "/");
         assert_eq!(shown(&[], &[pin("/", None)])[0].name, "/");
+    }
+
+    #[test]
+    fn a_place_is_here_only_while_its_folder_is_on_screen() {
+        let rows = shown(&[place(PlaceKind::Home, "/home/me")], &[]);
+        assert!(rows[0].is_here(Some(Path::new("/home/me"))));
+        assert!(!rows[0].is_here(Some(Path::new("/home/me/Work"))));
+        assert!(!rows[0].is_here(None));
     }
 }
