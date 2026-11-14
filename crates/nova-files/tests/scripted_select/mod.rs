@@ -16,7 +16,12 @@ fn answer_names(core: &mut Core, names: &[&str]) {
             kind: EntryKind::File,
         })
         .collect();
-    core.send(Event::FolderListed(Listing { id, path, entries }));
+    core.send(Event::FolderListed(Listing {
+        id,
+        path,
+        entries,
+        folders: None,
+    }));
 }
 
 /// A window on [`SHOWN`] with its keys bound, showing files `names`.

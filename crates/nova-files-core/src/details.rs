@@ -8,9 +8,10 @@
 //! details instead of stopping the rest.
 
 use std::fs;
+use std::ops::Range;
 use std::path::Path;
 
-use nova_files_api::{Details, Entry, EntryKind};
+use nova_files_api::{Details, Entry, EntryKind, Listing};
 
 /// The details of each of `entries`, all in the folder at `folder`, in the
 /// same order. `None` when `cancelled` said so before the batch was done.
@@ -22,6 +23,21 @@ pub fn read_batch(
     let mut details = Vec::with_capacity(entries.len());
     for entry in entries {
         details.push(read_one(&folder.join(&entry.name), entry.kind, &cancelled)?);
+    }
+    Some(details)
+}
+
+/// Like [`read_batch`], for `listing`'s entries `range`, each in its own
+/// folder; entries past its end are left out.
+pub fn read_listed(
+    listing: &Listing,
+    range: Range<usize>,
+    cancelled: impl Fn() -> bool,
+) -> Option<Vec<Details>> {
+    let entries = listing.entries.get(range).unwrap_or_default();
+    let mut details = Vec::with_capacity(entries.len());
+    for entry in entries {
+        details.push(read_one(&listing.path_of(entry), entry.kind, &cancelled)?);
     }
     Some(details)
 }

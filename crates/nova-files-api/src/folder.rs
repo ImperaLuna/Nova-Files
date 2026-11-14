@@ -5,7 +5,7 @@
 //! however many entries it has.
 
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -70,12 +70,33 @@ pub struct Order {
 }
 
 /// A folder's entries, folders first, in the [`Order`] the client asked
-/// for.
+/// for; or the files a search found, best first, each in its own folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listing {
     pub id: ListingId,
+    /// The folder listed, or the folder a search looked in.
     pub path: PathBuf,
     pub entries: Arc<[Entry]>,
+    /// For a search, the folder each entry is in, by entry; `None` when
+    /// every entry is in `path`.
+    pub folders: Option<Arc<[PathBuf]>>,
+}
+
+impl Listing {
+    /// The folder entry `index` is in: its own for a search, otherwise
+    /// [`Listing::path`].
+    pub fn folder_of(&self, index: usize) -> &Path {
+        self.folders
+            .as_ref()
+            .and_then(|folders| folders.get(index))
+            .unwrap_or(&self.path)
+    }
+
+    /// Where `entry`, one of this listing's, is on disk.
+    pub fn path_of(&self, entry: &Entry) -> PathBuf {
+        let index = usize::try_from(entry.id.0).unwrap_or(usize::MAX);
+        self.folder_of(index).join(&entry.name)
+    }
 }
 
 /// Why a folder couldn't be listed. Normal cases, not bugs: a client

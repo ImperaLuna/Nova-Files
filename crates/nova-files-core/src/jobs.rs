@@ -161,18 +161,14 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf, order: Order) 
             if cancelled() {
                 return;
             }
-            let listing = Event::FolderListed(Listing {
+            let listing = Listing {
                 id,
-                path: job_path.clone(),
+                path: job_path,
                 entries: Arc::clone(&entries),
-            });
-            if let Some(queue) = &details {
-                queue.show(id, job_path.clone(), Arc::clone(&entries), || !cancelled());
-            }
-            if let Some(queue) = &thumbnails {
-                queue.show(id, job_path.clone(), Arc::clone(&entries), || !cancelled());
-            }
-            events.deliver(listing).ok();
+                folders: None,
+            };
+            show(details.as_deref(), thumbnails.as_deref(), &listing, cancelled);
+            events.deliver(Event::FolderListed(listing)).ok();
             // Reading the folder is the heaviest work the core does; most
             // of what it built is free again now.
             drop(entries);
@@ -186,6 +182,24 @@ pub fn list_folder(client: &Client, id: ListingId, path: PathBuf, order: Order) 
                 reason: Unreadable::Failed,
             })
             .ok();
+    }
+}
+
+/// Tells the client's details and thumbnail queues that `listing` is the
+/// one on screen, unless `cancelled` says it was replaced meanwhile.
+/// Called just before the listing is sent, so the client's first rows
+/// request finds it.
+pub fn show(
+    details: Option<&details_queue::Queue>,
+    thumbnails: Option<&Queue>,
+    listing: &Listing,
+    cancelled: impl Fn() -> bool,
+) {
+    if let Some(queue) = details {
+        queue.show(listing, || !cancelled());
+    }
+    if let Some(queue) = thumbnails {
+        queue.show(listing, || !cancelled());
     }
 }
 

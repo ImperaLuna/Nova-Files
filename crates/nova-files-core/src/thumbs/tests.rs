@@ -4,7 +4,7 @@
 use std::sync::mpsc;
 use std::time::Duration;
 
-use nova_files_api::ClientGone;
+use nova_files_api::{ClientGone, Entry};
 
 use super::*;
 
@@ -22,10 +22,11 @@ fn entry(index: u32, name: &str, kind: EntryKind) -> Entry {
 fn shared(entries: Vec<Entry>, wanted: Range<usize>, done: &[usize]) -> Shared {
     Shared {
         state: Mutex::new(State {
-            shown: Some(Arc::new(Shown {
+            shown: Some(Arc::new(Listing {
                 id: LISTING,
-                folder: PathBuf::from("/folder"),
+                path: PathBuf::from("/folder"),
                 entries: entries.into(),
+                folders: None,
             })),
             wanted,
             done: done.iter().copied().collect(),
