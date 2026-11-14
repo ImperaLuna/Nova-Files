@@ -107,15 +107,34 @@ impl Running {
         drop(running);
     }
 
-    fn set(&self, group: Option<Pid>) {
-        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = group;
+    /// Counts `group` as running, unless it is no longer `wanted`: then
+    /// it is killed at once. Asked under the lock [`Self::stop`] takes, so
+    /// a request replaced just before can't keep its helper running.
+    fn start(&self, group: Option<Pid>, wanted: impl Fn() -> bool) {
+        let mut running = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if wanted() {
+            *running = group;
+        } else if let Some(group) = group {
+            process::kill_process_group(group, Signal::KILL).ok();
+        }
+        drop(running);
+    }
+
+    fn finish(&self) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = None;
     }
 }
 
 /// `file` decoded by the helper, scaled down to fit `fit`; `None` when it
-/// isn't a picture the helper decodes, it ran out of time, or `running`
-/// was stopped meanwhile.
-pub fn picture(helper: &Path, file: &Path, fit: Fit, running: &Running) -> Option<Picture> {
+/// isn't a picture the helper decodes, it ran out of time, or it stopped
+/// being `wanted` (whoever changes that then calls `running.stop()`).
+pub fn picture(
+    helper: &Path,
+    file: &Path,
+    fit: Fit,
+    running: &Running,
+    wanted: impl Fn() -> bool,
+) -> Option<Picture> {
     let fit = fit.clamped();
     let mut command = command(helper);
     command
@@ -124,7 +143,10 @@ pub fn picture(helper: &Path, file: &Path, fit: Fit, running: &Running) -> Optio
         .arg(fit.width.to_string())
         .arg(fit.height.to_string());
     let mut child = command.spawn().ok()?;
-    running.set(i32::try_from(child.id()).ok().and_then(Pid::from_raw));
+    running.start(
+        i32::try_from(child.id()).ok().and_then(Pid::from_raw),
+        wanted,
+    );
     let output = child.stdout.take();
     let (done, finished) = mpsc::channel();
     // A reader that couldn't start drops `done`, which ends the wait at once.
@@ -136,7 +158,7 @@ pub fn picture(helper: &Path, file: &Path, fit: Fit, running: &Running) -> Optio
         })
         .ok();
     let picture = finished.recv_timeout(PER_FILE).ok().flatten();
-    running.set(None);
+    running.finish();
     end(&mut child);
     picture
 }
@@ -254,7 +276,21 @@ mod tests {
     fn stopping_with_nothing_running_does_nothing() {
         let running = Running::new();
         running.stop();
-        running.set(None);
+        running.finish();
         running.stop();
+    }
+
+    #[test]
+    fn a_helper_no_longer_wanted_is_killed_as_it_starts() {
+        use std::os::unix::process::{CommandExt as _, ExitStatusExt as _};
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let group = i32::try_from(child.id()).ok().and_then(Pid::from_raw);
+        Running::new().start(group, || false);
+        let status = child.wait().unwrap();
+        assert_eq!(status.signal(), Some(Signal::KILL.as_raw()));
     }
 }
