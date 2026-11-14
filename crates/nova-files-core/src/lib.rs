@@ -11,6 +11,7 @@ mod accounts;
 mod config_watch;
 mod details;
 mod details_queue;
+mod disk_space;
 mod drives;
 mod hand_edited;
 mod index;
