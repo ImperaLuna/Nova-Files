@@ -239,6 +239,11 @@ fn column_head(
         }))
         .child(label)
         .when(in_use, |head| {
-            head.child(icon(arrow, size::HEAD_ARROW, colors.text))
+            let arrow_selector = format!("arrow-{}", label.to_lowercase());
+            head.child(div().debug_selector(move || arrow_selector).child(icon(
+                arrow,
+                size::HEAD_ARROW,
+                colors.text,
+            )))
         })
 }

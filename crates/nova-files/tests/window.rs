@@ -258,8 +258,21 @@ async fn a_click_on_a_column_head_orders_the_list_by_it(cx: &mut TestAppContext)
             .await;
     };
 
+    // Only the column in use carries the arrow.
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("arrow-name").is_some());
+    assert!(cx.debug_bounds("arrow-size").is_none());
+    // A head's highlight reaches past its text, which lines up with the
+    // column below.
+    let head = cx.debug_bounds("head-modified").unwrap().left();
+    let column = cx.debug_bounds("modified-header").unwrap().left();
+    assert!(head < column, "{head:?} {column:?}");
+
     click(cx, "head-size");
     shows(cx, ["Projects", "big.txt", "a.txt", "notes.txt"]).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("arrow-size").is_some());
+    assert!(cx.debug_bounds("arrow-name").is_none());
     click(cx, "head-size");
     shows(cx, ["Projects", "notes.txt", "a.txt", "big.txt"]).await;
     click(cx, "head-name");
