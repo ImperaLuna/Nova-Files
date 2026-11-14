@@ -275,3 +275,28 @@ pub fn open_file(
         client.deliver(Event::FileNotOpened).ok();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+
+    use super::*;
+
+    #[test]
+    fn a_replaced_listing_answers_nothing() {
+        let (sender, events) = mpsc::channel();
+        let client = Client::new(Arc::new(sender), None);
+        let older = client.start_listing(ListingId(1));
+        let newer = client.start_listing(ListingId(2));
+
+        assert!(older.cancelled());
+        assert!(!newer.cancelled());
+        older.answer(Event::FolderListed(Listing {
+            id: ListingId(1),
+            path: PathBuf::from("/"),
+            entries: Arc::new([]),
+            folders: None,
+        }));
+        assert!(events.try_recv().is_err());
+    }
+}

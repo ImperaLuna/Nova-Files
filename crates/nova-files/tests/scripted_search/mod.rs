@@ -386,3 +386,24 @@ fn clicking_a_result_takes_the_keys_from_the_box(cx: &mut TestAppContext) {
         .any(|command| matches!(command, Command::OpenFile { path, .. } if path == Path::new("/docs/report.pdf")));
     assert!(opened);
 }
+
+#[gpui::test]
+fn a_find_overtaken_by_a_folder_is_dropped_and_a_refusal_finds_again(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+    cx.simulate_input("o");
+    cx.run_until_parked();
+    let (overtaken, ..) = next_find(&mut core).unwrap();
+
+    view.update(cx, |view, _| view.open(Path::new(MISSING)));
+    let (id, path) = core.next_listing().unwrap();
+    answer_found(&core, overtaken, &REPORTS[..1]);
+    cx.run_until_parked();
+    assert_eq!(names(&view, cx), ["report.pdf", "reports"]);
+
+    core.refuse(id, &path);
+    cx.run_until_parked();
+    let (_, query, _) = next_find(&mut core).unwrap();
+    assert_eq!(query, "repo");
+    assert!(core.next_listing().is_none());
+}

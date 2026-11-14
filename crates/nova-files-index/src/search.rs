@@ -166,8 +166,10 @@ impl Search<'_> {
     /// Keeps only hits inside `folder`, at any depth (not `folder` itself).
     #[must_use]
     pub fn within(mut self, folder: &Path) -> Self {
-        if !self.overlay.is_some_and(Overlay::moves) {
-            let index = self.index;
+        let index = self.index;
+        // A folder above the index's root holds every row.
+        let holds_root = !folder.starts_with(index.root()) && index.root().starts_with(folder);
+        if !holds_root && !self.overlay.is_some_and(Overlay::moves) {
             self.rows = index
                 .row_of(folder)
                 .and_then(|row| Some(row.0.saturating_add(1)..index.entry(row)?.end.0))
