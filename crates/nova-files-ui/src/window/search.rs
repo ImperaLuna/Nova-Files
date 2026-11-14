@@ -8,7 +8,7 @@
 //! (see `events`). The folder the search started in stays the window's
 //! folder meanwhile: the path, Up and Here only go by it, and the history
 //! doesn't change. Clearing the box, or Escape in it, reads that folder
-//! again. Going anywhere else ends the search once that folder arrives,
+//! again, even before any find answered. Going anywhere else ends the search once that folder arrives,
 //! so a folder that can't be read leaves the search as it was. A find
 //! asked for while a folder is on its way replaces it (the core keeps one
 //! listing per window), so the search then starts from that folder.
@@ -181,8 +181,8 @@ impl MainWindow {
         }
     }
 
-    /// Empties the box and reads the folder the search started in again,
-    /// if its results took the list's place.
+    /// Empties the box and reads the folder the search started in again:
+    /// a find replaced it in the core, answered or not.
     pub(crate) fn end_search(&mut self, cx: &mut Context<Self>) {
         self.search
             .field
@@ -193,8 +193,8 @@ impl MainWindow {
         };
         if self.showing_found() {
             self.selection = None;
-            self.request(&from);
         }
+        self.request(&from);
         cx.notify();
     }
 
