@@ -38,7 +38,7 @@ mod save;
 mod select;
 mod typed;
 
-pub use typed::stem;
+pub use typed::{HOME, stem};
 
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write as _};

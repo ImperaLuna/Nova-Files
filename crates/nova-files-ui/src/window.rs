@@ -40,6 +40,7 @@ mod jobs;
 mod navigate;
 mod renaming;
 mod rows;
+mod trash;
 
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
@@ -67,6 +68,7 @@ use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
 use jobs::Jobs;
 use renaming::{Renaming, Wanted};
+use trash::TrashState;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
 /// which is never too small.
@@ -168,6 +170,8 @@ pub struct MainWindow {
     wanted: Option<Wanted>,
     /// Start renaming what is selected when the window next draws.
     rename_next_frame: bool,
+    /// The trash, and what the window knows of it (see `trash`).
+    trash: TrashState,
     _events: Task<()>,
 }
 
@@ -183,7 +187,9 @@ impl EventSink for WindowSink {
 impl MainWindow {
     /// Opens a window on `folder`.
     pub fn new(connector: &Connector, folder: &Path, cx: &mut Context<Self>) -> Self {
-        Self::with_home(connector, folder, home_folder(), cx)
+        let mut window = Self::with_home(connector, folder, home_folder(), cx);
+        window.trash = TrashState::new(&window.home, trash::data_folder());
+        window
     }
 
     /// Opens a window on `folder` that falls back to `home` instead of the
@@ -202,6 +208,7 @@ impl MainWindow {
                 connection.send(Command::Places)?;
                 connection.send(Command::Settings)?;
                 connection.send(Command::Theme)?;
+                connection.send(Command::ListTrash)?;
                 Ok(connection)
             })
             .ok();
@@ -223,6 +230,7 @@ impl MainWindow {
             this.update(cx, |this, cx| this.set_status(CoreStatus::Gone, cx))
                 .ok();
         });
+        let trash = TrashState::new(&home, None);
         let mut window = Self {
             status,
             connection,
@@ -258,6 +266,7 @@ impl MainWindow {
             renaming: None,
             wanted: None,
             rename_next_frame: false,
+            trash,
             _events: events,
         };
         window.open(folder);

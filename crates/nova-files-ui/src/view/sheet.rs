@@ -8,7 +8,9 @@
 //! with a selected neighbour. The row the keyboard is on has a ring (see
 //! `selecting`); a rename puts its text field where the name was (see
 //! `window::renaming`). A click on a column head orders the list by that column;
-//! folders always come first (see `navigate` and the core's `order`).
+//! folders always come first (see `navigate` and the core's `order`). The
+//! trash adds a Was in column, and says so when it is empty (see
+//! `window::trash`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -31,6 +33,8 @@ use crate::window::MainWindow;
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
 const SIZE_LABEL: &str = "Size";
+const WAS_IN_LABEL: &str = "Was in";
+const TRASH_EMPTY_LABEL: &str = "Empty";
 const MODIFIED_HEADER_SELECTOR: &str = "modified-header";
 
 impl MainWindow {
@@ -44,7 +48,12 @@ impl MainWindow {
             .relative()
             .px(size::SHEET_PAD)
             .child(sheet_corner(&colors))
-            .child(column_heads(self.shown_order(), &colors, cx))
+            .child(column_heads(
+                self.shown_order(),
+                self.trash_open(),
+                &colors,
+                cx,
+            ))
             .child(self.entries_area(cx))
             .child(self.island(cx))
     }
@@ -66,6 +75,7 @@ impl MainWindow {
                 }),
             )
             .child(self.entries(cx))
+            .children(self.empty_trash(&colors))
             .children(self.band_box().map(|band| {
                 div()
                     .debug_selector(|| "band".to_owned())
@@ -96,6 +106,7 @@ impl MainWindow {
                 };
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
+                let in_trash = this.trash_open();
                 let selected = |index: usize| {
                     listing
                         .entries
@@ -129,6 +140,10 @@ impl MainWindow {
                                     || entry_name(name, index, cx).into_any_element(),
                                     |field| rename_box(field.clone(), &colors).into_any_element(),
                                 )),
+                            in_trash.then(|| {
+                                let was_in = this.was_in(index).unwrap_or_default();
+                                detail(was_in.to_string(), &colors).into_any_element()
+                            }),
                             detail(columns.modified, &colors),
                             detail(columns.size, &colors),
                             format!("modified-{index}"),
@@ -152,6 +167,30 @@ impl MainWindow {
         .track_scroll(&self.scroll)
         .size_full()
         .pb(size::ISLAND_CLEARANCE)
+    }
+}
+
+impl MainWindow {
+    /// "Empty" in the middle of an empty trash.
+    fn empty_trash(&self, colors: &Colors) -> Option<impl IntoElement> {
+        let empty = self
+            .listing
+            .as_ref()
+            .is_some_and(|listing| listing.entries.is_empty());
+        (empty && self.trash_open()).then(|| {
+            div()
+                .debug_selector(|| "trash-empty".to_owned())
+                .absolute()
+                .inset_0()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(size::NAME_GAP)
+                .text_color(colors.text_dim)
+                .child(icon(Icon::Trash, size::EMPTY_ICON, colors.text_dim))
+                .child(TRASH_EMPTY_LABEL)
+        })
     }
 }
 
@@ -211,7 +250,12 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
 /// The heads above the entries, lined up with [`cells`]. A click on one
 /// orders the list by it (see `navigate`); the one in use is bright and
 /// carries an arrow for its direction.
-fn column_heads(order: Order, colors: &Colors, cx: &Context<MainWindow>) -> impl IntoElement {
+fn column_heads(
+    order: Order,
+    was_in: bool,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> impl IntoElement {
     let head = |key, label| column_head(key, label, order, colors, cx);
     div()
         .flex()
@@ -235,6 +279,12 @@ fn column_heads(order: Order, colors: &Colors, cx: &Context<MainWindow>) -> impl
                 .h_full()
                 .child(cells(
                     head(SortKey::Name, NAME_LABEL),
+                    was_in.then(|| {
+                        div()
+                            .debug_selector(|| "head-was-in".to_owned())
+                            .child(WAS_IN_LABEL)
+                            .into_any_element()
+                    }),
                     head(SortKey::Modified, MODIFIED_LABEL),
                     head(SortKey::Size, SIZE_LABEL).mr(-size::HEAD_BUTTON_PAD),
                     MODIFIED_HEADER_SELECTOR.to_owned(),

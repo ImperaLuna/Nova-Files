@@ -5,10 +5,11 @@
 //! screen read again when the core moved on from it (see `window`).
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::{Context, ScrollStrategy, UniformListScrollHandle};
-use nova_files_api::{Event, Listing, ListingId, Settings, Theme, Thumbnails};
+use nova_files_api::{Event, Listing, ListingId, Settings, Theme, Thumbnails, Unreadable};
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -39,8 +40,14 @@ impl MainWindow {
             self.scroll = UniformListScrollHandle::new();
             self.jump = TypeJump::default();
             self.band = None;
+            // A question was about the folder left.
+            self.island.confirm = None;
         }
         self.pick_folder_opened(reordered, cx);
+        // Jobs that change the trash ask again (see `trash`).
+        if !same_folder && self.trash_open() {
+            self.list_trash();
+        }
         if (!same_folder || reordered || made)
             && let Some(cursor) = self.cursor()
         {
@@ -50,31 +57,49 @@ impl MainWindow {
         cx.notify();
     }
 
+    /// The folder asked for as `id` couldn't be read. A trash never made
+    /// yet shows empty (see `trash`).
+    fn folder_refused(
+        &mut self,
+        id: ListingId,
+        path: PathBuf,
+        reason: Unreadable,
+        cx: &mut Context<Self>,
+    ) {
+        if reason == Unreadable::Missing
+            && let Some(empty) = self.missing_trash(id, &path)
+        {
+            self.listing_arrived(empty, cx);
+            return;
+        }
+        self.asked = None;
+        self.history.refused(&path);
+        match &self.listing {
+            None => {
+                if let Some(fallback) = self.fallbacks.pop() {
+                    self.request(&fallback);
+                }
+            }
+            Some(listing) if self.core_moved && listing.path != path => {
+                let shown = listing.path.clone();
+                self.request(&shown);
+            }
+            Some(_) => {}
+        }
+        self.pick_folder_refused(id, &path);
+        cx.emit(WindowEvent::Refused(path));
+        // Back or Forward may have nowhere left to go.
+        cx.notify();
+    }
+
     pub(super) fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
             Event::Pong => self.set_status(CoreStatus::Connected, cx),
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
                 self.listing_arrived(listing, cx);
             }
-            Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
-                self.asked = None;
-                self.history.refused(&path);
-                match &self.listing {
-                    None => {
-                        if let Some(fallback) = self.fallbacks.pop() {
-                            self.request(&fallback);
-                        }
-                    }
-                    Some(listing) if self.core_moved && listing.path != path => {
-                        let shown = listing.path.clone();
-                        self.request(&shown);
-                    }
-                    Some(_) => {}
-                }
-                self.pick_folder_refused(id, &path);
-                cx.emit(WindowEvent::Refused(path));
-                // Back or Forward may have nowhere left to go.
-                cx.notify();
+            Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
+                self.folder_refused(id, path, reason, cx);
             }
             Event::DetailsRead { id, first, details } => {
                 if let Some(listing) = &self.listing
@@ -128,8 +153,8 @@ impl MainWindow {
             | Event::OpenWith(_)
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
-            | Event::SpaceUnreadable { .. }
-            | Event::Trash(_) => {}
+            | Event::SpaceUnreadable { .. } => {}
+            Event::Trash(items) => self.trash_listed(items, cx),
             Event::Places(places) => {
                 self.places = places;
                 cx.emit(WindowEvent::Places);

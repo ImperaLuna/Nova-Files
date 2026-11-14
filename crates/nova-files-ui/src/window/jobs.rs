@@ -172,6 +172,7 @@ impl MainWindow {
             // Nothing was made to select.
             self.forget_wanted();
         }
+        self.trash_maybe_changed(&operation);
         let undo = self
             .jobs
             .undoable

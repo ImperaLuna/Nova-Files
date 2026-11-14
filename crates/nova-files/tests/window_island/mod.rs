@@ -7,6 +7,7 @@
 use std::fs;
 
 mod renaming;
+mod trash;
 
 use super::*;
 

@@ -174,3 +174,15 @@ fn every_failure_reads_differently() {
     let words: std::collections::HashSet<_> = reasons.into_iter().map(failure).collect();
     assert_eq!(words.len(), reasons.len());
 }
+
+#[test]
+fn a_path_under_home_reads_from_the_tilde() {
+    let home = Path::new("/home/a");
+    assert_eq!(short_path(Path::new("/home/a"), home), "~");
+    assert_eq!(
+        short_path(Path::new("/home/a/Documents/x"), home),
+        "~/Documents/x"
+    );
+    assert_eq!(short_path(Path::new("/home/ab"), home), "/home/ab");
+    assert_eq!(short_path(Path::new("/srv"), home), "/srv");
+}

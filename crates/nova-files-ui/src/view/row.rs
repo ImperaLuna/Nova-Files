@@ -7,7 +7,7 @@ use std::ffi::OsStr;
 use std::sync::Arc;
 
 use gpui::{
-    Context, Hsla, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    AnyElement, Context, Hsla, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
     ParentElement as _, Pixels, RenderImage, Rgba, SharedString, Styled as _, div, img, svg,
 };
 use nova_files_api::EntryKind;
@@ -37,11 +37,13 @@ impl Corners {
     }
 }
 
-/// One line of the columns: the name takes what the others leave, and
-/// Size sits flush right. The Modified cell carries `modified_selector`.
-/// Modified and Size are drawn as details: smaller and dimmer.
+/// One line of the columns: the name takes what the others leave, then
+/// a folder column when given (in the trash, Was in), and Size sits flush
+/// right. The Modified cell carries `modified_selector`. Modified and
+/// Size are drawn as details: smaller and dimmer.
 pub fn cells(
     name: impl IntoElement,
+    folder: Option<AnyElement>,
     modified: impl IntoElement,
     size_cell: impl IntoElement,
     modified_selector: String,
@@ -54,6 +56,7 @@ pub fn cells(
         .items_center()
         .gap(size::COLUMN_GAP)
         .child(div().flex_1().min_w_0().child(name))
+        .children(folder.map(|folder| column(size::FOLDER_WIDTH).child(folder)))
         .child(
             column(size::MODIFIED_WIDTH)
                 .debug_selector(|| modified_selector)

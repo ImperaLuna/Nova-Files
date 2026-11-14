@@ -268,6 +268,8 @@ pub mod size {
     /// The Modified and Size columns; Name takes the rest.
     pub const MODIFIED_WIDTH: Pixels = px(150.0);
     pub const SIZE_WIDTH: Pixels = px(92.0);
+    /// The column naming a folder: in the trash, where each entry was.
+    pub const FOLDER_WIDTH: Pixels = px(200.0);
     /// The column heads above the rows, the space above their text, and
     /// the space between them and the first row.
     pub const HEAD_HEIGHT: Pixels = px(38.0);
@@ -290,9 +292,15 @@ pub mod size {
     pub const CAPSULE_BUTTON_GAP: Pixels = px(1.0);
     pub const ICON_BUTTON: Pixels = px(34.0);
     pub const BUTTON_ICON: Pixels = px(19.0);
+    /// The icon over an empty place's words.
+    pub const EMPTY_ICON: Pixels = px(32.0);
     /// The path's slot and the search slot: the path takes what's left.
     pub const PATH_MIN_WIDTH: Pixels = px(150.0);
     pub const PATH_PAD: Pixels = px(12.0);
+    /// A chip at the end of the path's slot, such as Empty Trash.
+    pub const CHIP_PAD: Pixels = px(10.0);
+    pub const CHIP_PAD_Y: Pixels = px(5.0);
+    pub const CHIP_INSET: Pixels = px(6.0);
     pub const SEARCH_WIDTH: Pixels = px(220.0);
     pub const SEARCH_PAD: Pixels = px(12.0);
     pub const SEARCH_GAP: Pixels = px(9.0);

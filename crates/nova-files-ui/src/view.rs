@@ -38,7 +38,8 @@ use crate::commands::{
     SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
 };
 use crate::commands::{
-    CopySelected, CutSelected, NewFolder, Paste, RenameSelected, TrashSelected, Undo,
+    CopySelected, CutSelected, EmptyTrash, NewFolder, Paste, RenameSelected, RestoreSelected,
+    TrashSelected, Undo,
 };
 use crate::selection::Move;
 use crate::theme::{Colors, size, text};
@@ -150,7 +151,9 @@ impl MainWindow {
         root.on_action(cx.listener(|this, _: &CopySelected, _, cx| this.copy_selected(false, cx)))
             .on_action(cx.listener(|this, _: &CutSelected, _, cx| this.copy_selected(true, cx)))
             .on_action(cx.listener(|this, _: &Paste, _, cx| this.paste(cx)))
-            .on_action(cx.listener(|this, _: &TrashSelected, _, _| this.trash_selected()))
+            .on_action(cx.listener(|this, _: &TrashSelected, _, cx| this.trash_selected(cx)))
+            .on_action(cx.listener(|this, _: &RestoreSelected, _, _| this.restore_selected()))
+            .on_action(cx.listener(|this, _: &EmptyTrash, _, cx| this.ask_empty_trash(cx)))
             .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
             .on_action(cx.listener(|this, _: &RenameSelected, window, cx| {
                 this.start_rename(window, cx);

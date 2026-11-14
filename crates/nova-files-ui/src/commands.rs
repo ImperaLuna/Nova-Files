@@ -51,6 +51,8 @@ mod actions {
             RenameSelected,
             NewFolder,
             Undo,
+            RestoreSelected,
+            EmptyTrash,
         ]
     );
 }
@@ -117,6 +119,8 @@ pub const ACTIONS: &[ActionSpec] = &[
     RENAME,
     NEW_FOLDER,
     UNDO,
+    RESTORE,
+    EMPTY_TRASH,
 ];
 
 spec!(
@@ -246,6 +250,15 @@ spec!(
     /// Undoes what the island's note names, or else the window's last
     /// job that can still be undone.
     UNDO, Undo, "edit.undo", "Undo", ["ctrl-z"]
+);
+
+spec!(
+    /// Puts the entries selected in the trash back where they were.
+    RESTORE, RestoreSelected, "file.restore", "Restore", []
+);
+spec!(
+    /// Asks, then deletes everything in the trash for good.
+    EMPTY_TRASH, EmptyTrash, "file.empty-trash", "Empty Trash", []
 );
 
 /// Binds every action's default keys.

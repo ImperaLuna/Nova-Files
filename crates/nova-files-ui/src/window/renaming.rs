@@ -47,7 +47,7 @@ pub struct Wanted {
 impl MainWindow {
     /// Starts renaming the one entry selected in the folder on screen.
     pub(crate) fn start_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.renaming.is_some() {
+        if self.renaming.is_some() || self.in_trash() {
             return;
         }
         let Some(listing) = &self.listing else { return };
@@ -157,7 +157,7 @@ impl MainWindow {
     /// Makes a new folder in the folder on screen, then renames it.
     pub(crate) fn new_folder(&mut self) {
         let Some(listing) = &self.listing else { return };
-        if self.pick.is_some() || self.renaming.is_some() {
+        if self.pick.is_some() || self.renaming.is_some() || self.in_trash() {
             return;
         }
         let name = free_name(listing);

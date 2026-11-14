@@ -53,8 +53,13 @@ impl MainWindow {
         })
     }
 
-    /// Moves the files selected to the trash.
-    pub(crate) fn trash_selected(&mut self) {
+    /// Moves the files selected to the trash; in the trash, asks before
+    /// deleting them for good.
+    pub(crate) fn trash_selected(&mut self, cx: &mut Context<Self>) {
+        if self.in_trash() {
+            self.delete_selected_for_good(cx);
+            return;
+        }
         let paths = self.selected_paths();
         if !paths.is_empty() && self.pick.is_none() {
             self.start_job(Operation::Trash { paths });
