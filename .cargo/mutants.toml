@@ -22,6 +22,10 @@ exclude_re = [
     "replace <impl Drop for Client>::drop with \\(\\)",
     # Only changes a highlight color; tests can't read colors back.
     "nova-files-ui/src/view/sidebar\\.rs:.*replace == with != in MainWindow::sidebar",
+    # A wrong icon path fails the assets tests in under a second, yet the
+    # CI run of the whole workspace still hits the 20 s test timeout, so it
+    # reports a timeout instead of the catch.
+    "nova-files-ui/src/assets\\.rs:.*replace Icon::path -> &'static str with ",
     # Open windows, so they need a display.
     "\\bshow_windows\\b",
     "nova-files-ui/src/lib\\.rs:.*\\brun\\b",
