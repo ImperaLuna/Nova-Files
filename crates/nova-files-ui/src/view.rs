@@ -45,10 +45,20 @@ use crate::window::MainWindow;
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let scale_factor = window.scale_factor();
-        self.set_scale_factor(scale_factor, window, cx);
         let viewport = window.viewport_size();
         let room = preview::room(viewport.width, viewport.height);
         self.set_preview_room(room, scale_factor, cx);
+        self.window_root(window, cx)
+            .map(|root| Self::preview_keys(root, cx))
+            .relative()
+            .children(self.preview_layer(room, scale_factor, cx))
+    }
+}
+
+impl MainWindow {
+    /// The window without the quick look over it.
+    fn window_root(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        self.set_scale_factor(window.scale_factor(), window, cx);
         let colors = Colors::of(cx);
         // Keys always land somewhere: in a main window on the window
         // itself, which a click inside takes focus back to; in a picker in
@@ -68,7 +78,6 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
             .map(|root| Self::selection_keys(root, cx))
-            .map(|root| Self::preview_keys(root, cx))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if this.jump_typed(event, cx) {
                     cx.stop_propagation();
@@ -92,7 +101,6 @@ impl Render for MainWindow {
                 MouseButton::Navigate(NavigationDirection::Forward),
                 cx.listener(|this, _: &MouseDownEvent, _, _| this.go_forward()),
             )
-            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -121,11 +129,8 @@ impl Render for MainWindow {
                     ),
             )
             .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
-            .children(self.preview_layer(room, scale_factor, cx))
     }
-}
 
-impl MainWindow {
     /// The selection's actions on the window's root (see `selecting`).
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &OpenSelected, window, cx| {
