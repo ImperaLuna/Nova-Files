@@ -27,14 +27,12 @@ pub fn matched(name: &str, query: &str) -> Vec<Range<usize>> {
 fn find_ignoring_case(name: &str, word: &str) -> Option<Range<usize>> {
     name.char_indices().find_map(|(start, _)| {
         let mut rest = name[start..].char_indices();
-        for wanted in word.chars() {
-            let (_, found) = rest.next()?;
-            if !found.to_lowercase().eq(wanted.to_lowercase()) {
-                return None;
-            }
-        }
+        let same = word.chars().all(|wanted| {
+            rest.next()
+                .is_some_and(|(_, found)| found.to_lowercase().eq(wanted.to_lowercase()))
+        });
         let end = rest.next().map_or(name.len(), |(at, _)| start + at);
-        Some(start..end)
+        same.then_some(start..end)
     })
 }
 
