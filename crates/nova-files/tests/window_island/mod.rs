@@ -228,3 +228,58 @@ async fn pasting_a_copy_where_it_came_from_keeps_both(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-v");
     wait_for_names(&view, cx, &["Projects", "notes (2).txt", "notes.txt"]).await;
 }
+
+#[gpui::test]
+async fn the_selection_line_counts_bytes_of_files_only(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island-bytes");
+    let home = TempFolder::tree("island-bytes-home");
+    fs::write(tree.path().join("notes.txt"), "hello world").unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    view.condition::<WindowEvent>(cx, |view, _| view.selected_bytes() == Some(11))
+        .await;
+    // A folder selected too adds nothing.
+    cx.simulate_keystrokes("ctrl-a");
+    cx.run_until_parked();
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_bytes()),
+        Some(11)
+    );
+}
+
+#[gpui::test]
+async fn delete_with_nothing_selected_does_nothing(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island-none");
+    let home = TempFolder::tree("island-none-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    cx.simulate_keystrokes("delete");
+    cx.run_until_parked();
+    assert_eq!(view.read_with(cx, |view, _| view.jobs_pending()), 0);
+}
+
+#[gpui::test]
+async fn a_note_stays_its_full_time_after_another_goes(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island-notes");
+    let home = TempFolder::tree("island-notes-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    view.update(cx, |view, cx| view.show_note("first", None, cx));
+    cx.executor().advance_clock(nova_files_ui::NOTE_TIME / 2);
+    view.update(cx, |view, cx| view.show_note("second", None, cx));
+    // The first note's time is up; the second's isn't.
+    cx.executor()
+        .advance_clock(nova_files_ui::NOTE_TIME / 2 + nova_files_ui::NOTE_TIME / 4);
+    cx.run_until_parked();
+    assert_eq!(
+        view.read_with(cx, |view, _| view.note().map(|note| note.label.clone())),
+        Some("second".into())
+    );
+    cx.executor().advance_clock(nova_files_ui::NOTE_TIME / 2);
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.note().is_none()));
+}
