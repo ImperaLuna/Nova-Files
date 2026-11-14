@@ -198,12 +198,7 @@ fn hero_subtitle(folder: &RecentFolder, home: &Path) -> String {
 }
 
 /// A card's name in bold and the dim line under it, each cut to fit.
-fn titles(
-    name: String,
-    subtitle: String,
-    name_size: Pixels,
-    colors: &Colors,
-) -> impl IntoElement {
+fn titles(name: String, subtitle: String, name_size: Pixels, colors: &Colors) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
