@@ -212,7 +212,14 @@ async fn the_system_drive_shows_its_free_space_and_opens(cx: &mut TestAppContext
     view.condition::<WindowEvent>(cx, |view, _| view.disk_space(Path::new("/")).is_some())
         .await;
     cx.run_until_parked();
+    assert!(cx.debug_bounds("drive-0-number").is_some());
+    // A narrow window shows the drive by its name alone.
+    cx.simulate_resize(size(NARROWEST_WIDE - px(1.0), px(600.0)));
+    cx.run_until_parked();
     assert!(cx.debug_bounds("drive-0").is_some());
+    assert!(cx.debug_bounds("drive-0-number").is_none());
+    cx.simulate_resize(size(NARROWEST_WIDE, px(600.0)));
+    cx.run_until_parked();
 
     // The system drive can't be ejected: its menu only opens it.
     right_click(cx, "drive-0");

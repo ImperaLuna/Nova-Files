@@ -36,7 +36,9 @@ impl MainWindow {
                 .map(|space| {
                     let (text, full) = drives::free(space);
                     (text, if full { colors.full } else { colors.text_dim })
-                });
+                })
+                // A narrow window keeps its drives to their names.
+                .filter(|_| !narrow);
             let row = row(
                 Row {
                     id: ("drive", index).into(),

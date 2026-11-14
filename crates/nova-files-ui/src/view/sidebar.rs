@@ -118,7 +118,8 @@ fn section_button(selector: &'static str, glyph: Icon, colors: &Colors) -> State
         .child(icon(glyph, size::SECTION_BUTTON_ICON, colors.text_dim))
 }
 
-/// What a sidebar row shows.
+/// What a sidebar row shows. Its number carries the debug selector
+/// `<selector>-number`.
 pub struct Row {
     pub id: ElementId,
     pub selector: String,
@@ -142,6 +143,7 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         here,
     } = row;
     let tint = if here { colors.here } else { colors.text_dim };
+    let number_selector = format!("{selector}-number");
     div()
         .id(id)
         .debug_selector(move || selector)
@@ -167,6 +169,7 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         .child(div().flex_1().min_w_0().truncate().child(name))
         .children(number.map(|(number, color)| {
             div()
+                .debug_selector(move || number_selector)
                 .flex_none()
                 .text_size(text::LABEL)
                 .font_weight(text::DETAIL_WEIGHT)
