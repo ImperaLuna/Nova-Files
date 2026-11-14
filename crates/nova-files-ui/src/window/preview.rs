@@ -197,6 +197,12 @@ impl MainWindow {
         })
     }
 
+    /// The box the next picture is asked to fit, once the window has
+    /// drawn.
+    pub const fn preview_fit(&self) -> Option<Fit> {
+        self.quick_looks.fit
+    }
+
     /// The quick look on screen.
     pub(crate) const fn quick_look(&self) -> Option<&QuickLook> {
         self.quick_looks.open.as_ref()
@@ -359,12 +365,7 @@ impl MainWindow {
         });
         match (found, self.quick_looks.open.take()) {
             (Some((listing, entry)), Some(open)) => {
-                let shown = open.shown.map(|mut shown| {
-                    if shown.entry == open.entry {
-                        shown.entry = entry;
-                    }
-                    shown
-                });
+                let shown = open.shown.map(|shown| moved(shown, open.entry, entry));
                 self.preview_entry(listing, entry, shown, cx);
             }
             (_, open) => {
@@ -373,6 +374,15 @@ impl MainWindow {
             }
         }
     }
+}
+
+/// `shown` once its entry `from` is at `to` in a fresh read; what was
+/// shown for another entry keeps its place.
+fn moved(mut shown: Shown, from: EntryId, to: EntryId) -> Shown {
+    if shown.entry == from {
+        shown.entry = to;
+    }
+    shown
 }
 
 /// The box a picture fits before the window has drawn once.
@@ -432,6 +442,19 @@ mod tests {
             pixels: Arc::from([0; 8].as_slice()),
         };
         assert!(render_image(&picture).is_none());
+    }
+
+    #[test]
+    fn what_is_shown_moves_with_its_entry() {
+        let shown = |entry| Shown {
+            entry: EntryId(entry),
+            preview: None,
+            picture: None,
+        };
+        let moved_entry = |entry, from, to| moved(shown(entry), EntryId(from), EntryId(to)).entry;
+        assert_eq!(moved_entry(2, 2, 5), EntryId(5));
+        // Shown for the entry before: left where it was.
+        assert_eq!(moved_entry(1, 2, 5), EntryId(1));
     }
 
     #[test]

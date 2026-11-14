@@ -344,3 +344,23 @@ async fn a_big_folder_says_how_many_more_it_holds(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("preview-folder").is_some());
     assert!(cx.debug_bounds("preview-more").is_some());
 }
+
+#[gpui::test]
+async fn pictures_are_asked_to_fit_the_room_the_window_has(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview-fit");
+    let (view, cx) = with_text(cx, &tree).await;
+    let fit = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| view.preview_fit())
+    };
+
+    let drawn = fit(&view, cx).unwrap();
+    cx.simulate_resize(gpui::size(gpui::px(500.0), gpui::px(400.0)));
+    let smaller = fit(&view, cx).unwrap();
+    assert!(smaller.width < drawn.width && smaller.height < drawn.height);
+    cx.simulate_resize(gpui::size(gpui::px(600.0), gpui::px(400.0)));
+    let wider = fit(&view, cx).unwrap();
+    assert!(wider.width > smaller.width);
+    assert_eq!(wider.height, smaller.height);
+}

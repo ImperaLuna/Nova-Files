@@ -190,12 +190,14 @@ fn picture_art(
 ) -> impl IntoElement {
     let size = picture.size(0);
     let logical = |device: i32| logical_side(device, scale_factor);
-    let (width, height) = (logical(size.width.0), logical(size.height.0));
-    let scale = fitting_scale(gpui::size(width, height), room);
+    let drawn = fitted(
+        gpui::size(logical(size.width.0), logical(size.height.0)),
+        room,
+    );
     img(Arc::clone(picture))
         .debug_selector(|| "preview-picture".to_owned())
-        .w(width * scale)
-        .h(height * scale)
+        .w(drawn.width)
+        .h(drawn.height)
         .rounded(radius::CARD)
         .border(size::LINE)
         .border_color(colors.line)
@@ -229,6 +231,12 @@ fn lines_fitting(height: Pixels) -> usize {
     )]
     let lines = lines.max(1.0) as usize;
     lines
+}
+
+/// A picture `size` scaled to fit `room`, never up.
+fn fitted(size: gpui::Size<Pixels>, room: gpui::Size<Pixels>) -> gpui::Size<Pixels> {
+    let scale = fitting_scale(size, room);
+    gpui::size(size.width * scale, size.height * scale)
 }
 
 /// How much a picture `size` is scaled to fit `room`: never up.
@@ -458,6 +466,15 @@ mod tests {
         // A picture with no size is left as it is.
         let empty = fitting_scale(gpui::size(px(0.0), px(0.0)), gpui::size(px(0.0), px(0.0)));
         assert!((empty - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_picture_is_drawn_at_its_fitted_size() {
+        let drawn = fitted(
+            gpui::size(px(200.0), px(100.0)),
+            gpui::size(px(100.0), px(400.0)),
+        );
+        assert_eq!(drawn, gpui::size(px(100.0), px(50.0)));
     }
 
     #[test]
