@@ -58,6 +58,8 @@ impl MainWindow {
     /// Asks the core for `folder`, leaving the history as it is: the
     /// window moves there once it answers. Whether the ask was sent.
     pub(super) fn request(&mut self, folder: &Path) -> bool {
+        // Only a fallback's own ask marks it, after this returns.
+        self.falling_back = false;
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
         let path = tidy(folder);
