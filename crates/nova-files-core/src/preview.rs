@@ -206,8 +206,9 @@ fn picture(request: &Request, helper: &Path) -> Option<PreviewContent> {
     if !request.current.is(request.id) {
         return None;
     }
-    let running = &request.current.running;
-    let picture = thumbs::picture(helper, &request.path, request.fit, running);
+    let current = &request.current;
+    let wanted = || current.is(request.id);
+    let picture = thumbs::picture(helper, &request.path, request.fit, &current.running, wanted);
     Some(picture.map_or(PreviewContent::Icon, PreviewContent::Picture))
 }
 
