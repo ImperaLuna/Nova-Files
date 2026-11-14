@@ -33,6 +33,7 @@ mod search;
 mod settings;
 mod theme;
 mod thumbs;
+mod timed;
 mod trace;
 mod trash;
 mod vulkan_drivers;
