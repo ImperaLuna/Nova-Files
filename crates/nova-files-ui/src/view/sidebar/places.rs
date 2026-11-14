@@ -23,6 +23,7 @@ impl MainWindow {
             .enumerate()
             .map(|(index, place)| {
                 let target = place.path.clone();
+                let is_here = place.is_here(here);
                 row(
                     Row {
                         id: ("place", index).into(),
@@ -30,7 +31,7 @@ impl MainWindow {
                         glyph: place.icon,
                         name: place.name,
                         number: None,
-                        here: here == Some(place.path.as_path()),
+                        here: is_here,
                     },
                     narrow,
                     &colors,
