@@ -7,7 +7,9 @@
 //! lists a folder when it is opened, again each time it is opened (so a
 //! folder made since shows), and whenever the window's own listing of it
 //! arrives. Until a folder is listed it is drawn with its arrow, since it
-//! may hold folders; once listed with none, the arrow goes. Folders whose
+//! may hold folders; once listed with none, the arrow goes, until its
+//! parent is opened again: then what it holds is unknown again, so a
+//! folder made in it since can be found. Folders whose
 //! names start with a dot stay out, as hidden files do.
 //!
 //! The tree opens itself down to the folder you're in: each folder
@@ -105,10 +107,13 @@ impl FolderTree {
     }
 
     /// Opens `path` if closed, closes it if open. An opened folder is
-    /// listed again.
+    /// listed again, and its subfolders known to hold none are unknown
+    /// again.
     pub fn toggle(&mut self, path: &Path) {
         if !self.open.remove(path) {
             self.open.insert(path.to_owned());
+            self.children
+                .retain(|child, held| !held.is_empty() || child.parent() != Some(path));
             self.wait_for(path);
         }
     }
@@ -296,6 +301,20 @@ mod tests {
         tree.reveal(Path::new("/home/me"));
         tree.reveal(Path::new("/etc/nix"));
         assert_eq!(tree.next_to_list(), None);
+    }
+
+    #[test]
+    fn opening_a_parent_again_gives_an_empty_subfolder_its_arrow_back() {
+        let mut tree = home();
+        let root = Path::new("/home/me");
+        tree.toggle(root);
+        tree.listed(root, &entries(&["a"], &[]));
+        tree.listed(Path::new("/home/me/a"), &entries(&[], &[]));
+        tree.listed(root, &entries(&["a"], &[]));
+        assert_eq!(tree.rows()[1].toggle, Toggle::None);
+        tree.toggle(root);
+        tree.toggle(root);
+        assert_eq!(tree.rows()[1].toggle, Toggle::Closed);
     }
 
     #[test]

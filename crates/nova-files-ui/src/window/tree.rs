@@ -5,7 +5,8 @@
 //! when it answers, the next waiting folder is asked for (see `tree`).
 //!
 //! The window's own listings feed the tree too: a folder on screen is a
-//! folder listed, and the tree opens itself down to it.
+//! folder listed, and the tree opens itself down to a folder the window
+//! goes to.
 
 use std::path::{Path, PathBuf};
 
@@ -57,11 +58,14 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Takes the window's own listing of a folder into the tree, and
-    /// opens the tree down to it.
-    pub(super) fn tree_follows(&mut self, listing: &Listing) {
+    /// Takes the window's own listing of a folder into the tree, and opens
+    /// the tree down to it when the window has just `arrived` there, so a
+    /// folder read again in place never reopens what the user closed.
+    pub(super) fn tree_follows(&mut self, listing: &Listing, arrived: bool) {
         self.tree.listed(&listing.path, &listing.entries);
-        self.tree.reveal(&listing.path);
+        if arrived {
+            self.tree.reveal(&listing.path);
+        }
         self.list_tree_folder();
     }
 

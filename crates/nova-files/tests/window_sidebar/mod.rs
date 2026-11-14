@@ -171,11 +171,22 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     assert!(cx.debug_bounds("tree-toggle-1").is_some());
     assert!(cx.debug_bounds("tree-toggle-2").is_none());
 
-    // Clicking a row goes there; the arrow only opens and closes.
-    click(cx, "tree-0");
-    wait_for_folder(&view, cx, tree.path()).await;
+    // The arrow only opens and closes, and the folder on screen read again
+    // in place leaves closed what the user closed.
     click(cx, "tree-toggle-1");
     cx.run_until_parked();
     assert!(cx.debug_bounds("tree-2").is_none());
-    view.read_with(cx, |view, _| assert_eq!(view.folder(), Some(tree.path())));
+    view.update(cx, |view, _| view.sort_by(nova_files_api::SortKey::Name));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tree-2").is_none());
+    view.read_with(cx, |view, _| {
+        assert_eq!(
+            view.folder(),
+            Some(tree.path().join("Projects/nova").as_path())
+        );
+    });
+
+    // Clicking a row goes there.
+    click(cx, "tree-0");
+    wait_for_folder(&view, cx, tree.path()).await;
 }

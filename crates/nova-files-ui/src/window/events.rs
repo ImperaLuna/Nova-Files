@@ -26,7 +26,7 @@ impl MainWindow {
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
         self.selection = self.selection_for(&listing);
-        self.tree_follows(&listing);
+        self.tree_follows(&listing, !same_folder);
         self.listing = Some(listing);
         self.core_moved = false;
         self.details = HashMap::new();
