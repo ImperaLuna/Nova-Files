@@ -28,6 +28,7 @@ mod percent;
 mod places;
 mod private_file;
 mod properties;
+mod recent;
 mod run;
 mod saver;
 mod search;
@@ -124,6 +125,7 @@ pub fn spawn_with(
             let theme = theme::Store::open(config);
             theme.follow(&settings);
             let places = places::Store::open(home.clone());
+            let recent = recent::Store::open(home.as_ref().map(|home| home.state.as_path()));
             let mime_types = Arc::default();
             let setup = run::Setup {
                 home,
@@ -138,6 +140,7 @@ pub fn spawn_with(
                 jobs,
                 measurer: measure::Measurer::default(),
                 drives: drives::Store::default(),
+                recent,
             };
             run::run(&receiver, idle_exit, &setup);
         })?;
