@@ -78,9 +78,9 @@ fn the_tree_takes_only_the_listing_it_asked_for(cx: &mut TestAppContext) {
 #[gpui::test]
 fn a_folder_the_tree_couldnt_read_loses_its_arrow(cx: &mut TestAppContext) {
     let (view, cx, mut core) = tree_opened(cx);
-    let (id, path) = core.tree_listing();
+    let (root_id, path) = core.tree_listing();
     core.send_to_tree(Event::FolderListed(Listing {
-        id,
+        id: root_id,
         path,
         entries: folders(&["a", "b"]),
     }));
@@ -89,6 +89,7 @@ fn a_folder_the_tree_couldnt_read_loses_its_arrow(cx: &mut TestAppContext) {
     view.update(cx, |view, cx| view.toggle_tree(&a, cx));
     let (id, path) = core.tree_listing();
     assert_eq!(path, a);
+    assert_ne!(id, root_id, "each ask has an id of its own");
 
     core.send_to_tree(Event::FolderUnreadable {
         id: ListingId(id.0 + 1),

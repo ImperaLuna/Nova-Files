@@ -3,10 +3,10 @@
 //! depth, with a hairline down each level it sits in. The arrow opens and
 //! closes a folder in place; a click elsewhere on the row goes there. The
 //! folder you're in has its name strong and its icon orange. Rows carry
-//! the debug selectors `tree-<n>` and their arrows `tree-toggle-<n>`,
+//! the debug selectors `tree-<n>`, their arrows `tree-toggle-<n>` and
+//! their hairlines `tree-guide-<n>-<level>`,
 //! counted from 0 down the tree.
 
-use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
 
 use gpui::{
@@ -48,14 +48,15 @@ impl MainWindow {
         colors: &Colors,
         cx: &Context<Self>,
     ) -> impl IntoElement {
+        let here = row.is_here(self.folder());
+        let root = row.is_root();
         let TreeRow {
             path,
             name,
             depth,
             toggle,
         } = row;
-        let here = self.folder() == Some(path.as_path());
-        let (glyph, name) = if depth == 0 {
+        let (glyph, name) = if root {
             (Icon::Home, places::HOME_LABEL.into())
         } else {
             let glyph = places::standard_icon_at(self.places(), &path).unwrap_or(Icon::Folder);
@@ -65,6 +66,7 @@ impl MainWindow {
         let tint = if here { colors.here } else { colors.text_dim };
         let guides = (1..=depth).map(|level| {
             div()
+                .debug_selector(move || format!("tree-guide-{index}-{level}"))
                 .absolute()
                 .top_0()
                 .bottom_0()
@@ -119,11 +121,6 @@ fn tree_toggle(
     if toggle == Toggle::None {
         return slot;
     }
-    let angle = if toggle == Toggle::Open {
-        FRAC_PI_2
-    } else {
-        0.0
-    };
     slot.debug_selector(move || format!("tree-toggle-{index}"))
         .cursor_pointer()
         .hover(|button| button.bg(colors.press))
@@ -136,7 +133,7 @@ fn tree_toggle(
                 .path(Icon::Chevron.path())
                 .size(size::TREE_TOGGLE_ICON)
                 .text_color(colors.text_faint)
-                .with_transformation(Transformation::rotate(radians(angle))),
+                .with_transformation(Transformation::rotate(radians(toggle.angle()))),
         )
 }
 
