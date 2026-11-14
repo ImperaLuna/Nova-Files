@@ -7,6 +7,13 @@
 # crates/nova-files/tests, not from its own crate.
 test_workspace = true
 
+# The baseline's tests take about 1 s (cargo-mutants times them before the
+# in-place build is warm), so the timeout it sets is its 20 s floor, while a
+# whole test pass on a CI runner takes 15 to 19 s even for a mutant it
+# catches. A higher floor keeps slow passes from reading as timeouts; a
+# mutant that really hangs still times out and fails the job.
+minimum_test_timeout = 60
+
 exclude_re = [
     # Reads the real home folder and environment; tests hand the core a
     # temp home instead.
