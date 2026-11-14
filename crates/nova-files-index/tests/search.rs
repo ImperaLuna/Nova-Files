@@ -5,7 +5,7 @@
 
 mod support;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use nova_files_index::{
     Change, Details, FileId, Flags, Hit, Index, Kind, MatchKind, Overlay, STAGES, crawl,
@@ -456,4 +456,20 @@ fn a_search_within_a_folder_finds_entries_added_there_only() {
     let paths: Vec<PathBuf> = first.into_iter().map(|(path, _)| path).collect();
     assert!(paths.contains(&PathBuf::from("Documents/tax 2025.pdf")));
     assert!(!paths.contains(&PathBuf::from("Pictures/tax.png")));
+}
+
+#[test]
+fn a_search_within_a_folder_above_the_index_finds_everything_inside() {
+    let home = Home::new();
+    let above = home.folder.path().parent().unwrap();
+    let everywhere = home.named(home.index.search("settings", LIMIT));
+    let within = home.named(home.index.search("settings", LIMIT).within(above));
+    assert_eq!(within, everywhere);
+    assert_ne!(within[0].len(), 0);
+    let elsewhere = home.named(
+        home.index
+            .search("settings", LIMIT)
+            .within(Path::new("/nowhere-near")),
+    );
+    assert_eq!(elsewhere, [vec![], vec![]]);
 }
