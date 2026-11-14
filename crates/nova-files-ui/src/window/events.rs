@@ -98,12 +98,17 @@ impl MainWindow {
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             event @ (Event::JobStarted { .. }
             | Event::JobFinished { .. }
+            | Event::JobProgress { .. }
+            | Event::JobConflict { .. }
+            | Event::ConflictAnswered { .. }
+            | Event::JobPaused(_)
+            | Event::JobResumed(_)
             | Event::Undoable { .. }
             | Event::UndoGone(_)) => self.job_event(event, cx),
             // The window never searches or asks for drives yet, doesn't
-            // wait on a file opening, and doesn't show a job's progress
-            // yet; only a picker's opening asks for the window state (see
-            // `window_state`).
+            // wait on a file opening, and never watches jobs it didn't
+            // start; only a picker's opening asks for the window state
+            // (see `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Drives(_)
             | Event::DriveDone { .. }
@@ -115,11 +120,6 @@ impl MainWindow {
             | Event::FileNotOpened
             | Event::WindowState(_)
             | Event::JobRunning { .. }
-            | Event::JobConflict { .. }
-            | Event::ConflictAnswered { .. }
-            | Event::JobProgress { .. }
-            | Event::JobPaused(_)
-            | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
             | Event::Bookmarks(_)
             | Event::OpenWith(_)

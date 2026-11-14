@@ -40,6 +40,7 @@ mod jobs;
 mod navigate;
 mod rows;
 
+pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
 
 use std::collections::HashMap;

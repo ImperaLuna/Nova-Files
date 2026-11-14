@@ -172,3 +172,53 @@ async fn a_note_goes_by_itself(cx: &mut TestAppContext) {
     assert!(view.read_with(cx, |view, _| view.note().is_none()));
     assert!(cx.debug_bounds("count").is_some());
 }
+
+#[gpui::test]
+async fn a_job_held_at_a_conflict_shows_waiting_and_cancels(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island");
+    let home = TempFolder::tree("island-home");
+    let projects = tree.path().join("Projects");
+    fs::write(projects.join("notes.txt"), "there first").unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("ctrl-c");
+    double_click(cx, "entry-0");
+    wait_for_folder(&view, cx, &projects).await;
+    cx.simulate_keystrokes("ctrl-v");
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        view.newest_job_line(cx).as_deref() == Some("Copying notes.txt · waiting")
+    })
+    .await;
+    // A quick job only leaves its note; this one holds, so it shows.
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-progress").is_none());
+    cx.executor().advance_clock(nova_files_ui::JOB_SHOWS_AFTER);
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-progress").is_some());
+
+    click(cx, "island-cancel");
+    view.condition::<WindowEvent>(cx, |view, cx| view.newest_job_line(cx).is_none())
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-progress").is_none());
+    assert_eq!(
+        fs::read_to_string(projects.join("notes.txt")).unwrap(),
+        "there first"
+    );
+}
+
+#[gpui::test]
+async fn pasting_a_copy_where_it_came_from_keeps_both(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island");
+    let home = TempFolder::tree("island-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("ctrl-c");
+    cx.run_until_parked();
+    cx.simulate_keystrokes("ctrl-v");
+    wait_for_names(&view, cx, &["Projects", "notes (2).txt", "notes.txt"]).await;
+}
