@@ -131,3 +131,32 @@ pub struct Place {
     pub kind: PlaceKind,
     pub path: PathBuf,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(id: u32, name: &str) -> Entry {
+        Entry {
+            id: EntryId(id),
+            name: name.into(),
+            kind: EntryKind::File,
+        }
+    }
+
+    #[test]
+    fn an_entry_is_in_its_own_folder_or_the_listing_s() {
+        let folder = Listing {
+            id: ListingId(1),
+            path: PathBuf::from("/home"),
+            entries: Arc::new([]),
+            folders: None,
+        };
+        assert_eq!(folder.path_of(&entry(0, "a.txt")), Path::new("/home/a.txt"));
+        let found = Listing {
+            folders: Some(Arc::new([PathBuf::from("/docs")])),
+            ..folder
+        };
+        assert_eq!(found.path_of(&entry(0, "a.txt")), Path::new("/docs/a.txt"));
+    }
+}

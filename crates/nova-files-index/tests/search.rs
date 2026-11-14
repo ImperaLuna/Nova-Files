@@ -465,7 +465,7 @@ fn a_search_within_a_folder_above_the_index_finds_everything_inside() {
     let everywhere = home.named(home.index.search("settings", LIMIT));
     let within = home.named(home.index.search("settings", LIMIT).within(above));
     assert_eq!(within, everywhere);
-    assert!(!within[0].is_empty());
+    assert_ne!(within[0].len(), 0);
     let elsewhere = home.named(
         home.index
             .search("settings", LIMIT)

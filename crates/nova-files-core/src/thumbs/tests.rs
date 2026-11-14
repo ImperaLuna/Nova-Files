@@ -108,3 +108,51 @@ fn the_environment_names_the_thumbnails_folder_and_helper() {
     assert_eq!(thumbnails.folder, cache.join(THUMBNAILS_FOLDER));
     assert_eq!(thumbnails.helper.file_name().unwrap(), HELPER_NAME);
 }
+
+#[test]
+fn showing_a_listing_starts_over_unless_a_newer_one_came() {
+    let queue = Queue {
+        shared: Arc::new(shared(vec![entry(0, "a", EntryKind::File)], 0..1, &[0])),
+    };
+    let newer = Listing {
+        id: ListingId(2),
+        path: PathBuf::from("/other"),
+        entries: Arc::new([]),
+        folders: None,
+    };
+    queue.show(&newer, || false);
+    assert!(queue.shared.still_wanted(LISTING, 0));
+
+    queue.show(&newer, || true);
+    let state = queue.shared.state.lock().unwrap();
+    assert_eq!(
+        state.shown.as_ref().map(|shown| shown.id),
+        Some(ListingId(2))
+    );
+    assert_eq!((state.wanted.clone(), state.done.len()), (0..0, 0));
+}
+
+#[test]
+fn a_found_file_is_thumbnailed_from_its_own_folder() {
+    let folder = env::temp_dir().join(format!("nova-files-thumb-job-{}", std::process::id()));
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("photo.png"), b"png").unwrap();
+    let found = Listing {
+        id: LISTING,
+        path: PathBuf::from("/somewhere/else"),
+        entries: Arc::new([
+            entry(0, "photo.png", EntryKind::File),
+            entry(1, "gone.png", EntryKind::File),
+        ]),
+        folders: Some(Arc::new([folder.clone(), folder.clone()])),
+    };
+
+    let job = job_for(&found, 0);
+    let gone = job_for(&found, 1);
+
+    fs::remove_dir_all(&folder).ok();
+    let job = job.unwrap();
+    assert_eq!(job.source, folder.join("photo.png"));
+    assert!(job.mtime > 0);
+    assert!(gone.is_none());
+}
