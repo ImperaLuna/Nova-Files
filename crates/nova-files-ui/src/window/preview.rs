@@ -3,7 +3,8 @@
 //! Space opens it on the entry the keyboard is on, or else the first one
 //! selected, and closes it again; Escape closes it too. While it is open,
 //! the arrow keys move the cursor as they do in the list, the selection
-//! follows, and the quick look shows the entry the cursor lands on. Enter
+//! follows, and the quick look shows the entry the cursor lands on, as it
+//! does whatever else moves the cursor. Enter
 //! opens that entry as a double-click would, and closes the quick look.
 //! Going to another folder closes it.
 //!
@@ -115,29 +116,35 @@ impl MainWindow {
     }
 
     /// An arrow key while the quick look is open: the cursor moves as in
-    /// the list, the selection follows, and the quick look shows where it
-    /// lands. Whether the quick look was open to take it.
+    /// the list, the selection follows, and the quick look with it (see
+    /// [`Self::preview_follow_cursor`]). Whether the quick look was open to
+    /// take it.
     pub(crate) fn step_preview(&mut self, step: Move, cx: &mut Context<Self>) -> bool {
-        let Some(open) = &self.quick_looks.open else {
+        if self.quick_looks.open.is_none() {
             return false;
+        }
+        self.move_cursor(step, false, cx);
+        true
+    }
+
+    /// The selection changed: an open quick look moves to the entry the
+    /// cursor is on now, whatever moved it, keeping what it shows until
+    /// the core answers.
+    pub(crate) fn preview_follow_cursor(&mut self, cx: &mut Context<Self>) {
+        let Some(open) = &self.quick_looks.open else {
+            return;
         };
         let listing = open.listing;
-        self.move_cursor(step, false, cx);
         let Some(entry) = self
             .cursor()
             .and_then(|cursor| u32::try_from(cursor).ok())
             .map(EntryId)
+            .filter(|&entry| entry != open.entry && self.listing_id() == Some(listing))
         else {
-            return true;
+            return;
         };
-        let open = self.quick_looks.open.take();
-        if open.as_ref().is_some_and(|open| open.entry == entry) {
-            self.quick_looks.open = open;
-            return true;
-        }
-        let shown = open.and_then(|open| open.shown);
+        let shown = self.quick_looks.open.take().and_then(|open| open.shown);
         self.preview_entry(listing, entry, shown, cx);
-        true
     }
 
     /// Enter while the quick look is open: opens its entry as a
@@ -251,6 +258,8 @@ impl MainWindow {
             return;
         };
         let picture = picture.clone();
+        // Kept without its pixels, which the image drawn holds instead.
+        let preview = preview.map(|preview| Arc::new(without_pixels(&preview)));
         let converting = cx
             .background_executor()
             .spawn(async move { render_image(&picture) });
@@ -294,8 +303,9 @@ impl MainWindow {
 
     /// A listing arrived, in place of `before`: a quick look of another
     /// folder closes, and in a fresh read of the same folder it stays on
-    /// its entry by name, or closes when that is gone. What it shows stays
-    /// as it was.
+    /// its entry by name, or closes when that is gone. It asks for that
+    /// entry again, since it may have changed, and shows what it showed
+    /// until the answer comes.
     pub(super) fn preview_listing_arrived(
         &mut self,
         before: Option<&Listing>,
@@ -317,16 +327,20 @@ impl MainWindow {
                 .position(|entry| same_folder && entry.name == name)?;
             Some((listing.id, EntryId(u32::try_from(index).ok()?)))
         });
-        match (found, &mut self.quick_looks.open) {
+        match (found, self.quick_looks.open.take()) {
             (Some((listing, entry)), Some(open)) => {
-                let before = open.entry;
-                if let Some(shown) = open.shown.as_mut().filter(|shown| shown.entry == before) {
-                    shown.entry = entry;
-                }
-                open.listing = listing;
-                open.entry = entry;
+                let shown = open.shown.map(|mut shown| {
+                    if shown.entry == open.entry {
+                        shown.entry = entry;
+                    }
+                    shown
+                });
+                self.preview_entry(listing, entry, shown, cx);
             }
-            _ => self.close_preview(None, cx),
+            (_, open) => {
+                self.quick_looks.open = open;
+                self.close_preview(None, cx);
+            }
         }
     }
 }
@@ -336,6 +350,21 @@ const DEFAULT_FIT: Fit = Fit {
     width: 1920,
     height: 1080,
 };
+
+/// `preview` with its picture's pixels left out, its size kept.
+fn without_pixels(preview: &Preview) -> Preview {
+    let content = match &preview.content {
+        PreviewContent::Picture(picture) => PreviewContent::Picture(Picture {
+            pixels: Arc::from([]),
+            ..picture.clone()
+        }),
+        other => other.clone(),
+    };
+    Preview {
+        content,
+        ..preview.clone()
+    }
+}
 
 /// `picture` in GPUI's pixel order; `None` when its pixels don't match
 /// its size.
@@ -373,5 +402,26 @@ mod tests {
             pixels: Arc::from([0; 8].as_slice()),
         };
         assert!(render_image(&picture).is_none());
+    }
+
+    #[test]
+    fn a_kept_preview_drops_its_pixels_and_keeps_its_size() {
+        let preview = Preview {
+            path: PathBuf::from("/a.png"),
+            kind_name: Some("PNG image".to_owned()),
+            bytes: 8,
+            content: PreviewContent::Picture(Picture {
+                width: 2,
+                height: 1,
+                pixels: Arc::from([0; 8].as_slice()),
+            }),
+        };
+        let kept = without_pixels(&preview);
+        let PreviewContent::Picture(picture) = &kept.content else {
+            unreachable!("a picture stays a picture");
+        };
+        assert_eq!((picture.width, picture.height), (2, 1));
+        assert!(picture.pixels.is_empty());
+        assert_eq!(kept.kind_name, preview.kind_name);
     }
 }

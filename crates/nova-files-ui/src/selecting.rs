@@ -4,7 +4,8 @@
 //!
 //! Every change goes through [`MainWindow::reselect`], which works out
 //! the new selection from the old one, lets a picker update its name box
-//! (see `pick::select`), and scrolls the cursor's row into view. In a
+//! (see `pick::select`), moves an open quick look to the cursor (see
+//! `window::preview`), and scrolls the cursor's row into view. In a
 //! picker a range holds only what it picks, and a picker for one entry
 //! keeps at most one selected whatever the keys; a main window picks
 //! anything.
@@ -78,6 +79,7 @@ impl MainWindow {
             }
         });
         self.pick_selection_changed(cx);
+        self.preview_follow_cursor(cx);
         if let Some(cursor) = self.cursor() {
             self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
         }

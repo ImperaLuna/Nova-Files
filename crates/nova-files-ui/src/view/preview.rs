@@ -3,7 +3,8 @@
 //! round Previous and Next buttons either side.
 //!
 //! What is shown: a picture at the size the core decoded it (which fits
-//! the room, see `window::preview`), a text file's first lines as text, a
+//! the room, see `window::preview`), scaled down if the window has since
+//! shrunk, a text file's first lines as text, a
 //! folder's first entries with how many more it holds, and anything else
 //! as its large icon. The caption names the entry, its kind and its size
 //! (a folder's count of entries), with Open and Close buttons. A click on
@@ -82,7 +83,7 @@ impl MainWindow {
             |shown| {
                 art(
                     shown,
-                    listing_entry_kind(shown, listing, entry),
+                    shown_entry(shown, listing, entry),
                     room,
                     scale_factor,
                     &colors,
@@ -145,34 +146,34 @@ fn kept_open(element: impl IntoElement) -> Div {
         .child(element)
 }
 
-/// The kind of the entry `shown` is of: the one on screen, or the one
-/// shown before while this one loads.
-fn listing_entry_kind(
+/// The entry `shown` is of: the one on screen, or the one shown before
+/// while this one loads.
+fn shown_entry<'a>(
     shown: &Shown,
-    listing: &nova_files_api::Listing,
-    entry: &Entry,
-) -> EntryKind {
+    listing: &'a nova_files_api::Listing,
+    entry: &'a Entry,
+) -> &'a Entry {
     usize::try_from(shown.entry.0)
         .ok()
         .and_then(|index| listing.entries.get(index))
-        .map_or(entry.kind, |shown_entry| shown_entry.kind)
+        .unwrap_or(entry)
 }
 
 /// What `shown` draws large: its picture, text, folder list or icon.
 fn art(
     shown: &Shown,
-    kind: EntryKind,
+    entry: &Entry,
     room: gpui::Size<Pixels>,
     scale_factor: f32,
     colors: &Colors,
 ) -> AnyElement {
     let Some(preview) = shown.preview.as_deref() else {
-        return big_icon(OsStr::new(""), kind, colors);
+        return big_icon(&entry.name, entry.kind, colors);
     };
-    let name = preview.path.file_name().unwrap_or_default();
+    let (name, kind) = (&entry.name, entry.kind);
     match (&preview.content, &shown.picture) {
         (PreviewContent::Picture(_), Some(picture)) => {
-            picture_art(picture, scale_factor, colors).into_any_element()
+            picture_art(picture, room, scale_factor, colors).into_any_element()
         }
         (PreviewContent::Text { text, .. }, _) => text_art(text, room, colors).into_any_element(),
         (PreviewContent::Folder { first, count }, _) => {
@@ -182,8 +183,14 @@ fn art(
     }
 }
 
-/// A picture at the size it was decoded, which already fits the room.
-fn picture_art(picture: &Arc<RenderImage>, scale_factor: f32, colors: &Colors) -> impl IntoElement {
+/// A picture at the size it was decoded, which fit the room when it was
+/// asked for; scaled down to fit `room` if the window has shrunk since.
+fn picture_art(
+    picture: &Arc<RenderImage>,
+    room: gpui::Size<Pixels>,
+    scale_factor: f32,
+    colors: &Colors,
+) -> impl IntoElement {
     let size = picture.size(0);
     let logical = |device: i32| {
         #[expect(
@@ -193,12 +200,28 @@ fn picture_art(picture: &Arc<RenderImage>, scale_factor: f32, colors: &Colors) -
         let device = device as f32;
         px(device / scale_factor)
     };
+    let (width, height) = (logical(size.width.0), logical(size.height.0));
+    let scale = fitting_scale(gpui::size(width, height), room);
     img(Arc::clone(picture))
-        .w(logical(size.width.0))
-        .h(logical(size.height.0))
+        .w(width * scale)
+        .h(height * scale)
         .rounded(radius::CARD)
         .border(size::LINE)
         .border_color(colors.line)
+}
+
+/// How much a picture `size` is scaled to fit `room`: never up.
+fn fitting_scale(size: gpui::Size<Pixels>, room: gpui::Size<Pixels>) -> f32 {
+    let ratio = |room: Pixels, side: Pixels| {
+        if side > px(0.0) {
+            f32::from(room) / f32::from(side)
+        } else {
+            1.0
+        }
+    };
+    ratio(room.width, size.width)
+        .min(ratio(room.height, size.height))
+        .clamp(0.0, 1.0)
 }
 
 /// A text file's first lines, as many as fit the room.
@@ -392,6 +415,30 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+
+    #[test]
+    fn a_picture_shrinks_to_fit_but_never_grows() {
+        let fits = fitting_scale(
+            gpui::size(px(100.0), px(50.0)),
+            gpui::size(px(400.0), px(400.0)),
+        );
+        assert!((fits - 1.0).abs() < f32::EPSILON);
+        let wide = fitting_scale(
+            gpui::size(px(200.0), px(50.0)),
+            gpui::size(px(100.0), px(400.0)),
+        );
+        assert!((wide - 0.5).abs() < f32::EPSILON);
+        let tall = fitting_scale(
+            gpui::size(px(100.0), px(400.0)),
+            gpui::size(px(400.0), px(100.0)),
+        );
+        assert!((tall - 0.25).abs() < f32::EPSILON);
+        let none = fitting_scale(
+            gpui::size(px(100.0), px(50.0)),
+            gpui::size(px(0.0), px(0.0)),
+        );
+        assert!(none.abs() < f32::EPSILON);
+    }
 
     fn preview(content: PreviewContent, kind_name: Option<&str>, bytes: u64) -> Preview {
         Preview {

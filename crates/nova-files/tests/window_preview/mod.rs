@@ -204,3 +204,47 @@ async fn a_fresh_read_keeps_the_quick_look_on_its_entry(cx: &mut TestAppContext)
     cx.simulate_keystrokes("right");
     wait_for_preview(&view, cx, "a.txt").await;
 }
+
+#[gpui::test]
+async fn any_cursor_move_takes_the_quick_look_along(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview");
+    let (view, cx) = with_text(cx, &tree).await;
+
+    click(cx, "entry-1");
+    cx.simulate_keystrokes("space");
+    wait_for_preview(&view, cx, "a.txt").await;
+    cx.simulate_keystrokes("end");
+    wait_for_preview(&view, cx, "notes.txt").await;
+    cx.simulate_keystrokes("home");
+    wait_for_preview(&view, cx, "Projects").await;
+    assert_eq!(selected(&view, cx), ["Projects"]);
+}
+
+#[gpui::test]
+async fn a_fresh_read_shows_the_file_as_it_is_now(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview");
+    let (view, cx) = with_text(cx, &tree).await;
+
+    click(cx, "entry-1");
+    cx.simulate_keystrokes("space");
+    wait_for_preview(&view, cx, "a.txt").await;
+    fs::write(tree.path().join("a.txt"), "changed\n").unwrap();
+    view.update(cx, |view, cx| {
+        view.sort_by(nova_files_api::SortKey::Name);
+        cx.notify();
+    });
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.previewed()
+            .and_then(|shown| shown.preview)
+            .is_some_and(|preview| {
+                preview.content
+                    == nova_files_api::PreviewContent::Text {
+                        text: "changed\n".into(),
+                        cut: false,
+                    }
+            })
+    })
+    .await;
+}
