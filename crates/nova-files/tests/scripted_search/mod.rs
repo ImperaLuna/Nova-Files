@@ -276,3 +276,80 @@ fn a_search_typed_while_a_folder_is_on_its_way_starts_there(cx: &mut TestAppCont
     let (_, path) = core.next_listing().unwrap();
     assert_eq!(path, Path::new(OTHER));
 }
+
+#[gpui::test]
+fn found_files_get_a_folder_column_and_a_folder_only_does_not(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = searching(cx);
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("folder-header").is_none());
+    assert!(cx.debug_bounds("scope").is_none());
+
+    found_reports(cx, &mut core, "rep");
+
+    assert!(cx.debug_bounds("folder-header").is_some());
+    assert!(cx.debug_bounds("folder-1").is_some());
+    assert!(cx.debug_bounds("scope").is_some());
+    // The Modified column lines up with its head, Folder column or not.
+    let head = cx.debug_bounds("modified-header").unwrap();
+    let cell = cx.debug_bounds("modified-0").unwrap();
+    assert_eq!(head.origin.x, cell.origin.x);
+}
+
+#[gpui::test]
+fn a_folder_cell_goes_there_with_the_file_selected(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+
+    let link = cx.debug_bounds("folder-0").unwrap();
+    cx.simulate_click(link.center(), gpui::Modifiers::none());
+    cx.run_until_parked();
+    let (id, path) = core.next_listing().unwrap();
+    assert_eq!(path, Path::new("/docs"));
+    let entries: Arc<[Entry]> = ["notes.txt", "report.pdf"]
+        .into_iter()
+        .zip(0..)
+        .map(|(name, index)| Entry {
+            id: EntryId(index),
+            name: name.into(),
+            kind: EntryKind::File,
+        })
+        .collect();
+    core.send(Event::FolderListed(Listing {
+        id,
+        path,
+        entries,
+        folders: None,
+    }));
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, cx| {
+        assert_eq!(view.folder(), Some(Path::new("/docs")));
+        assert_eq!(view.selected_names(), ["report.pdf"]);
+        assert!(!view.searching());
+        assert_eq!(view.query(cx), "");
+    });
+}
+
+#[gpui::test]
+fn the_chip_switches_to_the_folder_searched_from_and_back(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+
+    let chip = cx.debug_bounds("scope").unwrap();
+    cx.simulate_click(chip.center(), gpui::Modifiers::none());
+    cx.run_until_parked();
+    let (_, query, within) = next_find(&mut core).unwrap();
+    assert_eq!(
+        (query.as_str(), within),
+        ("rep", Some(PathBuf::from(SHOWN)))
+    );
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.scope(), nova_files_ui::Scope::HereOnly);
+    });
+
+    let chip = cx.debug_bounds("scope").unwrap();
+    cx.simulate_click(chip.center(), gpui::Modifiers::none());
+    cx.run_until_parked();
+    let (.., within) = next_find(&mut core).unwrap();
+    assert_eq!(within, None);
+}

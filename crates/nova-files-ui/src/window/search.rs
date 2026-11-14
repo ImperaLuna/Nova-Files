@@ -14,6 +14,9 @@
 //! listing per window), so the search then starts from that folder.
 //! A find that can't run shows that, not an empty result.
 //!
+//! A found file's Folder cell goes to its folder with it selected. The
+//! folder is shown with the home folder as `~` (see [`short_folder`]).
+//!
 //! Keys: `/` or Ctrl+F put the caret in the box; Down or Enter in it move
 //! into the results; Escape in it clears it. A focus change waits for the
 //! next frame, which has a window to focus in (see `view`).
@@ -28,6 +31,8 @@ use gpui::{AppContext as _, Context, Entity, Subscription};
 use nova_files_api::{Command, Listing, ListingId};
 
 use super::MainWindow;
+use super::events::Place;
+use crate::pick::typed::HOME;
 use crate::text::{TextField, TextFieldEvent};
 
 const PLACEHOLDER: &str = "Search";
@@ -62,6 +67,9 @@ pub struct Search {
     /// The last find couldn't run.
     pub(crate) failed: bool,
     pub(crate) focus_to: Option<FocusTo>,
+    /// What to select once the folder asked for arrives: a file whose
+    /// Folder cell was clicked.
+    pub(crate) reveal: Option<PathBuf>,
     _changes: Subscription,
 }
 
@@ -84,6 +92,7 @@ impl Search {
             asked: None,
             failed: false,
             focus_to: None,
+            reveal: None,
             _changes: changes,
         }
     }
@@ -151,7 +160,7 @@ impl MainWindow {
         self.search.asked = None;
         self.search.failed = false;
         self.selection = None;
-        self.listing_replaced(listing, false, cx);
+        self.listing_replaced(listing, Place::Top, cx);
         cx.notify();
     }
 
@@ -205,9 +214,63 @@ impl MainWindow {
             .is_some_and(|listing| listing.folders.is_some())
     }
 
+    /// Goes to the folder `path` is in, with `path` selected there.
+    pub(crate) fn reveal(&mut self, path: PathBuf) {
+        let Some(folder) = path.parent().map(Path::to_path_buf) else {
+            return;
+        };
+        self.search.reveal = Some(path);
+        self.open(&folder);
+    }
+
+    /// Looks in `scope` from now on, searching again if a search is under
+    /// way.
+    pub fn set_scope(&mut self, scope: Scope, cx: &mut Context<Self>) {
+        if self.search.scope == scope {
+            return;
+        }
+        self.search.scope = scope;
+        if self.searching() {
+            self.find(cx);
+        }
+        cx.notify();
+    }
+
+    /// Where a search looks.
+    pub const fn scope(&self) -> Scope {
+        self.search.scope
+    }
+
     /// Moves the keyboard to `to` once the window next draws.
     pub(crate) fn focus_later(&mut self, to: FocusTo, cx: &mut Context<Self>) {
         self.search.focus_to = Some(to);
         cx.notify();
+    }
+}
+
+/// `folder` as the Folder column shows it: the home folder `home` and
+/// what is under it start with `~`.
+pub fn short_folder(folder: &Path, home: &Path) -> String {
+    match folder.strip_prefix(home) {
+        Ok(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
+        Ok(rest) => format!("{HOME}/{}", rest.to_string_lossy()),
+        Err(_) => folder.to_string_lossy().into_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn folders_under_home_start_with_a_tilde() {
+        let home = Path::new("/home/me");
+        assert_eq!(short_folder(Path::new("/home/me"), home), "~");
+        assert_eq!(
+            short_folder(Path::new("/home/me/Documents/tax"), home),
+            "~/Documents/tax"
+        );
+        assert_eq!(short_folder(Path::new("/home/meg"), home), "/home/meg");
+        assert_eq!(short_folder(Path::new("/etc"), home), "/etc");
     }
 }

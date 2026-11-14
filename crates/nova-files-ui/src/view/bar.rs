@@ -1,6 +1,7 @@
 //! The top bar: a row of capsules on the window. Back, Forward and Up;
 //! the path's slot, which takes what the others leave; the search box
-//! (see `search`); and the list and tiles switch. The path bar and the
+//! (see `search`), with the search's scope chip at the end of the path's
+//! slot; and the list and tiles switch. The path bar and the
 //! tiles view are features of their own that fill their slot; until then
 //! the path's slot shows the folder's path, and the slots do nothing.
 
@@ -59,8 +60,11 @@ impl MainWindow {
                     .debug_selector(|| "path".to_owned())
                     .flex_1()
                     .min_w(size::PATH_MIN_WIDTH)
-                    .px(size::PATH_PAD)
-                    .child(div().min_w_0().truncate().child(path)),
+                    .pl(size::PATH_PAD)
+                    .pr(size::CAPSULE_PAD)
+                    .gap(size::GAP)
+                    .child(div().flex_1().min_w_0().truncate().child(path))
+                    .children(self.scope_chip(colors, cx)),
             )
             .child(
                 self.search_box(

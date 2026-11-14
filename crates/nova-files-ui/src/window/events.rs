@@ -16,6 +16,15 @@ use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::jump::TypeJump;
 use crate::theme::Colors;
 
+/// Where a list put on screen starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Place {
+    /// Where the list before it was: the same folder, read again.
+    Kept,
+    /// At its top, with nothing typed or dragged carried over.
+    Top,
+}
+
 impl MainWindow {
     /// Shows `listing`, the folder the window last asked for.
     fn listing_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
@@ -30,7 +39,9 @@ impl MainWindow {
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
         self.selection = self.selection_for(&listing);
-        self.listing_replaced(listing, same_folder, cx);
+        self.search.reveal = None;
+        let place = if same_folder { Place::Kept } else { Place::Top };
+        self.listing_replaced(listing, place, cx);
         self.pick_folder_opened(reordered, cx);
         if (!same_folder || reordered)
             && let Some(cursor) = self.cursor()
@@ -42,12 +53,11 @@ impl MainWindow {
     }
 
     /// Puts `listing` on screen in place of the one before, whose details
-    /// and thumbnails go with it. Unless `same_place`, the list starts at
-    /// its top.
+    /// and thumbnails go with it, the list at `place`.
     pub(super) fn listing_replaced(
         &mut self,
         listing: Listing,
-        same_place: bool,
+        place: Place,
         cx: &mut Context<Self>,
     ) {
         self.listing = Some(listing);
@@ -55,7 +65,7 @@ impl MainWindow {
         self.details = HashMap::new();
         release(self.thumbnails.take_all(), None, cx);
         self.rows_wanted = 0..0;
-        if !same_place {
+        if place == Place::Top {
             self.scroll = UniformListScrollHandle::new();
             self.jump = TypeJump::default();
             self.band = None;

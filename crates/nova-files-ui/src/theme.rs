@@ -12,7 +12,8 @@ use nova_files_api::{Color, Mode, Palette, Theme};
 /// `bg`; the file sheet and everything raised are `bg_alt` mixed into
 /// `bg`, so height never comes from adding white. Hover, press, selection
 /// and hairlines are `fg` laid thinly over whatever is under them. Orange
-/// (`primary`) marks only the folder you're in and what acts; purple
+/// (`primary`) marks only the folder you're in, what acts and a search's
+/// matches; purple
 /// (`secondary`) only selected text. One for the whole app, since every
 /// window shows the same theme.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -52,6 +53,8 @@ pub struct Colors {
     pub caret: Rgba,
     /// Selected text in a text field.
     pub selection: Rgba,
+    /// The part of a name a search matched.
+    pub mark: Rgba,
     /// The button that does what the bar is for: Open, Save, Keep both.
     pub accept: Rgba,
     /// Text on [`Self::accept`].
@@ -93,6 +96,8 @@ mod share {
     pub const FOLDER: f32 = 0.26;
     /// `secondary` laid over a text field, for its selected text.
     pub const SELECTION: f32 = 0.40;
+    /// A search's match, under the name's text.
+    pub const MARK: f32 = 0.34;
 }
 
 impl Colors {
@@ -123,6 +128,7 @@ impl Colors {
             here: color(palette.primary),
             caret: color(palette.primary),
             selection: thin(palette.secondary, share::SELECTION),
+            mark: thin(palette.primary, share::MARK),
             accept: color(palette.primary),
             on_accept: color(palette.on_accent),
             tags: Tags::new(palette, text_dim),
@@ -279,6 +285,13 @@ pub mod size {
     pub const SEARCH_WIDTH: Pixels = px(220.0);
     pub const SEARCH_PAD: Pixels = px(12.0);
     pub const SEARCH_GAP: Pixels = px(9.0);
+    /// The Folder column of a search's files, and the cell's link.
+    pub const FOLDER_WIDTH: Pixels = px(200.0);
+    pub const FOLDER_LINK_HEIGHT: Pixels = px(26.0);
+    pub const FOLDER_LINK_PAD: Pixels = px(8.0);
+    /// The chip that says where a search looks, in the path's slot.
+    pub const CHIP_HEIGHT: Pixels = px(28.0);
+    pub const CHIP_PAD: Pixels = px(10.0);
     /// The count of files a search found, over the sheet's bottom left.
     pub const STATUS_INSET: Pixels = px(12.0);
     pub const STATUS_PAD_X: Pixels = px(8.0);

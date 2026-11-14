@@ -17,6 +17,7 @@ mod commands;
 mod history;
 mod jump;
 mod kind;
+mod marks;
 mod pick;
 mod requests;
 mod selecting;
@@ -43,7 +44,7 @@ pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
-pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
+pub use window::{CoreStatus, MainWindow, Scope, WindowEvent, home_folder};
 pub use window_state::{WindowState, fetch as fetch_window_state};
 
 /// Why [`run`] returned.

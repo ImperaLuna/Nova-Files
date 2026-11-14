@@ -8,17 +8,18 @@
 //! with a selected neighbour. The row the keyboard is on has a ring (see
 //! `selecting`). A click on a column head orders the list by that column;
 //! folders always come first (see `navigate` and the core's `order`). A
-//! search's files stay best first, so their heads do nothing; the count
-//! and the empty look are the search's (see `search`).
+//! search's files stay best first, so their heads do nothing; they get a
+//! Folder column, and the part of each name that matched is marked. The
+//! count and the empty look are the search's (see `search`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
 //! by the width of its name.
 
 use gpui::{
-    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
-    prelude::FluentBuilder as _, uniform_list,
+    AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
+    MouseDownEvent, ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _,
+    div, prelude::FluentBuilder as _, uniform_list,
 };
 
 use nova_files_api::{Order, SortKey};
@@ -26,13 +27,16 @@ use nova_files_api::{Order, SortKey};
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
 use crate::assets::Icon;
+use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::MainWindow;
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
 const SIZE_LABEL: &str = "Size";
+const FOLDER_LABEL: &str = "Folder";
 const MODIFIED_HEADER_SELECTOR: &str = "modified-header";
+const FOLDER_HEADER_SELECTOR: &str = "folder-header";
 
 impl MainWindow {
     pub(super) fn sheet(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -45,11 +49,7 @@ impl MainWindow {
             .px(size::SHEET_PAD)
             .bg(colors.sheet)
             .rounded_tl(radius::SHEET)
-            .child(column_heads(
-                (!self.searching()).then(|| self.shown_order()),
-                &colors,
-                cx,
-            ))
+            .child(self.column_heads(&colors, cx))
             .child(self.entries_area(cx))
     }
 
@@ -102,6 +102,7 @@ impl MainWindow {
                 };
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
+                let query = this.searching().then(|| this.query(cx));
                 let selected = |index: usize| {
                     listing
                         .entries
@@ -117,7 +118,15 @@ impl MainWindow {
                     .map(|(entry, index)| {
                         let id = entry.id;
                         let columns = this.columns(index).unwrap_or_default();
-                        let name = SharedString::from(entry.name.to_string_lossy().into_owned());
+                        let name = entry.name.to_string_lossy().into_owned();
+                        let marks = query
+                            .as_deref()
+                            .map(|query| marks::matched(&name, query))
+                            .unwrap_or_default();
+                        let folder = listing
+                            .folders
+                            .is_some()
+                            .then(|| this.folder_link(listing.path_of(entry), index, cx));
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let line = cells(
@@ -131,7 +140,8 @@ impl MainWindow {
                                     this.thumbnail(index),
                                     &colors,
                                 ))
-                                .child(entry_name(name, index, cx)),
+                                .child(entry_name(name.into(), marks, index, cx)),
+                            folder,
                             detail(columns.modified, &colors),
                             detail(columns.size, &colors),
                             format!("modified-{index}"),
@@ -178,12 +188,31 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
         .hover(|row| row.bg(colors.hover))
 }
 
-/// The heads above the entries, lined up with [`cells`]. A click on one
-/// orders the list by it (see `navigate`); the one in use is bright and
-/// carries an arrow for its direction. Without an `order` (a search's
-/// files, best first) none is in use and a click does nothing.
+impl MainWindow {
+    /// The heads above the entries, lined up with [`cells`]. A click on
+    /// one orders the list by it (see `navigate`); the one in use is
+    /// bright and carries an arrow for its direction. A search's files
+    /// stay best first: none is in use and a click does nothing, and they
+    /// add the Folder head.
+    fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
+        let order = (!self.searching()).then(|| self.shown_order());
+        column_heads(order, self.showing_found().then(folder_head), colors, cx)
+    }
+}
+
+/// The Folder column's head, which orders nothing.
+fn folder_head() -> AnyElement {
+    div()
+        .debug_selector(|| FOLDER_HEADER_SELECTOR.to_owned())
+        .child(FOLDER_LABEL)
+        .into_any_element()
+}
+
+/// The heads, ordered by `order` (none in use without one), with the
+/// `folder` head between Name and Modified when there is one.
 fn column_heads(
     order: Option<Order>,
+    folder: Option<AnyElement>,
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> impl IntoElement {
@@ -210,6 +239,7 @@ fn column_heads(
                 .h_full()
                 .child(cells(
                     head(SortKey::Name, NAME_LABEL),
+                    folder,
                     head(SortKey::Modified, MODIFIED_LABEL),
                     head(SortKey::Size, SIZE_LABEL).mr(-size::HEAD_BUTTON_PAD),
                     MODIFIED_HEADER_SELECTOR.to_owned(),
