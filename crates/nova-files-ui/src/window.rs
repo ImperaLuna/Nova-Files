@@ -138,6 +138,9 @@ pub struct MainWindow {
     /// Where to go, in order, while the window has no folder and the one
     /// asked for can't be read.
     fallbacks: Vec<PathBuf>,
+    /// Whether the folder asked for is a fallback, which nobody chose, so
+    /// it doesn't count as used.
+    pub(crate) falling_back: bool,
     pub(crate) places: Vec<Place>,
     /// Where the window has been, for Back and Forward.
     pub(crate) history: History,
@@ -166,11 +169,6 @@ impl MainWindow {
     /// Opens a window on `folder`.
     pub fn new(connector: &Connector, folder: &Path, cx: &mut Context<Self>) -> Self {
         Self::with_home(connector, folder, home_folder(), cx)
-    }
-
-    /// Opens a window on the Start page.
-    pub fn on_start(connector: &Connector, cx: &mut Context<Self>) -> Self {
-        Self::at(connector, &Location::Start, home_folder(), cx)
     }
 
     /// Opens a window on `folder` that falls back to `home` instead of the
@@ -242,6 +240,7 @@ impl MainWindow {
             next_listing: 0,
             // Popped from the end: home first, then the root.
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
+            falling_back: false,
             home,
             places: Vec::new(),
             history: History::default(),

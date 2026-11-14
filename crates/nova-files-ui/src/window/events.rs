@@ -23,7 +23,7 @@ impl MainWindow {
         let path = listing.path.clone();
         // Read again in place: keep the scroll position.
         let same_folder = self.folder() == Some(path.as_path());
-        if !same_folder {
+        if !same_folder && !std::mem::take(&mut self.falling_back) {
             self.used(&path);
         }
         self.history.arrived(&Location::from(path.as_path()));
@@ -135,7 +135,7 @@ impl MainWindow {
                 if self.history.here().is_none()
                     && let Some(fallback) = self.fallbacks.pop()
                 {
-                    self.request(&fallback);
+                    self.falling_back = self.request(&fallback);
                 }
             }
             Some(listing) if self.core_moved && listing.path != path => {

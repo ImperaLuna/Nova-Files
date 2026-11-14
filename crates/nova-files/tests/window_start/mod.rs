@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-use nova_files_api::{Command, Connector, Event};
+use nova_files_api::{Command, Connector, Event, RecentId};
 
 use super::*;
 
@@ -14,6 +14,15 @@ use super::*;
 fn start_window<'a>(
     cx: &'a mut TestAppContext,
     home: &Path,
+) -> (Entity<MainWindow>, &'a mut VisualTestContext, Connector) {
+    window_at(cx, home, &Location::Start)
+}
+
+/// Opens a window at `location`, as [`start_window`] does.
+fn window_at<'a>(
+    cx: &'a mut TestAppContext,
+    home: &Path,
+    location: &Location,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext, Connector) {
     cx.executor().allow_parking();
     let core_home = nova_files_core::Home {
@@ -29,7 +38,7 @@ fn start_window<'a>(
     let connector = core.connector.clone();
     let home = home.to_owned();
     let (view, cx) =
-        cx.add_window_view(|_, cx| MainWindow::at(&core.connector, &Location::Start, home, cx));
+        cx.add_window_view(|_, cx| MainWindow::at(&core.connector, location, home, cx));
     (view, cx, connector)
 }
 
@@ -39,12 +48,15 @@ fn recent_folders(connector: &Connector) -> Vec<PathBuf> {
     let connection = connector.connect(sink).unwrap();
     connection
         .send(Command::RecentFolders {
+            id: RecentId(0),
             count: 5,
             skip: Vec::new(),
         })
         .unwrap();
     match events.recv_timeout(common::WAIT).unwrap() {
-        Event::RecentFolders(folders) => folders.into_iter().map(|folder| folder.path).collect(),
+        Event::RecentFolders { folders, .. } => {
+            folders.into_iter().map(|folder| folder.path).collect()
+        }
         other => vec![PathBuf::from(format!("not the recent folders: {other:?}"))],
     }
 }
@@ -114,5 +126,15 @@ fn going_to_start_drops_the_folder_on_its_way(cx: &mut TestAppContext) {
         assert!(!view.waiting());
         assert_eq!(view.back_target(), None);
     });
+    assert_eq!(recent_folders(&connector), Vec::<PathBuf>::new());
+}
+
+#[gpui::test]
+async fn a_fallback_folder_isnt_counted_as_used(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("start-fallback");
+    let missing = tree.path().join("missing");
+    let (view, cx, connector) = window_at(cx, tree.path(), &Location::Folder(missing));
+    wait_for_folder(&view, cx, tree.path()).await;
     assert_eq!(recent_folders(&connector), Vec::<PathBuf>::new());
 }

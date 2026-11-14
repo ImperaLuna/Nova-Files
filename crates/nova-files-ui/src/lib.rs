@@ -66,10 +66,12 @@ pub enum Opening {
     Pick(Box<PickRequest>),
 }
 
-/// Called with the folder when the first window can't be opened, which
-/// means its GPU setup failed. The program uses it to start again with
-/// every Vulkan driver; it returns only when it didn't.
-pub type RecoverGpu = Rc<dyn Fn(&Path)>;
+/// Called when the first window can't set up its GPU.
+///
+/// It gets the window's folder, or none for the Start page. The program
+/// uses it to start again with every Vulkan driver; it returns only when
+/// it didn't.
+pub type RecoverGpu = Rc<dyn Fn(Option<&Path>)>;
 
 /// Runs the UI on this thread with one window open as `first` asks, until
 /// the last window closes or the program asks it to quit.
@@ -163,9 +165,7 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
         None if pick.is_some() => Location::Folder(home_folder()),
         None => Location::Start,
     };
-    let recover_folder = location
-        .folder()
-        .map_or_else(home_folder, Path::to_path_buf);
+    let recover_folder = location.folder().map(Path::to_path_buf);
     let opened = cx.open_window(options, move |window, cx| {
         cx.new(|cx| {
             let mut view = MainWindow::at(&connector, &location, home_folder(), cx);
@@ -177,7 +177,7 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
     });
     if let Err(error) = opened {
         if recovers && cx.windows().is_empty() {
-            recover_gpu(&recover_folder);
+            recover_gpu(recover_folder.as_deref());
         }
         // The display refused a window; any open ones carry on. Until there
         // is a log, stderr is where this goes.
