@@ -3,8 +3,11 @@
 //! folder under the home folder and Computer (`/`) for any other. Each
 //! crumb names the folder it goes to. A place's folder takes the place's
 //! icon; any other, the folder icon. Only the root and the folder on
-//! screen show theirs.
+//! screen show theirs. A path of more than [`MOST_SHOWN`] crumbs folds its
+//! middle into one "…" crumb (see [`folded`]), keeping the root and the
+//! last [`KEPT_AT_END`] levels in view.
 
+use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
 
 use gpui::SharedString;
@@ -12,6 +15,11 @@ use nova_files_api::{Place, PlaceKind};
 
 use crate::assets::Icon;
 use crate::window::ROOT_FOLDER;
+
+/// The most crumbs a path shows before its middle folds.
+pub const MOST_SHOWN: usize = 5;
+/// The levels a folded path keeps after the "…" crumb.
+pub const KEPT_AT_END: usize = 3;
 
 const HOME_LABEL: &str = "Home";
 const COMPUTER_LABEL: &str = "Computer";
@@ -74,10 +82,7 @@ pub fn crumbs(
             continue;
         };
         path.push(name);
-        let icon = places
-            .iter()
-            .find(|place| place.path == path)
-            .map_or(Icon::Folder, |place| place_icon(place.kind));
+        let icon = folder_icon(&path, places, place_icon);
         let label = name.to_string_lossy().into_owned().into();
         crumbs.push(Crumb::new(path.clone(), label, icon));
     }
@@ -89,6 +94,42 @@ pub fn crumbs(
         here.here = true;
     }
     crumbs
+}
+
+/// The icon of the folder at `path`: its place's, with `place_icon`, when
+/// it is one of `places`, else the folder icon.
+pub fn folder_icon(path: &Path, places: &[Place], place_icon: fn(PlaceKind) -> Icon) -> Icon {
+    places
+        .iter()
+        .find(|place| place.path == path)
+        .map_or(Icon::Folder, |place| place_icon(place.kind))
+}
+
+/// What the path bar draws, in order, for a path of `count` crumbs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Shown {
+    /// The crumb at this index.
+    Crumb(usize),
+    /// The "…" crumb, standing for the crumbs in this range.
+    Folded(Range<usize>),
+}
+
+/// The crumbs a path of `count` crumbs folds into the "…" crumb, if it
+/// folds: all but the root and the last [`KEPT_AT_END`].
+pub fn folded(count: usize) -> Option<Range<usize>> {
+    (count > MOST_SHOWN).then(|| 1..count - KEPT_AT_END)
+}
+
+/// What the path bar draws for a path of `count` crumbs: each crumb, with
+/// the [`folded`] ones as one "…" crumb.
+pub fn shown(count: usize) -> Vec<Shown> {
+    let Some(hidden) = folded(count) else {
+        return (0..count).map(Shown::Crumb).collect();
+    };
+    let mut shown: Vec<Shown> = (0..hidden.start).map(Shown::Crumb).collect();
+    shown.push(Shown::Folded(hidden.clone()));
+    shown.extend((hidden.end..count).map(Shown::Crumb));
+    shown
 }
 
 #[cfg(test)]
@@ -192,5 +233,29 @@ mod tests {
         let found = of(&folder);
         assert_eq!(labels(&found), ["Computer", "tmp", "caf\u{FFFD}"]);
         assert_eq!(found[2].path, folder);
+    }
+
+    #[test]
+    fn only_a_path_longer_than_five_folds_keeping_the_root_and_the_last_three() {
+        assert_eq!(folded(1), None);
+        assert_eq!(folded(MOST_SHOWN), None);
+        assert_eq!(folded(MOST_SHOWN + 1), Some(1..3));
+        assert_eq!(folded(9), Some(1..6));
+    }
+
+    #[test]
+    fn a_folded_path_draws_the_root_then_the_fold_then_the_last_three() {
+        assert_eq!(shown(0), []);
+        assert_eq!(shown(2), [Shown::Crumb(0), Shown::Crumb(1)]);
+        assert_eq!(
+            shown(7),
+            [
+                Shown::Crumb(0),
+                Shown::Folded(1..4),
+                Shown::Crumb(4),
+                Shown::Crumb(5),
+                Shown::Crumb(6),
+            ]
+        );
     }
 }

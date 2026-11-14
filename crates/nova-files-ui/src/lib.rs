@@ -18,6 +18,7 @@ mod crumbs;
 mod history;
 mod jump;
 mod kind;
+mod path_bar;
 mod pick;
 mod requests;
 mod selecting;

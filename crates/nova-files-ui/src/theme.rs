@@ -301,6 +301,16 @@ pub mod size {
     /// A row in a menu.
     pub const MENU_ROW_HEIGHT: Pixels = px(32.0);
     pub const MENU_PAD: Pixels = px(5.0);
+    /// A menu row with an icon: space either side, and between its icon
+    /// and its name.
+    pub const MENU_ITEM_PAD: Pixels = px(10.0);
+    pub const MENU_ICON_GAP: Pixels = px(10.0);
+    /// A menu of folders: its narrowest and widest, its tallest before it
+    /// scrolls, and how far below its button it hangs.
+    pub const MENU_MIN_WIDTH: Pixels = px(210.0);
+    pub const MENU_MAX_WIDTH: Pixels = px(300.0);
+    pub const MENU_MAX_HEIGHT: Pixels = px(340.0);
+    pub const MENU_OFFSET: Pixels = px(6.0);
     /// The widest the type filter's button gets; a longer name is cut.
     pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
     /// The tallest the type menu gets before it scrolls.
