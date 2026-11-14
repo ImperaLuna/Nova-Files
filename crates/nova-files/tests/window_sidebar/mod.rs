@@ -65,6 +65,9 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     assert!(pinned.left() >= home.right());
     let header = cx.debug_bounds("modified-header").unwrap();
     assert!(header.top() >= home.bottom(), "narrow: above the sheet");
+    // The + to pin a folder stays within reach.
+    let pin = cx.debug_bounds("pin").unwrap();
+    assert!(pin.left() >= pinned.right());
 }
 
 #[gpui::test]
