@@ -16,7 +16,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_api::{
-    Appearance, Color, Command, Connection, Event, Mode, SettingChange, Settings, Theme, Thumbnails,
+    Appearance, Color, Command, Connection, DesktopLook, Event, Mode, SettingChange, Settings,
+    Theme, Thumbnails,
 };
 use nova_files_core::{Home, IDLE_EXIT, RunningCore};
 
@@ -261,4 +262,22 @@ fn the_theme_follows_its_file_and_the_appearance_setting() {
             .try_iter()
             .any(|event| matches!(event, Event::Theme(_)))
     );
+}
+
+#[test]
+fn the_desktops_look_reaches_the_theme() {
+    let home = TempHome::new("desktop-look");
+    let core = home.core();
+    let (themes, theme_events) = mpsc::channel();
+    let theme_client = core.connector.connect(themes).unwrap();
+    theme_client.send(Command::Theme).unwrap();
+    assert_eq!(next_theme(&theme_events).mode, Mode::Dark);
+
+    theme_client
+        .send(Command::DesktopLook(DesktopLook {
+            mode: Some(Mode::Light),
+            accent: None,
+        }))
+        .unwrap();
+    assert_eq!(next_theme(&theme_events).mode, Mode::Light);
 }
