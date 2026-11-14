@@ -16,6 +16,7 @@
 //! icon orange; pressed-in rows are left for the Open list, as on the
 //! design page.
 
+mod drives;
 mod places;
 mod tree;
 
@@ -40,7 +41,8 @@ impl MainWindow {
         let drives = div()
             .debug_selector(|| "drives".to_owned())
             .flex()
-            .flex_none();
+            .flex_none()
+            .child(self.drives_section(narrow, cx));
         let places = self.places_section(narrow, cx);
         let sidebar = div()
             .id("sidebar")

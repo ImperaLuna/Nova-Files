@@ -50,6 +50,8 @@ pub struct Colors {
     pub here: Rgba,
     /// A text field's caret.
     pub caret: Rgba,
+    /// What warns: a drive's free space when it is nearly full.
+    pub full: Rgba,
     /// Selected text in a text field.
     pub selection: Rgba,
     /// The button that does what the bar is for: Open, Save, Keep both.
@@ -122,6 +124,7 @@ impl Colors {
             folder: mix(color(palette.primary), share::FOLDER, text_dim),
             here: color(palette.primary),
             caret: color(palette.primary),
+            full: color(palette.error),
             selection: thin(palette.secondary, share::SELECTION),
             accept: color(palette.primary),
             on_accept: color(palette.on_accent),

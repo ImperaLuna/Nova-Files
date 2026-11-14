@@ -14,6 +14,7 @@ mod assets;
 mod band;
 mod columns;
 mod commands;
+mod drives;
 mod history;
 mod jump;
 mod kind;
