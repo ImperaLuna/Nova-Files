@@ -108,12 +108,20 @@ impl FolderTree {
 
     /// Opens `path` if closed, closes it if open. An opened folder is
     /// listed again, and its subfolders known to hold none are unknown
-    /// again.
+    /// again, and closed, so their arrow lists them when pressed.
     pub fn toggle(&mut self, path: &Path) {
         if !self.open.remove(path) {
             self.open.insert(path.to_owned());
-            self.children
-                .retain(|child, held| !held.is_empty() || child.parent() != Some(path));
+            let emptied: Vec<PathBuf> = self
+                .children
+                .iter()
+                .filter(|(child, held)| held.is_empty() && child.parent() == Some(path))
+                .map(|(child, _)| child.clone())
+                .collect();
+            for child in emptied {
+                self.children.remove(&child);
+                self.open.remove(&child);
+            }
             self.wait_for(path);
         }
     }
@@ -315,6 +323,23 @@ mod tests {
         tree.toggle(root);
         tree.toggle(root);
         assert_eq!(tree.rows()[1].toggle, Toggle::Closed);
+    }
+
+    #[test]
+    fn an_opened_empty_subfolder_closes_when_its_parent_opens_again() {
+        let mut tree = home();
+        let root = Path::new("/home/me");
+        let a = Path::new("/home/me/a");
+        tree.toggle(root);
+        tree.listed(root, &entries(&["a"], &[]));
+        tree.toggle(a);
+        tree.listed(a, &entries(&[], &[]));
+        tree.toggle(root);
+        tree.toggle(root);
+        assert_eq!(tree.rows()[1].toggle, Toggle::Closed);
+        while tree.next_to_list().is_some() {}
+        tree.toggle(a);
+        assert_eq!(tree.next_to_list(), Some(a.to_owned()));
     }
 
     #[test]
