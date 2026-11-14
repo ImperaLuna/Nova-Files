@@ -4,6 +4,9 @@
 //! where the sidebar and the bar meet. In pick mode the pick bar runs along
 //! the bottom (see `pick`).
 //!
+//! A narrow window folds the sidebar into one row above the bar (see
+//! `sidebar`).
+//!
 //! Each part is drawn in a file of its own, so a feature changes only its
 //! part: the top bar in `bar`, the sidebar in `sidebar`, the sheet with its
 //! column heads and rows in `sheet`, and the pieces of one row in `row`.
@@ -36,7 +39,7 @@ use crate::commands::{
     SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
 };
 use crate::selection::Move;
-use crate::theme::{Colors, size, text};
+use crate::theme::{self, Colors, size, text};
 use crate::window::MainWindow;
 
 impl Render for MainWindow {
@@ -47,6 +50,7 @@ impl Render for MainWindow {
         // itself, which a click inside takes focus back to; in a picker in
         // its name box, whose keys pass the window's on.
         let main = self.pick.is_none();
+        let narrow = window.viewport_size().width < theme::window::NARROW_WIDTH;
         if window.focused(cx).is_none() {
             let focus = self.pick.as_ref().map_or_else(
                 || self.focus.clone(),
@@ -97,16 +101,23 @@ impl Render for MainWindow {
                     .flex()
                     .flex_1()
                     .min_h_0()
-                    .gap(size::GAP)
                     .pt(size::GAP)
                     .pl(size::GAP)
-                    .child(self.sidebar(cx))
+                    .map(|body| {
+                        if narrow {
+                            body.flex_col()
+                        } else {
+                            body.gap(size::GAP)
+                        }
+                    })
+                    .child(self.sidebar(narrow, cx))
                     .child(
                         div()
                             .flex()
                             .flex_col()
                             .flex_1()
                             .min_w_0()
+                            .min_h_0()
                             .child(self.top_bar(&colors))
                             .child(self.sheet(cx)),
                     ),

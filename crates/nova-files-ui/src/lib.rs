@@ -18,6 +18,7 @@ mod history;
 mod jump;
 mod kind;
 mod pick;
+mod places;
 mod requests;
 mod selecting;
 mod selection;

@@ -7,7 +7,7 @@
 //! picker window picks the file double-clicked when it asks for files,
 //! and answers cancelled when it is closed. Its own keys are tested in
 //! `window_keys`, selecting in `window_select`, and type to jump in
-//! `window_jump`.
+//! `window_jump`, and the sidebar in `window_sidebar`.
 
 #![expect(
     clippy::unwrap_used,
@@ -20,6 +20,7 @@ mod window_band;
 mod window_jump;
 mod window_keys;
 mod window_select;
+mod window_sidebar;
 
 use std::cell::RefCell;
 use std::fs;
@@ -28,7 +29,7 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
+use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, px};
 use nova_files_api::{
     Color, EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest, Thumbnails,
 };

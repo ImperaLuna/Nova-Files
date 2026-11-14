@@ -1,5 +1,5 @@
 //! The core's events as the window takes them: a listing arriving or
-//! refused, details, thumbnails, places, settings and the theme. Listings
+//! refused, details, thumbnails, places, pinned folders, settings and the theme. Listings
 //! the window no longer wants are dropped here too, and the folder on
 //! screen read again when the core moved on from it (see `window`).
 
@@ -117,7 +117,6 @@ impl MainWindow {
             | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
             | Event::JobFinished { .. }
-            | Event::Bookmarks(_)
             | Event::OpenWith(_)
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
@@ -127,10 +126,18 @@ impl MainWindow {
             | Event::UndoGone(_) => {}
             Event::Places(places) => {
                 self.places = places;
-                cx.emit(WindowEvent::Places);
-                cx.notify();
+                Self::places_changed(cx);
+            }
+            Event::Bookmarks(pinned) => {
+                self.pinned = pinned;
+                Self::places_changed(cx);
             }
         }
+    }
+
+    fn places_changed(cx: &mut Context<Self>) {
+        cx.emit(WindowEvent::Places);
+        cx.notify();
     }
 
     /// Takes the settings the core sent, which it sends again whenever
