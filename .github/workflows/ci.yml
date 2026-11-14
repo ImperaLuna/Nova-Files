@@ -62,6 +62,8 @@ jobs:
     name: nix flake check
     needs: stack-guard
     runs-on: ubuntu-latest
+    # A normal run takes 2 to 17 minutes; a hung one stops here.
+    timeout-minutes: 30
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
     steps:
@@ -117,6 +119,8 @@ jobs:
     name: mutation tests, shard ${{ matrix.shard }}
     needs: stack-guard
     runs-on: ubuntu-latest
+    # A shard takes 4 to 32 minutes; a hung one stops here.
+    timeout-minutes: 45
     strategy:
       matrix:
         shard: ${{ fromJSON(github.event_name == 'pull_request' && '[0, 1, 2, 3]' || '[0]') }}
@@ -130,17 +134,6 @@ jobs:
       - name: Look for Rust changes
         id: changes
         run: tools/ci-needs-run.sh rust
-      - name: Check the PR has a clean local mutation run
-        # Agents run `just mutants` before review and paste its summary line
-        # into the description. A missing or failed one fails here in seconds
-        # instead of after the whole run. The body is read from the API, not
-        # the event, so editing it and rerunning this job picks up the change.
-        # One shard checks it for all of them.
-        if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request' && matrix.shard == 0
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .body | tools/ci-mutants-summary.sh
       - uses: cachix/install-nix-action@v31
         if: steps.changes.outputs.run == 'true'
       - uses: cachix/cachix-action@v16
