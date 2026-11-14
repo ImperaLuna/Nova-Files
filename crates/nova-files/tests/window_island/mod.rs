@@ -169,3 +169,18 @@ async fn a_note_stays_its_full_time_after_another_goes(cx: &mut TestAppContext) 
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.note().is_none()));
 }
+
+#[gpui::test]
+async fn two_jobs_asked_at_once_are_both_pending(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island-two");
+    let home = TempFolder::tree("island-two-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-0");
+    view.update(cx, |view, _| {
+        view.trash_selected();
+        view.trash_selected();
+        assert_eq!(view.jobs_pending(), 2);
+    });
+}

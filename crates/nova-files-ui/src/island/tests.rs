@@ -168,3 +168,32 @@ fn every_failure_reads_differently() {
     let words: std::collections::HashSet<_> = reasons.into_iter().map(failure).collect();
     assert_eq!(words.len(), reasons.len());
 }
+
+#[test]
+fn a_listing_counts_its_folders_and_files() {
+    use nova_files_api::EntryId;
+    let entry = |id, name: &str, kind| Entry {
+        id: EntryId(id),
+        name: OsString::from(name),
+        kind,
+    };
+    let entries = [
+        entry(0, "a", EntryKind::Folder),
+        entry(1, "b", EntryKind::File),
+        entry(2, "c", EntryKind::File),
+    ];
+    assert_eq!(count_of(&entries), "1 folder, 2 files");
+}
+
+#[test]
+fn a_note_loses_only_its_own_undo() {
+    let mut note = Some(Note {
+        label: "Moved a to Trash".into(),
+        undo: Some(NoteUndo::Job(JobId(1))),
+    });
+    assert!(!drop_undo(&mut note, JobId(2)));
+    assert!(note.as_ref().is_some_and(|note| note.undo.is_some()));
+    assert!(drop_undo(&mut note, JobId(1)));
+    assert!(note.is_some_and(|note| note.undo.is_none()));
+    assert!(!drop_undo(&mut None, JobId(1)));
+}

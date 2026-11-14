@@ -12,6 +12,7 @@ use nova_files_api::{Event, Listing, ListingId, Settings, Theme, Thumbnails};
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
+use crate::island;
 use crate::jump::TypeJump;
 use crate::theme::Colors;
 
@@ -27,6 +28,7 @@ impl MainWindow {
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
         self.selection = self.selection_for(&listing);
+        self.counted = island::count_of(&listing.entries).into();
         self.listing = Some(listing);
         self.core_moved = false;
         self.details = HashMap::new();
@@ -185,8 +187,9 @@ impl MainWindow {
     pub(super) fn set_status(&mut self, status: CoreStatus, cx: &mut Context<Self>) {
         if self.status != status {
             self.status = status;
-            if status == CoreStatus::Gone {
-                self.jobs_gone();
+            if matches!(status, CoreStatus::Gone) {
+                // No job of this window will say more.
+                self.jobs = super::jobs::Jobs::default();
             }
             cx.emit(WindowEvent::Status(status));
             cx.notify();
