@@ -8,7 +8,7 @@
 //! become one more once it answers, so a drive that stopped answering
 //! never piles up the core's threads and answers land in order. A drive
 //! that goes away takes its number with it. A click on a volume not mounted mounts it,
-//! then opens it. A drive that goes away (ejected, unplugged) while the
+//! then opens it, unless the user went somewhere else meanwhile. A drive that goes away (ejected, unplugged) while the
 //! window is in it sends the window home.
 
 use std::collections::HashMap;
@@ -142,6 +142,12 @@ impl MainWindow {
             let home = self.home.clone();
             self.open(&home);
         }
+    }
+
+    /// Going somewhere else drops the wish to open the volume being
+    /// mounted, so its mount finishing late doesn't take the window away.
+    pub(super) fn forget_drive_to_open(&mut self) {
+        self.drives.opening = None;
     }
 
     /// Goes to `drive`, mounting it first when it isn't mounted.
