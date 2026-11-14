@@ -7,7 +7,9 @@
 //! that touch join into one block: a row squares the corners it shares
 //! with a selected neighbour. The row the keyboard is on has a ring (see
 //! `selecting`). A click on a column head orders the list by that column;
-//! folders always come first (see `navigate` and the core's `order`).
+//! folders always come first (see `navigate` and the core's `order`). A
+//! search's files stay best first, so their heads do nothing; the count
+//! and the empty look are the search's (see `search`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -43,7 +45,11 @@ impl MainWindow {
             .px(size::SHEET_PAD)
             .bg(colors.sheet)
             .rounded_tl(radius::SHEET)
-            .child(column_heads(self.shown_order(), &colors, cx))
+            .child(column_heads(
+                (!self.searching()).then(|| self.shown_order()),
+                &colors,
+                cx,
+            ))
             .child(self.entries_area(cx))
     }
 
@@ -64,6 +70,8 @@ impl MainWindow {
                 }),
             )
             .child(self.entries(cx))
+            .children(self.no_matches(&colors))
+            .children(self.match_count(&colors))
             .children(self.band_box().map(|band| {
                 div()
                     .debug_selector(|| "band".to_owned())
@@ -172,8 +180,13 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
 
 /// The heads above the entries, lined up with [`cells`]. A click on one
 /// orders the list by it (see `navigate`); the one in use is bright and
-/// carries an arrow for its direction.
-fn column_heads(order: Order, colors: &Colors, cx: &Context<MainWindow>) -> impl IntoElement {
+/// carries an arrow for its direction. Without an `order` (a search's
+/// files, best first) none is in use and a click does nothing.
+fn column_heads(
+    order: Option<Order>,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> impl IntoElement {
     let head = |key, label| column_head(key, label, order, colors, cx);
     div()
         .flex()
@@ -208,12 +221,12 @@ fn column_heads(order: Order, colors: &Colors, cx: &Context<MainWindow>) -> impl
 fn column_head(
     key: SortKey,
     label: &'static str,
-    order: Order,
+    order: Option<Order>,
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> Stateful<Div> {
-    let in_use = order.key == key;
-    let arrow = if order.descending {
+    let in_use = order.is_some_and(|order| order.key == key);
+    let arrow = if order.is_some_and(|order| order.descending) {
         Icon::SortDown
     } else {
         Icon::SortUp
@@ -230,13 +243,15 @@ fn column_head(
         .px(size::HEAD_BUTTON_PAD)
         .ml(-size::HEAD_BUTTON_PAD)
         .rounded(radius::SMALL)
-        .cursor_pointer()
-        .hover(|head| head.bg(colors.hover).text_color(colors.text))
+        .when(order.is_some(), |head| {
+            head.cursor_pointer()
+                .hover(|head| head.bg(colors.hover).text_color(colors.text))
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.sort_by(key);
+                    cx.notify();
+                }))
+        })
         .when(in_use, |head| head.text_color(colors.text))
-        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-            this.sort_by(key);
-            cx.notify();
-        }))
         .child(label)
         .when(in_use, |head| {
             let arrow_selector = format!("arrow-{}", label.to_lowercase());

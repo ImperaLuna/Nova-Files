@@ -17,10 +17,12 @@
 //! the box `band`. Each line's Modified cell carries one too,
 //! `modified-header` and `modified-<n>`, so a test can check the columns
 //! line up. The slots later features fill carry one each: `sidebar`,
-//! `path`, `search` and `views`.
+//! `path`, `search` and `views`; the search's parts carry `search-box`,
+//! `match-count` and `no-matches`.
 
 mod bar;
 mod row;
+mod search;
 mod sheet;
 mod sidebar;
 
@@ -32,16 +34,17 @@ use gpui::{
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
-    CursorUp, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown, SelectFirst,
-    SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
+    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown,
+    SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
 };
 use crate::selection::Move;
 use crate::theme::{Colors, size, text};
-use crate::window::MainWindow;
+use crate::window::{FocusTo, MainWindow};
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
+        self.settle_search(window, cx);
         let colors = Colors::of(cx);
         // Keys always land somewhere: in a main window on the window
         // itself, which a click inside takes focus back to; in a picker in
@@ -60,9 +63,16 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
+            .on_action(cx.listener(|this, _: &FocusSearch, _, cx| {
+                this.focus_later(FocusTo::Box, cx);
+            }))
             .map(|root| Self::selection_keys(root, cx))
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                if this.jump_typed(event, cx) {
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                // Keys typed in the search box are its own.
+                if this.search_focused(window, cx) {
+                    return;
+                }
+                if this.search_key(event, cx) || this.jump_typed(event, cx) {
                     cx.stop_propagation();
                 }
             }))
@@ -107,7 +117,7 @@ impl Render for MainWindow {
                             .flex_col()
                             .flex_1()
                             .min_w_0()
-                            .child(self.top_bar(&colors))
+                            .child(self.top_bar(&colors, cx))
                             .child(self.sheet(cx)),
                     ),
             )

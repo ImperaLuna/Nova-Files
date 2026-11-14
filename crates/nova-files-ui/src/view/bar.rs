@@ -1,12 +1,11 @@
 //! The top bar: a row of capsules on the window. Back, Forward and Up;
-//! the path's slot, which takes what the others leave; the search slot;
-//! and the list and tiles switch. The path bar, search and the tiles view
-//! are features of their own that fill their slot; until then the path's
-//! slot shows the folder's path, the search slot its label, and the slots
-//! do nothing.
+//! the path's slot, which takes what the others leave; the search box
+//! (see `search`); and the list and tiles switch. The path bar and the
+//! tiles view are features of their own that fill their slot; until then
+//! the path's slot shows the folder's path, and the slots do nothing.
 
 use gpui::{
-    Action, ClickEvent, Div, InteractiveElement as _, IntoElement, ParentElement as _,
+    Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
     SharedString, StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
 };
 
@@ -16,10 +15,8 @@ use crate::commands::{GoBack, GoForward, GoUp};
 use crate::theme::{Colors, radius, size};
 use crate::window::MainWindow;
 
-const SEARCH_LABEL: &str = "Search";
-
 impl MainWindow {
-    pub(super) fn top_bar(&self, colors: &Colors) -> impl IntoElement {
+    pub(super) fn top_bar(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let back = icon_button(
             "back",
             Icon::Back,
@@ -66,15 +63,16 @@ impl MainWindow {
                     .child(div().min_w_0().truncate().child(path)),
             )
             .child(
-                capsule(colors)
-                    .debug_selector(|| "search".to_owned())
-                    .flex_shrink()
-                    .w(size::SEARCH_WIDTH)
-                    .px(size::SEARCH_PAD)
-                    .gap(size::SEARCH_GAP)
-                    .text_color(colors.text_dim)
-                    .child(icon(Icon::Search, size::BUTTON_ICON, colors.text_dim))
-                    .child(div().min_w_0().truncate().child(SEARCH_LABEL)),
+                self.search_box(
+                    capsule(colors)
+                        .debug_selector(|| "search".to_owned())
+                        .flex_shrink()
+                        .w(size::SEARCH_WIDTH)
+                        .px(size::SEARCH_PAD)
+                        .gap(size::SEARCH_GAP),
+                    colors,
+                    cx,
+                ),
             )
             .child(
                 capsule(colors)

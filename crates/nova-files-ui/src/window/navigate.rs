@@ -1,8 +1,9 @@
 //! Going places: a new folder, Back, Forward, Up and into an entry. Each
 //! asks the core for a listing with a new id, in the window's order; the
 //! window moves once that id answers (see `events`). Changing the order
-//! reads the folder again. Paths are tidied by their text alone, as a user
-//! reads them.
+//! reads the folder again, except while a search's files are on screen,
+//! which stay best first. Going anywhere ends a search (see `search`).
+//! Paths are tidied by their text alone, as a user reads them.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -43,7 +44,8 @@ impl MainWindow {
     }
 
     /// Asks the core for `folder`, leaving the history as it is: the
-    /// window moves there once it answers. Whether the ask was sent.
+    /// window moves there once it answers, and a search under way ends.
+    /// Whether the ask was sent.
     pub(super) fn request(&mut self, folder: &Path) -> bool {
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
@@ -58,6 +60,7 @@ impl MainWindow {
         });
         let sent = matches!(sent, Some(Ok(())));
         if sent {
+            self.search.leave();
             self.asked = Some(id);
             self.asked_order = order;
             self.requested = Some(path);
@@ -77,6 +80,10 @@ impl MainWindow {
     /// still on its way) is read again in the new order; the window keeps
     /// its place in the history.
     pub fn sort_by(&mut self, key: SortKey) {
+        // A search's files stay best first.
+        if self.searching() {
+            return;
+        }
         let folder = if self.waiting() {
             self.requested.clone()
         } else {
@@ -99,7 +106,7 @@ impl MainWindow {
         if let Some(entry) = entry
             && entry.kind == EntryKind::Folder
         {
-            let folder = listing.path.join(&entry.name);
+            let folder = listing.path_of(entry);
             self.open(&folder);
         }
     }
