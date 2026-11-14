@@ -8,9 +8,10 @@
 test_workspace = true
 
 # CI's baseline reports about 1 s of tests, so the timeout cargo-mutants
-# sets is its 20 s floor, while a whole test pass on a CI runner takes 15 to 19 s even for a mutant it
-# catches. A higher floor keeps slow passes from reading as timeouts; a
-# mutant that really hangs still times out and fails the job.
+# sets is its 20 s floor, while a whole test pass on a CI runner takes 15
+# to 19 s even for a mutant it catches. A higher floor keeps slow passes
+# from reading as timeouts; a mutant that really hangs still times out and
+# fails the job.
 minimum_test_timeout = 60
 
 exclude_re = [
