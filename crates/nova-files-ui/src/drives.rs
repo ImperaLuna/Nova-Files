@@ -6,7 +6,8 @@
 //!
 //! The drive you're in is the one whose folder holds the folder on
 //! screen most closely; the system drive only counts outside Home, which
-//! Places and the tree already mark.
+//! Places and the tree already mark, while a drive mounted inside Home
+//! still does.
 
 use std::path::{Path, PathBuf};
 
@@ -74,12 +75,11 @@ pub fn shown(list: &DriveList) -> Vec<ShownDrive> {
 
 /// The row of `drives` you're in when `here` is on screen, if any.
 pub fn here(drives: &[ShownDrive], here: &Path, home: &Path) -> Option<usize> {
-    if here.starts_with(home) {
-        return None;
-    }
+    let inside_home = here.starts_with(home);
     drives
         .iter()
         .enumerate()
+        .filter(|(_, drive)| !(inside_home && drive.volume.is_none()))
         .filter_map(|(index, drive)| {
             let folder = drive.folder.as_deref()?;
             here.starts_with(folder)
@@ -174,6 +174,13 @@ mod tests {
         assert_eq!(at("/run/media/me/Photos"), Some(1));
         assert_eq!(at("/etc"), Some(0));
         assert_eq!(at("/home/me/Documents"), None);
+        let mut inside = list();
+        inside.volumes[2].mount_point = Some(PathBuf::from("/home/me/Games"));
+        let rows = shown(&inside);
+        assert_eq!(
+            here(&rows, Path::new("/home/me/Games/steam"), home),
+            Some(3)
+        );
     }
 
     #[test]
