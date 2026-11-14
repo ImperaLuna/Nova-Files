@@ -47,6 +47,24 @@ pub struct QuickLooks {
     next_id: u64,
 }
 
+impl QuickLook {
+    /// What the core sent for the entry on screen, once it came; until
+    /// then [`Self::shown`] is still the entry before.
+    pub(crate) fn current(&self) -> Option<&Shown> {
+        self.shown
+            .as_ref()
+            .filter(|shown| shown.entry == self.entry)
+    }
+}
+
+impl QuickLooks {
+    /// A request id no earlier request had.
+    const fn next_id(&mut self) -> PreviewId {
+        self.next_id += 1;
+        PreviewId(self.next_id)
+    }
+}
+
 /// What the quick look shows, as [`MainWindow::previewed`] tells it.
 #[derive(Debug, Clone)]
 pub struct Previewed {
@@ -171,10 +189,7 @@ impl MainWindow {
         let open = self.quick_looks.open.as_ref()?;
         let listing = self.listing.as_ref()?;
         let entry = listing.entries.get(usize::try_from(open.entry.0).ok()?)?;
-        let current = open
-            .shown
-            .as_ref()
-            .filter(|shown| shown.entry == open.entry);
+        let current = open.current();
         Some(Previewed {
             name: entry.name.to_string_lossy().into_owned(),
             preview: current.and_then(|shown| shown.preview.clone()),
@@ -188,8 +203,9 @@ impl MainWindow {
     }
 
     /// The room the quick look has this frame, `scale_factor` device
-    /// pixels to a pixel. When it changes under a picture, the picture is
-    /// asked for again at the new size; the old one stays until it comes.
+    /// pixels to a pixel. When it changes, an open quick look asks for its
+    /// entry again, so a picture comes at the new size; what it shows stays
+    /// until the answer comes.
     pub(crate) fn set_preview_room(
         &mut self,
         room: Size<Pixels>,
@@ -205,17 +221,8 @@ impl MainWindow {
             return;
         }
         self.quick_looks.fit = fit;
-        let Some(open) = self.quick_looks.open.take() else {
-            return;
-        };
-        let picture = open
-            .shown
-            .as_ref()
-            .is_some_and(|shown| shown.entry == open.entry && shown.picture.is_some());
-        if picture {
+        if let Some(open) = self.quick_looks.open.take() {
             self.preview_entry(open.listing, open.entry, open.shown, cx);
-        } else {
-            self.quick_looks.open = Some(open);
         }
     }
 
@@ -233,8 +240,7 @@ impl MainWindow {
             cx.notify();
             return;
         };
-        self.quick_looks.next_id += 1;
-        let asked = PreviewId(self.quick_looks.next_id);
+        let asked = self.quick_looks.next_id();
         self.quick_looks.open = Some(QuickLook {
             listing,
             entry,
@@ -426,6 +432,15 @@ mod tests {
             pixels: Arc::from([0; 8].as_slice()),
         };
         assert!(render_image(&picture).is_none());
+    }
+
+    #[test]
+    fn every_request_gets_a_new_id() {
+        let mut looks = QuickLooks::default();
+        let first = looks.next_id();
+        let second = looks.next_id();
+        assert_ne!(first, second);
+        assert!(second > first);
     }
 
     #[test]

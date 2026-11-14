@@ -13,7 +13,9 @@
 //! shows its name and what was shown before stays.
 //!
 //! Selectors for tests: `preview`, `preview-art`, `preview-open`,
-//! `preview-close`, `preview-previous` and `preview-next`.
+//! `preview-close`, `preview-previous` and `preview-next`; what is shown
+//! is `preview-picture`, `preview-text`, `preview-folder` (with
+//! `preview-more` under it when the folder holds more) or `preview-icon`.
 
 use std::ffi::OsStr;
 use std::sync::Arc;
@@ -75,9 +77,7 @@ impl MainWindow {
         let colors = Colors::of(cx);
         let shown = open.shown.as_ref();
         // The preview itself, once it is this entry's.
-        let current = shown
-            .filter(|shown| shown.entry == open.entry)
-            .and_then(|shown| shown.preview.as_deref());
+        let current = open.current().and_then(|shown| shown.preview.as_deref());
         let art = shown.map_or_else(
             || big_icon(&entry.name, entry.kind, &colors),
             |shown| {
@@ -90,8 +90,7 @@ impl MainWindow {
                 )
             },
         );
-        let previous = index > 0;
-        let next = index + 1 < listing.entries.len();
+        let (previous, next) = steps(index, listing.entries.len());
         Some(
             div()
                 .id("preview")
@@ -176,9 +175,7 @@ fn art(
             picture_art(picture, room, scale_factor, colors).into_any_element()
         }
         (PreviewContent::Text { text, .. }, _) => text_art(text, room, colors).into_any_element(),
-        (PreviewContent::Folder { first, count }, _) => {
-            folder_art(first, *count, colors).into_any_element()
-        }
+        (PreviewContent::Folder { first, count }, _) => folder_art(first, *count, colors),
         _ => big_icon(name, kind, colors),
     }
 }
@@ -192,22 +189,46 @@ fn picture_art(
     colors: &Colors,
 ) -> impl IntoElement {
     let size = picture.size(0);
-    let logical = |device: i32| {
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "a picture's side is a few thousand pixels at most"
-        )]
-        let device = device as f32;
-        px(device / scale_factor)
-    };
+    let logical = |device: i32| logical_side(device, scale_factor);
     let (width, height) = (logical(size.width.0), logical(size.height.0));
     let scale = fitting_scale(gpui::size(width, height), room);
     img(Arc::clone(picture))
+        .debug_selector(|| "preview-picture".to_owned())
         .w(width * scale)
         .h(height * scale)
         .rounded(radius::CARD)
         .border(size::LINE)
         .border_color(colors.line)
+}
+
+/// A side `device` pixels long, in pixels at `scale_factor`.
+fn logical_side(device: i32, scale_factor: f32) -> Pixels {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a picture's side is a few thousand pixels at most"
+    )]
+    let device = device as f32;
+    px(device / scale_factor)
+}
+
+/// Whether there is an entry before the one at `index` of `len`, and
+/// one after it, for Previous and Next.
+const fn steps(index: usize, len: usize) -> (bool, bool) {
+    (index > 0, index + 1 < len)
+}
+
+/// How many lines of text fit a room `height` high: at least one.
+fn lines_fitting(height: Pixels) -> usize {
+    let lines = (f32::from(height - preview::TEXT_PAD_Y * BOTH_SIDES)
+        / f32::from(preview::TEXT_LINE))
+    .floor();
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a count of lines that fit a window, never negative"
+    )]
+    let lines = lines.max(1.0) as usize;
+    lines
 }
 
 /// How much a picture `size` is scaled to fit `room`: never up.
@@ -226,16 +247,9 @@ fn fitting_scale(size: gpui::Size<Pixels>, room: gpui::Size<Pixels>) -> f32 {
 
 /// A text file's first lines, as many as fit the room.
 fn text_art(text_content: &str, room: gpui::Size<Pixels>, colors: &Colors) -> impl IntoElement {
-    let lines = (f32::from(room.height - preview::TEXT_PAD_Y * BOTH_SIDES)
-        / f32::from(preview::TEXT_LINE))
-    .floor();
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "a count of lines that fit a window, never negative"
-    )]
-    let lines = lines.max(1.0) as usize;
+    let lines = lines_fitting(room.height);
     card(preview::TEXT_WIDTH, colors)
+        .debug_selector(|| "preview-text".to_owned())
         .max_h(room.height)
         .px(preview::TEXT_PAD_X)
         .py(preview::TEXT_PAD_Y)
@@ -258,6 +272,7 @@ fn folder_art(first: &[Entry], count: usize, colors: &Colors) -> AnyElement {
     }
     let more = count.saturating_sub(first.len());
     card(preview::LIST_WIDTH, colors)
+        .debug_selector(|| "preview-folder".to_owned())
         .px(preview::LIST_PAD_X)
         .py(preview::LIST_PAD_Y)
         .bg(colors.raised)
@@ -277,6 +292,7 @@ fn folder_art(first: &[Entry], count: usize, colors: &Colors) -> AnyElement {
         .when(more > 0, |list| {
             list.child(
                 div()
+                    .debug_selector(|| "preview-more".to_owned())
                     .h(preview::LIST_ROW)
                     .flex()
                     .items_center()
@@ -308,6 +324,7 @@ fn big_icon(name: &OsStr, kind: EntryKind, colors: &Colors) -> AnyElement {
         EntryKind::File => (Icon::File, FileKind::of(name).tag(colors.tags)),
     };
     card(preview::CARD_WIDTH, colors)
+        .debug_selector(|| "preview-icon".to_owned())
         .h(preview::CARD_HEIGHT)
         .bg(colors.window)
         .items_center()
@@ -438,6 +455,34 @@ mod tests {
             gpui::size(px(0.0), px(0.0)),
         );
         assert!(none.abs() < f32::EPSILON);
+        // A picture with no size is left as it is.
+        let empty = fitting_scale(gpui::size(px(0.0), px(0.0)), gpui::size(px(0.0), px(0.0)));
+        assert!((empty - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn device_pixels_are_divided_by_the_scale() {
+        assert_eq!(logical_side(600, 2.0), px(300.0));
+        assert_eq!(logical_side(7, 1.0), px(7.0));
+    }
+
+    #[test]
+    fn previous_and_next_need_an_entry_that_way() {
+        assert_eq!(steps(0, 3), (false, true));
+        assert_eq!(steps(1, 3), (true, true));
+        assert_eq!(steps(2, 3), (true, false));
+        assert_eq!(steps(0, 1), (false, false));
+    }
+
+    #[test]
+    fn as_many_lines_fit_as_the_room_holds() {
+        let pads = preview::TEXT_PAD_Y * BOTH_SIDES;
+        let line = preview::TEXT_LINE;
+        assert_eq!(lines_fitting(pads + line * 10.0), 10);
+        assert_eq!(lines_fitting(pads + line * 10.5), 10);
+        assert_eq!(lines_fitting(pads + line * 3.0), 3);
+        // Even a room too small for one shows one.
+        assert_eq!(lines_fitting(px(0.0)), 1);
     }
 
     fn preview(content: PreviewContent, kind_name: Option<&str>, bytes: u64) -> Preview {

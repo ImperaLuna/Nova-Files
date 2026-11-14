@@ -131,6 +131,48 @@ async fn the_quick_look_shows_the_picture_itself(cx: &mut TestAppContext) {
         other => unreachable!("expected a picture, got {other:?}"),
     }
 
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("preview-picture").is_some());
+
     cx.simulate_keystrokes("space");
     view.read_with(cx, |view, _| assert!(!view.previewing()));
+}
+
+#[gpui::test]
+async fn a_smaller_window_gets_a_smaller_picture(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    cx.update(nova_files_ui::bind_window_keys);
+    let (_temp, view, cx, _core) = window_on_media(cx, "preview-resize").await;
+    let side = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| {
+            let shown = view.previewed()?;
+            match &shown.preview?.content {
+                PreviewContent::Picture(picture) if shown.picture => Some(picture.width),
+                _ => None,
+            }
+        })
+    };
+
+    let row = cx.debug_bounds("entry-1").unwrap();
+    cx.simulate_click(row.center(), Modifiers::none());
+    cx.simulate_keystrokes("space");
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.previewed().is_some_and(|shown| shown.picture)
+    })
+    .await;
+    assert_eq!(side(&view, cx), Some(SIDE));
+
+    // Too small for the picture, even in device pixels: it is asked for
+    // again, smaller.
+    cx.simulate_resize(gpui::size(gpui::px(200.0), gpui::px(200.0)));
+    cx.run_until_parked();
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.previewed()
+            .and_then(|shown| shown.preview)
+            .is_some_and(|preview| match &preview.content {
+                PreviewContent::Picture(picture) => picture.width < SIDE,
+                _ => false,
+            })
+    })
+    .await;
 }

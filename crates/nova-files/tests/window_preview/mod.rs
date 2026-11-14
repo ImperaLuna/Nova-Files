@@ -266,3 +266,81 @@ async fn stepping_starts_from_the_entry_shown(cx: &mut TestAppContext) {
     wait_for_preview(&view, cx, "a.txt").await;
     assert_eq!(selected(&view, cx), ["a.txt"]);
 }
+
+#[gpui::test]
+async fn a_space_inside_a_name_being_typed_does_not_open_the_quick_look(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview-jump");
+    fs::write(tree.path().join("my music.txt"), "").unwrap();
+    fs::write(tree.path().join("my notes.txt"), "").unwrap();
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx) = open_on(cx, tree.path()).await;
+
+    cx.simulate_keystrokes("m y space n");
+    assert_eq!(selected(&view, cx), ["my notes.txt"]);
+    assert!(!view.read_with(cx, |view, _| view.previewing()));
+}
+
+#[gpui::test]
+async fn each_kind_of_entry_is_drawn_its_own_way(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview-kinds");
+    let (view, cx) = with_text(cx, &tree).await;
+    let drawn = |cx: &mut VisualTestContext| {
+        cx.run_until_parked();
+        [
+            "preview-picture",
+            "preview-text",
+            "preview-folder",
+            "preview-icon",
+        ]
+        .into_iter()
+        .filter(|selector| cx.debug_bounds(selector).is_some())
+        .collect::<Vec<_>>()
+    };
+
+    click(cx, "entry-0");
+    cx.simulate_keystrokes("space");
+    wait_for_preview(&view, cx, "Projects").await;
+    assert_eq!(drawn(cx), ["preview-folder"]);
+    // Projects holds one entry, all of it shown.
+    assert!(cx.debug_bounds("preview-more").is_none());
+
+    cx.simulate_keystrokes("right");
+    wait_for_preview(&view, cx, "a.txt").await;
+    assert_eq!(drawn(cx), ["preview-text"]);
+}
+
+#[gpui::test]
+async fn a_binary_file_shows_its_icon(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview-icon");
+    fs::write(tree.path().join("a.bin"), [0, 1, 2, 0]).unwrap();
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx) = open_on(cx, tree.path()).await;
+
+    click(cx, "entry-1");
+    cx.simulate_keystrokes("space");
+    wait_for_preview(&view, cx, "a.bin").await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("preview-icon").is_some());
+    assert!(cx.debug_bounds("preview-text").is_none());
+}
+
+#[gpui::test]
+async fn a_big_folder_says_how_many_more_it_holds(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview-more");
+    for n in 0..12 {
+        fs::write(tree.path().join("Projects").join(format!("{n}.txt")), "").unwrap();
+    }
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx) = open_on(cx, tree.path()).await;
+
+    click(cx, "entry-0");
+    cx.simulate_keystrokes("space");
+    wait_for_preview(&view, cx, "Projects").await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("preview-folder").is_some());
+    assert!(cx.debug_bounds("preview-more").is_some());
+}

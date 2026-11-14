@@ -187,7 +187,8 @@ impl MainWindow {
     /// The quick look's actions on the window's root (see
     /// `window::preview`). A key it doesn't take goes on as typed: a space
     /// inside a name being jumped to stays part of the name, and in a
-    /// picker Space and the arrows edit its name box.
+    /// picker Space goes to its name box. (The name box takes the arrows
+    /// itself before they get here.)
     fn preview_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &TogglePreview, window, cx| {
             if this.pick.is_some() || this.jumping(cx) {
@@ -197,14 +198,10 @@ impl MainWindow {
             }
         }))
         .on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
-            if !this.step_preview(Move::Up, cx) {
-                cx.propagate();
-            }
+            this.step_preview(Move::Up, cx);
         }))
         .on_action(cx.listener(|this, _: &PreviewNext, _, cx| {
-            if !this.step_preview(Move::Down, cx) {
-                cx.propagate();
-            }
+            this.step_preview(Move::Down, cx);
         }))
     }
 }
