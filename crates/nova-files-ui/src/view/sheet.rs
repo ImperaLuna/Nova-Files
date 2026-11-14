@@ -191,7 +191,7 @@ fn column_heads(colors: &Colors) -> impl IntoElement {
                 .flex_1()
                 .min_w_0()
                 .items_center()
-                .h(size::HEAD_HEIGHT - size::HEAD_TOP)
+                .h_full()
                 .child(cells(
                     head(NAME_LABEL)
                         .gap(size::HEAD_ARROW_GAP)
