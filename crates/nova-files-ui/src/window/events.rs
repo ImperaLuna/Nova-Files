@@ -101,7 +101,7 @@ impl MainWindow {
             Event::FolderUnreadable { .. }
             | Event::Drives(_)
             | Event::DiskSpace(_)
-            | Event::RecentFolders(_)
+            | Event::RecentFolders { .. }
             | Event::DriveDone { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
