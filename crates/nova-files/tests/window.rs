@@ -2,7 +2,7 @@
 //! real temp folder tree: the window connects, opens its folder, selects
 //! an entry clicked, and goes into a folder double-clicked, up, or to a
 //! place clicked. A folder that can't be read leaves it where it was.
-//! Each entry's Modified, Type and Size fill in once the core has read
+//! Each entry's Modified and Size fill in once the core has read
 //! them, lined up under their headers whatever the length of each name. A
 //! picker window picks the file double-clicked when it asks for files,
 //! and answers cancelled when it is closed. Its own keys are tested in
@@ -224,15 +224,9 @@ async fn columns_fill_in_after_the_names(cx: &mut TestAppContext) {
     view.read_with(cx, |view, _| {
         let folder = view.columns(0).unwrap();
         assert_ne!(folder.modified, "");
-        assert_eq!(
-            (folder.type_name.as_str(), folder.size.as_str()),
-            ("Folder", "")
-        );
+        assert_eq!(folder.size, "");
         let file = view.columns(1).unwrap();
-        assert_eq!(
-            (file.type_name.as_str(), file.size.as_str()),
-            ("Text", "0 B")
-        );
+        assert_eq!(file.size, "0 B");
         assert_eq!(view.columns(2), None);
     });
 }

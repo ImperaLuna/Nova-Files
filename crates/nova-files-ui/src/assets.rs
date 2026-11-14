@@ -1,36 +1,57 @@
 //! The icons, built into the program so the window never reads them from
-//! the disk. GPUI asks for them by path; [`Icon`] names each one. They are
-//! drawn as masks, so the stroke color here doesn't matter: the UI colors
-//! them with theme tokens.
+//! the disk. GPUI asks for them by path; [`Icon`] names each one. Their
+//! shapes are in `svg`; they are drawn as masks, and the UI colors them
+//! with theme tokens.
+
+mod svg;
 
 use std::borrow::Cow;
 
 use gpui::{AssetSource, Result, SharedString};
-
-const FOLDER_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.6" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>"##;
-const FILE_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.6" stroke-linejoin="round"><path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5"/></svg>"##;
-const UP_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"##;
-
-const BACK_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>"##;
-const FORWARD_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>"##;
 
 /// The icons the UI draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Icon {
     Folder,
     File,
-    Up,
+    FileTag,
+    Home,
+    Desktop,
+    Documents,
+    Downloads,
+    Pictures,
+    Music,
+    Videos,
     Back,
     Forward,
+    Up,
+    SortUp,
+    SortDown,
+    Search,
+    List,
+    Tiles,
 }
 
 impl Icon {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 18] = [
         Self::Folder,
         Self::File,
-        Self::Up,
+        Self::FileTag,
+        Self::Home,
+        Self::Desktop,
+        Self::Documents,
+        Self::Downloads,
+        Self::Pictures,
+        Self::Music,
+        Self::Videos,
         Self::Back,
         Self::Forward,
+        Self::Up,
+        Self::SortUp,
+        Self::SortDown,
+        Self::Search,
+        Self::List,
+        Self::Tiles,
     ];
 
     /// The path GPUI asks the asset source for.
@@ -38,20 +59,47 @@ impl Icon {
         match self {
             Self::Folder => "icons/folder.svg",
             Self::File => "icons/file.svg",
-            Self::Up => "icons/up.svg",
+            Self::FileTag => "icons/file-tag.svg",
+            Self::Home => "icons/home.svg",
+            Self::Desktop => "icons/desktop.svg",
+            Self::Documents => "icons/documents.svg",
+            Self::Downloads => "icons/downloads.svg",
+            Self::Pictures => "icons/pictures.svg",
+            Self::Music => "icons/music.svg",
+            Self::Videos => "icons/videos.svg",
             Self::Back => "icons/back.svg",
             Self::Forward => "icons/forward.svg",
+            Self::Up => "icons/up.svg",
+            Self::SortUp => "icons/sort-up.svg",
+            Self::SortDown => "icons/sort-down.svg",
+            Self::Search => "icons/search.svg",
+            Self::List => "icons/list.svg",
+            Self::Tiles => "icons/tiles.svg",
         }
     }
 
     const fn bytes(self) -> &'static [u8] {
-        match self {
-            Self::Folder => FOLDER_SVG.as_bytes(),
-            Self::File => FILE_SVG.as_bytes(),
-            Self::Up => UP_SVG.as_bytes(),
-            Self::Back => BACK_SVG.as_bytes(),
-            Self::Forward => FORWARD_SVG.as_bytes(),
-        }
+        let source = match self {
+            Self::Folder => svg::FOLDER,
+            Self::File => svg::FILE,
+            Self::FileTag => svg::FILE_TAG,
+            Self::Home => svg::HOME,
+            Self::Desktop => svg::DESKTOP,
+            Self::Documents => svg::DOCUMENTS,
+            Self::Downloads => svg::DOWNLOADS,
+            Self::Pictures => svg::PICTURES,
+            Self::Music => svg::MUSIC,
+            Self::Videos => svg::VIDEOS,
+            Self::Back => svg::BACK,
+            Self::Forward => svg::FORWARD,
+            Self::Up => svg::UP,
+            Self::SortUp => svg::SORT_UP,
+            Self::SortDown => svg::SORT_DOWN,
+            Self::Search => svg::SEARCH,
+            Self::List => svg::LIST,
+            Self::Tiles => svg::TILES,
+        };
+        source.as_bytes()
     }
 }
 
@@ -78,6 +126,8 @@ impl AssetSource for Assets {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
 
     #[test]
@@ -87,6 +137,14 @@ mod tests {
             assert_eq!(&*loaded, icon.bytes());
         }
         assert!(Assets.load("icons/missing.svg").unwrap().is_none());
+    }
+
+    #[test]
+    fn every_icon_has_its_own_path_and_shape() {
+        let paths: HashSet<_> = Icon::ALL.into_iter().map(Icon::path).collect();
+        let shapes: HashSet<_> = Icon::ALL.into_iter().map(Icon::bytes).collect();
+        assert_eq!(paths.len(), Icon::ALL.len());
+        assert_eq!(shapes.len(), Icon::ALL.len());
     }
 
     #[test]

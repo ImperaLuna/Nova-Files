@@ -168,17 +168,18 @@ fn a_long_line_scrolls_to_keep_the_caret_in_view(cx: &mut TestAppContext) {
     assert_eq!(end, Some(edge));
     // Points near either edge find what has scrolled there.
     assert_eq!(index_at(&field, cx, edge - w * 0.2), Some(LONG - 1));
-    let x = w * 0.2;
-    let first = index_at(&field, cx, x).unwrap_or(0);
+    let first = index_at(&field, cx, w * 0.2).unwrap_or(0);
     assert!(first > 0);
-    let under = caret_box(&field, cx, first..first + 1);
-    assert!(
-        under.is_some_and(|b| b.left() <= x && x < b.right()),
-        "{under:?}"
-    );
+    // The character at the left edge may be cut; a click lands on the
+    // nearest edge between characters, so aim inside the first whole one.
+    let whole = (first..LONG)
+        .find(|&index| caret_box(&field, cx, index..index + 1).is_some_and(|b| b.left() >= px(0.0)))
+        .unwrap();
+    let x = caret_box(&field, cx, whole..whole + 1).unwrap().left() + w * 0.2;
+    assert_eq!(index_at(&field, cx, x), Some(whole));
     down(cx, x, Modifiers::none());
     up(cx, x);
-    assert_eq!(selection(&field, cx), first..first);
+    assert_eq!(selection(&field, cx), whole..whole);
 
     // Shorter text scrolls back to the start.
     field.update(cx, |field, cx| field.set_text("ab", cx));

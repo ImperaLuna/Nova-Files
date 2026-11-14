@@ -16,6 +16,7 @@ mod columns;
 mod commands;
 mod history;
 mod jump;
+mod kind;
 mod pick;
 mod requests;
 mod selecting;

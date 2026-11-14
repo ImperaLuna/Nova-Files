@@ -25,14 +25,15 @@ struct Shrunk {
 }
 
 impl MainWindow {
-    /// The Modified, Type and Size text of entry `index` on screen. Modified
-    /// and Size are empty until the core has read that entry's details.
+    /// The Modified and Size text of entry `index` on screen, empty until
+    /// the core has read that entry's details.
     pub fn columns(&self, index: usize) -> Option<ColumnText> {
-        let entry = self.listing.as_ref()?.entries.get(index)?;
+        if index >= self.listing.as_ref()?.entries.len() {
+            return None;
+        }
         let details = self.details.get(&index).copied().unwrap_or_default();
         Some(ColumnText {
             modified: details.modified.map(columns::modified).unwrap_or_default(),
-            type_name: columns::type_name(&entry.name, entry.kind),
             size: details.size.map(columns::size).unwrap_or_default(),
         })
     }

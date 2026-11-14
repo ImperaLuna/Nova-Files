@@ -1,22 +1,17 @@
-//! What the Modified, Type and Size columns show for one entry: plain text
-//! worked out from the entry and its details, no disk reads.
+//! What the Modified and Size columns show for one entry: plain text
+//! worked out from its details, no disk reads.
 //!
 //! Sizes use decimal units (1 KB is 1,000 bytes), one decimal below 10.
-//! Dates are local time. The type comes from the name's extension alone;
-//! a name without one is a plain "File".
+//! Dates are local time.
 
-use std::ffi::OsStr;
-use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local};
-use nova_files_api::EntryKind;
 
-/// The text of an entry's Modified, Type and Size columns.
+/// The text of an entry's Modified and Size columns.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ColumnText {
     pub modified: String,
-    pub type_name: String,
     pub size: String,
 }
 
@@ -26,36 +21,6 @@ const SIZE_STEP: f64 = 1000.0;
 /// Below this many units a size shows one decimal ("1.8 MB").
 const ONE_DECIMAL_BELOW: f64 = 10.0;
 const DATE_FORMAT: &str = "%Y-%m-%d %H:%M";
-
-const FOLDER_TYPE: &str = "Folder";
-const PLAIN_FILE_TYPE: &str = "File";
-
-/// Known extensions, lower case, and their type names.
-const KNOWN_TYPES: &[(&str, &str)] = &[
-    ("jpg", "JPEG image"),
-    ("jpeg", "JPEG image"),
-    ("png", "PNG image"),
-    ("webp", "WebP image"),
-    ("gif", "GIF image"),
-    ("heic", "HEIC image"),
-    ("svg", "SVG image"),
-    ("mp4", "MP4 video"),
-    ("mkv", "MKV video"),
-    ("webm", "WebM video"),
-    ("mov", "QuickTime video"),
-    ("mp3", "MP3 audio"),
-    ("flac", "FLAC audio"),
-    ("ogg", "Ogg audio"),
-    ("txt", "Text"),
-    ("md", "Markdown"),
-    ("pdf", "PDF document"),
-    ("odt", "Text document"),
-    ("ods", "Spreadsheet"),
-    ("zip", "ZIP archive"),
-    ("tar", "Tar archive"),
-    ("gz", "Gzip archive"),
-    ("rs", "Rust source"),
-];
 
 /// "512 B", "1.8 MB", "640 KB".
 pub fn size(bytes: u64) -> String {
@@ -100,24 +65,6 @@ pub fn modified(time: SystemTime) -> String {
         .unwrap_or_default()
 }
 
-/// The type name for an entry called `name`.
-pub fn type_name(name: &OsStr, kind: EntryKind) -> String {
-    if kind == EntryKind::Folder {
-        return FOLDER_TYPE.to_owned();
-    }
-    let Some(extension) = Path::new(name).extension() else {
-        return PLAIN_FILE_TYPE.to_owned();
-    };
-    let extension = extension.to_string_lossy().to_lowercase();
-    KNOWN_TYPES
-        .iter()
-        .find(|(known, _)| *known == extension)
-        .map_or_else(
-            || format!("{} file", extension.to_uppercase()),
-            |(_, name)| (*name).to_owned(),
-        )
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -153,19 +100,5 @@ mod tests {
         // minute before that.
         assert_eq!(before(60.5), before(61.0));
         assert_ne!(before(60.5), before(60.0));
-    }
-
-    #[test]
-    fn type_comes_from_the_extension() {
-        let file = |name: &str| type_name(OsStr::new(name), EntryKind::File);
-        assert_eq!(file("photo.JPG"), "JPEG image");
-        assert_eq!(file("clip.mkv"), "MKV video");
-        assert_eq!(file("data.xyz"), "XYZ file");
-        assert_eq!(file("Makefile"), "File");
-        assert_eq!(file(".bashrc"), "File");
-        assert_eq!(
-            type_name(OsStr::new("photos.jpg"), EntryKind::Folder),
-            "Folder"
-        );
     }
 }
