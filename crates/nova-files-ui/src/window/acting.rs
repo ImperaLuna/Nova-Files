@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use gpui::{Context, SharedString};
-use nova_files_api::{EntryKind, Operation};
+use nova_files_api::{EntryId, EntryKind, Listing, Operation};
 
 use super::MainWindow;
 use crate::island::{NOTE_TIME, Note, NoteUndo};
@@ -16,32 +16,31 @@ impl MainWindow {
     /// The paths of the entries selected in the folder on screen, in list
     /// order.
     pub fn selected_paths(&self) -> Vec<PathBuf> {
-        let Some(listing) = &self.listing else {
+        let Some((listing, ids)) = self.selected_ids() else {
             return Vec::new();
         };
-        self.selection()
-            .filter(|(id, _)| *id == listing.id)
-            .map(|(_, ids)| ids)
-            .unwrap_or_default()
-            .into_iter()
+        ids.into_iter()
             .filter_map(|id| entry_at(&listing.entries, id))
             .map(|entry| listing.path.join(&entry.name))
             .collect()
     }
 
+    /// The listing on screen and the entries selected in it.
+    fn selected_ids(&self) -> Option<(&Listing, Vec<EntryId>)> {
+        let listing = self.listing.as_ref()?;
+        let (id, ids) = self.selection()?;
+        (id == listing.id).then_some((listing, ids))
+    }
+
     /// How many entries are selected in the folder on screen.
     pub fn selected_count(&self) -> usize {
-        match (&self.listing, self.selection()) {
-            (Some(listing), Some((id, ids))) if id == listing.id => ids.len(),
-            _ => 0,
-        }
+        self.selected_ids().map_or(0, |(_, ids)| ids.len())
     }
 
     /// What the files selected take, once the core has read the size of
     /// each; folders don't count. `None` while one isn't known yet.
     pub fn selected_bytes(&self) -> Option<u64> {
-        let listing = self.listing.as_ref()?;
-        let (_, ids) = self.selection().filter(|(id, _)| *id == listing.id)?;
+        let (listing, ids) = self.selected_ids()?;
         ids.into_iter().try_fold(0_u64, |total, id| {
             let entry = entry_at(&listing.entries, id)?;
             if entry.kind == EntryKind::Folder {
