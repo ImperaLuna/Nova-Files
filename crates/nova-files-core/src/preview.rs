@@ -5,8 +5,9 @@
 //! [`PREVIEW_TEXT_BYTES`]. When its first bytes are those of a JPEG, PNG
 //! or WebP picture, it goes to the sandboxed thumbnail helper, which
 //! decodes it scaled down to the client's box (see `thumbs`); one client's
-//! pictures decode one at a time, and a request replaced while it waited
-//! its turn never starts. Otherwise, when the start is UTF-8 text
+//! pictures decode one at a time, a newer request stops the helper still
+//! decoding an older one, and a request replaced while it waited its turn
+//! never starts. Otherwise, when the start is UTF-8 text
 //! (allowing a character cut at the end) with no NUL byte, it shows as
 //! text. Anything else (a picture that wouldn't decode, a binary file, or
 //! anything that isn't a regular file: a device, pipe or socket, which is
@@ -38,7 +39,7 @@ use rustix::fs::OFlags;
 
 use crate::list::{self, Stopped};
 use crate::mime::MimeTypes;
-use crate::thumbs;
+use crate::thumbs::{self, Running};
 
 const THREAD_NAME: &str = "nova-files-preview";
 
@@ -62,6 +63,8 @@ const PICTURE_SIGNATURES: [&[(usize, &[u8])]; 3] = [
 pub struct Current {
     id: AtomicU64,
     decoding: Mutex<()>,
+    /// The helper decoding the client's picture, if one is.
+    running: Running,
 }
 
 /// No preview counts: the client never asked, or left.
@@ -72,6 +75,7 @@ impl Current {
         Self {
             id: AtomicU64::new(NONE),
             decoding: Mutex::new(()),
+            running: Running::new(),
         }
     }
 
@@ -79,13 +83,16 @@ impl Current {
         self.id.load(Ordering::SeqCst) == id.0
     }
 
+    /// Request `id` counts from now on: an older one still decoding stops.
     fn set(&self, id: PreviewId) {
         self.id.store(id.0, Ordering::SeqCst);
+        self.running.stop();
     }
 
     /// Stops the preview running, if any.
     pub fn cancel(&self) {
         self.id.store(NONE, Ordering::SeqCst);
+        self.running.stop();
     }
 }
 
@@ -199,7 +206,8 @@ fn picture(request: &Request, helper: &Path) -> Option<PreviewContent> {
     if !request.current.is(request.id) {
         return None;
     }
-    let picture = thumbs::picture(helper, &request.path, request.fit);
+    let running = &request.current.running;
+    let picture = thumbs::picture(helper, &request.path, request.fit, running);
     Some(picture.map_or(PreviewContent::Icon, PreviewContent::Picture))
 }
 

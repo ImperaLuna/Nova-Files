@@ -8,17 +8,18 @@
 //! Once it is done the rest of its group is killed too, so nothing a
 //! thumbnailer left running outlives the batch. It is always waited on. What it made is read from the cache, not from its
 //! answers, so a helper killed part-way still counts the files it saved.
-//! A preview's picture is read from the helper's output, at most as many
-//! bytes as the box asked for holds, and kept only when its size line and
-//! its pixels agree and fit the box.
+//! A preview's picture is read from the helper's output: its size line
+//! first, which must fit the box asked for, then exactly that many pixels
+//! into a buffer of that size, and nothing after. A newer preview stops
+//! the helper still decoding an older one (see [`Running`]).
 
 use std::env;
 use std::ffi::OsString;
-use std::io::{self, Read as _};
+use std::io::{self, Read};
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{Mutex, PoisonError, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -81,9 +82,40 @@ pub fn run(helper: &Path, thumbnails: &Path, jobs: &[Job]) {
     end(&mut child);
 }
 
+/// The preview helper one client has running, so that a newer request can
+/// stop it.
+#[derive(Debug, Default)]
+pub struct Running(Mutex<Option<Pid>>);
+
+impl Running {
+    /// Nothing running yet.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(Mutex::new(None))
+    }
+
+    /// Kills the helper running and what it started, if any. Its group id
+    /// names it alone: the helper is taken out of here before it is
+    /// waited on, under the same lock.
+    pub fn stop(&self) {
+        // Held through the kill, so the group can't be waited on and its
+        // id reused before the signal lands.
+        let running = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(group) = *running {
+            process::kill_process_group(group, Signal::KILL).ok();
+        }
+        drop(running);
+    }
+
+    fn set(&self, group: Option<Pid>) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = group;
+    }
+}
+
 /// `file` decoded by the helper, scaled down to fit `fit`; `None` when it
-/// isn't a picture the helper decodes, or it ran out of time.
-pub fn picture(helper: &Path, file: &Path, fit: Fit) -> Option<Picture> {
+/// isn't a picture the helper decodes, it ran out of time, or `running`
+/// was stopped meanwhile.
+pub fn picture(helper: &Path, file: &Path, fit: Fit, running: &Running) -> Option<Picture> {
     let fit = fit.clamped();
     let mut command = command(helper);
     command
@@ -92,24 +124,21 @@ pub fn picture(helper: &Path, file: &Path, fit: Fit) -> Option<Picture> {
         .arg(fit.width.to_string())
         .arg(fit.height.to_string());
     let mut child = command.spawn().ok()?;
+    running.set(i32::try_from(child.id()).ok().and_then(Pid::from_raw));
     let output = child.stdout.take();
-    let pixels = u64::from(fit.width) * u64::from(fit.height) * BYTES_PER_PIXEL;
-    // One byte past the most a right answer holds tells a wrong one apart.
-    let limit = pixels + u64::try_from(MAX_SIZE_LINE).unwrap_or(u64::MAX) + 1;
     let (done, finished) = mpsc::channel();
+    // A reader that couldn't start drops `done`, which ends the wait at once.
     thread::Builder::new()
         .name(READER_THREAD.to_owned())
         .spawn(move || {
-            let mut answer = Vec::new();
-            if let Some(output) = output {
-                output.take(limit).read_to_end(&mut answer).ok();
-            }
-            done.send(answer).ok();
+            let picture = output.and_then(|output| read_picture(output, fit));
+            done.send(picture).ok();
         })
         .ok();
-    let answer = finished.recv_timeout(PER_FILE).ok();
+    let picture = finished.recv_timeout(PER_FILE).ok().flatten();
+    running.set(None);
     end(&mut child);
-    parse(answer?, fit)
+    picture
 }
 
 /// The helper with only the environment it needs, in a process group of
@@ -141,23 +170,34 @@ fn end(child: &mut Child) {
     child.wait().ok();
 }
 
-/// The picture in the helper's `answer`: a size line, then exactly that
-/// many pixels, no bigger than `fit`.
-fn parse(mut answer: Vec<u8>, fit: Fit) -> Option<Picture> {
-    let line_end = answer
-        .iter()
-        .take(MAX_SIZE_LINE)
-        .position(|byte| *byte == SIZE_LINE_END)?;
-    let line = std::str::from_utf8(&answer[..line_end]).ok()?;
-    let (width, height) = line.split_once(SIZE_SEPARATOR)?;
+/// The picture the helper writes to `output`: a size line no bigger than
+/// `fit`, then exactly that many pixels.
+fn read_picture(mut output: impl Read, fit: Fit) -> Option<Picture> {
+    let mut line = Vec::with_capacity(MAX_SIZE_LINE);
+    let mut byte = [0];
+    while line.len() < MAX_SIZE_LINE {
+        output.read_exact(&mut byte).ok()?;
+        if byte[0] == SIZE_LINE_END {
+            break;
+        }
+        line.push(byte[0]);
+    }
+    let (width, height) = std::str::from_utf8(&line)
+        .ok()?
+        .split_once(SIZE_SEPARATOR)?;
     let (width, height): (u32, u32) = (width.parse().ok()?, height.parse().ok()?);
     let fits = (1..=fit.width).contains(&width) && (1..=fit.height).contains(&height);
-    let expected = u64::from(width) * u64::from(height) * BYTES_PER_PIXEL;
-    answer.drain(..=line_end);
-    (fits && u64::try_from(answer.len()).ok()? == expected).then(|| Picture {
+    if !fits {
+        return None;
+    }
+    let length = u64::from(width) * u64::from(height) * BYTES_PER_PIXEL;
+    let mut pixels = vec![0; usize::try_from(length).ok()?];
+    output.read_exact(&mut pixels).ok()?;
+    // Anything after the pixels means the answer isn't what it says.
+    (output.read(&mut byte).ok()? == 0).then(|| Picture {
         width,
         height,
-        pixels: answer.into(),
+        pixels: pixels.into(),
     })
 }
 
@@ -176,9 +216,13 @@ mod tests {
         answer
     }
 
+    fn parse(answer: &[u8], fit: Fit) -> Option<Picture> {
+        read_picture(answer, fit)
+    }
+
     #[test]
     fn a_size_line_and_its_pixels_make_a_picture() {
-        let picture = parse(answer("2 3\n", 6), FIT).unwrap();
+        let picture = parse(&answer("2 3\n", 6), FIT).unwrap();
         assert_eq!((picture.width, picture.height), (2, 3));
         assert_eq!(picture.pixels.len(), 24);
         assert!(picture.pixels.iter().all(|byte| *byte == 7));
@@ -197,12 +241,20 @@ mod tests {
             ("", 0),
         ] {
             assert!(
-                parse(answer(line, pixels), FIT).is_none(),
+                parse(&answer(line, pixels), FIT).is_none(),
                 "{line:?} {pixels}"
             );
         }
         // The line must end within its longest length.
         let long = format!("{}2 3\n", "0".repeat(MAX_SIZE_LINE));
-        assert!(parse(answer(&long, 6), FIT).is_none());
+        assert!(parse(&answer(&long, 6), FIT).is_none());
+    }
+
+    #[test]
+    fn stopping_with_nothing_running_does_nothing() {
+        let running = Running::new();
+        running.stop();
+        running.set(None);
+        running.stop();
     }
 }

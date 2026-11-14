@@ -25,7 +25,7 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::UNIX_EPOCH;
 
-pub use helper::picture;
+pub use helper::{Running, picture};
 
 use nova_files_api::{Entry, EntryId, EntryKind, Event, EventSink, ListingId, MAX_ROWS, uri};
 
