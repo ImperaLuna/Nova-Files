@@ -2,14 +2,14 @@
 #
 # Recipes that take `crate` run on the whole workspace when it's left out:
 # `just test` or `just test nova-files-core`. `just check` runs before every
-# push, `just mutants` once per PR.
+# push. CI runs the mutation tests; `just mutants` runs them locally.
 
 # List the recipes.
 default:
     @just --list
 
-# The checks CI runs in the Nix sandbox. CI also runs `just mutants`, which
-# needs git history and so can't run inside the sandbox; run it once per PR.
+# The checks CI runs in the Nix sandbox. CI also runs the mutation tests,
+# which need git history and so can't run inside the sandbox.
 check:
     nix flake check
 
