@@ -158,9 +158,9 @@ pub struct MainWindow {
     pub(crate) island: Island,
     /// The jobs this window started (see `jobs`).
     jobs: Jobs,
-    /// The quiet count of the listing it was worked out for (see
-    /// `view::island`).
-    pub(crate) counted: Option<(ListingId, SharedString)>,
+    /// The quiet count of the listing on screen, worked out once when it
+    /// arrives, so a frame never walks a long folder (see `view::island`).
+    pub(crate) counted: SharedString,
     /// The rename under way (see `renaming`).
     renaming: Option<Renaming>,
     /// The entry to select once a listing holds it, after a rename or a
@@ -254,7 +254,7 @@ impl MainWindow {
             focus: cx.focus_handle(),
             island: Island::default(),
             jobs: Jobs::default(),
-            counted: None,
+            counted: SharedString::default(),
             renaming: None,
             wanted: None,
             rename_next_frame: false,

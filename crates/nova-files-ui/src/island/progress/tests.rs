@@ -108,3 +108,21 @@ fn nothing_done_since_the_count_gives_no_time() {
         None
     );
 }
+
+#[test]
+fn time_left_shows_once_the_job_has_run_steady_long_enough() {
+    let start = Instant::now();
+    let mut job = Running::new(copy(&["a"]), start);
+    job.advanced(progress(0, 1000, 0, 1), start);
+    let now = start + STEADY_AFTER;
+    job.advanced(progress(500, 1000, 0, 1), now);
+    assert_eq!(job.time_left(now), Some(STEADY_AFTER));
+}
+
+#[test]
+fn a_job_of_one_item_from_several_sources_counts_them() {
+    let start = Instant::now();
+    let mut job = Running::new(copy(&["a", "b"]), start);
+    job.advanced(progress(0, 0, 0, 1), start);
+    assert_eq!(job.line(start), "Copying 2 items");
+}
