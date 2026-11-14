@@ -20,6 +20,7 @@ impl MainWindow {
     /// Shows `listing`, the folder the window last asked for.
     fn listing_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
         self.asked = None;
+        self.search_left(cx);
         let path = listing.path.clone();
         self.history.arrived(&path);
         // Read again in place: keep the scroll position. Files a search

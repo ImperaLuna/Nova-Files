@@ -44,7 +44,7 @@ impl MainWindow {
     }
 
     /// Asks the core for `folder`, leaving the history as it is: the
-    /// window moves there once it answers, and a search under way ends.
+    /// window moves there once it answers, ending a search under way.
     /// Whether the ask was sent.
     pub(super) fn request(&mut self, folder: &Path) -> bool {
         let id = ListingId(self.next_listing);
@@ -60,7 +60,7 @@ impl MainWindow {
         });
         let sent = matches!(sent, Some(Ok(())));
         if sent {
-            self.search.leave();
+            self.search.folder_asked();
             self.asked = Some(id);
             self.asked_order = order;
             self.requested = Some(path);

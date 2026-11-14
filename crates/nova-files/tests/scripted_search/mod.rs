@@ -240,3 +240,39 @@ fn column_heads_do_nothing_while_searching(cx: &mut TestAppContext) {
     assert!(core.next_listing().is_none());
     view.read_with(cx, |view, _| assert!(view.searching()));
 }
+
+#[gpui::test]
+fn a_folder_that_cant_be_read_leaves_the_search_as_it_was(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+
+    view.update(cx, |view, _| view.open(Path::new(MISSING)));
+    let (id, path) = core.next_listing().unwrap();
+    core.refuse(id, &path);
+    cx.run_until_parked();
+
+    assert_eq!(names(&view, cx), ["report.pdf", "reports"]);
+    view.read_with(cx, |view, cx| {
+        assert!(view.searching());
+        assert_eq!(view.query(cx), "rep");
+        assert_eq!(view.folder(), Some(Path::new(SHOWN)));
+    });
+}
+
+#[gpui::test]
+fn a_search_typed_while_a_folder_is_on_its_way_starts_there(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    view.update(cx, |view, _| view.open(Path::new(OTHER)));
+    core.next_listing().unwrap();
+
+    found_reports(cx, &mut core, "rep");
+    view.read_with(cx, |view, _| {
+        assert!(!view.waiting());
+        assert_eq!(view.folder(), Some(Path::new(OTHER)));
+    });
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+
+    let (_, path) = core.next_listing().unwrap();
+    assert_eq!(path, Path::new(OTHER));
+}

@@ -8,13 +8,18 @@
 //! (see `events`). The folder the search started in stays the window's
 //! folder meanwhile: the path, Up and Here only go by it, and the history
 //! doesn't change. Clearing the box, or Escape in it, reads that folder
-//! again. Going anywhere else ends the search there: the box is emptied
-//! on the next frame, since going places can happen without a GPUI
-//! context (see `navigate`).
+//! again. Going anywhere else ends the search once that folder arrives,
+//! so a folder that can't be read leaves the search as it was. A find
+//! asked for while a folder is on its way replaces it (the core keeps one
+//! listing per window), so the search then starts from that folder.
+//! A find that can't run shows that, not an empty result.
 //!
 //! Keys: `/` or Ctrl+F put the caret in the box; Down or Enter in it move
-//! into the results; Escape in it clears it. A focus change asked for
-//! without a window waits for the next frame too (see `view`).
+//! into the results; Escape in it clears it. A focus change waits for the
+//! next frame, which has a window to focus in (see `view`).
+//!
+//! A picker doesn't search yet: its rows answer the asking app by name in
+//! the folder on screen.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -54,9 +59,8 @@ pub struct Search {
     from: Option<PathBuf>,
     /// The find asked for most recently, until its answer arrives.
     pub(crate) asked: Option<ListingId>,
-    /// The box still holds the text of a search that ended without a
-    /// context; it is emptied on the next frame.
-    pub(crate) stale_text: bool,
+    /// The last find couldn't run.
+    pub(crate) failed: bool,
     pub(crate) focus_to: Option<FocusTo>,
     _changes: Subscription,
 }
@@ -78,7 +82,7 @@ impl Search {
             scope: Scope::default(),
             from: None,
             asked: None,
-            stale_text: false,
+            failed: false,
             focus_to: None,
             _changes: changes,
         }
@@ -89,12 +93,8 @@ impl Search {
         self.from.as_deref()
     }
 
-    /// Ends the search without reading its folder again: the window is
-    /// going elsewhere.
-    pub(super) fn leave(&mut self) {
-        if self.from.take().is_some() {
-            self.stale_text = true;
-        }
+    /// The window asked for a folder, which replaces any find on its way.
+    pub(super) const fn folder_asked(&mut self) {
         self.asked = None;
     }
 }
@@ -121,12 +121,12 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Asks the core for what the box holds, in the search's scope.
+    /// Asks the core for what the box holds, in the search's scope. A
+    /// folder still on its way is given up, and the search starts there.
     pub(crate) fn find(&mut self, cx: &Context<Self>) {
-        let Some(from) = self
-            .search
-            .from
-            .clone()
+        let on_its_way = self.asked.and_then(|_| self.requested.clone());
+        let Some(from) = on_its_way
+            .or_else(|| self.search.from.clone())
             .or_else(|| self.folder().map(Path::to_path_buf))
         else {
             return;
@@ -140,6 +140,7 @@ impl MainWindow {
             .as_ref()
             .map(|connection| connection.send(Command::Find { id, query, within }));
         if matches!(sent, Some(Ok(()))) {
+            self.asked = None;
             self.search.asked = Some(id);
             self.search.from = Some(from);
         }
@@ -148,12 +149,14 @@ impl MainWindow {
     /// Shows `listing`, the files the search asked for last found.
     pub(super) fn found_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
         self.search.asked = None;
+        self.search.failed = false;
         self.selection = None;
         self.listing_replaced(listing, false, cx);
         cx.notify();
     }
 
-    /// The find asked for last, `id`, couldn't run: nothing was found.
+    /// The find asked for last, `id`, couldn't run: the list empties and
+    /// says so.
     pub(super) fn find_failed(&mut self, id: ListingId, cx: &mut Context<Self>) {
         let Some(from) = self.search.from.clone() else {
             return;
@@ -165,6 +168,17 @@ impl MainWindow {
             folders: Some(Arc::new([])),
         };
         self.found_arrived(nothing, cx);
+        self.search.failed = true;
+    }
+
+    /// A folder arrived: the search under way, if any, ends.
+    pub(super) fn search_left(&mut self, cx: &mut Context<Self>) {
+        self.search.asked = None;
+        if self.search.from.take().is_some() {
+            self.search
+                .field
+                .update(cx, |field, cx| field.set_text("", cx));
+        }
     }
 
     /// Empties the box and reads the folder the search started in again,
@@ -173,7 +187,6 @@ impl MainWindow {
         self.search
             .field
             .update(cx, |field, cx| field.set_text("", cx));
-        self.search.stale_text = false;
         self.search.asked = None;
         let Some(from) = self.search.from.take() else {
             return;

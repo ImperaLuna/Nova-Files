@@ -63,9 +63,11 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
-            .on_action(cx.listener(|this, _: &FocusSearch, _, cx| {
-                this.focus_later(FocusTo::Box, cx);
-            }))
+            .when(main, |root| {
+                root.on_action(cx.listener(|this, _: &FocusSearch, _, cx| {
+                    this.focus_later(FocusTo::Box, cx);
+                }))
+            })
             .map(|root| Self::selection_keys(root, cx))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 // Keys typed in the search box are its own.

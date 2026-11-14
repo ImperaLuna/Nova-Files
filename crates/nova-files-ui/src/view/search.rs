@@ -17,13 +17,22 @@ use crate::window::{FocusTo, MainWindow};
 
 const ONE_MATCH: &str = "1 match";
 const NO_MATCHES: &str = "No matches";
+const CANT_SEARCH: &str = "Can't search";
+const SEARCH_LABEL: &str = "Search";
 /// Typed outside a text field, it puts the caret in the search box.
 const SEARCH_KEY: &str = "/";
 
 impl MainWindow {
     /// The search capsule's contents: the icon and the box. Down in the
-    /// box moves into the results.
+    /// box moves into the results. A picker shows the label alone, since
+    /// it doesn't search yet (see `window/search`).
     pub(super) fn search_box(&self, capsule: Div, colors: &Colors, cx: &Context<Self>) -> Div {
+        if self.pick.is_some() {
+            return capsule
+                .text_color(colors.text_dim)
+                .child(icon(Icon::Search, size::BUTTON_ICON, colors.text_dim))
+                .child(div().min_w_0().truncate().child(SEARCH_LABEL));
+        }
         capsule
             .on_action(cx.listener(|this, _: &CursorDown, _, cx| {
                 this.focus_later(FocusTo::Results, cx);
@@ -66,8 +75,13 @@ impl MainWindow {
     }
 
     /// A quiet icon and "No matches" in the middle of the sheet, when a
-    /// search found nothing.
+    /// search found nothing, or "Can't search" when it couldn't run.
     pub(super) fn no_matches(&self, colors: &Colors) -> Option<impl IntoElement> {
+        let label = if self.search.failed {
+            CANT_SEARCH
+        } else {
+            NO_MATCHES
+        };
         (self.found_count() == Some(0)).then(|| {
             div()
                 .debug_selector(|| "no-matches".to_owned())
@@ -80,7 +94,7 @@ impl MainWindow {
                 .gap(size::EMPTY_GAP)
                 .text_color(colors.text_dim)
                 .child(icon(Icon::Search, size::EMPTY_ICON, colors.text_faint))
-                .child(NO_MATCHES)
+                .child(label)
         })
     }
 
@@ -114,13 +128,8 @@ impl MainWindow {
     }
 
     /// Moves the keyboard where the search asked it to go, now that there
-    /// is a window, and empties a box the search left behind.
+    /// is a window.
     pub(super) fn settle_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if std::mem::take(&mut self.search.stale_text) {
-            self.search
-                .field
-                .update(cx, |field, cx| field.set_text("", cx));
-        }
         match self.search.focus_to.take() {
             Some(FocusTo::Box) => {
                 let field = self.search.field.clone();
