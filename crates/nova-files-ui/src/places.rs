@@ -5,13 +5,13 @@
 //! still reaches them.
 //!
 //! A pinned folder that is already listed (a pinned Documents) shows once,
-//! where it is first listed. A pinned folder that is missing (on a drive
+//! where it is first listed, and counts as pinned there, so it can still
+//! be unpinned. A pinned folder that is missing (on a drive
 //! not plugged in) is still listed, so it can be unpinned. A standard
 //! folder is named by its folder's own name, which follows the user's
 //! language ("Dokumente"); the home folder is "Home"; a pinned folder by
 //! the label the user gave it, else its folder's name.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use gpui::SharedString;
@@ -52,11 +52,14 @@ pub fn shown(places: &[Place], pinned: &[Bookmark]) -> Vec<Shown> {
         icon: Icon::Folder,
         pinned: true,
     });
-    let mut seen = HashSet::new();
-    standard
-        .chain(pinned)
-        .filter(|row| seen.insert(row.path.clone()))
-        .collect()
+    let mut rows: Vec<Shown> = Vec::new();
+    for row in standard.chain(pinned) {
+        match rows.iter_mut().find(|shown| shown.path == row.path) {
+            Some(shown) => shown.pinned |= row.pinned,
+            None => rows.push(row),
+        }
+    }
+    rows
 }
 
 /// The icon a standard folder is drawn with; `None` for one Places leaves
@@ -174,7 +177,8 @@ mod tests {
             ],
         );
         assert_eq!(names(&rows), ["Downloads", "srv"]);
-        assert!(!rows[0].pinned);
+        assert!(rows[0].pinned, "pinned too, so it can be unpinned");
+        assert_eq!(rows[0].icon, Icon::Downloads);
     }
 
     #[test]
