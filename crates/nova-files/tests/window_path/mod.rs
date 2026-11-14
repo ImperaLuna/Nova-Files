@@ -100,6 +100,22 @@ async fn a_press_on_an_open_arrow_closes_its_menu(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn going_elsewhere_closes_a_menu_for_good(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let nova = tree.path().join("Projects/nova");
+    let (view, cx) = path_window(cx, &tree, &nova).await;
+
+    click(cx, "arrow-1");
+    assert_eq!(menu_names(&view, cx).await, ["nova"]);
+    view.update(cx, |view, _| view.go_up());
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+    view.update(cx, |view, _| view.go_back());
+    wait_for_folder(&view, cx, &nova).await;
+    menu_closed(&view, cx).await;
+}
+
+#[gpui::test]
 async fn the_folder_on_screen_has_an_arrow_only_when_it_holds_folders(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("path");

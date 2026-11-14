@@ -1,8 +1,8 @@
 //! Going places: a new folder, Back, Forward, Up and into an entry. Each
 //! asks the core for a listing with a new id, in the window's order; the
 //! window moves once that id answers (see `events`). Changing the order
-//! reads the folder again. Paths are tidied by their text alone, as a user
-//! reads them.
+//! reads the folder again. Any ask closes the path bar's menu. Paths are
+//! tidied by their text alone, as a user reads them.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -58,6 +58,9 @@ impl MainWindow {
         });
         let sent = matches!(sent, Some(Ok(())));
         if sent {
+            // Going anywhere closes a path bar menu, and its connection
+            // with it, so the core stops reading that menu's folder.
+            self.close_path_menu();
             self.asked = Some(id);
             self.asked_order = order;
             self.requested = Some(path);
