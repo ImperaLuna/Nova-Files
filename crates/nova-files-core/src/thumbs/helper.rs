@@ -285,6 +285,43 @@ mod tests {
         running.stop();
     }
 
+    /// `sleep 30` in a process group of its own, and that group.
+    fn sleeper() -> (Child, Option<Pid>) {
+        use std::os::unix::process::CommandExt as _;
+        let child = Command::new("sleep")
+            .arg("30")
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let group = i32::try_from(child.id()).ok().and_then(Pid::from_raw);
+        (child, group)
+    }
+
+    #[test]
+    fn stopping_kills_the_helper_running() {
+        use std::os::unix::process::ExitStatusExt as _;
+        let (mut child, group) = sleeper();
+        let running = Running::new();
+        running.start(group, || true);
+        running.stop();
+        let status = child.wait().unwrap();
+        assert_eq!(status.signal(), Some(Signal::KILL.as_raw()));
+    }
+
+    #[test]
+    fn a_finished_helper_is_not_stopped() {
+        use std::os::unix::process::ExitStatusExt as _;
+        let (mut child, group) = sleeper();
+        let running = Running::new();
+        running.start(group, || true);
+        running.finish();
+        running.stop();
+        // Ended by this test, not by the stop: the first signal wins.
+        process::kill_process_group(group.unwrap(), Signal::TERM).unwrap();
+        let status = child.wait().unwrap();
+        assert_eq!(status.signal(), Some(Signal::TERM.as_raw()));
+    }
+
     #[test]
     fn a_helper_no_longer_wanted_is_killed_as_it_starts() {
         use std::os::unix::process::{CommandExt as _, ExitStatusExt as _};
