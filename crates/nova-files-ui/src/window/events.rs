@@ -96,13 +96,21 @@ impl MainWindow {
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            event @ (Event::JobStarted { .. }
-            | Event::JobFinished { .. }
-            | Event::JobProgress { .. }
-            | Event::JobConflict { .. }
+            event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)
-            | Event::JobResumed(_)
+            | Event::JobResumed(_)) => {
+                let now = cx.background_executor().now();
+                if let Some(into) = self.jobs.moved(&event, now)
+                    && self.read_again_if_changed(&[into])
+                {
+                    self.jobs.read_again = Some(now);
+                }
+                cx.notify();
+            }
+            event @ (Event::JobStarted { .. }
+            | Event::JobFinished { .. }
+            | Event::JobConflict { .. }
             | Event::Undoable { .. }
             | Event::UndoGone(_)) => self.job_event(event, cx),
             // The window never searches or asks for drives yet, doesn't

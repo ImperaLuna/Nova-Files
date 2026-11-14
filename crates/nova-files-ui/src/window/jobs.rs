@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 use gpui::{App, Context, Task};
 use nova_files_api::{
-    Answer, Command, Conflict, ConflictKind, Event, JobId, JobTag, Operation, Outcome, Progress,
+    Answer, Command, Conflict, ConflictKind, Event, JobId, JobTag, Operation, Outcome,
     Scope,
 };
 
@@ -53,7 +53,7 @@ pub struct Jobs {
     /// Redraws the window once the newest job has run for [`SHOW_AFTER`].
     show_timer: Option<Task<()>>,
     /// When a job last read the folder on screen again.
-    read_again: Option<Instant>,
+    pub(super) read_again: Option<Instant>,
 }
 
 /// How many jobs the core keeps to undo; the window keeps as many it
@@ -74,6 +74,36 @@ impl Jobs {
     /// The newest of this window's jobs that can still be undone.
     pub fn last_undoable(&self) -> Option<JobId> {
         self.undoable.last().copied()
+    }
+    /// Takes how one of this window's jobs moves on, at `now`: its
+    /// progress, or its holding for a conflict or a pause. The folder a
+    /// copy or move goes into when files landed in it and it is due to be
+    /// read again (see [`READ_AGAIN_EVERY`]).
+    pub(super) fn moved(&mut self, event: &Event, now: Instant) -> Option<PathBuf> {
+        let (job, change): (_, fn(&mut Running)) = match *event {
+            Event::JobProgress { job, progress } => {
+                let running = self.running.get_mut(&job)?;
+                let landed = progress.done_items > running.progress.done_items;
+                running.advanced(progress, now);
+                let (Operation::Copy { into, .. } | Operation::Move { into, .. }) =
+                    &running.operation
+                else {
+                    return None;
+                };
+                let due = self
+                    .read_again
+                    .is_none_or(|last| now.saturating_duration_since(last) >= READ_AGAIN_EVERY);
+                return (landed && due).then(|| into.clone());
+            }
+            Event::ConflictAnswered { job, .. } => (job, |job| job.waiting = false),
+            Event::JobPaused(job) => (job, |job| job.paused = true),
+            Event::JobResumed(job) => (job, |job| job.paused = false),
+            _ => return None,
+        };
+        if let Some(running) = self.running.get_mut(&job) {
+            change(running);
+        }
+        None
     }
 }
 
@@ -110,13 +140,7 @@ impl MainWindow {
                     }));
                 }
             }
-            Event::JobProgress { job, progress } => self.job_progressed(job, progress, cx),
             Event::JobConflict { job, conflict } => self.job_conflict(job, conflict, cx),
-            Event::ConflictAnswered { job, .. } => {
-                self.job_held(job, |job| job.waiting = false, cx);
-            }
-            Event::JobPaused(job) => self.job_held(job, |job| job.paused = true, cx),
-            Event::JobResumed(job) => self.job_held(job, |job| job.paused = false, cx),
             Event::Undoable { job, .. } => {
                 let gone = self.jobs.undo_gone.iter().position(|&gone| gone == job);
                 if let Some(gone) = gone {
@@ -177,7 +201,7 @@ impl MainWindow {
     /// the window is already on its way somewhere: that listing will show
     /// the change, or the window leaves the folder. Whether it was asked
     /// for.
-    fn read_again_if_changed(&mut self, changed: &[PathBuf]) -> bool {
+    pub(super) fn read_again_if_changed(&mut self, changed: &[PathBuf]) -> bool {
         if self.waiting() {
             return false;
         }
@@ -189,33 +213,6 @@ impl MainWindow {
         } else {
             false
         }
-    }
-
-    /// Takes the progress of job `job`; one of this window's copies or
-    /// moves into the folder on screen reads it again as files finish.
-    fn job_progressed(&mut self, job: JobId, progress: Progress, cx: &mut Context<Self>) {
-        let now = cx.background_executor().now();
-        let Some(running) = self.jobs.running.get_mut(&job) else {
-            return;
-        };
-        let landed = progress.done_items > running.progress.done_items;
-        running.advanced(progress, now);
-        let into = match &running.operation {
-            Operation::Copy { into, .. } | Operation::Move { into, .. } => Some(into.clone()),
-            _ => None,
-        };
-        let due = self
-            .jobs
-            .read_again
-            .is_none_or(|last| now.saturating_duration_since(last) >= READ_AGAIN_EVERY);
-        if landed
-            && due
-            && let Some(into) = into
-            && self.read_again_if_changed(&[into])
-        {
-            self.jobs.read_again = Some(now);
-        }
-        cx.notify();
     }
 
     /// Job `job` holds at `conflict`. A copy of a file onto itself (a
@@ -284,5 +281,90 @@ impl MainWindow {
     /// The core has stopped: no job of this window will say more.
     pub(super) fn jobs_gone(&mut self) {
         self.jobs = Jobs::default();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use nova_files_api::Progress;
+
+    use super::*;
+
+    fn items(done_items: u64) -> Progress {
+        Progress {
+            done_items,
+            total_items: 3,
+            ..Progress::default()
+        }
+    }
+
+    fn progress(job: JobId, done: u64) -> Event {
+        Event::JobProgress {
+            job,
+            progress: items(done),
+        }
+    }
+
+    #[test]
+    fn a_copy_reads_its_folder_again_as_files_land_but_not_too_often() {
+        let start = Instant::now();
+        let mut jobs = Jobs::default();
+        let job = JobId(1);
+        let into = PathBuf::from("/b");
+        let copy = Operation::Copy {
+            sources: vec![PathBuf::from("/a/x")],
+            into: into.clone(),
+        };
+        jobs.running.insert(job, Running::new(copy, start));
+        // Nothing landed yet.
+        assert_eq!(jobs.moved(&progress(job, 0), start), None);
+        assert_eq!(jobs.moved(&progress(job, 1), start), Some(into.clone()));
+        jobs.read_again = Some(start);
+        let soon = start + READ_AGAIN_EVERY / 2;
+        assert_eq!(jobs.moved(&progress(job, 2), soon), None);
+        // Nothing more landed.
+        let later = start + READ_AGAIN_EVERY;
+        assert_eq!(jobs.moved(&progress(job, 2), later), None);
+        assert_eq!(jobs.moved(&progress(job, 3), later), Some(into));
+        assert_eq!(jobs.running[&job].progress, items(3));
+        // Another window's job.
+        assert_eq!(jobs.moved(&progress(JobId(2), 3), later), None);
+    }
+
+    #[test]
+    fn other_jobs_read_nothing_again() {
+        let start = Instant::now();
+        let mut jobs = Jobs::default();
+        let trash = Operation::Trash {
+            paths: vec![PathBuf::from("/a/x")],
+        };
+        jobs.running.insert(JobId(1), Running::new(trash, start));
+        let later = start + Duration::from_secs(1);
+        assert_eq!(jobs.moved(&progress(JobId(1), 1), later), None);
+        assert_eq!(jobs.running[&JobId(1)].progress, items(1));
+    }
+
+    #[test]
+    fn a_job_holds_while_paused_or_waiting() {
+        let start = Instant::now();
+        let mut jobs = Jobs::default();
+        let job = JobId(1);
+        let empty = Operation::EmptyTrash;
+        jobs.running.insert(job, Running::new(empty, start));
+        jobs.running.get_mut(&job).unwrap().waiting = true;
+        jobs.moved(&Event::JobPaused(job), start);
+        assert!(jobs.running[&job].paused);
+        jobs.moved(&Event::JobResumed(job), start);
+        assert!(!jobs.running[&job].paused);
+        let answer = Event::ConflictAnswered {
+            job,
+            answer: Answer::KeepBoth,
+        };
+        jobs.moved(&answer, start);
+        assert!(!jobs.running[&job].waiting);
+        // Another window's job.
+        assert_eq!(jobs.moved(&Event::JobPaused(JobId(2)), start), None);
     }
 }
