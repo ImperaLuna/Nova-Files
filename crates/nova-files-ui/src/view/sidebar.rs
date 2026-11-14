@@ -1,7 +1,8 @@
 //! The sidebar, on the window to the left of the bar and the sheet, in
 //! three parts as on the design page: the Open list fixed at the top (the
 //! tabs fill it; for now it is an empty slot, `open`), then Places, which
-//! scroll, then the drives fixed at the very bottom (`drives`). Each
+//! scroll, then the drives fixed at the very bottom (`drives`), which
+//! scroll on their own past a few. Each
 //! section is drawn in a file of its own; this file lays them out and
 //! draws the section heads and the rows they share.
 //!
@@ -78,7 +79,7 @@ impl MainWindow {
                     .child(places)
                     .when(!narrow, |scroll| scroll.child(self.tree_section(cx))),
             )
-            .child(drives.flex_col())
+            .child(drives.flex_col().max_h(size::DRIVES_MAX_HEIGHT))
     }
 }
 

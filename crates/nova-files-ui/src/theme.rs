@@ -269,6 +269,8 @@ pub mod size {
     /// The sidebar, a place in it, its icon, and the space between places.
     pub const SIDEBAR_WIDTH: Pixels = px(228.0);
     pub const PLACE_HEIGHT: Pixels = px(34.0);
+    /// The most the Drives section takes: its head and about four rows.
+    pub const DRIVES_MAX_HEIGHT: Pixels = px(200.0);
     pub const PLACE_PAD: Pixels = px(10.0);
     pub const PLACE_ICON: Pixels = px(19.0);
     pub const PLACE_GAP: Pixels = px(1.0);

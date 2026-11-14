@@ -67,13 +67,21 @@ impl MainWindow {
         if narrow {
             return list;
         }
+        // Many drives scroll in their own part, so Places keep their room.
         div()
             .flex()
             .flex_col()
+            .min_h_0()
             .pb(size::GAP)
             .border_t(size::LINE)
             .border_color(colors.line)
             .child(section_head(LABEL, None, &colors))
-            .child(list.flex_col())
+            .child(
+                list.id("drives-scroll")
+                    .flex_col()
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll(),
+            )
     }
 }
