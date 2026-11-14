@@ -198,3 +198,49 @@ fn stepping_through_pictures_answers_the_last() {
         }
     }
 }
+
+#[test]
+fn a_picture_too_wide_for_the_box_is_scaled_down() {
+    let temp = TempFolder::new("wide");
+    let path = temp.0.join("photo.png");
+    orange_picture(&path, ImageFormat::Png);
+    let client = Client::new(&temp.0);
+
+    // Room enough in height; only the width is too small.
+    let shown = client.preview(
+        1,
+        &path,
+        Fit {
+            width: 100,
+            height: 4000,
+        },
+    );
+
+    let picture = picture(&shown);
+    assert_eq!((picture.width, picture.height), (100, 50));
+}
+
+#[test]
+fn a_text_file_is_not_sent_to_the_helper() {
+    let temp = TempFolder::new("text");
+    let path = temp.0.join("notes.png");
+    fs::write(&path, "plain words").unwrap();
+    let client = Client::new(&temp.0);
+
+    let shown = client.preview(
+        1,
+        &path,
+        Fit {
+            width: 100,
+            height: 100,
+        },
+    );
+
+    assert_eq!(
+        shown.content,
+        PreviewContent::Text {
+            text: "plain words".into(),
+            cut: false
+        }
+    );
+}

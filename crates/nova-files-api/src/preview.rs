@@ -94,3 +94,21 @@ pub enum PreviewContent {
     /// its icon.
     Icon,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_picture_shows_its_size_but_not_its_pixels() {
+        let picture = Picture {
+            width: 2,
+            height: 1,
+            pixels: Arc::from([7; 8].as_slice()),
+        };
+        assert_eq!(
+            format!("{picture:?}"),
+            "Picture { width: 2, height: 1, .. }"
+        );
+    }
+}
