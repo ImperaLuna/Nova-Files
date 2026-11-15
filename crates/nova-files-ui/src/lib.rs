@@ -19,6 +19,7 @@ mod history;
 mod jump;
 mod kind;
 mod marks;
+mod menu;
 mod path_bar;
 mod pick;
 mod places;
@@ -131,6 +132,14 @@ struct RequestLoop {
 }
 
 impl Global for RequestLoop {}
+
+/// Opens a picker window of the app's own for `request`, such as the
+/// folder picker that pins a folder to Places.
+pub(crate) fn open_picker(connector: &Connector, request: Box<PickRequest>, cx: &mut App) {
+    // Only a main window failing restarts the program for its GPU.
+    let recover_gpu: RecoverGpu = Rc::new(|_: &Path| {});
+    open_window(connector, Opening::Pick(request), &recover_gpu, cx);
+}
 
 /// Opens a main window on its folder (or the home folder), or a picker
 /// window titled as the asking app wants and dialog-sized, over the app's

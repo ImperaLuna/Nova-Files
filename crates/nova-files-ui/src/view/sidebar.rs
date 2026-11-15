@@ -92,6 +92,23 @@ fn section_head(label: &'static str, button: Option<AnyElement>, colors: &Colors
         .children(button)
 }
 
+/// The button on a section's head: `glyph` on a small square, carrying
+/// the debug selector `selector`. Ready for its click.
+fn section_button(selector: &'static str, glyph: Icon, colors: &Colors) -> Stateful<Div> {
+    div()
+        .id(selector)
+        .debug_selector(move || selector.to_owned())
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .size(size::SECTION_BUTTON)
+        .rounded(radius::SMALL)
+        .cursor_pointer()
+        .hover(|button| button.bg(colors.hover))
+        .child(icon(glyph, size::SECTION_BUTTON_ICON, colors.text_dim))
+}
+
 /// What a sidebar row shows.
 pub struct Row {
     pub id: ElementId,

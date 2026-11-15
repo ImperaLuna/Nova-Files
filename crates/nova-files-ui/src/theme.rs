@@ -332,6 +332,10 @@ pub mod size {
     /// A row in a menu.
     pub const MENU_ROW_HEIGHT: Pixels = px(32.0);
     pub const MENU_PAD: Pixels = px(5.0);
+    pub const MENU_ICON: Pixels = px(16.0);
+    /// The button on a sidebar section's head, and its icon.
+    pub const SECTION_BUTTON: Pixels = px(24.0);
+    pub const SECTION_BUTTON_ICON: Pixels = px(15.0);
     /// A menu row with an icon: space either side, and between its icon
     /// and its name.
     pub const MENU_ITEM_PAD: Pixels = px(10.0);
