@@ -8,9 +8,9 @@
 use std::path::PathBuf;
 
 use gpui::{
-    AnyElement, App, ClickEvent, Context, Div, Focusable as _, InteractiveElement as _,
-    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div,
+    AnyElement, ClickEvent, Context, Div, Focusable as _, InteractiveElement as _, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, ParentElement as _, StatefulInteractiveElement as _,
+    Styled as _, Window, div,
 };
 
 use super::row::icon;
@@ -193,15 +193,6 @@ impl MainWindow {
             return true;
         }
         false
-    }
-
-    /// Whether the search box has the keys.
-    pub(super) fn search_focused(&self, window: &Window, cx: &App) -> bool {
-        self.search
-            .field
-            .read(cx)
-            .focus_handle(cx)
-            .is_focused(window)
     }
 
     /// Moves the keyboard where the search asked it to go, now that there
