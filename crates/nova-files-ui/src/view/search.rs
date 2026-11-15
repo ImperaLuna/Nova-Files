@@ -52,11 +52,7 @@ impl MainWindow {
     /// nothing while no search is under way or none were found.
     pub(super) fn match_count(&self, colors: &Colors) -> Option<impl IntoElement> {
         let found = self.found_count().filter(|&count| count > 0)?;
-        let label = if found == 1 {
-            ONE_MATCH.to_owned()
-        } else {
-            format!("{found} matches")
-        };
+        let label = match_label(found);
         Some(
             div()
                 .debug_selector(|| "match-count".to_owned())
@@ -147,5 +143,25 @@ impl MainWindow {
             }
             None => {}
         }
+    }
+}
+
+/// The count's words for `found` files.
+fn match_label(found: usize) -> String {
+    if found == 1 {
+        ONE_MATCH.to_owned()
+    } else {
+        format!("{found} matches")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_match_is_singular() {
+        assert_eq!(match_label(1), "1 match");
+        assert_eq!(match_label(2), "2 matches");
     }
 }

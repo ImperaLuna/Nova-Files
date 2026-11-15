@@ -88,6 +88,8 @@ fn typing_finds_everywhere_and_the_window_stays_in_its_folder(cx: &mut TestAppCo
     cx.run_until_parked();
     let (id, query, within) = next_find(&mut core).unwrap();
     assert_eq!((query.as_str(), within), ("r", None));
+    // The folder is still on screen: no count over it yet.
+    assert!(cx.debug_bounds("match-count").is_none());
     answer_found(&core, id, REPORTS);
     let (id, ..) = std::iter::from_fn(|| next_find(&mut core)).last().unwrap();
     answer_found(&core, id, REPORTS);
