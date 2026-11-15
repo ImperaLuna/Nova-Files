@@ -1,42 +1,49 @@
 //! The core's events as the window takes them: a listing arriving or
-//! refused, details, thumbnails, places, settings and the theme. Listings
+//! refused, a search's files, details, thumbnails, places, pinned folders,
+//! drives, settings and the theme. Listings
 //! the window no longer wants are dropped here too, and the folder on
 //! screen read again when the core moved on from it (see `window`).
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, ScrollStrategy, UniformListScrollHandle};
-use nova_files_api::{Event, Listing, ListingId, Settings, Theme, Thumbnails};
+use nova_files_api::{Bookmark, Event, Listing, ListingId, Settings, Theme, Thumbnails};
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::jump::TypeJump;
 use crate::theme::Colors;
 
+/// Where a list put on screen starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Place {
+    /// Where the list before it was: the same folder, read again.
+    Kept,
+    /// At its top, with nothing typed or dragged carried over.
+    Top,
+}
+
 impl MainWindow {
     /// Shows `listing`, the folder the window last asked for.
     fn listing_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
         self.asked = None;
+        self.search_left(cx);
         let path = listing.path.clone();
         self.history.arrived(&path);
-        // Read again in place: keep the scroll position.
-        let same_folder = self.folder() == Some(path.as_path());
+        // Read again in place: keep the scroll position. Files a search
+        // found are never the same folder.
+        let same_folder = !self.showing_found() && self.folder() == Some(path.as_path());
         // In a new order the cursor's entry has moved: bring it into view.
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
         self.selection = self.selection_for(&listing);
-        self.listing = Some(listing);
-        self.core_moved = false;
-        self.details = HashMap::new();
-        release(self.thumbnails.take_all(), None, cx);
-        self.rows_wanted = 0..0;
-        if !same_folder {
-            self.scroll = UniformListScrollHandle::new();
-            self.jump = TypeJump::default();
-            self.band = None;
-        }
+        self.tree_follows(&listing, !same_folder);
+        self.ask_disk_space();
+        self.search.reveal = None;
+        let place = if same_folder { Place::Kept } else { Place::Top };
+        self.listing_replaced(listing, place, cx);
         self.pick_folder_opened(reordered, cx);
         self.typed_path_arrived(same_folder);
         if (!same_folder || reordered)
@@ -48,14 +55,40 @@ impl MainWindow {
         cx.notify();
     }
 
+    /// Puts `listing` on screen in place of the one before, whose details
+    /// and thumbnails go with it, the list at `place`.
+    pub(super) fn listing_replaced(
+        &mut self,
+        listing: Listing,
+        place: Place,
+        cx: &mut Context<Self>,
+    ) {
+        self.listing = Some(listing);
+        self.core_moved = false;
+        self.details = HashMap::new();
+        release(self.thumbnails.take_all(), None, cx);
+        self.rows_wanted = 0..0;
+        if place == Place::Top {
+            self.scroll = UniformListScrollHandle::new();
+            self.jump = TypeJump::default();
+            self.band = None;
+        }
+    }
+
     pub(super) fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
             Event::Pong => self.set_status(CoreStatus::Connected, cx),
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
                 self.listing_arrived(listing, cx);
             }
+            Event::FolderListed(listing) if self.search.asked == Some(listing.id) => {
+                self.found_arrived(listing, cx);
+            }
+            Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
+                self.find_failed(id, cx);
+            }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
-                self.listing_refused(id, path, cx);
+                self.folder_refused(id, path, cx);
             }
             Event::DetailsRead { id, first, details } => {
                 if let Some(listing) = &self.listing
@@ -77,19 +110,20 @@ impl MainWindow {
                 }
             }
             // An answer for a folder the window has since moved away from.
-            Event::FolderListed(stale) => self.dropped_listing(stale.id),
+            Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
+            Event::Drives(_) | Event::DriveDone { .. } | Event::DiskSpace(_) => {
+                self.drive_event(event, cx);
+            }
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            // The window never searches, opens files, starts jobs or asks
-            // for drives yet, and only a picker's opening asks for the
-            // window state (see `window_state`).
+            // The window never searches, opens files or starts jobs yet,
+            // and only a picker's opening asks for the window state (see
+            // `window_state`).
             Event::FolderUnreadable { .. }
-            | Event::Drives(_)
-            | Event::DiskSpace(_)
             | Event::RecentFolders { .. }
-            | Event::DriveDone { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
+            | Event::FindFailed { .. }
             | Event::Properties { .. }
             | Event::PropertiesUnreadable { .. }
             | Event::FileOpened
@@ -104,7 +138,6 @@ impl MainWindow {
             | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
             | Event::JobFinished { .. }
-            | Event::Bookmarks(_)
             | Event::OpenWith(_)
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
@@ -112,18 +145,14 @@ impl MainWindow {
             | Event::Trash(_)
             | Event::Undoable { .. }
             | Event::UndoGone(_) => {}
-            Event::Places(places) => {
-                self.places = places;
-                cx.emit(WindowEvent::Places);
-                cx.notify();
-            }
+            Event::Places(places) => self.places_arrived(places, cx),
+            Event::Bookmarks(pinned) => self.pinned_arrived(pinned, cx),
         }
     }
 
-    /// The folder asked for can't be read: a window that has been nowhere
-    /// yet tries the next fallback, and one whose folder the core moved
-    /// asks for the folder on screen again.
-    fn listing_refused(&mut self, id: ListingId, path: PathBuf, cx: &mut Context<Self>) {
+    /// The folder asked for last, `path`, couldn't be read: the window
+    /// stays put, or falls back when it has nothing on screen yet.
+    fn folder_refused(&mut self, id: ListingId, path: PathBuf, cx: &mut Context<Self>) {
         self.asked = None;
         self.history.refused(&path);
         match &self.listing {
@@ -134,7 +163,7 @@ impl MainWindow {
             }
             Some(listing) if self.core_moved && listing.path != path => {
                 let shown = listing.path.clone();
-                self.request(&shown);
+                self.read_again(&shown, cx);
             }
             Some(_) => {}
         }
@@ -142,6 +171,18 @@ impl MainWindow {
         self.typed_path_refused(id, cx);
         cx.emit(WindowEvent::Refused(path));
         // Back or Forward may have nowhere left to go.
+        cx.notify();
+    }
+
+    fn places_arrived(&mut self, places: Vec<nova_files_api::Place>, cx: &mut Context<Self>) {
+        self.places = places;
+        cx.emit(WindowEvent::Places);
+        cx.notify();
+    }
+
+    fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
+        self.pinned = pinned;
+        cx.emit(WindowEvent::Places);
         cx.notify();
     }
 
@@ -176,19 +217,30 @@ impl MainWindow {
     }
 
     /// The window dropped listing `id`, which it no longer wanted. One newer
-    /// than the folder on screen moved the core's row queues to it. A
+    /// than the list on screen moved the core's row queues to it. A
     /// refusal still to come reads the folder on screen again (see
-    /// `on_event`); with nothing asked for, nothing would, so it is read
-    /// again now.
-    fn dropped_listing(&mut self, id: ListingId) {
+    /// `on_event`); with nothing asked for, nothing would, so what is on
+    /// screen is asked for again now.
+    fn dropped_listing(&mut self, id: ListingId, cx: &Context<Self>) {
         let Some(listing) = &self.listing else { return };
         if id <= listing.id {
             return;
         }
         self.core_moved = true;
-        if self.asked.is_none() {
+        // A find still on its way moves the core's row queues on too.
+        if self.asked.is_none() && self.search.asked.is_none() {
             let shown = listing.path.clone();
-            self.request(&shown);
+            self.read_again(&shown, cx);
+        }
+    }
+
+    /// Asks again for what is on screen, so the core serves its rows: the
+    /// search's files while it shows them, otherwise `shown`, the folder.
+    fn read_again(&mut self, shown: &Path, cx: &Context<Self>) {
+        if self.searching() && self.showing_found() {
+            self.find(cx);
+        } else {
+            self.request(shown);
         }
     }
 

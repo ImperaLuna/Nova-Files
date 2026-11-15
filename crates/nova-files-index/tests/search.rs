@@ -5,7 +5,7 @@
 
 mod support;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use nova_files_index::{
     Change, Details, FileId, Flags, Hit, Index, Kind, MatchKind, Overlay, STAGES, crawl,
@@ -373,4 +373,103 @@ fn an_entry_is_shown_once() {
     let changes = [home.added("Documents/report.pdf")];
     let first = home.stages_now("report", LIMIT, &changes).remove(0);
     assert_eq!(first, [at("Documents/report.pdf", MatchKind::Exact)]);
+}
+
+#[test]
+fn a_search_within_a_folder_keeps_only_what_is_inside_it() {
+    let home = Home::new();
+    let documents = home.at("Documents");
+    let stages = home.named(home.index.search("tax", FEW).within(&documents));
+    // The best two inside Documents, though `.config/tax-tool` ranks
+    // above `syntax.txt` across home.
+    assert_eq!(
+        stages[0],
+        [
+            at("Documents/tax return.pdf", MatchKind::WordStart),
+            at("Documents/taxes 2024.pdf", MatchKind::WordStart),
+        ]
+    );
+    let stages = home.named(home.index.search("documents", LIMIT).within(&documents));
+    // Not the folder itself.
+    assert_eq!(stages, [vec![], vec![]]);
+}
+
+#[test]
+fn a_search_within_a_folder_follows_moves() {
+    let home = Home::new();
+    let changes = [home.moved("Pictures/Holiday", "Documents/Holiday")];
+    let mut overlay = Overlay::new();
+    for change in &changes {
+        overlay.apply(change);
+    }
+    let documents = home.at("Documents");
+    let pictures = home.at("Pictures");
+    let search = |folder| {
+        home.named(
+            home.index
+                .search_now("photos", LIMIT, &overlay)
+                .within(folder),
+        )
+        .remove(0)
+    };
+    assert_eq!(
+        search(&documents),
+        [at("Documents/Holiday/photos.txt", MatchKind::Exact)]
+    );
+    assert_eq!(search(&pictures), []);
+}
+
+#[test]
+fn a_search_within_a_hidden_folder_or_one_not_indexed() {
+    let home = Home::new();
+    let stages = home.named(
+        home.index
+            .search("settings", LIMIT)
+            .within(&home.at(".config")),
+    );
+    assert_eq!(
+        stages[0],
+        [at(".config/tax-tool/settings.toml", MatchKind::Exact)]
+    );
+    let nowhere = home.named(home.index.search("tax", LIMIT).within(&home.at("Missing")));
+    assert_eq!(nowhere, [vec![], vec![]]);
+}
+
+#[test]
+fn a_search_within_a_folder_finds_entries_added_there_only() {
+    let home = Home::new();
+    let changes = [
+        home.added("Documents/tax 2025.pdf"),
+        home.added("Pictures/tax.png"),
+    ];
+    let mut overlay = Overlay::new();
+    for change in &changes {
+        overlay.apply(change);
+    }
+    let first = home
+        .named(
+            home.index
+                .search_now("tax", LIMIT, &overlay)
+                .within(&home.at("Documents")),
+        )
+        .remove(0);
+    let paths: Vec<PathBuf> = first.into_iter().map(|(path, _)| path).collect();
+    assert!(paths.contains(&PathBuf::from("Documents/tax 2025.pdf")));
+    assert!(!paths.contains(&PathBuf::from("Pictures/tax.png")));
+}
+
+#[test]
+fn a_search_within_a_folder_above_the_index_finds_everything_inside() {
+    let home = Home::new();
+    let above = home.folder.path().parent().unwrap();
+    let everywhere = home.named(home.index.search("settings", LIMIT));
+    let within = home.named(home.index.search("settings", LIMIT).within(above));
+    assert_eq!(within, everywhere);
+    assert_ne!(within[0].len(), 0);
+    let elsewhere = home.named(
+        home.index
+            .search("settings", LIMIT)
+            .within(Path::new("/nowhere-near")),
+    );
+    assert_eq!(elsewhere, [vec![], vec![]]);
 }

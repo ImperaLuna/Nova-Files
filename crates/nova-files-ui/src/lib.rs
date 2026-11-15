@@ -15,11 +15,15 @@ mod band;
 mod columns;
 mod commands;
 mod crumbs;
+mod drives;
 mod history;
 mod jump;
 mod kind;
+mod marks;
+mod menu;
 mod path_bar;
 mod pick;
+mod places;
 mod requests;
 mod selecting;
 mod selection;
@@ -27,6 +31,7 @@ mod shown_thumbnails;
 mod text;
 mod theme;
 mod thumbnail;
+mod tree;
 mod view;
 mod window;
 mod window_state;
@@ -45,7 +50,7 @@ pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
-pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
+pub use window::{CoreStatus, MainWindow, Scope, WindowEvent, home_folder};
 pub use window_state::{WindowState, fetch as fetch_window_state};
 
 /// Why [`run`] returned.
@@ -129,6 +134,14 @@ struct RequestLoop {
 }
 
 impl Global for RequestLoop {}
+
+/// Opens a picker window of the app's own for `request`, such as the
+/// folder picker that pins a folder to Places.
+pub(crate) fn open_picker(connector: &Connector, request: Box<PickRequest>, cx: &mut App) {
+    // Only a main window failing restarts the program for its GPU.
+    let recover_gpu: RecoverGpu = Rc::new(|_: &Path| {});
+    open_window(connector, Opening::Pick(request), &recover_gpu, cx);
+}
 
 /// Opens a main window on its folder (or the home folder), or a picker
 /// window titled as the asking app wants and dialog-sized, over the app's
