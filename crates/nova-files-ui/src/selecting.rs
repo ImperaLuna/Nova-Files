@@ -137,13 +137,7 @@ impl MainWindow {
     /// (see `jump`). Whether it was taken.
     pub(crate) fn jump_typed(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
         let held = event.keystroke.modifiers;
-        if self.pick.is_some()
-            || self.renaming()
-            || held.control
-            || held.alt
-            || held.platform
-            || held.function
-        {
+        if self.pick.is_some() || held.control || held.alt || held.platform || held.function {
             return false;
         }
         let Some(typed) = event.keystroke.key_char.as_deref() else {
