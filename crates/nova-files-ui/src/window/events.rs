@@ -130,6 +130,8 @@ impl MainWindow {
             | Event::FindFailed { .. }
             | Event::Properties { .. }
             | Event::PropertiesUnreadable { .. }
+            | Event::Previewed { .. }
+            | Event::PreviewUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)

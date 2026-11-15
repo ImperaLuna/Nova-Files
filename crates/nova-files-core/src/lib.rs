@@ -26,6 +26,7 @@ mod ops;
 mod order;
 mod percent;
 mod places;
+mod preview;
 mod private_file;
 mod properties;
 mod recent;
