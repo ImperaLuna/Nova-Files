@@ -131,9 +131,29 @@ jobs:
         with:
           # The merge commit and its base parent, to diff against.
           fetch-depth: 2
+      - name: Key the run on the pull request's own changes
+        id: key
+        if: github.event_name == 'pull_request'
+        run: tools/ci-mutants-key.sh >>"$GITHUB_OUTPUT"
+      - name: Look for an earlier pass of the same changes
+        id: passed
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@v4
+        with:
+          path: target/mutants-passed
+          key: ${{ steps.key.outputs.key }}
+          lookup-only: true
       - name: Look for Rust changes
         id: changes
-        run: tools/ci-needs-run.sh rust
+        env:
+          PASSED: ${{ steps.passed.outputs.cache-hit }}
+        run: |
+          if [ "$PASSED" = true ]; then
+            echo "These changes passed their mutation tests in an earlier run."
+            echo "run=false" >>"$GITHUB_OUTPUT"
+          else
+            tools/ci-needs-run.sh rust
+          fi
       - uses: cachix/install-nix-action@v31
         if: steps.changes.outputs.run == 'true'
       - uses: cachix/cachix-action@v16
@@ -215,6 +235,11 @@ jobs:
   # The required check. The shards' names carry their index, so this job
   # keeps the one name the ruleset asks for, and fails unless every shard
   # passed (a skipped job, after a failed stack guard, fails it too).
+  # On a pass it saves a marker keyed on the pull request's own Rust changes
+  # (tools/ci-mutants-key.sh). The diff runs from the PR's base branch, so a
+  # stacked PR mutates only its own code; and when a lower PR merges and this
+  # one moves onto main, or main is merged in, the same changes find the
+  # marker and the shards skip their work.
   mutants-result:
     name: mutation tests on changed lines
     needs: mutants
@@ -226,3 +251,22 @@ jobs:
         env:
           RESULT: ${{ needs.mutants.result }}
         run: test "$RESULT" = success
+      - uses: actions/checkout@v5
+        if: github.event_name == 'pull_request'
+        with:
+          # The merge commit and its base parent, for the key.
+          fetch-depth: 2
+      - name: Mark these changes as passed
+        id: key
+        if: github.event_name == 'pull_request'
+        run: |
+          tools/ci-mutants-key.sh >>"$GITHUB_OUTPUT"
+          mkdir -p target
+          echo "$GITHUB_SHA" >target/mutants-passed
+      - uses: actions/cache/save@v4
+        # A run that skipped on an earlier pass finds the key taken; the
+        # action only warns then.
+        if: github.event_name == 'pull_request'
+        with:
+          path: target/mutants-passed
+          key: ${{ steps.key.outputs.key }}
