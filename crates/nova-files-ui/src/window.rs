@@ -3,9 +3,9 @@
 //! window's state and opening it; the work is split by area: going places
 //! in `navigate`, pinning folders in `pin`, the folder tree's own line to
 //! the core in `tree`, the drives in `drives`, the Start page in `start`,
-//! the core's events in `events`, the rows on screen in `rows`, and the
-//! quick look in `preview`, acting on the files selected in `acting`,
-//! and the jobs that does in `jobs`. Drawing
+//! the core's events in `events`, the rows on screen in `rows`, the
+//! quick look in `preview`, acting on the files selected in `acting` and
+//! `clipboard`, and the jobs that does in `jobs`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -42,6 +42,7 @@
 //! A search puts the files it found in the list's place (see `search`).
 
 mod acting;
+mod clipboard;
 mod drives;
 mod events;
 mod jobs;

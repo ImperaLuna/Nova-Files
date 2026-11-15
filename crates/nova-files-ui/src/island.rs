@@ -127,6 +127,13 @@ pub fn quiet_count(folders: usize, files: usize) -> String {
     parts.join(LIST_GAP)
 }
 
+/// The note for files put on the clipboard: "Copied notes.txt", "Cut 3
+/// items".
+pub fn clipboard_note(cut: bool, paths: &[PathBuf]) -> String {
+    let verb = if cut { "Cut" } else { "Copied" };
+    format!("{verb} {}", what(paths))
+}
+
 /// The note once a job doing `operation` ended with `outcome`, while the
 /// window shows `here`; `None` when there is nothing to say (a cancel, a
 /// new folder, an undo).

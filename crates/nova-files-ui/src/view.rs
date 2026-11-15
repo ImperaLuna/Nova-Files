@@ -54,7 +54,7 @@ use crate::commands::{
     SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp,
     TogglePreview, ToggleSelected,
 };
-use crate::commands::{TrashSelected, Undo};
+use crate::commands::{CopySelected, CutSelected, Paste, TrashSelected, Undo};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
 use crate::window::{FocusTo, MainWindow};
@@ -137,7 +137,10 @@ impl MainWindow {
 
     /// The actions on the files selected (see `window::acting`).
     fn file_keys(root: Div, cx: &Context<Self>) -> Div {
-        root.on_action(cx.listener(|this, _: &TrashSelected, _, _| this.trash_selected()))
+        root.on_action(cx.listener(|this, _: &CopySelected, _, cx| this.copy_selected(false, cx)))
+            .on_action(cx.listener(|this, _: &CutSelected, _, cx| this.copy_selected(true, cx)))
+            .on_action(cx.listener(|this, _: &Paste, _, cx| this.paste(cx)))
+            .on_action(cx.listener(|this, _: &TrashSelected, _, _| this.trash_selected()))
             .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
     }
 

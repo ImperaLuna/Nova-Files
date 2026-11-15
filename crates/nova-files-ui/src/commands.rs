@@ -44,6 +44,9 @@ mod actions {
             SelectAll,
             ToggleSelected,
             ClearSelection,
+            CopySelected,
+            CutSelected,
+            Paste,
             TrashSelected,
             Undo,
             TogglePreview,
@@ -109,6 +112,9 @@ pub const ACTIONS: &[ActionSpec] = &[
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
+    COPY,
+    CUT,
+    PASTE,
     TRASH,
     UNDO,
     PREVIEW,
@@ -212,6 +218,19 @@ spec!(
     ["escape"]
 );
 
+spec!(
+    /// Puts the files selected on the clipboard, to be copied.
+    COPY, CopySelected, "file.copy", "Copy", ["ctrl-c"]
+);
+spec!(
+    /// Puts the files selected on the clipboard, to be moved.
+    CUT, CutSelected, "file.cut", "Cut", ["ctrl-x"]
+);
+spec!(
+    /// Copies or moves the files on the clipboard into the folder on
+    /// screen.
+    PASTE, Paste, "file.paste", "Paste", ["ctrl-v"]
+);
 spec!(
     TRASH,
     TrashSelected,

@@ -1,6 +1,7 @@
 //! What the window does to the files selected, and the island's notes:
 //! move them to the trash, and undo. Each becomes one of the core's jobs
-//! (see `jobs`); the island says what happened (see `island`).
+//! (see `jobs`); the island says what happened (see `island`). Copy, cut
+//! and paste are in `clipboard`.
 
 use std::path::PathBuf;
 
