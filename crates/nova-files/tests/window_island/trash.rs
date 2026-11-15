@@ -226,3 +226,26 @@ async fn an_empty_folder_is_not_called_an_empty_trash(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(cx.debug_bounds("trash-empty").is_none());
 }
+
+#[gpui::test]
+async fn the_path_bar_in_the_trash_is_one_crumb(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("trash-crumb");
+    let home = TempFolder::tree("trash-crumb-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    trash_and_open(
+        &view,
+        cx,
+        "name-0",
+        "Moved Projects to Trash",
+        &["Projects"],
+    )
+    .await;
+    cx.run_until_parked();
+    // Trash alone, with no arrow into the folder it keeps them in, even
+    // though that holds a folder.
+    assert!(cx.debug_bounds("crumb-0").is_some());
+    assert!(cx.debug_bounds("crumb-1").is_none());
+    assert!(cx.debug_bounds("arrow-0").is_none());
+}

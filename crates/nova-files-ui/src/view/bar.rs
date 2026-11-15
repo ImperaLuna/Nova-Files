@@ -1,28 +1,24 @@
 //! The top bar: a row of capsules on the window. Back, Forward and Up;
-//! the path's slot, which takes what the others leave; the search slot;
-//! and the list and tiles switch. The path bar, search and the tiles view
-//! are features of their own that fill their slot; until then the path's
-//! slot shows the folder's path, the search slot its label, and the slots
-//! do nothing. In the trash the path's slot says Trash, with the Empty
-//! Trash chip at its end while any of the user's trashes holds anything.
+//! the path bar (see `path`), which takes what the others leave; the
+//! search slot; and the list and tiles switch. Search and the tiles view
+//! are features of their own that fill their slot; until then the search
+//! slot shows its label, and the slots do nothing.
 
 use gpui::{
-    Action, ClickEvent, Div, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
+    Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
 };
 
 use super::row::icon;
 use crate::assets::Icon;
-use crate::commands::{EmptyTrash, GoBack, GoForward, GoUp};
+use crate::commands::{GoBack, GoForward, GoUp};
 use crate::theme::{Colors, radius, size};
 use crate::window::MainWindow;
 
 const SEARCH_LABEL: &str = "Search";
-const TRASH_LABEL: &str = "Trash";
-const EMPTY_TRASH_LABEL: &str = "Empty Trash";
 
 impl MainWindow {
-    pub(super) fn top_bar(&self, colors: &Colors) -> impl IntoElement {
+    pub(super) fn top_bar(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let back = icon_button(
             "back",
             Icon::Back,
@@ -41,15 +37,6 @@ impl MainWindow {
             self.parent().is_some().then_some(&GoUp),
             colors,
         );
-        let trash = self.trash_open();
-        let path = if trash {
-            SharedString::new_static(TRASH_LABEL)
-        } else {
-            self.folder()
-                .map(|folder| SharedString::from(folder.to_string_lossy().into_owned()))
-                .unwrap_or_default()
-        };
-        let holds_any = self.trash_count().is_some_and(|count| count > 0);
         div()
             .flex()
             .flex_none()
@@ -65,17 +52,7 @@ impl MainWindow {
                     .child(forward)
                     .child(up),
             )
-            .child(
-                capsule(colors)
-                    .debug_selector(|| "path".to_owned())
-                    .flex_1()
-                    .min_w(size::PATH_MIN_WIDTH)
-                    .px(size::PATH_PAD)
-                    .child(div().flex_1().min_w_0().truncate().child(path))
-                    .when(trash && holds_any, |slot| {
-                        slot.child(empty_trash_chip(colors))
-                    }),
-            )
+            .child(self.path_bar(colors, cx))
             .child(
                 capsule(colors)
                     .debug_selector(|| "search".to_owned())
@@ -98,29 +75,8 @@ impl MainWindow {
     }
 }
 
-/// Empty Trash, at the end of the path's slot in the trash; it asks
-/// first (see `window::trash`).
-fn empty_trash_chip(colors: &Colors) -> impl IntoElement {
-    div()
-        .id("empty-trash")
-        .debug_selector(|| "empty-trash".to_owned())
-        .flex_none()
-        .px(size::CHIP_PAD)
-        .py(size::CHIP_PAD_Y)
-        .mr(-size::CHIP_INSET)
-        .rounded(radius::ROW)
-        .text_color(colors.text_soft)
-        .cursor_pointer()
-        .hover(|chip| chip.bg(colors.hover).text_color(colors.text))
-        .active(|chip| chip.bg(colors.press))
-        .child(EMPTY_TRASH_LABEL)
-        .on_click(|_: &ClickEvent, window, cx| {
-            window.dispatch_action(EmptyTrash.boxed_clone(), cx);
-        })
-}
-
 /// One capsule of the bar, raised from the window.
-fn capsule(colors: &Colors) -> Div {
+pub(super) fn capsule(colors: &Colors) -> Div {
     div()
         .flex()
         .flex_none()

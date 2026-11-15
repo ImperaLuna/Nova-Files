@@ -36,7 +36,7 @@ mod filter;
 mod opening;
 mod save;
 mod select;
-mod typed;
+pub mod typed;
 
 pub use typed::{HOME, stem};
 
