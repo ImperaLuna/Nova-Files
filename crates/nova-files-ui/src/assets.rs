@@ -21,6 +21,7 @@ pub enum Icon {
     Pictures,
     Music,
     Videos,
+    Drive,
     Back,
     Forward,
     Up,
@@ -35,7 +36,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 20] = [
+    const ALL: [Self; 21] = [
         Self::Folder,
         Self::File,
         Self::Home,
@@ -45,6 +46,7 @@ impl Icon {
         Self::Pictures,
         Self::Music,
         Self::Videos,
+        Self::Drive,
         Self::Back,
         Self::Forward,
         Self::Up,
@@ -70,6 +72,7 @@ impl Icon {
             Self::Pictures => "icons/pictures.svg",
             Self::Music => "icons/music.svg",
             Self::Videos => "icons/videos.svg",
+            Self::Drive => "icons/drive.svg",
             Self::Back => "icons/back.svg",
             Self::Forward => "icons/forward.svg",
             Self::Up => "icons/up.svg",
@@ -95,6 +98,7 @@ impl Icon {
             Self::Pictures => svg::PICTURES,
             Self::Music => svg::MUSIC,
             Self::Videos => svg::VIDEOS,
+            Self::Drive => svg::DRIVE,
             Self::Back => svg::BACK,
             Self::Forward => svg::FORWARD,
             Self::Up => svg::UP,

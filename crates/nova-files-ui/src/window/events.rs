@@ -4,6 +4,7 @@
 //! screen read again when the core moved on from it (see `window`).
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::{Context, ScrollStrategy, UniformListScrollHandle};
@@ -38,6 +39,7 @@ impl MainWindow {
             self.band = None;
         }
         self.pick_folder_opened(reordered, cx);
+        self.typed_path_arrived(same_folder);
         if (!same_folder || reordered)
             && let Some(cursor) = self.cursor()
         {
@@ -54,24 +56,7 @@ impl MainWindow {
                 self.listing_arrived(listing, cx);
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
-                self.asked = None;
-                self.history.refused(&path);
-                match &self.listing {
-                    None => {
-                        if let Some(fallback) = self.fallbacks.pop() {
-                            self.request(&fallback);
-                        }
-                    }
-                    Some(listing) if self.core_moved && listing.path != path => {
-                        let shown = listing.path.clone();
-                        self.request(&shown);
-                    }
-                    Some(_) => {}
-                }
-                self.pick_folder_refused(id, &path);
-                cx.emit(WindowEvent::Refused(path));
-                // Back or Forward may have nowhere left to go.
-                cx.notify();
+                self.listing_refused(id, path, cx);
             }
             Event::DetailsRead { id, first, details } => {
                 if let Some(listing) = &self.listing
@@ -101,6 +86,7 @@ impl MainWindow {
             // window state (see `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Drives(_)
+            | Event::DiskSpace(_)
             | Event::DriveDone { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
@@ -134,6 +120,30 @@ impl MainWindow {
                 Self::places_changed(cx);
             }
         }
+    }
+
+    /// The folder last asked for, listing `id`, couldn't be read: the
+    /// window stays put, or tries the next fallback when nothing is shown.
+    fn listing_refused(&mut self, id: ListingId, path: PathBuf, cx: &mut Context<Self>) {
+        self.asked = None;
+        self.history.refused(&path);
+        match &self.listing {
+            None => {
+                if let Some(fallback) = self.fallbacks.pop() {
+                    self.request(&fallback);
+                }
+            }
+            Some(listing) if self.core_moved && listing.path != path => {
+                let shown = listing.path.clone();
+                self.request(&shown);
+            }
+            Some(_) => {}
+        }
+        self.pick_folder_refused(id, &path);
+        self.typed_path_refused(id, cx);
+        cx.emit(WindowEvent::Refused(path));
+        // Back or Forward may have nowhere left to go.
+        cx.notify();
     }
 
     fn places_changed(cx: &mut Context<Self>) {
