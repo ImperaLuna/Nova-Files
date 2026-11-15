@@ -39,7 +39,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 22] = [
+    const ALL: [Self; 24] = [
         Self::Folder,
         Self::File,
         Self::Home,
