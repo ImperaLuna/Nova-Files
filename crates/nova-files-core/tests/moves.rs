@@ -1,6 +1,7 @@
 //! Moving through the real core: on one drive by renaming, across drives
 //! by copying and then removing each source item, and through the same
-//! conflicts a copy asks.
+//! conflicts a copy asks. A drop of files moves on one drive and copies
+//! across drives.
 
 #![expect(
     clippy::unwrap_used,
@@ -21,8 +22,8 @@ use std::time::{Duration, SystemTime};
 
 use nova_files_api::uri::file_uri;
 use nova_files_api::{
-    Answer, ConflictKind, Event, Failure, FileClipboard, GNOME_COPIED_FILES, JobId, Offer,
-    Operation, Outcome, Scope,
+    Answer, Command, ConflictKind, Event, Failure, FileClipboard, GNOME_COPIED_FILES, JobId,
+    JobTag, Offer, Operation, Outcome, Scope,
 };
 
 use answers::{answer, held};
@@ -55,6 +56,62 @@ fn answer_next(client: &Client, job: JobId, with: Answer) -> ConflictKind {
     let conflict = held(client, job);
     answer(client, job, &conflict, with, Scope::ThisOne);
     conflict.kind
+}
+
+/// Drops `sources` onto `into` and returns the job the core started and
+/// what it does.
+fn drop_onto(client: &Client, sources: Vec<PathBuf>, into: &Path) -> (JobId, Operation) {
+    let tag = JobTag(9);
+    client.send(Command::DropFiles {
+        tag,
+        sources,
+        into: into.to_owned(),
+    });
+    match client.next() {
+        Event::JobStarted {
+            tag: got,
+            job,
+            operation,
+        } if got == tag => (job, operation),
+        other => panic!("expected the drop's job first, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_drop_on_one_drive_moves_and_across_drives_copies() {
+    let bench = Bench::new("move-drop");
+    let near = bench.at("near.txt");
+    fs::write(&near, "near").unwrap();
+    let into = bench.at("into");
+    fs::create_dir(&into).unwrap();
+    let client = bench.client();
+
+    let (job, operation) = drop_onto(&client, vec![near.clone()], &into);
+    assert_eq!(operation, moving(vec![near.clone()], &into));
+    assert_eq!(client.ended(job).0, Outcome::Done);
+    assert!(!near.exists());
+    assert_eq!(fs::read_to_string(into.join("near.txt")).unwrap(), "near");
+
+    let other = Path::new(OTHER_DRIVE).join(format!("nova-files-drop-{}", std::process::id()));
+    fs::remove_dir_all(&other).ok();
+    if fs::create_dir(&other).is_err()
+        || fs::metadata(&other).unwrap().dev() == fs::metadata(&into).unwrap().dev()
+    {
+        eprintln!("no other drive at {OTHER_DRIVE} here, so nothing is dropped across drives");
+        return;
+    }
+    let far = other.join("far.txt");
+    fs::write(&far, "far").unwrap();
+    let (job, operation) = drop_onto(&client, vec![far.clone()], &into);
+    assert!(matches!(operation, Operation::Copy { .. }));
+    assert_eq!(client.ended(job).0, Outcome::Done);
+    assert_eq!(
+        fs::read_to_string(&far).unwrap(),
+        "far",
+        "a copy leaves the source"
+    );
+    assert_eq!(fs::read_to_string(into.join("far.txt")).unwrap(), "far");
+    fs::remove_dir_all(&other).ok();
 }
 
 #[test]

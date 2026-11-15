@@ -138,7 +138,7 @@ pub fn spawn_with(
                 searcher,
                 open_with: open::OpenWithWorker::new(Arc::clone(&mime_types)),
                 mime_types,
-                jobs,
+                jobs: Arc::new(jobs),
                 measurer: measure::Measurer::default(),
                 drives: drives::Store::default(),
                 recent,

@@ -1,6 +1,6 @@
-//! The commands about file operations: watching, starting, pausing,
-//! resuming, cancelling and forgetting jobs, and answering their
-//! conflicts. `run` sends only these here.
+//! The commands about file operations: watching, starting, dropping
+//! files, pausing, resuming, cancelling and forgetting jobs, and answering
+//! their conflicts. `run` sends only these here.
 
 use std::sync::Arc;
 
@@ -21,6 +21,10 @@ pub(super) fn answer(
         Command::StartJob { tag, operation } => {
             setup.jobs.audience().join(id, Arc::clone(client.events()));
             return setup.jobs.start(client, tag, operation);
+        }
+        Command::DropFiles { tag, sources, into } => {
+            setup.jobs.audience().join(id, Arc::clone(client.events()));
+            setup.jobs.start_drop(client.events(), tag, sources, into);
         }
         Command::PauseJob(job) => setup.jobs.pause(job),
         Command::ResumeJob(job) => setup.jobs.resume(job),

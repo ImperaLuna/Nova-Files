@@ -2,7 +2,8 @@
 //! every client.
 //!
 //! [`Jobs::start`] gives the job an id, tells the client that asked, and
-//! starts the job's thread. While it runs, every connected client hears
+//! starts the job's thread. A drop of files picks a copy or a move by
+//! drive first (see `dropped`). While it runs, every connected client hears
 //! its progress, and any client may pause, resume or cancel it (see
 //! `control`); the job checks before each change to the disk. When it
 //! ends, every client hears how and which folders changed (see
@@ -24,6 +25,7 @@ mod clash;
 mod control;
 mod copy_file;
 mod delete;
+mod dropped;
 mod failure;
 mod job;
 mod journal;
@@ -78,6 +80,8 @@ use trash::trash;
 use undo::{History, Undo, Undoable, undo_of};
 
 const JOB_THREAD: &str = "nova-files-job";
+/// The thread that looks at the drives for a drop.
+const DROP_THREAD: &str = "nova-files-drop";
 const RECOVER_THREAD: &str = "nova-files-recover";
 const FORGET_THREAD: &str = "nova-files-forget";
 
@@ -212,12 +216,62 @@ impl Jobs {
         tag: JobTag,
         operation: Operation,
     ) -> Result<(), ClientGone> {
+        self.start_for(client.events().as_ref(), tag, operation)
+    }
+
+    /// Starts `operation` for the client that hears through `events`,
+    /// which tagged it `tag`.
+    fn start_for(
+        &self,
+        events: &dyn EventSink,
+        tag: JobTag,
+        operation: Operation,
+    ) -> Result<(), ClientGone> {
         let job = JobId(self.next.fetch_add(1, Ordering::Relaxed));
         // Before the thread starts, so the client hears of the job before
         // it can end.
-        let told = client.deliver(Event::JobStarted { tag, job });
+        let told = events.deliver(Event::JobStarted {
+            tag,
+            job,
+            operation: operation.clone(),
+        });
         self.spawn(lock(&self.running), job, operation, None);
         told
+    }
+
+    /// Starts the job dropping `sources` onto the folder `into` runs (see
+    /// `dropped`), a move on one drive and a copy across drives, for the
+    /// client that hears through `events`. The drives are looked at on a
+    /// thread of their own, as a job's disk work is, so a drive that is
+    /// slow to answer holds up only this drop. When no thread can start,
+    /// the drop copies, which leaves every source where it was.
+    pub fn start_drop(
+        self: &Arc<Self>,
+        events: &Arc<dyn EventSink>,
+        tag: JobTag,
+        sources: Vec<PathBuf>,
+        into: PathBuf,
+    ) {
+        let jobs = Arc::clone(self);
+        // Taken by the thread, or back here when none starts.
+        let asked = Arc::new(Mutex::new(Some((sources, into))));
+        let taken = Arc::clone(&asked);
+        let thread_events = Arc::clone(events);
+        let spawned = thread::Builder::new()
+            .name(DROP_THREAD.to_owned())
+            .spawn(move || {
+                let asked = lock(&taken).take();
+                if let Some((sources, into)) = asked {
+                    let operation = dropped::dropped(sources, into);
+                    // A client gone hears nothing; the job runs anyway.
+                    jobs.start_for(thread_events.as_ref(), tag, operation).ok();
+                }
+            });
+        let unasked = spawned.is_err().then(|| lock(&asked).take()).flatten();
+        if let Some((sources, into)) = unasked {
+            let copy = Operation::Copy { sources, into };
+            self.start_for(events.as_ref(), tag, copy).ok();
+        }
     }
 
     /// Runs `operation` as job `job` on a thread of its own, resuming it

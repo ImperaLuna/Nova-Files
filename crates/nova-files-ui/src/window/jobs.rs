@@ -1,8 +1,9 @@
 //! The jobs this window starts, and what the core says about every job.
 //!
 //! A job starts with a tag the window picks; the core's `JobStarted`
-//! names the job that tag became, and from then on the window follows it
-//! by id. When any job ends, a folder it changed that is on screen is read
+//! names the job that tag became and what it does (a drop of files is a
+//! copy or a move as the core finds), and from then on the window follows
+//! it by id. When any job ends, a folder it changed that is on screen is read
 //! again, so what changed shows. When one of this window's own jobs ends,
 //! the island says how it went, with Undo when the core said the job can
 //! be undone (see `island`). Jobs other windows started are only read
@@ -17,7 +18,7 @@
 //! job as waiting, with Cancel: what the island asks about a conflict
 //! isn't decided yet.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -40,7 +41,7 @@ pub const READ_AGAIN_EVERY: Duration = Duration::from_millis(500);
 pub struct Jobs {
     next_tag: u64,
     /// Jobs asked for, by tag, until the core says which job each is.
-    asked: HashMap<JobTag, Operation>,
+    asked: HashSet<JobTag>,
     /// This window's jobs while they run.
     running: HashMap<JobId, Running>,
     /// This window's jobs that can still be undone, oldest first.
@@ -145,13 +146,10 @@ impl MainWindow {
         };
         let tag = self.jobs.next_tag();
         let sent = connection
-            .send(Command::StartJob {
-                tag,
-                operation: operation.clone(),
-            })
+            .send(Command::StartJob { tag, operation })
             .is_ok();
         if sent {
-            self.jobs.asked.insert(tag, operation);
+            self.jobs.asked.insert(tag);
         }
         sent
     }
@@ -171,8 +169,12 @@ impl MainWindow {
     /// Takes one of the core's job events.
     pub(super) fn job_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
-            Event::JobStarted { tag, job } => {
-                if let Some(operation) = self.jobs.asked.remove(&tag) {
+            Event::JobStarted {
+                tag,
+                job,
+                operation,
+            } => {
+                if self.jobs.asked.remove(&tag) {
                     let now = cx.background_executor().now();
                     self.jobs.running.insert(job, Running::new(operation, now));
                     self.jobs.show_timer = Some(cx.spawn(async move |this, cx| {
