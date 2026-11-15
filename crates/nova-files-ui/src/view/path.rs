@@ -91,7 +91,9 @@ impl MainWindow {
             .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
                 this.start_typing_path(window, cx);
             }));
-        bar.child(row).child(fill)
+        bar.child(row)
+            .child(fill)
+            .children(self.scope_chip(colors, cx))
     }
 
     /// The crumbs of the folder on screen; none before one arrives.

@@ -1,8 +1,8 @@
 //! The top bar: a row of capsules on the window. Back, Forward and Up;
-//! the path bar (see `path`), which takes what the others leave; the
-//! search slot; and the list and tiles switch. Search and the tiles view
-//! are features of their own that fill their slot; until then the search
-//! slot shows its label, and the slots do nothing.
+//! the path bar (see `path`), which takes what the others leave, with the
+//! search's scope chip at its end; the search box (see `search`); and the
+//! list and tiles switch. The tiles view is a feature of its own that
+//! fills its slot; until then the slot does nothing.
 
 use gpui::{
     Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -14,8 +14,6 @@ use crate::assets::Icon;
 use crate::commands::{GoBack, GoForward, GoUp};
 use crate::theme::{Colors, radius, size};
 use crate::window::MainWindow;
-
-const SEARCH_LABEL: &str = "Search";
 
 impl MainWindow {
     pub(super) fn top_bar(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
@@ -54,15 +52,16 @@ impl MainWindow {
             )
             .child(self.path_bar(colors, cx))
             .child(
-                capsule(colors)
-                    .debug_selector(|| "search".to_owned())
-                    .flex_shrink()
-                    .w(size::SEARCH_WIDTH)
-                    .px(size::SEARCH_PAD)
-                    .gap(size::SEARCH_GAP)
-                    .text_color(colors.text_dim)
-                    .child(icon(Icon::Search, size::BUTTON_ICON, colors.text_dim))
-                    .child(div().min_w_0().truncate().child(SEARCH_LABEL)),
+                self.search_box(
+                    capsule(colors)
+                        .debug_selector(|| "search".to_owned())
+                        .flex_shrink()
+                        .w(size::SEARCH_WIDTH)
+                        .px(size::SEARCH_PAD)
+                        .gap(size::SEARCH_GAP),
+                    colors,
+                    cx,
+                ),
             )
             .child(
                 capsule(colors)
