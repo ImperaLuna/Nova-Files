@@ -16,6 +16,7 @@ impl MainWindow {
     /// Goes to `folder`, a new place in the history: asks the core for it,
     /// and the window moves there once it answers.
     pub fn open(&mut self, folder: &Path) {
+        self.forget_drive_to_open();
         self.history.leave();
         self.request(folder);
     }
@@ -23,6 +24,7 @@ impl MainWindow {
     /// Goes back to the place before this one, if there is one.
     pub fn go_back(&mut self) {
         if let Some(place) = self.history.back() {
+            self.forget_drive_to_open();
             self.request(&place);
         }
     }
@@ -30,6 +32,7 @@ impl MainWindow {
     /// Goes forward again after Back, if there is somewhere to go.
     pub fn go_forward(&mut self) {
         if let Some(place) = self.history.forward() {
+            self.forget_drive_to_open();
             self.request(&place);
         }
     }

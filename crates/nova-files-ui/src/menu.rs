@@ -1,5 +1,5 @@
 //! A small menu that opens where the pointer was right-clicked, such as
-//! a pinned place's "Remove from Places". The window holds at most one;
+//! a pinned place's "Remove from Places" or a drive's Eject. The window holds at most one;
 //! it closes on a choice or on a click outside it. Drawing is
 //! in `view/menu`.
 //!
@@ -11,7 +11,10 @@ use std::path::PathBuf;
 
 use gpui::{Context, Pixels, Point, SharedString};
 
+use nova_files_api::{DriveAction, DriveId};
+
 use crate::assets::Icon;
+use crate::drives::ShownDrive;
 use crate::window::MainWindow;
 
 /// The menu on screen.
@@ -35,6 +38,10 @@ pub struct MenuItem {
 pub enum MenuAction {
     /// Take a pinned folder out of Places.
     Unpin(PathBuf),
+    /// Open a drive, mounting it first when needed.
+    OpenDrive(ShownDrive),
+    /// Make a drive safe to unplug.
+    Eject(DriveId),
 }
 
 impl MainWindow {
@@ -67,6 +74,8 @@ impl MainWindow {
         };
         match item.action {
             MenuAction::Unpin(path) => self.unpin(path),
+            MenuAction::OpenDrive(drive) => self.open_drive(drive),
+            MenuAction::Eject(drive) => self.act_on_drive(DriveAction::Eject(drive)),
         }
         cx.notify();
     }

@@ -1,6 +1,6 @@
 //! The core's events as the window takes them: a listing arriving or
 //! refused, a search's files, details, thumbnails, places, pinned folders,
-//! settings and the theme. Listings
+//! drives, settings and the theme. Listings
 //! the window no longer wants are dropped here too, and the folder on
 //! screen read again when the core moved on from it (see `window`).
 
@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, ScrollStrategy, UniformListScrollHandle};
-use nova_files_api::{Event, Listing, ListingId, Settings, Theme, Thumbnails};
+use nova_files_api::{Bookmark, Event, Listing, ListingId, Settings, Theme, Thumbnails};
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -40,6 +40,7 @@ impl MainWindow {
         self.shown_order = self.asked_order;
         self.selection = self.selection_for(&listing);
         self.tree_follows(&listing, !same_folder);
+        self.ask_disk_space();
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);
@@ -111,14 +112,14 @@ impl MainWindow {
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
+            Event::Drives(_) | Event::DriveDone { .. } | Event::DiskSpace(_) => {
+                self.drive_event(event, cx);
+            }
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            // The window never searches, opens files, starts jobs or asks
-            // for drives yet, and only a picker's opening asks for the
-            // window state (see `window_state`).
+            // The window never searches, opens files or starts jobs yet,
+            // and only a picker's opening asks for the window state (see
+            // `window_state`).
             Event::FolderUnreadable { .. }
-            | Event::Drives(_)
-            | Event::DiskSpace(_)
-            | Event::DriveDone { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }
@@ -143,14 +144,8 @@ impl MainWindow {
             | Event::Trash(_)
             | Event::Undoable { .. }
             | Event::UndoGone(_) => {}
-            Event::Places(places) => {
-                self.places = places;
-                Self::places_changed(cx);
-            }
-            Event::Bookmarks(pinned) => {
-                self.pinned = pinned;
-                Self::places_changed(cx);
-            }
+            Event::Places(places) => self.places_arrived(places, cx),
+            Event::Bookmarks(pinned) => self.pinned_arrived(pinned, cx),
         }
     }
 
@@ -178,7 +173,14 @@ impl MainWindow {
         cx.notify();
     }
 
-    fn places_changed(cx: &mut Context<Self>) {
+    fn places_arrived(&mut self, places: Vec<nova_files_api::Place>, cx: &mut Context<Self>) {
+        self.places = places;
+        cx.emit(WindowEvent::Places);
+        cx.notify();
+    }
+
+    fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
+        self.pinned = pinned;
         cx.emit(WindowEvent::Places);
         cx.notify();
     }

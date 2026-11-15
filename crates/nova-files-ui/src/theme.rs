@@ -51,6 +51,8 @@ pub struct Colors {
     pub here: Rgba,
     /// A text field's caret.
     pub caret: Rgba,
+    /// What warns: a drive's free space when it is nearly full.
+    pub full: Rgba,
     /// Selected text in a text field.
     pub selection: Rgba,
     /// The part of a name a search matched.
@@ -127,6 +129,7 @@ impl Colors {
             folder: mix(color(palette.primary), share::FOLDER, text_dim),
             here: color(palette.primary),
             caret: color(palette.primary),
+            full: color(palette.error),
             selection: thin(palette.secondary, share::SELECTION),
             mark: thin(palette.primary, share::MARK),
             accept: color(palette.primary),
@@ -272,6 +275,8 @@ pub mod size {
     /// The sidebar, a place in it, its icon, and the space between places.
     pub const SIDEBAR_WIDTH: Pixels = px(228.0);
     pub const PLACE_HEIGHT: Pixels = px(34.0);
+    /// The most the Drives section takes: its head and about four rows.
+    pub const DRIVES_MAX_HEIGHT: Pixels = px(200.0);
     pub const PLACE_PAD: Pixels = px(10.0);
     pub const PLACE_ICON: Pixels = px(19.0);
     pub const PLACE_GAP: Pixels = px(1.0);

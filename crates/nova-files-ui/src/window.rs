@@ -1,8 +1,9 @@
 //! The main window: the places on the left, the open folder's entries on
 //! the right, and an Up button. This file holds the window's state and
-//! opening it; the work is split by area: going places in `navigate`, pinning folders in `pin`, the
-//! folder tree's own line to the core in `tree`, the
-//! core's events in `events`, and the rows on screen in `rows`. Drawing
+//! opening it; the work is split by area: going places in `navigate`,
+//! pinning folders in `pin`, the folder tree's own line to the core in
+//! `tree`, the drives in `drives`, the core's events in `events`, and the
+//! rows on screen in `rows`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -34,6 +35,7 @@
 //!
 //! A search puts the files it found in the list's place (see `search`).
 
+mod drives;
 mod events;
 mod navigate;
 mod pin;
@@ -57,6 +59,7 @@ use nova_files_api::{
     ListingId, Order, Place, Settings,
 };
 
+use self::drives::Drives;
 use self::tree::TreeLine;
 use crate::band::Band;
 use crate::history::History;
@@ -161,6 +164,8 @@ pub struct MainWindow {
     pub(crate) home: PathBuf,
     /// The settings as the core last sent them.
     settings: Settings,
+    /// The drives and how full they are (see `drives`).
+    pub(crate) drives: Drives,
     /// The menu open over the window, if any (see `menu`).
     pub(crate) menu: Option<Menu>,
     /// The search box and the search under way (see `search`).
@@ -200,6 +205,7 @@ impl MainWindow {
             .and_then(|connection| {
                 connection.send(Command::Ping)?;
                 connection.send(Command::Places)?;
+                connection.send(Command::Drives)?;
                 connection.send(Command::Settings)?;
                 connection.send(Command::Theme)?;
                 Ok(connection)
@@ -256,6 +262,7 @@ impl MainWindow {
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
+            drives: Drives::default(),
             menu: None,
             search: search::Search::new(cx),
             focus: cx.focus_handle(),

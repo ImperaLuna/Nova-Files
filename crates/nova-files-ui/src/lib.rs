@@ -15,6 +15,7 @@ mod band;
 mod columns;
 mod commands;
 mod crumbs;
+mod drives;
 mod history;
 mod jump;
 mod kind;

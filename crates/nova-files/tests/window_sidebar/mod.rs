@@ -212,3 +212,36 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     click(cx, "tree-0");
     wait_for_folder(&view, cx, tree.path()).await;
 }
+
+#[gpui::test]
+async fn the_system_drive_shows_its_free_space_and_opens(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-drives");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    view.condition::<WindowEvent>(cx, |view, _| view.disk_space(Path::new("/")).is_some())
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("drive-0-number").is_some());
+    // A narrow window shows the drive by its name alone.
+    cx.simulate_resize(size(NARROWEST_WIDE - px(1.0), px(600.0)));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("drive-0").is_some());
+    assert!(cx.debug_bounds("drive-0-number").is_none());
+    cx.simulate_resize(size(NARROWEST_WIDE, px(600.0)));
+    cx.run_until_parked();
+
+    // The system drive can't be ejected: its menu only opens it.
+    right_click(cx, "drive-0");
+    view.read_with(cx, |view, _| {
+        let labels: Vec<_> = view
+            .menu()
+            .unwrap()
+            .items
+            .iter()
+            .map(|item| item.label.clone())
+            .collect();
+        assert_eq!(labels, ["Open"]);
+    });
+    click(cx, "menu-0");
+    wait_for_folder(&view, cx, Path::new("/")).await;
+}
