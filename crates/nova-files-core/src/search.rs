@@ -14,7 +14,11 @@
 //! were lost and that crawl fails, searches fail too, each trying again,
 //! until a crawl works: the old index no longer shows the disk.
 //!
+//! [`Command::Find`] runs the same search for a window and answers with a
+//! listing (see `found`).
+//!
 //! [`Command::Search`]: nova_files_api::Command::Search
+//! [`Command::Find`]: nova_files_api::Command::Find
 
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
@@ -22,18 +26,40 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 
-use nova_files_api::{Event, Hit, MAX_HITS, Matched, SearchFailed, SearchId};
+use nova_files_api::{Event, Hit, ListingId, MAX_FOUND, MAX_HITS, Matched, SearchFailed, SearchId};
 use nova_files_index::{Change, ChangeLog, Index, LogReader, MatchKind, Overlay, STAGES, Watcher};
 
 use crate::index::IndexPlace;
 use crate::jobs::Client;
 
+mod found;
+
 const INDEX_THREAD: &str = "nova-files-index";
 const SEARCH_THREAD: &str = "nova-files-search";
+const FIND_THREAD: &str = "nova-files-find";
 
 /// Changes after which the index is crawled anew: the overlay only grows,
 /// and putting hits through it costs more with each change.
 pub const REBUILD_AFTER: usize = 10_000;
+
+/// What one search looks for: `text` (one word or several), at most
+/// `limit` hits a stage, and with `within` only hits inside that folder.
+struct Query<'a> {
+    text: &'a str,
+    limit: usize,
+    within: Option<&'a Path>,
+}
+
+impl<'a> Query<'a> {
+    /// `text` across the whole index.
+    const fn everywhere(text: &'a str, limit: usize) -> Self {
+        Self {
+            text,
+            limit,
+            within: None,
+        }
+    }
+}
 
 /// The home index, and what changed since its crawl.
 #[derive(Clone)]
@@ -102,7 +128,7 @@ impl Searcher {
                 searcher.start_build(false);
                 let wanted = || !cancelled();
                 let answer = |event| wanted() && events.deliver(event).is_ok();
-                if !searcher.run(&query, limit, wanted, |hits, done| {
+                if !searcher.run(&Query::everywhere(&query, limit), wanted, |hits, done| {
                     answer(Event::Found { id, hits, done })
                 }) {
                     answer(Event::SearchFailed {
@@ -117,15 +143,54 @@ impl Searcher {
         }
     }
 
+    /// Finds files for `client` as listing `id`, replacing its listing
+    /// before (see [`nova_files_api::Command::Find`]).
+    pub fn find(&self, client: &Client, id: ListingId, query: String, within: Option<PathBuf>) {
+        let job = client.start_listing(id);
+        let Some((_, root)) = &self.shared.place else {
+            let reason = SearchFailed::NoIndex;
+            job.answer(Event::FindFailed { id, reason });
+            return;
+        };
+        let searcher = self.clone();
+        let folder = within.clone().unwrap_or_else(|| root.clone());
+        let limit = usize::try_from(MAX_FOUND).unwrap_or_default();
+        let spawned = thread::Builder::new()
+            .name(FIND_THREAD.to_owned())
+            .spawn(move || {
+                searcher.start_build(false);
+                let mut hits = Vec::new();
+                let wanted = || !job.cancelled();
+                let asked = Query {
+                    text: &query,
+                    limit,
+                    within: within.as_deref(),
+                };
+                let ran = searcher.run(&asked, wanted, |stage, _| {
+                    hits.extend(stage);
+                    true
+                });
+                if !ran {
+                    let reason = SearchFailed::IndexFailed;
+                    job.answer(Event::FindFailed { id, reason });
+                } else if let Some(listing) = found::listing(id, folder, hits, || job.cancelled()) {
+                    job.send(listing);
+                }
+            });
+        if spawned.is_err() {
+            let reason = SearchFailed::IndexFailed;
+            client.deliver(Event::FindFailed { id, reason }).ok();
+        }
+    }
+
     /// Waits for the index, then hands each stage's hits to `answer`
     /// until it returns `false`. Stops before reading the log or a stage
-    /// once `wanted` says a newer search replaced this one. `false` when
-    /// there is no index, or changes were lost and the crawl to recover
-    /// failed; that search starts another.
+    /// once `wanted` says a newer search replaced this one. `false` when there is no index,
+    /// or changes were lost and the crawl to recover failed; that search
+    /// starts another.
     fn run(
         &self,
-        query: &str,
-        limit: usize,
+        query: &Query<'_>,
         wanted: impl Fn() -> bool,
         mut answer: impl FnMut(Vec<Hit>, bool) -> bool,
     ) -> bool {
@@ -149,7 +214,12 @@ impl Searcher {
         }
         live.read_log();
         let outdated = live.lost || live.changes > REBUILD_AFTER;
-        let mut search = live.index.search_now(query, limit, &live.overlay);
+        let mut search = live
+            .index
+            .search_now(query.text, query.limit, &live.overlay);
+        if let Some(folder) = query.within {
+            search = search.within(folder);
+        }
         if search.is_done() {
             // Nothing to look for: no stages, one answer with no hits.
             answer(Vec::new(), true);
