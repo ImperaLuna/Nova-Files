@@ -95,7 +95,8 @@ async fn picker_with<'a>(
     let core_home = nova_files_core::Home {
         folder: home.clone(),
         config: home.join(".config"),
-        state: home.join(".local/state"),
+        // Beside the tree, so a saved recent folder never shows in it.
+        state: home.with_extension("state"),
         data: home.join(".local/share"),
         drive_trashes: false,
     };

@@ -110,7 +110,7 @@ async fn going_elsewhere_closes_a_menu_for_good(cx: &mut TestAppContext) {
     assert_eq!(menu_names(&view, cx).await, ["nova"]);
     view.update(cx, |view, _| view.go_up());
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
-    view.update(cx, |view, _| view.go_back());
+    view.update(cx, MainWindow::go_back);
     wait_for_folder(&view, cx, &nova).await;
     menu_closed(&view, cx).await;
 }

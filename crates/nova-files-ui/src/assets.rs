@@ -21,6 +21,7 @@ pub enum Icon {
     Pictures,
     Music,
     Videos,
+    Start,
     Drive,
     Back,
     Forward,
@@ -30,12 +31,15 @@ pub enum Icon {
     Search,
     List,
     Tiles,
-    Chevron,
+    Plus,
     Close,
+    Chevron,
+    Eject,
+    Open,
 }
 
 impl Icon {
-    const ALL: [Self; 20] = [
+    const ALL: [Self; 24] = [
         Self::Folder,
         Self::File,
         Self::Home,
@@ -45,6 +49,7 @@ impl Icon {
         Self::Pictures,
         Self::Music,
         Self::Videos,
+        Self::Start,
         Self::Drive,
         Self::Back,
         Self::Forward,
@@ -54,8 +59,11 @@ impl Icon {
         Self::Search,
         Self::List,
         Self::Tiles,
-        Self::Chevron,
+        Self::Plus,
         Self::Close,
+        Self::Chevron,
+        Self::Eject,
+        Self::Open,
     ];
 
     /// The path GPUI asks the asset source for.
@@ -70,6 +78,7 @@ impl Icon {
             Self::Pictures => "icons/pictures.svg",
             Self::Music => "icons/music.svg",
             Self::Videos => "icons/videos.svg",
+            Self::Start => "icons/start.svg",
             Self::Drive => "icons/drive.svg",
             Self::Back => "icons/back.svg",
             Self::Forward => "icons/forward.svg",
@@ -79,8 +88,11 @@ impl Icon {
             Self::Search => "icons/search.svg",
             Self::List => "icons/list.svg",
             Self::Tiles => "icons/tiles.svg",
-            Self::Chevron => "icons/chevron.svg",
+            Self::Plus => "icons/plus.svg",
             Self::Close => "icons/close.svg",
+            Self::Chevron => "icons/chevron.svg",
+            Self::Eject => "icons/eject.svg",
+            Self::Open => "icons/open.svg",
         }
     }
 
@@ -95,6 +107,7 @@ impl Icon {
             Self::Pictures => svg::PICTURES,
             Self::Music => svg::MUSIC,
             Self::Videos => svg::VIDEOS,
+            Self::Start => svg::START,
             Self::Drive => svg::DRIVE,
             Self::Back => svg::BACK,
             Self::Forward => svg::FORWARD,
@@ -104,8 +117,11 @@ impl Icon {
             Self::Search => svg::SEARCH,
             Self::List => svg::LIST,
             Self::Tiles => svg::TILES,
-            Self::Chevron => svg::CHEVRON,
+            Self::Plus => svg::PLUS,
             Self::Close => svg::CLOSE,
+            Self::Chevron => svg::CHEVRON,
+            Self::Eject => svg::EJECT,
+            Self::Open => svg::OPEN,
         };
         source.as_bytes()
     }

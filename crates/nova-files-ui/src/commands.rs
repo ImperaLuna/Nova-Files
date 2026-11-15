@@ -47,6 +47,7 @@ mod actions {
             TogglePreview,
             PreviewPrevious,
             PreviewNext,
+            FocusSearch,
         ]
     );
 }
@@ -109,6 +110,7 @@ pub const ACTIONS: &[ActionSpec] = &[
     PREVIEW,
     PREVIEW_PREVIOUS,
     PREVIEW_NEXT,
+    FIND,
 ];
 
 spec!(
@@ -217,6 +219,15 @@ spec!(
 spec!(
     /// Shows the entry after in the quick look.
     PREVIEW_NEXT, PreviewNext, "preview.next", "Next", ["right"]
+);
+spec!(
+    /// Puts the caret in the search box. `/` does too, unless a field
+    /// has the keys (see `view`).
+    FIND,
+    FocusSearch,
+    "search.focus",
+    "Search",
+    ["ctrl-f"]
 );
 
 /// Binds every action's default keys.

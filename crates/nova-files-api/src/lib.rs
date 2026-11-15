@@ -13,7 +13,8 @@
 //! what a quick look shows of a file or folder. Files cut or
 //! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
 //! a paste is a job. A [`Size`] is what a scan of files and folders
-//! counted. A [`DiskSpace`] is how full a drive is.
+//! counted. A [`DiskSpace`] is how full a drive is. A [`RecentFolder`] is
+//! one a person opened lately, for the Start page.
 
 #![forbid(unsafe_code)]
 
@@ -31,6 +32,7 @@ mod open_with;
 mod pick;
 mod preview;
 mod properties;
+mod recent;
 mod search;
 mod settings;
 mod size;
@@ -59,7 +61,7 @@ pub use folder::{
 pub use job::{
     Answer, Conflict, ConflictKind, Failure, JobId, JobTag, Operation, Outcome, Progress, Scope,
 };
-pub use message::{ClientId, Command, Event, MAX_HITS, MAX_ROWS};
+pub use message::{ClientId, Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
 pub use open_with::{App, OpenWith, OpenWithAnswer, OpenWithId};
 pub use pick::{
     FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,
@@ -69,6 +71,7 @@ pub use preview::{
     PreviewId,
 };
 pub use properties::{Account, PathKind, Properties, PropertiesId};
+pub use recent::{MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
 pub use size::{MeasureId, ScanState, Share, Size};

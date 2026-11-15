@@ -175,7 +175,7 @@ async fn a_click_beside_what_is_shown_closes_the_quick_look(cx: &mut TestAppCont
     cx.run_until_parked();
     let scrim = cx.debug_bounds("preview").unwrap();
     cx.simulate_click(
-        scrim.origin + gpui::point(gpui::px(4.0), gpui::px(4.0)),
+        scrim.origin + gpui::point(px(4.0), px(4.0)),
         Modifiers::none(),
     );
     assert!(!view.read_with(cx, |view, _| view.previewing()));
@@ -356,10 +356,10 @@ async fn pictures_are_asked_to_fit_the_room_the_window_has(cx: &mut TestAppConte
     };
 
     let drawn = fit(&view, cx).unwrap();
-    cx.simulate_resize(gpui::size(gpui::px(500.0), gpui::px(400.0)));
+    cx.simulate_resize(gpui::size(px(500.0), px(400.0)));
     let smaller = fit(&view, cx).unwrap();
     assert!(smaller.width < drawn.width && smaller.height < drawn.height);
-    cx.simulate_resize(gpui::size(gpui::px(600.0), gpui::px(400.0)));
+    cx.simulate_resize(gpui::size(px(600.0), px(400.0)));
     let wider = fit(&view, cx).unwrap();
     assert!(wider.width > smaller.width);
     assert_eq!(wider.height, smaller.height);

@@ -11,6 +11,7 @@ use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, 
 use crate::open_with::{OpenWith, OpenWithAnswer};
 use crate::preview::{Fit, Preview, PreviewId};
 use crate::properties::{Properties, PropertiesId};
+use crate::recent::{RecentFolder, RecentId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
 use crate::size::{MeasureId, ScanState, Share, Size};
@@ -24,6 +25,10 @@ pub const MAX_ROWS: u32 = 512;
 /// The most hits one search stage may hold: more than a launcher shows.
 /// The core keeps the best ones.
 pub const MAX_HITS: u32 = 200;
+
+/// The most entries each stage of a [`Command::Find`] adds: more than a
+/// window's list scrolls through when looking for one name.
+pub const MAX_FOUND: u32 = 1000;
 
 /// A request from a client to the core.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +77,20 @@ pub enum Command {
         id: SearchId,
         query: String,
         limit: u32,
+    },
+    /// Find files whose names match `query`, as [`Command::Search`] does,
+    /// for a window to show as its list. The answer is
+    /// [`Event::FolderListed`] with `id` and every stage's hits, best
+    /// first, each entry in its own folder (see [`Listing::folders`]), at
+    /// most [`MAX_FOUND`] a stage; or [`Event::FindFailed`]. `within` keeps
+    /// only what is inside that folder, at any depth; without it the whole
+    /// index counts. It is the client's listing like a
+    /// [`Command::ListFolder`]: either one asked for later cancels it, and
+    /// [`Command::Rows`] serves its rows.
+    Find {
+        id: ListingId,
+        query: String,
+        within: Option<PathBuf>,
     },
     /// Read the properties of what is at `path`, without following a link.
     /// The answer is [`Event::Properties`] or [`Event::PropertiesUnreadable`]
@@ -137,6 +156,18 @@ pub enum Command {
     /// answer is [`Event::DiskSpace`], one entry per path in the same
     /// order; paths past [`crate::MAX_DISK_SPACE_PATHS`] are left out.
     DiskSpace(Vec<PathBuf>),
+    /// A person opened `folder` (an absolute path); it goes first among the
+    /// recent folders. Nothing answers.
+    FolderUsed(PathBuf),
+    /// Ask for the newest `count` recent folders that can still be read,
+    /// leaving out those in `skip` (the ones a client already shows
+    /// elsewhere). The answer is [`Event::RecentFolders`] with the same
+    /// `id`.
+    RecentFolders {
+        id: RecentId,
+        count: u32,
+        skip: Vec<PathBuf>,
+    },
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -234,6 +265,8 @@ pub enum Event {
     },
     /// [`Command::Search`] `id` couldn't run.
     SearchFailed { id: SearchId, reason: SearchFailed },
+    /// [`Command::Find`] `id` couldn't run.
+    FindFailed { id: ListingId, reason: SearchFailed },
     /// The properties of [`Command::Properties`] `id`'s path.
     Properties {
         id: PropertiesId,
@@ -290,6 +323,12 @@ pub enum Event {
     /// How full the drives are, answering [`Command::DiskSpace`]: one
     /// entry per path asked, in the same order.
     DiskSpace(Vec<PathSpace>),
+    /// The recent folders, answering [`Command::RecentFolders`] `id`,
+    /// newest first.
+    RecentFolders {
+        id: RecentId,
+        folders: Vec<RecentFolder>,
+    },
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },

@@ -43,6 +43,7 @@ fn listed(id: ListingId, path: PathBuf) -> Event {
         id,
         path,
         entries: Vec::new().into(),
+        folders: None,
     })
 }
 

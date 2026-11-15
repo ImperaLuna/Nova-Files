@@ -24,6 +24,7 @@ use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
+use crate::recent::Store as RecentStore;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
@@ -57,6 +58,8 @@ pub struct Setup {
     pub measurer: Measurer,
     /// The drives, and the clients that hear about them.
     pub drives: DrivesStore,
+    /// The folders a person opened lately.
+    pub recent: RecentStore,
 }
 
 /// Runs until idle.
@@ -136,10 +139,13 @@ fn answer(
         | Command::ListTrash
         | Command::Rows { .. }
         | Command::Search { .. }
+        | Command::Find { .. }
         | Command::Properties { .. }
         | Command::Preview { .. }
         | Command::OpenFile { .. }
-        | Command::OpenWith(_)) => folders::answer(id, client, command, setup),
+        | Command::OpenWith(_)
+        | Command::FolderUsed(_)
+        | Command::RecentFolders { .. }) => folders::answer(id, client, command, setup),
         command @ (Command::WindowState
         | Command::SaveWindowState(_)
         | Command::Settings
