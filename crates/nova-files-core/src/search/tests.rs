@@ -66,7 +66,11 @@ impl Searcher {
     /// Runs a search to its end and waits for any build it started.
     fn search_and_settle(&self) {
         self.start_build(false);
-        assert!(self.run("report", LIMIT as usize, || true, |_, _| true));
+        assert!(self.run(
+            &Query::everywhere("report", LIMIT as usize),
+            || true,
+            |_, _| true
+        ));
         self.settle();
     }
 
@@ -119,8 +123,7 @@ fn a_replaced_search_stops_before_it_scans() {
     let searcher = scratch.searcher();
     searcher.search_and_settle();
     let answered = searcher.run(
-        "report",
-        LIMIT as usize,
+        &Query::everywhere("report", LIMIT as usize),
         || false,
         |_, _| {
             panic!("a replaced search answered");
@@ -218,7 +221,13 @@ fn a_failed_crawl_after_lost_changes_fails_searches_until_one_works() {
     fs::write(&cache, b"").unwrap();
     // Answers from the old index, and the crawl it starts fails.
     searcher.search_and_settle();
-    let search = || searcher.run("report", LIMIT as usize, || true, |_, _| true);
+    let search = || {
+        searcher.run(
+            &Query::everywhere("report", LIMIT as usize),
+            || true,
+            |_, _| true,
+        )
+    };
     assert!(!search());
     searcher.settle();
     fs::remove_file(&cache).unwrap();

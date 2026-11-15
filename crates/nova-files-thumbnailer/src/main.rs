@@ -1,5 +1,6 @@
 //! The sandboxed thumbnail helper. It renders one batch of thumbnails, then
-//! exits.
+//! exits. Asked with `--preview`, it decodes one picture for the quick look
+//! instead (see `preview`).
 //!
 //! `nova-files-thumbnailer <thumbnails folder> (<file> <uri> <mtime> <name>)...`
 //!
@@ -16,6 +17,7 @@ mod batch;
 mod data_dirs;
 mod mime;
 mod png_text;
+mod preview;
 mod render;
 mod sandbox;
 mod system;
@@ -24,7 +26,15 @@ use std::io::{self, Write as _};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let Some(batch) = batch::Batch::from_args(std::env::args_os().skip(1)) else {
+    let mut args = std::env::args_os().skip(1).peekable();
+    if args.next_if(|arg| arg == preview::FLAG).is_some() {
+        let Some(request) = preview::Request::from_args(args) else {
+            writeln!(io::stderr(), "{}", preview::USAGE).ok();
+            return ExitCode::FAILURE;
+        };
+        return preview::run(&request);
+    }
+    let Some(batch) = batch::Batch::from_args(args) else {
         writeln!(io::stderr(), "{}", batch::USAGE).ok();
         return ExitCode::FAILURE;
     };
