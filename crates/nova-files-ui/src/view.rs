@@ -5,7 +5,7 @@
 //! the bottom (see `pick`).
 //!
 //! Each part is drawn in a file of its own, so a feature changes only its
-//! part: the top bar in `bar`, the sidebar in `sidebar`, the sheet with its
+//! part: the top bar in `bar`, its path bar in `path`, the sidebar in `sidebar`, the sheet with its
 //! column heads and rows in `sheet`, and the pieces of one row in `row`.
 //!
 //! The window sets the key context its actions are bound in and handles
@@ -17,9 +17,10 @@
 //! the box `band`. Each line's Modified cell carries one too,
 //! `modified-header` and `modified-<n>`, so a test can check the columns
 //! line up. The slots later features fill carry one each: `sidebar`,
-//! `path`, `search` and `views`.
+//! `path`, `search` and `views`; the path bar's own are listed in `path`.
 
 mod bar;
+mod path;
 mod row;
 mod sheet;
 mod sidebar;
@@ -121,7 +122,7 @@ impl Render for MainWindow {
                                     .flex_none()
                                     .pt(size::GAP)
                                     .bg(colors.window)
-                                    .child(self.top_bar(&colors)),
+                                    .child(self.top_bar(&colors, cx)),
                             )
                             .child(self.sheet(cx)),
                     ),

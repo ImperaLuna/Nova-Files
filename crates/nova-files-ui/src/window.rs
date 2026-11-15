@@ -280,7 +280,8 @@ impl Focusable for MainWindow {
     }
 }
 
-const ROOT_FOLDER: &str = "/";
+/// The root folder, where a window lands when nothing else can be read.
+pub const ROOT_FOLDER: &str = "/";
 
 /// Where a window opens unless told otherwise: the home folder, or the
 /// root folder on a system without one.
