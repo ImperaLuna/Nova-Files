@@ -37,10 +37,9 @@ impl MainWindow {
         }
         let colors = Colors::of(cx);
         let rows = mounted.chunks(PER_ROW).enumerate().map(|(row, drives)| {
-            let cards = drives
-                .iter()
-                .enumerate()
-                .map(|(column, drive)| self.drive_card(row * PER_ROW + column, drive, &colors, cx));
+            let cards = drives.iter().enumerate().map(|(column, drive)| {
+                self.drive_card(card_index(row, column), drive, &colors, cx)
+            });
             // Empty slots keep a short last row's cards as wide as the rest.
             let fillers = (drives.len()..PER_ROW).map(|_| div().flex_1().into_any_element());
             div()
@@ -72,11 +71,8 @@ impl MainWindow {
             .as_deref()
             .and_then(|folder| self.disk_space(folder));
         let percent = space.map(DiskSpace::percent_used);
-        let tint = if percent.is_some_and(|percent| percent >= NEARLY_FULL) {
-            colors.full
-        } else {
-            colors.folder
-        };
+        let full = nearly_full(percent);
+        let tint = if full { colors.full } else { colors.folder };
         let clicked = drive.clone();
         div()
             .id(("drive-card", index))
@@ -113,11 +109,7 @@ impl MainWindow {
                                 .flex_none()
                                 .text_size(text::PERCENT)
                                 .font_weight(text::STRONG_WEIGHT)
-                                .text_color(if percent >= NEARLY_FULL {
-                                    colors.full
-                                } else {
-                                    colors.text
-                                })
+                                .text_color(if full { colors.full } else { colors.text })
                                 .child(format!("{percent}%")),
                         )
                     }),
@@ -132,7 +124,7 @@ impl MainWindow {
                         bar.child(
                             div()
                                 .h_full()
-                                .w(relative(f32::from(percent) / WHOLE))
+                                .w(relative(filled(percent)))
                                 .rounded(radius::SMALL)
                                 .bg(tint),
                         )
@@ -140,6 +132,21 @@ impl MainWindow {
             )
             .into_any_element()
     }
+}
+
+/// The card at `column` of row `row`, counted over every card shown.
+const fn card_index(row: usize, column: usize) -> usize {
+    row * PER_ROW + column
+}
+
+/// Whether a drive this full, if its space is known, shows red.
+fn nearly_full(percent: Option<u8>) -> bool {
+    percent.is_some_and(|percent| percent >= NEARLY_FULL)
+}
+
+/// How much of the bar a drive `percent` full fills, from 0 to 1.
+fn filled(percent: u8) -> f32 {
+    f32::from(percent) / WHOLE
 }
 
 /// "381 GB free of 1.0 TB".
@@ -162,5 +169,28 @@ mod tests {
             free: 381_000_000_000,
         };
         assert_eq!(free_of(space), "381 GB free of 1.0 TB");
+    }
+
+    #[test]
+    fn cards_count_on_across_rows() {
+        assert_eq!(card_index(0, 0), 0);
+        assert_eq!(card_index(0, 2), 2);
+        assert_eq!(card_index(1, 0), PER_ROW);
+        assert_eq!(card_index(2, 1), 2 * PER_ROW + 1);
+    }
+
+    #[test]
+    fn a_drive_turns_red_from_nearly_full() {
+        assert!(!nearly_full(None));
+        assert!(!nearly_full(Some(NEARLY_FULL - 1)));
+        assert!(nearly_full(Some(NEARLY_FULL)));
+        assert!(nearly_full(Some(100)));
+    }
+
+    #[test]
+    fn the_bar_fills_as_much_as_the_drive_is_used() {
+        assert!((filled(0) - 0.0).abs() < f32::EPSILON);
+        assert!((filled(25) - 0.25).abs() < f32::EPSILON);
+        assert!((filled(100) - 1.0).abs() < f32::EPSILON);
     }
 }
