@@ -25,7 +25,7 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::UNIX_EPOCH;
 
-use nova_files_api::{Entry, EntryId, EntryKind, Event, EventSink, ListingId, MAX_ROWS, uri};
+use nova_files_api::{EntryId, EntryKind, Event, EventSink, Listing, ListingId, MAX_ROWS, uri};
 
 /// The thumbnails folder under the cache folder.
 const THUMBNAILS_FOLDER: &str = "thumbnails";
@@ -70,18 +70,11 @@ struct Shared {
 
 #[derive(Default)]
 struct State {
-    shown: Option<Arc<Shown>>,
+    shown: Option<Arc<Listing>>,
     wanted: Range<usize>,
     /// Entries of the shown listing already answered or given up on.
     done: HashSet<usize>,
     closed: bool,
-}
-
-/// The listing on the client's screen.
-struct Shown {
-    id: ListingId,
-    folder: PathBuf,
-    entries: Arc<[Entry]>,
 }
 
 impl Queue {
@@ -103,22 +96,12 @@ impl Queue {
     /// before the client hears of the listing, so its first request finds
     /// it. `current` is asked under the queue's lock, so a listing that was
     /// replaced meanwhile can't overwrite the one after it.
-    pub fn show(
-        &self,
-        id: ListingId,
-        folder: PathBuf,
-        entries: Arc<[Entry]>,
-        current: impl FnOnce() -> bool,
-    ) {
+    pub fn show(&self, listing: &Listing, current: impl FnOnce() -> bool) {
         self.shared.update(|state| {
             if !current() {
                 return;
             }
-            state.shown = Some(Arc::new(Shown {
-                id,
-                folder,
-                entries,
-            }));
+            state.shown = Some(Arc::new(listing.clone()));
             state.wanted = 0..0;
             state.done.clear();
         });
@@ -165,7 +148,7 @@ impl Shared {
 
     /// Waits for the next batch: the shown listing and up to [`BATCH`]
     /// wanted files not done yet, now marked done. `None` once closed.
-    fn next_batch(&self) -> Option<(Arc<Shown>, Vec<usize>)> {
+    fn next_batch(&self) -> Option<(Arc<Listing>, Vec<usize>)> {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         loop {
             if state.closed {
@@ -264,9 +247,9 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
 
 /// What the cache and the helper need to know about entry `index`; `None`
 /// when it vanished or has no mtime.
-fn job_for(shown: &Shown, index: usize) -> Option<helper::Job> {
+fn job_for(shown: &Listing, index: usize) -> Option<helper::Job> {
     let entry = shown.entries.get(index)?;
-    let source = shown.folder.join(&entry.name);
+    let source = shown.path_of(entry);
     let mtime = fs::metadata(&source)
         .ok()?
         .modified()
