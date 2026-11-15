@@ -4,7 +4,8 @@
 //!
 //! Every change goes through [`MainWindow::reselect`], which works out
 //! the new selection from the old one, lets a picker update its name box
-//! (see `pick::select`), and scrolls the cursor's row into view. In a
+//! (see `pick::select`), moves an open quick look to the cursor (see
+//! `window::preview`), and scrolls the cursor's row into view. In a
 //! picker a range holds only what it picks, and a picker for one entry
 //! keeps at most one selected whatever the keys; a main window picks
 //! anything.
@@ -80,6 +81,7 @@ impl MainWindow {
             }
         });
         self.pick_selection_changed(cx);
+        self.preview_follow_cursor(cx);
         if let Some(cursor) = self.cursor() {
             self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
         }
@@ -108,13 +110,34 @@ impl MainWindow {
     /// Moves the cursor as `step` says and selects the row it lands on,
     /// or with `extend` the range from the anchor to it.
     pub(crate) fn move_cursor(&mut self, step: Move, extend: bool, cx: &mut Context<Self>) {
+        self.move_cursor_to(self.cursor(), step, extend, cx);
+    }
+
+    /// Moves as `step` says from row `from` rather than the cursor, and
+    /// selects the row it lands on alone.
+    pub(crate) fn move_cursor_from(
+        &mut self,
+        from: Option<usize>,
+        step: Move,
+        cx: &mut Context<Self>,
+    ) {
+        self.move_cursor_to(from, step, false, cx);
+    }
+
+    fn move_cursor_to(
+        &mut self,
+        from: Option<usize>,
+        step: Move,
+        extend: bool,
+        cx: &mut Context<Self>,
+    ) {
         let Some(listing) = self.listing_id() else {
             return;
         };
         let len = self.entry_count();
         let page = self.rows_on_screen();
         let Some(to) = step
-            .to(self.cursor(), len, page)
+            .to(from, len, page)
             .and_then(|to| u32::try_from(to).ok())
         else {
             return;
@@ -131,6 +154,12 @@ impl MainWindow {
             },
             cx,
         );
+    }
+
+    /// Whether letters typed to jump to a name are still being typed, so
+    /// a space now is part of the name.
+    pub(crate) fn jumping(&self, cx: &Context<Self>) -> bool {
+        self.pick.is_none() && self.jump.continues(cx.background_executor().now())
     }
 
     /// A key typed in a main window: a letter (or a space inside a name)
@@ -219,7 +248,7 @@ impl MainWindow {
     /// Opens the entries `ids` of the listing on screen: a lone folder is
     /// gone into, and files open in their default apps; folders among
     /// several are left alone.
-    fn open_entries(&mut self, ids: &[EntryId]) {
+    pub(crate) fn open_entries(&mut self, ids: &[EntryId]) {
         let Some(listing) = &self.listing else { return };
         let entries: Vec<_> = ids
             .iter()

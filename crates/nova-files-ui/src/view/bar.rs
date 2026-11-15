@@ -87,7 +87,7 @@ pub(super) fn capsule(colors: &Colors) -> Div {
 
 /// An icon button in a capsule, with selector `name`. A click sends
 /// `action`; without one the button is dimmed and does nothing.
-fn icon_button(
+pub(super) fn icon_button(
     name: &'static str,
     glyph: Icon,
     action: Option<&dyn Action>,

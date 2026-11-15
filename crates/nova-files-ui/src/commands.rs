@@ -44,6 +44,9 @@ mod actions {
             SelectAll,
             ToggleSelected,
             ClearSelection,
+            TogglePreview,
+            PreviewPrevious,
+            PreviewNext,
             FocusSearch,
         ]
     );
@@ -104,6 +107,9 @@ pub const ACTIONS: &[ActionSpec] = &[
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
+    PREVIEW,
+    PREVIEW_PREVIOUS,
+    PREVIEW_NEXT,
     FIND,
 ];
 
@@ -202,6 +208,18 @@ spec!(
     ["escape"]
 );
 
+spec!(
+    /// Opens the quick look on the selected entry, or closes it.
+    PREVIEW, TogglePreview, "preview.toggle", "Preview", ["space"]
+);
+spec!(
+    /// Shows the entry before in the quick look.
+    PREVIEW_PREVIOUS, PreviewPrevious, "preview.previous", "Previous", ["left"]
+);
+spec!(
+    /// Shows the entry after in the quick look.
+    PREVIEW_NEXT, PreviewNext, "preview.next", "Next", ["right"]
+);
 spec!(
     /// Puts the caret in the search box. `/` does too, unless a field
     /// has the keys (see `view`).

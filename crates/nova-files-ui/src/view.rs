@@ -10,8 +10,9 @@
 //! Each part is drawn in a file of its own, so a feature changes only its
 //! part: the top bar in `bar`, its path bar in `path`, the sidebar in
 //! `sidebar`, the sheet with its column heads and rows in `sheet`, the
-//! pieces of one row in `row`, a right-click menu in `menu`, and the Start
-//! page, drawn on the sheet in place of the rows, in `start`.
+//! pieces of one row in `row`, a right-click menu in `menu`, the Start
+//! page, drawn on the sheet in place of the rows, in `start`, and the
+//! quick look over it all in `preview`.
 //!
 //! The window sets the key context its actions are bound in and handles
 //! each action it takes; buttons and the mouse's side buttons send actions
@@ -30,6 +31,7 @@ mod bar;
 mod menu;
 mod path;
 mod path_menu;
+mod preview;
 mod row;
 mod search;
 mod sheet;
@@ -47,8 +49,9 @@ use gpui::{
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
-    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown,
-    SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
+    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenSelected, PreviewNext, PreviewPrevious,
+    SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp,
+    TogglePreview, ToggleSelected,
 };
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
@@ -56,6 +59,20 @@ use crate::window::{FocusTo, MainWindow};
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let scale_factor = window.scale_factor();
+        let viewport = window.viewport_size();
+        let room = preview::room(viewport.width, viewport.height);
+        self.set_preview_room(room, scale_factor, cx);
+        self.window_root(window, cx)
+            .map(|root| Self::preview_keys(root, cx))
+            .relative()
+            .children(self.preview_layer(room, scale_factor, cx))
+    }
+}
+
+impl MainWindow {
+    /// The window without the quick look over it.
+    fn window_root(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
         self.set_scale_factor(window.scale_factor(), window, cx);
         self.settle_search(window, cx);
         let colors = Colors::of(cx);
@@ -180,45 +197,80 @@ impl MainWindow {
 
     /// The selection's actions on the window's root (see `selecting`).
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
-        root.on_action(cx.listener(|this, _: &OpenSelected, _, _| this.open_selected()))
-            .on_action(cx.listener(|this, _: &CursorUp, _, cx| {
+        root.on_action(cx.listener(|this, _: &OpenSelected, window, cx| {
+            if !this.open_previewed(window, cx) {
+                this.open_selected();
+            }
+        }))
+        .on_action(cx.listener(|this, _: &CursorUp, _, cx| {
+            if !this.step_preview(Move::Up, cx) {
                 this.move_cursor(Move::Up, false, cx);
-            }))
-            .on_action(cx.listener(|this, _: &CursorDown, _, cx| {
+            }
+        }))
+        .on_action(cx.listener(|this, _: &CursorDown, _, cx| {
+            if !this.step_preview(Move::Down, cx) {
                 this.move_cursor(Move::Down, false, cx);
-            }))
-            .on_action(cx.listener(|this, _: &CursorPageUp, _, cx| {
-                this.move_cursor(Move::PageUp, false, cx);
-            }))
-            .on_action(cx.listener(|this, _: &CursorPageDown, _, cx| {
-                this.move_cursor(Move::PageDown, false, cx);
-            }))
-            .on_action(cx.listener(|this, _: &CursorFirst, _, cx| {
-                this.move_cursor(Move::First, false, cx);
-            }))
-            .on_action(cx.listener(|this, _: &CursorLast, _, cx| {
-                this.move_cursor(Move::Last, false, cx);
-            }))
-            .on_action(cx.listener(|this, _: &SelectUp, _, cx| {
-                this.move_cursor(Move::Up, true, cx);
-            }))
-            .on_action(cx.listener(|this, _: &SelectDown, _, cx| {
-                this.move_cursor(Move::Down, true, cx);
-            }))
-            .on_action(cx.listener(|this, _: &SelectPageUp, _, cx| {
-                this.move_cursor(Move::PageUp, true, cx);
-            }))
-            .on_action(cx.listener(|this, _: &SelectPageDown, _, cx| {
-                this.move_cursor(Move::PageDown, true, cx);
-            }))
-            .on_action(cx.listener(|this, _: &SelectFirst, _, cx| {
-                this.move_cursor(Move::First, true, cx);
-            }))
-            .on_action(cx.listener(|this, _: &SelectLast, _, cx| {
-                this.move_cursor(Move::Last, true, cx);
-            }))
-            .on_action(cx.listener(|this, _: &SelectAll, _, cx| this.select_all(cx)))
-            .on_action(cx.listener(|this, _: &ToggleSelected, _, cx| this.toggle_cursor(cx)))
-            .on_action(cx.listener(|this, _: &ClearSelection, _, cx| this.clear_selection(cx)))
+            }
+        }))
+        .on_action(cx.listener(|this, _: &CursorPageUp, _, cx| {
+            this.move_cursor(Move::PageUp, false, cx);
+        }))
+        .on_action(cx.listener(|this, _: &CursorPageDown, _, cx| {
+            this.move_cursor(Move::PageDown, false, cx);
+        }))
+        .on_action(cx.listener(|this, _: &CursorFirst, _, cx| {
+            this.move_cursor(Move::First, false, cx);
+        }))
+        .on_action(cx.listener(|this, _: &CursorLast, _, cx| {
+            this.move_cursor(Move::Last, false, cx);
+        }))
+        .on_action(cx.listener(|this, _: &SelectUp, _, cx| {
+            this.move_cursor(Move::Up, true, cx);
+        }))
+        .on_action(cx.listener(|this, _: &SelectDown, _, cx| {
+            this.move_cursor(Move::Down, true, cx);
+        }))
+        .on_action(cx.listener(|this, _: &SelectPageUp, _, cx| {
+            this.move_cursor(Move::PageUp, true, cx);
+        }))
+        .on_action(cx.listener(|this, _: &SelectPageDown, _, cx| {
+            this.move_cursor(Move::PageDown, true, cx);
+        }))
+        .on_action(cx.listener(|this, _: &SelectFirst, _, cx| {
+            this.move_cursor(Move::First, true, cx);
+        }))
+        .on_action(cx.listener(|this, _: &SelectLast, _, cx| {
+            this.move_cursor(Move::Last, true, cx);
+        }))
+        .on_action(cx.listener(|this, _: &SelectAll, _, cx| this.select_all(cx)))
+        .on_action(cx.listener(|this, _: &ToggleSelected, _, cx| this.toggle_cursor(cx)))
+        .on_action(cx.listener(|this, _: &ClearSelection, window, cx| {
+            if this.previewing() {
+                this.close_preview(Some(window), cx);
+            } else {
+                this.clear_selection(cx);
+            }
+        }))
+    }
+
+    /// The quick look's actions on the window's root (see
+    /// `window::preview`). A key it doesn't take goes on as typed: a space
+    /// inside a name being jumped to stays part of the name, and one typed
+    /// into a text field (a picker's name, a path, a search) stays there.
+    /// (A text field takes the arrows itself before they get here.)
+    fn preview_keys(root: Div, cx: &Context<Self>) -> Div {
+        root.on_action(cx.listener(|this, _: &TogglePreview, window, cx| {
+            if !this.focus.is_focused(window) || this.jumping(cx) {
+                cx.propagate();
+            } else {
+                this.toggle_preview(window, cx);
+            }
+        }))
+        .on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
+            this.step_preview(Move::Up, cx);
+        }))
+        .on_action(cx.listener(|this, _: &PreviewNext, _, cx| {
+            this.step_preview(Move::Down, cx);
+        }))
     }
 }

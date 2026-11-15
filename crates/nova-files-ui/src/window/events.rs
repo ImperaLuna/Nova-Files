@@ -1,6 +1,6 @@
 //! The core's events as the window takes them: a listing arriving or
-//! refused, a search's files, details, thumbnails, places, pinned folders,
-//! drives, settings and the theme. Listings
+//! refused, a search's files, details, thumbnails, previews, places,
+//! pinned folders, drives, settings and the theme. Listings
 //! the window no longer wants are dropped here too, and the folder on
 //! screen read again when the core moved on from it (see `window`).
 
@@ -67,7 +67,7 @@ impl MainWindow {
         place: Place,
         cx: &mut Context<Self>,
     ) {
-        self.listing = Some(listing);
+        let before = self.listing.replace(listing);
         self.core_moved = false;
         self.details = HashMap::new();
         release(self.thumbnails.take_all(), None, cx);
@@ -77,6 +77,7 @@ impl MainWindow {
             self.jump = TypeJump::default();
             self.band = None;
         }
+        self.preview_listing_arrived(before.as_ref(), cx);
     }
 
     pub(super) fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
@@ -115,6 +116,8 @@ impl MainWindow {
             }
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
+            Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
+            Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::Settings(settings) => self.settings_arrived(settings, cx),
             Event::Drives(_) | Event::DriveDone { .. } | Event::DiskSpace(_) => {
                 self.drive_event(event, cx);
@@ -130,8 +133,6 @@ impl MainWindow {
             | Event::FindFailed { .. }
             | Event::Properties { .. }
             | Event::PropertiesUnreadable { .. }
-            | Event::Previewed { .. }
-            | Event::PreviewUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)

@@ -480,3 +480,17 @@ fn a_refusal_before_any_results_reads_the_folder_again(cx: &mut TestAppContext) 
     let (_, again) = core.next_listing().unwrap();
     assert_eq!(again, Path::new(SHOWN));
 }
+
+#[gpui::test]
+fn a_space_typed_into_the_box_stays_in_it(cx: &mut TestAppContext) {
+    // Space is also the quick look's.
+    let (view, cx, _core) = searching(cx);
+    cx.simulate_input("a");
+    cx.simulate_keystrokes("space");
+    cx.simulate_input("b");
+    cx.run_until_parked();
+    view.read_with(cx, |view, cx| {
+        assert_eq!(view.query(cx), "a b");
+        assert!(!view.previewing());
+    });
+}

@@ -7,8 +7,8 @@
 //! picker window picks the file double-clicked when it asks for files,
 //! and answers cancelled when it is closed. Its own keys are tested in
 //! `window_keys`, selecting in `window_select`, type to jump in
-//! `window_jump`, the path bar in `window_path`, and the sidebar in
-//! `window_sidebar`.
+//! `window_jump`, the path bar in `window_path`, the sidebar in
+//! `window_sidebar`, and the quick look in `window_preview`.
 
 #![expect(
     clippy::unwrap_used,
@@ -21,6 +21,7 @@ mod window_band;
 mod window_jump;
 mod window_keys;
 mod window_path;
+mod window_preview;
 mod window_select;
 mod window_sidebar;
 mod window_start;
