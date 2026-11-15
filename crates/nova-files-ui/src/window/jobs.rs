@@ -217,7 +217,7 @@ impl MainWindow {
             )
         {
             // Nothing was made to select.
-            self.wanted = None;
+            self.waiting = super::renaming::Waiting::Nothing;
         }
         self.trash_maybe_changed(&operation);
         let undo = self

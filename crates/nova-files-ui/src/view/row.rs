@@ -4,11 +4,13 @@
 //! for every part of the window.
 
 use std::ffi::OsStr;
+use std::ops::Range;
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, Context, Hsla, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, Pixels, RenderImage, Rgba, SharedString, Styled as _, div, img, svg,
+    AnyElement, Context, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, MouseButton,
+    MouseDownEvent, ParentElement as _, Pixels, RenderImage, Rgba, SharedString, Styled as _,
+    StyledText, div, img, svg,
 };
 use nova_files_api::EntryKind;
 
@@ -38,9 +40,10 @@ impl Corners {
 }
 
 /// One line of the columns: the name takes what the others leave, then
-/// a folder column when given (in the trash, Was in), and Size sits flush
-/// right. The Modified cell carries `modified_selector`. Modified and
-/// Size are drawn as details: smaller and dimmer.
+/// the Folder column while a search's files are on screen (in the trash,
+/// Was in), and Size sits flush right. The Modified cell carries
+/// `modified_selector`. Modified and Size are drawn as details: smaller
+/// and dimmer.
 pub fn cells(
     name: impl IntoElement,
     folder: Option<AnyElement>,
@@ -75,9 +78,17 @@ pub fn detail(text_content: String, colors: &Colors) -> impl IntoElement {
         .child(text_content)
 }
 
-/// An entry's name. A press on it is left for dragging files, so it
-/// marks itself for `band`.
-pub fn entry_name(name: SharedString, index: usize, cx: &Context<MainWindow>) -> impl IntoElement {
+/// An entry's name, the parts in `marks` (byte ranges) marked as a
+/// search's match. A press on it is left for dragging files, so it marks
+/// itself for `band`.
+pub fn entry_name(
+    name: SharedString,
+    marks: Vec<Range<usize>>,
+    index: usize,
+    cx: &Context<MainWindow>,
+) -> impl IntoElement {
+    let mark = mark_style(&Colors::of(cx));
+    let text = StyledText::new(name).with_highlights(marks.into_iter().map(|range| (range, mark)));
     div()
         .debug_selector(move || format!("name-{index}"))
         .min_w_0()
@@ -86,7 +97,16 @@ pub fn entry_name(name: SharedString, index: usize, cx: &Context<MainWindow>) ->
             MouseButton::Left,
             cx.listener(|this, _: &MouseDownEvent, _, _| this.pressed_name = true),
         )
-        .child(name)
+        .child(text)
+}
+
+/// How a search's match shows in a name: full-strength text on orange.
+fn mark_style(colors: &Colors) -> HighlightStyle {
+    HighlightStyle {
+        color: Some(colors.text.into()),
+        background_color: Some(colors.mark.into()),
+        ..HighlightStyle::default()
+    }
 }
 
 /// The ring around the row the keyboard is on, laid over the row so it
@@ -122,10 +142,13 @@ pub fn entry_icon(
                 .size(size::THUMBNAIL)
                 .rounded(radius::SMALL),
         ),
-        (None, EntryKind::Folder) => slot.child(icon(Icon::Folder, size::ROW_ICON, colors.folder)),
-        (None, EntryKind::File) => slot
-            .child(icon(Icon::File, size::ROW_ICON, colors.text_soft))
-            .child(
+        (None, EntryKind::Folder) => {
+            let (glyph, tint) = kind_glyph(EntryKind::Folder, colors);
+            slot.child(icon(glyph, size::ROW_ICON, tint))
+        }
+        (None, EntryKind::File) => {
+            let (glyph, tint) = kind_glyph(EntryKind::File, colors);
+            slot.child(icon(glyph, size::ROW_ICON, tint)).child(
                 div()
                     .absolute()
                     .left(size::TAG_LEFT)
@@ -134,7 +157,16 @@ pub fn entry_icon(
                     .h(size::TAG_HEIGHT)
                     .rounded_full()
                     .bg(FileKind::of(name).tag(colors.tags)),
-            ),
+            )
+        }
+    }
+}
+
+/// The icon and tint an entry of `kind` is drawn with.
+pub const fn kind_glyph(kind: EntryKind, colors: &Colors) -> (Icon, Rgba) {
+    match kind {
+        EntryKind::Folder => (Icon::Folder, colors.folder),
+        EntryKind::File => (Icon::File, colors.text_soft),
     }
 }
 
@@ -155,6 +187,14 @@ mod tests {
         top: true,
         bottom: true,
     };
+
+    #[test]
+    fn a_match_is_full_strength_text_on_orange() {
+        let colors = Colors::default();
+        let mark = mark_style(&colors);
+        assert_eq!(mark.color, Some(colors.text.into()));
+        assert_eq!(mark.background_color, Some(colors.mark.into()));
+    }
 
     #[test]
     fn touching_selected_rows_join_into_one_block() {

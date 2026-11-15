@@ -97,6 +97,7 @@ impl MainWindow {
         let empties = self.trash_open() && self.trash_count().is_some_and(|count| count > 0);
         bar.child(row)
             .child(fill)
+            .children(self.scope_chip(colors, cx))
             .when(empties, |bar| bar.child(empty_trash_chip(colors)))
     }
 
@@ -239,9 +240,11 @@ fn empty_trash_chip(colors: &Colors) -> impl IntoElement {
     div()
         .id("empty-trash")
         .debug_selector(|| "empty-trash".to_owned())
+        .flex()
         .flex_none()
+        .items_center()
+        .h(size::CHIP_HEIGHT)
         .px(size::CHIP_PAD)
-        .py(size::CHIP_PAD_Y)
         .rounded(radius::ROW)
         .text_color(colors.text_soft)
         .cursor_pointer()

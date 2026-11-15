@@ -37,7 +37,7 @@ fn a_paused_job_says_so_until_it_resumes(cx: &mut TestAppContext) {
 
 /// How many times the window asked the core for the trash since last
 /// asked.
-fn trash_asks(core: &Core) -> usize {
+fn trash_asks(core: &mut Core) -> usize {
     core.commands()
         .into_iter()
         .filter(|command| matches!(command, Command::ListTrash))
@@ -49,22 +49,22 @@ fn the_trash_is_read_again_on_arriving_in_it(cx: &mut TestAppContext) {
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
-    trash_asks(&core);
+    trash_asks(&mut core);
 
     view.update(cx, |view, _| view.open(Path::new(OTHER)));
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
-    assert_eq!(trash_asks(&core), 0);
+    assert_eq!(trash_asks(&mut core), 0);
 
     view.update(cx, MainWindow::open_trash);
     answer_listing(&mut core, 0);
     cx.run_until_parked();
-    assert_eq!(trash_asks(&core), 1);
+    assert_eq!(trash_asks(&mut core), 1);
 
     // Reading it again where it is asks nothing more.
     let trash = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
     view.update(cx, |view, _| view.open(&trash.unwrap()));
     answer_listing(&mut core, 0);
     cx.run_until_parked();
-    assert_eq!(trash_asks(&core), 0);
+    assert_eq!(trash_asks(&mut core), 0);
 }

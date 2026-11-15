@@ -74,6 +74,7 @@ impl MainWindow {
             id,
             path: path.to_path_buf(),
             entries: Arc::from([]),
+            folders: None,
         })
     }
 

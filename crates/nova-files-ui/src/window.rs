@@ -1,9 +1,12 @@
-//! The main window: the places on the left, the open folder's entries on
-//! the right, and an Up button. This file holds the window's state and
-//! opening it; the work is split by area: going places in `navigate`, the
-//! core's events in `events`, the rows on screen in `rows`, acting on the
-//! files selected in `acting` and `clipboard`, renaming and New folder
-//! in `renaming`, and the jobs they start in `jobs`. Drawing
+//! The main window: the places on the left, the open folder's entries (or
+//! the Start page) on the right, and an Up button. This file holds the
+//! window's state and opening it; the work is split by area: going places
+//! in `navigate`, pinning folders in `pin`, the folder tree's own line to
+//! the core in `tree`, the drives in `drives`, the Start page in `start`,
+//! the core's events in `events`, the rows on screen in `rows`, the
+//! quick look in `preview`, acting on the files selected in `acting` and
+//! `clipboard`, renaming and New folder in `renaming`, and the jobs they
+//! start in `jobs`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -17,7 +20,11 @@
 //! (once, and not when it is the folder just refused) to get its rows
 //! served: at the refusal, or at once if the refusal came first.
 //! Back and Forward follow the window's history (see `history`); a
-//! folder joins it once its listing is on screen. Re-reads and fallbacks
+//! folder joins it once its listing is on screen. The Start page needs
+//! nothing from the core to show, so going there arrives at once and lets
+//! go of the folder's listing (see `start`); a new window opens on it.
+//! Each folder that arrives as a new place in a main window is told to the
+//! core as used, for the Start page's recent folders. Re-reads and fallbacks
 //! leave the history alone. Paths are tidied by their text alone
 //! (`a/../b` is `b`), as a user reads them, so Up goes where the path on
 //! screen says.
@@ -32,43 +39,60 @@
 //! thumbnails. The window keeps only the thumbnails of those rows, shrunk
 //! to the size they're drawn (see `thumbnail`). A thumbnail it lets go of
 //! is dropped from GPUI's image atlas too (see `shown_thumbnails`).
+//!
+//! A search puts the files it found in the list's place (see `search`).
 
 mod acting;
 mod clipboard;
+mod drives;
 mod events;
 mod jobs;
 mod navigate;
+mod pin;
+mod preview;
 mod renaming;
 mod rows;
+mod search;
+mod start;
 mod trash;
+mod tree;
 
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
+pub use preview::{Previewed, Shown};
+pub use search::{FocusTo, Scope, short_folder};
 
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use futures::StreamExt as _;
-use futures::channel::mpsc::{self, UnboundedSender};
+use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing, ListingId,
-    Order, Place, Settings,
+    Bookmark, ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing,
+    ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
 
+use self::drives::Drives;
+use self::preview::QuickLooks;
+use self::tree::TreeLine;
 use crate::band::Band;
 use crate::history::History;
 use crate::island::Island;
 use crate::jump::TypeJump;
+use crate::location::Location;
+use crate::menu::Menu;
 use crate::path_bar::PathBar;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
+use crate::tree::FolderTree;
 use jobs::Jobs;
-use renaming::{Renaming, Wanted};
+use renaming::{Renaming, Waiting};
 use trash::TrashState;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
@@ -92,9 +116,11 @@ pub enum WindowEvent {
     Status(CoreStatus),
     /// A folder's listing is now on screen.
     Opened(PathBuf),
+    /// The Start page is now on screen.
+    StartShown,
     /// The folder asked for couldn't be read; the window stayed put.
     Refused(PathBuf),
-    /// The places list changed.
+    /// The places list or the pinned folders changed.
     Places,
     /// The settings changed.
     Settings,
@@ -104,6 +130,8 @@ pub enum WindowEvent {
 
 pub struct MainWindow {
     status: CoreStatus,
+    /// What connects to the core, for the windows this one opens.
+    connector: Connector,
     /// Held so the core counts this window until it closes.
     pub(crate) connection: Option<Connection>,
     /// The folder on screen, once its first listing has arrived.
@@ -124,6 +152,8 @@ pub struct MainWindow {
     pub(crate) selection: Option<Selection>,
     /// The letters typed to jump to a name (see `jump`).
     pub(crate) jump: TypeJump,
+    /// The quick look, while it is open (see `preview`).
+    pub(crate) quick_looks: QuickLooks,
     /// A press on the entries list being dragged (see `band`).
     pub(crate) band: Option<Band>,
     /// Whether the press under way began on an entry's name.
@@ -145,9 +175,22 @@ pub struct MainWindow {
     /// Where to go, in order, while the window has no folder and the one
     /// asked for can't be read.
     fallbacks: Vec<PathBuf>,
+    /// Whether the folder asked for is a fallback, which nobody chose, so
+    /// it doesn't count as used.
+    pub(crate) falling_back: bool,
     pub(crate) places: Vec<Place>,
+    /// The sidebar's folder tree under Home, and its line to the core.
+    pub(crate) tree: FolderTree,
+    tree_line: TreeLine,
+    /// The folders the user pinned, in their order.
+    pinned: Arc<[Bookmark]>,
     /// Where the window has been, for Back and Forward.
     pub(crate) history: History,
+    /// The recent folders the Start page shows, newest first, as the core
+    /// last sent them (see `start`).
+    pub(crate) recent: Vec<RecentFolder>,
+    /// The newest ask for the recent folders; only its answer counts.
+    pub(crate) recent_asked: RecentId,
     /// The path bar's open menu (see `path_bar`).
     pub(crate) path_bar: PathBar,
     pub(crate) scroll: UniformListScrollHandle,
@@ -157,6 +200,12 @@ pub struct MainWindow {
     pub(crate) home: PathBuf,
     /// The settings as the core last sent them.
     settings: Settings,
+    /// The drives and how full they are (see `drives`).
+    pub(crate) drives: Drives,
+    /// The menu open over the window, if any (see `menu`).
+    pub(crate) menu: Option<Menu>,
+    /// The search box and the search under way (see `search`).
+    pub(crate) search: search::Search,
     /// Focus for the window's own keys (see `commands`).
     pub(crate) focus: FocusHandle,
     /// What the island at the bottom of the sheet says (see `island`).
@@ -168,11 +217,8 @@ pub struct MainWindow {
     pub(crate) counted: SharedString,
     /// The rename under way (see `renaming`).
     renaming: Option<Renaming>,
-    /// The entry to select once a listing holds it, after a rename or a
-    /// new folder.
-    wanted: Option<Wanted>,
-    /// Start renaming what is selected when the window next draws.
-    rename_next_frame: bool,
+    /// What a rename or a new folder waits for (see `renaming`).
+    waiting: Waiting,
     /// The trash, and what the window knows of it (see `trash`).
     trash: TrashState,
     _events: Task<()>,
@@ -208,12 +254,23 @@ impl MainWindow {
         home: PathBuf,
         cx: &mut Context<Self>,
     ) -> Self {
-        let (sink, mut events) = mpsc::unbounded();
+        Self::at(connector, &Location::from(folder), home, cx)
+    }
+
+    /// Opens a window at `location`, with `home` as the home folder.
+    pub fn at(
+        connector: &Connector,
+        location: &Location,
+        home: PathBuf,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let (sink, events) = mpsc::unbounded();
         let connection = connector
             .connect(ChannelSink(sink))
             .and_then(|connection| {
                 connection.send(Command::Ping)?;
                 connection.send(Command::Places)?;
+                connection.send(Command::Drives)?;
                 connection.send(Command::Settings)?;
                 connection.send(Command::Theme)?;
                 connection.send(Command::ListTrash)?;
@@ -225,21 +282,10 @@ impl MainWindow {
         } else {
             CoreStatus::Gone
         };
-        let events = cx.spawn(async move |this, cx| {
-            while let Some(event) = events.next().await {
-                if this
-                    .update(cx, |this, cx| this.on_event(event, cx))
-                    .is_err()
-                {
-                    return;
-                }
-            }
-            // The core dropped this window's events: it has stopped.
-            this.update(cx, |this, cx| this.set_status(CoreStatus::Gone, cx))
-                .ok();
-        });
+        let events = Self::listen(events, cx);
         let trash = TrashState::new(&home, None);
         let mut window = Self {
+            connector: connector.clone(),
             status,
             connection,
             listing: None,
@@ -249,6 +295,7 @@ impl MainWindow {
             rows_drawn: 0..0,
             selection: None,
             jump: TypeJump::default(),
+            quick_looks: QuickLooks::default(),
             band: None,
             pressed_name: false,
             scale_factor: DEFAULT_SCALE_FACTOR,
@@ -261,34 +308,76 @@ impl MainWindow {
             next_listing: 0,
             // Popped from the end: home first, then the root.
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
+            tree: FolderTree::new(home.clone()),
+            falling_back: false,
             home,
             places: Vec::new(),
+            tree_line: TreeLine::connect(connector, cx),
+            pinned: Arc::from([]),
             history: History::default(),
+            recent: Vec::new(),
+            recent_asked: RecentId(0),
             path_bar: PathBar::new(connector.clone()),
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
+            drives: Drives::default(),
+            menu: None,
+            search: search::Search::new(cx),
             focus: cx.focus_handle(),
             island: Island::default(),
             jobs: Jobs::default(),
             counted: SharedString::default(),
             renaming: None,
-            wanted: None,
-            rename_next_frame: false,
+            waiting: Waiting::Nothing,
             trash,
             _events: events,
         };
-        window.open(folder);
+        match location {
+            Location::Start => window.open_start(cx),
+            Location::Folder(folder) => window.open(folder),
+        }
         window
+    }
+
+    /// Hands the core's events to the window as they come, until the core
+    /// drops them.
+    fn listen(mut events: UnboundedReceiver<Event>, cx: &Context<Self>) -> Task<()> {
+        cx.spawn(async move |this, cx| {
+            while let Some(event) = events.next().await {
+                if this
+                    .update(cx, |this, cx| this.on_event(event, cx))
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            // The core dropped this window's events: it has stopped.
+            this.update(cx, |this, cx| this.set_status(CoreStatus::Gone, cx))
+                .ok();
+        })
     }
 
     pub const fn status(&self) -> CoreStatus {
         self.status
     }
 
-    /// The folder on screen, if one has arrived yet.
+    /// Where the window is, once it has been anywhere.
+    pub const fn location(&self) -> Option<&Location> {
+        self.history.here()
+    }
+
+    /// Whether the Start page is on screen.
+    pub fn is_on_start(&self) -> bool {
+        self.location() == Some(&Location::Start)
+    }
+
+    /// The folder on screen, if one has arrived yet, none on Start; while
+    /// a search is under way, the folder it started in.
     pub fn folder(&self) -> Option<&Path> {
-        self.listing.as_ref().map(|listing| listing.path.as_path())
+        self.search
+            .from()
+            .or_else(|| self.listing.as_ref().map(|listing| listing.path.as_path()))
     }
 
     /// Whether a folder asked for hasn't answered yet.
@@ -296,7 +385,8 @@ impl MainWindow {
         self.asked.is_some()
     }
 
-    /// The names on screen, in order.
+    /// The names on screen, in order: a folder's entries, or the files a
+    /// search found.
     pub fn entry_names(&self) -> Vec<String> {
         self.listing.as_ref().map_or_else(Vec::new, |listing| {
             listing
@@ -314,6 +404,11 @@ impl MainWindow {
 
     pub fn places(&self) -> &[Place] {
         &self.places
+    }
+
+    /// The folders the user pinned, in their order.
+    pub fn pinned(&self) -> &[Bookmark] {
+        &self.pinned
     }
 
     /// The settings as the core last sent them.

@@ -1,6 +1,7 @@
 //! Searching home through the real core, with its index in a temp cache
 //! folder: stages, changes made after the index was built, reusing a saved
-//! index, and searches that can't run.
+//! index, and searches that can't run. Finding files for a window too:
+//! hits as a listing whose rows are served like a folder's.
 
 #![expect(
     clippy::unwrap_used,
@@ -15,7 +16,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-use nova_files_api::{Command, Connection, Event, Hit, MAX_HITS, Matched, SearchFailed, SearchId};
+use nova_files_api::{
+    Command, Connection, EntryId, EntryKind, Event, Hit, Listing, ListingId, MAX_HITS, Matched,
+    Order, SearchFailed, SearchId,
+};
 use nova_files_core::{Home, IDLE_EXIT, IndexPlace, RunningCore};
 
 /// How long a test waits for the core before it counts as a failure; the
@@ -109,6 +113,42 @@ impl Client {
             .send(Command::Search { id, query, limit })
             .unwrap();
         id
+    }
+
+    /// Asks for files named like `query` as a listing.
+    fn find(&mut self, query: &str, within: Option<PathBuf>) -> ListingId {
+        self.next += 1;
+        let id = ListingId(self.next);
+        let query = query.to_owned();
+        self.connection
+            .send(Command::Find { id, query, within })
+            .unwrap();
+        id
+    }
+
+    /// The listing of files named like `query`.
+    fn found(&mut self, query: &str, within: Option<PathBuf>) -> Listing {
+        let asked = self.find(query, within);
+        let Event::FolderListed(listing) = self.answer() else {
+            panic!("expected a listing");
+        };
+        assert_eq!(listing.id, asked);
+        listing
+    }
+
+    /// The listing's entries as paths under home, with their kinds.
+    fn found_paths(&self, listing: &Listing) -> Vec<(PathBuf, EntryKind)> {
+        listing
+            .entries
+            .iter()
+            .map(|entry| {
+                let path = listing.path_of(entry);
+                (
+                    path.strip_prefix(&self.home).unwrap().to_owned(),
+                    entry.kind,
+                )
+            })
+            .collect()
     }
 
     fn answer(&self) -> Event {
@@ -256,4 +296,90 @@ fn an_index_that_cant_be_saved_fails() {
     let id = client.send("report", LIMIT);
     let reason = SearchFailed::IndexFailed;
     assert_eq!(client.answer(), Event::SearchFailed { id, reason });
+}
+
+#[test]
+fn found_files_are_a_listing_best_first_with_every_stage() {
+    let scratch = Scratch::new(&["Documents/report.pdf", "Old/repart.txt"]);
+    fs::create_dir_all(scratch.home().join("Reports/report")).unwrap();
+    let mut client = scratch.core(Some(scratch.place()));
+    let listing = client.found("report", None);
+    assert_eq!(listing.path, scratch.home());
+    assert_eq!(
+        client.found_paths(&listing),
+        [
+            (PathBuf::from("Reports/report"), EntryKind::Folder),
+            (PathBuf::from("Documents/report.pdf"), EntryKind::File),
+            (PathBuf::from("Reports"), EntryKind::Folder),
+            (PathBuf::from("Old/repart.txt"), EntryKind::File),
+        ]
+    );
+}
+
+#[test]
+fn found_files_within_a_folder_are_only_those_inside_it() {
+    let scratch = Scratch::new(&["Documents/a/report.pdf", "Old/report.txt"]);
+    let mut client = scratch.core(Some(scratch.place()));
+    let documents = scratch.home().join("Documents");
+    let listing = client.found("report", Some(documents.clone()));
+    assert_eq!(listing.path, documents);
+    assert_eq!(
+        client.found_paths(&listing),
+        [(PathBuf::from("Documents/a/report.pdf"), EntryKind::File)]
+    );
+}
+
+#[test]
+fn rows_of_found_files_get_their_details() {
+    let scratch = Scratch::new(&["Documents/report.pdf"]);
+    fs::write(scratch.home().join("Documents/report.pdf"), b"12345").unwrap();
+    let mut client = scratch.core(Some(scratch.place()));
+    let listing = client.found("report", None);
+    let rows = Command::Rows {
+        id: listing.id,
+        first: EntryId(0),
+        count: 1,
+    };
+    client.connection.send(rows).unwrap();
+    let Event::DetailsRead { id, details, .. } = client.answer() else {
+        panic!("expected details");
+    };
+    assert_eq!((id, details[0].size), (listing.id, Some(5)));
+}
+
+#[test]
+fn a_folder_asked_for_after_a_find_replaces_it() {
+    let scratch = Scratch::new(&["Documents/report.pdf"]);
+    let mut client = scratch.core(Some(scratch.place()));
+    // Indexed, so the next find is quick but still runs on its thread.
+    client.found("report", None);
+    client.find("report", None);
+    client.next += 1;
+    let folder = ListingId(client.next);
+    let list = Command::ListFolder {
+        id: folder,
+        path: scratch.home(),
+        order: Order::default(),
+    };
+    client.connection.send(list).unwrap();
+    // Whatever the find managed to send first, the folder comes last.
+    let started = Instant::now();
+    loop {
+        let Event::FolderListed(listing) = client.answer() else {
+            panic!("expected a listing");
+        };
+        if listing.id == folder {
+            break;
+        }
+        assert!(started.elapsed() < ANSWER_TIMEOUT);
+    }
+}
+
+#[test]
+fn without_a_cache_folder_find_fails() {
+    let scratch = Scratch::new(&[]);
+    let mut client = scratch.core(None);
+    let id = client.find("report", None);
+    let reason = SearchFailed::NoIndex;
+    assert_eq!(client.answer(), Event::FindFailed { id, reason });
 }

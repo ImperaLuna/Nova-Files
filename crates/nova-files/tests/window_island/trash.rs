@@ -49,7 +49,7 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     let chip = cx.debug_bounds("empty-trash").unwrap();
     let slot = cx.debug_bounds("path").unwrap();
     assert!(slot.right() - chip.right() < chip.left() - slot.left());
-    assert!(slot.right() - chip.right() < gpui::px(10.0));
+    assert!(slot.right() - chip.right() < px(10.0));
 
     click(cx, "island-dismiss");
     click(cx, "name-0");
@@ -150,8 +150,8 @@ async fn a_trash_never_used_shows_empty(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("empty-trash").is_none());
     // Back goes to where the window was.
     assert_eq!(
-        view.read_with(cx, |view, _| view.back_target().map(Path::to_path_buf)),
-        Some(tree.path().to_path_buf())
+        view.read_with(cx, |view, _| view.back_target().cloned()),
+        Some(Location::from(tree.path()))
     );
 }
 
