@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::{Context, ScrollStrategy, UniformListScrollHandle};
-use nova_files_api::{Event, Listing, ListingId, Settings, Theme, Thumbnails};
+use nova_files_api::{Event, Listing, ListingId, Place, Settings, Theme, Thumbnails};
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -130,12 +130,16 @@ impl MainWindow {
             | Event::Trash(_)
             | Event::Undoable { .. }
             | Event::UndoGone(_) => {}
-            Event::Places(places) => {
-                self.places = places;
-                cx.emit(WindowEvent::Places);
-                cx.notify();
-            }
+            Event::Places(places) => self.places_arrived(places, cx),
         }
+    }
+
+    /// Takes the places the core sent, which it sends again whenever they
+    /// change.
+    fn places_arrived(&mut self, places: Vec<Place>, cx: &mut Context<Self>) {
+        self.places = places;
+        cx.emit(WindowEvent::Places);
+        cx.notify();
     }
 
     /// Takes the settings the core sent, which it sends again whenever
