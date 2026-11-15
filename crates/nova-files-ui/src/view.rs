@@ -52,7 +52,7 @@ use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
     CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenSelected, PreviewNext, PreviewPrevious,
     SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp,
-    TogglePreview, ToggleSelected,
+    ToggleHidden, TogglePreview, ToggleSelected,
 };
 use crate::commands::{
     CloseTab, CopySelected, CutSelected, EmptyTrash, NewFolder, NewTab, NextTab, Paste,
@@ -95,6 +95,7 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
+            .on_action(cx.listener(|this, _: &ToggleHidden, _, _| this.toggle_hidden()))
             .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
             .map(|root| Self::file_keys(root, cx))

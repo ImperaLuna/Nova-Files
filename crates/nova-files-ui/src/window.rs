@@ -5,8 +5,9 @@
 //! the core in `tree`, the drives in `drives`, the Start page in `start`,
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
-//! `clipboard`, renaming and New folder in `renaming`, and the jobs they
-//! start in `jobs`, and the tabs in `tabs`. Drawing
+//! `clipboard`, renaming and New folder in `renaming`, the jobs they
+//! start in `jobs`, the tabs in `tabs`, and showing hidden files in
+//! `hidden`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -46,6 +47,7 @@ mod acting;
 mod clipboard;
 mod drives;
 mod events;
+mod hidden;
 mod jobs;
 mod navigate;
 mod pin;

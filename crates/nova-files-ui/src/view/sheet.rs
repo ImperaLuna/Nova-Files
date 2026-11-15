@@ -15,7 +15,8 @@
 //! Folder column, and the part of each name that matched is marked. The
 //! count and the empty look are the search's (see `search`). The
 //! trash adds a Was in column, and says so when it is empty (see
-//! `window::trash`).
+//! `window::trash`). A hidden entry's name and icon are dimmed (see
+//! `window::hidden`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -144,20 +145,7 @@ impl MainWindow {
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let line = cells(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(size::NAME_GAP)
-                                .child(entry_icon(
-                                    &entry.name,
-                                    entry.kind,
-                                    this.thumbnail(index),
-                                    &colors,
-                                ))
-                                .child(this.rename_field(index).map_or_else(
-                                    || entry_name(name.into(), marks, index, cx).into_any_element(),
-                                    |field| rename_box(field.clone(), &colors).into_any_element(),
-                                )),
+                            this.name_cell(entry, index, (name, marks), cx),
                             folder,
                             detail(columns.modified, &colors),
                             detail(columns.size, &colors),
@@ -189,6 +177,40 @@ impl MainWindow {
 }
 
 impl MainWindow {
+    /// The `index`th entry's icon and name, with the parts of the name in
+    /// `marks` marked; its rename field in place of the name while it is
+    /// renamed. A hidden entry is dimmed.
+    fn name_cell(
+        &self,
+        entry: &Entry,
+        index: usize,
+        (name, marks): (String, Vec<std::ops::Range<usize>>),
+        cx: &Context<Self>,
+    ) -> Div {
+        let colors = &Colors::of(cx);
+        let hidden = entry.is_hidden();
+        div()
+            .flex()
+            .items_center()
+            .gap(size::NAME_GAP)
+            .when(hidden, |line| line.text_color(colors.text_dim))
+            .child(
+                div()
+                    .flex_none()
+                    .when(hidden, |slot| slot.opacity(opacity::HIDDEN))
+                    .child(entry_icon(
+                        &entry.name,
+                        entry.kind,
+                        self.thumbnail(index),
+                        colors,
+                    )),
+            )
+            .child(self.rename_field(index).map_or_else(
+                || entry_name(name.into(), marks, index, cx).into_any_element(),
+                |field| rename_box(field.clone(), colors).into_any_element(),
+            ))
+    }
+
     /// "Empty" in the middle of an empty trash.
     fn empty_trash(&self, colors: &Colors) -> Option<impl IntoElement> {
         let empty = self

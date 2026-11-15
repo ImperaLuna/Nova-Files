@@ -61,6 +61,7 @@ mod actions {
             CloseTab,
             NextTab,
             PreviousTab,
+            ToggleHidden,
         ]
     );
 }
@@ -137,6 +138,7 @@ pub const ACTIONS: &[ActionSpec] = &[
     CLOSE_TAB,
     NEXT_TAB,
     PREVIOUS_TAB,
+    HIDDEN,
 ];
 
 spec!(
@@ -313,6 +315,10 @@ spec!(
 spec!(
     /// Shows the tab before, the last before the first.
     PREVIOUS_TAB, PreviousTab, "tab.previous", "Previous tab", ["ctrl-shift-tab"]
+);
+spec!(
+    /// Lists the hidden entries in every folder, or leaves them out again.
+    HIDDEN, ToggleHidden, "view.hidden", "Show hidden files", ["ctrl-h"]
 );
 
 /// Binds every action's default keys.
