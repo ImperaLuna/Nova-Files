@@ -58,13 +58,6 @@ impl TrashState {
     }
 }
 
-/// The data folder `$XDG_DATA_HOME` names, when it is an absolute path.
-pub fn data_folder() -> Option<PathBuf> {
-    std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-}
-
 impl MainWindow {
     /// Goes to the trash. Before anything was ever trashed its folder
     /// isn't there; the window then shows it empty (see `missing_trash`).

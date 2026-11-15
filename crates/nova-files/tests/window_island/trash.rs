@@ -44,7 +44,12 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     assert_eq!(view.read_with(cx, |view, _| view.trash_count()), Some(1));
     cx.run_until_parked();
     assert!(cx.debug_bounds("head-was-in").is_some());
-    assert!(cx.debug_bounds("empty-trash").is_some());
+    // Empty Trash sits at the far end of the path's slot, nearer its edge
+    // than the path's own text.
+    let chip = cx.debug_bounds("empty-trash").unwrap();
+    let slot = cx.debug_bounds("path").unwrap();
+    assert!(slot.right() - chip.right() < chip.left() - slot.left());
+    assert!(slot.right() - chip.right() < gpui::px(10.0));
 
     click(cx, "island-dismiss");
     click(cx, "name-0");
@@ -148,4 +153,76 @@ async fn a_trash_never_used_shows_empty(cx: &mut TestAppContext) {
         view.read_with(cx, |view, _| view.back_target().map(Path::to_path_buf)),
         Some(tree.path().to_path_buf())
     );
+}
+
+#[gpui::test]
+async fn in_the_trash_files_only_go_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("trash-only-back");
+    let home = TempFolder::tree("trash-only-back-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    // Something to paste.
+    click(cx, "name-0");
+    cx.simulate_keystrokes("ctrl-c");
+    trash_and_open(
+        &view,
+        cx,
+        "name-1",
+        "Moved notes.txt to Trash",
+        &["notes.txt"],
+    )
+    .await;
+    click(cx, "island-dismiss");
+    click(cx, "name-0");
+    cx.simulate_keystrokes("ctrl-c");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.note().is_none()));
+    cx.simulate_keystrokes("ctrl-v");
+    cx.run_until_parked();
+    assert_eq!(view.read_with(cx, |view, _| view.jobs_pending()), 0);
+    cx.simulate_keystrokes("f2");
+    cx.run_until_parked();
+    assert!(!view.read_with(cx, |view, _| view.renaming()));
+    assert_eq!(
+        view.read_with(cx, |view, _| view.entry_names()),
+        ["notes.txt"]
+    );
+}
+
+#[gpui::test]
+async fn undoing_elsewhere_stays_in_the_folder_on_screen(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("trash-stay");
+    let home = TempFolder::tree("trash-stay-home");
+    let notes = tree.path().join("notes.txt");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("delete");
+    wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
+    view.update(cx, |view, _| view.open(&projects));
+    wait_for_names(&view, cx, &["nova"]).await;
+    // The undo changes the trash, which isn't on screen.
+    cx.simulate_keystrokes("ctrl-z");
+    view.condition::<WindowEvent>(cx, |view, _| view.jobs_pending() == 0)
+        .await;
+    cx.run_until_parked();
+    assert!(notes.is_file());
+    assert!(!view.read_with(cx, |view, _| view.trash_open()));
+    assert_eq!(view.read_with(cx, |view, _| view.entry_names()), ["nova"]);
+}
+
+#[gpui::test]
+async fn an_empty_folder_is_not_called_an_empty_trash(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("trash-not");
+    let home = TempFolder::tree("trash-not-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    view.update(cx, |view, _| view.open(&tree.path().join("Projects/nova")));
+    wait_for_names(&view, cx, &[]).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("trash-empty").is_none());
 }

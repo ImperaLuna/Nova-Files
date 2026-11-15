@@ -188,7 +188,11 @@ impl MainWindow {
     /// Opens a window on `folder`.
     pub fn new(connector: &Connector, folder: &Path, cx: &mut Context<Self>) -> Self {
         let mut window = Self::with_home(connector, folder, home_folder(), cx);
-        window.trash = TrashState::new(&window.home, trash::data_folder());
+        // `$XDG_DATA_HOME`, when it is an absolute path, holds the trash.
+        let data = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute());
+        window.trash = TrashState::new(&window.home, data);
         window
     }
 
