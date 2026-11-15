@@ -585,3 +585,26 @@ fn a_new_order_reads_again_the_folder_asked_for_last(cx: &mut TestAppContext) {
         assert_eq!(view.back_target(), None);
     });
 }
+
+#[gpui::test]
+fn a_finished_job_reads_again_only_the_folder_it_changed(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    let finished = |changed: &str| Event::JobFinished {
+        job: nova_files_api::JobId(9),
+        outcome: nova_files_api::Outcome::Done,
+        changed: vec![PathBuf::from(changed)],
+    };
+
+    core.send(finished(OTHER));
+    cx.run_until_parked();
+    assert_eq!(core.next_listing(), None);
+
+    core.send(finished(SHOWN));
+    cx.run_until_parked();
+    assert_eq!(
+        core.next_listing().map(|(_, path)| path),
+        Some(PathBuf::from(SHOWN))
+    );
+}
