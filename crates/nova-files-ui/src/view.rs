@@ -63,21 +63,8 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
-            .when(main, |root| {
-                root.on_action(cx.listener(|this, _: &FocusSearch, _, cx| {
-                    this.focus_later(FocusTo::Box, cx);
-                }))
-            })
+            .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-                // Keys typed in the search box are its own.
-                if this.search_focused(window, cx) {
-                    return;
-                }
-                if this.search_key(event, cx) || this.jump_typed(event, cx) {
-                    cx.stop_propagation();
-                }
-            }))
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 this.band_moved(event, cx);
             }))
@@ -99,7 +86,10 @@ impl Render for MainWindow {
             .size_full()
             .flex()
             .flex_col()
-            .bg(colors.window)
+            // The sheet's color fills the window once, and the window's
+            // own color is painted only around the sheet: a software
+            // renderer pays for every layer it fills.
+            .bg(colors.sheet)
             .text_color(colors.text_soft)
             .font_family(text::FAMILY)
             .text_size(text::BODY)
@@ -109,17 +99,29 @@ impl Render for MainWindow {
                     .flex()
                     .flex_1()
                     .min_h_0()
-                    .gap(size::GAP)
-                    .pt(size::GAP)
-                    .pl(size::GAP)
-                    .child(self.sidebar(cx))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_none()
+                            .px(size::GAP)
+                            .pt(size::GAP)
+                            .bg(colors.window)
+                            .child(self.sidebar(cx)),
+                    )
                     .child(
                         div()
                             .flex()
                             .flex_col()
                             .flex_1()
                             .min_w_0()
-                            .child(self.top_bar(&colors, cx))
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .pt(size::GAP)
+                                    .bg(colors.window)
+                                    .child(self.top_bar(&colors, cx)),
+                            )
                             .child(self.sheet(cx)),
                     ),
             )
@@ -128,6 +130,25 @@ impl Render for MainWindow {
 }
 
 impl MainWindow {
+    /// What typing does on the window's root: Ctrl+F and `/` go to the
+    /// search box in a main window, other letters jump to a name. Keys
+    /// typed in the search box are its own.
+    fn typed_keys(root: Div, main: bool, cx: &Context<Self>) -> Div {
+        root.when(main, |root| {
+            root.on_action(cx.listener(|this, _: &FocusSearch, _, cx| {
+                this.focus_later(FocusTo::Box, cx);
+            }))
+        })
+        .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+            if this.search_focused(window, cx) {
+                return;
+            }
+            if this.search_key(event, cx) || this.jump_typed(event, cx) {
+                cx.stop_propagation();
+            }
+        }))
+    }
+
     /// The selection's actions on the window's root (see `selecting`).
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &OpenSelected, _, _| this.open_selected()))
