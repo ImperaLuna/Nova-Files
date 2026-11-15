@@ -26,6 +26,7 @@ pub(super) fn answer(
             client.want_rows(id, first, count, setup.settings.current().thumbnails);
         }
         Command::Search { id, query, limit } => setup.searcher.search(client, id, query, limit),
+        Command::Find { id, query, within } => setup.searcher.find(client, id, query, within),
         Command::Properties { id, path } => properties::answer(client.events(), id, path),
         Command::OpenFile { path, activation } => {
             jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);

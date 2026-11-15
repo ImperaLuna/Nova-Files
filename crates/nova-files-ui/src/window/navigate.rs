@@ -1,9 +1,11 @@
 //! Going places: a new folder, Back, Forward, Up and into an entry. Each
 //! folder asks the core for a listing with a new id, in the window's
 //! order; the window moves once that id answers (see `events`). Back or
-//! Forward to the Start page arrives at once (see `start`). Changing the order
-//! reads the folder again. Any ask closes the path bar's menu. Paths are
-//! tidied by their text alone, as a user reads them.
+//! Forward to the Start page arrives at once (see `start`). Changing the
+//! order reads the folder again, except while a search's files are on
+//! screen, which stay best first. Going anywhere ends a search (see
+//! `search`) and closes the path bar's menu. Paths are tidied by their
+//! text alone, as a user reads them.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -17,6 +19,7 @@ impl MainWindow {
     /// Goes to `folder`, a new place in the history: asks the core for it,
     /// and the window moves there once it answers.
     pub fn open(&mut self, folder: &Path) {
+        self.forget_drive_to_open();
         self.history.leave();
         self.request(folder);
     }
@@ -24,6 +27,7 @@ impl MainWindow {
     /// Goes back to the place before this one, if there is one.
     pub fn go_back(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.back() {
+            self.forget_drive_to_open();
             self.go_to(&place, cx);
         }
     }
@@ -31,6 +35,7 @@ impl MainWindow {
     /// Goes forward again after Back, if there is somewhere to go.
     pub fn go_forward(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.forward() {
+            self.forget_drive_to_open();
             self.go_to(&place, cx);
         }
     }
@@ -56,7 +61,8 @@ impl MainWindow {
     }
 
     /// Asks the core for `folder`, leaving the history as it is: the
-    /// window moves there once it answers. Whether the ask was sent.
+    /// window moves there once it answers, ending a search under way.
+    /// Whether the ask was sent.
     pub(super) fn request(&mut self, folder: &Path) -> bool {
         // Only a fallback's own ask marks it, after this returns.
         self.falling_back = false;
@@ -73,6 +79,7 @@ impl MainWindow {
         });
         let sent = matches!(sent, Some(Ok(())));
         if sent {
+            self.search.folder_asked();
             // Going anywhere closes a path bar menu, and its connection
             // with it, so the core stops reading that menu's folder.
             self.close_path_menu();
@@ -95,6 +102,10 @@ impl MainWindow {
     /// still on its way) is read again in the new order; the window keeps
     /// its place in the history.
     pub fn sort_by(&mut self, key: SortKey) {
+        // A search's files stay best first.
+        if self.searching() {
+            return;
+        }
         let folder = if self.waiting() {
             self.requested.clone()
         } else {
@@ -117,7 +128,7 @@ impl MainWindow {
         if let Some(entry) = entry
             && entry.kind == EntryKind::Folder
         {
-            let folder = listing.path.join(&entry.name);
+            let folder = listing.path_of(entry);
             self.open(&folder);
         }
     }

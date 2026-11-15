@@ -13,11 +13,12 @@
 
 use std::collections::HashSet;
 use std::ops::Range;
-use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 
-use nova_files_api::{ClientGone, Details, Entry, EntryId, Event, EventSink, ListingId, MAX_ROWS};
+use nova_files_api::{
+    ClientGone, Details, EntryId, Event, EventSink, Listing, ListingId, MAX_ROWS,
+};
 
 use crate::details;
 
@@ -38,7 +39,7 @@ struct Shared {
 
 #[derive(Default)]
 struct State {
-    listing: Option<Arc<Listed>>,
+    listing: Option<Arc<Listing>>,
     wanted: Range<usize>,
     /// Entries of the listing whose details were sent.
     read: HashSet<usize>,
@@ -65,16 +66,9 @@ impl State {
     }
 }
 
-/// The listing on the client's screen.
-struct Listed {
-    id: ListingId,
-    folder: PathBuf,
-    entries: Arc<[Entry]>,
-}
-
 /// The next entries to read: `entries` of listing `listed`.
 struct Run {
-    listed: Arc<Listed>,
+    listed: Arc<Listing>,
     entries: Range<usize>,
 }
 
@@ -97,22 +91,12 @@ impl Queue {
     /// before the client hears of the listing, so its first request finds
     /// it. `current` is asked under the queue's lock, so a listing that was
     /// replaced meanwhile can't overwrite the one after it.
-    pub fn show(
-        &self,
-        id: ListingId,
-        folder: PathBuf,
-        entries: Arc<[Entry]>,
-        current: impl FnOnce() -> bool,
-    ) {
+    pub fn show(&self, listing: &Listing, current: impl FnOnce() -> bool) {
         self.shared.update(|state| {
             if !current() {
                 return;
             }
-            state.listing = Some(Arc::new(Listed {
-                id,
-                folder,
-                entries,
-            }));
+            state.listing = Some(Arc::new(listing.clone()));
             state.wanted = 0..0;
             state.read.clear();
         });
@@ -221,12 +205,9 @@ impl Shared {
 
 fn work(shared: &Shared, events: &dyn EventSink) {
     while let Some(run) = shared.next_run() {
-        let listed = &run.listed;
         // `want` keeps the wanted entries inside the listing.
-        let entries = listed.entries.get(run.entries.clone()).unwrap_or_default();
-        let Some(read) =
-            details::read_batch(&listed.folder, entries, || !shared.still_wanted(&run))
-        else {
+        let entries = details::listed(&run.listed, run.entries.clone());
+        let Some(read) = details::read_batch(entries, || !shared.still_wanted(&run)) else {
             continue;
         };
         if shared.send(&run, read, events).is_err() {
@@ -238,9 +219,10 @@ fn work(shared: &Shared, events: &dyn EventSink) {
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
+    use std::path::PathBuf;
     use std::sync::mpsc;
 
-    use nova_files_api::EntryKind;
+    use nova_files_api::{Entry, EntryKind};
 
     use super::*;
 
@@ -255,10 +237,11 @@ mod tests {
             })
             .collect();
         State {
-            listing: Some(Arc::new(Listed {
+            listing: Some(Arc::new(Listing {
                 id: ListingId(0),
-                folder: PathBuf::new(),
+                path: PathBuf::new(),
                 entries,
+                folders: None,
             })),
             wanted,
             read: read.iter().copied().collect(),
@@ -280,10 +263,11 @@ mod tests {
     /// A run of entries `entries` of a listing with id `id`.
     fn run(id: u64, entries: Range<usize>) -> Run {
         Run {
-            listed: Arc::new(Listed {
+            listed: Arc::new(Listing {
                 id: ListingId(id),
-                folder: PathBuf::new(),
+                path: PathBuf::new(),
                 entries: Arc::new([]),
+                folders: None,
             }),
             entries,
         }
