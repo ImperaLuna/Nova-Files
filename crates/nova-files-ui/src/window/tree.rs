@@ -15,7 +15,7 @@ use futures::channel::mpsc;
 use gpui::{Context, Task};
 use nova_files_api::{Command, Connection, Connector, Event, Listing, ListingId, Order};
 
-use super::{MainWindow, WindowSink};
+use super::{ChannelSink, MainWindow};
 
 /// The tree's connection and the folder it asked for.
 pub struct TreeLine {
@@ -30,7 +30,7 @@ impl TreeLine {
     /// Connects the tree to the core; without a core, it lists nothing.
     pub fn connect(connector: &Connector, cx: &Context<MainWindow>) -> Self {
         let (sink, mut events) = mpsc::unbounded();
-        let connection = connector.connect(WindowSink(sink)).ok();
+        let connection = connector.connect(ChannelSink(sink)).ok();
         let events = cx.spawn(async move |this, cx| {
             while let Some(event) = events.next().await {
                 if this
