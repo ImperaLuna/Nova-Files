@@ -5,6 +5,7 @@
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 mod scripted_drives;
+mod scripted_jobs;
 mod scripted_search;
 mod scripted_select;
 mod scripted_tree;

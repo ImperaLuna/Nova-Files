@@ -1,6 +1,7 @@
 //! The island: one floating bar at the bottom of the sheet, where the
 //! window says what it is doing and what the user can do next. It shows
-//! one thing at a time, the most important first: a note after an action
+//! one thing at a time, the most important first: a running job's
+//! progress (see `progress`), a note after an action
 //! ("Moved 3 items to Trash", with Undo), then the selection ("3 selected
 //! · 12 MB", with what can be done to it). With nothing to show it goes
 //! down, and the sheet's quiet count ("4 folders, 9 files") shows in its
@@ -211,6 +212,8 @@ const fn failure(reason: Failure) -> &'static str {
         Failure::Other => "the system refused",
     }
 }
+
+pub mod progress;
 
 #[cfg(test)]
 mod tests;

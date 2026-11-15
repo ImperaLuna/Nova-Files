@@ -398,6 +398,10 @@ pub mod size {
     pub const ISLAND_DIVIDER_HEIGHT: Pixels = px(20.0);
     /// Room under the last row, so the island never covers it.
     pub const ISLAND_CLEARANCE: Pixels = px(68.0);
+    /// The bar of a running job on the island, and the space after it.
+    pub const PROGRESS_WIDTH: Pixels = px(140.0);
+    pub const PROGRESS_HEIGHT: Pixels = px(6.0);
+    pub const PROGRESS_RIGHT: Pixels = px(12.0);
     /// A worded button on the island (Undo).
     pub const TEXT_BUTTON_PAD: Pixels = px(12.0);
     /// The quiet count while the island is down: where it sits from the

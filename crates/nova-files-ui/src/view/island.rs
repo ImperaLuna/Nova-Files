@@ -1,27 +1,30 @@
-//! Draws the island over the bottom of the sheet (see `island`): a note
-//! with its Undo, or the selection with what can be done to it. While it
+//! Draws the island over the bottom of the sheet (see `island`): a
+//! running job's line and orange bar, a note with its Undo, or the
+//! selection with what can be done to it. While it
 //! is down, the sheet's quiet count shows at the bottom left instead.
 //!
 //! Its buttons send the window's actions, as keys do (see `commands`);
 //! only closing a note, which no key does, is handled here. Each part a
 //! test clicks carries a debug selector: `island`, `island-copy`,
 //! `island-cut`, `island-trash`, `island-clear`, `island-undo`,
-//! `island-dismiss`, and the count, `count`.
+//! `island-dismiss`, `island-progress`, `island-cancel`, and the count, `count`.
 
 use gpui::{
     Action, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement as _, IntoElement,
     ParentElement as _, Rgba, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
-    div, point, prelude::FluentBuilder as _, px,
+    div, point, prelude::FluentBuilder as _, px, relative,
 };
 
 use super::row::icon;
 use crate::assets::Icon;
 use crate::commands::{ClearSelection, CopySelected, CutSelected, TrashSelected, Undo};
+use crate::island::progress::Running;
 use crate::island::{self, Note};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
 const UNDO_LABEL: &str = "Undo";
+const CANCEL_LABEL: &str = "Cancel";
 
 impl MainWindow {
     /// The island, or the quiet count while the island is down.
@@ -29,6 +32,8 @@ impl MainWindow {
         let colors = Colors::of(cx);
         let parts = if self.pick.is_some() {
             None
+        } else if let Some((_, job)) = self.job_on_island(cx) {
+            Some(job_parts(job, &colors, cx))
         } else if let Some(note) = &self.island.note {
             Some(note_parts(note, &colors, cx))
         } else if self.selected_count() > 0 {
@@ -83,6 +88,43 @@ impl MainWindow {
             )
         })
     }
+}
+
+/// A running job's line and bar, and Cancel while it waits.
+fn job_parts(job: &Running, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gpui::AnyElement> {
+    let now = cx.background_executor().now();
+    let mut parts = vec![
+        label(colors).child(job.line(now)).into_any_element(),
+        div()
+            .debug_selector(|| "island-progress".to_owned())
+            .flex_none()
+            .w(size::PROGRESS_WIDTH)
+            .h(size::PROGRESS_HEIGHT)
+            .mr(size::PROGRESS_RIGHT)
+            .rounded_full()
+            .bg(colors.press)
+            .overflow_hidden()
+            .child(
+                div()
+                    .h_full()
+                    .w(relative(job.fraction()))
+                    .rounded_full()
+                    .bg(colors.accept),
+            )
+            .into_any_element(),
+    ];
+    if job.waiting {
+        parts.push(
+            square("island-cancel", colors)
+                .w_auto()
+                .px(size::TEXT_BUTTON_PAD)
+                .font_weight(text::STRONG_WEIGHT)
+                .child(SharedString::new_static(CANCEL_LABEL))
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.cancel_job(cx)))
+                .into_any_element(),
+        );
+    }
+    parts
 }
 
 /// A note's line, its Undo when it has one, and a button to close it.

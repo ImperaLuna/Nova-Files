@@ -127,13 +127,18 @@ impl MainWindow {
             }
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
+            event @ (Event::JobProgress { .. }
+            | Event::ConflictAnswered { .. }
+            | Event::JobPaused(_)
+            | Event::JobResumed(_)) => self.job_moved(&event, cx),
             event @ (Event::JobStarted { .. }
             | Event::JobFinished { .. }
+            | Event::JobConflict { .. }
             | Event::Undoable { .. }
             | Event::UndoGone(_)) => self.job_event(event, cx),
-            // The window doesn't open files or show a job's progress yet,
-            // and only a picker's opening asks for the window state (see
-            // `window_state`).
+            // The window doesn't wait on a file opening and never watches
+            // jobs it didn't start; only a picker's opening asks for the
+            // window state (see `window_state`).
             Event::FolderUnreadable { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
@@ -144,11 +149,6 @@ impl MainWindow {
             | Event::FileNotOpened
             | Event::WindowState(_)
             | Event::JobRunning { .. }
-            | Event::JobConflict { .. }
-            | Event::ConflictAnswered { .. }
-            | Event::JobProgress { .. }
-            | Event::JobPaused(_)
-            | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
             | Event::OpenWith(_)
             | Event::SizeMeasured { .. }

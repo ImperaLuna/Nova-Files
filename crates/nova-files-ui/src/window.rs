@@ -54,6 +54,7 @@ mod search;
 mod start;
 mod tree;
 
+pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
 pub use preview::{Previewed, Shown};
 pub use search::{FocusTo, Scope, short_folder};
