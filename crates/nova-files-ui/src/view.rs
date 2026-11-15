@@ -255,12 +255,12 @@ impl MainWindow {
 
     /// The quick look's actions on the window's root (see
     /// `window::preview`). A key it doesn't take goes on as typed: a space
-    /// inside a name being jumped to stays part of the name, and in a
-    /// picker or a path being typed Space goes to its text field. (The
-    /// name box takes the arrows itself before they get here.)
+    /// inside a name being jumped to stays part of the name, and one typed
+    /// into a text field (a picker's name, a path, a search) stays there.
+    /// (A text field takes the arrows itself before they get here.)
     fn preview_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &TogglePreview, window, cx| {
-            if this.pick.is_some() || this.path_bar.field.is_some() || this.jumping(cx) {
+            if !this.focus.is_focused(window) || this.jumping(cx) {
                 cx.propagate();
             } else {
                 this.toggle_preview(window, cx);
