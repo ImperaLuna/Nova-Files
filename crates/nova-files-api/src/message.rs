@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::bookmark::{Bookmark, BookmarkChange};
+use crate::disk_space::PathSpace;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
@@ -121,6 +122,10 @@ pub enum Command {
     /// [`Event::DriveDone`]; the change itself reaches every client that
     /// asked for the drives as [`Event::Drives`].
     Drive(DriveAction),
+    /// Ask how full the drives holding `paths` (absolute paths) are. The
+    /// answer is [`Event::DiskSpace`], one entry per path in the same
+    /// order; paths past [`crate::MAX_DISK_SPACE_PATHS`] are left out.
+    DiskSpace(Vec<PathBuf>),
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -260,6 +265,9 @@ pub enum Event {
         action: DriveAction,
         result: Result<Option<PathBuf>, DriveFailure>,
     },
+    /// How full the drives are, answering [`Command::DiskSpace`]: one
+    /// entry per path asked, in the same order.
+    DiskSpace(Vec<PathSpace>),
     /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
     /// asked hears it, and before anything else about the job.
     JobStarted { tag: JobTag, job: JobId },

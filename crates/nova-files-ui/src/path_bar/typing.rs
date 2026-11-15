@@ -1,0 +1,195 @@
+//! Typing a path into the path bar. A click on the bar's empty part turns
+//! it into the app's text field (see `text`) holding the folder on
+//! screen's path, `~` for the home folder, all selected. Enter goes where
+//! the text says, read as a picker's name box reads it (see
+//! `pick::typed`): `~` is the home folder and a path without a leading
+//! `/` is taken from the folder on screen. The field stays until that
+//! folder is on screen; a folder that can't be read selects the text
+//! again, so the next keys replace it. Enter on the path as it was, or on
+//! nothing, just puts the crumbs back. Escape puts them back too, and the
+//! window takes the keys again; so does a press anywhere else, or the
+//! field losing the keys.
+//!
+//! The text shown is the path as text; a name that isn't valid UTF-8 can't
+//! be typed, but Enter on the unchanged text never goes anywhere else.
+
+use std::path::{Path, PathBuf};
+
+use gpui::{AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
+use nova_files_api::ListingId;
+
+use crate::crumbs::under_home;
+use crate::pick::typed::{self, HOME, Typed};
+use crate::text::{TextField, TextFieldEvent};
+use crate::window::MainWindow;
+
+/// The path bar while it is a text field.
+pub struct PathField {
+    pub(crate) field: Entity<TextField>,
+    /// The text it started with.
+    shown: String,
+    /// The listing Enter asked for, while it is on its way.
+    going: Option<ListingId>,
+    _events: Subscription,
+    _blur: Subscription,
+}
+
+/// How the path bar shows `folder`: `~` for `home` and what is in it.
+pub fn shown_path(folder: &Path, home: &Path) -> String {
+    match under_home(folder, home) {
+        Some(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
+        Some(rest) => format!("{HOME}/{}", rest.to_string_lossy()),
+        None => folder.to_string_lossy().into_owned(),
+    }
+}
+
+impl MainWindow {
+    /// The path bar's text field, while it is one.
+    pub fn path_field(&self) -> Option<&Entity<TextField>> {
+        self.path_bar.field.as_ref().map(|typing| &typing.field)
+    }
+
+    /// Turns the path bar into a text field holding the folder on screen's
+    /// path, all selected, and gives it the keys.
+    pub(crate) fn start_typing_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(folder) = self.folder() else { return };
+        let shown = shown_path(folder, &self.home);
+        self.close_path_menu();
+        let field = cx.new(TextField::new);
+        field.update(cx, |field, cx| {
+            field.set_text(&shown, cx);
+            field.select_range(0..shown.len(), cx);
+        });
+        let events = cx.subscribe_in(&field, window, |this, _, event, window, cx| match event {
+            TextFieldEvent::Submitted => this.submit_typed_path(window, cx),
+            TextFieldEvent::Cancelled => this.stop_typing_path(Some(window), cx),
+            TextFieldEvent::Changed => {}
+        });
+        let focus = field.read(cx).focus_handle(cx);
+        let blur = cx.on_blur(&focus, window, |this, _, cx| {
+            this.stop_typing_path(None, cx);
+        });
+        window.focus(&focus, cx);
+        self.path_bar.field = Some(PathField {
+            field,
+            shown,
+            going: None,
+            _events: events,
+            _blur: blur,
+        });
+        cx.notify();
+    }
+
+    /// Puts the crumbs back; with `window`, the keys go back where they
+    /// were before (see `keys_home`).
+    pub(crate) fn stop_typing_path(&mut self, window: Option<&mut Window>, cx: &mut Context<Self>) {
+        if self.path_bar.field.take().is_some()
+            && let Some(window) = window
+        {
+            window.focus(&self.keys_home(cx), cx);
+        }
+        cx.notify();
+    }
+
+    /// Goes where the typed text says.
+    fn submit_typed_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(path_field) = &self.path_bar.field else {
+            return;
+        };
+        let text = path_field.field.read(cx).text().to_owned();
+        let target = if text == path_field.shown {
+            None
+        } else {
+            self.folder()
+                .and_then(|folder| typed_target(&text, &self.home, folder))
+        };
+        let Some(target) = target else {
+            self.stop_typing_path(Some(window), cx);
+            return;
+        };
+        let before = self.asked;
+        self.open(&target);
+        let asked = self.asked.filter(|_| self.asked != before);
+        let Some(path_field) = &mut self.path_bar.field else {
+            return;
+        };
+        path_field.going = asked;
+        // Not sent: the core has stopped. The text is selected again.
+        if asked.is_none() {
+            select_all(&path_field.field, cx);
+        }
+    }
+
+    /// A folder's listing is on screen: the path bar shows crumbs again,
+    /// unless it is the folder on screen read again and nothing typed is
+    /// on its way.
+    pub(crate) fn typed_path_arrived(&mut self, same_folder: bool) {
+        let ends = self
+            .path_bar
+            .field
+            .as_ref()
+            .is_some_and(|field| field.going.is_some() || !same_folder);
+        if ends {
+            self.path_bar.field = None;
+        }
+    }
+
+    /// The listing `id` was refused: if it was the one typed, the text is
+    /// selected again for the next try.
+    pub(crate) fn typed_path_refused(&mut self, id: ListingId, cx: &mut Context<Self>) {
+        let Some(path_field) = &mut self.path_bar.field else {
+            return;
+        };
+        if path_field.going != Some(id) {
+            return;
+        }
+        path_field.going = None;
+        select_all(&path_field.field, cx);
+    }
+}
+
+/// Selects all of `field`'s text, so the next keys replace it.
+fn select_all(field: &Entity<TextField>, cx: &mut Context<MainWindow>) {
+    field.update(cx, |field, cx| {
+        let all = 0..field.text().len();
+        field.select_range(all, cx);
+    });
+}
+
+/// Where `text`, typed in `folder` with `~` for `home`, goes; none for
+/// nothing typed.
+fn typed_target(text: &str, home: &Path, folder: &Path) -> Option<PathBuf> {
+    match typed::read(text, home, folder) {
+        Typed::Nothing => None,
+        Typed::Folder(path) | Typed::Path(path) => Some(path),
+        Typed::Name(name) => Some(folder.join(name)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_folder_under_home_shows_with_a_tilde() {
+        let home = Path::new("/home/me");
+        assert_eq!(shown_path(home, home), "~");
+        assert_eq!(shown_path(Path::new("/home/me/a/b"), home), "~/a/b");
+        assert_eq!(shown_path(Path::new("/home/meg"), home), "/home/meg");
+        assert_eq!(shown_path(Path::new("/etc"), home), "/etc");
+        assert_eq!(shown_path(Path::new("me/a"), Path::new("me")), "me/a");
+        assert_eq!(shown_path(Path::new("/etc"), Path::new("/")), "/etc");
+    }
+
+    #[test]
+    fn typed_text_goes_from_the_folder_on_screen_or_home() {
+        let (home, folder) = (Path::new("/home/me"), Path::new("/home/me/a"));
+        let target = |text| typed_target(text, home, folder);
+        assert_eq!(target("~"), Some(PathBuf::from("/home/me")));
+        assert_eq!(target("~/b"), Some(PathBuf::from("/home/me/b")));
+        assert_eq!(target("/etc"), Some(PathBuf::from("/etc")));
+        assert_eq!(target("c"), Some(PathBuf::from("/home/me/a/c")));
+        assert_eq!(target("c/d/"), Some(PathBuf::from("/home/me/a/c/d/")));
+        assert_eq!(target(" "), None);
+    }
+}
