@@ -4,7 +4,9 @@
 # All three jobs are required checks, so they always run. The two long ones
 # wait for the stack guard, then look at what the pull request changes
 # (tools/ci-needs-run.sh) and, when nothing is there for them, report
-# success in seconds without setting anything up.
+# success in seconds without setting anything up. The mutation job also
+# reports success in seconds when the same changes passed in an earlier run
+# (tools/ci-mutants-key.sh).
 #
 # A new push cancels the run it replaces, and a failed job cancels the
 # rest of its run. Built Nix store paths come from
@@ -31,6 +33,8 @@ permissions:
 
 env:
   CACHIX_CACHE: nova-de
+  # Saved under the key of a pull request's changes once they pass.
+  MUTANTS_MARKER: target/mutants-passed
 
 jobs:
   # A stacked pull request (base isn't main) may change code only: docs,
@@ -112,7 +116,7 @@ jobs:
 
   # On pull requests: mutation tests on the changed lines, split over up to
   # four runners (tools/ci-mutants-shard.sh decides how many the mutants are
-  # worth). On main: one runner and only a build, to save the cargo cache.
+  # worth), unless the same changes already passed. On main: one runner and only a build, to save the cargo cache.
   # GitHub lets a PR restore caches saved on main but not ones saved on other
   # PR branches, so main keeps it warm.
   mutants:
@@ -124,6 +128,10 @@ jobs:
     strategy:
       matrix:
         shard: ${{ fromJSON(github.event_name == 'pull_request' && '[0, 1, 2, 3]' || '[0]') }}
+    # The same on every shard; mutants-result saves the marker with them.
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+      passed: ${{ steps.passed.outputs.cache-hit }}
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
     steps:
@@ -140,7 +148,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: actions/cache/restore@v4
         with:
-          path: target/mutants-passed
+          path: ${{ env.MUTANTS_MARKER }}
           key: ${{ steps.key.outputs.key }}
           lookup-only: true
       - name: Look for Rust changes
@@ -235,8 +243,8 @@ jobs:
   # The required check. The shards' names carry their index, so this job
   # keeps the one name the ruleset asks for, and fails unless every shard
   # passed (a skipped job, after a failed stack guard, fails it too).
-  # On a pass it saves a marker keyed on the pull request's own Rust changes
-  # (tools/ci-mutants-key.sh). The diff runs from the PR's base branch, so a
+  # On a new pass it saves a marker keyed on the pull request's own Rust
+  # changes (tools/ci-mutants-key.sh). The diff runs from the PR's base branch, so a
   # stacked PR mutates only its own code; and when a lower PR merges and this
   # one moves onto main, or main is merged in, the same changes find the
   # marker and the shards skip their work.
@@ -245,28 +253,22 @@ jobs:
     needs: mutants
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    # Saving the marker can wait on the cache service a little.
+    timeout-minutes: 5
+    env:
+      SAVE: ${{ github.event_name == 'pull_request' && needs.mutants.outputs.passed != 'true' }}
     steps:
       - name: Every shard passed
         env:
           RESULT: ${{ needs.mutants.result }}
         run: test "$RESULT" = success
-      - uses: actions/checkout@v5
-        if: github.event_name == 'pull_request'
-        with:
-          # The merge commit and its base parent, for the key.
-          fetch-depth: 2
-      - name: Mark these changes as passed
-        id: key
-        if: github.event_name == 'pull_request'
+      - name: Write the marker
+        if: env.SAVE == 'true'
         run: |
-          tools/ci-mutants-key.sh >>"$GITHUB_OUTPUT"
-          mkdir -p target
-          echo "$GITHUB_SHA" >target/mutants-passed
+          mkdir -p "$(dirname "$MUTANTS_MARKER")"
+          echo "$GITHUB_SHA" >"$MUTANTS_MARKER"
       - uses: actions/cache/save@v4
-        # A run that skipped on an earlier pass finds the key taken; the
-        # action only warns then.
-        if: github.event_name == 'pull_request'
+        if: env.SAVE == 'true'
         with:
-          path: target/mutants-passed
-          key: ${{ steps.key.outputs.key }}
+          path: ${{ env.MUTANTS_MARKER }}
+          key: ${{ needs.mutants.outputs.key }}
