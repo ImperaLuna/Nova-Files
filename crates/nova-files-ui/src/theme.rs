@@ -291,6 +291,13 @@ pub mod size {
     pub const SEARCH_WIDTH: Pixels = px(220.0);
     pub const SEARCH_PAD: Pixels = px(12.0);
     pub const SEARCH_GAP: Pixels = px(9.0);
+    /// The count of files a search found, over the sheet's bottom left.
+    pub const STATUS_INSET: Pixels = px(12.0);
+    pub const STATUS_PAD_X: Pixels = px(8.0);
+    pub const STATUS_PAD_Y: Pixels = px(3.0);
+    /// What shows in an empty list: a quiet icon over one word or two.
+    pub const EMPTY_ICON: Pixels = px(44.0);
+    pub const EMPTY_GAP: Pixels = px(10.0);
     /// A button or text field in the pick bar.
     pub const CONTROL_HEIGHT: Pixels = px(38.0);
     pub const CONTROL_PAD: Pixels = px(16.0);

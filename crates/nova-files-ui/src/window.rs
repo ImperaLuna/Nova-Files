@@ -30,12 +30,16 @@
 //! thumbnails. The window keeps only the thumbnails of those rows, shrunk
 //! to the size they're drawn (see `thumbnail`). A thumbnail it lets go of
 //! is dropped from GPUI's image atlas too (see `shown_thumbnails`).
+//!
+//! A search puts the files it found in the list's place (see `search`).
 
 mod events;
 mod navigate;
 mod rows;
+mod search;
 
 pub use navigate::tidy;
+pub use search::FocusTo;
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -143,6 +147,8 @@ pub struct MainWindow {
     pub(crate) home: PathBuf,
     /// The settings as the core last sent them.
     settings: Settings,
+    /// The search box and the search under way (see `search`).
+    pub(crate) search: search::Search,
     /// Focus for the window's own keys (see `commands`).
     pub(crate) focus: FocusHandle,
     _events: Task<()>,
@@ -230,6 +236,7 @@ impl MainWindow {
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
+            search: search::Search::new(cx),
             focus: cx.focus_handle(),
             _events: events,
         };
@@ -241,9 +248,12 @@ impl MainWindow {
         self.status
     }
 
-    /// The folder on screen, if one has arrived yet.
+    /// The folder on screen, if one has arrived yet; while a search is
+    /// under way, the folder it started in.
     pub fn folder(&self) -> Option<&Path> {
-        self.listing.as_ref().map(|listing| listing.path.as_path())
+        self.search
+            .from()
+            .or_else(|| self.listing.as_ref().map(|listing| listing.path.as_path()))
     }
 
     /// Whether a folder asked for hasn't answered yet.
@@ -251,7 +261,8 @@ impl MainWindow {
         self.asked.is_some()
     }
 
-    /// The names on screen, in order.
+    /// The names on screen, in order: a folder's entries, or the files a
+    /// search found.
     pub fn entry_names(&self) -> Vec<String> {
         self.listing.as_ref().map_or_else(Vec::new, |listing| {
             listing
