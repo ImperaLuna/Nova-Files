@@ -25,9 +25,10 @@
 //! line up. The slots later features fill carry one each: `sidebar`,
 //! `path`, `search` and `views`; the search's parts carry `search-box`,
 //! `match-count` and `no-matches`, and the path bar's own are listed in
-//! `path`.
+//! `path`. The island over the bottom of the sheet is drawn in `island`.
 
 mod bar;
+mod island;
 mod menu;
 mod path;
 mod path_menu;
@@ -53,6 +54,7 @@ use crate::commands::{
     SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp,
     TogglePreview, ToggleSelected,
 };
+use crate::commands::{TrashSelected, Undo};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
 use crate::window::{FocusTo, MainWindow};
@@ -90,16 +92,8 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
-            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
-                this.band_moved(event, cx);
-            }))
-            .on_scroll_wheel(cx.listener(|this, _: &ScrollWheelEvent, _, cx| {
-                this.band_scrolled(cx);
-            }))
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
-            )
+            .map(|root| Self::file_keys(root, cx))
+            .map(|root| Self::band_events(root, cx))
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),
                 cx.listener(|this, _: &MouseDownEvent, _, cx| this.go_back(cx)),
@@ -126,6 +120,27 @@ impl MainWindow {
 }
 
 impl MainWindow {
+    /// A box being dragged follows the pointer anywhere in the window
+    /// (see `band`).
+    fn band_events(root: Div, cx: &Context<Self>) -> Div {
+        root.on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+            this.band_moved(event, cx);
+        }))
+        .on_scroll_wheel(cx.listener(|this, _: &ScrollWheelEvent, _, cx| {
+            this.band_scrolled(cx);
+        }))
+        .on_mouse_up(
+            MouseButton::Left,
+            cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
+        )
+    }
+
+    /// The actions on the files selected (see `window::acting`).
+    fn file_keys(root: Div, cx: &Context<Self>) -> Div {
+        root.on_action(cx.listener(|this, _: &TrashSelected, _, _| this.trash_selected()))
+            .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
+    }
+
     /// The sidebar beside the bar and sheet; above them when `narrow`.
     /// Only the strips around the sheet are painted the window's color.
     fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {

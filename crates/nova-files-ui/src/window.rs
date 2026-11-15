@@ -4,7 +4,8 @@
 //! in `navigate`, pinning folders in `pin`, the folder tree's own line to
 //! the core in `tree`, the drives in `drives`, the Start page in `start`,
 //! the core's events in `events`, the rows on screen in `rows`, and the
-//! quick look in `preview`. Drawing
+//! quick look in `preview`, acting on the files selected in `acting`,
+//! and the jobs that does in `jobs`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -40,8 +41,10 @@
 //!
 //! A search puts the files it found in the list's place (see `search`).
 
+mod acting;
 mod drives;
 mod events;
+mod jobs;
 mod navigate;
 mod pin;
 mod preview;
@@ -61,7 +64,9 @@ use std::sync::Arc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
-use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, Task, UniformListScrollHandle};
+use gpui::{
+    App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
+};
 use nova_files_api::{
     Bookmark, ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing,
     ListingId, Order, Place, RecentFolder, RecentId, Settings,
@@ -72,6 +77,7 @@ use self::preview::QuickLooks;
 use self::tree::TreeLine;
 use crate::band::Band;
 use crate::history::History;
+use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::menu::Menu;
@@ -80,6 +86,7 @@ use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
 use crate::tree::FolderTree;
+use jobs::Jobs;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
 /// which is never too small.
@@ -194,6 +201,13 @@ pub struct MainWindow {
     pub(crate) search: search::Search,
     /// Focus for the window's own keys (see `commands`).
     pub(crate) focus: FocusHandle,
+    /// What the island at the bottom of the sheet says (see `island`).
+    pub(crate) island: Island,
+    /// The jobs this window started (see `jobs`).
+    jobs: Jobs,
+    /// The quiet count of the listing on screen, worked out once when it
+    /// arrives, so a frame never walks a long folder (see `view::island`).
+    pub(crate) counted: SharedString,
     _events: Task<()>,
 }
 
@@ -302,6 +316,9 @@ impl MainWindow {
             menu: None,
             search: search::Search::new(cx),
             focus: cx.focus_handle(),
+            island: Island::default(),
+            jobs: Jobs::default(),
+            counted: SharedString::default(),
             _events: events,
         };
         match location {

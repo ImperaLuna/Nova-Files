@@ -8,7 +8,8 @@
 //! and answers cancelled when it is closed. Its own keys are tested in
 //! `window_keys`, selecting in `window_select`, type to jump in
 //! `window_jump`, the path bar in `window_path`, the sidebar in
-//! `window_sidebar`, and the quick look in `window_preview`.
+//! `window_sidebar`, the quick look in `window_preview`, and the island
+//! and its file actions in `window_island`.
 
 #![expect(
     clippy::unwrap_used,
@@ -18,6 +19,7 @@
 
 mod common;
 mod window_band;
+mod window_island;
 mod window_jump;
 mod window_keys;
 mod window_path;

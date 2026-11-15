@@ -58,6 +58,7 @@ impl MainWindow {
                     sheet
                         .child(self.column_heads(&colors, cx))
                         .child(self.entries_area(cx))
+                        .child(self.island(cx))
                 }
             })
     }
@@ -173,6 +174,7 @@ impl MainWindow {
         )
         .track_scroll(&self.scroll)
         .size_full()
+        .pb(size::ISLAND_CLEARANCE)
     }
 }
 

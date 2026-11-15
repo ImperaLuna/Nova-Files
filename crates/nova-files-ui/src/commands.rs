@@ -44,6 +44,8 @@ mod actions {
             SelectAll,
             ToggleSelected,
             ClearSelection,
+            TrashSelected,
+            Undo,
             TogglePreview,
             PreviewPrevious,
             PreviewNext,
@@ -107,6 +109,8 @@ pub const ACTIONS: &[ActionSpec] = &[
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
+    TRASH,
+    UNDO,
     PREVIEW,
     PREVIEW_PREVIOUS,
     PREVIEW_NEXT,
@@ -208,6 +212,18 @@ spec!(
     ["escape"]
 );
 
+spec!(
+    TRASH,
+    TrashSelected,
+    "file.trash",
+    "Move to Trash",
+    ["delete"]
+);
+spec!(
+    /// Undoes what the island's note names, or else the window's last
+    /// job that can still be undone.
+    UNDO, Undo, "edit.undo", "Undo", ["ctrl-z"]
+);
 spec!(
     /// Opens the quick look on the selected entry, or closes it.
     PREVIEW, TogglePreview, "preview.toggle", "Preview", ["space"]

@@ -31,6 +31,8 @@ pub enum Icon {
     Search,
     List,
     Tiles,
+    Trash,
+    Rename,
     Plus,
     Close,
     Chevron,
@@ -39,7 +41,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 24] = [
+    const ALL: [Self; 26] = [
         Self::Folder,
         Self::File,
         Self::Home,
@@ -59,6 +61,8 @@ impl Icon {
         Self::Search,
         Self::List,
         Self::Tiles,
+        Self::Trash,
+        Self::Rename,
         Self::Plus,
         Self::Close,
         Self::Chevron,
@@ -88,6 +92,8 @@ impl Icon {
             Self::Search => "icons/search.svg",
             Self::List => "icons/list.svg",
             Self::Tiles => "icons/tiles.svg",
+            Self::Trash => "icons/trash.svg",
+            Self::Rename => "icons/rename.svg",
             Self::Plus => "icons/plus.svg",
             Self::Close => "icons/close.svg",
             Self::Chevron => "icons/chevron.svg",
@@ -117,6 +123,8 @@ impl Icon {
             Self::Search => svg::SEARCH,
             Self::List => svg::LIST,
             Self::Tiles => svg::TILES,
+            Self::Trash => svg::TRASH,
+            Self::Rename => svg::RENAME,
             Self::Plus => svg::PLUS,
             Self::Close => svg::CLOSE,
             Self::Chevron => svg::CHEVRON,

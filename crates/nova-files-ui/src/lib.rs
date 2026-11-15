@@ -17,6 +17,7 @@ mod commands;
 mod crumbs;
 mod drives;
 mod history;
+mod island;
 mod jump;
 mod kind;
 mod location;
@@ -47,6 +48,7 @@ use nova_files_api::{Connector, PickRequest};
 
 pub use columns::ColumnText;
 pub use commands::{ACTIONS, ActionSpec, bind_keys as bind_window_keys};
+pub use island::{NOTE_TIME, Note, NoteUndo};
 pub use location::Location;
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};

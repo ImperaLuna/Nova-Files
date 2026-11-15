@@ -1,6 +1,7 @@
 //! The core's events as the window takes them: a listing arriving or
 //! refused, a search's files, details, thumbnails, previews, places,
-//! pinned folders, drives, settings and the theme. Listings
+//! pinned folders, drives, settings, the theme, and jobs (handed to
+//! `jobs`). Listings
 //! the window no longer wants are dropped here too, and the folder on
 //! screen read again when the core moved on from it (see `window`).
 
@@ -13,6 +14,7 @@ use nova_files_api::{Bookmark, Event, Listing, ListingId, Settings, Theme, Thumb
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
+use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::theme::Colors;
@@ -67,6 +69,7 @@ impl MainWindow {
         place: Place,
         cx: &mut Context<Self>,
     ) {
+        self.counted = island::count_of(&listing.entries).into();
         let before = self.listing.replace(listing);
         self.core_moved = false;
         self.details = HashMap::new();
@@ -124,7 +127,11 @@ impl MainWindow {
             }
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            // The window never searches, opens files or starts jobs yet,
+            event @ (Event::JobStarted { .. }
+            | Event::JobFinished { .. }
+            | Event::Undoable { .. }
+            | Event::UndoGone(_)) => self.job_event(event, cx),
+            // The window doesn't open files or show a job's progress yet,
             // and only a picker's opening asks for the window state (see
             // `window_state`).
             Event::FolderUnreadable { .. }
@@ -136,7 +143,6 @@ impl MainWindow {
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)
-            | Event::JobStarted { .. }
             | Event::JobRunning { .. }
             | Event::JobConflict { .. }
             | Event::ConflictAnswered { .. }
@@ -144,14 +150,11 @@ impl MainWindow {
             | Event::JobPaused(_)
             | Event::JobResumed(_)
             | Event::JobInterrupted { .. }
-            | Event::JobFinished { .. }
             | Event::OpenWith(_)
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
             | Event::SpaceUnreadable { .. }
-            | Event::Trash(_)
-            | Event::Undoable { .. }
-            | Event::UndoGone(_) => {}
+            | Event::Trash(_) => {}
             Event::Places(places) => self.places_arrived(places, cx),
             Event::Bookmarks(pinned) => self.pinned_arrived(pinned, cx),
         }
@@ -267,6 +270,10 @@ impl MainWindow {
     pub(super) fn set_status(&mut self, status: CoreStatus, cx: &mut Context<Self>) {
         if self.status != status {
             self.status = status;
+            if matches!(status, CoreStatus::Gone) {
+                // No job of this window will say more.
+                self.jobs = super::jobs::Jobs::default();
+            }
             cx.emit(WindowEvent::Status(status));
             cx.notify();
         }
