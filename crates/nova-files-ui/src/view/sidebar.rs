@@ -68,7 +68,7 @@ impl MainWindow {
 }
 
 /// The icon a place is drawn with.
-pub(super) const fn place_icon(kind: PlaceKind) -> Icon {
+pub const fn place_icon(kind: PlaceKind) -> Icon {
     match kind {
         PlaceKind::Home => Icon::Home,
         PlaceKind::Desktop => Icon::Desktop,
