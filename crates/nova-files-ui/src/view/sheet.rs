@@ -42,9 +42,9 @@ impl MainWindow {
             .flex_col()
             .flex_1()
             .min_h_0()
+            .relative()
             .px(size::SHEET_PAD)
-            .bg(colors.sheet)
-            .rounded_tl(radius::SHEET)
+            .child(sheet_corner(&colors))
             .child(column_heads(
                 (!self.searching()).then(|| self.shown_order()),
                 &colors,
@@ -155,6 +155,19 @@ impl MainWindow {
         .track_scroll(&self.scroll)
         .size_full()
     }
+}
+
+/// The sheet's rounded corner where the sidebar and bar meet. The sheet
+/// itself is the window's fill (see `view`), so only this corner paints
+/// the window's color behind a rounded patch of the sheet's.
+fn sheet_corner(colors: &Colors) -> impl IntoElement {
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .size(radius::SHEET)
+        .bg(colors.window)
+        .child(div().size_full().rounded_tl(radius::SHEET).bg(colors.sheet))
 }
 
 /// Row `index`'s box, as wide as the list, highlighted under the pointer,
