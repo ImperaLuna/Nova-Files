@@ -11,7 +11,7 @@
 
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
+    ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _, div,
     prelude::FluentBuilder as _,
 };
 
@@ -60,40 +60,8 @@ impl MainWindow {
                     )
                 })
             });
-        let start = main.then(|| {
-            row(
-                Row {
-                    id: "place-start".into(),
-                    selector: "place-start".to_owned(),
-                    glyph: Icon::Start,
-                    name: START_LABEL.into(),
-                    number: None,
-                    here: self.is_on_start(),
-                },
-                narrow,
-                &colors,
-            )
-            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_start(cx)))
-        });
-        let trash = main.then(|| {
-            let count = self
-                .trash_count()
-                .filter(|count| *count > 0)
-                .map(|count| (count.to_string().into(), colors.text_dim));
-            row(
-                Row {
-                    id: "place-trash".into(),
-                    selector: "place-trash".to_owned(),
-                    glyph: Icon::Trash,
-                    name: TRASH_LABEL.into(),
-                    number: count,
-                    here: self.trash_open(),
-                },
-                narrow,
-                &colors,
-            )
-            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)))
-        });
+        let start = main.then(|| self.start_row(narrow, &colors, cx));
+        let trash = main.then(|| self.trash_row(narrow, &colors, cx));
         let pin = main.then(|| {
             section_button("pin", Icon::Plus, &colors)
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder_to_pin(cx)))
@@ -118,5 +86,43 @@ impl MainWindow {
                 &colors,
             ))
             .child(list.flex_col())
+    }
+
+    /// The Start page's row, first in Places.
+    fn start_row(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
+        row(
+            Row {
+                id: "place-start".into(),
+                selector: "place-start".to_owned(),
+                glyph: Icon::Start,
+                name: START_LABEL.into(),
+                number: None,
+                here: self.is_on_start(),
+            },
+            narrow,
+            colors,
+        )
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_start(cx)))
+    }
+
+    /// The trash's row, last in Places, with how many items it holds.
+    fn trash_row(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
+        let count = self
+            .trash_count()
+            .filter(|count| *count > 0)
+            .map(|count| (count.to_string().into(), colors.text_dim));
+        row(
+            Row {
+                id: "place-trash".into(),
+                selector: "place-trash".to_owned(),
+                glyph: Icon::Trash,
+                name: TRASH_LABEL.into(),
+                number: count,
+                here: self.trash_open(),
+            },
+            narrow,
+            colors,
+        )
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)))
     }
 }
