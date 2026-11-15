@@ -13,7 +13,7 @@
 //! what a quick look shows of a file or folder. Files cut or
 //! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
 //! a paste is a job. A [`Size`] is what a scan of files and folders
-//! counted.
+//! counted. A [`DiskSpace`] is how full a drive is.
 
 #![forbid(unsafe_code)]
 
@@ -21,6 +21,7 @@ mod access;
 mod bookmark;
 mod clipboard;
 mod connection;
+mod disk_space;
 mod drive;
 mod file_type;
 mod folder;
@@ -46,6 +47,7 @@ pub use clipboard::{
 pub use connection::{
     ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
 };
+pub use disk_space::{DiskSpace, MAX_DISK_SPACE_PATHS, PathSpace};
 pub use drive::{
     Drive, DriveAction, DriveFailure, DriveId, DriveList, DriveService, Volume, VolumeId,
 };

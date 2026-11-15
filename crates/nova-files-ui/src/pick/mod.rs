@@ -36,7 +36,7 @@ mod filter;
 mod opening;
 mod save;
 mod select;
-mod typed;
+pub mod typed;
 
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write as _};
