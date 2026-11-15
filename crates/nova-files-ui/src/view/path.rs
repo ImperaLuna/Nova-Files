@@ -242,7 +242,6 @@ fn empty_trash_chip(colors: &Colors) -> impl IntoElement {
         .flex_none()
         .px(size::CHIP_PAD)
         .py(size::CHIP_PAD_Y)
-        .mr(-size::CHIP_INSET)
         .rounded(radius::ROW)
         .text_color(colors.text_soft)
         .cursor_pointer()

@@ -297,7 +297,6 @@ pub mod size {
     /// A chip at the end of the path bar, such as Empty Trash.
     pub const CHIP_PAD: Pixels = px(10.0);
     pub const CHIP_PAD_Y: Pixels = px(5.0);
-    pub const CHIP_INSET: Pixels = px(6.0);
     /// The path bar and the search slot: the path takes what's left.
     pub const PATH_MIN_WIDTH: Pixels = px(150.0);
     /// The path bar's empty part after the crumbs, which always shows.

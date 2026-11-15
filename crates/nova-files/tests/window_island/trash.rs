@@ -44,8 +44,8 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     assert_eq!(view.read_with(cx, |view, _| view.trash_count()), Some(1));
     cx.run_until_parked();
     assert!(cx.debug_bounds("head-was-in").is_some());
-    // Empty Trash sits at the far end of the path's slot, nearer its edge
-    // than the path's own text.
+    // Empty Trash sits at the far end of the path bar, nearer its edge
+    // than the crumbs.
     let chip = cx.debug_bounds("empty-trash").unwrap();
     let slot = cx.debug_bounds("path").unwrap();
     assert!(slot.right() - chip.right() < chip.left() - slot.left());
