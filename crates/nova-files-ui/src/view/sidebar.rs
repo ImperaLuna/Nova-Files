@@ -57,7 +57,8 @@ impl MainWindow {
             .debug_selector(|| "sidebar".to_owned())
             .flex()
             .flex_col()
-            .flex_none()
+            .flex_1()
+            .min_h_0()
             .gap(size::PLACE_GAP)
             .w(size::SIDEBAR_WIDTH)
             .pb(size::GAP)
@@ -67,7 +68,7 @@ impl MainWindow {
 }
 
 /// The icon a place is drawn with.
-const fn place_icon(kind: PlaceKind) -> Icon {
+pub const fn place_icon(kind: PlaceKind) -> Icon {
     match kind {
         PlaceKind::Home => Icon::Home,
         PlaceKind::Desktop => Icon::Desktop,
