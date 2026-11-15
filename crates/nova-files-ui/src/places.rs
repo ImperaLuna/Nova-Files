@@ -5,13 +5,13 @@
 //! still reaches them.
 //!
 //! A pinned folder that is already listed (a pinned Documents) shows once,
-//! where it is first listed. A pinned folder that is missing (on a drive
+//! where it is first listed, and counts as pinned there, so it can still
+//! be unpinned. A pinned folder that is missing (on a drive
 //! not plugged in) is still listed, so it can be unpinned. A standard
 //! folder is named by its folder's own name, which follows the user's
 //! language ("Dokumente"); the home folder is "Home"; a pinned folder by
 //! the label the user gave it, else its folder's name.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use gpui::SharedString;
@@ -52,28 +52,27 @@ pub fn shown(places: &[Place], pinned: &[Bookmark]) -> Vec<Shown> {
         icon: Icon::Folder,
         pinned: true,
     });
-    let mut seen = HashSet::new();
-    standard
-        .chain(pinned)
-        .filter(|row| seen.insert(row.path.clone()))
-        .collect()
+    let mut rows: Vec<Shown> = Vec::new();
+    for row in standard.chain(pinned) {
+        match rows.iter_mut().find(|shown| shown.path == row.path) {
+            Some(shown) => shown.pinned |= row.pinned,
+            None => rows.push(row),
+        }
+    }
+    rows
 }
 
-/// The icon a standard folder is drawn with; `None` for one Places leaves
-/// out.
-const fn standard_icon(kind: PlaceKind) -> Option<Icon> {
-    match kind {
-        PlaceKind::Music | PlaceKind::Videos => None,
-        PlaceKind::Home
-        | PlaceKind::Desktop
-        | PlaceKind::Documents
-        | PlaceKind::Downloads
-        | PlaceKind::Pictures => Some(kind_icon(kind)),
+impl Shown {
+    /// Whether the window is in this place: `here` is the folder on
+    /// screen, if any.
+    pub fn is_here(&self, here: Option<&Path>) -> bool {
+        here == Some(self.path.as_path())
     }
 }
 
-/// Each standard folder's own icon.
-const fn kind_icon(kind: PlaceKind) -> Icon {
+/// The icon a standard folder is drawn with, wherever it shows (Places,
+/// the path bar).
+pub const fn place_icon(kind: PlaceKind) -> Icon {
     match kind {
         PlaceKind::Home => Icon::Home,
         PlaceKind::Desktop => Icon::Desktop,
@@ -85,13 +84,26 @@ const fn kind_icon(kind: PlaceKind) -> Icon {
     }
 }
 
+/// The icon a standard folder has in Places; `None` for one Places leaves
+/// out.
+const fn standard_icon(kind: PlaceKind) -> Option<Icon> {
+    match kind {
+        PlaceKind::Music | PlaceKind::Videos => None,
+        PlaceKind::Home
+        | PlaceKind::Desktop
+        | PlaceKind::Documents
+        | PlaceKind::Downloads
+        | PlaceKind::Pictures => Some(place_icon(kind)),
+    }
+}
+
 /// The icon of the standard folder at `path`, if it is one of `places`,
 /// wherever it is drawn (the folder tree shows Music and Videos too).
 pub fn standard_icon_at(places: &[Place], path: &Path) -> Option<Icon> {
     places
         .iter()
         .find(|place| place.path == path)
-        .map(|place| kind_icon(place.kind))
+        .map(|place| place_icon(place.kind))
 }
 
 fn standard_name(place: &Place) -> SharedString {
@@ -174,7 +186,8 @@ mod tests {
             ],
         );
         assert_eq!(names(&rows), ["Downloads", "srv"]);
-        assert!(!rows[0].pinned);
+        assert!(rows[0].pinned, "pinned too, so it can be unpinned");
+        assert_eq!(rows[0].icon, Icon::Downloads);
     }
 
     #[test]
@@ -215,5 +228,31 @@ mod tests {
     fn the_root_is_named_by_its_path() {
         assert_eq!(folder_name(Path::new("/")), "/");
         assert_eq!(shown(&[], &[pin("/", None)])[0].name, "/");
+    }
+
+    #[test]
+    fn a_place_is_here_only_while_its_folder_is_on_screen() {
+        let rows = shown(&[place(PlaceKind::Home, "/home/me")], &[]);
+        assert!(rows[0].is_here(Some(Path::new("/home/me"))));
+        assert!(!rows[0].is_here(Some(Path::new("/home/me/Work"))));
+        assert!(!rows[0].is_here(None));
+    }
+
+    #[test]
+    fn every_folder_kind_has_an_icon_of_its_own() {
+        let kinds = [
+            PlaceKind::Home,
+            PlaceKind::Desktop,
+            PlaceKind::Documents,
+            PlaceKind::Downloads,
+            PlaceKind::Music,
+            PlaceKind::Pictures,
+            PlaceKind::Videos,
+        ];
+        let icons: Vec<Icon> = kinds.into_iter().map(place_icon).collect();
+        for (index, icon) in icons.iter().enumerate() {
+            assert!(!icons[..index].contains(icon), "{icon:?} drawn twice");
+        }
+        assert_eq!(place_icon(PlaceKind::Home), Icon::Home);
     }
 }

@@ -1,7 +1,8 @@
 //! The sidebar, on the window to the left of the bar and the sheet, in
 //! three parts as on the design page: the Open list fixed at the top (the
 //! tabs fill it; for now it is an empty slot, `open`), then Places, which
-//! scroll, then the drives fixed at the very bottom (`drives`). Each
+//! scroll, then the drives fixed at the very bottom (`drives`), which
+//! scroll on their own past a few. Each
 //! section is drawn in a file of its own; this file lays them out and
 //! draws the section heads and the rows they share.
 //!
@@ -54,8 +55,6 @@ impl MainWindow {
                 .w_full()
                 .items_center()
                 .gap(size::PLACE_GAP)
-                .pr(size::GAP)
-                .pb(size::GAP)
                 .overflow_x_scroll()
                 .child(open)
                 .child(places)
@@ -63,6 +62,8 @@ impl MainWindow {
         }
         sidebar
             .flex_col()
+            .flex_1()
+            .min_h_0()
             .w(size::SIDEBAR_WIDTH)
             .child(open.flex_col())
             .child(
@@ -78,7 +79,7 @@ impl MainWindow {
                     .child(places)
                     .when(!narrow, |scroll| scroll.child(self.tree_section(cx))),
             )
-            .child(drives.flex_col())
+            .child(drives.flex_col().max_h(size::DRIVES_MAX_HEIGHT))
     }
 }
 
@@ -117,7 +118,8 @@ fn section_button(selector: &'static str, glyph: Icon, colors: &Colors) -> State
         .child(icon(glyph, size::SECTION_BUTTON_ICON, colors.text_dim))
 }
 
-/// What a sidebar row shows.
+/// What a sidebar row shows. Its number carries the debug selector
+/// `<selector>-number`, and its icon `<selector>-here` while you're in it.
 pub struct Row {
     pub id: ElementId,
     pub selector: String,
@@ -141,6 +143,8 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         here,
     } = row;
     let tint = if here { colors.here } else { colors.text_dim };
+    let number_selector = format!("{selector}-number");
+    let here_selector = format!("{selector}-here");
     div()
         .id(id)
         .debug_selector(move || selector)
@@ -162,10 +166,15 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         .when(here, |row| {
             row.text_color(colors.text).font_weight(text::STRONG_WEIGHT)
         })
-        .child(icon(glyph, size::PLACE_ICON, tint))
-        .child(div().flex_1().min_w_0().truncate().child(name))
-        .children(number.filter(|_| !narrow).map(|(number, color)| {
+        .child(
             div()
+                .when(here, |glyph| glyph.debug_selector(move || here_selector))
+                .child(icon(glyph, size::PLACE_ICON, tint)),
+        )
+        .child(div().flex_1().min_w_0().truncate().child(name))
+        .children(number.map(|(number, color)| {
+            div()
+                .debug_selector(move || number_selector)
                 .flex_none()
                 .text_size(text::LABEL)
                 .font_weight(text::DETAIL_WEIGHT)

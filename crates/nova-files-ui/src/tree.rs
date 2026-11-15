@@ -7,7 +7,9 @@
 //! lists a folder when it is opened, again each time it is opened (so a
 //! folder made since shows), and whenever the window's own listing of it
 //! arrives. Until a folder is listed it is drawn with its arrow, since it
-//! may hold folders; once listed with none, the arrow goes. Folders whose
+//! may hold folders; once listed with none, the arrow goes, until its
+//! parent is opened again: then what it holds is unknown again, so a
+//! folder made in it since can be found. Folders whose
 //! names start with a dot stay out, as hidden files do.
 //!
 //! The tree opens itself down to the folder you're in: each folder
@@ -19,6 +21,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::f32::consts::FRAC_PI_2;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
@@ -60,6 +63,29 @@ pub struct TreeRow {
     /// How deep under the root: the root is 0.
     pub depth: usize,
     pub toggle: Toggle,
+}
+
+impl Toggle {
+    /// How far its arrow turns, in radians: down when open.
+    pub const fn angle(self) -> f32 {
+        match self {
+            Self::Open => FRAC_PI_2,
+            Self::Closed | Self::None => 0.0,
+        }
+    }
+}
+
+impl TreeRow {
+    /// Whether it is the tree's root, Home.
+    pub const fn is_root(&self) -> bool {
+        self.depth == 0
+    }
+
+    /// Whether the window is in its folder: `here` is the folder on
+    /// screen, if any.
+    pub fn is_here(&self, here: Option<&Path>) -> bool {
+        here == Some(self.path.as_path())
+    }
 }
 
 impl FolderTree {
@@ -105,10 +131,21 @@ impl FolderTree {
     }
 
     /// Opens `path` if closed, closes it if open. An opened folder is
-    /// listed again.
+    /// listed again, and its subfolders known to hold none are unknown
+    /// again, and closed, so their arrow lists them when pressed.
     pub fn toggle(&mut self, path: &Path) {
         if !self.open.remove(path) {
             self.open.insert(path.to_owned());
+            let emptied: Vec<PathBuf> = self
+                .children
+                .iter()
+                .filter(|(child, held)| held.is_empty() && child.parent() == Some(path))
+                .map(|(child, _)| child.clone())
+                .collect();
+            for child in emptied {
+                self.children.remove(&child);
+                self.open.remove(&child);
+            }
             self.wait_for(path);
         }
     }
@@ -299,6 +336,60 @@ mod tests {
     }
 
     #[test]
+    fn opening_a_parent_again_gives_an_empty_subfolder_its_arrow_back() {
+        let mut tree = home();
+        let root = Path::new("/home/me");
+        tree.toggle(root);
+        tree.listed(root, &entries(&["a"], &[]));
+        tree.listed(Path::new("/home/me/a"), &entries(&[], &[]));
+        tree.listed(root, &entries(&["a"], &[]));
+        assert_eq!(tree.rows()[1].toggle, Toggle::None);
+        tree.toggle(root);
+        tree.toggle(root);
+        assert_eq!(tree.rows()[1].toggle, Toggle::Closed);
+    }
+
+    #[test]
+    fn an_opened_empty_subfolder_closes_when_its_parent_opens_again() {
+        let mut tree = home();
+        let root = Path::new("/home/me");
+        let a = Path::new("/home/me/a");
+        tree.toggle(root);
+        tree.listed(root, &entries(&["a"], &[]));
+        tree.toggle(a);
+        tree.listed(a, &entries(&[], &[]));
+        tree.toggle(root);
+        tree.toggle(root);
+        assert_eq!(tree.rows()[1].toggle, Toggle::Closed);
+        while tree.next_to_list().is_some() {}
+        tree.toggle(a);
+        assert_eq!(tree.next_to_list(), Some(a.to_owned()));
+    }
+
+    #[test]
+    fn opening_a_folder_forgets_only_its_own_empty_subfolders() {
+        let mut tree = home();
+        let root = Path::new("/home/me");
+        let a = Path::new("/home/me/a");
+        tree.toggle(root);
+        tree.listed(root, &entries(&["a", "b"], &[]));
+        tree.toggle(a);
+        tree.listed(a, &entries(&["x"], &[]));
+        tree.listed(Path::new("/home/me/b"), &entries(&[], &[]));
+        tree.listed(Path::new("/home/me/a/x"), &entries(&[], &[]));
+        // Opening a again forgets x's emptiness, not b's.
+        tree.toggle(a);
+        tree.toggle(a);
+        let shown = shown(&tree);
+        assert_eq!(shown[2], ("x".to_owned(), 2, Toggle::Closed));
+        assert_eq!(shown[3], ("b".to_owned(), 1, Toggle::None));
+        // Opening the root again keeps what a holds.
+        tree.toggle(root);
+        tree.toggle(root);
+        assert_eq!(tree.rows().len(), 4);
+    }
+
+    #[test]
     fn a_folder_waits_once_however_often_it_is_asked_for() {
         let mut tree = home();
         let root = Path::new("/home/me");
@@ -307,6 +398,26 @@ mod tests {
         tree.toggle(root);
         assert_eq!(tree.next_to_list(), Some(root.to_owned()));
         assert_eq!(tree.next_to_list(), None);
+    }
+
+    #[test]
+    fn only_an_open_arrow_turns_down() {
+        assert!((Toggle::Open.angle() - FRAC_PI_2).abs() < f32::EPSILON);
+        assert!(Toggle::Closed.angle().abs() < f32::EPSILON);
+        assert!(Toggle::None.angle().abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn the_root_is_home_and_a_row_is_here_only_in_its_folder() {
+        let mut tree = home();
+        tree.toggle(Path::new("/home/me"));
+        tree.listed(Path::new("/home/me"), &entries(&["a"], &[]));
+        let rows = tree.rows();
+        assert!(rows[0].is_root());
+        assert!(!rows[1].is_root());
+        assert!(rows[1].is_here(Some(Path::new("/home/me/a"))));
+        assert!(!rows[1].is_here(Some(Path::new("/home/me"))));
+        assert!(!rows[1].is_here(None));
     }
 
     #[test]

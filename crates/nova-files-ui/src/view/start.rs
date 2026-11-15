@@ -16,15 +16,15 @@ use std::path::{Path, PathBuf};
 
 use gpui::{
     AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    Radians, SharedString, StatefulInteractiveElement as _, Styled as _, Transformation, div,
-    linear_color_stop, linear_gradient, prelude::FluentBuilder as _, svg,
+    Pixels, Radians, SharedString, StatefulInteractiveElement as _, Styled as _, Transformation,
+    div, linear_color_stop, linear_gradient, prelude::FluentBuilder as _, svg,
 };
 use nova_files_api::{EntryKind, Peeked, RecentFolder};
 
 use super::row::{entry_icon, icon, kind_glyph};
 use crate::assets::Icon;
 use crate::columns;
-use crate::location::HOME_MARK;
+use crate::pick::typed::HOME;
 use crate::theme::{Colors, radius, size, start, text};
 use crate::window::MainWindow;
 
@@ -180,12 +180,7 @@ fn group(label: &'static str, cards: AnyElement, colors: &Colors) -> impl IntoEl
 /// The large card's head: a big folder icon, the name, and where the
 /// folder is with when it last changed.
 fn hero_head(folder: &RecentFolder, home: &Path, colors: &Colors) -> impl IntoElement {
-    let mut subtitle = where_is(&folder.path, home);
-    if let Some(modified) = folder.modified.map(columns::modified)
-        && !modified.is_empty()
-    {
-        subtitle = format!("{subtitle}{SEPARATOR}{modified}");
-    }
+    let subtitle = hero_subtitle(folder, home);
     div()
         .flex()
         .items_center()
@@ -200,13 +195,17 @@ fn hero_head(folder: &RecentFolder, home: &Path, colors: &Colors) -> impl IntoEl
         )))
 }
 
+/// Where the large card's folder is, then when it last changed if known.
+fn hero_subtitle(folder: &RecentFolder, home: &Path) -> String {
+    let place = where_is(&folder.path, home);
+    match folder.modified.map(columns::modified) {
+        Some(modified) if !modified.is_empty() => format!("{place}{SEPARATOR}{modified}"),
+        Some(_) | None => place,
+    }
+}
+
 /// A card's name in bold and the dim line under it, each cut to fit.
-fn titles(
-    name: String,
-    subtitle: String,
-    name_size: gpui::Pixels,
-    colors: &Colors,
-) -> impl IntoElement {
+fn titles(name: String, subtitle: String, name_size: Pixels, colors: &Colors) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -272,7 +271,7 @@ fn peek(folder: &RecentFolder, colors: &Colors) -> impl IntoElement {
             list.child(
                 div()
                     .pt(start::SUBTITLE_GAP)
-                    .pl(size::ROW_ICON + start::PEEK_GAP)
+                    .pl(start::PEEK_MORE_INSET)
                     .text_size(text::LABEL)
                     .font_weight(text::DETAIL_WEIGHT)
                     .text_color(colors.text_dim)
@@ -294,10 +293,19 @@ fn fan(entries: &[Peeked], colors: &Colors) -> impl IntoElement {
                 .path(glyph.path())
                 .flex_none()
                 .size(start::FAN_ICON)
-                .when(index > 0, |glyph| glyph.ml(-start::FAN_OVERLAP))
+                .ml(overlap(index))
                 .text_color(gpui::Hsla::from(tint))
                 .with_transformation(Transformation::rotate(lean(index, count)))
         }))
+}
+
+/// How far fan entry `index` tucks under the one before it.
+fn overlap(index: usize) -> Pixels {
+    if index == 0 {
+        Pixels::ZERO
+    } else {
+        -start::FAN_OVERLAP
+    }
 }
 
 /// How far fan entry `index` of `count` leans: the first left, the last
@@ -327,8 +335,8 @@ fn name_of(path: &Path) -> String {
 fn where_is(path: &Path, home: &Path) -> String {
     let parent = path.parent().map_or_else(PathBuf::new, Path::to_path_buf);
     match parent.strip_prefix(home) {
-        Ok(rest) if rest.as_os_str().is_empty() => HOME_MARK.to_owned(),
-        Ok(rest) => format!("{HOME_MARK}/{}", rest.to_string_lossy()),
+        Ok(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
+        Ok(rest) => format!("{HOME}/{}", rest.to_string_lossy()),
         Err(_) => parent.to_string_lossy().into_owned(),
     }
 }
@@ -413,6 +421,33 @@ mod tests {
         assert_eq!(more_than_peeked(&folder(8, 5)).as_deref(), Some("3 more"));
         assert_eq!(more_than_peeked(&folder(5, 5)), None);
         assert_eq!(more_than_peeked(&folder(0, 0)), None);
+    }
+
+    #[test]
+    fn the_large_card_says_when_its_folder_changed_when_known() {
+        let home = Path::new("/home/me");
+        let mut newest = folder(0, 0);
+        assert_eq!(hero_subtitle(&newest, home), "~/Projects");
+        let time = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        newest.modified = Some(time);
+        assert_eq!(
+            hero_subtitle(&newest, home),
+            format!("~/Projects{SEPARATOR}{}", columns::modified(time))
+        );
+        // A date past what can be written shows no date.
+        let unwritable = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1 << 62);
+        assert_eq!(columns::modified(unwritable), "");
+        newest.modified = Some(unwritable);
+        assert_eq!(hero_subtitle(&newest, home), "~/Projects");
+    }
+
+    #[test]
+    fn each_fan_entry_after_the_first_tucks_under_the_one_before() {
+        assert_eq!(overlap(0), Pixels::ZERO);
+        assert_eq!(overlap(1), -start::FAN_OVERLAP);
+        assert_eq!(overlap(2), -start::FAN_OVERLAP);
+        // "N more" lines up with the peek's names.
+        assert_eq!(start::PEEK_MORE_INSET, size::ROW_ICON + start::PEEK_GAP);
     }
 
     #[test]

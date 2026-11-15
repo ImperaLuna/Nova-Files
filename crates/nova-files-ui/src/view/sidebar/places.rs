@@ -1,12 +1,13 @@
 //! The Places section: the standard folders and the pinned ones, as
 //! `places` lists them. Each row carries the debug selector `place-<n>`,
-//! counted from 0 in the order shown. In a main window, the + on the head
-//! (`pin`) picks a folder to pin, and right-click on a pinned folder opens
+//! counted from 0 in the order shown. In a main window, the + (`pin`) on
+//! the head, or at the end of the row in a narrow window, picks a folder
+//! to pin, and right-click on a pinned folder opens
 //! its menu (see `window/pin`).
 
 use gpui::{
-    ClickEvent, Context, Div, InteractiveElement as _, IntoElement as _, MouseButton,
-    MouseDownEvent, ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
+    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
     prelude::FluentBuilder as _,
 };
 
@@ -30,6 +31,7 @@ impl MainWindow {
             .map(|(index, place)| {
                 let target = place.path.clone();
                 let pinned = (main && place.pinned).then(|| place.path.clone());
+                let is_here = place.is_here(here);
                 row(
                     Row {
                         id: ("place", index).into(),
@@ -37,7 +39,7 @@ impl MainWindow {
                         glyph: place.icon,
                         name: place.name,
                         number: None,
-                        here: here == Some(place.path.as_path()),
+                        here: is_here,
                     },
                     narrow,
                     &colors,
@@ -54,22 +56,22 @@ impl MainWindow {
                     )
                 })
             });
+        let pin = main.then(|| {
+            section_button("pin", Icon::Plus, &colors)
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder_to_pin(cx)))
+        });
         let list = div().flex().gap(size::PLACE_GAP).children(rows);
         if narrow {
-            return list;
+            // No head to carry the +: it ends the row, so pinning stays
+            // within reach.
+            return list.items_center().children(pin);
         }
         div()
             .flex()
             .flex_col()
             .child(section_head(
                 LABEL,
-                main.then(|| {
-                    section_button("pin", Icon::Plus, &colors)
-                        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                            this.pick_folder_to_pin(cx);
-                        }))
-                        .into_any_element()
-                }),
+                pin.map(IntoElement::into_any_element),
                 &colors,
             ))
             .child(list.flex_col())

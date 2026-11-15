@@ -14,12 +14,15 @@ mod assets;
 mod band;
 mod columns;
 mod commands;
+mod crumbs;
 mod drives;
 mod history;
 mod jump;
 mod kind;
 mod location;
+mod marks;
 mod menu;
+mod path_bar;
 mod pick;
 mod places;
 mod requests;
@@ -49,7 +52,7 @@ pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
-pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
+pub use window::{CoreStatus, MainWindow, Scope, WindowEvent, home_folder};
 pub use window_state::{WindowState, fetch as fetch_window_state};
 
 /// Why [`run`] returned.

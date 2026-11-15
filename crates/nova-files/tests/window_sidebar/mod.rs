@@ -4,9 +4,12 @@
 //! that pins what it picks, and right-click on a pinned folder takes it
 //! out.
 
-use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, size};
+use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, size};
 
 use super::*;
+
+/// The window's width from which the sidebar stands beside the sheet.
+const NARROWEST_WIDE: Pixels = px(720.0);
 
 /// A window whose home is `tree`, with `Projects` pinned; waits until the
 /// pinned folder is listed.
@@ -45,7 +48,8 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("sidebar-narrow");
     let (_view, cx) = with_projects_pinned(cx, &tree).await;
-    cx.simulate_resize(size(px(1000.0), px(600.0)));
+    // As narrow as a window gets with the sidebar still beside the sheet.
+    cx.simulate_resize(size(NARROWEST_WIDE, px(600.0)));
     cx.run_until_parked();
     let (home, pinned) = (
         cx.debug_bounds("place-0").unwrap(),
@@ -55,7 +59,7 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     let sheet_left = cx.debug_bounds("modified-header").unwrap().left();
     assert!(home.right() < sheet_left, "wide: beside the sheet");
 
-    cx.simulate_resize(size(px(600.0), px(600.0)));
+    cx.simulate_resize(size(NARROWEST_WIDE - px(1.0), px(600.0)));
     cx.run_until_parked();
     let (home, pinned) = (
         cx.debug_bounds("place-0").unwrap(),
@@ -65,6 +69,9 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     assert!(pinned.left() >= home.right());
     let header = cx.debug_bounds("modified-header").unwrap();
     assert!(header.top() >= home.bottom(), "narrow: above the sheet");
+    // The + to pin a folder stays within reach.
+    let pin = cx.debug_bounds("pin").unwrap();
+    assert!(pin.left() >= pinned.right());
 }
 
 #[gpui::test]
@@ -73,6 +80,12 @@ async fn right_click_on_a_pinned_folder_takes_it_out(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("sidebar-unpin");
     let (view, cx) = with_projects_pinned(cx, &tree).await;
     // Home is a standard folder: no menu.
+    right_click(cx, "place-0");
+    view.read_with(cx, |view, _| assert!(view.menu().is_none()));
+
+    // A press anywhere else closes the menu.
+    right_click(cx, "place-1");
+    view.read_with(cx, |view, _| assert!(view.menu().is_some()));
     right_click(cx, "place-0");
     view.read_with(cx, |view, _| assert!(view.menu().is_none()));
 
@@ -170,14 +183,34 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     // nova holds no folders: no arrow.
     assert!(cx.debug_bounds("tree-toggle-1").is_some());
     assert!(cx.debug_bounds("tree-toggle-2").is_none());
+    // Each level steps in by one indent (22 px, past a 2 px pad), and
+    // each level's hairline runs 4 px before the rows inside it.
+    let from_row = |cx: &mut VisualTestContext, row: &'static str, part: &'static str| {
+        cx.debug_bounds(part).unwrap().left() - cx.debug_bounds(row).unwrap().left()
+    };
+    assert_eq!(from_row(cx, "tree-0", "tree-toggle-0"), px(2.0));
+    assert_eq!(from_row(cx, "tree-1", "tree-toggle-1"), px(24.0));
+    assert_eq!(from_row(cx, "tree-2", "tree-guide-2-1"), px(18.0));
+    assert_eq!(from_row(cx, "tree-2", "tree-guide-2-2"), px(40.0));
 
-    // Clicking a row goes there; the arrow only opens and closes.
-    click(cx, "tree-0");
-    wait_for_folder(&view, cx, tree.path()).await;
+    // The arrow only opens and closes, and the folder on screen read again
+    // in place leaves closed what the user closed.
     click(cx, "tree-toggle-1");
     cx.run_until_parked();
     assert!(cx.debug_bounds("tree-2").is_none());
-    view.read_with(cx, |view, _| assert_eq!(view.folder(), Some(tree.path())));
+    view.update(cx, |view, _| view.sort_by(nova_files_api::SortKey::Name));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tree-2").is_none());
+    view.read_with(cx, |view, _| {
+        assert_eq!(
+            view.folder(),
+            Some(tree.path().join("Projects/nova").as_path())
+        );
+    });
+
+    // Clicking a row goes there.
+    click(cx, "tree-0");
+    wait_for_folder(&view, cx, tree.path()).await;
 }
 
 #[gpui::test]
@@ -188,7 +221,14 @@ async fn the_system_drive_shows_its_free_space_and_opens(cx: &mut TestAppContext
     view.condition::<WindowEvent>(cx, |view, _| view.disk_space(Path::new("/")).is_some())
         .await;
     cx.run_until_parked();
+    assert!(cx.debug_bounds("drive-0-number").is_some());
+    // A narrow window shows the drive by its name alone.
+    cx.simulate_resize(size(NARROWEST_WIDE - px(1.0), px(600.0)));
+    cx.run_until_parked();
     assert!(cx.debug_bounds("drive-0").is_some());
+    assert!(cx.debug_bounds("drive-0-number").is_none());
+    cx.simulate_resize(size(NARROWEST_WIDE, px(600.0)));
+    cx.run_until_parked();
 
     // The system drive can't be ejected: its menu only opens it.
     right_click(cx, "drive-0");

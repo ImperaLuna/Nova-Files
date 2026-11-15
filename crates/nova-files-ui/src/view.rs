@@ -8,10 +8,10 @@
 //! `sidebar`).
 //!
 //! Each part is drawn in a file of its own, so a feature changes only its
-//! part: the top bar in `bar`, the sidebar in `sidebar`, the sheet with its
-//! column heads and rows in `sheet`, the pieces of one row in `row`, a
-//! right-click menu in `menu`, and the Start page, drawn on the sheet in
-//! place of the rows, in `start`.
+//! part: the top bar in `bar`, its path bar in `path`, the sidebar in
+//! `sidebar`, the sheet with its column heads and rows in `sheet`, the
+//! pieces of one row in `row`, a right-click menu in `menu`, and the Start
+//! page, drawn on the sheet in place of the rows, in `start`.
 //!
 //! The window sets the key context its actions are bound in and handles
 //! each action it takes; buttons and the mouse's side buttons send actions
@@ -22,45 +22,48 @@
 //! the box `band`. Each line's Modified cell carries one too,
 //! `modified-header` and `modified-<n>`, so a test can check the columns
 //! line up. The slots later features fill carry one each: `sidebar`,
-//! `path`, `search` and `views`.
+//! `path`, `search` and `views`; the search's parts carry `search-box`,
+//! `match-count` and `no-matches`, and the path bar's own are listed in
+//! `path`.
 
 mod bar;
 mod menu;
+mod path;
+mod path_menu;
 mod row;
+mod search;
 mod sheet;
 mod sidebar;
 mod start;
 
+pub use crate::places::place_icon;
+
 use gpui::{
-    Context, Div, Focusable as _, InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection, ParentElement as _, Render,
-    ScrollWheelEvent, Styled as _, Window, div, prelude::FluentBuilder as _,
+    App, Context, Div, FocusHandle, Focusable as _, InteractiveElement as _, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection,
+    ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
-    CursorUp, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown, SelectFirst,
-    SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
+    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown,
+    SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
 };
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
-use crate::window::MainWindow;
+use crate::window::{FocusTo, MainWindow};
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
+        self.settle_search(window, cx);
         let colors = Colors::of(cx);
-        // Keys always land somewhere: in a main window on the window
-        // itself, which a click inside takes focus back to; in a picker in
-        // its name box, whose keys pass the window's on.
+        // Keys always land somewhere (see `keys_home`).
         let main = self.pick.is_none();
         let narrow = window.viewport_size().width < theme::window::NARROW_WIDTH;
         if window.focused(cx).is_none() {
-            let focus = self.pick.as_ref().map_or_else(
-                || self.focus.clone(),
-                |pick| pick.name.read(cx).focus_handle(cx),
-            );
-            window.focus(&focus, cx);
+            window.focus(&self.keys_home(cx), cx);
         }
         div()
             .key_context(commands::KEY_CONTEXT)
@@ -68,12 +71,8 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
+            .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                if this.jump_typed(event, cx) {
-                    cx.stop_propagation();
-                }
-            }))
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 this.band_moved(event, cx);
             }))
@@ -95,43 +94,90 @@ impl Render for MainWindow {
             .size_full()
             .flex()
             .flex_col()
-            .bg(colors.window)
+            // The sheet's color fills the window once, and the window's
+            // own color is painted only around the sheet: a software
+            // renderer pays for every layer it fills.
+            .bg(colors.sheet)
             .text_color(colors.text_soft)
             .font_family(text::FAMILY)
             .text_size(text::BODY)
             .font_weight(text::BODY_WEIGHT)
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .pt(size::GAP)
-                    .pl(size::GAP)
-                    .map(|body| {
-                        if narrow {
-                            body.flex_col()
-                        } else {
-                            body.gap(size::GAP)
-                        }
-                    })
-                    .child(self.sidebar(narrow, cx))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .min_w_0()
-                            .min_h_0()
-                            .child(self.top_bar(&colors))
-                            .child(self.sheet(cx)),
-                    ),
-            )
+            .child(self.body(narrow, &colors, cx))
             .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
             .children(self.menu_overlay(cx))
     }
 }
 
 impl MainWindow {
+    /// The sidebar beside the bar and sheet; above them when `narrow`.
+    /// Only the strips around the sheet are painted the window's color.
+    fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {
+        div()
+            .flex()
+            .flex_1()
+            .min_h_0()
+            .when(narrow, gpui::Styled::flex_col)
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_none()
+                    .px(size::GAP)
+                    .pt(size::GAP)
+                    .bg(colors.window)
+                    .child(self.sidebar(narrow, cx)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_w_0()
+                    .min_h_0()
+                    .child(
+                        div()
+                            .flex_none()
+                            .pt(size::GAP)
+                            .when(narrow, |bar| bar.pl(size::GAP))
+                            .bg(colors.window)
+                            .child(self.top_bar(colors, cx)),
+                    )
+                    .child(self.sheet(cx)),
+            )
+    }
+}
+
+impl MainWindow {
+    /// What typing does on the window's root: Ctrl+F and `/` go to the
+    /// search box in a main window, other letters jump to a name. Keys
+    /// typed in a text field are its own.
+    fn typed_keys(root: Div, main: bool, cx: &Context<Self>) -> Div {
+        root.when(main, |root| {
+            root.on_action(cx.listener(|this, _: &FocusSearch, _, cx| {
+                this.focus_later(FocusTo::Box, cx);
+            }))
+        })
+        .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+            // Letters typed into a text field are the field's.
+            if !this.focus.is_focused(window) {
+                return;
+            }
+            if this.search_key(event, cx) || this.jump_typed(event, cx) {
+                cx.stop_propagation();
+            }
+        }))
+    }
+
+    /// Where the keys go when nothing else holds them: in a main window
+    /// the window itself, which a click inside takes focus back to; in a
+    /// picker its name box, whose keys pass the window's on.
+    pub fn keys_home(&self, cx: &App) -> FocusHandle {
+        self.pick.as_ref().map_or_else(
+            || self.focus.clone(),
+            |pick| pick.name.read(cx).focus_handle(cx),
+        )
+    }
+
     /// The selection's actions on the window's root (see `selecting`).
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &OpenSelected, _, _| this.open_selected()))

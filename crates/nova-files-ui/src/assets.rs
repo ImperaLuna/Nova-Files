@@ -22,6 +22,7 @@ pub enum Icon {
     Music,
     Videos,
     Start,
+    Drive,
     Back,
     Forward,
     Up,
@@ -33,7 +34,6 @@ pub enum Icon {
     Plus,
     Close,
     Chevron,
-    Drive,
     Eject,
     Open,
 }
@@ -50,6 +50,7 @@ impl Icon {
         Self::Music,
         Self::Videos,
         Self::Start,
+        Self::Drive,
         Self::Back,
         Self::Forward,
         Self::Up,
@@ -61,7 +62,6 @@ impl Icon {
         Self::Plus,
         Self::Close,
         Self::Chevron,
-        Self::Drive,
         Self::Eject,
         Self::Open,
     ];
@@ -79,6 +79,7 @@ impl Icon {
             Self::Music => "icons/music.svg",
             Self::Videos => "icons/videos.svg",
             Self::Start => "icons/start.svg",
+            Self::Drive => "icons/drive.svg",
             Self::Back => "icons/back.svg",
             Self::Forward => "icons/forward.svg",
             Self::Up => "icons/up.svg",
@@ -90,7 +91,6 @@ impl Icon {
             Self::Plus => "icons/plus.svg",
             Self::Close => "icons/close.svg",
             Self::Chevron => "icons/chevron.svg",
-            Self::Drive => "icons/drive.svg",
             Self::Eject => "icons/eject.svg",
             Self::Open => "icons/open.svg",
         }
@@ -108,6 +108,7 @@ impl Icon {
             Self::Music => svg::MUSIC,
             Self::Videos => svg::VIDEOS,
             Self::Start => svg::START,
+            Self::Drive => svg::DRIVE,
             Self::Back => svg::BACK,
             Self::Forward => svg::FORWARD,
             Self::Up => svg::UP,
@@ -119,7 +120,6 @@ impl Icon {
             Self::Plus => svg::PLUS,
             Self::Close => svg::CLOSE,
             Self::Chevron => svg::CHEVRON,
-            Self::Drive => svg::DRIVE,
             Self::Eject => svg::EJECT,
             Self::Open => svg::OPEN,
         };
