@@ -88,6 +88,8 @@ fn typing_finds_everywhere_and_the_window_stays_in_its_folder(cx: &mut TestAppCo
     cx.run_until_parked();
     let (id, query, within) = next_find(&mut core).unwrap();
     assert_eq!((query.as_str(), within), ("r", None));
+    // The folder is still on screen: no count over it yet.
+    assert!(cx.debug_bounds("match-count").is_none());
     answer_found(&core, id, REPORTS);
     let (id, ..) = std::iter::from_fn(|| next_find(&mut core)).last().unwrap();
     answer_found(&core, id, REPORTS);
@@ -411,4 +413,70 @@ fn a_find_overtaken_by_a_folder_is_dropped_and_a_refusal_finds_again(cx: &mut Te
     let (_, query, _) = next_find(&mut core).unwrap();
     assert_eq!(query, "repo");
     assert!(core.next_listing().is_none());
+}
+
+#[gpui::test]
+fn slash_with_a_modifier_leaves_the_box_alone(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+    cx.simulate_keystrokes("down");
+    cx.run_until_parked();
+
+    // As a keyboard that types `/` with Alt or Fn held reports it.
+    let function = gpui::Modifiers {
+        function: true,
+        ..gpui::Modifiers::default()
+    };
+    for modifiers in [gpui::Modifiers::alt(), function] {
+        cx.simulate_event(gpui::KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers,
+                key: "/".into(),
+                key_char: Some("/".into()),
+            },
+            is_held: false,
+            prefer_character_input: false,
+        });
+        cx.run_until_parked();
+    }
+    cx.simulate_input("x");
+    cx.run_until_parked();
+    view.read_with(cx, |view, cx| assert_eq!(view.query(cx), "rep"));
+}
+
+#[gpui::test]
+fn an_older_find_that_fails_late_is_dropped(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    cx.simulate_input("a");
+    cx.run_until_parked();
+    let (older, ..) = next_find(&mut core).unwrap();
+    cx.simulate_input("b");
+    cx.run_until_parked();
+    next_find(&mut core).unwrap();
+
+    core.send(Event::FindFailed {
+        id: older,
+        reason: nova_files_api::SearchFailed::IndexFailed,
+    });
+    cx.run_until_parked();
+
+    assert_eq!(names(&view, cx), ["0", "1", "2"]);
+    assert!(cx.debug_bounds("no-matches").is_none());
+}
+
+#[gpui::test]
+fn a_refusal_before_any_results_reads_the_folder_again(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    cx.simulate_input("r");
+    cx.run_until_parked();
+    let (overtaken, ..) = next_find(&mut core).unwrap();
+    view.update(cx, |view, _| view.open(Path::new(MISSING)));
+    let (id, path) = core.next_listing().unwrap();
+    answer_found(&core, overtaken, REPORTS);
+    cx.run_until_parked();
+
+    core.refuse(id, &path);
+    cx.run_until_parked();
+    let (_, again) = core.next_listing().unwrap();
+    assert_eq!(again, Path::new(SHOWN));
 }
