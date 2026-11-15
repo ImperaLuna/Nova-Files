@@ -106,17 +106,19 @@ mod tests {
         assert_eq!(store.bytes(), b"picker 900x600");
         store.save(vec![b'x'; 64 * 1024]);
         assert_eq!(store.bytes().len(), 64 * 1024);
-        store.save(b"picker 900x600".to_vec());
+        // The last save differs from every earlier one, so once the file
+        // holds it no earlier write can still land.
+        store.save(b"picker 800x500".to_vec());
         let path = home.join(FILE);
         let wait = std::time::Instant::now();
-        while read(&path) != b"picker 900x600" {
+        while read(&path) != b"picker 800x500" {
             assert!(
                 wait.elapsed() < std::time::Duration::from_secs(10),
                 "never saved"
             );
             thread::yield_now();
         }
-        assert_eq!(Store::open(Some(&home)).bytes(), b"picker 900x600");
+        assert_eq!(Store::open(Some(&home)).bytes(), b"picker 800x500");
         let memory_only = Store::open(None);
         memory_only.save(b"main 1x1".to_vec());
         assert_eq!(memory_only.bytes(), b"main 1x1");
