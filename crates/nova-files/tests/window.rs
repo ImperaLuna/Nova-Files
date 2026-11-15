@@ -7,8 +7,9 @@
 //! picker window picks the file double-clicked when it asks for files,
 //! and answers cancelled when it is closed. Its own keys are tested in
 //! `window_keys`, selecting in `window_select`, type to jump in
-//! `window_jump`, the island and its file actions in `window_island`, and
-//! the path bar in `window_path`.
+//! `window_jump`, the path bar in `window_path`, the sidebar in
+//! `window_sidebar`, the quick look in `window_preview`, and the island
+//! and its file actions in `window_island`.
 
 #![expect(
     clippy::unwrap_used,
@@ -22,7 +23,10 @@ mod window_island;
 mod window_jump;
 mod window_keys;
 mod window_path;
+mod window_preview;
 mod window_select;
+mod window_sidebar;
+mod window_start;
 
 use std::cell::RefCell;
 use std::fs;
@@ -31,11 +35,11 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
+use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, px};
 use nova_files_api::{
     Color, EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest, Thumbnails,
 };
-use nova_files_ui::{Colors, CoreStatus, MainWindow, WindowEvent};
+use nova_files_ui::{Colors, CoreStatus, Location, MainWindow, WindowEvent};
 
 use common::{TempFolder, Watchdog, click_with, double_click};
 
@@ -62,7 +66,8 @@ fn window_on<'a>(
     let core_home = nova_files_core::Home {
         folder: home.to_owned(),
         config: home.join(".config"),
-        state: home.join(".local/state"),
+        // Beside the tree, so a saved recent folder never shows in it.
+        state: home.with_extension("state"),
         data: home.join(".local/share"),
         drive_trashes: false,
     };
