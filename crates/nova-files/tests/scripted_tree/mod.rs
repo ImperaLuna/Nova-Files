@@ -40,6 +40,7 @@ fn tree_opened(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestC
         id,
         path,
         entries: folders(&["a", "b"]),
+        folders: None,
     }));
     cx.run_until_parked();
     view.update(cx, |view, cx| view.toggle_tree(Path::new(SHOWN), cx));
@@ -63,6 +64,7 @@ fn the_tree_takes_only_the_listing_it_asked_for(cx: &mut TestAppContext) {
         id: ListingId(id.0 + 1),
         path: path.clone(),
         entries: folders(&["c"]),
+        folders: None,
     }));
     assert!(shows(cx, "tree-2"), "an answer to another ask is dropped");
 
@@ -70,6 +72,7 @@ fn the_tree_takes_only_the_listing_it_asked_for(cx: &mut TestAppContext) {
         id,
         path,
         entries: folders(&["c"]),
+        folders: None,
     }));
     assert!(shows(cx, "tree-1"));
     assert!(!shows(cx, "tree-2"), "c alone under the root");
@@ -83,6 +86,7 @@ fn a_folder_the_tree_couldnt_read_loses_its_arrow(cx: &mut TestAppContext) {
         id: root_id,
         path,
         entries: folders(&["a", "b"]),
+        folders: None,
     }));
     cx.run_until_parked();
     let a = Path::new(SHOWN).join("a");

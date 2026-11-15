@@ -10,7 +10,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io;
 use std::os::unix::ffi::OsStrExt as _;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use memmap2::Mmap;
 
@@ -131,6 +131,22 @@ impl Index {
                 .map(|entry| entry.end)
                 .filter(|&next| next < end)
         })
+    }
+
+    /// The row of `path`, if the index holds it: found name by name from
+    /// the crawled folder down.
+    pub fn row_of(&self, path: &Path) -> Option<RowId> {
+        let inside = path.strip_prefix(self.root()).ok()?;
+        let mut row = RowId(0);
+        for part in inside.components() {
+            let Component::Normal(name) = part else {
+                return None;
+            };
+            row = self
+                .children(row)
+                .find(|&child| self.name(child) == Some(name))?;
+        }
+        Some(row)
     }
 
     /// The full path of `row`, put together from its parents' names.

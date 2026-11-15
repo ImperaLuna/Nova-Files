@@ -44,6 +44,7 @@ mod actions {
             SelectAll,
             ToggleSelected,
             ClearSelection,
+            FocusSearch,
         ]
     );
 }
@@ -103,6 +104,7 @@ pub const ACTIONS: &[ActionSpec] = &[
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
+    FIND,
 ];
 
 spec!(
@@ -198,6 +200,16 @@ spec!(
     "select.none",
     "Select none",
     ["escape"]
+);
+
+spec!(
+    /// Puts the caret in the search box. `/` does too, unless a field
+    /// has the keys (see `view`).
+    FIND,
+    FocusSearch,
+    "search.focus",
+    "Search",
+    ["ctrl-f"]
 );
 
 /// Binds every action's default keys.

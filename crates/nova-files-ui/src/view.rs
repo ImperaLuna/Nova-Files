@@ -21,13 +21,16 @@
 //! the box `band`. Each line's Modified cell carries one too,
 //! `modified-header` and `modified-<n>`, so a test can check the columns
 //! line up. The slots later features fill carry one each: `sidebar`,
-//! `path`, `search` and `views`; the path bar's own are listed in `path`.
+//! `path`, `search` and `views`; the search's parts carry `search-box`,
+//! `match-count` and `no-matches`, and the path bar's own are listed in
+//! `path`.
 
 mod bar;
 mod menu;
 mod path;
 mod path_menu;
 mod row;
+mod search;
 mod sheet;
 mod sidebar;
 
@@ -42,16 +45,17 @@ use gpui::{
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
-    CursorUp, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown, SelectFirst,
-    SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
+    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenSelected, SelectAll, SelectDown,
+    SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
 };
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
-use crate::window::MainWindow;
+use crate::window::{FocusTo, MainWindow};
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
+        self.settle_search(window, cx);
         let colors = Colors::of(cx);
         // Keys always land somewhere (see `keys_home`).
         let main = self.pick.is_none();
@@ -65,13 +69,8 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
+            .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-                // Letters typed into a text field are the field's.
-                if this.focus.is_focused(window) && this.jump_typed(event, cx) {
-                    cx.stop_propagation();
-                }
-            }))
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 this.band_moved(event, cx);
             }))
@@ -147,6 +146,26 @@ impl MainWindow {
 }
 
 impl MainWindow {
+    /// What typing does on the window's root: Ctrl+F and `/` go to the
+    /// search box in a main window, other letters jump to a name. Keys
+    /// typed in a text field are its own.
+    fn typed_keys(root: Div, main: bool, cx: &Context<Self>) -> Div {
+        root.when(main, |root| {
+            root.on_action(cx.listener(|this, _: &FocusSearch, _, cx| {
+                this.focus_later(FocusTo::Box, cx);
+            }))
+        })
+        .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+            // Letters typed into a text field are the field's.
+            if !this.focus.is_focused(window) {
+                return;
+            }
+            if this.search_key(event, cx) || this.jump_typed(event, cx) {
+                cx.stop_propagation();
+            }
+        }))
+    }
+
     /// Where the keys go when nothing else holds them: in a main window
     /// the window itself, which a click inside takes focus back to; in a
     /// picker its name box, whose keys pass the window's on.
