@@ -54,6 +54,7 @@ mod renaming;
 mod rows;
 mod search;
 mod start;
+mod trash;
 mod tree;
 
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
@@ -92,6 +93,7 @@ use crate::shown_thumbnails::ShownThumbnails;
 use crate::tree::FolderTree;
 use jobs::Jobs;
 use renaming::{Renaming, Waiting};
+use trash::TrashState;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
 /// which is never too small.
@@ -217,6 +219,8 @@ pub struct MainWindow {
     renaming: Option<Renaming>,
     /// What a rename or a new folder waits for (see `renaming`).
     waiting: Waiting,
+    /// The trash, and what the window knows of it (see `trash`).
+    trash: TrashState,
     _events: Task<()>,
 }
 
@@ -233,7 +237,13 @@ impl EventSink for ChannelSink {
 impl MainWindow {
     /// Opens a window on `folder`.
     pub fn new(connector: &Connector, folder: &Path, cx: &mut Context<Self>) -> Self {
-        Self::with_home(connector, folder, home_folder(), cx)
+        let mut window = Self::with_home(connector, folder, home_folder(), cx);
+        // `$XDG_DATA_HOME`, when it is an absolute path, holds the trash.
+        let data = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute());
+        window.trash = TrashState::new(&window.home, data);
+        window
     }
 
     /// Opens a window on `folder` that falls back to `home` instead of the
@@ -263,6 +273,7 @@ impl MainWindow {
                 connection.send(Command::Drives)?;
                 connection.send(Command::Settings)?;
                 connection.send(Command::Theme)?;
+                connection.send(Command::ListTrash)?;
                 Ok(connection)
             })
             .ok();
@@ -272,6 +283,7 @@ impl MainWindow {
             CoreStatus::Gone
         };
         let events = Self::listen(events, cx);
+        let trash = TrashState::new(&home, None);
         let mut window = Self {
             connector: connector.clone(),
             status,
@@ -318,6 +330,7 @@ impl MainWindow {
             counted: SharedString::default(),
             renaming: None,
             waiting: Waiting::Nothing,
+            trash,
             _events: events,
         };
         match location {

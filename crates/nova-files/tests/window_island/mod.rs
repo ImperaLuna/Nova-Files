@@ -7,6 +7,7 @@
 use std::fs;
 
 mod renaming;
+mod trash;
 
 use super::*;
 
@@ -296,9 +297,9 @@ async fn two_jobs_asked_at_once_are_both_pending(cx: &mut TestAppContext) {
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
     click(cx, "name-0");
-    view.update(cx, |view, _| {
-        view.trash_selected();
-        view.trash_selected();
+    view.update(cx, |view, cx| {
+        view.trash_selected(cx);
+        view.trash_selected(cx);
         assert_eq!(view.jobs_pending(), 2);
     });
 }

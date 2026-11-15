@@ -12,7 +12,9 @@
 //! folders always come first (see `navigate` and the core's `order`). A
 //! search's files stay best first, so their heads do nothing; they get a
 //! Folder column, and the part of each name that matched is marked. The
-//! count and the empty look are the search's (see `search`).
+//! count and the empty look are the search's (see `search`). The
+//! trash adds a Was in column, and says so when it is empty (see
+//! `window::trash`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -24,7 +26,7 @@ use gpui::{
     div, prelude::FluentBuilder as _, uniform_list,
 };
 
-use nova_files_api::{Order, SortKey};
+use nova_files_api::{Entry, Listing, Order, SortKey};
 
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
@@ -36,6 +38,8 @@ use crate::window::MainWindow;
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
 const SIZE_LABEL: &str = "Size";
+const WAS_IN_LABEL: &str = "Was in";
+const TRASH_EMPTY_LABEL: &str = "Empty";
 const FOLDER_LABEL: &str = "Folder";
 const MODIFIED_HEADER_SELECTOR: &str = "modified-header";
 const FOLDER_HEADER_SELECTOR: &str = "folder-header";
@@ -81,6 +85,7 @@ impl MainWindow {
                 }),
             )
             .child(self.entries(cx))
+            .children(self.empty_trash(&colors))
             .children(self.no_matches(&colors))
             .children(self.match_count(&colors))
             .children(self.band_box().map(|band| {
@@ -134,10 +139,7 @@ impl MainWindow {
                             .as_deref()
                             .map(|query| marks::matched(&name, query))
                             .unwrap_or_default();
-                        let folder = listing
-                            .folders
-                            .is_some()
-                            .then(|| this.folder_link(listing.path_of(entry), index, cx));
+                        let folder = this.folder_cell(listing, entry, index, cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let line = cells(
@@ -179,6 +181,30 @@ impl MainWindow {
         .track_scroll(&self.scroll)
         .size_full()
         .pb(size::ISLAND_CLEARANCE)
+    }
+}
+
+impl MainWindow {
+    /// "Empty" in the middle of an empty trash.
+    fn empty_trash(&self, colors: &Colors) -> Option<impl IntoElement> {
+        let empty = self
+            .listing
+            .as_ref()
+            .is_some_and(|listing| listing.entries.is_empty());
+        (empty && self.trash_open()).then(|| {
+            div()
+                .debug_selector(|| "trash-empty".to_owned())
+                .absolute()
+                .inset_0()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(size::NAME_GAP)
+                .text_color(colors.text_dim)
+                .child(icon(Icon::Trash, size::EMPTY_ICON, colors.text_dim))
+                .child(TRASH_EMPTY_LABEL)
+        })
     }
 }
 
@@ -238,6 +264,26 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
 }
 
 impl MainWindow {
+    /// The cell between Name and Modified: where the `index`th entry was
+    /// in the trash, or a search's file's folder; none in a folder.
+    fn folder_cell(
+        &self,
+        listing: &Listing,
+        entry: &Entry,
+        index: usize,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        if self.trash_open() {
+            let was_in = self.was_in(index).unwrap_or_default();
+            let colors = Colors::of(cx);
+            return Some(detail(was_in.to_string(), &colors).into_any_element());
+        }
+        listing
+            .folders
+            .is_some()
+            .then(|| self.folder_link(listing.path_of(entry), index, cx))
+    }
+
     /// The heads above the entries, lined up with [`cells`]. A click on
     /// one orders the list by it (see `navigate`); the one in use is
     /// bright and carries an arrow for its direction. A search's files
@@ -245,7 +291,12 @@ impl MainWindow {
     /// add the Folder head.
     fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let order = (!self.searching()).then(|| self.shown_order());
-        column_heads(order, self.showing_found().then(folder_head), colors, cx)
+        let folder = if self.trash_open() {
+            Some(was_in_head())
+        } else {
+            self.showing_found().then(folder_head)
+        };
+        column_heads(order, folder, colors, cx)
     }
 }
 
@@ -254,6 +305,14 @@ fn folder_head() -> AnyElement {
     div()
         .debug_selector(|| FOLDER_HEADER_SELECTOR.to_owned())
         .child(FOLDER_LABEL)
+        .into_any_element()
+}
+
+/// The trash's Was in head, which orders nothing.
+fn was_in_head() -> AnyElement {
+    div()
+        .debug_selector(|| "head-was-in".to_owned())
+        .child(WAS_IN_LABEL)
         .into_any_element()
 }
 

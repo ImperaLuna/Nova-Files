@@ -55,6 +55,8 @@ mod actions {
             PreviewPrevious,
             PreviewNext,
             FocusSearch,
+            RestoreSelected,
+            EmptyTrash,
         ]
     );
 }
@@ -125,6 +127,8 @@ pub const ACTIONS: &[ActionSpec] = &[
     PREVIEW_PREVIOUS,
     PREVIEW_NEXT,
     FIND,
+    RESTORE,
+    EMPTY_TRASH,
 ];
 
 spec!(
@@ -275,6 +279,15 @@ spec!(
     "search.focus",
     "Search",
     ["ctrl-f"]
+);
+
+spec!(
+    /// Puts the entries selected in the trash back where they were.
+    RESTORE, RestoreSelected, "file.restore", "Restore", []
+);
+spec!(
+    /// Asks, then deletes everything in the trash for good.
+    EMPTY_TRASH, EmptyTrash, "file.empty-trash", "Empty Trash", []
 );
 
 /// Binds every action's default keys.

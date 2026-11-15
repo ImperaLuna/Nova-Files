@@ -40,9 +40,10 @@ impl Corners {
 }
 
 /// One line of the columns: the name takes what the others leave, then
-/// the Folder column while a search's files are on screen, and Size sits
-/// flush right. The Modified cell carries `modified_selector`. Modified
-/// and Size are drawn as details: smaller and dimmer.
+/// the Folder column while a search's files are on screen (in the trash,
+/// Was in), and Size sits flush right. The Modified cell carries
+/// `modified_selector`. Modified and Size are drawn as details: smaller
+/// and dimmer.
 pub fn cells(
     name: impl IntoElement,
     folder: Option<AnyElement>,

@@ -355,11 +355,12 @@ pub mod size {
     pub const SEARCH_WIDTH: Pixels = px(220.0);
     pub const SEARCH_PAD: Pixels = px(12.0);
     pub const SEARCH_GAP: Pixels = px(9.0);
-    /// The Folder column of a search's files, and the cell's link.
+    /// The Folder column of a search's files (in the trash, Was in), and
+    /// the cell's link.
     pub const FOLDER_WIDTH: Pixels = px(200.0);
     pub const FOLDER_LINK_HEIGHT: Pixels = px(26.0);
     pub const FOLDER_LINK_PAD: Pixels = px(8.0);
-    /// The chip that says where a search looks, in the path's slot.
+    /// A chip at the path bar's end: where a search looks, Empty Trash.
     pub const CHIP_HEIGHT: Pixels = px(28.0);
     pub const CHIP_PAD: Pixels = px(10.0);
     /// The count of files a search found, over the sheet's bottom left.

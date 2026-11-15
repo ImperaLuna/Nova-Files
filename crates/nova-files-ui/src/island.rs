@@ -1,7 +1,8 @@
 //! The island: one floating bar at the bottom of the sheet, where the
 //! window says what it is doing and what the user can do next. It shows
 //! one thing at a time, the most important first: a running job's
-//! progress (see `progress`), a note after an action
+//! progress (see `progress`), a question before a step that can't be
+//! undone ("Delete 3 items for good?"), a note after an action
 //! ("Moved 3 items to Trash", with Undo), then the selection ("3 selected
 //! · 12 MB", with what can be done to it). With nothing to show it goes
 //! down, and the sheet's quiet count ("4 folders, 9 files") shows in its
@@ -25,6 +26,8 @@ pub const NOTE_TIME: Duration = Duration::from_secs(6);
 #[derive(Default)]
 pub struct Island {
     pub note: Option<Note>,
+    /// A question before a step that can't be undone.
+    pub confirm: Option<Confirm>,
     /// Takes the note down once [`NOTE_TIME`] has passed; replaced with
     /// each new note, which cancels the old one's.
     pub(crate) note_timer: Option<Task<()>>,
@@ -35,6 +38,15 @@ pub struct Island {
 pub struct Note {
     pub label: SharedString,
     pub undo: Option<NoteUndo>,
+}
+
+/// A question on the island before `operation`, which can't be undone:
+/// `label`, with Cancel and `yes`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Confirm {
+    pub label: SharedString,
+    pub yes: &'static str,
+    pub operation: Operation,
 }
 
 /// What a note's Undo does.
@@ -68,8 +80,8 @@ pub fn count(number: usize, one: &str, many: &str) -> String {
     }
 }
 
-const ITEM: &str = "item";
-const ITEMS: &str = "items";
+pub const ITEM: &str = "item";
+pub const ITEMS: &str = "items";
 const FOLDER: &str = "folder";
 const FOLDERS: &str = "folders";
 const FILE: &str = "file";
@@ -91,6 +103,16 @@ fn what(paths: &[PathBuf]) -> String {
 /// The last part of `path` as a user reads it; the root is "/".
 pub fn name_of(path: &Path) -> String {
     path.file_name().map_or_else(|| ROOT.to_owned(), lossy)
+}
+
+/// `path` as a user reads it, with the home folder `home` as `~`.
+pub fn short_path(path: &Path, home: &Path) -> String {
+    use crate::pick::HOME;
+    match path.strip_prefix(home) {
+        Ok(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
+        Ok(rest) => format!("{HOME}/{}", rest.to_string_lossy()),
+        Err(_) => path.to_string_lossy().into_owned(),
+    }
 }
 
 fn lossy(name: &OsStr) -> String {

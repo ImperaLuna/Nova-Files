@@ -1,13 +1,15 @@
 //! Draws the island over the bottom of the sheet (see `island`): a
-//! running job's line and orange bar, a note with its Undo, or the
-//! selection with what can be done to it. While it
+//! running job's line and orange bar, a question with Cancel and its
+//! answer, a note with its Undo, or the selection with what can be done
+//! to it (in the trash, Restore). While it
 //! is down, the sheet's quiet count shows at the bottom left instead.
 //!
 //! Its buttons send the window's actions, as keys do (see `commands`);
 //! only closing a note, which no key does, is handled here. Each part a
 //! test clicks carries a debug selector: `island`, `island-copy`,
 //! `island-cut`, `island-rename`, `island-trash`, `island-clear`, `island-undo`,
-//! `island-dismiss`, `island-progress`, `island-cancel`, and the count, `count`.
+//! `island-dismiss`, `island-progress`, `island-cancel`, `island-restore`,
+//! `island-no`, `island-yes`, and the count, `count`.
 
 use gpui::{
     Action, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement as _, IntoElement,
@@ -18,15 +20,16 @@ use gpui::{
 use super::row::icon;
 use crate::assets::Icon;
 use crate::commands::{
-    ClearSelection, CopySelected, CutSelected, RenameSelected, TrashSelected, Undo,
+    ClearSelection, CopySelected, CutSelected, RenameSelected, RestoreSelected, TrashSelected, Undo,
 };
 use crate::island::progress::Running;
-use crate::island::{self, Note};
+use crate::island::{self, Confirm, Note};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
 const UNDO_LABEL: &str = "Undo";
 const CANCEL_LABEL: &str = "Cancel";
+const RESTORE_LABEL: &str = "Restore";
 
 impl MainWindow {
     /// The island, or the quiet count while the island is down.
@@ -36,6 +39,8 @@ impl MainWindow {
             None
         } else if let Some((_, job)) = self.job_on_island(cx) {
             Some(job_parts(job, &colors, cx))
+        } else if let Some(confirm) = &self.island.confirm {
+            Some(confirm_parts(confirm, &colors, cx))
         } else if let Some(note) = &self.island.note {
             Some(note_parts(note, &colors, cx))
         } else if self.selected_count() > 0 {
@@ -50,7 +55,7 @@ impl MainWindow {
     }
 
     /// "3 selected · 12 MB", then Copy, Cut, Rename (for one), Move to
-    /// Trash and Clear.
+    /// Trash and Clear; in the trash, Restore and Clear.
     fn selection_parts(&self, colors: &Colors) -> Vec<gpui::AnyElement> {
         let count = self.selected_count();
         let (number, rest) = island::selection_line(count, self.selected_bytes());
@@ -64,17 +69,22 @@ impl MainWindow {
                 )
                 .child(rest)
                 .into_any_element(),
-            icon_button("island-copy", Icon::Copy, &CopySelected, colors).into_any_element(),
-            icon_button("island-cut", Icon::Cut, &CutSelected, colors).into_any_element(),
         ];
-        if count == 1 {
+        if self.trash_open() {
             parts.push(
-                icon_button("island-rename", Icon::Rename, &RenameSelected, colors)
-                    .into_any_element(),
+                text_button(
+                    "island-restore",
+                    RESTORE_LABEL,
+                    &RestoreSelected,
+                    colors.accept,
+                    colors,
+                )
+                .into_any_element(),
             );
+        } else if !self.in_trash() {
+            file_buttons(count, &mut parts, colors);
         }
         parts.extend([
-            icon_button("island-trash", Icon::Trash, &TrashSelected, colors).into_any_element(),
             divider(colors).into_any_element(),
             icon_button("island-clear", Icon::Close, &ClearSelection, colors).into_any_element(),
         ]);
@@ -101,6 +111,20 @@ impl MainWindow {
             )
         })
     }
+}
+
+/// Copy, Cut, Rename (for one) and Move to Trash.
+fn file_buttons(count: usize, parts: &mut Vec<gpui::AnyElement>, colors: &Colors) {
+    parts.extend([
+        icon_button("island-copy", Icon::Copy, &CopySelected, colors).into_any_element(),
+        icon_button("island-cut", Icon::Cut, &CutSelected, colors).into_any_element(),
+    ]);
+    if count == 1 {
+        parts.push(
+            icon_button("island-rename", Icon::Rename, &RenameSelected, colors).into_any_element(),
+        );
+    }
+    parts.push(icon_button("island-trash", Icon::Trash, &TrashSelected, colors).into_any_element());
 }
 
 /// A running job's line and bar, and Cancel while it waits.
@@ -138,6 +162,31 @@ fn job_parts(job: &Running, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gp
         );
     }
     parts
+}
+
+/// A question's line, Cancel, and its answer in red.
+fn confirm_parts(
+    confirm: &Confirm,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> Vec<gpui::AnyElement> {
+    let answer = |name: &'static str, words: &'static str, yes: bool| {
+        square(name, colors)
+            .w_auto()
+            .px(size::TEXT_BUTTON_PAD)
+            .font_weight(text::STRONG_WEIGHT)
+            .when(yes, |button| button.text_color(colors.danger))
+            .child(SharedString::new_static(words))
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.answer_confirm(yes, cx)))
+            .into_any_element()
+    };
+    vec![
+        label(colors)
+            .child(confirm.label.clone())
+            .into_any_element(),
+        answer("island-no", CANCEL_LABEL, false),
+        answer("island-yes", confirm.yes, true),
+    ]
 }
 
 /// A note's line, its Undo when it has one, and a button to close it.

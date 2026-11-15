@@ -176,6 +176,18 @@ fn every_failure_reads_differently() {
 }
 
 #[test]
+fn a_path_under_home_reads_from_the_tilde() {
+    let home = Path::new("/home/a");
+    assert_eq!(short_path(Path::new("/home/a"), home), "~");
+    assert_eq!(
+        short_path(Path::new("/home/a/Documents/x"), home),
+        "~/Documents/x"
+    );
+    assert_eq!(short_path(Path::new("/home/ab"), home), "/home/ab");
+    assert_eq!(short_path(Path::new("/srv"), home), "/srv");
+}
+
+#[test]
 fn a_listing_counts_its_folders_and_files() {
     use nova_files_api::EntryId;
     let entry = |id, name: &str, kind| Entry {

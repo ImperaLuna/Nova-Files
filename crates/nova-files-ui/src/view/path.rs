@@ -21,21 +21,24 @@
 use std::path::PathBuf;
 
 use gpui::{
-    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
-    prelude::FluentBuilder as _,
+    Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
+    MouseDownEvent, ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _,
+    Styled as _, div, prelude::FluentBuilder as _,
 };
 
 use super::bar::capsule;
 use super::place_icon;
 use super::row::icon;
 use crate::assets::Icon;
+use crate::commands::EmptyTrash;
 use crate::crumbs::{self, Crumb, Shown};
 use crate::path_bar::{MenuItem, MenuOwner};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
 const FOLDED_LABEL: &str = "…";
+const TRASH_LABEL: &str = "Trash";
+const EMPTY_TRASH_LABEL: &str = "Empty Trash";
 
 impl MainWindow {
     pub(super) fn path_bar(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
@@ -69,7 +72,7 @@ impl MainWindow {
                 Shown::Crumb(index) => {
                     let crumb = &crumbs[index];
                     row = row.child(crumb_button(index, crumb, colors, cx));
-                    if !crumb.here || self.has_folders() {
+                    if !crumb.here || (self.has_folders() && !self.trash_open()) {
                         row = row.child(self.arrow(index, crumb.path.clone(), colors, cx));
                     }
                 }
@@ -91,16 +94,28 @@ impl MainWindow {
             .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
                 this.start_typing_path(window, cx);
             }));
+        let empties = self.trash_open() && self.trash_count().is_some_and(|count| count > 0);
         bar.child(row)
             .child(fill)
             .children(self.scope_chip(colors, cx))
+            .when(empties, |bar| bar.child(empty_trash_chip(colors)))
     }
 
-    /// The crumbs of the folder on screen; none before one arrives.
+    /// The crumbs of the folder on screen; none before one arrives. The
+    /// trash is one crumb, Trash, whichever folder holds it.
     fn crumbs(&self) -> Vec<Crumb> {
         let Some(folder) = self.folder() else {
             return Vec::new();
         };
+        if self.trash_open() {
+            return vec![Crumb {
+                path: folder.to_path_buf(),
+                label: SharedString::new_static(TRASH_LABEL),
+                icon: Icon::Trash,
+                shows_icon: true,
+                here: true,
+            }];
+        }
         crumbs::crumbs(folder, &self.home, &self.places, place_icon)
     }
 
@@ -217,4 +232,26 @@ fn chevron(colors: &Colors) -> Div {
         .w(size::SEPARATOR_WIDTH)
         .h(size::SEPARATOR_HEIGHT)
         .child(icon(Icon::Chevron, size::SEPARATOR_ICON, colors.text_faint))
+}
+
+/// Empty Trash, at the path bar's right end in the trash; it asks
+/// first (see `window::trash`).
+fn empty_trash_chip(colors: &Colors) -> impl IntoElement {
+    div()
+        .id("empty-trash")
+        .debug_selector(|| "empty-trash".to_owned())
+        .flex()
+        .flex_none()
+        .items_center()
+        .h(size::CHIP_HEIGHT)
+        .px(size::CHIP_PAD)
+        .rounded(radius::ROW)
+        .text_color(colors.text_soft)
+        .cursor_pointer()
+        .hover(|chip| chip.bg(colors.hover).text_color(colors.text))
+        .active(|chip| chip.bg(colors.press))
+        .child(EMPTY_TRASH_LABEL)
+        .on_click(|_: &ClickEvent, window, cx| {
+            window.dispatch_action(EmptyTrash.boxed_clone(), cx);
+        })
 }

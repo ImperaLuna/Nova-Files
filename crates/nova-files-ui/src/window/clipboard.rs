@@ -20,7 +20,8 @@ use crate::island;
 impl MainWindow {
     /// Puts the files selected on the clipboard, to be moved when `cut`.
     pub(crate) fn copy_selected(&mut self, cut: bool, cx: &mut Context<Self>) {
-        if self.pick.is_some() {
+        // What is in the trash only goes back where it was.
+        if self.pick.is_some() || self.in_trash() {
             return;
         }
         let paths = self.selected_paths();
@@ -45,7 +46,7 @@ impl MainWindow {
     /// screen. Files cut from this folder stay where they are; files cut
     /// elsewhere leave the clipboard once pasted.
     pub(crate) fn paste(&mut self, cx: &Context<Self>) {
-        if self.pick.is_some() {
+        if self.pick.is_some() || self.in_trash() {
             return;
         }
         let Some(folder) = self.folder().map(PathBuf::from) else {
