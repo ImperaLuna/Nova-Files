@@ -1,8 +1,8 @@
 //! The top bar: a row of capsules on the window. Back, Forward and Up;
-//! the path bar (see `path`), which takes what the others leave; the
-//! search box (see `search`); and the list and tiles switch. The tiles
-//! view is a feature of its own that fills its slot; until then the slot
-//! does nothing.
+//! the path bar (see `path`), which takes what the others leave, with the
+//! search's scope chip at its end; the search box (see `search`); and the
+//! list and tiles switch. The tiles view is a feature of its own that
+//! fills its slot; until then the slot does nothing.
 
 use gpui::{
     Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,

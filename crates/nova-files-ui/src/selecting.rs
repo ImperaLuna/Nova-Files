@@ -15,7 +15,8 @@
 //! selection by name; arriving in the folder that holds the one just left
 //! (Up, Back, or any other way) selects the folder left, so the keyboard
 //! carries on from there. Anything else starts with nothing selected, and
-//! so does every list a search shows and the folder after it.
+//! so does every list a search shows and the folder after it, unless a
+//! found file's Folder cell was clicked: it is selected in its folder.
 
 use gpui::{ClickEvent, Context, KeyDownEvent, ScrollStrategy};
 use nova_files_api::{Command, EntryId, EntryKind, Listing, ListingId};
@@ -252,7 +253,10 @@ impl MainWindow {
     pub(crate) fn selection_for(&self, next: &Listing) -> Option<Selection> {
         let shown = self.listing.as_ref()?;
         if shown.folders.is_some() {
-            return None;
+            let reveal = self.search.reveal.as_deref()?;
+            return (reveal.parent() == Some(next.path.as_path()))
+                .then(|| Selection::named(next.id, &next.entries, reveal.file_name()?))
+                .flatten();
         }
         if shown.path == next.path {
             return self

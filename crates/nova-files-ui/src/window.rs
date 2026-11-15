@@ -39,7 +39,7 @@ mod rows;
 mod search;
 
 pub use navigate::tidy;
-pub use search::FocusTo;
+pub use search::{FocusTo, Scope, short_folder};
 
 use std::collections::HashMap;
 use std::ops::Range;

@@ -1,21 +1,27 @@
-//! The search's parts of the window: the box in the top bar, the count
-//! of files found at the sheet's bottom left, and what shows when nothing
-//! was found. The box's keys are handled here too: Down in it moves into
+//! The search's parts of the window: the box in the top bar, the chip in
+//! the path's slot that says where it looks, each found file's Folder
+//! cell, the count of files found at the sheet's bottom left, and what
+//! shows when nothing was found. The box's keys are handled here too: Down in it moves into
 //! the results, and the window's own keys (`/`, Ctrl+F) bring the caret
 //! back (see `window/search`).
 
+use std::path::PathBuf;
+
 use gpui::{
-    Context, Div, Focusable as _, InteractiveElement as _, IntoElement, KeyDownEvent,
-    ParentElement as _, Styled as _, Window, div,
+    AnyElement, ClickEvent, Context, Div, Focusable as _, InteractiveElement as _, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, ParentElement as _, StatefulInteractiveElement as _,
+    Styled as _, Window, div,
 };
 
 use super::row::icon;
 use crate::assets::Icon;
 use crate::commands::CursorDown;
 use crate::theme::{Colors, radius, size, text};
-use crate::window::{FocusTo, MainWindow};
+use crate::window::{FocusTo, MainWindow, Scope, short_folder};
 
 const ONE_MATCH: &str = "1 match";
+const EVERYWHERE: &str = "Everywhere";
+const HERE_ONLY: &str = "Here only";
 const NO_MATCHES: &str = "No matches";
 const CANT_SEARCH: &str = "Can't search";
 const SEARCH_LABEL: &str = "Search";
@@ -46,6 +52,81 @@ impl MainWindow {
                     .text_color(colors.text)
                     .child(self.search.field.clone()),
             )
+    }
+
+    /// The chip at the end of the path's slot that says where the search
+    /// looks; a click switches between the whole index and the folder.
+    /// Only while a search is under way.
+    pub(super) fn scope_chip(&self, colors: &Colors, cx: &Context<Self>) -> Option<AnyElement> {
+        if !self.searching() {
+            return None;
+        }
+        let (label, other) = match self.scope() {
+            Scope::Everywhere => (EVERYWHERE, Scope::HereOnly),
+            Scope::HereOnly => (HERE_ONLY, Scope::Everywhere),
+        };
+        Some(
+            div()
+                .id("scope")
+                .debug_selector(|| "scope".to_owned())
+                .flex()
+                .flex_none()
+                .items_center()
+                .h(size::CHIP_HEIGHT)
+                .px(size::CHIP_PAD)
+                .rounded(radius::ROW)
+                .bg(colors.press)
+                .text_size(text::LABEL)
+                .font_weight(text::DETAIL_WEIGHT)
+                .text_color(colors.text_soft)
+                .cursor_pointer()
+                .hover(|chip| chip.bg(colors.selected).text_color(colors.text))
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.set_scope(other, cx);
+                }))
+                .child(label)
+                .into_any_element(),
+        )
+    }
+
+    /// Row `index`'s Folder cell: where the found file `path` is, as a
+    /// link that goes there with it selected.
+    pub(super) fn folder_link(
+        &self,
+        path: PathBuf,
+        index: usize,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let colors = Colors::of(cx);
+        let folder = path.parent().unwrap_or(&path);
+        let label = short_folder(folder, &self.home);
+        div()
+            .id(("folder", index))
+            .debug_selector(move || format!("folder-{index}"))
+            .max_w_full()
+            .h(size::FOLDER_LINK_HEIGHT)
+            .flex()
+            .items_center()
+            .px(size::FOLDER_LINK_PAD)
+            .ml(-size::FOLDER_LINK_PAD)
+            .rounded(radius::SMALL)
+            .text_size(text::DETAIL)
+            .font_weight(text::DETAIL_WEIGHT)
+            .text_color(colors.text_dim)
+            .cursor_pointer()
+            .hover(|link| link.bg(colors.press).text_color(colors.text))
+            // Like a name, a press here is not the start of a band.
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseDownEvent, _, _| this.pressed_name = true),
+            )
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                cx.stop_propagation();
+                this.reveal(path.clone());
+                cx.notify();
+            }))
+            .child(div().min_w_0().truncate().child(label))
+            .into_any_element()
     }
 
     /// How many files the search found, over the sheet's bottom left;
