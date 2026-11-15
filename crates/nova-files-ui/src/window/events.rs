@@ -4,7 +4,6 @@
 //! screen read again when the core moved on from it (see `window`).
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::{Context, ScrollStrategy, UniformListScrollHandle};
@@ -55,7 +54,25 @@ impl MainWindow {
                 self.listing_arrived(listing, cx);
             }
             Event::FolderUnreadable { id, path, .. } if self.asked == Some(id) => {
-                self.folder_refused(id, path, cx);
+                self.asked = None;
+                self.history.refused(&path);
+                match &self.listing {
+                    None => {
+                        if let Some(fallback) = self.fallbacks.pop() {
+                            self.request(&fallback);
+                        }
+                    }
+                    Some(listing) if self.core_moved && listing.path != path => {
+                        let shown = listing.path.clone();
+                        self.request(&shown);
+                    }
+                    Some(_) => {}
+                }
+                self.pick_folder_refused(id, &path);
+                self.typed_path_refused(id, cx);
+                cx.emit(WindowEvent::Refused(path));
+                // Back or Forward may have nowhere left to go.
+                cx.notify();
             }
             Event::DetailsRead { id, first, details } => {
                 if let Some(listing) = &self.listing
@@ -119,29 +136,6 @@ impl MainWindow {
                 cx.notify();
             }
         }
-    }
-
-    /// The core refused the folder asked last, `id` for `path`.
-    fn folder_refused(&mut self, id: ListingId, path: PathBuf, cx: &mut Context<Self>) {
-        self.asked = None;
-        self.history.refused(&path);
-        match &self.listing {
-            None => {
-                if let Some(fallback) = self.fallbacks.pop() {
-                    self.request(&fallback);
-                }
-            }
-            Some(listing) if self.core_moved && listing.path != path => {
-                let shown = listing.path.clone();
-                self.request(&shown);
-            }
-            Some(_) => {}
-        }
-        self.pick_folder_refused(id, &path);
-        self.typed_path_refused(id, cx);
-        cx.emit(WindowEvent::Refused(path));
-        // Back or Forward may have nowhere left to go.
-        cx.notify();
     }
 
     /// Takes the settings the core sent, which it sends again whenever
