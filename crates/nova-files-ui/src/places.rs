@@ -70,16 +70,30 @@ impl Shown {
     }
 }
 
-/// The icon a standard folder is drawn with; `None` for one Places leaves
+/// The icon a standard folder is drawn with, wherever it shows (Places,
+/// the path bar).
+pub const fn place_icon(kind: PlaceKind) -> Icon {
+    match kind {
+        PlaceKind::Home => Icon::Home,
+        PlaceKind::Desktop => Icon::Desktop,
+        PlaceKind::Documents => Icon::Documents,
+        PlaceKind::Downloads => Icon::Downloads,
+        PlaceKind::Music => Icon::Music,
+        PlaceKind::Pictures => Icon::Pictures,
+        PlaceKind::Videos => Icon::Videos,
+    }
+}
+
+/// The icon a standard folder has in Places; `None` for one Places leaves
 /// out.
 const fn standard_icon(kind: PlaceKind) -> Option<Icon> {
     match kind {
-        PlaceKind::Home => Some(Icon::Home),
-        PlaceKind::Desktop => Some(Icon::Desktop),
-        PlaceKind::Documents => Some(Icon::Documents),
-        PlaceKind::Downloads => Some(Icon::Downloads),
-        PlaceKind::Pictures => Some(Icon::Pictures),
         PlaceKind::Music | PlaceKind::Videos => None,
+        PlaceKind::Home
+        | PlaceKind::Desktop
+        | PlaceKind::Documents
+        | PlaceKind::Downloads
+        | PlaceKind::Pictures => Some(place_icon(kind)),
     }
 }
 
@@ -196,5 +210,23 @@ mod tests {
         assert!(rows[0].is_here(Some(Path::new("/home/me"))));
         assert!(!rows[0].is_here(Some(Path::new("/home/me/Work"))));
         assert!(!rows[0].is_here(None));
+    }
+
+    #[test]
+    fn every_folder_kind_has_an_icon_of_its_own() {
+        let kinds = [
+            PlaceKind::Home,
+            PlaceKind::Desktop,
+            PlaceKind::Documents,
+            PlaceKind::Downloads,
+            PlaceKind::Music,
+            PlaceKind::Pictures,
+            PlaceKind::Videos,
+        ];
+        let icons: Vec<Icon> = kinds.into_iter().map(place_icon).collect();
+        for (index, icon) in icons.iter().enumerate() {
+            assert!(!icons[..index].contains(icon), "{icon:?} drawn twice");
+        }
+        assert_eq!(place_icon(PlaceKind::Home), Icon::Home);
     }
 }

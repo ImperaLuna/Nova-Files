@@ -282,9 +282,21 @@ pub mod size {
     pub const CAPSULE_BUTTON_GAP: Pixels = px(1.0);
     pub const ICON_BUTTON: Pixels = px(34.0);
     pub const BUTTON_ICON: Pixels = px(19.0);
-    /// The path's slot and the search slot: the path takes what's left.
+    /// The path bar and the search slot: the path takes what's left.
     pub const PATH_MIN_WIDTH: Pixels = px(150.0);
-    pub const PATH_PAD: Pixels = px(12.0);
+    /// The path bar's empty part after the crumbs, which always shows.
+    pub const PATH_FILL_MIN: Pixels = px(12.0);
+    /// Space either side of the path bar's text field.
+    pub const PATH_FIELD_PAD: Pixels = px(10.0);
+    /// A crumb in the path bar: space either side, between its icon and
+    /// its name, and its icon.
+    pub const CRUMB_PAD: Pixels = px(9.0);
+    pub const CRUMB_GAP: Pixels = px(7.0);
+    pub const CRUMB_ICON: Pixels = px(16.0);
+    /// The arrow between two crumbs, and its icon.
+    pub const SEPARATOR_WIDTH: Pixels = px(18.0);
+    pub const SEPARATOR_HEIGHT: Pixels = px(26.0);
+    pub const SEPARATOR_ICON: Pixels = px(11.0);
     pub const SEARCH_WIDTH: Pixels = px(220.0);
     pub const SEARCH_PAD: Pixels = px(12.0);
     pub const SEARCH_GAP: Pixels = px(9.0);
@@ -301,10 +313,19 @@ pub mod size {
     pub const MENU_ROW_HEIGHT: Pixels = px(32.0);
     pub const MENU_PAD: Pixels = px(5.0);
     pub const MENU_ICON: Pixels = px(16.0);
-    pub const MENU_MIN_WIDTH: Pixels = px(210.0);
     /// The button on a sidebar section's head, and its icon.
     pub const SECTION_BUTTON: Pixels = px(24.0);
     pub const SECTION_BUTTON_ICON: Pixels = px(15.0);
+    /// A menu row with an icon: space either side, and between its icon
+    /// and its name.
+    pub const MENU_ITEM_PAD: Pixels = px(10.0);
+    pub const MENU_ICON_GAP: Pixels = px(10.0);
+    /// A menu of folders: its narrowest and widest, its tallest before it
+    /// scrolls, and how far below its button it hangs.
+    pub const MENU_MIN_WIDTH: Pixels = px(210.0);
+    pub const MENU_MAX_WIDTH: Pixels = px(300.0);
+    pub const MENU_MAX_HEIGHT: Pixels = px(340.0);
+    pub const MENU_OFFSET: Pixels = px(6.0);
     /// The widest the type filter's button gets; a longer name is cut.
     pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
     /// The tallest the type menu gets before it scrolls.

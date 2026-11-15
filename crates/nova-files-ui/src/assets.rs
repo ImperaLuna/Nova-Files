@@ -21,6 +21,7 @@ pub enum Icon {
     Pictures,
     Music,
     Videos,
+    Drive,
     Back,
     Forward,
     Up,
@@ -31,10 +32,11 @@ pub enum Icon {
     Tiles,
     Plus,
     Close,
+    Chevron,
 }
 
 impl Icon {
-    const ALL: [Self; 19] = [
+    const ALL: [Self; 21] = [
         Self::Folder,
         Self::File,
         Self::Home,
@@ -44,6 +46,7 @@ impl Icon {
         Self::Pictures,
         Self::Music,
         Self::Videos,
+        Self::Drive,
         Self::Back,
         Self::Forward,
         Self::Up,
@@ -54,6 +57,7 @@ impl Icon {
         Self::Tiles,
         Self::Plus,
         Self::Close,
+        Self::Chevron,
     ];
 
     /// The path GPUI asks the asset source for.
@@ -68,6 +72,7 @@ impl Icon {
             Self::Pictures => "icons/pictures.svg",
             Self::Music => "icons/music.svg",
             Self::Videos => "icons/videos.svg",
+            Self::Drive => "icons/drive.svg",
             Self::Back => "icons/back.svg",
             Self::Forward => "icons/forward.svg",
             Self::Up => "icons/up.svg",
@@ -78,6 +83,7 @@ impl Icon {
             Self::Tiles => "icons/tiles.svg",
             Self::Plus => "icons/plus.svg",
             Self::Close => "icons/close.svg",
+            Self::Chevron => "icons/chevron.svg",
         }
     }
 
@@ -92,6 +98,7 @@ impl Icon {
             Self::Pictures => svg::PICTURES,
             Self::Music => svg::MUSIC,
             Self::Videos => svg::VIDEOS,
+            Self::Drive => svg::DRIVE,
             Self::Back => svg::BACK,
             Self::Forward => svg::FORWARD,
             Self::Up => svg::UP,
@@ -102,6 +109,7 @@ impl Icon {
             Self::Tiles => svg::TILES,
             Self::Plus => svg::PLUS,
             Self::Close => svg::CLOSE,
+            Self::Chevron => svg::CHEVRON,
         };
         source.as_bytes()
     }

@@ -55,6 +55,7 @@ use crate::band::Band;
 use crate::history::History;
 use crate::jump::TypeJump;
 use crate::menu::Menu;
+use crate::path_bar::PathBar;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
@@ -140,6 +141,8 @@ pub struct MainWindow {
     pinned: Arc<[Bookmark]>,
     /// Where the window has been, for Back and Forward.
     pub(crate) history: History,
+    /// The path bar's open menu (see `path_bar`).
+    pub(crate) path_bar: PathBar,
     pub(crate) scroll: UniformListScrollHandle,
     /// Another app's request, while the window is its picker (see `pick`).
     pub(crate) pick: Option<Picker>,
@@ -154,10 +157,11 @@ pub struct MainWindow {
     _events: Task<()>,
 }
 
-/// Delivers the core's events into the window's async channel.
-struct WindowSink(UnboundedSender<Event>);
+/// Delivers the core's events into an async channel: the window's, or a
+/// path bar menu's.
+pub struct ChannelSink(pub UnboundedSender<Event>);
 
-impl EventSink for WindowSink {
+impl EventSink for ChannelSink {
     fn deliver(&self, event: Event) -> Result<(), ClientGone> {
         self.0.unbounded_send(event).map_err(|_| ClientGone)
     }
@@ -179,7 +183,7 @@ impl MainWindow {
     ) -> Self {
         let (sink, mut events) = mpsc::unbounded();
         let connection = connector
-            .connect(WindowSink(sink))
+            .connect(ChannelSink(sink))
             .and_then(|connection| {
                 connection.send(Command::Ping)?;
                 connection.send(Command::Places)?;
@@ -233,6 +237,7 @@ impl MainWindow {
             places: Vec::new(),
             pinned: Arc::from([]),
             history: History::default(),
+            path_bar: PathBar::new(connector.clone()),
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
@@ -297,7 +302,8 @@ impl Focusable for MainWindow {
     }
 }
 
-const ROOT_FOLDER: &str = "/";
+/// The root folder, where a window lands when nothing else can be read.
+pub const ROOT_FOLDER: &str = "/";
 
 /// Where a window opens unless told otherwise: the home folder, or the
 /// root folder on a system without one.
