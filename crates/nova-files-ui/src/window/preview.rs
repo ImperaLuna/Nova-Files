@@ -149,7 +149,9 @@ impl MainWindow {
 
     /// The selection changed: an open quick look moves to the entry the
     /// cursor is on now, whatever moved it, keeping what it shows until
-    /// the core answers.
+    /// the core answers. (Its listing is the one on screen: a listing
+    /// that arrives moves or closes it first, see
+    /// [`Self::preview_listing_arrived`].)
     pub(crate) fn preview_follow_cursor(&mut self, cx: &mut Context<Self>) {
         let Some(open) = &self.quick_looks.open else {
             return;
@@ -159,7 +161,7 @@ impl MainWindow {
             .cursor()
             .and_then(|cursor| u32::try_from(cursor).ok())
             .map(EntryId)
-            .filter(|&entry| entry != open.entry && self.listing_id() == Some(listing))
+            .filter(|&entry| entry != open.entry)
         else {
             return;
         };
