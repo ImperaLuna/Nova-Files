@@ -24,6 +24,10 @@ pub const MAX_ROWS: u32 = 512;
 /// The core keeps the best ones.
 pub const MAX_HITS: u32 = 200;
 
+/// The most entries each stage of a [`Command::Find`] adds: more than a
+/// window's list scrolls through when looking for one name.
+pub const MAX_FOUND: u32 = 1000;
+
 /// A request from a client to the core.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -71,6 +75,20 @@ pub enum Command {
         id: SearchId,
         query: String,
         limit: u32,
+    },
+    /// Find files whose names match `query`, as [`Command::Search`] does,
+    /// for a window to show as its list. The answer is
+    /// [`Event::FolderListed`] with `id` and every stage's hits, best
+    /// first, each entry in its own folder (see [`Listing::folders`]), at
+    /// most [`MAX_FOUND`] a stage; or [`Event::FindFailed`]. `within` keeps
+    /// only what is inside that folder, at any depth; without it the whole
+    /// index counts. It is the client's listing like a
+    /// [`Command::ListFolder`]: either one asked for later cancels it, and
+    /// [`Command::Rows`] serves its rows.
+    Find {
+        id: ListingId,
+        query: String,
+        within: Option<PathBuf>,
     },
     /// Read the properties of what is at `path`, without following a link.
     /// The answer is [`Event::Properties`] or [`Event::PropertiesUnreadable`]
@@ -223,6 +241,8 @@ pub enum Event {
     },
     /// [`Command::Search`] `id` couldn't run.
     SearchFailed { id: SearchId, reason: SearchFailed },
+    /// [`Command::Find`] `id` couldn't run.
+    FindFailed { id: ListingId, reason: SearchFailed },
     /// The properties of [`Command::Properties`] `id`'s path.
     Properties {
         id: PropertiesId,

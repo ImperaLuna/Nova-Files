@@ -4,6 +4,7 @@
 
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
+mod scripted_search;
 mod scripted_select;
 
 use std::cell::Cell;
@@ -111,7 +112,12 @@ fn answer_listing(core: &mut Core, count: u32) -> ListingId {
             kind: EntryKind::File,
         })
         .collect();
-    core.send(Event::FolderListed(Listing { id, path, entries }));
+    core.send(Event::FolderListed(Listing {
+        id,
+        path,
+        entries,
+        folders: None,
+    }));
     id
 }
 
@@ -204,6 +210,7 @@ fn a_listing_dropped_after_the_refusal_reads_the_shown_one_again(cx: &mut TestAp
         id: other,
         path: other_path,
         entries: Arc::new([]),
+        folders: None,
     }));
     cx.run_until_parked();
 
@@ -219,6 +226,7 @@ fn an_older_listing_dropped_leaves_the_shown_one_alone(cx: &mut TestAppContext) 
         id: ListingId(id.0.saturating_sub(1)),
         path: PathBuf::from(OTHER),
         entries: Arc::new([]),
+        folders: None,
     }));
     cx.run_until_parked();
 
@@ -590,6 +598,7 @@ fn a_new_order_reads_again_the_folder_asked_for_last(cx: &mut TestAppContext) {
         id,
         path,
         entries: Arc::from([]),
+        folders: None,
     }));
     cx.run_until_parked();
     view.read_with(cx, |view, _| assert_eq!(view.shown_order(), by_size));

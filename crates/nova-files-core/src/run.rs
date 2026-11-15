@@ -135,6 +135,7 @@ fn answer(
         | Command::ListTrash
         | Command::Rows { .. }
         | Command::Search { .. }
+        | Command::Find { .. }
         | Command::Properties { .. }
         | Command::OpenFile { .. }
         | Command::OpenWith(_)) => folders::answer(id, client, command, setup),
