@@ -57,6 +57,10 @@ mod actions {
             FocusSearch,
             RestoreSelected,
             EmptyTrash,
+            NewTab,
+            CloseTab,
+            NextTab,
+            PreviousTab,
         ]
     );
 }
@@ -129,6 +133,10 @@ pub const ACTIONS: &[ActionSpec] = &[
     FIND,
     RESTORE,
     EMPTY_TRASH,
+    NEW_TAB,
+    CLOSE_TAB,
+    NEXT_TAB,
+    PREVIOUS_TAB,
 ];
 
 spec!(
@@ -288,6 +296,23 @@ spec!(
 spec!(
     /// Asks, then deletes everything in the trash for good.
     EMPTY_TRASH, EmptyTrash, "file.empty-trash", "Empty Trash", []
+);
+
+spec!(
+    /// Opens a new tab on the Start page.
+    NEW_TAB, NewTab, "tab.new", "New tab", ["ctrl-t"]
+);
+spec!(
+    /// Closes the tab on screen, unless it is the last one.
+    CLOSE_TAB, CloseTab, "tab.close", "Close tab", ["ctrl-w"]
+);
+spec!(
+    /// Shows the next tab, the first after the last.
+    NEXT_TAB, NextTab, "tab.next", "Next tab", ["ctrl-tab"]
+);
+spec!(
+    /// Shows the tab before, the last before the first.
+    PREVIOUS_TAB, PreviousTab, "tab.previous", "Previous tab", ["ctrl-shift-tab"]
 );
 
 /// Binds every action's default keys.

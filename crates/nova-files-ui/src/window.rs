@@ -6,7 +6,7 @@
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
 //! `clipboard`, renaming and New folder in `renaming`, and the jobs they
-//! start in `jobs`. Drawing
+//! start in `jobs`, and the tabs in `tabs`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -54,6 +54,7 @@ mod renaming;
 mod rows;
 mod search;
 mod start;
+mod tabs;
 mod trash;
 mod tree;
 
@@ -93,6 +94,7 @@ use crate::shown_thumbnails::ShownThumbnails;
 use crate::tree::FolderTree;
 use jobs::Jobs;
 use renaming::{Renaming, Waiting};
+use tabs::Tabs;
 use trash::TrashState;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
@@ -221,6 +223,9 @@ pub struct MainWindow {
     waiting: Waiting,
     /// The trash, and what the window knows of it (see `trash`).
     trash: TrashState,
+    /// The tabs in the background, and which one is on screen (see
+    /// `tabs`).
+    tabs: Tabs,
     _events: Task<()>,
 }
 
@@ -331,6 +336,7 @@ impl MainWindow {
             renaming: None,
             waiting: Waiting::Nothing,
             trash,
+            tabs: Tabs::default(),
             _events: events,
         };
         match location {
