@@ -4,9 +4,13 @@
 //! where the sidebar and the bar meet. In pick mode the pick bar runs along
 //! the bottom (see `pick`).
 //!
+//! A narrow window folds the sidebar into one row above the bar (see
+//! `sidebar`).
+//!
 //! Each part is drawn in a file of its own, so a feature changes only its
-//! part: the top bar in `bar`, its path bar in `path`, the sidebar in `sidebar`, the sheet with its
-//! column heads and rows in `sheet`, and the pieces of one row in `row`.
+//! part: the top bar in `bar`, its path bar in `path`, the sidebar in
+//! `sidebar`, the sheet with its column heads and rows in `sheet`, and the
+//! pieces of one row in `row`.
 //!
 //! The window sets the key context its actions are bound in and handles
 //! each action it takes; buttons and the mouse's side buttons send actions
@@ -29,7 +33,7 @@ mod search;
 mod sheet;
 mod sidebar;
 
-pub use sidebar::place_icon;
+pub use crate::places::place_icon;
 
 use gpui::{
     App, Context, Div, FocusHandle, Focusable as _, InteractiveElement as _, IntoElement,
@@ -44,7 +48,7 @@ use crate::commands::{
     SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp, ToggleSelected,
 };
 use crate::selection::Move;
-use crate::theme::{Colors, size, text};
+use crate::theme::{self, Colors, size, text};
 use crate::window::{FocusTo, MainWindow};
 
 impl Render for MainWindow {
@@ -54,6 +58,7 @@ impl Render for MainWindow {
         let colors = Colors::of(cx);
         // Keys always land somewhere (see `keys_home`).
         let main = self.pick.is_none();
+        let narrow = window.viewport_size().width < theme::window::NARROW_WIDTH;
         if window.focused(cx).is_none() {
             window.focus(&self.keys_home(cx), cx);
         }
@@ -94,38 +99,47 @@ impl Render for MainWindow {
             .font_family(text::FAMILY)
             .text_size(text::BODY)
             .font_weight(text::BODY_WEIGHT)
+            .child(self.body(narrow, &colors, cx))
+            .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
+    }
+}
+
+impl MainWindow {
+    /// The sidebar beside the bar and sheet; above them when `narrow`.
+    /// Only the strips around the sheet are painted the window's color.
+    fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {
+        div()
+            .flex()
+            .flex_1()
+            .min_h_0()
+            .when(narrow, gpui::Styled::flex_col)
             .child(
                 div()
                     .flex()
+                    .flex_col()
+                    .flex_none()
+                    .px(size::GAP)
+                    .pt(size::GAP)
+                    .bg(colors.window)
+                    .child(self.sidebar(narrow, cx)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
                     .flex_1()
+                    .min_w_0()
                     .min_h_0()
                     .child(
                         div()
-                            .flex()
-                            .flex_col()
                             .flex_none()
-                            .px(size::GAP)
                             .pt(size::GAP)
+                            .when(narrow, |bar| bar.pl(size::GAP))
                             .bg(colors.window)
-                            .child(self.sidebar(cx)),
+                            .child(self.top_bar(colors, cx)),
                     )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .pt(size::GAP)
-                                    .bg(colors.window)
-                                    .child(self.top_bar(&colors, cx)),
-                            )
-                            .child(self.sheet(cx)),
-                    ),
+                    .child(self.sheet(cx)),
             )
-            .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
     }
 }
 

@@ -21,6 +21,7 @@ mod kind;
 mod marks;
 mod path_bar;
 mod pick;
+mod places;
 mod requests;
 mod selecting;
 mod selection;

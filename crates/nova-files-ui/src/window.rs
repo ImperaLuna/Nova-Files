@@ -44,13 +44,14 @@ pub use search::{FocusTo, Scope, short_folder};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedSender};
 use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, Task, UniformListScrollHandle};
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing, ListingId,
-    Order, Place, Settings,
+    Bookmark, ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing,
+    ListingId, Order, Place, Settings,
 };
 
 use crate::band::Band;
@@ -84,7 +85,7 @@ pub enum WindowEvent {
     Opened(PathBuf),
     /// The folder asked for couldn't be read; the window stayed put.
     Refused(PathBuf),
-    /// The places list changed.
+    /// The places list or the pinned folders changed.
     Places,
     /// The settings changed.
     Settings,
@@ -136,6 +137,8 @@ pub struct MainWindow {
     /// asked for can't be read.
     fallbacks: Vec<PathBuf>,
     pub(crate) places: Vec<Place>,
+    /// The folders the user pinned, in their order.
+    pinned: Arc<[Bookmark]>,
     /// Where the window has been, for Back and Forward.
     pub(crate) history: History,
     /// The path bar's open menu (see `path_bar`).
@@ -231,6 +234,7 @@ impl MainWindow {
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
             home,
             places: Vec::new(),
+            pinned: Arc::from([]),
             history: History::default(),
             path_bar: PathBar::new(connector.clone()),
             scroll: UniformListScrollHandle::new(),
@@ -280,6 +284,11 @@ impl MainWindow {
 
     pub fn places(&self) -> &[Place] {
         &self.places
+    }
+
+    /// The folders the user pinned, in their order.
+    pub fn pinned(&self) -> &[Bookmark] {
+        &self.pinned
     }
 
     /// The settings as the core last sent them.

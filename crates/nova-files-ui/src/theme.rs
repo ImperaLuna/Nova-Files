@@ -202,6 +202,8 @@ pub mod window {
     /// smaller than the main window.
     pub const PICK_WIDTH: Pixels = px(900.0);
     pub const PICK_HEIGHT: Pixels = px(600.0);
+    /// Narrower than this, the sidebar folds into one row above the bar.
+    pub const NARROW_WIDTH: Pixels = px(720.0);
 }
 
 /// Type: Inter throughout, in the four roles of the design page.
@@ -273,6 +275,13 @@ pub mod size {
     pub const PLACE_PAD: Pixels = px(10.0);
     pub const PLACE_ICON: Pixels = px(19.0);
     pub const PLACE_GAP: Pixels = px(1.0);
+    /// A place in the sidebar folded into one row: snug around its name.
+    pub const PLACE_NARROW_PAD: Pixels = px(12.0);
+    pub const PLACE_NARROW_GAP: Pixels = px(8.0);
+    /// The space around a sidebar section's head.
+    pub const SECTION_TOP: Pixels = px(8.0);
+    pub const SECTION_RIGHT: Pixels = px(6.0);
+    pub const SECTION_BOTTOM: Pixels = px(4.0);
     /// A capsule in the top bar, an icon button in it, and its icon.
     pub const CAPSULE_HEIGHT: Pixels = px(40.0);
     pub const CAPSULE_PAD: Pixels = px(3.0);
