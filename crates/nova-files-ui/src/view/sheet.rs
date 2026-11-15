@@ -7,7 +7,8 @@
 //! read that entry's details. Selected rows are grey, and selected rows
 //! that touch join into one block: a row squares the corners it shares
 //! with a selected neighbour. The row the keyboard is on has a ring (see
-//! `selecting`). A click on a column head orders the list by that column;
+//! `selecting`); a rename puts its text field where the name was (see
+//! `window::renaming`). A click on a column head orders the list by that column;
 //! folders always come first (see `navigate` and the core's `order`). A
 //! search's files stay best first, so their heads do nothing; they get a
 //! Folder column, and the part of each name that matched is marked. The
@@ -150,7 +151,10 @@ impl MainWindow {
                                     this.thumbnail(index),
                                     &colors,
                                 ))
-                                .child(entry_name(name.into(), marks, index, cx)),
+                                .child(this.rename_field(index).map_or_else(
+                                    || entry_name(name.into(), marks, index, cx).into_any_element(),
+                                    |field| rename_box(field.clone(), &colors).into_any_element(),
+                                )),
                             folder,
                             detail(columns.modified, &colors),
                             detail(columns.size, &colors),
@@ -189,6 +193,27 @@ fn sheet_corner(colors: &Colors) -> impl IntoElement {
         .size(radius::SHEET)
         .bg(colors.window)
         .child(div().size_full().rounded_tl(radius::SHEET).bg(colors.sheet))
+}
+
+/// The rename field over an entry's name, its text where the name was.
+/// A press in it stays in it: it neither clicks the row nor starts a box.
+fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> impl IntoElement {
+    div()
+        .debug_selector(|| "rename".to_owned())
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .flex()
+        .flex_1()
+        .items_center()
+        .min_w_0()
+        .h(size::RENAME_HEIGHT)
+        .px(size::RENAME_PAD)
+        .ml(-size::RENAME_PAD)
+        .rounded(radius::SMALL)
+        .bg(colors.window)
+        .border(size::RING)
+        .border_color(colors.accept)
+        .text_color(colors.text)
+        .child(field)
 }
 
 /// Row `index`'s box, as wide as the list, highlighted under the pointer,

@@ -2,20 +2,26 @@
 //! tree: the quiet count while nothing is selected, the selection's
 //! line and buttons, copy, cut and paste through the clipboard, moving
 //! to the trash by key or button, Undo, and a note going by itself.
+//! Renaming and New folder are in `renaming`.
 
 use std::fs;
 
+mod renaming;
+
 use super::*;
 
-/// A window on `folder`, with the window's keys bound as the program
-/// binds them, and a home of its own in `home`, so the trash and the
+/// A window on `folder`, with the window's and text fields' keys bound
+/// as the program binds them, and a home of its own in `home`, so the trash and the
 /// core's state stay out of the folder on screen.
 async fn island_window<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
     home: &TempFolder,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(|cx| {
+        nova_files_ui::bind_text_keys(cx);
+        nova_files_ui::bind_window_keys(cx);
+    });
     let (view, cx) = window_on(cx, folder, home.path());
     wait_for_folder(&view, cx, folder).await;
     cx.run_until_parked();

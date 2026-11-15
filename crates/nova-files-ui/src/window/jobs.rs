@@ -210,6 +210,15 @@ impl MainWindow {
             return;
         };
         cx.notify();
+        if *outcome != Outcome::Done
+            && matches!(
+                operation,
+                Operation::Rename { .. } | Operation::NewFolder { .. }
+            )
+        {
+            // Nothing was made to select.
+            self.waiting = super::renaming::Waiting::Nothing;
+        }
         let undo = self
             .jobs
             .undoable

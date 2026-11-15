@@ -54,7 +54,9 @@ use crate::commands::{
     SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp,
     TogglePreview, ToggleSelected,
 };
-use crate::commands::{CopySelected, CutSelected, Paste, TrashSelected, Undo};
+use crate::commands::{
+    CopySelected, CutSelected, NewFolder, Paste, RenameSelected, TrashSelected, Undo,
+};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
 use crate::window::{FocusTo, MainWindow};
@@ -76,6 +78,7 @@ impl MainWindow {
     /// The window without the quick look over it.
     fn window_root(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
         self.set_scale_factor(window.scale_factor(), window, cx);
+        self.start_wanted_rename(window, cx);
         self.settle_search(window, cx);
         let colors = Colors::of(cx);
         // Keys always land somewhere (see `keys_home`).
@@ -142,6 +145,10 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &Paste, _, cx| this.paste(cx)))
             .on_action(cx.listener(|this, _: &TrashSelected, _, _| this.trash_selected()))
             .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
+            .on_action(cx.listener(|this, _: &RenameSelected, window, cx| {
+                this.start_rename(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &NewFolder, _, _| this.new_folder()))
     }
 
     /// The sidebar beside the bar and sheet; above them when `narrow`.

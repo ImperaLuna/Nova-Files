@@ -10,7 +10,8 @@
 //! keeps at most one selected whatever the keys; a main window picks
 //! anything.
 //!
-//! Letters typed in a main window jump to a name (see `jump`).
+//! Letters typed in a main window jump to a name (see `jump`), except
+//! while a rename's field takes them.
 //!
 //! When a listing arrives, a fresh read of the same folder keeps the
 //! selection by name; arriving in the folder that holds the one just left

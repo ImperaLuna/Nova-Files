@@ -44,7 +44,10 @@ impl MainWindow {
         // In a new order the cursor's entry has moved: bring it into view.
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
-        self.selection = self.selection_for(&listing);
+        // What a rename or a new folder made is brought into view.
+        let wanted = self.wanted_selection(&listing);
+        let made = wanted.is_some();
+        self.selection = wanted.or_else(|| self.selection_for(&listing));
         self.tree_follows(&listing, !same_folder);
         self.ask_disk_space();
         self.search.reveal = None;
@@ -52,7 +55,7 @@ impl MainWindow {
         self.listing_replaced(listing, place, cx);
         self.pick_folder_opened(reordered, cx);
         self.typed_path_arrived(same_folder);
-        if (!same_folder || reordered)
+        if (!same_folder || reordered || made)
             && let Some(cursor) = self.cursor()
         {
             self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);

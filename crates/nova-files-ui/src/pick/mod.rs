@@ -38,6 +38,8 @@ mod save;
 mod select;
 pub mod typed;
 
+pub use typed::stem;
+
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write as _};
 use std::path::{Component, Path, PathBuf};
@@ -219,7 +221,7 @@ impl MainWindow {
             let text = suggested.to_string_lossy();
             name.update(cx, |field, cx| {
                 field.set_text(&text, cx);
-                field.select_range(typed::stem(&text), cx);
+                field.select_range(stem(&text), cx);
             });
         }
         let name_events =

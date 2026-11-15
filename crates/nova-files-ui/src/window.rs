@@ -5,7 +5,8 @@
 //! the core in `tree`, the drives in `drives`, the Start page in `start`,
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
-//! `clipboard`, and the jobs that does in `jobs`. Drawing
+//! `clipboard`, renaming and New folder in `renaming`, and the jobs they
+//! start in `jobs`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -49,6 +50,7 @@ mod jobs;
 mod navigate;
 mod pin;
 mod preview;
+mod renaming;
 mod rows;
 mod search;
 mod start;
@@ -65,7 +67,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures::StreamExt as _;
-use futures::channel::mpsc::{self, UnboundedSender};
+use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
 };
@@ -89,6 +91,7 @@ use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
 use crate::tree::FolderTree;
 use jobs::Jobs;
+use renaming::{Renaming, Waiting};
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
 /// which is never too small.
@@ -210,6 +213,10 @@ pub struct MainWindow {
     /// The quiet count of the listing on screen, worked out once when it
     /// arrives, so a frame never walks a long folder (see `view::island`).
     pub(crate) counted: SharedString,
+    /// The rename under way (see `renaming`).
+    renaming: Option<Renaming>,
+    /// What a rename or a new folder waits for (see `renaming`).
+    waiting: Waiting,
     _events: Task<()>,
 }
 
@@ -247,7 +254,7 @@ impl MainWindow {
         home: PathBuf,
         cx: &mut Context<Self>,
     ) -> Self {
-        let (sink, mut events) = mpsc::unbounded();
+        let (sink, events) = mpsc::unbounded();
         let connection = connector
             .connect(ChannelSink(sink))
             .and_then(|connection| {
@@ -264,19 +271,7 @@ impl MainWindow {
         } else {
             CoreStatus::Gone
         };
-        let events = cx.spawn(async move |this, cx| {
-            while let Some(event) = events.next().await {
-                if this
-                    .update(cx, |this, cx| this.on_event(event, cx))
-                    .is_err()
-                {
-                    return;
-                }
-            }
-            // The core dropped this window's events: it has stopped.
-            this.update(cx, |this, cx| this.set_status(CoreStatus::Gone, cx))
-                .ok();
-        });
+        let events = Self::listen(events, cx);
         let mut window = Self {
             connector: connector.clone(),
             status,
@@ -321,6 +316,8 @@ impl MainWindow {
             island: Island::default(),
             jobs: Jobs::default(),
             counted: SharedString::default(),
+            renaming: None,
+            waiting: Waiting::Nothing,
             _events: events,
         };
         match location {
@@ -328,6 +325,24 @@ impl MainWindow {
             Location::Folder(folder) => window.open(folder),
         }
         window
+    }
+
+    /// Hands the core's events to the window as they come, until the core
+    /// drops them.
+    fn listen(mut events: UnboundedReceiver<Event>, cx: &Context<Self>) -> Task<()> {
+        cx.spawn(async move |this, cx| {
+            while let Some(event) = events.next().await {
+                if this
+                    .update(cx, |this, cx| this.on_event(event, cx))
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            // The core dropped this window's events: it has stopped.
+            this.update(cx, |this, cx| this.set_status(CoreStatus::Gone, cx))
+                .ok();
+        })
     }
 
     pub const fn status(&self) -> CoreStatus {
