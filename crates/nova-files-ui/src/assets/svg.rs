@@ -16,6 +16,7 @@ pub const MUSIC: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
 pub const VIDEOS: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><rect opacity=".5" x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="M10 8.9v6.2c0 .5.5.8.9.5l5.2-3.1a.6.6 0 0 0 0-1l-5.2-3.1a.6.6 0 0 0-.9.5z"/></svg>"##;
 /// The Start page: a four-pointed spark.
 pub const START: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path d="M12 2c.8 5.6 4.4 9.2 10 10-5.6.8-9.2 4.4-10 10-.8-5.6-4.4-9.2-10-10 5.6-.8 9.2-4.4 10-10z"/></svg>"##;
+pub const DRIVE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><rect opacity=".5" x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="M2.5 13h19v3.5a3 3 0 0 1-3 3h-13a3 3 0 0 1-3-3z"/></svg>"##;
 
 // Actions: lines.
 pub const BACK: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6 8.5 12l6 6"/></svg>"##;
@@ -28,3 +29,5 @@ pub const SORT_DOWN: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox=
 pub const SEARCH: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>"##;
 pub const LIST: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15m-15 5h15m-15 5h15"/></svg>"##;
 pub const TILES: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.2" y="4.2" width="6.4" height="6.4" rx="1.6"/><rect x="13.4" y="4.2" width="6.4" height="6.4" rx="1.6"/><rect x="4.2" y="13.4" width="6.4" height="6.4" rx="1.6"/><rect x="13.4" y="13.4" width="6.4" height="6.4" rx="1.6"/></svg>"##;
+/// The arrow after a crumb in the path bar.
+pub const CHEVRON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>"##;

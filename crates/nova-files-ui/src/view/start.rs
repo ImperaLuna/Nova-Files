@@ -21,7 +21,7 @@ use nova_files_api::{EntryKind, Peeked, RecentFolder};
 use super::row::{entry_icon, icon, kind_glyph};
 use crate::assets::Icon;
 use crate::columns;
-use crate::location::HOME_MARK;
+use crate::pick::typed::HOME;
 use crate::theme::{Colors, radius, size, start, text};
 use crate::window::MainWindow;
 
@@ -328,8 +328,8 @@ fn name_of(path: &Path) -> String {
 fn where_is(path: &Path, home: &Path) -> String {
     let parent = path.parent().map_or_else(PathBuf::new, Path::to_path_buf);
     match parent.strip_prefix(home) {
-        Ok(rest) if rest.as_os_str().is_empty() => HOME_MARK.to_owned(),
-        Ok(rest) => format!("{HOME_MARK}/{}", rest.to_string_lossy()),
+        Ok(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
+        Ok(rest) => format!("{HOME}/{}", rest.to_string_lossy()),
         Err(_) => parent.to_string_lossy().into_owned(),
     }
 }
