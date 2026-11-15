@@ -2,8 +2,9 @@
 //! asks the core for a listing with a new id, in the window's order; the
 //! window moves once that id answers (see `events`). Changing the order
 //! reads the folder again, except while a search's files are on screen,
-//! which stay best first. Going anywhere ends a search (see `search`).
-//! Paths are tidied by their text alone, as a user reads them.
+//! which stay best first. Going anywhere ends a search (see `search`) and
+//! closes the path bar's menu. Paths are tidied by their text alone, as a
+//! user reads them.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -61,6 +62,9 @@ impl MainWindow {
         let sent = matches!(sent, Some(Ok(())));
         if sent {
             self.search.folder_asked();
+            // Going anywhere closes a path bar menu, and its connection
+            // with it, so the core stops reading that menu's folder.
+            self.close_path_menu();
             self.asked = Some(id);
             self.asked_order = order;
             self.requested = Some(path);
