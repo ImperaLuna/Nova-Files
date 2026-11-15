@@ -30,6 +30,7 @@ impl TempFolder {
         // gone and make its state folder again; a later test given the same
         // process id would find it.
         fs::remove_dir_all(&path).ok();
+        fs::remove_dir_all(path.with_extension("state")).ok();
         fs::create_dir_all(path.join("Projects").join("nova")).unwrap();
         fs::write(path.join("notes.txt"), "").unwrap();
         Self(path)
@@ -43,6 +44,8 @@ impl TempFolder {
 impl Drop for TempFolder {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.0).ok();
+        // Where the tests' cores keep their state.
+        fs::remove_dir_all(self.0.with_extension("state")).ok();
     }
 }
 

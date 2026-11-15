@@ -1,6 +1,6 @@
 //! The commands about folders and the files in them: listing, rows,
-//! places, the trash, search, properties and opening files. `run` sends
-//! only these here.
+//! places, the trash, search, properties, opening files and the recent
+//! folders. `run` sends only these here.
 
 use std::sync::Arc;
 
@@ -32,6 +32,11 @@ pub(super) fn answer(
             jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
         }
         Command::OpenWith(request) => setup.open_with.answer(client.events(), request),
+        Command::FolderUsed(folder) => setup.recent.used(folder),
+        Command::RecentFolders { id, count, skip } => {
+            let count = usize::try_from(count).unwrap_or(usize::MAX);
+            setup.recent.answer(client.events(), id, count, skip);
+        }
         // `run` sends the other commands elsewhere.
         _ => {}
     }

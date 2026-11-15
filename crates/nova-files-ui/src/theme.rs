@@ -61,6 +61,8 @@ pub struct Colors {
     pub accept: Rgba,
     /// Text on [`Self::accept`].
     pub on_accept: Rgba,
+    /// The soft orange glow at the top of the Start page.
+    pub glow: Rgba,
     /// The tag on a file icon, by the file's kind (see `kind`).
     pub tags: Tags,
 }
@@ -98,6 +100,8 @@ mod share {
     pub const FOLDER: f32 = 0.26;
     /// `secondary` laid over a text field, for its selected text.
     pub const SELECTION: f32 = 0.40;
+    /// `primary` laid over the sheet, at the top of the Start page.
+    pub const GLOW: f32 = 0.10;
     /// A search's match, under the name's text.
     pub const MARK: f32 = 0.34;
 }
@@ -134,6 +138,7 @@ impl Colors {
             mark: thin(palette.primary, share::MARK),
             accept: color(palette.primary),
             on_accept: color(palette.on_accent),
+            glow: thin(palette.primary, share::GLOW),
             tags: Tags::new(palette, text_dim),
         }
     }
@@ -225,6 +230,11 @@ pub mod text {
     pub const LABEL_WEIGHT: FontWeight = FontWeight::SEMIBOLD;
     /// The open place.
     pub const STRONG_WEIGHT: FontWeight = FontWeight::SEMIBOLD;
+    /// A card's name on the Start page, and the large card's.
+    pub const CARD_NAME: Pixels = px(13.5);
+    pub const HERO_NAME: Pixels = px(16.0);
+    /// How full a drive is, large on its Start card.
+    pub const PERCENT: Pixels = px(26.0);
 }
 
 /// Sizes and spacing.
@@ -368,6 +378,56 @@ pub mod size {
     pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
     /// The tallest the type menu gets before it scrolls.
     pub const FILTER_MENU_MAX_HEIGHT: Pixels = px(320.0);
+}
+
+/// The Start page: the column its cards sit in, the cards, the large
+/// card's peek inside the folder and the small cards' fan of three.
+pub mod start {
+    use gpui::{Pixels, px};
+
+    /// The widest the page's column gets, and the space around it.
+    pub const MAX_WIDTH: Pixels = px(800.0);
+    pub const PAD_TOP: Pixels = px(28.0);
+    pub const PAD_SIDE: Pixels = px(12.0);
+    /// Between the groups, and between a group's label and its cards.
+    pub const GROUP_GAP: Pixels = px(30.0);
+    pub const LABEL_GAP: Pixels = px(10.0);
+    /// The label's inset, so it lines up with a card's content.
+    pub const LABEL_INSET: Pixels = px(4.0);
+    /// Inside a small card, and between its icon row and its name.
+    pub const CARD_PAD: Pixels = px(14.0);
+    pub const CARD_GAP: Pixels = px(14.0);
+    /// Inside the large card, and between its head and its peek.
+    pub const HERO_PAD: Pixels = px(18.0);
+    pub const HERO_GAP: Pixels = px(16.0);
+    /// Between the large card's icon and its name.
+    pub const HERO_HEAD_GAP: Pixels = px(14.0);
+    /// The folder icon on a small card and on the large one.
+    pub const CARD_ICON: Pixels = px(34.0);
+    pub const HERO_ICON: Pixels = px(46.0);
+    /// Between a name and the line under it.
+    pub const SUBTITLE_GAP: Pixels = px(2.0);
+    /// One line of the large card's peek, and the space above the lines.
+    pub const PEEK_ROW: Pixels = px(28.0);
+    pub const PEEK_TOP: Pixels = px(12.0);
+    pub const PEEK_GAP: Pixels = px(10.0);
+    /// The peek's "N more" line starts under the names: a row icon (22)
+    /// and the gap after it.
+    pub const PEEK_MORE_INSET: Pixels = px(32.0);
+    /// One icon of a small card's fan, how far each overlaps the one
+    /// before, and how far the outer two lean, in degrees.
+    pub const FAN_ICON: Pixels = px(24.0);
+    pub const FAN_OVERLAP: Pixels = px(5.0);
+    pub const FAN_TILT: f32 = 8.0;
+    /// Where the glow at the top of the page has faded out, as a share of
+    /// the page's height, and the direction it fades in, in degrees (180
+    /// is downward).
+    pub const GLOW_END: f32 = 0.46;
+    pub const GLOW_ANGLE: f32 = 180.0;
+    /// A drive card's icon, the space after it, and its bar's height.
+    pub const DRIVE_ICON: Pixels = px(22.0);
+    pub const DRIVE_HEAD_GAP: Pixels = px(10.0);
+    pub const BAR: Pixels = px(6.0);
 }
 
 /// How much of an element shows through.

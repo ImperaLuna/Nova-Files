@@ -114,7 +114,7 @@ async fn a_place_gone_since_is_skipped_and_the_window_stays(cx: &mut TestAppCont
         .await;
     view.read_with(cx, |view, _| {
         assert_eq!(view.folder(), Some(projects.as_path()));
-        assert_eq!(view.back_target(), Some(tree.path()));
+        assert_eq!(view.back_target(), Some(&Location::from(tree.path())));
     });
     cx.simulate_keystrokes("alt-left");
     wait_for_folder(&view, cx, tree.path()).await;
