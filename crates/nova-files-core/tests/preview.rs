@@ -17,17 +17,24 @@ use std::process::Command as Process;
 use std::sync::Arc;
 
 use nova_files_api::{
-    Command, EntryKind, Event, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent,
+    Command, EntryKind, Event, Fit, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent,
     PreviewId, Unreadable,
 };
 
 use common::{Bench, Client};
+
+/// The box pictures fit; this bench has no helper, so none decode.
+const FIT: Fit = Fit {
+    width: 800,
+    height: 600,
+};
 
 /// Asks `client` to preview `path` as request `id` and waits for the answer.
 fn preview(client: &Client, id: u64, path: PathBuf) -> Result<Arc<Preview>, Unreadable> {
     client.send(Command::Preview {
         id: PreviewId(id),
         path,
+        fit: FIT,
     });
     match client.next() {
         Event::Previewed {

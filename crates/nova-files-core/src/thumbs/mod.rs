@@ -25,6 +25,8 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::UNIX_EPOCH;
 
+pub use helper::{Running, picture};
+
 use nova_files_api::{EntryId, EntryKind, Event, EventSink, Listing, ListingId, MAX_ROWS, uri};
 
 /// The thumbnails folder under the cache folder.

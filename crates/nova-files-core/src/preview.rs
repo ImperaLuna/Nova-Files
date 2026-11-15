@@ -2,12 +2,18 @@
 //!
 //! A folder shows its first entries, as a listing orders them, and how
 //! many it holds. A regular file is read from its start, at most
-//! [`PREVIEW_TEXT_BYTES`]: when that is UTF-8 text (allowing a character
-//! cut at the end) with no NUL byte, it shows as text; anything else, and
-//! anything that isn't a regular file (a device, pipe or socket, which is
-//! never opened), shows as its icon. A link shows what it points to,
-//! named by its target's name too. The kind's name comes from the file's
-//! name, through the MIME database.
+//! [`PREVIEW_TEXT_BYTES`]. When its first bytes are those of a JPEG, PNG
+//! or WebP picture, it goes to the sandboxed thumbnail helper, which
+//! decodes it scaled down to the client's box (see `thumbs`); one client's
+//! pictures decode one at a time, a newer request stops the helper still
+//! decoding an older one, and a request replaced while it waited its turn
+//! never starts. Otherwise, when the start is UTF-8 text
+//! (allowing a character cut at the end) with no NUL byte, it shows as
+//! text. Anything else (a picture that wouldn't decode, a binary file, or
+//! anything that isn't a regular file: a device, pipe or socket, which is
+//! never opened) shows as its icon. A link shows what it points to, named
+//! by its target's name too. The kind's name comes from the file's name,
+//! through the MIME database.
 //!
 //! Each request reads on a thread of its own, so a drive that stopped
 //! answering never holds up the core. A client's newer request cancels
@@ -22,42 +28,71 @@ use std::io::{self, Read as _};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread;
 
 use nova_files_api::{
-    Event, EventSink, FileTypes as _, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent,
-    PreviewId, Unreadable,
+    Event, EventSink, FileTypes as _, Fit, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview,
+    PreviewContent, PreviewId, Unreadable,
 };
 use rustix::fs::OFlags;
 
 use crate::list::{self, Stopped};
 use crate::mime::MimeTypes;
+use crate::thumbs::{self, Running};
 
 const THREAD_NAME: &str = "nova-files-preview";
 
 /// A NUL byte marks a file as binary.
 const NUL: u8 = 0;
 
-/// The preview that counts for one client, or none.
+/// How the pictures the helper decodes begin: the bytes each holds at
+/// which place.
+const PICTURE_SIGNATURES: [&[(usize, &[u8])]; 3] = [
+    // JPEG
+    &[(0, &[0xFF, 0xD8, 0xFF])],
+    // PNG
+    &[(0, b"\x89PNG\r\n\x1a\n")],
+    // WebP: a RIFF file of WEBP data.
+    &[(0, b"RIFF"), (8, b"WEBP")],
+];
+
+/// The preview that counts for one client, or none, and the turn its
+/// pictures take to decode.
 #[derive(Debug, Default)]
-pub struct Current(AtomicU64);
+pub struct Current {
+    id: AtomicU64,
+    decoding: Mutex<()>,
+    /// The helper decoding the client's picture, if one is.
+    running: Running,
+}
 
 /// No preview counts: the client never asked, or left.
 const NONE: u64 = u64::MAX;
 
 impl Current {
     pub const fn new() -> Self {
-        Self(AtomicU64::new(NONE))
+        Self {
+            id: AtomicU64::new(NONE),
+            decoding: Mutex::new(()),
+            running: Running::new(),
+        }
     }
 
     fn is(&self, id: PreviewId) -> bool {
-        self.0.load(Ordering::SeqCst) == id.0
+        self.id.load(Ordering::SeqCst) == id.0
+    }
+
+    /// Request `id` counts from now on: an older one still decoding stops.
+    fn set(&self, id: PreviewId) {
+        self.id.store(id.0, Ordering::SeqCst);
+        self.running.stop();
     }
 
     /// Stops the preview running, if any.
     pub fn cancel(&self) {
-        self.0.store(NONE, Ordering::SeqCst);
+        self.id.store(NONE, Ordering::SeqCst);
+        self.running.stop();
     }
 }
 
@@ -65,14 +100,18 @@ impl Current {
 pub struct Request {
     pub id: PreviewId,
     pub path: PathBuf,
+    pub fit: Fit,
     pub current: Arc<Current>,
     pub types: Arc<OnceLock<MimeTypes>>,
+    /// The thumbnail helper, which decodes pictures; without one, a
+    /// picture shows its icon.
+    pub helper: Option<PathBuf>,
 }
 
 /// Looks into `request`'s path on a thread of its own and hands the answer
 /// to `events`, unless a newer request replaced it first.
 pub fn answer(events: &Arc<dyn EventSink>, request: Request) {
-    request.current.0.store(request.id.0, Ordering::SeqCst);
+    request.current.set(request.id);
     let sink = Arc::clone(events);
     let (id, asked) = (request.id, request.path.clone());
     let spawned = thread::Builder::new()
@@ -121,9 +160,11 @@ fn event(request: &Request) -> Option<Event> {
         if cancelled() {
             return None;
         }
-        match file(path, &metadata) {
-            Ok(content) => content,
-            Err(error) => return Some(unreadable(list::unreadable(&error))),
+        match (start(path, &metadata), &request.helper) {
+            (Err(error), _) => return Some(unreadable(list::unreadable(&error))),
+            (Ok(Some(start)), Some(helper)) if is_picture(&start) => picture(request, helper)?,
+            (Ok(Some(start)), _) => text(start, metadata.len()),
+            (Ok(None), _) => PreviewContent::Icon,
         }
     };
     let named = (!metadata.is_dir()).then(|| target(path));
@@ -153,6 +194,24 @@ fn target(path: &Path) -> PathBuf {
         .unwrap_or_else(|| path.to_owned())
 }
 
+/// `request`'s picture, decoded by `helper` once the client's previous
+/// picture is done, or its icon when it wouldn't decode. `None` when the
+/// request was replaced meanwhile.
+fn picture(request: &Request, helper: &Path) -> Option<PreviewContent> {
+    let _turn = request
+        .current
+        .decoding
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if !request.current.is(request.id) {
+        return None;
+    }
+    let current = &request.current;
+    let wanted = || current.is(request.id);
+    let picture = thumbs::picture(helper, &request.path, request.fit, &current.running, wanted);
+    Some(picture.map_or(PreviewContent::Icon, PreviewContent::Picture))
+}
+
 /// A folder's first entries and how many it holds.
 fn folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<PreviewContent, Stopped> {
     let mut first = list::read_folder(path, cancelled)?;
@@ -161,10 +220,10 @@ fn folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<PreviewContent, S
     Ok(PreviewContent::Folder { first, count })
 }
 
-/// What a file that isn't a folder shows: its text, or its icon.
-fn file(path: &Path, metadata: &Metadata) -> io::Result<PreviewContent> {
+/// The first bytes of a regular file; `None` for anything else.
+fn start(path: &Path, metadata: &Metadata) -> io::Result<Option<Vec<u8>>> {
     if !metadata.is_file() {
-        return Ok(PreviewContent::Icon);
+        return Ok(None);
     }
     // Swapped for a pipe since the look, it still won't wait for a writer.
     let opened = File::options()
@@ -174,7 +233,16 @@ fn file(path: &Path, metadata: &Metadata) -> io::Result<PreviewContent> {
     let mut start = Vec::with_capacity(PREVIEW_TEXT_BYTES);
     let limit = u64::try_from(PREVIEW_TEXT_BYTES).unwrap_or(u64::MAX);
     opened.take(limit).read_to_end(&mut start)?;
-    Ok(text(start, metadata.len()))
+    Ok(Some(start))
+}
+
+/// Whether a file starting with `start` is a picture the helper decodes.
+fn is_picture(start: &[u8]) -> bool {
+    PICTURE_SIGNATURES.iter().any(|parts| {
+        parts
+            .iter()
+            .all(|(at, bytes)| start.get(*at..).is_some_and(|rest| rest.starts_with(bytes)))
+    })
 }
 
 /// `start`, the first bytes of a file `length` long, as text when it is
@@ -219,11 +287,16 @@ mod tests {
         let request = |id| Request {
             id: PreviewId(id),
             path: dir.clone(),
+            fit: Fit {
+                width: 1,
+                height: 1,
+            },
             current: Arc::clone(&current),
             types: Arc::new(OnceLock::new()),
+            helper: None,
         };
         let (old, new) = (request(1), request(2));
-        current.0.store(new.id.0, Ordering::SeqCst);
+        current.set(new.id);
         assert!(event(&old).is_none());
         assert!(event(&new).is_some());
         current.cancel();
@@ -243,12 +316,17 @@ mod tests {
         let types = OnceLock::new();
         types.get_or_init(|| MimeTypes::load(&[dir.join("data")]));
         let current = Arc::new(Current::new());
-        current.0.store(1, Ordering::SeqCst);
+        current.set(PreviewId(1));
         let request = Request {
             id: PreviewId(1),
             path: path.to_owned(),
+            fit: Fit {
+                width: 1,
+                height: 1,
+            },
             current,
             types: Arc::new(types),
+            helper: None,
         };
         match event(&request) {
             Some(Event::Previewed { preview, .. }) => preview,
@@ -288,6 +366,18 @@ mod tests {
         fs::remove_dir_all(&dir).ok();
         assert_eq!(to_link.file_name(), photo.file_name());
         assert_eq!(to_photo, photo);
+    }
+
+    #[test]
+    fn pictures_are_known_by_their_first_bytes() {
+        assert!(is_picture(&[0xFF, 0xD8, 0xFF, 0xE0]));
+        assert!(is_picture(b"\x89PNG\r\n\x1a\n\0\0"));
+        assert!(is_picture(b"RIFF\0\0\0\0WEBPVP8 "));
+        assert!(!is_picture(b"RIFF\0\0\0\0WAVEfmt "));
+        assert!(!is_picture(b"RIFF"));
+        assert!(!is_picture(b"\x89PNG"));
+        assert!(!is_picture(b"GIF89a"));
+        assert!(!is_picture(b""));
     }
 
     #[test]

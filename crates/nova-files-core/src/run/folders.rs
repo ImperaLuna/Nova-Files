@@ -29,12 +29,14 @@ pub(super) fn answer(
         Command::Search { id, query, limit } => setup.searcher.search(client, id, query, limit),
         Command::Find { id, query, within } => setup.searcher.find(client, id, query, within),
         Command::Properties { id, path } => properties::answer(client.events(), id, path),
-        Command::Preview { id, path } => {
+        Command::Preview { id, path, fit } => {
             let request = Request {
                 id,
                 path,
+                fit,
                 current: Arc::clone(client.current_preview()),
                 types: Arc::clone(&setup.mime_types),
+                helper: setup.thumbnails.as_ref().map(|setup| setup.helper.clone()),
             };
             preview::answer(client.events(), request);
         }
