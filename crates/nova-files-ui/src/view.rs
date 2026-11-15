@@ -8,8 +8,9 @@
 //! `sidebar`).
 //!
 //! Each part is drawn in a file of its own, so a feature changes only its
-//! part: the top bar in `bar`, the sidebar in `sidebar`, the sheet with its
-//! column heads and rows in `sheet`, and the pieces of one row in `row`.
+//! part: the top bar in `bar`, its path bar in `path`, the sidebar in
+//! `sidebar`, the sheet with its column heads and rows in `sheet`, and the
+//! pieces of one row in `row`.
 //!
 //! The window sets the key context its actions are bound in and handles
 //! each action it takes; buttons and the mouse's side buttons send actions
@@ -20,17 +21,22 @@
 //! the box `band`. Each line's Modified cell carries one too,
 //! `modified-header` and `modified-<n>`, so a test can check the columns
 //! line up. The slots later features fill carry one each: `sidebar`,
-//! `path`, `search` and `views`.
+//! `path`, `search` and `views`; the path bar's own are listed in `path`.
 
 mod bar;
+mod path;
+mod path_menu;
 mod row;
 mod sheet;
 mod sidebar;
 
+pub use crate::places::place_icon;
+
 use gpui::{
-    Context, Div, Focusable as _, InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection, ParentElement as _, Render,
-    ScrollWheelEvent, Styled as _, Window, div, prelude::FluentBuilder as _,
+    App, Context, Div, FocusHandle, Focusable as _, InteractiveElement as _, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection,
+    ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::commands::{
@@ -46,17 +52,11 @@ impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.set_scale_factor(window.scale_factor(), window, cx);
         let colors = Colors::of(cx);
-        // Keys always land somewhere: in a main window on the window
-        // itself, which a click inside takes focus back to; in a picker in
-        // its name box, whose keys pass the window's on.
+        // Keys always land somewhere (see `keys_home`).
         let main = self.pick.is_none();
         let narrow = window.viewport_size().width < theme::window::NARROW_WIDTH;
         if window.focused(cx).is_none() {
-            let focus = self.pick.as_ref().map_or_else(
-                || self.focus.clone(),
-                |pick| pick.name.read(cx).focus_handle(cx),
-            );
-            window.focus(&focus, cx);
+            window.focus(&self.keys_home(cx), cx);
         }
         div()
             .key_context(commands::KEY_CONTEXT)
@@ -65,8 +65,9 @@ impl Render for MainWindow {
             .on_action(cx.listener(|this, _: &GoBack, _, _| this.go_back()))
             .on_action(cx.listener(|this, _: &GoForward, _, _| this.go_forward()))
             .map(|root| Self::selection_keys(root, cx))
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                if this.jump_typed(event, cx) {
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                // Letters typed into a text field are the field's.
+                if this.focus.is_focused(window) && this.jump_typed(event, cx) {
                     cx.stop_propagation();
                 }
             }))
@@ -136,7 +137,7 @@ impl MainWindow {
                             .pt(size::GAP)
                             .when(narrow, |bar| bar.pl(size::GAP))
                             .bg(colors.window)
-                            .child(self.top_bar(colors)),
+                            .child(self.top_bar(colors, cx)),
                     )
                     .child(self.sheet(cx)),
             )
@@ -144,6 +145,16 @@ impl MainWindow {
 }
 
 impl MainWindow {
+    /// Where the keys go when nothing else holds them: in a main window
+    /// the window itself, which a click inside takes focus back to; in a
+    /// picker its name box, whose keys pass the window's on.
+    pub fn keys_home(&self, cx: &App) -> FocusHandle {
+        self.pick.as_ref().map_or_else(
+            || self.focus.clone(),
+            |pick| pick.name.read(cx).focus_handle(cx),
+        )
+    }
+
     /// The selection's actions on the window's root (see `selecting`).
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &OpenSelected, _, _| this.open_selected()))
