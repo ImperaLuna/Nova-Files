@@ -55,10 +55,12 @@ fn shows(cx: &mut VisualTestContext, selector: &'static str) -> bool {
 
 #[gpui::test]
 fn the_tree_takes_only_the_listing_it_asked_for(cx: &mut TestAppContext) {
-    let (_view, cx, mut core) = tree_opened(cx);
+    let (view, cx, mut core) = tree_opened(cx);
     let (id, path) = core.tree_listing();
     assert_eq!(path, Path::new(SHOWN));
     assert!(shows(cx, "tree-2"), "a and b under the root");
+    let settled = |cx: &mut VisualTestContext| view.read_with(cx, |view, _| view.tree_settled());
+    assert!(!settled(cx), "the tree waits on its listing");
 
     core.send_to_tree(Event::FolderListed(Listing {
         id: ListingId(id.0 + 1),
@@ -67,6 +69,7 @@ fn the_tree_takes_only_the_listing_it_asked_for(cx: &mut TestAppContext) {
         folders: None,
     }));
     assert!(shows(cx, "tree-2"), "an answer to another ask is dropped");
+    assert!(!settled(cx));
 
     core.send_to_tree(Event::FolderListed(Listing {
         id,
@@ -76,6 +79,7 @@ fn the_tree_takes_only_the_listing_it_asked_for(cx: &mut TestAppContext) {
     }));
     assert!(shows(cx, "tree-1"));
     assert!(!shows(cx, "tree-2"), "c alone under the root");
+    assert!(settled(cx));
 }
 
 #[gpui::test]
