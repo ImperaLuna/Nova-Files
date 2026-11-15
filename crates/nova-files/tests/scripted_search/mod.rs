@@ -293,6 +293,11 @@ fn found_files_get_a_folder_column_and_a_folder_only_does_not(cx: &mut TestAppCo
     let head = cx.debug_bounds("modified-header").unwrap();
     let cell = cx.debug_bounds("modified-0").unwrap();
     assert_eq!(head.origin.x, cell.origin.x);
+    // A folder's text lines up with the head too: its link's padding
+    // hangs out to the left.
+    let head = cx.debug_bounds("folder-header").unwrap();
+    let link = cx.debug_bounds("folder-0").unwrap();
+    assert!(link.origin.x < head.origin.x);
 }
 
 #[gpui::test]

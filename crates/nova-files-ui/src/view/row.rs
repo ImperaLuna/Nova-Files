@@ -86,12 +86,7 @@ pub fn entry_name(
     index: usize,
     cx: &Context<MainWindow>,
 ) -> impl IntoElement {
-    let colors = Colors::of(cx);
-    let mark = HighlightStyle {
-        color: Some(colors.text.into()),
-        background_color: Some(colors.mark.into()),
-        ..HighlightStyle::default()
-    };
+    let mark = mark_style(&Colors::of(cx));
     let text = StyledText::new(name).with_highlights(marks.into_iter().map(|range| (range, mark)));
     div()
         .debug_selector(move || format!("name-{index}"))
@@ -102,6 +97,15 @@ pub fn entry_name(
             cx.listener(|this, _: &MouseDownEvent, _, _| this.pressed_name = true),
         )
         .child(text)
+}
+
+/// How a search's match shows in a name: full-strength text on orange.
+fn mark_style(colors: &Colors) -> HighlightStyle {
+    HighlightStyle {
+        color: Some(colors.text.into()),
+        background_color: Some(colors.mark.into()),
+        ..HighlightStyle::default()
+    }
 }
 
 /// The ring around the row the keyboard is on, laid over the row so it
@@ -170,6 +174,14 @@ mod tests {
         top: true,
         bottom: true,
     };
+
+    #[test]
+    fn a_match_is_full_strength_text_on_orange() {
+        let colors = Colors::default();
+        let mark = mark_style(&colors);
+        assert_eq!(mark.color, Some(colors.text.into()));
+        assert_eq!(mark.background_color, Some(colors.mark.into()));
+    }
 
     #[test]
     fn touching_selected_rows_join_into_one_block() {
