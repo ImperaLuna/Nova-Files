@@ -41,9 +41,9 @@ fn selected(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
 }
 
 /// The files the window asked the core to open since last asked.
-fn opened(core: &Core) -> Vec<PathBuf> {
+fn opened(core: &mut Core) -> Vec<PathBuf> {
     let mut opened = Vec::new();
-    while let Ok(message) = core.messages.try_recv() {
+    while let Some(message) = core.try_recv() {
         if let CoreMessage::Command {
             command: Command::OpenFile { path, .. },
             ..
@@ -84,11 +84,11 @@ fn a_cursor_whose_file_went_lands_on_the_nearest_row(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn enter_opens_the_files_selected(cx: &mut TestAppContext) {
-    let (view, cx, core) = keyed(cx, &["a", "b", "c"]);
-    opened(&core);
+    let (view, cx, mut core) = keyed(cx, &["a", "b", "c"]);
+    opened(&mut core);
     cx.simulate_keystrokes("down shift-down enter");
     let shown = Path::new(SHOWN);
-    assert_eq!(opened(&core), [shown.join("a"), shown.join("b")]);
+    assert_eq!(opened(&mut core), [shown.join("a"), shown.join("b")]);
     view.read_with(cx, |view, _| assert_eq!(view.folder(), Some(shown)));
 }
 

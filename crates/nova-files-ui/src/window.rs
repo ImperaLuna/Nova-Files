@@ -1,6 +1,7 @@
 //! The main window: the places on the left, the open folder's entries on
 //! the right, and an Up button. This file holds the window's state and
 //! opening it; the work is split by area: going places in `navigate`, pinning folders in `pin`, the
+//! folder tree's own line to the core in `tree`, the
 //! core's events in `events`, and the rows on screen in `rows`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
@@ -38,6 +39,7 @@ mod navigate;
 mod pin;
 mod rows;
 mod search;
+mod tree;
 
 pub use navigate::tidy;
 pub use search::{FocusTo, Scope, short_folder};
@@ -55,6 +57,7 @@ use nova_files_api::{
     ListingId, Order, Place, Settings,
 };
 
+use self::tree::TreeLine;
 use crate::band::Band;
 use crate::history::History;
 use crate::jump::TypeJump;
@@ -63,6 +66,7 @@ use crate::path_bar::PathBar;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
+use crate::tree::FolderTree;
 
 /// Until the window first draws, thumbnails are sized for a 2x screen,
 /// which is never too small.
@@ -141,6 +145,9 @@ pub struct MainWindow {
     /// asked for can't be read.
     fallbacks: Vec<PathBuf>,
     pub(crate) places: Vec<Place>,
+    /// The sidebar's folder tree under Home, and its line to the core.
+    pub(crate) tree: FolderTree,
+    tree_line: TreeLine,
     /// The folders the user pinned, in their order.
     pinned: Arc<[Bookmark]>,
     /// Where the window has been, for Back and Forward.
@@ -239,8 +246,10 @@ impl MainWindow {
             next_listing: 0,
             // Popped from the end: home first, then the root.
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
+            tree: FolderTree::new(home.clone()),
             home,
             places: Vec::new(),
+            tree_line: TreeLine::connect(connector, cx),
             pinned: Arc::from([]),
             history: History::default(),
             path_bar: PathBar::new(connector.clone()),

@@ -19,7 +19,7 @@ use nova_files_api::{Bookmark, Place, PlaceKind};
 
 use crate::assets::Icon;
 
-const HOME_LABEL: &str = "Home";
+pub const HOME_LABEL: &str = "Home";
 
 /// One row of Places.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,6 +95,15 @@ const fn standard_icon(kind: PlaceKind) -> Option<Icon> {
         | PlaceKind::Downloads
         | PlaceKind::Pictures => Some(place_icon(kind)),
     }
+}
+
+/// The icon of the standard folder at `path`, if it is one of `places`,
+/// wherever it is drawn (the folder tree shows Music and Videos too).
+pub fn standard_icon_at(places: &[Place], path: &Path) -> Option<Icon> {
+    places
+        .iter()
+        .find(|place| place.path == path)
+        .map(|place| place_icon(place.kind))
 }
 
 fn standard_name(place: &Place) -> SharedString {
@@ -196,6 +205,23 @@ mod tests {
             assert!(!icons[..index].contains(icon), "{icon:?} drawn twice");
             assert_ne!(*icon, Icon::Folder);
         }
+    }
+
+    #[test]
+    fn the_tree_draws_every_standard_folder_with_its_icon() {
+        let places = [
+            place(PlaceKind::Music, "/home/me/Music"),
+            place(PlaceKind::Videos, "/home/me/Videos"),
+        ];
+        assert_eq!(
+            standard_icon_at(&places, Path::new("/home/me/Music")),
+            Some(Icon::Music)
+        );
+        assert_eq!(
+            standard_icon_at(&places, Path::new("/home/me/Videos")),
+            Some(Icon::Videos)
+        );
+        assert_eq!(standard_icon_at(&places, Path::new("/home/me/Work")), None);
     }
 
     #[test]

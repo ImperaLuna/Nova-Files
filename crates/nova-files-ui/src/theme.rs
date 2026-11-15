@@ -278,6 +278,19 @@ pub mod size {
     /// A place in the sidebar folded into one row: snug around its name.
     pub const PLACE_NARROW_PAD: Pixels = px(12.0);
     pub const PLACE_NARROW_GAP: Pixels = px(8.0);
+    /// A row of the sidebar's folder tree: its height, the space between
+    /// its parts and at its ends, its arrow's slot and arrow, its icon, how
+    /// far each level is indented, and how far before a level's rows its
+    /// hairline runs.
+    pub const TREE_ROW_HEIGHT: Pixels = px(30.0);
+    pub const TREE_ROW_GAP: Pixels = px(6.0);
+    pub const TREE_PAD_LEFT: Pixels = px(2.0);
+    pub const TREE_PAD_RIGHT: Pixels = px(8.0);
+    pub const TREE_TOGGLE: Pixels = px(20.0);
+    pub const TREE_TOGGLE_ICON: Pixels = px(12.0);
+    pub const TREE_ICON: Pixels = px(17.0);
+    pub const TREE_INDENT: Pixels = px(22.0);
+    pub const TREE_GUIDE_INSET: Pixels = px(4.0);
     /// The space around a sidebar section's head.
     pub const SECTION_TOP: Pixels = px(8.0);
     pub const SECTION_RIGHT: Pixels = px(6.0);

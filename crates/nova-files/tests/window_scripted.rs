@@ -6,6 +6,7 @@
 
 mod scripted_search;
 mod scripted_select;
+mod scripted_tree;
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -15,9 +16,9 @@ use std::sync::mpsc::Receiver;
 
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
-    Appearance, Bookmark, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event,
-    EventSink, Listing, ListingId, Mode, Order, Palette, Place, PlaceKind, SettingChange, Settings,
-    SortKey, Theme, Thumbnails, Unreadable,
+    Appearance, Bookmark, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind,
+    Event, EventSink, Listing, ListingId, Mode, Order, Palette, Place, PlaceKind, SettingChange,
+    Settings, SortKey, Theme, Thumbnails, Unreadable,
 };
 use nova_files_ui::{Colors, MainWindow, WindowEvent};
 
@@ -31,19 +32,46 @@ const MANY: u32 = 500;
 struct Core {
     messages: Receiver<CoreMessage>,
     events: Option<Box<dyn EventSink>>,
+    /// The window's own connection: the first to arrive. The sidebar's
+    /// folder tree lists on a second one (see `scripted_tree`).
+    window: Option<ClientId>,
+    tree: Option<(ClientId, Box<dyn EventSink>)>,
+    /// The folders the tree asked for, oldest first, until taken.
+    tree_listings: Vec<(ListingId, PathBuf)>,
 }
 
 impl Core {
-    /// The next folder the window asks for, skipping other commands.
-    fn next_listing(&mut self) -> Option<(ListingId, PathBuf)> {
+    /// The window's next message, if one is waiting; the window's own
+    /// arrival is taken in passing, and the tree's messages put aside.
+    fn try_recv(&mut self) -> Option<CoreMessage> {
         while let Ok(message) = self.messages.try_recv() {
             match message {
-                CoreMessage::Connected { events, .. } => self.events = Some(events),
+                CoreMessage::Connected { client, events } if self.window.is_none() => {
+                    self.window = Some(client);
+                    self.events = Some(events);
+                }
+                CoreMessage::Connected { client, events } => self.tree = Some((client, events)),
                 CoreMessage::Command {
                     command: Command::ListFolder { id, path, .. },
-                    ..
-                } => return Some((id, path)),
-                _ => {}
+                    client,
+                } if Some(client) != self.window => self.tree_listings.push((id, path)),
+                CoreMessage::Command { client, .. } | CoreMessage::Disconnected { client }
+                    if Some(client) != self.window => {}
+                message => return Some(message),
+            }
+        }
+        None
+    }
+
+    /// The next folder the window asks for, skipping other commands.
+    fn next_listing(&mut self) -> Option<(ListingId, PathBuf)> {
+        while let Some(message) = self.try_recv() {
+            if let CoreMessage::Command {
+                command: Command::ListFolder { id, path, .. },
+                ..
+            } = message
+            {
+                return Some((id, path));
             }
         }
         None
@@ -51,9 +79,9 @@ impl Core {
 
     /// The thumbnail requests the window has sent since last asked, as
     /// `(first, count)`, skipping other commands.
-    fn thumbnail_requests(&self) -> Vec<(u32, u32)> {
+    fn thumbnail_requests(&mut self) -> Vec<(u32, u32)> {
         let mut requests = Vec::new();
-        while let Ok(message) = self.messages.try_recv() {
+        while let Some(message) = self.try_recv() {
             if let CoreMessage::Command {
                 command: Command::Rows { first, count, .. },
                 ..
@@ -66,9 +94,9 @@ impl Core {
     }
 
     /// Every command the window has sent since last asked.
-    fn commands(&self) -> Vec<Command> {
+    fn commands(&mut self) -> Vec<Command> {
         let mut commands = Vec::new();
-        while let Ok(message) = self.messages.try_recv() {
+        while let Some(message) = self.try_recv() {
             if let CoreMessage::Command { command, .. } = message {
                 commands.push(command);
             }
@@ -98,6 +126,9 @@ fn window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContex
     let core = Core {
         messages,
         events: None,
+        window: None,
+        tree: None,
+        tree_listings: Vec::new(),
     };
     (view, cx, core)
 }
@@ -386,7 +417,7 @@ fn a_thumbnail_for_a_listing_left_behind_is_dropped(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn the_same_scale_keeps_the_thumbnails(cx: &mut TestAppContext) {
-    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+    let (view, cx, mut core, id) = shown_with_details(cx, ENTRIES);
     core.send(thumbnail(id, 1));
     cx.run_until_parked();
     core.thumbnail_requests();
@@ -402,7 +433,7 @@ fn the_same_scale_keeps_the_thumbnails(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn another_scale_drops_the_thumbnails_and_asks_again(cx: &mut TestAppContext) {
-    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+    let (view, cx, mut core, id) = shown_with_details(cx, ENTRIES);
     core.send(thumbnail(id, 1));
     cx.run_until_parked();
     core.thumbnail_requests();
@@ -470,7 +501,7 @@ fn new_places_and_pinned_folders_are_told(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn the_window_asks_for_the_settings_and_the_theme(cx: &mut TestAppContext) {
-    let (_view, _cx, core) = window(cx);
+    let (_view, _cx, mut core) = window(cx);
     let commands = core.commands();
     assert!(commands.contains(&Command::Settings), "{commands:?}");
     assert!(commands.contains(&Command::Theme), "{commands:?}");
@@ -492,7 +523,7 @@ fn the_window_draws_with_the_theme_the_core_sends(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppContext) {
-    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+    let (view, cx, mut core, id) = shown_with_details(cx, ENTRIES);
     core.send(thumbnail(id, 1));
     cx.run_until_parked();
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_some()));
@@ -529,7 +560,7 @@ fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppC
 
 #[gpui::test]
 fn hiding_and_showing_before_a_frame_still_asks_for_thumbnails_anew(cx: &mut TestAppContext) {
-    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+    let (view, cx, mut core, id) = shown_with_details(cx, ENTRIES);
     core.send(thumbnail(id, 1));
     cx.run_until_parked();
     core.thumbnail_requests();
@@ -560,14 +591,13 @@ fn a_thumbnail_shrunk_after_hiding_is_not_kept(cx: &mut TestAppContext) {
 /// and order.
 fn listing_asked(core: &mut Core) -> (ListingId, PathBuf, Order) {
     let mut asked = Vec::new();
-    while let Ok(message) = core.messages.try_recv() {
-        match message {
-            CoreMessage::Connected { events, .. } => core.events = Some(events),
-            CoreMessage::Command {
-                command: Command::ListFolder { id, path, order },
-                ..
-            } => asked.push((id, path, order)),
-            _ => {}
+    while let Some(message) = core.try_recv() {
+        if let CoreMessage::Command {
+            command: Command::ListFolder { id, path, order },
+            ..
+        } = message
+        {
+            asked.push((id, path, order));
         }
     }
     assert_eq!(asked.len(), 1, "{asked:?}");

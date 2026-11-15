@@ -156,3 +156,59 @@ fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
     });
     cx.run_until_parked();
 }
+
+#[gpui::test]
+async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-tree");
+    fs::create_dir(tree.path().join(".hidden")).unwrap();
+    let (view, cx) = window_on(cx, tree.path(), tree.path());
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+    // Home, closed: only its own row.
+    assert!(cx.debug_bounds("tree-0").is_some());
+    assert!(cx.debug_bounds("tree-1").is_none());
+
+    click(cx, "tree-toggle-0");
+    cx.run_until_parked();
+    // Projects, but not the hidden folder or the file.
+    assert!(cx.debug_bounds("tree-1").is_some());
+    assert!(cx.debug_bounds("tree-2").is_none());
+
+    // Going into Projects/nova opens the tree down to it.
+    view.update(cx, |view, _| view.open(&tree.path().join("Projects/nova")));
+    wait_for_folder(&view, cx, &tree.path().join("Projects/nova")).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tree-2").is_some());
+    // nova holds no folders: no arrow.
+    assert!(cx.debug_bounds("tree-toggle-1").is_some());
+    assert!(cx.debug_bounds("tree-toggle-2").is_none());
+    // Each level steps in by one indent (22 px, past a 2 px pad), and
+    // each level's hairline runs 4 px before the rows inside it.
+    let from_row = |cx: &mut VisualTestContext, row: &'static str, part: &'static str| {
+        cx.debug_bounds(part).unwrap().left() - cx.debug_bounds(row).unwrap().left()
+    };
+    assert_eq!(from_row(cx, "tree-0", "tree-toggle-0"), px(2.0));
+    assert_eq!(from_row(cx, "tree-1", "tree-toggle-1"), px(24.0));
+    assert_eq!(from_row(cx, "tree-2", "tree-guide-2-1"), px(18.0));
+    assert_eq!(from_row(cx, "tree-2", "tree-guide-2-2"), px(40.0));
+
+    // The arrow only opens and closes, and the folder on screen read again
+    // in place leaves closed what the user closed.
+    click(cx, "tree-toggle-1");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tree-2").is_none());
+    view.update(cx, |view, _| view.sort_by(nova_files_api::SortKey::Name));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tree-2").is_none());
+    view.read_with(cx, |view, _| {
+        assert_eq!(
+            view.folder(),
+            Some(tree.path().join("Projects/nova").as_path())
+        );
+    });
+
+    // Clicking a row goes there.
+    click(cx, "tree-0");
+    wait_for_folder(&view, cx, tree.path()).await;
+}
