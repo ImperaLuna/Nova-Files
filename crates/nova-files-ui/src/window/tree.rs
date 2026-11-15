@@ -58,6 +58,11 @@ impl MainWindow {
         cx.notify();
     }
 
+    /// Whether the tree has every listing it asked the core for.
+    pub const fn tree_settled(&self) -> bool {
+        self.tree_line.asked.is_none()
+    }
+
     /// Takes the window's own listing of a folder into the tree, and opens
     /// the tree down to it when the window has just `arrived` there, so a
     /// folder read again in place never reopens what the user closed.
