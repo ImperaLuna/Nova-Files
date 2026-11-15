@@ -11,6 +11,14 @@ use super::*;
 /// The window's width from which the sidebar stands beside the sheet.
 const NARROWEST_WIDE: Pixels = px(720.0);
 
+/// Waits until the tree has every listing it asked for. They come from the
+/// core's own threads, so `run_until_parked` alone can finish first.
+async fn wait_for_tree(view: &Entity<MainWindow>, cx: &VisualTestContext) {
+    view.condition::<WindowEvent>(cx, |view, _| view.tree_settled())
+        .await;
+    cx.run_until_parked();
+}
+
 /// A window whose home is `tree`, with `Projects` pinned; waits until the
 /// pinned folder is listed.
 async fn with_projects_pinned<'a>(
@@ -170,7 +178,7 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     assert!(cx.debug_bounds("tree-1").is_none());
 
     click(cx, "tree-toggle-0");
-    cx.run_until_parked();
+    wait_for_tree(&view, cx).await;
     // Projects, but not the hidden folder or the file.
     assert!(cx.debug_bounds("tree-1").is_some());
     assert!(cx.debug_bounds("tree-2").is_none());
@@ -178,7 +186,7 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     // Going into Projects/nova opens the tree down to it.
     view.update(cx, |view, _| view.open(&tree.path().join("Projects/nova")));
     wait_for_folder(&view, cx, &tree.path().join("Projects/nova")).await;
-    cx.run_until_parked();
+    wait_for_tree(&view, cx).await;
     assert!(cx.debug_bounds("tree-2").is_some());
     // nova holds no folders: no arrow.
     assert!(cx.debug_bounds("tree-toggle-1").is_some());
