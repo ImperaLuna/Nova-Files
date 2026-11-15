@@ -7,6 +7,12 @@
 # crates/nova-files/tests, not from its own crate.
 test_workspace = true
 
+# A test that waits on the core fails through its watchdog (common::WAIT,
+# 10 s), and the workspace's tests take 15 to 19 s on a CI runner, so a
+# mutant that makes a test wait ends past cargo-mutants' 20 s floor and is
+# counted a timeout, which fails the run, rather than caught.
+minimum_test_timeout = 60
+
 exclude_re = [
     # Reads the real home folder and environment; tests hand the core a
     # temp home instead.
