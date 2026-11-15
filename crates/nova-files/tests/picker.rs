@@ -249,6 +249,18 @@ async fn typing_goes_to_the_name_box_after_focus_is_lost(cx: &mut TestAppContext
 }
 
 #[gpui::test]
+async fn leaving_the_path_bar_gives_the_name_box_its_keys_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), FILES).await;
+    click(cx, "path-fill");
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    cx.simulate_input("plan");
+    assert_eq!(name(&view, cx).as_deref(), Some("plan"));
+}
+
+#[gpui::test]
 async fn typed_paths_go_there(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();

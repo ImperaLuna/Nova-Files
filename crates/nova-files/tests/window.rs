@@ -7,7 +7,8 @@
 //! picker window picks the file double-clicked when it asks for files,
 //! and answers cancelled when it is closed. Its own keys are tested in
 //! `window_keys`, selecting in `window_select`, type to jump in
-//! `window_jump`, and the island and its file actions in `window_island`.
+//! `window_jump`, the island and its file actions in `window_island`, and
+//! the path bar in `window_path`.
 
 #![expect(
     clippy::unwrap_used,
@@ -20,6 +21,7 @@ mod window_band;
 mod window_island;
 mod window_jump;
 mod window_keys;
+mod window_path;
 mod window_select;
 
 use std::cell::RefCell;
