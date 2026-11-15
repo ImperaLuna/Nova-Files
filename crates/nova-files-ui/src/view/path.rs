@@ -2,19 +2,21 @@
 //! Home or Computer down to the folder on screen (see `crumbs`), with an
 //! arrow between each two. A click on a crumb goes to its folder. The
 //! folder on screen is pressed in, strong, with its icon in orange; the
-//! root shows its icon too.
+//! root shows its icon too. A long path folds its middle into a "…" crumb
+//! whose menu lists the folders it hides (see `path_menu`).
 //!
 //! The crumbs sit at the bar's right end of their own box, so a narrow
 //! window cuts the root side off and keeps the folder on screen in view.
 //! The empty part of the bar after them is kept free; a feature's button
 //! (search scope, Empty Trash) goes after it, at the bar's right end.
 //!
-//! Debug selectors: `crumb-<n>` for each crumb, counted from the root, and
-//! `arrow-<n>` for the arrow after it.
+//! Debug selectors: `crumb-<n>` for each crumb, counted from the root
+//! whether shown or folded, `arrow-<n>` for the arrow after it, and
+//! `crumb-more` for the "…" crumb.
 
 use gpui::{
-    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
+    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
     prelude::FluentBuilder as _,
 };
 
@@ -22,9 +24,12 @@ use super::bar::capsule;
 use super::row::icon;
 use super::sidebar::place_icon;
 use crate::assets::Icon;
-use crate::crumbs::{self, Crumb};
+use crate::crumbs::{self, Crumb, Shown};
+use crate::path_bar::{MenuItem, MenuOwner};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
+
+const FOLDED_LABEL: &str = "…";
 
 impl MainWindow {
     pub(super) fn path_bar(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
@@ -36,10 +41,23 @@ impl MainWindow {
             .overflow_hidden()
             .justify_end()
             .items_center();
-        for (index, crumb) in crumbs.iter().enumerate() {
-            row = row.child(crumb_button(index, crumb, colors, cx));
-            if !crumb.here {
-                row = row.child(separator(index, colors));
+        for shown in crumbs::shown(crumbs.len()) {
+            match shown {
+                Shown::Crumb(index) => {
+                    let crumb = &crumbs[index];
+                    row = row.child(crumb_button(index, crumb, colors, cx));
+                    if !crumb.here {
+                        row = row.child(
+                            chevron(colors).debug_selector(move || format!("arrow-{index}")),
+                        );
+                    }
+                }
+                Shown::Folded(hidden) => {
+                    let items = crumbs[hidden].iter().cloned().map(MenuItem::from);
+                    row = row
+                        .child(self.folded_crumb(items.collect(), colors, cx))
+                        .child(chevron(colors));
+                }
             }
         }
         capsule(colors)
@@ -57,6 +75,32 @@ impl MainWindow {
             return Vec::new();
         };
         crumbs::crumbs(folder, &self.home, &self.places, place_icon)
+    }
+
+    /// Whether `owner`'s menu is the one open.
+    fn menu_open(&self, owner: MenuOwner) -> bool {
+        self.path_menu().is_some_and(|menu| menu.owner == owner)
+    }
+
+    /// The "…" crumb, which opens `items`, the folders it hides, as a
+    /// menu.
+    fn folded_crumb(&self, items: Vec<MenuItem>, colors: &Colors, cx: &Context<Self>) -> Div {
+        let open = self.menu_open(MenuOwner::Folded);
+        let button = crumb_box("crumb-more".into(), colors)
+            .when(open, |button| button.bg(colors.press))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    this.press_path_menu(MenuOwner::Folded, event.position, items.clone());
+                    cx.notify();
+                }),
+            )
+            .child(FOLDED_LABEL);
+        div()
+            .relative()
+            .flex_none()
+            .child(button)
+            .when(open, |slot| slot.child(self.path_menu_card(cx)))
     }
 }
 
@@ -82,6 +126,7 @@ fn crumb_button(
                 .font_weight(text::STRONG_WEIGHT)
         })
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            this.close_path_menu();
             this.open(&target);
             cx.notify();
         }))
@@ -110,10 +155,9 @@ fn crumb_box(selector: SharedString, colors: &Colors) -> Stateful<Div> {
         .hover(|button| button.bg(colors.hover).text_color(colors.text))
 }
 
-/// The arrow after the `index`th crumb.
-fn separator(index: usize, colors: &Colors) -> Div {
+/// An arrow between two crumbs.
+fn chevron(colors: &Colors) -> Div {
     div()
-        .debug_selector(move || format!("arrow-{index}"))
         .flex()
         .flex_none()
         .items_center()

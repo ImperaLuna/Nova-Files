@@ -1,6 +1,6 @@
 //! The path bar: a crumb for each level from Home down to the folder on
-//! screen, each going to its folder, and a narrow window keeping the
-//! folder on screen in view.
+//! screen, each going to its folder; a long path folding its middle into
+//! a "…" menu; and a narrow window keeping the folder on screen in view.
 
 use gpui::{px, size};
 
@@ -42,6 +42,63 @@ async fn each_crumb_goes_to_its_folder(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
     click(cx, "crumb-0");
     wait_for_folder(&view, cx, tree.path()).await;
+}
+
+/// Waits until the path bar's menu holds names, and returns them.
+async fn menu_names(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.path_menu_names()
+            .is_some_and(|names| !names.is_empty())
+    })
+    .await;
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| view.path_menu_names().unwrap())
+}
+
+/// Waits until the path bar's menu has closed.
+async fn menu_closed(view: &Entity<MainWindow>, cx: &mut VisualTestContext) {
+    view.condition::<WindowEvent>(cx, |view, _| view.path_menu_names().is_none())
+        .await;
+    cx.run_until_parked();
+    assert!(!drawn(cx, "path-menu"));
+}
+
+#[gpui::test]
+async fn a_long_path_folds_its_middle_into_a_menu(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let deep = tree.path().join("a/b/c/d/e/f");
+    fs::create_dir_all(&deep).unwrap();
+    let (view, cx) = path_window(cx, &tree, &deep).await;
+
+    // Home, …, d, e, f.
+    for shown in ["crumb-0", "crumb-more", "crumb-4", "crumb-5", "crumb-6"] {
+        assert!(drawn(cx, shown), "{shown} not drawn");
+    }
+    for folded in ["crumb-1", "crumb-2", "crumb-3", "arrow-1", "arrow-3"] {
+        assert!(!drawn(cx, folded), "{folded} drawn");
+    }
+
+    click(cx, "crumb-more");
+    assert_eq!(menu_names(&view, cx).await, ["a", "b", "c"]);
+    assert!(drawn(cx, "path-menu"));
+    click(cx, "path-menu-1");
+    wait_for_folder(&view, cx, &tree.path().join("a/b")).await;
+    menu_closed(&view, cx).await;
+}
+
+#[gpui::test]
+async fn a_click_on_the_folded_crumb_again_closes_its_menu(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let deep = tree.path().join("a/b/c/d/e/f");
+    fs::create_dir_all(&deep).unwrap();
+    let (view, cx) = path_window(cx, &tree, &deep).await;
+
+    click(cx, "crumb-more");
+    menu_names(&view, cx).await;
+    click(cx, "crumb-more");
+    menu_closed(&view, cx).await;
 }
 
 #[gpui::test]

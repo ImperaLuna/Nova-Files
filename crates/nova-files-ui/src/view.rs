@@ -21,6 +21,7 @@
 
 mod bar;
 mod path;
+mod path_menu;
 mod row;
 mod sheet;
 mod sidebar;

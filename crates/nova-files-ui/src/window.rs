@@ -52,6 +52,7 @@ use nova_files_api::{
 use crate::band::Band;
 use crate::history::History;
 use crate::jump::TypeJump;
+use crate::path_bar::PathBar;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
@@ -133,6 +134,8 @@ pub struct MainWindow {
     pub(crate) places: Vec<Place>,
     /// Where the window has been, for Back and Forward.
     pub(crate) history: History,
+    /// The path bar's open menu (see `path_bar`).
+    pub(crate) path_bar: PathBar,
     pub(crate) scroll: UniformListScrollHandle,
     /// Another app's request, while the window is its picker (see `pick`).
     pub(crate) pick: Option<Picker>,
@@ -222,6 +225,7 @@ impl MainWindow {
             home,
             places: Vec::new(),
             history: History::default(),
+            path_bar: PathBar::default(),
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
