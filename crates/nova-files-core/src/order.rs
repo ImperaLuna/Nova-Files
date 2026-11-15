@@ -35,7 +35,10 @@ pub fn arrange(
         }
         SortKey::Name => return Some(entries),
         SortKey::Modified | SortKey::Size => {
-            let read = details::read_batch(folder, &entries, cancelled)?;
+            let paths = entries
+                .iter()
+                .map(|entry| (folder.join(&entry.name), entry.kind));
+            let read = details::read_batch(paths, cancelled)?;
             let mut paired: Vec<(Entry, Details)> = entries.into_iter().zip(read).collect();
             paired.sort_by(|(left, left_details), (right, right_details)| {
                 group(left)

@@ -9,9 +9,12 @@ use nova_files_ui::{WindowState, fetch_window_state};
 
 use super::*;
 
-/// The state file under the tree's state folder, as `picker_with` sets it.
+/// The state file in the state folder beside the tree, as `picker_with`
+/// sets it.
 fn state_file(tree: &TempFolder) -> PathBuf {
-    tree.path().join(".local/state/nova-files/window-state")
+    tree.path()
+        .with_extension("state")
+        .join("nova-files/window-state")
 }
 
 /// Waits until the core has written `expected` to the state file.
@@ -80,7 +83,7 @@ fn the_next_picker_gets_the_state_the_core_kept() {
     let home = nova_files_core::Home {
         folder: tree.path().to_owned(),
         config: tree.path().join(".config"),
-        state: tree.path().join(".local/state"),
+        state: tree.path().with_extension("state"),
         data: tree.path().join(".local/share"),
         drive_trashes: false,
     };
