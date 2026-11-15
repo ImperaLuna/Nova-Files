@@ -1,5 +1,6 @@
 //! The path bar's state: which of its menus is open, if any, and what it
-//! lists. Drawing is in `view::path` and `view::path_menu`; the crumbs
+//! lists, and whether it is a text field for typing a path (see
+//! `typing`). Drawing is in `view::path` and `view::path_menu`; the crumbs
 //! themselves are worked out each time the bar draws (see `crumbs`).
 //!
 //! Two menus: the "…" crumb's, listing the folders a long path folds
@@ -18,6 +19,8 @@
 //! the menu remembers that press: when it lands on the menu's own button,
 //! the button leaves the menu closed instead of opening it again.
 
+mod typing;
+
 use std::path::{Path, PathBuf};
 
 use futures::StreamExt as _;
@@ -34,6 +37,8 @@ use crate::window::{ChannelSink, MainWindow};
 
 /// The one listing an arrow menu's connection asks for.
 const MENU_LISTING: ListingId = ListingId(0);
+
+pub use typing::PathField;
 
 /// One folder in a path bar menu.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,6 +88,8 @@ pub struct PathBar {
     /// was.
     dismissed: Option<(MenuOwner, Point<Pixels>)>,
     connector: Connector,
+    /// The text field typing a path, while the bar is one.
+    pub(crate) field: Option<PathField>,
 }
 
 /// An arrow menu's connection to the core and the task taking its events.
@@ -96,6 +103,7 @@ impl PathBar {
         Self {
             menu: None,
             dismissed: None,
+            field: None,
             connector,
         }
     }

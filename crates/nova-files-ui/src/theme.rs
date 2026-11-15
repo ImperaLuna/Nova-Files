@@ -277,6 +277,8 @@ pub mod size {
     pub const PATH_MIN_WIDTH: Pixels = px(150.0);
     /// The path bar's empty part after the crumbs, which always shows.
     pub const PATH_FILL_MIN: Pixels = px(12.0);
+    /// Space either side of the path bar's text field.
+    pub const PATH_FIELD_PAD: Pixels = px(10.0);
     /// A crumb in the path bar: space either side, between its icon and
     /// its name, and its icon.
     pub const CRUMB_PAD: Pixels = px(9.0);
