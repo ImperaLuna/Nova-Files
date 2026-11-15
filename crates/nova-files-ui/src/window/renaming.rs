@@ -44,6 +44,17 @@ pub struct Wanted {
     pub rename: bool,
 }
 
+/// What the window waits for after a rename or a new folder.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Waiting {
+    #[default]
+    Nothing,
+    /// A listing that holds this entry, to select it.
+    Entry(Wanted),
+    /// The next frame, to start renaming what is selected.
+    Rename,
+}
+
 impl MainWindow {
     /// Starts renaming the one entry selected in the folder on screen.
     pub(crate) fn start_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -113,7 +124,7 @@ impl MainWindow {
         if !keep || typed.is_empty() || name == renaming.name {
             return;
         }
-        self.wanted = Some(Wanted {
+        self.waiting = Waiting::Entry(Wanted {
             folder: renaming.folder.clone(),
             name: name.clone(),
             rename: false,
@@ -157,7 +168,7 @@ impl MainWindow {
         }
         let name = free_name(listing);
         let inside = listing.path.clone();
-        self.wanted = Some(Wanted {
+        self.waiting = Waiting::Entry(Wanted {
             folder: inside.clone(),
             name: name.clone(),
             rename: true,
@@ -168,20 +179,26 @@ impl MainWindow {
     /// The selection `listing` starts with when it holds the entry the
     /// window waits for; a rename then starts on the next frame.
     pub(super) fn wanted_selection(&mut self, listing: &Listing) -> Option<Selection> {
-        let wanted = self
-            .wanted
-            .as_ref()
-            .filter(|wanted| wanted.folder == listing.path)?;
+        let Waiting::Entry(wanted) = &self.waiting else {
+            return None;
+        };
+        if wanted.folder != listing.path {
+            return None;
+        }
         let selection = Selection::named(listing.id, &listing.entries, &wanted.name)?;
-        self.rename_next_frame = wanted.rename;
-        self.wanted = None;
+        self.waiting = if wanted.rename {
+            Waiting::Rename
+        } else {
+            Waiting::Nothing
+        };
         Some(selection)
     }
 
     /// Starts the rename a new folder asked for, now that the window can
     /// give the field focus.
     pub(crate) fn start_wanted_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if std::mem::take(&mut self.rename_next_frame) {
+        if self.waiting == Waiting::Rename {
+            self.waiting = Waiting::Nothing;
             self.start_rename(window, cx);
         }
     }
@@ -273,6 +290,7 @@ mod tests {
                     kind: EntryKind::Folder,
                 })
                 .collect::<Arc<[Entry]>>(),
+            folders: None,
         }
     }
 

@@ -1,4 +1,5 @@
-//! The sheet the folder's entries sit on: the column heads, then the rows.
+//! The sheet the folder's entries sit on: the column heads, then the rows;
+//! on Start, the Start page instead (see `start`).
 //!
 //! The rows are a `uniform_list`, which builds only the rows on screen, so
 //! a folder of any size costs the same to draw. Each row is an icon and a
@@ -8,16 +9,19 @@
 //! with a selected neighbour. The row the keyboard is on has a ring (see
 //! `selecting`); a rename puts its text field where the name was (see
 //! `window::renaming`). A click on a column head orders the list by that column;
-//! folders always come first (see `navigate` and the core's `order`).
+//! folders always come first (see `navigate` and the core's `order`). A
+//! search's files stay best first, so their heads do nothing; they get a
+//! Folder column, and the part of each name that matched is marked. The
+//! count and the empty look are the search's (see `search`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
 //! by the width of its name.
 
 use gpui::{
-    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
-    prelude::FluentBuilder as _, uniform_list,
+    AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
+    MouseDownEvent, ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _,
+    div, prelude::FluentBuilder as _, uniform_list,
 };
 
 use nova_files_api::{Order, SortKey};
@@ -25,13 +29,16 @@ use nova_files_api::{Order, SortKey};
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
 use crate::assets::Icon;
+use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::MainWindow;
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
 const SIZE_LABEL: &str = "Size";
+const FOLDER_LABEL: &str = "Folder";
 const MODIFIED_HEADER_SELECTOR: &str = "modified-header";
+const FOLDER_HEADER_SELECTOR: &str = "folder-header";
 
 impl MainWindow {
     pub(super) fn sheet(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -44,9 +51,17 @@ impl MainWindow {
             .relative()
             .px(size::SHEET_PAD)
             .child(sheet_corner(&colors))
-            .child(column_heads(self.shown_order(), &colors, cx))
-            .child(self.entries_area(cx))
-            .child(self.island(cx))
+            .map(|sheet| {
+                if self.is_on_start() {
+                    // The page runs to the sheet's edges, glow and all.
+                    sheet.px_0().child(self.start_page(cx))
+                } else {
+                    sheet
+                        .child(self.column_heads(&colors, cx))
+                        .child(self.entries_area(cx))
+                        .child(self.island(cx))
+                }
+            })
     }
 
     /// The entries, where a press that isn't on a name can drag a box
@@ -66,6 +81,8 @@ impl MainWindow {
                 }),
             )
             .child(self.entries(cx))
+            .children(self.no_matches(&colors))
+            .children(self.match_count(&colors))
             .children(self.band_box().map(|band| {
                 div()
                     .debug_selector(|| "band".to_owned())
@@ -96,6 +113,7 @@ impl MainWindow {
                 };
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
+                let query = this.searching().then(|| this.query(cx));
                 let selected = |index: usize| {
                     listing
                         .entries
@@ -111,7 +129,15 @@ impl MainWindow {
                     .map(|(entry, index)| {
                         let id = entry.id;
                         let columns = this.columns(index).unwrap_or_default();
-                        let name = SharedString::from(entry.name.to_string_lossy().into_owned());
+                        let name = entry.name.to_string_lossy().into_owned();
+                        let marks = query
+                            .as_deref()
+                            .map(|query| marks::matched(&name, query))
+                            .unwrap_or_default();
+                        let folder = listing
+                            .folders
+                            .is_some()
+                            .then(|| this.folder_link(listing.path_of(entry), index, cx));
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let line = cells(
@@ -126,9 +152,10 @@ impl MainWindow {
                                     &colors,
                                 ))
                                 .child(this.rename_field(index).map_or_else(
-                                    || entry_name(name, index, cx).into_any_element(),
+                                    || entry_name(name.into(), marks, index, cx).into_any_element(),
                                     |field| rename_box(field.clone(), &colors).into_any_element(),
                                 )),
+                            folder,
                             detail(columns.modified, &colors),
                             detail(columns.size, &colors),
                             format!("modified-{index}"),
@@ -210,10 +237,34 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
         .hover(|row| row.bg(colors.hover))
 }
 
-/// The heads above the entries, lined up with [`cells`]. A click on one
-/// orders the list by it (see `navigate`); the one in use is bright and
-/// carries an arrow for its direction.
-fn column_heads(order: Order, colors: &Colors, cx: &Context<MainWindow>) -> impl IntoElement {
+impl MainWindow {
+    /// The heads above the entries, lined up with [`cells`]. A click on
+    /// one orders the list by it (see `navigate`); the one in use is
+    /// bright and carries an arrow for its direction. A search's files
+    /// stay best first: none is in use and a click does nothing, and they
+    /// add the Folder head.
+    fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
+        let order = (!self.searching()).then(|| self.shown_order());
+        column_heads(order, self.showing_found().then(folder_head), colors, cx)
+    }
+}
+
+/// The Folder column's head, which orders nothing.
+fn folder_head() -> AnyElement {
+    div()
+        .debug_selector(|| FOLDER_HEADER_SELECTOR.to_owned())
+        .child(FOLDER_LABEL)
+        .into_any_element()
+}
+
+/// The heads, ordered by `order` (none in use without one), with the
+/// `folder` head between Name and Modified when there is one.
+fn column_heads(
+    order: Option<Order>,
+    folder: Option<AnyElement>,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> impl IntoElement {
     let head = |key, label| column_head(key, label, order, colors, cx);
     div()
         .flex()
@@ -237,6 +288,7 @@ fn column_heads(order: Order, colors: &Colors, cx: &Context<MainWindow>) -> impl
                 .h_full()
                 .child(cells(
                     head(SortKey::Name, NAME_LABEL),
+                    folder,
                     head(SortKey::Modified, MODIFIED_LABEL),
                     head(SortKey::Size, SIZE_LABEL).mr(-size::HEAD_BUTTON_PAD),
                     MODIFIED_HEADER_SELECTOR.to_owned(),
@@ -248,12 +300,12 @@ fn column_heads(order: Order, colors: &Colors, cx: &Context<MainWindow>) -> impl
 fn column_head(
     key: SortKey,
     label: &'static str,
-    order: Order,
+    order: Option<Order>,
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> Stateful<Div> {
-    let in_use = order.key == key;
-    let arrow = if order.descending {
+    let in_use = order.is_some_and(|order| order.key == key);
+    let arrow = if order.is_some_and(|order| order.descending) {
         Icon::SortDown
     } else {
         Icon::SortUp
@@ -270,13 +322,15 @@ fn column_head(
         .px(size::HEAD_BUTTON_PAD)
         .ml(-size::HEAD_BUTTON_PAD)
         .rounded(radius::SMALL)
-        .cursor_pointer()
-        .hover(|head| head.bg(colors.hover).text_color(colors.text))
+        .when(order.is_some(), |head| {
+            head.cursor_pointer()
+                .hover(|head| head.bg(colors.hover).text_color(colors.text))
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.sort_by(key);
+                    cx.notify();
+                }))
+        })
         .when(in_use, |head| head.text_color(colors.text))
-        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-            this.sort_by(key);
-            cx.notify();
-        }))
         .child(label)
         .when(in_use, |head| {
             let arrow_selector = format!("arrow-{}", label.to_lowercase());

@@ -144,7 +144,7 @@ fn readable(path: &Path) -> bool {
 
 /// Whether the helper decodes the file itself: by its first bytes, or by
 /// its name when they say nothing (or it can't be opened).
-fn built_in(path: &Path) -> bool {
+pub fn built_in(path: &Path) -> bool {
     let format = ImageReader::open(path)
         .and_then(ImageReader::with_guessed_format)
         .ok()
@@ -156,7 +156,7 @@ fn built_in(path: &Path) -> bool {
     )
 }
 
-fn decode(path: &Path) -> ImageResult<DynamicImage> {
+pub fn decode(path: &Path) -> ImageResult<DynamicImage> {
     let mut reader = ImageReader::open(path)?.with_guessed_format()?;
     let mut limits = Limits::default();
     limits.max_alloc = Some(MAX_DECODE_BYTES);

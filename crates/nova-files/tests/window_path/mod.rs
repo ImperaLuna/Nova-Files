@@ -110,7 +110,7 @@ async fn going_elsewhere_closes_a_menu_for_good(cx: &mut TestAppContext) {
     assert_eq!(menu_names(&view, cx).await, ["nova"]);
     view.update(cx, |view, _| view.go_up());
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
-    view.update(cx, |view, _| view.go_back());
+    view.update(cx, MainWindow::go_back);
     wait_for_folder(&view, cx, &nova).await;
     menu_closed(&view, cx).await;
 }
@@ -341,4 +341,20 @@ async fn going_elsewhere_or_clicking_away_puts_the_crumbs_back(cx: &mut TestAppC
     click(cx, "entry-1");
     cx.run_until_parked();
     assert!(path_field(&view, cx).is_none());
+}
+
+#[gpui::test]
+async fn a_space_typed_into_the_path_stays_in_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path");
+    let projects = tree.path().join("Projects");
+    // With the window's keys bound, Space is also the quick look's.
+    let (view, cx) = typing_window(cx, &tree, &projects).await;
+
+    click(cx, "path-fill");
+    cx.simulate_input("a");
+    cx.simulate_keystrokes("space");
+    cx.run_until_parked();
+    assert_eq!(typed(&view, cx).0, "a ");
+    assert!(!view.read_with(cx, |view, _| view.previewing()));
 }

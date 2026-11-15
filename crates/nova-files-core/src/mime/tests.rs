@@ -287,3 +287,74 @@ fn on_a_tie_the_first_data_folder_wins() {
         Some("text/x-personal")
     );
 }
+
+#[test]
+fn a_type_is_called_by_its_untranslated_comment() {
+    let (dir, types) = types("names");
+    fs::create_dir_all(dir.0.join("mime/image")).unwrap();
+    dir.write(
+        "mime/image/png.xml",
+        "<?xml version=\"1.0\"?>\n<mime-type type=\"image/png\">\n  \
+         <comment xml:lang=\"sv\">PNG-bild</comment>\n  \
+         <comment>PNG &amp; &lt;friends&gt;</comment>\n</mime-type>\n",
+    );
+    assert_eq!(types.name("image/png").as_deref(), Some("PNG & <friends>"));
+    // An alias is called what the type it stands for is.
+    assert_eq!(
+        types.name("image/x-old").as_deref(),
+        Some("PNG & <friends>")
+    );
+    assert_eq!(types.name("image/jpeg"), None);
+}
+
+#[test]
+fn a_subtype_with_dots_is_named_by_its_whole_file() {
+    let (dir, types) = types("dotted");
+    fs::create_dir_all(dir.0.join("mime/application")).unwrap();
+    dir.write(
+        "mime/application/vnd.oasis.opendocument.text.xml",
+        "<comment>ODT document</comment>",
+    );
+    dir.write(
+        "mime/application/vnd.oasis.opendocument.xml",
+        "<comment>Wrong file</comment>",
+    );
+    assert_eq!(
+        types
+            .name("application/vnd.oasis.opendocument.text")
+            .as_deref(),
+        Some("ODT document")
+    );
+}
+
+#[test]
+fn a_name_that_is_not_a_type_reads_no_file() {
+    let (dir, types) = types("not-types");
+    dir.write("mime/globs.xml", "<comment>Not a type</comment>");
+    dir.write("mime/x.xml", "<comment>Not a type</comment>");
+    for name in ["globs", "x", "/globs", "mime/../globs", "../mime", "a/.."] {
+        assert_eq!(types.name(name), None, "{name}");
+    }
+}
+
+#[test]
+fn a_type_file_without_a_name_gives_none() {
+    let (dir, types) = types("no-comment");
+    fs::create_dir_all(dir.0.join("mime/text")).unwrap();
+    dir.write("mime/text/plain.xml", "<mime-type><comment> </comment>");
+    dir.write("mime/text/markdown.xml", "<mime-type><comment>Open");
+    assert_eq!(types.name("text/plain"), None);
+    assert_eq!(types.name("text/markdown"), None);
+}
+
+#[test]
+fn the_first_data_folder_names_a_type() {
+    let user = Dir::new("name-user");
+    let system = Dir::new("name-system");
+    for (dir, name) in [(&user, "Mine"), (&system, "System's")] {
+        fs::create_dir_all(dir.0.join("mime/text")).unwrap();
+        dir.write("mime/text/plain.xml", &format!("<comment>{name}</comment>"));
+    }
+    let types = MimeTypes::load(&[user.0.clone(), system.0.clone()]);
+    assert_eq!(types.name("text/plain").as_deref(), Some("Mine"));
+}

@@ -51,6 +51,10 @@ mod actions {
             RenameSelected,
             NewFolder,
             Undo,
+            TogglePreview,
+            PreviewPrevious,
+            PreviewNext,
+            FocusSearch,
         ]
     );
 }
@@ -117,6 +121,10 @@ pub const ACTIONS: &[ActionSpec] = &[
     RENAME,
     NEW_FOLDER,
     UNDO,
+    PREVIEW,
+    PREVIEW_PREVIOUS,
+    PREVIEW_NEXT,
+    FIND,
 ];
 
 spec!(
@@ -246,6 +254,27 @@ spec!(
     /// Undoes what the island's note names, or else the window's last
     /// job that can still be undone.
     UNDO, Undo, "edit.undo", "Undo", ["ctrl-z"]
+);
+spec!(
+    /// Opens the quick look on the selected entry, or closes it.
+    PREVIEW, TogglePreview, "preview.toggle", "Preview", ["space"]
+);
+spec!(
+    /// Shows the entry before in the quick look.
+    PREVIEW_PREVIOUS, PreviewPrevious, "preview.previous", "Previous", ["left"]
+);
+spec!(
+    /// Shows the entry after in the quick look.
+    PREVIEW_NEXT, PreviewNext, "preview.next", "Next", ["right"]
+);
+spec!(
+    /// Puts the caret in the search box. `/` does too, unless a field
+    /// has the keys (see `view`).
+    FIND,
+    FocusSearch,
+    "search.focus",
+    "Search",
+    ["ctrl-f"]
 );
 
 /// Binds every action's default keys.

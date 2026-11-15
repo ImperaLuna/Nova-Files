@@ -12,7 +12,8 @@ use nova_files_api::{Color, Mode, Palette, Theme};
 /// `bg`; the file sheet and everything raised are `bg_alt` mixed into
 /// `bg`, so height never comes from adding white. Hover, press, selection
 /// and hairlines are `fg` laid thinly over whatever is under them. Orange
-/// (`primary`) marks only the folder you're in and what acts; purple
+/// (`primary`) marks only the folder you're in, what acts and a search's
+/// matches; purple
 /// (`secondary`) only selected text. One for the whole app, since every
 /// window shows the same theme.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -33,6 +34,8 @@ pub struct Colors {
     pub press: Rgba,
     /// Selected rows, and the band dragged to select.
     pub selected: Rgba,
+    /// Laid over the window under the quick look.
+    pub scrim: Rgba,
     /// Hairlines: under the column heads, around menus.
     pub line: Rgba,
     /// The ring around the row the keyboard is on, and the band's edge.
@@ -52,14 +55,20 @@ pub struct Colors {
     pub here: Rgba,
     /// A text field's caret.
     pub caret: Rgba,
+    /// What warns: a drive's free space when it is nearly full.
+    pub full: Rgba,
     /// Selected text in a text field.
     pub selection: Rgba,
+    /// The part of a name a search matched.
+    pub mark: Rgba,
     /// The button that does what the bar is for: Open, Save, Keep both.
     pub accept: Rgba,
     /// Text on [`Self::accept`].
     pub on_accept: Rgba,
     /// A step that can't be undone: Delete for good.
     pub danger: Rgba,
+    /// The soft orange glow at the top of the Start page.
+    pub glow: Rgba,
     /// The tag on a file icon, by the file's kind (see `kind`).
     pub tags: Tags,
 }
@@ -101,6 +110,11 @@ mod share {
     /// `fg` on a light one, where black would read as dirt.
     pub const SHADOW_DARK: f32 = 0.55;
     pub const SHADOW_LIGHT: f32 = 0.22;
+    /// `primary` laid over the sheet, at the top of the Start page.
+    pub const GLOW: f32 = 0.10;
+    /// A search's match, under the name's text.
+    pub const MARK: f32 = 0.34;
+    pub const SCRIM: f32 = 0.72;
 }
 
 impl Colors {
@@ -126,6 +140,7 @@ impl Colors {
             hover: thin(palette.fg, share::HOVER),
             press: thin(palette.fg, share::PRESS),
             selected: thin(palette.fg, share::SELECTED),
+            scrim: thin(palette.bg, share::SCRIM),
             line: thin(palette.fg, share::LINE),
             ring: thin(palette.fg, share::RING),
             text: color(palette.fg),
@@ -135,10 +150,13 @@ impl Colors {
             folder: mix(color(palette.primary), share::FOLDER, text_dim),
             here: color(palette.primary),
             caret: color(palette.primary),
+            full: color(palette.error),
             selection: thin(palette.secondary, share::SELECTION),
+            mark: thin(palette.primary, share::MARK),
             accept: color(palette.primary),
             on_accept: color(palette.on_accent),
             danger: color(palette.error),
+            glow: thin(palette.primary, share::GLOW),
             tags: Tags::new(palette, text_dim),
         }
     }
@@ -213,6 +231,8 @@ pub mod window {
     /// smaller than the main window.
     pub const PICK_WIDTH: Pixels = px(900.0);
     pub const PICK_HEIGHT: Pixels = px(600.0);
+    /// Narrower than this, the sidebar folds into one row above the bar.
+    pub const NARROW_WIDTH: Pixels = px(720.0);
 }
 
 /// Type: Inter throughout, in the four roles of the design page.
@@ -231,6 +251,11 @@ pub mod text {
     pub const LABEL_WEIGHT: FontWeight = FontWeight::SEMIBOLD;
     /// The open place.
     pub const STRONG_WEIGHT: FontWeight = FontWeight::SEMIBOLD;
+    /// A card's name on the Start page, and the large card's.
+    pub const CARD_NAME: Pixels = px(13.5);
+    pub const HERO_NAME: Pixels = px(16.0);
+    /// How full a drive is, large on its Start card.
+    pub const PERCENT: Pixels = px(26.0);
 }
 
 /// Sizes and spacing.
@@ -281,9 +306,31 @@ pub mod size {
     /// The sidebar, a place in it, its icon, and the space between places.
     pub const SIDEBAR_WIDTH: Pixels = px(228.0);
     pub const PLACE_HEIGHT: Pixels = px(34.0);
+    /// The most the Drives section takes: its head and about four rows.
+    pub const DRIVES_MAX_HEIGHT: Pixels = px(200.0);
     pub const PLACE_PAD: Pixels = px(10.0);
     pub const PLACE_ICON: Pixels = px(19.0);
     pub const PLACE_GAP: Pixels = px(1.0);
+    /// A place in the sidebar folded into one row: snug around its name.
+    pub const PLACE_NARROW_PAD: Pixels = px(12.0);
+    pub const PLACE_NARROW_GAP: Pixels = px(8.0);
+    /// A row of the sidebar's folder tree: its height, the space between
+    /// its parts and at its ends, its arrow's slot and arrow, its icon, how
+    /// far each level is indented, and how far before a level's rows its
+    /// hairline runs.
+    pub const TREE_ROW_HEIGHT: Pixels = px(30.0);
+    pub const TREE_ROW_GAP: Pixels = px(6.0);
+    pub const TREE_PAD_LEFT: Pixels = px(2.0);
+    pub const TREE_PAD_RIGHT: Pixels = px(8.0);
+    pub const TREE_TOGGLE: Pixels = px(20.0);
+    pub const TREE_TOGGLE_ICON: Pixels = px(12.0);
+    pub const TREE_ICON: Pixels = px(17.0);
+    pub const TREE_INDENT: Pixels = px(22.0);
+    pub const TREE_GUIDE_INSET: Pixels = px(4.0);
+    /// The space around a sidebar section's head.
+    pub const SECTION_TOP: Pixels = px(8.0);
+    pub const SECTION_RIGHT: Pixels = px(6.0);
+    pub const SECTION_BOTTOM: Pixels = px(4.0);
     /// A capsule in the top bar, an icon button in it, and its icon.
     pub const CAPSULE_HEIGHT: Pixels = px(40.0);
     pub const CAPSULE_PAD: Pixels = px(3.0);
@@ -308,6 +355,20 @@ pub mod size {
     pub const SEARCH_WIDTH: Pixels = px(220.0);
     pub const SEARCH_PAD: Pixels = px(12.0);
     pub const SEARCH_GAP: Pixels = px(9.0);
+    /// The Folder column of a search's files, and the cell's link.
+    pub const FOLDER_WIDTH: Pixels = px(200.0);
+    pub const FOLDER_LINK_HEIGHT: Pixels = px(26.0);
+    pub const FOLDER_LINK_PAD: Pixels = px(8.0);
+    /// The chip that says where a search looks, in the path's slot.
+    pub const CHIP_HEIGHT: Pixels = px(28.0);
+    pub const CHIP_PAD: Pixels = px(10.0);
+    /// The count of files a search found, over the sheet's bottom left.
+    pub const STATUS_INSET: Pixels = px(12.0);
+    pub const STATUS_PAD_X: Pixels = px(8.0);
+    pub const STATUS_PAD_Y: Pixels = px(3.0);
+    /// What shows in an empty list: a quiet icon over one word or two.
+    pub const EMPTY_ICON: Pixels = px(44.0);
+    pub const EMPTY_GAP: Pixels = px(10.0);
     /// A button or text field in the pick bar.
     pub const CONTROL_HEIGHT: Pixels = px(38.0);
     pub const CONTROL_PAD: Pixels = px(16.0);
@@ -353,6 +414,10 @@ pub mod size {
     pub const COUNT_BOTTOM: Pixels = px(12.0);
     pub const COUNT_PAD_X: Pixels = px(8.0);
     pub const COUNT_PAD_Y: Pixels = px(3.0);
+    pub const MENU_ICON: Pixels = px(16.0);
+    /// The button on a sidebar section's head, and its icon.
+    pub const SECTION_BUTTON: Pixels = px(24.0);
+    pub const SECTION_BUTTON_ICON: Pixels = px(15.0);
     /// A menu row with an icon: space either side, and between its icon
     /// and its name.
     pub const MENU_ITEM_PAD: Pixels = px(10.0);
@@ -369,10 +434,97 @@ pub mod size {
     pub const FILTER_MENU_MAX_HEIGHT: Pixels = px(320.0);
 }
 
+/// The Start page: the column its cards sit in, the cards, the large
+/// card's peek inside the folder and the small cards' fan of three.
+pub mod start {
+    use gpui::{Pixels, px};
+
+    /// The widest the page's column gets, and the space around it.
+    pub const MAX_WIDTH: Pixels = px(800.0);
+    pub const PAD_TOP: Pixels = px(28.0);
+    pub const PAD_SIDE: Pixels = px(12.0);
+    /// Between the groups, and between a group's label and its cards.
+    pub const GROUP_GAP: Pixels = px(30.0);
+    pub const LABEL_GAP: Pixels = px(10.0);
+    /// The label's inset, so it lines up with a card's content.
+    pub const LABEL_INSET: Pixels = px(4.0);
+    /// Inside a small card, and between its icon row and its name.
+    pub const CARD_PAD: Pixels = px(14.0);
+    pub const CARD_GAP: Pixels = px(14.0);
+    /// Inside the large card, and between its head and its peek.
+    pub const HERO_PAD: Pixels = px(18.0);
+    pub const HERO_GAP: Pixels = px(16.0);
+    /// Between the large card's icon and its name.
+    pub const HERO_HEAD_GAP: Pixels = px(14.0);
+    /// The folder icon on a small card and on the large one.
+    pub const CARD_ICON: Pixels = px(34.0);
+    pub const HERO_ICON: Pixels = px(46.0);
+    /// Between a name and the line under it.
+    pub const SUBTITLE_GAP: Pixels = px(2.0);
+    /// One line of the large card's peek, and the space above the lines.
+    pub const PEEK_ROW: Pixels = px(28.0);
+    pub const PEEK_TOP: Pixels = px(12.0);
+    pub const PEEK_GAP: Pixels = px(10.0);
+    /// The peek's "N more" line starts under the names: a row icon (22)
+    /// and the gap after it.
+    pub const PEEK_MORE_INSET: Pixels = px(32.0);
+    /// One icon of a small card's fan, how far each overlaps the one
+    /// before, and how far the outer two lean, in degrees.
+    pub const FAN_ICON: Pixels = px(24.0);
+    pub const FAN_OVERLAP: Pixels = px(5.0);
+    pub const FAN_TILT: f32 = 8.0;
+    /// Where the glow at the top of the page has faded out, as a share of
+    /// the page's height, and the direction it fades in, in degrees (180
+    /// is downward).
+    pub const GLOW_END: f32 = 0.46;
+    pub const GLOW_ANGLE: f32 = 180.0;
+    /// A drive card's icon, the space after it, and its bar's height.
+    pub const DRIVE_ICON: Pixels = px(22.0);
+    pub const DRIVE_HEAD_GAP: Pixels = px(10.0);
+    pub const BAR: Pixels = px(6.0);
+}
+
 /// How much of an element shows through.
 pub mod opacity {
     /// A file the picker's type filter leaves out: still there, set back.
     pub const DIMMED: f32 = 0.4;
+}
+
+/// The quick look (see `view::preview`).
+pub mod preview {
+    use gpui::{Pixels, px};
+
+    /// Space between the quick look and the window's edges, and between
+    /// its parts.
+    pub const MARGIN: Pixels = px(16.0);
+    pub const GAP: Pixels = px(12.0);
+    /// The round Previous and Next buttons either side.
+    pub const NAV: Pixels = px(40.0);
+    /// The caption under what is shown, and the space at its ends.
+    pub const CAPTION_HEIGHT: Pixels = px(46.0);
+    pub const CAPTION_PAD_START: Pixels = px(16.0);
+    pub const CAPTION_PAD_END: Pixels = px(6.0);
+    pub const CAPTION_GAP: Pixels = px(4.0);
+    pub const CAPTION_TEXT_GAP: Pixels = px(10.0);
+    /// The caption's Open button.
+    pub const BUTTON_HEIGHT: Pixels = px(34.0);
+    pub const BUTTON_PAD: Pixels = px(12.0);
+    /// A text file's page, its padding and its lines.
+    pub const TEXT_WIDTH: Pixels = px(560.0);
+    pub const TEXT_PAD_X: Pixels = px(26.0);
+    pub const TEXT_PAD_Y: Pixels = px(22.0);
+    pub const TEXT_LINE: Pixels = px(22.0);
+    /// A folder's list of what it holds, its padding and rows.
+    pub const LIST_WIDTH: Pixels = px(400.0);
+    pub const LIST_PAD_X: Pixels = px(18.0);
+    pub const LIST_PAD_Y: Pixels = px(14.0);
+    pub const LIST_ROW: Pixels = px(32.0);
+    pub const LIST_GAP: Pixels = px(10.0);
+    /// The card a file with nothing to draw shows its icon on, and the
+    /// icon.
+    pub const CARD_WIDTH: Pixels = px(640.0);
+    pub const CARD_HEIGHT: Pixels = px(400.0);
+    pub const BIG_ICON: Pixels = px(96.0);
 }
 
 /// Corner radii. They nest: the sheet sits one gap inside the window,
@@ -445,6 +597,7 @@ mod tests {
         assert!(near(colors.hover, grey(1.0, share::HOVER)));
         assert!(near(colors.press, grey(1.0, share::PRESS)));
         assert!(near(colors.selected, grey(1.0, share::SELECTED)));
+        assert!(near(colors.scrim, grey(0.0, share::SCRIM)));
         assert!(near(colors.line, grey(1.0, share::LINE)));
         assert!(near(colors.ring, grey(1.0, share::RING)));
     }

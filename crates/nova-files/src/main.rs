@@ -115,20 +115,21 @@ fn skip_absent_vulkan_drivers() {
     }
 }
 
-/// The command that starts this program again on `folder` with every
-/// Vulkan driver, or `None` when this process didn't filter any.
+/// The command that starts this program again on `folder` (or on the
+/// Start page, without one) with every Vulkan driver, or `None` when this
+/// process didn't filter any.
 ///
 /// A window that can't set up its GPU with drivers filtered may still draw
 /// with the software driver (lavapipe): after an NVIDIA driver update
 /// without a reboot, NVIDIA's Vulkan and OpenGL both fail. The environment
 /// can't be changed once threads run, so the new process gets it instead.
-fn restart_with_every_driver(folder: &Path) -> Option<Command> {
+fn restart_with_every_driver(folder: Option<&Path>) -> Option<Command> {
     if !FILTER_SET.load(Ordering::SeqCst) {
         return None;
     }
     let mut command = Command::new(std::env::current_exe().ok()?);
     command
-        .arg(folder)
+        .args(folder)
         .env_remove(nova_files_core::FILTER_VARIABLE)
         .env(EVERY_DRIVER_VARIABLE, "1");
     Some(command)
@@ -266,7 +267,7 @@ mod tests {
     fn a_restart_gives_back_the_drivers_this_process_filtered() {
         FILTER_SET.store(true, Ordering::SeqCst);
 
-        let command = restart_with_every_driver(Path::new("/srv/photos")).unwrap();
+        let command = restart_with_every_driver(Some(Path::new("/srv/photos"))).unwrap();
 
         assert_eq!(command.get_program(), std::env::current_exe().unwrap());
         assert_eq!(
@@ -276,11 +277,14 @@ mod tests {
         let envs: Vec<_> = command.get_envs().collect();
         assert!(envs.contains(&(OsStr::new(nova_files_core::FILTER_VARIABLE), None)));
         assert!(envs.contains(&(OsStr::new(EVERY_DRIVER_VARIABLE), Some(OsStr::new("1")))));
+        // A window on the Start page starts again on it.
+        let command = restart_with_every_driver(None).unwrap();
+        assert_eq!(command.get_args().count(), 0);
     }
 
     #[test]
     fn no_restart_when_this_process_filtered_nothing() {
-        assert!(restart_with_every_driver(Path::new("/srv/photos")).is_none());
+        assert!(restart_with_every_driver(Some(Path::new("/srv/photos"))).is_none());
     }
 
     #[expect(
