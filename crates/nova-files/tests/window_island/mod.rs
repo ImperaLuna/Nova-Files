@@ -186,14 +186,18 @@ async fn a_job_held_at_a_conflict_shows_waiting_and_cancels(cx: &mut TestAppCont
     cx.simulate_keystrokes("ctrl-c");
     double_click(cx, "entry-0");
     wait_for_folder(&view, cx, &projects).await;
+    let asked = cx.executor().now();
     cx.simulate_keystrokes("ctrl-v");
     view.condition::<WindowEvent>(cx, |view, cx| {
         view.newest_job_line(cx).as_deref() == Some("Copying notes.txt · waiting")
     })
     .await;
-    // A quick job only leaves its note; this one holds, so it shows.
+    // A quick job only leaves its note; this one holds, so it shows. The
+    // test clock moves on while the core answers, sometimes past the wait.
     cx.run_until_parked();
-    assert!(cx.debug_bounds("island-progress").is_none());
+    if cx.executor().now() - asked < nova_files_ui::JOB_SHOWS_AFTER {
+        assert!(cx.debug_bounds("island-progress").is_none());
+    }
     cx.executor().advance_clock(nova_files_ui::JOB_SHOWS_AFTER);
     cx.run_until_parked();
     assert!(cx.debug_bounds("island-progress").is_some());
