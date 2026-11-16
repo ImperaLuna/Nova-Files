@@ -63,7 +63,7 @@ pub use job::{
     Tally,
 };
 pub use message::{ClientId, Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
-pub use open_with::{App, OpenWith, OpenWithAnswer, OpenWithId};
+pub use open_with::{App, NotOpened, OpenWith, OpenWithAnswer, OpenWithId};
 pub use pick::{
     FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,
 };

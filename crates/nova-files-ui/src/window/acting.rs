@@ -1,15 +1,15 @@
 //! What the window does to the files selected, and the island's notes:
-//! move them to the trash, and undo. Each becomes one of the core's jobs
+//! move them to the trash, undo, and say which files didn't open. Each becomes one of the core's jobs
 //! (see `jobs`); the island says what happened (see `island`). Copy, cut
 //! and paste are in `clipboard`.
 
 use std::path::PathBuf;
 
 use gpui::{Context, SharedString};
-use nova_files_api::{EntryId, EntryKind, Listing, Operation};
+use nova_files_api::{EntryId, EntryKind, Listing, NotOpened, Operation};
 
 use super::MainWindow;
-use crate::island::{NOTE_TIME, Note, NoteUndo};
+use crate::island::{NOTE_TIME, Note, NoteUndo, opening};
 use crate::selection::entry_at;
 
 impl MainWindow {
@@ -112,6 +112,29 @@ impl MainWindow {
             this.update(cx, Self::dismiss_note).ok();
         }));
         cx.notify();
+    }
+
+    /// Says on the island that `path` started no app, and why. A note
+    /// already up for other files that didn't open takes it in too.
+    pub(crate) fn file_not_opened(
+        &mut self,
+        path: PathBuf,
+        reason: NotOpened,
+        cx: &mut Context<Self>,
+    ) {
+        let shown = opening::note(&self.island.not_opened);
+        let joins = self
+            .island
+            .note
+            .as_ref()
+            .is_some_and(|note| Some(note.label.as_ref()) == shown.as_deref());
+        if !joins {
+            self.island.not_opened.clear();
+        }
+        self.island.not_opened.push((path, reason));
+        if let Some(label) = opening::note(&self.island.not_opened) {
+            self.show_note(label, None, cx);
+        }
     }
 
     /// Takes the note down.

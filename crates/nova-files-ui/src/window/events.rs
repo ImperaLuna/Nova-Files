@@ -162,8 +162,7 @@ impl MainWindow {
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }
-            | Event::FileOpened
-            | Event::FileNotOpened
+            | Event::FileOpened { .. }
             | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. }
@@ -171,6 +170,7 @@ impl MainWindow {
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
             | Event::SpaceUnreadable { .. } => {}
+            Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
             Event::Trash(items) => self.trash_listed(items, cx),
             Event::Places(places) => self.places_arrived(places, cx),
             Event::Bookmarks(pinned) => self.pinned_arrived(pinned, cx),

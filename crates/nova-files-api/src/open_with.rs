@@ -9,6 +9,20 @@
 
 use std::path::PathBuf;
 
+/// Why [`Command::OpenFile`] started no app.
+///
+/// [`Command::OpenFile`]: crate::Command::OpenFile
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NotOpened {
+    /// Inside a sandbox, so the desktop portal must do it.
+    Sandboxed,
+    /// No installed app is the default for the file's type, or its
+    /// `Exec` line can't take a file.
+    NoApp,
+    /// The app's program couldn't start.
+    Failed,
+}
+
 /// Names one Open With request. The client picks it; the core echoes it
 /// in the [`OpenWithAnswer`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

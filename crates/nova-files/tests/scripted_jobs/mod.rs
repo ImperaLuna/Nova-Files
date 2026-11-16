@@ -1,7 +1,8 @@
 //! Jobs and the trash against a scripted core: the island follows what
-//! the core says about a job, and arriving in the trash reads it again.
+//! the core says about a job, arriving in the trash reads it again, and
+//! files that open in no app say so.
 
-use nova_files_api::{JobId, Operation};
+use nova_files_api::{JobId, NotOpened, Operation};
 
 use super::*;
 
@@ -152,4 +153,56 @@ fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContex
     core.send(finished(jobs[1], nova_files_api::Outcome::Cancelled));
     cx.run_until_parked();
     assert_eq!(note(cx).as_deref(), Some("Copied 1 item"));
+}
+
+#[gpui::test]
+fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext) {
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down shift-down enter");
+    cx.run_until_parked();
+    let opened: Vec<PathBuf> = core
+        .commands()
+        .into_iter()
+        .filter_map(|command| match command {
+            Command::OpenFile { path, .. } => Some(path),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(opened.len(), 2, "{opened:?}");
+    let note = |cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| view.note().map(|note| note.label.to_string()))
+    };
+
+    core.send(Event::FileNotOpened {
+        path: opened[0].clone(),
+        reason: NotOpened::NoApp,
+    });
+    cx.run_until_parked();
+    assert_eq!(note(cx).as_deref(), Some("Can't open 0: no app opens it"));
+    core.send(Event::FileNotOpened {
+        path: opened[1].clone(),
+        reason: NotOpened::Failed,
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        note(cx).as_deref(),
+        Some("Can't open 0: no app opens it · 1: its app didn't start")
+    );
+
+    // Gone by itself; a later failure starts its own note.
+    cx.executor().advance_clock(nova_files_ui::NOTE_TIME);
+    cx.run_until_parked();
+    assert_eq!(note(cx), None);
+    core.send(Event::FileNotOpened {
+        path: opened[1].clone(),
+        reason: NotOpened::Failed,
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        note(cx).as_deref(),
+        Some("Can't open 1: its app didn't start")
+    );
 }

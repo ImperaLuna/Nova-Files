@@ -3,7 +3,8 @@
 //! one thing at a time, the most important first: a running job's
 //! progress (see `progress`), a question before a step that can't be
 //! undone ("Delete 3 items for good?"), a note after an action
-//! ("Moved 3 items to Trash", with Undo), then the selection ("3 selected
+//! ("Moved 3 items to Trash", with Undo, or "Can't open notes.txt: no
+//! app opens it"), then the selection ("3 selected
 //! · 12 MB", with what can be done to it). With nothing to show it goes
 //! down, and the sheet's quiet count ("4 folders, 9 files") shows in its
 //! place.
@@ -17,7 +18,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use gpui::{SharedString, Task};
-use nova_files_api::{Command, Entry, EntryKind, Failure, JobId, Operation, Outcome, Tally};
+use nova_files_api::{
+    Command, Entry, EntryKind, Failure, JobId, NotOpened, Operation, Outcome, Tally,
+};
 
 /// How long a note stays up.
 pub const NOTE_TIME: Duration = Duration::from_secs(6);
@@ -33,6 +36,9 @@ pub struct Island {
     pub for_all: bool,
     /// Whether the list of the window's jobs is open, when several run.
     pub jobs_open: bool,
+    /// The files the note on the island says didn't open, and why (see
+    /// `opening`).
+    pub not_opened: Vec<(PathBuf, NotOpened)>,
     /// Takes the note down once [`NOTE_TIME`] has passed; replaced with
     /// each new note, which cancels the old one's.
     pub(crate) note_timer: Option<Task<()>>,
@@ -293,6 +299,7 @@ const fn failure(reason: Failure) -> &'static str {
 }
 
 pub mod asking;
+pub mod opening;
 pub mod progress;
 pub mod several;
 

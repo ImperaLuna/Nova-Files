@@ -8,7 +8,7 @@ use crate::disk_space::PathSpace;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope, Tally};
-use crate::open_with::{OpenWith, OpenWithAnswer};
+use crate::open_with::{NotOpened, OpenWith, OpenWithAnswer};
 use crate::preview::{Fit, Preview, PreviewId};
 use crate::properties::{Properties, PropertiesId};
 use crate::recent::{RecentFolder, RecentId};
@@ -299,11 +299,10 @@ pub enum Event {
         path: PathBuf,
         reason: Unreadable,
     },
-    /// [`Command::OpenFile`]'s app has started.
-    FileOpened,
-    /// [`Command::OpenFile`] started nothing: sandboxed, no default app for
-    /// the file's type, or the app's program couldn't start.
-    FileNotOpened,
+    /// [`Command::OpenFile`]'s app has started on `path`.
+    FileOpened { path: PathBuf },
+    /// [`Command::OpenFile`] started nothing for `path`, for `reason`.
+    FileNotOpened { path: PathBuf, reason: NotOpened },
     /// The answer to a [`Command::OpenWith`] request.
     OpenWith(OpenWithAnswer),
     /// The UI's window state as last saved, empty when there is none,
