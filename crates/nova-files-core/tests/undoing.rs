@@ -177,6 +177,31 @@ fn undoing_a_move_that_replaced_puts_both_back() {
 }
 
 #[test]
+fn a_replaced_file_whose_name_was_taken_again_stays_in_the_trash() {
+    let bench = Bench::new("undo-replace-taken");
+    fs::write(bench.at("a"), "new").unwrap();
+    fs::create_dir(bench.at("into")).unwrap();
+    fs::write(bench.at("into/a"), "old").unwrap();
+    let client = bench.client();
+    let job = client.start(Operation::Copy {
+        sources: vec![bench.at("a")],
+        into: bench.at("into"),
+    });
+    let clash = answers::held(&client, job);
+    answers::answer(&client, job, &clash, Answer::Replace, Scope::ThisOne);
+    assert_eq!(client.ended(job).0, Outcome::Done);
+    // Saved over by an editor: a new file under the copy's name.
+    fs::remove_file(bench.at("into/a")).unwrap();
+    fs::write(bench.at("into/a"), "edited").unwrap();
+
+    assert_ne!(undo(&client, job), Outcome::Done);
+
+    assert_eq!(fs::read_to_string(bench.at("into/a")).unwrap(), "edited");
+    let trash = home_trash_files(&bench.root);
+    assert_eq!(fs::read_to_string(trash.join("a")).unwrap(), "old");
+}
+
+#[test]
 fn undoing_a_trash_restores_and_undoing_a_restore_trashes_again() {
     let bench = Bench::new("undo-trash");
     fs::write(bench.at("a"), "a").unwrap();
