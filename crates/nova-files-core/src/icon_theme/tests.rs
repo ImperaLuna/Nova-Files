@@ -292,9 +292,11 @@ fn the_chosen_theme_comes_from_the_first_settings_file_naming_one() {
         fs::write(path, text).unwrap();
     };
     assert_eq!(name::chosen(&config.0), None);
+    // A long settings file is read whole.
+    let comment = "x".repeat(64 * 1024);
     write(
         "kdeglobals",
-        "[General]\nTheme=No\n[Icons]\nTheme=breeze-dark\n",
+        &format!("# {comment}\n[General]\nTheme=No\n[Icons]\nTheme=breeze-dark\n"),
     );
     assert_eq!(name::chosen(&config.0).as_deref(), Some("breeze-dark"));
     write(
@@ -408,4 +410,6 @@ fn key_files_read_values_from_their_own_section() {
     assert_eq!(ini::value(text, "B", "Key"), Some("b"));
     assert_eq!(ini::value(text, "C", "Key"), None);
     assert_eq!(ini::value(text, "A", "Other"), None);
+    // Comments and blank lines are no lines at all.
+    assert_eq!(ini::lines("\n# a = b\n\n").count(), 0);
 }
