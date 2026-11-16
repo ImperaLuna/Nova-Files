@@ -2,7 +2,7 @@
 //! entries, the empty space and the trash offer, that each item does what
 //! its key does, and the Menu key.
 
-use gpui::{Pixels, Point, point};
+use gpui::{Pixels, Point, point, px};
 use nova_files_ui::{Look, MenuAction};
 
 use super::*;
@@ -148,7 +148,11 @@ async fn the_menu_key_opens_the_menu_with_its_first_item_marked(cx: &mut TestApp
 
     // Nothing selected: the empty space's menu.
     cx.simulate_keystrokes("shift-f10");
-    assert_eq!(offered(&view, cx).0[0], "New folder");
+    // Paste only with files on the clipboard.
+    assert_eq!(
+        offered(&view, cx).0,
+        ["New folder", "Select all", "Show hidden files"]
+    );
     assert_eq!(
         view.read_with(cx, |view, _| view.menu().unwrap().active),
         Some(0)
@@ -281,4 +285,62 @@ async fn a_folder_opens_in_a_new_tab_from_its_menu(cx: &mut TestAppContext) {
             Some(Location::Folder(projects))
         ]
     );
+}
+
+#[gpui::test]
+async fn an_empty_trash_offers_nothing(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-trash-none");
+    let home = TempFolder::tree("menu-trash-none-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    view.update(cx, MainWindow::open_trash);
+    view.condition::<WindowEvent>(cx, |view, _| view.trash_count() == Some(0))
+        .await;
+    wait_for_names(&view, cx, &[]).await;
+    cx.simulate_keystrokes("shift-f10");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+}
+
+/// Where the menu on screen opened.
+fn menu_at(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Point<Pixels> {
+    view.read_with(cx, |view, _| view.menu().unwrap().at)
+}
+
+#[gpui::test]
+async fn the_menu_key_opens_at_the_list_or_under_the_row(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-place");
+    let home = TempFolder::tree("menu-place-home");
+    for index in 0..60 {
+        fs::write(tree.path().join(format!("file-{index:02}")), "").unwrap();
+    }
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    // Nothing selected: inside the list's top left corner.
+    cx.simulate_keystrokes("shift-f10");
+    let first = cx.debug_bounds("entry-0").unwrap();
+    let at = menu_at(&view, cx);
+    assert!(
+        at.x > first.left() && at.y > first.top() && at.y < first.bottom(),
+        "{at:?} {first:?}"
+    );
+    cx.simulate_keystrokes("escape");
+
+    // Just under the row the keyboard is on, the list scrolled or not.
+    click(cx, "name-1");
+    cx.simulate_keystrokes("menu");
+    let row = cx.debug_bounds("entry-1").unwrap();
+    let at = menu_at(&view, cx);
+    assert!(
+        at.x > row.left() && (at.y - row.bottom()).abs() < px(0.5),
+        "{at:?} {row:?}"
+    );
+    // Scrolled to the end, then three rows up: under that row, not past
+    // the list's bottom.
+    cx.simulate_keystrokes("escape end up up up menu");
+    cx.run_until_parked();
+    let row = cx.debug_bounds("entry-58").unwrap();
+    let at = menu_at(&view, cx);
+    assert!((at.y - row.bottom()).abs() < px(0.5), "{at:?} {row:?}");
 }
