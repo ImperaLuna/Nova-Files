@@ -222,6 +222,13 @@ fn a_missing_theme_or_a_loop_of_themes_ends() {
         Some(base.path("Parent", "mimes/x.png"))
     );
     assert_eq!(looped.find(&names(&["y"]), Some), None);
+    // Each theme in the loop is searched once.
+    let mut tried = 0;
+    looped.find(&names(&["x"]), |_| {
+        tried += 1;
+        None::<PathBuf>
+    });
+    assert_eq!(tried, 1);
 
     let mut missing = themes(Some("Gone"), &[&base]);
     assert_eq!(missing.find(&names(&["x"]), Some), None);
@@ -383,6 +390,19 @@ fn png_comes_before_svg_in_one_folder() {
     let found = themes.find(&names(&["a"]), Some);
     assert_eq!(found, Some(base.path("Mine", "48x48/mimetypes/a.png")));
     assert_eq!(themes.find(&names(&["b"]), Some), None);
+}
+
+#[test]
+fn an_earlier_folder_wins_over_a_later_ones_png() {
+    let first = Base::new("first");
+    let second = Base::new("second");
+    first
+        .index("Mine", MINE)
+        .icon("Mine", "48x48/mimetypes/a.svg");
+    second.icon("Mine", "48x48/mimetypes/a.png");
+    let mut themes = themes(Some("Mine"), &[&first, &second]);
+    let found = themes.find(&names(&["a"]), Some);
+    assert_eq!(found, Some(first.path("Mine", "48x48/mimetypes/a.svg")));
 }
 
 #[test]
