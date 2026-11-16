@@ -14,9 +14,9 @@
 //! leaves its note. A copy or move into the folder on screen reads the
 //! folder again as files finish, at most every [`READ_AGAIN_EVERY`], so
 //! they show as they land. A copy onto itself keeps both, as a paste into
-//! the folder the files came from should; any other conflict shows the
-//! job as waiting, with Cancel: what the island asks about a conflict
-//! isn't decided yet.
+//! the folder the files came from should; at any other conflict the job
+//! holds and the island asks about it at once (see `island::asking`),
+//! before any other job's progress.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 
 use gpui::{App, Context, Task};
 use nova_files_api::{
-    Answer, Command, Conflict, ConflictKind, Event, JobId, JobTag, Operation, Outcome, Scope,
+    Answer, Command, Conflict, ConflictKind, Event, JobId, JobTag, Operation, Outcome, Scope, Tally,
 };
 
 use super::MainWindow;
@@ -61,13 +61,22 @@ pub struct Jobs {
 const UNDO_KEPT: usize = 50;
 
 impl Jobs {
-    /// The job the island shows at `now`: the newest of this window's
-    /// running jobs that has run for [`SHOW_AFTER`].
+    /// The job the island shows at `now`: the oldest of this window's
+    /// jobs that holds at a conflict, else the newest that has run for
+    /// [`SHOW_AFTER`].
     pub fn on_island(&self, now: Instant) -> Option<(JobId, &Running)> {
-        self.running
+        let asking = self
+            .running
             .iter()
-            .filter(|(_, job)| now.saturating_duration_since(job.started) >= SHOW_AFTER)
-            .max_by_key(|(id, job)| (job.started, **id))
+            .filter(|(_, job)| job.asking.is_some())
+            .min_by_key(|(id, job)| (job.started, **id));
+        asking
+            .or_else(|| {
+                self.running
+                    .iter()
+                    .filter(|(_, job)| now.saturating_duration_since(job.started) >= SHOW_AFTER)
+                    .max_by_key(|(id, job)| (job.started, **id))
+            })
             .map(|(id, job)| (*id, job))
     }
 
@@ -96,7 +105,7 @@ impl Jobs {
                     .is_none_or(|last| now.saturating_duration_since(last) >= READ_AGAIN_EVERY);
                 return (landed && due).then(|| into.clone());
             }
-            Event::ConflictAnswered { job, .. } => (job, |job| job.waiting = false),
+            Event::ConflictAnswered { job, .. } => (job, |job| job.asking = None),
             Event::JobPaused(job) => (job, |job| job.paused = true),
             Event::JobResumed(job) => (job, |job| job.paused = false),
             _ => return None,
@@ -205,8 +214,8 @@ impl MainWindow {
                 job,
                 outcome,
                 changed,
-                ..
-            } => self.job_finished(job, &outcome, &changed, cx),
+                tally,
+            } => self.job_finished(job, (&outcome, tally), &changed, cx),
             _ => {}
         }
     }
@@ -214,7 +223,7 @@ impl MainWindow {
     fn job_finished(
         &mut self,
         job: JobId,
-        outcome: &Outcome,
+        (outcome, tally): (&Outcome, Tally),
         changed: &[PathBuf],
         cx: &mut Context<Self>,
     ) {
@@ -238,7 +247,7 @@ impl MainWindow {
             .undoable
             .contains(&job)
             .then_some(NoteUndo::Job(job));
-        if let Some(label) = island::finished_note(&operation, outcome, self.folder()) {
+        if let Some(label) = island::finished_note(&operation, outcome, self.folder(), tally) {
             self.show_note(label, undo, cx);
         }
     }
@@ -263,8 +272,8 @@ impl MainWindow {
 
     /// Job `job` holds at `conflict`. A copy of a file onto itself (a
     /// paste into the folder it came from) keeps both, as a copy in place
-    /// should; anything else waits, since what the island asks isn't
-    /// decided yet.
+    /// should; the island asks about anything else, its "For all" tick
+    /// clear.
     fn job_conflict(&mut self, job: JobId, conflict: Conflict, cx: &mut Context<Self>) {
         let copies = self
             .jobs
@@ -285,15 +294,43 @@ impl MainWindow {
                 .ok();
             return;
         }
-        self.job_held(job, |job| job.waiting = true, cx);
-    }
-
-    /// Changes how job `job` holds, if it is this window's.
-    fn job_held(&mut self, job: JobId, change: impl FnOnce(&mut Running), cx: &mut Context<Self>) {
         if let Some(running) = self.jobs.running.get_mut(&job) {
-            change(running);
+            running.asking = Some(conflict);
+            self.island.for_all = false;
             cx.notify();
         }
+    }
+
+    /// Answers the conflict the island asks about with `answer`, for it
+    /// alone or, with the "For all" tick, for every one like it.
+    pub(crate) fn answer_conflict(&mut self, answer: Answer, cx: &mut Context<Self>) {
+        let asked = self
+            .job_on_island(cx)
+            .and_then(|(job, running)| Some((job, running.asking.clone()?)));
+        let (Some((job, conflict)), Some(connection)) = (asked, &self.connection) else {
+            return;
+        };
+        let scope = if self.island.for_all && conflict.more > 0 {
+            Scope::AllOfThisKind
+        } else {
+            Scope::ThisOne
+        };
+        connection
+            .send(Command::AnswerConflict {
+                job,
+                conflict,
+                answer,
+                scope,
+            })
+            .ok();
+        self.island.for_all = false;
+        cx.notify();
+    }
+
+    /// Ticks or clears "For all" on the island's question.
+    pub(crate) fn toggle_for_all(&mut self, cx: &mut Context<Self>) {
+        self.island.for_all = !self.island.for_all;
+        cx.notify();
     }
 
     /// The line of this window's newest running job, shown or not yet.
@@ -309,14 +346,6 @@ impl MainWindow {
     /// The job the island shows now, if any.
     pub(crate) fn job_on_island(&self, cx: &Context<Self>) -> Option<(JobId, &Running)> {
         self.jobs.on_island(cx.background_executor().now())
-    }
-
-    /// Cancels the job the island shows.
-    pub(crate) fn cancel_job(&self, cx: &Context<Self>) {
-        let shown = self.job_on_island(cx).map(|(job, _)| job);
-        if let (Some(job), Some(connection)) = (shown, &self.connection) {
-            connection.send(Command::CancelJob(job)).ok();
-        }
     }
 
     /// How many of this window's jobs were asked for and haven't ended.
@@ -439,7 +468,13 @@ mod tests {
         let job = JobId(1);
         let empty = Operation::EmptyTrash;
         jobs.running.insert(job, Running::new(empty, start));
-        jobs.running.get_mut(&job).unwrap().waiting = true;
+        jobs.running.get_mut(&job).unwrap().asking = Some(Conflict {
+            kind: ConflictKind::FileExists,
+            source: PathBuf::from("/a/x"),
+            target: PathBuf::from("/b/x"),
+            number: 1,
+            more: 0,
+        });
         jobs.moved(&Event::JobPaused(job), start);
         assert!(jobs.running[&job].paused);
         jobs.moved(&Event::JobResumed(job), start);
@@ -449,8 +484,42 @@ mod tests {
             answer: Answer::KeepBoth,
         };
         jobs.moved(&answer, start);
-        assert!(!jobs.running[&job].waiting);
+        assert!(jobs.running[&job].asking.is_none());
         // Another window's job.
         assert_eq!(jobs.moved(&Event::JobPaused(JobId(2)), start), None);
+    }
+
+    #[test]
+    fn a_job_asking_shows_at_once_before_newer_ones() {
+        let start = Instant::now();
+        let mut jobs = Jobs::default();
+        let shown = start + SHOW_AFTER;
+        assert!(jobs.on_island(shown).is_none());
+        jobs.running
+            .insert(JobId(1), Running::new(Operation::EmptyTrash, start));
+        jobs.running.insert(
+            JobId(2),
+            Running::new(Operation::EmptyTrash, start + SHOW_AFTER / 2),
+        );
+        jobs.running
+            .insert(JobId(3), Running::new(Operation::EmptyTrash, shown));
+        // Only those that ran long enough, the newest first.
+        assert_eq!(jobs.on_island(shown).map(|(id, _)| id), Some(JobId(1)));
+        assert_eq!(
+            jobs.on_island(shown + SHOW_AFTER).map(|(id, _)| id),
+            Some(JobId(3))
+        );
+        let clash = Conflict {
+            kind: ConflictKind::FileExists,
+            source: PathBuf::from("/a/x"),
+            target: PathBuf::from("/b/x"),
+            number: 1,
+            more: 0,
+        };
+        for id in [JobId(2), JobId(3)] {
+            jobs.running.get_mut(&id).unwrap().asking = Some(clash.clone());
+        }
+        // The oldest asking, however new.
+        assert_eq!(jobs.on_island(start).map(|(id, _)| id), Some(JobId(2)));
     }
 }

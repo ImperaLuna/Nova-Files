@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use nova_files_api::{Operation, Progress};
+use nova_files_api::{Conflict, Operation, Progress};
 
 use super::{ITEM, ITEMS, PART_GAP, count, name_of};
 
@@ -37,8 +37,8 @@ pub struct Running {
     pub started: Instant,
     /// When its totals were first known, for its speed.
     pub counted_from: Option<Start>,
-    /// It holds at a question the window doesn't ask yet.
-    pub waiting: bool,
+    /// The conflict it holds at, until answered: the island asks about it.
+    pub asking: Option<Conflict>,
     pub paused: bool,
 }
 
@@ -54,7 +54,7 @@ impl Running {
             },
             started,
             counted_from: None,
-            waiting: false,
+            asking: None,
             paused: false,
         }
     }
@@ -125,7 +125,7 @@ impl Running {
         } else {
             format!(" {what}")
         };
-        let state = if self.waiting {
+        let state = if self.asking.is_some() {
             Some(WAITING.to_owned())
         } else if self.paused {
             Some(PAUSED.to_owned())

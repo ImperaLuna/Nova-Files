@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use gpui::{SharedString, Task};
-use nova_files_api::{Command, Entry, EntryKind, Failure, JobId, Operation, Outcome};
+use nova_files_api::{Command, Entry, EntryKind, Failure, JobId, Operation, Outcome, Tally};
 
 /// How long a note stays up.
 pub const NOTE_TIME: Duration = Duration::from_secs(6);
@@ -28,6 +28,9 @@ pub struct Island {
     pub note: Option<Note>,
     /// A question before a step that can't be undone.
     pub confirm: Option<Confirm>,
+    /// Whether the answer to the conflict the island asks about goes for
+    /// every one like it (see `asking`).
+    pub for_all: bool,
     /// Takes the note down once [`NOTE_TIME`] has passed; replaced with
     /// each new note, which cancels the old one's.
     pub(crate) note_timer: Option<Task<()>>,
@@ -158,15 +161,24 @@ pub fn clipboard_note(cut: bool, paths: &[PathBuf]) -> String {
 }
 
 /// The note once a job doing `operation` ended with `outcome`, while the
-/// window shows `here`; `None` when there is nothing to say (a cancel, a
-/// new folder, an undo).
+/// window shows `here`, with what `tally` says the answers to its
+/// conflicts did; `None` when there is nothing to say (a cancel, a new
+/// folder, an undo).
 pub fn finished_note(
     operation: &Operation,
     outcome: &Outcome,
     here: Option<&Path>,
+    tally: Tally,
 ) -> Option<String> {
     match outcome {
-        Outcome::Done => done_note(operation, here),
+        Outcome::Done => match operation {
+            Operation::Copy { sources, .. } | Operation::Move { sources, .. }
+                if tally != Tally::default() =>
+            {
+                answered_note(operation, sources, here, tally)
+            }
+            _ => done_note(operation, here),
+        },
         Outcome::Cancelled => None,
         Outcome::Failed { path, reason } => Some(match verb(operation) {
             (verb, true) => format!("Couldn't {verb} {}: {}", name_of(path), failure(*reason)),
@@ -175,16 +187,54 @@ pub fn finished_note(
     }
 }
 
-fn done_note(operation: &Operation, here: Option<&Path>) -> Option<String> {
-    let elsewhere = |into: &Path| {
-        if here == Some(into) {
-            String::new()
-        } else {
-            format!(" to {}", name_of(into))
-        }
+/// The note for a copy or move of `sources` whose answers replaced or
+/// skipped some: "Copied 4 items, replaced 2, skipped 1", or "Nothing
+/// copied, skipped 3".
+fn answered_note(
+    operation: &Operation,
+    sources: &[PathBuf],
+    here: Option<&Path>,
+    tally: Tally,
+) -> Option<String> {
+    let skipped = usize::try_from(tally.skipped).unwrap_or(usize::MAX);
+    let went = sources.len().saturating_sub(skipped);
+    let what = if skipped == 0 {
+        what(sources)
+    } else {
+        count(went, ITEM, ITEMS)
     };
+    let done = match operation {
+        Operation::Copy { .. } if went == 0 => "Nothing copied".to_owned(),
+        Operation::Move { .. } if went == 0 => "Nothing moved".to_owned(),
+        Operation::Copy { into, .. } => format!("Copied {what}{}", elsewhere(into, here)),
+        Operation::Move { into, .. } => format!("Moved {what} to {}", name_of(into)),
+        _ => return done_note(operation, here),
+    };
+    let mut parts = vec![done];
+    if tally.replaced > 0 {
+        parts.push(format!("replaced {}", tally.replaced));
+    }
+    if tally.skipped > 0 {
+        parts.push(format!("skipped {}", tally.skipped));
+    }
+    Some(parts.join(LIST_GAP))
+}
+
+/// " to Documents" for a job into `into`, unless that is `here`, the
+/// folder on screen.
+fn elsewhere(into: &Path, here: Option<&Path>) -> String {
+    if here == Some(into) {
+        String::new()
+    } else {
+        format!(" to {}", name_of(into))
+    }
+}
+
+fn done_note(operation: &Operation, here: Option<&Path>) -> Option<String> {
     Some(match operation {
-        Operation::Copy { sources, into } => format!("Copied {}{}", what(sources), elsewhere(into)),
+        Operation::Copy { sources, into } => {
+            format!("Copied {}{}", what(sources), elsewhere(into, here))
+        }
         Operation::Move { sources, into } => {
             format!("Moved {} to {}", what(sources), name_of(into))
         }
@@ -235,6 +285,7 @@ const fn failure(reason: Failure) -> &'static str {
     }
 }
 
+pub mod asking;
 pub mod progress;
 
 #[cfg(test)]

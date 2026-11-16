@@ -431,6 +431,12 @@ pub mod size {
     pub const RENAME_PAD: Pixels = px(7.0);
     /// A worded button on the island (Undo).
     pub const TEXT_BUTTON_PAD: Pixels = px(12.0);
+    /// The "For all" tick on the island: its box, the box's edge, the
+    /// check inside, and the space before its words.
+    pub const TICK_BOX: Pixels = px(16.0);
+    pub const TICK_LINE: Pixels = px(1.5);
+    pub const TICK_ICON: Pixels = px(11.0);
+    pub const TICK_GAP: Pixels = px(8.0);
     /// The quiet count while the island is down: where it sits from the
     /// sheet's corner, and the space in its backing.
     pub const COUNT_LEFT: Pixels = px(6.0);
@@ -578,6 +584,8 @@ pub mod radius {
     pub const ROW: Pixels = px(10.0);
     /// A thumbnail, a column head's button, the band.
     pub const SMALL: Pixels = px(6.0);
+    /// The box of a tick.
+    pub const TICK: Pixels = px(4.0);
 }
 
 #[cfg(test)]
