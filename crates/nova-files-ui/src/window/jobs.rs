@@ -309,7 +309,7 @@ impl MainWindow {
         let (Some((job, conflict)), Some(connection)) = (asked, &self.connection) else {
             return;
         };
-        let scope = if self.island.for_all == Some((job, conflict.number)) {
+        let scope = if self.island.ticked_for_all(job, conflict.number) {
             Scope::AllOfThisKind
         } else {
             Scope::ThisOne
@@ -345,11 +345,6 @@ impl MainWindow {
             asked
         };
         cx.notify();
-    }
-
-    /// Whether the "For all" tick is ticked on the question `job` asks.
-    pub(crate) fn ticked_for_all(&self, job: JobId, conflict: &Conflict) -> bool {
-        self.island.for_all == Some((job, conflict.number))
     }
 
     /// The line of this window's newest running job, shown or not yet.

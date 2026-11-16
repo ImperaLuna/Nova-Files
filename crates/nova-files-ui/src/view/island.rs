@@ -45,7 +45,14 @@ impl MainWindow {
         } else if let Some((id, job)) = self.job_on_island(cx) {
             Some(job.asking.as_ref().map_or_else(
                 || job_parts(job, &colors, cx),
-                |conflict| ask_parts(conflict, self.ticked_for_all(id, conflict), &colors, cx),
+                |conflict| {
+                    ask_parts(
+                        conflict,
+                        self.island.ticked_for_all(id, conflict.number),
+                        &colors,
+                        cx,
+                    )
+                },
             ))
         } else if let Some(confirm) = &self.island.confirm {
             Some(confirm_parts(confirm, &colors, cx))
