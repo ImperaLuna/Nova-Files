@@ -205,7 +205,7 @@ pub struct MainWindow {
     /// The settings as the core last sent them.
     settings: Settings,
     /// Whether hidden files show, once the core has said (see `hidden`).
-    hidden_files: Option<HiddenFiles>,
+    pub(crate) hidden_files: Option<HiddenFiles>,
     /// The drives and how full they are (see `drives`).
     pub(crate) drives: Drives,
     /// The menu open over the window, if any (see `menu`).

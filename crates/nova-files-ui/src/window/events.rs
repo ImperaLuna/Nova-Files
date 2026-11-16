@@ -106,6 +106,10 @@ impl MainWindow {
             Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
                 self.find_failed(id, cx);
             }
+            Event::Properties { id, .. } => self.save_probed(id, false, cx),
+            Event::PropertiesUnreadable { id, reason, .. } => {
+                self.save_probed(id, crate::pick::found_nothing(reason), cx);
+            }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);
             }
@@ -154,8 +158,6 @@ impl MainWindow {
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }
-            | Event::Properties { .. }
-            | Event::PropertiesUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)

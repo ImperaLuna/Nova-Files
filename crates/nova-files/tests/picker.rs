@@ -744,3 +744,26 @@ async fn going_elsewhere_before_a_typed_folder_opens_drops_it(cx: &mut TestAppCo
     cx.run_until_parked();
     assert_eq!(name(&view, cx).as_deref(), Some("mine.txt"));
 }
+
+#[gpui::test]
+async fn a_save_onto_a_hidden_file_left_out_still_asks(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    fs::write(tree.path().join(".env"), "").unwrap();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(".env")).await;
+    cx.simulate_keystrokes("enter");
+    assert!(asked(&view, cx).await.is_some());
+    assert!(answers.try_recv().is_err());
+}
+
+#[gpui::test]
+async fn a_free_hidden_name_saves(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(".fresh")).await;
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join(".fresh")))
+    );
+}
