@@ -103,9 +103,14 @@ impl BothMethods {
     }
 
     #[expect(clippy::unused_self, reason = "the interface needs a receiver")]
-    fn read(&self, _namespace: &str, _key: &str) -> fdo::Result<OwnedValue> {
-        let wrapped = Value::Value(Box::new(Value::Structure(Structure::from(ACCENT))));
-        Ok(wrapped.try_to_owned().unwrap())
+    fn read(&self, namespace: &str, key: &str) -> fdo::Result<OwnedValue> {
+        match (namespace, key) {
+            (APPEARANCE_NAMESPACE, ACCENT_COLOR) => {
+                let wrapped = Value::Value(Box::new(Value::Structure(Structure::from(ACCENT))));
+                Ok(wrapped.try_to_owned().unwrap())
+            }
+            _ => Err(fdo::Error::Failed("not found".to_owned())),
+        }
     }
 }
 
