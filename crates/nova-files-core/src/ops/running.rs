@@ -18,6 +18,7 @@ use super::left::{Done, Left};
 use super::plan::{Kind, kind};
 use super::progress::Reporter;
 use super::stop::Stop;
+use crate::trash::TrashFolder;
 
 pub struct Running {
     pub job: JobId,
@@ -54,6 +55,9 @@ pub struct Running {
     /// Each file the job replaced, by the path it had, and where in a
     /// trash it went, so an undo can put it back.
     pub replaced: Vec<(PathBuf, PathBuf)>,
+    /// The trash found for each folder a replaced file went from, looked
+    /// for once per job.
+    pub replaced_trashes: HashMap<PathBuf, TrashFolder>,
 }
 
 impl Running {
@@ -79,6 +83,7 @@ impl Running {
             tally: Tally::default(),
             home_trash: None,
             replaced: Vec::new(),
+            replaced_trashes: HashMap::new(),
         }
     }
 

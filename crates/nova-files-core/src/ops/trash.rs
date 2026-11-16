@@ -118,9 +118,11 @@ pub fn trash_set_aside(
     shown: &Path,
 ) -> Option<PathBuf> {
     let home_trash = running.home_trash.clone();
-    let mut known = Known::new();
+    let mut known = std::mem::take(&mut running.replaced_trashes);
     let at = (index, left, shown.file_name());
-    match send(running, at, (home_trash.as_deref(), &mut known)) {
+    let sent = send(running, at, (home_trash.as_deref(), &mut known));
+    running.replaced_trashes = known;
+    match sent {
         Ok(Some((_, item, _))) => Some(item),
         Ok(None) => None,
         Err(Refused::NoTrash) => {

@@ -220,9 +220,14 @@ pub fn run(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ende
     if !free {
         return (outcome, changed);
     }
+    // Still in a trash, and its name free: one taken since (the new file
+    // saved over by an editor, say) stays the user's.
     let items: Vec<_> = still(replaced)
         .into_iter()
-        .filter(|item| trash::find(item, trashes).is_some())
+        .filter(|item| {
+            trash::find(item, trashes)
+                .is_some_and(|(_, found)| found.original.symlink_metadata().is_err())
+        })
         .collect();
     if items.is_empty() {
         return (outcome, changed);
