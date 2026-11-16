@@ -11,7 +11,9 @@
 //! `text/*` type is also plain text, and every type is a kind of
 //! `application/octet-stream`. The file's content is never read. A type's
 //! name is the untranslated `<comment>` of its `mime/<type>.xml`, read
-//! when asked for, from the first data folder that has it.
+//! when asked for, from the first data folder that has it. The icon names
+//! a type is drawn with come from `mime/icons` and `mime/generic-icons`
+//! (see `icons`).
 
 use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
@@ -32,6 +34,8 @@ const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 const GLOBS_FILE: &str = "mime/globs2";
 const SUBCLASSES_FILE: &str = "mime/subclasses";
 const ALIASES_FILE: &str = "mime/aliases";
+const ICONS_FILE: &str = "mime/icons";
+const GENERIC_ICONS_FILE: &str = "mime/generic-icons";
 /// Where each type's own file is: `mime/image/png.xml`.
 const TYPES_FOLDER: &str = "mime";
 const TYPE_FILE_EXTENSION: &str = "xml";
@@ -90,6 +94,10 @@ pub struct MimeTypes {
     parents: HashMap<String, Vec<String>>,
     /// Other names to the type they stand for.
     aliases: HashMap<String, String>,
+    /// Each type's own icon name, where its package names one.
+    icons: HashMap<String, String>,
+    /// Each type's generic icon name (`image-x-generic`).
+    generic_icons: HashMap<String, String>,
     /// The data folders it was read from, in order, for the types' names.
     dirs: Vec<PathBuf>,
 }
@@ -119,6 +127,13 @@ impl MimeTypes {
                 types.parents.entry(child).or_default().push(parent);
             }
             types.aliases.extend(pairs(&dir.join(ALIASES_FILE)));
+            // The first folder's names win, as its globs do.
+            for (mime, icon) in icon_pairs(&dir.join(ICONS_FILE)) {
+                types.icons.entry(mime).or_insert(icon);
+            }
+            for (mime, icon) in icon_pairs(&dir.join(GENERIC_ICONS_FILE)) {
+                types.generic_icons.entry(mime).or_insert(icon);
+            }
         }
         types
     }
@@ -273,9 +288,22 @@ fn pairs(path: &Path) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
+/// The `type:icon` lines of `icons` or `generic-icons`.
+fn icon_pairs(path: &Path) -> Vec<(String, String)> {
+    read_capped(path)
+        .map(|text| {
+            text.lines()
+                .filter(|line| !line.starts_with(COMMENT))
+                .filter_map(|line| line.split_once(FIELD))
+                .map(|(mime, icon)| (mime.to_owned(), icon.trim().to_owned()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The user's data folder, then the system's, as the XDG base directory
 /// spec lists them.
-fn data_dirs(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
+pub fn data_dirs(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let set = |name: &str| var(name).filter(|value| !value.is_empty());
     let home = set(DATA_HOME_VAR)
         .map(PathBuf::from)
@@ -294,5 +322,6 @@ fn read_capped(path: &Path) -> Option<String> {
     Some(text)
 }
 
+mod icons;
 #[cfg(test)]
 mod tests;

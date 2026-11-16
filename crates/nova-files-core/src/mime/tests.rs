@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use nova_files_api::{FileFilter, FilterRule};
+use nova_files_api::{FileFilter, FilterRule, IconKind};
 
 use super::*;
 
@@ -357,4 +357,79 @@ fn the_first_data_folder_names_a_type() {
     }
     let types = MimeTypes::load(&[user.0.clone(), system.0.clone()]);
     assert_eq!(types.name("text/plain").as_deref(), Some("Mine"));
+}
+
+fn icon_types(name: &str) -> (Dir, MimeTypes) {
+    let (dir, _) = types(name);
+    dir.write(
+        GENERIC_ICONS_FILE,
+        "application/gzip:package-x-generic\n\
+         application/x-compressed-tar:package-x-generic\n\
+         application/x-sharedlib:application-x-executable\n\
+         application/vnd.oasis.opendocument.text:x-office-document\n",
+    )
+    .write(ICONS_FILE, "application/pdf:my-pdf\n");
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0));
+    (dir, types)
+}
+
+#[test]
+fn icon_names_go_from_the_type_to_its_generic_icon() {
+    let (_dir, types) = icon_types("icon-names");
+    assert_eq!(
+        types.icon_names("application/x-compressed-tar"),
+        [
+            "application-x-compressed-tar",
+            "application-gzip",
+            "package-x-generic",
+            "application-x-generic",
+        ]
+    );
+    assert_eq!(
+        types.icon_names("text/x-csrc"),
+        ["text-x-csrc", "text-plain", "text-x-generic"]
+    );
+    assert_eq!(
+        types.icon_names("application/pdf"),
+        ["my-pdf", "application-pdf", "application-x-generic"]
+    );
+    // An alias is drawn as the type it stands for.
+    assert_eq!(
+        types.icon_names("image/x-old"),
+        ["image-png", "image-x-generic"]
+    );
+}
+
+#[test]
+fn the_first_data_folder_names_a_types_icon() {
+    let user = Dir::new("icon-user");
+    let system = Dir::new("icon-system");
+    user.write(GENERIC_ICONS_FILE, "application/zip:mine\n");
+    system.write(
+        GENERIC_ICONS_FILE,
+        "application/zip:package-x-generic\n# a:b\n",
+    );
+    let types = MimeTypes::load(&[user.0.clone(), system.0.clone()]);
+    assert_eq!(
+        types.icon_names("application/zip"),
+        ["application-zip", "mine", "application-x-generic"]
+    );
+}
+
+#[test]
+fn a_types_kind_comes_from_its_media_then_its_generic_icon() {
+    let (_dir, types) = icon_types("icon-kinds");
+    let kind = |mime| types.icon_kind(mime);
+    assert_eq!(kind("image/png"), IconKind::Picture);
+    assert_eq!(kind("video/mp4"), IconKind::Video);
+    assert_eq!(kind("audio/flac"), IconKind::Audio);
+    assert_eq!(kind("text/x-csrc"), IconKind::Text);
+    assert_eq!(kind("application/x-compressed-tar"), IconKind::Archive);
+    assert_eq!(kind("application/x-sharedlib"), IconKind::Program);
+    assert_eq!(
+        kind("application/vnd.oasis.opendocument.text"),
+        IconKind::Text
+    );
+    assert_eq!(kind("application/pdf"), IconKind::File);
+    assert_eq!(kind(ANY_FILE), IconKind::File);
 }
