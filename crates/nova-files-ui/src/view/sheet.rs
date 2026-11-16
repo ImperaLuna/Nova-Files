@@ -22,6 +22,8 @@
 //! on its own, and a row sized to its content would push its columns along
 //! by the width of its name.
 
+use std::path::Path;
+
 use gpui::{
     AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
     MouseDownEvent, ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _,
@@ -88,9 +90,11 @@ impl MainWindow {
                     this.band_pressed(event, on_name);
                 }),
             )
-            .when_some(self.list_drops_into(), |area, at| {
-                self.takes_drops(area, at, cx)
-            })
+            .when_some(
+                self.list_drop_folder()
+                    .map(|folder| DropAt::Folder(folder.to_path_buf())),
+                |area, at| self.takes_drops(area, at, cx),
+            )
             .child(self.entries(cx))
             .children(self.empty_trash(&colors))
             .children(self.no_matches(&colors))
@@ -304,12 +308,11 @@ impl MainWindow {
 
     /// Where files dropped on the list but not on a folder go: the
     /// folder on screen; nowhere on a search's files or in the trash.
-    fn list_drops_into(&self) -> Option<DropAt> {
+    pub fn list_drop_folder(&self) -> Option<&Path> {
         if self.searching() || self.trash_open() {
             return None;
         }
-        let listing = self.listing.as_ref()?;
-        Some(DropAt::Folder(listing.path.clone()))
+        Some(&self.listing.as_ref()?.path)
     }
 
     /// The cell between Name and Modified: where the `index`th entry was
