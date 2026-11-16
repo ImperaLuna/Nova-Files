@@ -201,14 +201,24 @@ impl MainWindow {
         }
     }
 
+    /// The name of each tab in the Open list, in order.
+    pub fn tab_names(&self) -> Vec<SharedString> {
+        self.tab_looks().into_iter().map(|(name, _)| name).collect()
+    }
+
+    /// The name and icon of each tab in the Open list, in order.
+    pub(crate) fn tab_looks(&self) -> Vec<(SharedString, Icon)> {
+        let shown = places::shown(self.places(), self.pinned());
+        self.tab_places()
+            .iter()
+            .map(|place| self.tab_look(place.as_ref(), &shown))
+            .collect()
+    }
+
     /// The name and icon of a tab at `place` in the Open list: as Places
     /// shows it when it is one of `shown`, Places' rows, else the
     /// folder's own.
-    pub(crate) fn tab_look(
-        &self,
-        place: Option<&Location>,
-        shown: &[places::Shown],
-    ) -> (SharedString, Icon) {
+    fn tab_look(&self, place: Option<&Location>, shown: &[places::Shown]) -> (SharedString, Icon) {
         match place {
             Some(Location::Start) => (START_LABEL.into(), Icon::Start),
             Some(Location::Folder(folder)) if *folder == self.trash.folder => {

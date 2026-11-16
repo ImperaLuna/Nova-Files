@@ -276,6 +276,8 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
     view.read_with(cx, |view, _| {
         assert_eq!(view.tab_count(), 3);
         assert_eq!(view.current_tab(), 2);
+        // A folder that isn't in Places goes by its own name.
+        assert_eq!(view.tab_names()[1..], ["Start", "Projects"]);
     });
     // On a file, nothing.
     click(cx, "tab-0");
