@@ -88,8 +88,7 @@ impl MainWindow {
             let items = self.selected_trashed();
             return (!items.is_empty()).then_some(Operation::DeleteFromTrash { items });
         }
-        let paths = self.selected_paths();
-        (!paths.is_empty() && self.pick.is_none()).then_some(Operation::Delete { paths })
+        deleting(self.selected_paths(), self.pick.is_some())
     }
 
     /// Undoes what the note names, or else this window's newest job that
@@ -171,5 +170,29 @@ impl MainWindow {
     /// The note on the island, if any.
     pub const fn note(&self) -> Option<&Note> {
         self.island.note.as_ref()
+    }
+}
+
+/// Deleting `paths` for good, as the job that would do it; `None` with
+/// none of them, or in a picker, which never deletes.
+fn deleting(paths: Vec<PathBuf>, picking: bool) -> Option<Operation> {
+    (!paths.is_empty() && !picking).then_some(Operation::Delete { paths })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deleting_needs_a_selection_and_no_picker() {
+        let paths = vec![PathBuf::from("/home/a/notes.txt")];
+        assert_eq!(
+            deleting(paths.clone(), false),
+            Some(Operation::Delete {
+                paths: paths.clone()
+            })
+        );
+        assert_eq!(deleting(paths, true), None);
+        assert_eq!(deleting(Vec::new(), false), None);
     }
 }
