@@ -208,6 +208,11 @@ fn the_keys_go_round_a_drive_menu(cx: &mut TestAppContext) {
         click_count: 1,
     });
     cx.run_until_parked();
+    // Open and Open in new tab, a line, then Eject.
+    assert_eq!(
+        view.read_with(cx, |view, _| view.menu().unwrap().lines.clone()),
+        [2]
+    );
     let mut marks = Vec::new();
     for key in ["down", "down", "down", "down", "up", "up", "up"] {
         cx.simulate_keystrokes(key);
@@ -215,4 +220,12 @@ fn the_keys_go_round_a_drive_menu(cx: &mut TestAppContext) {
     }
     // Open, Open in new tab, Eject: round past each end.
     assert_eq!(marks, [0, 1, 2, 0, 2, 1, 0]);
+    // The pointer marks what it is over.
+    let over = cx.debug_bounds("menu-1").unwrap().center();
+    cx.simulate_mouse_move(over, None, Modifiers::none());
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| {
+        let menu = view.menu().unwrap();
+        assert!(menu.marks(1) && !menu.marks(0));
+    });
 }

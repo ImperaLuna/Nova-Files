@@ -31,21 +31,21 @@ impl MainWindow {
         window: &Window,
         cx: &Context<Self>,
     ) -> Option<impl IntoElement> {
+        let menu = self.menu.as_ref()?;
         let Menu {
             at,
             items,
             lines,
-            active,
             focus,
             ..
-        } = self.menu.as_ref()?;
+        } = menu;
         let colors = Colors::of(cx);
         let mut rows: Vec<AnyElement> = Vec::new();
         for (index, item) in items.iter().enumerate() {
             if lines.contains(&index) {
                 rows.push(menu_line(index, &colors).into_any_element());
             }
-            let marked = *active == Some(index);
+            let marked = menu.marks(index);
             rows.push(
                 menu_item(index, item, marked, &colors, cx)
                     .children(
