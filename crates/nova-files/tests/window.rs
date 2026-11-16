@@ -9,8 +9,8 @@
 //! `window_keys`, selecting in `window_select`, type to jump in
 //! `window_jump`, the path bar in `window_path`, the sidebar in
 //! `window_sidebar`, the quick look in `window_preview`, the island
-//! and its file actions in `window_island`, and dragging files in
-//! `window_drag`.
+//! and its file actions in `window_island`, tabs in `window_tabs`, and
+//! dragging files in `window_drag`.
 
 #![expect(
     clippy::unwrap_used,
@@ -29,6 +29,7 @@ mod window_preview;
 mod window_select;
 mod window_sidebar;
 mod window_start;
+mod window_tabs;
 
 use std::cell::RefCell;
 use std::fs;

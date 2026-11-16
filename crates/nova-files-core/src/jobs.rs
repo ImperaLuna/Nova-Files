@@ -20,7 +20,8 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
-    ClientGone, Entry, EntryId, Event, EventSink, Listing, ListingId, Order, Unreadable,
+    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, Order,
+    Unreadable,
 };
 
 use nova_files_api::Thumbnails as ThumbnailsSetting;
@@ -192,17 +193,25 @@ impl Client {
     }
 }
 
-/// Lists `path` for `client` as listing `id` in `order`, replacing any
-/// listing before.
-pub fn list_folder(client: &Client, id: ListingId, path: PathBuf, order: Order) {
+/// Lists `path` for `client` as listing `id` in `order`, with its hidden
+/// entries as `hidden` says, replacing any listing before.
+pub fn list_folder(
+    client: &Client,
+    id: ListingId,
+    path: PathBuf,
+    order: Order,
+    hidden: HiddenFiles,
+) {
     let job = client.start_listing(id);
     let job_path = path.clone();
     let spawned = thread::Builder::new()
         .name(LIST_THREAD.to_owned())
         .spawn(move || {
             let cancelled = || job.cancelled();
-            let listed = list::read_folder(&job_path, cancelled)
-                .map(|entries| order::arrange(&job_path, entries, order, cancelled));
+            let listed = list::read_folder(&job_path, cancelled).map(|entries| {
+                let entries = list::keep_shown(entries, hidden);
+                order::arrange(&job_path, entries, order, cancelled)
+            });
             let entries: Arc<[Entry]> = match listed {
                 Ok(Some(entries)) => entries.into(),
                 Err(Stopped::Unreadable(reason)) => {

@@ -20,6 +20,9 @@ use nova_files_api::{Bookmark, Place, PlaceKind};
 use crate::assets::Icon;
 
 pub const HOME_LABEL: &str = "Home";
+/// The Start page's name, in Places and on its tab.
+pub const START_LABEL: &str = "Start";
+/// The trash's name, in Places, the path bar and on its tab.
 pub const TRASH_LABEL: &str = "Trash";
 
 /// One row of Places.

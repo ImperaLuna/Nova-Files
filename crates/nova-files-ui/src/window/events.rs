@@ -39,8 +39,12 @@ impl MainWindow {
         // Read again in place: keep the scroll position. Files a search
         // found are never the same folder.
         let same_folder = !self.showing_found() && self.folder() == Some(path.as_path());
-        if !same_folder && !std::mem::take(&mut self.falling_back) {
-            self.used(&path);
+        if !same_folder {
+            // A menu belongs to the folder it opened in.
+            self.menu = None;
+            if !std::mem::take(&mut self.falling_back) {
+                self.used(&path);
+            }
         }
         self.history.arrived(&Location::from(path.as_path()));
         // In a new order the cursor's entry has moved: bring it into view.
@@ -106,6 +110,10 @@ impl MainWindow {
             Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
                 self.find_failed(id, cx);
             }
+            Event::Properties { id, .. } => self.save_probed(id, false, cx),
+            Event::PropertiesUnreadable { id, reason, .. } => {
+                self.save_probed(id, reason == Unreadable::Missing, cx);
+            }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);
             }
@@ -154,8 +162,6 @@ impl MainWindow {
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }
-            | Event::Properties { .. }
-            | Event::PropertiesUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)
@@ -206,6 +212,10 @@ impl MainWindow {
             self.listing_arrived(empty, cx);
             return;
         }
+        if self.tab_folder_refused(id, cx) {
+            cx.emit(WindowEvent::Refused(path));
+            return;
+        }
         self.asked = None;
         self.history.refused(&Location::from(path.as_path()));
         match &self.listing {
@@ -238,7 +248,9 @@ impl MainWindow {
     /// them again asks for the rows on screen anew, so theirs arrive.
     fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
         let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
+        let hidden_files = settings.hidden_files;
         self.settings = Arc::unwrap_or_clone(settings);
+        self.hidden_arrived(hidden_files);
         if thumbnails_changed {
             if self.settings.thumbnails == Thumbnails::Hidden {
                 release(self.thumbnails.take_all(), None, cx);

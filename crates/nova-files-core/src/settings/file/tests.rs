@@ -26,6 +26,7 @@ fn every_key_reads() {
     let text = r#"
 appearance = "light"
 thumbnails = false
+hidden_files = true
 
 [keys]
 "go.back" = ["alt-left", "backspace"]
@@ -38,6 +39,7 @@ thumbnails = false
         Settings {
             appearance: Appearance::Light,
             thumbnails: Thumbnails::Hidden,
+            hidden_files: HiddenFiles::Shown,
             keys: keys(&[("go.back", &["alt-left", "backspace"]), ("go.up", &[])]),
         }
     );
@@ -48,6 +50,10 @@ thumbnails = false
         (Settings::default(), Vec::new())
     );
     assert_eq!(read("thumbnails = true").0.thumbnails, Thumbnails::Shown);
+    assert_eq!(
+        read("hidden_files = false").0.hidden_files,
+        HiddenFiles::Left
+    );
 }
 
 #[test]
@@ -55,6 +61,7 @@ fn a_bad_value_costs_only_its_own_key() {
     let text = r#"
 appearance = "blue"
 thumbnails = "yes"
+hidden_files = 1
 colour = "dark"
 [keys]
 "go.back" = ["alt-left", 3]
@@ -63,8 +70,9 @@ colour = "dark"
     let (settings, problems) = read(text);
     assert_eq!(settings.appearance, Appearance::System);
     assert_eq!(settings.thumbnails, Thumbnails::Shown);
+    assert_eq!(settings.hidden_files, HiddenFiles::Left);
     assert_eq!(settings.keys, keys(&[("go.up", &["alt-up"])]));
-    assert_eq!(problems.len(), 4, "{problems:?}");
+    assert_eq!(problems.len(), 5, "{problems:?}");
     assert!(problems.iter().any(|problem| problem.contains("colour")));
     let (settings, problems) = read("keys = 3\nthumbnails = false");
     assert_eq!(settings.thumbnails, Thumbnails::Hidden);
@@ -112,6 +120,22 @@ fn a_default_value_is_only_written_over_a_key_already_there() {
     assert_eq!(
         edit("", &SettingChange::Thumbnails(Thumbnails::Hidden)).unwrap(),
         "thumbnails = false\n"
+    );
+    assert_eq!(
+        edit("", &SettingChange::HiddenFiles(HiddenFiles::Left)).unwrap(),
+        ""
+    );
+    assert_eq!(
+        edit("", &SettingChange::HiddenFiles(HiddenFiles::Shown)).unwrap(),
+        "hidden_files = true\n"
+    );
+    assert_eq!(
+        edit(
+            "hidden_files = true\n",
+            &SettingChange::HiddenFiles(HiddenFiles::Left)
+        )
+        .unwrap(),
+        "hidden_files = false\n"
     );
 }
 

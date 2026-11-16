@@ -35,6 +35,7 @@ use crate::commands::EmptyTrash;
 use crate::crumbs::{self, Crumb, Shown};
 use crate::dropping::DropAt;
 use crate::path_bar::{MenuItem, MenuOwner};
+use crate::places::TRASH_LABEL;
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
@@ -117,7 +118,7 @@ impl MainWindow {
         if self.trash_open() {
             return vec![Crumb {
                 path: folder.to_path_buf(),
-                label: SharedString::new_static(crate::places::TRASH_LABEL),
+                label: SharedString::new_static(TRASH_LABEL),
                 icon: Icon::Trash,
                 shows_icon: true,
                 here: true,

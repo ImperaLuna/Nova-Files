@@ -39,7 +39,8 @@ pub enum Command {
     /// [`Event::FolderListed`] or [`Event::FolderUnreadable`] with the same
     /// `id`. A newer `ListFolder` from the same client cancels this one,
     /// which then may never answer. An order by modified time or size reads
-    /// every entry's details before the listing goes out.
+    /// every entry's details before the listing goes out. Hidden entries
+    /// are listed only while [`crate::Settings::hidden_files`] shows them.
     ListFolder {
         id: ListingId,
         path: PathBuf,

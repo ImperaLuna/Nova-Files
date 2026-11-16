@@ -1,11 +1,14 @@
-//! The Places section: the standard folders and the pinned ones, as
-//! `places` lists them, then, outside a picker, the trash with how many
-//! items it holds. Each folder's row carries the debug selector
-//! `place-<n>`, counted from 0 in the order shown, and the trash's
-//! `place-trash`. Files dropped on a row go into it (see `drop`). In a
-//! main window, the + (`pin`) on the head, or at the end of the row in a
-//! narrow window, picks a folder to pin, and right-click on a pinned
-//! folder opens its menu (see `window/pin`).
+//! The Places section: the Start page first, then the standard folders
+//! and the pinned ones, as `places` lists them, then the trash with how
+//! many items it holds. Each listed folder's row carries the debug
+//! selector `place-<n>`, counted from 0 in the order shown; the first and
+//! last rows carry `place-start` and `place-trash`. A picker shows only
+//! the folders: it has no Start page, and its trash isn't one to pick
+//! from. In a main window, the + (`pin`) on
+//! the head, or at the end of the row in a narrow window, picks a folder
+//! to pin, and right-click on a pinned folder opens
+//! its menu (see `window/pin`). Files dropped on a folder's row go into
+//! it, and on the trash's to the trash (see `drop`).
 
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
@@ -13,15 +16,15 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 
-use super::{Row, row, section_button, section_head};
+use super::{Row, new_tab_on_middle_click, on_middle_click, row, section_button, section_head};
 use crate::assets::Icon;
 use crate::dropping::DropAt;
-use crate::places;
+use crate::location::Location;
+use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::theme::{Colors, size};
 use crate::window::MainWindow;
 
 const LABEL: &str = "Places";
-const TRASH_SELECTOR: &str = "place-trash";
 
 impl MainWindow {
     /// The Places section; without its head when `narrow`.
@@ -44,6 +47,7 @@ impl MainWindow {
                         name: place.name,
                         number: None,
                         here: is_here,
+                        pressed: false,
                     },
                     narrow,
                     &colors,
@@ -51,6 +55,7 @@ impl MainWindow {
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
                     this.open(&target);
                 }))
+                .map(|row| new_tab_on_middle_click(row, place.path.clone(), main, cx))
                 .map(|row| self.drop_target(row, DropAt::Folder(place.path.clone()), cx))
                 .when_some(pinned, |row, path| {
                     row.on_mouse_down(
@@ -61,6 +66,8 @@ impl MainWindow {
                     )
                 })
             });
+        let start = main.then(|| self.start_row(narrow, &colors, cx));
+        let trash = main.then(|| self.trash_row(narrow, &colors, cx));
         let pin = main.then(|| {
             section_button("pin", Icon::Plus, &colors)
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder_to_pin(cx)))
@@ -68,10 +75,9 @@ impl MainWindow {
         let list = div()
             .flex()
             .gap(size::PLACE_GAP)
+            .children(start)
             .children(rows)
-            .when(main, |list| {
-                list.child(self.trash_place(narrow, &colors, cx))
-            });
+            .children(trash);
         if narrow {
             // No head to carry the +: it ends the row, so pinning stays
             // within reach.
@@ -87,29 +93,51 @@ impl MainWindow {
             ))
             .child(list.flex_col())
     }
-}
 
-impl MainWindow {
-    /// The trash, after the folders: how many items it holds, once the
-    /// core has said; files dropped on it go to it.
-    fn trash_place(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
-        let number = self
-            .trash_count()
-            .filter(|&count| count > 0)
-            .map(|count| (count.to_string().into(), colors.text_dim));
-        let trash = row(
+    /// The Start page's row, first in Places.
+    fn start_row(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
+        row(
             Row {
-                id: TRASH_SELECTOR.into(),
-                selector: TRASH_SELECTOR.to_owned(),
-                glyph: Icon::Trash,
-                name: places::TRASH_LABEL.into(),
-                number,
-                here: self.trash_open(),
+                id: "place-start".into(),
+                selector: "place-start".to_owned(),
+                glyph: Icon::Start,
+                name: START_LABEL.into(),
+                number: None,
+                here: self.is_on_start(),
+                pressed: false,
             },
             narrow,
             colors,
         )
-        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)));
-        self.drop_target(trash, DropAt::Trash, cx)
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_start(cx)))
+        .map(|row| {
+            on_middle_click(row, true, cx, |this, cx| {
+                this.new_tab(&Location::Start, cx);
+            })
+        })
+    }
+
+    /// The trash's row, last in Places, with how many items it holds.
+    fn trash_row(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
+        let count = self
+            .trash_count()
+            .filter(|count| *count > 0)
+            .map(|count| (count.to_string().into(), colors.text_dim));
+        row(
+            Row {
+                id: "place-trash".into(),
+                selector: "place-trash".to_owned(),
+                glyph: Icon::Trash,
+                name: TRASH_LABEL.into(),
+                number: count,
+                here: self.trash_open(),
+                pressed: false,
+            },
+            narrow,
+            colors,
+        )
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)))
+        .map(|row| on_middle_click(row, true, cx, Self::open_trash_in_new_tab))
+        .map(|row| self.drop_target(row, DropAt::Trash, cx))
     }
 }

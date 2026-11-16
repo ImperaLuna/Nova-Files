@@ -51,13 +51,13 @@ use gpui::{
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
-    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenSelected, PreviewNext, PreviewPrevious,
-    SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp,
-    TogglePreview, ToggleSelected,
+    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext,
+    PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp,
+    SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
 };
 use crate::commands::{
-    CopySelected, CutSelected, EmptyTrash, NewFolder, Paste, RenameSelected, RestoreSelected,
-    TrashSelected, Undo,
+    CloseTab, CopySelected, CutSelected, EmptyTrash, NewFolder, NewTab, NextTab, Paste,
+    PreviousTab, RenameSelected, RestoreSelected, TrashSelected, Undo,
 };
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
@@ -82,6 +82,7 @@ impl MainWindow {
         self.set_scale_factor(window.scale_factor(), window, cx);
         self.start_wanted_rename(window, cx);
         self.settle_search(window, cx);
+        self.settle_tab_focus(window, cx);
         let colors = Colors::of(cx);
         // Keys always land somewhere (see `keys_home`).
         let main = self.pick.is_none();
@@ -89,16 +90,20 @@ impl MainWindow {
         if window.focused(cx).is_none() {
             window.focus(&self.keys_home(cx), cx);
         }
+        self.focus_menu(window, cx);
         div()
             .key_context(commands::KEY_CONTEXT)
             .when(main, |root| root.track_focus(&self.focus))
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
+            .on_action(cx.listener(|this, _: &ToggleHidden, _, _| this.toggle_hidden()))
+            .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
             .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
             .map(|root| Self::file_keys(root, cx))
             .map(|root| Self::band_events(root, cx))
+            .when(main, |root| Self::tab_keys(root, cx))
             .on_mouse_down(
                 MouseButton::Navigate(NavigationDirection::Back),
                 cx.listener(|this, _: &MouseDownEvent, _, cx| this.go_back(cx)),
@@ -120,7 +125,7 @@ impl MainWindow {
             .font_weight(text::BODY_WEIGHT)
             .child(self.body(narrow, &colors, cx))
             .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
-            .children(self.menu_overlay(cx))
+            .children(self.menu_overlay(window, cx))
     }
 }
 
@@ -138,6 +143,16 @@ impl MainWindow {
             MouseButton::Left,
             cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
         )
+    }
+
+    /// The tabs' actions, in a main window (see `window::tabs`).
+    fn tab_keys(root: Div, cx: &Context<Self>) -> Div {
+        root.on_action(cx.listener(|this, _: &NewTab, _, cx| {
+            this.new_tab(&crate::location::Location::Start, cx);
+        }))
+        .on_action(cx.listener(|this, _: &CloseTab, _, cx| this.close_current_tab(cx)))
+        .on_action(cx.listener(|this, _: &NextTab, _, cx| this.next_tab(cx)))
+        .on_action(cx.listener(|this, _: &PreviousTab, _, cx| this.previous_tab(cx)))
     }
 
     /// The actions on the files selected (see `window::acting`).

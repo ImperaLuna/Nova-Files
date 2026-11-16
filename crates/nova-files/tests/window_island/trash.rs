@@ -44,6 +44,16 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     assert_eq!(view.read_with(cx, |view, _| view.trash_count()), Some(1));
     cx.run_until_parked();
     assert!(cx.debug_bounds("head-was-in").is_some());
+    // Places' Trash row is the place on screen and says how many it holds.
+    assert!(cx.debug_bounds("place-trash-here").is_some());
+    assert!(cx.debug_bounds("place-trash-number").is_some());
+    // A tab on the trash goes by its name in Places, as does a new one.
+    view.update(cx, MainWindow::open_trash_in_new_tab);
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.tab_names(), ["Trash", "Trash"]);
+    });
+    click(cx, "tab-0");
+    cx.run_until_parked();
     // Empty Trash sits at the far end of the path bar, nearer its edge
     // than the crumbs.
     let chip = cx.debug_bounds("empty-trash").unwrap();
@@ -65,6 +75,7 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     cx.run_until_parked();
     assert!(cx.debug_bounds("trash-empty").is_some());
     assert!(cx.debug_bounds("empty-trash").is_none());
+    assert!(cx.debug_bounds("place-trash-number").is_none());
 }
 
 #[gpui::test]

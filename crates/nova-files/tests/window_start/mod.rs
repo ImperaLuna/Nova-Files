@@ -1,6 +1,7 @@
 //! The Start page as a place: a new window can open on it, Back and
 //! Forward cross it, a folder that can't be read leaves the window on it,
 //! and each folder a person opens reaches the core's recent folders.
+//! Start heads Places, so a folder's window gets back to it in a click.
 
 use std::path::PathBuf;
 use std::sync::mpsc;
@@ -173,4 +174,27 @@ async fn a_drive_card_shows_how_full_it_is_and_opens_the_drive(cx: &mut TestAppC
     let card = cx.debug_bounds("drive-card-0").unwrap();
     cx.simulate_click(card.center(), Modifiers::none());
     wait_for_folder(&view, cx, root).await;
+}
+
+#[gpui::test]
+async fn start_heads_places_and_goes_there(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("start-place");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+    let (start, home) = (
+        cx.debug_bounds("place-start").unwrap(),
+        cx.debug_bounds("place-0").unwrap(),
+    );
+    assert!(start.bottom() <= home.top(), "Start comes first");
+    assert!(cx.debug_bounds("place-start-here").is_none());
+
+    click(cx, "place-start");
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert!(view.is_on_start()));
+    assert!(cx.debug_bounds("place-start-here").is_some());
+    assert_eq!(
+        view.read_with(cx, |view, _| view.back_target().cloned()),
+        Some(Location::from(tree.path()))
+    );
 }
