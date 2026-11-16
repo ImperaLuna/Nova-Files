@@ -91,9 +91,12 @@ fn names(names: &[&str]) -> Vec<String> {
     names.iter().map(|name| (*name).to_owned()).collect()
 }
 
+/// The icon size the tests look for, in pixels at scale 1.
+const SIZE: u32 = 48;
+
 fn themes(chosen: Option<&str>, bases: &[&Base]) -> IconThemes {
     let bases = bases.iter().map(|base| base.0.clone()).collect();
-    IconThemes::new(chosen.map(str::to_owned), bases, 48, 1)
+    IconThemes::new(chosen.map(str::to_owned), bases, SIZE, 1)
 }
 
 #[test]
