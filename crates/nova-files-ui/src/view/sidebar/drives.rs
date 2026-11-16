@@ -1,8 +1,8 @@
 //! The Drives section, fixed at the bottom of the sidebar: each drive as
 //! `drives` lists it, with how much is free as a number on the right, red
 //! when nearly full. A click opens it (mounting it first when needed);
-//! right-click opens its menu, which has Eject for a drive that can be
-//! unplugged. There is no eject button. Rows carry the debug selectors
+//! middle-click opens it in a new tab; right-click opens its menu, which
+//! has Eject for a drive that can be unplugged. There is no eject button. Rows carry the debug selectors
 //! `drive-<n>`, counted from 0.
 
 use gpui::{
@@ -10,7 +10,7 @@ use gpui::{
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
 };
 
-use super::{Row, row, section_head};
+use super::{Row, on_middle_click, row, section_head};
 use crate::assets::Icon;
 use crate::drives;
 use crate::theme::{Colors, size};
@@ -28,7 +28,7 @@ impl MainWindow {
             .and_then(|folder| drives::here(&shown, folder, &self.home));
         let main = self.pick.is_none();
         let rows = shown.into_iter().enumerate().map(|(index, drive)| {
-            let (clicked, menu) = (drive.clone(), drive.clone());
+            let (clicked, menu, in_new_tab) = (drive.clone(), drive.clone(), drive.clone());
             let number = drive
                 .folder
                 .as_deref()
@@ -47,6 +47,7 @@ impl MainWindow {
                     name: drive.name,
                     number,
                     here: here == Some(index),
+                    pressed: false,
                 },
                 narrow,
                 &colors,
@@ -55,7 +56,10 @@ impl MainWindow {
                 this.open_drive(clicked.clone());
             }));
             if main {
-                row.on_mouse_down(
+                on_middle_click(row, main, cx, move |this, cx| {
+                    this.open_drive_in_new_tab(in_new_tab.clone(), cx);
+                })
+                .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, event: &MouseDownEvent, _, cx| {
                         this.open_drive_menu(menu.clone(), event.position, cx);

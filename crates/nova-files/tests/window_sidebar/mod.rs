@@ -4,7 +4,7 @@
 //! that pins what it picks, and right-click on a pinned folder takes it
 //! out.
 
-use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, size};
+use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, size};
 
 use super::*;
 
@@ -113,6 +113,38 @@ async fn right_click_on_a_pinned_folder_takes_it_out(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn a_menu_takes_the_keys_until_it_closes(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-menu-keys");
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx) = with_projects_pinned(cx, &tree).await;
+    let marked = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| view.menu().map(|menu| menu.active))
+    };
+
+    right_click(cx, "place-1");
+    assert_eq!(marked(&view, cx), Some(None));
+    // Down marks the first item, and goes round past the last.
+    cx.simulate_keystrokes("down");
+    assert_eq!(marked(&view, cx), Some(Some(0)));
+    cx.simulate_keystrokes("down");
+    assert_eq!(marked(&view, cx), Some(Some(0)));
+    cx.simulate_keystrokes("up");
+    assert_eq!(marked(&view, cx), Some(Some(0)));
+    // Escape closes the menu, and Enter with nothing marked does nothing.
+    cx.simulate_keystrokes("escape");
+    assert_eq!(marked(&view, cx), None);
+    right_click(cx, "place-1");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(marked(&view, cx), Some(None));
+
+    cx.simulate_keystrokes("down enter");
+    view.condition::<WindowEvent>(cx, |view, _| view.pinned().is_empty())
+        .await;
+    assert_eq!(marked(&view, cx), None);
+}
+
+#[gpui::test]
 async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("sidebar-pin");
@@ -146,9 +178,15 @@ async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
 }
 
 /// Right-clicks the element drawn with `selector`.
-fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
+pub fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
     cx.run_until_parked();
     let position = cx.debug_bounds(selector).unwrap().center();
+    right_click_at(cx, position);
+}
+
+/// Right-clicks the window at `position`.
+pub fn right_click_at(cx: &mut VisualTestContext, position: Point<Pixels>) {
+    cx.run_until_parked();
     cx.simulate_event(MouseDownEvent {
         position,
         modifiers: Modifiers::none(),
@@ -248,8 +286,16 @@ async fn the_system_drive_shows_its_free_space_and_opens(cx: &mut TestAppContext
             .iter()
             .map(|item| item.label.clone())
             .collect();
-        assert_eq!(labels, ["Open"]);
+        assert_eq!(labels, ["Open", "Open in new tab"]);
     });
     click(cx, "menu-0");
     wait_for_folder(&view, cx, Path::new("/")).await;
+
+    right_click(cx, "drive-0");
+    click(cx, "menu-1");
+    wait_for_folder(&view, cx, Path::new("/")).await;
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.tab_count(), 2);
+        assert_eq!(view.current_tab(), 1);
+    });
 }

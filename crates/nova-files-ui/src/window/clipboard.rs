@@ -64,6 +64,14 @@ impl MainWindow {
             cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
         }
     }
+
+    /// Whether the clipboard holds files a paste would bring here.
+    pub(super) fn clipboard_has_files(cx: &Context<Self>) -> bool {
+        cx.read_from_clipboard()
+            .as_ref()
+            .and_then(files_in)
+            .is_some()
+    }
 }
 
 /// The clipboard item for `files`: their paths as text, GNOME's list as

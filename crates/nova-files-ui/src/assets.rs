@@ -40,10 +40,16 @@ pub enum Icon {
     Chevron,
     Eject,
     Open,
+    Check,
+    Eye,
+    Paste,
+    SelectAll,
+    NewFolder,
+    Undo,
 }
 
 impl Icon {
-    const ALL: [Self; 28] = [
+    const ALL: [Self; 34] = [
         Self::Folder,
         Self::File,
         Self::Home,
@@ -72,6 +78,12 @@ impl Icon {
         Self::Chevron,
         Self::Eject,
         Self::Open,
+        Self::Check,
+        Self::Eye,
+        Self::Paste,
+        Self::SelectAll,
+        Self::NewFolder,
+        Self::Undo,
     ];
 
     /// The path GPUI asks the asset source for.
@@ -105,6 +117,12 @@ impl Icon {
             Self::Chevron => "icons/chevron.svg",
             Self::Eject => "icons/eject.svg",
             Self::Open => "icons/open.svg",
+            Self::Check => "icons/check.svg",
+            Self::Eye => "icons/eye.svg",
+            Self::Paste => "icons/paste.svg",
+            Self::SelectAll => "icons/select-all.svg",
+            Self::NewFolder => "icons/new-folder.svg",
+            Self::Undo => "icons/undo.svg",
         }
     }
 
@@ -138,6 +156,12 @@ impl Icon {
             Self::Chevron => svg::CHEVRON,
             Self::Eject => svg::EJECT,
             Self::Open => svg::OPEN,
+            Self::Check => svg::CHECK,
+            Self::Eye => svg::EYE,
+            Self::Paste => svg::PASTE,
+            Self::SelectAll => svg::SELECT_ALL,
+            Self::NewFolder => svg::NEW_FOLDER,
+            Self::Undo => svg::UNDO,
         };
         source.as_bytes()
     }

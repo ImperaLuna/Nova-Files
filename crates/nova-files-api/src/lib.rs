@@ -73,7 +73,7 @@ pub use preview::{
 pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use recent::{MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
-pub use settings::{Appearance, SettingChange, Settings, Thumbnails};
+pub use settings::{Appearance, HiddenFiles, SettingChange, Settings, Thumbnails};
 pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 pub use trash::Trashed;

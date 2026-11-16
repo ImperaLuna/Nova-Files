@@ -15,16 +15,18 @@
 //! ```toml
 //! appearance = "system"   # "system", "light" or "dark"
 //! thumbnails = true
+//! hidden_files = false    # true lists names that start with a dot
 //!
 //! [keys]                  # action id = keys, in GPUI's keystroke syntax
 //! "go.back" = ["alt-left", "backspace"]
 //! ```
 
-use nova_files_api::{Appearance, SettingChange, Settings, Thumbnails};
+use nova_files_api::{Appearance, HiddenFiles, SettingChange, Settings, Thumbnails};
 use toml_edit::{Array, DocumentMut, Item, Table, TableLike, Value};
 
 const APPEARANCE: &str = "appearance";
 const THUMBNAILS: &str = "thumbnails";
+const HIDDEN_FILES: &str = "hidden_files";
 const KEYS: &str = "keys";
 
 const SYSTEM: &str = "system";
@@ -51,6 +53,11 @@ pub fn read(text: &str) -> (Settings, Vec<String>) {
                 Some(true) => settings.thumbnails = Thumbnails::Shown,
                 Some(false) => settings.thumbnails = Thumbnails::Hidden,
                 None => problems.push(format!("`{THUMBNAILS}` is true or false")),
+            },
+            HIDDEN_FILES => match item.as_bool() {
+                Some(true) => settings.hidden_files = HiddenFiles::Shown,
+                Some(false) => settings.hidden_files = HiddenFiles::Left,
+                None => problems.push(format!("`{HIDDEN_FILES}` is true or false")),
             },
             KEYS => read_keys(item, &mut settings, &mut problems),
             unknown => problems.push(format!("unknown setting `{unknown}`")),
@@ -91,6 +98,12 @@ pub fn edit(text: &str, change: &SettingChange) -> Option<String> {
             THUMBNAILS,
             (*thumbnails == Thumbnails::Shown).into(),
             *thumbnails == defaults.thumbnails,
+        ),
+        SettingChange::HiddenFiles(hidden) => set(
+            &mut document,
+            HIDDEN_FILES,
+            (*hidden == HiddenFiles::Shown).into(),
+            *hidden == defaults.hidden_files,
         ),
         SettingChange::Keys {
             action,

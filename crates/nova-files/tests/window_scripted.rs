@@ -19,8 +19,8 @@ use std::sync::mpsc::Receiver;
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
     Appearance, Bookmark, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind,
-    Event, EventSink, Listing, ListingId, Mode, Order, Palette, Place, PlaceKind, SettingChange,
-    Settings, SortKey, Theme, Thumbnails, Unreadable,
+    Event, EventSink, HiddenFiles, Listing, ListingId, Mode, Order, Palette, Place, PlaceKind,
+    SettingChange, Settings, SortKey, Theme, Thumbnails, Unreadable,
 };
 use nova_files_ui::{Colors, MainWindow, WindowEvent};
 

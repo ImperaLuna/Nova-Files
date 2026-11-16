@@ -494,3 +494,16 @@ fn a_space_typed_into_the_box_stays_in_it(cx: &mut TestAppContext) {
         assert!(!view.previewing());
     });
 }
+
+#[gpui::test]
+fn hidden_files_shown_mid_search_leave_the_search_alone(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+    for hidden in [HiddenFiles::Left, HiddenFiles::Shown] {
+        let settings = Settings::default().with(SettingChange::HiddenFiles(hidden));
+        core.send(Event::Settings(Arc::new(settings)));
+        cx.run_until_parked();
+    }
+    assert!(core.next_listing().is_none());
+    assert_eq!(names(&view, cx), ["report.pdf", "reports"]);
+}

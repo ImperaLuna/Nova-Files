@@ -81,8 +81,8 @@ let
   };
   ciArtifacts = craneLib.buildDepsOnly ciArgs;
 
-  # The installed app: binaries, the D-Bus service files, the desktop entry,
-  # the file picker's .portal file and the wrapper.
+  # The installed app: binaries, the D-Bus service files, the desktop entry
+  # and its icon, the file picker's .portal file and the wrapper.
   mkPackage =
     args: artifacts:
     craneLib.buildPackage (
@@ -102,7 +102,12 @@ let
           install -Dm644 ${../data/desktop-entry.in} \
             $out/share/applications/${appId}.desktop
           substituteInPlace $out/share/applications/${appId}.desktop \
-            --replace-fail "@bin@" "$out/bin/nova-files"
+            --replace-fail "@bin@" "$out/bin/nova-files" \
+            --replace-fail "@app_id@" "${appId}"
+          # The desktop entry names this icon by the app id, so launchers and
+          # docks find it in hicolor whatever icon theme is set.
+          install -Dm644 ${../data/app-icon.svg} \
+            $out/share/icons/hicolor/scalable/apps/${appId}.svg
           # The file picker: xdg-desktop-portal reads the .portal file, and
           # D-Bus starts the program in service mode when the portal first
           # calls it.

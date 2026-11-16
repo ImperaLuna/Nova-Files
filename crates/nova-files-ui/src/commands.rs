@@ -12,7 +12,7 @@
 //! change once shipped. Key strings use GPUI's keystroke syntax
 //! (`ctrl-shift-a`).
 
-use gpui::{App, KeyBinding};
+use gpui::{Action, App, KeyBinding};
 
 /// The key context the window sets.
 pub const KEY_CONTEXT: &str = "MainWindow";
@@ -57,6 +57,12 @@ mod actions {
             FocusSearch,
             RestoreSelected,
             EmptyTrash,
+            NewTab,
+            CloseTab,
+            NextTab,
+            PreviousTab,
+            ToggleHidden,
+            OpenMenu,
         ]
     );
 }
@@ -73,12 +79,34 @@ pub struct ActionSpec {
     pub keys: &'static [&'static str],
     /// Binds `keys` (one keystroke sequence) to this action in `context`.
     bind: fn(&str, Option<&str>) -> KeyBinding,
+    /// The GPUI action, to send from a menu.
+    make: fn() -> Box<dyn Action>,
 }
 
 impl ActionSpec {
+    /// The GPUI action this row sends.
+    pub fn action(&self) -> Box<dyn Action> {
+        (self.make)()
+    }
+
     /// The binding of `keys` to this action under the window's context.
     pub fn binding(&self, keys: &str) -> KeyBinding {
         (self.bind)(keys, Some(KEY_CONTEXT))
+    }
+}
+
+/// Two rows are the same action when they share an id.
+impl PartialEq for ActionSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for ActionSpec {}
+
+impl std::fmt::Debug for ActionSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.id)
     }
 }
 
@@ -91,6 +119,7 @@ macro_rules! spec {
             label: $label,
             keys: &[$($keys),*],
             bind: |keys, context| KeyBinding::new(keys, $action, context),
+            make: || Box::new($action),
         };
     };
 }
@@ -129,6 +158,12 @@ pub const ACTIONS: &[ActionSpec] = &[
     FIND,
     RESTORE,
     EMPTY_TRASH,
+    NEW_TAB,
+    CLOSE_TAB,
+    NEXT_TAB,
+    PREVIOUS_TAB,
+    HIDDEN,
+    MENU,
 ];
 
 spec!(
@@ -290,8 +325,36 @@ spec!(
     EMPTY_TRASH, EmptyTrash, "file.empty-trash", "Empty Trash", []
 );
 
-/// Binds every action's default keys.
+spec!(
+    /// Opens a new tab on the Start page.
+    NEW_TAB, NewTab, "tab.new", "New tab", ["ctrl-t"]
+);
+spec!(
+    /// Closes the tab on screen, unless it is the last one.
+    CLOSE_TAB, CloseTab, "tab.close", "Close tab", ["ctrl-w"]
+);
+spec!(
+    /// Shows the next tab, the first after the last.
+    NEXT_TAB, NextTab, "tab.next", "Next tab", ["ctrl-tab"]
+);
+spec!(
+    /// Shows the tab before, the last before the first.
+    PREVIOUS_TAB, PreviousTab, "tab.previous", "Previous tab", ["ctrl-shift-tab"]
+);
+spec!(
+    /// Lists the hidden entries in every folder, or leaves them out again.
+    HIDDEN, ToggleHidden, "view.hidden", "Show hidden files", ["ctrl-h"]
+);
+
+spec!(
+    /// Opens the right-click menu of the entries selected, or of the
+    /// empty space when none are.
+    MENU, OpenMenu, "menu.open", "Menu", ["menu", "shift-f10"]
+);
+
+/// Binds every action's default keys, and the keys of an open menu.
 pub fn bind_keys(cx: &mut App) {
+    crate::menu::bind_keys(cx);
     cx.bind_keys(
         ACTIONS
             .iter()
@@ -339,7 +402,17 @@ mod tests {
                 // Panics on a key string GPUI can't read.
                 let binding = spec.binding(key);
                 assert!(!binding.keystrokes().is_empty(), "{key}");
+                assert!(binding.action().partial_eq(&*spec.action()), "{key}");
             }
         }
+    }
+
+    #[test]
+    fn each_row_sends_its_own_action() {
+        let names: HashSet<_> = ACTIONS.iter().map(|spec| spec.action().name()).collect();
+        assert_eq!(names.len(), ACTIONS.len());
+        assert_eq!(COPY, COPY);
+        assert_ne!(COPY, CUT);
+        assert_eq!(format!("{COPY:?}"), "file.copy");
     }
 }

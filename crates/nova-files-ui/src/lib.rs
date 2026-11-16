@@ -50,6 +50,7 @@ pub use columns::ColumnText;
 pub use commands::{ACTIONS, ActionSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note, NoteUndo};
 pub use location::Location;
+pub use menu::{Look, Menu, MenuAction, MenuItem};
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};

@@ -8,13 +8,16 @@
 //! that touch join into one block: a row squares the corners it shares
 //! with a selected neighbour. The row the keyboard is on has a ring (see
 //! `selecting`); a rename puts its text field where the name was (see
-//! `window::renaming`). A click on a column head orders the list by that column;
+//! `window::renaming`). Middle-click on a folder opens it in a new tab.
+//! A click on a column head orders the list by that column;
 //! folders always come first (see `navigate` and the core's `order`). A
 //! search's files stay best first, so their heads do nothing; they get a
 //! Folder column, and the part of each name that matched is marked. The
 //! count and the empty look are the search's (see `search`). The
 //! trash adds a Was in column, and says so when it is empty (see
-//! `window::trash`).
+//! `window::trash`). A hidden entry's name and icon are dimmed (see
+//! `window::hidden`). A right-click on a row or on the empty space below
+//! opens its menu (see `window::context_menu`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -26,7 +29,7 @@ use gpui::{
     div, prelude::FluentBuilder as _, uniform_list,
 };
 
-use nova_files_api::{Entry, Listing, Order, SortKey};
+use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
 
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
@@ -82,6 +85,12 @@ impl MainWindow {
                 cx.listener(|this, event: &MouseDownEvent, _, _| {
                     let on_name = std::mem::take(&mut this.pressed_name);
                     this.band_pressed(event, on_name);
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                    this.space_right_clicked(event.position, cx);
                 }),
             )
             .child(self.entries(cx))
@@ -143,26 +152,13 @@ impl MainWindow {
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let line = cells(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(size::NAME_GAP)
-                                .child(entry_icon(
-                                    &entry.name,
-                                    entry.kind,
-                                    this.thumbnail(index),
-                                    &colors,
-                                ))
-                                .child(this.rename_field(index).map_or_else(
-                                    || entry_name(name.into(), marks, index, cx).into_any_element(),
-                                    |field| rename_box(field.clone(), &colors).into_any_element(),
-                                )),
+                            this.name_cell(entry, index, (name, marks), cx),
                             folder,
                             detail(columns.modified, &colors),
                             detail(columns.size, &colors),
                             format!("modified-{index}"),
                         );
-                        entry_row(index, corners, &colors)
+                        entry_row(index, (listing_id, id), corners, &colors, cx)
                             .when(on, |row| row.bg(colors.selected).text_color(colors.text))
                             .child(line)
                             .when(this.cursor() == Some(index), |row| {
@@ -172,6 +168,9 @@ impl MainWindow {
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
                                 this.row_clicked((listing_id, id), event, window, cx);
+                            }))
+                            .on_aux_click(cx.listener(move |this, event, _, cx| {
+                                this.entry_aux_clicked((listing_id, id), event, cx);
                             }))
                             .into_any_element()
                     })
@@ -185,6 +184,40 @@ impl MainWindow {
 }
 
 impl MainWindow {
+    /// The `index`th entry's icon and name, with the parts of the name in
+    /// `marks` marked; its rename field in place of the name while it is
+    /// renamed. A hidden entry is dimmed.
+    fn name_cell(
+        &self,
+        entry: &Entry,
+        index: usize,
+        (name, marks): (String, Vec<std::ops::Range<usize>>),
+        cx: &Context<Self>,
+    ) -> Div {
+        let colors = &Colors::of(cx);
+        let hidden = entry.is_hidden();
+        div()
+            .flex()
+            .items_center()
+            .gap(size::NAME_GAP)
+            .when(hidden, |line| line.text_color(colors.text_dim))
+            .child(
+                div()
+                    .flex_none()
+                    .when(hidden, |slot| slot.opacity(opacity::HIDDEN))
+                    .child(entry_icon(
+                        &entry.name,
+                        entry.kind,
+                        self.thumbnail(index),
+                        colors,
+                    )),
+            )
+            .child(self.rename_field(index).map_or_else(
+                || entry_name(name.into(), marks, index, cx).into_any_element(),
+                |field| rename_box(field.clone(), colors).into_any_element(),
+            ))
+    }
+
     /// "Empty" in the middle of an empty trash.
     fn empty_trash(&self, colors: &Colors) -> Option<impl IntoElement> {
         let empty = self
@@ -243,10 +276,24 @@ fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> i
 }
 
 /// Row `index`'s box, as wide as the list, highlighted under the pointer,
-/// with only the corners `corners` keeps rounded.
-fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
+/// with only the corners `corners` keeps rounded. A right-click on it
+/// opens its entry's menu (see `window::context_menu`).
+fn entry_row(
+    index: usize,
+    entry: (ListingId, EntryId),
+    corners: Corners,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> Stateful<Div> {
     div()
         .id(("entry", index))
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                cx.stop_propagation();
+                this.entry_right_clicked(entry, event.position, cx);
+            }),
+        )
         .debug_selector(move || format!("entry-{index}"))
         .w_full()
         .flex()
