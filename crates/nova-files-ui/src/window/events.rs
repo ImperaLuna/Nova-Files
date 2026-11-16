@@ -106,6 +106,10 @@ impl MainWindow {
             Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
                 self.find_failed(id, cx);
             }
+            Event::Properties { id, .. } => self.save_probed(id, false, cx),
+            Event::PropertiesUnreadable { id, reason, .. } => {
+                self.save_probed(id, reason == Unreadable::Missing, cx);
+            }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);
             }
@@ -154,8 +158,6 @@ impl MainWindow {
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }
-            | Event::Properties { .. }
-            | Event::PropertiesUnreadable { .. }
             | Event::FileOpened
             | Event::FileNotOpened
             | Event::WindowState(_)
@@ -242,7 +244,9 @@ impl MainWindow {
     /// them again asks for the rows on screen anew, so theirs arrive.
     fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
         let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
+        let hidden_files = settings.hidden_files;
         self.settings = Arc::unwrap_or_clone(settings);
+        self.hidden_arrived(hidden_files);
         if thumbnails_changed {
             if self.settings.thumbnails == Thumbnails::Hidden {
                 release(self.thumbnails.take_all(), None, cx);

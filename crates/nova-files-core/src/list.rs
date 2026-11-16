@@ -2,14 +2,15 @@
 //!
 //! [`read_folder`] asks `cancelled` before each read from the disk, so a
 //! listing nobody wants any more stops early. Links are followed only to
-//! learn whether they point at a folder.
+//! learn whether they point at a folder. [`keep_shown`] leaves out hidden
+//! entries when the settings say so.
 
 use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::Path;
 
-use nova_files_api::{Entry, EntryId, EntryKind, Unreadable};
+use nova_files_api::{Entry, EntryId, EntryKind, HiddenFiles, Unreadable};
 
 /// Why [`read_folder`] returned without entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +55,21 @@ pub fn read_folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<Vec<Entr
         }
     }
     Err(Stopped::Cancelled)
+}
+
+/// `entries`, without the hidden ones unless `hidden` shows them, each
+/// with its position as its id again.
+pub fn keep_shown(entries: Vec<Entry>, hidden: HiddenFiles) -> Vec<Entry> {
+    match hidden {
+        HiddenFiles::Shown => entries,
+        HiddenFiles::Left => numbered(
+            entries
+                .into_iter()
+                .filter(|entry| !entry.is_hidden())
+                .map(|entry| (entry.name, entry.kind))
+                .collect(),
+        ),
+    }
 }
 
 /// Passes over an entry that vanished between the folder read and this
@@ -167,5 +183,25 @@ mod tests {
         );
         assert_eq!(reason(io::ErrorKind::NotADirectory), Unreadable::NotAFolder);
         assert_eq!(reason(io::ErrorKind::Other), Unreadable::Failed);
+    }
+
+    #[test]
+    fn hidden_entries_are_left_out_unless_shown_and_the_rest_renumbered() {
+        let entries = numbered(vec![
+            (OsString::from(".config"), EntryKind::Folder),
+            (OsString::from("Projects"), EntryKind::Folder),
+            (OsString::from(".bashrc"), EntryKind::File),
+            (OsString::from("notes.txt"), EntryKind::File),
+        ]);
+        assert_eq!(keep_shown(entries.clone(), HiddenFiles::Shown), entries);
+        let kept = keep_shown(entries, HiddenFiles::Left);
+        assert_eq!(
+            kept,
+            numbered(vec![
+                (OsString::from("Projects"), EntryKind::Folder),
+                (OsString::from("notes.txt"), EntryKind::File),
+            ])
+        );
+        assert_eq!(kept[1].id, EntryId(1));
     }
 }

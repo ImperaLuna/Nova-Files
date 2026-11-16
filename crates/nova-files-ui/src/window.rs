@@ -5,8 +5,9 @@
 //! the core in `tree`, the drives in `drives`, the Start page in `start`,
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
-//! `clipboard`, renaming and New folder in `renaming`, and the jobs they
-//! start in `jobs`, and the tabs in `tabs`. Drawing
+//! `clipboard`, renaming and New folder in `renaming`, the jobs they
+//! start in `jobs`, the tabs in `tabs`, and showing hidden files in
+//! `hidden`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -46,6 +47,7 @@ mod acting;
 mod clipboard;
 mod drives;
 mod events;
+mod hidden;
 mod jobs;
 mod navigate;
 mod pin;
@@ -74,8 +76,8 @@ use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    Bookmark, ClientGone, Command, Connection, Connector, Details, Event, EventSink, Listing,
-    ListingId, Order, Place, RecentFolder, RecentId, Settings,
+    Bookmark, ClientGone, Command, Connection, Connector, Details, Event, EventSink, HiddenFiles,
+    Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
 
 use self::drives::Drives;
@@ -202,6 +204,8 @@ pub struct MainWindow {
     pub(crate) home: PathBuf,
     /// The settings as the core last sent them.
     settings: Settings,
+    /// Whether hidden files show, once the core has said (see `hidden`).
+    hidden_files: Option<HiddenFiles>,
     /// The drives and how full they are (see `drives`).
     pub(crate) drives: Drives,
     /// The menu open over the window, if any (see `menu`).
@@ -326,6 +330,7 @@ impl MainWindow {
             scroll: UniformListScrollHandle::new(),
             pick: None,
             settings: Settings::default(),
+            hidden_files: None,
             drives: Drives::default(),
             menu: None,
             search: search::Search::new(cx),

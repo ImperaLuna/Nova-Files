@@ -1,6 +1,6 @@
 //! Folder listing through the real core, against real temp folder trees:
-//! the order, links, empty folders, names that aren't UTF-8, folders that
-//! can't be read, and the details of the rows a client shows.
+//! the order, links, hidden files, empty folders, names that aren't UTF-8,
+//! folders that can't be read, and the details of the rows a client shows.
 
 #![expect(
     clippy::unwrap_used,
@@ -269,13 +269,49 @@ fn rows_of_an_older_listing_are_not_read() {
 }
 
 #[test]
-fn hidden_files_are_listed_like_any_other() {
+fn hidden_files_are_left_out_unless_the_settings_show_them() {
     let folder = TempFolder::new();
     fs::write(folder.path().join(".hidden"), "").unwrap();
+    fs::write(folder.path().join("shown"), "").unwrap();
 
-    let listing = listing(client().list(1, folder.path()));
+    let left_out = listing(client().list(1, folder.path()));
+    assert_eq!(names(&left_out), [("shown".to_owned(), EntryKind::File)]);
+    assert_eq!(left_out.entries[0].id, EntryId(0));
 
-    assert_eq!(names(&listing), [(".hidden".to_owned(), EntryKind::File)]);
+    let home = TempFolder::new();
+    let config = home.path().join(".config/nova-files");
+    fs::create_dir_all(&config).unwrap();
+    fs::write(config.join("settings.toml"), "hidden_files = true\n").unwrap();
+    let shown = listing(client_at(home.path()).list(1, folder.path()));
+    assert_eq!(
+        names(&shown),
+        [
+            (".hidden".to_owned(), EntryKind::File),
+            ("shown".to_owned(), EntryKind::File)
+        ]
+    );
+}
+
+#[test]
+fn the_trash_lists_its_hidden_items_too() {
+    let home = TempFolder::new();
+    let trash = home.path().join(".local/share/Trash/files");
+    fs::create_dir_all(trash.join(".old")).unwrap();
+    fs::write(trash.join(".env"), "").unwrap();
+    let client = client_at(home.path());
+
+    let trashed = listing(client.list(1, &trash));
+    assert_eq!(
+        names(&trashed),
+        [
+            (".old".to_owned(), EntryKind::Folder),
+            (".env".to_owned(), EntryKind::File)
+        ]
+    );
+    // A trashed folder's own hidden entries too.
+    fs::write(trash.join(".old/.inside"), "").unwrap();
+    let inside = listing(client.list(2, &trash.join(".old")));
+    assert_eq!(names(&inside), [(".inside".to_owned(), EntryKind::File)]);
 }
 
 #[test]

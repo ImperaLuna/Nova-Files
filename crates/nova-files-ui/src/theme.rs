@@ -497,6 +497,8 @@ pub mod start {
 pub mod opacity {
     /// A file the picker's type filter leaves out: still there, set back.
     pub const DIMMED: f32 = 0.4;
+    /// A hidden entry's icon, while hidden files show.
+    pub const HIDDEN: f32 = 0.55;
 }
 
 /// The quick look (see `view::preview`).

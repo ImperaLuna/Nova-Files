@@ -16,6 +16,8 @@ pub struct Settings {
     pub appearance: Appearance,
     /// Whether rows show thumbnails of pictures and videos.
     pub thumbnails: Thumbnails,
+    /// Whether folders list their hidden entries.
+    pub hidden_files: HiddenFiles,
     /// Key overrides: an action's id (owned by the UI, such as `go.back`)
     /// to the keys that run it, in GPUI's keystroke syntax
     /// (`ctrl-shift-a`). An empty list leaves the action without keys. The
@@ -42,11 +44,32 @@ pub enum Thumbnails {
     Hidden,
 }
 
+/// Whether folders list their hidden entries: those whose name starts
+/// with a dot (see [`crate::Entry::is_hidden`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HiddenFiles {
+    #[default]
+    Left,
+    Shown,
+}
+
+impl HiddenFiles {
+    /// The other choice: what Ctrl+H turns this into.
+    #[must_use]
+    pub const fn toggled(self) -> Self {
+        match self {
+            Self::Left => Self::Shown,
+            Self::Shown => Self::Left,
+        }
+    }
+}
+
 /// One setting's new value, sent with [`crate::Command::ChangeSetting`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingChange {
     Appearance(Appearance),
     Thumbnails(Thumbnails),
+    HiddenFiles(HiddenFiles),
     /// The keys for the action named `action`; `None` drops the override,
     /// so the action gets its default keys back.
     Keys {
@@ -62,6 +85,7 @@ impl Settings {
         match change {
             SettingChange::Appearance(appearance) => self.appearance = appearance,
             SettingChange::Thumbnails(thumbnails) => self.thumbnails = thumbnails,
+            SettingChange::HiddenFiles(hidden) => self.hidden_files = hidden,
             SettingChange::Keys {
                 action,
                 keys: Some(keys),
@@ -88,6 +112,16 @@ mod tests {
         let hidden = dark.with(SettingChange::Thumbnails(Thumbnails::Hidden));
         assert_eq!(hidden.appearance, Appearance::Dark);
         assert_eq!(hidden.thumbnails, Thumbnails::Hidden);
+        assert_eq!(hidden.hidden_files, HiddenFiles::Left);
+        let shown = hidden.with(SettingChange::HiddenFiles(HiddenFiles::Shown));
+        assert_eq!(shown.hidden_files, HiddenFiles::Shown);
+        assert_eq!(shown.thumbnails, Thumbnails::Hidden);
+    }
+
+    #[test]
+    fn hidden_files_toggle_both_ways() {
+        assert_eq!(HiddenFiles::Left.toggled(), HiddenFiles::Shown);
+        assert_eq!(HiddenFiles::Shown.toggled(), HiddenFiles::Left);
     }
 
     #[test]

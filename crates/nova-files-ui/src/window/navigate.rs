@@ -106,12 +106,9 @@ impl MainWindow {
         if self.searching() {
             return;
         }
-        let folder = if self.waiting() {
-            self.requested.clone()
-        } else {
-            self.folder().map(Path::to_path_buf)
+        let Some(folder) = self.folder_asked_last() else {
+            return;
         };
-        let Some(folder) = folder else { return };
         let before = self.order;
         self.order = next_order(before, key);
         if !self.request(&folder) {
