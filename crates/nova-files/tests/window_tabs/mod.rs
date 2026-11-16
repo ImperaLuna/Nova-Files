@@ -5,7 +5,7 @@
 //! and middle-click opens folders in new tabs. A tab's row dragged along
 //! the list moves the tab.
 
-use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, point};
+use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, point, size};
 use nova_files_api::SortKey;
 use nova_files_ui::HOVER_OPEN_AFTER;
 
@@ -387,4 +387,59 @@ async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut Te
     });
     assert!(cx.debug_bounds("tab-landing").is_none());
     assert!(tree.path().join("notes.txt").exists());
+}
+
+/// Drags tab `from`'s row and lets go at `to`.
+fn drag_tab(cx: &mut VisualTestContext, from: &'static str, to: Point<Pixels>) {
+    let start = cx.debug_bounds(from).unwrap().center();
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(
+        start + point(px(3.0), px(3.0)),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+}
+
+/// Tabs on the tree, Projects and Start reordered by dragging, in a
+/// window `width` wide: past a row's middle the tab lands after it, at
+/// its middle or before, before it.
+async fn reorder_tabs_by_halves(cx: &mut TestAppContext, test: &str, width: Pixels) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree(test);
+    let (view, cx) = tabs_on(cx, tree.path()).await;
+    cx.simulate_resize(size(width, px(600.0)));
+    view.update(cx, |view, cx| {
+        view.open_in_new_tab(tree.path().join("Projects"), cx);
+        view.new_tab(&Location::Start, cx);
+    });
+    settled(&view, cx).await;
+    let names = |view: &Entity<MainWindow>, cx: &VisualTestContext| {
+        view.read_with(cx, |view, _| view.tab_names())
+    };
+    let [a, b, c] = <[_; 3]>::try_from(names(&view, cx)).unwrap();
+
+    // Past the middle of the last row, along the list's run.
+    let last = cx.debug_bounds("tab-2").unwrap();
+    drag_tab(cx, "tab-0", last.center() + point(px(4.0), px(4.0)));
+    assert_eq!(names(&view, cx), [b.clone(), c.clone(), a.clone()]);
+
+    // Right at the middle of the first row.
+    let first = cx.debug_bounds("tab-0").unwrap().center();
+    drag_tab(cx, "tab-2", first);
+    assert_eq!(names(&view, cx), [a, b, c]);
+}
+
+#[gpui::test]
+async fn a_tab_lands_by_the_half_of_the_row_it_is_let_go_over(cx: &mut TestAppContext) {
+    reorder_tabs_by_halves(cx, "tabs-halves", px(1000.0)).await;
+}
+
+#[gpui::test]
+async fn in_a_narrow_window_a_tab_lands_by_the_half_across(cx: &mut TestAppContext) {
+    reorder_tabs_by_halves(cx, "tabs-halves-narrow", px(600.0)).await;
 }
