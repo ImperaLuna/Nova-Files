@@ -92,6 +92,13 @@ pub enum MenuAction {
     Run(&'static ActionSpec),
 }
 
+impl Menu {
+    /// Whether item `index` is the one marked.
+    pub fn marks(&self, index: usize) -> bool {
+        self.active == Some(index)
+    }
+}
+
 impl MenuItem {
     /// A plain item.
     pub fn new(icon: Icon, label: impl Into<SharedString>, action: MenuAction) -> Self {
