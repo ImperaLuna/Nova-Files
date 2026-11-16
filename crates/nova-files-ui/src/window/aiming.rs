@@ -112,6 +112,14 @@ pub struct Asks {
     over: Weak<Drag>,
 }
 
+impl Asks {
+    /// A new ask's id, unlike any before it.
+    const fn next_id(&mut self) -> DropAskId {
+        self.last += 1;
+        DropAskId(self.last)
+    }
+}
+
 impl MainWindow {
     /// Files dragged from a list, `drag`, moved: over the window, and no
     /// longer aimed anywhere until a target under the pointer says.
@@ -138,8 +146,7 @@ impl MainWindow {
         let (Some(connection), Some(sources)) = (&self.connection, drag.sources()) else {
             return;
         };
-        self.drop_asks.last += 1;
-        let id = DropAskId(self.drop_asks.last);
+        let id = self.drop_asks.next_id();
         // A core gone ends the window's events, which shows it.
         let asked = connection.send(Command::DropWould {
             id,
@@ -170,5 +177,17 @@ impl MainWindow {
             // The drag may be over another of the app's windows by now.
             cx.refresh_windows();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_ask_has_an_id_of_its_own() {
+        let mut asks = Asks::default();
+        let first = asks.next_id();
+        assert_ne!(asks.next_id(), first);
     }
 }
