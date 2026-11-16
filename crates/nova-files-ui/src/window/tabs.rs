@@ -13,9 +13,13 @@
 //! scroll position with its selection, then asks the core for it again,
 //! since the core serves the rows of one listing per window. That answer
 //! arrives in place: the scroll stays and the selection is kept by name
-//! (see `events`), so it also brings in what changed meanwhile. A folder
-//! still on its way when the tab was left is asked for again; a search is
-//! run again.
+//! (see `events`), so it also brings in what changed meanwhile, and the
+//! sidebar's tree opens down to it. A folder still on its way when the
+//! tab was left is asked for again; a search is run again and shows from
+//! its top, since what it finds may have changed. A tab whose folder is
+//! gone by then (deleted, or its drive unplugged) goes to Start, and so
+//! does a new tab whose folder can't be read. A drive still mounting
+//! when the tab is left isn't opened.
 //!
 //! The keys go back to the window on each change of tab, once it draws: a
 //! field of the tab left (its search box, a rename) may have held them.
@@ -28,11 +32,11 @@ use std::mem;
 use std::path::PathBuf;
 
 use gpui::{Context, SharedString, UniformListScrollHandle, Window};
-use nova_files_api::{Listing, Order};
+use nova_files_api::{Listing, ListingId, Order};
 
+use super::MainWindow;
 use super::rows::release;
 use super::search::Search;
-use super::{MainWindow, ROOT_FOLDER};
 use crate::history::History;
 use crate::jump::TypeJump;
 use crate::location::Location;
@@ -73,6 +77,9 @@ pub struct Tabs {
     current: usize,
     /// The tab on screen changed since the window last drew.
     changed: bool,
+    /// The ask that puts the tab on Start if refused: a new tab's first
+    /// folder, or the folder of a tab shown again (it may be gone).
+    start_if_refused: Option<ListingId>,
 }
 
 impl Default for Tabs {
@@ -81,6 +88,7 @@ impl Default for Tabs {
             list: vec![None],
             current: 0,
             changed: false,
+            start_if_refused: None,
         }
     }
 }
@@ -126,12 +134,13 @@ impl MainWindow {
         self.tabs.list[self.tabs.current] = Some(left);
         self.tabs.list.push(None);
         self.tabs.current = self.tabs.list.len() - 1;
-        // A new tab has been nowhere, as a new window: one that can't
-        // read its folder falls back to home, then the root.
-        self.fallbacks = vec![PathBuf::from(ROOT_FOLDER), self.home.clone()];
         match place {
             Location::Start => self.open_start(cx),
-            Location::Folder(folder) => self.open(folder),
+            Location::Folder(folder) => {
+                self.open(folder);
+                // A folder that can't be read leaves the tab on Start.
+                self.tabs.start_if_refused = self.asked;
+            }
         }
         cx.notify();
     }
@@ -189,6 +198,19 @@ impl MainWindow {
         self.close_tab(self.tabs.current, cx);
     }
 
+    /// Listing `id` was refused. When it was a new tab's first folder or
+    /// a tab's folder asked for again on coming back (deleted, or its
+    /// drive gone meanwhile), the tab goes to Start rather than stay
+    /// blank or show what is no longer there. Whether it did.
+    pub(super) fn tab_folder_refused(&mut self, id: ListingId, cx: &mut Context<Self>) -> bool {
+        if self.tabs.start_if_refused != Some(id) {
+            return false;
+        }
+        self.tabs.start_if_refused = None;
+        self.open_start(cx);
+        true
+    }
+
     /// Gives the keys back to the window after a change of tab.
     pub(crate) fn settle_tab_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if mem::take(&mut self.tabs.changed) {
@@ -200,6 +222,8 @@ impl MainWindow {
     /// what only the screen needs. The window is left as a fresh one.
     fn leave_tab(&mut self, cx: &mut Context<Self>) -> Tab {
         self.forget_rows();
+        // A drive mounting opens in the tab that asked, or nowhere.
+        self.forget_drive_to_open();
         self.close_preview(None, cx);
         self.close_menu(cx);
         self.close_path_menu();
@@ -249,8 +273,11 @@ impl MainWindow {
             self.request(&folder);
         } else if self.searching() {
             self.find(cx);
-        } else if let Some(folder) = self.listing.as_ref().map(|listing| listing.path.clone()) {
-            self.request(&folder);
+        } else if let Some(listing) = self.listing.clone() {
+            // The sidebar's tree comes along to the tab's folder.
+            self.tree_follows(&listing, true);
+            self.request(&listing.path);
+            self.tabs.start_if_refused = self.asked;
         } else if self.is_on_start() {
             self.arrive_at_start(cx);
         }

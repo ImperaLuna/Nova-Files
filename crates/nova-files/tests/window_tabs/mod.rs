@@ -197,3 +197,26 @@ async fn the_last_tab_stays_open(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 1);
 }
+
+#[gpui::test]
+async fn a_tab_whose_folder_is_gone_goes_to_start(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("tabs-gone");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = tabs_on(cx, tree.path()).await;
+    view.update(cx, |view, cx| view.open_in_new_tab(projects.clone(), cx));
+    wait_for_folder(&view, cx, &projects).await;
+    view.update(cx, |view, cx| view.switch_tab(0, cx));
+    settled(&view, cx).await;
+
+    fs::remove_dir_all(&projects).unwrap();
+    view.update(cx, |view, cx| view.switch_tab(1, cx));
+    view.condition::<WindowEvent>(cx, |view, _| view.is_on_start())
+        .await;
+
+    // A new tab on a folder that isn't there waits on Start.
+    view.update(cx, |view, cx| view.open_in_new_tab(projects.clone(), cx));
+    view.condition::<WindowEvent>(cx, |view, _| view.is_on_start() && !view.waiting())
+        .await;
+    view.read_with(cx, |view, _| assert_eq!(view.tab_count(), 3));
+}
