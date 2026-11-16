@@ -109,4 +109,11 @@ fn one_note_says_what_the_jobs_did_together() {
         },
     );
     assert_eq!(batch.note(), "Nothing copied, skipped 1");
+    let skipped_both = Tally {
+        replaced: 0,
+        skipped: 2,
+    };
+    batch.keep(&moved, skipped_both);
+    batch.keep(&moved, skipped_both);
+    assert_eq!(batch.note(), "Nothing moved, skipped 4");
 }

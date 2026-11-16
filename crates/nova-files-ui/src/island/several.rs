@@ -11,7 +11,7 @@ use std::time::Instant;
 use nova_files_api::{Operation, Tally};
 
 use super::progress::{Running, short_left, sources};
-use super::{ITEM, ITEMS, LIST_GAP, PART_GAP, count, name_of, what};
+use super::{ITEM, ITEMS, PART_GAP, count, name_of, what, with_answers};
 
 /// The folded line: how many jobs, drawn strong, and the time until the
 /// last one ends, once every one can say.
@@ -88,16 +88,19 @@ impl Batch {
     /// moved 2 items, replaced 1".
     pub fn note(&mut self) -> String {
         let ended = std::mem::take(&mut self.ended);
-        let (mut copied, mut moved, mut replaced, mut skipped) = (0, 0, 0, 0);
+        let (mut copied, mut moved, mut answers) = (0, 0, Tally::default());
+        let mut any_copy = false;
         for (operation, tally) in &ended {
             let gone = usize::try_from(tally.skipped).unwrap_or(usize::MAX);
             let went = sources(operation).len().saturating_sub(gone);
-            match operation {
-                Operation::Move { .. } => moved += went,
-                _ => copied += went,
+            if matches!(operation, Operation::Move { .. }) {
+                moved += went;
+            } else {
+                any_copy = true;
+                copied += went;
             }
-            replaced += tally.replaced;
-            skipped += tally.skipped;
+            answers.replaced += tally.replaced;
+            answers.skipped += tally.skipped;
         }
         let mut parts = Vec::new();
         if copied > 0 {
@@ -108,15 +111,14 @@ impl Batch {
             parts.push(format!("{verb} {}", count(moved, ITEM, ITEMS)));
         }
         if parts.is_empty() {
-            parts.push("Nothing copied".to_owned());
+            let nothing = if any_copy {
+                "Nothing copied"
+            } else {
+                "Nothing moved"
+            };
+            parts.push(nothing.to_owned());
         }
-        if replaced > 0 {
-            parts.push(format!("replaced {replaced}"));
-        }
-        if skipped > 0 {
-            parts.push(format!("skipped {skipped}"));
-        }
-        parts.join(LIST_GAP)
+        with_answers(parts, answers)
     }
 }
 

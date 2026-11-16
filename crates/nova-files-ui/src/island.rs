@@ -212,14 +212,19 @@ fn answered_note(
         Operation::Move { into, .. } => format!("Moved {what} to {}", name_of(into)),
         _ => return done_note(operation, here),
     };
-    let mut parts = vec![done];
+    Some(with_answers(vec![done], tally))
+}
+
+/// `parts` of a note, then what the answers to clashes did: "Copied 4
+/// items, replaced 2, skipped 1".
+fn with_answers(mut parts: Vec<String>, tally: Tally) -> String {
     if tally.replaced > 0 {
         parts.push(format!("replaced {}", tally.replaced));
     }
     if tally.skipped > 0 {
         parts.push(format!("skipped {}", tally.skipped));
     }
-    Some(parts.join(LIST_GAP))
+    parts.join(LIST_GAP)
 }
 
 /// " to Documents" for a job into `into`, unless that is `here`, the
