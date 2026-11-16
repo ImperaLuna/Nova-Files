@@ -58,6 +58,9 @@ pub struct Running {
     /// The trash found for each folder a replaced file went from, looked
     /// for once per job.
     pub replaced_trashes: HashMap<PathBuf, TrashFolder>,
+    /// Where the steps kept went, so a replace can tell an entry this
+    /// job made from one that was there before it.
+    placed: HashSet<PathBuf>,
 }
 
 impl Running {
@@ -84,6 +87,7 @@ impl Running {
             home_trash: None,
             replaced: Vec::new(),
             replaced_trashes: HashMap::new(),
+            placed: HashSet::new(),
         }
     }
 
@@ -279,6 +283,12 @@ impl Running {
             self.steps.remove(&kept);
         }
         self.steps.insert(from.to_path_buf(), to.to_path_buf());
+        self.placed.insert(to.to_path_buf());
+    }
+
+    /// Whether `path` is, or is inside, an entry this job put there.
+    pub fn placed_here(&self, path: &Path) -> bool {
+        path.ancestors().any(|path| self.placed.contains(path))
     }
 
     /// Whether the job resumed after a crash.
