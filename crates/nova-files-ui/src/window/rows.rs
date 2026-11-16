@@ -124,7 +124,9 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         let side = self.icon_side();
-        release(self.theme_icons.resize(side).into_iter().flatten(), None, cx);
+        if let Some(gone) = self.theme_icons.resize(side) {
+            release(gone, None, cx);
+        }
         let mut wanted: Vec<Arc<ThemeIcon>> = Vec::new();
         for icon in icons {
             if let FileIcon::Theme { icon, .. } = icon
