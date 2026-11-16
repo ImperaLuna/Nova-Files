@@ -4,7 +4,7 @@
 //! that pins what it picks, and right-click on a pinned folder takes it
 //! out.
 
-use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, size};
+use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, size};
 
 use super::*;
 
@@ -178,9 +178,15 @@ async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
 }
 
 /// Right-clicks the element drawn with `selector`.
-fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
+pub fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
     cx.run_until_parked();
     let position = cx.debug_bounds(selector).unwrap().center();
+    right_click_at(cx, position);
+}
+
+/// Right-clicks the window at `position`.
+pub fn right_click_at(cx: &mut VisualTestContext, position: Point<Pixels>) {
+    cx.run_until_parked();
     cx.simulate_event(MouseDownEvent {
         position,
         modifiers: Modifiers::none(),
