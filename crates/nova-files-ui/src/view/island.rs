@@ -52,7 +52,7 @@ impl MainWindow {
         {
             Some(ask_parts(
                 conflict,
-                self.ticked_for_all(id, conflict),
+                self.island.ticked_for_all(id, conflict.number),
                 &colors,
                 cx,
             ))

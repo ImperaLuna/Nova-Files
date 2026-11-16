@@ -45,6 +45,13 @@ pub struct Island {
     pub(crate) note_timer: Option<Task<()>>,
 }
 
+impl Island {
+    /// Whether the "For all" tick is ticked on conflict `number` of `job`.
+    pub fn ticked_for_all(&self, job: JobId, number: u64) -> bool {
+        self.for_all == Some((job, number))
+    }
+}
+
 /// A line said after an action, maybe with a way to undo it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Note {
