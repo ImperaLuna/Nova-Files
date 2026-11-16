@@ -129,6 +129,12 @@ impl Running {
         }
     }
 
+    /// Whether an answer for all conflicts of `kind` is already given,
+    /// so [`Self::ask`] won't ask about one.
+    pub fn answered(&self, kind: ConflictKind) -> bool {
+        self.answers.contains_key(&kind)
+    }
+
     /// Holds at `conflict` until a client answers, unless one already
     /// answered for all of its kind. Retry is never kept for a kind: what
     /// still fails would be retried for ever.
