@@ -159,8 +159,8 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             // The window doesn't wait on a file opening and never watches
             // jobs it didn't start; only a picker's opening asks for the
-            // window state (see `window_state`).
-            // Details for a folder the window has since left.
+            // window state (see `window_state`). Details that come for a
+            // folder the window has since left are dropped.
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
             | Event::Found { .. }

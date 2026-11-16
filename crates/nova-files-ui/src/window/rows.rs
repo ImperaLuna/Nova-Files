@@ -112,29 +112,34 @@ impl MainWindow {
                 (first + at, read)
             });
         self.details.extend(read);
-        self.make_theme_icons(icons.to_vec(), cx);
+        self.make_theme_icons(icons.iter(), cx);
         cx.notify();
     }
 
     /// Makes each theme icon of `icons` not made or being made yet, off
     /// the UI thread, at the row's size.
-    fn make_theme_icons(&mut self, icons: Vec<FileIcon>, cx: &mut Context<Self>) {
+    fn make_theme_icons<'a>(
+        &mut self,
+        icons: impl Iterator<Item = &'a FileIcon>,
+        cx: &mut Context<Self>,
+    ) {
         let side = self.icon_side();
         if self.theme_icons.side() != side {
             release(self.theme_icons.resize(side), None, cx);
         }
-        let wanted: Vec<Arc<ThemeIcon>> = icons
-            .into_iter()
-            .filter_map(|icon| match icon {
-                FileIcon::Theme { icon, .. } => Some(icon),
-                FileIcon::BuiltIn(_) => None,
-            })
-            .filter(|icon| self.theme_icons.start(icon))
-            .collect();
+        let mut wanted: Vec<Arc<ThemeIcon>> = Vec::new();
+        for icon in icons {
+            if let FileIcon::Theme { icon, .. } = icon
+                && self.theme_icons.start(icon)
+            {
+                wanted.push(Arc::clone(icon));
+            }
+        }
         for icon in wanted {
             let renderer = cx.svg_renderer();
             let making = cx.background_executor().spawn(async move {
-                theme_icons::make(&icon, side, &renderer).map(|image| (icon, image))
+                let image = theme_icons::make(&icon, side, &renderer);
+                (icon, image)
             });
             cx.spawn(async move |this, cx| {
                 let made = making.await;
@@ -145,17 +150,16 @@ impl MainWindow {
         }
     }
 
-    /// Keeps a theme icon made at `side`, or notes that it didn't decode.
+    /// Keeps a theme icon made at `side`. One that didn't decode is no
+    /// longer being made: its rows keep their built-in icon, and it is
+    /// tried again when the rows next arrive.
     fn theme_icon_ready(
         &mut self,
-        made: Option<(Arc<ThemeIcon>, Arc<RenderImage>)>,
+        (icon, image): (Arc<ThemeIcon>, Option<Arc<RenderImage>>),
         side: u32,
         cx: &mut Context<Self>,
     ) {
-        let Some((icon, image)) = made else { return };
-        let handed_back = self
-            .theme_icons
-            .finish(icon.path.clone(), side, Some(image));
+        let handed_back = self.theme_icons.finish(icon.path.clone(), side, image);
         release(handed_back, None, cx);
         cx.notify();
     }
@@ -220,12 +224,12 @@ impl MainWindow {
         self.scale_factor = scale_factor;
         if self.theme_icons.side() != self.icon_side() {
             release(self.theme_icons.resize(self.icon_side()), Some(window), cx);
-            let icons = self
+            let icons: Vec<FileIcon> = self
                 .details
                 .values()
                 .map(|read| read.icon.clone())
                 .collect();
-            self.make_theme_icons(icons, cx);
+            self.make_theme_icons(icons.iter(), cx);
         }
         if self.thumbnail_side() == before {
             return;

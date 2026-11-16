@@ -3,7 +3,8 @@
 //!
 //! The core sends the icon file as it is (see `FileIcon`); a PNG is
 //! decoded and shrunk as a thumbnail is, an SVG is drawn by GPUI's SVG
-//! renderer straight at the row's size in device pixels. Both happen off
+//! renderer straight at the row's size in device pixels, whatever size the
+//! file declares. Both happen off
 //! the UI thread. A window draws a few dozen types at most, so the images
 //! are kept while it draws at one scale; a new scale hands them all back,
 //! so the window drops them from GPUI's image atlas and makes them again.
@@ -17,9 +18,11 @@ use nova_files_api::{IconFormat, ThemeIcon};
 
 use crate::thumbnail;
 
-/// GPUI's renderer draws at twice the scale asked for; a first draw at
-/// this scale gives the SVG's own size, doubled.
-const PROBE_SCALE: f32 = 1.0;
+/// GPUI's renderer draws at twice the scale it is asked for.
+const RENDERER_SCALE: f32 = 2.0;
+/// Added to the side before working out the scale, so the renderer's
+/// rounding down still lands on the whole side.
+const ROUNDING: f32 = 0.5;
 
 /// The theme icons made so far, `side` device pixels across.
 #[derive(Default)]
@@ -80,19 +83,18 @@ pub fn make(icon: &ThemeIcon, side: u32, svg: &SvgRenderer) -> Option<Arc<Render
     match icon.format {
         IconFormat::Png => thumbnail::shrink(&icon.bytes, side).map(Arc::new),
         IconFormat::Svg => {
-            let probe = svg.render_single_frame(&icon.bytes, PROBE_SCALE).ok()?;
-            let drawn = probe.size(0);
-            let longest = drawn.width.0.max(drawn.height.0);
-            let longest = u32::try_from(longest).ok().filter(|longest| *longest > 0)?;
-            if longest == side {
-                return Some(probe);
+            let tree = usvg::Tree::from_data(&icon.bytes, &usvg::Options::default()).ok()?;
+            let longest = tree.size().width().max(tree.size().height());
+            if !longest.is_normal() {
+                return None;
             }
             #[expect(
                 clippy::cast_precision_loss,
-                reason = "icon sides are a few hundred pixels at most"
+                reason = "an icon's side is a few hundred pixels at most"
             )]
-            let scale = PROBE_SCALE * side as f32 / longest as f32;
-            svg.render_single_frame(&icon.bytes, scale).ok()
+            let wanted = side as f32 + ROUNDING;
+            svg.render_single_frame(&icon.bytes, wanted / (longest * RENDERER_SCALE))
+                .ok()
         }
     }
 }
@@ -127,15 +129,23 @@ mod tests {
         assert_eq!(side_of(&drawn), (44, 44));
         // GPUI draws in BGRA: red is the third byte.
         assert_eq!(&drawn.as_bytes(0).unwrap()[..4], [0, 0, 255, 255]);
-        let exact = make(&icon(IconFormat::Svg, SQUARE.into()), 32, &svg).unwrap();
-        assert_eq!(side_of(&exact), (32, 32));
+        // A 48 px icon at 44 px, and at 1.25 times 22 px.
+        let big = SQUARE.replace("16", "48");
+        let shrunk = make(&icon(IconFormat::Svg, big.clone().into()), 44, &svg).unwrap();
+        assert_eq!(side_of(&shrunk), (44, 44));
+        let odd = make(&icon(IconFormat::Svg, big.into()), 28, &svg).unwrap();
+        assert_eq!(side_of(&odd), (28, 28));
+        // A huge declared size costs no huge image.
+        let huge = SQUARE.replace("16", "30000");
+        let made = make(&icon(IconFormat::Svg, huge.into()), 22, &svg).unwrap();
+        assert_eq!(side_of(&made), (22, 22));
 
         let mut png = Vec::new();
         RgbaImage::from_pixel(48, 48, Rgba([1, 2, 3, 255]))
             .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
             .unwrap();
-        let shrunk = make(&icon(IconFormat::Png, png), 22, &svg).unwrap();
-        assert_eq!(side_of(&shrunk), (22, 22));
+        let png = make(&icon(IconFormat::Png, png), 22, &svg).unwrap();
+        assert_eq!(side_of(&png), (22, 22));
 
         assert!(make(&icon(IconFormat::Svg, b"not svg".to_vec()), 22, &svg).is_none());
         assert!(make(&icon(IconFormat::Png, b"not png".to_vec()), 22, &svg).is_none());

@@ -28,11 +28,11 @@ use gpui::{
 use nova_files_api::{Entry, EntryKind, Preview, PreviewContent};
 
 use super::bar::icon_button;
-use super::row::{RowIcon, entry_icon, entry_kind, icon};
+use super::row::{RowIcon, built_in, entry_icon, icon};
 use crate::assets::Icon;
 use crate::columns;
 use crate::commands::{PreviewNext, PreviewPrevious};
-use crate::kind::FileKind;
+use crate::kind::{FileKind, icon_kind};
 use crate::theme::{Colors, preview, radius, size, text};
 use crate::window::{MainWindow, Shown};
 
@@ -292,7 +292,10 @@ fn folder_art(first: &[Entry], count: usize, colors: &Colors) -> AnyElement {
                 .h(preview::LIST_ROW)
                 .min_w_0()
                 .text_color(colors.text_soft)
-                .child(entry_icon(RowIcon::BuiltIn(entry_kind(entry.kind)), colors))
+                .child(entry_icon(
+                    RowIcon::BuiltIn(icon_kind(&entry.name, entry.kind)),
+                    colors,
+                ))
                 .child(div().min_w_0().truncate().child(SharedString::from(
                     entry.name.to_string_lossy().into_owned(),
                 )))
@@ -329,7 +332,10 @@ fn card(width: Pixels, colors: &Colors) -> Div {
 fn big_icon(name: &OsStr, kind: EntryKind, colors: &Colors) -> AnyElement {
     let (glyph, tint) = match kind {
         EntryKind::Folder => (Icon::Folder, colors.folder),
-        EntryKind::File => (Icon::File, FileKind::of(name).tag(colors.tags)),
+        EntryKind::File => {
+            let (glyph, _) = built_in(icon_kind(name, kind), colors);
+            (glyph, FileKind::of(name).tag(colors.tags))
+        }
     };
     card(preview::CARD_WIDTH, colors)
         .debug_selector(|| "preview-icon".to_owned())
