@@ -86,6 +86,15 @@ mod tests {
             note(&mixed).as_deref(),
             Some("Can't open a.txt, b.txt: no app opens them · c.pdf: its app didn't start")
         );
+        let three = failed(&[
+            ("a", NotOpened::Failed),
+            ("b", NotOpened::Failed),
+            ("c", NotOpened::Failed),
+        ]);
+        assert_eq!(
+            note(&three).as_deref(),
+            Some("Can't open a, b, c: their apps didn't start")
+        );
         let many = failed(&[
             ("a", NotOpened::Sandboxed),
             ("b", NotOpened::Sandboxed),
