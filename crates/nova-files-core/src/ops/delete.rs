@@ -96,15 +96,19 @@ pub fn delete_paths(running: &mut Running, paths: &[PathBuf]) -> (Result<(), Sto
 
 /// `plan` as the journal keeps it. A delete that resumes keeps only what
 /// it planned before the crash, entry for entry: what was added since,
-/// even under a planned name, nobody chose to delete. One that starts
+/// even under a planned name and with a planned entry's inode number,
+/// nobody chose to delete. One that starts
 /// records its plan, on the disk before anything goes.
 ///
 /// # Errors
 /// [`Stop`] when cancelled while the plan is recorded.
 fn planned(running: &mut Running, mut plan: Plan) -> Result<Plan, Stop> {
     if let Some(before) = &running.before.planned {
-        plan.items
-            .retain(|item| before.get(&item.from) == Some(&item.entry));
+        plan.items.retain(|item| {
+            before
+                .get(&item.from)
+                .is_some_and(|planned| planned.is(&item.entry))
+        });
         plan.bytes = plan.items.iter().map(size).sum();
     } else {
         for item in &plan.items {
@@ -232,6 +236,23 @@ mod tests {
         assert_eq!(kept.items.len(), 1);
         assert_eq!(kept.items[0].from, paths[0]);
         assert_eq!(kept.bytes, 1);
+    }
+
+    #[test]
+    fn a_resumed_delete_leaves_a_new_entry_that_took_a_planned_inode() {
+        let folder = TestFolder::new("delete-plan-reused");
+        let paths = [folder.file("a", "a")];
+        let mut plan = plan_delete(&paths, &Control::default(), &|_| true).unwrap();
+        let mut running = Running::for_test();
+        let mut before = plan.items[0].entry;
+        before.born = Some(1);
+        // Removed before the crash; a new file then took its inode.
+        plan.items[0].entry.born = Some(2);
+        running.before.planned = Some(HashMap::from([(paths[0].clone(), before)]));
+
+        let kept = planned(&mut running, plan).unwrap();
+
+        assert!(kept.items.is_empty());
     }
 
     #[test]
