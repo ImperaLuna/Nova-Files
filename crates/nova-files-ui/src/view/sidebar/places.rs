@@ -1,19 +1,23 @@
-//! The Places section: the standard folders and the pinned ones, as
-//! `places` lists them. Each row carries the debug selector `place-<n>`,
-//! counted from 0 in the order shown. In a main window, the + (`pin`) on
+//! The Places section: the Start page first, then the standard folders
+//! and the pinned ones, as `places` lists them, then the trash with how
+//! many items it holds. Each listed folder's row carries the debug
+//! selector `place-<n>`, counted from 0 in the order shown; the first and
+//! last rows carry `place-start` and `place-trash`. A picker shows only
+//! the folders: it has no Start page, and its trash isn't one to pick
+//! from. In a main window, the + (`pin`) on
 //! the head, or at the end of the row in a narrow window, picks a folder
 //! to pin, and right-click on a pinned folder opens
 //! its menu (see `window/pin`).
 
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
+    ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _, div,
     prelude::FluentBuilder as _,
 };
 
 use super::{Row, row, section_button, section_head};
 use crate::assets::Icon;
-use crate::places;
+use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::theme::{Colors, size};
 use crate::window::MainWindow;
 
@@ -56,11 +60,18 @@ impl MainWindow {
                     )
                 })
             });
+        let start = main.then(|| self.start_row(narrow, &colors, cx));
+        let trash = main.then(|| self.trash_row(narrow, &colors, cx));
         let pin = main.then(|| {
             section_button("pin", Icon::Plus, &colors)
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder_to_pin(cx)))
         });
-        let list = div().flex().gap(size::PLACE_GAP).children(rows);
+        let list = div()
+            .flex()
+            .gap(size::PLACE_GAP)
+            .children(start)
+            .children(rows)
+            .children(trash);
         if narrow {
             // No head to carry the +: it ends the row, so pinning stays
             // within reach.
@@ -75,5 +86,43 @@ impl MainWindow {
                 &colors,
             ))
             .child(list.flex_col())
+    }
+
+    /// The Start page's row, first in Places.
+    fn start_row(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
+        row(
+            Row {
+                id: "place-start".into(),
+                selector: "place-start".to_owned(),
+                glyph: Icon::Start,
+                name: START_LABEL.into(),
+                number: None,
+                here: self.is_on_start(),
+            },
+            narrow,
+            colors,
+        )
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_start(cx)))
+    }
+
+    /// The trash's row, last in Places, with how many items it holds.
+    fn trash_row(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
+        let count = self
+            .trash_count()
+            .filter(|count| *count > 0)
+            .map(|count| (count.to_string().into(), colors.text_dim));
+        row(
+            Row {
+                id: "place-trash".into(),
+                selector: "place-trash".to_owned(),
+                glyph: Icon::Trash,
+                name: TRASH_LABEL.into(),
+                number: count,
+                here: self.trash_open(),
+            },
+            narrow,
+            colors,
+        )
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)))
     }
 }

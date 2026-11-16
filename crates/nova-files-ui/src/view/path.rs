@@ -33,11 +33,11 @@ use crate::assets::Icon;
 use crate::commands::EmptyTrash;
 use crate::crumbs::{self, Crumb, Shown};
 use crate::path_bar::{MenuItem, MenuOwner};
+use crate::places::TRASH_LABEL;
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
 const FOLDED_LABEL: &str = "…";
-const TRASH_LABEL: &str = "Trash";
 const EMPTY_TRASH_LABEL: &str = "Empty Trash";
 
 impl MainWindow {
