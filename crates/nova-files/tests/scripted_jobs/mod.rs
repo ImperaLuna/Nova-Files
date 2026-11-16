@@ -123,8 +123,16 @@ fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContex
         "one line for both"
     );
     assert!(cx.debug_bounds("island-job-0").is_none(), "folded");
+    assert!(
+        cx.debug_bounds("island-jobs-bar").is_some(),
+        "one bar for all"
+    );
 
     press(cx, "island-jobs-open");
+    assert!(
+        cx.debug_bounds("island-jobs-bar").is_none(),
+        "a bar per row"
+    );
     assert!(cx.debug_bounds("island-job-0").is_some());
     assert!(cx.debug_bounds("island-job-1").is_some());
     press(cx, "island-stop-1");
@@ -152,6 +160,32 @@ fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContex
     core.send(finished(jobs[1], Outcome::Cancelled));
     cx.run_until_parked();
     assert_eq!(note(cx).as_deref(), Some("Copied 1 item"));
+}
+
+#[gpui::test]
+fn copies_all_cancelled_leave_no_note(cx: &mut TestAppContext) {
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down ctrl-c ctrl-v ctrl-v");
+    cx.run_until_parked();
+    let jobs = start_copies(&mut core);
+    let note = |cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| view.note().map(|note| note.label.to_string()))
+    };
+    // What Ctrl+C said.
+    let before = note(cx);
+    for job in jobs {
+        core.send(Event::JobFinished {
+            job,
+            outcome: Outcome::Cancelled,
+            changed: Vec::new(),
+            tally: Tally::default(),
+        });
+        cx.run_until_parked();
+        assert_eq!(note(cx), before, "{job:?}");
+    }
 }
 
 #[gpui::test]

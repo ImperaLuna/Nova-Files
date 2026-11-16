@@ -4,8 +4,9 @@
 //! upward with a row per job (what it works on, its seconds left, its bar
 //! and a stop button) over the same line, its arrow turned down to fold
 //! it again; past a few rows the list scrolls. Selectors:
-//! `island-jobs-open`, the list `island-jobs`, and per row `island-job-N`
-//! and `island-stop-N`, counting from the oldest.
+//! `island-jobs-open`, the folded bar `island-jobs-bar`, the list
+//! `island-jobs`, and per row `island-job-N` and `island-stop-N`, counting
+//! from the oldest.
 
 use std::f32::consts::FRAC_PI_2;
 
@@ -22,6 +23,11 @@ use crate::island::several::{fraction, left, line, title};
 use crate::theme::{Colors, size, text};
 use crate::view::row::icon;
 use crate::window::MainWindow;
+
+/// The arrow's turn while the list is folded: pointing up, to open it.
+const POINT_UP: f32 = -FRAC_PI_2;
+/// The arrow's turn while the list is open: pointing down, to fold it.
+const POINT_DOWN: f32 = FRAC_PI_2;
 
 /// The island for `jobs`, two or more, oldest first: folded, or `open`.
 pub(super) fn island(
@@ -48,6 +54,7 @@ pub(super) fn island(
     if !open {
         parts.push(
             bar(fraction(&running), size::PROGRESS_WIDTH, colors)
+                .debug_selector(|| "island-jobs-bar".to_owned())
                 .mr(size::PROGRESS_RIGHT)
                 .into_any_element(),
         );
@@ -80,7 +87,7 @@ pub(super) fn island(
 /// The arrow that opens the list, pointing up, or folds it, pointing
 /// down.
 fn arrow(open: bool, colors: &Colors, cx: &Context<MainWindow>) -> impl IntoElement {
-    let angle = if open { FRAC_PI_2 } else { -FRAC_PI_2 };
+    let angle = if open { POINT_DOWN } else { POINT_UP };
     square("island-jobs-open", colors)
         .child(
             svg()
