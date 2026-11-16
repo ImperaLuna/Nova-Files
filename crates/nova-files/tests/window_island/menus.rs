@@ -250,3 +250,35 @@ async fn inside_a_trashed_folder_only_select_all_is_offered(cx: &mut TestAppCont
         (["Select all"].map(str::to_owned).to_vec(), vec![])
     );
 }
+
+#[gpui::test]
+async fn a_folder_opens_in_a_new_tab_from_its_menu(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-new-tab");
+    let home = TempFolder::tree("menu-new-tab-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    right_click(cx, "name-0");
+    assert_eq!(
+        offered(&view, cx).0,
+        [
+            "Open",
+            "Open in new tab",
+            "Preview",
+            "Cut",
+            "Copy",
+            "Rename",
+            "Move to Trash"
+        ]
+    );
+    choose(&view, cx, "Open in new tab");
+    let projects = tree.path().join("Projects");
+    wait_for_folder(&view, cx, &projects).await;
+    assert_eq!(
+        view.read_with(cx, |view, _| view.tab_places()),
+        [
+            Some(Location::Folder(tree.path().to_owned())),
+            Some(Location::Folder(projects))
+        ]
+    );
+}

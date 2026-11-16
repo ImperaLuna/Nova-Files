@@ -1,7 +1,7 @@
 //! The right-click menus on the sheet, kept short as on the design page.
 //!
-//! On an entry: Open and Preview, Cut, Copy and Rename, then Move to
-//! Trash; with several selected only what applies to all of them (Cut,
+//! On an entry: Open, Open in new tab (a folder) and Preview, Cut, Copy
+//! and Rename, then Move to Trash; with several selected only what applies to all of them (Cut,
 //! Copy, Move to Trash). A right-click on an entry that isn't selected
 //! selects it alone first; one inside the selection keeps it. In the
 //! trash an entry offers Restore; inside a trashed folder, nothing.
@@ -16,6 +16,8 @@
 //! key (or Shift+F10) opens the same menu from the keyboard, under the
 //! row the keyboard is on, or at the list's top for empty space.
 
+use std::path::PathBuf;
+
 use gpui::{Context, Modifiers, Pixels, Point, point};
 use nova_files_api::{EntryId, HiddenFiles, ListingId};
 
@@ -25,7 +27,7 @@ use crate::commands::{
     COPY, CUT, EMPTY_TRASH, HIDDEN, NEW_FOLDER, OPEN, PASTE, PREVIEW, RENAME, RESTORE, SELECT_ALL,
     TRASH,
 };
-use crate::menu::{Look, MenuItem};
+use crate::menu::{Look, MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
 use crate::theme::size;
 
@@ -92,9 +94,17 @@ impl MainWindow {
         }
         let one = self.selected_count() == 1;
         let lone = |item: MenuItem| one.then_some(item);
+        let new_tab = self.lone_folder().map(|folder| {
+            MenuItem::new(
+                Icon::Plus,
+                super::tabs::OPEN_IN_NEW_TAB_LABEL,
+                MenuAction::OpenInNewTab(folder),
+            )
+        });
         vec![
             [
                 lone(MenuItem::run(Icon::Open, &OPEN)),
+                new_tab,
                 lone(MenuItem::run(Icon::Eye, &PREVIEW)),
             ]
             .into_iter()
@@ -110,6 +120,14 @@ impl MainWindow {
             .collect(),
             vec![MenuItem::run(Icon::Trash, &TRASH).with_look(Look::Danger)],
         ]
+    }
+
+    /// The folder selected, when it is the only entry selected.
+    fn lone_folder(&self) -> Option<PathBuf> {
+        match self.selection()?.1[..] {
+            [id] => self.folder_of_entry(id),
+            _ => None,
+        }
     }
 
     /// The menu for the sheet's empty space.

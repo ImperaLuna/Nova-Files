@@ -88,6 +88,8 @@ pub enum MenuAction {
     OpenDriveInNewTab(ShownDrive),
     /// Make a drive safe to unplug.
     Eject(DriveId),
+    /// Open a folder in a new tab.
+    OpenInNewTab(PathBuf),
     /// Send one of the window's actions, as its key does.
     Run(&'static ActionSpec),
 }
@@ -220,6 +222,7 @@ impl MainWindow {
             MenuAction::Unpin(path) => self.unpin(path),
             MenuAction::OpenDrive(drive) => self.open_drive(drive),
             MenuAction::OpenDriveInNewTab(drive) => self.open_drive_in_new_tab(drive, cx),
+            MenuAction::OpenInNewTab(folder) => self.open_in_new_tab(folder, cx),
             MenuAction::Eject(drive) => self.act_on_drive(DriveAction::Eject(drive)),
             MenuAction::Run(spec) => window.dispatch_action(spec.action(), cx),
         }
