@@ -3,10 +3,12 @@
 //! island says so with Undo, and a drop that would change nothing (a
 //! folder onto itself, files onto the folder they are in) does nothing.
 //! The trash, a tree folder, a crumb and a tab take drops too. On the way,
-//! the chip names the drop under the pointer.
+//! the chip names the drop under the pointer, and a tab or a sidebar row
+//! held over opens, the drag going on.
 //! The rules for every target are tested in the UI crate's `dropping`.
 
 use gpui::{MouseButton, Pixels, Point, point, px};
+use nova_files_ui::HOVER_OPEN_AFTER;
 
 use super::*;
 
@@ -146,6 +148,104 @@ async fn the_chip_names_the_drop_under_the_pointer(cx: &mut TestAppContext) {
     cx.simulate_mouse_up(file, MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
     assert_eq!(view.read_with(cx, |view, _| view.jobs_pending()), 0);
+}
+
+/// Presses on `from` and moves until it drags.
+fn start_drag(cx: &mut VisualTestContext, from: &'static str) {
+    let start = center(cx, from);
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(
+        start + point(px(20.0), px(0.0)),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+}
+
+/// Moves what is dragged over `to`, wiggling once as a hand does.
+fn drag_over(cx: &mut VisualTestContext, to: &'static str) {
+    let at = center(cx, to);
+    cx.simulate_mouse_move(at, Some(MouseButton::Left), Modifiers::none());
+    cx.simulate_mouse_move(
+        at + point(px(1.0), px(0.0)),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+}
+
+/// Holds what is dragged where it is for `wait`.
+fn hold(cx: &VisualTestContext, wait: Duration) {
+    cx.executor().advance_clock(wait);
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+async fn a_tab_held_over_shows_and_the_drag_goes_on_into_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-hover-tab");
+    let home = TempFolder::tree("drag-hover-tab-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let projects = tree.path().join("Projects");
+    view.update(cx, |view, cx| {
+        view.open_in_new_tab(projects.clone(), cx);
+        view.new_tab(&Location::Start, cx);
+        view.switch_tab(0, cx);
+    });
+    wait_for_folder(&view, cx, tree.path()).await;
+    let tab = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| view.current_tab())
+    };
+
+    start_drag(cx, "name-1");
+    // Passing over Start's tab, and away before the wait is up, does
+    // nothing.
+    drag_over(cx, "tab-2");
+    hold(cx, HOVER_OPEN_AFTER / 2);
+    drag_over(cx, "modified-0");
+    hold(cx, HOVER_OPEN_AFTER);
+    assert_eq!(tab(&view, cx), 0);
+
+    drag_over(cx, "tab-1");
+    hold(cx, HOVER_OPEN_AFTER);
+    wait_for_folder(&view, cx, &projects).await;
+    assert_eq!(tab(&view, cx), 1);
+    // Projects holds nova: notes.txt goes into it.
+    drag_over(cx, "entry-0");
+    let end = center(cx, "entry-0");
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    wait_for_note(&view, cx, "Moved notes.txt to nova").await;
+    assert!(projects.join("nova/notes.txt").exists());
+}
+
+#[gpui::test]
+async fn start_and_places_held_over_open_in_the_tab_on_screen(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-hover-place");
+    let home = TempFolder::tree("drag-hover-place-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    view.update(cx, |view, cx| view.new_tab(&Location::Start, cx));
+    view.update(cx, |view, cx| view.switch_tab(0, cx));
+    wait_for_folder(&view, cx, tree.path()).await;
+
+    // Start's tab takes no files, but shows.
+    start_drag(cx, "name-1");
+    drag_over(cx, "tab-1");
+    hold(cx, HOVER_OPEN_AFTER);
+    assert!(view.read_with(cx, |view, _| view.current_tab() == 1 && view.is_on_start()));
+
+    // The trash opens in it, and the drag still lives: let go there.
+    drag_over(cx, "place-trash");
+    hold(cx, HOVER_OPEN_AFTER);
+    assert!(view.read_with(cx, |view, _| view.current_tab() == 1 && view.trash_open()));
+    assert!(cx.debug_bounds("drag-chip").is_some());
+    let end = center(cx, "place-trash");
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
+
+    // Held over after the drag ended, nothing opens.
+    hold(cx, HOVER_OPEN_AFTER);
+    assert!(view.read_with(cx, |view, _| view.trash_open()));
 }
 
 #[gpui::test]

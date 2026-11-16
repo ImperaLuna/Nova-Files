@@ -201,7 +201,7 @@ impl MainWindow {
     }
 
     /// The folder of the trash's entries, where nothing drops.
-    fn trash_folder(&self) -> &Path {
+    pub(crate) fn trash_folder(&self) -> &Path {
         &self.trash.folder
     }
 

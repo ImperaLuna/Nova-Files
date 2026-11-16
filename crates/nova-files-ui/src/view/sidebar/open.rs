@@ -12,7 +12,8 @@
 //! tabs.
 //!
 //! Files dropped on a tab go into its folder, or to the trash on the
-//! trash's tab (see `drop`); a tab on Start takes none.
+//! trash's tab (see `drop`); a tab on Start takes none. Anything dragged
+//! and held over a tab shows it.
 //!
 //! Debug selectors: `tab-<n>` for each row, counted from 0, `tab-close-<n>`
 //! for its x, and `new-tab` for the +.
@@ -28,7 +29,7 @@ use crate::assets::Icon;
 use crate::location::Location;
 use crate::theme::{Colors, radius, size};
 use crate::view::row::icon;
-use crate::window::MainWindow;
+use crate::window::{HoverOpens, MainWindow};
 
 const LABEL: &str = "Open";
 
@@ -49,6 +50,7 @@ impl MainWindow {
                     let at = self.tab_drops_at(place.as_ref(), look.0.clone());
                     self.tab_row(index, look, narrow, cx)
                         .when_some(at, |row, at| self.drop_target(row, at, cx))
+                        .map(|row| Self::opens_on_hover(row, HoverOpens::Tab(index), cx))
                 });
         let new_tab = section_button("new-tab", Icon::Plus, &colors).on_click(
             cx.listener(|this, _: &ClickEvent, _, cx| this.new_tab(&Location::Start, cx)),

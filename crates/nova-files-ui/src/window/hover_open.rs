@@ -1,0 +1,92 @@
+//! Hover to switch: files held over a tab in the Open list for
+//! [`HOVER_OPEN_AFTER`] show that tab, and over a place, a drive or a tree
+//! folder open it in the tab on screen, so the drag can go on to a folder
+//! inside. The drag stays alive throughout. Leaving the row sooner opens
+//! nothing, and a row is opened once per stay over it. A tab on Start,
+//! which takes no files, still switches. It works for files from another
+//! app as well as from a list.
+//!
+//! Each move of the pointer while something is dragged is told first to
+//! the rows under it, innermost first, and the first one claims the move
+//! (see `view::drop`), then to the window's root, which sees which row,
+//! if any, the pointer is over now: a new one starts the wait, none drops
+//! it.
+
+use std::time::Duration;
+
+use gpui::{Context, Task};
+
+use super::MainWindow;
+use crate::location::Location;
+
+/// How long files are held over a row before it opens.
+pub const HOVER_OPEN_AFTER: Duration = Duration::from_millis(700);
+
+/// What a row opens when files are held over it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HoverOpens {
+    /// The tab at this place in the Open list.
+    Tab(usize),
+    /// A place, in the tab on screen.
+    Place(Location),
+}
+
+/// The row the pointer is over while something is dragged.
+#[derive(Default)]
+pub struct HoverOpen {
+    /// The row that claimed the move under way, innermost first.
+    claimed: Option<HoverOpens>,
+    /// The row the pointer stays over, and the wait before it opens; no
+    /// wait once it opened.
+    over: Option<(HoverOpens, Option<Task<()>>)>,
+}
+
+impl MainWindow {
+    /// The pointer moved over a row that opens `opens` while something is
+    /// dragged; a row nearer the pointer may have claimed the move first.
+    pub(crate) fn hovered_while_dragging(&mut self, opens: HoverOpens) {
+        self.hover_open.claimed.get_or_insert(opens);
+    }
+
+    /// The pointer moved over the window, `dragging` or not: after the
+    /// rows under it heard it (see [`Self::hovered_while_dragging`]).
+    pub(crate) fn pointer_moved(&mut self, dragging: bool, cx: &Context<Self>) {
+        let claimed = self.hover_open.claimed.take().filter(|_| dragging);
+        let same = self.hover_open.over.as_ref().map(|(opens, _)| opens) == claimed.as_ref();
+        if same {
+            return;
+        }
+        self.hover_open.over = claimed.map(|opens| {
+            let wait = cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(HOVER_OPEN_AFTER).await;
+                // A window closed opens nothing.
+                this.update(cx, Self::hover_open_due).ok();
+            });
+            (opens, Some(wait))
+        });
+    }
+
+    /// The wait over a row is over: it opens, if something is still
+    /// dragged.
+    fn hover_open_due(&mut self, cx: &mut Context<Self>) {
+        let Some((opens, wait)) = &mut self.hover_open.over else {
+            return;
+        };
+        wait.take();
+        if !cx.has_active_drag() {
+            self.hover_open.over = None;
+            return;
+        }
+        match opens.clone() {
+            HoverOpens::Tab(index) => self.switch_tab(index, cx),
+            HoverOpens::Place(Location::Start) if !self.is_on_start() => self.open_start(cx),
+            HoverOpens::Place(Location::Folder(folder))
+                if self.folder() != Some(folder.as_path()) =>
+            {
+                self.open(&folder);
+                cx.notify();
+            }
+            HoverOpens::Place(_) => {}
+        }
+    }
+}

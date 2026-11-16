@@ -6,7 +6,8 @@
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
 //! `clipboard`, dragging and dropping files in `dragging` (naming the
-//! drop under the pointer in `aiming`), renaming and
+//! drop under the pointer in `aiming`, opening rows held over in
+//! `hover_open`), renaming and
 //! New folder in `renaming`, the jobs they start in `jobs`, the tabs in
 //! `tabs`, showing hidden files in `hidden`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
@@ -53,6 +54,7 @@ mod dragging;
 mod drives;
 mod events;
 mod hidden;
+mod hover_open;
 mod jobs;
 mod navigate;
 mod pin;
@@ -67,6 +69,7 @@ mod tree;
 
 pub use aiming::Aim;
 pub use dragging::DraggedRow;
+pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
 pub use preview::{Previewed, Shown};
@@ -239,6 +242,9 @@ pub struct MainWindow {
     tabs: Tabs,
     /// What the window asked the core about drops (see `aiming`).
     drop_asks: aiming::Asks,
+    /// The row things are dragged over, which opens if they stay (see
+    /// `hover_open`).
+    hover_open: hover_open::HoverOpen,
     _events: Task<()>,
 }
 
@@ -352,6 +358,7 @@ impl MainWindow {
             trash,
             tabs: Tabs::default(),
             drop_asks: aiming::Asks::default(),
+            hover_open: hover_open::HoverOpen::default(),
             _events: events,
         };
         match location {
