@@ -35,6 +35,7 @@ impl MainWindow {
 
     /// Shows the Start page, leaving the history's trip as it is.
     pub(super) fn arrive_at_start(&mut self, cx: &mut Context<Self>) {
+        self.menu = None;
         self.asked = None;
         self.requested = None;
         self.forget_rows();

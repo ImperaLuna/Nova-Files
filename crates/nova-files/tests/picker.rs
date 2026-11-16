@@ -767,3 +767,26 @@ async fn a_free_hidden_name_saves(cx: &mut TestAppContext) {
         Some(picked(tree.path().join(".fresh")))
     );
 }
+
+#[gpui::test]
+async fn a_picker_has_no_right_click_menu(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), save("a.txt")).await;
+    let position = cx.debug_bounds("name-1").unwrap().center();
+    cx.simulate_event(MouseDownEvent {
+        position,
+        modifiers: Modifiers::none(),
+        button: MouseButton::Right,
+        click_count: 1,
+        first_mouse: false,
+    });
+    cx.simulate_event(MouseUpEvent {
+        position,
+        modifiers: Modifiers::none(),
+        button: MouseButton::Right,
+        click_count: 1,
+    });
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+}

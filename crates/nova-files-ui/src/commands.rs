@@ -62,6 +62,7 @@ mod actions {
             NextTab,
             PreviousTab,
             ToggleHidden,
+            OpenMenu,
         ]
     );
 }
@@ -162,6 +163,7 @@ pub const ACTIONS: &[ActionSpec] = &[
     NEXT_TAB,
     PREVIOUS_TAB,
     HIDDEN,
+    MENU,
 ];
 
 spec!(
@@ -342,6 +344,12 @@ spec!(
 spec!(
     /// Lists the hidden entries in every folder, or leaves them out again.
     HIDDEN, ToggleHidden, "view.hidden", "Show hidden files", ["ctrl-h"]
+);
+
+spec!(
+    /// Opens the right-click menu of the entries selected, or of the
+    /// empty space when none are.
+    MENU, OpenMenu, "menu.open", "Menu", ["menu", "shift-f10"]
 );
 
 /// Binds every action's default keys, and the keys of an open menu.

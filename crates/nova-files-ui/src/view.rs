@@ -50,9 +50,9 @@ use gpui::{
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
-    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenSelected, PreviewNext, PreviewPrevious,
-    SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp, SelectUp,
-    ToggleHidden, TogglePreview, ToggleSelected,
+    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext,
+    PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp,
+    SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
 };
 use crate::commands::{
     CloseTab, CopySelected, CutSelected, EmptyTrash, NewFolder, NewTab, NextTab, Paste,
@@ -97,6 +97,7 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .on_action(cx.listener(|this, _: &ToggleHidden, _, _| this.toggle_hidden()))
+            .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
             .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
             .map(|root| Self::file_keys(root, cx))

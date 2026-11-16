@@ -16,7 +16,8 @@
 //! count and the empty look are the search's (see `search`). The
 //! trash adds a Was in column, and says so when it is empty (see
 //! `window::trash`). A hidden entry's name and icon are dimmed (see
-//! `window::hidden`).
+//! `window::hidden`). A right-click on a row or on the empty space below
+//! opens its menu (see `window::context_menu`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -28,7 +29,7 @@ use gpui::{
     div, prelude::FluentBuilder as _, uniform_list,
 };
 
-use nova_files_api::{Entry, Listing, Order, SortKey};
+use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
 
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
@@ -84,6 +85,12 @@ impl MainWindow {
                 cx.listener(|this, event: &MouseDownEvent, _, _| {
                     let on_name = std::mem::take(&mut this.pressed_name);
                     this.band_pressed(event, on_name);
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                    this.space_right_clicked(event.position, cx);
                 }),
             )
             .child(self.entries(cx))
@@ -151,7 +158,7 @@ impl MainWindow {
                             detail(columns.size, &colors),
                             format!("modified-{index}"),
                         );
-                        entry_row(index, corners, &colors)
+                        entry_row(index, (listing_id, id), corners, &colors, cx)
                             .when(on, |row| row.bg(colors.selected).text_color(colors.text))
                             .child(line)
                             .when(this.cursor() == Some(index), |row| {
@@ -269,10 +276,24 @@ fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> i
 }
 
 /// Row `index`'s box, as wide as the list, highlighted under the pointer,
-/// with only the corners `corners` keeps rounded.
-fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
+/// with only the corners `corners` keeps rounded. A right-click on it
+/// opens its entry's menu (see `window::context_menu`).
+fn entry_row(
+    index: usize,
+    entry: (ListingId, EntryId),
+    corners: Corners,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> Stateful<Div> {
     div()
         .id(("entry", index))
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                cx.stop_propagation();
+                this.entry_right_clicked(entry, event.position, cx);
+            }),
+        )
         .debug_selector(move || format!("entry-{index}"))
         .w_full()
         .flex()
