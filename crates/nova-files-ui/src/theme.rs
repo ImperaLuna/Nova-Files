@@ -437,6 +437,17 @@ pub mod size {
     pub const MENU_MAX_WIDTH: Pixels = px(300.0);
     pub const MENU_MAX_HEIGHT: Pixels = px(340.0);
     pub const MENU_OFFSET: Pixels = px(6.0);
+    /// A right-click menu: the space between its items, before an item's
+    /// key, around the line between its groups (above and below, then
+    /// either end), the least room it leaves to the window's edges, and
+    /// its shadow's fall and blur.
+    pub const MENU_ITEM_GAP: Pixels = px(1.0);
+    pub const MENU_KEY_GAP: Pixels = px(18.0);
+    pub const MENU_LINE_Y: Pixels = px(4.0);
+    pub const MENU_LINE_X: Pixels = px(8.0);
+    pub const MENU_EDGE: Pixels = px(8.0);
+    pub const MENU_SHADOW_Y: Pixels = px(18.0);
+    pub const MENU_SHADOW_BLUR: Pixels = px(44.0);
     /// The widest the type filter's button gets; a longer name is cut.
     pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
     /// The tallest the type menu gets before it scrolls.

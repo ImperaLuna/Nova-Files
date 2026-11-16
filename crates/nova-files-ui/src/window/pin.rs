@@ -79,11 +79,11 @@ impl MainWindow {
         at: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        let items = vec![MenuItem {
-            icon: Icon::Close,
-            label: UNPIN_LABEL.into(),
-            action: MenuAction::Unpin(path),
-        }];
+        let items = vec![MenuItem::new(
+            Icon::Close,
+            UNPIN_LABEL,
+            MenuAction::Unpin(path),
+        )];
         self.open_menu(at, items, cx);
     }
 
