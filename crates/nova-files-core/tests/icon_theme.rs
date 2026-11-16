@@ -46,7 +46,11 @@ fn run_again_in_folders_of_its_own() {
         &format!("data/icons/{THEME}/index.theme"),
         "[Icon Theme]\nDirectories=m\n[m]\nSize=48\nType=Scalable\nMinSize=8\nMaxSize=256\n",
     );
-    write(&root, &format!("data/icons/{THEME}/m/image-png.svg"), "<svg/>");
+    write(
+        &root,
+        &format!("data/icons/{THEME}/m/image-png.svg"),
+        "<svg/>",
+    );
     write(&root, "files/a.png", "");
     run_again_in(&root, ROOT_VAR, TEST_NAME);
 }
@@ -63,9 +67,10 @@ fn icons_through_the_core(root: &Path) {
                 order: Order::default(),
             })
             .unwrap();
-        wait_for(&events, |event| {
-            matches!(event, Event::FolderListed(listing) if listing.id == ListingId(id))
-        });
+        wait_for(
+            &events,
+            |event| matches!(event, Event::FolderListed(listing) if listing.id == ListingId(id)),
+        );
         connection
             .send(Command::Rows {
                 id: ListingId(id),
