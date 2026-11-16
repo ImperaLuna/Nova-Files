@@ -15,8 +15,9 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 
-use super::{Row, row, section_button, section_head};
+use super::{Row, new_tab_on_middle_click, on_middle_click, row, section_button, section_head};
 use crate::assets::Icon;
+use crate::location::Location;
 use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::theme::{Colors, size};
 use crate::window::MainWindow;
@@ -44,6 +45,7 @@ impl MainWindow {
                         name: place.name,
                         number: None,
                         here: is_here,
+                        pressed: false,
                     },
                     narrow,
                     &colors,
@@ -51,6 +53,7 @@ impl MainWindow {
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
                     this.open(&target);
                 }))
+                .map(|row| new_tab_on_middle_click(row, place.path.clone(), main, cx))
                 .when_some(pinned, |row, path| {
                     row.on_mouse_down(
                         MouseButton::Right,
@@ -98,11 +101,17 @@ impl MainWindow {
                 name: START_LABEL.into(),
                 number: None,
                 here: self.is_on_start(),
+                pressed: false,
             },
             narrow,
             colors,
         )
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_start(cx)))
+        .map(|row| {
+            on_middle_click(row, true, cx, |this, cx| {
+                this.new_tab(&Location::Start, cx);
+            })
+        })
     }
 
     /// The trash's row, last in Places, with how many items it holds.
@@ -119,10 +128,12 @@ impl MainWindow {
                 name: TRASH_LABEL.into(),
                 number: count,
                 here: self.trash_open(),
+                pressed: false,
             },
             narrow,
             colors,
         )
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)))
+        .map(|row| on_middle_click(row, true, cx, Self::open_trash_in_new_tab))
     }
 }

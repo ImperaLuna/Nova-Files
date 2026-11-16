@@ -1,9 +1,10 @@
 //! Tabs on a real core: each tab keeps its own folder, history, selection,
 //! order, search and scroll position, and gets them back at once when
 //! shown again; the last tab can't be closed; Ctrl+T, Ctrl+W and
-//! Ctrl+Tab work them.
+//! Ctrl+Tab work them. The Open list draws them at the top of the sidebar,
+//! and middle-click opens folders in new tabs.
 
-use gpui::{Pixels, Point, point};
+use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, point};
 use nova_files_api::SortKey;
 
 use super::*;
@@ -196,6 +197,89 @@ async fn the_last_tab_stays_open(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-w");
     cx.run_until_parked();
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 1);
+}
+
+/// Middle-clicks the element drawn with `selector`.
+fn middle_click(cx: &mut VisualTestContext, selector: &'static str) {
+    cx.run_until_parked();
+    let position = cx.debug_bounds(selector).unwrap().center();
+    cx.simulate_event(MouseDownEvent {
+        position,
+        modifiers: Modifiers::none(),
+        button: MouseButton::Middle,
+        click_count: 1,
+        first_mouse: false,
+    });
+    cx.simulate_event(MouseUpEvent {
+        position,
+        modifiers: Modifiers::none(),
+        button: MouseButton::Middle,
+        click_count: 1,
+    });
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("tabs-open-list");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = tabs_on(cx, tree.path()).await;
+    cx.run_until_parked();
+    // One tab: the + is there, the x isn't.
+    assert!(cx.debug_bounds("tab-0").is_some());
+    assert!(cx.debug_bounds("tab-0-here").is_some());
+    assert!(cx.debug_bounds("tab-close-0").is_none());
+    let (open, home) = (
+        cx.debug_bounds("open").unwrap(),
+        cx.debug_bounds("place-0").unwrap(),
+    );
+    assert!(open.bottom() <= home.top(), "Open comes before Places");
+
+    click(cx, "new-tab");
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.tab_count(), 2);
+        assert!(view.is_on_start());
+    });
+    assert!(cx.debug_bounds("tab-1-here").is_some());
+    assert!(cx.debug_bounds("tab-0-here").is_none());
+    assert!(cx.debug_bounds("tab-close-1").is_some());
+
+    click(cx, "tab-0");
+    wait_for_folder(&view, cx, tree.path()).await;
+    assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 0);
+
+    // Middle-click on a folder opens it in a new tab.
+    middle_click(cx, "entry-0");
+    wait_for_folder(&view, cx, &projects).await;
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.tab_count(), 3);
+        assert_eq!(view.current_tab(), 2);
+    });
+    // On a file, nothing.
+    click(cx, "tab-0");
+    wait_for_folder(&view, cx, tree.path()).await;
+    middle_click(cx, "entry-1");
+    assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 3);
+
+    // Middle-click on a tab closes it, and so does its x.
+    middle_click(cx, "tab-1");
+    assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 2);
+    click(cx, "tab-close-0");
+    wait_for_folder(&view, cx, &projects).await;
+    view.read_with(cx, |view, _| assert_eq!(view.tab_count(), 1));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tab-close-0").is_none());
+
+    // Middle-click on a place opens it in a new tab.
+    middle_click(cx, "place-0");
+    wait_for_folder(&view, cx, tree.path()).await;
+    assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 2);
+    middle_click(cx, "place-start");
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.tab_count(), 3);
+        assert!(view.is_on_start());
+    });
 }
 
 #[gpui::test]

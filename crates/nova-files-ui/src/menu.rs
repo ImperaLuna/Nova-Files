@@ -40,6 +40,8 @@ pub enum MenuAction {
     Unpin(PathBuf),
     /// Open a drive, mounting it first when needed.
     OpenDrive(ShownDrive),
+    /// Open a drive in a new tab, mounting it first when needed.
+    OpenDriveInNewTab(ShownDrive),
     /// Make a drive safe to unplug.
     Eject(DriveId),
 }
@@ -75,6 +77,7 @@ impl MainWindow {
         match item.action {
             MenuAction::Unpin(path) => self.unpin(path),
             MenuAction::OpenDrive(drive) => self.open_drive(drive),
+            MenuAction::OpenDriveInNewTab(drive) => self.open_drive_in_new_tab(drive, cx),
             MenuAction::Eject(drive) => self.act_on_drive(DriveAction::Eject(drive)),
         }
         cx.notify();

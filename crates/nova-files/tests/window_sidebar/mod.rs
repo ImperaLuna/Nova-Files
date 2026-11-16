@@ -248,8 +248,16 @@ async fn the_system_drive_shows_its_free_space_and_opens(cx: &mut TestAppContext
             .iter()
             .map(|item| item.label.clone())
             .collect();
-        assert_eq!(labels, ["Open"]);
+        assert_eq!(labels, ["Open", "Open in new tab"]);
     });
     click(cx, "menu-0");
     wait_for_folder(&view, cx, Path::new("/")).await;
+
+    right_click(cx, "drive-0");
+    click(cx, "menu-1");
+    wait_for_folder(&view, cx, Path::new("/")).await;
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.tab_count(), 2);
+        assert_eq!(view.current_tab(), 1);
+    });
 }

@@ -31,16 +31,22 @@ use std::collections::HashMap;
 use std::mem;
 use std::path::PathBuf;
 
-use gpui::{Context, SharedString, UniformListScrollHandle, Window};
-use nova_files_api::{Listing, ListingId, Order};
+use gpui::{ClickEvent, Context, SharedString, UniformListScrollHandle, Window};
+use nova_files_api::{EntryId, Listing, ListingId, Order};
 
 use super::MainWindow;
 use super::rows::release;
 use super::search::Search;
+use crate::assets::Icon;
+use crate::drives::ShownDrive;
 use crate::history::History;
 use crate::jump::TypeJump;
 use crate::location::Location;
+use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::selection::Selection;
+
+/// What a menu item that opens a folder in a new tab says.
+pub const OPEN_IN_NEW_TAB_LABEL: &str = "Open in new tab";
 
 /// How many tabs a window keeps at least: the last can't be closed.
 const LAST: usize = 1;
@@ -148,6 +154,78 @@ impl MainWindow {
     /// Opens `folder` in a new tab.
     pub fn open_in_new_tab(&mut self, folder: PathBuf, cx: &mut Context<Self>) {
         self.new_tab(&Location::Folder(folder), cx);
+    }
+
+    /// A click other than the left one on entry `entry`: a middle-click
+    /// on a folder opens it in a new tab, in a main window.
+    pub(crate) fn entry_aux_clicked(
+        &mut self,
+        entry: (ListingId, EntryId),
+        event: &ClickEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if event.is_middle_click() && self.pick.is_none() {
+            self.open_entry_in_new_tab(entry, cx);
+        }
+    }
+
+    /// Opens the folder of entry `entry` of the list on screen in a new
+    /// tab, if it is a folder.
+    fn open_entry_in_new_tab(
+        &mut self,
+        (listing, entry): (ListingId, EntryId),
+        cx: &mut Context<Self>,
+    ) {
+        let shown = self.listing.as_ref().map(|shown| shown.id);
+        if shown == Some(listing)
+            && let Some(folder) = self.folder_of_entry(entry)
+        {
+            self.open_in_new_tab(folder, cx);
+        }
+    }
+
+    /// Opens the trash in a new tab.
+    pub fn open_trash_in_new_tab(&mut self, cx: &mut Context<Self>) {
+        self.open_in_new_tab(self.trash.folder.clone(), cx);
+    }
+
+    /// Opens `drive` in a new tab, mounting it first when needed.
+    pub(crate) fn open_drive_in_new_tab(&mut self, drive: ShownDrive, cx: &mut Context<Self>) {
+        if let Some(folder) = drive.folder.clone() {
+            self.open_in_new_tab(folder, cx);
+        } else {
+            // The new tab waits on Start until the drive is mounted.
+            self.new_tab(&Location::Start, cx);
+            self.open_drive(drive);
+        }
+    }
+
+    /// The name and icon of a tab at `place` in the Open list: as Places
+    /// shows it when it is one of `shown`, Places' rows, else the
+    /// folder's own.
+    pub(crate) fn tab_look(
+        &self,
+        place: Option<&Location>,
+        shown: &[places::Shown],
+    ) -> (SharedString, Icon) {
+        match place {
+            Some(Location::Start) => (START_LABEL.into(), Icon::Start),
+            Some(Location::Folder(folder)) if *folder == self.trash.folder => {
+                (TRASH_LABEL.into(), Icon::Trash)
+            }
+            Some(Location::Folder(folder)) => shown
+                .iter()
+                .find(|shown| shown.path == *folder)
+                .map_or_else(
+                    || {
+                        let icon =
+                            places::standard_icon_at(&self.places, folder).unwrap_or(Icon::Folder);
+                        (places::folder_name(folder), icon)
+                    },
+                    |shown| (shown.name.clone(), shown.icon),
+                ),
+            None => (SharedString::default(), Icon::Folder),
+        }
     }
 
     /// Shows tab `index`.

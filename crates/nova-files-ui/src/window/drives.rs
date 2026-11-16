@@ -171,8 +171,8 @@ impl MainWindow {
         }
     }
 
-    /// Opens `drive`'s menu at `at`: Open, and Eject for a drive that can
-    /// be unplugged.
+    /// Opens `drive`'s menu at `at`: Open, Open in new tab, and Eject for
+    /// a drive that can be unplugged.
     pub(crate) fn open_drive_menu(
         &mut self,
         drive: ShownDrive,
@@ -180,11 +180,18 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         let eject = drive.eject.clone();
-        let mut items = vec![MenuItem {
-            icon: Icon::Open,
-            label: OPEN_LABEL.into(),
-            action: MenuAction::OpenDrive(drive),
-        }];
+        let mut items = vec![
+            MenuItem {
+                icon: Icon::Open,
+                label: OPEN_LABEL.into(),
+                action: MenuAction::OpenDrive(drive.clone()),
+            },
+            MenuItem {
+                icon: Icon::Plus,
+                label: super::tabs::OPEN_IN_NEW_TAB_LABEL.into(),
+                action: MenuAction::OpenDriveInNewTab(drive),
+            },
+        ];
         items.extend(eject.map(|id: DriveId| MenuItem {
             icon: Icon::Eject,
             label: EJECT_LABEL.into(),

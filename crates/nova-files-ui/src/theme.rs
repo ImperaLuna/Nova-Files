@@ -308,6 +308,14 @@ pub mod size {
     pub const PLACE_HEIGHT: Pixels = px(34.0);
     /// The most the Drives section takes: its head and about four rows.
     pub const DRIVES_MAX_HEIGHT: Pixels = px(200.0);
+    /// The most of the sidebar's height the Open list takes, as a share;
+    /// more tabs scroll inside it.
+    pub const OPEN_MAX_SHARE: f32 = 0.42;
+    /// A tab's close button in the Open list, its icon, and the space on
+    /// its right.
+    pub const TAB_CLOSE: Pixels = px(22.0);
+    pub const TAB_CLOSE_ICON: Pixels = px(12.0);
+    pub const TAB_CLOSE_RIGHT: Pixels = px(6.0);
     pub const PLACE_PAD: Pixels = px(10.0);
     pub const PLACE_ICON: Pixels = px(19.0);
     pub const PLACE_GAP: Pixels = px(1.0);
