@@ -57,7 +57,7 @@ impl MainWindow {
     /// deleting them for good.
     pub fn trash_selected(&mut self, cx: &mut Context<Self>) {
         if self.in_trash() {
-            self.delete_selected_for_good(cx);
+            self.delete_selected(cx);
             return;
         }
         let paths = self.selected_paths();
@@ -69,20 +69,27 @@ impl MainWindow {
     /// Asks on the island before deleting the files selected for good;
     /// in the trash, the entries selected there.
     pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
-        if self.in_trash() {
-            self.delete_selected_for_good(cx);
+        let Some(operation) = self.deleting_selected() else {
             return;
+        };
+        let many = match &operation {
+            Operation::Delete { paths } => paths.len(),
+            Operation::DeleteFromTrash { items } => items.len(),
+            _ => return,
+        };
+        let what = island::count(many, ITEM, ITEMS);
+        self.ask(format!("Delete {what} for good?"), operation, cx);
+    }
+
+    /// Deleting the selection for good, as the job that would do it;
+    /// `None` with nothing selected or in a picker.
+    pub(super) fn deleting_selected(&self) -> Option<Operation> {
+        if self.in_trash() {
+            let items = self.selected_trashed();
+            return (!items.is_empty()).then_some(Operation::DeleteFromTrash { items });
         }
         let paths = self.selected_paths();
-        if paths.is_empty() || self.pick.is_some() {
-            return;
-        }
-        let what = island::count(paths.len(), ITEM, ITEMS);
-        self.ask(
-            format!("Delete {what} for good?"),
-            Operation::Delete { paths },
-            cx,
-        );
+        (!paths.is_empty() && self.pick.is_none()).then_some(Operation::Delete { paths })
     }
 
     /// Undoes what the note names, or else this window's newest job that

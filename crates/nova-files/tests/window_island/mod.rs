@@ -309,6 +309,17 @@ async fn shift_delete_asks_then_deletes_for_good(cx: &mut TestAppContext) {
     click(cx, "island-no");
     assert_eq!(confirm(cx), None);
     assert!(tree.path().join("notes.txt").exists());
+    // Asked about one selection, answered with another: nothing goes.
+    cx.simulate_keystrokes("shift-delete");
+    cx.run_until_parked();
+    click(cx, "name-0");
+    click(cx, "island-yes");
+    cx.run_until_parked();
+    assert_eq!(confirm(cx), None);
+    assert!(tree.path().join("notes.txt").exists());
+    assert!(tree.path().join("Projects").exists());
+
+    click(cx, "name-1");
 
     cx.simulate_keystrokes("shift-delete");
     cx.run_until_parked();
