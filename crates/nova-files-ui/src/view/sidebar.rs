@@ -28,6 +28,7 @@ use gpui::{
     prelude::FluentBuilder as _, transparent_black,
 };
 
+use super::drop::inside_edge;
 use super::row::icon;
 use crate::assets::Icon;
 use crate::theme::{Colors, radius, size, text};
@@ -164,11 +165,11 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         .map(|row| {
             if narrow {
                 row.gap(size::PLACE_NARROW_GAP)
-                    .px(size::PLACE_NARROW_PAD - size::DROP_EDGE)
+                    .px(inside_edge(size::PLACE_NARROW_PAD))
             } else {
                 row.w_full()
                     .gap(size::PLACE_PAD)
-                    .px(size::PLACE_PAD - size::DROP_EDGE)
+                    .px(inside_edge(size::PLACE_PAD))
             }
         })
         .when(here, |row| {

@@ -16,7 +16,7 @@ use gpui::{
     radians, svg,
 };
 
-use super::{icon, section_head};
+use super::{icon, inside_edge, section_head};
 use crate::assets::Icon;
 use crate::dropping::DropAt;
 use crate::places;
@@ -87,8 +87,8 @@ impl MainWindow {
             .h(size::TREE_ROW_HEIGHT)
             .gap(size::TREE_ROW_GAP)
             // A clear drop edge (see `drop`), inside the padding.
-            .pl(indent(depth) + size::TREE_PAD_LEFT - size::DROP_EDGE)
-            .pr(size::TREE_PAD_RIGHT - size::DROP_EDGE)
+            .pl(inside_edge(indent(depth) + size::TREE_PAD_LEFT))
+            .pr(inside_edge(size::TREE_PAD_RIGHT))
             .rounded(radius::ROW)
             .cursor_pointer()
             .whitespace_nowrap()

@@ -27,6 +27,7 @@ use gpui::{
 };
 
 use super::bar::capsule;
+use super::drop::inside_edge;
 use super::place_icon;
 use super::row::icon;
 use crate::assets::Icon;
@@ -222,7 +223,7 @@ fn crumb_box(selector: SharedString, colors: &Colors) -> Stateful<Div> {
         .h(size::ICON_BUTTON)
         // A clear drop edge (see `drop`), inside the padding, so every
         // crumb lines up whether it takes drops or not.
-        .px(size::CRUMB_PAD - size::DROP_EDGE)
+        .px(inside_edge(size::CRUMB_PAD))
         .border(size::DROP_EDGE)
         .border_color(transparent_black())
         .rounded(radius::ROW)

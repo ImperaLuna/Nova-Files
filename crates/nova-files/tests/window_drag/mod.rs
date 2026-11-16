@@ -130,10 +130,19 @@ async fn files_dropped_on_the_trash_go_to_it(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("drag-trash");
     let home = TempFolder::tree("drag-trash-home");
     let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    // An empty trash shows no count.
+    view.condition::<WindowEvent>(cx, |view, _| view.trash_count() == Some(0))
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("place-trash-number").is_none());
 
     // Shift picks nothing for the trash.
     drag(cx, "name-1", "place-trash", Modifiers::shift());
     wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
+    view.condition::<WindowEvent>(cx, |view, _| view.trash_count() == Some(1))
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("place-trash-number").is_some());
     assert!(!tree.path().join("notes.txt").exists());
     assert!(
         home.path()
