@@ -249,6 +249,23 @@ async fn start_and_places_held_over_open_in_the_tab_on_screen(cx: &mut TestAppCo
 }
 
 #[gpui::test]
+async fn a_row_left_for_outside_the_window_opens_nothing(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-hover-leave");
+    let home = TempFolder::tree("drag-hover-leave-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+
+    start_drag(cx, "name-1");
+    drag_over(cx, "place-trash");
+    // Out past the window's edge, the button still held.
+    let outside = point(px(-40.0), center(cx, "place-trash").y);
+    cx.simulate_mouse_move(outside, Some(MouseButton::Left), Modifiers::none());
+    hold(cx, HOVER_OPEN_AFTER);
+    assert!(view.read_with(cx, |view, _| !view.trash_open()));
+    cx.simulate_mouse_up(outside, MouseButton::Left, Modifiers::none());
+}
+
+#[gpui::test]
 async fn ctrl_copies_what_is_dragged(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("drag-copy");

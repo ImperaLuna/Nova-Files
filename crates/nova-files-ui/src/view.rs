@@ -100,8 +100,8 @@ impl MainWindow {
                 }
             })
             // After every row under the pointer (see `hover_open`).
-            .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, cx| {
-                this.pointer_moved(cx.has_active_drag(), cx);
+            .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, window, cx| {
+                this.pointer_moved(cx.has_active_drag(), window, cx);
             }))
             .when(main, |root| root.track_focus(&self.focus))
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))

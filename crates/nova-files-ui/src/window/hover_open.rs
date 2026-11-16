@@ -14,7 +14,7 @@
 
 use std::time::Duration;
 
-use gpui::{Context, Task};
+use gpui::{Bounds, Context, Point, Task, Window};
 
 use super::MainWindow;
 use crate::location::Location;
@@ -50,7 +50,12 @@ impl MainWindow {
 
     /// The pointer moved over the window, `dragging` or not: after the
     /// rows under it heard it (see [`Self::hovered_while_dragging`]).
-    pub(crate) fn pointer_moved(&mut self, dragging: bool, cx: &mut Context<Self>) {
+    pub(crate) fn pointer_moved(
+        &mut self,
+        dragging: bool,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
         // A tab being reordered opens nothing.
         let tab = self.tab_drag_heard(cx);
         let claimed = self.hover_open.claimed.take().filter(|_| dragging && !tab);
@@ -59,31 +64,37 @@ impl MainWindow {
             return;
         }
         self.hover_open.over = claimed.map(|opens| {
-            let wait = cx.spawn(async move |this, cx| {
+            let wait = cx.spawn_in(window, async move |this, cx| {
                 cx.background_executor().timer(HOVER_OPEN_AFTER).await;
                 // A window closed opens nothing.
-                this.update(cx, Self::hover_open_due).ok();
+                this.update_in(cx, Self::hover_open_due).ok();
             });
             (opens, Some(wait))
         });
     }
 
     /// The wait over a row is over: it opens, if something is still
-    /// dragged.
-    fn hover_open_due(&mut self, cx: &mut Context<Self>) {
+    /// dragged and the pointer is still in the window. A drag that held
+    /// the pointer as it left goes on being told where it is, outside, but
+    /// no row hears that.
+    fn hover_open_due(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some((opens, wait)) = &mut self.hover_open.over else {
             return;
         };
         wait.take();
-        if !cx.has_active_drag() {
+        let on_window = Bounds::new(Point::default(), window.viewport_size())
+            .contains(&window.mouse_position());
+        if !cx.has_active_drag() || !on_window {
             self.hover_open.over = None;
             return;
         }
         match opens.clone() {
             HoverOpens::Tab(index) => self.switch_tab(index, cx),
             HoverOpens::Place(Location::Start) if !self.is_on_start() => self.open_start(cx),
+            // A search started from the folder shows what it found, not
+            // the folder.
             HoverOpens::Place(Location::Folder(folder))
-                if self.folder() != Some(folder.as_path()) =>
+                if self.folder() != Some(folder.as_path()) || self.searching() =>
             {
                 self.open(&folder);
                 cx.notify();
