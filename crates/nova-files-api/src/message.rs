@@ -181,6 +181,15 @@ pub enum Command {
     /// [`Command::WatchJobs`]) and hears [`Event::JobFinished`] once it
     /// ends.
     StartJob { tag: JobTag, operation: Operation },
+    /// Copy or move `sources` into the folder `into`, as dragging them
+    /// there does: moved when every one is on `into`'s drive, copied
+    /// otherwise. The core picks; [`Event::JobStarted`] says which, and
+    /// the job then runs as a [`Command::StartJob`] of it would.
+    DropFiles {
+        tag: JobTag,
+        sources: Vec<PathBuf>,
+        into: PathBuf,
+    },
     /// Hold job `job` before its next change to the disk. Every client
     /// hears [`Event::JobPaused`].
     PauseJob(JobId),
@@ -330,9 +339,14 @@ pub enum Event {
         id: RecentId,
         folders: Vec<RecentFolder>,
     },
-    /// [`Command::StartJob`] `tag` runs as job `job`. Only the client that
-    /// asked hears it, and before anything else about the job.
-    JobStarted { tag: JobTag, job: JobId },
+    /// [`Command::StartJob`] or [`Command::DropFiles`] `tag` runs as job
+    /// `job`, doing `operation`. Only the client that asked hears it, and
+    /// before anything else about the job.
+    JobStarted {
+        tag: JobTag,
+        job: JobId,
+        operation: Operation,
+    },
     /// Job `job`, started before this client watched jobs, runs (or holds,
     /// when `paused`) doing `operation`, this far along. Answers
     /// [`Command::WatchJobs`].

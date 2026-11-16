@@ -12,19 +12,23 @@ fn a_paused_job_says_so_until_it_resumes(cx: &mut TestAppContext) {
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
     cx.simulate_keystrokes("down delete");
-    let tag = core
+    let (tag, operation) = core
         .commands()
         .into_iter()
         .find_map(|command| match command {
             Command::StartJob {
                 tag,
-                operation: Operation::Trash { .. },
-            } => Some(tag),
+                operation: operation @ Operation::Trash { .. },
+            } => Some((tag, operation)),
             _ => None,
         })
         .unwrap();
     let job = JobId(7);
-    core.send(Event::JobStarted { tag, job });
+    core.send(Event::JobStarted {
+        tag,
+        job,
+        operation,
+    });
     core.send(Event::JobPaused(job));
     cx.run_until_parked();
     let line = || view.read_with(cx, MainWindow::newest_job_line);

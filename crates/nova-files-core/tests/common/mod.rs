@@ -71,7 +71,7 @@ impl Client {
             .send(Command::StartJob { tag, operation })
             .unwrap();
         match self.next() {
-            Event::JobStarted { tag: got, job } if got == tag => job,
+            Event::JobStarted { tag: got, job, .. } if got == tag => job,
             other => panic!("expected the job's id first, got {other:?}"),
         }
     }

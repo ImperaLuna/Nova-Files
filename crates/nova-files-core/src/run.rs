@@ -53,7 +53,7 @@ pub struct Setup {
     /// Answers Open With requests, in order.
     pub open_with: OpenWithWorker,
     /// File operations, and the clients that hear about them.
-    pub jobs: Jobs,
+    pub jobs: Arc<Jobs>,
     /// Size scans, each for the client that asked.
     pub measurer: Measurer,
     /// The drives, and the clients that hear about them.
@@ -154,6 +154,7 @@ fn answer(
         | Command::DesktopLook(_)) => look::answer(id, client, command, setup),
         command @ (Command::WatchJobs
         | Command::StartJob { .. }
+        | Command::DropFiles { .. }
         | Command::PauseJob(_)
         | Command::ResumeJob(_)
         | Command::ForgetJob(_)
