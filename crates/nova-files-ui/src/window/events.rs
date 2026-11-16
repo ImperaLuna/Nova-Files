@@ -112,7 +112,7 @@ impl MainWindow {
             }
             Event::Properties { id, .. } => self.save_probed(id, false, cx),
             Event::PropertiesUnreadable { id, reason, .. } => {
-                self.save_probed(id, crate::pick::found_nothing(reason), cx);
+                self.save_probed(id, reason == Unreadable::Missing, cx);
             }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);

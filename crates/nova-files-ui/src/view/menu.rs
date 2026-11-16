@@ -9,9 +9,9 @@
 //! its lines `menu-line-<n>`, by the item they sit above.
 
 use gpui::{
-    AnyElement, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _, Window, anchored,
-    deferred, div, point, prelude::FluentBuilder as _, px,
+    Action, AnyElement, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement as _,
+    IntoElement, KeyBinding, ParentElement as _, Rgba, Stateful, StatefulInteractiveElement as _,
+    Styled as _, Window, anchored, deferred, div, point, prelude::FluentBuilder as _, px,
 };
 
 use super::row::icon;
@@ -48,7 +48,12 @@ impl MainWindow {
             let marked = *active == Some(index);
             rows.push(
                 menu_item(index, item, marked, &colors, cx)
-                    .children(item_keys(item, window).map(|keys| key_cell(keys, &colors)))
+                    .children(
+                        item_keys(item, |action| {
+                            window.highest_precedence_binding_for_action(action)
+                        })
+                        .map(|keys| key_cell(keys, &colors)),
+                    )
                     .into_any_element(),
             );
         }
@@ -108,14 +113,41 @@ fn menu_card(colors: &Colors) -> Stateful<Div> {
 }
 
 /// The keys that do what `item` does, when it sends one of the window's
-/// actions and a key is bound to it.
-fn item_keys(item: &MenuItem, window: &Window) -> Option<gpui::SharedString> {
+/// actions and a key is bound to it; `bound` gives the binding in force.
+fn item_keys(
+    item: &MenuItem,
+    bound: impl FnOnce(&dyn Action) -> Option<KeyBinding>,
+) -> Option<gpui::SharedString> {
     let MenuAction::Run(spec) = item.action else {
         return None;
     };
-    window
-        .highest_precedence_binding_for_action(&*spec.action())
-        .and_then(|binding| key_label(&binding))
+    bound(&*spec.action()).and_then(|binding| key_label(&binding))
+}
+
+/// How an item of `look` is drawn, `marked` or not.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ItemStyle {
+    /// The icon's color.
+    tint: Rgba,
+    /// The name's color.
+    name: Rgba,
+    strong: bool,
+}
+
+impl ItemStyle {
+    fn of(look: Look, marked: bool, colors: &Colors) -> Self {
+        let (tint, name) = match look {
+            Look::Plain if marked => (colors.text_dim, colors.text),
+            Look::Plain => (colors.text_dim, colors.text_soft),
+            Look::On => (colors.here, colors.text),
+            Look::Danger => (colors.danger, colors.danger),
+        };
+        Self {
+            tint,
+            name,
+            strong: look == Look::On,
+        }
+    }
 }
 
 /// The line above item `index`, between two groups.
@@ -138,11 +170,7 @@ fn menu_item(
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> Stateful<Div> {
-    let (tint, name) = match item.look {
-        Look::Plain => (colors.text_dim, colors.text_soft),
-        Look::On => (colors.here, colors.text),
-        Look::Danger => (colors.danger, colors.danger),
-    };
+    let style = ItemStyle::of(item.look, marked, colors);
     div()
         .id(("menu", index))
         .debug_selector(move || format!("menu-{index}"))
@@ -155,14 +183,9 @@ fn menu_item(
         .rounded(radius::ROW)
         .whitespace_nowrap()
         .cursor_pointer()
-        .text_color(name)
-        .when(item.look == Look::On, |row| {
-            row.font_weight(text::STRONG_WEIGHT)
-        })
-        .when(marked, |row| {
-            row.bg(colors.press)
-                .when(item.look == Look::Plain, |row| row.text_color(colors.text))
-        })
+        .text_color(style.name)
+        .when(style.strong, |row| row.font_weight(text::STRONG_WEIGHT))
+        .when(marked, |row| row.bg(colors.press))
         .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
             if *hovered {
                 this.mark_menu_item(index, cx);
@@ -171,7 +194,7 @@ fn menu_item(
         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
             this.choose(index, window, cx);
         }))
-        .child(icon(item.icon, size::MENU_ICON, tint))
+        .child(icon(item.icon, size::MENU_ICON, style.tint))
         .child(div().min_w_0().truncate().child(item.label.clone()))
 }
 
@@ -185,4 +208,40 @@ fn key_cell(keys: gpui::SharedString, colors: &Colors) -> Div {
         .font_weight(text::DETAIL_WEIGHT)
         .text_color(colors.text_dim)
         .child(keys)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+    use crate::assets::Icon;
+    use crate::commands::COPY;
+
+    #[test]
+    fn an_item_shows_the_keys_of_its_action() {
+        let copy = MenuItem::run(Icon::Copy, &COPY);
+        let bound = |_: &dyn Action| Some(COPY.binding(COPY.keys[0]));
+        assert_eq!(
+            item_keys(&copy, bound).map(String::from).as_deref(),
+            Some("Ctrl C")
+        );
+        assert_eq!(item_keys(&copy, |_| None), None);
+        let unpin = MenuItem::new(Icon::Trash, "Remove", MenuAction::Unpin(PathBuf::new()));
+        assert_eq!(item_keys(&unpin, bound), None);
+    }
+
+    #[test]
+    fn a_look_sets_the_colors_and_weight() {
+        let colors = Colors::default();
+        let style = |look, marked| ItemStyle::of(look, marked, &colors);
+        assert_eq!(style(Look::Plain, false).name, colors.text_soft);
+        assert_eq!(style(Look::Plain, true).name, colors.text);
+        assert!(!style(Look::Plain, true).strong);
+        assert_eq!(style(Look::On, false).tint, colors.here);
+        assert!(style(Look::On, false).strong);
+        let danger = style(Look::Danger, true);
+        assert_eq!((danger.name, danger.tint), (colors.danger, colors.danger));
+        assert!(!danger.strong);
+    }
 }
