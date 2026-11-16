@@ -5,9 +5,10 @@
 //! the core in `tree`, the drives in `drives`, the Start page in `start`,
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
-//! `clipboard`, renaming and New folder in `renaming`, the jobs they
-//! start in `jobs`, the tabs in `tabs`, showing hidden files in
-//! `hidden`, and the sheet's right-click menus in `context_menu`. Drawing
+//! `clipboard`, dragging and dropping files in `dragging`, renaming and
+//! New folder in `renaming`, the jobs they start in `jobs`, the tabs in
+//! `tabs`, showing hidden files in `hidden`, and the sheet's right-click
+//! menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -46,6 +47,7 @@
 mod acting;
 mod clipboard;
 mod context_menu;
+mod dragging;
 mod drives;
 mod events;
 mod hidden;
@@ -61,6 +63,7 @@ mod tabs;
 mod trash;
 mod tree;
 
+pub use dragging::DraggedRow;
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
 pub use preview::{Previewed, Shown};

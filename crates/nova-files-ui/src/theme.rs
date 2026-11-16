@@ -69,6 +69,9 @@ pub struct Colors {
     pub danger: Rgba,
     /// The soft orange glow at the top of the Start page.
     pub glow: Rgba,
+    /// Where dragged files would drop: its fill, and its edge.
+    pub drop: Rgba,
+    pub drop_edge: Rgba,
     /// The tag on a file icon, by the file's kind (see `kind`).
     pub tags: Tags,
 }
@@ -114,6 +117,8 @@ mod share {
     pub const GLOW: f32 = 0.10;
     /// A search's match, under the name's text.
     pub const MARK: f32 = 0.34;
+    /// `primary` laid over where dragged files would drop.
+    pub const DROP: f32 = 0.16;
     pub const SCRIM: f32 = 0.72;
 }
 
@@ -157,6 +162,8 @@ impl Colors {
             on_accept: color(palette.on_accent),
             danger: color(palette.error),
             glow: thin(palette.primary, share::GLOW),
+            drop: thin(palette.primary, share::DROP),
+            drop_edge: color(palette.primary),
             tags: Tags::new(palette, text_dim),
         }
     }
@@ -387,6 +394,13 @@ pub mod size {
     pub const RING: Pixels = px(1.5);
     /// Hairline width.
     pub const LINE: Pixels = px(1.0);
+    /// The orange edge around where dragged files would drop. Every drop
+    /// target keeps a clear edge this wide, so the color shifts nothing.
+    pub const DROP_EDGE: Pixels = RING;
+    /// The chip under the pointer while files are dragged: the space
+    /// inside it either side, and above and below its text.
+    pub const DRAG_CHIP_PAD: Pixels = px(12.0);
+    pub const DRAG_CHIP_PAD_Y: Pixels = px(6.0);
     /// A row in a menu.
     pub const MENU_ROW_HEIGHT: Pixels = px(32.0);
     pub const MENU_PAD: Pixels = px(5.0);

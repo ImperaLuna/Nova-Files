@@ -17,26 +17,32 @@
 //! trash adds a Was in column, and says so when it is empty (see
 //! `window::trash`). A hidden entry's name and icon are dimmed (see
 //! `window::hidden`). A right-click on a row or on the empty space below
-//! opens its menu (see `window::context_menu`).
+//! opens its menu (see `window::context_menu`). A name can be dragged; a
+//! folder row takes files dropped on it, and the rest of the list takes
+//! them into the folder on screen (see `drop` and `window::dragging`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
 //! by the width of its name.
 
+use std::path::Path;
+
 use gpui::{
     AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
     MouseDownEvent, ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _,
-    div, prelude::FluentBuilder as _, uniform_list,
+    div, prelude::FluentBuilder as _, transparent_black, uniform_list,
 };
 
-use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
+use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId, Order, SortKey};
 
+use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
 use crate::assets::Icon;
+use crate::dropping::DropAt;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
-use crate::window::MainWindow;
+use crate::window::{DraggedRow, MainWindow};
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
@@ -92,6 +98,11 @@ impl MainWindow {
                 cx.listener(|this, event: &MouseDownEvent, _, cx| {
                     this.space_right_clicked(event.position, cx);
                 }),
+            )
+            .when_some(
+                self.list_drop_folder()
+                    .map(|folder| DropAt::Folder(folder.to_path_buf())),
+                |area, at| self.takes_drops(area, at, cx),
             )
             .child(self.entries(cx))
             .children(self.empty_trash(&colors))
@@ -152,13 +163,21 @@ impl MainWindow {
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let line = cells(
-                            this.name_cell(entry, index, (name, marks), cx),
+                            this.name_cell(
+                                entry,
+                                (DraggedRow::new(listing_id, id), index),
+                                (name, marks),
+                                cx,
+                            ),
                             folder,
                             detail(columns.modified, &colors),
                             detail(columns.size, &colors),
                             format!("modified-{index}"),
                         );
+                        let folder_at = (entry.kind == EntryKind::Folder)
+                            .then(|| DropAt::Folder(listing.path_of(entry)));
                         entry_row(index, (listing_id, id), corners, &colors, cx)
+                            .when_some(folder_at, |row, at| this.drop_target(row, at, cx))
                             .when(on, |row| row.bg(colors.selected).text_color(colors.text))
                             .child(line)
                             .when(this.cursor() == Some(index), |row| {
@@ -185,15 +204,17 @@ impl MainWindow {
 
 impl MainWindow {
     /// The `index`th entry's icon and name, with the parts of the name in
-    /// `marks` marked; its rename field in place of the name while it is
-    /// renamed. A hidden entry is dimmed.
+    /// `marks` marked, draggable as `row` outside a picker and the trash;
+    /// its rename field in place of the name while it is renamed. A hidden
+    /// entry is dimmed.
     fn name_cell(
         &self,
         entry: &Entry,
-        index: usize,
+        (row, index): (DraggedRow, usize),
         (name, marks): (String, Vec<std::ops::Range<usize>>),
         cx: &Context<Self>,
     ) -> Div {
+        let draggable = self.pick.is_none() && !self.in_trash();
         let colors = &Colors::of(cx);
         let hidden = entry.is_hidden();
         div()
@@ -213,7 +234,10 @@ impl MainWindow {
                     )),
             )
             .child(self.rename_field(index).map_or_else(
-                || entry_name(name.into(), marks, index, cx).into_any_element(),
+                || {
+                    entry_name(name.into(), marks, index, draggable.then_some(row), cx)
+                        .into_any_element()
+                },
                 |field| rename_box(field.clone(), colors).into_any_element(),
             ))
     }
@@ -277,7 +301,9 @@ fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> i
 
 /// Row `index`'s box, as wide as the list, highlighted under the pointer,
 /// with only the corners `corners` keeps rounded. A right-click on it
-/// opens its entry's menu (see `window::context_menu`).
+/// opens its entry's menu (see `window::context_menu`). Every row keeps
+/// the clear edge a folder row lights up as a drop target (see `drop`),
+/// so all rows line up.
 fn entry_row(
     index: usize,
     entry: (ListingId, EntryId),
@@ -300,7 +326,9 @@ fn entry_row(
         .flex_none()
         .items_center()
         .h(size::ROW_HEIGHT)
-        .px(size::ROW_PAD)
+        .px(inside_edge(size::ROW_PAD))
+        .border(size::DROP_EDGE)
+        .border_color(transparent_black())
         .when(corners.top, |row| {
             row.rounded_tl(radius::ROW).rounded_tr(radius::ROW)
         })
@@ -311,6 +339,15 @@ fn entry_row(
 }
 
 impl MainWindow {
+    /// Where files dropped on the list but not on a folder go: the
+    /// folder on screen; nowhere on a search's files or in the trash.
+    pub fn list_drop_folder(&self) -> Option<&Path> {
+        if self.searching() || self.trash_open() {
+            return None;
+        }
+        Some(&self.listing.as_ref()?.path)
+    }
+
     /// The cell between Name and Modified: where the `index`th entry was
     /// in the trash, or a search's file's folder; none in a folder.
     fn folder_cell(

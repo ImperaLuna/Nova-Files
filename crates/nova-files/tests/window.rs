@@ -9,7 +9,8 @@
 //! `window_keys`, selecting in `window_select`, type to jump in
 //! `window_jump`, the path bar in `window_path`, the sidebar in
 //! `window_sidebar`, the quick look in `window_preview`, the island
-//! and its file actions in `window_island`, and tabs in `window_tabs`.
+//! and its file actions in `window_island`, tabs in `window_tabs`, and
+//! dragging files in `window_drag`.
 
 #![expect(
     clippy::unwrap_used,
@@ -19,6 +20,7 @@
 
 mod common;
 mod window_band;
+mod window_drag;
 mod window_island;
 mod window_jump;
 mod window_keys;

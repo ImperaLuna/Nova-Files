@@ -9,15 +9,16 @@ use std::sync::Arc;
 
 use gpui::{
     AnyElement, Context, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Pixels, RenderImage, Rgba, SharedString, Styled as _,
-    StyledText, div, img, svg,
+    MouseDownEvent, ParentElement as _, Pixels, RenderImage, Rgba, SharedString,
+    StatefulInteractiveElement as _, Styled as _, StyledText, div, img,
+    prelude::FluentBuilder as _, svg,
 };
 use nova_files_api::EntryKind;
 
 use crate::assets::Icon;
 use crate::kind::FileKind;
 use crate::theme::{Colors, radius, size, text};
-use crate::window::MainWindow;
+use crate::window::{DraggedRow, MainWindow};
 
 /// Which corners of a row stay rounded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,16 +81,20 @@ pub fn detail(text_content: String, colors: &Colors) -> impl IntoElement {
 
 /// An entry's name, the parts in `marks` (byte ranges) marked as a
 /// search's match. A press on it is left for dragging files, so it marks
-/// itself for `band`.
+/// itself for `band`; when it carries `row`, moving the press drags the
+/// selection (see `window::dragging`).
 pub fn entry_name(
     name: SharedString,
     marks: Vec<Range<usize>>,
     index: usize,
+    row: Option<DraggedRow>,
     cx: &Context<MainWindow>,
 ) -> impl IntoElement {
     let mark = mark_style(&Colors::of(cx));
     let text = StyledText::new(name).with_highlights(marks.into_iter().map(|range| (range, mark)));
+    let window = cx.entity();
     div()
+        .id(("name", index))
         .debug_selector(move || format!("name-{index}"))
         .min_w_0()
         .truncate()
@@ -97,6 +102,11 @@ pub fn entry_name(
             MouseButton::Left,
             cx.listener(|this, _: &MouseDownEvent, _, _| this.pressed_name = true),
         )
+        .when_some(row, |name, row| {
+            name.on_drag(row, move |row, _, _, cx| {
+                window.update(cx, |this, cx| this.drag_started(row, cx))
+            })
+        })
         .child(text)
 }
 
