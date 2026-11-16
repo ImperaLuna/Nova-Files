@@ -86,6 +86,42 @@ fn a_version_1_portal_is_read_too() {
     assert_eq!(next_look(&core), dark);
 }
 
+/// A portal with both methods: `ReadOne` holds the scheme but no accent,
+/// and `Read` would give an accent. A key `ReadOne` lacks stays unset.
+struct BothMethods;
+
+#[zbus::interface(name = "org.freedesktop.portal.Settings")]
+impl BothMethods {
+    #[expect(clippy::unused_self, reason = "the interface needs a receiver")]
+    fn read_one(&self, namespace: &str, key: &str) -> fdo::Result<OwnedValue> {
+        match (namespace, key) {
+            (APPEARANCE_NAMESPACE, COLOR_SCHEME) => {
+                Ok(Value::U32(PREFERS_LIGHT).try_to_owned().unwrap())
+            }
+            _ => Err(fdo::Error::Failed("not found".to_owned())),
+        }
+    }
+
+    #[expect(clippy::unused_self, reason = "the interface needs a receiver")]
+    fn read(&self, _namespace: &str, _key: &str) -> fdo::Result<OwnedValue> {
+        let wrapped = Value::Value(Box::new(Value::Structure(Structure::from(ACCENT))));
+        Ok(wrapped.try_to_owned().unwrap())
+    }
+}
+
+#[test]
+fn a_key_the_new_method_lacks_is_not_asked_of_the_old_one() {
+    let bus = PrivateBus::start();
+    let _portal = serve_portal(&bus, BothMethods);
+    let (connector, core) = nova_files_api::channel();
+    let _service = follow(&bus, connector);
+    let light = DesktopLook {
+        mode: Some(Mode::Light),
+        accent: None,
+    };
+    assert_eq!(next_look(&core), light);
+}
+
 #[test]
 fn a_portal_that_starts_later_or_again_is_read_then() {
     let bus = PrivateBus::start();
