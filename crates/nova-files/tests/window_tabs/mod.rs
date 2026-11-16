@@ -180,6 +180,16 @@ async fn the_last_tab_stays_open(cx: &mut TestAppContext) {
         view.new_tab(&Location::Start, cx);
     });
     cx.run_until_parked();
+    // With three tabs, back goes one step, not round to the first.
+    cx.simulate_keystrokes("ctrl-shift-tab");
+    wait_for_folder(&view, cx, &projects).await;
+    assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 1);
+    cx.simulate_keystrokes("ctrl-tab");
+    cx.run_until_parked();
+    assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 2);
+    // A tab past the end is no tab.
+    view.update(cx, |view, cx| view.switch_tab(3, cx));
+    assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 2);
     // Closing a tab in the background leaves the one on screen.
     view.update(cx, |view, cx| view.close_tab(0, cx));
     view.read_with(cx, |view, _| {
