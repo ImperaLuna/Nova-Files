@@ -24,7 +24,6 @@ pub mod name;
 mod tests;
 
 use std::collections::HashMap;
-use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::PathBuf;
@@ -108,11 +107,6 @@ impl IconThemes {
         self.bases
             .iter()
             .any(|base| base.join(name).join(INDEX_FILE).is_file())
-    }
-
-    /// The folders themes live in, in the spec's order.
-    pub fn bases_from_env() -> Vec<PathBuf> {
-        bases(|name| env::var_os(name))
     }
 
     /// The first icon file of `names`, tried in order in each theme of the
@@ -246,8 +240,9 @@ fn read_index(name: &str, bases: &[PathBuf]) -> Option<Index> {
         .map(|text| index::parse(&text))
 }
 
-/// `~/.icons`, then `icons` in each data folder.
-fn bases(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
+/// The folders themes live in, in the spec's order: `~/.icons`, then
+/// `icons` in each data folder, from the environment `var` reads.
+pub fn bases(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let home = var(HOME_VAR)
         .filter(|home| !home.is_empty())
         .map(|home| PathBuf::from(home).join(HOME_ICONS));
