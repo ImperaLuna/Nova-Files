@@ -367,7 +367,10 @@ async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut Te
     assert!(cx.debug_bounds("tab-landing").is_none());
     cx.simulate_mouse_move(below_middle, Some(MouseButton::Left), Modifiers::none());
     cx.run_until_parked();
-    assert!(cx.debug_bounds("tab-landing").is_some());
+    // Along the bottom of Projects' row, and no other.
+    let line = cx.debug_bounds("tab-landing").unwrap();
+    assert!(projects_tab.contains(&line.center()));
+    assert!(line.center().y > projects_tab.center().y);
     // Held over another tab, a tab being moved shows nothing.
     cx.executor().advance_clock(HOVER_OPEN_AFTER);
     cx.run_until_parked();
@@ -422,6 +425,12 @@ async fn reorder_tabs_by_halves(cx: &mut TestAppContext, test: &str, width: Pixe
         view.read_with(cx, |view, _| view.tab_names())
     };
     let [a, b, c] = <[_; 3]>::try_from(names(&view, cx)).unwrap();
+    // No such tab, or no such place: nothing moves.
+    view.update(cx, |view, cx| {
+        view.move_tab(3, 0, cx);
+        view.move_tab(0, 4, cx);
+    });
+    assert_eq!(names(&view, cx), [a.clone(), b.clone(), c.clone()]);
 
     // Past the middle of the last row, along the list's run.
     let last = cx.debug_bounds("tab-2").unwrap();

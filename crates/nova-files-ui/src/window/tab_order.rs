@@ -162,12 +162,12 @@ const fn slot(at: usize, side: Side) -> usize {
 /// Where tab `from` ends up dropped at `slot`; none when that is where it
 /// is.
 const fn landing(from: usize, slot: usize) -> Option<usize> {
-    if slot == from || slot == from + 1 {
-        None
-    } else if slot > from {
+    if slot > from + 1 {
         Some(slot - 1)
-    } else {
+    } else if slot < from {
         Some(slot)
+    } else {
+        None
     }
 }
 
