@@ -55,12 +55,12 @@ fn the_link_fallback_moves_a_file_and_never_replaces() {
     let from = folder.file("a", "new");
     let taken = folder.file("b", "old");
 
-    let error = link_or_check(&from, &taken).unwrap_err();
+    let error = link_or_check(At::path(&from), &taken).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
     assert_eq!(fs::read_to_string(&taken).unwrap(), "old");
 
     let free = folder.path().join("c");
-    link_or_check(&from, &free).unwrap();
+    link_or_check(At::path(&from), &free).unwrap();
     assert!(!from.exists());
     assert_eq!(fs::read_to_string(&free).unwrap(), "new");
 }
@@ -72,12 +72,12 @@ fn a_folder_falls_back_to_check_then_rename() {
     fs::create_dir(&from).unwrap();
     let taken = folder.file("b", "old");
 
-    let error = link_or_check(&from, &taken).unwrap_err();
+    let error = link_or_check(At::path(&from), &taken).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
     assert!(from.is_dir());
 
     let free = folder.path().join("moved");
-    link_or_check(&from, &free).unwrap();
+    link_or_check(At::path(&from), &free).unwrap();
     assert!(!from.exists());
     assert!(free.is_dir());
 }
@@ -99,7 +99,7 @@ fn a_link_whose_source_cant_be_removed_is_taken_back() {
     }
     let to = folder.path().join("b");
 
-    let result = link_or_check(&inside, &to);
+    let result = link_or_check(At::path(&inside), &to);
     set_writable(&locked, true);
 
     assert_eq!(result.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
@@ -114,10 +114,10 @@ fn a_change_of_case_alone_is_no_clash() {
     let from = folder.file("photo", "kept");
     let to = folder.path().join("Photo");
     fs::hard_link(&from, &to).unwrap();
-    let taken = |_: &Path, _: &Path| Err(Errno::EXIST);
+    let taken = |_: At<'_>, _: &Path| Err(Errno::EXIST);
 
-    rename_or_fall_back(&from, &to, taken).unwrap();
-    check_then_rename(&from, &to).unwrap();
+    rename_or_fall_back(At::path(&from), &to, taken).unwrap();
+    check_then_rename(At::path(&from), &to).unwrap();
     assert_eq!(fs::read_to_string(&to).unwrap(), "kept");
 }
 
@@ -132,24 +132,27 @@ fn only_the_same_entry_under_another_case_counts_as_a_case_change() {
     let odd_lower = folder.path().join(OsStr::from_bytes(b"caf\xe9x"));
     fs::write(&odd, "").unwrap();
     fs::hard_link(&odd, &odd_lower).unwrap();
-    let taken = |_: &Path, _: &Path| Err(Errno::EXIST);
+    let taken = |_: At<'_>, _: &Path| Err(Errno::EXIST);
 
-    assert!(!is_case_change(&from, &other), "another file");
-    assert!(!is_case_change(&from, &linked), "another name");
+    assert!(!is_case_change(At::path(&from), &other), "another file");
+    assert!(!is_case_change(At::path(&from), &linked), "another name");
     assert!(
-        !is_case_change(&from, &folder.path().join("PHOTO")),
+        !is_case_change(At::path(&from), &folder.path().join("PHOTO")),
         "nothing there"
     );
-    assert!(!is_case_change(Path::new("/"), &from));
-    assert!(is_case_change(&odd, &odd_lower), "bytes that aren't UTF-8");
+    assert!(!is_case_change(At::path(Path::new("/")), &from));
+    assert!(
+        is_case_change(At::path(&odd), &odd_lower),
+        "bytes that aren't UTF-8"
+    );
     let accented = folder.file("Été", "");
     let accented_lower = folder.path().join("été");
     fs::hard_link(&accented, &accented_lower).unwrap();
     assert!(
-        is_case_change(&accented, &accented_lower),
+        is_case_change(At::path(&accented), &accented_lower),
         "letters beyond ASCII"
     );
-    let error = rename_or_fall_back(&from, &other, taken).unwrap_err();
+    let error = rename_or_fall_back(At::path(&from), &other, taken).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
     assert_eq!(fs::read_to_string(&other).unwrap(), "old");
 }
@@ -161,13 +164,13 @@ fn a_refused_flag_falls_back_and_any_other_error_stands() {
     let free = folder.path().join("b");
 
     // Told the name is taken, though it is free: nothing is tried after.
-    let error = rename_or_fall_back(&from, &free, |_, _| Err(Errno::EXIST)).unwrap_err();
+    let error = rename_or_fall_back(At::path(&from), &free, |_, _| Err(Errno::EXIST)).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
     assert!(from.exists());
     assert!(!free.exists());
 
     // Told the flag is refused: the fallback renames.
-    rename_or_fall_back(&from, &free, |_, _| Err(Errno::INVAL)).unwrap();
+    rename_or_fall_back(At::path(&from), &free, |_, _| Err(Errno::INVAL)).unwrap();
     assert!(!from.exists());
     assert_eq!(fs::read_to_string(&free).unwrap(), "new");
 }
@@ -188,7 +191,7 @@ fn a_file_saved_anew_after_the_link_is_never_removed() {
     let saved = folder.file(".a.tmp", "new");
     fs::rename(&saved, &from).unwrap();
 
-    let error = unlink_or_take_back(&from, &to).unwrap_err();
+    let error = unlink_or_take_back(At::path(&from), &to).unwrap_err();
 
     assert_eq!(error.raw_os_error(), Some(Errno::AGAIN.raw_os_error()));
     assert_eq!(fs::read_to_string(&from).unwrap(), "new");
@@ -204,17 +207,17 @@ fn the_check_fallback_moves_each_kind_and_never_replaces() {
     let taken = folder.file("taken", "old");
 
     for from in [&file, &link] {
-        let error = check_then_rename(from, &taken).unwrap_err();
+        let error = check_then_rename(At::path(from), &taken).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
     }
     assert_eq!(fs::read_to_string(&taken).unwrap(), "old");
 
-    check_then_rename(&link, &folder.path().join("l2")).unwrap();
+    check_then_rename(At::path(&link), &folder.path().join("l2")).unwrap();
     assert_eq!(
         fs::read_link(folder.path().join("l2")).unwrap(),
         Path::new("f")
     );
-    check_then_rename(&file, &folder.path().join("f2")).unwrap();
+    check_then_rename(At::path(&file), &folder.path().join("f2")).unwrap();
     assert_eq!(
         fs::read_to_string(folder.path().join("f2")).unwrap(),
         "file"
@@ -231,11 +234,11 @@ fn a_failed_rename_gives_the_name_back() {
     // taken.
     let to = from.join("inside/dir");
 
-    assert!(check_then_rename(&from, &to).is_err());
+    assert!(check_then_rename(At::path(&from), &to).is_err());
     assert!(!to.exists());
     let gone = folder.path().join("gone");
     assert_eq!(
-        check_then_rename(&gone, &folder.path().join("x"))
+        check_then_rename(At::path(&gone), &folder.path().join("x"))
             .unwrap_err()
             .kind(),
         io::ErrorKind::NotFound

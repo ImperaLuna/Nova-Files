@@ -27,6 +27,7 @@ mod copy_file;
 mod delete;
 mod dropped;
 mod failure;
+mod folders;
 mod job;
 mod journal;
 mod keep_both;

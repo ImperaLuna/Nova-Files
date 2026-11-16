@@ -17,13 +17,14 @@ use std::io;
 use std::os::unix::fs::{FileExt as _, MetadataExt as _, OpenOptionsExt as _};
 use std::path::Path;
 
-use rustix::fs::{Mode, OFlags, SeekFrom, copy_file_range, ioctl_ficlone, seek};
+use rustix::fs::{Mode, OFlags, SeekFrom, copy_file_range, ioctl_ficlone, openat, seek};
 use rustix::io::Errno;
 
 use nova_files_api::Failure;
 
 use super::attrs::{copy_mode_and_times, copy_xattrs};
 use super::control::Control;
+use super::folders::At;
 use super::stop::Stop;
 
 /// A part file is the user's alone until it is whole.
@@ -66,6 +67,9 @@ impl Ends<'_> {
 
 /// The paths of one file's copy.
 pub struct FileCopy<'a> {
+    /// The source, reached through its folder.
+    pub source: At<'a>,
+    /// The source's path, which a failure is named by.
     pub from: &'a Path,
     pub to: &'a Path,
     /// The hidden name the copy is written under until whole.
@@ -85,9 +89,14 @@ pub fn copy_file(
     copied: &mut dyn FnMut(u64),
     place: impl FnOnce(&Path, &Path) -> io::Result<()>,
 ) -> Result<(), Stop> {
-    let FileCopy { from, to, part } = *paths;
+    let FileCopy {
+        source,
+        from,
+        to,
+        part,
+    } = *paths;
     control.checkpoint()?;
-    let source = open_source(from).map_err(|error| Stop::at(from, &error))?;
+    let source = open_source(source).map_err(|error| Stop::at(from, &error))?;
     // Planned as a file, but anything may stand there by now.
     if !source.metadata().is_ok_and(|metadata| metadata.is_file()) {
         return Err(Stop::because(from, Failure::Unsupported));
@@ -116,12 +125,17 @@ pub fn copy_file(
 
 /// Opens `from` for reading without following a link it may have become,
 /// and without waiting for a writer should it have become a pipe.
-fn open_source(from: &Path) -> io::Result<File> {
+fn open_source(from: At<'_>) -> io::Result<File> {
     let flags = OFlags::RDONLY
         .union(OFlags::NOFOLLOW)
         .union(OFlags::NONBLOCK)
         .union(OFlags::CLOEXEC);
-    Ok(File::from(rustix::fs::open(from, flags, Mode::empty())?))
+    Ok(File::from(openat(
+        from.folder,
+        from.name,
+        flags,
+        Mode::empty(),
+    )?))
 }
 
 /// Fills `target` from `source`, gives it the source's attributes, mode

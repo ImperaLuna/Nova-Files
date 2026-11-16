@@ -42,6 +42,7 @@ fn copy(from: &Path, to: &Path, cancelled: bool) -> (Result<(), Stop>, u64) {
         }
         let mut copied = 0;
         let paths = FileCopy {
+            source: At::path(&from),
             from: &from,
             to: &to,
             part: &part,
@@ -169,6 +170,7 @@ fn a_missing_source_or_folder_fails_at_its_end() {
     assert_eq!(
         copy_file(
             &FileCopy {
+                source: At::path(&from),
                 from: &from,
                 to: &nowhere,
                 part: &part,
@@ -260,6 +262,7 @@ fn a_file_written_while_copied_isnt_kept() {
 
     // The first bytes copied are the moment another program writes.
     let paths = FileCopy {
+        source: At::path(&from),
         from: &from,
         to: &to,
         part: &part,
@@ -434,6 +437,7 @@ fn changed_while_copied(test: &str, change: impl Fn(&Path)) {
     let mut written = false;
 
     let paths = FileCopy {
+        source: At::path(&from),
         from: &from,
         to: &to,
         part: &part,
@@ -509,6 +513,7 @@ fn a_file_that_says_its_empty_is_read_to_its_end() {
     let mut copied = 0;
 
     let paths = FileCopy {
+        source: At::path(from),
         from,
         to: &to,
         part: &part,
@@ -545,6 +550,7 @@ fn a_pipe_where_a_file_was_planned_is_refused_without_waiting() {
     let result = within(move || {
         let part = paths.1.with_file_name(".part");
         let copy = FileCopy {
+            source: At::path(&paths.0),
             from: &paths.0,
             to: &paths.1,
             part: &part,

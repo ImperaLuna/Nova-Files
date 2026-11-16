@@ -429,3 +429,58 @@ fn a_source_inside_another_gets_its_own_answers() {
     assert!(!into.join("photos/child").exists());
     assert_eq!(text(into.join("child/c")), "c");
 }
+
+#[test]
+fn a_folder_swapped_for_a_link_while_the_copy_waits_is_not_followed() {
+    let bench = Bench::new("conflict-swap");
+    let (taken, into) = file_over_file(&bench);
+    let tree = bench.at("tree");
+    fs::create_dir_all(tree.join("sub")).unwrap();
+    fs::write(tree.join("sub/f"), "planned").unwrap();
+    let outside = bench.at("outside");
+    fs::create_dir(&outside).unwrap();
+    fs::write(outside.join("f"), "outside").unwrap();
+    let client = bench.client();
+
+    let job = client.start(copy(vec![taken, tree.clone()], &into));
+    let conflict = held(&client, job);
+    // While the job waits, another program swaps `sub` for a link.
+    fs::remove_dir_all(tree.join("sub")).unwrap();
+    symlink(&outside, tree.join("sub")).unwrap();
+    answer(&client, job, &conflict, Answer::Skip, Scope::ThisOne);
+    let changed = held(&client, job);
+    answer(&client, job, &changed, Answer::Skip, Scope::ThisOne);
+    let (outcome, _) = client.ended(job);
+
+    assert_eq!(conflict.kind, ConflictKind::FileExists);
+    assert_eq!(changed.kind, ConflictKind::SourceChanged);
+    assert_eq!(changed.source, tree.join("sub/f"));
+    assert_eq!(outcome, Outcome::Done);
+    assert!(into.join("tree/sub").is_dir());
+    assert!(!into.join("tree/sub/f").exists());
+}
+
+#[test]
+fn a_chosen_folder_swapped_for_a_look_alike_while_the_copy_waits_is_refused() {
+    let bench = Bench::new("conflict-look-alike");
+    let (taken, into) = file_over_file(&bench);
+    let tree = bench.at("tree");
+    fs::create_dir(&tree).unwrap();
+    fs::write(tree.join("f"), "planned").unwrap();
+    let client = bench.client();
+
+    let job = client.start(copy(vec![taken, tree.clone()], &into));
+    let conflict = held(&client, job);
+    // While the job waits, another program puts its own folder there.
+    fs::rename(&tree, bench.at("moved")).unwrap();
+    fs::create_dir(&tree).unwrap();
+    fs::write(tree.join("f"), "look-alike").unwrap();
+    answer(&client, job, &conflict, Answer::Skip, Scope::ThisOne);
+    let changed = held(&client, job);
+    answer(&client, job, &changed, Answer::Skip, Scope::ThisOne);
+    let (outcome, _) = client.ended(job);
+
+    assert_eq!(changed.kind, ConflictKind::SourceChanged);
+    assert_eq!(outcome, Outcome::Done);
+    assert!(!into.join("tree/f").exists());
+}

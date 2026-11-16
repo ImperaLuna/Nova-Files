@@ -54,6 +54,14 @@ impl Entry {
             inode: metadata.ino(),
         }
     }
+
+    /// The entry `stat` describes.
+    pub const fn of_stat(stat: &rustix::fs::Stat) -> Self {
+        Self {
+            device: stat.st_dev,
+            inode: stat.st_ino,
+        }
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]

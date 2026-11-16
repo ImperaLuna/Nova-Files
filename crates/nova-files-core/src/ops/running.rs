@@ -12,6 +12,7 @@ use nova_files_api::{Answer, Conflict, ConflictKind, Failure, JobId, Scope};
 
 use super::clash::conflict_for;
 use super::control::Cancelled;
+use super::folders::Folders;
 use super::job::Job;
 use super::journal::{Journal, Record, word};
 use super::left::{Done, Left};
@@ -34,6 +35,9 @@ pub struct Running {
     answers: HashMap<ConflictKind, Answer>,
     /// How many conflicts it asked about.
     asked: u64,
+    /// The folders of the trees the job walks, opened so as never to
+    /// leave them.
+    pub folders: Folders,
     /// What the job did before a crash cut it short, taken as done now
     /// that it resumes.
     pub before: Done,
@@ -64,6 +68,7 @@ impl Running {
             journal: None,
             answers: HashMap::new(),
             asked: 0,
+            folders: Folders::default(),
             before: Done::default(),
             resumes: false,
             sources: HashSet::new(),
