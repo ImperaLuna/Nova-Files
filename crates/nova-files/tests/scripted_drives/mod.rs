@@ -4,7 +4,8 @@
 
 use std::ffi::OsString;
 
-use nova_files_api::{DiskSpace, DriveAction, DriveList, Volume, VolumeId};
+use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent};
+use nova_files_api::{DiskSpace, Drive, DriveAction, DriveId, DriveList, Volume, VolumeId};
 
 use super::*;
 
@@ -173,4 +174,45 @@ fn the_drive_you_are_on_is_marked(cx: &mut TestAppContext) {
     let (_view, cx, _core) = in_the_stick(cx);
     assert!(cx.debug_bounds("drive-1-here").is_some());
     assert!(cx.debug_bounds("drive-0-here").is_none());
+}
+
+#[gpui::test]
+fn the_keys_go_round_a_drive_menu(cx: &mut TestAppContext) {
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    let mut stick = volume("stick", Some(STICK));
+    stick.drive = Some(DriveId("usb".to_owned()));
+    core.send(Event::Drives(Arc::new(DriveList {
+        drives: vec![Drive {
+            id: DriveId("usb".to_owned()),
+            name: String::new(),
+            removable: true,
+            ejectable: true,
+        }],
+        volumes: vec![stick],
+    })));
+    cx.run_until_parked();
+    let position = cx.debug_bounds("drive-1").unwrap().center();
+    cx.simulate_event(MouseDownEvent {
+        position,
+        modifiers: Modifiers::none(),
+        button: MouseButton::Right,
+        click_count: 1,
+        first_mouse: false,
+    });
+    cx.simulate_event(MouseUpEvent {
+        position,
+        modifiers: Modifiers::none(),
+        button: MouseButton::Right,
+        click_count: 1,
+    });
+    cx.run_until_parked();
+    let mut marks = Vec::new();
+    for key in ["down", "down", "down", "down", "up", "up", "up"] {
+        cx.simulate_keystrokes(key);
+        marks.push(view.read_with(cx, |view, _| view.menu().unwrap().active.unwrap()));
+    }
+    // Open, Open in new tab, Eject: round past each end.
+    assert_eq!(marks, [0, 1, 2, 0, 2, 1, 0]);
 }
