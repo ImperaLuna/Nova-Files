@@ -263,3 +263,13 @@ fn a_note_says_what_the_answers_to_clashes_did() {
         Some("Moved a to Trash")
     );
 }
+
+#[test]
+fn the_for_all_tick_holds_only_for_its_own_question() {
+    let mut island = Island::default();
+    assert!(!island.ticked_for_all(JobId(1), 1));
+    island.for_all = Some((JobId(1), 1));
+    assert!(island.ticked_for_all(JobId(1), 1));
+    assert!(!island.ticked_for_all(JobId(1), 2));
+    assert!(!island.ticked_for_all(JobId(2), 1));
+}
