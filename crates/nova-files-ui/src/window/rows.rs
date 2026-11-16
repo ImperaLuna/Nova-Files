@@ -124,9 +124,7 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         let side = self.icon_side();
-        if self.theme_icons.side() != side {
-            release(self.theme_icons.resize(side), None, cx);
-        }
+        release(self.theme_icons.resize(side).into_iter().flatten(), None, cx);
         let mut wanted: Vec<Arc<ThemeIcon>> = Vec::new();
         for icon in icons {
             if let FileIcon::Theme { icon, .. } = icon
@@ -214,16 +212,20 @@ impl MainWindow {
     /// another scale (the window moved to another screen) are dropped and
     /// asked for again: an empty request first, so the core sends them anew.
     /// Theme icons are dropped and made again from the icons the rows have.
+    /// Called each frame, so the same scale returns at once.
     pub fn set_scale_factor(
         &mut self,
         scale_factor: f32,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if scale_factor.to_bits() == self.scale_factor.to_bits() {
+            return;
+        }
         let before = self.thumbnail_side();
         self.scale_factor = scale_factor;
-        if self.theme_icons.side() != self.icon_side() {
-            release(self.theme_icons.resize(self.icon_side()), Some(window), cx);
+        if let Some(gone) = self.theme_icons.resize(self.icon_side()) {
+            release(gone, Some(window), cx);
             let icons: Vec<FileIcon> = self
                 .details
                 .values()

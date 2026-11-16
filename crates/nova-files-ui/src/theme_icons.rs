@@ -45,11 +45,6 @@ impl ThemeIcons {
         !self.made.contains_key(&icon.path) && self.pending.insert(icon.path.clone())
     }
 
-    /// The side images are made at.
-    pub const fn side(&self) -> u32 {
-        self.side
-    }
-
     /// Keeps `image`, made for `path` at `side`, if the window still
     /// draws at that size; otherwise hands it back. An image it replaces
     /// is handed back too.
@@ -60,7 +55,7 @@ impl ThemeIcons {
         side: u32,
         image: Option<Arc<RenderImage>>,
     ) -> Option<Arc<RenderImage>> {
-        if side != self.side {
+        if side == self.side {
             return image;
         }
         self.pending.remove(&path);
@@ -68,12 +63,16 @@ impl ThemeIcons {
         self.made.insert(path, image)
     }
 
-    /// Starts again at `side`, handing back every image made so far.
+    /// Starts again at `side`, handing back every image made so far;
+    /// `None`, keeping them, when they are already made at `side`.
     #[must_use]
-    pub fn resize(&mut self, side: u32) -> Vec<Arc<RenderImage>> {
+    pub fn resize(&mut self, side: u32) -> Option<Vec<Arc<RenderImage>>> {
+        if side == self.side {
+            return None;
+        }
         self.side = side;
         self.pending.clear();
-        self.made.drain().map(|(_, image)| image).collect()
+        Some(self.made.drain().map(|(_, image)| image).collect())
     }
 }
 
@@ -154,7 +153,7 @@ mod tests {
     #[test]
     fn an_icon_is_made_once_per_size() {
         let mut icons = ThemeIcons::default();
-        assert_eq!(icons.resize(44).len(), 0);
+        assert_eq!(icons.resize(44).map(|gone| gone.len()), Some(0));
         let first = icon(IconFormat::Svg, Vec::new());
 
         assert!(icons.start(&first));
@@ -171,10 +170,14 @@ mod tests {
         assert_eq!(icons.get(&first.path).map(|made| made.id), Some(image.id));
         assert!(!icons.start(&first));
 
+        // Already at that size: nothing is made again.
+        assert!(icons.resize(44).is_none());
+        assert_eq!(icons.get(&first.path).map(|made| made.id), Some(image.id));
+
         let gone = icons.resize(22);
-        assert_eq!(gone.len(), 1);
+        assert_eq!(gone.map(|gone| gone.len()), Some(1));
         assert!(icons.get(&first.path).is_none());
-        assert_eq!(icons.side(), 22);
+        assert!(icons.resize(22).is_none());
         assert!(icons.start(&first));
         // One that doesn't decode can be tried again.
         assert!(icons.finish(first.path.clone(), 22, None).is_none());
