@@ -1,6 +1,7 @@
 //! Dragging a box over the entries on a real core: it selects the rows it
-//! touches, Ctrl adds them, a press on a name drags no box, and a click on
-//! the empty space below the rows selects nothing.
+//! touches, Ctrl adds them, a press on a name drags no box (it drags the
+//! file, see `window_drag`), and a click on the empty space below the
+//! rows selects nothing.
 
 use gpui::{
     Bounds, MouseButton, Pixels, Point, ScrollDelta, ScrollWheelEvent, TouchPhase, point, px,
@@ -137,7 +138,8 @@ async fn a_press_on_a_name_drags_no_box(cx: &mut TestAppContext) {
     let from = bounds(cx, "name-1").center();
     let to = bounds(cx, "modified-3").center();
     drag(cx, from, to, Modifiers::none());
-    assert_eq!(selected(&view, cx), Vec::<String>::new());
+    // It drags the file instead, which selects it alone.
+    assert_eq!(selected(&view, cx), ["a.txt"]);
     // The next press, off the name, can.
     let from = bounds(cx, "modified-1").center();
     drag(cx, from, to, Modifiers::none());

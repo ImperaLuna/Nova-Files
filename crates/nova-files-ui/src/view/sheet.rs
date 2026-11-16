@@ -14,7 +14,9 @@
 //! Folder column, and the part of each name that matched is marked. The
 //! count and the empty look are the search's (see `search`). The
 //! trash adds a Was in column, and says so when it is empty (see
-//! `window::trash`).
+//! `window::trash`). A name can be dragged; a folder row takes files
+//! dropped on it, and the rest of the list takes them into the folder on
+//! screen (see `drop` and `window::dragging`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -23,17 +25,18 @@
 use gpui::{
     AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
     MouseDownEvent, ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _,
-    div, prelude::FluentBuilder as _, uniform_list,
+    div, prelude::FluentBuilder as _, transparent_black, uniform_list,
 };
 
-use nova_files_api::{Entry, Listing, Order, SortKey};
+use nova_files_api::{Entry, EntryKind, Listing, Order, SortKey};
 
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
 use crate::assets::Icon;
+use crate::dropping::DropAt;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
-use crate::window::MainWindow;
+use crate::window::{DraggedRow, MainWindow};
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
@@ -84,6 +87,9 @@ impl MainWindow {
                     this.band_pressed(event, on_name);
                 }),
             )
+            .when_some(self.list_drops_into(), |area, at| {
+                self.takes_drops(area, at, cx)
+            })
             .child(self.entries(cx))
             .children(self.empty_trash(&colors))
             .children(self.no_matches(&colors))
@@ -134,35 +140,25 @@ impl MainWindow {
                     .map(|(entry, index)| {
                         let id = entry.id;
                         let columns = this.columns(index).unwrap_or_default();
-                        let name = entry.name.to_string_lossy().into_owned();
-                        let marks = query
-                            .as_deref()
-                            .map(|query| marks::matched(&name, query))
-                            .unwrap_or_default();
                         let folder = this.folder_cell(listing, entry, index, cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let line = cells(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(size::NAME_GAP)
-                                .child(entry_icon(
-                                    &entry.name,
-                                    entry.kind,
-                                    this.thumbnail(index),
-                                    &colors,
-                                ))
-                                .child(this.rename_field(index).map_or_else(
-                                    || entry_name(name.into(), marks, index, cx).into_any_element(),
-                                    |field| rename_box(field.clone(), &colors).into_any_element(),
-                                )),
+                            this.name_column(
+                                entry,
+                                (DraggedRow::new(listing_id, id), index),
+                                query.as_deref(),
+                                cx,
+                            ),
                             folder,
                             detail(columns.modified, &colors),
                             detail(columns.size, &colors),
                             format!("modified-{index}"),
                         );
+                        let folder_at = (entry.kind == EntryKind::Folder)
+                            .then(|| DropAt::Folder(listing.path_of(entry)));
                         entry_row(index, corners, &colors)
+                            .when_some(folder_at, |row, at| this.drop_target(row, at, cx))
                             .when(on, |row| row.bg(colors.selected).text_color(colors.text))
                             .child(line)
                             .when(this.cursor() == Some(index), |row| {
@@ -243,7 +239,9 @@ fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> i
 }
 
 /// Row `index`'s box, as wide as the list, highlighted under the pointer,
-/// with only the corners `corners` keeps rounded.
+/// with only the corners `corners` keeps rounded. Every row keeps the
+/// clear edge a folder row lights up as a drop target (see `drop`), so
+/// all rows line up.
 fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
     div()
         .id(("entry", index))
@@ -253,7 +251,9 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
         .flex_none()
         .items_center()
         .h(size::ROW_HEIGHT)
-        .px(size::ROW_PAD)
+        .px(size::ROW_PAD - size::DROP_EDGE)
+        .border(size::DROP_EDGE)
+        .border_color(transparent_black())
         .when(corners.top, |row| {
             row.rounded_tl(radius::ROW).rounded_tr(radius::ROW)
         })
@@ -264,6 +264,53 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
 }
 
 impl MainWindow {
+    /// The `index`th entry's icon and name, the part of the name a
+    /// search's `query` matches marked (see `marks`), draggable as `row`
+    /// outside a picker and the trash; or the rename's field in the
+    /// name's place.
+    fn name_column(
+        &self,
+        entry: &Entry,
+        (row, index): (DraggedRow, usize),
+        query: Option<&str>,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
+        let colors = Colors::of(cx);
+        let name = self.rename_field(index).map_or_else(
+            || {
+                let name = entry.name.to_string_lossy().into_owned();
+                let marks = query
+                    .map(|query| marks::matched(&name, query))
+                    .unwrap_or_default();
+                let draggable = self.pick.is_none() && !self.in_trash();
+                entry_name(name.into(), marks, index, draggable.then_some(row), cx)
+                    .into_any_element()
+            },
+            |field| rename_box(field.clone(), &colors).into_any_element(),
+        );
+        div()
+            .flex()
+            .items_center()
+            .gap(size::NAME_GAP)
+            .child(entry_icon(
+                &entry.name,
+                entry.kind,
+                self.thumbnail(index),
+                &colors,
+            ))
+            .child(name)
+    }
+
+    /// Where files dropped on the list but not on a folder go: the
+    /// folder on screen; nowhere on a search's files or in the trash.
+    fn list_drops_into(&self) -> Option<DropAt> {
+        if self.searching() || self.trash_open() {
+            return None;
+        }
+        let listing = self.listing.as_ref()?;
+        Some(DropAt::Folder(listing.path.clone()))
+    }
+
     /// The cell between Name and Modified: where the `index`th entry was
     /// in the trash, or a search's file's folder; none in a folder.
     fn folder_cell(

@@ -28,6 +28,7 @@
 //! `path`. The island over the bottom of the sheet is drawn in `island`.
 
 mod bar;
+mod drop;
 mod island;
 mod menu;
 mod path;

@@ -5,8 +5,8 @@
 //! the core in `tree`, the drives in `drives`, the Start page in `start`,
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
-//! `clipboard`, renaming and New folder in `renaming`, and the jobs they
-//! start in `jobs`. Drawing
+//! `clipboard`, dragging and dropping files in `dragging`, renaming and
+//! New folder in `renaming`, and the jobs they start in `jobs`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!
@@ -44,6 +44,7 @@
 
 mod acting;
 mod clipboard;
+mod dragging;
 mod drives;
 mod events;
 mod jobs;
@@ -57,6 +58,7 @@ mod start;
 mod trash;
 mod tree;
 
+pub use dragging::DraggedRow;
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
 pub use preview::{Previewed, Shown};

@@ -141,13 +141,23 @@ impl Jobs {
 impl MainWindow {
     /// Asks the core to run `operation`. Whether the ask was sent.
     pub(crate) fn start_job(&mut self, operation: Operation) -> bool {
+        self.ask_job(|tag| Command::StartJob { tag, operation })
+    }
+
+    /// Asks the core to copy or move `sources` into `into` as a drop
+    /// does, by drive. Whether the ask was sent.
+    pub(crate) fn start_drop(&mut self, sources: Vec<PathBuf>, into: PathBuf) -> bool {
+        self.ask_job(|tag| Command::DropFiles { tag, sources, into })
+    }
+
+    /// Sends the command `command` makes of a new job tag. Whether it was
+    /// sent.
+    fn ask_job(&mut self, command: impl FnOnce(JobTag) -> Command) -> bool {
         let Some(connection) = &self.connection else {
             return false;
         };
         let tag = self.jobs.next_tag();
-        let sent = connection
-            .send(Command::StartJob { tag, operation })
-            .is_ok();
+        let sent = connection.send(command(tag)).is_ok();
         if sent {
             self.jobs.asked.insert(tag);
         }

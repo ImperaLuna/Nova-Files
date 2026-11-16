@@ -93,7 +93,7 @@ const TRASH: &str = "Trash";
 const ROOT: &str = "/";
 
 /// A lone path by its name, several by how many.
-fn what(paths: &[PathBuf]) -> String {
+pub fn what(paths: &[PathBuf]) -> String {
     match paths {
         [one] => name_of(one),
         many => count(many.len(), ITEM, ITEMS),

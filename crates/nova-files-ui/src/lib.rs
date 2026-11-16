@@ -16,6 +16,7 @@ mod columns;
 mod commands;
 mod crumbs;
 mod drives;
+mod dropping;
 mod history;
 mod island;
 mod jump;
