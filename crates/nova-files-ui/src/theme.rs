@@ -428,6 +428,9 @@ pub mod size {
     pub const ISLAND_LIST_WIDTH: Pixels = px(450.0);
     pub const ISLAND_LIST_PAD: Pixels = px(6.0);
     pub const ISLAND_LIST_ROW: Pixels = px(40.0);
+    /// How many rows the open list of jobs shows before it scrolls; the
+    /// half row says there is more.
+    pub const ISLAND_LIST_ROWS: f32 = 6.5;
     pub const ISLAND_LIST_LINE: Pixels = px(34.0);
     pub const ISLAND_LIST_INSET: Pixels = px(10.0);
     pub const ISLAND_LIST_GAP: Pixels = px(10.0);

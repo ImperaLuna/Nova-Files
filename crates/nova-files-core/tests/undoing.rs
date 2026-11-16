@@ -177,6 +177,32 @@ fn undoing_a_move_that_replaced_puts_both_back() {
 }
 
 #[test]
+fn undo_leaves_out_a_file_the_same_job_made_and_then_replaced() {
+    let bench = Bench::new("undo-replace-own");
+    fs::create_dir_all(bench.at("a")).unwrap();
+    fs::create_dir_all(bench.at("b")).unwrap();
+    fs::create_dir(bench.at("into")).unwrap();
+    fs::write(bench.at("a/report"), "a").unwrap();
+    fs::write(bench.at("b/report"), "b").unwrap();
+    let client = bench.client();
+    let job = client.start(Operation::Copy {
+        sources: vec![bench.at("a/report"), bench.at("b/report")],
+        into: bench.at("into"),
+    });
+    let clash = answers::held(&client, job);
+    answers::answer(&client, job, &clash, Answer::Replace, Scope::ThisOne);
+    assert_eq!(client.ended(job).0, Outcome::Done);
+    assert_eq!(fs::read_to_string(bench.at("into/report")).unwrap(), "b");
+
+    assert_eq!(undo(&client, job), Outcome::Done);
+
+    assert!(
+        !bench.at("into/report").exists(),
+        "as it was before the job"
+    );
+}
+
+#[test]
 fn a_replaced_file_whose_name_was_taken_again_stays_in_the_trash() {
     let bench = Bench::new("undo-replace-taken");
     fs::write(bench.at("a"), "new").unwrap();

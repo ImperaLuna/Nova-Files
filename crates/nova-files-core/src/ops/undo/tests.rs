@@ -240,3 +240,21 @@ fn files_replaced_and_still_in_the_trash_are_put_back_after() {
         )
     );
 }
+
+#[test]
+fn only_nothing_left_to_undo_counts_as_gone() {
+    let gone = Outcome::Failed {
+        path: PathBuf::new(),
+        reason: Failure::NotFound,
+    };
+    assert!(is_gone(&gone));
+    assert!(!is_gone(&Outcome::Done));
+    assert!(!is_gone(&Outcome::Failed {
+        path: PathBuf::from("/a"),
+        reason: Failure::NotFound,
+    }));
+    assert!(!is_gone(&Outcome::Failed {
+        path: PathBuf::new(),
+        reason: Failure::PermissionDenied,
+    }));
+}

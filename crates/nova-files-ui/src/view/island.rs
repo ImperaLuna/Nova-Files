@@ -21,7 +21,7 @@ use gpui::{
     relative,
 };
 
-use nova_files_api::Conflict;
+use nova_files_api::{Answer, Conflict};
 
 use super::row::icon;
 use crate::assets::Icon;
@@ -45,9 +45,14 @@ impl MainWindow {
         let colors = Colors::of(cx);
         let parts = if self.pick.is_some() {
             None
-        } else if let Some((_, job)) = self.job_on_island(cx) {
+        } else if let Some((id, job)) = self.job_on_island(cx) {
             if let Some(conflict) = &job.asking {
-                Some(ask_parts(conflict, self.island.for_all, &colors, cx))
+                Some(ask_parts(
+                    conflict,
+                    self.ticked_for_all(id, conflict),
+                    &colors,
+                    cx,
+                ))
             } else {
                 let shown = self.jobs_shown(cx);
                 if shown.len() > 1 {
@@ -175,21 +180,20 @@ fn ask_parts(
             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.cancel_job(cx)))
             .into_any_element(),
     );
+    let answer = |answer: Answer| {
+        square(asking::selector(answer), colors)
+            .w_auto()
+            .px(size::TEXT_BUTTON_PAD)
+            .font_weight(text::STRONG_WEIGHT)
+            .child(SharedString::new_static(asking::label(answer)))
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.answer_conflict(answer, cx);
+            }))
+    };
     let answers = asking::answers(conflict.kind);
-    let last = answers.len().saturating_sub(1);
-    for (index, answer) in answers.into_iter().enumerate() {
-        parts.push(
-            square(asking::selector(answer), colors)
-                .w_auto()
-                .px(size::TEXT_BUTTON_PAD)
-                .font_weight(text::STRONG_WEIGHT)
-                .when(index == last, |button| button.text_color(colors.accept))
-                .child(SharedString::new_static(asking::label(answer)))
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    this.answer_conflict(answer, cx);
-                }))
-                .into_any_element(),
-        );
+    if let Some((&last, rest)) = answers.split_last() {
+        parts.extend(rest.iter().map(|&each| answer(each).into_any_element()));
+        parts.push(answer(last).text_color(colors.accept).into_any_element());
     }
     if let Some(words) = asking::for_all(conflict) {
         parts.push(divider(colors).into_any_element());

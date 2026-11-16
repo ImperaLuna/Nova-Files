@@ -298,19 +298,21 @@ fn put(from: &Path, to: &Path, backup: &Path, replacing: bool) -> io::Result<Opt
 }
 
 /// Sends the file a replace `left` under a hidden name to the trash, as
-/// the path `making` gave it, and keeps where it went for an undo. Where
-/// it can't go to the trash it is removed, as it would have been without
-/// one: the user chose to replace it.
+/// the path `making` gave it, and keeps where it went for an undo, unless
+/// this job put it there itself: an undo leaves that one in the trash.
+/// Where it can't go to the trash it is removed, as it would have been
+/// without one: the user chose to replace it.
 fn set_aside(running: &mut Running, making: &Making<'_>, left: Option<&Path>) {
     let Some(left) = left else {
         return;
     };
     let target = making.target;
+    let ours = running.placed_here(target);
     if let Some(item) = trash_set_aside(running, (making.index, left), target) {
-        running.replaced.push((target.to_path_buf(), item));
-    } else if let Err(error) = fs::remove_file(left)
-        && error.kind() != io::ErrorKind::NotFound
-    {
+        if !ours {
+            running.replaced.push((target.to_path_buf(), item));
+        }
+    } else if let Err(error) = fs::remove_file(left) {
         log::warn!("can't remove the replaced {}: {error}", left.display());
     }
 }

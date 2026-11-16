@@ -259,7 +259,7 @@ impl MainWindow {
             // Nothing was made to select.
             self.waiting = super::renaming::Waiting::Nothing;
         }
-        self.trash_maybe_changed(&operation);
+        self.trash_maybe_changed(&operation, tally.replaced > 0);
         let transfer = is_transfer(&operation);
         let others = self.transfers_running();
         let batching = others || !self.jobs.batch.is_empty();
@@ -335,7 +335,6 @@ impl MainWindow {
         }
         if let Some(running) = self.jobs.running.get_mut(&job) {
             running.asking = Some(conflict);
-            self.island.for_all = false;
             cx.notify();
         }
     }
@@ -349,7 +348,7 @@ impl MainWindow {
         let (Some((job, conflict)), Some(connection)) = (asked, &self.connection) else {
             return;
         };
-        let scope = if self.island.for_all && conflict.more > 0 {
+        let scope = if self.island.for_all == Some((job, conflict.number)) {
             Scope::AllOfThisKind
         } else {
             Scope::ThisOne
@@ -362,7 +361,7 @@ impl MainWindow {
                 scope,
             })
             .ok();
-        self.island.for_all = false;
+        self.island.for_all = None;
         cx.notify();
     }
 
@@ -376,8 +375,20 @@ impl MainWindow {
 
     /// Ticks or clears "For all" on the island's question.
     pub(crate) fn toggle_for_all(&mut self, cx: &mut Context<Self>) {
-        self.island.for_all = !self.island.for_all;
+        let asked = self
+            .job_on_island(cx)
+            .and_then(|(job, running)| Some((job, running.asking.as_ref()?.number)));
+        self.island.for_all = if self.island.for_all == asked {
+            None
+        } else {
+            asked
+        };
         cx.notify();
+    }
+
+    /// Whether the "For all" tick is ticked on the question `job` asks.
+    pub(crate) fn ticked_for_all(&self, job: JobId, conflict: &Conflict) -> bool {
+        self.island.for_all == Some((job, conflict.number))
     }
 
     /// The line of this window's newest running job, shown or not yet.
@@ -388,6 +399,16 @@ impl MainWindow {
             .values()
             .max_by_key(|job| job.started)
             .map(|job| job.line(now))
+    }
+
+    /// What the newest of this window's jobs asks about, if anything.
+    pub fn newest_question(&self) -> Option<&Conflict> {
+        self.jobs
+            .running
+            .values()
+            .max_by_key(|job| job.started)?
+            .asking
+            .as_ref()
     }
 
     /// The job the island shows now, if any.

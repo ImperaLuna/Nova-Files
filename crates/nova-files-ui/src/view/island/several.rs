@@ -3,7 +3,8 @@
 //! bar for all and an arrow that opens the list; open, the island grows
 //! upward with a row per job (what it works on, its seconds left, its bar
 //! and a stop button) over the same line, its arrow turned down to fold
-//! it again. Selectors: `island-jobs-open`, and per row `island-job-N`
+//! it again; past a few rows the list scrolls. Selectors:
+//! `island-jobs-open`, the list `island-jobs`, and per row `island-job-N`
 //! and `island-stop-N`, counting from the oldest.
 
 use std::f32::consts::FRAC_PI_2;
@@ -52,10 +53,16 @@ pub(super) fn island(
         );
     }
     parts.push(arrow(open, colors, cx).into_any_element());
+    // At most a few rows' height, the rest scrolled to, so a long list
+    // never grows past the window.
     let rows = open.then(|| {
         div()
+            .id("island-jobs")
+            .debug_selector(|| "island-jobs".to_owned())
             .flex()
             .flex_col()
+            .max_h(size::ISLAND_LIST_ROW * size::ISLAND_LIST_ROWS)
+            .overflow_y_scroll()
             .pb(size::ISLAND_LIST_PAD)
             .mb(size::ISLAND_LIST_PAD)
             .border_b(size::LINE)
