@@ -72,3 +72,84 @@ fn the_trash_is_read_again_on_arriving_in_it(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(trash_asks(&mut core), 0);
 }
+
+/// Clicks the element drawn with `selector`.
+fn press(cx: &mut VisualTestContext, selector: &'static str) {
+    let at = cx.debug_bounds(selector).unwrap().center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+}
+
+/// The copies the window asked the core for since last asked, each
+/// started as a job, the first as 7.
+fn start_copies(core: &mut Core) -> Vec<JobId> {
+    let asked: Vec<_> = core
+        .commands()
+        .into_iter()
+        .filter_map(|command| match command {
+            Command::StartJob {
+                tag,
+                operation: operation @ Operation::Copy { .. },
+            } => Some((tag, operation)),
+            _ => None,
+        })
+        .collect();
+    let mut jobs = Vec::new();
+    for ((tag, operation), id) in asked.into_iter().zip(7..) {
+        let job = JobId(id);
+        core.send(Event::JobStarted {
+            tag,
+            job,
+            operation,
+        });
+        jobs.push(job);
+    }
+    jobs
+}
+
+#[gpui::test]
+fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContext) {
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down ctrl-c ctrl-v ctrl-v");
+    cx.run_until_parked();
+    let jobs = start_copies(&mut core);
+    assert_eq!(jobs.len(), 2);
+    cx.executor().advance_clock(nova_files_ui::JOB_SHOWS_AFTER);
+    cx.run_until_parked();
+    assert!(
+        cx.debug_bounds("island-progress").is_none(),
+        "one line for both"
+    );
+    assert!(cx.debug_bounds("island-job-0").is_none(), "folded");
+
+    press(cx, "island-jobs-open");
+    assert!(cx.debug_bounds("island-job-0").is_some());
+    assert!(cx.debug_bounds("island-job-1").is_some());
+    press(cx, "island-stop-1");
+    assert!(
+        core.commands().contains(&Command::CancelJob(jobs[1])),
+        "the newer one stops"
+    );
+
+    // The first ends while the other runs: no note yet; one when the last
+    // ends.
+    let finished = |job, outcome| Event::JobFinished {
+        job,
+        outcome,
+        changed: Vec::new(),
+        tally: nova_files_api::Tally::default(),
+    };
+    let note = |cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| view.note().map(|note| note.label.to_string()))
+    };
+    // What Ctrl+C said.
+    let before = note(cx);
+    core.send(finished(jobs[0], nova_files_api::Outcome::Done));
+    cx.run_until_parked();
+    assert_eq!(note(cx), before);
+    core.send(finished(jobs[1], nova_files_api::Outcome::Cancelled));
+    cx.run_until_parked();
+    assert_eq!(note(cx).as_deref(), Some("Copied 1 item"));
+}

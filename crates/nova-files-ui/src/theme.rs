@@ -421,6 +421,18 @@ pub mod size {
     pub const ISLAND_DIVIDER_HEIGHT: Pixels = px(20.0);
     /// Room under the last row, so the island never covers it.
     pub const ISLAND_CLEARANCE: Pixels = px(68.0);
+    /// The island opened into a list of jobs: its width, the space inside
+    /// it and under the rows, the height of each row and of the line
+    /// under them, how far in their text starts, the space between a
+    /// row's parts, and a row's seconds left and bar.
+    pub const ISLAND_LIST_WIDTH: Pixels = px(450.0);
+    pub const ISLAND_LIST_PAD: Pixels = px(6.0);
+    pub const ISLAND_LIST_ROW: Pixels = px(40.0);
+    pub const ISLAND_LIST_LINE: Pixels = px(34.0);
+    pub const ISLAND_LIST_INSET: Pixels = px(10.0);
+    pub const ISLAND_LIST_GAP: Pixels = px(10.0);
+    pub const ISLAND_LIST_LEFT: Pixels = px(30.0);
+    pub const ISLAND_LIST_BAR: Pixels = px(72.0);
     /// The bar of a running job on the island, and the space after it.
     pub const PROGRESS_WIDTH: Pixels = px(140.0);
     pub const PROGRESS_HEIGHT: Pixels = px(6.0);

@@ -31,6 +31,8 @@ pub struct Island {
     /// Whether the answer to the conflict the island asks about goes for
     /// every one like it (see `asking`).
     pub for_all: bool,
+    /// Whether the list of the window's jobs is open, when several run.
+    pub jobs_open: bool,
     /// Takes the note down once [`NOTE_TIME`] has passed; replaced with
     /// each new note, which cancels the old one's.
     pub(crate) note_timer: Option<Task<()>>,
@@ -287,6 +289,7 @@ const fn failure(reason: Failure) -> &'static str {
 
 pub mod asking;
 pub mod progress;
+pub mod several;
 
 #[cfg(test)]
 mod tests;
