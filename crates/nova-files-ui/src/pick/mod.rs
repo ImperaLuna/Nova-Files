@@ -54,7 +54,6 @@ use nova_files_api::{
 
 use self::accept::Jump;
 pub use self::opening::foreign_parent;
-pub use self::save::found_nothing;
 use crate::selecting::DOUBLE_CLICK;
 use crate::selection::Click;
 use crate::text::{TextField, TextFieldEvent};

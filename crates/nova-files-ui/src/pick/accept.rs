@@ -248,7 +248,7 @@ impl MainWindow {
         if let Some(recheck) = pick.recheck.take()
             && recheck.listing == listed
         {
-            self.save_checked(recheck, cx);
+            self.save_checked(recheck);
         }
     }
 
