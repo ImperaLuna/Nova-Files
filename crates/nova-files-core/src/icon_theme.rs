@@ -91,6 +91,17 @@ impl IconThemes {
         }
     }
 
+    /// Starts from `chosen` from now on; the chain is read again at the
+    /// next search. Whether that changed anything.
+    pub fn choose(&mut self, chosen: Option<String>) -> bool {
+        if chosen == self.chosen {
+            return false;
+        }
+        self.chosen = chosen;
+        self.chain = None;
+        true
+    }
+
     /// The folders themes live in, in the spec's order.
     pub fn bases_from_env() -> Vec<PathBuf> {
         bases(|name| env::var_os(name))

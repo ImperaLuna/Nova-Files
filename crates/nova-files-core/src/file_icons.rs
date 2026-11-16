@@ -10,6 +10,11 @@
 //! for an icon, counts as missing and the search goes on. The answers sit
 //! behind one lock shared by every client; a search under it costs a few
 //! hash lookups once the theme's folders are listed (see `icon_theme`).
+//!
+//! The theme is the one the desktop asks for through the settings portal
+//! when it names one, else the one the toolkits' settings files name (see
+//! `icon_theme::name`). A change of theme forgets every answer, so icons
+//! asked for from then on come from the new theme.
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -43,6 +48,8 @@ pub struct FileIcons {
 #[derive(Debug)]
 struct State {
     themes: IconThemes,
+    /// The theme the settings files name, read at start.
+    from_files: Option<String>,
     by_type: HashMap<String, FileIcon>,
     files: HashMap<PathBuf, Arc<ThemeIcon>>,
 }
@@ -52,20 +59,22 @@ impl FileIcons {
     /// system's icon folders; `types` is read at the first answer if no
     /// one has read it yet.
     pub fn from_env(types: Arc<OnceLock<MimeTypes>>, config: Option<&Path>) -> Self {
-        let chosen = config.and_then(name::chosen);
-        Self::new(types, chosen, IconThemes::bases_from_env())
+        let from_files = config.and_then(name::chosen);
+        Self::new(types, from_files, IconThemes::bases_from_env())
     }
 
-    /// Icons from the theme `chosen`, in the icon folders `bases`.
+    /// Icons from the theme `from_files`, in the icon folders `bases`,
+    /// until the desktop names one.
     pub fn new(
         types: Arc<OnceLock<MimeTypes>>,
-        chosen: Option<String>,
+        from_files: Option<String>,
         bases: Vec<PathBuf>,
     ) -> Self {
         Self {
             types,
             state: Mutex::new(State {
-                themes: IconThemes::new(chosen, bases, FILE_ICON_PIXELS, SCALE),
+                themes: IconThemes::new(from_files.clone(), bases, FILE_ICON_PIXELS, SCALE),
+                from_files,
                 by_type: HashMap::new(),
                 files: HashMap::new(),
             }),
@@ -78,6 +87,19 @@ impl FileIcons {
     pub fn plain() -> Arc<Self> {
         let types = Arc::new(OnceLock::from(MimeTypes::default()));
         Arc::new(Self::new(types, None, Vec::new()))
+    }
+
+    /// The desktop asks for the icon theme `asked`, or for none: the
+    /// settings files' theme then counts again.
+    pub fn follow_desktop(&self, asked: Option<&str>) {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let chosen = asked
+            .and_then(name::checked)
+            .or_else(|| state.from_files.clone());
+        if state.themes.choose(chosen) {
+            state.by_type.clear();
+            state.files.clear();
+        }
     }
 
     /// The icon of an entry called `name`.
@@ -96,6 +118,7 @@ impl FileIcons {
             themes,
             by_type,
             files,
+            ..
         } = &mut *state;
         if let Some(icon) = by_type.get(mime) {
             return icon.clone();
@@ -223,6 +246,35 @@ mod tests {
             theme(&text).path,
             data.0.join("icons/Mine/m/text-plain.png")
         );
+    }
+
+    #[test]
+    fn the_desktops_theme_wins_until_it_names_none() {
+        let data = Data::new("desktop");
+        let write = |file: &str, text: &[u8]| {
+            let path = data.0.join(file);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        };
+        write(
+            "icons/Desk/index.theme",
+            b"[Icon Theme]\nDirectories=m\n[m]\nSize=48\n",
+        );
+        write("icons/Desk/m/text-plain.svg", b"<svg/>");
+        let icons = data.icons();
+        let text = || icons.of(OsStr::new("a.txt"), EntryKind::File);
+        let mine = data.0.join("icons/Mine/m/text-plain.png");
+        let desk = data.0.join("icons/Desk/m/text-plain.svg");
+
+        assert_eq!(theme(&text()).path, mine);
+        icons.follow_desktop(Some("Desk"));
+        assert_eq!(theme(&text()).path, desk);
+        // A name that reaches outside the icons folder counts as none.
+        icons.follow_desktop(Some("../Desk"));
+        assert_eq!(theme(&text()).path, mine);
+        icons.follow_desktop(Some("Desk"));
+        icons.follow_desktop(None);
+        assert_eq!(theme(&text()).path, mine);
     }
 
     #[test]

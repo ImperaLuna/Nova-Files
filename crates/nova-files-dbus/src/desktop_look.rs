@@ -1,7 +1,8 @@
-//! The desktop's look: whether it prefers dark or light, and its accent,
-//! read from the freedesktop settings portal and handed to the core, which
-//! uses them for the `System` appearance and as the primary color when the
-//! theme file sets none.
+//! The desktop's look: whether it prefers dark or light, its accent and
+//! its icon theme, read from the freedesktop settings portal and handed to
+//! the core, which uses them for the `System` appearance, as the primary
+//! color when the theme file sets none, and for file icons. The icon theme
+//! is GNOME's setting where the portal has it, else KDE's.
 //!
 //! The portal is read once, then followed through its `SettingChanged`
 //! signal on a thread of its own, which stays blocked until the next
@@ -18,6 +19,7 @@ use futures::{Stream, StreamExt as _, future, stream};
 use nova_files_api::{Color, Command, Connector, CoreGone, DesktopLook, Event, Mode};
 use zbus::blocking::Connection;
 use zbus::fdo::DBusProxy;
+use zbus::zvariant::Str;
 use zbus::zvariant::{OwnedValue, Value};
 use zbus::{Message, Proxy};
 
@@ -31,6 +33,14 @@ pub const NAMESPACE: &str = "org.freedesktop.appearance";
 pub const COLOR_SCHEME: &str = "color-scheme";
 /// `(ddd)`: red, green and blue from 0 to 1; anything outside means unset.
 pub const ACCENT_COLOR: &str = "accent-color";
+/// Where GNOME's settings keep the icon theme, as the portal passes them.
+pub const GNOME_INTERFACE: &str = "org.gnome.desktop.interface";
+/// `s`: the icon theme's name.
+pub const GNOME_ICON_THEME: &str = "icon-theme";
+/// Where KDE's portal keeps the `[Icons]` group of `kdeglobals`.
+pub const KDE_ICONS: &str = "org.kde.kdeglobals.Icons";
+/// `s`: the icon theme's name.
+pub const KDE_ICON_THEME: &str = "Theme";
 
 const CHANGED: &str = "SettingChanged";
 /// Since version 2 of the interface.
@@ -81,16 +91,45 @@ enum Heard {
     Started,
 }
 
+/// What the desktop asks for, as last told to the core.
+#[derive(Default)]
+struct Told {
+    look: DesktopLook,
+    icons: IconThemes,
+}
+
+impl Told {
+    /// Tells the core what changed between this and `now`, and keeps
+    /// `now`. The core starts with the defaults, so it needs no word of
+    /// them.
+    fn update(
+        &mut self,
+        now: (DesktopLook, IconThemes),
+        connector: &Connector,
+    ) -> Result<(), CoreGone> {
+        let (look, icons) = now;
+        if look != self.look {
+            self.look = look;
+            tell(connector, look)?;
+        }
+        if icons.chosen() != self.icons.chosen() {
+            tell_icons(connector, &icons)?;
+        }
+        self.icons = icons;
+        Ok(())
+    }
+}
+
 /// Reads the look, then follows what `heard` brings until the core stops.
 async fn watch(
     portal: &Proxy<'_>,
     mut heard: impl Stream<Item = Heard> + Unpin,
     connector: &Connector,
 ) {
-    let mut look = DesktopLook::default();
+    let mut told = Told::default();
     let mut started = true;
     loop {
-        let changed = if started {
+        let now = if started {
             started = false;
             read_all(portal).await
         } else {
@@ -106,39 +145,86 @@ async fn watch(
                     else {
                         continue;
                     };
-                    if namespace != NAMESPACE {
-                        continue;
-                    }
-                    with(look, &key, &value)
+                    changed(&told, &namespace, &key, &value)
                 }
             }
         };
-        // The core starts with the default, so it needs no word of it.
-        if changed != look {
-            look = changed;
-            if tell(connector, look).is_err() {
-                return;
-            }
+        if told.update(now, connector).is_err() {
+            return;
         }
     }
 }
 
-/// The look as the portal holds it now; nothing without a portal.
-async fn read_all(portal: &Proxy<'_>) -> DesktopLook {
+/// What the desktop asks for once `key` of `namespace` is `value`.
+fn changed(
+    told: &Told,
+    namespace: &str,
+    key: &str,
+    value: &OwnedValue,
+) -> (DesktopLook, IconThemes) {
+    let mut icons = told.icons.clone();
+    if namespace == NAMESPACE {
+        return (with(told.look, key, value), icons);
+    }
+    icons.set(namespace, key, value);
+    (told.look, icons)
+}
+
+/// The icon theme names the portal holds, GNOME's and KDE's.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct IconThemes {
+    gnome: Option<String>,
+    kde: Option<String>,
+}
+
+impl IconThemes {
+    /// The theme the desktop asks for: GNOME's, else KDE's.
+    fn chosen(&self) -> Option<&str> {
+        self.gnome.as_deref().or(self.kde.as_deref())
+    }
+
+    /// Takes `value` if `key` of `namespace` names an icon theme; an empty
+    /// or non-string value unsets it.
+    fn set(&mut self, namespace: &str, key: &str, value: &OwnedValue) {
+        let slot = match (namespace, key) {
+            (GNOME_INTERFACE, GNOME_ICON_THEME) => &mut self.gnome,
+            (KDE_ICONS, KDE_ICON_THEME) => &mut self.kde,
+            _ => return,
+        };
+        *slot = <&Str<'_>>::try_from(peel(value))
+            .ok()
+            .map(|name| name.as_str().trim().to_owned())
+            .filter(|name| !name.is_empty());
+    }
+}
+
+/// The look and icon themes as the portal holds them now; nothing without
+/// a portal.
+async fn read_all(portal: &Proxy<'_>) -> (DesktopLook, IconThemes) {
     let mut look = DesktopLook::default();
     for key in [COLOR_SCHEME, ACCENT_COLOR] {
-        if let Some(value) = read(portal, key).await {
+        if let Some(value) = read(portal, NAMESPACE, key).await {
             look = with(look, key, &value);
         }
     }
-    look
+    let mut icons = IconThemes::default();
+    for (namespace, key) in [
+        (GNOME_INTERFACE, GNOME_ICON_THEME),
+        (KDE_ICONS, KDE_ICON_THEME),
+    ] {
+        if let Some(value) = read(portal, namespace, key).await {
+            icons.set(namespace, key, &value);
+        }
+    }
+    (look, icons)
 }
 
-/// The portal's value for `key`; `None` without a portal.
-async fn read(portal: &Proxy<'_>, key: &str) -> Option<OwnedValue> {
-    match portal.call(READ_ONE, &(NAMESPACE, key)).await {
+/// The portal's value for `key` of `namespace`; `None` without a portal
+/// or without the key.
+async fn read(portal: &Proxy<'_>, namespace: &str, key: &str) -> Option<OwnedValue> {
+    match portal.call(READ_ONE, &(namespace, key)).await {
         Ok(value) => Some(value),
-        Err(_) => portal.call(READ, &(NAMESPACE, key)).await.ok(),
+        Err(_) => portal.call(READ, &(namespace, key)).await.ok(),
     }
 }
 
@@ -194,8 +280,20 @@ fn channel(value: f64) -> Option<u8> {
 
 /// Sends `look` to the core on a connection made for it; nothing answers.
 fn tell(connector: &Connector, look: DesktopLook) -> Result<(), CoreGone> {
+    send(connector, Command::DesktopLook(look))
+}
+
+/// Sends the icon theme `icons` choose to the core.
+fn tell_icons(connector: &Connector, icons: &IconThemes) -> Result<(), CoreGone> {
+    let chosen = icons.chosen().map(str::to_owned);
+    send(connector, Command::DesktopIconTheme(chosen))
+}
+
+/// Sends `command` to the core on a connection made for it; nothing
+/// answers.
+fn send(connector: &Connector, command: Command) -> Result<(), CoreGone> {
     let (nobody, _) = mpsc::channel::<Event>();
-    connector.connect(nobody)?.send(Command::DesktopLook(look))
+    connector.connect(nobody)?.send(command)
 }
 
 #[cfg(test)]
@@ -231,6 +329,27 @@ mod tests {
         assert_eq!(look(-1.0, -1.0, -1.0), None);
         assert_eq!(look(0.5, 1.5, 0.5), None);
         assert_eq!(look(0.5, 0.5, f64::NAN), None);
+    }
+
+    #[test]
+    fn gnomes_icon_theme_wins_over_kdes() {
+        let mut icons = IconThemes::default();
+        let name = |text: &str| owned(&Value::from(text));
+        icons.set(KDE_ICONS, KDE_ICON_THEME, &name("breeze"));
+        assert_eq!(icons.chosen(), Some("breeze"));
+        icons.set(GNOME_INTERFACE, GNOME_ICON_THEME, &name(" Papirus-Dark "));
+        assert_eq!(icons.chosen(), Some("Papirus-Dark"));
+        // Version 1 wraps it once more.
+        let wrapped = owned(&Value::Value(Box::new(Value::from("Adwaita"))));
+        icons.set(GNOME_INTERFACE, GNOME_ICON_THEME, &wrapped);
+        assert_eq!(icons.chosen(), Some("Adwaita"));
+        icons.set(GNOME_INTERFACE, GNOME_ICON_THEME, &name(""));
+        assert_eq!(icons.chosen(), Some("breeze"));
+        icons.set(KDE_ICONS, KDE_ICON_THEME, &owned(&Value::U32(1)));
+        assert_eq!(icons.chosen(), None);
+        icons.set(GNOME_INTERFACE, "font-name", &name("Inter"));
+        icons.set("org.example", GNOME_ICON_THEME, &name("x"));
+        assert_eq!(icons, IconThemes::default());
     }
 
     #[test]

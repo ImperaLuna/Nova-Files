@@ -143,6 +143,10 @@ pub enum Command {
     /// the theme get [`Event::Theme`] if the theme changed; nothing
     /// answers the sender.
     DesktopLook(DesktopLook),
+    /// Tell the core which icon theme the desktop asks for, or that it
+    /// asks for none; sent by the D-Bus side each time it changes. Icons
+    /// found from then on come from it; nothing answers.
+    DesktopIconTheme(Option<String>),
     /// Ask for the drives and volumes; the answer is [`Event::Drives`],
     /// and from then on the client gets [`Event::Drives`] again each time
     /// one comes, goes or changes. Clients that never ask never get them.
