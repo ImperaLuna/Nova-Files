@@ -89,6 +89,7 @@ impl MainWindow {
         if window.focused(cx).is_none() {
             window.focus(&self.keys_home(cx), cx);
         }
+        self.focus_menu(window, cx);
         div()
             .key_context(commands::KEY_CONTEXT)
             .when(main, |root| root.track_focus(&self.focus))
@@ -122,7 +123,7 @@ impl MainWindow {
             .font_weight(text::BODY_WEIGHT)
             .child(self.body(narrow, &colors, cx))
             .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
-            .children(self.menu_overlay(cx))
+            .children(self.menu_overlay(window, cx))
     }
 }
 

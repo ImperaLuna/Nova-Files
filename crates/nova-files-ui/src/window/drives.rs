@@ -180,23 +180,16 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         let eject = drive.eject.clone();
-        let mut items = vec![
-            MenuItem {
-                icon: Icon::Open,
-                label: OPEN_LABEL.into(),
-                action: MenuAction::OpenDrive(drive.clone()),
-            },
-            MenuItem {
-                icon: Icon::Plus,
-                label: super::tabs::OPEN_IN_NEW_TAB_LABEL.into(),
-                action: MenuAction::OpenDriveInNewTab(drive),
-            },
+        let opens = vec![
+            MenuItem::new(Icon::Open, OPEN_LABEL, MenuAction::OpenDrive(drive.clone())),
+            MenuItem::new(
+                Icon::Plus,
+                super::tabs::OPEN_IN_NEW_TAB_LABEL,
+                MenuAction::OpenDriveInNewTab(drive),
+            ),
         ];
-        items.extend(eject.map(|id: DriveId| MenuItem {
-            icon: Icon::Eject,
-            label: EJECT_LABEL.into(),
-            action: MenuAction::Eject(id),
-        }));
-        self.open_menu(at, items, cx);
+        let eject =
+            eject.map(|id: DriveId| MenuItem::new(Icon::Eject, EJECT_LABEL, MenuAction::Eject(id)));
+        self.open_menu_groups(at, vec![opens, eject.into_iter().collect()], false, cx);
     }
 }
