@@ -460,6 +460,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn only_copies_and_moves_are_transfers() {
+        let paths = vec![PathBuf::from("/home/a/notes.txt")];
+        assert!(is_transfer(&Operation::Copy {
+            sources: paths.clone(),
+            into: PathBuf::from("/home/b"),
+        }));
+        assert!(!is_transfer(&Operation::Trash { paths }));
+    }
+
+    #[test]
     fn each_job_asked_for_gets_its_own_tag() {
         let mut jobs = Jobs::default();
         assert_ne!(jobs.next_tag(), jobs.next_tag());
