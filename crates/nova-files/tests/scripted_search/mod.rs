@@ -83,6 +83,12 @@ fn names(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
 #[gpui::test]
 fn typing_finds_everywhere_and_the_window_stays_in_its_folder(cx: &mut TestAppContext) {
     let (view, cx, mut core) = searching(cx);
+    // Files dropped on the list go into the folder on screen, but not
+    // onto a search's files, which aren't in it.
+    assert_eq!(
+        view.read_with(cx, |view, _| view.list_drop_folder().map(Path::to_path_buf)),
+        Some(PathBuf::from(SHOWN))
+    );
 
     cx.simulate_input("rep");
     cx.run_until_parked();
@@ -100,6 +106,7 @@ fn typing_finds_everywhere_and_the_window_stays_in_its_folder(cx: &mut TestAppCo
         assert!(view.searching());
         assert_eq!(view.query(cx), "rep");
         assert_eq!(view.folder(), Some(Path::new(SHOWN)));
+        assert_eq!(view.list_drop_folder(), None);
     });
     assert!(cx.debug_bounds("match-count").is_some());
     assert!(cx.debug_bounds("no-matches").is_none());

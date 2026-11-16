@@ -46,6 +46,18 @@ fn drag(cx: &mut VisualTestContext, from: &'static str, to: &'static str, modifi
     cx.run_until_parked();
 }
 
+/// Drags `from` onto `to` like [`drag`], checking the chip shows on
+/// the way.
+fn drag_checked(cx: &mut VisualTestContext, from: &'static str, to: &'static str) {
+    let (start, end) = (center(cx, from), center(cx, to));
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(end, Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("drag-chip").is_some());
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+}
+
 async fn wait_for_note(view: &Entity<MainWindow>, cx: &VisualTestContext, label: &str) {
     view.condition::<WindowEvent>(cx, |view, _| {
         view.note().is_some_and(|note| note.label == label)
@@ -62,9 +74,15 @@ async fn a_name_dragged_onto_a_folder_moves_it_there_and_undo_moves_it_back(
     let home = TempFolder::tree("drag-move-home");
     let (view, cx) = drag_window(cx, tree.path(), &home).await;
     let projects = tree.path().join("Projects");
+    // Rows keep a clear drop edge inside their padding, so a name starts
+    // where it always did: the row's pad, the icon and the gap in
+    // (12 + 22 + 11 px).
+    let inset =
+        cx.debug_bounds("name-1").unwrap().left() - cx.debug_bounds("entry-1").unwrap().left();
+    assert_eq!(inset, px(45.0));
 
     // Projects, notes.txt: nothing selected, so the drag selects it.
-    drag(cx, "name-1", "entry-0", Modifiers::none());
+    drag_checked(cx, "name-1", "entry-0");
     wait_for_note(&view, cx, "Moved notes.txt to Projects").await;
     assert!(!tree.path().join("notes.txt").exists());
     assert!(projects.join("notes.txt").exists());
@@ -148,4 +166,31 @@ async fn files_drop_on_a_tree_folder_and_a_crumb(cx: &mut TestAppContext) {
     view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["notes.txt"])
         .await;
     assert!(tree.path().join("nova").is_dir());
+}
+
+#[gpui::test]
+async fn names_in_the_trash_do_not_drag(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-in-trash");
+    let home = TempFolder::tree("drag-in-trash-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    click(cx, "name-1");
+    cx.simulate_keystrokes("delete");
+    wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
+    view.update(cx, MainWindow::open_trash);
+    view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["notes.txt"])
+        .await;
+    assert!(view.read_with(cx, |view, _| view.list_drop_folder().is_none()));
+
+    // Pressed and moved, a name here carries no chip: nothing drags.
+    let start = center(cx, "name-0");
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(
+        start + point(px(40.0), px(0.0)),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("drag-chip").is_none());
+    cx.simulate_mouse_up(start, MouseButton::Left, Modifiers::none());
 }

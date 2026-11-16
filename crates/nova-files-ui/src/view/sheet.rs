@@ -22,6 +22,8 @@
 //! on its own, and a row sized to its content would push its columns along
 //! by the width of its name.
 
+use std::path::Path;
+
 use gpui::{
     AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
     MouseDownEvent, ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _,
@@ -30,6 +32,7 @@ use gpui::{
 
 use nova_files_api::{Entry, EntryKind, Listing, Order, SortKey};
 
+use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
 use crate::assets::Icon;
@@ -87,9 +90,11 @@ impl MainWindow {
                     this.band_pressed(event, on_name);
                 }),
             )
-            .when_some(self.list_drops_into(), |area, at| {
-                self.takes_drops(area, at, cx)
-            })
+            .when_some(
+                self.list_drop_folder()
+                    .map(|folder| DropAt::Folder(folder.to_path_buf())),
+                |area, at| self.takes_drops(area, at, cx),
+            )
             .child(self.entries(cx))
             .children(self.empty_trash(&colors))
             .children(self.no_matches(&colors))
@@ -251,7 +256,7 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
         .flex_none()
         .items_center()
         .h(size::ROW_HEIGHT)
-        .px(size::ROW_PAD - size::DROP_EDGE)
+        .px(inside_edge(size::ROW_PAD))
         .border(size::DROP_EDGE)
         .border_color(transparent_black())
         .when(corners.top, |row| {
@@ -303,12 +308,11 @@ impl MainWindow {
 
     /// Where files dropped on the list but not on a folder go: the
     /// folder on screen; nowhere on a search's files or in the trash.
-    fn list_drops_into(&self) -> Option<DropAt> {
+    pub fn list_drop_folder(&self) -> Option<&Path> {
         if self.searching() || self.trash_open() {
             return None;
         }
-        let listing = self.listing.as_ref()?;
-        Some(DropAt::Folder(listing.path.clone()))
+        Some(&self.listing.as_ref()?.path)
     }
 
     /// The cell between Name and Modified: where the `index`th entry was

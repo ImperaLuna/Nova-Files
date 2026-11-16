@@ -16,8 +16,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AppContext as _, Context, Entity, IntoElement, Modifiers, ParentElement as _, Render,
-    SharedString, Styled as _, Window, div,
+    AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, Modifiers,
+    ParentElement as _, Render, SharedString, Styled as _, Window, div,
 };
 use nova_files_api::{EntryId, ListingId};
 
@@ -61,6 +61,7 @@ impl Render for DragChip {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         div()
+            .debug_selector(|| "drag-chip".to_owned())
             .px(size::DRAG_CHIP_PAD)
             .py(size::DRAG_CHIP_PAD_Y)
             .rounded(radius::CONTROL)
@@ -74,22 +75,19 @@ impl Render for DragChip {
 }
 
 impl MainWindow {
-    /// A drag starts on `row`'s name: selects it alone unless it is
-    /// selected, gives the drag what is selected, and gives the chip to
-    /// draw under the pointer.
+    /// A drag starts on `row`'s name (only outside a picker and the
+    /// trash, see `view::sheet`): selects it alone unless it is selected,
+    /// gives the drag what is selected, and gives the chip to draw under
+    /// the pointer.
     pub(crate) fn drag_started(
         &mut self,
         row: &DraggedRow,
         cx: &mut Context<Self>,
     ) -> Entity<DragChip> {
-        let paths = if self.pick.is_none() && !self.in_trash() {
-            if !self.selects((row.listing, row.id)) {
-                self.reselect(|_, _| Some(Selection::only(row.listing, row.id)), cx);
-            }
-            self.selected_full_paths()
-        } else {
-            Vec::new()
-        };
+        if !self.selects((row.listing, row.id)) {
+            self.reselect(|_, _| Some(Selection::only(row.listing, row.id)), cx);
+        }
+        let paths = self.selected_full_paths();
         let label = island::what(&paths).into();
         row.sources.set(Sources::new(paths)).ok();
         cx.new(|_| DragChip { label })
