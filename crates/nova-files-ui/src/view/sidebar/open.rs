@@ -46,7 +46,7 @@ impl MainWindow {
                 .zip(places)
                 .enumerate()
                 .map(|(index, (look, place))| {
-                    let at = self.tab_drops_at(place.as_ref());
+                    let at = self.tab_drops_at(place.as_ref(), look.0.clone());
                     self.tab_row(index, look, narrow, cx)
                         .when_some(at, |row, at| self.drop_target(row, at, cx))
                 });

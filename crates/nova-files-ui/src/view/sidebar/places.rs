@@ -18,11 +18,10 @@ use gpui::{
 
 use super::{Row, new_tab_on_middle_click, on_middle_click, row, section_button, section_head};
 use crate::assets::Icon;
-use crate::dropping::DropAt;
 use crate::location::Location;
 use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::theme::{Colors, size};
-use crate::window::MainWindow;
+use crate::window::{Aim, MainWindow};
 
 const LABEL: &str = "Places";
 
@@ -39,6 +38,7 @@ impl MainWindow {
                 let target = place.path.clone();
                 let pinned = (main && place.pinned).then(|| place.path.clone());
                 let is_here = place.is_here(here);
+                let aimed = place.name.clone();
                 row(
                     Row {
                         id: ("place", index).into(),
@@ -56,7 +56,7 @@ impl MainWindow {
                     this.open(&target);
                 }))
                 .map(|row| new_tab_on_middle_click(row, place.path.clone(), main, cx))
-                .map(|row| self.drop_target(row, DropAt::Folder(place.path.clone()), cx))
+                .map(|row| self.drop_target(row, Aim::folder(place.path.clone(), aimed), cx))
                 .when_some(pinned, |row, path| {
                     row.on_mouse_down(
                         MouseButton::Right,
@@ -138,6 +138,6 @@ impl MainWindow {
         )
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)))
         .map(|row| on_middle_click(row, true, cx, Self::open_trash_in_new_tab))
-        .map(|row| self.drop_target(row, DropAt::Trash, cx))
+        .map(|row| self.drop_target(row, Aim::trash(), cx))
     }
 }

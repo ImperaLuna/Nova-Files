@@ -33,11 +33,10 @@ use super::row::icon;
 use crate::assets::Icon;
 use crate::commands::EmptyTrash;
 use crate::crumbs::{self, Crumb, Shown};
-use crate::dropping::DropAt;
 use crate::path_bar::{MenuItem, MenuOwner};
 use crate::places::TRASH_LABEL;
 use crate::theme::{Colors, radius, size, text};
-use crate::window::MainWindow;
+use crate::window::{Aim, MainWindow};
 
 const FOLDED_LABEL: &str = "…";
 const EMPTY_TRASH_LABEL: &str = "Empty Trash";
@@ -74,9 +73,9 @@ impl MainWindow {
                 Shown::Crumb(index) => {
                     let crumb = &crumbs[index];
                     let at = if self.trash_open() {
-                        DropAt::Trash
+                        Aim::trash()
                     } else {
-                        DropAt::Folder(crumb.path.clone())
+                        Aim::folder(crumb.path.clone(), crumb.label.clone())
                     };
                     let button = crumb_button(index, crumb, colors, cx);
                     row = row.child(self.drop_target(button, at, cx));

@@ -5,7 +5,8 @@
 //! the core in `tree`, the drives in `drives`, the Start page in `start`,
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
-//! `clipboard`, dragging and dropping files in `dragging`, renaming and
+//! `clipboard`, dragging and dropping files in `dragging` (naming the
+//! drop under the pointer in `aiming`), renaming and
 //! New folder in `renaming`, the jobs they start in `jobs`, the tabs in
 //! `tabs`, showing hidden files in `hidden`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
@@ -45,6 +46,7 @@
 //! A search puts the files it found in the list's place (see `search`).
 
 mod acting;
+mod aiming;
 mod clipboard;
 mod context_menu;
 mod dragging;
@@ -63,6 +65,7 @@ mod tabs;
 mod trash;
 mod tree;
 
+pub use aiming::Aim;
 pub use dragging::DraggedRow;
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
@@ -234,6 +237,8 @@ pub struct MainWindow {
     /// The tabs in the background, and which one is on screen (see
     /// `tabs`).
     tabs: Tabs,
+    /// What the window asked the core about drops (see `aiming`).
+    drop_asks: aiming::Asks,
     _events: Task<()>,
 }
 
@@ -346,6 +351,7 @@ impl MainWindow {
             waiting: Waiting::Nothing,
             trash,
             tabs: Tabs::default(),
+            drop_asks: aiming::Asks::default(),
             _events: events,
         };
         match location {

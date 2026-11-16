@@ -39,10 +39,9 @@ use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
 use crate::assets::Icon;
-use crate::dropping::DropAt;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
-use crate::window::{DraggedRow, MainWindow};
+use crate::window::{Aim, DraggedRow, MainWindow};
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
@@ -101,7 +100,7 @@ impl MainWindow {
             )
             .when_some(
                 self.list_drop_folder()
-                    .map(|folder| DropAt::Folder(folder.to_path_buf())),
+                    .map(|folder| Aim::folder(folder.to_path_buf(), self.folder_name(folder))),
                 |area, at| self.takes_drops(area, at, cx),
             )
             .child(self.entries(cx))
@@ -162,6 +161,8 @@ impl MainWindow {
                         let folder = this.folder_cell(listing, entry, index, cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
+                        let folder_at = (entry.kind == EntryKind::Folder)
+                            .then(|| Aim::folder(listing.path_of(entry), name.clone()));
                         let line = cells(
                             this.name_cell(
                                 entry,
@@ -174,8 +175,6 @@ impl MainWindow {
                             detail(columns.size, &colors),
                             format!("modified-{index}"),
                         );
-                        let folder_at = (entry.kind == EntryKind::Folder)
-                            .then(|| DropAt::Folder(listing.path_of(entry)));
                         entry_row(index, (listing_id, id), corners, &colors, cx)
                             .when_some(folder_at, |row, at| this.drop_target(row, at, cx))
                             .when(on, |row| row.bg(colors.selected).text_color(colors.text))

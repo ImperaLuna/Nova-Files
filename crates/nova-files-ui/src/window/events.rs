@@ -146,6 +146,7 @@ impl MainWindow {
             }
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
+            Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)
@@ -157,10 +158,8 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             // The window doesn't wait on a file opening and never watches
             // jobs it didn't start; only a picker's opening asks for the
-            // window state (see `window_state`). It doesn't ask what a
-            // drop would do yet.
+            // window state (see `window_state`).
             Event::FolderUnreadable { .. }
-            | Event::DropWould { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }

@@ -30,7 +30,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::mem;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use gpui::{ClickEvent, Context, SharedString, UniformListScrollHandle, Window};
 use nova_files_api::{EntryId, Listing, ListingId, Order};
@@ -237,6 +237,13 @@ impl MainWindow {
                 ),
             None => (SharedString::default(), Icon::Folder),
         }
+    }
+
+    /// The name `folder` goes by: as a tab on it is named.
+    pub(crate) fn folder_name(&self, folder: &Path) -> SharedString {
+        let shown = places::shown(self.places(), self.pinned());
+        self.tab_look(Some(&Location::Folder(folder.to_path_buf())), &shown)
+            .0
     }
 
     /// Shows tab `index`.
