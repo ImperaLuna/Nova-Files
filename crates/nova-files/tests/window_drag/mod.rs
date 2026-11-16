@@ -228,8 +228,12 @@ async fn start_and_places_held_over_open_in_the_tab_on_screen(cx: &mut TestAppCo
     view.update(cx, |view, cx| view.switch_tab(0, cx));
     wait_for_folder(&view, cx, tree.path()).await;
 
-    // Start's tab takes no files, but shows.
+    // Start opens in the tab on screen; Start's tab takes no files, but
+    // shows.
     start_drag(cx, "name-1");
+    drag_over(cx, "place-start");
+    hold(cx, HOVER_OPEN_AFTER);
+    assert!(view.read_with(cx, |view, _| view.current_tab() == 0 && view.is_on_start()));
     drag_over(cx, "tab-1");
     hold(cx, HOVER_OPEN_AFTER);
     assert!(view.read_with(cx, |view, _| view.current_tab() == 1 && view.is_on_start()));

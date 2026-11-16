@@ -12,6 +12,7 @@
 //! if any, the pointer is over now: a new one starts the wait, none drops
 //! it.
 
+use std::path::Path;
 use std::time::Duration;
 
 use gpui::{Bounds, Context, Point, Task, Window};
@@ -29,6 +30,18 @@ pub enum HoverOpens {
     Tab(usize),
     /// A place, in the tab on screen.
     Place(Location),
+}
+
+impl HoverOpens {
+    /// Whether it is the folder on screen, `here`, and so opens nothing.
+    /// A search started from the folder shows what it found, not the
+    /// folder: `searching`, it opens.
+    fn on_screen(&self, here: Option<&Path>, searching: bool) -> bool {
+        match self {
+            Self::Place(Location::Folder(folder)) => here == Some(folder.as_path()) && !searching,
+            Self::Tab(_) | Self::Place(Location::Start) => false,
+        }
+    }
 }
 
 /// The row the pointer is over while something is dragged.
@@ -81,18 +94,35 @@ impl MainWindow {
             self.hover_open.over = None;
             return;
         }
-        match opens.clone() {
+        let opens = opens.clone();
+        if opens.on_screen(self.folder(), self.searching()) {
+            return;
+        }
+        match opens {
             HoverOpens::Tab(index) => self.switch_tab(index, cx),
-            HoverOpens::Place(Location::Start) if !self.is_on_start() => self.open_start(cx),
-            // A search started from the folder shows what it found, not
-            // the folder.
-            HoverOpens::Place(Location::Folder(folder))
-                if self.folder() != Some(folder.as_path()) || self.searching() =>
-            {
+            // Start shown again is Start as it was.
+            HoverOpens::Place(Location::Start) => self.open_start(cx),
+            HoverOpens::Place(Location::Folder(folder)) => {
                 self.open(&folder);
                 cx.notify();
             }
-            HoverOpens::Place(_) => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_folder_on_screen_is_on_screen_and_not_while_searching() {
+        let here = Path::new("/home/me");
+        let folder = HoverOpens::Place(Location::Folder(here.to_path_buf()));
+        assert!(folder.on_screen(Some(here), false));
+        assert!(!folder.on_screen(Some(here), true));
+        assert!(!folder.on_screen(Some(Path::new("/home")), false));
+        assert!(!folder.on_screen(None, false));
+        assert!(!HoverOpens::Tab(0).on_screen(Some(here), false));
+        assert!(!HoverOpens::Place(Location::Start).on_screen(None, false));
     }
 }
