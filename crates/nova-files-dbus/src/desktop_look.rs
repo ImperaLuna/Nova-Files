@@ -1,8 +1,9 @@
 //! The desktop's look: whether it prefers dark or light, its accent and
 //! its icon theme, read from the freedesktop settings portal and handed to
 //! the core, which uses them for the `System` appearance, as the primary
-//! color when the theme file sets none, and for file icons. The icon theme
-//! is GNOME's setting where the portal has it, else KDE's.
+//! color when the theme file sets none, and for file icons. The icon
+//! themes are GNOME's setting and KDE's, where the portal has them; the
+//! core picks among them.
 //!
 //! The portal is read once, then followed through its `SettingChanged`
 //! signal on a thread of its own, which stays blocked until the next
@@ -47,6 +48,9 @@ const CHANGED: &str = "SettingChanged";
 const READ_ONE: &str = "ReadOne";
 /// Version 1's read, which wraps the value in one more variant.
 const READ: &str = "Read";
+/// What a version 1 portal answers to `ReadOne`; any other error (a key
+/// it doesn't have) is the answer.
+const UNKNOWN_METHOD: &str = "org.freedesktop.DBus.Error.UnknownMethod";
 const THREAD: &str = "nova-files-dbus-desktop-look";
 
 const PREFERS_DARK: u32 = 1;
@@ -112,7 +116,7 @@ impl Told {
             self.look = look;
             tell(connector, look)?;
         }
-        if icons.chosen() != self.icons.chosen() {
+        if icons != self.icons {
             tell_icons(connector, &icons)?;
         }
         self.icons = icons;
@@ -178,9 +182,9 @@ struct IconThemes {
 }
 
 impl IconThemes {
-    /// The theme the desktop asks for: GNOME's, else KDE's.
-    fn chosen(&self) -> Option<&str> {
-        self.gnome.as_deref().or(self.kde.as_deref())
+    /// The themes the desktop names: GNOME's, then KDE's.
+    fn named(&self) -> Vec<String> {
+        self.gnome.iter().chain(&self.kde).cloned().collect()
     }
 
     /// Takes `value` if `key` of `namespace` names an icon theme; an empty
@@ -224,7 +228,10 @@ async fn read_all(portal: &Proxy<'_>) -> (DesktopLook, IconThemes) {
 async fn read(portal: &Proxy<'_>, namespace: &str, key: &str) -> Option<OwnedValue> {
     match portal.call(READ_ONE, &(namespace, key)).await {
         Ok(value) => Some(value),
-        Err(_) => portal.call(READ, &(namespace, key)).await.ok(),
+        Err(zbus::Error::MethodError(name, _, _)) if name.as_str() == UNKNOWN_METHOD => {
+            portal.call(READ, &(namespace, key)).await.ok()
+        }
+        Err(_) => None,
     }
 }
 
@@ -283,10 +290,9 @@ fn tell(connector: &Connector, look: DesktopLook) -> Result<(), CoreGone> {
     send(connector, Command::DesktopLook(look))
 }
 
-/// Sends the icon theme `icons` choose to the core.
+/// Sends the icon themes `icons` name to the core.
 fn tell_icons(connector: &Connector, icons: &IconThemes) -> Result<(), CoreGone> {
-    let chosen = icons.chosen().map(str::to_owned);
-    send(connector, Command::DesktopIconTheme(chosen))
+    send(connector, Command::DesktopIconThemes(icons.named()))
 }
 
 /// Sends `command` to the core on a connection made for it; nothing
@@ -332,21 +338,21 @@ mod tests {
     }
 
     #[test]
-    fn gnomes_icon_theme_wins_over_kdes() {
+    fn icon_themes_are_named_gnomes_first() {
         let mut icons = IconThemes::default();
         let name = |text: &str| owned(&Value::from(text));
         icons.set(KDE_ICONS, KDE_ICON_THEME, &name("breeze"));
-        assert_eq!(icons.chosen(), Some("breeze"));
+        assert_eq!(icons.named(), ["breeze"]);
         icons.set(GNOME_INTERFACE, GNOME_ICON_THEME, &name(" Papirus-Dark "));
-        assert_eq!(icons.chosen(), Some("Papirus-Dark"));
+        assert_eq!(icons.named(), ["Papirus-Dark", "breeze"]);
         // Version 1 wraps it once more.
         let wrapped = owned(&Value::Value(Box::new(Value::from("Adwaita"))));
         icons.set(GNOME_INTERFACE, GNOME_ICON_THEME, &wrapped);
-        assert_eq!(icons.chosen(), Some("Adwaita"));
+        assert_eq!(icons.named(), ["Adwaita", "breeze"]);
         icons.set(GNOME_INTERFACE, GNOME_ICON_THEME, &name(""));
-        assert_eq!(icons.chosen(), Some("breeze"));
+        assert_eq!(icons.named(), ["breeze"]);
         icons.set(KDE_ICONS, KDE_ICON_THEME, &owned(&Value::U32(1)));
-        assert_eq!(icons.chosen(), None);
+        assert_eq!(icons.named(), Vec::<String>::new());
         icons.set(GNOME_INTERFACE, "font-name", &name("Inter"));
         icons.set("org.example", GNOME_ICON_THEME, &name("x"));
         assert_eq!(icons, IconThemes::default());

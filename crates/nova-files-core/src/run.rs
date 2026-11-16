@@ -156,7 +156,7 @@ fn answer(
         | Command::ChangeSetting(_)
         | Command::Theme
         | Command::DesktopLook(_)
-        | Command::DesktopIconTheme(_)) => look::answer(id, client, command, setup),
+        | Command::DesktopIconThemes(_)) => look::answer(id, client, command, setup),
         command @ (Command::WatchJobs
         | Command::StartJob { .. }
         | Command::DropFiles { .. }

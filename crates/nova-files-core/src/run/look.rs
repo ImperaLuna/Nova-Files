@@ -23,7 +23,7 @@ pub(super) fn answer(
         Command::ChangeSetting(change) => setup.settings.change(change),
         Command::Theme => setup.theme.listen(id, client.events()),
         Command::DesktopLook(look) => setup.theme.follow_desktop(look),
-        Command::DesktopIconTheme(name) => setup.file_icons.follow_desktop(name.as_deref()),
+        Command::DesktopIconThemes(names) => setup.file_icons.follow_desktop(&names),
         // `run` sends the other commands elsewhere.
         _ => {}
     }

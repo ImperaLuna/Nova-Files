@@ -102,6 +102,14 @@ impl IconThemes {
         true
     }
 
+    /// Whether a theme called `name` is installed: some base has its
+    /// index.
+    pub fn installed(&self, name: &str) -> bool {
+        self.bases
+            .iter()
+            .any(|base| base.join(name).join(INDEX_FILE).is_file())
+    }
+
     /// The folders themes live in, in the spec's order.
     pub fn bases_from_env() -> Vec<PathBuf> {
         bases(|name| env::var_os(name))

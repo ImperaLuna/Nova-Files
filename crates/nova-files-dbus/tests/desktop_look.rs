@@ -188,32 +188,25 @@ fn the_icon_theme_reaches_the_core_and_follows_changes() {
     );
     let (connector, core) = nova_files_api::channel();
     let _service = follow(&bus, connector);
-    assert_eq!(next_icon_theme(&core).as_deref(), Some(GNOME_THEME));
+    assert_eq!(next_icon_themes(&core), [GNOME_THEME, KDE_THEME]);
 
-    // A change to the look only, or to KDE's while GNOME's counts, says
-    // nothing of icons.
+    // A change to the look only says nothing of icons.
     changed(&portal, COLOR_SCHEME, Value::U32(PREFERS_DARK));
     changed_in(&portal, KDE_ICONS, KDE_ICON_THEME, Value::from("oxygen"));
-    changed_in(
-        &portal,
-        GNOME_INTERFACE,
-        GNOME_ICON_THEME,
-        Value::from("Adwaita"),
-    );
-    assert_eq!(next_icon_theme(&core).as_deref(), Some("Adwaita"));
+    assert_eq!(next_icon_themes(&core), [GNOME_THEME, "oxygen"]);
     changed_in(&portal, GNOME_INTERFACE, GNOME_ICON_THEME, Value::from(""));
-    assert_eq!(next_icon_theme(&core).as_deref(), Some("oxygen"));
+    assert_eq!(next_icon_themes(&core), ["oxygen"]);
 }
 
-/// The next icon theme sent to the core; other messages are skipped.
-fn next_icon_theme(core: &Receiver<CoreMessage>) -> Option<String> {
+/// The next icon themes sent to the core; other messages are skipped.
+fn next_icon_themes(core: &Receiver<CoreMessage>) -> Vec<String> {
     loop {
         if let CoreMessage::Command {
-            command: Command::DesktopIconTheme(name),
+            command: Command::DesktopIconThemes(names),
             ..
         } = core.recv_timeout(WAIT).unwrap()
         {
-            return name;
+            return names;
         }
     }
 }

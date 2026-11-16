@@ -11,10 +11,14 @@
 //! behind one lock shared by every client; a search under it costs a few
 //! hash lookups once the theme's folders are listed (see `icon_theme`).
 //!
-//! The theme is the one the desktop asks for through the settings portal
-//! when it names one, else the one the toolkits' settings files name (see
-//! `icon_theme::name`). A change of theme forgets every answer, so icons
-//! asked for from then on come from the new theme.
+//! The theme is the one the toolkits' settings files name (see
+//! `icon_theme::name`), which is what a desktop without GNOME's settings
+//! sets up; when they name none, or one that isn't installed, it is the
+//! first installed one the desktop names through the settings portal.
+//! The portal's GNOME key goes second because it holds GNOME's default
+//! even where nobody set it. A change of theme forgets every answer, so
+//! icons asked for from then on come from the new theme; rows already
+//! sent keep theirs until listed again.
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -89,12 +93,20 @@ impl FileIcons {
         Arc::new(Self::new(types, None, Vec::new()))
     }
 
-    /// The desktop asks for the icon theme `asked`, or for none: the
-    /// settings files' theme then counts again.
-    pub fn follow_desktop(&self, asked: Option<&str>) {
+    /// The desktop names the icon themes `named`, in its order.
+    pub fn follow_desktop(&self, named: &[String]) {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        let chosen = asked
-            .and_then(name::checked)
+        let installed = |name: &String| state.themes.installed(name);
+        let chosen = state
+            .from_files
+            .clone()
+            .filter(installed)
+            .or_else(|| {
+                named
+                    .iter()
+                    .filter_map(|name| name::checked(name))
+                    .find(installed)
+            })
             .or_else(|| state.from_files.clone());
         if state.themes.choose(chosen) {
             state.by_type.clear();
@@ -249,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn the_desktops_theme_wins_until_it_names_none() {
+    fn the_desktops_first_installed_theme_counts_when_the_files_name_none() {
         let data = Data::new("desktop");
         let write = |file: &str, text: &[u8]| {
             let path = data.0.join(file);
@@ -261,20 +273,34 @@ mod tests {
             b"[Icon Theme]\nDirectories=m\n[m]\nSize=48\n",
         );
         write("icons/Desk/m/text-plain.svg", b"<svg/>");
-        let icons = data.icons();
-        let text = || icons.of(OsStr::new("a.txt"), EntryKind::File);
+        let bases = vec![data.0.join("icons")];
+        let named = |names: &[&str]| -> Vec<String> {
+            names.iter().map(|name| (*name).to_owned()).collect()
+        };
         let mine = data.0.join("icons/Mine/m/text-plain.png");
         let desk = data.0.join("icons/Desk/m/text-plain.svg");
 
-        assert_eq!(theme(&text()).path, mine);
-        icons.follow_desktop(Some("Desk"));
-        assert_eq!(theme(&text()).path, desk);
-        // A name that reaches outside the icons folder counts as none.
-        icons.follow_desktop(Some("../Desk"));
-        assert_eq!(theme(&text()).path, mine);
-        icons.follow_desktop(Some("Desk"));
-        icons.follow_desktop(None);
-        assert_eq!(theme(&text()).path, mine);
+        // The files name Mine: it stays.
+        let with_files = data.icons();
+        with_files.follow_desktop(&named(&["Desk"]));
+        let text = with_files.of(OsStr::new("a.txt"), EntryKind::File);
+        assert_eq!(theme(&text).path, mine);
+
+        // The files name none, or one not installed: the first installed
+        // one the desktop names, passing over names that aren't themes.
+        for files in [None, Some("Gone".to_owned())] {
+            let types = Arc::new(OnceLock::from(MimeTypes::load(std::slice::from_ref(
+                &data.0,
+            ))));
+            let icons = FileIcons::new(types, files, bases.clone());
+            let text = || icons.of(OsStr::new("a.txt"), EntryKind::File);
+            icons.follow_desktop(&named(&["../Mine", "Missing", "Desk", "Mine"]));
+            assert_eq!(theme(&text()).path, desk);
+            icons.follow_desktop(&named(&["Mine"]));
+            assert_eq!(theme(&text()).path, mine);
+            icons.follow_desktop(&[]);
+            assert_eq!(text(), FileIcon::BuiltIn(IconKind::Text));
+        }
     }
 
     #[test]
