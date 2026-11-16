@@ -8,8 +8,6 @@
 //! `island-jobs`, and per row `island-job-N` and `island-stop-N`, counting
 //! from the oldest.
 
-use std::f32::consts::FRAC_PI_2;
-
 use gpui::{
     ClickEvent, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, Transformation, div, radians, svg,
@@ -25,9 +23,9 @@ use crate::view::row::icon;
 use crate::window::MainWindow;
 
 /// The arrow's turn while the list is folded: pointing up, to open it.
-const POINT_UP: f32 = -FRAC_PI_2;
+const POINT_UP: f32 = 270.0_f32.to_radians();
 /// The arrow's turn while the list is open: pointing down, to fold it.
-const POINT_DOWN: f32 = FRAC_PI_2;
+const POINT_DOWN: f32 = 90.0_f32.to_radians();
 
 /// The island for `jobs`, two or more, oldest first: folded, or `open`.
 pub(super) fn island(
