@@ -121,16 +121,18 @@ impl MainWindow {
 
     /// Goes into the entry `id` of the folder on screen, if it is a folder.
     pub fn open_entry(&mut self, id: EntryId) {
-        let Some(listing) = &self.listing else { return };
-        let entry = usize::try_from(id.0)
-            .ok()
-            .and_then(|index| listing.entries.get(index));
-        if let Some(entry) = entry
-            && entry.kind == EntryKind::Folder
-        {
-            let folder = listing.path_of(entry);
+        if let Some(folder) = self.folder_of_entry(id) {
             self.open(&folder);
         }
+    }
+
+    /// The path of entry `id` on screen, if it is a folder.
+    pub(super) fn folder_of_entry(&self, id: EntryId) -> Option<PathBuf> {
+        let listing = self.listing.as_ref()?;
+        let entry = usize::try_from(id.0)
+            .ok()
+            .and_then(|index| listing.entries.get(index))?;
+        (entry.kind == EntryKind::Folder).then(|| listing.path_of(entry))
     }
 
     /// The folder Up goes to, if there is one.

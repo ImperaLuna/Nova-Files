@@ -206,6 +206,10 @@ impl MainWindow {
             self.listing_arrived(empty, cx);
             return;
         }
+        if self.tab_folder_refused(id, cx) {
+            cx.emit(WindowEvent::Refused(path));
+            return;
+        }
         self.asked = None;
         self.history.refused(&Location::from(path.as_path()));
         match &self.listing {
