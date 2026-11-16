@@ -24,6 +24,7 @@ use nova_files_api::{EntryId, ListingId};
 use super::MainWindow;
 use crate::dropping::{self, DropAt, Dropped, Sources};
 use crate::island;
+use crate::location::Location;
 use crate::selection::{Selection, entry_at};
 use crate::theme::{Colors, radius, size, text};
 
@@ -134,5 +135,16 @@ impl MainWindow {
     /// The folder of the trash's entries, where nothing drops.
     fn trash_folder(&self) -> &Path {
         &self.trash.folder
+    }
+
+    /// Where files dropped on a tab at `place` go: its folder, or the
+    /// trash for the trash's tab; nowhere for a Start page.
+    pub(crate) fn tab_drops_at(&self, place: Option<&Location>) -> Option<DropAt> {
+        let folder = place?.folder()?;
+        Some(if folder == self.trash_folder() {
+            DropAt::Trash
+        } else {
+            DropAt::Folder(folder.to_path_buf())
+        })
     }
 }

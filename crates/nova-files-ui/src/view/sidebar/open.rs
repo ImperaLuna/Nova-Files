@@ -11,6 +11,9 @@
 //! row, the + after them and a hairline before Places. A picker has no
 //! tabs.
 //!
+//! Files dropped on a tab go into its folder, or to the trash on the
+//! trash's tab (see `drop`); a tab on Start takes none.
+//!
 //! Debug selectors: `tab-<n>` for each row, counted from 0, `tab-close-<n>`
 //! for its x, and `new-tab` for the +.
 
@@ -36,11 +39,17 @@ impl MainWindow {
             return None;
         }
         let colors = Colors::of(cx);
-        let rows = self
-            .tab_looks()
-            .into_iter()
-            .enumerate()
-            .map(|(index, look)| self.tab_row(index, look, narrow, cx));
+        let places = self.tab_places();
+        let rows =
+            self.tab_looks()
+                .into_iter()
+                .zip(places)
+                .enumerate()
+                .map(|(index, (look, place))| {
+                    let at = self.tab_drops_at(place.as_ref());
+                    self.tab_row(index, look, narrow, cx)
+                        .when_some(at, |row, at| self.drop_target(row, at, cx))
+                });
         let new_tab = section_button("new-tab", Icon::Plus, &colors).on_click(
             cx.listener(|this, _: &ClickEvent, _, cx| this.new_tab(&Location::Start, cx)),
         );
