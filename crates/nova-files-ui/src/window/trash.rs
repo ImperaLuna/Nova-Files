@@ -198,7 +198,9 @@ impl MainWindow {
         );
     }
 
-    fn ask(&mut self, label: String, operation: Operation, cx: &mut Context<Self>) {
+    /// Asks `label` on the island, with Cancel and Delete; Delete starts
+    /// `operation`.
+    pub(super) fn ask(&mut self, label: String, operation: Operation, cx: &mut Context<Self>) {
         self.island.confirm = Some(Confirm {
             label: label.into(),
             yes: DELETE_LABEL,

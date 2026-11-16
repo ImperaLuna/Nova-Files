@@ -1,5 +1,6 @@
 //! What the window does to the files selected, and the island's notes:
-//! move them to the trash, undo, and say which files didn't open. Each becomes one of the core's jobs
+//! move them to the trash, delete them for good (after asking), undo,
+//! and say which files didn't open. Each becomes one of the core's jobs
 //! (see `jobs`); the island says what happened (see `island`). Copy, cut
 //! and paste are in `clipboard`.
 
@@ -9,7 +10,7 @@ use gpui::{Context, SharedString};
 use nova_files_api::{EntryId, EntryKind, Listing, NotOpened, Operation};
 
 use super::MainWindow;
-use crate::island::{NOTE_TIME, Note, NoteUndo, opening};
+use crate::island::{self, ITEM, ITEMS, NOTE_TIME, Note, NoteUndo, opening};
 use crate::selection::entry_at;
 
 impl MainWindow {
@@ -63,6 +64,25 @@ impl MainWindow {
         if !paths.is_empty() && self.pick.is_none() {
             self.start_job(Operation::Trash { paths });
         }
+    }
+
+    /// Asks on the island before deleting the files selected for good;
+    /// in the trash, the entries selected there.
+    pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
+        if self.in_trash() {
+            self.delete_selected_for_good(cx);
+            return;
+        }
+        let paths = self.selected_paths();
+        if paths.is_empty() || self.pick.is_some() {
+            return;
+        }
+        let what = island::count(paths.len(), ITEM, ITEMS);
+        self.ask(
+            format!("Delete {what} for good?"),
+            Operation::Delete { paths },
+            cx,
+        );
     }
 
     /// Undoes what the note names, or else this window's newest job that
