@@ -8,9 +8,9 @@
 //! worked out from the same listing. Replace answers straight away, since
 //! the user chose to save over the file.
 //!
-//! A hidden name the folder on screen leaves out (see `hidden`) can't be
-//! told free from the listing, so the window asks the core what is at
-//! that path before answering: a file that is there asks too.
+//! A listing can leave out a hidden file (see `hidden`), so a name it
+//! shows as free is checked once more: the window asks the core what is at
+//! that path before answering, and a file there asks too.
 //!
 //! Names count as taken when they differ only in case: on a FAT drive
 //! `report.txt` is `REPORT.TXT`, and the window can't tell which file
@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 use gpui::{Context, Window};
 
-use nova_files_api::{Command, HiddenFiles, ListingId, PropertiesId, Unreadable};
+use nova_files_api::{Command, ListingId, PropertiesId};
 
 use super::{Conflict, typed};
 use crate::selection::Selection;
@@ -96,9 +96,9 @@ impl MainWindow {
         }
     }
 
-    /// The fresh listing a save waited for is on screen: answers if its
-    /// name is still free, and closes the window; otherwise asks.
-    pub fn save_checked(&mut self, recheck: Recheck, cx: &mut Context<Self>) {
+    /// The fresh listing a save waited for is on screen: a name it has
+    /// asks Replace or Keep both; a free one is looked at once more.
+    pub fn save_checked(&mut self, recheck: Recheck) {
         let name = folded(&recheck.name);
         let taken = self.listing.as_ref().is_some_and(|listing| {
             listing
@@ -111,14 +111,10 @@ impl MainWindow {
             self.ask_over(&recheck.folder, over);
             return;
         }
-        if self.hidden_files != Some(HiddenFiles::Shown) && is_hidden(&recheck.name) {
-            self.probe(recheck);
-            return;
-        }
-        self.save_free(recheck, cx);
+        self.probe(recheck);
     }
 
-    /// Asks the core what is at the path a hidden name would save to; the
+    /// Asks the core what is at the path a free name would save to; the
     /// save waits for the answer.
     fn probe(&mut self, mut recheck: Recheck) {
         // One probe per listing asked, so the listing's id names it too.
@@ -204,14 +200,4 @@ impl MainWindow {
 fn folded(name: &OsStr) -> OsString {
     name.to_str()
         .map_or_else(|| name.to_owned(), |text| text.to_lowercase().into())
-}
-
-/// Whether `name` is hidden, as a listing leaves it out.
-fn is_hidden(name: &OsStr) -> bool {
-    name.as_encoded_bytes().first() == Some(&b'.')
-}
-
-/// Whether a look at a path found nothing there.
-pub const fn found_nothing(reason: Unreadable) -> bool {
-    matches!(reason, Unreadable::Missing)
 }
