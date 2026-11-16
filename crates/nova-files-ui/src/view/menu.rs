@@ -87,6 +87,8 @@ fn menu_card(colors: &Colors) -> Stateful<Div> {
     div()
         .id("menu")
         .debug_selector(|| "menu".to_owned())
+        // Clicks on the menu are the menu's, never the rows' under it.
+        .occlude()
         .flex()
         .flex_col()
         .gap(size::MENU_ITEM_GAP)
