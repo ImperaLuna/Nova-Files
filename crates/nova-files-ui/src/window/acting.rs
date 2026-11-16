@@ -14,15 +14,15 @@ use crate::island::{self, ITEM, ITEMS, NOTE_TIME, Note, NoteUndo, opening};
 use crate::selection::entry_at;
 
 impl MainWindow {
-    /// The paths of the entries selected in the folder on screen, in list
-    /// order.
+    /// The paths of the entries selected in the list on screen, in list
+    /// order, each where it is: a search's results in their own folders.
     pub fn selected_paths(&self) -> Vec<PathBuf> {
         let Some((listing, ids)) = self.selected_ids() else {
             return Vec::new();
         };
         ids.into_iter()
             .filter_map(|id| entry_at(&listing.entries, id))
-            .map(|entry| listing.path.join(&entry.name))
+            .map(|entry| listing.path_of(entry))
             .collect()
     }
 
