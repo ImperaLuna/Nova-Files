@@ -17,9 +17,10 @@ use super::plan::Item;
 /// What a transfer knows of the clashes ahead of it.
 pub struct Ahead<'a> {
     items: &'a [Item],
-    /// Each item, by its place in the plan, whose target was taken when
-    /// first looked; `None` until a clash needs it.
-    found: Option<Vec<(usize, ConflictKind)>>,
+    /// For each kind of clash, the places in the plan, in order, of the
+    /// items whose target was taken that way when first looked; `None`
+    /// until a clash needs it.
+    found: Option<Vec<(ConflictKind, Vec<usize>)>>,
 }
 
 impl<'a> Ahead<'a> {
@@ -40,8 +41,10 @@ impl<'a> Ahead<'a> {
         let found = self.found.get_or_insert_with(|| look(items, control));
         let more = found
             .iter()
-            .filter(|&&(index, found)| index > at && found == kind)
-            .count();
+            .find(|(found, _)| *found == kind)
+            .map_or(0, |(_, places)| {
+                places.len() - places.partition_point(|&index| index <= at)
+            });
         u64::try_from(more).unwrap_or(u64::MAX)
     }
 }
@@ -57,9 +60,9 @@ const fn is_name_clash(kind: ConflictKind) -> bool {
     )
 }
 
-/// Each of `items` whose target is taken, and how.
-fn look(items: &[Item], control: &Control) -> Vec<(usize, ConflictKind)> {
-    let mut found = Vec::new();
+/// Each of `items` whose target is taken, by how, in plan order.
+fn look(items: &[Item], control: &Control) -> Vec<(ConflictKind, Vec<usize>)> {
+    let mut found: Vec<(ConflictKind, Vec<usize>)> = Vec::new();
     for (index, item) in items.iter().enumerate() {
         if control.checkpoint().is_err() {
             break;
@@ -71,7 +74,10 @@ fn look(items: &[Item], control: &Control) -> Vec<(usize, ConflictKind)> {
         if let Ok(Some(kind)) = clash(&item.from, item.kind, &item.to)
             && is_name_clash(kind)
         {
-            found.push((index, kind));
+            match found.iter_mut().find(|(found, _)| *found == kind) {
+                Some((_, places)) => places.push(index),
+                None => found.push((kind, vec![index])),
+            }
         }
     }
     found
