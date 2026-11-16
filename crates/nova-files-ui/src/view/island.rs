@@ -1,6 +1,6 @@
 //! Draws the island over the bottom of the sheet (see `island`): a
 //! running job's line and orange bar, what it asks about a conflict the
-//! job holds at, with an answer button each and a "For all N" tick, a
+//! job holds at, with Cancel, an answer button each and a "For all N" tick, a
 //! question with Cancel and its answer, a note with its Undo, or the selection with what can be done
 //! to it (in the trash, Restore). While it
 //! is down, the sheet's quiet count shows at the bottom left instead.
@@ -11,8 +11,8 @@
 //! `island-cut`, `island-rename`, `island-trash`, `island-clear`, `island-undo`,
 //! `island-dismiss`, `island-progress`, `island-restore`, `island-no`,
 //! `island-yes`, the answers to a conflict (`island-skip`,
-//! `island-keep-both`, `island-merge`, `island-replace`, `island-retry`)
-//! and its `island-for-all` tick, and the count, `count`.
+//! `island-keep-both`, `island-merge`, `island-replace`, `island-retry`),
+//! its `island-cancel` and its `island-for-all` tick, and the count, `count`.
 
 use gpui::{
     Action, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement as _, IntoElement,
@@ -136,8 +136,8 @@ fn file_buttons(count: usize, parts: &mut Vec<gpui::AnyElement>, colors: &Colors
 }
 
 /// What the island asks about `conflict`: the name, drawn strong, and
-/// what is wrong, then an answer button for each answer it takes, the
-/// last in the accent, and the "For all N" tick, `ticked` or not, when
+/// what is wrong, then Cancel, which stops the job, an answer button
+/// for each answer it takes, the last in the accent, and the "For all N" tick, `ticked` or not, when
 /// more like it are coming.
 fn ask_parts(
     conflict: &Conflict,
@@ -157,6 +157,15 @@ fn ask_parts(
             .child(rest)
             .into_any_element(),
     ];
+    parts.push(
+        square("island-cancel", colors)
+            .w_auto()
+            .px(size::TEXT_BUTTON_PAD)
+            .font_weight(text::STRONG_WEIGHT)
+            .child(SharedString::new_static(CANCEL_LABEL))
+            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.cancel_job(cx)))
+            .into_any_element(),
+    );
     let answers = asking::answers(conflict.kind);
     let last = answers.len().saturating_sub(1);
     for (index, answer) in answers.into_iter().enumerate() {

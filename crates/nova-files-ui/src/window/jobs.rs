@@ -327,6 +327,14 @@ impl MainWindow {
         cx.notify();
     }
 
+    /// Cancels the job the island shows: what it already did stays done.
+    pub(crate) fn cancel_job(&self, cx: &Context<Self>) {
+        let shown = self.job_on_island(cx).map(|(job, _)| job);
+        if let (Some(job), Some(connection)) = (shown, &self.connection) {
+            connection.send(Command::CancelJob(job)).ok();
+        }
+    }
+
     /// Ticks or clears "For all" on the island's question.
     pub(crate) fn toggle_for_all(&mut self, cx: &mut Context<Self>) {
         self.island.for_all = !self.island.for_all;
