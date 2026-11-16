@@ -185,9 +185,6 @@ fn an_entry_is_another_once_its_birth_differs() {
         ..entry(Some(5))
     };
     assert!(!entry(Some(5)).is(&other));
-    let mut seen = std::collections::HashSet::new();
-    seen.insert(entry(Some(5)));
-    assert!(seen.contains(&entry(None)));
 }
 
 #[test]

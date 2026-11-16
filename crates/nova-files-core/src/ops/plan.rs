@@ -7,7 +7,6 @@
 //! exists before anything goes into it.
 
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -59,12 +58,6 @@ pub struct Entry {
 impl PartialEq for Entry {
     fn eq(&self, other: &Self) -> bool {
         (self.device, self.inode) == (other.device, other.inode)
-    }
-}
-
-impl Hash for Entry {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.device, self.inode).hash(state);
     }
 }
 
