@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod accounts;
+mod capped;
 mod config_watch;
 mod details;
 mod details_queue;

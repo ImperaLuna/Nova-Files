@@ -4,27 +4,34 @@
 //! Themes live in `~/.icons` and in `icons` under each data folder
 //! (`XDG_DATA_HOME`, then `XDG_DATA_DIRS`); one theme may be spread over
 //! several of them, and its `index.theme` is the first one found. The
-//! search goes through the chosen theme, then the themes it inherits from
-//! (depth first, each once), then `hicolor`. In each theme every name is
-//! tried before the next theme, so the theme's own generic icon beats a
-//! parent's exact one and the rows keep one look. Within a theme the
-//! folders made for the asked size come first, then the nearest. The
-//! chain is read at the first search; only file type folders are looked in.
+//! search goes through the chosen theme (or, when none is chosen, the
+//! system's `default` theme), then the themes it inherits from (depth
+//! first, each once), then `hicolor`. In each theme every name is tried
+//! before the next theme, so the theme's own generic icon beats a parent's
+//! exact one and the rows keep one look. Within a theme the folders made
+//! for the asked size come first, then the nearest. Only file type folders
+//! are looked in.
+//!
+//! A theme's folders are listed once, at its first search, so each later
+//! search is a few hash lookups instead of thousands of file checks. The
+//! caller reads the file it is handed; one it can't use (unreadable, too
+//! big) lets the search go on to the next.
 
 mod index;
+mod ini;
 pub mod name;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
 use std::env;
-use std::ffi::OsString;
-use std::fs::File;
-use std::io::Read as _;
-use std::path::{Path, PathBuf};
+use std::ffi::{OsStr, OsString};
+use std::fs;
+use std::path::PathBuf;
 
 use index::Index;
 
-use crate::mime;
+use crate::{capped, mime};
 
 /// Where the spec puts themes under a data folder.
 const ICONS_FOLDER: &str = "icons";
@@ -34,8 +41,11 @@ const HOME_VAR: &str = "HOME";
 const INDEX_FILE: &str = "index.theme";
 /// Every theme falls back to it.
 pub const HICOLOR: &str = "hicolor";
-/// The extensions tried, in the spec's order; XPM isn't drawn.
+/// The theme systems set up for when the user chose none.
+pub const DEFAULT_THEME: &str = "default";
+/// The extensions looked for, in the spec's order; XPM isn't drawn.
 const EXTENSIONS: [&str; 2] = ["png", "svg"];
+const EXTENSION_SEPARATOR: char = '.';
 /// A theme's index is tens of KB.
 const MAX_INDEX_BYTES: u64 = 1024 * 1024;
 /// More inherited themes than any real chain, so a loop of themes ends.
@@ -46,8 +56,7 @@ const MAX_THEMES: usize = 32;
 pub struct IconThemes {
     chosen: Option<String>,
     bases: Vec<PathBuf>,
-    /// The chain, once read; each theme with its folders ordered for the
-    /// size asked for.
+    /// The chain, once read.
     chain: Option<Vec<Theme>>,
     size: u32,
     scale: u32,
@@ -58,6 +67,15 @@ struct Theme {
     name: String,
     /// Folders made for the size first, then by distance.
     folders: Vec<String>,
+    /// Each folder's icons, by name, once listed.
+    listed: Option<Vec<HashMap<String, Found>>>,
+}
+
+/// Where one icon file is: the base folder it is in and its extension.
+#[derive(Debug, Clone, Copy)]
+struct Found {
+    base: usize,
+    extension: &'static str,
 }
 
 impl IconThemes {
@@ -79,40 +97,90 @@ impl IconThemes {
     }
 
     /// The first icon file of `names`, tried in order in each theme of the
-    /// chain.
-    pub fn find(&mut self, names: &[String]) -> Option<PathBuf> {
+    /// chain, that `take` makes something of.
+    pub fn find<T>(
+        &mut self,
+        names: &[String],
+        mut take: impl FnMut(PathBuf) -> Option<T>,
+    ) -> Option<T> {
         let bases = &self.bases;
-        let chain = self.chain.get_or_insert_with(|| {
-            read_chain(self.chosen.as_deref(), bases, self.size, self.scale)
-        });
-        chain.iter().find_map(|theme| {
-            names.iter().find_map(|name| {
-                theme
-                    .folders
-                    .iter()
-                    .find_map(|folder| find_in(bases, &theme.name, folder, name))
+        let chosen = self.chosen.as_deref().unwrap_or(DEFAULT_THEME);
+        let chain = self
+            .chain
+            .get_or_insert_with(|| read_chain(chosen, bases, self.size, self.scale));
+        chain
+            .iter_mut()
+            .find_map(|theme| theme.find(bases, names, &mut take))
+    }
+}
+
+impl Theme {
+    /// The first icon file of `names` in this theme that `take` makes
+    /// something of; its folders are listed at the first search.
+    fn find<T>(
+        &mut self,
+        bases: &[PathBuf],
+        names: &[String],
+        take: &mut impl FnMut(PathBuf) -> Option<T>,
+    ) -> Option<T> {
+        let listed = self
+            .listed
+            .get_or_insert_with(|| list(bases, &self.name, &self.folders));
+        let folders = || self.folders.iter().zip(listed.iter());
+        names.iter().find_map(|name| {
+            folders().find_map(|(folder, icons)| {
+                let found = icons.get(name)?;
+                let file = format!("{name}{EXTENSION_SEPARATOR}{}", found.extension);
+                take(bases[found.base].join(&self.name).join(folder).join(file))
             })
         })
     }
 }
 
-/// The file of icon `name` in `folder` of `theme`, in the first of `bases`
-/// that has it.
-fn find_in(bases: &[PathBuf], theme: &str, folder: &str, name: &str) -> Option<PathBuf> {
-    bases.iter().find_map(|base| {
-        let folder = base.join(theme).join(folder);
-        EXTENSIONS
-            .iter()
-            .map(|extension| folder.join(format!("{name}.{extension}")))
-            .find(|path| path.is_file())
-    })
+/// The icons in each of `folders` of `theme`, by name.
+fn list(bases: &[PathBuf], theme: &str, folders: &[String]) -> Vec<HashMap<String, Found>> {
+    folders
+        .iter()
+        .map(|folder| {
+            let mut icons = HashMap::new();
+            for (base, root) in bases.iter().enumerate() {
+                let Ok(entries) = fs::read_dir(root.join(theme).join(folder)) else {
+                    continue;
+                };
+                for entry in entries.flatten() {
+                    add(&mut icons, &entry.file_name(), base);
+                }
+            }
+            icons
+        })
+        .collect()
+}
+
+/// Notes the icon in `file`, from base `base`, if it has an extension that
+/// is drawn. A name in several bases, or with both extensions, counts
+/// where it is first found, PNG before SVG.
+fn add(icons: &mut HashMap<String, Found>, file: &OsStr, base: usize) {
+    let Some((name, extension)) = file
+        .to_str()
+        .and_then(|file| file.rsplit_once(EXTENSION_SEPARATOR))
+    else {
+        return;
+    };
+    let Some(extension) = EXTENSIONS.iter().find(|known| **known == extension) else {
+        return;
+    };
+    let found = Found { base, extension };
+    let first = icons.entry(name.to_owned()).or_insert(found);
+    if first.base == base && found.extension == EXTENSIONS[0] {
+        *first = found;
+    }
 }
 
 /// `chosen`, the themes it inherits from and `hicolor`, each read once.
-fn read_chain(chosen: Option<&str>, bases: &[PathBuf], size: u32, scale: u32) -> Vec<Theme> {
+fn read_chain(chosen: &str, bases: &[PathBuf], size: u32, scale: u32) -> Vec<Theme> {
     let mut chain: Vec<Theme> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
-    let mut pending: Vec<String> = chosen.into_iter().map(str::to_owned).collect();
+    let mut pending = vec![chosen.to_owned()];
     while let Some(name) = pending.pop() {
         if seen.contains(&name) || seen.len() >= MAX_THEMES {
             continue;
@@ -147,6 +215,7 @@ fn ordered(name: String, index: Index, size: u32, scale: u32) -> Theme {
     Theme {
         name,
         folders: folders.into_iter().map(|folder| folder.path).collect(),
+        listed: None,
     }
 }
 
@@ -154,7 +223,7 @@ fn ordered(name: String, index: Index, size: u32, scale: u32) -> Theme {
 fn read_index(name: &str, bases: &[PathBuf]) -> Option<Index> {
     bases
         .iter()
-        .find_map(|base| read_capped(&base.join(name).join(INDEX_FILE)))
+        .find_map(|base| capped::text(&base.join(name).join(INDEX_FILE), MAX_INDEX_BYTES))
         .map(|text| index::parse(&text))
 }
 
@@ -167,14 +236,4 @@ fn bases(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
         .into_iter()
         .map(|dir| dir.join(ICONS_FOLDER));
     home.into_iter().chain(data).collect()
-}
-
-fn read_capped(path: &Path) -> Option<String> {
-    let mut text = String::new();
-    File::open(path)
-        .ok()?
-        .take(MAX_INDEX_BYTES)
-        .read_to_string(&mut text)
-        .ok()?;
-    Some(text)
 }

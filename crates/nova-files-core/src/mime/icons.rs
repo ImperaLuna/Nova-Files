@@ -3,8 +3,10 @@
 //!
 //! The names follow the shared MIME info spec, most specific first: the
 //! type's own icon from `mime/icons`, its name with `/` made `-`
-//! (`image-png`), the same for each type it is a kind of, then the generic
-//! icon from `mime/generic-icons`, and last `<media>-x-generic`. An icon
+//! (`image-png`) and its generic icon from `mime/generic-icons`; then the
+//! same for each type it is a kind of, nearest first; last
+//! `<media>-x-generic`. So a Python script is drawn as a script
+//! (`text-x-script`) before as plain text. An icon
 //! theme is searched for each in turn. The kind comes from the type's
 //! media (`image/*` is a picture), else from its generic icon.
 
@@ -56,8 +58,6 @@ impl MimeTypes {
                 add(icon.clone());
             }
             add(kind_of.replace(MEDIA_SEPARATOR, NAME_SEPARATOR));
-        }
-        for kind_of in &ancestry {
             if let Some(icon) = self.generic_icons.get(kind_of) {
                 add(icon.clone());
             }

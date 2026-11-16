@@ -2,14 +2,14 @@
 //! folders, each with the sizes it serves, as the freedesktop icon theme
 //! spec defines them. Only the folders whose icons stand for file types
 //! are kept. Keys the spec doesn't name, and values that don't parse, are
-//! skipped; a folder missing its `Size` is left out.
+//! skipped; a folder missing its `Size`, or reaching outside the theme
+//! (`..`, a root), is left out.
 
 use std::collections::HashSet;
+use std::path::{Component, Path};
 
-const SECTION_OPEN: char = '[';
-const SECTION_CLOSE: char = ']';
-const COMMENT: char = '#';
-const ASSIGN: char = '=';
+use super::ini::{self, Line};
+
 const LIST: char = ',';
 const THEME_SECTION: &str = "Icon Theme";
 const INHERITS: &str = "Inherits";
@@ -142,52 +142,50 @@ impl Section {
 
 /// Reads an `index.theme`'s text.
 pub fn parse(text: &str) -> Index {
-    let mut current: Option<String> = None;
+    let mut current: Option<&str> = None;
     let mut inherits = Vec::new();
     let mut listed: Vec<String> = Vec::new();
-    let mut sections: Vec<(String, Section)> = Vec::new();
-    for line in text.lines().map(str::trim) {
-        if line.is_empty() || line.starts_with(COMMENT) {
-            continue;
-        }
-        if let Some(name) = line
-            .strip_prefix(SECTION_OPEN)
-            .and_then(|rest| rest.strip_suffix(SECTION_CLOSE))
-        {
-            current = Some(name.to_owned());
-            if name != THEME_SECTION {
-                sections.push((name.to_owned(), Section::default()));
+    let mut sections: Vec<(&str, Section)> = Vec::new();
+    for line in ini::lines(text) {
+        match (line, current) {
+            (Line::Section(name), _) => {
+                current = Some(name);
+                if name != THEME_SECTION {
+                    sections.push((name, Section::default()));
+                }
             }
-            continue;
-        }
-        let Some((key, value)) = line.split_once(ASSIGN) else {
-            continue;
-        };
-        let (key, value) = (key.trim(), value.trim());
-        match current.as_deref() {
-            Some(THEME_SECTION) => match key {
+            (Line::Entry { key, value }, Some(THEME_SECTION)) => match key {
                 INHERITS => inherits = list(value),
                 DIRECTORIES | SCALED_DIRECTORIES => listed.extend(list(value)),
                 _ => {}
             },
-            Some(_) => {
+            (Line::Entry { key, value }, Some(_)) => {
                 if let Some((_, section)) = sections.last_mut() {
                     section.set(key, value);
                 }
             }
-            None => {}
+            (Line::Entry { .. }, None) => {}
         }
     }
     let mut seen = HashSet::new();
     listed.retain(|path| seen.insert(path.clone()));
     let folders = listed
         .iter()
+        .filter(|path| inside(path))
         .filter_map(|path| {
             let (_, section) = sections.iter().find(|(name, _)| name == path)?;
             section.folder(path)
         })
         .collect();
     Index { inherits, folders }
+}
+
+/// Whether a folder `path` from the index stays inside its theme: no
+/// root, no `..`.
+fn inside(path: &str) -> bool {
+    Path::new(path)
+        .components()
+        .all(|part| matches!(part, Component::Normal(_)))
 }
 
 /// A comma-separated list, without empty items.

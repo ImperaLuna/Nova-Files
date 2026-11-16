@@ -214,12 +214,10 @@ fn work(shared: &Shared, events: &dyn EventSink, icons: &FileIcons) {
         let Some(read) = details::read_batch(entries, || !shared.still_wanted(&run)) else {
             continue;
         };
-        let listed = run
-            .listed
-            .entries
-            .get(run.entries.clone())
-            .unwrap_or_default();
-        let found = listed
+        if !shared.still_wanted(&run) {
+            continue;
+        }
+        let found = details::entries(&run.listed, run.entries.clone())
             .iter()
             .map(|entry| icons.of(&entry.name, entry.kind))
             .collect();

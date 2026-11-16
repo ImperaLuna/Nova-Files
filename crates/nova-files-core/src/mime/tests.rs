@@ -366,6 +366,7 @@ fn icon_types(name: &str) -> (Dir, MimeTypes) {
         "application/gzip:package-x-generic\n\
          application/x-compressed-tar:package-x-generic\n\
          application/x-sharedlib:application-x-executable\n\
+         text/x-csrc:text-x-script\n\
          application/vnd.oasis.opendocument.text:x-office-document\n",
     )
     .write(ICONS_FILE, "application/pdf:my-pdf\n");
@@ -380,14 +381,19 @@ fn icon_names_go_from_the_type_to_its_generic_icon() {
         types.icon_names("application/x-compressed-tar"),
         [
             "application-x-compressed-tar",
-            "application-gzip",
             "package-x-generic",
+            "application-gzip",
             "application-x-generic",
         ]
     );
     assert_eq!(
         types.icon_names("text/x-csrc"),
-        ["text-x-csrc", "text-plain", "text-x-generic"]
+        [
+            "text-x-csrc",
+            "text-x-script",
+            "text-plain",
+            "text-x-generic"
+        ]
     );
     assert_eq!(
         types.icon_names("application/pdf"),

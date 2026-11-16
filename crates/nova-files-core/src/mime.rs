@@ -19,11 +19,11 @@ use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::fs::File;
-use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::{FileTypes, glob_matches};
+
+use crate::capped;
 
 const DATA_HOME_VAR: &str = "XDG_DATA_HOME";
 const DATA_DIRS_VAR: &str = "XDG_DATA_DIRS";
@@ -313,13 +313,7 @@ pub fn data_dirs(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
 }
 
 fn read_capped(path: &Path) -> Option<String> {
-    let mut text = String::new();
-    File::open(path)
-        .ok()?
-        .take(MAX_FILE_BYTES)
-        .read_to_string(&mut text)
-        .ok()?;
-    Some(text)
+    capped::text(path, MAX_FILE_BYTES)
 }
 
 mod icons;

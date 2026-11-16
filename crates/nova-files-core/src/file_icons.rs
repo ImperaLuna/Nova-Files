@@ -7,7 +7,9 @@
 //! `application/octet-stream`. Answers are kept per type for as long as
 //! the core runs, and icon files per path, so a folder of a thousand
 //! photos costs one search. An icon file that can't be read, or is too big
-//! for an icon, counts as missing.
+//! for an icon, counts as missing and the search goes on. The answers sit
+//! behind one lock shared by every client; a search under it costs a few
+//! hash lookups once the theme's folders are listed (see `icon_theme`).
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -79,6 +81,10 @@ impl FileIcons {
     }
 
     /// The icon of an entry called `name`.
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "a type is searched once: the search and keeping its answer share the lock"
+    )]
     pub fn of(&self, name: &OsStr, kind: EntryKind) -> FileIcon {
         if kind == EntryKind::Folder {
             return FileIcon::BuiltIn(IconKind::Folder);
@@ -86,47 +92,47 @@ impl FileIcons {
         let types = self.types.get_or_init(MimeTypes::from_env);
         let mime = types.of(name).unwrap_or(ANY_FILE);
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(icon) = state.by_type.get(mime) {
+        let State {
+            themes,
+            by_type,
+            files,
+        } = &mut *state;
+        if let Some(icon) = by_type.get(mime) {
             return icon.clone();
         }
-        let found = state
-            .themes
-            .find(&types.icon_names(mime))
-            .and_then(|path| state.read(path));
+        let found = themes.find(&types.icon_names(mime), |path| read(files, path));
         let icon = found.map_or_else(|| FileIcon::BuiltIn(types.icon_kind(mime)), FileIcon::Theme);
-        state.by_type.insert(mime.to_owned(), icon.clone());
+        by_type.insert(mime.to_owned(), icon.clone());
         icon
     }
 }
 
-impl State {
-    /// The icon file at `path`, read once.
-    fn read(&mut self, path: PathBuf) -> Option<Arc<ThemeIcon>> {
-        if let Some(icon) = self.files.get(&path) {
-            return Some(Arc::clone(icon));
-        }
-        let format = if path.extension() == Some(OsStr::new(SVG_EXTENSION)) {
-            IconFormat::Svg
-        } else {
-            IconFormat::Png
-        };
-        let mut bytes = Vec::new();
-        File::open(&path)
-            .ok()?
-            .take(MAX_ICON_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .ok()?;
-        if u64::try_from(bytes.len()).map_or(true, |length| length > MAX_ICON_BYTES) {
-            return None;
-        }
-        let icon = Arc::new(ThemeIcon {
-            path: path.clone(),
-            format,
-            bytes: bytes.into(),
-        });
-        self.files.insert(path, Arc::clone(&icon));
-        Some(icon)
+/// The icon file at `path`, read once and kept in `files`.
+fn read(files: &mut HashMap<PathBuf, Arc<ThemeIcon>>, path: PathBuf) -> Option<Arc<ThemeIcon>> {
+    if let Some(icon) = files.get(&path) {
+        return Some(Arc::clone(icon));
     }
+    let format = if path.extension() == Some(OsStr::new(SVG_EXTENSION)) {
+        IconFormat::Svg
+    } else {
+        IconFormat::Png
+    };
+    let mut bytes = Vec::new();
+    File::open(&path)
+        .ok()?
+        .take(MAX_ICON_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if u64::try_from(bytes.len()).map_or(true, |length| length > MAX_ICON_BYTES) {
+        return None;
+    }
+    let icon = Arc::new(ThemeIcon {
+        path: path.clone(),
+        format,
+        bytes: bytes.into(),
+    });
+    files.insert(path, Arc::clone(&icon));
+    Some(icon)
 }
 
 #[cfg(test)]

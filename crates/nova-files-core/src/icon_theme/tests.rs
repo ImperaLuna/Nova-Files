@@ -106,18 +106,18 @@ fn the_folder_made_for_the_size_wins() {
         .icon("Mine", "48x48/apps/text-html.png");
     let mut themes = themes(Some("Mine"), &[&base]);
 
-    let found = themes.find(&names(&["image-png"]));
+    let found = themes.find(&names(&["image-png"]), Some);
     assert_eq!(
         found,
         Some(base.path("Mine", "48x48/mimetypes/image-png.png"))
     );
-    let scalable = themes.find(&names(&["text-plain"]));
+    let scalable = themes.find(&names(&["text-plain"]), Some);
     assert_eq!(
         scalable,
         Some(base.path("Mine", "scalable/mimetypes/text-plain.svg"))
     );
     // Only file type folders count.
-    assert_eq!(themes.find(&names(&["text-html"])), None);
+    assert_eq!(themes.find(&names(&["text-html"]), Some), None);
 }
 
 #[test]
@@ -130,12 +130,12 @@ fn a_themes_generic_icon_beats_its_parents_exact_one() {
         .icon("Parent", "mimes/text-plain.png");
     let mut themes = themes(Some("Mine"), &[&base]);
 
-    let found = themes.find(&names(&["image-png", "image-x-generic"]));
+    let found = themes.find(&names(&["image-png", "image-x-generic"]), Some);
     assert_eq!(
         found,
         Some(base.path("Mine", "48x48/mimetypes/image-x-generic.png"))
     );
-    let inherited = themes.find(&names(&["text-plain"]));
+    let inherited = themes.find(&names(&["text-plain"]), Some);
     assert_eq!(inherited, Some(base.path("Parent", "mimes/text-plain.png")));
 }
 
@@ -151,21 +151,21 @@ fn hicolor_comes_last_even_when_no_theme_is_chosen() {
 
     // Parent lists hicolor before it is searched: hicolor still comes last.
     let mut chosen = themes(Some("Mine"), &[&base]);
-    let found = chosen.find(&names(&["text-plain"]));
+    let found = chosen.find(&names(&["text-plain"]), Some);
     assert_eq!(found, Some(base.path("Parent", "mimes/text-plain.png")));
-    let last = chosen.find(&names(&["audio-x-generic"]));
+    let last = chosen.find(&names(&["audio-x-generic"]), Some);
     assert_eq!(
         last,
         Some(base.path(HICOLOR, "48x48/mimetypes/audio-x-generic.png"))
     );
 
     let mut unset = themes(None, &[&base]);
-    let found = unset.find(&names(&["text-plain"]));
+    let found = unset.find(&names(&["text-plain"]), Some);
     assert_eq!(
         found,
         Some(base.path(HICOLOR, "48x48/mimetypes/text-plain.png"))
     );
-    assert_eq!(unset.find(&names(&["video-x-generic"])), None);
+    assert_eq!(unset.find(&names(&["video-x-generic"]), Some), None);
 }
 
 #[test]
@@ -181,11 +181,11 @@ fn a_theme_spreads_over_several_folders() {
     let mut themes = themes(Some("Mine"), &[&user, &system]);
 
     assert_eq!(
-        themes.find(&names(&["a"])),
+        themes.find(&names(&["a"]), Some),
         Some(user.path("Mine", "48x48/mimetypes/a.png"))
     );
     assert_eq!(
-        themes.find(&names(&["b"])),
+        themes.find(&names(&["b"]), Some),
         Some(system.path("Mine", "48x48/mimetypes/b.svg"))
     );
 }
@@ -198,13 +198,13 @@ fn a_missing_theme_or_a_loop_of_themes_ends() {
         .icon("Parent", "mimes/x.png");
     let mut looped = themes(Some("Parent"), &[&base]);
     assert_eq!(
-        looped.find(&names(&["x"])),
+        looped.find(&names(&["x"]), Some),
         Some(base.path("Parent", "mimes/x.png"))
     );
-    assert_eq!(looped.find(&names(&["y"])), None);
+    assert_eq!(looped.find(&names(&["y"]), Some), None);
 
     let mut missing = themes(Some("Gone"), &[&base]);
-    assert_eq!(missing.find(&names(&["x"])), None);
+    assert_eq!(missing.find(&names(&["x"]), Some), None);
 }
 
 #[test]
@@ -310,4 +310,82 @@ fn icons_live_in_home_then_each_data_folder() {
         .map(PathBuf::from)
         .collect();
     assert_eq!(bases(var), expected);
+}
+
+#[test]
+fn an_unusable_file_lets_the_search_go_on() {
+    let base = Base::new("unusable");
+    base.index("Mine", MINE)
+        .icon("Mine", "48x48/mimetypes/image-png.png")
+        .icon("Mine", "scalable/mimetypes/image-png.svg")
+        .icon("Mine", "48x48/mimetypes/image-x-generic.png");
+    let mut themes = themes(Some("Mine"), &[&base]);
+    let wanted = names(&["image-png", "image-x-generic"]);
+
+    let mut tried = Vec::new();
+    let taken = themes.find(&wanted, |path| {
+        tried.push(path.clone());
+        path.ends_with("image-x-generic.png").then_some(path)
+    });
+
+    assert_eq!(
+        taken,
+        Some(base.path("Mine", "48x48/mimetypes/image-x-generic.png"))
+    );
+    assert_eq!(
+        tried,
+        [
+            base.path("Mine", "48x48/mimetypes/image-png.png"),
+            base.path("Mine", "scalable/mimetypes/image-png.svg"),
+            base.path("Mine", "48x48/mimetypes/image-x-generic.png"),
+        ]
+    );
+}
+
+#[test]
+fn png_comes_before_svg_in_one_folder() {
+    let base = Base::new("png-first");
+    base.index("Mine", MINE)
+        .icon("Mine", "48x48/mimetypes/a.svg")
+        .icon("Mine", "48x48/mimetypes/a.png")
+        .icon("Mine", "48x48/mimetypes/a.xpm")
+        .icon("Mine", "48x48/mimetypes/b.xpm");
+    let mut themes = themes(Some("Mine"), &[&base]);
+    let found = themes.find(&names(&["a"]), Some);
+    assert_eq!(found, Some(base.path("Mine", "48x48/mimetypes/a.png")));
+    assert_eq!(themes.find(&names(&["b"]), Some), None);
+}
+
+#[test]
+fn without_a_chosen_theme_the_default_one_is_searched() {
+    let base = Base::new("default");
+    base.index(DEFAULT_THEME, "[Icon Theme]\nInherits=Mine\n")
+        .index("Mine", MINE)
+        .icon("Mine", "48x48/mimetypes/a.png");
+    let mut themes = themes(None, &[&base]);
+    let found = themes.find(&names(&["a"]), Some);
+    assert_eq!(found, Some(base.path("Mine", "48x48/mimetypes/a.png")));
+}
+
+#[test]
+fn a_folder_reaching_outside_its_theme_is_left_out() {
+    let read = index::parse(
+        "[Icon Theme]\nDirectories=../x,/abs,a/../b,ok\n\
+         [../x]\nSize=48\n[/abs]\nSize=48\n[a/../b]\nSize=48\n[ok]\nSize=48\n",
+    );
+    let paths: Vec<_> = read
+        .folders
+        .iter()
+        .map(|folder| folder.path.as_str())
+        .collect();
+    assert_eq!(paths, ["ok"]);
+}
+
+#[test]
+fn key_files_read_values_from_their_own_section() {
+    let text = "# c\nKey=outside\n[A]\n Key = a \n[B]\nKey=b\nbroken line\n";
+    assert_eq!(ini::value(text, "A", "Key"), Some("a"));
+    assert_eq!(ini::value(text, "B", "Key"), Some("b"));
+    assert_eq!(ini::value(text, "C", "Key"), None);
+    assert_eq!(ini::value(text, "A", "Other"), None);
 }
