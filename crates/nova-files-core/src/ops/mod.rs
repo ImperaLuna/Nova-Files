@@ -19,6 +19,7 @@
 //! starts from then.
 
 mod access;
+mod ahead;
 mod attrs;
 mod audience;
 mod clash;
@@ -58,7 +59,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use nova_files_api::{
     Answer, ClientGone, ClientId, Conflict, Connector, Event, EventSink, Failure, JobId, JobTag,
-    Operation, Outcome, Scope,
+    Operation, Outcome, Scope, Tally,
 };
 
 pub use audience::Audience;
@@ -325,6 +326,7 @@ impl Jobs {
                 let undo = taken.as_ref().map(|taken| taken.undo.clone());
                 let ended = run(&mut running, &operation, &trashes, undo);
                 let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
+                let tally = running.tally;
                 let undoable = (!running.resumed())
                     .then(|| undo_of(&operation, &steps, &ended.0, &trashes))
                     .flatten();
@@ -353,7 +355,7 @@ impl Jobs {
                 if let Some(taken) = taken.filter(|_| !spent) {
                     history.add(taken, &audience);
                 }
-                finish(&registry, &audience, job, ended);
+                finish(&registry, &audience, job, ended, tally);
                 // Into the loop's queue, so its idle wait starts again now.
                 wake.activity().ok();
             });
@@ -365,7 +367,8 @@ impl Jobs {
             if let Some(taken) = not_spawned {
                 self.history.add(taken, &self.audience);
             }
-            finish(&self.running, &self.audience, job, (outcome, Vec::new()));
+            let ended = (outcome, Vec::new());
+            finish(&self.running, &self.audience, job, ended, Tally::default());
         }
     }
 
@@ -430,6 +433,7 @@ impl Jobs {
                         job,
                         outcome: Outcome::Cancelled,
                         changed: Vec::new(),
+                        tally: Tally::default(),
                     });
                 }
             }
@@ -554,18 +558,26 @@ fn first_path(operation: &Operation) -> PathBuf {
     }
 }
 
-/// Forgets job `job` and tells every client how it ended.
+/// Forgets job `job` and tells every client how it ended, and what the
+/// answers to its conflicts made of it.
 #[expect(
     clippy::significant_drop_tightening,
     reason = "telling under the lock keeps a pause from being heard after the end"
 )]
-fn finish(registry: &Registry, audience: &Audience, job: JobId, (outcome, changed): Ended) {
+fn finish(
+    registry: &Registry,
+    audience: &Audience,
+    job: JobId,
+    (outcome, changed): Ended,
+    tally: Tally,
+) {
     let mut running = lock(registry);
     running.remove(&job);
     audience.tell(&Event::JobFinished {
         job,
         outcome,
         changed,
+        tally,
     });
 }
 

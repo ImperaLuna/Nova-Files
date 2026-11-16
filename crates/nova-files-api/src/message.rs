@@ -7,7 +7,7 @@ use crate::bookmark::{Bookmark, BookmarkChange};
 use crate::disk_space::PathSpace;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
-use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
+use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope, Tally};
 use crate::open_with::{OpenWith, OpenWithAnswer};
 use crate::preview::{Fit, Preview, PreviewId};
 use crate::properties::{Properties, PropertiesId};
@@ -377,12 +377,14 @@ pub enum Event {
     /// forget it. Answers [`Command::WatchJobs`].
     JobInterrupted { job: JobId, operation: Operation },
     /// Job `job` has ended. `changed` names the folders whose entries it
-    /// changed, so a window showing one reads it again. Every client that
-    /// watches jobs hears it.
+    /// changed, so a window showing one reads it again, and `tally` what
+    /// the answers to its conflicts made of it. Every client that watches
+    /// jobs hears it.
     JobFinished {
         job: JobId,
         outcome: Outcome,
         changed: Vec<PathBuf>,
+        tally: Tally,
     },
     /// Job `job`, which did `operation`, can be undone with
     /// [`Operation::Undo`]. Every client that watches jobs hears it just

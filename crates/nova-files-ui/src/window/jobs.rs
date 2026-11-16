@@ -205,6 +205,7 @@ impl MainWindow {
                 job,
                 outcome,
                 changed,
+                ..
             } => self.job_finished(job, &outcome, &changed, cx),
             _ => {}
         }

@@ -1,6 +1,6 @@
 //! What a job's thread holds while it runs: its id, its switch, its
-//! progress, its journal once it has one, and the answers a client gave
-//! for all conflicts of a kind.
+//! progress, its journal once it has one, the answers a client gave for
+//! all conflicts of a kind, and what those answers made of it.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io;
@@ -8,7 +8,7 @@ use std::ops::Bound;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use nova_files_api::{Answer, Conflict, ConflictKind, Failure, JobId, Scope};
+use nova_files_api::{Answer, Conflict, ConflictKind, Failure, JobId, Scope, Tally};
 
 use super::clash::conflict_for;
 use super::control::Cancelled;
@@ -46,6 +46,8 @@ pub struct Running {
     /// the outermost such entry. A folder merged into one already there
     /// was never moved itself, so its entries are.
     pub steps: BTreeMap<PathBuf, PathBuf>,
+    /// What the answers to its conflicts made of the job so far.
+    pub tally: Tally,
 }
 
 impl Running {
@@ -68,6 +70,7 @@ impl Running {
             resumes: false,
             sources: HashSet::new(),
             steps: BTreeMap::new(),
+            tally: Tally::default(),
         }
     }
 
@@ -175,6 +178,7 @@ impl Running {
                 target: path.to_path_buf(),
                 // Numbered when asked.
                 number: 0,
+                more: 0,
             };
             if self.skips(conflict)? {
                 return Ok(None);
