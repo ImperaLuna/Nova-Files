@@ -27,6 +27,7 @@
 //! A tab in the background holds its listing's names and nothing per row
 //! beyond them.
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::mem;
 use std::path::PathBuf;
@@ -257,17 +258,22 @@ impl MainWindow {
         if self.tab_count() <= LAST || index >= self.tab_count() {
             return;
         }
-        if index == self.tabs.current {
-            drop(self.leave_tab(cx));
-            self.tabs.list.remove(index);
-            self.tabs.current = index.min(self.tab_count() - 1);
-            self.enter_tab(cx);
-        } else {
-            self.tabs.list.remove(index);
-            if index < self.tabs.current {
-                self.tabs.current -= 1;
+        match index.cmp(&self.tabs.current) {
+            Ordering::Equal => {
+                drop(self.leave_tab(cx));
+                self.tabs.list.remove(index);
+                self.tabs.current = index.min(self.tab_count() - 1);
+                self.enter_tab(cx);
             }
-            cx.notify();
+            Ordering::Less => {
+                self.tabs.list.remove(index);
+                self.tabs.current -= 1;
+                cx.notify();
+            }
+            Ordering::Greater => {
+                self.tabs.list.remove(index);
+                cx.notify();
+            }
         }
     }
 
