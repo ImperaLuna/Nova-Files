@@ -72,7 +72,6 @@ use access::change_access;
 use control::{Cancelled, Control};
 use delete::delete;
 use job::Job;
-use journal::remove_journal;
 use left::Left;
 use make::How;
 use progress::Reporter;
@@ -300,8 +299,6 @@ impl Jobs {
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
         // New hidden names for a resumed job, never a crash's.
         let resume = left.map(|left| (left, self.next.fetch_add(1, Ordering::Relaxed)));
-        // A resumed job that never starts is over all the same.
-        let resumed_journal = resume.as_ref().map(|(left, _)| left.journal.clone());
         // Taken now, so an undo runs once however often it is asked for;
         // put back unless it ends done.
         let taken = match &operation {
@@ -319,11 +316,12 @@ impl Jobs {
         let spawned = thread::Builder::new()
             .name(JOB_THREAD.to_owned())
             .spawn(move || {
-                let (operation, to_run) = to_run(&mut running, operation, resume);
                 let undo = taken.as_ref().map(|taken| taken.undo.clone());
-                let ended = to_run.map_or((Outcome::Cancelled, Vec::new()), |()| {
-                    run(&mut running, &operation, &trashes, undo)
-                });
+                let ended = match resumed(&mut running, resume) {
+                    None => run(&mut running, &operation, &trashes, undo),
+                    Some(Ok(rest)) => run(&mut running, &rest, &trashes, undo),
+                    Some(Err(Cancelled)) => (Outcome::Cancelled, Vec::new()),
+                };
                 let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
                 let undoable = (!running.resumed())
                     .then(|| undo_of(&operation, &steps, &ended.0, &trashes))
@@ -358,9 +356,6 @@ impl Jobs {
                 wake.activity().ok();
             });
         if spawned.is_err() {
-            if let Some(journal) = resumed_journal {
-                remove_journal(&journal);
-            }
             let outcome = Outcome::Failed {
                 path: failed_path,
                 reason: Failure::Other,
@@ -501,23 +496,19 @@ fn run(
     }
 }
 
-/// What job `running` runs: `operation`, or, when it resumes what a
-/// crash `left`, what is left of it; with [`Cancelled`] when cancelled
-/// while that is found.
-fn to_run(
+/// When job `running` resumes what a crash `left`, takes up its journal
+/// and returns what is left to do; `None` when it doesn't resume.
+///
+/// # Errors
+/// [`Cancelled`] when cancelled while what is left is found.
+fn resumed(
     running: &mut Running,
-    operation: Operation,
     resume: Option<(Left, u64)>,
-) -> (Operation, Result<(), Cancelled>) {
-    let Some((left, names)) = resume else {
-        return (operation, Ok(()));
-    };
-    let all = left.operation.clone();
+) -> Option<Result<Operation, Cancelled>> {
+    let (left, names) = resume?;
+    let rest = still_to_do(&left.operation, &running.shared.control);
     running.resuming(left, names);
-    match still_to_do(&all, &running.shared.control) {
-        Ok(rest) => (rest, Ok(())),
-        Err(cancelled) => (all, Err(cancelled)),
-    }
+    Some(rest)
 }
 
 /// What is left of `operation` after a crash: a move, delete or trash

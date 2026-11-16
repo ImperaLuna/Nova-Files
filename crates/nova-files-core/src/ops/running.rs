@@ -3,6 +3,7 @@
 //! for all conflicts of a kind.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs::File;
 use std::io;
 use std::ops::Bound;
 use std::path::{Path, PathBuf};
@@ -31,9 +32,10 @@ pub struct Running {
     /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
     journal: Option<Journal>,
-    /// The journal of a resumed job that couldn't be opened again: it
-    /// still goes when the job ends, or the job would seem cut short.
-    unopened: Option<PathBuf>,
+    /// The journal of a resumed job that couldn't be opened again, held
+    /// so no other core takes the job up meanwhile: it still goes when the
+    /// job ends, or the job would seem cut short.
+    unopened: Option<(PathBuf, File)>,
     /// Answers given for every conflict of their kind.
     answers: HashMap<ConflictKind, Answer>,
     /// How many conflicts it asked about.
@@ -88,12 +90,17 @@ impl Running {
         self.names = names;
         self.resumes = true;
         self.journals = None;
+        // Another handle on the journal keeps it held should it fail.
+        let held = left.file.try_clone();
         let path = left.journal.clone();
         match Journal::reopen(left.file, left.journal, left.whole) {
             Ok(journal) => self.journal = Some(journal),
             Err(error) => {
                 log::warn!("job {} resumes without its journal: {error}", self.job.0);
-                self.unopened = Some(path);
+                match held {
+                    Ok(held) => self.unopened = Some((path, held)),
+                    Err(error) => log::warn!("{} is let go: {error}", path.display()),
+                }
             }
         }
     }
@@ -281,7 +288,7 @@ impl Running {
         if let Some(journal) = self.journal.take() {
             journal.finish();
         }
-        if let Some(path) = self.unopened.take() {
+        if let Some((path, _held)) = self.unopened.take() {
             remove_journal(&path);
         }
     }
