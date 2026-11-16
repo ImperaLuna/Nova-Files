@@ -48,6 +48,12 @@ pub struct Running {
     pub steps: BTreeMap<PathBuf, PathBuf>,
     /// What the answers to its conflicts made of the job so far.
     pub tally: Tally,
+    /// The home trash's folder, where files the job replaces go when
+    /// they are on the home drive.
+    pub home_trash: Option<PathBuf>,
+    /// Each file the job replaced, by the path it had, and where in a
+    /// trash it went, so an undo can put it back.
+    pub replaced: Vec<(PathBuf, PathBuf)>,
 }
 
 impl Running {
@@ -71,6 +77,8 @@ impl Running {
             sources: HashSet::new(),
             steps: BTreeMap::new(),
             tally: Tally::default(),
+            home_trash: None,
+            replaced: Vec::new(),
         }
     }
 

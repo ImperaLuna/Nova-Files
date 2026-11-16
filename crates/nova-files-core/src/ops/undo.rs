@@ -11,8 +11,9 @@
 //! trash. A rename is renamed back, and a new folder goes while it is
 //! still empty. A delete, a delete from the trash, an empty trash and an
 //! undo can't be taken back, nor can a job that resumed after a crash,
-//! whose earlier steps this run never saw. What a replace put aside
-//! isn't brought back.
+//! whose earlier steps this run never saw. The files a copy or move
+//! replaced went to the trash (see `make`); once what took their names is
+//! taken back, they are restored there.
 //!
 //! Each entry to take back is remembered with its device and inode, as
 //! it was when the job ended; one that has changed since (removed,
@@ -40,7 +41,7 @@ use super::journal::{Record, word};
 use super::make::How;
 use super::one_step;
 use super::plan::Entry;
-use super::restore::{make_folders, restore};
+use super::restore::{make_folders, put_back, restore};
 use super::running::Running;
 use super::stop::Stop;
 use super::transfer::transfer_to;
@@ -73,6 +74,24 @@ pub enum Undo {
     Rename(PathBuf, Identity, OsString),
     /// Remove this folder, while empty.
     RemoveFolder(PathBuf, Identity),
+    /// Undo as the first says, then restore these entries from the trash:
+    /// the files the job replaced, which go back once their names are
+    /// free again.
+    ThenPutBack(Box<Self>, Vec<(PathBuf, Identity)>),
+}
+
+/// `undo`, and then the files a job `replaced` (each by the path it had
+/// and where in a trash it went) put back.
+pub fn putting_back(undo: Undo, replaced: &[(PathBuf, PathBuf)]) -> Undo {
+    let items: Vec<_> = replaced
+        .iter()
+        .filter_map(|(_, item)| Some((item.clone(), entry(item)?)))
+        .collect();
+    if items.is_empty() {
+        undo
+    } else {
+        Undo::ThenPutBack(Box::new(undo), items)
+    }
 }
 
 /// A job that can be undone: its id, what it did, and how to undo it.
@@ -184,7 +203,7 @@ pub fn undo_of(
     let empty = match &undo {
         Undo::Trash(paths) | Undo::Restore(paths) => paths.is_empty(),
         Undo::MoveBack(pairs) => pairs.is_empty(),
-        Undo::Rename(..) | Undo::RemoveFolder(..) => false,
+        Undo::Rename(..) | Undo::RemoveFolder(..) | Undo::ThenPutBack(..) => false,
     };
     (!empty).then_some(undo)
 }
@@ -192,6 +211,45 @@ pub fn undo_of(
 /// Takes back what `undo` says, as job `running`; `None` when the job
 /// to undo can't be.
 pub fn run(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ended {
+    let Some(Undo::ThenPutBack(first, replaced)) = undo else {
+        return run_one(running, undo, trashes);
+    };
+    let (outcome, mut changed) = run_one(running, Some(*first), trashes);
+    // Taken back, or nothing was left to take back: the names are free.
+    let free = outcome == Outcome::Done || is_gone(&outcome);
+    if !free {
+        return (outcome, changed);
+    }
+    let items: Vec<_> = still(replaced)
+        .into_iter()
+        .filter(|item| trash::find(item, trashes).is_some())
+        .collect();
+    if items.is_empty() {
+        return (outcome, changed);
+    }
+    let (put, more) = put_back(running, &items, trashes);
+    changed.extend(more);
+    changed.sort();
+    changed.dedup();
+    (put, changed)
+}
+
+/// Whether `outcome` says an undo found nothing left to take back.
+fn is_gone(outcome: &Outcome) -> bool {
+    matches!(outcome, Outcome::Failed { path, reason: Failure::NotFound } if path.as_os_str().is_empty())
+}
+
+/// The entries of `paths` still the entries they were.
+fn still(paths: Vec<(PathBuf, Identity)>) -> Vec<PathBuf> {
+    paths
+        .into_iter()
+        .filter(|(path, was)| entry(path) == Some(*was))
+        .map(|(path, _)| path)
+        .collect()
+}
+
+/// Takes back what `undo` says, but for files to put back after.
+fn run_one(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ended {
     let gone = || {
         let outcome = Outcome::Failed {
             path: PathBuf::new(),
@@ -203,13 +261,6 @@ pub fn run(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ende
         return gone();
     };
     let same = |path: &Path, was: Identity| entry(path) == Some(was);
-    let still = |paths: Vec<(PathBuf, Identity)>| -> Vec<PathBuf> {
-        paths
-            .into_iter()
-            .filter(|(path, was)| same(path, *was))
-            .map(|(path, _)| path)
-            .collect()
-    };
     match undo {
         Undo::Trash(paths) => match still(paths) {
             paths if paths.is_empty() => gone(),
@@ -247,7 +298,8 @@ pub fn run(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ende
                 Err(stop) => (stop.outcome(), Vec::new()),
             }
         }
-        Undo::Rename(..) | Undo::RemoveFolder(..) => gone(),
+        // A put back is built only around another undo, never inside one.
+        Undo::Rename(..) | Undo::RemoveFolder(..) | Undo::ThenPutBack(..) => gone(),
     }
 }
 

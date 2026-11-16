@@ -296,6 +296,7 @@ impl Jobs {
             Arc::clone(&shared),
         );
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
+        running.home_trash.clone_from(&self.trashes.home);
         // New hidden names for a resumed job, never a crash's.
         let resume = left.map(|left| (left, self.next.fetch_add(1, Ordering::Relaxed)));
         // Taken now, so an undo runs once however often it is asked for;
@@ -325,11 +326,7 @@ impl Jobs {
                 };
                 let undo = taken.as_ref().map(|taken| taken.undo.clone());
                 let ended = run(&mut running, &operation, &trashes, undo);
-                let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
-                let tally = running.tally;
-                let undoable = (!running.resumed())
-                    .then(|| undo_of(&operation, &steps, &ended.0, &trashes))
-                    .flatten();
+                let (tally, undoable) = after(&mut running, &operation, &ended, &trashes);
                 running.finish();
                 // Before clients hear the job ended, so an undo asked for
                 // then finds it.
@@ -500,6 +497,23 @@ fn run(
         Operation::EmptyTrash => empty_trash(running, trashes),
         Operation::Undo { .. } => undo::run(running, undo, trashes),
     }
+}
+
+/// What the answers to `running`'s conflicts made of it, and how to undo
+/// it, once it ran `operation` and `ended`: what it made taken back, and
+/// then what it replaced put back.
+fn after(
+    running: &mut Running,
+    operation: &Operation,
+    ended: &Ended,
+    trashes: &Trashes,
+) -> (Tally, Option<Undo>) {
+    let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
+    let undo = (!running.resumed())
+        .then(|| undo_of(operation, &steps, &ended.0, trashes))
+        .flatten()
+        .map(|undo| undo::putting_back(undo, &running.replaced));
+    (running.tally, undo)
 }
 
 /// What is left of `operation` after a crash: a move, delete or trash
