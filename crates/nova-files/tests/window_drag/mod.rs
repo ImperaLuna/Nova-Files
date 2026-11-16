@@ -270,6 +270,39 @@ async fn a_row_left_for_outside_the_window_opens_nothing(cx: &mut TestAppContext
 }
 
 #[gpui::test]
+async fn the_chip_names_the_folder_on_screen_over_its_list(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-says-list");
+    let home = TempFolder::tree("drag-says-list-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let projects = tree.path().join("Projects");
+    let start = center(cx, "name-1");
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(
+        start + point(px(20.0), px(0.0)),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    // The drag goes on while another folder opens: below its rows, its
+    // list takes the file, by the folder's name.
+    view.update(cx, |view, cx| {
+        view.open(&projects);
+        cx.notify();
+    });
+    wait_for_folder(&view, cx, &projects).await;
+    let below = cx.debug_bounds("entry-0").unwrap().bottom_left() + point(px(40.0), px(60.0));
+    cx.simulate_mouse_move(below, Some(MouseButton::Left), Modifiers::none());
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.drop_says(Modifiers::none()).as_deref() == Some("Move to Projects")
+    })
+    .await;
+    cx.simulate_mouse_up(below, MouseButton::Left, Modifiers::none());
+    wait_for_note(&view, cx, "Moved notes.txt to Projects").await;
+    assert!(projects.join("notes.txt").exists());
+}
+
+#[gpui::test]
 async fn ctrl_copies_what_is_dragged(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("drag-copy");
