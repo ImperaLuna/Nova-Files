@@ -7,7 +7,8 @@
 //! from. In a main window, the + (`pin`) on
 //! the head, or at the end of the row in a narrow window, picks a folder
 //! to pin, and right-click on a pinned folder opens
-//! its menu (see `window/pin`).
+//! its menu (see `window/pin`). Files dropped on a folder's row go into
+//! it, and on the trash's to the trash (see `drop`).
 
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
@@ -17,6 +18,7 @@ use gpui::{
 
 use super::{Row, new_tab_on_middle_click, on_middle_click, row, section_button, section_head};
 use crate::assets::Icon;
+use crate::dropping::DropAt;
 use crate::location::Location;
 use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::theme::{Colors, size};
@@ -54,6 +56,7 @@ impl MainWindow {
                     this.open(&target);
                 }))
                 .map(|row| new_tab_on_middle_click(row, place.path.clone(), main, cx))
+                .map(|row| self.drop_target(row, DropAt::Folder(place.path.clone()), cx))
                 .when_some(pinned, |row, path| {
                     row.on_mouse_down(
                         MouseButton::Right,
@@ -135,5 +138,6 @@ impl MainWindow {
         )
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)))
         .map(|row| on_middle_click(row, true, cx, Self::open_trash_in_new_tab))
+        .map(|row| self.drop_target(row, DropAt::Trash, cx))
     }
 }

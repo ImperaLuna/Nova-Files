@@ -8,11 +8,13 @@
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, MouseButton, MouseDownEvent,
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
+    prelude::FluentBuilder as _,
 };
 
 use super::{Row, on_middle_click, row, section_head};
 use crate::assets::Icon;
 use crate::drives;
+use crate::dropping::DropAt;
 use crate::theme::{Colors, size};
 use crate::window::MainWindow;
 
@@ -54,7 +56,10 @@ impl MainWindow {
             )
             .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
                 this.open_drive(clicked.clone());
-            }));
+            }))
+            .when_some(drive.folder, |row, folder| {
+                self.drop_target(row, DropAt::Folder(folder), cx)
+            });
             if main {
                 on_middle_click(row, main, cx, move |this, cx| {
                     this.open_drive_in_new_tab(in_new_tab.clone(), cx);

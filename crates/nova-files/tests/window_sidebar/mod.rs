@@ -51,6 +51,11 @@ async fn a_pinned_folder_shows_after_home_and_opens(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
 }
 
+/// How far in from its row the home place's icon starts.
+fn icon_inset(cx: &mut VisualTestContext) -> Pixels {
+    cx.debug_bounds("place-0-here").unwrap().left() - cx.debug_bounds("place-0").unwrap().left()
+}
+
 #[gpui::test]
 async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
@@ -66,6 +71,9 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     assert!(pinned.top() >= home.bottom(), "wide: one under the other");
     let sheet_left = cx.debug_bounds("modified-header").unwrap().left();
     assert!(home.right() < sheet_left, "wide: beside the sheet");
+    // The clear drop edge sits inside the padding, so the icon keeps its
+    // place: 10 px in from the row when wide, 12 px when narrow.
+    assert_eq!(icon_inset(cx), px(10.0));
 
     cx.simulate_resize(size(NARROWEST_WIDE - px(1.0), px(600.0)));
     cx.run_until_parked();
@@ -74,6 +82,7 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
         cx.debug_bounds("place-1").unwrap(),
     );
     assert_eq!(home.top(), pinned.top(), "narrow: side by side");
+    assert_eq!(icon_inset(cx), px(12.0));
     assert!(pinned.left() >= home.right());
     let header = cx.debug_bounds("modified-header").unwrap();
     assert!(header.top() >= home.bottom(), "narrow: above the sheet");

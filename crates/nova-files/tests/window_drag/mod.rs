@@ -2,6 +2,7 @@
 //! onto a folder row moves the file there on one drive, Ctrl copies, the
 //! island says so with Undo, and a drop that would change nothing (a
 //! folder onto itself, files onto the folder they are in) does nothing.
+//! The trash, a tree folder and a crumb take drops too.
 //! The rules for every target are tested in the UI crate's `dropping`.
 
 use gpui::{MouseButton, Pixels, Point, point, px};
@@ -121,6 +122,59 @@ async fn a_drop_that_changes_nothing_does_nothing(cx: &mut TestAppContext) {
         assert_eq!(view.jobs_pending(), 0);
         assert_eq!(view.entry_names(), ["Projects", "notes.txt"]);
     });
+}
+
+#[gpui::test]
+async fn files_dropped_on_the_trash_go_to_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-trash");
+    let home = TempFolder::tree("drag-trash-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    // An empty trash shows no count.
+    view.condition::<WindowEvent>(cx, |view, _| view.trash_count() == Some(0))
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("place-trash-number").is_none());
+
+    // Shift picks nothing for the trash.
+    drag(cx, "name-1", "place-trash", Modifiers::shift());
+    wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
+    view.condition::<WindowEvent>(cx, |view, _| view.trash_count() == Some(1))
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("place-trash-number").is_some());
+    assert!(!tree.path().join("notes.txt").exists());
+    assert!(
+        home.path()
+            .join(".local/share/Trash/files/notes.txt")
+            .exists()
+    );
+}
+
+#[gpui::test]
+async fn files_drop_on_a_tree_folder_and_a_crumb(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-sidebar");
+    let projects = tree.path().join("Projects");
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx) = window_on(cx, tree.path(), tree.path());
+    wait_for_folder(&view, cx, tree.path()).await;
+    click(cx, "tree-toggle-0");
+    view.condition::<WindowEvent>(cx, |view, _| view.tree_settled())
+        .await;
+
+    // Home holds Projects, notes.txt; the tree Home, Projects.
+    drag(cx, "name-1", "tree-1", Modifiers::none());
+    wait_for_note(&view, cx, "Moved notes.txt to Projects").await;
+    assert!(projects.join("notes.txt").exists());
+
+    // In Projects (nova, notes.txt), nova up onto Home's crumb.
+    click(cx, "tree-1");
+    wait_for_folder(&view, cx, &projects).await;
+    drag(cx, "name-0", "crumb-0", Modifiers::none());
+    view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["notes.txt"])
+        .await;
+    assert!(tree.path().join("nova").is_dir());
 }
 
 #[gpui::test]

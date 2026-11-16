@@ -20,7 +20,7 @@ use gpui::{
     prelude::FluentBuilder as _, relative,
 };
 
-use super::{Row, on_middle_click, row, section_button, section_head};
+use super::{Row, inside_edge, on_middle_click, row, section_button, section_head};
 use crate::assets::Icon;
 use crate::location::Location;
 use crate::theme::{Colors, radius, size};
@@ -106,7 +106,7 @@ impl MainWindow {
             &colors,
         )
         .group(group.clone())
-        .when(!narrow, |row| row.pr(size::TAB_CLOSE_RIGHT))
+        .when(!narrow, |row| row.pr(inside_edge(size::TAB_CLOSE_RIGHT)))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.switch_tab(index, cx)))
         .map(|row| on_middle_click(row, true, cx, move |this, cx| this.close_tab(index, cx)))
         .when(closable, |row| {

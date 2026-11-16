@@ -1,7 +1,8 @@
 //! What dropping files does, as other file managers do it: a drop on a
 //! folder moves files on that folder's drive and copies files from
 //! another (the core looks at the drives, see `Command::DropFiles`); Ctrl
-//! held always copies, Shift held always moves.
+//! held always copies, Shift held always moves. A drop on the trash sends
+//! the files there.
 //!
 //! A drop that would change nothing, or can't be done, isn't offered: a
 //! folder onto itself or into a folder inside it, files onto the folder
@@ -19,12 +20,14 @@ use nova_files_api::Operation;
 pub enum DropAt {
     /// Into a folder.
     Folder(PathBuf),
+    /// Into the trash.
+    Trash,
 }
 
 /// What a drop asks the core for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Dropped {
-    /// A job of its own: a copy or move the keys held chose.
+    /// A job of its own: a copy or move the keys held chose, or the trash.
     Job(Operation),
     /// A copy or move the core picks by drive.
     ByDrive {
@@ -71,15 +74,22 @@ pub fn allowed(at: &DropAt, sources: &Sources, trash: &Path) -> bool {
     {
         return false;
     }
-    let DropAt::Folder(into) = at;
-    !into.starts_with(trash)
-        && !sources.folders.contains(into)
-        && !into.ancestors().any(|folder| sources.each.contains(folder))
+    match at {
+        DropAt::Trash => true,
+        DropAt::Folder(into) => {
+            !into.starts_with(trash)
+                && !sources.folders.contains(into)
+                && !into.ancestors().any(|folder| sources.each.contains(folder))
+        }
+    }
 }
 
 /// What dropping `sources` at `at` with `modifiers` held does.
 pub fn dropped(at: DropAt, sources: Vec<PathBuf>, modifiers: Modifiers) -> Dropped {
-    let DropAt::Folder(into) = at;
+    let into = match at {
+        DropAt::Trash => return Dropped::Job(Operation::Trash { paths: sources }),
+        DropAt::Folder(into) => into,
+    };
     if modifiers.control {
         Dropped::Job(Operation::Copy { sources, into })
     } else if modifiers.shift {
@@ -108,6 +118,7 @@ mod tests {
         let trash = Path::new(TRASH);
         assert!(allowed(&folder("/b"), &paths(&["/a/x", "/a/y"]), trash));
         assert!(allowed(&folder("/a/x2"), &paths(&["/a/x"]), trash));
+        assert!(allowed(&DropAt::Trash, &paths(&["/a/x"]), trash));
     }
 
     #[test]
@@ -127,6 +138,7 @@ mod tests {
         let trash = Path::new(TRASH);
         let trashed = paths(&[&format!("{TRASH}/x")]);
         assert!(!allowed(&folder("/b"), &trashed, trash));
+        assert!(!allowed(&DropAt::Trash, &trashed, trash));
         assert!(!allowed(&folder(TRASH), &paths(&["/a/x"]), trash));
     }
 
@@ -167,7 +179,14 @@ mod tests {
         );
         assert_eq!(
             dropped(at(), sources.clone(), Modifiers::default()),
-            Dropped::ByDrive { sources, into }
+            Dropped::ByDrive {
+                sources: sources.clone(),
+                into
+            }
+        );
+        assert_eq!(
+            dropped(DropAt::Trash, sources.clone(), shift),
+            Dropped::Job(Operation::Trash { paths: sources })
         );
     }
 }

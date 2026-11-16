@@ -1,7 +1,8 @@
 //! The "This computer" section: the folder tree under Home (see `tree`),
 //! under Places and scrolling with them. Each row is indented by its
 //! depth, with a hairline down each level it sits in. The arrow opens and
-//! closes a folder in place; a click elsewhere on the row goes there. The
+//! closes a folder in place; a click elsewhere on the row goes there, and
+//! files dropped on it go into it (see `drop`). The
 //! folder you're in has its name strong and its icon orange. Rows carry
 //! the debug selectors `tree-<n>`, their arrows `tree-toggle-<n>` and
 //! their hairlines `tree-guide-<n>-<level>`,
@@ -15,8 +16,9 @@ use gpui::{
     radians, svg,
 };
 
-use super::{icon, new_tab_on_middle_click, section_head};
+use super::{icon, inside_edge, new_tab_on_middle_click, section_head};
 use crate::assets::Icon;
+use crate::dropping::DropAt;
 use crate::places;
 use crate::theme::{Colors, radius, size, text};
 use crate::tree::{Toggle, TreeRow};
@@ -62,7 +64,7 @@ impl MainWindow {
             let glyph = places::standard_icon_at(self.places(), &path).unwrap_or(Icon::Folder);
             (glyph, name)
         };
-        let (target, in_new_tab) = (path.clone(), path.clone());
+        let (target, in_new_tab, dropped) = (path.clone(), path.clone(), path.clone());
         let main = self.pick.is_none();
         let tint = if here { colors.here } else { colors.text_dim };
         let guides = (1..=depth).map(|level| {
@@ -85,8 +87,9 @@ impl MainWindow {
             .w_full()
             .h(size::TREE_ROW_HEIGHT)
             .gap(size::TREE_ROW_GAP)
-            .pl(indent(depth) + size::TREE_PAD_LEFT)
-            .pr(size::TREE_PAD_RIGHT)
+            // A clear drop edge (see `drop`), inside the padding.
+            .pl(inside_edge(indent(depth) + size::TREE_PAD_LEFT))
+            .pr(inside_edge(size::TREE_PAD_RIGHT))
             .rounded(radius::ROW)
             .cursor_pointer()
             .whitespace_nowrap()
@@ -96,6 +99,7 @@ impl MainWindow {
             })
             .on_click(cx.listener(move |this, _: &ClickEvent, _, _| this.open(&target)))
             .map(|row| new_tab_on_middle_click(row, in_new_tab, main, cx))
+            .map(|row| self.drop_target(row, DropAt::Folder(dropped), cx))
             .children(guides)
             .child(tree_toggle(index, path, toggle, colors, cx))
             .child(icon(glyph, size::TREE_ICON, tint))
@@ -149,5 +153,6 @@ fn indent(depth: usize) -> Pixels {
 /// Where the hairline for `level` runs: at the start of that level's
 /// indent, a little before the rows inside it.
 fn guide_left(level: usize) -> Pixels {
-    indent(level) - size::TREE_GUIDE_INSET
+    // Placed inside the row's clear drop edge, so it gives that back.
+    indent(level) - size::TREE_GUIDE_INSET - size::DROP_EDGE
 }
