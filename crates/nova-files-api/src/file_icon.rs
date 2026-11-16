@@ -14,8 +14,13 @@ pub const FILE_ICON_PIXELS: u32 = 48;
 /// How an entry's icon is drawn.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileIcon {
-    /// A file of the system icon theme. Entries of one type share it.
-    Theme(Arc<ThemeIcon>),
+    /// A file of the system icon theme, which entries of one type share,
+    /// and the kind of file, for the built-in icon drawn until the file is
+    /// ready or when it doesn't decode.
+    Theme {
+        icon: Arc<ThemeIcon>,
+        kind: IconKind,
+    },
     /// The window's own icon for this kind.
     BuiltIn(IconKind),
 }

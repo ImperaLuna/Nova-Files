@@ -101,7 +101,11 @@ impl FileIcons {
             return icon.clone();
         }
         let found = themes.find(&types.icon_names(mime), |path| read(files, path));
-        let icon = found.map_or_else(|| FileIcon::BuiltIn(types.icon_kind(mime)), FileIcon::Theme);
+        let kind = types.icon_kind(mime);
+        let icon = found.map_or(FileIcon::BuiltIn(kind), |icon| FileIcon::Theme {
+            icon,
+            kind,
+        });
         by_type.insert(mime.to_owned(), icon.clone());
         icon
     }
@@ -189,7 +193,7 @@ mod tests {
 
     fn theme(icon: &FileIcon) -> &ThemeIcon {
         match icon {
-            FileIcon::Theme(icon) => icon,
+            FileIcon::Theme { icon, .. } => icon,
             FileIcon::BuiltIn(kind) => panic!("built in: {kind:?}"),
         }
     }
@@ -203,13 +207,14 @@ mod tests {
         let jpeg = icons.of(OsStr::new("b.jpg"), EntryKind::File);
         let again = icons.of(OsStr::new("c.PNG"), EntryKind::File);
 
-        let FileIcon::Theme(shared) = &png else {
+        let FileIcon::Theme { icon: shared, kind } = &png else {
             panic!("{png:?}")
         };
+        assert_eq!(*kind, IconKind::Picture);
         assert_eq!(shared.format, IconFormat::Svg);
         assert_eq!(&*shared.bytes, b"<svg/>");
         assert!(
-            matches!((&jpeg, &again), (FileIcon::Theme(a), FileIcon::Theme(b))
+            matches!((&jpeg, &again), (FileIcon::Theme { icon: a, .. }, FileIcon::Theme { icon: b, .. })
             if Arc::ptr_eq(a, shared) && Arc::ptr_eq(b, shared))
         );
         let text = icons.of(OsStr::new("notes.txt"), EntryKind::File);
