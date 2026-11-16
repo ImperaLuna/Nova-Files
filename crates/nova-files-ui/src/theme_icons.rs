@@ -55,7 +55,7 @@ impl ThemeIcons {
         side: u32,
         image: Option<Arc<RenderImage>>,
     ) -> Option<Arc<RenderImage>> {
-        if side == self.side {
+        if side != self.side {
             return image;
         }
         self.pending.remove(&path);
