@@ -8,7 +8,8 @@
 //! that touch join into one block: a row squares the corners it shares
 //! with a selected neighbour. The row the keyboard is on has a ring (see
 //! `selecting`); a rename puts its text field where the name was (see
-//! `window::renaming`). A click on a column head orders the list by that column;
+//! `window::renaming`). Middle-click on a folder opens it in a new tab.
+//! A click on a column head orders the list by that column;
 //! folders always come first (see `navigate` and the core's `order`). A
 //! search's files stay best first, so their heads do nothing; they get a
 //! Folder column, and the part of each name that matched is marked. The
@@ -172,6 +173,9 @@ impl MainWindow {
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
                                 this.row_clicked((listing_id, id), event, window, cx);
+                            }))
+                            .on_aux_click(cx.listener(move |this, event, _, cx| {
+                                this.entry_aux_clicked((listing_id, id), event, cx);
                             }))
                             .into_any_element()
                     })
