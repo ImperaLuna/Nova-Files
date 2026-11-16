@@ -23,7 +23,6 @@ use gpui::{
 use super::{Row, on_middle_click, row, section_button, section_head};
 use crate::assets::Icon;
 use crate::location::Location;
-use crate::places;
 use crate::theme::{Colors, radius, size};
 use crate::view::row::icon;
 use crate::window::MainWindow;
@@ -37,15 +36,11 @@ impl MainWindow {
             return None;
         }
         let colors = Colors::of(cx);
-        let shown = places::shown(self.places(), self.pinned());
         let rows = self
-            .tab_places()
+            .tab_looks()
             .into_iter()
             .enumerate()
-            .map(|(index, place)| {
-                let look = self.tab_look(place.as_ref(), &shown);
-                self.tab_row(index, look, narrow, cx)
-            });
+            .map(|(index, look)| self.tab_row(index, look, narrow, cx));
         let new_tab = section_button("new-tab", Icon::Plus, &colors).on_click(
             cx.listener(|this, _: &ClickEvent, _, cx| this.new_tab(&Location::Start, cx)),
         );
@@ -111,7 +106,7 @@ impl MainWindow {
             &colors,
         )
         .group(group.clone())
-        .when(closable && !narrow, |row| row.pr(size::TAB_CLOSE_RIGHT))
+        .when(!narrow, |row| row.pr(size::TAB_CLOSE_RIGHT))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.switch_tab(index, cx)))
         .map(|row| on_middle_click(row, true, cx, move |this, cx| this.close_tab(index, cx)))
         .when(closable, |row| {

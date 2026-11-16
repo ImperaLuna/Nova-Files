@@ -27,6 +27,7 @@
 //! A tab in the background holds its listing's names and nothing per row
 //! beyond them.
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::mem;
 use std::path::PathBuf;
@@ -200,14 +201,24 @@ impl MainWindow {
         }
     }
 
+    /// The name of each tab in the Open list, in order.
+    pub fn tab_names(&self) -> Vec<SharedString> {
+        self.tab_looks().into_iter().map(|(name, _)| name).collect()
+    }
+
+    /// The name and icon of each tab in the Open list, in order.
+    pub(crate) fn tab_looks(&self) -> Vec<(SharedString, Icon)> {
+        let shown = places::shown(self.places(), self.pinned());
+        self.tab_places()
+            .iter()
+            .map(|place| self.tab_look(place.as_ref(), &shown))
+            .collect()
+    }
+
     /// The name and icon of a tab at `place` in the Open list: as Places
     /// shows it when it is one of `shown`, Places' rows, else the
     /// folder's own.
-    pub(crate) fn tab_look(
-        &self,
-        place: Option<&Location>,
-        shown: &[places::Shown],
-    ) -> (SharedString, Icon) {
+    fn tab_look(&self, place: Option<&Location>, shown: &[places::Shown]) -> (SharedString, Icon) {
         match place {
             Some(Location::Start) => (START_LABEL.into(), Icon::Start),
             Some(Location::Folder(folder)) if *folder == self.trash.folder => {
@@ -257,17 +268,22 @@ impl MainWindow {
         if self.tab_count() <= LAST || index >= self.tab_count() {
             return;
         }
-        if index == self.tabs.current {
-            drop(self.leave_tab(cx));
-            self.tabs.list.remove(index);
-            self.tabs.current = index.min(self.tab_count() - 1);
-            self.enter_tab(cx);
-        } else {
-            self.tabs.list.remove(index);
-            if index < self.tabs.current {
-                self.tabs.current -= 1;
+        match index.cmp(&self.tabs.current) {
+            Ordering::Equal => {
+                drop(self.leave_tab(cx));
+                self.tabs.list.remove(index);
+                self.tabs.current = index.min(self.tab_count() - 1);
+                self.enter_tab(cx);
             }
-            cx.notify();
+            Ordering::Less => {
+                self.tabs.list.remove(index);
+                self.tabs.current -= 1;
+                cx.notify();
+            }
+            Ordering::Greater => {
+                self.tabs.list.remove(index);
+                cx.notify();
+            }
         }
     }
 
