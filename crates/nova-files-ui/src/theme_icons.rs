@@ -92,8 +92,19 @@ pub fn make(icon: &ThemeIcon, side: u32, svg: &SvgRenderer) -> Option<Arc<Render
                 reason = "an icon's side is a few hundred pixels at most"
             )]
             let wanted = side as f32 + ROUNDING;
-            svg.render_single_frame(&icon.bytes, wanted / (longest * RENDERER_SCALE))
-                .ok()
+            let scale = wanted / (longest * RENDERER_SCALE);
+            // Checked before drawing, so a wrong scale never draws a huge
+            // image.
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "the renderer rounds the side down the same way"
+            )]
+            let drawn = (longest * scale * RENDERER_SCALE) as u32;
+            if drawn != side {
+                return None;
+            }
+            svg.render_single_frame(&icon.bytes, scale).ok()
         }
     }
 }
