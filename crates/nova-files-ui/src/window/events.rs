@@ -39,8 +39,12 @@ impl MainWindow {
         // Read again in place: keep the scroll position. Files a search
         // found are never the same folder.
         let same_folder = !self.showing_found() && self.folder() == Some(path.as_path());
-        if !same_folder && !std::mem::take(&mut self.falling_back) {
-            self.used(&path);
+        if !same_folder {
+            // A menu belongs to the folder it opened in.
+            self.menu = None;
+            if !std::mem::take(&mut self.falling_back) {
+                self.used(&path);
+            }
         }
         self.history.arrived(&Location::from(path.as_path()));
         // In a new order the cursor's entry has moved: bring it into view.

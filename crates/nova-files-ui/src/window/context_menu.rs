@@ -4,12 +4,12 @@
 //! Trash; with several selected only what applies to all of them (Cut,
 //! Copy, Move to Trash). A right-click on an entry that isn't selected
 //! selects it alone first; one inside the selection keeps it. In the
-//! trash an entry offers Restore.
+//! trash an entry offers Restore; inside a trashed folder, nothing.
 //!
 //! On empty space: New folder and Paste (only with files on the
 //! clipboard), Select all (with something to select), then Show hidden
 //! files, which shows a tick while they show. In the trash: Empty Trash
-//! and Select all, while it holds anything. A search's files aren't a folder, so there
+//! while any trash holds anything, and Select all. A search's files aren't a folder, so there
 //! only Select all is offered. The Start page and a picker have no menu.
 //!
 //! Each item sends the window action its key sends (see `menu`). The Menu
@@ -85,6 +85,11 @@ impl MainWindow {
         if self.trash_open() {
             return vec![vec![MenuItem::run(Icon::Undo, &RESTORE)]];
         }
+        // Inside a trashed folder nothing can be changed or put back on
+        // its own.
+        if self.in_trash() {
+            return Vec::new();
+        }
         let one = self.selected_count() == 1;
         let lone = |item: MenuItem| one.then_some(item);
         vec![
@@ -114,8 +119,10 @@ impl MainWindow {
             .as_ref()
             .is_some_and(|listing| !listing.entries.is_empty());
         let select_all = any.then(|| MenuItem::run(Icon::SelectAll, &SELECT_ALL));
-        if self.trash_open() {
-            let empty_trash = any.then(|| MenuItem::run(Icon::Trash, &EMPTY_TRASH));
+        if self.in_trash() {
+            // Every trash counts, not only the one listed here.
+            let full = self.trash_open() && self.trash_count().is_some_and(|count| count > 0);
+            let empty_trash = full.then(|| MenuItem::run(Icon::Trash, &EMPTY_TRASH));
             return vec![
                 empty_trash
                     .map(|item| item.with_look(Look::Danger))

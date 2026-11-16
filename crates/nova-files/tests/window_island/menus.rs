@@ -162,6 +162,13 @@ async fn the_menu_key_opens_the_menu_with_its_first_item_marked(cx: &mut TestApp
     assert_eq!(offered(&view, cx).0[0], "Open");
     cx.simulate_keystrokes("enter");
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+
+    // Going elsewhere with a menu open closes it.
+    right_click(cx, "name-0");
+    assert!(view.read_with(cx, |view, _| view.menu().is_some()));
+    cx.simulate_keystrokes("alt-up");
+    wait_for_folder(&view, cx, tree.path()).await;
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
 }
 
 #[gpui::test]
@@ -219,4 +226,27 @@ async fn the_trash_offers_restore_and_empty_trash(cx: &mut TestAppContext) {
     choose(&view, cx, "Restore");
     wait_for_names(&view, cx, &[]).await;
     assert!(tree.path().join("notes.txt").is_file());
+}
+
+#[gpui::test]
+async fn inside_a_trashed_folder_only_select_all_is_offered(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-trashed");
+    let home = TempFolder::tree("menu-trashed-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    click(cx, "name-0");
+    cx.simulate_keystrokes("delete");
+    wait_for_note(&view, cx, "Moved Projects to Trash").await;
+    view.update(cx, MainWindow::open_trash);
+    wait_for_names(&view, cx, &["Projects"]).await;
+    double_click(cx, "name-0");
+    wait_for_names(&view, cx, &["nova"]).await;
+
+    right_click(cx, "name-0");
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+    right_click_space(cx, 1);
+    assert_eq!(
+        offered(&view, cx),
+        (["Select all"].map(str::to_owned).to_vec(), vec![])
+    );
 }
