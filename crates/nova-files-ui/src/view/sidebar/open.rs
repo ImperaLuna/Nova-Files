@@ -111,7 +111,7 @@ impl MainWindow {
             &colors,
         )
         .group(group.clone())
-        .when(closable && !narrow, |row| row.pr(size::TAB_CLOSE_RIGHT))
+        .when(!narrow, |row| row.pr(size::TAB_CLOSE_RIGHT))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.switch_tab(index, cx)))
         .map(|row| on_middle_click(row, true, cx, move |this, cx| this.close_tab(index, cx)))
         .when(closable, |row| {

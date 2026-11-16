@@ -201,19 +201,24 @@ async fn the_last_tab_stays_open(cx: &mut TestAppContext) {
 
 /// Middle-clicks the element drawn with `selector`.
 fn middle_click(cx: &mut VisualTestContext, selector: &'static str) {
+    aux_click(cx, selector, MouseButton::Middle);
+}
+
+/// Clicks the element drawn with `selector` with `button`.
+fn aux_click(cx: &mut VisualTestContext, selector: &'static str, button: MouseButton) {
     cx.run_until_parked();
     let position = cx.debug_bounds(selector).unwrap().center();
     cx.simulate_event(MouseDownEvent {
         position,
         modifiers: Modifiers::none(),
-        button: MouseButton::Middle,
+        button,
         click_count: 1,
         first_mouse: false,
     });
     cx.simulate_event(MouseUpEvent {
         position,
         modifiers: Modifiers::none(),
-        button: MouseButton::Middle,
+        button,
         click_count: 1,
     });
     cx.run_until_parked();
@@ -244,6 +249,12 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("tab-1-here").is_some());
     assert!(cx.debug_bounds("tab-0-here").is_none());
     assert!(cx.debug_bounds("tab-close-1").is_some());
+    // The x sits a short way in from the row's right end.
+    let (row, close) = (
+        cx.debug_bounds("tab-1").unwrap(),
+        cx.debug_bounds("tab-close-1").unwrap(),
+    );
+    assert_eq!(row.right() - close.right(), px(6.0));
 
     click(cx, "tab-0");
     wait_for_folder(&view, cx, tree.path()).await;
@@ -260,6 +271,9 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
     click(cx, "tab-0");
     wait_for_folder(&view, cx, tree.path()).await;
     middle_click(cx, "entry-1");
+    assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 3);
+    // Only the middle button opens a tab: not a right-click on a folder.
+    aux_click(cx, "entry-0", MouseButton::Right);
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 3);
 
     // Middle-click on a tab closes it, and so does its x.
