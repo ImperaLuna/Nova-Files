@@ -1,5 +1,5 @@
-use std::fs;
 use std::path::PathBuf;
+use std::{env, fs};
 
 use super::index::{Folder, Sizes};
 use super::*;
@@ -121,6 +121,23 @@ fn the_folder_made_for_the_size_wins() {
     );
     // Only file type folders count.
     assert_eq!(themes.find(&names(&["text-html"]), Some), None);
+}
+
+#[test]
+fn a_long_index_is_read_whole() {
+    let base = Base::new("long");
+    let comment = "x".repeat(64 * 1024);
+    // The folders come after the long line, so a cut index has none.
+    let index = MINE.replacen(
+        "[Icon Theme]\n",
+        &format!("[Icon Theme]\nComment={comment}\n"),
+        1,
+    );
+    base.index("Mine", &index)
+        .icon("Mine", "48x48/mimetypes/image-png.png");
+    let mut themes = themes(Some("Mine"), &[&base]);
+
+    assert!(themes.find(&names(&["image-png"]), Some).is_some());
 }
 
 #[test]

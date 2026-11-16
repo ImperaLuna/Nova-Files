@@ -12,6 +12,7 @@
 //! hash lookups once the theme's folders are listed (see `icon_theme`).
 
 use std::collections::HashMap;
+use std::env;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Read as _;
@@ -22,7 +23,7 @@ use nova_files_api::{
     EntryKind, FILE_ICON_PIXELS, FileIcon, FileTypes as _, IconFormat, IconKind, ThemeIcon,
 };
 
-use crate::icon_theme::{IconThemes, name};
+use crate::icon_theme::{self, IconThemes, name};
 use crate::mime::MimeTypes;
 
 /// The type of a file whose name says nothing.
@@ -53,7 +54,7 @@ impl FileIcons {
     /// one has read it yet.
     pub fn from_env(types: Arc<OnceLock<MimeTypes>>, config: Option<&Path>) -> Self {
         let chosen = config.and_then(name::chosen);
-        Self::new(types, chosen, IconThemes::bases_from_env())
+        Self::new(types, chosen, icon_theme::bases(|name| env::var_os(name)))
     }
 
     /// Icons from the theme `chosen`, in the icon folders `bases`.
@@ -145,6 +146,9 @@ mod tests {
 
     use super::*;
 
+    /// The most an icon may hold, spelled out so a changed limit shows.
+    const ICON_LIMIT: usize = 1024 * 1024;
+
     /// A data folder with a MIME database and an icon theme, removed
     /// afterwards.
     struct Data(PathBuf);
@@ -164,7 +168,8 @@ mod tests {
             write(
                 "mime/globs2",
                 b"50:image/png:*.png\n50:image/jpeg:*.jpg\n50:text/plain:*.txt\n\
-                  50:application/zip:*.zip\n50:application/x-big:*.big\n",
+                  50:application/zip:*.zip\n50:application/x-big:*.big\n\
+                  50:application/x-edge:*.edge\n",
             );
             write("mime/generic-icons", b"application/zip:package-x-generic\n");
             write(
@@ -173,7 +178,9 @@ mod tests {
             );
             write("icons/Mine/m/image-x-generic.svg", b"<svg/>");
             write("icons/Mine/m/text-plain.png", b"png");
-            let big = vec![0; usize::try_from(MAX_ICON_BYTES).unwrap() + 1];
+            let mut big = vec![0; ICON_LIMIT];
+            write("icons/Mine/m/application-x-edge.png", &big);
+            big.push(0);
             write("icons/Mine/m/application-x-big.png", &big);
             Self(dir)
         }
@@ -243,7 +250,11 @@ mod tests {
             of("Makefile", EntryKind::File),
             FileIcon::BuiltIn(IconKind::File)
         );
-        // Too big to be an icon.
+        // As big as an icon can be, and one byte more.
+        assert!(matches!(
+            of("a.edge", EntryKind::File),
+            FileIcon::Theme { .. }
+        ));
         assert_eq!(
             of("a.big", EntryKind::File),
             FileIcon::BuiltIn(IconKind::File)
