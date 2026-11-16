@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, Modifiers,
+    App, AppContext as _, Context, Div, Entity, InteractiveElement as _, IntoElement, Modifiers,
     ParentElement as _, Render, SharedString, Styled as _, WeakEntity, Window, div,
 };
 use nova_files_api::{EntryId, ListingId};
@@ -126,20 +126,25 @@ impl DragChip {
 
 impl Render for DragChip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let colors = Colors::of(cx);
         let label = self.label(window.modifiers(), cx);
-        div()
-            .debug_selector(|| "drag-chip".to_owned())
-            .px(size::DRAG_CHIP_PAD)
-            .py(size::DRAG_CHIP_PAD_Y)
-            .rounded(radius::CONTROL)
-            .bg(colors.lifted)
-            .border(size::LINE)
-            .border_color(colors.line)
-            .text_size(text::BODY)
-            .text_color(colors.text)
-            .child(label)
+        chip(label, cx)
     }
+}
+
+/// A chip under the pointer saying `label`, for anything dragged.
+pub(super) fn chip(label: SharedString, cx: &App) -> Div {
+    let colors = Colors::of(cx);
+    div()
+        .debug_selector(|| "drag-chip".to_owned())
+        .px(size::DRAG_CHIP_PAD)
+        .py(size::DRAG_CHIP_PAD_Y)
+        .rounded(radius::CONTROL)
+        .bg(colors.lifted)
+        .border(size::LINE)
+        .border_color(colors.line)
+        .text_size(text::BODY)
+        .text_color(colors.text)
+        .child(label)
 }
 
 impl MainWindow {

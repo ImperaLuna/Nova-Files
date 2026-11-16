@@ -9,7 +9,7 @@
 //! drop under the pointer in `aiming`, opening rows held over in
 //! `hover_open`), renaming and
 //! New folder in `renaming`, the jobs they start in `jobs`, the tabs in
-//! `tabs`, showing hidden files in `hidden`, and the sheet's right-click
+//! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
@@ -63,6 +63,7 @@ mod renaming;
 mod rows;
 mod search;
 mod start;
+mod tab_order;
 mod tabs;
 mod trash;
 mod tree;
@@ -74,6 +75,7 @@ pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
 pub use preview::{Previewed, Shown};
 pub use search::{FocusTo, Scope, short_folder};
+pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -245,6 +247,9 @@ pub struct MainWindow {
     /// The row things are dragged over, which opens if they stay (see
     /// `hover_open`).
     hover_open: hover_open::HoverOpen,
+    /// A tab being dragged to another place in the Open list (see
+    /// `tab_order`).
+    tab_order: tab_order::TabOrder,
     _events: Task<()>,
 }
 
@@ -359,6 +364,7 @@ impl MainWindow {
             tabs: Tabs::default(),
             drop_asks: aiming::Asks::default(),
             hover_open: hover_open::HoverOpen::default(),
+            tab_order: tab_order::TabOrder::default(),
             _events: events,
         };
         match location {

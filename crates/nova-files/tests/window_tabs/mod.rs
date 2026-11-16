@@ -2,10 +2,12 @@
 //! order, search and scroll position, and gets them back at once when
 //! shown again; the last tab can't be closed; Ctrl+T, Ctrl+W and
 //! Ctrl+Tab work them. The Open list draws them at the top of the sidebar,
-//! and middle-click opens folders in new tabs.
+//! and middle-click opens folders in new tabs. A tab's row dragged along
+//! the list moves the tab.
 
 use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, point};
 use nova_files_api::SortKey;
+use nova_files_ui::HOVER_OPEN_AFTER;
 
 use super::*;
 
@@ -329,4 +331,60 @@ async fn a_tab_whose_folder_is_gone_goes_to_start(cx: &mut TestAppContext) {
     view.condition::<WindowEvent>(cx, |view, _| view.is_on_start() && !view.waiting())
         .await;
     view.read_with(cx, |view, _| assert_eq!(view.tab_count(), 3));
+}
+
+#[gpui::test]
+async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("tabs-reorder");
+    let (view, cx) = tabs_on(cx, tree.path()).await;
+    let projects = tree.path().join("Projects");
+    view.update(cx, |view, cx| {
+        view.open_in_new_tab(projects.clone(), cx);
+        view.new_tab(&Location::Start, cx);
+        view.switch_tab(0, cx);
+    });
+    settled(&view, cx).await;
+    let names = |view: &Entity<MainWindow>, cx: &VisualTestContext| {
+        view.read_with(cx, |view, _| view.tab_names())
+    };
+    let before = names(&view, cx);
+    let here = before[0].clone();
+
+    // The tab on screen, pressed and taken past the middle of Projects'
+    // tab, which takes files too.
+    let start = cx.debug_bounds("tab-0").unwrap().center();
+    let projects_tab = cx.debug_bounds("tab-1").unwrap();
+    let below_middle = projects_tab.center() + point(px(0.0), projects_tab.size.height / 4.0);
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(
+        start + point(px(0.0), px(6.0)),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    // Over its own row it would stay put: no line.
+    assert!(cx.debug_bounds("tab-landing").is_none());
+    cx.simulate_mouse_move(below_middle, Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tab-landing").is_some());
+    // Held over another tab, a tab being moved shows nothing.
+    cx.executor().advance_clock(HOVER_OPEN_AFTER);
+    cx.run_until_parked();
+    assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 0);
+    cx.simulate_mouse_up(below_middle, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+
+    assert_eq!(
+        names(&view, cx),
+        [before[1].clone(), here, before[2].clone()]
+    );
+    view.read_with(cx, |view, _| {
+        // The tab on screen came along, and nothing moved on the disk.
+        assert_eq!(view.current_tab(), 1);
+        assert_eq!(view.folder(), Some(tree.path()));
+        assert_eq!(view.jobs_pending(), 0);
+    });
+    assert!(cx.debug_bounds("tab-landing").is_none());
+    assert!(tree.path().join("notes.txt").exists());
 }
