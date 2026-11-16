@@ -15,17 +15,20 @@ fn copy(names: &[&str], into: &str) -> Operation {
     }
 }
 
-/// A job started at `start`, half way through 10 bytes after `secs`.
+const TOTAL_BYTES: u64 = 10;
+const HALF_THE_BYTES: u64 = TOTAL_BYTES / 2;
+
+/// A job started at `start`, half way through its bytes after `secs`.
 fn half_way(operation: Operation, start: Instant, secs: u64) -> Running {
     let mut job = Running::new(operation, start);
     let progress = |done_bytes| Progress {
         done_bytes,
-        total_bytes: 10,
+        total_bytes: TOTAL_BYTES,
         done_items: 0,
         total_items: 1,
     };
     job.advanced(progress(0), start);
-    job.advanced(progress(5), start + Duration::from_secs(secs));
+    job.advanced(progress(HALF_THE_BYTES), start + Duration::from_secs(secs));
     job
 }
 
