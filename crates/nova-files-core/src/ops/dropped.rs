@@ -7,18 +7,32 @@
 //! never through a link (a drive mounted on a folder dragged counts as
 //! that drive), and the folder through any link to it. A source or a
 //! folder that can't be looked at makes the drop a copy, which leaves
-//! every source where it was. This looks at the disk: the caller runs it
-//! off the core's loop (see `Jobs::start_drop`).
+//! every source where it was, and so does a drive that doesn't answer
+//! within [`PROBE_WAIT`] (a network share whose server went away): the
+//! drop still starts a job the user can see and cancel. This looks at the
+//! disk: the caller runs it off the core's loop (see `Jobs::start_drop`).
 
 use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use nova_files_api::Operation;
 
+use crate::timed;
+
+/// How long the drives are looked at before the drop is made a copy.
+const PROBE_WAIT: Duration = Duration::from_secs(2);
+
+const PROBE_THREAD: &str = "nova-files-drop-probe";
+
 /// The job dropping `sources` onto the folder `into` runs.
 pub fn dropped(sources: Vec<PathBuf>, into: PathBuf) -> Operation {
-    if on_one_drive(&sources, &into) {
+    let (asked, folder) = (sources.clone(), into.clone());
+    let one_drive = timed::within(PROBE_WAIT, PROBE_THREAD, move || {
+        on_one_drive(&asked, &folder)
+    });
+    if one_drive == Some(true) {
         Operation::Move { sources, into }
     } else {
         Operation::Copy { sources, into }
