@@ -157,8 +157,10 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             // The window doesn't wait on a file opening and never watches
             // jobs it didn't start; only a picker's opening asks for the
-            // window state (see `window_state`).
+            // window state (see `window_state`). It doesn't ask what a
+            // drop would do yet.
             Event::FolderUnreadable { .. }
+            | Event::DropWould { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }

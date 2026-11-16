@@ -155,6 +155,7 @@ fn answer(
         command @ (Command::WatchJobs
         | Command::StartJob { .. }
         | Command::DropFiles { .. }
+        | Command::DropWould { .. }
         | Command::PauseJob(_)
         | Command::ResumeJob(_)
         | Command::ForgetJob(_)

@@ -22,6 +22,20 @@ use crate::access::AccessChange;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct JobTag(pub u64);
 
+/// Names one ask of what a drop would do. The client picks it; the core
+/// only echoes it, so a client that asked twice knows which answer is
+/// which.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct DropAskId(pub u64);
+
+/// What dropping files on a folder does when no key picks: a move when
+/// every file is on the folder's drive, a copy otherwise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropKind {
+    Move,
+    Copy,
+}
+
 /// Names one job. The core picks it, unique across the core's runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct JobId(pub u64);

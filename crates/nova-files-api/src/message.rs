@@ -7,7 +7,9 @@ use crate::bookmark::{Bookmark, BookmarkChange};
 use crate::disk_space::PathSpace;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
-use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
+use crate::job::{
+    Answer, Conflict, DropAskId, DropKind, JobId, JobTag, Operation, Outcome, Progress, Scope,
+};
 use crate::open_with::{OpenWith, OpenWithAnswer};
 use crate::preview::{Fit, Preview, PreviewId};
 use crate::properties::{Properties, PropertiesId};
@@ -190,6 +192,14 @@ pub enum Command {
         sources: Vec<PathBuf>,
         into: PathBuf,
     },
+    /// Say what [`Command::DropFiles`] of `sources` into `into` would do,
+    /// without doing it: for a drag to name its drop before it lands. The
+    /// answer is [`Event::DropWould`] with the same `id`.
+    DropWould {
+        id: DropAskId,
+        sources: Vec<PathBuf>,
+        into: PathBuf,
+    },
     /// Hold job `job` before its next change to the disk. Every client
     /// hears [`Event::JobPaused`].
     PauseJob(JobId),
@@ -339,6 +349,9 @@ pub enum Event {
         id: RecentId,
         folders: Vec<RecentFolder>,
     },
+    /// [`Command::DropWould`] `id`'s drop would `kind` its files. Only the
+    /// client that asked hears it.
+    DropWould { id: DropAskId, kind: DropKind },
     /// [`Command::StartJob`] or [`Command::DropFiles`] `tag` runs as job
     /// `job`, doing `operation`. Only the client that asked hears it, and
     /// before anything else about the job.

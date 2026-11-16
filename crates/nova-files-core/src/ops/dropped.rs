@@ -11,13 +11,19 @@
 //! within [`PROBE_WAIT`] (a network share whose server went away): the
 //! drop still starts a job the user can see and cancel. This looks at the
 //! disk: the caller runs it off the core's loop (see `Jobs::start_drop`).
+//!
+//! A drag asks the same before it lands ([`answer`]), so it can say "Move
+//! to" or "Copy to"; that answer comes from the same rule on a thread of
+//! its own, and a drop made after it picks again.
 
 use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
-use nova_files_api::Operation;
+use nova_files_api::{DropAskId, DropKind, Event, EventSink, Operation};
 
 use crate::timed;
 
@@ -26,16 +32,44 @@ const PROBE_WAIT: Duration = Duration::from_secs(2);
 
 const PROBE_THREAD: &str = "nova-files-drop-probe";
 
+const ASK_THREAD: &str = "nova-files-drop-ask";
+
 /// The job dropping `sources` onto the folder `into` runs.
 pub fn dropped(sources: Vec<PathBuf>, into: PathBuf) -> Operation {
-    let (asked, folder) = (sources.clone(), into.clone());
+    match kind(&sources, &into) {
+        DropKind::Move => Operation::Move { sources, into },
+        DropKind::Copy => Operation::Copy { sources, into },
+    }
+}
+
+/// Answers ask `id`, what dropping `sources` onto `into` would do, to
+/// `events`, from a thread of its own. When no thread can start, it
+/// answers a copy, as such a drop does.
+pub fn answer(events: &Arc<dyn EventSink>, id: DropAskId, sources: Vec<PathBuf>, into: PathBuf) {
+    let sink = Arc::clone(events);
+    let spawned = thread::Builder::new()
+        .name(ASK_THREAD.to_owned())
+        .spawn(move || {
+            let kind = kind(&sources, &into);
+            // A client gone needs no answer.
+            sink.deliver(Event::DropWould { id, kind }).ok();
+        });
+    if spawned.is_err() {
+        let kind = DropKind::Copy;
+        events.deliver(Event::DropWould { id, kind }).ok();
+    }
+}
+
+/// Whether dropping `sources` onto the folder `into` moves or copies.
+fn kind(sources: &[PathBuf], into: &Path) -> DropKind {
+    let (asked, folder) = (sources.to_vec(), into.to_path_buf());
     let one_drive = timed::within(PROBE_WAIT, PROBE_THREAD, move || {
         on_one_drive(&asked, &folder)
     });
     if one_drive == Some(true) {
-        Operation::Move { sources, into }
+        DropKind::Move
     } else {
-        Operation::Copy { sources, into }
+        DropKind::Copy
     }
 }
 
