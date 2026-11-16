@@ -254,6 +254,13 @@ fn an_index_lists_its_parents_and_file_type_folders() {
     assert_eq!(paths, ["a", "a@2"]);
     assert_eq!(odd.folders[0].sizes, Sizes::Threshold(2));
     assert_eq!(odd.folders[1].scale, 2);
+    // Each kind of folder keeps the sizes its section gives.
+    let kinds = index::parse(
+        "[Icon Theme]\nDirectories=f,t\n[f]\nSize=16\nType=Fixed\n\
+         [t]\nSize=32\nType=Threshold\nThreshold=5\n",
+    );
+    assert_eq!(kinds.folders[0].sizes, Sizes::Fixed);
+    assert_eq!(kinds.folders[1].sizes, Sizes::Threshold(5));
 }
 
 #[test]
