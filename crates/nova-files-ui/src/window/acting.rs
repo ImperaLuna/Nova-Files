@@ -129,16 +129,8 @@ impl MainWindow {
         undo: Option<NoteUndo>,
         cx: &mut Context<Self>,
     ) {
-        self.island.note = Some(Note {
-            label: label.into(),
-            undo,
-        });
-        // A new note's timer replaces, and so cancels, the old one's.
-        self.island.note_timer = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(NOTE_TIME).await;
-            this.update(cx, Self::dismiss_note).ok();
-        }));
-        cx.notify();
+        self.island.not_opened.clear();
+        self.put_note(label.into(), undo, cx);
     }
 
     /// Says on the island that `path` started no app, and why. A note
@@ -149,25 +141,30 @@ impl MainWindow {
         reason: NotOpened,
         cx: &mut Context<Self>,
     ) {
-        let shown = opening::note(&self.island.not_opened);
-        let joins = self
-            .island
-            .note
-            .as_ref()
-            .is_some_and(|note| Some(note.label.as_ref()) == shown.as_deref());
-        if !joins {
-            self.island.not_opened.clear();
+        let failed = &mut self.island.not_opened;
+        failed.retain(|(was, _)| *was != path);
+        failed.push((path, reason));
+        if let Some(label) = opening::note(failed) {
+            self.put_note(label.into(), None, cx);
         }
-        self.island.not_opened.push((path, reason));
-        if let Some(label) = opening::note(&self.island.not_opened) {
-            self.show_note(label, None, cx);
-        }
+    }
+
+    /// Puts up a note, whose timer replaces, and so cancels, the old
+    /// one's.
+    fn put_note(&mut self, label: SharedString, undo: Option<NoteUndo>, cx: &mut Context<Self>) {
+        self.island.note = Some(Note { label, undo });
+        self.island.note_timer = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(NOTE_TIME).await;
+            this.update(cx, Self::dismiss_note).ok();
+        }));
+        cx.notify();
     }
 
     /// Takes the note down.
     pub(crate) fn dismiss_note(&mut self, cx: &mut Context<Self>) {
         self.island.note = None;
         self.island.note_timer = None;
+        self.island.not_opened.clear();
         cx.notify();
     }
 

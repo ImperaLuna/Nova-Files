@@ -191,6 +191,16 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
         note(cx).as_deref(),
         Some("Can't open 0: no app opens it · 1: its app didn't start")
     );
+    // The same file failing again is named once, with its latest reason.
+    core.send(Event::FileNotOpened {
+        path: opened[0].clone(),
+        reason: NotOpened::Failed,
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        note(cx).as_deref(),
+        Some("Can't open 1, 0: their apps didn't start")
+    );
 
     // Gone by itself; a later failure starts its own note.
     cx.executor().advance_clock(nova_files_ui::NOTE_TIME);
