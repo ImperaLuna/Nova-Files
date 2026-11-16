@@ -2,17 +2,20 @@
 //! `drives` lists it, with how much is free as a number on the right, red
 //! when nearly full. A click opens it (mounting it first when needed);
 //! right-click opens its menu, which has Eject for a drive that can be
-//! unplugged. There is no eject button. Rows carry the debug selectors
+//! unplugged. There is no eject button. Files dropped on a mounted
+//! drive go into it (see `drop`). Rows carry the debug selectors
 //! `drive-<n>`, counted from 0.
 
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, MouseButton, MouseDownEvent,
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
+    prelude::FluentBuilder as _,
 };
 
 use super::{Row, row, section_head};
 use crate::assets::Icon;
 use crate::drives;
+use crate::dropping::DropAt;
 use crate::theme::{Colors, size};
 use crate::window::MainWindow;
 
@@ -53,7 +56,10 @@ impl MainWindow {
             )
             .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
                 this.open_drive(clicked.clone());
-            }));
+            }))
+            .when_some(drive.folder, |row, folder| {
+                self.drop_target(row, DropAt::Folder(folder), cx)
+            });
             if main {
                 row.on_mouse_down(
                     MouseButton::Right,

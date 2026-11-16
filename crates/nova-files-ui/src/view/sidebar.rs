@@ -13,7 +13,8 @@
 //! scroll across.
 //!
 //! A row is a place you can go: its icon, its name and, on the right, a
-//! number when it has one. The row you're in has its name strong and its
+//! number when it has one. Rows with a folder (and the trash) take files
+//! dropped on them (see `drop`). The row you're in has its name strong and its
 //! icon orange; pressed-in rows are left for the Open list, as on the
 //! design page.
 
@@ -24,7 +25,7 @@ mod tree;
 use gpui::{
     AnyElement, Context, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
     Rgba, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
-    prelude::FluentBuilder as _,
+    prelude::FluentBuilder as _, transparent_black,
 };
 
 use super::row::icon;
@@ -156,11 +157,18 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         .cursor_pointer()
         .whitespace_nowrap()
         .hover(|row| row.bg(colors.hover))
+        // Every row keeps the clear edge one lights up as a drop target
+        // (see `drop`), inside its padding, so all rows line up.
+        .border(size::DROP_EDGE)
+        .border_color(transparent_black())
         .map(|row| {
             if narrow {
-                row.gap(size::PLACE_NARROW_GAP).px(size::PLACE_NARROW_PAD)
+                row.gap(size::PLACE_NARROW_GAP)
+                    .px(size::PLACE_NARROW_PAD - size::DROP_EDGE)
             } else {
-                row.w_full().gap(size::PLACE_PAD).px(size::PLACE_PAD)
+                row.w_full()
+                    .gap(size::PLACE_PAD)
+                    .px(size::PLACE_PAD - size::DROP_EDGE)
             }
         })
         .when(here, |row| {

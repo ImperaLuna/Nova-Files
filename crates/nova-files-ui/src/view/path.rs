@@ -23,7 +23,7 @@ use std::path::PathBuf;
 use gpui::{
     Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
     MouseDownEvent, ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _,
-    Styled as _, div, prelude::FluentBuilder as _,
+    Styled as _, div, prelude::FluentBuilder as _, transparent_black,
 };
 
 use super::bar::capsule;
@@ -32,12 +32,12 @@ use super::row::icon;
 use crate::assets::Icon;
 use crate::commands::EmptyTrash;
 use crate::crumbs::{self, Crumb, Shown};
+use crate::dropping::DropAt;
 use crate::path_bar::{MenuItem, MenuOwner};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
 const FOLDED_LABEL: &str = "…";
-const TRASH_LABEL: &str = "Trash";
 const EMPTY_TRASH_LABEL: &str = "Empty Trash";
 
 impl MainWindow {
@@ -71,7 +71,13 @@ impl MainWindow {
             match shown {
                 Shown::Crumb(index) => {
                     let crumb = &crumbs[index];
-                    row = row.child(crumb_button(index, crumb, colors, cx));
+                    let at = if self.trash_open() {
+                        DropAt::Trash
+                    } else {
+                        DropAt::Folder(crumb.path.clone())
+                    };
+                    let button = crumb_button(index, crumb, colors, cx);
+                    row = row.child(self.drop_target(button, at, cx));
                     if !crumb.here || (self.has_folders() && !self.trash_open()) {
                         row = row.child(self.arrow(index, crumb.path.clone(), colors, cx));
                     }
@@ -110,7 +116,7 @@ impl MainWindow {
         if self.trash_open() {
             return vec![Crumb {
                 path: folder.to_path_buf(),
-                label: SharedString::new_static(TRASH_LABEL),
+                label: SharedString::new_static(crate::places::TRASH_LABEL),
                 icon: Icon::Trash,
                 shows_icon: true,
                 here: true,
@@ -214,7 +220,11 @@ fn crumb_box(selector: SharedString, colors: &Colors) -> Stateful<Div> {
         .items_center()
         .gap(size::CRUMB_GAP)
         .h(size::ICON_BUTTON)
-        .px(size::CRUMB_PAD)
+        // A clear drop edge (see `drop`), inside the padding, so every
+        // crumb lines up whether it takes drops or not.
+        .px(size::CRUMB_PAD - size::DROP_EDGE)
+        .border(size::DROP_EDGE)
+        .border_color(transparent_black())
         .rounded(radius::ROW)
         .whitespace_nowrap()
         .text_color(colors.text_dim)

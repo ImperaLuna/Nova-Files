@@ -1,23 +1,27 @@
 //! The Places section: the standard folders and the pinned ones, as
-//! `places` lists them. Each row carries the debug selector `place-<n>`,
-//! counted from 0 in the order shown. In a main window, the + (`pin`) on
-//! the head, or at the end of the row in a narrow window, picks a folder
-//! to pin, and right-click on a pinned folder opens
-//! its menu (see `window/pin`).
+//! `places` lists them, then, outside a picker, the trash with how many
+//! items it holds. Each folder's row carries the debug selector
+//! `place-<n>`, counted from 0 in the order shown, and the trash's
+//! `place-trash`. Files dropped on a row go into it (see `drop`). In a
+//! main window, the + (`pin`) on the head, or at the end of the row in a
+//! narrow window, picks a folder to pin, and right-click on a pinned
+//! folder opens its menu (see `window/pin`).
 
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
+    ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _, div,
     prelude::FluentBuilder as _,
 };
 
 use super::{Row, row, section_button, section_head};
 use crate::assets::Icon;
+use crate::dropping::DropAt;
 use crate::places;
 use crate::theme::{Colors, size};
 use crate::window::MainWindow;
 
 const LABEL: &str = "Places";
+const TRASH_SELECTOR: &str = "place-trash";
 
 impl MainWindow {
     /// The Places section; without its head when `narrow`.
@@ -47,6 +51,7 @@ impl MainWindow {
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
                     this.open(&target);
                 }))
+                .map(|row| self.drop_target(row, DropAt::Folder(place.path.clone()), cx))
                 .when_some(pinned, |row, path| {
                     row.on_mouse_down(
                         MouseButton::Right,
@@ -60,7 +65,13 @@ impl MainWindow {
             section_button("pin", Icon::Plus, &colors)
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder_to_pin(cx)))
         });
-        let list = div().flex().gap(size::PLACE_GAP).children(rows);
+        let list = div()
+            .flex()
+            .gap(size::PLACE_GAP)
+            .children(rows)
+            .when(main, |list| {
+                list.child(self.trash_place(narrow, &colors, cx))
+            });
         if narrow {
             // No head to carry the +: it ends the row, so pinning stays
             // within reach.
@@ -75,5 +86,30 @@ impl MainWindow {
                 &colors,
             ))
             .child(list.flex_col())
+    }
+}
+
+impl MainWindow {
+    /// The trash, after the folders: how many items it holds, once the
+    /// core has said; files dropped on it go to it.
+    fn trash_place(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
+        let number = self
+            .trash_count()
+            .filter(|&count| count > 0)
+            .map(|count| (count.to_string().into(), colors.text_dim));
+        let trash = row(
+            Row {
+                id: TRASH_SELECTOR.into(),
+                selector: TRASH_SELECTOR.to_owned(),
+                glyph: Icon::Trash,
+                name: places::TRASH_LABEL.into(),
+                number,
+                here: self.trash_open(),
+            },
+            narrow,
+            colors,
+        )
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)));
+        self.drop_target(trash, DropAt::Trash, cx)
     }
 }

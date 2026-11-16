@@ -20,6 +20,7 @@ use nova_files_api::{Bookmark, Place, PlaceKind};
 use crate::assets::Icon;
 
 pub const HOME_LABEL: &str = "Home";
+pub const TRASH_LABEL: &str = "Trash";
 
 /// One row of Places.
 #[derive(Debug, Clone, PartialEq, Eq)]
