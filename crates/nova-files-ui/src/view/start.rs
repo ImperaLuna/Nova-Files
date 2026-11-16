@@ -145,7 +145,7 @@ impl MainWindow {
     /// A card's box, which opens `folder` when clicked.
     fn card(index: usize, folder: &Path, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
         let colors = Colors::of(cx);
-        let target = folder.to_owned();
+        let (target, in_new_tab) = (folder.to_owned(), folder.to_owned());
         div()
             .id(("recent", index))
             .debug_selector(move || format!("recent-{index}"))
@@ -157,6 +157,11 @@ impl MainWindow {
             .cursor_pointer()
             .hover(|card| card.bg(colors.lifted))
             .on_click(cx.listener(move |this, _: &ClickEvent, _, _| this.open(&target)))
+            .on_aux_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+                if event.is_middle_click() {
+                    this.open_in_new_tab(in_new_tab.clone(), cx);
+                }
+            }))
     }
 }
 

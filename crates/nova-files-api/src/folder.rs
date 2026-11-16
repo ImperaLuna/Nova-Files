@@ -40,6 +40,16 @@ pub struct Entry {
     pub kind: EntryKind,
 }
 
+impl Entry {
+    /// Whether the entry is hidden: its name starts with a dot.
+    pub fn is_hidden(&self) -> bool {
+        self.name.as_encoded_bytes().first() == Some(&HIDDEN_MARK)
+    }
+}
+
+/// The first byte of a hidden entry's name.
+const HIDDEN_MARK: u8 = b'.';
+
 /// What the core reads about one entry after listing it. A field is `None`
 /// when the disk couldn't say (the entry vanished, or can't be read).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -158,5 +168,18 @@ mod tests {
             ..folder
         };
         assert_eq!(found.path_of(&entry(0, "a.txt")), Path::new("/docs/a.txt"));
+    }
+
+    #[test]
+    fn a_name_starting_with_a_dot_is_hidden() {
+        assert!(entry(0, ".config").is_hidden());
+        assert!(entry(0, "..").is_hidden());
+        assert!(!entry(0, "notes.txt").is_hidden());
+        assert!(!entry(0, "").is_hidden());
+        let raw = Entry {
+            name: std::os::unix::ffi::OsStringExt::from_vec(vec![b'.', 0xff]),
+            ..entry(0, "")
+        };
+        assert!(raw.is_hidden());
     }
 }

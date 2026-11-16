@@ -15,7 +15,7 @@ use gpui::{
     radians, svg,
 };
 
-use super::{icon, section_head};
+use super::{icon, new_tab_on_middle_click, section_head};
 use crate::assets::Icon;
 use crate::places;
 use crate::theme::{Colors, radius, size, text};
@@ -62,7 +62,8 @@ impl MainWindow {
             let glyph = places::standard_icon_at(self.places(), &path).unwrap_or(Icon::Folder);
             (glyph, name)
         };
-        let target = path.clone();
+        let (target, in_new_tab) = (path.clone(), path.clone());
+        let main = self.pick.is_none();
         let tint = if here { colors.here } else { colors.text_dim };
         let guides = (1..=depth).map(|level| {
             div()
@@ -94,6 +95,7 @@ impl MainWindow {
                 row.text_color(colors.text).font_weight(text::STRONG_WEIGHT)
             })
             .on_click(cx.listener(move |this, _: &ClickEvent, _, _| this.open(&target)))
+            .map(|row| new_tab_on_middle_click(row, in_new_tab, main, cx))
             .children(guides)
             .child(tree_toggle(index, path, toggle, colors, cx))
             .child(icon(glyph, size::TREE_ICON, tint))

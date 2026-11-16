@@ -2,10 +2,12 @@
 //! tree: the quiet count while nothing is selected, the selection's
 //! line and buttons, copy, cut and paste through the clipboard, moving
 //! to the trash by key or button, Undo, and a note going by itself.
-//! Renaming and New folder are in `renaming`.
+//! Renaming and New folder are in `renaming`, the trash in `trash`, and
+//! the right-click menus in `menus`.
 
 use std::fs;
 
+mod menus;
 mod renaming;
 mod trash;
 

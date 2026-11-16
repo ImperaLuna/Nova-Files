@@ -8,15 +8,18 @@
 //! that touch join into one block: a row squares the corners it shares
 //! with a selected neighbour. The row the keyboard is on has a ring (see
 //! `selecting`); a rename puts its text field where the name was (see
-//! `window::renaming`). A click on a column head orders the list by that column;
+//! `window::renaming`). Middle-click on a folder opens it in a new tab.
+//! A click on a column head orders the list by that column;
 //! folders always come first (see `navigate` and the core's `order`). A
 //! search's files stay best first, so their heads do nothing; they get a
 //! Folder column, and the part of each name that matched is marked. The
 //! count and the empty look are the search's (see `search`). The
 //! trash adds a Was in column, and says so when it is empty (see
-//! `window::trash`). A name can be dragged; a folder row takes files
-//! dropped on it, and the rest of the list takes them into the folder on
-//! screen (see `drop` and `window::dragging`).
+//! `window::trash`). A hidden entry's name and icon are dimmed (see
+//! `window::hidden`). A right-click on a row or on the empty space below
+//! opens its menu (see `window::context_menu`). A name can be dragged; a
+//! folder row takes files dropped on it, and the rest of the list takes
+//! them into the folder on screen (see `drop` and `window::dragging`).
 //!
 //! Every row spans the list's full width: `uniform_list` lays each row out
 //! on its own, and a row sized to its content would push its columns along
@@ -30,7 +33,7 @@ use gpui::{
     div, prelude::FluentBuilder as _, transparent_black, uniform_list,
 };
 
-use nova_files_api::{Entry, EntryKind, Listing, Order, SortKey};
+use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId, Order, SortKey};
 
 use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
@@ -90,6 +93,12 @@ impl MainWindow {
                     this.band_pressed(event, on_name);
                 }),
             )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                    this.space_right_clicked(event.position, cx);
+                }),
+            )
             .when_some(
                 self.list_drop_folder()
                     .map(|folder| DropAt::Folder(folder.to_path_buf())),
@@ -145,14 +154,19 @@ impl MainWindow {
                     .map(|(entry, index)| {
                         let id = entry.id;
                         let columns = this.columns(index).unwrap_or_default();
+                        let name = entry.name.to_string_lossy().into_owned();
+                        let marks = query
+                            .as_deref()
+                            .map(|query| marks::matched(&name, query))
+                            .unwrap_or_default();
                         let folder = this.folder_cell(listing, entry, index, cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let line = cells(
-                            this.name_column(
+                            this.name_cell(
                                 entry,
                                 (DraggedRow::new(listing_id, id), index),
-                                query.as_deref(),
+                                (name, marks),
                                 cx,
                             ),
                             folder,
@@ -162,7 +176,7 @@ impl MainWindow {
                         );
                         let folder_at = (entry.kind == EntryKind::Folder)
                             .then(|| DropAt::Folder(listing.path_of(entry)));
-                        entry_row(index, corners, &colors)
+                        entry_row(index, (listing_id, id), corners, &colors, cx)
                             .when_some(folder_at, |row, at| this.drop_target(row, at, cx))
                             .when(on, |row| row.bg(colors.selected).text_color(colors.text))
                             .child(line)
@@ -173,6 +187,9 @@ impl MainWindow {
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
                                 this.row_clicked((listing_id, id), event, window, cx);
+                            }))
+                            .on_aux_click(cx.listener(move |this, event, _, cx| {
+                                this.entry_aux_clicked((listing_id, id), event, cx);
                             }))
                             .into_any_element()
                     })
@@ -186,6 +203,45 @@ impl MainWindow {
 }
 
 impl MainWindow {
+    /// The `index`th entry's icon and name, with the parts of the name in
+    /// `marks` marked, draggable as `row` outside a picker and the trash;
+    /// its rename field in place of the name while it is renamed. A hidden
+    /// entry is dimmed.
+    fn name_cell(
+        &self,
+        entry: &Entry,
+        (row, index): (DraggedRow, usize),
+        (name, marks): (String, Vec<std::ops::Range<usize>>),
+        cx: &Context<Self>,
+    ) -> Div {
+        let draggable = self.pick.is_none() && !self.in_trash();
+        let colors = &Colors::of(cx);
+        let hidden = entry.is_hidden();
+        div()
+            .flex()
+            .items_center()
+            .gap(size::NAME_GAP)
+            .when(hidden, |line| line.text_color(colors.text_dim))
+            .child(
+                div()
+                    .flex_none()
+                    .when(hidden, |slot| slot.opacity(opacity::HIDDEN))
+                    .child(entry_icon(
+                        &entry.name,
+                        entry.kind,
+                        self.thumbnail(index),
+                        colors,
+                    )),
+            )
+            .child(self.rename_field(index).map_or_else(
+                || {
+                    entry_name(name.into(), marks, index, draggable.then_some(row), cx)
+                        .into_any_element()
+                },
+                |field| rename_box(field.clone(), colors).into_any_element(),
+            ))
+    }
+
     /// "Empty" in the middle of an empty trash.
     fn empty_trash(&self, colors: &Colors) -> Option<impl IntoElement> {
         let empty = self
@@ -244,12 +300,26 @@ fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> i
 }
 
 /// Row `index`'s box, as wide as the list, highlighted under the pointer,
-/// with only the corners `corners` keeps rounded. Every row keeps the
-/// clear edge a folder row lights up as a drop target (see `drop`), so
-/// all rows line up.
-fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
+/// with only the corners `corners` keeps rounded. A right-click on it
+/// opens its entry's menu (see `window::context_menu`). Every row keeps
+/// the clear edge a folder row lights up as a drop target (see `drop`),
+/// so all rows line up.
+fn entry_row(
+    index: usize,
+    entry: (ListingId, EntryId),
+    corners: Corners,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> Stateful<Div> {
     div()
         .id(("entry", index))
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                cx.stop_propagation();
+                this.entry_right_clicked(entry, event.position, cx);
+            }),
+        )
         .debug_selector(move || format!("entry-{index}"))
         .w_full()
         .flex()
@@ -269,43 +339,6 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
 }
 
 impl MainWindow {
-    /// The `index`th entry's icon and name, the part of the name a
-    /// search's `query` matches marked (see `marks`), draggable as `row`
-    /// outside a picker and the trash; or the rename's field in the
-    /// name's place.
-    fn name_column(
-        &self,
-        entry: &Entry,
-        (row, index): (DraggedRow, usize),
-        query: Option<&str>,
-        cx: &Context<Self>,
-    ) -> impl IntoElement {
-        let colors = Colors::of(cx);
-        let name = self.rename_field(index).map_or_else(
-            || {
-                let name = entry.name.to_string_lossy().into_owned();
-                let marks = query
-                    .map(|query| marks::matched(&name, query))
-                    .unwrap_or_default();
-                let draggable = self.pick.is_none() && !self.in_trash();
-                entry_name(name.into(), marks, index, draggable.then_some(row), cx)
-                    .into_any_element()
-            },
-            |field| rename_box(field.clone(), &colors).into_any_element(),
-        );
-        div()
-            .flex()
-            .items_center()
-            .gap(size::NAME_GAP)
-            .child(entry_icon(
-                &entry.name,
-                entry.kind,
-                self.thumbnail(index),
-                &colors,
-            ))
-            .child(name)
-    }
-
     /// Where files dropped on the list but not on a folder go: the
     /// folder on screen; nowhere on a search's files or in the trash.
     pub fn list_drop_folder(&self) -> Option<&Path> {

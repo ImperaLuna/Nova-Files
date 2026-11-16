@@ -1,8 +1,10 @@
 //! The window's own keys, bound from its action table, and Back and
 //! Forward by key, toolbar button and mouse side button: each test drives
-//! a window on a real core and checks where it went.
+//! a window on a real core and checks where it went. Ctrl+H shows hidden
+//! files and leaves them out again.
 
 use gpui::{MouseButton, NavigationDirection};
+use nova_files_api::HiddenFiles;
 
 use super::*;
 
@@ -118,4 +120,30 @@ async fn a_place_gone_since_is_skipped_and_the_window_stays(cx: &mut TestAppCont
     });
     cx.simulate_keystrokes("alt-left");
     wait_for_folder(&view, cx, tree.path()).await;
+}
+
+#[gpui::test]
+async fn ctrl_h_shows_hidden_files_and_leaves_them_out_again(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("keys-hidden");
+    let projects = tree.path().join("Projects");
+    fs::write(projects.join(".secret"), "").unwrap();
+    cx.update(nova_files_ui::bind_window_keys);
+    // Home is the tree, so the core's settings file stays out of Projects.
+    let (view, cx) = window_on(cx, &projects, tree.path());
+    wait_for_folder(&view, cx, &projects).await;
+    cx.run_until_parked();
+    assert_eq!(view.read_with(cx, |view, _| view.entry_names()), ["nova"]);
+
+    cx.simulate_keystrokes("ctrl-h");
+    view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["nova", ".secret"])
+        .await;
+    assert_eq!(
+        view.read_with(cx, |view, _| view.settings().hidden_files),
+        HiddenFiles::Shown
+    );
+
+    cx.simulate_keystrokes("ctrl-h");
+    view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["nova"])
+        .await;
 }

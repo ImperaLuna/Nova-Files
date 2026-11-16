@@ -315,6 +315,14 @@ pub mod size {
     pub const PLACE_HEIGHT: Pixels = px(34.0);
     /// The most the Drives section takes: its head and about four rows.
     pub const DRIVES_MAX_HEIGHT: Pixels = px(200.0);
+    /// The most of the sidebar's height the Open list takes, as a share;
+    /// more tabs scroll inside it.
+    pub const OPEN_MAX_SHARE: f32 = 0.42;
+    /// A tab's close button in the Open list, its icon, and the space on
+    /// its right.
+    pub const TAB_CLOSE: Pixels = px(22.0);
+    pub const TAB_CLOSE_ICON: Pixels = px(12.0);
+    pub const TAB_CLOSE_RIGHT: Pixels = px(6.0);
     pub const PLACE_PAD: Pixels = px(10.0);
     pub const PLACE_ICON: Pixels = px(19.0);
     pub const PLACE_GAP: Pixels = px(1.0);
@@ -443,6 +451,17 @@ pub mod size {
     pub const MENU_MAX_WIDTH: Pixels = px(300.0);
     pub const MENU_MAX_HEIGHT: Pixels = px(340.0);
     pub const MENU_OFFSET: Pixels = px(6.0);
+    /// A right-click menu: the space between its items, before an item's
+    /// key, around the line between its groups (above and below, then
+    /// either end), the least room it leaves to the window's edges, and
+    /// its shadow's fall and blur.
+    pub const MENU_ITEM_GAP: Pixels = px(1.0);
+    pub const MENU_KEY_GAP: Pixels = px(18.0);
+    pub const MENU_LINE_Y: Pixels = px(4.0);
+    pub const MENU_LINE_X: Pixels = px(8.0);
+    pub const MENU_EDGE: Pixels = px(8.0);
+    pub const MENU_SHADOW_Y: Pixels = px(18.0);
+    pub const MENU_SHADOW_BLUR: Pixels = px(44.0);
     /// The widest the type filter's button gets; a longer name is cut.
     pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
     /// The tallest the type menu gets before it scrolls.
@@ -503,6 +522,8 @@ pub mod start {
 pub mod opacity {
     /// A file the picker's type filter leaves out: still there, set back.
     pub const DIMMED: f32 = 0.4;
+    /// A hidden entry's icon, while hidden files show.
+    pub const HIDDEN: f32 = 0.55;
 }
 
 /// The quick look (see `view::preview`).
