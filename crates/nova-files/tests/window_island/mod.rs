@@ -225,6 +225,37 @@ async fn a_clash_is_asked_on_the_island_and_undo_puts_the_replaced_back(cx: &mut
 }
 
 #[gpui::test]
+async fn cancel_on_a_clash_stops_the_job(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island");
+    let home = TempFolder::tree("island-home");
+    let projects = tree.path().join("Projects");
+    fs::write(projects.join("notes.txt"), "there first").unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("ctrl-c");
+    double_click(cx, "entry-0");
+    wait_for_folder(&view, cx, &projects).await;
+    cx.simulate_keystrokes("ctrl-v");
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        view.newest_job_line(cx).as_deref() == Some("Copying notes.txt · waiting")
+    })
+    .await;
+    cx.run_until_parked();
+
+    click(cx, "island-cancel");
+    view.condition::<WindowEvent>(cx, |view, cx| view.newest_job_line(cx).is_none())
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-skip").is_none());
+    assert_eq!(
+        fs::read_to_string(projects.join("notes.txt")).unwrap(),
+        "there first"
+    );
+}
+
+#[gpui::test]
 async fn for_all_answers_every_clash_like_it_at_once(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("island");

@@ -469,7 +469,9 @@ fn place(
             Ok(Some(kind)) => {
                 replacing = false;
                 let mut asked = conflict(kind, item, &target);
-                asked.more = ahead.more(planned.index, kind, &running.shared.control);
+                if !running.answered(kind) {
+                    asked.more = ahead.more(planned.index, kind, &running.shared.control);
+                }
                 match running.ask(asked)? {
                     Answer::Skip => return Ok((Placed::Skipped, target)),
                     Answer::Merge => return Ok((Placed::Merged, target)),
