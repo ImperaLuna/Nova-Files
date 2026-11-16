@@ -8,6 +8,10 @@
 //! worked out from the same listing. Replace answers straight away, since
 //! the user chose to save over the file.
 //!
+//! A hidden name the folder on screen leaves out (see `hidden`) can't be
+//! told free from the listing, so the window asks the core what is at
+//! that path before answering: a file that is there asks too.
+//!
 //! Names count as taken when they differ only in case: on a FAT drive
 //! `report.txt` is `REPORT.TXT`, and the window can't tell which file
 //! system a folder is on, so it asks rather than risk saving over a file.
@@ -18,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 use gpui::{Context, Window};
 
-use nova_files_api::ListingId;
+use nova_files_api::{Command, HiddenFiles, ListingId, PropertiesId, Unreadable};
 
 use super::{Conflict, typed};
 use crate::selection::Selection;
@@ -33,6 +37,9 @@ pub struct Recheck {
     name: OsString,
     /// For Keep both, the file it keeps: the one to ask about again.
     beside: Option<OsString>,
+    /// The look at the path a hidden name waits for, once the listing
+    /// showed nothing under it.
+    pub probe: Option<PropertiesId>,
 }
 
 impl MainWindow {
@@ -50,6 +57,7 @@ impl MainWindow {
                 listing,
                 name,
                 beside,
+                probe: None,
             });
         }
     }
@@ -103,6 +111,52 @@ impl MainWindow {
             self.ask_over(&recheck.folder, over);
             return;
         }
+        if self.hidden_files != Some(HiddenFiles::Shown) && is_hidden(&recheck.name) {
+            self.probe(recheck);
+            return;
+        }
+        self.save_free(recheck, cx);
+    }
+
+    /// Asks the core what is at the path a hidden name would save to; the
+    /// save waits for the answer.
+    fn probe(&mut self, mut recheck: Recheck) {
+        // One probe per listing asked, so the listing's id names it too.
+        let Some(id) = recheck.listing.map(|listing| PropertiesId(listing.0)) else {
+            return;
+        };
+        let path = recheck.folder.join(&recheck.name);
+        let sent = self
+            .connection
+            .as_ref()
+            .is_some_and(|connection| connection.send(Command::Properties { id, path }).is_ok());
+        if let Some(pick) = self.pick.as_mut().filter(|_| sent) {
+            recheck.probe = Some(id);
+            pick.recheck = Some(recheck);
+        }
+    }
+
+    /// The core looked at the path of probe `id`: `missing` when nothing
+    /// is there. A save waiting on it answers, or asks about the file.
+    pub fn save_probed(&mut self, id: PropertiesId, missing: bool, cx: &mut Context<Self>) {
+        let Some(recheck) = self
+            .pick
+            .as_mut()
+            .and_then(|pick| pick.recheck.take_if(|recheck| recheck.probe == Some(id)))
+        else {
+            return;
+        };
+        if missing {
+            self.save_free(recheck, cx);
+        } else {
+            let over = recheck.beside.unwrap_or(recheck.name);
+            self.ask_over(&recheck.folder, over);
+            cx.notify();
+        }
+    }
+
+    /// Answers a save whose name is free, and closes the window.
+    fn save_free(&mut self, recheck: Recheck, cx: &mut Context<Self>) {
         let Some(handle) = self.pick.as_ref().map(|pick| pick.window) else {
             return;
         };
@@ -150,4 +204,14 @@ impl MainWindow {
 fn folded(name: &OsStr) -> OsString {
     name.to_str()
         .map_or_else(|| name.to_owned(), |text| text.to_lowercase().into())
+}
+
+/// Whether `name` is hidden, as a listing leaves it out.
+fn is_hidden(name: &OsStr) -> bool {
+    name.as_encoded_bytes().first() == Some(&b'.')
+}
+
+/// Whether a look at a path found nothing there.
+pub const fn found_nothing(reason: Unreadable) -> bool {
+    matches!(reason, Unreadable::Missing)
 }
