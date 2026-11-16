@@ -318,12 +318,14 @@ impl Journal {
 
     /// The job is over: its journal goes.
     pub fn finish(self) {
-        if let Err(error) = fs::remove_file(&self.path) {
-            log::warn!(
-                "can't remove the job journal {}: {error}",
-                self.path.display()
-            );
-        }
+        remove_journal(&self.path);
+    }
+}
+
+/// Removes the journal at `path`, of a job that is over.
+pub fn remove_journal(path: &Path) {
+    if let Err(error) = fs::remove_file(path) {
+        log::warn!("can't remove the job journal {}: {error}", path.display());
     }
 }
 

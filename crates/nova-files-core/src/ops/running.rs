@@ -14,7 +14,7 @@ use super::clash::conflict_for;
 use super::control::Cancelled;
 use super::folders::Folders;
 use super::job::Job;
-use super::journal::{Journal, Record, word};
+use super::journal::{Journal, Record, remove_journal, word};
 use super::left::{Done, Left};
 use super::plan::{Kind, kind};
 use super::progress::Reporter;
@@ -31,6 +31,9 @@ pub struct Running {
     /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
     journal: Option<Journal>,
+    /// The journal of a resumed job that couldn't be opened again: it
+    /// still goes when the job ends, or the job would seem cut short.
+    unopened: Option<PathBuf>,
     /// Answers given for every conflict of their kind.
     answers: HashMap<ConflictKind, Answer>,
     /// How many conflicts it asked about.
@@ -66,6 +69,7 @@ impl Running {
             reporter,
             journals,
             journal: None,
+            unopened: None,
             answers: HashMap::new(),
             asked: 0,
             folders: Folders::default(),
@@ -84,9 +88,13 @@ impl Running {
         self.names = names;
         self.resumes = true;
         self.journals = None;
+        let path = left.journal.clone();
         match Journal::reopen(left.file, left.journal, left.whole) {
             Ok(journal) => self.journal = Some(journal),
-            Err(error) => log::warn!("job {} resumes without its journal: {error}", self.job.0),
+            Err(error) => {
+                log::warn!("job {} resumes without its journal: {error}", self.job.0);
+                self.unopened = Some(path);
+            }
         }
     }
 
@@ -272,6 +280,9 @@ impl Running {
     pub fn finish(mut self) {
         if let Some(journal) = self.journal.take() {
             journal.finish();
+        }
+        if let Some(path) = self.unopened.take() {
+            remove_journal(&path);
         }
     }
 }

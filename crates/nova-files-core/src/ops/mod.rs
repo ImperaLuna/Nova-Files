@@ -69,8 +69,10 @@ pub use test_folder::TestFolder;
 use crate::jobs::Client;
 use crate::trash::Trashes;
 use access::change_access;
+use control::{Cancelled, Control};
 use delete::delete;
 use job::Job;
+use journal::remove_journal;
 use left::Left;
 use make::How;
 use progress::Reporter;
@@ -298,6 +300,8 @@ impl Jobs {
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
         // New hidden names for a resumed job, never a crash's.
         let resume = left.map(|left| (left, self.next.fetch_add(1, Ordering::Relaxed)));
+        // A resumed job that never starts is over all the same.
+        let resumed_journal = resume.as_ref().map(|(left, _)| left.journal.clone());
         // Taken now, so an undo runs once however often it is asked for;
         // put back unless it ends done.
         let taken = match &operation {
@@ -315,16 +319,11 @@ impl Jobs {
         let spawned = thread::Builder::new()
             .name(JOB_THREAD.to_owned())
             .spawn(move || {
-                let operation = match resume {
-                    Some((left, names)) => {
-                        let rest = still_to_do(&left.operation);
-                        running.resuming(left, names);
-                        rest
-                    }
-                    None => operation,
-                };
+                let (operation, to_run) = to_run(&mut running, operation, resume);
                 let undo = taken.as_ref().map(|taken| taken.undo.clone());
-                let ended = run(&mut running, &operation, &trashes, undo);
+                let ended = to_run.map_or((Outcome::Cancelled, Vec::new()), |()| {
+                    run(&mut running, &operation, &trashes, undo)
+                });
                 let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
                 let undoable = (!running.resumed())
                     .then(|| undo_of(&operation, &steps, &ended.0, &trashes))
@@ -359,6 +358,9 @@ impl Jobs {
                 wake.activity().ok();
             });
         if spawned.is_err() {
+            if let Some(journal) = resumed_journal {
+                remove_journal(&journal);
+            }
             let outcome = Outcome::Failed {
                 path: failed_path,
                 reason: Failure::Other,
@@ -499,43 +501,68 @@ fn run(
     }
 }
 
+/// What job `running` runs: `operation`, or, when it resumes what a
+/// crash `left`, what is left of it; with [`Cancelled`] when cancelled
+/// while that is found.
+fn to_run(
+    running: &mut Running,
+    operation: Operation,
+    resume: Option<(Left, u64)>,
+) -> (Operation, Result<(), Cancelled>) {
+    let Some((left, names)) = resume else {
+        return (operation, Ok(()));
+    };
+    let all = left.operation.clone();
+    running.resuming(left, names);
+    match still_to_do(&all, &running.shared.control) {
+        Ok(rest) => (rest, Ok(())),
+        Err(cancelled) => (all, Err(cancelled)),
+    }
+}
+
 /// What is left of `operation` after a crash: a move, delete or trash
 /// leaves out the sources already gone (moved whole, deleted, or in the
-/// trash); a copy does
-/// all of it again, taking what it made as done. A source that can't be
-/// looked at stays, so the job reports it.
-fn still_to_do(operation: &Operation) -> Operation {
-    let there = |paths: &[PathBuf]| -> Vec<PathBuf> {
-        paths
-            .iter()
-            .filter(|path| {
-                !matches!(
-                    path.symlink_metadata(),
-                    Err(error) if error.kind() == io::ErrorKind::NotFound
-                )
-            })
-            .cloned()
-            .collect()
+/// trash); a copy does all of it again, taking what it made as done. A
+/// source that can't be looked at stays, so the job reports it. Each
+/// look is held or stopped through `control` first, so a long list on a
+/// slow disk never keeps a pause or cancel waiting.
+///
+/// # Errors
+/// [`Cancelled`] when cancelled.
+fn still_to_do(operation: &Operation, control: &Control) -> Result<Operation, Cancelled> {
+    let there = |paths: &[PathBuf]| -> Result<Vec<PathBuf>, Cancelled> {
+        let mut there = Vec::with_capacity(paths.len());
+        for path in paths {
+            control.checkpoint()?;
+            let gone = matches!(
+                path.symlink_metadata(),
+                Err(error) if error.kind() == io::ErrorKind::NotFound
+            );
+            if !gone {
+                there.push(path.clone());
+            }
+        }
+        Ok(there)
     };
-    match operation {
+    Ok(match operation {
         Operation::Move { sources, into } => Operation::Move {
-            sources: there(sources),
+            sources: there(sources)?,
             into: into.clone(),
         },
         Operation::Delete { paths } => Operation::Delete {
-            paths: there(paths),
+            paths: there(paths)?,
         },
         Operation::Trash { paths } => Operation::Trash {
-            paths: there(paths),
+            paths: there(paths)?,
         },
         Operation::Restore { items } => Operation::Restore {
-            items: there(items),
+            items: there(items)?,
         },
         Operation::DeleteFromTrash { items } => Operation::DeleteFromTrash {
-            items: there(items),
+            items: there(items)?,
         },
         other => other.clone(),
-    }
+    })
 }
 
 /// The path a job that couldn't start failed at.
@@ -580,6 +607,18 @@ mod tests {
     use crate::ops::test_folder::TestFolder;
 
     #[test]
+    fn a_resumed_job_cancelled_while_its_sources_are_looked_at_stops() {
+        let folder = TestFolder::new("ops-still-to-do-cancel");
+        let delete = Operation::Delete {
+            paths: vec![folder.file("file", "f")],
+        };
+        let control = Control::default();
+        control.cancel();
+
+        assert_eq!(still_to_do(&delete, &control), Err(Cancelled));
+    }
+
+    #[test]
     fn a_resumed_delete_keeps_a_source_it_cant_look_at() {
         let folder = TestFolder::new("ops-still-to-do");
         let file = folder.file("file", "f");
@@ -590,7 +629,7 @@ mod tests {
             paths: vec![file.clone(), unreachable.clone(), gone],
         };
 
-        let left = still_to_do(&delete);
+        let left = still_to_do(&delete, &Control::default()).unwrap();
 
         assert_eq!(
             left,

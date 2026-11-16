@@ -252,7 +252,7 @@ mod tests {
 
         let kept = planned(&mut running, plan).unwrap();
 
-        assert!(kept.items.is_empty());
+        assert_eq!(kept.items, []);
     }
 
     #[test]
