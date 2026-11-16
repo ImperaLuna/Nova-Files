@@ -11,12 +11,18 @@
 use std::any::Any;
 
 use gpui::{
-    Context, ExternalPaths, InteractiveElement, StyleRefinement, Styled, Window, transparent_black,
+    Context, ExternalPaths, InteractiveElement, Pixels, StyleRefinement, Styled, Window,
+    transparent_black,
 };
 
 use crate::dropping::{DropAt, Sources};
 use crate::theme::{Colors, size};
 use crate::window::{DraggedRow, MainWindow};
+
+/// The padding that, with the clear drop edge, makes `pad`.
+pub(super) fn inside_edge(pad: Pixels) -> Pixels {
+    pad - size::DROP_EDGE
+}
 
 impl MainWindow {
     /// Makes `target` take files dropped at `at`, lit while they would.

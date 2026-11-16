@@ -30,6 +30,7 @@ use gpui::{
 
 use nova_files_api::{Entry, EntryKind, Listing, Order, SortKey};
 
+use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
 
 use crate::assets::Icon;
@@ -251,7 +252,7 @@ fn entry_row(index: usize, corners: Corners, colors: &Colors) -> Stateful<Div> {
         .flex_none()
         .items_center()
         .h(size::ROW_HEIGHT)
-        .px(size::ROW_PAD - size::DROP_EDGE)
+        .px(inside_edge(size::ROW_PAD))
         .border(size::DROP_EDGE)
         .border_color(transparent_black())
         .when(corners.top, |row| {

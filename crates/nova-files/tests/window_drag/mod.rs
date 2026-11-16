@@ -61,6 +61,12 @@ async fn a_name_dragged_onto_a_folder_moves_it_there_and_undo_moves_it_back(
     let home = TempFolder::tree("drag-move-home");
     let (view, cx) = drag_window(cx, tree.path(), &home).await;
     let projects = tree.path().join("Projects");
+    // Rows keep a clear drop edge inside their padding, so a name starts
+    // where it always did: the row's pad, the icon and the gap in
+    // (12 + 22 + 11 px).
+    let inset =
+        cx.debug_bounds("name-1").unwrap().left() - cx.debug_bounds("entry-1").unwrap().left();
+    assert_eq!(inset, px(45.0));
 
     // Projects, notes.txt: nothing selected, so the drag selects it.
     drag(cx, "name-1", "entry-0", Modifiers::none());
