@@ -293,6 +293,28 @@ fn hidden_files_are_left_out_unless_the_settings_show_them() {
 }
 
 #[test]
+fn the_trash_lists_its_hidden_items_too() {
+    let home = TempFolder::new();
+    let trash = home.path().join(".local/share/Trash/files");
+    fs::create_dir_all(trash.join(".old")).unwrap();
+    fs::write(trash.join(".env"), "").unwrap();
+    let client = client_at(home.path());
+
+    let trashed = listing(client.list(1, &trash));
+    assert_eq!(
+        names(&trashed),
+        [
+            (".old".to_owned(), EntryKind::Folder),
+            (".env".to_owned(), EntryKind::File)
+        ]
+    );
+    // A trashed folder's own hidden entries too.
+    fs::write(trash.join(".old/.inside"), "").unwrap();
+    let inside = listing(client.list(2, &trash.join(".old")));
+    assert_eq!(names(&inside), [(".inside".to_owned(), EntryKind::File)]);
+}
+
+#[test]
 fn empty_folder_lists_nothing() {
     let folder = TempFolder::new();
 

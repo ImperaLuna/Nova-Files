@@ -1,15 +1,18 @@
 //! The commands about folders and the files in them: listing, rows,
 //! places, the trash, search, properties, previews, opening files and
-//! the recent folders. `run` sends only these here.
+//! the recent folders. `run` sends only these here. Folders list their
+//! hidden entries as the settings say, but the trash lists all of them.
 
+use std::path::Path;
 use std::sync::Arc;
 
-use nova_files_api::{ClientGone, ClientId, Command};
+use nova_files_api::{ClientGone, ClientId, Command, HiddenFiles};
 
 use super::Setup;
 use crate::jobs::{self, Client};
 use crate::preview::{self, Request};
 use crate::properties;
+use crate::trash::{FILES, Trashes};
 
 /// Answers one of the folder commands for client `id`.
 pub(super) fn answer(
@@ -20,7 +23,7 @@ pub(super) fn answer(
 ) -> Result<(), ClientGone> {
     match command {
         Command::ListFolder { id, path, order } => {
-            let hidden = setup.settings.current().hidden_files;
+            let hidden = hidden_files(setup, &path);
             jobs::list_folder(client, id, path, order, hidden);
         }
         Command::Places => setup.places.listen(id, client.events()),
@@ -56,4 +59,16 @@ pub(super) fn answer(
         _ => {}
     }
     Ok(())
+}
+
+/// Whether a listing of `path` shows its hidden entries: as the settings
+/// say, except in the home trash, which lists all it holds so every item
+/// in it can be seen and put back.
+fn hidden_files(setup: &Setup, path: &Path) -> HiddenFiles {
+    let trash = Trashes::of(setup.home.as_ref()).home;
+    if trash.is_some_and(|trash| path.starts_with(trash.join(FILES))) {
+        HiddenFiles::Shown
+    } else {
+        setup.settings.current().hidden_files
+    }
 }

@@ -242,11 +242,9 @@ impl MainWindow {
     /// them again asks for the rows on screen anew, so theirs arrive.
     fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
         let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
-        let hidden_changed = settings.hidden_files != self.settings.hidden_files;
+        let hidden_files = settings.hidden_files;
         self.settings = Arc::unwrap_or_clone(settings);
-        if hidden_changed {
-            self.hidden_changed();
-        }
+        self.hidden_arrived(hidden_files);
         if thumbnails_changed {
             if self.settings.thumbnails == Thumbnails::Hidden {
                 release(self.thumbnails.take_all(), None, cx);
