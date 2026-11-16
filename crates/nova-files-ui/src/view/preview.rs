@@ -28,7 +28,7 @@ use gpui::{
 use nova_files_api::{Entry, EntryKind, Preview, PreviewContent};
 
 use super::bar::icon_button;
-use super::row::{entry_icon, icon};
+use super::row::{RowIcon, entry_icon, entry_kind, icon};
 use crate::assets::Icon;
 use crate::columns;
 use crate::commands::{PreviewNext, PreviewPrevious};
@@ -292,7 +292,7 @@ fn folder_art(first: &[Entry], count: usize, colors: &Colors) -> AnyElement {
                 .h(preview::LIST_ROW)
                 .min_w_0()
                 .text_color(colors.text_soft)
-                .child(entry_icon(&entry.name, entry.kind, None, colors))
+                .child(entry_icon(RowIcon::BuiltIn(entry_kind(entry.kind)), colors))
                 .child(div().min_w_0().truncate().child(SharedString::from(
                     entry.name.to_string_lossy().into_owned(),
                 )))

@@ -21,7 +21,7 @@ use gpui::{
 };
 use nova_files_api::{EntryKind, Peeked, RecentFolder};
 
-use super::row::{entry_icon, icon, kind_glyph};
+use super::row::{RowIcon, entry_icon, entry_kind, icon, kind_glyph};
 use crate::assets::Icon;
 use crate::columns;
 use crate::pick::typed::HOME;
@@ -245,7 +245,7 @@ fn peek(folder: &RecentFolder, colors: &Colors) -> impl IntoElement {
             .h(start::PEEK_ROW)
             .min_w_0()
             .text_size(text::DETAIL)
-            .child(entry_icon(&entry.name, entry.kind, None, colors))
+            .child(entry_icon(RowIcon::BuiltIn(entry_kind(entry.kind)), colors))
             .child(
                 div()
                     .flex_1()
