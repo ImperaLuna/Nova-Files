@@ -1,7 +1,7 @@
 //! Jobs and the trash against a scripted core: the island follows what
 //! the core says about a job, and arriving in the trash reads it again.
 
-use nova_files_api::{JobId, Operation};
+use nova_files_api::{JobId, Operation, Outcome, Tally};
 
 use super::*;
 
@@ -139,17 +139,73 @@ fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContex
         job,
         outcome,
         changed: Vec::new(),
-        tally: nova_files_api::Tally::default(),
+        tally: Tally::default(),
     };
     let note = |cx: &mut VisualTestContext| {
         view.read_with(cx, |view, _| view.note().map(|note| note.label.to_string()))
     };
     // What Ctrl+C said.
     let before = note(cx);
-    core.send(finished(jobs[0], nova_files_api::Outcome::Done));
+    core.send(finished(jobs[0], Outcome::Done));
     cx.run_until_parked();
     assert_eq!(note(cx), before);
-    core.send(finished(jobs[1], nova_files_api::Outcome::Cancelled));
+    core.send(finished(jobs[1], Outcome::Cancelled));
     cx.run_until_parked();
     assert_eq!(note(cx).as_deref(), Some("Copied 1 item"));
+}
+
+#[gpui::test]
+fn a_copy_shows_while_it_runs_and_one_that_replaced_reads_the_trash_again(cx: &mut TestAppContext) {
+    cx.update(nova_files_ui::bind_window_keys);
+    let (_view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down");
+
+    for (replaced, asks) in [(0, 0), (1, 1)] {
+        cx.simulate_keystrokes("ctrl-c ctrl-v");
+        cx.run_until_parked();
+        let [job] = start_copies(&mut core)[..] else {
+            panic!("one copy");
+        };
+        cx.executor().advance_clock(nova_files_ui::JOB_SHOWS_AFTER);
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("island-progress").is_some());
+        core.send(Event::JobFinished {
+            job,
+            outcome: Outcome::Done,
+            changed: Vec::new(),
+            tally: Tally {
+                replaced,
+                skipped: 0,
+            },
+        });
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("island-progress").is_none());
+        assert_eq!(trash_asks(&mut core), asks, "replaced {replaced}");
+    }
+}
+
+#[gpui::test]
+fn a_long_list_of_jobs_scrolls_instead_of_growing_past_the_window(cx: &mut TestAppContext) {
+    cx.update(nova_files_ui::bind_window_keys);
+    let (_view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down ctrl-c");
+    for _ in 0..12 {
+        cx.simulate_keystrokes("ctrl-v");
+    }
+    cx.run_until_parked();
+    assert_eq!(start_copies(&mut core).len(), 12);
+    cx.executor().advance_clock(nova_files_ui::JOB_SHOWS_AFTER);
+    cx.run_until_parked();
+
+    press(cx, "island-jobs-open");
+    let list = cx.debug_bounds("island-jobs").unwrap();
+    let first = cx.debug_bounds("island-job-0").unwrap();
+    assert!(
+        list.size.height < first.size.height * 8.0,
+        "{list:?} for rows of {first:?}"
+    );
 }

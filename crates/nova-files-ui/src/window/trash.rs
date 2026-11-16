@@ -140,18 +140,20 @@ impl MainWindow {
             .collect()
     }
 
-    /// After a job doing `operation`, which may have changed the trash:
+    /// After a job doing `operation`, which may have changed the trash
+    /// (a copy or move too when it `replaced` files, which went there):
     /// asks again what it holds, and reads it again when it is on screen
     /// (the core names the trashed entries, not the trash, as changed).
-    pub(super) fn trash_maybe_changed(&mut self, operation: &Operation) {
-        let changes_trash = matches!(
-            operation,
-            Operation::Trash { .. }
-                | Operation::Restore { .. }
-                | Operation::DeleteFromTrash { .. }
-                | Operation::EmptyTrash
-                | Operation::Undo { .. }
-        );
+    pub(super) fn trash_maybe_changed(&mut self, operation: &Operation, replaced: bool) {
+        let changes_trash = replaced
+            || matches!(
+                operation,
+                Operation::Trash { .. }
+                    | Operation::Restore { .. }
+                    | Operation::DeleteFromTrash { .. }
+                    | Operation::EmptyTrash
+                    | Operation::Undo { .. }
+            );
         if !changes_trash {
             return;
         }
