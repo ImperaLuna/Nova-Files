@@ -1,14 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="tile" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
-      <stop offset="0" stop-color="#3C291C"/>
-      <stop offset="0.62" stop-color="#1D1D1D"/>
+    <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF9A4D"/>
+      <stop offset=".55" stop-color="#FD7014"/>
+      <stop offset="1" stop-color="#E0590A"/>
     </linearGradient>
   </defs>
-  <rect width="128" height="128" rx="29.4" fill="url(#tile)"/>
-  <rect x="0.5" y="0.5" width="127" height="127" rx="28.9" fill="none" stroke="#FFF6EB" stroke-opacity="0.08"/>
-  <g fill="#FD7014" transform="translate(24.32 24.32) scale(3.3067)">
-    <path opacity=".5" d="M2.5 7A2.5 2.5 0 0 1 5 4.5h3.6c.75 0 1.45.33 1.93.9l.92 1.1H19A2.5 2.5 0 0 1 21.5 9v3h-19z"/>
-    <rect x="2.5" y="8.6" width="19" height="11.4" rx="2.8"/>
+  <g transform="translate(16 16.5) scale(1.5) translate(-16 -16.5)">
+    <path fill="#C4520A" d="M7 10.5A1.5 1.5 0 0 1 8.5 9h4.6l1.8 2H23.5A1.5 1.5 0 0 1 25 12.5V14H7z"/>
+    <rect x="7" y="13" width="18" height="11" rx="1.6" fill="url(#front)"/>
+    <path d="M8.2 13.6h15.6" stroke="#fff" stroke-opacity=".45" stroke-width=".8" stroke-linecap="round"/>
   </g>
 </svg>
