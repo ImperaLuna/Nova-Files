@@ -174,6 +174,7 @@ fn shown_with_details(
         id,
         first: EntryId(0),
         details: (0..with_details).map(|_| sized(1)).collect(),
+        icons: Arc::new([]),
     });
     cx.run_until_parked();
     (view, cx, core, id)
@@ -290,6 +291,7 @@ fn details_for_another_listing_are_left_out(cx: &mut TestAppContext) {
         id: ListingId(id.0 + 1),
         first: EntryId(1),
         details: Arc::new([sized(5)]),
+        icons: Arc::new([]),
     });
     cx.run_until_parked();
 
@@ -304,6 +306,7 @@ fn details_after_a_gap_fill_their_own_rows(cx: &mut TestAppContext) {
         id,
         first: EntryId(2),
         details: Arc::new([sized(5)]),
+        icons: Arc::new([]),
     });
     cx.run_until_parked();
 

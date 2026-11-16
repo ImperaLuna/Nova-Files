@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::bookmark::{Bookmark, BookmarkChange};
 use crate::disk_space::PathSpace;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
+use crate::file_icon::FileIcon;
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope};
 use crate::open_with::{OpenWith, OpenWithAnswer};
@@ -247,12 +248,14 @@ pub enum Event {
         reason: Unreadable,
     },
     /// Details for entries `first` onward of listing `id`, one per entry,
-    /// in entry order, answering [`Command::Rows`]. Each entry's details
-    /// come at most once per listing.
+    /// in entry order, answering [`Command::Rows`], and each entry's icon
+    /// in the same order. Each entry's details come at most once per
+    /// listing.
     DetailsRead {
         id: ListingId,
         first: EntryId,
         details: Arc<[Details]>,
+        icons: Arc<[FileIcon]>,
     },
     /// A thumbnail for entry `entry` of listing `id`, as PNG bytes that fit
     /// in 128 by 128 pixels.
