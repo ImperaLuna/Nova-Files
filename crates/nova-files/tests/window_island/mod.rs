@@ -279,6 +279,14 @@ async fn for_all_answers_every_clash_like_it_at_once(cx: &mut TestAppContext) {
     .await;
     cx.run_until_parked();
 
+    // Unticked, an answer goes for this clash alone.
+    let number = |view: &MainWindow| view.newest_question().map(|asked| asked.number);
+    assert_eq!(view.read_with(cx, |view, _| number(view)), Some(1));
+    click(cx, "island-skip");
+    view.condition::<WindowEvent>(cx, move |view, _| number(view) == Some(2))
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-for-all").is_some());
     click(cx, "island-for-all");
     click(cx, "island-skip");
     wait_for_note(&view, cx, "Nothing copied, skipped 3").await;
