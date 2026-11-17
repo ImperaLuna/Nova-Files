@@ -2,6 +2,8 @@
 //! for as a find, the files found take the list's place while the window
 //! stays in its folder, and clearing the box or going elsewhere ends it.
 
+use nova_files_api::Operation;
+
 use super::*;
 
 /// The next find the window asks for, skipping other commands.
@@ -207,6 +209,32 @@ fn down_moves_into_the_results_and_enter_opens_a_file_where_it_is(cx: &mut TestA
         })
         .collect();
     assert_eq!(opened, [PathBuf::from("/docs/report.pdf")]);
+}
+
+#[gpui::test]
+fn deleting_a_result_for_good_names_it_where_it_is(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+
+    cx.simulate_keystrokes("down shift-delete");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.confirm().is_some()));
+    let yes = cx.debug_bounds("island-yes").unwrap().center();
+    cx.simulate_click(yes, gpui::Modifiers::none());
+    cx.run_until_parked();
+
+    let deleted: Vec<_> = core
+        .commands()
+        .into_iter()
+        .filter_map(|command| match command {
+            Command::StartJob {
+                operation: Operation::Delete { paths },
+                ..
+            } => Some(paths),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(deleted, [vec![PathBuf::from("/docs/report.pdf")]]);
 }
 
 #[gpui::test]

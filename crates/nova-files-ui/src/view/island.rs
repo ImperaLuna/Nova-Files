@@ -43,26 +43,28 @@ impl MainWindow {
     /// The island, or the quiet count while the island is down.
     pub(super) fn island(&self, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
+        let job = self.job_on_island(cx);
+        // A question waits on the user, so it comes before a job's line.
         let parts = if self.pick.is_some() {
             None
-        } else if let Some((id, job)) = self.job_on_island(cx) {
-            if let Some(conflict) = &job.asking {
-                Some(ask_parts(
-                    conflict,
-                    self.island.ticked_for_all(id, conflict.number),
-                    &colors,
-                    cx,
-                ))
-            } else {
-                let shown = self.jobs_shown(cx);
-                if shown.len() > 1 {
-                    return several::island(&shown, self.island.jobs_open, &colors, cx)
-                        .into_any_element();
-                }
-                Some(job_parts(job, &colors, cx))
-            }
+        } else if let Some((id, conflict)) =
+            job.and_then(|(id, job)| Some((id, job.asking.as_ref()?)))
+        {
+            Some(ask_parts(
+                conflict,
+                self.island.ticked_for_all(id, conflict.number),
+                &colors,
+                cx,
+            ))
         } else if let Some(confirm) = &self.island.confirm {
             Some(confirm_parts(confirm, &colors, cx))
+        } else if let Some((_, job)) = job {
+            let shown = self.jobs_shown(cx);
+            if shown.len() > 1 {
+                return several::island(&shown, self.island.jobs_open, &colors, cx)
+                    .into_any_element();
+            }
+            Some(job_parts(job, &colors, cx))
         } else if let Some(note) = &self.island.note {
             Some(note_parts(note, &colors, cx))
         } else if self.selected_count() > 0 {

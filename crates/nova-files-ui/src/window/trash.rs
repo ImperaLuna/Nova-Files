@@ -1,8 +1,10 @@
 //! Trash as a place: the home trash's folder of trashed entries, listed
 //! like any folder, with a "Was in" column saying where each came from.
 //! There the selection can only be restored (the island's Restore) or,
-//! with Delete, deleted for good; Empty Trash deletes everything in every
-//! trash. Both ask first on the island, since they can't be undone.
+//! with Delete or Shift+Delete, deleted for good (see `acting`); Empty
+//! Trash deletes everything in every trash. Both ask first on the island
+//! with `ask`, which deleting files elsewhere for good uses
+//! too, since they can't be undone.
 //!
 //! Where each entry was comes from the core's list of the trash, asked
 //! for when the trash is opened or a job may have changed it; the same
@@ -126,7 +128,7 @@ impl MainWindow {
     }
 
     /// The entries selected in the trash, as the core names them.
-    fn selected_trashed(&self) -> Vec<PathBuf> {
+    pub(super) fn selected_trashed(&self) -> Vec<PathBuf> {
         if !self.trash_open() {
             return Vec::new();
         }
@@ -172,21 +174,6 @@ impl MainWindow {
         }
     }
 
-    /// Asks on the island before deleting the entries selected in the
-    /// trash for good.
-    pub(crate) fn delete_selected_for_good(&mut self, cx: &mut Context<Self>) {
-        let items = self.selected_trashed();
-        if items.is_empty() {
-            return;
-        }
-        let what = island::count(items.len(), ITEM, ITEMS);
-        self.ask(
-            format!("Delete {what} for good?"),
-            Operation::DeleteFromTrash { items },
-            cx,
-        );
-    }
-
     /// Asks on the island before deleting everything in the trash.
     pub fn ask_empty_trash(&mut self, cx: &mut Context<Self>) {
         let what = self.trash.count.map_or_else(
@@ -200,7 +187,9 @@ impl MainWindow {
         );
     }
 
-    fn ask(&mut self, label: String, operation: Operation, cx: &mut Context<Self>) {
+    /// Asks `label` on the island, with Cancel and Delete; Delete starts
+    /// `operation`.
+    pub(super) fn ask(&mut self, label: String, operation: Operation, cx: &mut Context<Self>) {
         self.island.confirm = Some(Confirm {
             label: label.into(),
             yes: DELETE_LABEL,
@@ -211,8 +200,14 @@ impl MainWindow {
 
     /// Answers the island's question: does what it asked about, or not.
     pub(crate) fn answer_confirm(&mut self, yes: bool, cx: &mut Context<Self>) {
+        // Deleting the selection goes only while it is what was asked
+        // about: one changed since takes the question back.
         if let Some(confirm) = self.island.confirm.take()
             && yes
+            && (!matches!(
+                confirm.operation,
+                Operation::Delete { .. } | Operation::DeleteFromTrash { .. }
+            ) || self.deleting_selected().as_ref() == Some(&confirm.operation))
         {
             self.start_job(confirm.operation);
         }

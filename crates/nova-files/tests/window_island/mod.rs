@@ -299,6 +299,47 @@ async fn for_all_answers_every_clash_like_it_at_once(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn shift_delete_asks_then_deletes_for_good(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island");
+    let home = TempFolder::tree("island-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let confirm = |cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| {
+            view.confirm().map(|confirm| confirm.label.to_string())
+        })
+    };
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("shift-delete");
+    cx.run_until_parked();
+    assert_eq!(confirm(cx).as_deref(), Some("Delete 1 item for good?"));
+    click(cx, "island-no");
+    assert_eq!(confirm(cx), None);
+    assert!(tree.path().join("notes.txt").exists());
+    // Asked about one selection, answered with another: nothing goes.
+    cx.simulate_keystrokes("shift-delete");
+    cx.run_until_parked();
+    click(cx, "name-0");
+    click(cx, "island-yes");
+    cx.run_until_parked();
+    assert_eq!(confirm(cx), None);
+    assert!(tree.path().join("notes.txt").exists());
+    assert!(tree.path().join("Projects").exists());
+
+    click(cx, "name-1");
+
+    cx.simulate_keystrokes("shift-delete");
+    cx.run_until_parked();
+    click(cx, "island-yes");
+    wait_for_note(&view, cx, "Deleted notes.txt").await;
+    assert!(!tree.path().join("notes.txt").exists());
+    assert!(cx.debug_bounds("island-undo").is_none(), "no undo");
+    let home_trash = home.path().join(".local/share/Trash/files/notes.txt");
+    assert!(!home_trash.exists(), "not in the trash");
+}
+
+#[gpui::test]
 async fn pasting_a_copy_where_it_came_from_keeps_both(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("island");
