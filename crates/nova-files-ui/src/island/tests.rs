@@ -55,11 +55,11 @@ fn a_copy_names_where_it_went_only_when_that_is_not_on_screen() {
         into: here.to_path_buf(),
     };
     assert_eq!(
-        finished_note(&copy, &Outcome::Done, Some(here)).as_deref(),
+        finished_note(&copy, &Outcome::Done, Some(here), Tally::default()).as_deref(),
         Some("Copied 2 items")
     );
     assert_eq!(
-        finished_note(&copy, &Outcome::Done, None).as_deref(),
+        finished_note(&copy, &Outcome::Done, None, Tally::default()).as_deref(),
         Some("Copied 2 items to Projects")
     );
 }
@@ -118,7 +118,7 @@ fn each_done_job_has_its_note() {
     ];
     for (operation, note) in notes {
         assert_eq!(
-            finished_note(&operation, &Outcome::Done, None).as_deref(),
+            finished_note(&operation, &Outcome::Done, None, Tally::default()).as_deref(),
             note,
             "{operation:?}"
         );
@@ -130,13 +130,16 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
     let trash = Operation::Trash {
         paths: paths(&["a"]),
     };
-    assert_eq!(finished_note(&trash, &Outcome::Cancelled, None), None);
+    assert_eq!(
+        finished_note(&trash, &Outcome::Cancelled, None, Tally::default()),
+        None
+    );
     let failed = Outcome::Failed {
         path: PathBuf::from("/home/a/locked"),
         reason: Failure::PermissionDenied,
     };
     assert_eq!(
-        finished_note(&trash, &failed, None).as_deref(),
+        finished_note(&trash, &failed, None, Tally::default()).as_deref(),
         Some("Couldn't move to Trash locked: permission denied")
     );
     let new_folder = Operation::NewFolder {
@@ -148,11 +151,11 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
         reason: Failure::ReadOnly,
     };
     assert_eq!(
-        finished_note(&new_folder, &read_only, None).as_deref(),
+        finished_note(&new_folder, &read_only, None, Tally::default()).as_deref(),
         Some("Couldn't make New folder: the drive is read-only")
     );
     assert_eq!(
-        finished_note(&Operation::EmptyTrash, &failed, None).as_deref(),
+        finished_note(&Operation::EmptyTrash, &failed, None, Tally::default()).as_deref(),
         Some("Couldn't empty Trash: permission denied")
     );
 }
@@ -214,4 +217,59 @@ fn a_note_loses_only_its_own_undo() {
     assert!(drop_undo(&mut note, JobId(1)));
     assert!(note.is_some_and(|note| note.undo.is_none()));
     assert!(!drop_undo(&mut None, JobId(1)));
+}
+
+#[test]
+fn a_note_says_what_the_answers_to_clashes_did() {
+    let into = PathBuf::from("/home/a/Documents");
+    let copy = Operation::Copy {
+        sources: paths(&["a", "b", "c", "d", "e"]),
+        into: into.clone(),
+    };
+    let moved = Operation::Move {
+        sources: paths(&["a"]),
+        into: into.clone(),
+    };
+    let tally = |replaced, skipped| Tally { replaced, skipped };
+    let note = |operation: &Operation, here: Option<&Path>, answered| {
+        finished_note(operation, &Outcome::Done, here, answered)
+    };
+
+    assert_eq!(
+        note(&copy, Some(&into), tally(2, 1)).as_deref(),
+        Some("Copied 4 items, replaced 2, skipped 1")
+    );
+    assert_eq!(
+        note(&copy, None, tally(3, 0)).as_deref(),
+        Some("Copied 5 items to Documents, replaced 3")
+    );
+    assert_eq!(
+        note(&moved, None, tally(1, 0)).as_deref(),
+        Some("Moved a to Documents, replaced 1")
+    );
+    assert_eq!(
+        note(&moved, None, tally(0, 1)).as_deref(),
+        Some("Nothing moved, skipped 1")
+    );
+    assert_eq!(
+        note(&copy, None, tally(0, 5)).as_deref(),
+        Some("Nothing copied, skipped 5")
+    );
+    let trash = Operation::Trash {
+        paths: paths(&["a"]),
+    };
+    assert_eq!(
+        note(&trash, None, tally(0, 1)).as_deref(),
+        Some("Moved a to Trash")
+    );
+}
+
+#[test]
+fn the_for_all_tick_holds_only_for_its_own_question() {
+    let mut island = Island::default();
+    assert!(!island.ticked_for_all(JobId(1), 1));
+    island.for_all = Some((JobId(1), 1));
+    assert!(island.ticked_for_all(JobId(1), 1));
+    assert!(!island.ticked_for_all(JobId(1), 2));
+    assert!(!island.ticked_for_all(JobId(2), 1));
 }

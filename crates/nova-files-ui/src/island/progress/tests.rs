@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use nova_files_api::{Conflict, ConflictKind};
+
 use super::*;
 
 fn copy(names: &[&str]) -> Operation {
@@ -78,9 +80,15 @@ fn a_lone_source_goes_by_its_name_and_a_held_job_says_so() {
     let mut job = Running::new(copy(&["Photos"]), start);
     assert_eq!(job.line(start), "Copying Photos");
     assert_eq!(job.fraction(), 0.0);
-    job.waiting = true;
+    job.asking = Some(Conflict {
+        kind: ConflictKind::FileExists,
+        source: "/a/Photos".into(),
+        target: "/b/Photos".into(),
+        number: 1,
+        more: 0,
+    });
     assert_eq!(job.line(start), "Copying Photos · waiting");
-    job.waiting = false;
+    job.asking = None;
     job.paused = true;
     assert_eq!(job.line(start), "Copying Photos · paused");
 }
