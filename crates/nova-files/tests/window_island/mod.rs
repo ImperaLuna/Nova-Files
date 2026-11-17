@@ -182,8 +182,56 @@ async fn a_note_goes_by_itself(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("count").is_some());
 }
 
+/// Copies `notes.txt` into `projects`, where one is already, and waits
+/// until the job holds at the clash.
+async fn paste_onto_notes(view: &Entity<MainWindow>, cx: &mut VisualTestContext, projects: &Path) {
+    click(cx, "name-1");
+    cx.simulate_keystrokes("ctrl-c");
+    double_click(cx, "entry-0");
+    wait_for_folder(view, cx, projects).await;
+    cx.simulate_keystrokes("ctrl-v");
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        view.newest_job_line(cx).as_deref() == Some("Copying notes.txt · waiting")
+    })
+    .await;
+}
+
 #[gpui::test]
-async fn a_job_held_at_a_conflict_shows_waiting_and_cancels(cx: &mut TestAppContext) {
+async fn a_clash_is_asked_on_the_island_and_undo_puts_the_replaced_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island");
+    let home = TempFolder::tree("island-home");
+    let projects = tree.path().join("Projects");
+    fs::write(tree.path().join("notes.txt"), "new").unwrap();
+    fs::write(projects.join("notes.txt"), "there first").unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    paste_onto_notes(&view, cx, &projects).await;
+    // Asked at once, with what a file clash takes; one clash, no tick.
+    cx.run_until_parked();
+    for answer in ["island-skip", "island-keep-both", "island-replace"] {
+        assert!(cx.debug_bounds(answer).is_some(), "{answer}");
+    }
+    assert!(cx.debug_bounds("island-merge").is_none());
+    assert!(cx.debug_bounds("island-for-all").is_none());
+    assert!(cx.debug_bounds("island-progress").is_none());
+
+    click(cx, "island-replace");
+    wait_for_note(&view, cx, "Copied notes.txt, replaced 1").await;
+    assert_eq!(
+        fs::read_to_string(projects.join("notes.txt")).unwrap(),
+        "new"
+    );
+
+    click(cx, "island-undo");
+    view.condition::<WindowEvent>(cx, |_, _| {
+        fs::read_to_string(projects.join("notes.txt")).is_ok_and(|text| text == "there first")
+    })
+    .await;
+}
+
+#[gpui::test]
+async fn cancel_on_a_clash_stops_the_job(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("island");
     let home = TempFolder::tree("island-home");
@@ -191,35 +239,104 @@ async fn a_job_held_at_a_conflict_shows_waiting_and_cancels(cx: &mut TestAppCont
     fs::write(projects.join("notes.txt"), "there first").unwrap();
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
-    click(cx, "name-1");
-    cx.simulate_keystrokes("ctrl-c");
-    double_click(cx, "entry-0");
-    wait_for_folder(&view, cx, &projects).await;
-    let asked = cx.executor().now();
-    cx.simulate_keystrokes("ctrl-v");
-    view.condition::<WindowEvent>(cx, |view, cx| {
-        view.newest_job_line(cx).as_deref() == Some("Copying notes.txt · waiting")
-    })
-    .await;
-    // A quick job only leaves its note; this one holds, so it shows. The
-    // test clock moves on while the core answers, sometimes past the wait.
+    paste_onto_notes(&view, cx, &projects).await;
     cx.run_until_parked();
-    if cx.executor().now() - asked < nova_files_ui::JOB_SHOWS_AFTER {
-        assert!(cx.debug_bounds("island-progress").is_none());
-    }
-    cx.executor().advance_clock(nova_files_ui::JOB_SHOWS_AFTER);
-    cx.run_until_parked();
-    assert!(cx.debug_bounds("island-progress").is_some());
 
     click(cx, "island-cancel");
     view.condition::<WindowEvent>(cx, |view, cx| view.newest_job_line(cx).is_none())
         .await;
     cx.run_until_parked();
-    assert!(cx.debug_bounds("island-progress").is_none());
+    assert!(cx.debug_bounds("island-skip").is_none());
     assert_eq!(
         fs::read_to_string(projects.join("notes.txt")).unwrap(),
         "there first"
     );
+}
+
+#[gpui::test]
+async fn for_all_answers_every_clash_like_it_at_once(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island");
+    let home = TempFolder::tree("island-home");
+    let projects = tree.path().join("Projects");
+    for name in ["a.txt", "b.txt", "notes.txt"] {
+        fs::write(projects.join(name), "there first").unwrap();
+    }
+    fs::write(tree.path().join("a.txt"), "new").unwrap();
+    fs::write(tree.path().join("b.txt"), "new").unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    click_with(cx, "name-3", Modifiers::shift());
+    cx.simulate_keystrokes("ctrl-c");
+    double_click(cx, "entry-0");
+    wait_for_folder(&view, cx, &projects).await;
+    cx.simulate_keystrokes("ctrl-v");
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        view.newest_job_line(cx)
+            .is_some_and(|line| line.ends_with("· waiting"))
+    })
+    .await;
+    cx.run_until_parked();
+
+    // Unticked, an answer goes for this clash alone.
+    let number = |view: &MainWindow| view.newest_question().map(|asked| asked.number);
+    assert_eq!(view.read_with(cx, |view, _| number(view)), Some(1));
+    click(cx, "island-skip");
+    view.condition::<WindowEvent>(cx, move |view, _| number(view) == Some(2))
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-for-all").is_some());
+    click(cx, "island-for-all");
+    click(cx, "island-skip");
+    wait_for_note(&view, cx, "Nothing copied, skipped 3").await;
+    for name in ["a.txt", "b.txt", "notes.txt"] {
+        assert_eq!(
+            fs::read_to_string(projects.join(name)).unwrap(),
+            "there first"
+        );
+    }
+}
+
+#[gpui::test]
+async fn shift_delete_asks_then_deletes_for_good(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("island");
+    let home = TempFolder::tree("island-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let confirm = |cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| {
+            view.confirm().map(|confirm| confirm.label.to_string())
+        })
+    };
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("shift-delete");
+    cx.run_until_parked();
+    assert_eq!(confirm(cx).as_deref(), Some("Delete 1 item for good?"));
+    click(cx, "island-no");
+    assert_eq!(confirm(cx), None);
+    assert!(tree.path().join("notes.txt").exists());
+    // Asked about one selection, answered with another: nothing goes.
+    cx.simulate_keystrokes("shift-delete");
+    cx.run_until_parked();
+    click(cx, "name-0");
+    click(cx, "island-yes");
+    cx.run_until_parked();
+    assert_eq!(confirm(cx), None);
+    assert!(tree.path().join("notes.txt").exists());
+    assert!(tree.path().join("Projects").exists());
+
+    click(cx, "name-1");
+
+    cx.simulate_keystrokes("shift-delete");
+    cx.run_until_parked();
+    click(cx, "island-yes");
+    wait_for_note(&view, cx, "Deleted notes.txt").await;
+    assert!(!tree.path().join("notes.txt").exists());
+    assert!(cx.debug_bounds("island-undo").is_none(), "no undo");
+    let home_trash = home.path().join(".local/share/Trash/files/notes.txt");
+    assert!(!home_trash.exists(), "not in the trash");
 }
 
 #[gpui::test]

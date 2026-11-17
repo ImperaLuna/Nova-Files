@@ -18,7 +18,9 @@ use std::fs;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Answer, Command, Conflict, ConflictKind, Event, Operation, Outcome, Scope};
+use nova_files_api::{
+    Answer, Command, Conflict, ConflictKind, Event, Operation, Outcome, Scope, Tally,
+};
 
 use answers::{answer, held};
 use common::{Bench, Client};
@@ -81,6 +83,7 @@ fn copying_again_asks_and_skip_keeps_the_first_copy() {
             source,
             target: into.join("a.txt"),
             number: 1,
+            more: 0,
         }
     );
     assert_eq!(outcome, Outcome::Done);
@@ -251,6 +254,43 @@ fn an_answer_for_all_of_a_kind_is_not_asked_again() {
     assert_eq!(outcome, Outcome::Done);
     for name in ["a", "b", "c"] {
         assert_eq!(text(into.join("src").join(name)), "new");
+    }
+}
+
+#[test]
+fn a_question_says_how_many_more_clash_and_the_end_says_what_answers_did() {
+    let bench = Bench::new("conflict-tally");
+    let into = bench.at("into");
+    fs::create_dir(&into).unwrap();
+    let mut sources = Vec::new();
+    for name in ["a", "b", "c", "d", "e"] {
+        fs::write(bench.at(name), "new").unwrap();
+        sources.push(bench.at(name));
+    }
+    for name in ["a", "b", "d", "e"] {
+        fs::write(into.join(name), "old").unwrap();
+    }
+    let client = bench.client();
+
+    let job = client.start(copy(sources, &into));
+    let first = held(&client, job);
+    answer(&client, job, &first, Answer::Skip, Scope::ThisOne);
+    let second = held(&client, job);
+    answer(&client, job, &second, Answer::Replace, Scope::AllOfThisKind);
+    let (outcome, _, tally) = client.finished(job);
+
+    assert_eq!((first.more, second.more), (3, 2));
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(
+        tally,
+        Tally {
+            replaced: 3,
+            skipped: 1
+        }
+    );
+    assert_eq!(text(into.join("a")), "old");
+    for name in ["b", "c", "d", "e"] {
+        assert_eq!(text(into.join(name)), "new");
     }
 }
 

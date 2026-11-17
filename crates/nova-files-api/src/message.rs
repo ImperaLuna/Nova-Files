@@ -6,11 +6,13 @@ use std::sync::Arc;
 use crate::bookmark::{Bookmark, BookmarkChange};
 use crate::disk_space::PathSpace;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
+use crate::file_icon::FileIcon;
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
 use crate::job::{
     Answer, Conflict, DropAskId, DropKind, JobId, JobTag, Operation, Outcome, Progress, Scope,
+    Tally,
 };
-use crate::open_with::{OpenWith, OpenWithAnswer};
+use crate::open_with::{NotOpened, OpenWith, OpenWithAnswer};
 use crate::preview::{Fit, Preview, PreviewId};
 use crate::properties::{Properties, PropertiesId};
 use crate::recent::{RecentFolder, RecentId};
@@ -144,6 +146,11 @@ pub enum Command {
     /// the theme get [`Event::Theme`] if the theme changed; nothing
     /// answers the sender.
     DesktopLook(DesktopLook),
+    /// Tell the core which icon themes the desktop names, in its order
+    /// (none when it names none); sent by the D-Bus side each time they
+    /// change. The core takes the first one installed when the toolkits'
+    /// settings files name none; nothing answers.
+    DesktopIconThemes(Vec<String>),
     /// Ask for the drives and volumes; the answer is [`Event::Drives`],
     /// and from then on the client gets [`Event::Drives`] again each time
     /// one comes, goes or changes. Clients that never ask never get them.
@@ -257,12 +264,14 @@ pub enum Event {
         reason: Unreadable,
     },
     /// Details for entries `first` onward of listing `id`, one per entry,
-    /// in entry order, answering [`Command::Rows`]. Each entry's details
-    /// come at most once per listing.
+    /// in entry order, answering [`Command::Rows`], and each entry's icon
+    /// in the same order. Each entry's details come at most once per
+    /// listing.
     DetailsRead {
         id: ListingId,
         first: EntryId,
         details: Arc<[Details]>,
+        icons: Arc<[FileIcon]>,
     },
     /// A thumbnail for entry `entry` of listing `id`, as PNG bytes that fit
     /// in 128 by 128 pixels.
@@ -309,11 +318,10 @@ pub enum Event {
         path: PathBuf,
         reason: Unreadable,
     },
-    /// [`Command::OpenFile`]'s app has started.
-    FileOpened,
-    /// [`Command::OpenFile`] started nothing: sandboxed, no default app for
-    /// the file's type, or the app's program couldn't start.
-    FileNotOpened,
+    /// [`Command::OpenFile`]'s app has started on `path`.
+    FileOpened { path: PathBuf },
+    /// [`Command::OpenFile`] started nothing for `path`, for `reason`.
+    FileNotOpened { path: PathBuf, reason: NotOpened },
     /// The answer to a [`Command::OpenWith`] request.
     OpenWith(OpenWithAnswer),
     /// The UI's window state as last saved, empty when there is none,
@@ -390,12 +398,14 @@ pub enum Event {
     /// forget it. Answers [`Command::WatchJobs`].
     JobInterrupted { job: JobId, operation: Operation },
     /// Job `job` has ended. `changed` names the folders whose entries it
-    /// changed, so a window showing one reads it again. Every client that
-    /// watches jobs hears it.
+    /// changed, so a window showing one reads it again, and `tally` what
+    /// the answers to its conflicts made of it. Every client that watches
+    /// jobs hears it.
     JobFinished {
         job: JobId,
         outcome: Outcome,
         changed: Vec<PathBuf>,
+        tally: Tally,
     },
     /// Job `job`, which did `operation`, can be undone with
     /// [`Operation::Undo`]. Every client that watches jobs hears it just

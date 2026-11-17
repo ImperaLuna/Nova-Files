@@ -42,6 +42,23 @@ async fn f2_renames_in_place_and_undo_names_it_back(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn shift_delete_in_the_field_cuts_text_not_files(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("rename");
+    let home = TempFolder::tree("rename-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("f2");
+    cx.run_until_parked();
+    cx.simulate_keystrokes("shift-delete");
+    cx.run_until_parked();
+    assert_eq!(field_state(&view, cx, 1), (".txt".to_owned(), 0..0));
+    assert!(view.read_with(cx, |view, _| view.confirm().is_none()));
+    assert!(view.read_with(cx, |view, _| view.renaming()));
+}
+
+#[gpui::test]
 async fn escape_or_the_same_name_leaves_it_as_it_was(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("rename");

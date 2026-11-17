@@ -77,6 +77,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-delete", DeleteWordRight, context),
         KeyBinding::new("ctrl-c", Copy, context),
         KeyBinding::new("ctrl-x", Cut, context),
+        // Also keeps the window's Shift+Delete off the files while typing.
+        KeyBinding::new("shift-delete", Cut, context),
         KeyBinding::new("ctrl-v", Paste, context),
         KeyBinding::new("enter", Submit, context),
         KeyBinding::new("escape", Cancel, context),

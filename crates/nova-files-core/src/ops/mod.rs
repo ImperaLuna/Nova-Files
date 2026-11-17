@@ -19,6 +19,7 @@
 //! starts from then.
 
 mod access;
+mod ahead;
 mod attrs;
 mod audience;
 mod clash;
@@ -58,7 +59,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use nova_files_api::{
     Answer, ClientGone, ClientId, Conflict, Connector, Event, EventSink, Failure, JobId, JobTag,
-    Operation, Outcome, Scope,
+    Operation, Outcome, Scope, Tally,
 };
 
 pub use audience::Audience;
@@ -296,6 +297,7 @@ impl Jobs {
             Arc::clone(&shared),
         );
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
+        running.home_trash.clone_from(&self.trashes.home);
         // New hidden names for a resumed job, never a crash's.
         let resume = left.map(|left| (left, self.next.fetch_add(1, Ordering::Relaxed)));
         // Taken now, so an undo runs once however often it is asked for;
@@ -325,10 +327,7 @@ impl Jobs {
                 };
                 let undo = taken.as_ref().map(|taken| taken.undo.clone());
                 let ended = run(&mut running, &operation, &trashes, undo);
-                let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
-                let undoable = (!running.resumed())
-                    .then(|| undo_of(&operation, &steps, &ended.0, &trashes))
-                    .flatten();
+                let (tally, undoable) = after(&mut running, &operation, &ended, &trashes);
                 running.finish();
                 // Before clients hear the job ended, so an undo asked for
                 // then finds it.
@@ -354,7 +353,7 @@ impl Jobs {
                 if let Some(taken) = taken.filter(|_| !spent) {
                     history.add(taken, &audience);
                 }
-                finish(&registry, &audience, job, ended);
+                finish(&registry, &audience, job, ended, tally);
                 // Into the loop's queue, so its idle wait starts again now.
                 wake.activity().ok();
             });
@@ -366,7 +365,8 @@ impl Jobs {
             if let Some(taken) = not_spawned {
                 self.history.add(taken, &self.audience);
             }
-            finish(&self.running, &self.audience, job, (outcome, Vec::new()));
+            let ended = (outcome, Vec::new());
+            finish(&self.running, &self.audience, job, ended, Tally::default());
         }
     }
 
@@ -431,6 +431,7 @@ impl Jobs {
                         job,
                         outcome: Outcome::Cancelled,
                         changed: Vec::new(),
+                        tally: Tally::default(),
                     });
                 }
             }
@@ -499,6 +500,23 @@ fn run(
     }
 }
 
+/// What the answers to `running`'s conflicts made of it, and how to undo
+/// it, once it ran `operation` and `ended`: what it made taken back, and
+/// then what it replaced put back.
+fn after(
+    running: &mut Running,
+    operation: &Operation,
+    ended: &Ended,
+    trashes: &Trashes,
+) -> (Tally, Option<Undo>) {
+    let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
+    let undo = (!running.resumed())
+        .then(|| undo_of(operation, &steps, &ended.0, trashes))
+        .flatten()
+        .map(|undo| undo::putting_back(undo, &running.replaced));
+    (running.tally, undo)
+}
+
 /// What is left of `operation` after a crash: a move, delete or trash
 /// leaves out the sources already gone (moved whole, deleted, or in the
 /// trash); a copy does
@@ -555,18 +573,26 @@ fn first_path(operation: &Operation) -> PathBuf {
     }
 }
 
-/// Forgets job `job` and tells every client how it ended.
+/// Forgets job `job` and tells every client how it ended, and what the
+/// answers to its conflicts made of it.
 #[expect(
     clippy::significant_drop_tightening,
     reason = "telling under the lock keeps a pause from being heard after the end"
 )]
-fn finish(registry: &Registry, audience: &Audience, job: JobId, (outcome, changed): Ended) {
+fn finish(
+    registry: &Registry,
+    audience: &Audience,
+    job: JobId,
+    (outcome, changed): Ended,
+    tally: Tally,
+) {
     let mut running = lock(registry);
     running.remove(&job);
     audience.tell(&Event::JobFinished {
         job,
         outcome,
         changed,
+        tally,
     });
 }
 
