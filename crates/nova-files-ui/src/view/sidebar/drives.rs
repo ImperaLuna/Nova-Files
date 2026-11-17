@@ -14,8 +14,9 @@ use gpui::{
 use super::{Row, on_middle_click, row, section_head};
 use crate::assets::Icon;
 use crate::drives;
+use crate::location::Location;
 use crate::theme::{Colors, size};
-use crate::window::{Aim, MainWindow};
+use crate::window::{Aim, HoverOpens, MainWindow};
 
 const LABEL: &str = "Drives";
 
@@ -58,7 +59,9 @@ impl MainWindow {
                 this.open_drive(clicked.clone());
             }))
             .when_some(drive.folder, |row, folder| {
-                self.drop_target(row, Aim::folder(folder, aimed), cx)
+                let opens = HoverOpens::Place(Location::Folder(folder.clone()));
+                let row = self.drop_target(row, Aim::folder(folder, aimed), cx);
+                Self::opens_on_hover(row, opens, cx)
             });
             if main {
                 on_middle_click(row, main, cx, move |this, cx| {

@@ -8,7 +8,8 @@
 //! the head, or at the end of the row in a narrow window, picks a folder
 //! to pin, and right-click on a pinned folder opens
 //! its menu (see `window/pin`). Files dropped on a folder's row go into
-//! it, and on the trash's to the trash (see `drop`).
+//! it, and on the trash's to the trash (see `drop`); anything dragged and
+//! held over a row opens it.
 
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
@@ -21,7 +22,7 @@ use crate::assets::Icon;
 use crate::location::Location;
 use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::theme::{Colors, size};
-use crate::window::{Aim, MainWindow};
+use crate::window::{Aim, HoverOpens, MainWindow};
 
 const LABEL: &str = "Places";
 
@@ -57,6 +58,10 @@ impl MainWindow {
                 }))
                 .map(|row| new_tab_on_middle_click(row, place.path.clone(), main, cx))
                 .map(|row| self.drop_target(row, Aim::folder(place.path.clone(), aimed), cx))
+                .map(|row| {
+                    let opens = HoverOpens::Place(Location::Folder(place.path.clone()));
+                    Self::opens_on_hover(row, opens, cx)
+                })
                 .when_some(pinned, |row, path| {
                     row.on_mouse_down(
                         MouseButton::Right,
@@ -110,6 +115,7 @@ impl MainWindow {
             colors,
         )
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_start(cx)))
+        .map(|row| Self::opens_on_hover(row, HoverOpens::Place(Location::Start), cx))
         .map(|row| {
             on_middle_click(row, true, cx, |this, cx| {
                 this.new_tab(&Location::Start, cx);
@@ -139,5 +145,9 @@ impl MainWindow {
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)))
         .map(|row| on_middle_click(row, true, cx, Self::open_trash_in_new_tab))
         .map(|row| self.drop_target(row, Aim::trash(), cx))
+        .map(|row| {
+            let opens = HoverOpens::Place(Location::Folder(self.trash_folder().to_path_buf()));
+            Self::opens_on_hover(row, opens, cx)
+        })
     }
 }

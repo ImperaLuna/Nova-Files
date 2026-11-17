@@ -5,7 +5,8 @@
 //! as it is and takes nothing. Files dragged out of a list and files from
 //! another app drop alike. The innermost target under the pointer that
 //! takes files dragged from a list aims the drag at itself, so its chip
-//! names the drop (see `window::aiming`).
+//! names the drop (see `window::aiming`). Rows in the sidebar also open
+//! when something dragged is held over them (see `window::hover_open`).
 //!
 //! Each target keeps a clear edge of [`size::DROP_EDGE`], so the orange
 //! edge shifts nothing; a target's padding gives that width back.
@@ -20,7 +21,7 @@ use gpui::{
 
 use crate::dropping::Sources;
 use crate::theme::{Colors, size};
-use crate::window::{Aim, DraggedRow, MainWindow};
+use crate::window::{Aim, DraggedRow, HoverOpens, MainWindow};
 
 /// The padding that, with the clear drop edge, makes `pad`.
 pub(super) fn inside_edge(pad: Pixels) -> Pixels {
@@ -43,6 +44,20 @@ impl MainWindow {
             .border_color(transparent_black())
             .drag_over::<DraggedRow>(move |style, _, _, _| lit(style))
             .drag_over::<ExternalPaths>(move |style, _, _, _| lit(style))
+    }
+
+    /// Makes `target` open `opens` when something dragged is held over it
+    /// (see `window::hover_open`).
+    pub(super) fn opens_on_hover<E: InteractiveElement>(
+        target: E,
+        opens: HoverOpens,
+        cx: &Context<Self>,
+    ) -> E {
+        target.on_mouse_move(cx.listener(move |this, _: &MouseMoveEvent, _, cx| {
+            if cx.has_active_drag() {
+                this.hovered_while_dragging(opens.clone());
+            }
+        }))
     }
 
     /// Makes `target` take files dropped at `aim`, without lighting up:
