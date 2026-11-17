@@ -18,6 +18,7 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 
 use crate::disk_space;
 use crate::drives::Store as DrivesStore;
+use crate::file_icons::FileIcons;
 use crate::jobs::Client;
 use crate::measure::Measurer;
 use crate::mime::MimeTypes;
@@ -50,6 +51,8 @@ pub struct Setup {
     /// [`Command::OpenWith`] or [`Command::Preview`] and kept while the
     /// core runs.
     pub mime_types: Arc<OnceLock<MimeTypes>>,
+    /// The entries' icons, shared by every client.
+    pub file_icons: Arc<FileIcons>,
     /// Answers Open With requests, in order.
     pub open_with: OpenWithWorker,
     /// File operations, and the clients that hear about them.
@@ -85,7 +88,8 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
     match message {
         CoreMessage::Connected { client, events } => {
             let events: Arc<dyn EventSink> = Arc::from(events);
-            clients.insert(client, Client::new(events, setup.thumbnails.as_ref()));
+            let started = Client::new(events, setup.thumbnails.as_ref(), &setup.file_icons);
+            clients.insert(client, started);
         }
         CoreMessage::Disconnected { client } => {
             // Dropping the client stops its listing.

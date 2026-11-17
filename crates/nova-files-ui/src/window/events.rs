@@ -117,7 +117,9 @@ impl MainWindow {
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);
             }
-            Event::DetailsRead { id, first, details } => {
+            Event::DetailsRead {
+                id, first, details, ..
+            } => {
                 if let Some(listing) = &self.listing
                     && listing.id == id
                     && let Ok(first) = usize::try_from(first.0)
