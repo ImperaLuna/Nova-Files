@@ -1,15 +1,15 @@
 //! What the window does to the files selected, and the island's notes:
-//! move them to the trash, and undo. Each becomes one of the core's jobs
+//! move them to the trash, undo, and say which files didn't open. Each becomes one of the core's jobs
 //! (see `jobs`); the island says what happened (see `island`). Copy, cut
 //! and paste are in `clipboard`.
 
 use std::path::PathBuf;
 
 use gpui::{Context, SharedString};
-use nova_files_api::{EntryId, EntryKind, Listing, Operation};
+use nova_files_api::{EntryId, EntryKind, Listing, NotOpened, Operation};
 
 use super::MainWindow;
-use crate::island::{NOTE_TIME, Note, NoteUndo};
+use crate::island::{NOTE_TIME, Note, NoteUndo, opening};
 use crate::selection::entry_at;
 
 impl MainWindow {
@@ -102,11 +102,30 @@ impl MainWindow {
         undo: Option<NoteUndo>,
         cx: &mut Context<Self>,
     ) {
-        self.island.note = Some(Note {
-            label: label.into(),
-            undo,
-        });
-        // A new note's timer replaces, and so cancels, the old one's.
+        self.island.not_opened.clear();
+        self.put_note(label.into(), undo, cx);
+    }
+
+    /// Says on the island that `path` started no app, and why. A note
+    /// already up for other files that didn't open takes it in too.
+    pub(crate) fn file_not_opened(
+        &mut self,
+        path: PathBuf,
+        reason: NotOpened,
+        cx: &mut Context<Self>,
+    ) {
+        let failed = &mut self.island.not_opened;
+        failed.retain(|(was, _)| *was != path);
+        failed.push((path, reason));
+        if let Some(label) = opening::note(failed) {
+            self.put_note(label.into(), None, cx);
+        }
+    }
+
+    /// Puts up a note, whose timer replaces, and so cancels, the old
+    /// one's.
+    fn put_note(&mut self, label: SharedString, undo: Option<NoteUndo>, cx: &mut Context<Self>) {
+        self.island.note = Some(Note { label, undo });
         self.island.note_timer = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(NOTE_TIME).await;
             this.update(cx, Self::dismiss_note).ok();
@@ -118,6 +137,7 @@ impl MainWindow {
     pub(crate) fn dismiss_note(&mut self, cx: &mut Context<Self>) {
         self.island.note = None;
         self.island.note_timer = None;
+        self.island.not_opened.clear();
         cx.notify();
     }
 

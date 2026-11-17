@@ -20,8 +20,8 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
-    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, Order,
-    Unreadable,
+    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, NotOpened,
+    Order, Unreadable,
 };
 
 use nova_files_api::Thumbnails as ThumbnailsSetting;
@@ -279,19 +279,26 @@ pub fn open_file(
     activation: Option<String>,
 ) {
     let events = Arc::clone(&client.events);
+    let failed_path = path.clone();
     let spawned = thread::Builder::new()
         .name(OPEN_THREAD.to_owned())
         .spawn(move || {
             let types = types.get_or_init(MimeTypes::from_env);
             let event = match open::open_file(&path, types, activation.as_deref()) {
-                Ok(()) => Event::FileOpened,
-                Err(_) => Event::FileNotOpened,
+                Ok(()) => Event::FileOpened { path },
+                Err(reason) => Event::FileNotOpened { path, reason },
             };
             events.deliver(event).ok();
         });
-    if spawned.is_err() {
+    if let Err(error) = spawned {
         // The portal can still open it.
-        client.deliver(Event::FileNotOpened).ok();
+        log::warn!("can't start a thread to open a file: {error}");
+        client
+            .deliver(Event::FileNotOpened {
+                path: failed_path,
+                reason: NotOpened::Failed,
+            })
+            .ok();
     }
 }
 
