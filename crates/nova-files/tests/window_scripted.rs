@@ -666,6 +666,7 @@ fn a_finished_job_reads_again_only_the_folder_it_changed(cx: &mut TestAppContext
         job: nova_files_api::JobId(9),
         outcome: nova_files_api::Outcome::Done,
         changed: vec![PathBuf::from(changed)],
+        tally: nova_files_api::Tally::default(),
     };
 
     core.send(finished(OTHER));

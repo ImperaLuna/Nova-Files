@@ -164,6 +164,7 @@ fn trash_one(
             target: path.to_path_buf(),
             // Numbered when asked.
             number: 0,
+            more: 0,
         };
         if running.skips(conflict)? {
             return Ok(None);
