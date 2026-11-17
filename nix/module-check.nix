@@ -45,19 +45,29 @@ let
     mode = "launcher";
     filePicker.enable = true;
   };
+  launcherOpeningFolders = system {
+    mode = "launcher";
+    defaultFileManager = true;
+  };
 
   expectations = {
     "launcher installs only the search service" =
       installs launcher "nova-files-service" && !installs launcher "nova-files-stand-in";
     "launcher sets no folder default or picker" =
       folderDefault launcher == null && picker launcher == null && !failed launcher;
-    "launcher can't be the picker" = failed launcherWithPicker;
+    "launcher can't be the picker or the folder default" =
+      failed launcherWithPicker && failed launcherOpeningFolders;
     "basic installs the app" = installs basic "nova-files-stand-in";
     "basic opens folders and picks files" =
       folderDefault basic == "${appId}.desktop" && picker basic == portalName;
-    "basic adds nothing more" = !installs basic "ffmpegthumbnailer" && !basic.services.udisks2.enable;
+    "basic adds nothing more" =
+      !installs basic "ffmpegthumbnailer" && !basic.services.udisks2.enable && !failed basic;
     "full adds thumbnails and drives" =
-      installs full "ffmpegthumbnailer" && full.services.udisks2.enable && picker full == portalName;
+      installs full "ffmpegthumbnailer"
+      && full.services.udisks2.enable
+      && picker full == portalName
+      && folderDefault full == "${appId}.desktop"
+      && !failed full;
   };
   broken = lib.attrNames (lib.filterAttrs (_name: holds: !holds) expectations);
 in

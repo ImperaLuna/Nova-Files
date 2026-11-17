@@ -7,8 +7,8 @@
 # - `basic`: the app, the default for folders and the file picker of other
 #   apps' Open and Save dialogs, with nothing else installed.
 # - `full`: basic, plus what makes the extras work: video thumbnails
-#   (ffmpegthumbnailer, found through the system's `share/thumbnailers`) and
-#   drives in the sidebar (udisks2).
+#   (ffmpegthumbnailer's `share/thumbnailers` entry) and drives in the
+#   sidebar (udisks2).
 #
 # `filePicker.enable` and `defaultFileManager` follow the mode and can still
 # be set on their own.
@@ -36,6 +36,8 @@ let
   # that would list it as an app or offer it as a picker.
   service = pkgs.runCommand "nova-files-service" { } ''
     mkdir -p $out/bin $out/share/dbus-1/services
+    test -e ${cfg.package}/bin/nova-files
+    test -e ${cfg.package}/share/dbus-1/services/${appId}.service
     ln -s ${cfg.package}/bin/nova-files $out/bin/nova-files
     ln -s ${cfg.package}/share/dbus-1/services/${appId}.service \
       $out/share/dbus-1/services/${appId}.service
@@ -108,7 +110,7 @@ in
       })
       (lib.mkIf cfg.filePicker.enable {
         xdg.portal = {
-          enable = true;
+          enable = lib.mkDefault true;
           extraPortals = [ cfg.package ];
           config = lib.genAttrs cfg.filePicker.desktops (_desktop: {
             "org.freedesktop.impl.portal.FileChooser" = [ portalName ];
@@ -117,8 +119,7 @@ in
       })
       (lib.mkIf (cfg.mode == "full") {
         environment.systemPackages = [ pkgs.ffmpegthumbnailer ];
-        environment.pathsToLink = [ "/share/thumbnailers" ];
-        services.udisks2.enable = true;
+        services.udisks2.enable = lib.mkDefault true;
       })
     ]
   );
