@@ -244,32 +244,34 @@ fn a_failed_rename_gives_the_name_back() {
 }
 
 #[test]
-fn a_replace_swaps_then_removes_the_old() {
+fn a_replace_swaps_and_leaves_the_old_under_the_new_ones_name() {
     let folder = TestFolder::new("place-replace");
     let new = folder.file(".part", "new");
     let old = folder.file("a", "old");
     let backup = folder.path().join(".backup");
 
-    replace(&new, &old, &backup).unwrap();
+    let left = replace(&new, &old, &backup).unwrap();
 
     assert_eq!(fs::read_to_string(&old).unwrap(), "new");
-    assert!(!new.exists());
+    assert_eq!(left, new);
+    assert_eq!(fs::read_to_string(&left).unwrap(), "old");
     assert!(!backup.exists());
 }
 
 #[test]
-fn without_a_swap_the_old_steps_aside_and_goes_last() {
+fn without_a_swap_the_old_steps_aside_to_the_backup() {
     let folder = TestFolder::new("place-backup");
     let new = folder.file(".part", "new");
     let old = folder.file("a", "old");
     let backup = folder.path().join(".backup");
     let refused = |_: &Path, _: &Path| Err(Errno::INVAL);
 
-    replace_or_fall_back(&new, &old, &backup, refused).unwrap();
+    let left = replace_or_fall_back(&new, &old, &backup, refused).unwrap();
 
     assert_eq!(fs::read_to_string(&old).unwrap(), "new");
     assert!(!new.exists());
-    assert!(!backup.exists());
+    assert_eq!(left, backup);
+    assert_eq!(fs::read_to_string(&backup).unwrap(), "old");
 }
 
 #[test]

@@ -56,6 +56,7 @@ fn conflict(kind: ConflictKind) -> Conflict {
         source: "/a".into(),
         target: "/b".into(),
         number: 1,
+        more: 0,
     }
 }
 

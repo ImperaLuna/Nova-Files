@@ -88,12 +88,13 @@ use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    Bookmark, ClientGone, Command, Connection, Connector, Details, Event, EventSink, HiddenFiles,
-    Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
+    Bookmark, ClientGone, Command, Connection, Connector, Event, EventSink, HiddenFiles, Listing,
+    ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
 
 use self::drives::Drives;
 use self::preview::QuickLooks;
+use self::rows::RowRead;
 use self::tree::TreeLine;
 use crate::band::Band;
 use crate::history::History;
@@ -105,6 +106,7 @@ use crate::path_bar::PathBar;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
+use crate::theme_icons::ThemeIcons;
 use crate::tree::FolderTree;
 use jobs::Jobs;
 use renaming::{Renaming, Waiting};
@@ -152,9 +154,11 @@ pub struct MainWindow {
     pub(crate) connection: Option<Connection>,
     /// The folder on screen, once its first listing has arrived.
     pub(crate) listing: Option<Listing>,
-    /// The details the core has read so far, by row. Rows never shown have
-    /// none.
-    details: HashMap<usize, Details>,
+    /// The details and icons the core has sent so far, by row. Rows never
+    /// shown have none.
+    details: HashMap<usize, RowRead>,
+    /// The theme icons the rows draw, made at the size they're drawn.
+    theme_icons: ThemeIcons,
     /// Thumbnails of the rows in `rows_wanted`, by row.
     thumbnails: ShownThumbnails,
     /// The window's scale factor when it last drew, for sizing thumbnails.
@@ -319,6 +323,7 @@ impl MainWindow {
             connection,
             listing: None,
             details: HashMap::new(),
+            theme_icons: ThemeIcons::default(),
             thumbnails: ShownThumbnails::default(),
             rows_wanted: 0..0,
             rows_drawn: 0..0,
