@@ -15,9 +15,10 @@
 //! its `island-cancel` and its `island-for-all` tick, and the count, `count`.
 
 use gpui::{
-    Action, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, Rgba, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
-    div, point, prelude::FluentBuilder as _, px, relative,
+    Action, BoxShadow, ClickEvent, Context, Div, ElementId, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement as _, Pixels, Rgba, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled as _, div, point, prelude::FluentBuilder as _, px,
+    relative,
 };
 
 use nova_files_api::{Answer, Conflict};
@@ -32,6 +33,8 @@ use crate::island::{self, Confirm, Note, asking};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
+mod several;
+
 const UNDO_LABEL: &str = "Undo";
 const CANCEL_LABEL: &str = "Cancel";
 const RESTORE_LABEL: &str = "Restore";
@@ -43,17 +46,21 @@ impl MainWindow {
         let parts = if self.pick.is_some() {
             None
         } else if let Some((id, job)) = self.job_on_island(cx) {
-            Some(job.asking.as_ref().map_or_else(
-                || job_parts(job, &colors, cx),
-                |conflict| {
-                    ask_parts(
-                        conflict,
-                        self.island.ticked_for_all(id, conflict.number),
-                        &colors,
-                        cx,
-                    )
-                },
-            ))
+            if let Some(conflict) = &job.asking {
+                Some(ask_parts(
+                    conflict,
+                    self.island.ticked_for_all(id, conflict.number),
+                    &colors,
+                    cx,
+                ))
+            } else {
+                let shown = self.jobs_shown(cx);
+                if shown.len() > 1 {
+                    return several::island(&shown, self.island.jobs_open, &colors, cx)
+                        .into_any_element();
+                }
+                Some(job_parts(job, &colors, cx))
+            }
         } else if let Some(confirm) = &self.island.confirm {
             Some(confirm_parts(confirm, &colors, cx))
         } else if let Some(note) = &self.island.note {
@@ -65,7 +72,7 @@ impl MainWindow {
         };
         parts.map_or_else(
             || self.quiet_count(&colors).into_any_element(),
-            |parts| floating(parts, &colors).into_any_element(),
+            |parts| floating(parts, None, &colors).into_any_element(),
         )
     }
 
@@ -235,24 +242,29 @@ fn job_parts(job: &Running, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gp
     let now = cx.background_executor().now();
     vec![
         label(colors).child(job.line(now)).into_any_element(),
-        div()
+        bar(job.fraction(), size::PROGRESS_WIDTH, colors)
             .debug_selector(|| "island-progress".to_owned())
-            .flex_none()
-            .w(size::PROGRESS_WIDTH)
-            .h(size::PROGRESS_HEIGHT)
             .mr(size::PROGRESS_RIGHT)
-            .rounded_full()
-            .bg(colors.press)
-            .overflow_hidden()
-            .child(
-                div()
-                    .h_full()
-                    .w(relative(job.fraction()))
-                    .rounded_full()
-                    .bg(colors.accept),
-            )
             .into_any_element(),
     ]
+}
+
+/// A bar `width` wide, filled `fraction` of the way in the accent.
+fn bar(fraction: f32, width: Pixels, colors: &Colors) -> Div {
+    div()
+        .flex_none()
+        .w(width)
+        .h(size::PROGRESS_HEIGHT)
+        .rounded_full()
+        .bg(colors.press)
+        .overflow_hidden()
+        .child(
+            div()
+                .h_full()
+                .w(relative(fraction))
+                .rounded_full()
+                .bg(colors.accept),
+        )
 }
 
 /// A question's line, Cancel, and its answer in red.
@@ -298,9 +310,20 @@ fn note_parts(note: &Note, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gpu
 }
 
 /// The island itself, centred over the bottom of the sheet, holding
-/// `parts`. It takes the pointer, so a click on it never reaches a row
-/// under it.
-fn floating(parts: Vec<gpui::AnyElement>, colors: &Colors) -> impl IntoElement {
+/// `parts` in a row, and when `above` holds something, that over them:
+/// the island then grows upward. It takes the pointer, so a click on it
+/// never reaches a row under it.
+fn floating(
+    parts: Vec<gpui::AnyElement>,
+    above: Option<gpui::AnyElement>,
+    colors: &Colors,
+) -> impl IntoElement {
+    let row = div()
+        .flex()
+        .items_center()
+        .min_w_0()
+        .gap(size::ISLAND_GAP)
+        .children(parts);
     div()
         .absolute()
         .left_0()
@@ -315,12 +338,21 @@ fn floating(parts: Vec<gpui::AnyElement>, colors: &Colors) -> impl IntoElement {
                 .debug_selector(|| "island".to_owned())
                 .occlude()
                 .flex()
-                .items_center()
                 .min_w_0()
-                .gap(size::ISLAND_GAP)
-                .h(size::ISLAND_HEIGHT)
-                .pl(size::ISLAND_PAD_LEFT)
-                .pr(size::ISLAND_PAD_RIGHT)
+                .map(|island| match above {
+                    Some(above) => island
+                        .flex_col()
+                        .w(size::ISLAND_LIST_WIDTH)
+                        .p(size::ISLAND_LIST_PAD)
+                        .child(above)
+                        .child(row.h(size::ISLAND_LIST_LINE).pl(size::ISLAND_LIST_INSET)),
+                    None => island
+                        .items_center()
+                        .h(size::ISLAND_HEIGHT)
+                        .pl(size::ISLAND_PAD_LEFT)
+                        .pr(size::ISLAND_PAD_RIGHT)
+                        .child(row),
+                })
                 .rounded(radius::CARD)
                 .bg(colors.lifted)
                 .border(size::LINE)
@@ -330,8 +362,7 @@ fn floating(parts: Vec<gpui::AnyElement>, colors: &Colors) -> impl IntoElement {
                     offset: point(px(0.0), size::ISLAND_SHADOW_Y),
                     blur_radius: size::ISLAND_SHADOW_BLUR,
                     spread_radius: px(0.0),
-                }])
-                .children(parts),
+                }]),
         )
 }
 
@@ -356,10 +387,11 @@ fn divider(colors: &Colors) -> impl IntoElement {
 }
 
 /// A square button on the island, with selector `name`.
-fn square(name: &'static str, colors: &Colors) -> Stateful<Div> {
+fn square(name: impl Into<SharedString>, colors: &Colors) -> Stateful<Div> {
+    let name = name.into();
     div()
-        .id(name)
-        .debug_selector(|| name.to_owned())
+        .id(ElementId::Name(name.clone()))
+        .debug_selector(move || name.to_string())
         .flex()
         .flex_none()
         .items_center()

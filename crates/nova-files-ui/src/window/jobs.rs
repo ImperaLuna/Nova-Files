@@ -9,9 +9,11 @@
 //! be undone (see `island`). Jobs other windows started are only read
 //! for what they changed.
 //!
-//! While one of its jobs runs, the island shows the newest one's progress
-//! and time left, once it has run for [`SHOW_AFTER`], so a quick job only
-//! leaves its note. A copy or move into the folder on screen reads the
+//! While one of its jobs runs, the island shows its progress and time
+//! left, once it has run for [`SHOW_AFTER`], so a quick job only leaves
+//! its note; several show folded into one line that opens into a row each
+//! (see `island::several`), and copies and moves that end while others
+//! run leave one note when the last ends. A copy or move into the folder on screen reads the
 //! folder again as files finish, at most every [`READ_AGAIN_EVERY`], so
 //! they show as they land. A copy onto itself keeps both, as a paste into
 //! the folder the files came from should; at any other conflict the job
@@ -29,6 +31,7 @@ use nova_files_api::{
 
 use super::MainWindow;
 use crate::island::progress::Running;
+use crate::island::several::Batch;
 use crate::island::{self, NoteUndo};
 
 /// How long a job runs before the island shows its progress.
@@ -54,6 +57,8 @@ pub struct Jobs {
     show_timer: Option<Task<()>>,
     /// When a job last read the folder on screen again.
     read_again: Option<Instant>,
+    /// Copies and moves that ended while others still ran.
+    batch: Batch,
 }
 
 /// How many jobs the core keeps to undo; the window keeps as many it
@@ -78,6 +83,19 @@ impl Jobs {
                     .max_by_key(|(id, job)| (job.started, **id))
             })
             .map(|(id, job)| (*id, job))
+    }
+
+    /// This window's jobs that have run for [`SHOW_AFTER`] at `now`,
+    /// oldest first: the rows of the island's list.
+    pub fn shown(&self, now: Instant) -> Vec<(JobId, &Running)> {
+        let mut shown: Vec<_> = self
+            .running
+            .iter()
+            .filter(|(_, job)| now.saturating_duration_since(job.started) >= SHOW_AFTER)
+            .map(|(id, job)| (*id, job))
+            .collect();
+        shown.sort_by_key(|(id, job)| (job.started, *id));
+        shown
     }
 
     /// The newest of this window's jobs that can still be undone.
@@ -242,13 +260,34 @@ impl MainWindow {
             self.waiting = super::renaming::Waiting::Nothing;
         }
         self.trash_maybe_changed(&operation, tally.replaced > 0);
+        let transfer = is_transfer(&operation);
+        let others = self.transfers_running();
+        let batching = others || !self.jobs.batch.is_empty();
+        // A copy or move that ends while others run waits for the last to
+        // say what they all did.
+        if transfer && batching && *outcome == Outcome::Done {
+            self.jobs.batch.keep(&operation, tally);
+            if !others {
+                let label = self.jobs.batch.note();
+                self.show_note(label, None, cx);
+            }
+            return;
+        }
         let undo = self
             .jobs
             .undoable
             .contains(&job)
             .then_some(NoteUndo::Job(job));
-        if let Some(label) = island::finished_note(&operation, outcome, self.folder(), tally) {
+        let own = island::finished_note(&operation, outcome, self.folder(), tally);
+        // The last of several stopped or failed: its failure says more
+        // than what the others did.
+        let together = (transfer && !others && !self.jobs.batch.is_empty())
+            .then(|| self.jobs.batch.note())
+            .filter(|_| own.is_none());
+        if let Some(label) = own {
             self.show_note(label, undo, cx);
+        } else if let Some(label) = together {
+            self.show_note(label, None, cx);
         }
     }
 
@@ -372,6 +411,32 @@ impl MainWindow {
         self.jobs.on_island(cx.background_executor().now())
     }
 
+    /// This window's jobs on the island now, oldest first.
+    pub(crate) fn jobs_shown(&self, cx: &Context<Self>) -> Vec<(JobId, &Running)> {
+        self.jobs.shown(cx.background_executor().now())
+    }
+
+    /// Whether any of this window's copies or moves still runs.
+    fn transfers_running(&self) -> bool {
+        self.jobs
+            .running
+            .values()
+            .any(|job| is_transfer(&job.operation))
+    }
+
+    /// Stops job `job`, one of the island's rows.
+    pub(crate) fn stop_job(&self, job: JobId) {
+        if let Some(connection) = &self.connection {
+            connection.send(Command::CancelJob(job)).ok();
+        }
+    }
+
+    /// Opens or folds the island's list of jobs.
+    pub(crate) fn toggle_jobs_open(&mut self, cx: &mut Context<Self>) {
+        self.island.jobs_open = !self.island.jobs_open;
+        cx.notify();
+    }
+
     /// How many of this window's jobs were asked for and haven't ended.
     pub fn jobs_pending(&self) -> usize {
         self.jobs
@@ -381,6 +446,11 @@ impl MainWindow {
     }
 }
 
+/// Whether `operation` copies or moves.
+const fn is_transfer(operation: &Operation) -> bool {
+    matches!(operation, Operation::Copy { .. } | Operation::Move { .. })
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -388,6 +458,16 @@ mod tests {
     use nova_files_api::Progress;
 
     use super::*;
+
+    #[test]
+    fn only_copies_and_moves_are_transfers() {
+        let paths = vec![PathBuf::from("/home/a/notes.txt")];
+        assert!(is_transfer(&Operation::Copy {
+            sources: paths.clone(),
+            into: PathBuf::from("/home/b"),
+        }));
+        assert!(!is_transfer(&Operation::Trash { paths }));
+    }
 
     #[test]
     fn each_job_asked_for_gets_its_own_tag() {

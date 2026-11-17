@@ -32,6 +32,8 @@ pub struct Island {
     /// number there, so the tick never carries over to another question
     /// (see `asking`).
     pub for_all: Option<(JobId, u64)>,
+    /// Whether the list of the window's jobs is open, when several run.
+    pub jobs_open: bool,
     /// Takes the note down once [`NOTE_TIME`] has passed; replaced with
     /// each new note, which cancels the old one's.
     pub(crate) note_timer: Option<Task<()>>,
@@ -216,14 +218,19 @@ fn answered_note(
         Operation::Move { into, .. } => format!("Moved {what} to {}", name_of(into)),
         _ => return None,
     };
-    let mut parts = vec![done];
+    Some(with_answers(vec![done], tally))
+}
+
+/// `parts` of a note, then what the answers to clashes did: "Copied 4
+/// items, replaced 2, skipped 1".
+fn with_answers(mut parts: Vec<String>, tally: Tally) -> String {
     if tally.replaced > 0 {
         parts.push(format!("replaced {}", tally.replaced));
     }
     if tally.skipped > 0 {
         parts.push(format!("skipped {}", tally.skipped));
     }
-    Some(parts.join(LIST_GAP))
+    parts.join(LIST_GAP)
 }
 
 /// " to Documents" for a job into `into`, unless that is `here`, the
@@ -290,6 +297,7 @@ const fn failure(reason: Failure) -> &'static str {
 
 pub mod asking;
 pub mod progress;
+pub mod several;
 
 #[cfg(test)]
 mod tests;
