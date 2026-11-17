@@ -90,6 +90,25 @@ impl IconThemes {
         }
     }
 
+    /// Starts from `chosen` from now on; the chain is read again at the
+    /// next search. Whether that changed anything.
+    pub fn choose(&mut self, chosen: Option<String>) -> bool {
+        if chosen == self.chosen {
+            return false;
+        }
+        self.chosen = chosen;
+        self.chain = None;
+        true
+    }
+
+    /// Whether a theme called `name` is installed: some base has its
+    /// index.
+    pub fn installed(&self, name: &str) -> bool {
+        self.bases
+            .iter()
+            .any(|base| base.join(name).join(INDEX_FILE).is_file())
+    }
+
     /// The first icon file of `names`, tried in order in each theme of the
     /// chain, that `take` makes something of.
     pub fn find<T>(
