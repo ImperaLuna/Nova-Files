@@ -21,7 +21,7 @@ use gpui::{
 
 use crate::dropping::Sources;
 use crate::theme::{Colors, size};
-use crate::window::{Aim, DraggedRow, HoverOpens, MainWindow};
+use crate::window::{Aim, DraggedRow, DraggedTab, HoverOpens, MainWindow};
 
 /// The padding that, with the clear drop edge, makes `pad`.
 pub(super) fn inside_edge(pad: Pixels) -> Pixels {
@@ -85,6 +85,11 @@ impl MainWindow {
                 }
             }))
             .can_drop(move |dragged: &dyn Any, _, _| {
+                // A tab's row reorders tabs dropped on it (see
+                // `window::tab_order`); nothing else here takes one.
+                if dragged.is::<DraggedTab>() {
+                    return true;
+                }
                 if let Some(row) = dragged.downcast_ref::<DraggedRow>() {
                     return row.sources().is_some_and(|sources| rule(&asked, sources));
                 }

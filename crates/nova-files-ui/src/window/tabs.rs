@@ -257,6 +257,17 @@ impl MainWindow {
         self.enter_tab(cx);
     }
 
+    /// Makes tab `from` tab `to`, the others closing up around it; the
+    /// tab on screen stays on screen.
+    pub(super) fn reorder_tab(&mut self, from: usize, to: usize) {
+        let tab = self.tabs.list.remove(from);
+        self.tabs.list.insert(to, tab);
+        // The tab on screen is the one without a stash.
+        if let Some(current) = self.tabs.list.iter().position(Option::is_none) {
+            self.tabs.current = current;
+        }
+    }
+
     /// Shows the tab after the one on screen, the first after the last.
     pub fn next_tab(&mut self, cx: &mut Context<Self>) {
         let count = self.tab_count();

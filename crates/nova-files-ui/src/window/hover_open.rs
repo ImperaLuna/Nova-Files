@@ -4,7 +4,7 @@
 //! inside. The drag stays alive throughout. Leaving the row sooner opens
 //! nothing, and a row is opened once per stay over it. A tab on Start,
 //! which takes no files, still switches. It works for files from another
-//! app as well as from a list.
+//! app as well as from a list, but not for a tab dragged to reorder it.
 //!
 //! Each move of the pointer while something is dragged is told first to
 //! the rows under it, innermost first, and the first one claims the move
@@ -63,8 +63,15 @@ impl MainWindow {
 
     /// The pointer moved over the window, `dragging` or not: after the
     /// rows under it heard it (see [`Self::hovered_while_dragging`]).
-    pub(crate) fn pointer_moved(&mut self, dragging: bool, window: &Window, cx: &Context<Self>) {
-        let claimed = self.hover_open.claimed.take().filter(|_| dragging);
+    pub(crate) fn pointer_moved(
+        &mut self,
+        dragging: bool,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        // A tab being reordered opens nothing.
+        let tab = self.tab_drag_heard(cx);
+        let claimed = self.hover_open.claimed.take().filter(|_| dragging && !tab);
         let same = self.hover_open.over.as_ref().map(|(opens, _)| opens) == claimed.as_ref();
         if same {
             return;

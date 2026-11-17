@@ -5,7 +5,8 @@
 //! under the pointer, and only while there is more than one tab. The + on
 //! the head opens a new tab on Start; it is always there, even with one
 //! tab. Many tabs scroll inside the list, which takes at most a share of
-//! the sidebar's height, so Places keep their room.
+//! the sidebar's height, so Places keep their room. A tab's row dragged
+//! along the list moves the tab (see `window/tab_order`).
 //!
 //! A narrow window shows the tabs side by side at the start of the folded
 //! row, the + after them and a hairline before Places. A picker has no
@@ -19,9 +20,9 @@
 //! for its x, and `new-tab` for the +.
 
 use gpui::{
-    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
-    prelude::FluentBuilder as _, relative,
+    AppContext as _, ClickEvent, Context, Div, DragMoveEvent, InteractiveElement as _, IntoElement,
+    MouseButton, ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _,
+    Styled as _, div, prelude::FluentBuilder as _, relative,
 };
 
 use super::{Row, inside_edge, on_middle_click, row, section_button, section_head};
@@ -29,7 +30,7 @@ use crate::assets::Icon;
 use crate::location::Location;
 use crate::theme::{Colors, radius, size};
 use crate::view::row::icon;
-use crate::window::{HoverOpens, MainWindow};
+use crate::window::{DraggedTab, HoverOpens, MainWindow, TabChip, TabSide};
 
 const LABEL: &str = "Open";
 
@@ -103,6 +104,7 @@ impl MainWindow {
         let closable = self.tab_count() > 1;
         let on = index == self.current_tab();
         let group = format!("tab-{index}");
+        let dragged = DraggedTab::new(cx.entity_id(), index, name.clone());
         row(
             Row {
                 id: ("tab", index).into(),
@@ -120,6 +122,7 @@ impl MainWindow {
         .when(!narrow, |row| row.pr(inside_edge(size::TAB_CLOSE_RIGHT)))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.switch_tab(index, cx)))
         .map(|row| on_middle_click(row, true, cx, move |this, cx| this.close_tab(index, cx)))
+        .map(|row| self.reorders(row, dragged, narrow, cx))
         .when(closable, |row| {
             row.child(
                 close_button(index, on, &group, &colors).on_click(cx.listener(
@@ -130,6 +133,63 @@ impl MainWindow {
                 )),
             )
         })
+    }
+}
+
+impl MainWindow {
+    /// Lets the row of tab `dragged` be dragged to another place in the
+    /// list, and take a tab dropped on it, with a line on the side where
+    /// it would land (see `window/tab_order`).
+    fn reorders(
+        &self,
+        row: Stateful<Div>,
+        dragged: DraggedTab,
+        narrow: bool,
+        cx: &Context<Self>,
+    ) -> Stateful<Div> {
+        let index = dragged.index();
+        let colors = Colors::of(cx);
+        let line = self
+            .tab_landing_line(index, cx)
+            .map(|side| landing_line(side, narrow, &colors));
+        row.on_drag(dragged, |tab, _, _, cx| cx.new(|_| TabChip::new(tab)))
+            .on_drag_move(
+                cx.listener(move |this, moved: &DragMoveEvent<DraggedTab>, _, cx| {
+                    let (at, bounds) = (moved.event.position, moved.bounds);
+                    let after = if narrow {
+                        at.x > bounds.center().x
+                    } else {
+                        at.y > bounds.center().y
+                    };
+                    let side = if after {
+                        TabSide::After
+                    } else {
+                        TabSide::Before
+                    };
+                    let over = (index, bounds.contains(&at), side);
+                    this.tab_dragged_over(&moved.drag(cx).clone(), over, cx);
+                }),
+            )
+            .on_drop(cx.listener(|this, tab: &DraggedTab, _, cx| {
+                this.tab_dropped(tab, cx);
+            }))
+            .when_some(line, |row, line| row.relative().child(line))
+    }
+}
+
+/// The line on `side` of a tab's row where a dragged tab would land:
+/// along its top or bottom, or in a narrow window its start or end.
+fn landing_line(side: TabSide, narrow: bool, colors: &Colors) -> Div {
+    let line = div()
+        .debug_selector(|| "tab-landing".to_owned())
+        .absolute()
+        .rounded(radius::SMALL)
+        .bg(colors.drop_edge);
+    match (narrow, side) {
+        (false, TabSide::Before) => line.top_0().left_0().right_0().h(size::DROP_EDGE),
+        (false, TabSide::After) => line.bottom_0().left_0().right_0().h(size::DROP_EDGE),
+        (true, TabSide::Before) => line.left_0().top_0().bottom_0().w(size::DROP_EDGE),
+        (true, TabSide::After) => line.right_0().top_0().bottom_0().w(size::DROP_EDGE),
     }
 }
 
@@ -153,5 +213,7 @@ fn close_button(index: usize, on: bool, group: &str, colors: &Colors) -> Statefu
                 .group_hover(group.to_owned(), gpui::Styled::visible)
         })
         .hover(|button| button.bg(colors.press).text_color(colors.text))
+        // A press on the x closes the tab, and never drags its row.
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .child(icon(Icon::Close, size::TAB_CLOSE_ICON, colors.text_dim))
 }
