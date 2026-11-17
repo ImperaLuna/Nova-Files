@@ -54,6 +54,12 @@ struct Leaving {
 /// Puts each of `items` back where it was trashed from.
 pub fn restore(running: &mut Running, items: &[PathBuf], trashes: &Trashes) -> Ended {
     running.record_job(word::RESTORE, None, items);
+    put_back(running, items, trashes)
+}
+
+/// Puts each of `items` back where it was trashed from, as part of a job
+/// that already recorded what it does.
+pub fn put_back(running: &mut Running, items: &[PathBuf], trashes: &Trashes) -> Ended {
     let mut leaving = match leaving(running, items, trashes) {
         Ok(leaving) => leaving,
         Err(stop) => return (stop.outcome(), Vec::new()),

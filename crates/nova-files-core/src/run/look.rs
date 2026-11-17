@@ -1,6 +1,6 @@
 //! The commands about how the app looks and is set: settings, the theme,
-//! the desktop's look and the saved window state. `run` sends only these
-//! here.
+//! the desktop's look and icon theme, and the saved window state. `run`
+//! sends only these here.
 
 use nova_files_api::{ClientGone, ClientId, Command, Event};
 
@@ -23,6 +23,7 @@ pub(super) fn answer(
         Command::ChangeSetting(change) => setup.settings.change(change),
         Command::Theme => setup.theme.listen(id, client.events()),
         Command::DesktopLook(look) => setup.theme.follow_desktop(look),
+        Command::DesktopIconThemes(names) => setup.file_icons.follow_desktop(&names),
         // `run` sends the other commands elsewhere.
         _ => {}
     }

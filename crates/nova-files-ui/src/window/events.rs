@@ -117,15 +117,17 @@ impl MainWindow {
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);
             }
-            Event::DetailsRead { id, first, details } => {
-                if let Some(listing) = &self.listing
-                    && listing.id == id
-                    && let Ok(first) = usize::try_from(first.0)
-                {
-                    let rows = first..listing.entries.len();
-                    self.details.extend(rows.zip(details.iter().copied()));
-                    cx.notify();
-                }
+            Event::DetailsRead {
+                id,
+                first,
+                details,
+                icons,
+            } if self
+                .listing
+                .as_ref()
+                .is_some_and(|listing| listing.id == id) =>
+            {
+                self.details_arrived(first, &details, &icons, cx);
             }
             // Checked against the listing once shrunk, when it counts.
             Event::Thumbnail { id, entry, png } => {
@@ -157,13 +159,14 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             // The window doesn't wait on a file opening and never watches
             // jobs it didn't start; only a picker's opening asks for the
-            // window state (see `window_state`).
+            // window state (see `window_state`). Details that come for a
+            // folder the window has since left are dropped.
             Event::FolderUnreadable { .. }
+            | Event::DetailsRead { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }
-            | Event::FileOpened
-            | Event::FileNotOpened
+            | Event::FileOpened { .. }
             | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. }
@@ -171,6 +174,7 @@ impl MainWindow {
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
             | Event::SpaceUnreadable { .. } => {}
+            Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
             Event::Trash(items) => self.trash_listed(items, cx),
             Event::Places(places) => self.places_arrived(places, cx),
             Event::Bookmarks(pinned) => self.pinned_arrived(pinned, cx),

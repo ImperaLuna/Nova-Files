@@ -33,6 +33,7 @@ use nova_files_api::{Answer, Conflict, ConflictKind, Failure, Outcome};
 use rustix::fs::{AtFlags, Mode, OFlags, openat, unlinkat};
 
 use super::Ended;
+use super::ahead::Ahead;
 use super::attrs::{copy_mode_and_times, copy_xattrs};
 use super::clash::{clash, conflict_for};
 use super::control::{Cancelled, Control};
@@ -414,9 +415,11 @@ fn place_each(
         .iter()
         .map(|(source, target)| (source.as_path(), target.as_path()))
         .collect();
+    let mut ahead = Ahead::new(&plan.items);
     for (index, item) in plan.items.iter().enumerate() {
         // A source's tree starts: the last one's answers were its own.
-        if tops.contains(&(item.from.as_path(), item.to.as_path())) {
+        let top = tops.contains(&(item.from.as_path(), item.to.as_path()));
+        if top {
             done.detours = Detours::default();
         }
         let Some(planned) = done.detours.target(&item.to) else {
@@ -430,7 +433,10 @@ fn place_each(
             replacing: false,
             how: done.how,
         };
-        let placed = place(running, &making, &mut make)?;
+        let placed = place(running, &making, &mut make, &mut ahead)?;
+        if top && matches!(placed.0, Placed::Skipped) {
+            running.tally.skipped += 1;
+        }
         done.note(running, item, &planned, placed);
     }
     Ok(())
@@ -438,11 +444,13 @@ fn place_each(
 
 /// Puts the item `planned` names at its target, or wherever the user's
 /// answers to what stands in its way say, and returns what became of it
-/// and where.
+/// and where. A question about a taken name says how many more `ahead`
+/// will meet one like it.
 fn place(
     running: &mut Running,
     planned: &Making<'_>,
     make: &mut Make<'_>,
+    ahead: &mut Ahead<'_>,
 ) -> Result<(Placed, PathBuf), Stop> {
     let item = planned.item;
     let mut target = planned.target.to_path_buf();
@@ -480,7 +488,11 @@ fn place(
             }
             Ok(Some(kind)) => {
                 replacing = false;
-                match running.ask(conflict(kind, item, &target))? {
+                let mut asked = conflict(kind, item, &target);
+                if !running.answered(kind) {
+                    asked.more = ahead.more(planned.index, kind, &running.shared.control);
+                }
+                match running.ask(asked)? {
                     Answer::Skip => return Ok((Placed::Skipped, target)),
                     Answer::Merge => return Ok((Placed::Merged, target)),
                     Answer::Replace => replacing = true,
@@ -494,7 +506,12 @@ fn place(
             }
         };
         match tried {
-            Ok(it) => return Ok((Placed::Made(it), target)),
+            Ok(it) => {
+                if making.replacing {
+                    running.tally.replaced += 1;
+                }
+                return Ok((Placed::Made(it), target));
+            }
             // The name changed hands since it was looked at: look again.
             Err(Stop::Failed { path, reason })
                 if looked_again < LOOK_AGAIN
@@ -523,6 +540,8 @@ fn conflict(kind: ConflictKind, item: &Item, target: &Path) -> Conflict {
         target: target.to_path_buf(),
         // Numbered when asked.
         number: 0,
+        // Counted when asked.
+        more: 0,
     }
 }
 

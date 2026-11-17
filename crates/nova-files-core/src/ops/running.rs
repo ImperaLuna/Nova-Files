@@ -1,6 +1,6 @@
 //! What a job's thread holds while it runs: its id, its switch, its
-//! progress, its journal once it has one, and the answers a client gave
-//! for all conflicts of a kind.
+//! progress, its journal once it has one, the answers a client gave for
+//! all conflicts of a kind, and what those answers made of it.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
@@ -9,7 +9,7 @@ use std::ops::Bound;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use nova_files_api::{Answer, Conflict, ConflictKind, Failure, JobId, Scope};
+use nova_files_api::{Answer, Conflict, ConflictKind, Failure, JobId, Scope, Tally};
 
 use super::clash::conflict_for;
 use super::control::Cancelled;
@@ -20,6 +20,7 @@ use super::left::{Done, Left};
 use super::plan::{Kind, kind};
 use super::progress::Reporter;
 use super::stop::Stop;
+use crate::trash::TrashFolder;
 
 pub struct Running {
     pub job: JobId,
@@ -55,6 +56,20 @@ pub struct Running {
     /// the outermost such entry. A folder merged into one already there
     /// was never moved itself, so its entries are.
     pub steps: BTreeMap<PathBuf, PathBuf>,
+    /// What the answers to its conflicts made of the job so far.
+    pub tally: Tally,
+    /// The home trash's folder, where files the job replaces go when
+    /// they are on the home drive.
+    pub home_trash: Option<PathBuf>,
+    /// Each file the job replaced, by the path it had, and where in a
+    /// trash it went, so an undo can put it back.
+    pub replaced: Vec<(PathBuf, PathBuf)>,
+    /// The trash found for each folder a replaced file went from, looked
+    /// for once per job.
+    pub replaced_trashes: HashMap<PathBuf, TrashFolder>,
+    /// Where the steps kept went, so a replace can tell an entry this
+    /// job made from one that was there before it.
+    placed: HashSet<PathBuf>,
 }
 
 impl Running {
@@ -79,6 +94,11 @@ impl Running {
             resumes: false,
             sources: HashSet::new(),
             steps: BTreeMap::new(),
+            tally: Tally::default(),
+            home_trash: None,
+            replaced: Vec::new(),
+            replaced_trashes: HashMap::new(),
+            placed: HashSet::new(),
         }
     }
 
@@ -138,6 +158,12 @@ impl Running {
         }
     }
 
+    /// Whether an answer for all conflicts of `kind` is already given,
+    /// so [`Self::ask`] won't ask about one.
+    pub fn answered(&self, kind: ConflictKind) -> bool {
+        self.answers.contains_key(&kind)
+    }
+
     /// Holds at `conflict` until a client answers, unless one already
     /// answered for all of its kind. Retry is never kept for a kind: what
     /// still fails would be retried for ever.
@@ -195,6 +221,7 @@ impl Running {
                 target: path.to_path_buf(),
                 // Numbered when asked.
                 number: 0,
+                more: 0,
             };
             if self.skips(conflict)? {
                 return Ok(None);
@@ -276,6 +303,12 @@ impl Running {
             self.steps.remove(&kept);
         }
         self.steps.insert(from.to_path_buf(), to.to_path_buf());
+        self.placed.insert(to.to_path_buf());
+    }
+
+    /// Whether `path` is, or is inside, an entry this job put there.
+    pub fn placed_here(&self, path: &Path) -> bool {
+        path.ancestors().any(|path| self.placed.contains(path))
     }
 
     /// Whether the job resumed after a crash.

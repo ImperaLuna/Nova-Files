@@ -88,3 +88,37 @@ fn a_journal_that_cant_be_opened_again_still_goes_when_the_job_ends() {
 
     assert!(!path.exists());
 }
+
+#[test]
+fn a_kind_is_answered_once_answered_for_all() {
+    let mut running = Running::for_test();
+    let control = Arc::clone(&running.shared);
+    let answering = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if let Some(open) = control.control.open() {
+                return control
+                    .control
+                    .answer(&open, Answer::Skip, Scope::AllOfThisKind, || {});
+            }
+            std::thread::yield_now();
+        }
+        false
+    });
+    let clash = |name: &str| Conflict {
+        kind: ConflictKind::FileExists,
+        source: PathBuf::from("/a").join(name),
+        target: PathBuf::from("/b").join(name),
+        number: 0,
+        more: 1,
+    };
+
+    assert!(!running.answered(ConflictKind::FileExists));
+    assert_eq!(running.ask(clash("x")), Ok(Answer::Skip));
+    assert!(answering.join().unwrap());
+
+    assert!(running.answered(ConflictKind::FileExists));
+    assert!(!running.answered(ConflictKind::FolderExists));
+    // Asked no more.
+    assert_eq!(running.ask(clash("y")), Ok(Answer::Skip));
+}

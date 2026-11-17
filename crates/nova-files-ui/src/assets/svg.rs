@@ -6,7 +6,45 @@
 
 // Things: solid, two-tone.
 pub const FOLDER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".5" d="M2.5 7A2.5 2.5 0 0 1 5 4.5h3.6c.75 0 1.45.33 1.93.9l.92 1.1H19A2.5 2.5 0 0 1 21.5 9v3h-19z"/><rect x="2.5" y="8.6" width="19" height="11.4" rx="2.8"/></svg>"##;
-pub const FILE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".38" d="M6.5 2.5h6.8L19.5 8.7V19a2.5 2.5 0 0 1-2.5 2.5H6.5A2.5 2.5 0 0 1 4 19V5a2.5 2.5 0 0 1 2.5-2.5z"/><path opacity=".7" d="M13.3 2.5l6.2 6.2h-4a2.2 2.2 0 0 1-2.2-2.2z"/></svg>"##;
+/// A file's shape with `$mark` drawn over it, so every file icon shares
+/// one outline.
+macro_rules! file_with {
+    ($mark:literal) => {
+        concat!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".38" d="M6.5 2.5h6.8L19.5 8.7V19a2.5 2.5 0 0 1-2.5 2.5H6.5A2.5 2.5 0 0 1 4 19V5a2.5 2.5 0 0 1 2.5-2.5z"/><path opacity=".7" d="M13.3 2.5l6.2 6.2h-4a2.2 2.2 0 0 1-2.2-2.2z"/>"##,
+            $mark,
+            "</svg>"
+        )
+    };
+}
+
+pub const FILE: &str = file_with!("");
+/// The built-in icons for files no icon theme draws, one per kind: the
+/// file shape with a mark at full strength.
+/// A file of text: lines.
+pub const FILE_TEXT: &str = file_with!(
+    r##"<rect x="7.2" y="11.2" width="9.2" height="1.7" rx=".85"/><rect x="7.2" y="14.4" width="9.2" height="1.7" rx=".85"/><rect x="7.2" y="17.6" width="5.6" height="1.7" rx=".85"/>"##
+);
+/// A picture: a sun over a hill.
+pub const FILE_PICTURE: &str = file_with!(
+    r##"<circle cx="9.2" cy="12.6" r="1.7"/><path d="M6.6 19.1 10 15.2l2.1 2.2 2-2.1 3 3.8z"/>"##
+);
+/// A video: a play mark.
+pub const FILE_VIDEO: &str = file_with!(
+    r##"<path d="M9.4 11.6v6.8c0 .5.5.8.9.5l5.2-3.4a.6.6 0 0 0 0-1l-5.2-3.4a.6.6 0 0 0-.9.5z"/>"##
+);
+/// A sound: a note.
+pub const FILE_AUDIO: &str = file_with!(
+    r##"<path d="M11.4 11.4 16.4 10v6.8h-1.6v-4.6l-1.8.5v5.2h-1.6z"/><circle cx="10.4" cy="18" r="1.9"/><circle cx="14.8" cy="16.8" r="1.9"/>"##
+);
+/// An archive: a zip down the middle and its pull.
+pub const FILE_ARCHIVE: &str = file_with!(
+    r##"<rect x="9.9" y="3" width="1.9" height="1.6" rx=".5"/><rect x="11.6" y="4.8" width="1.9" height="1.6" rx=".5"/><rect x="9.9" y="6.6" width="1.9" height="1.6" rx=".5"/><rect x="11.6" y="8.4" width="1.9" height="1.6" rx=".5"/><rect x="9.9" y="10.2" width="1.9" height="1.6" rx=".5"/><rect x="9.7" y="12.4" width="4" height="5.4" rx="1.2"/>"##
+);
+/// A program: a prompt.
+pub const FILE_PROGRAM: &str = file_with!(
+    r##"<path fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="m7.6 12.3 2.8 2.6-2.8 2.6m4.6.4h4.2"/>"##
+);
 pub const HOME: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".5" d="M3.5 10.6 12 3.4l8.5 7.2V18a2.6 2.6 0 0 1-2.6 2.6H6.1A2.6 2.6 0 0 1 3.5 18z"/><path d="M9.6 20.6v-5a1.6 1.6 0 0 1 1.6-1.6h1.6a1.6 1.6 0 0 1 1.6 1.6v5z"/></svg>"##;
 pub const DESKTOP: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><rect x="2.5" y="4" width="19" height="12.6" rx="2.8"/><path opacity=".5" d="M9.4 16.6h5.2l.9 3.6h-7z"/></svg>"##;
 pub const DOCUMENTS: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><rect opacity=".5" x="4.5" y="2.5" width="15" height="19" rx="2.8"/><rect x="7.6" y="7" width="8.8" height="1.9" rx=".95"/><rect x="7.6" y="11" width="8.8" height="1.9" rx=".95"/><rect x="7.6" y="15" width="5" height="1.9" rx=".95"/></svg>"##;

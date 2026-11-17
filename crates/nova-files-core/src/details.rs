@@ -11,7 +11,7 @@ use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Details, EntryKind, Listing};
+use nova_files_api::{Details, Entry, EntryKind, Listing};
 
 /// The details of each entry `entries` names by its path and kind, in
 /// the same order. `None` when `cancelled` said so before the batch was
@@ -33,10 +33,14 @@ pub fn listed(
     listing: &Listing,
     range: Range<usize>,
 ) -> impl ExactSizeIterator<Item = (PathBuf, EntryKind)> + '_ {
-    let entries = listing.entries.get(range).unwrap_or_default();
-    entries
+    entries(listing, range)
         .iter()
         .map(|entry| (listing.path_of(entry), entry.kind))
+}
+
+/// `listing`'s entries `range`; entries past its end are left out.
+pub fn entries(listing: &Listing, range: Range<usize>) -> &[Entry] {
+    listing.entries.get(range).unwrap_or_default()
 }
 
 /// One entry's details; `None` when `cancelled` said so before a read.

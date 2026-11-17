@@ -119,6 +119,7 @@ impl Client {
                     id: ListingId(got),
                     first,
                     details,
+                    ..
                 } if got == id => {
                     let start = *start.get_or_insert(first.0);
                     assert_eq!(

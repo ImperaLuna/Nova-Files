@@ -22,7 +22,7 @@
 use std::fs::{self, Metadata, OpenOptions};
 use std::io;
 use std::os::unix::fs::MetadataExt as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rustix::fs::{AtFlags, CWD, RenameFlags, linkat, renameat, renameat_with, unlinkat};
 use rustix::io::Errno;
@@ -60,12 +60,14 @@ fn rename_or_fall_back(
     }
 }
 
-/// Puts `new` in the place of `old`, which is removed only once `new`
-/// holds its name, and never a folder. Where the filesystem can swap two
-/// names in one step it does; elsewhere `old` steps aside to `backup`
-/// first, and comes back if `new` can't take its name. Should it not
-/// come back either, the error says where it was left.
-pub fn replace(new: &Path, old: &Path, backup: &Path) -> io::Result<()> {
+/// Puts `new` in the place of `old`, never a folder, and returns where
+/// what was at `old` is now, under a hidden name: the caller sets it
+/// aside (see `aside`). Where the filesystem can swap two names in one
+/// step it does, and the old entry ends up at `new`; elsewhere `old`
+/// steps aside to `backup` first, and comes back if `new` can't take its
+/// name. Should it not come back either, the error says where it was
+/// left.
+pub fn replace(new: &Path, old: &Path, backup: &Path) -> io::Result<PathBuf> {
     replace_or_fall_back(new, old, backup, |new, old| {
         renameat_with(CWD, new, CWD, old, RenameFlags::EXCHANGE)
     })
@@ -77,7 +79,7 @@ fn replace_or_fall_back(
     old: &Path,
     backup: &Path,
     exchange: impl Fn(&Path, &Path) -> rustix::io::Result<()>,
-) -> io::Result<()> {
+) -> io::Result<PathBuf> {
     let ours = new.symlink_metadata()?;
     // A folder that took the name since it was looked at is never
     // replaced: it goes back, and the name counts as taken.
@@ -96,19 +98,19 @@ fn replace_or_fall_back(
             };
             Err(taken_back(back, old, new))
         }
-        Ok(()) => fs::remove_file(new),
+        Ok(()) => Ok(new.to_path_buf()),
         Err(errno) if refuses_flag(errno) => replace_through(At::path(new), old, backup),
         Err(errno) => Err(errno.into()),
     }
 }
 
 /// Puts `new` in the place of `old` by way of `backup`: `old` steps aside
-/// to it, `new` takes the name, and the backup goes. If `new` can't take
-/// the name, `old` comes back; should it not come back either, the error
-/// says where it was left. Every step leaves both files under a name a
-/// journal knows, unlike an exchange, after which `new`'s name holds the
-/// old file.
-pub fn replace_through(new: At<'_>, old: &Path, backup: &Path) -> io::Result<()> {
+/// to it and `new` takes the name; returns `backup`, where the old entry
+/// now is. If `new` can't take the name, `old` comes back; should it not
+/// come back either, the error says where it was left. Every step leaves
+/// both files under a name a journal knows, unlike an exchange, after
+/// which `new`'s name holds the old file.
+pub fn replace_through(new: At<'_>, old: &Path, backup: &Path) -> io::Result<PathBuf> {
     rename_no_replace(old, backup)?;
     if is_folder(backup) {
         return Err(taken_back(rename_no_replace(backup, old), old, backup));
@@ -119,7 +121,7 @@ pub fn replace_through(new: At<'_>, old: &Path, backup: &Path) -> io::Result<()>
             Err(stuck) => left_at(old, backup, &error, &stuck),
         });
     }
-    fs::remove_file(backup)
+    Ok(backup.to_path_buf())
 }
 
 /// Whether a folder, not a link to one, is at `path`.

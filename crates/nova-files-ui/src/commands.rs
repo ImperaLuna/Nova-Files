@@ -48,6 +48,7 @@ mod actions {
             CutSelected,
             Paste,
             TrashSelected,
+            DeleteSelected,
             RenameSelected,
             NewFolder,
             Undo,
@@ -149,6 +150,7 @@ pub const ACTIONS: &[ActionSpec] = &[
     CUT,
     PASTE,
     TRASH,
+    DELETE,
     RENAME,
     NEW_FOLDER,
     UNDO,
@@ -280,6 +282,14 @@ spec!(
     "file.trash",
     "Move to Trash",
     ["delete"]
+);
+spec!(
+    /// Asks, then deletes the files selected for good, not to the trash.
+    DELETE,
+    DeleteSelected,
+    "file.delete",
+    "Delete for good",
+    ["shift-delete"]
 );
 spec!(
     /// Renames the one entry selected, in place.

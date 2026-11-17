@@ -110,6 +110,16 @@ pub enum Outcome {
     Failed { path: PathBuf, reason: Failure },
 }
 
+/// What the user's answers to a job's conflicts made of it, for the
+/// note that says how it went.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Tally {
+    /// Files that took the place of one already there.
+    pub replaced: u64,
+    /// The job's own sources (not what is inside them) left out.
+    pub skipped: u64,
+}
+
 /// Why a step of a job failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Failure {
@@ -149,6 +159,10 @@ pub struct Conflict {
     /// Which of the job's conflicts it is, counting from 1, so an answer
     /// to an earlier one never settles a later one that looks the same.
     pub number: u64,
+    /// How many more of the job's items, as far as the job can see when
+    /// it asks, will meet a conflict of the same kind: what an answer for
+    /// all of its kind ([`Scope::AllOfThisKind`]) settles beyond this one.
+    pub more: u64,
 }
 
 /// What stands in a job's way.

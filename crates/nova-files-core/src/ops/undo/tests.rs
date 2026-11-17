@@ -217,3 +217,44 @@ fn the_history_keeps_the_last_jobs_and_gives_each_once() {
     assert_eq!(history.take(JobId(3), &audience), Some(undoable(3)));
     assert_eq!(history.take(JobId(3), &audience), None, "taken once");
 }
+
+#[test]
+fn files_replaced_and_still_in_the_trash_are_put_back_after() {
+    let folder = TestFolder::new("undo-put-back");
+    let copy = folder.file("a", "new");
+    let trashed = folder.file("trashed-a", "old");
+    let first = Undo::Trash(vec![(copy.clone(), entry(&copy).unwrap())]);
+    let gone = folder.path().join("gone");
+
+    assert_eq!(putting_back(first.clone(), &[]), first);
+    assert_eq!(
+        putting_back(first.clone(), &[(copy.clone(), gone)]),
+        first,
+        "nothing left to put back"
+    );
+    assert_eq!(
+        putting_back(first.clone(), &[(copy, trashed.clone())]),
+        Undo::ThenPutBack(
+            Box::new(first),
+            vec![(trashed.clone(), entry(&trashed).unwrap())]
+        )
+    );
+}
+
+#[test]
+fn only_nothing_left_to_undo_counts_as_gone() {
+    let gone = Outcome::Failed {
+        path: PathBuf::new(),
+        reason: Failure::NotFound,
+    };
+    assert!(is_gone(&gone));
+    assert!(!is_gone(&Outcome::Done));
+    assert!(!is_gone(&Outcome::Failed {
+        path: PathBuf::from("/a"),
+        reason: Failure::NotFound,
+    }));
+    assert!(!is_gone(&Outcome::Failed {
+        path: PathBuf::new(),
+        reason: Failure::PermissionDenied,
+    }));
+}
