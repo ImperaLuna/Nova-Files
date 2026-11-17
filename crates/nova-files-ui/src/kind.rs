@@ -1,11 +1,14 @@
-//! What kind of file an entry is, for the colored tag on its icon. The kind
-//! comes from the name's extension alone, so it costs no disk read; a
-//! name without a known one is `Other`.
+//! What kind of file an entry is, by its name, where the core hasn't said:
+//! the colored tag of the quick look's big icon, and the built-in icon of
+//! the entries the quick look and the Start page peek into. The kind comes
+//! from the name's extension alone, so it costs no disk read; a name
+//! without a known one is `Other`.
 
 use std::ffi::OsStr;
 use std::path::Path;
 
 use gpui::Rgba;
+use nova_files_api::{EntryKind, IconKind};
 
 use crate::theme::Tags;
 
@@ -75,6 +78,32 @@ const KNOWN: &[(&str, FileKind)] = &[
     ("wav", FileKind::Media),
 ];
 
+/// Media extensions that are sound; the rest of [`FileKind::Media`] is
+/// video.
+const AUDIO: [&str; 5] = ["mp3", "flac", "ogg", "opus", "wav"];
+
+/// The built-in icon of an entry called `name` of `kind`.
+pub fn icon_kind(name: &OsStr, kind: EntryKind) -> IconKind {
+    if kind == EntryKind::Folder {
+        return IconKind::Folder;
+    }
+    match FileKind::of(name) {
+        FileKind::Image => IconKind::Picture,
+        FileKind::Document | FileKind::Code => IconKind::Text,
+        FileKind::Archive => IconKind::Archive,
+        FileKind::Media if is_audio(name) => IconKind::Audio,
+        FileKind::Media => IconKind::Video,
+        FileKind::Other => IconKind::File,
+    }
+}
+
+fn is_audio(name: &OsStr) -> bool {
+    Path::new(name).extension().is_some_and(|extension| {
+        let extension = extension.to_string_lossy().to_lowercase();
+        AUDIO.contains(&extension.as_str())
+    })
+}
+
 impl FileKind {
     /// The kind of a file called `name`.
     pub fn of(name: &OsStr) -> Self {
@@ -117,6 +146,20 @@ mod tests {
         assert_eq!(kind("data.xyz"), FileKind::Other);
         assert_eq!(kind("Makefile"), FileKind::Other);
         assert_eq!(kind(".bashrc"), FileKind::Other);
+    }
+
+    #[test]
+    fn the_built_in_icon_comes_from_the_name() {
+        let file = |name: &str| icon_kind(OsStr::new(name), EntryKind::File);
+        assert_eq!(file("a.PNG"), IconKind::Picture);
+        assert_eq!(file("a.pdf"), IconKind::Text);
+        assert_eq!(file("a.rs"), IconKind::Text);
+        assert_eq!(file("a.zip"), IconKind::Archive);
+        assert_eq!(file("a.FLAC"), IconKind::Audio);
+        assert_eq!(file("a.mkv"), IconKind::Video);
+        assert_eq!(file("Makefile"), IconKind::File);
+        let folder = icon_kind(OsStr::new("a.png"), EntryKind::Folder);
+        assert_eq!(folder, IconKind::Folder);
     }
 
     #[test]

@@ -291,12 +291,6 @@ pub mod size {
     /// A file or folder icon in a row, and a thumbnail in its place.
     pub const ROW_ICON: Pixels = px(22.0);
     pub const THUMBNAIL: Pixels = px(22.0);
-    /// The colored tag on a file icon: where it sits in the icon's box,
-    /// and its size. A plain box, so a row draws one icon, not two.
-    pub const TAG_LEFT: Pixels = px(6.2);
-    pub const TAG_TOP: Pixels = px(13.4);
-    pub const TAG_WIDTH: Pixels = px(6.8);
-    pub const TAG_HEIGHT: Pixels = px(2.9);
     /// The Modified and Size columns; Name takes the rest.
     pub const MODIFIED_WIDTH: Pixels = px(150.0);
     pub const SIZE_WIDTH: Pixels = px(92.0);
@@ -421,6 +415,21 @@ pub mod size {
     pub const ISLAND_DIVIDER_HEIGHT: Pixels = px(20.0);
     /// Room under the last row, so the island never covers it.
     pub const ISLAND_CLEARANCE: Pixels = px(68.0);
+    /// The island opened into a list of jobs: its width, the space inside
+    /// it and under the rows, the height of each row and of the line
+    /// under them, how far in their text starts, the space between a
+    /// row's parts, and a row's seconds left and bar.
+    pub const ISLAND_LIST_WIDTH: Pixels = px(450.0);
+    pub const ISLAND_LIST_PAD: Pixels = px(6.0);
+    pub const ISLAND_LIST_ROW: Pixels = px(40.0);
+    /// How many rows the open list of jobs shows before it scrolls; the
+    /// half row says there is more.
+    pub const ISLAND_LIST_ROWS: f32 = 6.5;
+    pub const ISLAND_LIST_LINE: Pixels = px(34.0);
+    pub const ISLAND_LIST_INSET: Pixels = px(10.0);
+    pub const ISLAND_LIST_GAP: Pixels = px(10.0);
+    pub const ISLAND_LIST_LEFT: Pixels = px(30.0);
+    pub const ISLAND_LIST_BAR: Pixels = px(72.0);
     /// The bar of a running job on the island, and the space after it.
     pub const PROGRESS_WIDTH: Pixels = px(140.0);
     pub const PROGRESS_HEIGHT: Pixels = px(6.0);
@@ -431,6 +440,12 @@ pub mod size {
     pub const RENAME_PAD: Pixels = px(7.0);
     /// A worded button on the island (Undo).
     pub const TEXT_BUTTON_PAD: Pixels = px(12.0);
+    /// The "For all" tick on the island: its box, the box's edge, the
+    /// check inside, and the space before its words.
+    pub const TICK_BOX: Pixels = px(16.0);
+    pub const TICK_LINE: Pixels = px(1.5);
+    pub const TICK_ICON: Pixels = px(11.0);
+    pub const TICK_GAP: Pixels = px(8.0);
     /// The quiet count while the island is down: where it sits from the
     /// sheet's corner, and the space in its backing.
     pub const COUNT_LEFT: Pixels = px(6.0);
@@ -578,6 +593,8 @@ pub mod radius {
     pub const ROW: Pixels = px(10.0);
     /// A thumbnail, a column head's button, the band.
     pub const SMALL: Pixels = px(6.0);
+    /// The box of a tick.
+    pub const TICK: Pixels = px(4.0);
 }
 
 #[cfg(test)]

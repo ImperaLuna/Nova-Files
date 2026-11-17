@@ -123,6 +123,110 @@ fn undoing_a_merged_move_takes_back_only_what_went_in() {
     assert_eq!(left, ["kept"]);
 }
 
+/// Copies or moves (as `operation` says) `a`, holding "new", over an
+/// `into/a` holding "old", answering Replace; checks the old one went to
+/// the trash, undoes the job and returns the bench.
+fn replace_then_undo(test: &str, operation: fn(PathBuf, PathBuf) -> Operation) -> Bench {
+    let bench = Bench::new(test);
+    fs::write(bench.at("a"), "new").unwrap();
+    fs::create_dir(bench.at("into")).unwrap();
+    fs::write(bench.at("into/a"), "old").unwrap();
+    let client = bench.client();
+    let job = client.start(operation(bench.at("a"), bench.at("into")));
+    let clash = answers::held(&client, job);
+    answers::answer(&client, job, &clash, Answer::Replace, Scope::ThisOne);
+    assert_eq!(client.ended(job).0, Outcome::Done);
+    assert_eq!(fs::read_to_string(bench.at("into/a")).unwrap(), "new");
+    let trash = home_trash_files(&bench.root);
+    assert_eq!(fs::read_to_string(trash.join("a")).unwrap(), "old");
+
+    assert_eq!(undo(&client, job), Outcome::Done);
+
+    assert_eq!(fs::read_to_string(bench.at("into/a")).unwrap(), "old");
+    bench
+}
+
+#[test]
+fn undoing_a_copy_that_replaced_puts_the_replaced_file_back() {
+    let bench = replace_then_undo("undo-copy-replace", |source, into| Operation::Copy {
+        sources: vec![source],
+        into,
+    });
+
+    assert_eq!(fs::read_to_string(bench.at("a")).unwrap(), "new");
+    let trash = home_trash_files(&bench.root);
+    let trashed: Vec<_> = fs::read_dir(&trash)
+        .unwrap()
+        .map(|entry| fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect();
+    assert_eq!(trashed, ["new"], "only the copy is left in the trash");
+}
+
+#[test]
+fn undoing_a_move_that_replaced_puts_both_back() {
+    let bench = replace_then_undo("undo-move-replace", |source, into| Operation::Move {
+        sources: vec![source],
+        into,
+    });
+
+    assert_eq!(fs::read_to_string(bench.at("a")).unwrap(), "new");
+    assert_eq!(
+        fs::read_dir(home_trash_files(&bench.root)).unwrap().count(),
+        0
+    );
+}
+
+#[test]
+fn undo_leaves_out_a_file_the_same_job_made_and_then_replaced() {
+    let bench = Bench::new("undo-replace-own");
+    fs::create_dir_all(bench.at("a")).unwrap();
+    fs::create_dir_all(bench.at("b")).unwrap();
+    fs::create_dir(bench.at("into")).unwrap();
+    fs::write(bench.at("a/report"), "a").unwrap();
+    fs::write(bench.at("b/report"), "b").unwrap();
+    let client = bench.client();
+    let job = client.start(Operation::Copy {
+        sources: vec![bench.at("a/report"), bench.at("b/report")],
+        into: bench.at("into"),
+    });
+    let clash = answers::held(&client, job);
+    answers::answer(&client, job, &clash, Answer::Replace, Scope::ThisOne);
+    assert_eq!(client.ended(job).0, Outcome::Done);
+    assert_eq!(fs::read_to_string(bench.at("into/report")).unwrap(), "b");
+
+    assert_eq!(undo(&client, job), Outcome::Done);
+
+    assert!(
+        !bench.at("into/report").exists(),
+        "as it was before the job"
+    );
+}
+
+#[test]
+fn a_replaced_file_whose_name_was_taken_again_stays_in_the_trash() {
+    let bench = Bench::new("undo-replace-taken");
+    fs::write(bench.at("a"), "new").unwrap();
+    fs::create_dir(bench.at("into")).unwrap();
+    fs::write(bench.at("into/a"), "old").unwrap();
+    let client = bench.client();
+    let job = client.start(Operation::Copy {
+        sources: vec![bench.at("a")],
+        into: bench.at("into"),
+    });
+    let clash = answers::held(&client, job);
+    answers::answer(&client, job, &clash, Answer::Replace, Scope::ThisOne);
+    assert_eq!(client.ended(job).0, Outcome::Done);
+    // Saved over by an editor: a new file under the copy's name.
+    fs::remove_file(bench.at("into/a")).unwrap();
+    fs::write(bench.at("into/a"), "edited").unwrap();
+
+    assert_ne!(undo(&client, job), Outcome::Done);
+
+    assert_eq!(fs::read_to_string(bench.at("into/a")).unwrap(), "edited");
+    let trash = home_trash_files(&bench.root);
+    assert_eq!(fs::read_to_string(trash.join("a")).unwrap(), "old");
+}
+
 #[test]
 fn undoing_a_trash_restores_and_undoing_a_restore_trashes_again() {
     let bench = Bench::new("undo-trash");

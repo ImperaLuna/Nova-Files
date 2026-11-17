@@ -41,6 +41,7 @@ mod sidebar;
 mod start;
 
 pub use crate::places::place_icon;
+pub use row::{RowIcon, entry_kind};
 
 use gpui::{
     App, Context, Div, FocusHandle, Focusable as _, InteractiveElement as _, IntoElement,
@@ -56,8 +57,8 @@ use crate::commands::{
     SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
 };
 use crate::commands::{
-    CloseTab, CopySelected, CutSelected, EmptyTrash, NewFolder, NewTab, NextTab, Paste,
-    PreviousTab, RenameSelected, RestoreSelected, TrashSelected, Undo,
+    CloseTab, CopySelected, CutSelected, DeleteSelected, EmptyTrash, NewFolder, NewTab, NextTab,
+    Paste, PreviousTab, RenameSelected, RestoreSelected, TrashSelected, Undo,
 };
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
@@ -167,6 +168,7 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &CutSelected, _, cx| this.copy_selected(true, cx)))
             .on_action(cx.listener(|this, _: &Paste, _, cx| this.paste(cx)))
             .on_action(cx.listener(|this, _: &TrashSelected, _, cx| this.trash_selected(cx)))
+            .on_action(cx.listener(|this, _: &DeleteSelected, _, cx| this.delete_selected(cx)))
             .on_action(cx.listener(|this, _: &RestoreSelected, _, _| this.restore_selected()))
             .on_action(cx.listener(|this, _: &EmptyTrash, _, cx| this.ask_empty_trash(cx)))
             .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))

@@ -8,12 +8,15 @@
 #![forbid(unsafe_code)]
 
 mod accounts;
+mod capped;
 mod config_watch;
 mod details;
 mod details_queue;
 mod disk_space;
 mod drives;
+mod file_icons;
 mod hand_edited;
+mod icon_theme;
 mod index;
 mod jobs;
 mod list;
@@ -128,6 +131,10 @@ pub fn spawn_with(
             let places = places::Store::open(home.clone());
             let recent = recent::Store::open(home.as_ref().map(|home| home.state.as_path()));
             let mime_types = Arc::default();
+            let file_icons = Arc::new(file_icons::FileIcons::from_env(
+                Arc::clone(&mime_types),
+                config,
+            ));
             let setup = run::Setup {
                 home,
                 places,
@@ -138,6 +145,7 @@ pub fn spawn_with(
                 searcher,
                 open_with: open::OpenWithWorker::new(Arc::clone(&mime_types)),
                 mime_types,
+                file_icons,
                 jobs: Arc::new(jobs),
                 measurer: measure::Measurer::default(),
                 drives: drives::Store::default(),

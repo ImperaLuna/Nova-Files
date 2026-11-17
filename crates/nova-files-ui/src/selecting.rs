@@ -268,7 +268,7 @@ impl MainWindow {
         for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
             let path = listing.path_of(file);
             // The window can't fall back to the portal; an app that
-            // doesn't start shows nothing for now.
+            // doesn't start is said on the island (see `file_not_opened`).
             connection
                 .send(Command::OpenFile {
                     path,

@@ -31,6 +31,7 @@ use std::thread;
 use defaults::{App, Places};
 use exec::Fields;
 use nova_files_api::FileTypes as _;
+pub use nova_files_api::NotOpened;
 
 use crate::mime::MimeTypes;
 
@@ -57,18 +58,6 @@ const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 const REAPER_THREAD: &str = "nova-files-opened-app";
 /// A file to try an app's command line with.
 const ANY_FILE: &str = "/";
-
-/// Why a file wasn't opened here; the caller can still ask the portal.
-#[derive(Debug)]
-pub enum NotOpened {
-    /// Inside a sandbox, so the portal must do it.
-    Sandboxed,
-    /// No installed app is the default for the file's type, or its
-    /// `Exec` line can't take a file.
-    NoApp,
-    /// The app's program couldn't start.
-    Failed,
-}
 
 /// Opens `file` in the default app for its type, as `types` tells it from
 /// the file's name, or for the nearest type that one is a kind of.
