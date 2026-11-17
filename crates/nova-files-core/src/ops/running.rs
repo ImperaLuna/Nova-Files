@@ -18,6 +18,7 @@ use super::left::{Done, Left};
 use super::plan::{Kind, kind};
 use super::progress::Reporter;
 use super::stop::Stop;
+use crate::trash::TrashFolder;
 
 pub struct Running {
     pub job: JobId,
@@ -48,6 +49,18 @@ pub struct Running {
     pub steps: BTreeMap<PathBuf, PathBuf>,
     /// What the answers to its conflicts made of the job so far.
     pub tally: Tally,
+    /// The home trash's folder, where files the job replaces go when
+    /// they are on the home drive.
+    pub home_trash: Option<PathBuf>,
+    /// Each file the job replaced, by the path it had, and where in a
+    /// trash it went, so an undo can put it back.
+    pub replaced: Vec<(PathBuf, PathBuf)>,
+    /// The trash found for each folder a replaced file went from, looked
+    /// for once per job.
+    pub replaced_trashes: HashMap<PathBuf, TrashFolder>,
+    /// Where the steps kept went, so a replace can tell an entry this
+    /// job made from one that was there before it.
+    placed: HashSet<PathBuf>,
 }
 
 impl Running {
@@ -71,6 +84,10 @@ impl Running {
             sources: HashSet::new(),
             steps: BTreeMap::new(),
             tally: Tally::default(),
+            home_trash: None,
+            replaced: Vec::new(),
+            replaced_trashes: HashMap::new(),
+            placed: HashSet::new(),
         }
     }
 
@@ -266,6 +283,12 @@ impl Running {
             self.steps.remove(&kept);
         }
         self.steps.insert(from.to_path_buf(), to.to_path_buf());
+        self.placed.insert(to.to_path_buf());
+    }
+
+    /// Whether `path` is, or is inside, an entry this job put there.
+    pub fn placed_here(&self, path: &Path) -> bool {
+        path.ancestors().any(|path| self.placed.contains(path))
     }
 
     /// Whether the job resumed after a crash.
