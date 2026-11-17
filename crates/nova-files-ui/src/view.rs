@@ -41,6 +41,7 @@ mod sidebar;
 mod start;
 
 pub use crate::places::place_icon;
+pub use row::{RowIcon, entry_kind};
 
 use gpui::{
     App, Context, Div, FocusHandle, Focusable as _, InteractiveElement as _, IntoElement,

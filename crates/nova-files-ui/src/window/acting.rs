@@ -48,7 +48,7 @@ impl MainWindow {
                 return Some(total);
             }
             let row = usize::try_from(id.0).ok()?;
-            let size = self.details.get(&row)?.size?;
+            let size = self.details.get(&row)?.details.size?;
             Some(total.saturating_add(size))
         })
     }
