@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::PathBuf;
 
 use super::*;
@@ -98,7 +99,7 @@ fn a_folder_a_move_emptied_goes_unless_something_keeps_it() {
     let mut touched = BTreeSet::new();
     let empty = folder.path().join("empty");
     fs::create_dir(&empty).unwrap();
-    remove_if_empty(&mut running, &empty, &mut touched).unwrap();
+    remove_if_empty(&mut running, &mut Folders::default(), &empty, &mut touched).unwrap();
     assert!(!empty.exists());
     assert_eq!(touched, BTreeSet::from([folder.path().to_path_buf()]));
 
@@ -107,14 +108,22 @@ fn a_folder_a_move_emptied_goes_unless_something_keeps_it() {
     folder.file("full/f", "f");
     let gone = folder.path().join("gone");
     let mut nothing = BTreeSet::new();
-    remove_if_empty(&mut running, &full, &mut nothing).unwrap();
-    remove_if_empty(&mut running, &gone, &mut nothing).unwrap();
+    remove_if_empty(&mut running, &mut Folders::default(), &full, &mut nothing).unwrap();
+    remove_if_empty(&mut running, &mut Folders::default(), &gone, &mut nothing).unwrap();
     assert!(full.exists());
     assert!(nothing.is_empty());
 
+    // A folder that became a file since isn't the one emptied.
     let file = folder.file("file", "f");
+    remove_if_empty(&mut running, &mut Folders::default(), &file, &mut nothing).unwrap();
+    assert!(file.exists());
     assert!(matches!(
-        remove_if_empty(&mut running, &file, &mut nothing),
+        remove_if_empty(
+            &mut running,
+            &mut Folders::default(),
+            &folder.path().join("in\0valid"),
+            &mut nothing
+        ),
         Err(Stop::Failed {
             reason: Failure::Other,
             ..
@@ -122,6 +131,6 @@ fn a_folder_a_move_emptied_goes_unless_something_keeps_it() {
     ));
     fs::create_dir(&empty).unwrap();
     running.shared.control.cancel();
-    assert!(remove_if_empty(&mut running, &empty, &mut nothing).is_err());
+    assert!(remove_if_empty(&mut running, &mut Folders::default(), &empty, &mut nothing).is_err());
     assert!(empty.exists(), "a cancel leaves it");
 }

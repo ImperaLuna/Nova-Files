@@ -410,3 +410,32 @@ fn a_cut_from_another_file_manager_pastes_as_a_move() {
     assert_eq!(fs::read(bench.at("into/a b.txt")).unwrap(), b"a");
     assert_eq!(fs::read(bench.at("into/folder/inside")).unwrap(), b"kept");
 }
+
+#[test]
+fn a_folder_swapped_for_a_link_while_the_move_waits_moves_nothing_from_outside() {
+    let bench = Bench::new("move-swap");
+    let source = bench.at("tree");
+    fs::create_dir_all(source.join("sub")).unwrap();
+    fs::write(source.join("sub/f"), "planned").unwrap();
+    let outside = bench.at("outside");
+    fs::create_dir(&outside).unwrap();
+    fs::write(outside.join("f"), "outside").unwrap();
+    let into = bench.at("into");
+    fs::create_dir_all(into.join("tree/sub")).unwrap();
+    let client = bench.client();
+
+    let job = client.start(moving(vec![source.clone()], &into));
+    let conflict = held(&client, job);
+    // While the job waits, another program swaps `sub` for a link.
+    fs::remove_dir_all(source.join("sub")).unwrap();
+    symlink(&outside, source.join("sub")).unwrap();
+    answer(&client, job, &conflict, Answer::Merge, Scope::AllOfThisKind);
+    let changed = answer_next(&client, job, Answer::Skip);
+    let (outcome, _) = client.ended(job);
+
+    assert_eq!(changed, ConflictKind::SourceChanged);
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(fs::read_to_string(outside.join("f")).unwrap(), "outside");
+    assert!(!into.join("tree/sub/f").exists());
+    assert!(source.join("sub").is_symlink());
+}

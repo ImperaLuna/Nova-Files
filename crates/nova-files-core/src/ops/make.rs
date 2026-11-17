@@ -2,21 +2,26 @@
 //! files through part files, links as links); a move renames it there,
 //! and only across drives, where no rename reaches, copies it and then
 //! removes the source, once the copy is whole and only if the source is
-//! still what was copied. A file it replaces goes to the trash once the
-//! new one has its name (see [`set_aside`]), so an undo can bring it back.
+//! still what was copied. The source is reached through the folders
+//! planned (see `folders`), so a folder swapped for a link since leads
+//! nowhere else. A file it replaces goes to the trash once the new one
+//! has its name (see [`set_aside`]), so an undo can bring it back.
 
+use std::ffi::OsString;
 use std::fs::{self, DirBuilder, Metadata};
 use std::io;
+use std::os::unix::ffi::OsStringExt as _;
 use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _, symlink};
 use std::path::{Path, PathBuf};
 
 use nova_files_api::Failure;
-use rustix::fs::{Access, access};
+use rustix::fs::{Access, AtFlags, accessat, readlinkat, unlinkat};
 use rustix::io::Errno;
 
 use super::copy_file::{FileCopy, copy_file, version};
+use super::folders::{At, Unreached};
 use super::journal::{BACKUP_PREFIX, PART_PREFIX, Record};
-use super::place::{rename_no_replace, replace, replace_through, same_entry};
+use super::place::{rename_no_replace, rename_no_replace_at, replace, replace_through, same_entry};
 use super::plan::{Item, Kind};
 use super::running::Running;
 use super::stop::Stop;
@@ -68,6 +73,12 @@ pub struct Making<'a> {
 /// [`Stop`] when cancelled, or at the path a step failed at.
 pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
     let Making { item, target, .. } = *making;
+    // Through the folders planned, never one swapped for a link since.
+    let source = running
+        .folders
+        .source(&item.from)
+        .map_err(|why| unreached(&item.from, why))?;
+    let from = source.at();
     let names = running.names;
     let hidden = |prefix: &str| target.with_file_name(format!("{prefix}{names}-{}", making.index));
     let (part, backup) = (hidden(PART_PREFIX), hidden(BACKUP_PREFIX));
@@ -79,9 +90,9 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
         // file it replaced until that is removed, and a crash between
         // would leave it there unrecorded.
         let renamed = if making.replacing {
-            replace_through(&item.from, target, &backup).map(Some)
+            replace_through(from, target, &backup).map(Some)
         } else {
-            rename_no_replace(&item.from, target).map(|()| None)
+            rename_no_replace_at(from, target).map(|()| None)
         };
         match renamed {
             Ok(left) => {
@@ -93,13 +104,13 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
                 });
             }
             Err(error) if crosses_drives(&error) => {}
-            Err(error) => return Err(failed_rename(item, target, &error)),
+            Err(error) => return Err(failed_rename(item, from, target, &error)),
         }
     }
     let moving = making.how.moves() && item.kind != Kind::Folder;
     // What a move copies must be removable after, or it would stay twice.
     let before = if moving {
-        Some(removable(&item.from)?)
+        Some(removable(from, &item.from)?)
     } else {
         None
     };
@@ -116,16 +127,16 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
             }
         }
         Kind::File { size } => {
-            let copied = copy_whole(running, making, &part, &backup)?;
+            let copied = copy_whole(running, making, from, &part, &backup)?;
             left = size.saturating_sub(copied);
         }
-        Kind::Link => link(running, making, &part, &backup)?,
+        Kind::Link => link(running, making, from, &part, &backup)?,
         Kind::Special => return Err(Stop::because(&item.from, Failure::Unsupported)),
     }
     if let Some(before) = before {
         // The copy is whole and has its name: only now may the source go.
         let copy = target.symlink_metadata().ok();
-        if let Err(stop) = remove_source(running, making, &before, copy.as_ref()) {
+        if let Err(stop) = remove_source(running, making, from, &before, copy.as_ref()) {
             running.reporter.take_back(size(item).saturating_sub(left));
             return Err(stop);
         }
@@ -139,11 +150,20 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
     })
 }
 
-/// Copies the file `making` names through the part file `part`, and
-/// returns how many bytes it copied.
+/// Why `path` couldn't be reached.
+fn unreached(path: &Path, unreached: Unreached) -> Stop {
+    match unreached {
+        Unreached::Changed => Stop::because(path, Failure::SourceChanged),
+        Unreached::Failed(errno) => Stop::at(path, &errno.into()),
+    }
+}
+
+/// Copies the file `making` names, at `from`, through the part file
+/// `part`, and returns how many bytes it copied.
 fn copy_whole(
     running: &mut Running,
     making: &Making<'_>,
+    from: At<'_>,
     part: &Path,
     backup: &Path,
 ) -> Result<u64, Stop> {
@@ -155,6 +175,7 @@ fn copy_whole(
     let mut left = None;
     let reporter = &mut running.reporter;
     let paths = FileCopy {
+        source: from,
         from: &making.item.from,
         to: making.target,
         part,
@@ -180,16 +201,19 @@ fn copy_whole(
     Ok(copied)
 }
 
-/// Makes the link `making` names, pointing where its source points, by
-/// way of `part` when it replaces.
+/// Makes the link `making` names, pointing where its source at `from`
+/// points, by way of `part` when it replaces.
 fn link(
     running: &mut Running,
     making: &Making<'_>,
+    from: At<'_>,
     part: &Path,
     backup: &Path,
 ) -> Result<(), Stop> {
-    let (from, target) = (&making.item.from, making.target);
-    let points_to = fs::read_link(from).map_err(|error| Stop::at(from, &error))?;
+    let target = making.target;
+    let points_to = readlinkat(from.folder, from.name, Vec::new())
+        .map(|points_to| PathBuf::from(OsString::from_vec(points_to.into_bytes())))
+        .map_err(|errno| Stop::at(&making.item.from, &errno.into()))?;
     if making.replacing {
         running.record(Record::Part(part));
         running.record(Record::Backup(backup, target));
@@ -208,19 +232,21 @@ fn link(
     Ok(())
 }
 
-/// Looks at `from`, a source a move is about to copy, and checks its
-/// folder lets it be removed after.
-fn removable(from: &Path) -> Result<Metadata, Stop> {
-    let metadata = from
-        .symlink_metadata()
-        .map_err(|error| Stop::at(from, &error))?;
-    if let Some(folder) = from.parent() {
-        access(folder, Access::WRITE_OK).map_err(|errno| Stop::at(from, &errno.into()))?;
-    }
+/// Looks at `from`, the source at `path` a move is about to copy, and
+/// checks its folder lets it be removed after.
+fn removable(from: At<'_>, path: &Path) -> Result<Metadata, Stop> {
+    let metadata = from.look().map_err(|error| Stop::at(path, &error))?;
+    accessat(
+        from.folder,
+        from.folder_path(),
+        Access::WRITE_OK,
+        AtFlags::empty(),
+    )
+    .map_err(|errno| Stop::at(path, &errno.into()))?;
     Ok(metadata)
 }
 
-/// Removes the source of the item `making` copied whole to its target,
+/// Removes the source, at `from`, of the item `making` copied whole to its target,
 /// unless it changed since `before` was looked at: the copy may then hold
 /// an older version, and the source is the only one of the newer. The
 /// copy's name is on the disk first, so a power cut between the two
@@ -231,6 +257,7 @@ fn removable(from: &Path) -> Result<Metadata, Stop> {
 fn remove_source(
     running: &Running,
     making: &Making<'_>,
+    from: At<'_>,
     before: &Metadata,
     copy: Option<&Metadata>,
 ) -> Result<(), Stop> {
@@ -242,14 +269,12 @@ fn remove_source(
         .map_err(Stop::from)
         .and_then(|()| {
             sync_folder_of(target)?;
-            let now = item
-                .from
-                .symlink_metadata()
-                .map_err(|error| Stop::at(&item.from, &error))?;
+            let now = from.look().map_err(|error| Stop::at(&item.from, &error))?;
             if !unchanged(before, &now) {
                 return Err(Stop::because(&item.from, Failure::SourceChanged));
             }
-            fs::remove_file(&item.from).map_err(|error| Stop::at(&item.from, &error))
+            unlinkat(from.folder, from.name, AtFlags::empty())
+                .map_err(|errno| Stop::at(&item.from, &errno.into()))
         });
     let ours = target
         .symlink_metadata()
@@ -322,10 +347,10 @@ fn crosses_drives(error: &io::Error) -> bool {
     error.raw_os_error() == Some(Errno::XDEV.raw_os_error())
 }
 
-/// Where a move's rename of `item` to `target` failed with `error`: at
-/// the source when it is gone, else at the target.
-fn failed_rename(item: &Item, target: &Path, error: &io::Error) -> Stop {
-    let gone = error.kind() == io::ErrorKind::NotFound && item.from.symlink_metadata().is_err();
+/// Where a move's rename of `item`, at `from`, to `target` failed with
+/// `error`: at the source when it is gone, else at the target.
+fn failed_rename(item: &Item, from: At<'_>, target: &Path, error: &io::Error) -> Stop {
+    let gone = error.kind() == io::ErrorKind::NotFound && from.look().is_err();
     Stop::at(if gone { &item.from } else { target }, error)
 }
 

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use rustix::fs::{CWD, FileType, Mode, mknodat};
 
 use super::*;
+use crate::ops::folders::Folders;
 use crate::ops::plan::Entry;
 use crate::ops::test_folder::TestFolder;
 
@@ -120,8 +121,9 @@ fn a_source_that_cant_go_takes_its_copy_along_unless_the_copy_replaced_a_file() 
         };
 
         let copy = target.symlink_metadata().ok();
+        let at = Folders::default().source(&source).unwrap();
 
-        let removed = remove_source(&running, &making, &before, copy.as_ref());
+        let removed = remove_source(&running, &making, at.at(), &before, copy.as_ref());
 
         assert!(matches!(removed, Err(Stop::Cancelled)));
         assert!(source.exists());
@@ -155,9 +157,10 @@ fn a_target_saved_over_since_the_copy_stays() {
         how: How::Move,
     };
 
-    assert!(remove_source(&running, &making, &before, Some(&copy)).is_err());
+    let at = Folders::default().source(&item.from).unwrap();
+    assert!(remove_source(&running, &making, at.at(), &before, Some(&copy)).is_err());
     assert_eq!(fs::read_to_string(&target).unwrap(), "newer");
-    assert!(remove_source(&running, &making, &before, None).is_err());
+    assert!(remove_source(&running, &making, at.at(), &before, None).is_err());
     assert!(target.exists());
 }
 

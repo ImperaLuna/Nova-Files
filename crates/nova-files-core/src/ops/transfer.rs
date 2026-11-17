@@ -16,14 +16,21 @@
 //! under a new name takes its contents there. Nothing is replaced unless
 //! the answer says so, and then only through a backup or an exchange.
 //! What was made before a failure or a cancel stays, whole.
+//!
+//! Every source is reached through the folders planned (see `folders`):
+//! a folder swapped for a link or a look-alike while the job runs, say
+//! while it waits on a question, is refused as changed, so the job never
+//! reads or moves anything from outside the trees the user chose.
 
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, HashSet};
-use std::fs::{self, File, Metadata};
+use std::fs::{File, Metadata};
 use std::io;
+use std::mem;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::{Answer, Conflict, ConflictKind, Failure, Outcome};
+use rustix::fs::{AtFlags, Mode, OFlags, openat, unlinkat};
 
 use super::Ended;
 use super::ahead::Ahead;
@@ -31,6 +38,7 @@ use super::attrs::{copy_mode_and_times, copy_xattrs};
 use super::clash::{clash, conflict_for};
 use super::control::{Cancelled, Control};
 use super::failure::failure;
+use super::folders::{Folders, Unreached};
 use super::journal::{Record, word};
 use super::keep_both::{Naming, free_path};
 use super::make::{How, Made, Making, make, size};
@@ -135,7 +143,7 @@ impl Done {
                 if made.carried {
                     self.detours.settled = Some(item.to.clone());
                 } else if folder {
-                    let times = item.from.symlink_metadata();
+                    let times = look_at_source(&mut running.folders, &item.from);
                     self.folders.push((item.from.clone(), target, times));
                     if moving {
                         self.emptied.push(item.from.clone());
@@ -197,6 +205,7 @@ pub fn transfer_to(
         Ok(plan) => plan,
         Err(stop) => return (Err(stop), touched),
     };
+    running.folders = Folders::of(&plan);
     let items = u64::try_from(plan.items.len() + renamed).unwrap_or(u64::MAX);
     running.reporter.planned(plan.bytes, items);
     for _ in 0..renamed {
@@ -208,6 +217,7 @@ pub fn transfer_to(
         ..Done::default()
     };
     let mut result = place_each(running, &plan, &rest, &mut done);
+    let mut sources = mem::take(&mut running.folders);
     let Done {
         folders,
         emptied,
@@ -220,11 +230,11 @@ pub fn transfer_to(
             result = Err(cancelled.into());
             break;
         }
-        finish_folder(&from, &to, times);
+        finish_folder(&mut sources, &from, &to, times);
     }
     for folder in emptied.iter().rev() {
         // A cancel leaves the user's folders as they are.
-        if let Err(stop) = remove_if_empty(running, folder, &mut touched) {
+        if let Err(stop) = remove_if_empty(running, &mut sources, folder, &mut touched) {
             result = result.and(Err(stop));
             break;
         }
@@ -331,27 +341,37 @@ fn rename_whole(
     Ok(rest)
 }
 
-/// Removes the source folder `folder` a move emptied. Anything still in
-/// it (skipped, or added since) keeps it; any other failure is asked
-/// about, as a file's would be.
+/// Removes the source folder `folder` a move emptied, reached through
+/// `sources`. Anything still in it (skipped, or added since) keeps it, as
+/// does a change on the way to it; any other failure is asked about, as
+/// a file's would be.
 ///
 /// # Errors
 /// [`Stop`] when cancelled, or the failure can't be asked about.
 fn remove_if_empty(
     running: &mut Running,
+    sources: &mut Folders,
     folder: &Path,
     touched: &mut BTreeSet<PathBuf>,
 ) -> Result<(), Stop> {
-    let removed = running.retry_or_skip(folder, || match fs::remove_dir(folder) {
-        Ok(()) => Ok(true),
-        Err(error) => {
-            let reason = failure(&error);
-            if matches!(reason, Failure::NameTaken | Failure::NotFound) {
-                log::info!("{} stays: {error}", folder.display());
-                return Ok(false);
+    let removed = running.retry_or_skip(folder, || {
+        let removed = sources.planned_folder(folder).and_then(|source| {
+            let at = source.at();
+            Ok(unlinkat(at.folder, at.name, AtFlags::REMOVEDIR)?)
+        });
+        match removed {
+            Ok(()) => return Ok(true),
+            Err(Unreached::Changed) => {}
+            Err(Unreached::Failed(errno)) => {
+                let reason = failure(&errno.into());
+                if !matches!(reason, Failure::NameTaken | Failure::NotFound) {
+                    return Err(reason);
+                }
             }
-            Err(reason)
         }
+        let why = removed.err().map(|why| why.to_string()).unwrap_or_default();
+        log::info!("{} stays: {why}", folder.display());
+        Ok(false)
     })?;
     if removed == Some(true)
         && let Some(parent) = folder.parent()
@@ -532,11 +552,25 @@ const fn naming(kind: Kind) -> Naming {
     }
 }
 
-/// Gives the folder made at `to` the attributes of its source `from`, and
-/// the mode and times `times` read from it when the folder was made. The
-/// copy is whole without them, so a failure is only logged.
-fn finish_folder(from: &Path, to: &Path, times: io::Result<Metadata>) {
-    let finished = File::open(from).and_then(|source| {
+/// What the source `path` is now, reached through `sources`.
+fn look_at_source(sources: &mut Folders, path: &Path) -> io::Result<Metadata> {
+    sources.source(path)?.at().look()
+}
+
+/// Gives the folder made at `to` the attributes of its source `from`,
+/// reached through `sources`, and the mode and times `times` read from
+/// it when the folder was made. The copy is whole without them, so a
+/// failure is only logged.
+fn finish_folder(sources: &mut Folders, from: &Path, to: &Path, times: io::Result<Metadata>) {
+    // The folder planned, opened again to be read.
+    let flags = OFlags::RDONLY
+        .union(OFlags::DIRECTORY)
+        .union(OFlags::CLOEXEC);
+    let opened = sources
+        .open(from)
+        .and_then(|folder| Ok(openat(folder, ".", flags, Mode::empty())?));
+    let finished = opened.map_err(io::Error::from).and_then(|source| {
+        let source = File::from(source);
         let target = File::open(to)?;
         copy_xattrs(&source, &target)?;
         copy_mode_and_times(&times?, &target)
