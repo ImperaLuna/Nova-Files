@@ -226,12 +226,7 @@ impl MainWindow {
                 div()
                     .flex_none()
                     .when(hidden, |slot| slot.opacity(opacity::HIDDEN))
-                    .child(entry_icon(
-                        &entry.name,
-                        entry.kind,
-                        self.thumbnail(index),
-                        colors,
-                    )),
+                    .child(entry_icon(self.row_icon(index, entry.kind), colors)),
             )
             .child(self.rename_field(index).map_or_else(
                 || {

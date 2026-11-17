@@ -236,8 +236,8 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
                 // wait, the core may still start the app, and it would
                 // open twice.
                 match ask_core(&self.connector, command).await? {
-                    Event::FileOpened => Ok(()),
-                    Event::FileNotOpened => open_file(bus, file, token).await,
+                    Event::FileOpened { .. } => Ok(()),
+                    Event::FileNotOpened { .. } => open_file(bus, file, token).await,
                     _ => Err(failed("the core gave an unexpected answer")),
                 }
             }

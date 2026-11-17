@@ -1,4 +1,5 @@
-//! Trash as a place: Was in, Restore, Delete for good and Empty Trash,
+//! Trash as a place: Was in, Restore, Delete (or Shift+Delete) for good
+//! and Empty Trash,
 //! on a real core with a home of its own.
 
 use super::*;
@@ -119,6 +120,17 @@ async fn empty_trash_asks_first(cx: &mut TestAppContext) {
 
 #[gpui::test]
 async fn delete_in_the_trash_asks_then_deletes_for_good(cx: &mut TestAppContext) {
+    delete_in_the_trash(cx, "delete").await;
+}
+
+#[gpui::test]
+async fn shift_delete_in_the_trash_does_the_same(cx: &mut TestAppContext) {
+    delete_in_the_trash(cx, "shift-delete").await;
+}
+
+/// Trashes a file, opens the trash, and deletes it there for good with
+/// `key`, which asks first.
+async fn delete_in_the_trash(cx: &mut TestAppContext, key: &str) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("trash-delete");
     let home = TempFolder::tree("trash-delete-home");
@@ -133,7 +145,7 @@ async fn delete_in_the_trash_asks_then_deletes_for_good(cx: &mut TestAppContext)
     )
     .await;
     click(cx, "name-0");
-    cx.simulate_keystrokes("delete");
+    cx.simulate_keystrokes(key);
     cx.run_until_parked();
     assert_eq!(
         view.read_with(cx, |view, _| view

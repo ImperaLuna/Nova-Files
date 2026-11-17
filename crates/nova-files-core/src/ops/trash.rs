@@ -108,6 +108,41 @@ pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>
     )
 }
 
+/// Moves `left`, a file a replace set aside under a hidden name as the
+/// job's `index`th item, to its trash as `shown`, the path it had, and
+/// returns where in the trash it went. `None` when it can't go there (a
+/// drive without a trash, say) or was gone already.
+pub fn trash_set_aside(
+    running: &mut Running,
+    (index, left): (usize, &Path),
+    shown: &Path,
+) -> Option<PathBuf> {
+    let home_trash = running.home_trash.clone();
+    let mut known = std::mem::take(&mut running.replaced_trashes);
+    let at = (index, left, shown.file_name());
+    let sent = send(running, at, (home_trash.as_deref(), &mut known));
+    running.replaced_trashes = known;
+    match sent {
+        Ok(Some((_, item, _))) => Some(item),
+        Ok(None) => None,
+        Err(Refused::NoTrash) => {
+            log::info!(
+                "{} has no trash to set {} aside in",
+                shown.display(),
+                left.display()
+            );
+            None
+        }
+        Err(Refused::Failed(reason)) => {
+            log::warn!(
+                "can't set {} aside in the trash: {reason:?}",
+                left.display()
+            );
+            None
+        }
+    }
+}
+
 /// Checks every path before anything goes, so a bad one fails the job
 /// with nothing done.
 ///
@@ -138,8 +173,8 @@ fn trash_one(
 ) -> Result<Option<Trashed>, Stop> {
     loop {
         running.shared.control.checkpoint()?;
-        let refused = match send(running, (index, path), (home_trash, known)) {
-            Ok(Some((trash, folder))) => {
+        let refused = match send(running, (index, path, None), (home_trash, known)) {
+            Ok(Some((trash, _, folder))) => {
                 touched.extend(path.parent().map(Path::to_path_buf));
                 touched.insert(trash.files());
                 touched.insert(trash.info());
@@ -164,6 +199,7 @@ fn trash_one(
             target: path.to_path_buf(),
             // Numbered when asked.
             number: 0,
+            more: 0,
         };
         if running.skips(conflict)? {
             return Ok(None);
@@ -172,8 +208,9 @@ fn trash_one(
 }
 
 /// What [`send`] did: `None` when the entry was gone already, else its
-/// trash and, for a folder, what its size is noted under.
-type Sent = Option<(TrashFolder, Option<Trashed>)>;
+/// trash, where in it the entry went, and, for a folder, what its size
+/// is noted under.
+type Sent = Option<(TrashFolder, PathBuf, Option<Trashed>)>;
 
 /// Moves `path`, the job's `index`th, into its trash under a free name,
 /// its info file first.
@@ -182,24 +219,28 @@ type Sent = Option<(TrashFolder, Option<Trashed>)>;
 /// [`Refused`] when it stays where it is.
 fn send(
     running: &mut Running,
-    (index, path): (usize, &Path),
+    (index, path, shown): (usize, &Path, Option<&OsStr>),
     (home_trash, known): (Option<&Path>, &mut Known),
 ) -> Result<Sent, Refused> {
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
         return Err(Refused::Failed(Failure::InvalidName));
     };
+    let shown = shown.unwrap_or(name);
     // Without links, so the trash is the one the entry is really on and
     // the info file says where it really was.
     let found = parent.canonicalize().and_then(|parent| {
-        let original = parent.join(name);
-        let there = original.symlink_metadata()?;
-        Ok((parent, original, there.is_dir(), Entry::of(&there)))
+        let at = parent.join(name);
+        let there = at.symlink_metadata()?;
+        Ok((parent, at, there.is_dir(), Entry::of(&there)))
     });
-    let (parent, original, is_folder, item) = match found {
+    let (parent, at, is_folder, item) = match found {
         Ok(found) => found,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(Refused::Failed(failure(&error))),
     };
+    // Where it was as the user knows it, which a file set aside under a
+    // hidden name is not.
+    let original = parent.join(shown);
     let trash = if let Some(trash) = known.get(&parent) {
         trash.clone()
     } else {
@@ -223,19 +264,20 @@ fn send(
         remove(&part);
         refused(&error)
     })?;
-    let moved = take_names(running, (&part, entry), &trash, (&original, name, item));
+    let moved = take_names(running, (&part, entry), &trash, (&at, shown, item));
     remove(&part);
     match moved {
         Ok(stored) => {
-            running.record(Record::Trashed(path, &trash.files().join(&stored)));
+            let item = trash.files().join(&stored);
+            running.record(Record::Trashed(path, &item));
             let folder = is_folder.then(|| Trashed {
                 trash: trash.root.clone(),
                 info: info_path(&trash, &stored),
                 stored,
             });
-            Ok(Some((trash, folder)))
+            Ok(Some((trash, item, folder)))
         }
-        Err(error) if gone_meanwhile(&error, &original) => Ok(None),
+        Err(error) if gone_meanwhile(&error, &at) => Ok(None),
         Err(error) => Err(refused(&error)),
     }
 }
@@ -247,7 +289,7 @@ fn gone_meanwhile(error: &io::Error, original: &Path) -> bool {
 }
 
 /// Puts the info file written as `part`, the entry `entry`, and then
-/// `original`, named `name` and the entry `item`, into `trash`, each
+/// the entry `item` at `original`, stored as `name`, into `trash`, each
 /// under the first name free for both, and returns that name.
 ///
 /// # Errors

@@ -14,6 +14,12 @@ use gpui::{AssetSource, Result, SharedString};
 pub enum Icon {
     Folder,
     File,
+    FileText,
+    FilePicture,
+    FileVideo,
+    FileAudio,
+    FileArchive,
+    FileProgram,
     Home,
     Desktop,
     Documents,
@@ -49,9 +55,15 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 34] = [
+    const ALL: [Self; 40] = [
         Self::Folder,
         Self::File,
+        Self::FileText,
+        Self::FilePicture,
+        Self::FileVideo,
+        Self::FileAudio,
+        Self::FileArchive,
+        Self::FileProgram,
         Self::Home,
         Self::Desktop,
         Self::Documents,
@@ -91,6 +103,12 @@ impl Icon {
         match self {
             Self::Folder => "icons/folder.svg",
             Self::File => "icons/file.svg",
+            Self::FileText => "icons/file-text.svg",
+            Self::FilePicture => "icons/file-picture.svg",
+            Self::FileVideo => "icons/file-video.svg",
+            Self::FileAudio => "icons/file-audio.svg",
+            Self::FileArchive => "icons/file-archive.svg",
+            Self::FileProgram => "icons/file-program.svg",
             Self::Home => "icons/home.svg",
             Self::Desktop => "icons/desktop.svg",
             Self::Documents => "icons/documents.svg",
@@ -130,6 +148,12 @@ impl Icon {
         let source = match self {
             Self::Folder => svg::FOLDER,
             Self::File => svg::FILE,
+            Self::FileText => svg::FILE_TEXT,
+            Self::FilePicture => svg::FILE_PICTURE,
+            Self::FileVideo => svg::FILE_VIDEO,
+            Self::FileAudio => svg::FILE_AUDIO,
+            Self::FileArchive => svg::FILE_ARCHIVE,
+            Self::FileProgram => svg::FILE_PROGRAM,
             Self::Home => svg::HOME,
             Self::Desktop => svg::DESKTOP,
             Self::Documents => svg::DOCUMENTS,

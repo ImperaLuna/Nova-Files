@@ -4,7 +4,8 @@
 //! removes the source, once the copy is whole and only if the source is
 //! still what was copied. The source is reached through the folders
 //! planned (see `folders`), so a folder swapped for a link since leads
-//! nowhere else.
+//! nowhere else. A file it replaces goes to the trash once the new one
+//! has its name (see [`set_aside`]), so an undo can bring it back.
 
 use std::ffi::OsString;
 use std::fs::{self, DirBuilder, Metadata};
@@ -25,6 +26,7 @@ use super::plan::{Item, Kind};
 use super::running::Running;
 use super::stop::Stop;
 use super::sync::sync_folder;
+use super::trash::trash_set_aside;
 
 /// A folder being filled is the user's alone; it gets its source's mode
 /// once full.
@@ -88,12 +90,13 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
         // file it replaced until that is removed, and a crash between
         // would leave it there unrecorded.
         let renamed = if making.replacing {
-            replace_through(from, target, &backup)
+            replace_through(from, target, &backup).map(Some)
         } else {
-            rename_no_replace_at(from, target)
+            rename_no_replace_at(from, target).map(|()| None)
         };
         match renamed {
-            Ok(()) => {
+            Ok(left) => {
+                set_aside(running, making, left.as_deref());
                 running.record(Record::Moved(&item.from, target));
                 return Ok(Made {
                     left: size(item),
@@ -169,6 +172,7 @@ fn copy_whole(
         running.record(Record::Backup(backup, making.target));
     }
     let mut copied = 0;
+    let mut left = None;
     let reporter = &mut running.reporter;
     let paths = FileCopy {
         source: from,
@@ -183,13 +187,17 @@ fn copy_whole(
             copied += bytes;
             reporter.bytes(bytes);
         },
-        |part, to| put(part, to, backup, making.replacing),
+        |part, to| {
+            left = put(part, to, backup, making.replacing)?;
+            Ok(())
+        },
     );
     if let Err(stop) = copying {
         // The item is skipped or tried again from the start.
         running.reporter.take_back(copied);
         return Err(stop);
     }
+    set_aside(running, making, left.as_deref());
     Ok(copied)
 }
 
@@ -212,11 +220,14 @@ fn link(
     }
     let made = if making.replacing { part } else { target };
     symlink(points_to, made).map_err(|error| Stop::at(target, &error))?;
-    if making.replacing
-        && let Err(error) = put(part, target, backup, making.replacing)
-    {
-        fs::remove_file(part).ok();
-        return Err(Stop::at(target, &error));
+    if making.replacing {
+        match put(part, target, backup, making.replacing) {
+            Ok(left) => set_aside(running, making, left.as_deref()),
+            Err(error) => {
+                fs::remove_file(part).ok();
+                return Err(Stop::at(target, &error));
+            }
+        }
     }
     Ok(())
 }
@@ -302,12 +313,32 @@ pub const fn size(item: &Item) -> u64 {
 }
 
 /// Gives the whole file at `from` the name `to`, replacing what has it
-/// only when `replacing`.
-fn put(from: &Path, to: &Path, backup: &Path, replacing: bool) -> io::Result<()> {
+/// only when `replacing`, and returns where the replaced file was left.
+fn put(from: &Path, to: &Path, backup: &Path, replacing: bool) -> io::Result<Option<PathBuf>> {
     if replacing {
-        replace(from, to, backup)
+        replace(from, to, backup).map(Some)
     } else {
-        rename_no_replace(from, to)
+        rename_no_replace(from, to).map(|()| None)
+    }
+}
+
+/// Sends the file a replace `left` under a hidden name to the trash, as
+/// the path `making` gave it, and keeps where it went for an undo, unless
+/// this job put it there itself: an undo leaves that one in the trash.
+/// Where it can't go to the trash it is removed, as it would have been
+/// without one: the user chose to replace it.
+fn set_aside(running: &mut Running, making: &Making<'_>, left: Option<&Path>) {
+    let Some(left) = left else {
+        return;
+    };
+    let target = making.target;
+    let ours = running.placed_here(target);
+    if let Some(item) = trash_set_aside(running, (making.index, left), target) {
+        if !ours {
+            running.replaced.push((target.to_path_buf(), item));
+        }
+    } else if let Err(error) = fs::remove_file(left) {
+        log::warn!("can't remove the replaced {}: {error}", left.display());
     }
 }
 

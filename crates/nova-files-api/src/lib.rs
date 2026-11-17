@@ -14,7 +14,8 @@
 //! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
 //! a paste is a job. A [`Size`] is what a scan of files and folders
 //! counted. A [`DiskSpace`] is how full a drive is. A [`RecentFolder`] is
-//! one a person opened lately, for the Start page.
+//! one a person opened lately, for the Start page. A [`FileIcon`] is how an
+//! entry's icon is drawn.
 
 #![forbid(unsafe_code)]
 
@@ -24,6 +25,7 @@ mod clipboard;
 mod connection;
 mod disk_space;
 mod drive;
+mod file_icon;
 mod file_type;
 mod folder;
 mod job;
@@ -53,6 +55,7 @@ pub use disk_space::{DiskSpace, MAX_DISK_SPACE_PATHS, PathSpace};
 pub use drive::{
     Drive, DriveAction, DriveFailure, DriveId, DriveList, DriveService, Volume, VolumeId,
 };
+pub use file_icon::{FILE_ICON_PIXELS, FileIcon, IconFormat, IconKind, ThemeIcon};
 pub use file_type::{FileTypes, glob_matches};
 pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Order, Place, PlaceKind, SortKey,
@@ -60,9 +63,10 @@ pub use folder::{
 };
 pub use job::{
     Answer, Conflict, ConflictKind, Failure, JobId, JobTag, Operation, Outcome, Progress, Scope,
+    Tally,
 };
 pub use message::{ClientId, Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
-pub use open_with::{App, OpenWith, OpenWithAnswer, OpenWithId};
+pub use open_with::{App, NotOpened, OpenWith, OpenWithAnswer, OpenWithId};
 pub use pick::{
     FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,
 };

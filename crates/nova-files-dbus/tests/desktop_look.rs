@@ -1,6 +1,6 @@
 //! Against a private D-Bus daemon with a stand-in settings portal: the
-//! running instance reads the desktop's light or dark and accent at once,
-//! and passes each later change on to the core.
+//! running instance reads the desktop's light or dark, accent and icon
+//! theme at once, and passes each later change on to the core.
 
 #![expect(
     clippy::unwrap_used,
@@ -12,8 +12,8 @@ use std::sync::mpsc::Receiver;
 
 use nova_files_api::{Color, Command, Connector, CoreMessage, DesktopLook, Mode};
 use nova_files_dbus::{
-    ACCENT_COLOR, APPEARANCE_NAMESPACE, COLOR_SCHEME, PORTAL_NAME, PORTAL_PATH, SETTINGS_INTERFACE,
-    Service, Started,
+    ACCENT_COLOR, APPEARANCE_NAMESPACE, COLOR_SCHEME, GNOME_ICON_THEME, GNOME_INTERFACE,
+    KDE_ICON_THEME, KDE_ICONS, PORTAL_NAME, PORTAL_PATH, SETTINGS_INTERFACE, Service, Started,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder;
@@ -31,6 +31,9 @@ const STARTING_SCHEME: u32 = PREFERS_LIGHT;
 /// Orange, as the portal sends it.
 const ACCENT: (f64, f64, f64) = (1.0, 0.5, 0.0);
 const ACCENT_RGB: Color = Color(0xFF_80_00);
+/// The icon themes the portal names: GNOME's and KDE's.
+const GNOME_THEME: &str = "Papirus-Dark";
+const KDE_THEME: &str = "breeze";
 
 /// The portal's settings, as a desktop that prefers light with an orange
 /// accent would answer.
@@ -44,6 +47,8 @@ impl Portal {
         let value = match (namespace, key) {
             (APPEARANCE_NAMESPACE, COLOR_SCHEME) => Value::U32(self.scheme),
             (APPEARANCE_NAMESPACE, ACCENT_COLOR) => Value::Structure(Structure::from(ACCENT)),
+            (GNOME_INTERFACE, GNOME_ICON_THEME) => Value::from(GNOME_THEME),
+            (KDE_ICONS, KDE_ICON_THEME) => Value::from(KDE_THEME),
             _ => return Err(fdo::Error::Failed("not found".to_owned())),
         };
         Ok(value.try_to_owned().unwrap())
@@ -79,6 +84,47 @@ fn a_version_1_portal_is_read_too() {
         accent: None,
     };
     assert_eq!(next_look(&core), dark);
+}
+
+/// A portal with both methods: `ReadOne` holds the scheme but no accent,
+/// and `Read` would give an accent. A key `ReadOne` lacks stays unset.
+struct BothMethods;
+
+#[zbus::interface(name = "org.freedesktop.portal.Settings")]
+impl BothMethods {
+    #[expect(clippy::unused_self, reason = "the interface needs a receiver")]
+    fn read_one(&self, namespace: &str, key: &str) -> fdo::Result<OwnedValue> {
+        match (namespace, key) {
+            (APPEARANCE_NAMESPACE, COLOR_SCHEME) => {
+                Ok(Value::U32(PREFERS_LIGHT).try_to_owned().unwrap())
+            }
+            _ => Err(fdo::Error::Failed("not found".to_owned())),
+        }
+    }
+
+    #[expect(clippy::unused_self, reason = "the interface needs a receiver")]
+    fn read(&self, namespace: &str, key: &str) -> fdo::Result<OwnedValue> {
+        match (namespace, key) {
+            (APPEARANCE_NAMESPACE, ACCENT_COLOR) => {
+                let wrapped = Value::Value(Box::new(Value::Structure(Structure::from(ACCENT))));
+                Ok(wrapped.try_to_owned().unwrap())
+            }
+            _ => Err(fdo::Error::Failed("not found".to_owned())),
+        }
+    }
+}
+
+#[test]
+fn a_key_the_new_method_lacks_is_not_asked_of_the_old_one() {
+    let bus = PrivateBus::start();
+    let _portal = serve_portal(&bus, BothMethods);
+    let (connector, core) = nova_files_api::channel();
+    let _service = follow(&bus, connector);
+    let light = DesktopLook {
+        mode: Some(Mode::Light),
+        accent: None,
+    };
+    assert_eq!(next_look(&core), light);
 }
 
 #[test]
@@ -170,6 +216,40 @@ fn the_desktop_look_reaches_the_core_and_follows_changes() {
             ..dark
         }
     );
+}
+
+#[test]
+fn the_icon_theme_reaches_the_core_and_follows_changes() {
+    let bus = PrivateBus::start();
+    let portal = serve_portal(
+        &bus,
+        Portal {
+            scheme: STARTING_SCHEME,
+        },
+    );
+    let (connector, core) = nova_files_api::channel();
+    let _service = follow(&bus, connector);
+    assert_eq!(next_icon_themes(&core), [GNOME_THEME, KDE_THEME]);
+
+    // A change to the look only says nothing of icons.
+    changed(&portal, COLOR_SCHEME, Value::U32(PREFERS_DARK));
+    changed_in(&portal, KDE_ICONS, KDE_ICON_THEME, Value::from("oxygen"));
+    assert_eq!(next_icon_themes(&core), [GNOME_THEME, "oxygen"]);
+    changed_in(&portal, GNOME_INTERFACE, GNOME_ICON_THEME, Value::from(""));
+    assert_eq!(next_icon_themes(&core), ["oxygen"]);
+}
+
+/// The next icon themes sent to the core; other messages are skipped.
+fn next_icon_themes(core: &Receiver<CoreMessage>) -> Vec<String> {
+    loop {
+        if let CoreMessage::Command {
+            command: Command::DesktopIconThemes(names),
+            ..
+        } = core.recv_timeout(WAIT).unwrap()
+        {
+            return names;
+        }
+    }
 }
 
 /// Serves `portal` under the portal's name on `bus`.

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::{Command, Connection, Event, JobId, JobTag, Operation, Outcome};
+use nova_files_api::{Command, Connection, Event, JobId, JobTag, Operation, Outcome, Tally};
 
 /// How long a test waits for the core before it counts as a failure.
 pub const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
@@ -95,13 +95,21 @@ impl Client {
     /// Waits for job `job` to end, skipping its progress, and returns how
     /// it ended and the folders it changed.
     pub fn ended(&self, job: JobId) -> (Outcome, Vec<PathBuf>) {
+        let (outcome, changed, _) = self.finished(job);
+        (outcome, changed)
+    }
+
+    /// Waits for job `job` to end, skipping its progress, and returns how
+    /// it ended, the folders it changed and what answers made of it.
+    pub fn finished(&self, job: JobId) -> (Outcome, Vec<PathBuf>, Tally) {
         loop {
             match self.next() {
                 Event::JobFinished {
                     job: ended,
                     outcome,
                     changed,
-                } if ended == job => return (outcome, changed),
+                    tally,
+                } if ended == job => return (outcome, changed, tally),
                 Event::JobProgress { .. } => {}
                 other => panic!("expected job {job:?} to end, got {other:?}"),
             }

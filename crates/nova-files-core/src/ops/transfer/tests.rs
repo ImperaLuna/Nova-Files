@@ -33,7 +33,9 @@ fn place_with_name_taken(taken: impl Fn(&Item) -> PathBuf) -> (Result<PathBuf, S
         replacing: false,
         how: How::Copy,
     };
-    let placed = place(&mut running, &planned, &mut make).map(|(_, at)| at);
+    let items = [item.clone()];
+    let mut ahead = Ahead::new(&items);
+    let placed = place(&mut running, &planned, &mut make, &mut ahead).map(|(_, at)| at);
     assert!(!item.to.exists());
     (placed, tries)
 }
