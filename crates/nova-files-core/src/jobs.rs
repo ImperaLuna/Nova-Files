@@ -20,13 +20,14 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
-    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, Order,
-    Unreadable,
+    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, NotOpened,
+    Order, Unreadable,
 };
 
 use nova_files_api::Thumbnails as ThumbnailsSetting;
 
 use crate::details_queue;
+use crate::file_icons::FileIcons;
 use crate::thumbs::{Queue, Thumbnails};
 
 use crate::list::{self, Stopped};
@@ -61,11 +62,16 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(events: Arc<dyn EventSink>, thumbnails: Option<&Thumbnails>) -> Self {
+    pub fn new(
+        events: Arc<dyn EventSink>,
+        thumbnails: Option<&Thumbnails>,
+        icons: &Arc<FileIcons>,
+    ) -> Self {
         let thumbnails = thumbnails
             .and_then(|setup| Queue::start(setup.clone(), Arc::clone(&events)))
             .map(Arc::new);
-        let details = details_queue::Queue::start(Arc::clone(&events)).map(Arc::new);
+        let details =
+            details_queue::Queue::start(Arc::clone(&events), Arc::clone(icons)).map(Arc::new);
         Self {
             events,
             details,
@@ -279,19 +285,26 @@ pub fn open_file(
     activation: Option<String>,
 ) {
     let events = Arc::clone(&client.events);
+    let failed_path = path.clone();
     let spawned = thread::Builder::new()
         .name(OPEN_THREAD.to_owned())
         .spawn(move || {
             let types = types.get_or_init(MimeTypes::from_env);
             let event = match open::open_file(&path, types, activation.as_deref()) {
-                Ok(()) => Event::FileOpened,
-                Err(_) => Event::FileNotOpened,
+                Ok(()) => Event::FileOpened { path },
+                Err(reason) => Event::FileNotOpened { path, reason },
             };
             events.deliver(event).ok();
         });
-    if spawned.is_err() {
+    if let Err(error) = spawned {
         // The portal can still open it.
-        client.deliver(Event::FileNotOpened).ok();
+        log::warn!("can't start a thread to open a file: {error}");
+        client
+            .deliver(Event::FileNotOpened {
+                path: failed_path,
+                reason: NotOpened::Failed,
+            })
+            .ok();
     }
 }
 
@@ -304,7 +317,7 @@ mod tests {
     #[test]
     fn a_replaced_listing_answers_nothing() {
         let (sender, events) = mpsc::channel();
-        let client = Client::new(Arc::new(sender), None);
+        let client = Client::new(Arc::new(sender), None, &FileIcons::plain());
         let older = client.start_listing(ListingId(1));
         let newer = client.start_listing(ListingId(2));
 

@@ -33,6 +33,7 @@ mod selection;
 mod shown_thumbnails;
 mod text;
 mod theme;
+mod theme_icons;
 mod thumbnail;
 mod tree;
 mod view;

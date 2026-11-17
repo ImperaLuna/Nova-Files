@@ -10,6 +10,7 @@
 //! the old one and its work. Before each read the worker asks whether its
 //! run is still wanted (same listing, and some of it still asked for), so
 //! a run scrolled away stops at once and the rows now shown come next.
+//! Each entry's icon goes out with its details (see `file_icons`).
 
 use std::collections::HashSet;
 use std::ops::Range;
@@ -17,10 +18,11 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 
 use nova_files_api::{
-    ClientGone, Details, EntryId, Event, EventSink, Listing, ListingId, MAX_ROWS,
+    ClientGone, Details, EntryId, Event, EventSink, FileIcon, Listing, ListingId, MAX_ROWS,
 };
 
 use crate::details;
+use crate::file_icons::FileIcons;
 
 /// Entries per [`Event::DetailsRead`]: a few screens of rows, so the
 /// rows asked for arrive in one or two events, each one redraw.
@@ -74,7 +76,7 @@ struct Run {
 
 impl Queue {
     /// Starts the worker; `None` when the OS refuses a thread.
-    pub fn start(events: Arc<dyn EventSink>) -> Option<Self> {
+    pub fn start(events: Arc<dyn EventSink>, icons: Arc<FileIcons>) -> Option<Self> {
         let shared = Arc::new(Shared {
             state: Mutex::new(State::default()),
             wake: Condvar::new(),
@@ -82,7 +84,7 @@ impl Queue {
         let worker = Arc::clone(&shared);
         thread::Builder::new()
             .name(WORKER_THREAD.to_owned())
-            .spawn(move || work(&worker, events.as_ref()))
+            .spawn(move || work(&worker, events.as_ref(), &icons))
             .ok()?;
         Some(Self { shared })
     }
@@ -167,7 +169,7 @@ impl Shared {
         }
     }
 
-    /// Sends the details of `run`, read as `read`, unless its listing was
+    /// Sends the details of `run`, read as `read`, and its `icons`, unless its listing was
     /// replaced meanwhile. Marking them read and sending happen under one
     /// lock, so a new listing can't slip in between.
     ///
@@ -181,6 +183,7 @@ impl Shared {
         &self,
         run: &Run,
         read: Vec<Details>,
+        icons: Vec<FileIcon>,
         events: &dyn EventSink,
     ) -> Result<(), ClientGone> {
         let mut state = self.lock();
@@ -199,18 +202,26 @@ impl Shared {
             id: run.listed.id,
             first: EntryId(first),
             details: read.into(),
+            icons: icons.into(),
         })
     }
 }
 
-fn work(shared: &Shared, events: &dyn EventSink) {
+fn work(shared: &Shared, events: &dyn EventSink, icons: &FileIcons) {
     while let Some(run) = shared.next_run() {
         // `want` keeps the wanted entries inside the listing.
         let entries = details::listed(&run.listed, run.entries.clone());
         let Some(read) = details::read_batch(entries, || !shared.still_wanted(&run)) else {
             continue;
         };
-        if shared.send(&run, read, events).is_err() {
+        if !shared.still_wanted(&run) {
+            continue;
+        }
+        let found = details::entries(&run.listed, run.entries.clone())
+            .iter()
+            .map(|entry| icons.of(&entry.name, entry.kind))
+            .collect();
+        if shared.send(&run, read, found, events).is_err() {
             return;
         }
     }
@@ -327,7 +338,7 @@ mod tests {
         let (sink, events) = mpsc::channel();
 
         queue
-            .send(&run(1, 0..1), vec![Details::default()], &sink)
+            .send(&run(1, 0..1), vec![Details::default()], Vec::new(), &sink)
             .ok();
 
         assert!(events.try_recv().is_err());

@@ -1,9 +1,10 @@
 //! The pieces of one row in the sheet, shared by the column heads and the
 //! entries so their columns line up: the cells, an entry's icon and name,
 //! and the ring around the row the keyboard is on. Icons are drawn here
-//! for every part of the window.
+//! for every part of the window. An entry's icon is its thumbnail, else
+//! its type's icon from the system icon theme, else the window's own icon
+//! for its kind.
 
-use std::ffi::OsStr;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -13,10 +14,9 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, StyledText, div, img,
     prelude::FluentBuilder as _, svg,
 };
-use nova_files_api::EntryKind;
+use nova_files_api::{EntryKind, IconKind};
 
 use crate::assets::Icon;
-use crate::kind::FileKind;
 use crate::theme::{Colors, radius, size, text};
 use crate::window::{DraggedRow, MainWindow};
 
@@ -130,15 +130,19 @@ pub fn cursor_ring(colors: &Colors) -> impl IntoElement {
         .border_color(colors.ring)
 }
 
-/// The icon slot of an entry row: its thumbnail if it has one, otherwise
-/// its kind's icon, so nothing shifts when the thumbnail arrives. A file's
-/// icon carries a tag in its kind's color.
-pub fn entry_icon(
-    name: &OsStr,
-    kind: EntryKind,
-    thumbnail: Option<&Arc<RenderImage>>,
-    colors: &Colors,
-) -> impl IntoElement {
+/// What an entry's icon slot shows.
+#[derive(Debug, Clone, Copy)]
+pub enum RowIcon<'a> {
+    Thumbnail(&'a Arc<RenderImage>),
+    /// Its type's icon from the system icon theme, in its own colors.
+    Theme(&'a Arc<RenderImage>),
+    /// The window's own icon for its kind.
+    BuiltIn(IconKind),
+}
+
+/// The icon slot of an entry row, the same size whatever it shows, so
+/// nothing shifts when a thumbnail or theme icon arrives.
+pub fn entry_icon(shown: RowIcon<'_>, colors: &Colors) -> impl IntoElement {
     let slot = div()
         .relative()
         .flex()
@@ -146,38 +150,46 @@ pub fn entry_icon(
         .items_center()
         .justify_center()
         .size(size::ROW_ICON);
-    match (thumbnail, kind) {
-        (Some(image), _) => slot.child(
+    match shown {
+        RowIcon::Thumbnail(image) => slot.child(
             img(Arc::clone(image))
                 .size(size::THUMBNAIL)
                 .rounded(radius::SMALL),
         ),
-        (None, EntryKind::Folder) => {
-            let (glyph, tint) = kind_glyph(EntryKind::Folder, colors);
+        RowIcon::Theme(image) => slot.child(img(Arc::clone(image)).size(size::ROW_ICON)),
+        RowIcon::BuiltIn(kind) => {
+            let (glyph, tint) = built_in(kind, colors);
             slot.child(icon(glyph, size::ROW_ICON, tint))
         }
-        (None, EntryKind::File) => {
-            let (glyph, tint) = kind_glyph(EntryKind::File, colors);
-            slot.child(icon(glyph, size::ROW_ICON, tint)).child(
-                div()
-                    .absolute()
-                    .left(size::TAG_LEFT)
-                    .top(size::TAG_TOP)
-                    .w(size::TAG_WIDTH)
-                    .h(size::TAG_HEIGHT)
-                    .rounded_full()
-                    .bg(FileKind::of(name).tag(colors.tags)),
-            )
-        }
+    }
+}
+
+/// The kind of icon an entry of `kind` has before the core says more.
+pub const fn entry_kind(kind: EntryKind) -> IconKind {
+    match kind {
+        EntryKind::Folder => IconKind::Folder,
+        EntryKind::File => IconKind::File,
     }
 }
 
 /// The icon and tint an entry of `kind` is drawn with.
 pub const fn kind_glyph(kind: EntryKind, colors: &Colors) -> (Icon, Rgba) {
-    match kind {
-        EntryKind::Folder => (Icon::Folder, colors.folder),
-        EntryKind::File => (Icon::File, colors.text_soft),
-    }
+    built_in(entry_kind(kind), colors)
+}
+
+/// The window's own icon for `kind`, and its tint.
+pub const fn built_in(kind: IconKind, colors: &Colors) -> (Icon, Rgba) {
+    let glyph = match kind {
+        IconKind::Folder => return (Icon::Folder, colors.folder),
+        IconKind::File => Icon::File,
+        IconKind::Text => Icon::FileText,
+        IconKind::Picture => Icon::FilePicture,
+        IconKind::Video => Icon::FileVideo,
+        IconKind::Audio => Icon::FileAudio,
+        IconKind::Archive => Icon::FileArchive,
+        IconKind::Program => Icon::FileProgram,
+    };
+    (glyph, colors.text_soft)
 }
 
 /// `glyph`, `side` across, in `tint`.

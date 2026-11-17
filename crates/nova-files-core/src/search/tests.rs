@@ -8,6 +8,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use super::*;
+use crate::file_icons::FileIcons;
 
 const LIMIT: u32 = 50;
 /// How long a test waits for an answer it expects.
@@ -55,7 +56,10 @@ impl Drop for Scratch {
 
 fn client() -> (Client, Receiver<Event>) {
     let (sink, events) = mpsc::channel();
-    (Client::new(Arc::new(sink), None), events)
+    (
+        Client::new(Arc::new(sink), None, &FileIcons::plain()),
+        events,
+    )
 }
 
 impl Searcher {

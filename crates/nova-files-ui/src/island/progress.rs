@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use nova_files_api::{Operation, Progress};
+use nova_files_api::{Conflict, Operation, Progress};
 
 use super::{ITEM, ITEMS, PART_GAP, count, name_of};
 
@@ -19,6 +19,7 @@ const SECONDS_IN_MINUTE: u64 = 60;
 const MINUTES_IN_HOUR: u64 = 60;
 const WAITING: &str = "waiting";
 const PAUSED: &str = "paused";
+const LEFT: &str = "left";
 
 /// Where a job's count of work stood when it first knew its totals, for
 /// its speed.
@@ -37,8 +38,8 @@ pub struct Running {
     pub started: Instant,
     /// When its totals were first known, for its speed.
     pub counted_from: Option<Start>,
-    /// It holds at a question the window doesn't ask yet.
-    pub waiting: bool,
+    /// The conflict it holds at, until answered: the island asks about it.
+    pub asking: Option<Conflict>,
     pub paused: bool,
 }
 
@@ -54,7 +55,7 @@ impl Running {
             },
             started,
             counted_from: None,
-            waiting: false,
+            asking: None,
             paused: false,
         }
     }
@@ -125,7 +126,7 @@ impl Running {
         } else {
             format!(" {what}")
         };
-        let state = if self.waiting {
+        let state = if self.asking.is_some() {
             Some(WAITING.to_owned())
         } else if self.paused {
             Some(PAUSED.to_owned())
@@ -150,19 +151,25 @@ const fn work(progress: &Progress) -> (u64, u64) {
 
 /// "12 s left", "3 min left", "2 h 5 min left", rounded up.
 pub fn left_text(left: Duration) -> String {
+    format!("{} {LEFT}", short_left(left))
+}
+
+/// "12 s", "3 min", "2 h 5 min", rounded up: the time left where "left"
+/// goes without saying, as in a row of the island's list of jobs.
+pub fn short_left(left: Duration) -> String {
     let seconds = left.as_secs() + u64::from(left.subsec_nanos() > 0);
     if seconds < SECONDS_IN_MINUTE {
-        return format!("{} s left", seconds.max(1));
+        return format!("{} s", seconds.max(1));
     }
     let minutes = seconds.div_ceil(SECONDS_IN_MINUTE);
     if minutes < MINUTES_IN_HOUR {
-        return format!("{minutes} min left");
+        return format!("{minutes} min");
     }
     let (hours, minutes) = (minutes / MINUTES_IN_HOUR, minutes % MINUTES_IN_HOUR);
     if minutes == 0 {
-        format!("{hours} h left")
+        format!("{hours} h")
     } else {
-        format!("{hours} h {minutes} min left")
+        format!("{hours} h {minutes} min")
     }
 }
 
@@ -184,7 +191,7 @@ const fn doing(operation: &Operation) -> (&'static str, &'static str) {
 }
 
 /// What a job works on, as its request named it.
-fn sources(operation: &Operation) -> &[std::path::PathBuf] {
+pub fn sources(operation: &Operation) -> &[std::path::PathBuf] {
     match operation {
         Operation::Copy { sources, .. } | Operation::Move { sources, .. } => sources,
         Operation::Trash { paths }

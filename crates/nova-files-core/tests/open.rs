@@ -17,7 +17,7 @@ use std::time::Duration;
 #[path = "common/own_folders.rs"]
 mod own_folders;
 
-use nova_files_api::{Command, Event};
+use nova_files_api::{Command, Event, NotOpened};
 
 use own_folders::run_again_in;
 
@@ -100,9 +100,16 @@ fn open_through_the_core(root: &Path) {
     };
 
     // No type from its name, so no app.
-    assert_eq!(open(root.join("plain")), Event::FileNotOpened);
+    let plain = root.join("plain");
+    assert_eq!(
+        open(plain.clone()),
+        Event::FileNotOpened {
+            path: plain,
+            reason: NotOpened::NoApp
+        }
+    );
     let file = root.join("a.novatest");
-    assert_eq!(open(file.clone()), Event::FileOpened);
+    assert_eq!(open(file.clone()), Event::FileOpened { path: file.clone() });
     // On a thread, so a viewer that never runs fails the test, not hangs it.
     let out = root.join("out");
     let (sender, written) = mpsc::channel();
