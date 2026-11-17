@@ -92,6 +92,7 @@ fn records_what_resumes_need() {
     let entry = Entry {
         device: 2049,
         inode: 77,
+        born: Some(1_700_000_000_123_456_789),
     };
     journal
         .record(Record::Planned(Path::new("/t"), entry))
@@ -101,11 +102,27 @@ fn records_what_resumes_need() {
 
     assert_eq!(
         fs::read_to_string(jobs.join("5")).unwrap(),
-        "nova-files-job 1\nmade /a%20(2) /b/a\nplanned /t 2049:77\nplan-done\nsources-done\n"
+        "nova-files-job 1\nmade /a%20(2) /b/a\nplanned /t 2049:77:1700000000123456789\nplan-done\nsources-done\n"
     );
     let path = jobs.join("5");
     let written = read::read(&File::open(&path).unwrap(), &path).unwrap();
     assert_eq!(entry_from(&written.lines[1].paths[1]), Some(entry));
+}
+
+#[test]
+fn an_entry_field_says_when_it_was_born_only_where_known() {
+    let entry = Entry {
+        device: 1,
+        inode: 2,
+        born: None,
+    };
+    assert_eq!(entry_field(entry), PathBuf::from("1:2"));
+    let read = |field: &str| entry_from(Path::new(field));
+    assert_eq!(read("1:2").map(|entry| entry.born), Some(None));
+    assert_eq!(read("1:2:3").and_then(|entry| entry.born), Some(3));
+    assert_eq!(read("1:2:3:4"), None);
+    assert_eq!(read("1:2:x"), None);
+    assert_eq!(read("1"), None);
 }
 
 #[test]

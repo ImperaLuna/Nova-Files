@@ -9,6 +9,7 @@
 use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use nova_files_api::Failure;
 
@@ -39,11 +40,25 @@ pub struct Item {
 }
 
 /// Which entry on the disk a path names: its device and inode, which a
-/// new entry under the same name doesn't share.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+/// new entry under the same name doesn't share while this one exists.
+/// Entries are equal by those two alone.
+///
+/// Once an entry is removed, a filesystem such as ext4 may give its inode
+/// number to a new one. Where the filesystem keeps when an entry was
+/// born, `born` tells the two apart: see [`Entry::is`].
+#[derive(Debug, Clone, Copy, Default, Eq)]
 pub struct Entry {
     pub device: u64,
     pub inode: u64,
+    /// When the entry was made, in nanoseconds since 1970, where the
+    /// filesystem keeps it.
+    pub born: Option<u128>,
+}
+
+impl PartialEq for Entry {
+    fn eq(&self, other: &Self) -> bool {
+        (self.device, self.inode) == (other.device, other.inode)
+    }
 }
 
 impl Entry {
@@ -52,15 +67,31 @@ impl Entry {
         Self {
             device: metadata.dev(),
             inode: metadata.ino(),
+            born: metadata
+                .created()
+                .ok()
+                .and_then(|born| born.duration_since(UNIX_EPOCH).ok())
+                .map(|since| since.as_nanos()),
         }
     }
 
-    /// The entry `stat` describes.
+    /// The entry `stat` describes; when it was born, a stat doesn't say.
     pub const fn of_stat(stat: &rustix::fs::Stat) -> Self {
         Self {
             device: stat.st_dev,
             inode: stat.st_ino,
+            born: None,
         }
+    }
+
+    /// Whether `other` is this very entry, not a later one that took its
+    /// inode number: equal, and born at the same time where both say when.
+    pub fn is(&self, other: &Self) -> bool {
+        self == other
+            && match (self.born, other.born) {
+                (Some(born), Some(other)) => born == other,
+                _ => true,
+            }
     }
 }
 

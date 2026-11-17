@@ -213,10 +213,10 @@ pub(super) fn remove_lone_info(info: &Path, entry: Entry, item: Entry) {
     };
     let ours = info
         .symlink_metadata()
-        .is_ok_and(|there| Entry::of(&there) == entry);
+        .is_ok_and(|there| entry.is(&Entry::of(&there)));
     if ours
         && match stored.symlink_metadata() {
-            Ok(there) => Entry::of(&there) != item,
+            Ok(there) => !item.is(&Entry::of(&there)),
             Err(error) => error.kind() == io::ErrorKind::NotFound,
         }
     {

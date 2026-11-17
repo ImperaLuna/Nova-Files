@@ -28,7 +28,8 @@
 //! another name (the user kept both) is found again. A move records each
 //! item it moved, from and to, instead of `made`; a delete records what
 //! it was asked to delete, then each entry it planned to, with its
-//! device and inode, before it removes any.
+//! device and inode (and when it was born, where the filesystem keeps
+//! it), before it removes any.
 //!
 //! A trash job writes each info file as a part file in the trash, then
 //! records it (`trash-info`, with its device and inode) before it takes
@@ -115,21 +116,32 @@ pub mod word {
     }
 }
 
-/// Splits an entry's device and inode in its field.
+/// Splits an entry's device, inode and birth in its field.
 const ENTRY_SPLIT: char = ':';
 
-/// `entry` as a journal field: its device, then its inode.
+/// `entry` as a journal field: its device, then its inode, then when it
+/// was born where that is known.
 fn entry_field(entry: Entry) -> PathBuf {
-    PathBuf::from(format!("{}{ENTRY_SPLIT}{}", entry.device, entry.inode))
+    let Entry {
+        device,
+        inode,
+        born,
+    } = entry;
+    PathBuf::from(born.map_or_else(
+        || format!("{device}{ENTRY_SPLIT}{inode}"),
+        |born| format!("{device}{ENTRY_SPLIT}{inode}{ENTRY_SPLIT}{born}"),
+    ))
 }
 
 /// The entry `field` names, or `None` when it names none.
 pub fn entry_from(field: &Path) -> Option<Entry> {
-    let (device, inode) = field.to_str()?.split_once(ENTRY_SPLIT)?;
-    Some(Entry {
-        device: device.parse().ok()?,
-        inode: inode.parse().ok()?,
-    })
+    let mut parts = field.to_str()?.split(ENTRY_SPLIT);
+    let entry = Entry {
+        device: parts.next()?.parse().ok()?,
+        inode: parts.next()?.parse().ok()?,
+        born: parts.next().map(str::parse).transpose().ok()?,
+    };
+    parts.next().is_none().then_some(entry)
 }
 
 /// One line of a journal.
@@ -306,12 +318,14 @@ impl Journal {
 
     /// The job is over: its journal goes.
     pub fn finish(self) {
-        if let Err(error) = fs::remove_file(&self.path) {
-            log::warn!(
-                "can't remove the job journal {}: {error}",
-                self.path.display()
-            );
-        }
+        remove_journal(&self.path);
+    }
+}
+
+/// Removes the journal at `path`, of a job that is over.
+pub fn remove_journal(path: &Path) {
+    if let Err(error) = fs::remove_file(path) {
+        log::warn!("can't remove the job journal {}: {error}", path.display());
     }
 }
 

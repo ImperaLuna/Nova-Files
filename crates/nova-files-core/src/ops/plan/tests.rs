@@ -164,3 +164,36 @@ fn a_delete_within_leaves_out_what_it_doesnt_want_unread() {
     let planned: Vec<_> = plan.items.iter().map(|item| item.from.clone()).collect();
     assert_eq!(planned, [tree.clone(), tree.join("a")]);
 }
+
+#[test]
+fn an_entry_is_another_once_its_birth_differs() {
+    let entry = |born| Entry {
+        device: 1,
+        inode: 2,
+        born,
+    };
+    assert!(entry(Some(5)).is(&entry(Some(5))));
+    assert!(!entry(Some(5)).is(&entry(Some(6))));
+    assert!(
+        entry(None).is(&entry(Some(6))),
+        "a journal from before births"
+    );
+    assert!(entry(Some(5)).is(&entry(None)));
+    assert_eq!(entry(Some(5)), entry(Some(6)), "equal by device and inode");
+    let other = Entry {
+        inode: 3,
+        ..entry(Some(5))
+    };
+    assert!(!entry(Some(5)).is(&other));
+}
+
+#[test]
+fn an_entry_knows_when_it_was_born_where_the_filesystem_says() {
+    let folder = TestFolder::new("plan-born");
+    let metadata = folder.file("a", "a").symlink_metadata().unwrap();
+
+    assert_eq!(
+        Entry::of(&metadata).born.is_some(),
+        metadata.created().is_ok()
+    );
+}

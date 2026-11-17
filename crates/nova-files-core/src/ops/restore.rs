@@ -173,7 +173,7 @@ fn leave(running: &Running, trash: TrashFolder, listed: Trashed) -> io::Result<O
         .before
         .leaving
         .get(&listed.item)
-        .is_some_and(|before| *before != item_entry)
+        .is_some_and(|before| !before.is(&item_entry))
     {
         return Ok(None);
     }
