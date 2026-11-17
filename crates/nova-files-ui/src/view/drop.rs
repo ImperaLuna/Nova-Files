@@ -3,21 +3,24 @@
 //! the trash. While dragged files would drop on one, it is filled and
 //! edged in orange; a target where they can't drop (see `dropping`) stays
 //! as it is and takes nothing. Files dragged out of a list and files from
-//! another app drop alike.
+//! another app drop alike. The innermost target under the pointer that
+//! takes files dragged from a list aims the drag at itself, so its chip
+//! names the drop (see `window::aiming`).
 //!
 //! Each target keeps a clear edge of [`size::DROP_EDGE`], so the orange
 //! edge shifts nothing; a target's padding gives that width back.
 
 use std::any::Any;
+use std::rc::Rc;
 
 use gpui::{
-    Context, ExternalPaths, InteractiveElement, Pixels, StyleRefinement, Styled, Window,
-    transparent_black,
+    Context, DragMoveEvent, ExternalPaths, InteractiveElement, MouseMoveEvent, Pixels,
+    StyleRefinement, Styled, Window, transparent_black,
 };
 
-use crate::dropping::{DropAt, Sources};
+use crate::dropping::Sources;
 use crate::theme::{Colors, size};
-use crate::window::{DraggedRow, MainWindow};
+use crate::window::{Aim, DraggedRow, MainWindow};
 
 /// The padding that, with the clear drop edge, makes `pad`.
 pub(super) fn inside_edge(pad: Pixels) -> Pixels {
@@ -25,34 +28,47 @@ pub(super) fn inside_edge(pad: Pixels) -> Pixels {
 }
 
 impl MainWindow {
-    /// Makes `target` take files dropped at `at`, lit while they would.
+    /// Makes `target` take files dropped at `aim`, lit while they would.
     pub(super) fn drop_target<E: InteractiveElement + Styled>(
         &self,
         target: E,
-        at: DropAt,
+        aim: Aim,
         cx: &Context<Self>,
     ) -> E {
         let colors = Colors::of(cx);
         let lit =
             move |style: StyleRefinement| style.bg(colors.drop).border_color(colors.drop_edge);
-        self.takes_drops(target, at, cx)
+        self.takes_drops(target, aim, cx)
             .border(size::DROP_EDGE)
             .border_color(transparent_black())
             .drag_over::<DraggedRow>(move |style, _, _, _| lit(style))
             .drag_over::<ExternalPaths>(move |style, _, _, _| lit(style))
     }
 
-    /// Makes `target` take files dropped at `at`, without lighting up:
+    /// Makes `target` take files dropped at `aim`, without lighting up:
     /// for the list of the folder on screen, whose rows light up.
     pub(super) fn takes_drops<E: InteractiveElement>(
         &self,
         target: E,
-        at: DropAt,
+        aim: Aim,
         cx: &Context<Self>,
     ) -> E {
-        let rule = self.drop_rule();
-        let (asked, dropped, theirs) = (at.clone(), at.clone(), at);
+        let rule = Rc::new(self.drop_rule());
+        let aims = Rc::clone(&rule);
+        let (asked, dropped, theirs) = (aim.at.clone(), aim.at.clone(), aim.at.clone());
         target
+            .on_drag_move(
+                cx.listener(|this, moved: &DragMoveEvent<DraggedRow>, _, cx| {
+                    this.drag_moved(moved.drag(cx).drag());
+                }),
+            )
+            .on_mouse_move(cx.listener(move |this, _: &MouseMoveEvent, _, _| {
+                if let Some(drag) = this.drag_over()
+                    && drag.sources().is_some_and(|sources| aims(&aim.at, sources))
+                {
+                    drag.aim(aim.clone());
+                }
+            }))
             .can_drop(move |dragged: &dyn Any, _, _| {
                 if let Some(row) = dragged.downcast_ref::<DraggedRow>() {
                     return row.sources().is_some_and(|sources| rule(&asked, sources));

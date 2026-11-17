@@ -4,6 +4,10 @@
 //! held always copies, Shift held always moves. A drop on the trash sends
 //! the files there.
 //!
+//! While files are dragged over a target, the chip under the pointer says
+//! what dropping them there does and where: "Move to Documents", "Copy to
+//! Backup" (see [`label`]).
+//!
 //! A drop that would change nothing, or can't be done, isn't offered: a
 //! folder onto itself or into a folder inside it, files onto the folder
 //! they are already in, and anything dropped out of the trash or into its
@@ -13,7 +17,12 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use gpui::Modifiers;
-use nova_files_api::Operation;
+use nova_files_api::{DropKind, Operation};
+
+/// What the chip says before a target's name for a drop that moves.
+pub const MOVE_TO: &str = "Move to";
+/// What the chip says before a target's name for a drop that copies.
+pub const COPY_TO: &str = "Copy to";
 
 /// Where files can be dropped.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +106,29 @@ pub fn dropped(at: DropAt, sources: Vec<PathBuf>, modifiers: Modifiers) -> Dropp
     } else {
         Dropped::ByDrive { sources, into }
     }
+}
+
+/// What the chip says while files are over the target `name`, where they
+/// would drop at `at` with `modifiers` held. `by_drive` is what the core
+/// said the drop does when no key picks; until it has said, a drop no key
+/// picks has nothing to say.
+pub fn label(
+    at: &DropAt,
+    name: &str,
+    by_drive: Option<DropKind>,
+    modifiers: Modifiers,
+) -> Option<String> {
+    let kind = match at {
+        DropAt::Trash => DropKind::Move,
+        DropAt::Folder(_) if modifiers.control => DropKind::Copy,
+        DropAt::Folder(_) if modifiers.shift => DropKind::Move,
+        DropAt::Folder(_) => by_drive?,
+    };
+    let verb = match kind {
+        DropKind::Move => MOVE_TO,
+        DropKind::Copy => COPY_TO,
+    };
+    Some(format!("{verb} {name}"))
 }
 
 #[cfg(test)]
@@ -187,6 +219,47 @@ mod tests {
         assert_eq!(
             dropped(DropAt::Trash, sources.clone(), shift),
             Dropped::Job(Operation::Trash { paths: sources })
+        );
+    }
+
+    #[test]
+    fn the_chip_names_the_drop_as_the_keys_or_the_drive_pick_it() {
+        let at = folder("/b");
+        let none = Modifiers::default();
+        let ctrl = Modifiers {
+            control: true,
+            ..none
+        };
+        let shift = Modifiers {
+            shift: true,
+            ..none
+        };
+        let says = |by_drive, modifiers| label(&at, "Backup", by_drive, modifiers);
+        assert_eq!(
+            says(Some(DropKind::Move), none).as_deref(),
+            Some("Move to Backup")
+        );
+        assert_eq!(
+            says(Some(DropKind::Copy), none).as_deref(),
+            Some("Copy to Backup")
+        );
+        assert_eq!(says(None, none), None);
+        // Keys win over the drive, and need no answer from the core.
+        assert_eq!(
+            says(Some(DropKind::Move), ctrl).as_deref(),
+            Some("Copy to Backup")
+        );
+        assert_eq!(says(None, shift).as_deref(), Some("Move to Backup"));
+        // Ctrl wins when both are held.
+        let both = Modifiers {
+            shift: true,
+            ..ctrl
+        };
+        assert_eq!(says(None, both).as_deref(), Some("Copy to Backup"));
+        // The trash takes files whatever is held.
+        assert_eq!(
+            label(&DropAt::Trash, "Trash", None, ctrl).as_deref(),
+            Some("Move to Trash")
         );
     }
 }

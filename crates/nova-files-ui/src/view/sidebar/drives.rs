@@ -14,9 +14,8 @@ use gpui::{
 use super::{Row, on_middle_click, row, section_head};
 use crate::assets::Icon;
 use crate::drives;
-use crate::dropping::DropAt;
 use crate::theme::{Colors, size};
-use crate::window::MainWindow;
+use crate::window::{Aim, MainWindow};
 
 const LABEL: &str = "Drives";
 
@@ -31,6 +30,7 @@ impl MainWindow {
         let main = self.pick.is_none();
         let rows = shown.into_iter().enumerate().map(|(index, drive)| {
             let (clicked, menu, in_new_tab) = (drive.clone(), drive.clone(), drive.clone());
+            let aimed = drive.name.clone();
             let number = drive
                 .folder
                 .as_deref()
@@ -58,7 +58,7 @@ impl MainWindow {
                 this.open_drive(clicked.clone());
             }))
             .when_some(drive.folder, |row, folder| {
-                self.drop_target(row, DropAt::Folder(folder), cx)
+                self.drop_target(row, Aim::folder(folder, aimed), cx)
             });
             if main {
                 on_middle_click(row, main, cx, move |this, cx| {

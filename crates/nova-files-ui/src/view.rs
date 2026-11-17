@@ -94,6 +94,12 @@ impl MainWindow {
         self.focus_menu(window, cx);
         div()
             .key_context(commands::KEY_CONTEXT)
+            // The drag chip says what Ctrl or Shift makes of a drop.
+            .on_modifiers_changed(|_, window, cx| {
+                if cx.has_active_drag() {
+                    window.refresh();
+                }
+            })
             .when(main, |root| root.track_focus(&self.focus))
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))

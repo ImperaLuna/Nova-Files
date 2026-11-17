@@ -18,11 +18,10 @@ use gpui::{
 
 use super::{icon, inside_edge, new_tab_on_middle_click, section_head};
 use crate::assets::Icon;
-use crate::dropping::DropAt;
 use crate::places;
 use crate::theme::{Colors, radius, size, text};
 use crate::tree::{Toggle, TreeRow};
-use crate::window::MainWindow;
+use crate::window::{Aim, MainWindow};
 
 const LABEL: &str = "This computer";
 
@@ -65,6 +64,7 @@ impl MainWindow {
             (glyph, name)
         };
         let (target, in_new_tab, dropped) = (path.clone(), path.clone(), path.clone());
+        let aimed = Aim::folder(dropped, name.clone());
         let main = self.pick.is_none();
         let tint = if here { colors.here } else { colors.text_dim };
         let guides = (1..=depth).map(|level| {
@@ -99,7 +99,7 @@ impl MainWindow {
             })
             .on_click(cx.listener(move |this, _: &ClickEvent, _, _| this.open(&target)))
             .map(|row| new_tab_on_middle_click(row, in_new_tab, main, cx))
-            .map(|row| self.drop_target(row, DropAt::Folder(dropped), cx))
+            .map(|row| self.drop_target(row, aimed, cx))
             .children(guides)
             .child(tree_toggle(index, path, toggle, colors, cx))
             .child(icon(glyph, size::TREE_ICON, tint))

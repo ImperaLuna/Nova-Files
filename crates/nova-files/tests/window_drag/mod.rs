@@ -2,7 +2,8 @@
 //! onto a folder row moves the file there on one drive, Ctrl copies, the
 //! island says so with Undo, and a drop that would change nothing (a
 //! folder onto itself, files onto the folder they are in) does nothing.
-//! The trash, a tree folder, a crumb and a tab take drops too.
+//! The trash, a tree folder, a crumb and a tab take drops too. On the way,
+//! the chip names the drop under the pointer.
 //! The rules for every target are tested in the UI crate's `dropping`.
 
 use gpui::{MouseButton, Pixels, Point, point, px};
@@ -93,6 +94,91 @@ async fn a_name_dragged_onto_a_folder_moves_it_there_and_undo_moves_it_back(
     })
     .await;
     assert!(!projects.join("notes.txt").exists());
+}
+
+#[gpui::test]
+async fn the_chip_names_the_drop_under_the_pointer(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-says");
+    let home = TempFolder::tree("drag-says-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let says = |view: &Entity<MainWindow>, cx: &mut VisualTestContext, modifiers| {
+        view.read_with(cx, |view, _| view.drop_says(modifiers))
+    };
+    let (start, file, folder, trash) = (
+        center(cx, "name-1"),
+        center(cx, "modified-1"),
+        center(cx, "entry-0"),
+        center(cx, "place-trash"),
+    );
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(file, Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    // Over its own row, in the folder it is already in: nothing to say.
+    cx.simulate_mouse_move(
+        file + point(px(1.0), px(0.0)),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("drag-chip").is_some());
+    assert_eq!(says(&view, cx, Modifiers::none()), None);
+
+    // Over a folder on the same drive: the core says it moves.
+    cx.simulate_mouse_move(folder, Some(MouseButton::Left), Modifiers::none());
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.drop_says(Modifiers::none()).as_deref() == Some("Move to Projects")
+    })
+    .await;
+    assert_eq!(
+        says(&view, cx, Modifiers::control()).as_deref(),
+        Some("Copy to Projects")
+    );
+
+    cx.simulate_mouse_move(trash, Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(
+        says(&view, cx, Modifiers::control()).as_deref(),
+        Some("Move to Trash")
+    );
+    // Let go where nothing drops.
+    cx.simulate_mouse_move(file, Some(MouseButton::Left), Modifiers::none());
+    cx.simulate_mouse_up(file, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(view.read_with(cx, |view, _| view.jobs_pending()), 0);
+}
+
+#[gpui::test]
+async fn the_chip_names_the_folder_on_screen_over_its_list(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-says-list");
+    let home = TempFolder::tree("drag-says-list-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let projects = tree.path().join("Projects");
+    let start = center(cx, "name-1");
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(
+        start + point(px(20.0), px(0.0)),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    // The drag goes on while another folder opens: below its rows, its
+    // list takes the file, by the folder's name.
+    view.update(cx, |view, cx| {
+        view.open(&projects);
+        cx.notify();
+    });
+    wait_for_folder(&view, cx, &projects).await;
+    let below = cx.debug_bounds("entry-0").unwrap().bottom_left() + point(px(40.0), px(60.0));
+    cx.simulate_mouse_move(below, Some(MouseButton::Left), Modifiers::none());
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.drop_says(Modifiers::none()).as_deref() == Some("Move to Projects")
+    })
+    .await;
+    cx.simulate_mouse_up(below, MouseButton::Left, Modifiers::none());
+    wait_for_note(&view, cx, "Moved notes.txt to Projects").await;
+    assert!(projects.join("notes.txt").exists());
 }
 
 #[gpui::test]
