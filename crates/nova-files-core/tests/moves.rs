@@ -1,7 +1,7 @@
 //! Moving through the real core: on one drive by renaming, across drives
 //! by copying and then removing each source item, and through the same
 //! conflicts a copy asks. A drop of files moves on one drive and copies
-//! across drives.
+//! across drives, and the core says which before the drop.
 
 #![expect(
     clippy::unwrap_used,
@@ -22,8 +22,8 @@ use std::time::{Duration, SystemTime};
 
 use nova_files_api::uri::file_uri;
 use nova_files_api::{
-    Answer, Command, ConflictKind, Event, Failure, FileClipboard, GNOME_COPIED_FILES, JobId,
-    JobTag, Offer, Operation, Outcome, Scope,
+    Answer, Command, ConflictKind, DropAskId, DropKind, Event, Failure, FileClipboard,
+    GNOME_COPIED_FILES, JobId, JobTag, Offer, Operation, Outcome, Scope,
 };
 
 use answers::{answer, held};
@@ -112,6 +112,44 @@ fn a_drop_on_one_drive_moves_and_across_drives_copies() {
     );
     assert_eq!(fs::read_to_string(into.join("far.txt")).unwrap(), "far");
     fs::remove_dir_all(&other).ok();
+}
+
+/// What dropping `sources` onto `into` would do, as the core says.
+fn drop_would(client: &Client, id: u64, sources: Vec<PathBuf>, into: &Path) -> DropKind {
+    let id = DropAskId(id);
+    client.send(Command::DropWould {
+        id,
+        sources,
+        into: into.to_owned(),
+    });
+    match client.next() {
+        Event::DropWould { id: got, kind } if got == id => kind,
+        other => panic!("expected what the drop would do, got {other:?}"),
+    }
+}
+
+#[test]
+fn the_core_says_what_a_drop_would_do_and_does_nothing() {
+    let bench = Bench::new("drop-would");
+    let near = bench.at("near.txt");
+    fs::write(&near, "near").unwrap();
+    let into = bench.at("into");
+    fs::create_dir(&into).unwrap();
+    let client = bench.client();
+
+    let kind = drop_would(&client, 1, vec![near.clone()], &into);
+    assert_eq!(kind, DropKind::Move);
+    // `/proc` is never on the scratch folder's drive, and a file gone
+    // can't be moved: both copy.
+    let far = PathBuf::from("/proc/self");
+    assert_eq!(
+        drop_would(&client, 2, vec![near.clone(), far], &into),
+        DropKind::Copy
+    );
+    let gone = bench.at("gone");
+    assert_eq!(drop_would(&client, 3, vec![gone], &into), DropKind::Copy);
+    assert!(near.exists(), "asking moves nothing");
+    assert!(fs::read_dir(&into).unwrap().next().is_none());
 }
 
 #[test]

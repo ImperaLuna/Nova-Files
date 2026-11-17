@@ -160,9 +160,11 @@ impl MainWindow {
             // The window doesn't wait on a file opening and never watches
             // jobs it didn't start; only a picker's opening asks for the
             // window state (see `window_state`). Details that come for a
-            // folder the window has since left are dropped.
+            // folder the window has since left are dropped. It doesn't ask
+            // what a drop would do yet.
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
+            | Event::DropWould { .. }
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }

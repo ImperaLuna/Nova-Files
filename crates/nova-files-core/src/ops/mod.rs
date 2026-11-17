@@ -63,6 +63,7 @@ use nova_files_api::{
 };
 
 pub use audience::Audience;
+pub use dropped::answer as answer_drop_would;
 #[cfg(test)]
 pub use test_folder::TestFolder;
 

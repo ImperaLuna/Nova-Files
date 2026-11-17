@@ -1,6 +1,6 @@
 //! The commands about file operations: watching, starting, dropping
-//! files, pausing, resuming, cancelling and forgetting jobs, and answering
-//! their conflicts. `run` sends only these here.
+//! files and saying what a drop would do, pausing, resuming, cancelling
+//! and forgetting jobs, and answering their conflicts. `run` sends only these here.
 
 use std::sync::Arc;
 
@@ -8,6 +8,7 @@ use nova_files_api::{ClientGone, ClientId, Command};
 
 use super::Setup;
 use crate::jobs::Client;
+use crate::ops::answer_drop_would;
 
 /// Answers one of the job commands for client `id`.
 pub(super) fn answer(
@@ -25,6 +26,9 @@ pub(super) fn answer(
         Command::DropFiles { tag, sources, into } => {
             setup.jobs.audience().join(id, Arc::clone(client.events()));
             setup.jobs.start_drop(client.events(), tag, sources, into);
+        }
+        Command::DropWould { id, sources, into } => {
+            answer_drop_would(client.events(), id, sources, into);
         }
         Command::PauseJob(job) => setup.jobs.pause(job),
         Command::ResumeJob(job) => setup.jobs.resume(job),
