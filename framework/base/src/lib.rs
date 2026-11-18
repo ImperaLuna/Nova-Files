@@ -7,21 +7,19 @@
 //! [`Settings`], the [`Theme`], the [`DriveList`] or the places gets them
 //! again whenever they change. The core reads the other end of the channel
 //! as [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
-//! operations run as jobs (see [`Operation`]). A [`Preview`] is
-//! what a quick look shows of a file or folder. Files cut or
-//! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
-//! a paste is a job. A [`Size`] is what a scan of files and folders
-//! counted. A [`DiskSpace`] is how full a drive is. A [`RecentFolder`] is
-//! one a person opened lately, for the Start page. [`Gathered`] folders
-//! make up the Games and Projects places. A [`FileIcon`] is how an
-//! entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
+//! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
+//! quick look shows of a file or folder. A [`Size`] is what a scan of files
+//! and folders counted. A [`DiskSpace`] is how full a drive is. A
+//! [`RecentFolder`] is one a person opened lately, for the Start page.
+//! [`Gathered`] folders make up the Games and Projects places. A
+//! [`FileIcon`] is how an entry's icon is drawn, and a [`ThumbnailSize`] how
+//! big its thumbnail is.
 //! A [`WindowRequest`] is a window another program asks for.
 
 #![forbid(unsafe_code)]
 
 mod access;
 mod bookmark;
-mod clipboard;
 mod disk_space;
 mod drive;
 mod file_icon;
@@ -44,10 +42,6 @@ mod window;
 
 pub use access::{AccessChange, MODE_BITS, ModeChange, Reach};
 pub use bookmark::{Bookmark, BookmarkChange};
-pub use clipboard::{
-    ClipboardAction, FileClipboard, GNOME_COPIED_FILES, KDE_CUT_SELECTION, Offer, PLAIN_TEXT,
-    PLAIN_TEXT_UTF8, URI_LIST,
-};
 pub use disk_space::{DiskSpace, MAX_DISK_SPACE_PATHS, PathSpace};
 pub use drive::{
     Drive, DriveAction, DriveFailure, DriveId, DriveList, DriveOffer, DriveService, Volume,

@@ -3617,12 +3617,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-clipboard-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
 name = "nova-files-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "log",
  "nova-files-api",
+ "nova-files-clipboard-api",
  "nova-files-disk",
  "nova-files-folders-api",
  "nova-files-index",
@@ -3655,6 +3663,8 @@ dependencies = [
 name = "nova-files-disk"
 version = "0.1.0"
 dependencies = [
+ "log",
+ "nova-files-api",
  "rustix 1.1.6",
 ]
 
@@ -3748,6 +3758,7 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
+ "nova-files-clipboard-api",
  "nova-files-folders-api",
  "nova-files-picker-api",
  "nova-files-shell",

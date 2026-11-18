@@ -6,7 +6,6 @@ mod copy_file;
 mod delete;
 mod dropped;
 mod extract;
-mod keep_both;
 mod make;
 mod name;
 mod one_step;
@@ -23,7 +22,7 @@ use nova_files_jobs::control::{Cancelled, Control};
 use nova_files_jobs::mover::{Moved, Mover};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, lock};
-use nova_files_jobs::{clash, control, failure, folders, journal, place, plan};
+use nova_files_jobs::{clash, control, failure, folders, journal, keep_both, place, plan};
 use nova_files_jobs::{running, stop, sync};
 
 pub use dropped::answer as answer_drop_would;

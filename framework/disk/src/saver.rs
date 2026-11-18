@@ -39,7 +39,6 @@ impl Saver {
     }
 }
 
-#[cfg(test)]
 impl Saver {
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()

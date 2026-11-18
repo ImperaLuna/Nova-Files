@@ -8,6 +8,7 @@ pub mod folders;
 pub mod history;
 pub mod job;
 pub mod journal;
+pub mod keep_both;
 pub mod left;
 pub mod mover;
 pub mod place;
