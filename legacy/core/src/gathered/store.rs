@@ -13,8 +13,8 @@ use super::{FILE, guess, usual_folders};
 use crate::change_writer::ChangeWriter;
 use crate::config_watch::{self, Changed, ConfigWatch};
 use crate::hand_edited::lock;
-use crate::places::Home;
 use crate::private_file::{self, Read};
+use nova_files_disk::home::Home;
 
 const MAX_BYTES: usize = 256 * 1024;
 const LOAD_THREAD: &str = "nova-files-gathered";

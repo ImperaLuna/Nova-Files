@@ -31,6 +31,8 @@ nova-files-index = { path = "helpers/index" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-messages = { path = "framework/messages" }
 nova-files-picker-api = { path = "features/picker/api" }
+nova-files-places-api = { path = "features/places/api" }
+nova-files-places-core = { path = "features/places/core" }
 nova-files-rename-api = { path = "features/rename/api" }
 nova-files-rename-core = { path = "features/rename/core" }
 nova-files-settings-api = { path = "features/settings/api" }

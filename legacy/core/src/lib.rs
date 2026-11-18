@@ -12,7 +12,6 @@ mod measure;
 mod mime;
 mod open;
 mod ops;
-mod places;
 mod preview;
 mod properties;
 mod recent;
@@ -44,8 +43,8 @@ pub use mime::MimeTypes;
 pub use nova_files_archives_core::{
     ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe, seven_on,
 };
+pub use nova_files_disk::home::Home;
 pub use open::{NotDefault, make_default_for_folders, opens_folders};
-pub use places::Home;
 pub use run::{emitted_types, routed_types};
 pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
@@ -110,7 +109,7 @@ pub fn spawn_with_archiver(
             let settings = nova_files_settings_core::Store::open(config);
             let theme = theme::Store::open(config);
             theme.follow(&settings);
-            let places = places::Store::open(home.clone());
+            let places = nova_files_places_core::Store::open(home.clone());
             let gathered = gathered::Store::open(home.clone());
             let state_home = home.as_ref().map(|home| home.state.as_path());
             let recent = recent::Store::open(state_home);

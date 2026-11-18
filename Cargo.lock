@@ -3586,6 +3586,7 @@ dependencies = [
  "nova-files-dbus",
  "nova-files-drives-api",
  "nova-files-picker-api",
+ "nova-files-places-api",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",
@@ -3652,6 +3653,8 @@ dependencies = [
  "nova-files-jobs",
  "nova-files-messages",
  "nova-files-picker-api",
+ "nova-files-places-api",
+ "nova-files-places-core",
  "nova-files-rename-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
@@ -3752,6 +3755,21 @@ name = "nova-files-picker-api"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-places-api"
+version = "0.1.0"
+
+[[package]]
+name = "nova-files-places-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-messages",
+ "nova-files-places-api",
 ]
 
 [[package]]
@@ -3861,6 +3879,7 @@ dependencies = [
  "nova-files-clipboard-api",
  "nova-files-drives-api",
  "nova-files-picker-api",
+ "nova-files-places-api",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",

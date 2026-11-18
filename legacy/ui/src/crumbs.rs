@@ -2,7 +2,7 @@ use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
 
 use gpui::SharedString;
-use nova_files_api::{Place, PlaceKind};
+use nova_files_places_api::{Place, PlaceKind};
 
 use crate::assets::Icon;
 use crate::window::ROOT_FOLDER;

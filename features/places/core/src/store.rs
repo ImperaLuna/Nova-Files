@@ -5,14 +5,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 
-use nova_files_api::{Bookmark, BookmarkChange, ClientId, Event, EventSink, Place};
+use nova_files_disk::change_writer::ChangeWriter;
+use nova_files_disk::config_watch::{Changed, ConfigWatch};
+use nova_files_disk::hand_edited::lock;
+use nova_files_disk::home::Home;
+use nova_files_disk::private_file::{self, Read};
+use nova_files_messages::{ClientId, EventSink};
+use nova_files_places_api::{Bookmark, BookmarkChange, Event, Place};
 
 use super::bookmarks::{self, Lines};
-use super::{Home, USER_DIRS_FILE, places, usual_name};
-use crate::change_writer::ChangeWriter;
-use crate::config_watch::{Changed, ConfigWatch};
-use crate::hand_edited::lock;
-use crate::private_file::{self, Read};
+use super::{USER_DIRS_FILE, places, usual_name};
 
 const MAX_BYTES: usize = 1_048_576;
 const LOAD_THREAD: &str = "nova-files-places";

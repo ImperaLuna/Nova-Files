@@ -4,8 +4,7 @@
 //! A client (a window, the D-Bus service) gets a [`Connection`] from a
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
 //! through the [`EventSink`] it handed over. A client that asks for the
-//! [`Theme`] or the places gets them
-//! again whenever they change. The core reads the other end of the channel
+//! [`Theme`] gets it again whenever it changes. The core reads the other end of the channel
 //! as [`CoreMessage`]s. File
 //! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
 //! quick look shows of a file or folder. A [`Size`] is what a scan of files
@@ -18,7 +17,6 @@
 #![forbid(unsafe_code)]
 
 mod access;
-mod bookmark;
 mod file_icon;
 mod file_type;
 mod folder;
@@ -39,12 +37,10 @@ pub mod uri;
 mod window;
 
 pub use access::{AccessChange, MODE_BITS, ModeChange, Reach};
-pub use bookmark::{Bookmark, BookmarkChange};
 pub use file_icon::{FILE_ICON_PIXELS, FileIcon, IconFormat, IconKind, ThemeIcon};
 pub use file_type::{FileTypes, glob_matches};
 pub use folder::{
-    Details, Entry, EntryId, EntryKind, Listing, ListingId, Order, Place, PlaceKind, SortKey,
-    Unreadable,
+    Details, Entry, EntryId, EntryKind, Listing, ListingId, Order, SortKey, Unreadable,
 };
 pub use folder_view::{FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode};
 pub use gathered::{Gathered, GatheredChange, GatheredFolder, Gathering, Holds};

@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod bookmarks;
 mod store;
 
@@ -5,8 +7,8 @@ use std::fs;
 use std::io::Read as _;
 use std::path::{Component, Path, PathBuf};
 
-use nova_files_api::{Place, PlaceKind};
-pub use nova_files_disk::home::{Home, cache_home};
+use nova_files_disk::home::Home;
+use nova_files_places_api::{Place, PlaceKind};
 
 const STANDARD: [(PlaceKind, &str, &str); 6] = [
     (PlaceKind::Desktop, "XDG_DESKTOP_DIR", "Desktop"),
