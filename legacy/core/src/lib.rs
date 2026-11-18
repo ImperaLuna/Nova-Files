@@ -26,7 +26,6 @@ mod properties;
 mod recent;
 mod run;
 mod search;
-mod settings;
 mod theme;
 mod thumbs;
 mod trace;
@@ -115,7 +114,7 @@ pub fn spawn_with_archiver(
         .name(THREAD_NAME.to_owned())
         .spawn(move || {
             let config = home.as_ref().map(|home| home.config.as_path());
-            let settings = settings::Store::open(config);
+            let settings = nova_files_settings_core::Store::open(config);
             let theme = theme::Store::open(config);
             theme.follow(&settings);
             let places = places::Store::open(home.clone());
