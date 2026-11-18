@@ -3623,6 +3623,7 @@ dependencies = [
  "log",
  "nova-files-api",
  "nova-files-disk",
+ "nova-files-entries",
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
