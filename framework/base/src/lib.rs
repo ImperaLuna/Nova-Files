@@ -50,8 +50,8 @@ pub use folder_view::{FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewM
 pub use gathered::{Gathered, GatheredChange, GatheredFolder, Gathering, Holds};
 pub use hidden_files::HiddenFiles;
 pub use job::{
-    Answer, Conflict, ConflictKind, DropAskId, DropKind, ExtractTo, Failure, JobId, JobTag,
-    Operation, Outcome, Packing, Progress, Scope, Tally,
+    Answer, Conflict, ConflictKind, ExtractTo, Failure, JobId, JobTag, Operation, Outcome, Packing,
+    Progress, Scope, Tally,
 };
 pub use message::{Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
 pub use nova_files_messages::{

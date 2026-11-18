@@ -1,5 +1,4 @@
 mod access;
-mod dropped;
 mod undo;
 
 use std::io;
@@ -16,7 +15,6 @@ use nova_files_jobs::{Ended, lock};
 use nova_files_jobs::{failure, journal, plan};
 use nova_files_jobs::{running, stop};
 
-pub use dropped::answer as answer_drop_would;
 #[cfg(test)]
 pub use nova_files_jobs::test_folder::{self, TestFolder};
 
@@ -70,7 +68,7 @@ pub fn start_drop(
         .spawn(move || {
             let asked = lock(&taken).take();
             if let Some((sources, into)) = asked {
-                let operation = dropped::dropped(sources, into);
+                let operation = nova_files_transfer_core::dropped(sources, into);
                 thread_jobs
                     .start(thread_events.as_ref(), tag, operation)
                     .ok();

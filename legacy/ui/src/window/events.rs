@@ -151,7 +151,6 @@ impl MainWindow {
             Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
             Event::OpenWith(answer) => self.open_with_answered(answer, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
-            Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)

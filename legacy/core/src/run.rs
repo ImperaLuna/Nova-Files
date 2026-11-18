@@ -9,6 +9,7 @@ use nova_files_drives_core::{Store as DrivesStore, disk_space};
 use nova_files_messages::{Routed, Routes};
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
+use nova_files_transfer_api as transfer_api;
 use nova_files_trash_api as trash_api;
 
 use crate::file_icons::FileIcons;
@@ -64,6 +65,10 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        operations::drop(id, client, command, setup);
+        Ok(())
+    })?;
     routes.on(|setup: &Setup, _, client: &Client, command| match command {
         trash_api::Command::List => {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
@@ -86,6 +91,7 @@ pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
         MessageType::of::<settings_api::Event>(),
+        MessageType::of::<transfer_api::Event>(),
         MessageType::of::<trash_api::Event>(),
         MessageType::of::<DrivesEvent>(),
     ]
@@ -203,8 +209,6 @@ fn answer(
         | Command::DesktopIconThemes(_)) => look::answer(id, client, command, setup),
         command @ (Command::WatchJobs
         | Command::StartJob { .. }
-        | Command::DropFiles { .. }
-        | Command::DropWould { .. }
         | Command::PauseJob(_)
         | Command::ResumeJob(_)
         | Command::ForgetJob(_)

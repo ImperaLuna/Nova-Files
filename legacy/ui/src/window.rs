@@ -58,6 +58,7 @@ use nova_files_api::{
 use nova_files_drives_api as drives_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
+use nova_files_transfer_api as transfer_api;
 use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;
@@ -332,6 +333,12 @@ impl MainWindow {
         let envelope = match envelope.open::<settings_api::Event>() {
             Ok(settings_api::Event::Settings(settings)) => {
                 return self.settings_arrived(settings, cx);
+            }
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<transfer_api::Event>() {
+            Ok(transfer_api::Event::DropWould { id, kind }) => {
+                return self.drop_would_arrived(id, kind, cx);
             }
             Err(envelope) => envelope,
         };
