@@ -20,6 +20,8 @@ use common::Bench;
 use nova_files_api::{Command, ConflictKind, Event, ExtractTo, Operation, Outcome, Packing, Tally};
 use nova_files_core::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
 
+/// Entries whose listing outgrows the helper's output buffer.
+const MANY: u32 = 500;
 /// More asks with nothing new than a test archive takes.
 const MOST_WAITS: u32 = 100;
 /// Well under the 10 s a helper gets to exit once its output ends.
@@ -335,7 +337,25 @@ fn a_job_asks_for_the_password_a_locked_7z_needs_to_list() {
 #[test]
 fn a_listing_no_one_reads_is_a_usage_error() {
     let folder = sources("unheard");
-    let archive = make(&folder, None);
+    let many = folder.join("many");
+    fs::create_dir(&many).unwrap();
+    for number in 0..MANY {
+        fs::write(
+            many.join(format!("a-long-file-name-for-a-long-listing-{number}")),
+            b"",
+        )
+        .unwrap();
+    }
+    let archive = folder.join("many.7z");
+    let recipe = Recipe {
+        packing: Packing::SevenZip,
+        level: 1,
+        password: None,
+    };
+    let mut entries = 0;
+    archiver()
+        .compress(&[many], &archive, &recipe, go(&mut entries))
+        .unwrap();
     let seven = nova_files_core::seven_on(std::env::var_os("PATH").as_deref()).unwrap();
     let full = fs::OpenOptions::new()
         .write(true)
