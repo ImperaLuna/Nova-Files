@@ -9,12 +9,7 @@ note: >-
   on, are kept, plus a doc line that links the outside source of a fact
   (`https://`).
 files:
-  - "app/**/*.rs"
-  - "framework/**/*.rs"
-  - "features/**/*.rs"
-  - "fronts/**/*.rs"
-  - "helpers/**/*.rs"
-  - "legacy/**/*.rs"
+  - "**/*.rs"
 ignores:
   - "framework/base/**"
 utils:

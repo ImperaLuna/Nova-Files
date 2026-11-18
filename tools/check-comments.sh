@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
-# Fails on a comment in the crates outside the keep list in AGENTS.md
-# ("Comments"). The rules live in tools/ast-grep/comments; their tests run
-# first. `--report` lists the count and passes, until the comments are gone.
+# Fails on a Rust comment outside the keep list in AGENTS.md ("Comments"),
+# or a kept one past two lines, wherever the file lives. The rules live in
+# tools/ast-grep/comments; their tests run first. `--report` only counts.
 set -euo pipefail
 
 readonly CONFIG=tools/ast-grep/comments/sgconfig.yml
+readonly API_FOLDER=framework/base
 
 ast-grep test --config "$CONFIG" --skip-snapshot-tests
+
+files=$( (ast-grep scan --inline-rules '{id: rust-file, language: rust, rule: {kind: source_file}}' --json=stream . || true) | wc -l)
+if ((files == 0)); then
+    echo "No Rust files scanned: the comment lint covers nothing."
+    exit 1
+fi
+if [[ ! -f "$API_FOLDER/Cargo.toml" ]]; then
+    echo "No crate in $API_FOLDER: the rules exempt its docs by that folder; update them."
+    exit 1
+fi
+echo "Scanned $files Rust files."
 
 if [[ "${1:-}" == "--report" ]]; then
     count=$( (ast-grep scan --config "$CONFIG" --json=stream || true) | wc -l)

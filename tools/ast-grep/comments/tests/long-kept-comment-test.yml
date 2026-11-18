@@ -1,0 +1,26 @@
+# The invalid case is a comment from main at cc1b603 with a link added,
+# the way a long explanation could slip past no-comment.
+id: long-kept-comment
+valid:
+  - |
+    fn f() {
+        // With no flags the bus queues the request and never hands the name to another program.
+        // https://dbus.freedesktop.org/doc/dbus-specification.html#bus-messages-request-name
+        let no_flags = BitFlags::<RequestNameFlags>::EMPTY;
+    }
+  - |
+    pub fn open(path: &Path) -> Result<Self, OpenError> {
+        // SAFETY: the map is only sound while nobody changes the file under
+        // it. Nova Files never writes an index in place: `Built::save`
+        // writes a new file and renames it over this one.
+        let map = unsafe { Mmap::map(&file)? };
+    }
+invalid:
+  - |
+    fn queue_for(connection: &Connection, name: &'static str) -> bool {
+        // With no flags, the bus queues the request while the name is taken
+        // and never lets another program replace us. zbus's default flags do
+        // the opposite.
+        // https://dbus.freedesktop.org/doc/dbus-specification.html#bus-messages-request-name
+        let no_flags = BitFlags::<RequestNameFlags>::EMPTY;
+    }

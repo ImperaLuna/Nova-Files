@@ -120,9 +120,7 @@ in
     pkgs.ast-grep
   ];
 
-  # Report only until the comments outside the keep list are removed
-  # (FIL-108); the rule tests fail it already.
-  comments = toolCheck "comments" "tools/check-comments.sh --report" [ pkgs.ast-grep ];
+  comments = toolCheck "comments" "tools/check-comments.sh" [ pkgs.ast-grep ];
 
   nix-fmt = toolCheck "nix-fmt" "nixfmt --check flake.nix nix/*.nix" [ pkgs.nixfmt ];
 
