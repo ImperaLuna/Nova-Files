@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 
-use nova_files_api::{EntryKind, FileIcon, FileTypes};
+use nova_files_api::{EntryKind, FileIcon, FileTypes, IconKind};
 
 pub trait Icons: Send + Sync {
     fn of(&self, name: &OsStr, kind: EntryKind) -> FileIcon;
@@ -10,4 +10,6 @@ pub trait Icons: Send + Sync {
 pub trait Mimes: FileTypes {
     fn ancestry(&self, mime: &str) -> Vec<String>;
     fn name(&self, mime: &str) -> Option<String>;
+    fn icon_names(&self, mime: &str) -> Vec<String>;
+    fn icon_kind(&self, mime: &str) -> IconKind;
 }

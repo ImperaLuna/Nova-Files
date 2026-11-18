@@ -124,42 +124,6 @@ fn every_data_folder_is_read() {
 }
 
 #[test]
-fn the_data_folders_follow_the_xdg_spec() {
-    let vars = |values: &'static [(&'static str, &'static str)]| {
-        move |name: &str| {
-            values
-                .iter()
-                .find(|(key, _)| *key == name)
-                .map(|(_, value)| OsString::from(value))
-        }
-    };
-    assert_eq!(
-        data_dirs(vars(&[("HOME", "/home/me")])),
-        ["/home/me/.local/share", "/usr/local/share", "/usr/share"].map(PathBuf::from)
-    );
-    assert_eq!(
-        data_dirs(vars(&[
-            ("HOME", "/home/me"),
-            ("XDG_DATA_HOME", "/data"),
-            (
-                "XDG_DATA_DIRS",
-                "/run/current-system/sw/share:/nix/profile/share"
-            ),
-        ])),
-        [
-            "/data",
-            "/run/current-system/sw/share",
-            "/nix/profile/share"
-        ]
-        .map(PathBuf::from)
-    );
-    assert_eq!(
-        data_dirs(vars(&[("XDG_DATA_HOME", ""), ("XDG_DATA_DIRS", "")])),
-        ["/usr/local/share", "/usr/share"].map(PathBuf::from)
-    );
-}
-
-#[test]
 fn a_name_gets_the_type_its_alias_stands_for() {
     let (_dir, types) = types("alias-of");
     assert_eq!(types.of(OsStr::new("scan.old")), Some("image/png"));
@@ -214,8 +178,8 @@ fn the_environment_names_the_data_folders() {
     dir.write(GLOBS_FILE, GLOBS);
     let status = std::process::Command::new(env::current_exe().unwrap())
         .args(["--exact", "mime::tests::from_env_child", "--ignored"])
-        .env(DATA_HOME_VAR, &dir.0)
-        .env(DATA_DIRS_VAR, dir.0.join("none"))
+        .env("XDG_DATA_HOME", &dir.0)
+        .env("XDG_DATA_DIRS", dir.0.join("none"))
         .status()
         .unwrap();
     assert!(status.success());

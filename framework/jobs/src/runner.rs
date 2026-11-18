@@ -33,6 +33,10 @@ pub trait JobKind: Send + Sync + 'static {
     type Op: Message + Clone;
     type Undo: Clone + Send + 'static;
 
+    fn claims(&self, _: &Self::Op) -> bool {
+        true
+    }
+
     fn run(&self, running: &mut Running, op: &Self::Op, undo: Option<&Self::Undo>) -> Ended;
     fn rest(&self, op: &Self::Op, control: &Control) -> Result<Self::Op, Cancelled>;
     fn undo(&self, running: &mut Running, op: &Self::Op, ended: &Ended) -> Option<Self::Undo>;

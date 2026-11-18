@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use index::Index;
 
 use crate::capped;
+use nova_files_disk::home::data_dirs;
 
 const ICONS_FOLDER: &str = "icons";
 const HOME_ICONS: &str = ".icons";
@@ -196,7 +197,7 @@ pub fn bases(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let home = var(HOME_VAR)
         .filter(|home| !home.is_empty())
         .map(|home| PathBuf::from(home).join(HOME_ICONS));
-    let data = nova_files_open_core::data_dirs(&var)
+    let data = data_dirs(&var)
         .into_iter()
         .map(|dir| dir.join(ICONS_FOLDER));
     home.into_iter().chain(data).collect()
