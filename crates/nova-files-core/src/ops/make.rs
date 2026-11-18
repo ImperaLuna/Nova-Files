@@ -18,15 +18,16 @@ use nova_files_api::Failure;
 use rustix::fs::{Access, AtFlags, accessat, readlinkat, unlinkat};
 use rustix::io::Errno;
 
-use super::copy_file::{FileCopy, copy_file, version};
+use super::copy_file::{CHUNK, FileCopy, copy_file, version};
 use super::folders::{At, Unreached};
 use super::journal::{BACKUP_PREFIX, PART_PREFIX, Record};
+use super::keep_both::take_free_name;
 use super::place::{rename_no_replace, rename_no_replace_at, replace, replace_through, same_entry};
 use super::plan::{Item, Kind};
 use super::running::Running;
 use super::stop::Stop;
 use super::sync::sync_folder;
-use super::trash::trash_set_aside;
+use super::trash::{SetAside, trash_set_aside};
 
 /// A folder being filled is the user's alone; it gets its source's mode
 /// once full.
@@ -84,7 +85,7 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
     let (part, backup) = (hidden(PART_PREFIX), hidden(BACKUP_PREFIX));
     if making.how == How::Move {
         if making.replacing {
-            running.record(Record::Backup(&backup, target));
+            running.record_backup(&backup, target)?;
         }
         // Not an exchange: after one, the source's name would hold the
         // file it replaced until that is removed, and a crash between
@@ -169,7 +170,10 @@ fn copy_whole(
 ) -> Result<u64, Stop> {
     running.record(Record::Part(part));
     if making.replacing {
-        running.record(Record::Backup(backup, making.target));
+        running.record_backup(backup, making.target)?;
+    }
+    if size(making.item) > CHUNK {
+        running.settle();
     }
     let mut copied = 0;
     let mut left = None;
@@ -216,7 +220,7 @@ fn link(
         .map_err(|errno| Stop::at(&making.item.from, &errno.into()))?;
     if making.replacing {
         running.record(Record::Part(part));
-        running.record(Record::Backup(backup, target));
+        running.record_backup(backup, target)?;
     }
     let made = if making.replacing { part } else { target };
     symlink(points_to, made).map_err(|error| Stop::at(target, &error))?;
@@ -325,20 +329,39 @@ fn put(from: &Path, to: &Path, backup: &Path, replacing: bool) -> io::Result<Opt
 /// Sends the file a replace `left` under a hidden name to the trash, as
 /// the path `making` gave it, and keeps where it went for an undo, unless
 /// this job put it there itself: an undo leaves that one in the trash.
-/// Where it can't go to the trash it is removed, as it would have been
-/// without one: the user chose to replace it.
+/// On a drive without a trash it is removed, as the user chose to
+/// replace it. When the trash refuses it, it is kept beside its
+/// replacement under a "keep both" name.
 fn set_aside(running: &mut Running, making: &Making<'_>, left: Option<&Path>) {
     let Some(left) = left else {
         return;
     };
     let target = making.target;
     let ours = running.placed_here(target);
-    if let Some(item) = trash_set_aside(running, (making.index, left), target) {
-        if !ours {
-            running.replaced.push((target.to_path_buf(), item));
+    match trash_set_aside(running, (making.index, left), target) {
+        SetAside::Trashed(item) => {
+            if !ours {
+                running.replaced.push((target.to_path_buf(), item));
+            }
         }
-    } else if let Err(error) = fs::remove_file(left) {
-        log::warn!("can't remove the replaced {}: {error}", left.display());
+        SetAside::Gone => {}
+        SetAside::NoTrash => {
+            if let Err(error) = fs::remove_file(left) {
+                log::warn!("can't remove the replaced {}: {error}", left.display());
+            }
+        }
+        SetAside::Refused => match take_free_name(left, target) {
+            Ok(kept) => log::warn!(
+                "the replaced {} is kept as {}",
+                target.display(),
+                kept.display()
+            ),
+            Err(error) => log::warn!(
+                "the replaced {} stays at {}: {error}",
+                target.display(),
+                left.display()
+            ),
+        },
     }
 }
 

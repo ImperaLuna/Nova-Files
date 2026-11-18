@@ -30,7 +30,7 @@ use super::stop::Stop;
 /// A part file is the user's alone until it is whole.
 const PART_MODE: u32 = 0o600;
 /// The most bytes copied between two checks for a pause or cancel: 8 MiB.
-const CHUNK: u64 = 0x80_0000;
+pub const CHUNK: u64 = 0x80_0000;
 /// The buffer for plain reads and writes: 1 MiB.
 const BUFFER: usize = 0x10_0000;
 

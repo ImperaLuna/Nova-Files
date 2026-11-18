@@ -4,7 +4,6 @@
 
 use std::ffi::OsStr;
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::{ConflictKind, Failure, Outcome, Packing};
@@ -12,9 +11,8 @@ use nova_files_api::{ConflictKind, Failure, Outcome, Packing};
 use super::Ended;
 use super::extract::{ask_password, steer};
 use super::journal::PART_PREFIX;
-use super::keep_both::{Naming, free_path};
+use super::keep_both::take_free_name;
 use super::name::is_plain_name;
-use super::place::rename_no_replace;
 use super::running::Running;
 use super::stop::Stop;
 use crate::archive::{ArchiveFailure, Archiver, Recipe};
@@ -89,7 +87,7 @@ fn make(
         fs::remove_file(&part).ok();
         return Err(stop_for(failure, first, &target));
     }
-    match place(&part, &target) {
+    match take_free_name(&part, &target) {
         Ok(placed) => Ok(Some((part, placed))),
         Err(error) => {
             fs::remove_file(&part).ok();
@@ -110,20 +108,6 @@ fn locking_password(
             Some(password) if password.is_empty() => {}
             given => return Ok(given),
         }
-    }
-}
-
-/// Gives the finished `part` the name `target`, or the next free one.
-fn place(part: &Path, target: &Path) -> io::Result<PathBuf> {
-    let mut to = target.to_path_buf();
-    loop {
-        let Err(error) = rename_no_replace(part, &to) else {
-            return Ok(to);
-        };
-        if error.kind() != io::ErrorKind::AlreadyExists {
-            return Err(error);
-        }
-        to = free_path(target, Naming::File)?;
     }
 }
 
@@ -174,26 +158,6 @@ fn stop_for(failure: ArchiveFailure, first: &Path, target: &Path) -> Stop {
 mod tests {
     use super::*;
     use crate::ops::test_folder::TestFolder;
-
-    #[test]
-    fn a_taken_name_gives_the_next_free_one() {
-        let folder = TestFolder::new("compress-place");
-        let part = folder.path().join(".part");
-        fs::write(&part, b"zip").unwrap();
-        fs::write(folder.path().join("a.zip"), b"mine").unwrap();
-        let placed = place(&part, &folder.path().join("a.zip")).unwrap();
-        assert_eq!(placed, folder.path().join("a (2).zip"));
-        assert_eq!(fs::read(&placed).unwrap(), b"zip");
-        assert_eq!(fs::read(folder.path().join("a.zip")).unwrap(), b"mine");
-    }
-
-    #[test]
-    fn a_name_that_cant_be_given_is_an_error() {
-        let folder = TestFolder::new("compress-place-missing");
-        let part = folder.file(".part", "zip");
-        let error = place(&part, &folder.path().join("gone/a.zip")).unwrap_err();
-        assert_eq!(error.kind(), io::ErrorKind::NotFound);
-    }
 
     #[test]
     fn totals_count_file_bytes_and_every_entry_once() {

@@ -9,10 +9,13 @@
 //! or not, fits on one line. A part file is recorded before it is made
 //! and a copy after it is made, so the journal may miss a copy but never
 //! claims one the job didn't make: undo can't remove what isn't the job's.
-//! Records reach the disk at most a second late, so a crash may leave the
-//! last part files hidden and unrecorded, but costs no data; a backup,
-//! the user's own file stepping aside, is on the disk before it happens. The file is
-//! removed when the job ends.
+//! A record reaches the disk with the first record written a second or
+//! more after the last sync, before a copy longer than one chunk starts,
+//! and before the job waits on the user, so a crash may leave the last
+//! short part files hidden and unrecorded, but costs no data; a backup,
+//! the user's own file stepping aside, is on the disk before it happens.
+//! A job whose journal fails replaces nothing more, and the journal stays
+//! for the clean-up after a crash. The file is removed when the job ends.
 //!
 //! ```text
 //! nova-files-job 1
@@ -228,7 +231,7 @@ fn escape(bytes: &[u8]) -> Vec<u8> {
     percent::escape(bytes, |byte| PLAIN.contains(&byte))
 }
 
-/// The longest a record waits to be synced to the disk.
+/// How long after a sync a record syncs the journal again.
 const SYNC_EVERY: Duration = Duration::from_secs(1);
 
 /// Whether a journal last synced at `synced` is due a sync at `now`.
@@ -319,6 +322,11 @@ impl Journal {
     /// The job is over: its journal goes.
     pub fn finish(self) {
         remove_journal(&self.path);
+    }
+
+    /// The journal's path and file, held, as the job writes no more to it.
+    pub fn into_held(self) -> (PathBuf, File) {
+        (self.path, self.file)
     }
 }
 

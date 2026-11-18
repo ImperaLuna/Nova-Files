@@ -5,6 +5,7 @@ use rustix::fs::{CWD, FileType, Mode, mknodat};
 
 use super::*;
 use crate::ops::folders::Folders;
+use crate::ops::journal::Journal;
 use crate::ops::plan::Entry;
 use crate::ops::test_folder::TestFolder;
 
@@ -34,6 +35,66 @@ fn failed_at(made: Result<Made, Stop>) -> (PathBuf, Failure) {
         Err(Stop::Failed { path, reason }) => (path, reason),
         other => panic!("expected a failure, got {other:?}"),
     }
+}
+
+/// Making `item` by `how` over the file already at its target.
+fn replacing(item: &Item, how: How) -> Making<'_> {
+    Making {
+        item,
+        target: &item.to,
+        index: 0,
+        replacing: true,
+        how,
+    }
+}
+
+#[test]
+fn a_job_without_a_journal_replaces_nothing() {
+    for how in [How::Copy, How::Move] {
+        let folder = TestFolder::new("make-no-journal");
+        let item = Item {
+            from: folder.file("a", "new"),
+            to: folder.file("b", "old"),
+            kind: Kind::File { size: 3 },
+            entry: Entry::default(),
+        };
+
+        let made = make(&mut Running::for_test(), &replacing(&item, how));
+
+        assert_eq!(failed_at(made), (item.to.clone(), Failure::Other));
+        assert_eq!(fs::read_to_string(&item.from).unwrap(), "new");
+        assert_eq!(fs::read_to_string(&item.to).unwrap(), "old");
+        assert_eq!(fs::read_dir(folder.path()).unwrap().count(), 2, "{how:?}");
+    }
+}
+
+#[test]
+fn a_long_copy_puts_the_journal_on_the_disk_before_it_starts() {
+    let folder = TestFolder::new("make-long-copy");
+    let journal = folder.file("journal", "");
+    let file = fs::OpenOptions::new().append(true).open(&journal).unwrap();
+    let mut running = Running::with_journal(Journal::over(file, journal));
+    let long = CHUNK + 1;
+    let from = folder.path().join("long");
+    fs::File::create(&from).unwrap().set_len(long).unwrap();
+    let item = Item {
+        from,
+        to: folder.path().join("copy"),
+        kind: Kind::File { size: long },
+        entry: Entry::default(),
+    };
+    let making = Making {
+        item: &item,
+        target: &item.to,
+        index: 0,
+        replacing: false,
+        how: How::Copy,
+    };
+    let before = running.journal_synced().unwrap();
+
+    make(&mut running, &making).unwrap();
+
+    assert!(running.journal_synced().unwrap() > before);
 }
 
 #[test]

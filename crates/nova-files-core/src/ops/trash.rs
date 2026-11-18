@@ -108,37 +108,40 @@ pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>
     )
 }
 
+/// What became of a file a replace set aside.
+pub enum SetAside {
+    /// It went to this path in a trash.
+    Trashed(PathBuf),
+    /// It was gone already.
+    Gone,
+    /// Its drive has no trash the user may use.
+    NoTrash,
+    /// The trash refused it.
+    Refused,
+}
+
 /// Moves `left`, a file a replace set aside under a hidden name as the
-/// job's `index`th item, to its trash as `shown`, the path it had, and
-/// returns where in the trash it went. `None` when it can't go there (a
-/// drive without a trash, say) or was gone already.
+/// job's `index`th item, to its trash as `shown`, the path it had.
 pub fn trash_set_aside(
     running: &mut Running,
     (index, left): (usize, &Path),
     shown: &Path,
-) -> Option<PathBuf> {
+) -> SetAside {
     let home_trash = running.home_trash.clone();
     let mut known = std::mem::take(&mut running.replaced_trashes);
     let at = (index, left, shown.file_name());
     let sent = send(running, at, (home_trash.as_deref(), &mut known));
     running.replaced_trashes = known;
     match sent {
-        Ok(Some((_, item, _))) => Some(item),
-        Ok(None) => None,
-        Err(Refused::NoTrash) => {
-            log::info!(
-                "{} has no trash to set {} aside in",
-                shown.display(),
-                left.display()
-            );
-            None
-        }
+        Ok(Some((_, item, _))) => SetAside::Trashed(item),
+        Ok(None) => SetAside::Gone,
+        Err(Refused::NoTrash) => SetAside::NoTrash,
         Err(Refused::Failed(reason)) => {
             log::warn!(
                 "can't set {} aside in the trash: {reason:?}",
                 left.display()
             );
-            None
+            SetAside::Refused
         }
     }
 }
