@@ -9,8 +9,9 @@
 //! `window_keys`, selecting in `window_select`, type to jump in
 //! `window_jump`, the path bar in `window_path`, the sidebar in
 //! `window_sidebar`, the quick look in `window_preview`, the island
-//! and its file actions in `window_island`, tabs in `window_tabs`, and
-//! dragging files in `window_drag`.
+//! and its file actions in `window_island`, tabs in `window_tabs`,
+//! dragging files in `window_drag`, and Games and Projects in
+//! `window_gathered`.
 
 #![expect(
     clippy::unwrap_used,
@@ -21,6 +22,7 @@
 mod common;
 mod window_band;
 mod window_drag;
+mod window_gathered;
 mod window_island;
 mod window_jump;
 mod window_keys;
@@ -65,6 +67,17 @@ fn window_on<'a>(
     folder: &Path,
     home: &Path,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
+    window_showing(cx, folder, home, Vec::new())
+}
+
+/// [`window_on`], opened to show `names` there, as an app's "Show in
+/// folder" asks.
+fn window_showing<'a>(
+    cx: &'a mut TestAppContext,
+    folder: &Path,
+    home: &Path,
+    names: Vec<std::ffi::OsString>,
+) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     // The core answers from its own threads.
     cx.executor().allow_parking();
     let core_home = nova_files_core::Home {
@@ -78,7 +91,11 @@ fn window_on<'a>(
     let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None, None)
         .unwrap();
     let (start, home) = (folder.to_owned(), home.to_owned());
-    cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx))
+    cx.add_window_view(|_, cx| {
+        let mut view = MainWindow::with_home(&core.connector, &start, home, cx);
+        view.select_on_arrival(start.clone(), names);
+        view
+    })
 }
 
 async fn wait_for_folder(view: &Entity<MainWindow>, cx: &VisualTestContext, folder: &Path) {

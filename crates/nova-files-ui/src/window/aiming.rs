@@ -21,12 +21,12 @@ use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 
 use gpui::{Context, SharedString};
-use nova_files_api::{Command, DropAskId, DropKind};
+use nova_files_api::{Command, DropAskId, DropKind, Gathering};
 
 use super::MainWindow;
 use super::dragging::Drag;
 use crate::dropping::DropAt;
-use crate::places::TRASH_LABEL;
+use crate::places::{self, TRASH_LABEL};
 
 /// A target files are over: where they would drop, and its name.
 #[derive(Debug, Clone)]
@@ -51,6 +51,14 @@ impl Aim {
         Self {
             at: DropAt::Folder(path),
             name: name.into(),
+        }
+    }
+
+    /// Games or Projects, `place`, which gathers the folders dropped.
+    pub fn gathered(place: Gathering) -> Self {
+        Self {
+            at: DropAt::Gathered(place),
+            name: places::gathering_look(place).0.into(),
         }
     }
 

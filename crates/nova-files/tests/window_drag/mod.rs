@@ -89,6 +89,8 @@ async fn a_name_dragged_onto_a_folder_moves_it_there_and_undo_moves_it_back(
     wait_for_note(&view, cx, "Moved notes.txt to Projects").await;
     assert!(!tree.path().join("notes.txt").exists());
     assert!(projects.join("notes.txt").exists());
+    view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["Projects"])
+        .await;
 
     click(cx, "island-undo");
     view.condition::<WindowEvent>(cx, |view, _| {

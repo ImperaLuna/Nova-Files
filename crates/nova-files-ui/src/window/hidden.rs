@@ -7,11 +7,10 @@
 //! `selecting`). A search's files are the index's, which this leaves
 //! alone. Hidden rows show dimmed (see `view::sheet`).
 
-use std::path::{Path, PathBuf};
-
 use nova_files_api::{Command, HiddenFiles, SettingChange};
 
 use super::MainWindow;
+use crate::location::Location;
 
 impl MainWindow {
     /// Asks the core to show hidden files if they are left out, or to
@@ -28,7 +27,7 @@ impl MainWindow {
     }
 
     /// Takes `hidden`, from settings the core sent: when hidden files
-    /// were shown and now aren't, or the other way round, reads the folder
+    /// were shown and now aren't, or the other way round, reads the place
     /// asked for last again. The first settings change nothing: the core
     /// already listed that folder under them.
     pub(super) fn hidden_arrived(&mut self, hidden: HiddenFiles) {
@@ -36,18 +35,18 @@ impl MainWindow {
         if before.is_none_or(|before| before == hidden) || self.searching() {
             return;
         }
-        if let Some(folder) = self.folder_asked_last() {
-            self.request(&folder);
+        if let Some(place) = self.place_asked_last() {
+            self.request_place(&place);
         }
     }
 
-    /// The folder the window asked for last: the one still on its way, or
-    /// else the one on screen.
-    pub(super) fn folder_asked_last(&self) -> Option<PathBuf> {
+    /// The place the window asked for last: the one still on its way, or
+    /// else the folder or gathered place on screen.
+    pub(super) fn place_asked_last(&self) -> Option<Location> {
         if self.waiting() {
             self.requested.clone()
         } else {
-            self.folder().map(Path::to_path_buf)
+            self.place_on_screen_now()
         }
     }
 }

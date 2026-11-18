@@ -15,6 +15,8 @@ build.craneLib.devShell {
     pkgs.mold
     # For the D-Bus tests.
     pkgs.dbus
+    # For the 7z archive tests.
+    pkgs._7zz
   ];
   # Each mutant changes one line, so the build is mostly linking and
   # recompiling one crate: mold links several times faster than the default

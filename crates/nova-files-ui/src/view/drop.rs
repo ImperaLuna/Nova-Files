@@ -99,17 +99,17 @@ impl MainWindow {
                     .is_some_and(|paths| rule(&asked, &Sources::new(paths.paths().to_vec())))
             })
             .on_drop(
-                cx.listener(move |this, row: &DraggedRow, window: &mut Window, _| {
+                cx.listener(move |this, row: &DraggedRow, window: &mut Window, cx| {
                     if let Some(sources) = row.sources() {
-                        this.drop_files(dropped.clone(), sources, window.modifiers());
+                        this.drop_files(dropped.clone(), sources, window.modifiers(), cx);
                     }
                 }),
             )
-            .on_drop(
-                cx.listener(move |this, paths: &ExternalPaths, window: &mut Window, _| {
+            .on_drop(cx.listener(
+                move |this, paths: &ExternalPaths, window: &mut Window, cx| {
                     let sources = Sources::new(paths.paths().to_vec());
-                    this.drop_files(theirs.clone(), &sources, window.modifiers());
-                }),
-            )
+                    this.drop_files(theirs.clone(), &sources, window.modifiers(), cx);
+                },
+            ))
     }
 }

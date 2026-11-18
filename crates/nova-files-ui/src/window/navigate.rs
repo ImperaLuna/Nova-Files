@@ -49,6 +49,9 @@ impl MainWindow {
             Location::Folder(folder) => {
                 self.request(folder);
             }
+            Location::Gathered(place) => {
+                self.request_gathered(*place);
+            }
             Location::Properties(paths) => self.arrive_at_properties(paths, cx),
         }
     }
@@ -67,19 +70,27 @@ impl MainWindow {
     /// window moves there once it answers, ending a search under way.
     /// Whether the ask was sent.
     pub(super) fn request(&mut self, folder: &Path) -> bool {
+        let path = tidy(folder);
+        let place = Location::Folder(path.clone());
+        self.ask_listing(place, |id, order| Command::ListFolder { id, path, order })
+    }
+
+    /// Sends the core `command`, made with a new listing id and the
+    /// window's order, to list `place`. Whether it was sent.
+    pub(super) fn ask_listing(
+        &mut self,
+        place: Location,
+        command: impl FnOnce(ListingId, Order) -> Command,
+    ) -> bool {
         // Only a fallback's own ask marks it, after this returns.
         self.falling_back = false;
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
-        let path = tidy(folder);
         let order = self.order;
-        let sent = self.connection.as_ref().map(|connection| {
-            connection.send(Command::ListFolder {
-                id,
-                path: path.clone(),
-                order,
-            })
-        });
+        let sent = self
+            .connection
+            .as_ref()
+            .map(|connection| connection.send(command(id, order)));
         let sent = matches!(sent, Some(Ok(())));
         if sent {
             self.search.folder_asked();
@@ -88,7 +99,7 @@ impl MainWindow {
             self.close_path_menu();
             self.asked = Some(id);
             self.asked_order = order;
-            self.requested = Some(path);
+            self.requested = Some(place);
         }
         sent
     }
@@ -101,7 +112,7 @@ impl MainWindow {
 
     /// Orders the list by `key`: the other way round when it already is,
     /// otherwise A to Z by name and newest or largest first by the
-    /// others. The folder asked for last (the one on screen, or the one
+    /// others. The place asked for last (the one on screen, or the one
     /// still on its way) is read again in the new order; the window keeps
     /// its place in the history.
     pub fn sort_by(&mut self, key: SortKey) {
@@ -109,12 +120,12 @@ impl MainWindow {
         if self.searching() {
             return;
         }
-        let Some(folder) = self.folder_asked_last() else {
+        let Some(place) = self.place_asked_last() else {
             return;
         };
         let before = self.order;
         self.order = next_order(before, key);
-        if !self.request(&folder) {
+        if !self.request_place(&place) {
             self.order = before;
         }
     }

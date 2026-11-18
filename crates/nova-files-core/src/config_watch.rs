@@ -1,5 +1,7 @@
-//! Watches the core's config folder (`$XDG_CONFIG_HOME/nova-files`) and
-//! says which of its files changed.
+//! Watches one folder and says which of its files changed: the core's
+//! config folder (`$XDG_CONFIG_HOME/nova-files`) and the other folders
+//! whose top level a store follows (Home for the places, each gathered
+//! folder for Games and Projects).
 //!
 //! The folder is watched, not each file, so a save of any kind is seen: an
 //! editor writing in place (`CLOSE_WRITE`), or writing a temporary file and
@@ -97,7 +99,8 @@ impl Changed {
         self.touches_os(OsStr::new(name))
     }
 
-    fn touches_os(&self, name: &OsStr) -> bool {
+    /// [`Changed::touches`] for a name that may not be UTF-8.
+    pub fn touches_os(&self, name: &OsStr) -> bool {
         match self {
             Self::Files(names) => names.contains(name),
             Self::All => true,

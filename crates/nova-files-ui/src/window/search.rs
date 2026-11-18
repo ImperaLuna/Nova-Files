@@ -12,7 +12,9 @@
 //! so a folder that can't be read leaves the search as it was. A find
 //! asked for while a folder is on its way replaces it (the core keeps one
 //! listing per window), so the search then starts from that folder.
-//! A find that can't run shows that, not an empty result.
+//! A find that can't run shows that, not an empty result. A search from
+//! Games or Projects looks everywhere, and clearing it lists the place
+//! again.
 //!
 //! A found file's Folder cell goes to its folder with it selected. The
 //! folder is shown with the home folder as `~` (see [`short_folder`]).
@@ -32,6 +34,7 @@ use nova_files_api::{Command, Listing, ListingId};
 
 use super::MainWindow;
 use super::events::Place;
+use crate::location::Location;
 use crate::pick::typed::HOME;
 use crate::text::{TextField, TextFieldEvent};
 
@@ -60,8 +63,9 @@ pub enum FocusTo {
 pub struct Search {
     pub(crate) field: Entity<TextField>,
     pub(crate) scope: Scope,
-    /// The folder the search started in, while one is under way.
-    from: Option<PathBuf>,
+    /// The place the search started in, while one is under way: a
+    /// folder, or Games or Projects.
+    from: Option<Location>,
     /// The find asked for most recently, until its answer arrives.
     pub(crate) asked: Option<ListingId>,
     /// The last find couldn't run.
@@ -97,9 +101,9 @@ impl Search {
         }
     }
 
-    /// The folder the search started in, while one is under way.
-    pub(crate) fn from(&self) -> Option<&Path> {
-        self.from.as_deref()
+    /// The place the search started in, while one is under way.
+    pub(crate) const fn from(&self) -> Option<&Location> {
+        self.from.as_ref()
     }
 
     /// The window asked for a folder, which replaces any find on its way.
@@ -110,8 +114,8 @@ impl Search {
 
 impl MainWindow {
     /// Whether a search is under way.
-    pub fn searching(&self) -> bool {
-        self.search.from().is_some()
+    pub const fn searching(&self) -> bool {
+        self.search.from.is_some()
     }
 
     /// The text in the search box.
@@ -131,19 +135,23 @@ impl MainWindow {
     }
 
     /// Asks the core for what the box holds, in the search's scope. A
-    /// folder still on its way is given up, and the search starts there.
+    /// place still on its way is given up, and the search starts there.
+    /// Games and Projects have no folder to look inside: from them, it
+    /// looks everywhere.
     pub(crate) fn find(&mut self, cx: &Context<Self>) {
         let on_its_way = self.asked.and_then(|_| self.requested.clone());
         let Some(from) = on_its_way
             .or_else(|| self.search.from.clone())
-            .or_else(|| self.folder().map(Path::to_path_buf))
+            .or_else(|| self.place_on_screen_now())
         else {
             return;
         };
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
         let query = self.query(cx).trim().to_owned();
-        let within = (self.search.scope == Scope::HereOnly).then(|| from.clone());
+        let within = (self.search.scope == Scope::HereOnly)
+            .then(|| from.folder().map(Path::to_path_buf))
+            .flatten();
         let sent = self
             .connection
             .as_ref()
@@ -160,6 +168,7 @@ impl MainWindow {
         self.search.asked = None;
         self.search.failed = false;
         self.selection = None;
+        self.gathered.shown = None;
         self.listing_replaced(listing, Place::Top, cx);
         cx.notify();
     }
@@ -172,7 +181,7 @@ impl MainWindow {
         };
         let nothing = Listing {
             id,
-            path: from,
+            path: from.folder().map(Path::to_path_buf).unwrap_or_default(),
             entries: Arc::new([]),
             folders: Some(Arc::new([])),
         };
@@ -190,7 +199,7 @@ impl MainWindow {
         }
     }
 
-    /// Empties the box and reads the folder the search started in again:
+    /// Empties the box and reads the place the search started in again:
     /// a find replaced it in the core, answered or not.
     pub(crate) fn end_search(&mut self, cx: &mut Context<Self>) {
         self.search
@@ -203,15 +212,18 @@ impl MainWindow {
         if self.showing_found() {
             self.selection = None;
         }
-        self.request(&from);
+        self.request_place(&from);
         cx.notify();
     }
 
-    /// Whether the list shows files a search found.
+    /// Whether the list shows files a search found. Games and Projects
+    /// list each row in its own folder too, but found nothing.
     pub(crate) fn showing_found(&self) -> bool {
-        self.listing
-            .as_ref()
-            .is_some_and(|listing| listing.folders.is_some())
+        self.gathered_shown().is_none()
+            && self
+                .listing
+                .as_ref()
+                .is_some_and(|listing| listing.folders.is_some())
     }
 
     /// Goes to the folder `path` is in, with `path` selected there.

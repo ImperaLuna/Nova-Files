@@ -8,13 +8,17 @@
 #![forbid(unsafe_code)]
 
 mod accounts;
+mod archive;
 mod capped;
+mod change_writer;
 mod config_watch;
 mod details;
 mod details_queue;
 mod disk_space;
 mod drives;
 mod file_icons;
+mod folder_views;
+mod gathered;
 mod hand_edited;
 mod icon_theme;
 mod index;
@@ -54,9 +58,11 @@ use nova_files_api::Connector;
 
 use search::Searcher;
 
+pub use archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver};
 pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
 pub use mime::MimeTypes;
+pub use open::{NotDefault, make_default_for_folders, opens_folders};
 pub use places::Home;
 pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
@@ -129,7 +135,10 @@ pub fn spawn_with(
             let theme = theme::Store::open(config);
             theme.follow(&settings);
             let places = places::Store::open(home.clone());
-            let recent = recent::Store::open(home.as_ref().map(|home| home.state.as_path()));
+            let gathered = gathered::Store::open(home.clone());
+            let state_home = home.as_ref().map(|home| home.state.as_path());
+            let recent = recent::Store::open(state_home);
+            let folder_views = folder_views::Store::open(state_home);
             let mime_types = Arc::default();
             let file_icons = Arc::new(file_icons::FileIcons::from_env(
                 Arc::clone(&mime_types),
@@ -138,6 +147,7 @@ pub fn spawn_with(
             let setup = run::Setup {
                 home,
                 places,
+                gathered,
                 window_state,
                 settings,
                 theme,
@@ -150,6 +160,7 @@ pub fn spawn_with(
                 measurer: measure::Measurer::default(),
                 drives: drives::Store::default(),
                 recent,
+                folder_views,
             };
             run::run(&receiver, idle_exit, &setup);
         })?;
