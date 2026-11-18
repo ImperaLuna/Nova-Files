@@ -1,0 +1,15 @@
+# The invalid case is a doc comment from main at cc1b603 with a link
+# added, the way a long explanation could slip past no-doc-comment.
+id: long-kept-doc
+valid:
+  - |
+    /// Follows the icon theme spec:
+    /// https://specifications.freedesktop.org/icon-theme-spec/latest/
+    fn lookup() {}
+invalid:
+  - |
+    /// zbus has no timeout for connecting and authenticating, so that happens
+    /// on its own thread; if the bus never answers, the thread is left blocked
+    /// and the caller carries on without D-Bus.
+    /// https://docs.rs/zbus/latest/zbus/connection/struct.Builder.html
+    pub(crate) fn connect_within_timeout() {}

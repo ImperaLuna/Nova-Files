@@ -1,0 +1,25 @@
+id: long-kept-comment
+language: rust
+severity: error
+message: >-
+  A kept comment runs past two lines. Cut the fact to one or two plain
+  lines and its source link; anything more belongs in the code, a test or
+  the PR.
+note: >-
+  SAFETY notes have no cap. Doc comments have their own cap,
+  long-kept-doc.
+files:
+  - "crates/**/*.rs"
+utils:
+  safety: { kind: line_comment, regex: '^//\s*SAFETY:' }
+  run-break: { not: { kind: line_comment } }
+rule:
+  kind: line_comment
+  not:
+    any:
+      - regex: '^(///($|[^/])|//!)'
+      - matches: safety
+      - follows: { matches: safety, stopBy: { matches: run-break } }
+  follows:
+    kind: line_comment
+    follows: { kind: line_comment }

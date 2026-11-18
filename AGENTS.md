@@ -174,7 +174,7 @@ Each rule above and what enforces it. "Review" means nothing does yet.
 
 | Rule | Enforced by |
 |---|---|
-| No comments outside the keep list | `just comments` (report only until FIL-108 removes them) |
+| No comments outside the keep list; a kept fact is at most two lines | `just comments` (ast-grep rules in `tools/ast-grep/comments`) |
 | No hard-coded numbers | ast-grep `no-bare-number` (`just numbers`) |
 | Logic shows up twice: share it | PMD CPD (`just duplicates`) |
 | Small files and functions | `just lengths` (800 lines); Clippy `too_many_lines`, `too_many_arguments`, `excessive_nesting` |

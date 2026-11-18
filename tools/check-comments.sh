@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fails on a comment in crates/ outside the keep list in AGENTS.md
-# ("Comments"). The rules live in tools/ast-grep/comments; their tests run
-# first. `--report` lists the count and passes, until the comments are gone.
+# ("Comments"), or a kept one past two lines. The rules live in
+# tools/ast-grep/comments; their tests run first. `--report` only counts.
 set -euo pipefail
 
 readonly CONFIG=tools/ast-grep/comments/sgconfig.yml

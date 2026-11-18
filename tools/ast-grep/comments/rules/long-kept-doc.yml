@@ -1,0 +1,20 @@
+id: long-kept-doc
+language: rust
+severity: error
+message: >-
+  A kept comment runs past two lines. Cut the fact to one or two plain
+  lines and its source link; anything more belongs in the code, a test or
+  the PR.
+note: >-
+  The docs of nova-files-api, the contract other apps build on, have no
+  cap.
+files:
+  - "crates/**/*.rs"
+ignores:
+  - "crates/nova-files-api/**"
+rule:
+  kind: line_comment
+  regex: '^(///($|[^/])|//!)'
+  follows:
+    kind: line_comment
+    follows: { kind: line_comment }
