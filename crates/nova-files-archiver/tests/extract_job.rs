@@ -268,7 +268,7 @@ fn a_locked_archive_asks_for_its_password_until_it_is_right() {
 }
 
 #[test]
-fn a_skipped_password_extracts_nothing_and_leaves_nothing() {
+fn skipping_the_password_cancels_and_leaves_nothing() {
     let bench = Bench::new("skip");
     locked_zip(&bench.at("secret.zip"), "pw");
     let job = bench.extract("secret.zip", ExtractTo::Here);
@@ -289,8 +289,8 @@ fn a_skipped_password_extracts_nothing_and_leaves_nothing() {
         scope: Scope::ThisOne,
     });
     let (outcome, tally) = bench.finished(job);
-    assert_eq!(outcome, Outcome::Done);
-    assert_eq!(tally.skipped, 1);
+    assert_eq!(outcome, Outcome::Cancelled);
+    assert_eq!(tally, Tally::default());
     assert_eq!(bench.landed(), Vec::<String>::new());
 }
 

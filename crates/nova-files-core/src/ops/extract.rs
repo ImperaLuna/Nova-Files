@@ -58,7 +58,7 @@ pub fn extract(
     };
     let staging = match unpack(running, archiver, archive, into) {
         Ok(Some(staging)) => staging,
-        Ok(None) => return (Outcome::Done, Vec::new()),
+        Ok(None) => return (Outcome::Cancelled, Vec::new()),
         Err(stop) => return (stop.outcome(), Vec::new()),
     };
     let placed = place(running, &staging, into, to);
@@ -139,7 +139,6 @@ fn ask_password(
         more: 0,
     };
     if running.skips(conflict)? {
-        running.tally.skipped += 1;
         return Ok(None);
     }
     Ok(Some(
@@ -201,6 +200,7 @@ fn place(
     }
     let locked = writable(&sources);
     running.record_job(word::MOVE, Some(into), &sources);
+    running.reporter.start_over();
     let (result, touched) = transfer_to(running, &pairs_into(&sources, into), How::Move);
     for (source, mode) in locked {
         let target = running.steps.get(&source).cloned();
