@@ -11,7 +11,7 @@ note: >-
 files:
   - "**/*.rs"
 ignores:
-  - "**/nova-files-api/**"
+  - "framework/base/**"
 utils:
   linked: { kind: line_comment, regex: 'https?://' }
   run-break: { not: { kind: line_comment } }

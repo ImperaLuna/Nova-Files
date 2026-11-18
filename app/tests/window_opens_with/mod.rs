@@ -1,4 +1,4 @@
-#[path = "../../../nova-files-core/tests/common/own_folders.rs"]
+#[path = "../../../legacy/core/tests/common/own_folders.rs"]
 mod own_folders;
 
 use own_folders::run_again_in;

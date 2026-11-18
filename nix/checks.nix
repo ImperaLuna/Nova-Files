@@ -19,7 +19,12 @@ let
       ../Cargo.toml
       ../Cargo.lock
       ../clippy.toml
-      ../crates
+      ../app
+      ../framework
+      ../fronts
+      ../helpers
+      ../legacy
+      (lib.fileset.maybeMissing ../features)
       ../tools
       ../flake.nix
       ../nix
@@ -111,7 +116,7 @@ in
 
   file-length = toolCheck "file-length" "tools/check-file-length.sh" [ ];
 
-  bare-numbers = toolCheck "bare-numbers" "ast-grep scan --config tools/ast-grep/sgconfig.yml" [
+  bare-numbers = toolCheck "bare-numbers" "tools/check-bare-numbers.sh" [
     pkgs.ast-grep
   ];
 

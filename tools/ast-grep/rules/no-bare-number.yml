@@ -9,10 +9,15 @@ language: rust
 severity: error
 message: Bare number. Name it as a const in the module that owns it.
 files:
-  - "crates/**/*.rs"
+  - "app/**/*.rs"
+  - "framework/**/*.rs"
+  - "features/**/*.rs"
+  - "fronts/**/*.rs"
+  - "helpers/**/*.rs"
+  - "legacy/**/*.rs"
 ignores:
-  - "crates/*/tests/**"
-  - "crates/*/benches/**"
+  - "**/tests/**"
+  - "**/benches/**"
 rule:
   any:
     - kind: integer_literal

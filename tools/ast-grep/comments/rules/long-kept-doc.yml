@@ -11,7 +11,7 @@ note: >-
 files:
   - "**/*.rs"
 ignores:
-  - "**/nova-files-api/**"
+  - "framework/base/**"
 rule:
   kind: line_comment
   regex: '^(///($|[^/])|//!)'

@@ -5,7 +5,7 @@
 set -euo pipefail
 
 readonly CONFIG=tools/ast-grep/comments/sgconfig.yml
-readonly API_CRATE=nova-files-api
+readonly API_FOLDER=framework/base
 
 ast-grep test --config "$CONFIG" --skip-snapshot-tests
 
@@ -14,8 +14,8 @@ if ((files == 0)); then
     echo "No Rust files scanned: the comment lint covers nothing."
     exit 1
 fi
-if [[ -z "$(find . -path "*/$API_CRATE/Cargo.toml" -not -path './target/*' -print -quit)" ]]; then
-    echo "No $API_CRATE crate found: the rules exempt its docs by that folder name; update them."
+if [[ ! -f "$API_FOLDER/Cargo.toml" ]]; then
+    echo "No crate in $API_FOLDER: the rules exempt its docs by that folder; update them."
     exit 1
 fi
 echo "Scanned $files Rust files."
