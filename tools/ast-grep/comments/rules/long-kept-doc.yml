@@ -9,9 +9,9 @@ note: >-
   The docs of nova-files-api, the contract other apps build on, have no
   cap.
 files:
-  - "crates/**/*.rs"
+  - "**/*.rs"
 ignores:
-  - "crates/nova-files-api/**"
+  - "**/nova-files-api/**"
 rule:
   kind: line_comment
   regex: '^(///($|[^/])|//!)'

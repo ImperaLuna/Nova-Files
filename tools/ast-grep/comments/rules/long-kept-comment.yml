@@ -9,7 +9,7 @@ note: >-
   SAFETY notes have no cap. Doc comments have their own cap,
   long-kept-doc.
 files:
-  - "crates/**/*.rs"
+  - "**/*.rs"
 utils:
   safety: { kind: line_comment, regex: '^//\s*SAFETY:' }
   run-break: { not: { kind: line_comment } }
