@@ -19,8 +19,8 @@
 //! order the lists changed. A bookmarks file that can't be read keeps the
 //! pinned folders last read: a passing error never empties the list.
 //!
-//! A client's change goes to a writer thread, so the core's loop never
-//! waits on the disk; it edits the bookmarks file's current bytes, saves it
+//! A client's change goes to a writer thread (see `change_writer`), so
+//! the core's loop never waits on the disk; it edits the bookmarks file's current bytes, saves it
 //! whole with its mode (through a symlink, to where it points), then reads
 //! the pinned folders again.
 
@@ -28,7 +28,6 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 
@@ -36,6 +35,7 @@ use nova_files_api::{Bookmark, BookmarkChange, ClientId, Event, EventSink, Place
 
 use super::bookmarks::{self, Lines};
 use super::{Home, USER_DIRS_FILE, places, usual_name};
+use crate::change_writer::ChangeWriter;
 use crate::config_watch::{Changed, ConfigWatch};
 use crate::hand_edited::lock;
 use crate::private_file::{self, Read};
@@ -45,14 +45,16 @@ use crate::private_file::{self, Read};
 const MAX_BYTES: usize = 1_048_576;
 const LOAD_THREAD: &str = "nova-files-places";
 const SAVE_THREAD: &str = "nova-files-bookmarks";
+/// What the writer saves, for the log.
+const WHAT: &str = "pinned folders";
 
 /// The places list and who hears about it.
 pub struct Store {
     shared: Arc<Shared>,
     /// Set once the first client asked and the lists started loading.
     started: AtomicBool,
-    /// The writer's queue, started on the first change.
-    writer: Mutex<Option<Sender<BookmarkChange>>>,
+    /// Saves each change, on a thread of its own.
+    writer: ChangeWriter<BookmarkChange>,
     /// Stop with the store.
     watches: Arc<Mutex<Vec<ConfigWatch>>>,
 }
@@ -100,14 +102,16 @@ impl Store {
     /// The places under `home`, read once a client asks. Without `home`
     /// both lists stay empty.
     pub fn open(home: Option<Home>) -> Self {
+        let shared = Arc::new(Shared {
+            home,
+            disk: Mutex::new(()),
+            lists: Mutex::default(),
+        });
+        let saving = Arc::clone(&shared);
         Self {
-            shared: Arc::new(Shared {
-                home,
-                disk: Mutex::new(()),
-                lists: Mutex::default(),
-            }),
+            shared,
             started: AtomicBool::new(false),
-            writer: Mutex::new(None),
+            writer: ChangeWriter::new(SAVE_THREAD, WHAT, move |change| saving.save(&change)),
             watches: Arc::default(),
         }
     }
@@ -141,25 +145,8 @@ impl Store {
     /// Makes `change` in the bookmarks file and tells the listening
     /// clients, on the writer's thread.
     pub fn change(&self, change: BookmarkChange) {
-        if self.shared.home.is_none() {
-            return;
-        }
-        let mut writer = lock(&self.writer);
-        let change = match writer.as_ref() {
-            Some(queue) => match queue.send(change) {
-                Ok(()) => return,
-                // The writer stopped: the change goes to a new one.
-                Err(mpsc::SendError(change)) => change,
-            },
-            None => change,
-        };
-        *writer = start_writer(Arc::downgrade(&self.shared));
-        if writer
-            .as_ref()
-            .is_some_and(|queue| queue.send(change).is_err())
-        {
-            log::warn!("the bookmarks writer stopped; pinned folders aren't saved");
-            *writer = None;
+        if self.shared.home.is_some() {
+            self.writer.send(change);
         }
     }
 
@@ -340,35 +327,12 @@ fn watch(home: &Home, shared: &Weak<Shared>) -> Vec<ConfigWatch> {
         .collect()
 }
 
-/// Starts the thread that makes each change it is sent, in order, or none
-/// when no thread can start.
-fn start_writer(shared: Weak<Shared>) -> Option<Sender<BookmarkChange>> {
-    let (queue, changes) = mpsc::channel::<BookmarkChange>();
-    let started = thread::Builder::new()
-        .name(SAVE_THREAD.to_owned())
-        .spawn(move || {
-            for change in changes {
-                let Some(shared) = shared.upgrade() else {
-                    return;
-                };
-                shared.save(&change);
-            }
-        });
-    match started {
-        Ok(_) => Some(queue),
-        Err(error) => {
-            log::warn!("can't start the bookmarks writer; pinned folders aren't saved: {error}");
-            None
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
     use std::ffi::OsString;
     use std::fs;
-    use std::sync::mpsc::Receiver;
+    use std::sync::mpsc::{self, Receiver};
 
     use super::*;
 
@@ -448,10 +412,12 @@ mod tests {
     fn a_forgotten_client_hears_nothing_more() {
         let scratch = Scratch::new("forget");
         let (shared, events) = scratch.listening();
+        let shared = Arc::new(shared);
+        let saving = Arc::clone(&shared);
         let store = Store {
-            shared: Arc::new(shared),
+            shared,
             started: AtomicBool::new(true),
-            writer: Mutex::new(None),
+            writer: ChangeWriter::new(SAVE_THREAD, WHAT, move |change| saving.save(&change)),
             watches: Arc::default(),
         };
         store.forget(ClientId(1));

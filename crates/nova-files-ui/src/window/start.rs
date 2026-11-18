@@ -40,6 +40,7 @@ impl MainWindow {
         self.requested = None;
         self.forget_rows();
         self.listing = None;
+        self.gathered.shown = None;
         self.details = HashMap::new();
         release(self.thumbnails.take_all(), None, cx);
         self.selection = None;

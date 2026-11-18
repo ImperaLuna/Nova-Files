@@ -84,7 +84,8 @@ pub struct Order {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listing {
     pub id: ListingId,
-    /// The folder listed, or the folder a search looked in.
+    /// The folder listed, or the folder a search looked in; empty for a
+    /// gathered place (Games, Projects).
     pub path: PathBuf,
     pub entries: Arc<[Entry]>,
     /// For a search, the folder each entry is in, by entry; `None` when

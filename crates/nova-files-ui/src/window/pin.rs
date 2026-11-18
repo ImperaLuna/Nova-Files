@@ -34,6 +34,25 @@ static NEXT_OWN_PICK: AtomicU64 = AtomicU64::new(u64::MAX);
 impl MainWindow {
     /// Opens a folder picker and pins the folder picked.
     pub fn pick_folder_to_pin(&mut self, cx: &mut Context<Self>) {
+        self.pick_folder(PICK_TITLE, PICK_LABEL, cx, |this, path, _| {
+            this.change_pinned(BookmarkChange::Add {
+                path,
+                label: None,
+                at: None,
+            });
+        });
+    }
+
+    /// Opens a folder picker titled `title`, its button saying `accept`,
+    /// starting at the folder on screen, and hands the folder picked to
+    /// `then`.
+    pub(super) fn pick_folder(
+        &self,
+        title: &str,
+        accept: &str,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, PathBuf, &mut Context<Self>) + 'static,
+    ) {
         let (deliver, answer) = oneshot::channel();
         let request = PickRequest {
             id: PickId(NEXT_OWN_PICK.fetch_sub(1, Ordering::Relaxed)),
@@ -41,8 +60,8 @@ impl MainWindow {
                 multiple: false,
                 folders: true,
             },
-            title: PICK_TITLE.to_owned(),
-            accept_label: Some(PICK_LABEL.to_owned()),
+            title: title.to_owned(),
+            accept_label: Some(accept.to_owned()),
             filters: Vec::new(),
             filter: None,
             folder: self.folder().map(ToOwned::to_owned),
@@ -59,14 +78,7 @@ impl MainWindow {
                 return;
             };
             if let Some(path) = paths.into_iter().next() {
-                this.update(cx, |this, _| {
-                    this.change_pinned(BookmarkChange::Add {
-                        path,
-                        label: None,
-                        at: None,
-                    });
-                })
-                .ok();
+                this.update(cx, |this, cx| then(this, path, cx)).ok();
             }
         })
         .detach();
