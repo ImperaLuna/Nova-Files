@@ -154,6 +154,9 @@ impl Unpacking {
         else {
             return Ok(false);
         };
+        if parts == target {
+            return Ok(false);
+        }
         let Ok(from) = self.open(target_inside, false) else {
             return Ok(false);
         };
