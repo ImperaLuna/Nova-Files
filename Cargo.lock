@@ -3632,6 +3632,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-clipboard-api",
  "nova-files-disk",
+ "nova-files-entries",
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
@@ -3639,6 +3640,7 @@ dependencies = [
  "nova-files-rename-api",
  "nova-files-rename-core",
  "nova-files-settings-api",
+ "nova-files-settings-core",
  "nova-files-trash-api",
  "nova-files-trash-core",
  "rustix 1.1.6",
@@ -3668,6 +3670,14 @@ dependencies = [
  "log",
  "nova-files-api",
  "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-entries"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+ "nova-files-disk",
 ]
 
 [[package]]
@@ -3721,6 +3731,18 @@ name = "nova-files-settings-api"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-settings-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-messages",
+ "nova-files-settings-api",
+ "toml_edit 0.25.18+spec-1.1.0",
 ]
 
 [[package]]

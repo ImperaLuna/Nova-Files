@@ -17,6 +17,7 @@ use std::thread;
 
 use nova_files_api::{Connector, EventSink, JobId, JobTag, Operation};
 use nova_files_jobs::control::{Cancelled, Control};
+use nova_files_jobs::kinds::Kinds;
 use nova_files_jobs::mover::{Moved, Mover};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, lock};
@@ -41,7 +42,7 @@ use undo::{Undo, undo_of};
 
 const DROP_THREAD: &str = "nova-files-drop";
 
-pub type Jobs = nova_files_jobs::Jobs<Files>;
+pub type Jobs = nova_files_jobs::Jobs<Kinds>;
 
 pub fn jobs(
     state: Option<&Path>,
@@ -50,12 +51,17 @@ pub fn jobs(
     archiver: Option<Archiver>,
 ) -> Jobs {
     let set_aside = Arc::new(Trasher::new(trashes.home.clone()));
-    let files = Arc::new(Files {
+    let files = Files {
         trashes,
         archiver,
         mover: Moves,
-    });
-    Jobs::new(state, files, set_aside, wake)
+    };
+    Jobs::new(
+        state,
+        Arc::new(Kinds::default().with(files)),
+        set_aside,
+        wake,
+    )
 }
 
 pub fn start_drop(
