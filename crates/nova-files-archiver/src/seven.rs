@@ -134,14 +134,9 @@ impl Heard {
 
 /// Writes every entry of `archive` to `out`.
 fn list(program: &Path, archive: &Path, password: Option<&[u8]>, out: &mut impl Write) -> Ending {
-    let mut unheard = false;
-    let ending = listing(program, archive, password, |entry| {
-        unheard |= wire::write(out, &entry.as_entry()).is_err();
-    });
-    if unheard {
-        return Ending::Usage;
-    }
-    ending
+    listing(program, archive, password, |entry| {
+        wire::write(out, &entry.as_entry())
+    })
 }
 
 /// Unpacks every entry of `archive` into `folder`.
@@ -155,6 +150,7 @@ fn extract(
     let mut sizes = HashMap::new();
     let listed = listing(program, archive, password, |entry| {
         sizes.insert(entry.path.clone(), entry.size);
+        Ok(())
     });
     if listed != Ending::Done {
         return listed;
@@ -268,12 +264,13 @@ impl Found {
     }
 }
 
-/// Lists `archive`, calling `each` with every entry; says how it ended.
+/// Lists `archive`, calling `each` with every entry; says how it ended,
+/// as a usage error when `each` fails.
 fn listing(
     program: &Path,
     archive: &Path,
     password: Option<&[u8]>,
-    mut each: impl FnMut(&Found),
+    mut each: impl FnMut(&Found) -> io::Result<()>,
 ) -> Ending {
     let mut args: Vec<&OsStr> = LISTING.iter().map(OsStr::new).collect();
     args.push(archive.as_os_str());
@@ -287,11 +284,16 @@ fn listing(
             break;
         };
         if let Some(path) = line.strip_prefix(PATH) {
-            if let Some(done) = found.replace(Found {
+            let done = found.replace(Found {
                 path: path.to_vec(),
                 ..Found::default()
-            }) {
-                each(&done);
+            });
+            if let Some(done) = done
+                && each(&done).is_err()
+            {
+                child.kill().ok();
+                child.wait().ok();
+                return Ending::Usage;
             }
         } else if let Some(entry) = found.as_mut() {
             entry.take(&line);
@@ -300,10 +302,10 @@ fn listing(
     }
     let code = child.wait().ok().and_then(|status| status.code());
     let ending = heard.ending(code, password.is_some(), false);
-    if let (Ending::Done, Some(last)) = (ending, &found) {
-        each(last);
+    match (ending, &found) {
+        (Ending::Done, Some(last)) if each(last).is_err() => Ending::Usage,
+        _ => ending,
     }
-    ending
 }
 
 /// Runs 7-Zip with `args` and calls `each` with the name on every line
