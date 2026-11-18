@@ -3585,6 +3585,7 @@ dependencies = [
  "nova-files-core",
  "nova-files-dbus",
  "nova-files-picker-api",
+ "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",
  "nova-files-ui",
@@ -3616,17 +3617,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-clipboard-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
 name = "nova-files-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "log",
  "nova-files-api",
+ "nova-files-clipboard-api",
  "nova-files-disk",
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
  "nova-files-picker-api",
+ "nova-files-settings-api",
  "nova-files-thumbnailer-launch",
  "nova-files-trash-api",
  "nova-files-trash-core",
@@ -3654,6 +3664,8 @@ dependencies = [
 name = "nova-files-disk"
 version = "0.1.0"
 dependencies = [
+ "log",
+ "nova-files-api",
  "rustix 1.1.6",
 ]
 
@@ -3685,6 +3697,13 @@ dependencies = [
 
 [[package]]
 name = "nova-files-picker-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-settings-api"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
@@ -3751,7 +3770,9 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
+ "nova-files-clipboard-api",
  "nova-files-picker-api",
+ "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",
  "unicode-segmentation",

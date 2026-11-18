@@ -1,11 +1,15 @@
 # nova-files-disk
 #
-# The core side's own files on disk: private files saved whole, and the
-# percent-encoding of paths in them.
+# The core side's own files on disk: private files saved whole, the
+# percent-encoding of paths in them, the XDG home folders, watching and
+# saving config files, and the ports to the icon theme and MIME database.
 #
 # Allowed outside crates:
+# - log
 # - rustix
-# Allowed workspace crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
 
 [package]
 name = "nova-files-disk"
@@ -19,5 +23,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-# Names the error for a chain of links too long to follow.
-rustix = { version = "1.1.6", default-features = false, features = ["std"] }
+log = { version = "0.4.35", features = ["std"] }
+nova-files-api.workspace = true
+# Names the error for a chain of links too long to follow, watches config
+# folders with inotify and reads mount roots with statx.
+rustix = { version = "1.1.6", default-features = false, features = ["event", "fs", "std"] }

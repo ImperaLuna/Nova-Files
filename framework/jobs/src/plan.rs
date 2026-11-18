@@ -24,6 +24,15 @@ pub struct Item {
     pub entry: Entry,
 }
 
+impl Item {
+    pub const fn size(&self) -> u64 {
+        match self.kind {
+            Kind::File { size } => size,
+            Kind::Folder | Kind::Link | Kind::Special => 0,
+        }
+    }
+}
+
 // A filesystem such as ext4 may give a removed entry's inode number to a new one.
 // https://man7.org/linux/man-pages/man7/inode.7.html
 #[derive(Debug, Clone, Copy, Default, Eq)]

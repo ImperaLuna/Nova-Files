@@ -17,9 +17,8 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, SystemTime};
 
 use nova_files_api::uri::file_uri;
-use nova_files_api::{
-    Command, Event, Failure, FileClipboard, JobId, Offer, Operation, Outcome, Progress, URI_LIST,
-};
+use nova_files_api::{Command, Event, Failure, JobId, Operation, Outcome, Progress};
+use nova_files_clipboard_api::{FileClipboard, Offer, URI_LIST};
 
 use common::{Bench, Client};
 use files::{hidden, tree};
