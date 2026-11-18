@@ -4,7 +4,16 @@
 # makes them) for the core, locked in so that a hostile archive can't
 # reach anything but what it is given.
 #
-# Allowed outside crates: bzip2, chrono, flate2, landlock, lzma-rust2, rustix, tar, zip, zstd
+# Allowed outside crates:
+# - bzip2
+# - chrono
+# - flate2
+# - landlock
+# - lzma-rust2
+# - rustix
+# - tar
+# - zip
+# - zstd
 # Allowed workspace crates: none
 
 [package]

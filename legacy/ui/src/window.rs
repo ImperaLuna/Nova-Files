@@ -56,6 +56,7 @@ use nova_files_api::{
     Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
+use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;
 use self::preview::QuickLooks;
@@ -200,14 +201,13 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 7] = [
+    const FIRST_ASKS: [Command; 6] = [
         Command::Ping,
         Command::Places,
         Command::Drives,
         Command::Settings,
         Command::FolderViews,
         Command::Theme,
-        Command::ListTrash,
     ];
 
     pub fn at(
@@ -321,8 +321,12 @@ impl MainWindow {
     }
 
     fn take(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
-        match envelope.open::<Event>() {
-            Ok(event) => self.on_event(event, cx),
+        let envelope = match envelope.open::<Event>() {
+            Ok(event) => return self.on_event(event, cx),
+            Err(envelope) => envelope,
+        };
+        match envelope.open::<trash_api::Event>() {
+            Ok(trash_api::Event::Listed(items)) => self.trash_listed(items, cx),
             Err(envelope) => {
                 if let Err(envelope) = self.parts.deliver(envelope, cx) {
                     log::error!("no part takes {envelope:?}");
@@ -405,6 +409,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             for command in MainWindow::FIRST_ASKS {
                 connection.send(command)?;
             }
+            connection.send(trash_api::Command::List)?;
             Ok(connection)
         })
         .ok()

@@ -19,13 +19,10 @@ use crate::memory;
 use crate::mime::MimeTypes;
 use crate::open;
 use crate::order;
-use crate::places::Home;
 use crate::preview;
-use crate::trash;
 
 const LIST_THREAD: &str = "nova-files-list";
 const OPEN_THREAD: &str = "nova-files-open";
-const TRASH_THREAD: &str = "nova-files-trash";
 
 const NO_LISTING: u64 = u64::MAX;
 
@@ -233,24 +230,6 @@ fn list_inside(
         }
         Err(reason) => job.answer(Event::FolderUnreadable { id, path, reason }),
     }
-}
-
-pub fn list_trash(client: &Client, home: Option<Home>) -> Result<(), ClientGone> {
-    let events = Arc::clone(&client.events);
-    let spawned = thread::Builder::new()
-        .name(TRASH_THREAD.to_owned())
-        .spawn(move || {
-            let listed = trash::Trashes::of(home.as_ref())
-                .all()
-                .iter()
-                .flat_map(trash::list)
-                .collect();
-            events.deliver(Event::Trash(listed)).ok();
-        });
-    if spawned.is_err() {
-        return client.deliver(Event::Trash(Vec::new()));
-    }
-    Ok(())
 }
 
 pub fn open_file(

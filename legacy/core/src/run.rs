@@ -7,6 +7,7 @@ use nova_files_api::{
     ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
 };
 use nova_files_messages::{Routed, Routes};
+use nova_files_trash_api as trash_api;
 
 use crate::disk_space;
 use crate::drives::Store as DrivesStore;
@@ -25,6 +26,7 @@ use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
+use crate::trash;
 use crate::window_state::Store as WindowStateStore;
 
 mod folders;
@@ -56,6 +58,11 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
     routes.on(|setup: &Setup, id, client: &Client, command: Command| {
         answer(id, client, command, setup)
     })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| match command {
+        trash_api::Command::List => {
+            nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
+        }
+    })?;
     routes.on_leave(forget);
     Ok(routes)
 }
@@ -65,7 +72,10 @@ pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
 }
 
 pub fn emitted_types() -> Vec<MessageType> {
-    vec![MessageType::of::<Event>()]
+    vec![
+        MessageType::of::<Event>(),
+        MessageType::of::<trash_api::Event>(),
+    ]
 }
 
 pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup) {
@@ -159,7 +169,6 @@ fn answer(
         | Command::Gathered
         | Command::ChangeGathered(_)
         | Command::ListGathered { .. }
-        | Command::ListTrash
         | Command::Rows { .. }
         | Command::Search { .. }
         | Command::Find { .. }
@@ -168,7 +177,10 @@ fn answer(
         | Command::OpenFile { .. }
         | Command::OpenWith(_)
         | Command::FolderUsed(_)
-        | Command::RecentFolders { .. }) => folders::answer(id, client, command, setup),
+        | Command::RecentFolders { .. }) => {
+            folders::answer(id, client, command, setup);
+            Ok(())
+        }
         command @ (Command::WindowState
         | Command::SaveWindowState(_)
         | Command::FolderViews

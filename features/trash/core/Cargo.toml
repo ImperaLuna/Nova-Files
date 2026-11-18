@@ -1,0 +1,47 @@
+# nova-files-trash-core
+#
+# The trash feature's core half: finds and reads the desktop's trashes,
+# moves entries in, restores and deletes them, lists what is there, and
+# sets replaced files aside for other jobs.
+#
+# Allowed outside crates:
+# - chrono
+# - log
+# - rustix
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-index
+# - nova-files-jobs
+# - nova-files-messages
+# - nova-files-trash-api
+
+[package]
+name = "nova-files-trash-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# The trash spec's DeletionDate is local time: the system time zone.
+chrono = "0.4.45"
+log = { version = "0.4.35", features = ["std"] }
+# Opens a trash folder by handle, looks at its owner and mount, and renames
+# without replacing.
+rustix = { version = "1.1.6", default-features = false, features = ["fs", "process", "std"] }
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+# Lists the mounted local drives, each of which may hold a trash.
+nova-files-index.workspace = true
+nova-files-jobs.workspace = true
+nova-files-messages.workspace = true
+nova-files-trash-api.workspace = true
+
+[dev-dependencies]
+nova-files-jobs = { workspace = true, features = ["test-support"] }

@@ -9,7 +9,7 @@ use rustix::fs::{AtFlags, CWD, StatxFlags, statx};
 use rustix::process::getuid;
 
 use super::{FILES, INFO};
-use crate::private_file::FOLDER_MODE;
+use nova_files_disk::private_file::FOLDER_MODE;
 
 const STICKY: u32 = 0o1000;
 pub(super) const SHARED: &str = ".Trash";
@@ -173,7 +173,7 @@ mod tests {
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 
     use super::*;
-    use crate::ops::TestFolder;
+    use nova_files_jobs::test_folder::TestFolder;
 
     #[test]
     fn the_top_of_a_mount_is_where_the_mount_changes() {
