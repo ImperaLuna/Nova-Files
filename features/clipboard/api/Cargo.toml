@@ -1,0 +1,22 @@
+# nova-files-clipboard-api
+#
+# Files on the clipboard: the bytes the window puts there and takes back,
+# in the formats other file managers read and write. Plain std types, no I/O.
+#
+# Allowed outside crates: none
+# Allowed workspace crates:
+# - nova-files-api
+
+[package]
+name = "nova-files-clipboard-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

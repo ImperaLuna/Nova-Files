@@ -15,6 +15,7 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
+# - nova-files-clipboard-api
 # - nova-files-disk
 # - nova-files-index
 # - nova-files-jobs
@@ -62,6 +63,7 @@ nova-files-trash-api.workspace = true
 nova-files-trash-core.workspace = true
 
 [dev-dependencies]
+nova-files-clipboard-api.workspace = true
 nova-files-jobs = { workspace = true, features = ["test-support"] }
 nova-files-picker-api.workspace = true
 # Gives a test's own thread other groups (accounts tests).
