@@ -21,7 +21,8 @@ use gpui::{
     Entity, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput, TestAppContext,
     VisualTestContext,
 };
-use nova_files_api::{EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest};
+use nova_files_api::EntryId;
+use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_ui::{MainWindow, WindowEvent};
 
 use common::{TempFolder, Watchdog, click_with, double_click};

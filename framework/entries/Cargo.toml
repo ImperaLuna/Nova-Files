@@ -5,8 +5,12 @@
 # listing a newer one cancels. Features list through it and watch rows
 # through the RowWatch port.
 #
-# Allowed outside crates: log
-# Allowed workspace crates: nova-files-api, nova-files-disk
+# Allowed outside crates:
+# - log
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
 
 [package]
 name = "nova-files-entries"

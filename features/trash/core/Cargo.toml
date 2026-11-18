@@ -4,8 +4,18 @@
 # moves entries in, restores and deletes them, lists what is there, and
 # sets replaced files aside for other jobs.
 #
-# Allowed outside crates: chrono, log, rustix
-# Allowed workspace crates: nova-files-api, nova-files-disk, nova-files-index, nova-files-jobs, nova-files-messages, nova-files-trash-api
+# Allowed outside crates:
+# - chrono
+# - log
+# - rustix
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-index
+# - nova-files-jobs
+# - nova-files-messages
+# - nova-files-trash-api
 
 [package]
 name = "nova-files-trash-core"

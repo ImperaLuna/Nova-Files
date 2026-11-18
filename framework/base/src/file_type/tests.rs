@@ -1,5 +1,3 @@
-use std::ffi::OsStr;
-
 use super::*;
 
 #[test]
@@ -39,21 +37,6 @@ fn case_folds_unless_asked_not_to() {
     assert!(!glob_matches("*.png", "PHOTO.PNG", true));
     assert!(glob_matches("*.C", "main.C", true));
     assert!(!glob_matches("*.C", "main.c", true));
-}
-
-fn filter(rules: &[FilterRule]) -> FileFilter {
-    FileFilter {
-        name: "Some".to_owned(),
-        rules: rules.to_vec(),
-    }
-}
-
-#[test]
-fn without_a_database_mime_rules_admit_everything() {
-    let text = filter(&[FilterRule::MimeType("text/plain".to_owned())]);
-    assert!(text.admits(OsStr::new("photo.png"), None));
-    let none = filter(&[]);
-    assert!(!none.admits(OsStr::new("photo.png"), None));
 }
 
 #[test]

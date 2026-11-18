@@ -37,7 +37,8 @@ use std::path::Path;
 use std::rc::Rc;
 
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
-use nova_files_api::{Command, Connector, Event, MessageType, PickRequest, WindowRequest};
+use nova_files_api::{Command, Connector, Event, MessageType, WindowRequest};
+use nova_files_picker_api::PickRequest;
 
 pub use assets::Icon;
 pub use columns::ColumnText;

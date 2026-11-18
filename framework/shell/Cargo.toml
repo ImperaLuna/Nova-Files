@@ -4,8 +4,12 @@
 # slots, the host each part gets, folder rules, per-tab state and values
 # one feature publishes for the others. It never touches the disk.
 #
-# Allowed outside crates: gpui
-# Allowed workspace crates: nova-files-api, nova-files-messages
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-messages
 
 [package]
 name = "nova-files-shell"

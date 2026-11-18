@@ -4,7 +4,8 @@
 # types, no I/O.
 #
 # Allowed outside crates: none
-# Allowed workspace crates: nova-files-messages
+# Allowed workspace crates:
+# - nova-files-messages
 
 [package]
 name = "nova-files-api"
