@@ -7,7 +7,7 @@
 
 [workspace]
 resolver = "3"
-members = ["app", "framework/*", "fronts/*", "helpers/*", "legacy/*"]
+members = ["app", "features/*/*", "framework/*", "fronts/*", "helpers/*", "legacy/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -24,6 +24,8 @@ nova-files-messages = { path = "framework/messages" }
 nova-files-disk = { path = "framework/disk" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-shell = { path = "framework/shell" }
+nova-files-trash-api = { path = "features/trash/api" }
+nova-files-trash-core = { path = "features/trash/core" }
 nova-files-index = { path = "helpers/index" }
 nova-files-ui = { path = "legacy/ui" }
 

@@ -3585,6 +3585,7 @@ dependencies = [
  "nova-files-core",
  "nova-files-dbus",
  "nova-files-shell",
+ "nova-files-trash-api",
  "nova-files-ui",
  "zbus",
 ]
@@ -3624,6 +3625,8 @@ dependencies = [
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
+ "nova-files-trash-api",
+ "nova-files-trash-core",
  "rustix 1.1.6",
  "serde",
  "serde_json",
@@ -3697,6 +3700,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-trash-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-trash-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-index",
+ "nova-files-jobs",
+ "nova-files-messages",
+ "nova-files-trash-api",
+ "rustix 1.1.6",
+]
+
+[[package]]
 name = "nova-files-ui"
 version = "0.1.0"
 dependencies = [
@@ -3708,6 +3733,7 @@ dependencies = [
  "log",
  "nova-files-api",
  "nova-files-shell",
+ "nova-files-trash-api",
  "unicode-segmentation",
  "usvg",
 ]

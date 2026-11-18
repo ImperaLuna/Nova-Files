@@ -74,11 +74,17 @@ pub enum Opening {
 pub type RecoverGpu = Rc<dyn Fn(Option<&Path>)>;
 
 pub fn sent_types() -> Vec<MessageType> {
-    vec![MessageType::of::<Command>()]
+    vec![
+        MessageType::of::<Command>(),
+        MessageType::of::<nova_files_trash_api::Command>(),
+    ]
 }
 
 pub fn taken_types() -> Vec<MessageType> {
-    vec![MessageType::of::<Event>()]
+    vec![
+        MessageType::of::<Event>(),
+        MessageType::of::<nova_files_trash_api::Event>(),
+    ]
 }
 
 pub fn run(

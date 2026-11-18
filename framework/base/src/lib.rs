@@ -7,8 +7,7 @@
 //! [`Settings`], the [`Theme`], the [`DriveList`] or the places gets them
 //! again whenever they change. The core reads the other end of the channel
 //! as [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
-//! operations run as jobs (see [`Operation`]); what is in the desktop's
-//! trash is listed as [`Trashed`] entries. A [`PickRequest`] carries
+//! operations run as jobs (see [`Operation`]). A [`PickRequest`] carries
 //! another app's file picker request from D-Bus to the UI. A [`Preview`] is
 //! what a quick look shows of a file or folder. Files cut or
 //! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
@@ -44,7 +43,6 @@ mod settings;
 mod size;
 mod theme;
 mod thumbnail_size;
-mod trash;
 pub mod uri;
 mod window;
 
@@ -91,7 +89,6 @@ pub use settings::{Appearance, HiddenFiles, SettingChange, Settings, Thumbnails}
 pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 pub use thumbnail_size::ThumbnailSize;
-pub use trash::Trashed;
 pub use window::WindowRequest;
 
 /// The application id: the D-Bus name, the Wayland app id and the name of

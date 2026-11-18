@@ -7,7 +7,8 @@ use std::path::{Component, Path, PathBuf};
 use std::time::SystemTime;
 
 use chrono::{Local, NaiveDateTime, TimeZone as _};
-use nova_files_api::{EntryKind, Trashed};
+use nova_files_api::EntryKind;
+use nova_files_trash_api::Trashed;
 use rustix::fs::OFlags;
 use rustix::process::getuid;
 
@@ -15,7 +16,7 @@ use super::INFO_SUFFIX;
 use super::folder::{OWN_PREFIX, SHARED, TrashFolder, is_own, mount_trash_at};
 use super::info::{DATE_FORMAT, DATE_KEY, HEADER, PATH_KEY};
 use super::{FILES, Trashes};
-use crate::percent::unescape;
+use nova_files_disk::percent::unescape;
 
 const MAX_INFO_BYTES: u64 = 64 * 1024;
 

@@ -1,4 +1,5 @@
 use nova_files_api::{JobId, NotOpened, Operation, Outcome, Tally};
+use nova_files_trash_api as trash_api;
 
 use super::*;
 
@@ -37,10 +38,13 @@ fn a_paused_job_says_so_until_it_resumes(cx: &mut TestAppContext) {
 }
 
 fn trash_asks(core: &mut Core) -> usize {
-    core.commands()
-        .into_iter()
-        .filter(|command| matches!(command, Command::ListTrash))
-        .count()
+    let mut asks = 0;
+    while let Some(message) = core.try_recv() {
+        if message.command::<trash_api::Command>() == Some(&trash_api::Command::List) {
+            asks += 1;
+        }
+    }
+    asks
 }
 
 #[gpui::test]

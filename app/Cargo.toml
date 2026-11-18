@@ -27,6 +27,7 @@ nova-files-ui.workspace = true
 
 [dev-dependencies]
 nova-files-shell.workspace = true
+nova-files-trash-api.workspace = true
 gpui = { workspace = true, features = ["test-support"] }
 # To call the running program over D-Bus, as a launcher would.
 zbus = "5"

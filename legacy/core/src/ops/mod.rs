@@ -10,9 +10,7 @@ mod keep_both;
 mod make;
 mod name;
 mod one_step;
-mod restore;
 mod transfer;
-mod trash;
 mod undo;
 
 use std::io;
@@ -22,9 +20,10 @@ use std::thread;
 
 use nova_files_api::{Connector, EventSink, JobId, JobTag, Operation};
 use nova_files_jobs::control::{Cancelled, Control};
+use nova_files_jobs::mover::{Moved, Mover};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, lock};
-use nova_files_jobs::{clash, control, failure, folders, journal, left, place, plan};
+use nova_files_jobs::{clash, control, failure, folders, journal, place, plan};
 use nova_files_jobs::{running, stop, sync};
 
 pub use dropped::answer as answer_drop_would;
@@ -38,9 +37,8 @@ use access::change_access;
 use delete::delete;
 use extract::{Taking, extract};
 use make::How;
-use restore::{delete_from_trash, empty_trash, restore};
+use nova_files_trash_core::{Trasher, delete_from_trash, empty_trash, restore, trash};
 use transfer::transfer;
-use trash::{Trasher, trash};
 use undo::{Undo, undo_of};
 
 const DROP_THREAD: &str = "nova-files-drop";
@@ -54,7 +52,11 @@ pub fn jobs(
     archiver: Option<Archiver>,
 ) -> Jobs {
     let set_aside = Arc::new(Trasher::new(trashes.home.clone()));
-    let files = Arc::new(Files { trashes, archiver });
+    let files = Arc::new(Files {
+        trashes,
+        archiver,
+        mover: Moves,
+    });
     Jobs::new(state, files, set_aside, wake)
 }
 
@@ -90,6 +92,20 @@ pub fn start_drop(
 pub struct Files {
     trashes: Trashes,
     archiver: Option<Archiver>,
+    mover: Moves,
+}
+
+pub struct Moves;
+
+impl Mover for Moves {
+    fn move_pairs(&self, running: &mut Running, pairs: &[(PathBuf, PathBuf)]) -> Moved {
+        let (result, moved) = transfer::transfer_to(running, pairs, How::Move);
+        (result, moved.into_iter().collect())
+    }
+
+    fn delete(&self, running: &mut Running, paths: &[PathBuf]) -> Moved {
+        delete::delete_paths(running, paths)
+    }
 }
 
 impl nova_files_jobs::JobKind for Files {
@@ -112,10 +128,12 @@ impl nova_files_jobs::JobKind for Files {
             Operation::Delete { paths } => delete(running, paths),
             Operation::ChangeAccess { paths, change } => change_access(running, paths, change),
             Operation::Trash { paths } => trash(running, paths, trashes.home.as_deref()),
-            Operation::Restore { items } => restore(running, items, trashes),
-            Operation::DeleteFromTrash { items } => delete_from_trash(running, items, trashes),
-            Operation::EmptyTrash => empty_trash(running, trashes),
-            Operation::Undo { .. } => undo::run(running, undo.cloned(), trashes),
+            Operation::Restore { items } => restore(running, items, trashes, &self.mover),
+            Operation::DeleteFromTrash { items } => {
+                delete_from_trash(running, items, trashes, &self.mover)
+            }
+            Operation::EmptyTrash => empty_trash(running, trashes, &self.mover),
+            Operation::Undo { .. } => undo::run(running, undo.cloned(), trashes, &self.mover),
             Operation::Extract { archive, into, to } => {
                 extract(running, archiver, archive, into, Taking::All(*to))
             }

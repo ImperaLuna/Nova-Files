@@ -47,7 +47,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::Connector;
-use nova_files_disk::{percent, private_file};
+use nova_files_disk::private_file;
 
 use search::Searcher;
 
@@ -112,7 +112,7 @@ pub fn spawn_with_archiver(
     ));
     let jobs = ops::jobs(
         home.as_ref().map(|home| home.state.as_path()),
-        trash::Trashes::of(home.as_ref()),
+        trash::trashes(home.as_ref()),
         connector.clone(),
         archiver,
     );
