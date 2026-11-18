@@ -7,13 +7,13 @@ use nova_files_api::{
     ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
 };
 use nova_files_folders_api as folders_api;
+use nova_files_folders_core::Store as FolderViewsStore;
 use nova_files_messages::{Routed, Routes};
 use nova_files_trash_api as trash_api;
 
 use crate::disk_space;
 use crate::drives::Store as DrivesStore;
 use crate::file_icons::FileIcons;
-use crate::folder_views::Store as FolderViewsStore;
 use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
 use crate::jobs::Client;

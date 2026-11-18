@@ -7,7 +7,6 @@ mod details_queue;
 mod disk_space;
 mod drives;
 mod file_icons;
-mod folder_views;
 mod gathered;
 mod icon_theme;
 mod index;
@@ -122,7 +121,7 @@ pub fn spawn_with_archiver(
             let gathered = gathered::Store::open(home.clone());
             let state_home = home.as_ref().map(|home| home.state.as_path());
             let recent = recent::Store::open(state_home);
-            let folder_views = folder_views::Store::open(state_home);
+            let folder_views = nova_files_folders_core::Store::open(state_home);
             let mime_types = Arc::default();
             let file_icons = Arc::new(file_icons::FileIcons::from_env(
                 Arc::clone(&mime_types),

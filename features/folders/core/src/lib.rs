@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -10,8 +12,8 @@ use nova_files_folders_api::{
     Event, FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode,
 };
 
-use crate::private_file::{self, Read};
-use crate::saver::Saver;
+use nova_files_disk::private_file::{self, Read};
+use nova_files_disk::saver::Saver;
 use nova_files_disk::stored_path::{END, MAX_PATH, fits};
 
 const FILE: &str = "nova-files/folder-views";

@@ -3633,6 +3633,7 @@ dependencies = [
  "nova-files-clipboard-api",
  "nova-files-disk",
  "nova-files-folders-api",
+ "nova-files-folders-core",
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
@@ -3671,6 +3672,15 @@ dependencies = [
 [[package]]
 name = "nova-files-folders-api"
 version = "0.1.0"
+
+[[package]]
+name = "nova-files-folders-core"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-folders-api",
+]
 
 [[package]]
 name = "nova-files-index"

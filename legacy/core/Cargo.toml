@@ -18,6 +18,7 @@
 # - nova-files-clipboard-api
 # - nova-files-disk
 # - nova-files-folders-api
+# - nova-files-folders-core
 # - nova-files-index
 # - nova-files-jobs
 # - nova-files-messages
@@ -58,6 +59,7 @@ uzers = { version = "0.12.2", default-features = false }
 nova-files-api.workspace = true
 nova-files-disk.workspace = true
 nova-files-folders-api.workspace = true
+nova-files-folders-core.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true
 nova-files-messages.workspace = true
