@@ -10,6 +10,9 @@ const DATA_HOME_VAR: &str = "XDG_DATA_HOME";
 const DATA_IN_HOME: &str = ".local/share";
 const CACHE_HOME_VAR: &str = "XDG_CACHE_HOME";
 const CACHE_IN_HOME: &str = ".cache";
+const DATA_DIRS_VAR: &str = "XDG_DATA_DIRS";
+const HOME_VAR: &str = "HOME";
+const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Home {
@@ -52,6 +55,15 @@ fn xdg_home(home: &Path, from_env: Option<OsString>, in_home: &str) -> PathBuf {
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
         .unwrap_or_else(|| home.join(in_home))
+}
+
+pub fn data_dirs(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
+    let set = |name: &str| var(name).filter(|value| !value.is_empty());
+    let home = set(DATA_HOME_VAR)
+        .map(PathBuf::from)
+        .or_else(|| set(HOME_VAR).map(|home| PathBuf::from(home).join(DATA_IN_HOME)));
+    let system = set(DATA_DIRS_VAR).unwrap_or_else(|| DEFAULT_DATA_DIRS.into());
+    home.into_iter().chain(env::split_paths(&system)).collect()
 }
 
 #[cfg(test)]
@@ -102,5 +114,41 @@ mod tests {
             cache_home_from(env::var_os(CACHE_HOME_VAR), env::home_dir())
         );
         assert!(cache_home().is_some_and(|cache| cache.is_absolute()));
+    }
+
+    #[test]
+    fn the_data_folders_follow_the_xdg_spec() {
+        let vars = |values: &'static [(&'static str, &'static str)]| {
+            move |name: &str| {
+                values
+                    .iter()
+                    .find(|(key, _)| *key == name)
+                    .map(|(_, value)| OsString::from(value))
+            }
+        };
+        assert_eq!(
+            data_dirs(vars(&[("HOME", "/home/me")])),
+            ["/home/me/.local/share", "/usr/local/share", "/usr/share"].map(PathBuf::from)
+        );
+        assert_eq!(
+            data_dirs(vars(&[
+                ("HOME", "/home/me"),
+                ("XDG_DATA_HOME", "/data"),
+                (
+                    "XDG_DATA_DIRS",
+                    "/run/current-system/sw/share:/nix/profile/share"
+                ),
+            ])),
+            [
+                "/data",
+                "/run/current-system/sw/share",
+                "/nix/profile/share"
+            ]
+            .map(PathBuf::from)
+        );
+        assert_eq!(
+            data_dirs(vars(&[("XDG_DATA_HOME", ""), ("XDG_DATA_DIRS", "")])),
+            ["/usr/local/share", "/usr/share"].map(PathBuf::from)
+        );
     }
 }

@@ -3,18 +3,13 @@
 use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 use std::env;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{FileTypes, glob_matches};
+use nova_files_api::{FileTypes, IconKind, glob_matches};
 
 use crate::capped;
-
-const DATA_HOME_VAR: &str = "XDG_DATA_HOME";
-const DATA_DIRS_VAR: &str = "XDG_DATA_DIRS";
-const HOME_VAR: &str = "HOME";
-const DATA_IN_HOME: &str = ".local/share";
-const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
+use nova_files_disk::home::data_dirs;
 
 const GLOBS_FILE: &str = "mime/globs2";
 const SUBCLASSES_FILE: &str = "mime/subclasses";
@@ -262,15 +257,14 @@ impl nova_files_disk::ports::Mimes for MimeTypes {
     fn name(&self, mime: &str) -> Option<String> {
         Self::name(self, mime)
     }
-}
 
-pub fn data_dirs(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
-    let set = |name: &str| var(name).filter(|value| !value.is_empty());
-    let home = set(DATA_HOME_VAR)
-        .map(PathBuf::from)
-        .or_else(|| set(HOME_VAR).map(|home| PathBuf::from(home).join(DATA_IN_HOME)));
-    let system = set(DATA_DIRS_VAR).unwrap_or_else(|| DEFAULT_DATA_DIRS.into());
-    home.into_iter().chain(env::split_paths(&system)).collect()
+    fn icon_names(&self, mime: &str) -> Vec<String> {
+        Self::icon_names(self, mime)
+    }
+
+    fn icon_kind(&self, mime: &str) -> IconKind {
+        Self::icon_kind(self, mime)
+    }
 }
 
 fn read_capped(path: &Path) -> Option<String> {

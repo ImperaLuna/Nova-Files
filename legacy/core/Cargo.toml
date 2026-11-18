@@ -17,12 +17,14 @@
 # - nova-files-api
 # - nova-files-clipboard-api
 # - nova-files-disk
+# - nova-files-entries
 # - nova-files-index
 # - nova-files-jobs
 # - nova-files-messages
 # - nova-files-places-api
 # - nova-files-places-core
 # - nova-files-settings-api
+# - nova-files-settings-core
 # - nova-files-trash-api
 # - nova-files-trash-core
 
@@ -59,12 +61,14 @@ toml_edit = { version = "0.25.18", default-features = false, features = ["displa
 uzers = { version = "0.12.2", default-features = false }
 nova-files-api.workspace = true
 nova-files-disk.workspace = true
+nova-files-entries.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true
 nova-files-messages.workspace = true
 nova-files-places-api.workspace = true
 nova-files-places-core.workspace = true
 nova-files-settings-api.workspace = true
+nova-files-settings-core.workspace = true
 nova-files-trash-api.workspace = true
 nova-files-trash-core.workspace = true
 
