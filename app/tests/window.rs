@@ -28,8 +28,9 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use gpui::{App, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext, px};
-use nova_files_api::{Color, EntryId, Thumbnails};
+use nova_files_api::{Color, EntryId};
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
+use nova_files_settings_api::Thumbnails;
 use nova_files_trash_ui::TrashPart;
 use nova_files_ui::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent};
 

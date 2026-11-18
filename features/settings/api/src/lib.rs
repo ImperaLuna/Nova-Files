@@ -2,12 +2,39 @@
 //! them.
 //!
 //! The core reads them from its settings file and sends the whole set as
-//! [`crate::Event::Settings`]: when a client asks, and from then on to that
+//! [`Event::Settings`]: when a client asks, and from then on to that
 //! client each time a value changes, whoever changed it. A client changes one value at
-//! a time with [`crate::Command::ChangeSetting`], so two windows changing
+//! a time with [`Command::Change`], so two windows changing
 //! different values never undo each other.
 
+#![forbid(unsafe_code)]
+
 use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use nova_files_api::HiddenFiles;
+
+/// What a client asks of the settings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    /// Ask for the settings; the answer is [`Event::Settings`], and from
+    /// then on the client gets [`Event::Settings`] again each time one
+    /// changes. Clients that never ask never get them.
+    Watch,
+    /// Change one setting and save it. Every client that asked for the
+    /// settings, this one included, then gets [`Event::Settings`]; nothing
+    /// is sent when the value was already set.
+    Change(SettingChange),
+}
+
+/// What the settings tell a client.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Event {
+    /// The settings, answering [`Command::Watch`], and sent again to
+    /// each client that asked whenever one changes: from a client, or from
+    /// the settings file.
+    Settings(Arc<Settings>),
+}
 
 /// Every setting, each with its default.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -44,27 +71,7 @@ pub enum Thumbnails {
     Hidden,
 }
 
-/// Whether folders list their hidden entries: those whose name starts
-/// with a dot (see [`crate::Entry::is_hidden`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum HiddenFiles {
-    #[default]
-    Left,
-    Shown,
-}
-
-impl HiddenFiles {
-    /// The other choice: what Ctrl+H turns this into.
-    #[must_use]
-    pub const fn toggled(self) -> Self {
-        match self {
-            Self::Left => Self::Shown,
-            Self::Shown => Self::Left,
-        }
-    }
-}
-
-/// One setting's new value, sent with [`crate::Command::ChangeSetting`].
+/// One setting's new value, sent with [`Command::Change`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingChange {
     Appearance(Appearance),
@@ -116,12 +123,6 @@ mod tests {
         let shown = hidden.with(SettingChange::HiddenFiles(HiddenFiles::Shown));
         assert_eq!(shown.hidden_files, HiddenFiles::Shown);
         assert_eq!(shown.thumbnails, Thumbnails::Hidden);
-    }
-
-    #[test]
-    fn hidden_files_toggle_both_ways() {
-        assert_eq!(HiddenFiles::Left.toggled(), HiddenFiles::Shown);
-        assert_eq!(HiddenFiles::Shown.toggled(), HiddenFiles::Left);
     }
 
     #[test]

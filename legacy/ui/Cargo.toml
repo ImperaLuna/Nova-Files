@@ -18,6 +18,7 @@
 # - nova-files-api
 # - nova-files-clipboard-api
 # - nova-files-picker-api
+# - nova-files-settings-api
 # - nova-files-shell
 
 [package]
@@ -37,6 +38,7 @@ chrono = "0.4.45"
 nova-files-api.workspace = true
 nova-files-clipboard-api.workspace = true
 nova-files-picker-api.workspace = true
+nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }
