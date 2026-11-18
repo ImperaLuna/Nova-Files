@@ -63,7 +63,7 @@ deps:
 
 # Bare numbers outside named constants.
 numbers:
-    ast-grep scan --config tools/ast-grep/sgconfig.yml
+    tools/check-bare-numbers.sh
 
 # Comments outside the keep list in AGENTS.md; `--report` only counts them.
 comments *flags:

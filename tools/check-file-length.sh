@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Fails when a Rust file under crates/ is longer than MAX_LINES.
+# Fails when a Rust file in a crate is longer than MAX_LINES.
 #
 # Aim for modules under about 500 lines; past MAX_LINES a file must be split
 # into smaller modules that each do one job.
 set -euo pipefail
+source "$(dirname "$0")/code-dirs.sh"
 
 readonly MAX_LINES=800
 
@@ -14,5 +15,5 @@ while IFS= read -r -d '' file; do
         echo "$file: $lines lines (limit $MAX_LINES). Split it into smaller modules."
         status=1
     fi
-done < <(find crates -name '*.rs' -print0)
+done < <(find "${CODE_DIRS[@]}" -name '*.rs' -print0)
 exit "$status"

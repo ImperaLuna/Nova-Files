@@ -1,10 +1,10 @@
 # cargo-mutants settings, read by `just mutants` and CI.
 #
 # Each exclusion is code no headless test can reach; everything else in the
-# program is covered by crates/nova-files/tests/service.rs.
+# program is covered by app/tests/service.rs.
 
 # Every mutant runs the whole workspace's tests: the window is tested from
-# crates/nova-files/tests, not from its own crate.
+# app/tests, not from its own crate.
 test_workspace = true
 
 # CI's baseline reports about 1 s of tests, so the timeout cargo-mutants
@@ -28,54 +28,54 @@ exclude_re = [
     # Dropping a client cancels its listing, for the same reason.
     "replace <impl Drop for Client>::drop with \\(\\)",
     # Only changes a highlight color; tests can't read colors back.
-    "nova-files-ui/src/view/sidebar\\.rs:.*replace == with != in MainWindow::sidebar",
+    "legacy/ui/src/view/sidebar\\.rs:.*replace == with != in MainWindow::sidebar",
     # Open windows, so they need a display.
     "\\bshow_windows\\b",
-    "nova-files-ui/src/lib\\.rs:.*\\brun\\b",
-    "nova-files-ui/src/lib\\.rs:.*\\bopen_window\\b",
+    "legacy/ui/src/lib\\.rs:.*\\brun\\b",
+    "legacy/ui/src/lib\\.rs:.*\\bopen_window\\b",
     # Window mode without a bus goes on to open a window.
     "replace match guard mode != Mode::Service with false in run",
     # Fires when the core stops, which takes the 3-minute idle wait.
     "\\bwatch_core\\b",
     # Drops thumbnails from GPUI's image atlas (FIL-70), which no test can
     # read; the ShownThumbnails tests cover which images get dropped.
-    "nova-files-ui/src/window/rows\\.rs:.*replace release with \\(\\)",
+    "legacy/ui/src/window/rows\\.rs:.*replace release with \\(\\)",
     # The text field's selection (FIL-36): when its two ends meet, which
     # end is the caret makes no difference, so `<=` here is the same code.
-    "nova-files-ui/src/text/edit\\.rs:.*replace < with <= in TextEdit::select_range",
+    "legacy/ui/src/text/edit\\.rs:.*replace < with <= in TextEdit::select_range",
     # Only changes which row a picker highlights (FIL-36); the picker tests
     # check the selection itself.
-    "nova-files-ui/src/view/sheet\\.rs:.*replace == with != in MainWindow::entries",
+    "legacy/ui/src/view/sheet\\.rs:.*replace == with != in MainWindow::entries",
     # The trash (FIL-21). A folder sync only matters across a power cut.
-    "nova-files-core/src/ops/sync\\.rs:.*replace sync_folders with \\(\\)",
+    "legacy/core/src/ops/sync\\.rs:.*replace sync_folders with \\(\\)",
     # Only picks what is logged when a leftover can't be removed.
-    "nova-files-core/src/ops/sync\\.rs:.*replace != with == in remove$",
+    "legacy/core/src/ops/sync\\.rs:.*replace != with == in remove$",
     # Another program removing the entry, or taking a name in the trash,
     # between the trash job's look and its rename: a race no test can time.
-    "nova-files-core/src/ops/trash\\.rs:.*replace match guard error\\.kind\\(\\) == io::ErrorKind::NotFound with true in send$",
-    "nova-files-core/src/ops/trash\\.rs:.*\\bgone_meanwhile\\b",
-    "nova-files-core/src/ops/trash\\.rs:.*(match guard error\\.kind\\(\\) == io::ErrorKind::AlreadyExists|== with !=).* in take_names$",
+    "legacy/core/src/ops/trash\\.rs:.*replace match guard error\\.kind\\(\\) == io::ErrorKind::NotFound with true in send$",
+    "legacy/core/src/ops/trash\\.rs:.*\\bgone_meanwhile\\b",
+    "legacy/core/src/ops/trash\\.rs:.*(match guard error\\.kind\\(\\) == io::ErrorKind::AlreadyExists|== with !=).* in take_names$",
     # A home trash path that can't be looked at for a reason other than
     # missing leads to the trash at the top of the real root drive.
-    "nova-files-core/src/trash/folder\\.rs:.*NotFound with true in home_mount$",
+    "legacy/core/src/trash/folder\\.rs:.*NotFound with true in home_mount$",
     # Every kernel since 5.8 gives the mount id, so the mask test is true.
-    "nova-files-core/src/trash/folder\\.rs:.*replace & with [|^] in mount_of$",
+    "legacy/core/src/trash/folder\\.rs:.*replace & with [|^] in mount_of$",
     # Only which error a failed make reports (a full drive), which no test
     # can cause.
-    "nova-files-core/src/trash/folder\\.rs:.*match guard error\\.kind\\(\\) != io::ErrorKind::AlreadyExists with false in own_folder$",
+    "legacy/core/src/trash/folder\\.rs:.*match guard error\\.kind\\(\\) != io::ErrorKind::AlreadyExists with false in own_folder$",
     # Listing and restoring (FIL-21). A drive's trash must sit at the top
     # of a real mount, which tests can't make; its name rules are tested
     # in trash_top.
-    "nova-files-core/src/trash/folder\\.rs:.*\\bmount_trash_at\\b",
+    "legacy/core/src/trash/folder\\.rs:.*\\bmount_trash_at\\b",
     # Whether drives are looked at: with them, only the real system's
     # mounts are read, and a CI runner's hold no trash to tell apart.
-    "nova-files-core/src/trash/read\\.rs:.*delete ! in trashes$",
+    "legacy/core/src/trash/read\\.rs:.*delete ! in trashes$",
     # Read the real system's mountinfo; tests hand the parser recorded
     # text instead.
-    "nova-files-index/src/mounts\\.rs:.*\\b(system|local)_mount_points\\b",
+    "helpers/index/src/mounts\\.rs:.*\\b(system|local)_mount_points\\b",
     # A restore's info records are read only after a crash cuts it short.
-    "nova-files-core/src/ops/restore\\.rs:.*replace note_infos with \\(\\)",
+    "legacy/core/src/ops/restore\\.rs:.*replace note_infos with \\(\\)",
     # The open flags share no bits, so ^ is |; & leaves none, and the test
     # with a pipe then waits forever, a timeout rather than a catch.
-    "nova-files-core/src/trash/read\\.rs:.*replace \\| with [&^] in read_info$",
+    "legacy/core/src/trash/read\\.rs:.*replace \\| with [&^] in read_info$",
 ]

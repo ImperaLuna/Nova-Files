@@ -5,10 +5,11 @@
 # with its own file must repeat every root setting. This compares lines
 # (comments and blank lines skipped) and lists the ones a crate file lacks.
 set -euo pipefail
+source "$(dirname "$0")/code-dirs.sh"
 
 root=clippy.toml
 status=0
-for crate_config in crates/*/clippy.toml; do
+for crate_config in $(find "${CODE_DIRS[@]}" -name clippy.toml); do
     [[ -e "$crate_config" ]] || continue
     missing=$(grep -vE '^\s*(#|$)' "$root" | grep -vxFf "$crate_config" || true)
     if [[ -n "$missing" ]]; then

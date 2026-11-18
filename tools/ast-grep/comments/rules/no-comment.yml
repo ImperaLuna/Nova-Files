@@ -12,7 +12,12 @@ note: >-
   filesystem, a spec or a dependency, in one or two lines that link its
   source (`https://`). Doc comments have their own rule, no-doc-comment.
 files:
-  - "crates/**/*.rs"
+  - "app/**/*.rs"
+  - "framework/**/*.rs"
+  - "features/**/*.rs"
+  - "fronts/**/*.rs"
+  - "helpers/**/*.rs"
+  - "legacy/**/*.rs"
 utils:
   kept:
     kind: line_comment

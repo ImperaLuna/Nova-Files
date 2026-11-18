@@ -24,6 +24,7 @@ if [ -z "${IN_NIX_SHELL:-}" ]; then
     echo "pre-push: not inside nix develop; $(cargo clippy --version 2>/dev/null || echo 'Clippy') may lack lints CI's has." >&2
 fi
 
+root=$(git rev-parse --show-toplevel)
 workspace=false
 declare -A crates=()
 for sha in "$@"; do
@@ -31,19 +32,28 @@ for sha in "$@"; do
     while IFS= read -r path; do
         case $path in
             Cargo.toml | Cargo.lock) workspace=true ;;
-            crates/*/*) crate=${path#crates/}; crates[${crate%%/*}]=1 ;;
+            app/* | framework/* | features/* | fronts/* | helpers/* | legacy/*)
+                dir=$(dirname "$path")
+                while [[ "$dir" != . && ! -f "$root/$dir/Cargo.toml" ]]; do
+                    dir=$(dirname "$dir")
+                done
+                if [[ "$dir" != . ]]; then
+                    crates[$dir]=1
+                fi
+                ;;
         esac
     done < <(git diff --no-renames --name-only "$base" "$sha")
 done
 
-root=$(git rev-parse --show-toplevel)
 if $workspace; then
     scope=(--workspace)
 else
     scope=()
     for crate in "${!crates[@]}"; do
         # A crate deleted by the push has nothing left to lint.
-        [ -f "$root/crates/$crate/Cargo.toml" ] && scope+=(--package "$crate")
+        if [ -f "$root/$crate/Cargo.toml" ]; then
+            scope+=(--package "$(sed -n 's/^name = "\(.*\)"$/\1/p' "$root/$crate/Cargo.toml" | head -n 1)")
+        fi
     done
     [ ${#scope[@]} -gt 0 ] || exit 0
 fi

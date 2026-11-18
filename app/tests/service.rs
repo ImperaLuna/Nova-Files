@@ -4,7 +4,7 @@
     reason = "test setup should fail loudly"
 )]
 
-#[path = "../../nova-files-dbus/tests/support/mod.rs"]
+#[path = "../../fronts/dbus/tests/support/mod.rs"]
 mod support;
 
 use std::io;

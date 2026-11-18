@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fails on a comment in crates/ outside the keep list in AGENTS.md
+# Fails on a comment in the crates outside the keep list in AGENTS.md
 # ("Comments"). The rules live in tools/ast-grep/comments; their tests run
 # first. `--report` lists the count and passes, until the comments are gone.
 set -euo pipefail

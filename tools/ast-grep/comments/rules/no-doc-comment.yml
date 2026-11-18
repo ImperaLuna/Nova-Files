@@ -9,9 +9,14 @@ note: >-
   on, are kept, plus a doc line that links the outside source of a fact
   (`https://`).
 files:
-  - "crates/**/*.rs"
+  - "app/**/*.rs"
+  - "framework/**/*.rs"
+  - "features/**/*.rs"
+  - "fronts/**/*.rs"
+  - "helpers/**/*.rs"
+  - "legacy/**/*.rs"
 ignores:
-  - "crates/nova-files-api/**"
+  - "framework/base/**"
 utils:
   linked: { kind: line_comment, regex: 'https?://' }
   run-break: { not: { kind: line_comment } }

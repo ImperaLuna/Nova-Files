@@ -67,7 +67,7 @@ let
       zstd
     ];
     LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath runtimeLibs;
-    pname = (pkgs.lib.importTOML ../crates/nova-files/Cargo.toml).package.name;
+    pname = (pkgs.lib.importTOML ../app/Cargo.toml).package.name;
     inherit ((pkgs.lib.importTOML ../Cargo.toml).workspace.package) version;
   };
 

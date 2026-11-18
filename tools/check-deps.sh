@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Fails when a crate depends on a crate its Cargo.toml doesn't allow.
+# Fails when a crate depends on a crate it may not use.
 #
-# Each crates/*/Cargo.toml opens with two comment lines:
-#   # Allowed outside crates: rustix, serde      (or "none")
-#   # Allowed workspace crates: nova-files-api   (or "none")
-# This compares them with the normal and build dependencies that
-# `cargo metadata` reports. Dev-dependencies are left to cargo-deny.
+# Two checks. Each Cargo.toml lists the outside and workspace crates it may
+# use on its "# Allowed outside crates:" and "# Allowed workspace crates:"
+# lines. The layer rules below come from each crate's folder, so a new
+# crate can't opt out of them.
 set -euo pipefail
 
 allowed_list() { # <Cargo.toml> <label>
@@ -23,8 +22,127 @@ allowed_list() { # <Cargo.toml> <label>
     echo "$line"
 }
 
+root=$(pwd)
+
+layer_of() { # <crate folder relative to the root>
+    case $1 in
+        app) echo app ;;
+        legacy/*) echo legacy ;;
+        fronts/*) echo front ;;
+        helpers/*) echo helper ;;
+        framework/*) echo "framework ${1#framework/}" ;;
+        features/*/api | features/*/core | features/*/ui)
+            local rest=${1#features/}
+            echo "feature ${rest%%/*} ${rest#*/}"
+            ;;
+        *) echo "unknown $1" ;;
+    esac
+}
+
+in_list() { # <word> <words...>
+    local word=$1
+    shift
+    local each
+    for each in "$@"; do
+        [[ "$each" == "$word" ]] && return 0
+    done
+    return 1
+}
+
+rule_for() { # <half>
+    case $1 in
+        api) echo F1 ;;
+        core) echo F2 ;;
+        ui) echo F3 ;;
+    esac
+}
+
+FRAMEWORK_FOR_API=(base entries/api)
+FRAMEWORK_FOR_CORE=(base entries/api entries/core messages disk jobs)
+FRAMEWORK_FOR_UI=(base entries/api entries/ui messages shell)
+FRAMEWORK_FOR_FRONT=(base entries/api messages)
+
+rule_break() { # <from folder> <to folder>; prints the broken rule, if any
+    local -a from to
+    read -r -a from <<<"$(layer_of "$1")"
+    read -r -a to <<<"$(layer_of "$2")"
+    if [[ ${from[0]} == unknown || ${to[0]} == unknown ]]; then
+        echo "rule C1: every crate sits in app/, framework/, features/<name>/{api,core,ui}, fronts/, helpers/ or legacy/."
+        return
+    fi
+    if [[ ${to[0]} == legacy && ${from[0]} != app && ${from[0]} != legacy ]]; then
+        echo "rule L1: only app may use legacy/. Move what you need out of legacy/ first."
+        return
+    fi
+    case ${from[0]} in
+        app | legacy) return ;;
+        framework)
+            if [[ ${to[0]} != framework && ${to[0]} != helper ]]; then
+                echo "rule W1: the framework never uses a feature or a front. Add a slot or a port instead."
+            fi
+            ;;
+        helper)
+            if [[ ${to[0]} != helper && "${to[*]}" != "framework base" ]]; then
+                echo "rule H1: a helper uses only other helpers and framework/base."
+            fi
+            ;;
+        front)
+            if [[ ${to[0]} == framework ]] && in_list "${to[1]}" "${FRAMEWORK_FOR_FRONT[@]}"; then
+                return
+            fi
+            if [[ ${to[0]} == feature && ${to[2]} == api ]]; then
+                return
+            fi
+            echo "rule W2: a front uses only framework/{base,entries/api,messages} and feature api crates."
+            ;;
+        feature)
+            if [[ ${to[0]} == feature && ${to[2]} != api && ${to[1]} != "${from[1]}" ]]; then
+                echo "rule F4: a feature never uses another feature's ${to[2]}. Use its api, or a port in framework/jobs."
+                return
+            fi
+            local -a framework_ok
+            case ${from[2]} in
+                api) framework_ok=("${FRAMEWORK_FOR_API[@]}") ;;
+                core) framework_ok=("${FRAMEWORK_FOR_CORE[@]}") ;;
+                ui) framework_ok=("${FRAMEWORK_FOR_UI[@]}") ;;
+            esac
+            case ${to[0]} in
+                framework)
+                    in_list "${to[1]}" "${framework_ok[@]}" && return
+                    echo "rule $(rule_for "${from[2]}"): a feature's ${from[2]} may use framework/{${framework_ok[*]// /,}} only."
+                    ;;
+                feature)
+                    [[ ${to[2]} == api ]] && return
+                    if [[ ${from[2]} == ui && ${to[2]} == core ]]; then
+                        echo "rule F3: a feature's ui never uses a core crate. Send a message instead."
+                    elif [[ ${from[2]} == api ]]; then
+                        echo "rule F1: an api crate uses only framework/base, framework/entries/api and api crates."
+                    elif [[ ${from[2]} == core && ${to[2]} == ui ]]; then
+                        echo "rule F2: a feature's core never uses a ui crate."
+                    fi
+                    ;;
+                helper)
+                    [[ ${from[2]} == core ]] && return
+                    echo "rule F2: only a feature's core may use a helper."
+                    ;;
+                *) echo "rule F4: a feature uses only the framework, api crates, and its own crates." ;;
+            esac
+            ;;
+    esac
+}
+
 metadata=$(cargo metadata --no-deps --offline --format-version 1)
 workspace_names=$(jq -r '.packages[].name' <<<"$metadata")
+declare -A folder_of=()
+while IFS=$'\t' read -r name manifest; do
+    folder=${manifest%/Cargo.toml}
+    folder_of[$name]=${folder#"$root"/}
+done < <(jq -r '.packages[] | [.name, .manifest_path] | @tsv' <<<"$metadata")
+
+if [[ ${#folder_of[@]} -eq 0 ]]; then
+    echo "$0: cargo metadata listed no crates; run it from the repo root." >&2
+    exit 1
+fi
 
 status=0
 while IFS=$'\t' read -r name manifest deps; do
@@ -39,6 +157,11 @@ while IFS=$'\t' read -r name manifest deps; do
         if grep -qxF "$dep" <<<"$workspace_names"; then
             allowed=$inside
             kind=workspace
+            broken=$(rule_break "${folder_of[$name]}" "${folder_of[$dep]}")
+            if [[ -n "$broken" ]]; then
+                echo "$name (${folder_of[$name]}) depends on $dep (${folder_of[$dep]}): $broken"
+                status=1
+            fi
         else
             allowed=$outside
             kind=outside
@@ -51,4 +174,9 @@ while IFS=$'\t' read -r name manifest deps; do
     done
 done < <(jq -r '.packages[] | [.name, .manifest_path,
     ([.dependencies[] | select(.kind != "dev") | .name] | unique | join(" "))] | @tsv' <<<"$metadata")
+
+if [[ -d legacy ]]; then
+    left=$(find legacy -name '*.rs' -print0 | xargs -0 cat | wc -l)
+    echo "Lines left in legacy/: $left"
+fi
 exit "$status"
