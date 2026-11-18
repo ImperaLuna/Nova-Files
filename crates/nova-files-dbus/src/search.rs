@@ -16,7 +16,7 @@
 //! default app. The core starts that app itself when it can (see
 //! `Command::OpenFile`); when it says it can't, as in a sandbox or for a
 //! type it finds no app for, the desktop portal's `OpenFile` does. `ShowInFolder` opens
-//! a window on the folder that holds the path. Both take the launcher's
+//! a window on the folder that holds the path, with it selected. Both take the launcher's
 //! `platform_data`, as `org.freedesktop.Application.Open` does, and pass
 //! its `activation-token` on, so the compositor lets the opened app take
 //! focus.
@@ -33,6 +33,7 @@ use futures::channel::oneshot;
 
 use nova_files_api::{
     ClientGone, Command, Connector, Event, EventSink, Hit, Matched, SearchFailed, SearchId,
+    WindowRequest,
 };
 use rustix::fs::{Mode, OFlags};
 use zbus::fdo;
@@ -40,6 +41,7 @@ use zbus::message::Header;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{Fd, OwnedValue, Value};
 
+use crate::application::keep_core_up;
 use crate::files::ask_core;
 use crate::holds::{Hold, Holds};
 
@@ -158,18 +160,18 @@ impl<F> Searches<F> {
     }
 }
 
-impl<F: Fn(Option<PathBuf>)> Searches<F> {
-    /// Opens a window on `folder`, first telling the core, so it doesn't
-    /// reach its idle exit while the window starts.
-    fn open_window(&self, folder: PathBuf) -> fdo::Result<()> {
-        self.connector.activity().map_err(failed)?;
-        (self.on_open)(Some(folder));
+impl<F: Fn(WindowRequest)> Searches<F> {
+    /// Opens a window as `request` asks, first telling the core, so it
+    /// doesn't reach its idle exit while the window starts.
+    fn open_window(&self, request: WindowRequest) -> fdo::Result<()> {
+        keep_core_up(&self.connector)?;
+        (self.on_open)(request);
         Ok(())
     }
 }
 
 #[zbus::interface(name = "io.github.ImperaLuna.NovaFiles.Search1")]
-impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
+impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
     /// Starts search `id` for `query`, one word or several, with at most
     /// `limit` hits per stage. The stages arrive as `Found` signals.
     #[expect(
@@ -225,7 +227,7 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
     ) -> fdo::Result<()> {
         let path = absolute(path)?;
         match look_at(path.clone()).await? {
-            Target::Folder => self.open_window(path),
+            Target::Folder => self.open_window(WindowRequest::on(path)),
             Target::File(file) => {
                 let token = token(&platform_data);
                 let command = Command::OpenFile {
@@ -244,7 +246,8 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
         }
     }
 
-    /// Opens a Nova Files window on the folder that holds `path`.
+    /// Opens a Nova Files window on the folder that holds `path`, with
+    /// `path` selected.
     fn show_in_folder(
         &self,
         path: &str,
@@ -252,11 +255,9 @@ impl<F: Fn(Option<PathBuf>) + Send + Sync + 'static> Searches<F> {
     ) -> fdo::Result<()> {
         // The window can't take an activation token yet.
         drop(platform_data);
-        let path = absolute(path)?;
-        let folder = path
-            .parent()
-            .ok_or_else(|| fdo::Error::InvalidArgs("the root has no folder".to_owned()))?;
-        self.open_window(folder.to_owned())
+        let request = WindowRequest::showing(&absolute(path)?)
+            .ok_or_else(|| fdo::Error::InvalidArgs(format!("no folder holds {path}")))?;
+        self.open_window(request)
     }
 
     /// One stage of search `id`: (path, how it matched) pairs, best first.
@@ -503,7 +504,7 @@ mod tests {
     #[test]
     fn interface_name_matches_the_constant() {
         assert_eq!(
-            Searches::<fn(Option<std::path::PathBuf>)>::name().as_str(),
+            Searches::<fn(nova_files_api::WindowRequest)>::name().as_str(),
             INTERFACE
         );
     }

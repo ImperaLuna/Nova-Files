@@ -124,6 +124,34 @@ in
         touch $out
       '';
 
+  # `just install` and the Nix package lay out the same files, since both
+  # run data/install.sh; each mode installs what it should.
+  install-layout = pkgs.runCommand "nova-files-install-layout" { } ''
+    mkdir programs
+    touch programs/nova-files programs/nova-files-thumbnailer
+    for mode in launcher basic full; do
+      bash ${../data}/install.sh --mode $mode --prefix $PWD/$mode --from programs \
+        --app-id ${build.appId} --portal-bus-name ${build.portalBusName}
+    done
+    # The installed files, without the wrapper's hidden program.
+    list() { (cd "$1" && find bin share -not -name '.*' \( -type f -o -type l \) | sort); }
+    diff <(list ${build.ciPackage}) <(list basic)
+    diff <(list basic) <(list full)
+    diff <(list launcher) - <<EOF
+    bin/nova-files
+    bin/nova-files-thumbnailer
+    share/dbus-1/services/${build.appId}.service
+    EOF
+    # A smaller mode over a bigger one leaves only its own files.
+    bash ${../data}/install.sh --mode launcher --prefix $PWD/basic --from programs \
+      --app-id ${build.appId} --portal-bus-name ${build.portalBusName}
+    diff <(list launcher) <(list basic)
+    bash ${../data}/install.sh --uninstall --prefix $PWD/full \
+      --app-id ${build.appId} --portal-bus-name ${build.portalBusName}
+    test -z "$(find full -type f)"
+    touch $out
+  '';
+
   duplicates = toolCheck "duplicates" "tools/check-duplicates.sh" [ pkgs.pmd ];
 
   # The NixOS module in each of its modes.

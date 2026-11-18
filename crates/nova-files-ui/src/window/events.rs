@@ -50,8 +50,10 @@ impl MainWindow {
         // In a new order the cursor's entry has moved: bring it into view.
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
-        // What a rename or a new folder made is brought into view.
-        let wanted = self.wanted_selection(&listing);
+        // What a rename or a new folder made, or what an app asked to
+        // show, is brought into view.
+        let shown = self.shown_selection(&listing);
+        let wanted = self.wanted_selection(&listing).or(shown);
         let made = wanted.is_some();
         self.selection = wanted.or_else(|| self.selection_for(&listing));
         self.tree_follows(&listing, !same_folder);

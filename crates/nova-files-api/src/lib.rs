@@ -16,6 +16,7 @@
 //! counted. A [`DiskSpace`] is how full a drive is. A [`RecentFolder`] is
 //! one a person opened lately, for the Start page. A [`FileIcon`] is how an
 //! entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
+//! A [`WindowRequest`] is a window another program asks for.
 
 #![forbid(unsafe_code)]
 
@@ -42,6 +43,7 @@ mod theme;
 mod thumbnail_size;
 mod trash;
 pub mod uri;
+mod window;
 
 pub use access::{AccessChange, MODE_BITS, ModeChange, Reach};
 pub use bookmark::{Bookmark, BookmarkChange};
@@ -83,6 +85,7 @@ pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 pub use thumbnail_size::ThumbnailSize;
 pub use trash::Trashed;
+pub use window::WindowRequest;
 
 /// The application id: the D-Bus name, the Wayland app id and the name of
 /// the D-Bus service file. Set once, in `.cargo/config.toml`.
