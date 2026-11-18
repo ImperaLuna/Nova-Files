@@ -3584,6 +3584,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-dbus",
+ "nova-files-shell",
  "nova-files-ui",
  "zbus",
 ]
@@ -3671,6 +3672,17 @@ dependencies = [
 [[package]]
 name = "nova-files-messages"
 version = "0.1.0"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "nova-files-shell"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-messages",
+]
 
 [[package]]
 name = "nova-files-thumbnailer"
@@ -3693,7 +3705,9 @@ dependencies = [
  "gpui",
  "gpui_platform",
  "image",
+ "log",
  "nova-files-api",
+ "nova-files-shell",
  "unicode-segmentation",
  "usvg",
 ]

@@ -227,7 +227,9 @@ struct Stages {
 
 impl EventSink for Stages {
     fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
-        let event = envelope.open::<Event>().map_err(|_| ClientGone)?;
+        let Some(event) = envelope.taken_as::<Event>() else {
+            return Ok(());
+        };
         let (caller, path, id) = (Some(self.caller.as_str()), self.path.as_str(), self.id);
         let sent = match event {
             Event::Found { hits, done, .. } => {

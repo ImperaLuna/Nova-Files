@@ -19,7 +19,9 @@ impl dyn EventSink {
 
 impl<M: Message> EventSink for Sender<M> {
     fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
-        let message = envelope.open::<M>().map_err(|_| ClientGone)?;
+        let Some(message) = envelope.taken_as::<M>() else {
+            return Ok(());
+        };
         self.send(message).map_err(|_| ClientGone)
     }
 }
@@ -196,12 +198,13 @@ mod tests {
     }
 
     #[test]
-    fn a_channel_sink_takes_only_its_own_type() {
+    fn a_channel_sink_drops_another_type_and_stays() {
         let (sender, receiver) = mpsc::channel::<Hello>();
         let sink: Box<dyn EventSink> = Box::new(sender);
+        assert_eq!(sink.deliver(3_u8), Ok(()));
         assert_eq!(sink.deliver(Hello), Ok(()));
-        assert_eq!(sink.deliver(3_u8), Err(ClientGone));
         assert_eq!(receiver.try_recv(), Ok(Hello));
+        assert!(receiver.try_recv().is_err());
     }
 
     #[test]

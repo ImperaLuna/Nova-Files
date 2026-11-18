@@ -3,7 +3,7 @@
 # How the core and its clients talk: one connection per client, carrying
 # each feature's own message types, and the core's routes by type.
 #
-# Allowed outside crates: none
+# Allowed outside crates: log
 # Allowed workspace crates: none
 
 [package]
@@ -18,3 +18,5 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# Logs a message of a type its sink does not take.
+log = { version = "0.4.35", features = ["std"] }
