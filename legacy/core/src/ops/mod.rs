@@ -7,8 +7,6 @@ mod delete;
 mod dropped;
 mod extract;
 mod make;
-mod name;
-mod one_step;
 mod transfer;
 mod undo;
 
@@ -37,6 +35,7 @@ use access::change_access;
 use delete::delete;
 use extract::{Taking, extract};
 use make::How;
+use nova_files_rename_core::{new_folder, rename};
 use nova_files_trash_core::{Trasher, delete_from_trash, empty_trash, restore, trash};
 use transfer::transfer;
 use undo::{Undo, undo_of};
@@ -121,8 +120,8 @@ impl nova_files_jobs::JobKind for Files {
         let trashes = &self.trashes;
         let archiver = self.archiver.as_ref();
         match operation {
-            Operation::Rename { path, name } => one_step::rename(path, name),
-            Operation::NewFolder { inside, name } => one_step::new_folder(inside, name),
+            Operation::Rename { path, name } => rename(path, name),
+            Operation::NewFolder { inside, name } => new_folder(inside, name),
             Operation::Copy { sources, into } => match copied_out(sources) {
                 Some((archive, picked)) => {
                     extract(running, archiver, &archive, into, Taking::Picked(&picked))

@@ -9,7 +9,6 @@ use nova_files_api::{Failure, Operation, Outcome};
 use super::Ended;
 use super::journal::{Record, word};
 use super::make::How;
-use super::one_step;
 use super::plan::Entry;
 use super::running::Running;
 use super::stop::Stop;
@@ -183,7 +182,7 @@ fn run_one(
         }
         Undo::Rename(path, was, name) if same(&path, was) => {
             match running.shared.control.checkpoint().map_err(Stop::from) {
-                Ok(()) => one_step::rename(&path, &name),
+                Ok(()) => nova_files_rename_core::rename(&path, &name),
                 Err(stop) => (stop.outcome(), Vec::new()),
             }
         }
