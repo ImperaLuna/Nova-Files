@@ -2,15 +2,18 @@
 //! the Start page) on the right, and an Up button. This file holds the
 //! window's state and opening it; the work is split by area: going places
 //! in `navigate`, pinning folders in `pin`, the folder tree's own line to
-//! the core in `tree`, the drives in `drives`, the Start page in `start`,
+//! the core in `tree`, the drives in `drives`, the Start page in `start`, Games and Projects
+//! in `gathered`,
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
 //! `clipboard`, dragging and dropping files in `dragging` (naming the
 //! drop under the pointer in `aiming`, opening rows held over in
 //! `hover_open`), renaming and
-//! New folder in `renaming`, the Properties page in `properties` (its size in `measuring`, its
-//! app in `opens_with`), the jobs they start in `jobs`, the tabs in
-//! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, and the sheet's right-click
+//! New folder in `renaming`, the Properties page in `properties` (its
+//! size in `measuring`, its app in `opens_with`), the jobs they start in
+//! `jobs`, the tabs in `tabs` (reordered in `tab_order`), showing hidden
+//! files in `hidden`, the files an app asked to show selected in
+//! `showing`, the folders' views in `views`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
@@ -54,6 +57,9 @@ mod context_menu;
 mod dragging;
 mod drives;
 mod events;
+mod gallery;
+mod gathered;
+mod gathering;
 mod hidden;
 mod hover_open;
 mod jobs;
@@ -66,18 +72,21 @@ mod properties;
 mod renaming;
 mod rows;
 mod search;
+mod showing;
 mod start;
 mod tab_order;
 mod tabs;
 mod trash;
 mod tree;
+mod views;
 
 pub use aiming::Aim;
 pub use dragging::DraggedRow;
+pub use gathered::LIBRARY_LABEL;
 pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
-pub use preview::{Previewed, Shown};
+pub use preview::{Previewed, QuickLook, Shown};
 pub use properties::Page as PropertiesPage;
 pub use search::{FocusTo, Scope, short_folder};
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
@@ -93,8 +102,8 @@ use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    Bookmark, ClientGone, Command, Connection, Connector, Event, EventSink, HiddenFiles, Listing,
-    ListingId, Order, Place, RecentFolder, RecentId, Settings,
+    Bookmark, ClientGone, Command, Connection, Connector, Event, EventSink, FolderView, Gathering,
+    HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
 
 use self::drives::Drives;
@@ -139,6 +148,8 @@ pub enum WindowEvent {
     Status(CoreStatus),
     /// A folder's listing is now on screen.
     Opened(PathBuf),
+    /// What Games or Projects gathers is now on screen.
+    GatheredShown(Gathering),
     /// The Start page is now on screen.
     StartShown,
     /// The folder asked for couldn't be read; the window stayed put.
@@ -167,12 +178,14 @@ pub struct MainWindow {
     /// Thumbnails of the rows in `rows_wanted`, by row.
     thumbnails: ShownThumbnails,
     /// The window's scale factor when it last drew, for sizing thumbnails.
-    scale_factor: f32,
+    pub(crate) scale_factor: f32,
     /// The rows the core was last told about: on screen and one screen
     /// either side.
     rows_wanted: Range<usize>,
     /// The rows the list drew last; see [`Self::rows_drawn`].
     pub(crate) rows_drawn: Range<usize>,
+    /// What the view's layout keeps between frames.
+    sizing: views::Sizing,
     /// What is selected, and the row the keyboard is on (see `selecting`).
     pub(crate) selection: Option<Selection>,
     /// The letters typed to jump to a name (see `jump`).
@@ -185,8 +198,8 @@ pub struct MainWindow {
     pub(crate) pressed_name: bool,
     /// The listing asked for most recently; only its answer counts.
     pub(crate) asked: Option<ListingId>,
-    /// The folder asked for most recently.
-    requested: Option<PathBuf>,
+    /// The place asked for most recently: a folder, or Games or Projects.
+    requested: Option<Location>,
     /// The order the window asks for listings in (see `navigate`).
     order: Order,
     /// The order of the listing asked for most recently.
@@ -194,7 +207,8 @@ pub struct MainWindow {
     /// The order of the listing on screen, which the column heads show.
     shown_order: Order,
     /// Whether the core sent a listing since the one on screen, which the
-    /// window dropped: the core now serves rows of that one, not this.
+    /// window dropped: the core now serves rows of that one, not this,
+    /// until the window asks for the one on screen again.
     core_moved: bool,
     next_listing: u64,
     /// Where to go, in order, while the window has no folder and the one
@@ -204,11 +218,19 @@ pub struct MainWindow {
     /// it doesn't count as used.
     pub(crate) falling_back: bool,
     pub(crate) places: Vec<Place>,
+    /// The view each folder was given, as the core last sent them (see
+    /// `views`).
+    folder_views: HashMap<PathBuf, FolderView>,
+    /// Views given here that the core's list doesn't hold yet.
+    pending_views: HashMap<PathBuf, FolderView>,
     /// The sidebar's folder tree under Home, and its line to the core.
     pub(crate) tree: FolderTree,
     tree_line: TreeLine,
     /// The folders the user pinned, in their order.
     pinned: Arc<[Bookmark]>,
+    /// Games and Projects, and what the window knows of them (see
+    /// `gathered`).
+    gathered: gathered::GatheredState,
     /// Where the window has been, for Back and Forward.
     pub(crate) history: History,
     /// The recent folders the Start page shows, newest first, as the core
@@ -246,6 +268,8 @@ pub struct MainWindow {
     renaming: Option<Renaming>,
     /// What a rename or a new folder waits for (see `renaming`).
     waiting: Waiting,
+    /// Names to select in the first listing (see `showing`).
+    showing: Option<showing::Showing>,
     /// The trash, and what the window knows of it (see `trash`).
     trash: TrashState,
     /// The tabs in the background, and which one is on screen (see
@@ -300,6 +324,17 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
+    /// What a window asks the core for as it opens.
+    const FIRST_ASKS: [Command; 7] = [
+        Command::Ping,
+        Command::Places,
+        Command::Drives,
+        Command::Settings,
+        Command::FolderViews,
+        Command::Theme,
+        Command::ListTrash,
+    ];
+
     /// Opens a window at `location`, with `home` as the home folder.
     pub fn at(
         connector: &Connector,
@@ -308,18 +343,7 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) -> Self {
         let (sink, events) = mpsc::unbounded();
-        let connection = connector
-            .connect(ChannelSink(sink))
-            .and_then(|connection| {
-                connection.send(Command::Ping)?;
-                connection.send(Command::Places)?;
-                connection.send(Command::Drives)?;
-                connection.send(Command::Settings)?;
-                connection.send(Command::Theme)?;
-                connection.send(Command::ListTrash)?;
-                Ok(connection)
-            })
-            .ok();
+        let connection = connect(connector, ChannelSink(sink));
         let status = if connection.is_some() {
             CoreStatus::Connecting
         } else {
@@ -337,6 +361,7 @@ impl MainWindow {
             thumbnails: ShownThumbnails::default(),
             rows_wanted: 0..0,
             rows_drawn: 0..0,
+            sizing: views::Sizing::default(),
             selection: None,
             jump: TypeJump::default(),
             quick_looks: QuickLooks::default(),
@@ -356,8 +381,11 @@ impl MainWindow {
             falling_back: false,
             home,
             places: Vec::new(),
+            folder_views: HashMap::new(),
+            pending_views: HashMap::new(),
             tree_line: TreeLine::connect(connector, cx),
             pinned: Arc::from([]),
+            gathered: gathered::GatheredState::default(),
             history: History::default(),
             recent: Vec::new(),
             recent_asked: RecentId(0),
@@ -375,6 +403,7 @@ impl MainWindow {
             counted: SharedString::default(),
             renaming: None,
             waiting: Waiting::Nothing,
+            showing: None,
             trash,
             tabs: Tabs::default(),
             drop_asks: aiming::Asks::default(),
@@ -399,6 +428,7 @@ impl MainWindow {
         match location {
             Location::Start => self.open_start(cx),
             Location::Folder(folder) => self.open(folder),
+            Location::Gathered(place) => self.open_gathered(*place, cx),
             Location::Properties(paths) => self.arrive_at_properties(paths, cx),
         }
     }
@@ -435,12 +465,17 @@ impl MainWindow {
         self.location() == Some(&Location::Start)
     }
 
-    /// The folder on screen, if one has arrived yet, none on Start; while
-    /// a search is under way, the folder it started in.
+    /// The folder on screen, if one has arrived yet, none on Start or in
+    /// Games or Projects; while a search is under way, the folder it
+    /// started in, none when it started in Games or Projects.
     pub fn folder(&self) -> Option<&Path> {
-        self.search
-            .from()
-            .or_else(|| self.listing.as_ref().map(|listing| listing.path.as_path()))
+        if let Some(from) = self.search.from() {
+            return from.folder();
+        }
+        if self.gathered_shown().is_some() {
+            return None;
+        }
+        self.listing.as_ref().map(|listing| listing.path.as_path())
     }
 
     /// Whether a folder asked for hasn't answered yet.
@@ -486,6 +521,20 @@ impl Focusable for MainWindow {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus.clone()
     }
+}
+
+/// Connects to the core with `sink` for its events, and asks for what
+/// every window shows; `None` when the core isn't running.
+fn connect(connector: &Connector, sink: ChannelSink) -> Option<Connection> {
+    connector
+        .connect(sink)
+        .and_then(|connection| {
+            for command in MainWindow::FIRST_ASKS {
+                connection.send(command)?;
+            }
+            Ok(connection)
+        })
+        .ok()
 }
 
 /// The root folder, where a window lands when nothing else can be read.

@@ -1,6 +1,7 @@
 //! A small menu that opens where the pointer was right-clicked: a file's
 //! actions, a pinned place's "Remove from Places", a drive's Eject, or
-//! the apps that can open a file on its Properties page. The
+//! the folders Games or Projects gather from, or the apps that can open
+//! a file on its Properties page. The
 //! window holds at most one; it closes on a choice, on Escape, or on a
 //! press outside it. Drawing is in `view/menu`.
 //!
@@ -22,7 +23,7 @@ use gpui::{
     App, Context, FocusHandle, KeyBinding, KeybindingKeystroke, Pixels, Point, SharedString, Window,
 };
 
-use nova_files_api::{DriveAction, DriveId};
+use nova_files_api::{DriveAction, DriveId, Gathering};
 
 use crate::assets::Icon;
 use crate::commands::ActionSpec;
@@ -65,6 +66,8 @@ pub struct MenuItem {
     pub label: SharedString,
     pub action: MenuAction,
     pub look: Look,
+    /// A word on it at its right, where an action's keys go.
+    pub detail: Option<SharedString>,
 }
 
 /// How an item stands out.
@@ -95,6 +98,10 @@ pub enum MenuAction {
     SetDefaultApp { mime: String, app: String },
     /// Send one of the window's actions, as its key does.
     Run(&'static ActionSpec),
+    /// Stop gathering a place from a folder.
+    Ungather(Gathering, PathBuf),
+    /// Pick a folder to add to a place.
+    AddGathered(Gathering),
 }
 
 impl Menu {
@@ -112,12 +119,20 @@ impl MenuItem {
             label: label.into(),
             action,
             look: Look::Plain,
+            detail: None,
         }
     }
 
     /// An item that sends `spec`'s action, named by its label.
     pub fn run(icon: Icon, spec: &'static ActionSpec) -> Self {
         Self::new(icon, spec.label, MenuAction::Run(spec))
+    }
+
+    /// This item, with `detail` at its right.
+    #[must_use]
+    pub fn with_detail(mut self, detail: Option<SharedString>) -> Self {
+        self.detail = detail;
+        self
     }
 
     /// This item, standing out as `look` says.
@@ -236,6 +251,8 @@ impl MainWindow {
             MenuAction::Eject(drive) => self.act_on_drive(DriveAction::Eject(drive)),
             MenuAction::SetDefaultApp { mime, app } => self.set_default_app(mime, app),
             MenuAction::Run(spec) => window.dispatch_action(spec.action(), cx),
+            MenuAction::Ungather(place, path) => self.ungather(place, path, cx),
+            MenuAction::AddGathered(place) => self.pick_folder_to_gather(place, cx),
         }
         cx.notify();
     }

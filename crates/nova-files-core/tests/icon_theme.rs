@@ -19,7 +19,9 @@ use std::time::Duration;
 #[path = "common/own_folders.rs"]
 mod own_folders;
 
-use nova_files_api::{Command, EntryId, Event, FileIcon, IconKind, ListingId, Order};
+use nova_files_api::{
+    Command, EntryId, Event, FileIcon, IconKind, ListingId, Order, ThumbnailSize,
+};
 
 use own_folders::run_again_in;
 
@@ -76,6 +78,7 @@ fn icons_through_the_core(root: &Path) {
                 id: ListingId(id),
                 first: EntryId(0),
                 count: 1,
+                size: ThumbnailSize::Normal,
             })
             .unwrap();
         match wait_for(&events, |event| matches!(event, Event::DetailsRead { .. })) {

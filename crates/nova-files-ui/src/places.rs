@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use gpui::SharedString;
-use nova_files_api::{Bookmark, Place, PlaceKind};
+use nova_files_api::{Bookmark, Gathering, Place, PlaceKind};
 
 use crate::assets::Icon;
 
@@ -24,6 +24,18 @@ pub const HOME_LABEL: &str = "Home";
 pub const START_LABEL: &str = "Start";
 /// The trash's name, in Places, the path bar and on its tab.
 pub const TRASH_LABEL: &str = "Trash";
+/// Projects' name, in Places, the path bar and on its tab.
+pub const PROJECTS_LABEL: &str = "Projects";
+/// Games' name, in Places, the path bar and on its tab.
+pub const GAMES_LABEL: &str = "Games";
+
+/// The name and icon of `place`, Games or Projects.
+pub const fn gathering_look(place: Gathering) -> (&'static str, Icon) {
+    match place {
+        Gathering::Projects => (PROJECTS_LABEL, Icon::Projects),
+        Gathering::Games => (GAMES_LABEL, Icon::Games),
+    }
+}
 
 /// One row of Places.
 #[derive(Debug, Clone, PartialEq, Eq)]

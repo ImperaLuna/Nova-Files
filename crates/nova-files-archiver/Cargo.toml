@@ -1,0 +1,41 @@
+# nova-files-archiver
+#
+# The sandboxed archive helper. It reads zip and tar archives (and, later,
+# makes them) for the core, locked in so that a hostile archive can't
+# reach anything but what it is given.
+#
+# Allowed outside crates: bzip2, chrono, flate2, landlock, lzma-rust2, tar, zip, zstd
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-archiver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Reads .tar.bz2. Pure Rust (libbz2-rs-sys), already in the lock under GPUI.
+bzip2 = "0.6"
+# Turns zip's calendar times into seconds; the core already builds it.
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+# Reads .tar.gz, every gzip member; zlib-rs is the pure Rust backend.
+flate2 = { version = "1.1.11", default-features = false, features = ["zlib-rs"] }
+landlock = "0.4"
+# Reads and writes .tar.xz, in pure Rust.
+lzma-rust2 = { version = "0.25", default-features = false, features = ["encoder", "optimization", "std", "xz"] }
+# Reads tar archives: GNU long names and pax headers included.
+tar = { version = "0.4.46", default-features = false }
+# Reads zip archives: Deflate, Zstandard, bzip2 and xz entries, and AES or
+# the old ZipCrypto passwords.
+zip = { version = "9", default-features = false, features = ["aes-crypto", "bzip2", "chrono", "deflate-flate2-zlib-rs", "legacy-zip", "xz", "zstd"] }
+# Reads .tar.zst.
+zstd = { version = "0.14", default-features = false }
+
+[dev-dependencies]
+# The tests run the helper the way the core does.
+nova-files-core.workspace = true
