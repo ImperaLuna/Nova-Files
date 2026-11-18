@@ -79,8 +79,8 @@ most") becomes a type, a test or a lint, not a sentence. What a change
 leaves unsolved goes under "Known gaps" in the PR body. Only these stay:
 
 - `// SAFETY:` on an unsafe block.
-- Docs (`///`, `//!`) in `nova-files-api` and the feature `api` crates: the
-  contract other apps build on.
+- Docs (`///`, `//!`) in `nova-files-api` and each feature's `api` crate
+  (`features/*/api`): the contract other apps and features build on.
 - A licence header (`// SPDX-License-Identifier:`).
 - A fact forced by the kernel, a filesystem, a spec or a dependency, true
   today, in one or two plain lines that link its source (`https://`). A

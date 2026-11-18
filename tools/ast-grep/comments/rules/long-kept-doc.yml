@@ -6,8 +6,8 @@ message: >-
   lines and its source link; anything more belongs in the code, a test or
   the PR.
 note: >-
-  The docs of nova-files-api and the feature api crates, the contract
-  other apps build on, have no cap.
+  The docs of nova-files-api and the features' api crates, the contract
+  other apps and features build on, have no cap.
 files:
   - "**/*.rs"
 ignores:
