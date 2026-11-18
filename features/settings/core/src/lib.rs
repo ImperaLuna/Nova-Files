@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod file;
 
 use std::collections::BTreeMap;
@@ -7,12 +9,11 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 
-use nova_files_api::{ClientId, EventSink};
+use nova_files_disk::config_watch::{self, ConfigWatch};
+use nova_files_disk::hand_edited::{self, Reread, lock};
+use nova_files_disk::private_file::{self, Read};
+use nova_files_messages::{ClientId, EventSink};
 use nova_files_settings_api::{Event, SettingChange, Settings};
-
-use crate::config_watch::{self, ConfigWatch};
-use crate::hand_edited::{self, Reread, lock};
-use crate::private_file::{self, Read};
 
 const FILE: &str = "settings.toml";
 const MAX_BYTES: usize = 64 * 1024;
