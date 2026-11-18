@@ -11,6 +11,9 @@
 //! answers come the page shows what it had, so a tab shown again draws at
 //! once and then catches up with what changed meanwhile.
 //!
+//! A folder's size, or several paths' total, is measured while the page
+//! is on screen (see `measuring`).
+//!
 //! A path that can't be read any more (deleted, moved, its drive gone)
 //! drops off the page; when none is left the tab goes to Start, as a tab
 //! on a folder that is gone does.
@@ -28,6 +31,8 @@ use crate::location::Location;
 #[derive(Debug)]
 pub struct Page {
     items: Vec<Item>,
+    /// What is under its paths, as measured so far (see `measuring`).
+    pub(super) measure: Option<super::measuring::Measure>,
 }
 
 /// One path on a Properties page.
@@ -53,7 +58,19 @@ impl Page {
                 gone: false,
             })
             .collect();
-        Self { items }
+        Self {
+            items,
+            measure: None,
+        }
+    }
+
+    /// The paths still on the page, in order.
+    pub(super) fn paths(&self) -> Vec<PathBuf> {
+        self.items
+            .iter()
+            .filter(|item| !item.gone)
+            .map(|item| item.path.clone())
+            .collect()
     }
 
     /// What the core said of each path still on the page, in order;
@@ -123,18 +140,18 @@ impl MainWindow {
         }
         self.history.arrived(&Location::Properties(paths.to_vec()));
         self.ask_properties();
+        self.measure();
         cx.notify();
     }
 
     /// Asks the core again for each path on the page, gone ones too, so a
     /// path that is back shows again.
     pub(super) fn ask_properties(&mut self) {
-        let Some(page) = self.properties.as_mut() else {
+        let Some(mut page) = self.properties.take() else {
             return;
         };
         for item in &mut page.items {
-            let id = PropertiesId(self.next_properties);
-            self.next_properties += 1;
+            let id = PropertiesId(self.next_ask());
             let sent = self.connection.as_ref().map(|connection| {
                 connection.send(Command::Properties {
                     id,
@@ -143,6 +160,7 @@ impl MainWindow {
             });
             item.asked = matches!(sent, Some(Ok(()))).then_some(id);
         }
+        self.properties = Some(page);
     }
 
     /// The answer to request `id`: the path's properties, or `None` when

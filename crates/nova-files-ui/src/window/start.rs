@@ -37,6 +37,7 @@ impl MainWindow {
     /// Shows the Start page, leaving the history's trip as it is.
     pub(super) fn arrive_at_start(&mut self, cx: &mut Context<Self>) {
         self.let_go_of_folder(cx);
+        self.stop_measuring();
         self.history.arrived(&Location::Start);
         self.ask_for_recent();
         cx.emit(WindowEvent::StartShown);

@@ -8,7 +8,7 @@
 //! `clipboard`, dragging and dropping files in `dragging` (naming the
 //! drop under the pointer in `aiming`, opening rows held over in
 //! `hover_open`), renaming and
-//! New folder in `renaming`, the Properties page in `properties`, the jobs they start in `jobs`, the tabs in
+//! New folder in `renaming`, the Properties page in `properties` (its size in `measuring`), the jobs they start in `jobs`, the tabs in
 //! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
@@ -56,6 +56,7 @@ mod events;
 mod hidden;
 mod hover_open;
 mod jobs;
+mod measuring;
 mod navigate;
 mod pin;
 mod preview;
@@ -259,8 +260,8 @@ pub struct MainWindow {
     /// The Properties page of the tab on screen, while it has one (see
     /// `properties`).
     properties: Option<properties::Page>,
-    /// The id the next properties request gets.
-    next_properties: u64,
+    /// The id the next properties request or size scan gets.
+    next_ask: u64,
     _events: Task<()>,
 }
 
@@ -378,11 +379,17 @@ impl MainWindow {
             hover_open: hover_open::HoverOpen::default(),
             tab_order: tab_order::TabOrder::default(),
             properties: None,
-            next_properties: 0,
+            next_ask: 0,
             _events: events,
         };
         window.go_first(location, cx);
         window
+    }
+
+    /// A new id for a request, to match its answer to it.
+    const fn next_ask(&mut self) -> u64 {
+        self.next_ask += 1;
+        self.next_ask
     }
 
     /// Goes to `location`, the first place of a new window.

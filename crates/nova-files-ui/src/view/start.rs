@@ -12,6 +12,8 @@
 
 mod drives;
 
+pub(super) use drives::bar;
+
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -37,7 +39,7 @@ const SEPARATOR: &str = " · ";
 /// The small cards sit two by two beside the large one.
 const SMALL_PER_ROW: usize = 2;
 /// The entries a small card's fan shows.
-const FAN_ENTRIES: usize = 3;
+pub(super) const FAN_ENTRIES: usize = 3;
 
 impl MainWindow {
     /// The Start page, filling the sheet.
