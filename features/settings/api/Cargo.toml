@@ -1,0 +1,21 @@
+# nova-files-settings-api
+#
+# The user's settings, and what the settings feature's two halves say to
+# each other: its command and its event.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: nova-files-api
+
+[package]
+name = "nova-files-settings-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

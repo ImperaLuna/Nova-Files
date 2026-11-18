@@ -7,7 +7,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 
-use nova_files_api::{ClientId, Event, EventSink, SettingChange, Settings};
+use nova_files_api::{ClientId, EventSink};
+use nova_files_settings_api::{Event, SettingChange, Settings};
 
 use crate::config_watch::{self, ConfigWatch};
 use crate::hand_edited::{self, Reread, lock};

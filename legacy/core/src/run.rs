@@ -7,6 +7,7 @@ use nova_files_api::{
     ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
 };
 use nova_files_messages::{Routed, Routes};
+use nova_files_settings_api as settings_api;
 
 use crate::disk_space;
 use crate::drives::Store as DrivesStore;
@@ -56,6 +57,13 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
     routes.on(|setup: &Setup, id, client: &Client, command: Command| {
         answer(id, client, command, setup)
     })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
+            settings_api::Command::Watch => setup.settings.listen(id, client.events()),
+            settings_api::Command::Change(change) => setup.settings.change(change),
+        }
+        Ok(())
+    })?;
     routes.on_leave(forget);
     Ok(routes)
 }
@@ -65,7 +73,10 @@ pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
 }
 
 pub fn emitted_types() -> Vec<MessageType> {
-    vec![MessageType::of::<Event>()]
+    vec![
+        MessageType::of::<Event>(),
+        MessageType::of::<settings_api::Event>(),
+    ]
 }
 
 pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup) {
@@ -173,8 +184,6 @@ fn answer(
         | Command::SaveWindowState(_)
         | Command::FolderViews
         | Command::SetFolderView { .. }
-        | Command::Settings
-        | Command::ChangeSetting(_)
         | Command::Theme
         | Command::DesktopLook(_)
         | Command::DesktopIconThemes(_)) => look::answer(id, client, command, setup),

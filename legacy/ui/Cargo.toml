@@ -4,7 +4,7 @@
 # never touches the disk.
 #
 # Allowed outside crates: chrono, futures, gpui, gpui-component, gpui_platform, image, log, unicode-segmentation, usvg
-# Allowed workspace crates: nova-files-api, nova-files-picker-api, nova-files-shell
+# Allowed workspace crates: nova-files-api, nova-files-picker-api, nova-files-settings-api, nova-files-shell
 
 [package]
 name = "nova-files-ui"
@@ -22,6 +22,7 @@ workspace = true
 chrono = "0.4.45"
 nova-files-api.workspace = true
 nova-files-picker-api.workspace = true
+nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }
