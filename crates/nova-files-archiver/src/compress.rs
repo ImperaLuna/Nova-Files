@@ -89,13 +89,19 @@ pub fn compress(
     let mut told = Told::new(out);
     let packing = recipe.packing;
     let level = recipe.level.clamp(FASTEST, SMALLEST);
+    let Ok(made) = output.metadata() else {
+        return Ending::NotWritten;
+    };
+    let itself = (made.dev(), made.ino());
     let output = BufWriter::new(output);
     let result = match packing {
-        Packing::ZipDeflate | Packing::ZipZstd => zip_all(output, sources, recipe, &mut told),
+        Packing::ZipDeflate | Packing::ZipZstd => {
+            zip_all(output, sources, itself, recipe, &mut told)
+        }
         Packing::TarZstd => zstd::Encoder::new(output, zstd_level(level))
             .map_err(Stopped::Write)
             .and_then(|encoder| {
-                let encoder = tar_all(encoder, sources, &mut told)?;
+                let encoder = tar_all(encoder, sources, itself, &mut told)?;
                 encoder
                     .finish()
                     .map_err(Stopped::Write)?
@@ -104,7 +110,7 @@ pub fn compress(
             }),
         Packing::TarGzip => {
             let encoder = flate2::write::GzEncoder::new(output, flate2::Compression::new(level));
-            tar_all(encoder, sources, &mut told).and_then(|encoder| {
+            tar_all(encoder, sources, itself, &mut told).and_then(|encoder| {
                 encoder
                     .finish()
                     .map_err(Stopped::Write)?
@@ -116,7 +122,7 @@ pub fn compress(
             lzma_rust2::XzWriter::new(output, lzma_rust2::XzOptions::with_preset(level))
                 .map_err(Stopped::Write)
                 .and_then(|encoder| {
-                    let encoder = tar_all(encoder, sources, &mut told)?;
+                    let encoder = tar_all(encoder, sources, itself, &mut told)?;
                     encoder
                         .finish()
                         .map_err(Stopped::Write)?
@@ -138,15 +144,21 @@ fn zstd_level(level: Level) -> i32 {
     ZSTD_LEVELS.get(index).copied().unwrap_or_default()
 }
 
+/// The device and inode of the archive being made, which no walk takes.
+type Itself = (u64, u64);
+
 /// Calls `each` with every entry under `source`, `source` first, a
-/// folder before what it holds, each with its name in the archive.
+/// folder before what it holds, each with its name in the archive; the
+/// archive being made is left out.
 fn walk(
     source: &Path,
+    itself: Itself,
     each: &mut impl FnMut(&Path, &[u8], &fs::Metadata) -> Result<(), Stopped>,
 ) -> Result<(), Stopped> {
     walk_in(
         source,
         source.file_name().unwrap_or_default().as_bytes(),
+        itself,
         each,
     )
 }
@@ -154,9 +166,13 @@ fn walk(
 fn walk_in(
     path: &Path,
     name: &[u8],
+    itself: Itself,
     each: &mut impl FnMut(&Path, &[u8], &fs::Metadata) -> Result<(), Stopped>,
 ) -> Result<(), Stopped> {
     let metadata = path.symlink_metadata().map_err(Stopped::Read)?;
+    if (metadata.dev(), metadata.ino()) == itself {
+        return Ok(());
+    }
     each(path, name, &metadata)?;
     if !metadata.is_dir() {
         return Ok(());
@@ -169,7 +185,7 @@ fn walk_in(
     inside.sort();
     for child in inside {
         let child_name = [name, PART, child.as_bytes()].concat();
-        walk_in(&path.join(&child), &child_name, each)?;
+        walk_in(&path.join(&child), &child_name, itself, each)?;
     }
     Ok(())
 }
@@ -177,13 +193,14 @@ fn walk_in(
 fn tar_all<W: Write>(
     output: W,
     sources: &[&Path],
+    itself: Itself,
     told: &mut Told<'_, impl Write>,
 ) -> Result<W, Stopped> {
     let mut builder = tar::Builder::new(output);
     builder.follow_symlinks(false);
     builder.mode(tar::HeaderMode::Complete);
     for source in sources {
-        walk(source, &mut |path, name, metadata| {
+        walk(source, itself, &mut |path, name, metadata| {
             let kind = metadata.file_type();
             if !(kind.is_file() || kind.is_dir() || kind.is_symlink()) {
                 return Ok(());
@@ -211,6 +228,7 @@ fn sort(error: io::Error, path: &Path) -> Stopped {
 fn zip_all(
     output: impl Write + io::Seek,
     sources: &[&Path],
+    itself: Itself,
     recipe: &Recipe<'_>,
     told: &mut Told<'_, impl Write>,
 ) -> Result<(), Stopped> {
@@ -223,7 +241,7 @@ fn zip_all(
         (CompressionMethod::Deflated, i64::from(level))
     };
     for source in sources {
-        walk(source, &mut |path, name, metadata| {
+        walk(source, itself, &mut |path, name, metadata| {
             let kind = metadata.file_type();
             let mode = metadata.permissions().mode() & PERMISSION_BITS;
             let base = FullFileOptions::default()

@@ -331,3 +331,49 @@ fn each_zip_packing_uses_its_own_method() {
     }
     fs::remove_dir_all(&folder).ok();
 }
+
+#[test]
+fn a_link_on_its_own_goes_in_as_a_link() {
+    let folder = sources("link-source");
+    let archive = folder.join("link.zip");
+    archiver()
+        .compress(
+            &[folder.join("docs/to-a")],
+            &archive,
+            &recipe(Packing::ZipDeflate),
+            go(),
+        )
+        .unwrap();
+    let entries = archiver().list(&archive).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].kind, ArchiveKind::Link);
+    assert_eq!(entries[0].link, Path::new("a.txt"));
+    fs::remove_dir_all(&folder).ok();
+}
+
+#[test]
+fn an_archive_made_inside_a_source_leaves_itself_out() {
+    let folder = sources("inside-source");
+    let archive = folder.join("docs/docs.tar.gz");
+    archiver()
+        .compress(
+            &[folder.join("docs")],
+            &archive,
+            &recipe(Packing::TarGzip),
+            go(),
+        )
+        .unwrap();
+    let entries = archiver().list(&archive).unwrap();
+    let paths: Vec<_> = entries.iter().map(|entry| entry.path.as_path()).collect();
+    assert_eq!(
+        paths,
+        [
+            Path::new("docs"),
+            Path::new("docs/a.txt"),
+            Path::new("docs/inner"),
+            Path::new("docs/inner/b.txt"),
+            Path::new("docs/to-a"),
+        ]
+    );
+    fs::remove_dir_all(&folder).ok();
+}

@@ -36,7 +36,7 @@ pub fn compress(running: &mut Running, archiver: Option<&Archiver>, asked: &Aske
             running.steps.insert(made.0, made.1);
             (Outcome::Done, vec![asked.into.to_path_buf()])
         }
-        Ok(None) => (Outcome::Done, Vec::new()),
+        Ok(None) => (Outcome::Cancelled, Vec::new()),
         Err(stop) => (stop.outcome(), Vec::new()),
     }
 }
@@ -68,15 +68,14 @@ fn make(
     let (bytes, items) = totals(asked.sources, &running.shared.control)?;
     running.reporter.planned(bytes, items);
     let password = if asked.locked {
-        let Some(password) =
-            ask_password(running, ConflictKind::PasswordNeeded, first, asked.into)?
-        else {
+        let Some(password) = locking_password(running, first, asked.into)? else {
             return Ok(None);
         };
         Some(password)
     } else {
         None
     };
+    running.shared.control.checkpoint()?;
     let part = asked
         .into
         .join(format!("{PART_PREFIX}{}-archive", running.names));
@@ -99,6 +98,21 @@ fn make(
     }
 }
 
+/// The password to lock the archive with, asked until one is given;
+/// `None` when the user skips it.
+fn locking_password(
+    running: &mut Running,
+    first: &Path,
+    into: &Path,
+) -> Result<Option<String>, Stop> {
+    loop {
+        match ask_password(running, ConflictKind::PasswordNeeded, first, into)? {
+            Some(password) if password.is_empty() => {}
+            given => return Ok(given),
+        }
+    }
+}
+
 /// Gives the finished `part` the name `target`, or the next free one.
 fn place(part: &Path, target: &Path) -> io::Result<PathBuf> {
     let mut to = target.to_path_buf();
@@ -115,23 +129,23 @@ fn place(part: &Path, target: &Path) -> io::Result<PathBuf> {
 
 /// The bytes the files under `sources` hold, and how many entries there
 /// are, links not followed. Held or stopped through `control` at each
-/// folder.
+/// entry.
 fn totals(sources: &[PathBuf], control: &super::control::Control) -> Result<(u64, u64), Stop> {
     let mut bytes = 0_u64;
     let mut items = 0_u64;
     let mut left: Vec<PathBuf> = sources.to_vec();
     while let Some(path) = left.pop() {
+        control.checkpoint()?;
         let Ok(metadata) = path.symlink_metadata() else {
             continue;
         };
         items += 1;
         if metadata.is_file() {
             bytes = bytes.saturating_add(metadata.len());
-        } else if metadata.is_dir() {
-            control.checkpoint()?;
-            if let Ok(entries) = fs::read_dir(&path) {
-                left.extend(entries.flatten().map(|entry| entry.path()));
-            }
+        } else if metadata.is_dir()
+            && let Ok(entries) = fs::read_dir(&path)
+        {
+            left.extend(entries.flatten().map(|entry| entry.path()));
         }
     }
     Ok((bytes, items))
