@@ -28,7 +28,7 @@ target_dir := env("CARGO_TARGET_DIR", "target")
 # Build a release and install it under `prefix` in a mode: launcher, basic
 # or full (see data/install.sh). Works on any distro, outside Nix too.
 install mode="basic" prefix=(env("HOME") / ".local"):
-    cargo build --release --package nova-files --package nova-files-thumbnailer
+    cargo build --release --package nova-files --package nova-files-thumbnailer --package nova-files-archiver
     data/install.sh --mode "{{ mode }}" --prefix "{{ prefix }}" --from "{{ target_dir }}/release" \
         --app-id "{{ app_id }}" --portal-bus-name "{{ portal_bus_name }}"
 
