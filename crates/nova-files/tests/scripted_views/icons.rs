@@ -250,3 +250,35 @@ fn the_cursor_stays_in_view_when_the_view_changes(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(cx.debug_bounds("entry-60").is_some());
 }
+
+#[gpui::test]
+fn a_box_dragged_down_and_left_selects_the_cells_between(cx: &mut TestAppContext) {
+    let (view, cx, _) = icons(cx);
+    let across = per_line(cx);
+    // From a corner of the first line's second cell to one of the second
+    // line's first, clear of their icons and names.
+    let inset = point(px(3.0), px(3.0));
+    let from = point(cell(cx, 1).right(), cell(cx, 1).top()) + point(-inset.x, inset.y);
+    let to = point(cell(cx, across).left(), cell(cx, across).bottom()) + point(inset.x, -inset.y);
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    let names = |indices: [u32; 4]| indices.map(|index| index.to_string()).to_vec();
+    assert_eq!(selected(&view, cx), names([0, 1, across, across + 1]));
+    assert_eq!(cursor(&view, cx), Some(usize::try_from(across).unwrap()));
+}
+
+#[gpui::test]
+fn a_rename_under_an_icon_takes_the_cells_width(cx: &mut TestAppContext) {
+    let (view, cx, _) = icons(cx);
+    cx.simulate_keystrokes("right f2");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.renaming()));
+    let field = cx.debug_bounds("rename").unwrap();
+    let under = cell(cx, 0);
+    assert!(
+        field.size.width > under.size.width / 2.0,
+        "{field:?} {under:?}"
+    );
+}

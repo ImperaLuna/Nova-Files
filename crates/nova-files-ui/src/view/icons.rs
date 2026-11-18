@@ -97,7 +97,11 @@ impl MainWindow {
                 self.cell_name((index, name), grid, row, cx)
                     .into_any_element()
             },
-            |field| rename_box(field.clone(), &colors).into_any_element(),
+            |field| {
+                rename_box(field.clone(), &colors)
+                    .when(!grid.beside, |field| field.flex_none().w_full().ml_0())
+                    .into_any_element()
+            },
         );
         cell(index, at, grid, cx)
             .when(hidden, |cell| cell.text_color(colors.text_dim))

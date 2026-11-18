@@ -194,26 +194,22 @@ impl Selection {
         Self::clicked(selection, listing, id, click, picks)
     }
 
-    /// A box dragged from the row `from` to the row `to` of `listing`: the rows
-    /// it touches that `picks` allows, added to `before` with `add`.
+    /// A box dragged from the entry `from` to the entry `to` of `listing`:
+    /// `ids`, the entries it covers, added to `before` with `add`.
     #[must_use]
     pub fn banded(
         before: Option<&Self>,
         listing: ListingId,
+        ids: impl IntoIterator<Item = EntryId>,
         (from, to): (EntryId, EntryId),
         add: bool,
-        picks: impl Fn(EntryId) -> bool,
     ) -> Self {
-        let (low, high) = if from <= to { (from, to) } else { (to, from) };
-        let mut ids: Vec<EntryId> = (low.0..=high.0)
-            .map(EntryId)
-            .filter(|&id| picks(id))
-            .collect();
+        let mut ids: Vec<EntryId> = ids.into_iter().collect();
         if let Some(before) = before.filter(|before| add && before.listing == listing) {
             ids.extend_from_slice(&before.ids);
-            ids.sort_unstable();
-            ids.dedup();
         }
+        ids.sort_unstable();
+        ids.dedup();
         Self {
             listing,
             ids,
@@ -512,11 +508,11 @@ mod tests {
 
     #[test]
     fn at_most_one_keeps_the_nearest_selected_when_the_cursor_is_not() {
-        let not_picked = |id: EntryId| id != EntryId(3);
-        let band = Selection::banded(None, SHOWN, (EntryId(0), EntryId(3)), false, not_picked);
+        let covered = || [2, 0, 1].map(EntryId);
+        let band = Selection::banded(None, SHOWN, covered(), (EntryId(0), EntryId(3)), false);
         assert_eq!(ids(&band), [0, 1, 2]);
         assert_eq!(ids(&band.at_most_one()), [2]);
-        let up = Selection::banded(None, SHOWN, (EntryId(3), EntryId(0)), false, not_picked);
+        let up = Selection::banded(None, SHOWN, covered(), (EntryId(3), EntryId(0)), false);
         assert_eq!(ids(&up.at_most_one()), [0]);
     }
 

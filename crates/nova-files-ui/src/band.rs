@@ -116,25 +116,33 @@ impl MainWindow {
         let columns = (grid.column_at(from.x), grid.column_at(to.x));
         let (left, right) = (columns.0.min(columns.1), columns.0.max(columns.1));
         let entry = |line: u32, column: usize| {
-            let at = usize::try_from(line)
-                .unwrap_or(usize::MAX)
-                .saturating_mul(grid.per_line)
-                .saturating_add(column)
-                .min(len.saturating_sub(1));
-            EntryId(u32::try_from(at).unwrap_or(u32::MAX))
+            usize::try_from(line)
+                .ok()?
+                .checked_mul(grid.per_line)?
+                .checked_add(column)
+                .filter(|&at| at < len)
+                .and_then(|at| u32::try_from(at).ok())
+                .map(EntryId)
         };
-        let inside = move |id: EntryId| {
-            usize::try_from(id.0).is_ok_and(|at| (left..=right).contains(&grid.column_of(at)))
-        };
+        let last = EntryId(u32::try_from(len.saturating_sub(1)).unwrap_or(u32::MAX));
+        let corner = |line: u32, column: usize| entry(line, column).unwrap_or(last);
         self.reselect(
             |_, picks| match lines {
-                Some((anchor, cursor)) => Some(Selection::banded(
-                    before.as_ref(),
-                    listing,
-                    (entry(anchor, columns.0), entry(cursor, columns.1)),
-                    add,
-                    |id| picks(id) && inside(id),
-                )),
+                Some((anchor, cursor)) => {
+                    let (low, high) = (anchor.min(cursor), anchor.max(cursor));
+                    let covered = (low..=high)
+                        .flat_map(|line| {
+                            (left..=right).filter_map(move |column| entry(line, column))
+                        })
+                        .filter(|&id| picks(id));
+                    Some(Selection::banded(
+                        before.as_ref(),
+                        listing,
+                        covered.collect::<Vec<_>>(),
+                        (corner(anchor, columns.0), corner(cursor, columns.1)),
+                        add,
+                    ))
+                }
                 None => before.filter(|before| add && before.listing == listing),
             },
             cx,
