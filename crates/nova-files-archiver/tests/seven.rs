@@ -314,3 +314,19 @@ fn a_job_asks_for_the_password_a_locked_7z_needs_to_list() {
     assert_eq!(bench.landed(), ["docs"]);
     assert_eq!(fs::read(bench.at("into/docs/a.txt")).unwrap(), b"a");
 }
+
+#[test]
+fn a_7z_gives_only_the_picked_entries() {
+    let folder = sources("picked");
+    let archive = make(&folder, None);
+    let into = folder.join("into");
+    let mut entries = 0;
+    let picked = [PathBuf::from("docs/inner"), PathBuf::from("notes.txt")];
+    archiver()
+        .extract_picked((&archive, &picked), &into, None, go(&mut entries))
+        .unwrap();
+    assert_eq!(fs::read(into.join("docs/inner/b.txt")).unwrap(), b"deep");
+    assert_eq!(fs::read(into.join("notes.txt")).unwrap(), b"notes");
+    assert!(!into.join("docs/a.txt").exists());
+    fs::remove_dir_all(&folder).ok();
+}

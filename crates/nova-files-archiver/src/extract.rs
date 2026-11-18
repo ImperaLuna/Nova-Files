@@ -1,8 +1,11 @@
-//! Unpacks an archive into the folder it is given. For each entry done it
-//! writes a line to the core: the bytes the entry held, in decimal.
+//! Unpacks an archive, or some of its entries, into the folder it is
+//! given. For each entry done it writes a line to the core: the bytes the
+//! entry held, in decimal.
 
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
 
 use chrono::TimeZone as _;
@@ -39,21 +42,58 @@ impl From<WriteError> for Stopped {
     }
 }
 
-/// Unpacks every entry of `archive` into `into`, the folder `folder`,
-/// opening locked entries with the password `seven` holds.
+/// Where an archive unpacks, and which of its entries.
+pub struct Target<'a> {
+    pub into: Unpacking,
+    /// The folder `into` is.
+    pub folder: &'a Path,
+    /// The paths inside the archive to unpack, with all inside them;
+    /// every entry when empty.
+    pub picked: &'a [OsString],
+}
+
+/// Which entries to unpack: the parts of each picked path.
+struct Picked<'a>(Vec<Vec<&'a [u8]>>);
+
+impl<'a> Picked<'a> {
+    /// `None` when a picked path has a `..` part.
+    fn of(picked: &'a [OsString]) -> Option<Self> {
+        picked
+            .iter()
+            .map(|path| parts(path.as_bytes()))
+            .collect::<Option<_>>()
+            .map(Self)
+    }
+
+    /// Whether the entry with these `parts` is one to unpack.
+    fn wants(&self, parts: &[&[u8]]) -> bool {
+        self.0.is_empty() || self.0.iter().any(|picked| parts.starts_with(picked))
+    }
+}
+
+/// Unpacks the entries of `archive` that `target` picks, opening locked
+/// entries with the password `seven` holds.
 pub fn extract(
     mut archive: File,
-    into: Unpacking,
-    folder: &Path,
+    target: Target<'_>,
     seven: Seven<'_>,
     out: &mut impl Write,
 ) -> Ending {
+    let Some(picked) = Picked::of(target.picked) else {
+        return Ending::Usage;
+    };
+    let into = target.into;
     let result = match format::sniff(&mut archive) {
-        Ok(Some(Format::Seven)) => return seven.extract(folder, out),
-        Ok(Some(Format::Zip)) => extract_zip(archive, into, seven.password, &mut Told::new(out)),
+        Ok(Some(Format::Seven)) => return seven.extract(target.folder, target.picked, out),
+        Ok(Some(Format::Zip)) => extract_zip(
+            archive,
+            (into, &picked),
+            seven.password,
+            &mut Told::new(out),
+        ),
         Ok(Some(Format::Tar(compression))) => tar_stream(archive, compression)
             .map_or(Err(Stopped::Read), |stream| {
-                extract_tar(stream, into, &mut Told::new(out))
+                extract_tar(stream, (into, &picked), &mut Told::new(out))
             }),
         Ok(None) => return Ending::Unsupported,
         Err(_) => return Ending::Broken,
@@ -70,7 +110,7 @@ pub fn extract(
 
 fn extract_zip(
     archive: File,
-    mut into: Unpacking,
+    (mut into, picked): (Unpacking, &Picked<'_>),
     password: Option<&[u8]>,
     told: &mut Told<'_, impl Write>,
 ) -> Result<(), Stopped> {
@@ -82,7 +122,7 @@ fn extract_zip(
         let locked = entry.encrypted();
         let name = entry.name_raw().to_vec();
         drop(entry);
-        let Some(parts) = parts(&name) else {
+        let Some(parts) = parts(&name).filter(|parts| picked.wants(parts)) else {
             continue;
         };
         let stamp = Stamp {
@@ -129,7 +169,7 @@ fn extract_zip(
 
 fn extract_tar(
     stream: impl Read,
-    mut into: Unpacking,
+    (mut into, picked): (Unpacking, &Picked<'_>),
     told: &mut Told<'_, impl Write>,
 ) -> Result<(), Stopped> {
     let mut archive = tar::Archive::new(stream);
@@ -142,7 +182,7 @@ fn extract_tar(
         let Some(kind) = tar_kind(entry_type, &path) else {
             continue;
         };
-        let Some(parts) = parts(&path) else {
+        let Some(parts) = parts(&path).filter(|parts| picked.wants(parts)) else {
             continue;
         };
         let stamp = Stamp {
