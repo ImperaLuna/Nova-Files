@@ -278,7 +278,7 @@ mod tests {
                 reason: Failure::Other,
             }
         );
-        assert!(changed.is_empty());
+        assert_eq!(changed, Vec::<PathBuf>::new());
         assert!(
             JobKind::undo(
                 &kinds,
