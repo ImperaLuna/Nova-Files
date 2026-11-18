@@ -1,7 +1,7 @@
 //! Runs the helper once and reads what it writes.
 //!
-//! The helper gets an empty environment and nothing on its standard
-//! input. It runs in a process group of its own. Its standard output is
+//! The helper gets an empty environment and, when listing, the password
+//! on its standard input, if any. It runs in a process group of its own. Its standard output is
 //! read on a thread of its own, up to [`MAX_OUTPUT`]. The whole run,
 //! reading and exiting, has [`RUN_TIME`]. Once the helper has exited or
 //! the time is up, its group is killed, while the helper is not yet
@@ -10,7 +10,7 @@
 //! uses.
 
 use std::ffi::OsStr;
-use std::io::{self, Read};
+use std::io::{self, Read, Write as _};
 use std::os::unix::process::CommandExt as _;
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -40,10 +40,19 @@ const NO_SPACE: i32 = 10;
 const READ_ONLY: i32 = 11;
 const NOT_WRITTEN: i32 = 12;
 
-/// What the helper wrote listing `archive`.
-pub fn list(helper: &Path, archive: &Path) -> Result<Vec<u8>, ArchiveFailure> {
+/// What the helper, given `lead` before its mode, wrote listing
+/// `archive` with `password`.
+pub fn list(
+    helper: &Path,
+    lead: &[&OsStr],
+    archive: &Path,
+    password: Option<&str>,
+) -> Result<Vec<u8>, ArchiveFailure> {
     let deadline = Instant::now() + RUN_TIME;
-    let mut child = spawn(helper, &[LIST.as_ref(), archive.as_os_str()], Stdio::null())?;
+    let mut args = lead.to_vec();
+    args.extend([LIST.as_ref(), archive.as_os_str()]);
+    let mut child = spawn(helper, &args, Stdio::piped())?;
+    give(&mut child, password);
     let output = read_output(&mut child, deadline);
     let status = end(child, deadline.saturating_duration_since(Instant::now()));
     ended(status)?;
@@ -62,6 +71,14 @@ pub fn spawn(helper: &Path, args: &[&OsStr], input: Stdio) -> Result<Child, Arch
         .process_group(0)
         .spawn()
         .map_err(|_| ArchiveFailure::NotRead)
+}
+
+/// Writes `password` to the helper's standard input, then closes it.
+pub fn give(child: &mut Child, password: Option<&str>) {
+    if let (Some(mut input), Some(password)) = (child.stdin.take(), password) {
+        // A helper that exits before reading it has said why.
+        input.write_all(password.as_bytes()).ok();
+    }
 }
 
 /// What the helper's exit `status` says of its run.

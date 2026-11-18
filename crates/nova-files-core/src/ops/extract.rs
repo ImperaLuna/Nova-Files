@@ -84,20 +84,18 @@ fn unpack(
     archive: &Path,
     into: &Path,
 ) -> Result<Option<Staging>, Stop> {
-    let entries = archiver
-        .list(archive)
-        .map_err(|failure| stop_for(failure, archive, into))?;
+    let Some((entries, mut password)) = listed(running, archiver, archive, into)? else {
+        return Ok(None);
+    };
     let (bytes, items) = totals(&entries);
     running.reporter.planned(bytes, items);
-    let mut password = if entries.iter().any(|entry| entry.locked) {
+    if password.is_none() && entries.iter().any(|entry| entry.locked) {
         let Some(given) = ask_password(running, ConflictKind::PasswordNeeded, archive, into)?
         else {
             return Ok(None);
         };
-        Some(given)
-    } else {
-        None
-    };
+        password = Some(given);
+    }
     for attempt in 0_u64.. {
         let staging = staging(into, running.names, attempt, &folder_name(archive))?;
         let unpacked = archiver.extract(archive, &staging.named, password.as_deref(), |told| {
@@ -120,6 +118,32 @@ fn unpack(
         password = Some(given);
     }
     Err(Stop::because(archive, Failure::Other))
+}
+
+/// An archive's entries, and the password its names took, if any.
+type Listed = (Vec<ArchiveEntry>, Option<String>);
+
+/// The entries of `archive`, and the password its names took, asked
+/// while they need one; `None` when the user skips it.
+fn listed(
+    running: &mut Running,
+    archiver: &Archiver,
+    archive: &Path,
+    into: &Path,
+) -> Result<Option<Listed>, Stop> {
+    let mut password = None;
+    loop {
+        let kind = match archiver.list_locked(archive, password.as_deref()) {
+            Ok(entries) => return Ok(Some((entries, password))),
+            Err(ArchiveFailure::NeedsPassword) => ConflictKind::PasswordNeeded,
+            Err(ArchiveFailure::WrongPassword) => ConflictKind::PasswordWrong,
+            Err(failure) => return Err(stop_for(failure, archive, into)),
+        };
+        let Some(given) = ask_password(running, kind, archive, into)? else {
+            return Ok(None);
+        };
+        password = Some(given);
+    }
 }
 
 /// Asks for the password of `archive` with a conflict of `kind`; `None`

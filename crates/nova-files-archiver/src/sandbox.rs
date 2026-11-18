@@ -2,35 +2,53 @@
 //! reach no network and signal no process outside itself. What it needs
 //! is already open (the archive, and its answers on standard output), so
 //! a hostile archive that takes over a decoder finds nothing to read and
-//! nowhere to send it.
+//! nowhere to send it. Given 7-Zip, it may also run it and read the
+//! system's programs and libraries; 7-Zip runs locked in with it.
 //!
 //! Landlock does the locking. A kernel without Landlock (or an older ABI)
 //! gets as much of it as it supports; the helper still runs there, since a
 //! missing sandbox must not cost the user their archives.
 
 use std::error::Error;
-use std::os::fd::{AsFd, OwnedFd};
+use std::os::fd::OwnedFd;
+use std::path::Path;
 
 use landlock::{
     ABI, Access as _, AccessFs, AccessNet, BitFlags, PathBeneath, RestrictionStatus, Ruleset,
     RulesetAttr as _, RulesetCreatedAttr as _, Scope,
 };
+use rustix::fs::{Mode, OFlags};
 
 /// The newest Landlock ABI the rules are written for: V6 adds the network
 /// (V4) and signal (V6) scopes.
 const ABI_VERSION: ABI = ABI::V6;
+const PATH_ONLY: OFlags = OFlags::PATH.union(OFlags::CLOEXEC);
+/// Where a program's libraries and loader live, on the systems the
+/// helper runs on.
+const SYSTEM: [&str; 4] = ["/nix/store", "/usr", "/lib", "/lib64"];
+/// Where 7-Zip reads the random numbers a locked archive starts from.
+const RANDOM: &str = "/dev/urandom";
 
-/// Locks the process in: every file, network and scope right handled,
-/// none granted. Says how much of that this kernel enforces.
-pub fn lock_in() -> Result<RestrictionStatus, Box<dyn Error>> {
-    Ok(ruleset()?.create()?.restrict_self()?)
+/// Rights the sandbox leaves open beneath one file or folder.
+pub struct Grant {
+    fd: OwnedFd,
+    rights: BitFlags<AccessFs>,
 }
 
-/// Locks the process in as [`lock_in`] does, except that inside the
-/// folder `unpack` it may make, write and remove files, folders and
+/// Locks the process in: every file, network and scope right handled,
+/// none granted but `grants`. Says how much of that this kernel enforces.
+pub fn lock_in(grants: Vec<Grant>) -> Result<RestrictionStatus, Box<dyn Error>> {
+    let mut created = ruleset()?.create()?;
+    for grant in grants {
+        created = created.add_rule(PathBeneath::new(grant.fd, grant.rights))?;
+    }
+    Ok(created.restrict_self()?)
+}
+
+/// Inside the folder `unpack`: make, write and remove files, folders and
 /// links, and open folders.
-pub fn lock_in_unpacking(unpack: impl AsFd) -> Result<RestrictionStatus, Box<dyn Error>> {
-    let unpacking: BitFlags<AccessFs> = [
+pub fn unpacking(unpack: OwnedFd) -> Grant {
+    let rights = [
         AccessFs::ReadDir,
         AccessFs::WriteFile,
         AccessFs::Truncate,
@@ -43,27 +61,59 @@ pub fn lock_in_unpacking(unpack: impl AsFd) -> Result<RestrictionStatus, Box<dyn
     ]
     .into_iter()
     .collect();
-    Ok(ruleset()?
-        .create()?
-        .add_rule(PathBeneath::new(unpack, unpacking))?
-        .restrict_self()?)
+    Grant { fd: unpack, rights }
 }
 
-/// Locks the process in as [`lock_in`] does, except that it may read the
-/// files `readable` are, and all inside the folders they are.
-pub fn lock_in_reading(readable: &[(OwnedFd, bool)]) -> Result<RestrictionStatus, Box<dyn Error>> {
-    let mut created = ruleset()?.create()?;
-    for (fd, folder) in readable {
-        let rights: BitFlags<AccessFs> = if *folder {
-            [AccessFs::ReadFile, AccessFs::ReadDir]
-                .into_iter()
-                .collect()
-        } else {
-            AccessFs::ReadFile.into()
-        };
-        created = created.add_rule(PathBeneath::new(fd, rights))?;
+/// Read the file `fd` is, or all inside the folder it is.
+pub fn reading(fd: OwnedFd, folder: bool) -> Grant {
+    let rights = if folder {
+        [AccessFs::ReadFile, AccessFs::ReadDir]
+            .into_iter()
+            .collect()
+    } else {
+        AccessFs::ReadFile.into()
+    };
+    Grant { fd, rights }
+}
+
+/// List the names in the folder `fd` is, and in those inside it, without
+/// reading any file.
+pub fn naming(fd: OwnedFd) -> Grant {
+    Grant {
+        fd,
+        rights: AccessFs::ReadDir.into(),
     }
-    Ok(created.restrict_self()?)
+}
+
+/// Make files in the folder `fd` is, and write them.
+pub fn making_in(fd: OwnedFd) -> Grant {
+    let rights = [AccessFs::MakeReg, AccessFs::WriteFile]
+        .into_iter()
+        .collect();
+    Grant { fd, rights }
+}
+
+/// Run `program`: read and run what is in its folder and the system's
+/// library folders that exist, and read the kernel's random numbers.
+pub fn running(program: &Path) -> Vec<Grant> {
+    let folder = program
+        .canonicalize()
+        .ok()
+        .and_then(|program| program.parent().map(Path::to_path_buf));
+    let rights: BitFlags<AccessFs> = [AccessFs::Execute, AccessFs::ReadFile, AccessFs::ReadDir]
+        .into_iter()
+        .collect();
+    folder
+        .into_iter()
+        .chain(SYSTEM.iter().map(Into::into))
+        .filter_map(|folder| rustix::fs::open(&folder, PATH_ONLY, Mode::empty()).ok())
+        .map(|fd| Grant { fd, rights })
+        .chain(
+            rustix::fs::open(RANDOM, PATH_ONLY, Mode::empty())
+                .ok()
+                .map(|fd| reading(fd, false)),
+        )
+        .collect()
 }
 
 fn ruleset() -> Result<Ruleset, Box<dyn Error>> {
@@ -94,7 +144,7 @@ mod tests {
         let held = fs::File::open(root.join("there.txt")).unwrap();
         // Landlock binds the thread that asks, so the test locks its own.
         let result = thread::spawn(move || {
-            let status = lock_in().unwrap();
+            let status = lock_in(Vec::new()).unwrap();
             (
                 status.ruleset,
                 fs::read(inside.join("there.txt")).map_err(|error| error.kind()),
@@ -125,10 +175,10 @@ mod tests {
         let inside = root.join("into");
         fs::create_dir_all(&inside).unwrap();
         fs::write(inside.join("there.txt"), b"x").unwrap();
-        let folder = fs::File::open(&inside).unwrap();
+        let folder = OwnedFd::from(fs::File::open(&inside).unwrap());
         let (outside, into) = (root.clone(), inside);
         let result = thread::spawn(move || {
-            let status = lock_in_unpacking(folder).unwrap();
+            let status = lock_in(vec![unpacking(folder)]).unwrap();
             (
                 status.ruleset,
                 fs::write(into.join("new.txt"), b"x").map_err(|error| error.kind()),
