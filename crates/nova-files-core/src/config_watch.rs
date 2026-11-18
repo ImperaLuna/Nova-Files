@@ -1,5 +1,7 @@
-//! Watches the core's config folder (`$XDG_CONFIG_HOME/nova-files`) and
-//! says which of its files changed.
+//! Watches one folder and says which of its files changed: the core's
+//! config folder (`$XDG_CONFIG_HOME/nova-files`) and the other folders
+//! whose top level a store follows (Home for the places, each gathered
+//! folder for Games and Projects).
 //!
 //! The folder is watched, not each file, so a save of any kind is seen: an
 //! editor writing in place (`CLOSE_WRITE`), or writing a temporary file and

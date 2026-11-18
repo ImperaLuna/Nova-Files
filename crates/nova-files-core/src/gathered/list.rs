@@ -41,6 +41,9 @@ pub fn list(
     let spawned = thread::Builder::new()
         .name(THREAD.to_owned())
         .spawn(move || {
+            if job.cancelled() {
+                return;
+            }
             let folders = folders();
             let Some(gathered) = gather(&folders, hidden, order, || job.cancelled()) else {
                 return;
@@ -115,7 +118,13 @@ fn rows_of(
                 return Some(Vec::new());
             };
             let is_folder = fs::metadata(&folder.path).is_ok_and(|found| found.is_dir());
-            Some(if is_folder {
+            let entry = Entry {
+                id: EntryId(0),
+                name: name.to_owned(),
+                kind: EntryKind::Folder,
+            };
+            let shown = hidden == HiddenFiles::Shown || !entry.is_hidden();
+            Some(if is_folder && shown {
                 vec![(name.to_owned(), home.to_owned())]
             } else {
                 Vec::new()

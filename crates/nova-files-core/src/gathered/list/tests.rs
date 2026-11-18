@@ -151,6 +151,12 @@ fn hidden_folders_follow_the_setting_and_links_to_folders_count() {
     );
     let shown = gather(&folders, HiddenFiles::Shown, Order::default(), || false).unwrap();
     assert_eq!(shown.len(), 3);
+    // A hidden one-project folder follows the setting too.
+    scratch.folders(&[".dotfiles"]);
+    let dotfiles = [one(scratch.at(".dotfiles"))];
+    assert_eq!(rows(&scratch.0, &dotfiles, Order::default()), []);
+    let shown = gather(&dotfiles, HiddenFiles::Shown, Order::default(), || false).unwrap();
+    assert_eq!(shown.len(), 1);
 }
 
 #[test]

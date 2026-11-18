@@ -320,6 +320,9 @@ fn a_folder_of_projects_changes_when_one_is_made_and_stops_when_removed() {
     changed(&events, Gathering::Games);
     fs::create_dir(games.join("Celeste")).unwrap();
     changed(&events, Gathering::Games);
+    // A loose file saved there is no change.
+    fs::write(games.join("steam.log"), "").unwrap();
+    assert!(events.recv_timeout(Duration::from_millis(600)).is_err());
 
     store.change(GatheredChange::Remove {
         place: Gathering::Games,
@@ -328,4 +331,19 @@ fn a_folder_of_projects_changes_when_one_is_made_and_stops_when_removed() {
     assert!(next(&events).games.is_empty());
     fs::create_dir(games.join("Hades")).unwrap();
     assert!(events.recv_timeout(Duration::from_millis(600)).is_err());
+}
+
+#[test]
+fn listing_before_any_client_asked_still_follows_the_file() {
+    let scratch = Scratch::new("list-first");
+    scratch.write("");
+    let store = Store::open(Some(scratch.home()));
+    assert_eq!(store.folders_of(Gathering::Games)().len(), 0);
+    // The listing started the watch; asking now starts nothing more.
+    let (sink, events) = mpsc::channel();
+    store.listen(ClientId(1), &(Arc::new(sink) as Arc<dyn EventSink>));
+    assert_eq!(*next(&events), Gathered::default());
+    scratch.write("[[games]]\npath = \"/mnt/games\"\n");
+    assert_eq!(paths(&next(&events).games), [Path::new("/mnt/games")]);
+    assert_eq!(store.folders_of(Gathering::Games)().len(), 1);
 }

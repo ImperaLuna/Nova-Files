@@ -38,7 +38,7 @@ use nova_files_api::{
 use super::file::{self, Edit};
 use super::{FILE, guess, usual_folders};
 use crate::change_writer::ChangeWriter;
-use crate::config_watch::{self, ConfigWatch};
+use crate::config_watch::{self, Changed, ConfigWatch};
 use crate::hand_edited::lock;
 use crate::places::Home;
 use crate::private_file::{self, Read};
@@ -54,24 +54,23 @@ const WHAT: &str = "gathered folders";
 /// The gathered folders and who hears about them.
 pub struct Store {
     shared: Arc<Shared>,
-    /// Set once the first client asked and the folders started loading.
-    started: AtomicBool,
     /// Saves each change, on a thread of its own.
     writer: ChangeWriter<GatheredChange>,
-    /// Stops with the store.
-    watch: Arc<Mutex<Option<ConfigWatch>>>,
+    /// Held only here, so a watch is never dropped on its own thread (a
+    /// watch's callback may hold the last [`Shared`]); stop with the store.
+    _watches: Arc<Mutex<Watches>>,
 }
 
 struct Shared {
-    /// This, for the watches' callbacks.
-    this: Weak<Self>,
     home: Option<Home>,
+    /// Set once the watch on the file started and the first read began.
+    started: AtomicBool,
     /// Held from each read of the disk until what it found is kept, and
     /// across each save.
     disk: Mutex<()>,
-    folders: Mutex<Folders>,
-    /// A watch on each gathered folder, by place and folder.
-    watches: Mutex<BTreeMap<(Gathering, PathBuf, Holds), ConfigWatch>>,
+    /// Shared with the folders' watches, which tell its listeners.
+    folders: Arc<Mutex<Folders>>,
+    watches: Weak<Mutex<Watches>>,
 }
 
 #[derive(Default)]
@@ -83,23 +82,30 @@ struct Folders {
     listeners: BTreeMap<ClientId, Arc<dyn EventSink>>,
 }
 
+/// The watch on the file, and one on each gathered folder.
+#[derive(Default)]
+struct Watches {
+    file: Option<ConfigWatch>,
+    folders: BTreeMap<(Gathering, PathBuf, Holds), ConfigWatch>,
+}
+
 impl Store {
     /// The folders gathered by the user of `home`, read once a client
     /// asks. Without `home` both places stay empty.
     pub fn open(home: Option<Home>) -> Self {
-        let shared = Arc::new_cyclic(|this| Shared {
-            this: Weak::clone(this),
+        let watches = Arc::default();
+        let shared = Arc::new(Shared {
             home,
+            started: AtomicBool::new(false),
             disk: Mutex::new(()),
-            folders: Mutex::default(),
-            watches: Mutex::default(),
+            folders: Arc::default(),
+            watches: Arc::downgrade(&watches),
         });
         let saving = Arc::clone(&shared);
         Self {
             shared,
-            started: AtomicBool::new(false),
             writer: ChangeWriter::new(SAVE_THREAD, WHAT, move |change| saving.save(change)),
-            watch: Arc::default(),
+            _watches: watches,
         }
     }
 
@@ -117,22 +123,23 @@ impl Store {
                 folders.listeners.insert(client, Arc::clone(events));
             }
         }
-        if !self.started.swap(true, Ordering::SeqCst) {
+        if !self.shared.started.load(Ordering::SeqCst) {
             self.load();
         }
     }
 
-    /// What gives the folders `place` gathers from, read first if no
-    /// client asked yet; for a listing's thread, as that read may wait on
-    /// the disk.
+    /// What gives the folders `place` gathers from, read first (and
+    /// followed from then on) if no client asked yet; for a listing's
+    /// thread, as that read may wait on the disk.
     pub fn folders_of(
         &self,
         place: Gathering,
     ) -> impl FnOnce() -> Arc<[GatheredFolder]> + Send + 'static {
         let shared = Arc::clone(&self.shared);
         move || {
-            let loaded = lock(&shared.folders).loaded;
-            if !loaded {
+            shared.start();
+            // Another thread may have started first and not read yet.
+            if !lock(&shared.folders).loaded {
                 shared.first_read();
             }
             let folders = lock(&shared.folders);
@@ -156,19 +163,10 @@ impl Store {
         }
     }
 
-    /// Starts the watch, writes the usual folders when there is no file
-    /// and reads it, on a thread of its own.
+    /// Starts following the file, on a thread of its own.
     fn load(&self) {
         let shared = Arc::clone(&self.shared);
-        let watch = Arc::clone(&self.watch);
-        let load = move || {
-            // The watch goes in before the first read, so no change is
-            // missed.
-            if let Some(home) = &shared.home {
-                *lock(&watch) = start_watch(home, &Arc::downgrade(&shared));
-            }
-            shared.first_read();
-        };
+        let load = move || shared.start();
         let started = thread::Builder::new()
             .name(LOAD_THREAD.to_owned())
             .spawn(load.clone());
@@ -182,20 +180,41 @@ impl Store {
 }
 
 impl Shared {
+    /// The first time: starts the watch on the file, writes the usual
+    /// folders when there is no file and reads it. The watch goes in
+    /// before the first read, so no change is missed.
+    fn start(self: &Arc<Self>) {
+        if self.started.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        if let Some(home) = &self.home
+            && let Some(watches) = self.watches.upgrade()
+        {
+            lock(&watches).file = start_watch(home, &Arc::downgrade(self));
+        }
+        self.first_read();
+    }
+
     /// Writes the usual folders when there is no file, then reads it.
     fn first_read(&self) {
-        let _disk = lock(&self.disk);
-        if let Some(home) = &self.home {
-            write_usual(home);
+        {
+            let _disk = lock(&self.disk);
+            if let Some(home) = &self.home {
+                write_usual(home);
+            }
+            self.reload_holding_disk();
         }
-        self.reload_holding_disk();
+        self.rewatch();
     }
 
     /// Reads the file again and tells the listening clients when the
     /// folders changed.
     fn reload(&self) {
-        let _disk = lock(&self.disk);
-        self.reload_holding_disk();
+        {
+            let _disk = lock(&self.disk);
+            self.reload_holding_disk();
+        }
+        self.rewatch();
     }
 
     fn reload_holding_disk(&self) {
@@ -217,15 +236,20 @@ impl Shared {
             folders
                 .listeners
                 .retain(|_, events| events.deliver(event.clone()).is_ok());
-            let gathered = Arc::clone(&folders.gathered);
-            drop(folders);
-            self.rewatch(&gathered);
         }
     }
 
-    /// Watches each folder in `gathered` (see [`watch_folder`]), keeping the watches already in place and stopping those on
-    /// folders gone from it.
-    fn rewatch(&self, gathered: &Gathered) {
+    /// Watches each folder gathered now (see [`watch_folder`]), keeping
+    /// the watches already in place, stopping those on folders gone and
+    /// trying again any that couldn't start before. Run after the disk is
+    /// let go, since a watch on a hung mount may take a while; the folders
+    /// are taken under the watches' lock, so the newest always wins.
+    fn rewatch(&self) {
+        let Some(watches) = self.watches.upgrade() else {
+            return;
+        };
+        let mut watches = lock(&watches);
+        let gathered = Arc::clone(&lock(&self.folders).gathered);
         let wanted: BTreeSet<(Gathering, PathBuf, Holds)> = Gathering::ALL
             .into_iter()
             .flat_map(|place| {
@@ -235,24 +259,15 @@ impl Shared {
                     .map(move |folder| (place, folder.path.clone(), folder.holds))
             })
             .collect();
-        let mut watches = lock(&self.watches);
-        watches.retain(|key, _| wanted.contains(key));
+        watches.folders.retain(|key, _| wanted.contains(key));
         for key in wanted {
-            if watches.contains_key(&key) {
+            if watches.folders.contains_key(&key) {
                 continue;
             }
-            if let Some(watch) = watch_folder(&key, &self.this) {
-                watches.insert(key, watch);
+            if let Some(watch) = watch_folder(&key, Arc::downgrade(&self.folders)) {
+                watches.folders.insert(key, watch);
             }
         }
-    }
-
-    /// Tells every listening client that what `place` gathers changed.
-    fn contents_changed(&self, place: Gathering) {
-        let event = Event::GatheredChanged(place);
-        lock(&self.folders)
-            .listeners
-            .retain(|_, events| events.deliver(event.clone()).is_ok());
     }
 
     /// Makes `change` in the file, then reads it again. A file that can't
@@ -263,7 +278,7 @@ impl Shared {
             return;
         };
         let change = self.guessed(change);
-        let _disk = lock(&self.disk);
+        let disk = lock(&self.disk);
         write_usual(home);
         let target = private_file::saved_at(&file_of(home));
         if let Some(text) = read_text(&target) {
@@ -285,6 +300,8 @@ impl Shared {
             }
         }
         self.reload_holding_disk();
+        drop(disk);
+        self.rewatch();
     }
 
     /// `change` with what an added folder holds: what the client said, or
@@ -393,35 +410,47 @@ fn write_usual(home: &Home) {
     }
 }
 
-/// Starts the watch on one gathered folder, which tells the clients when
-/// what it brings to its place may have changed; `None` (logged) when it
-/// can't start. A folder that holds many is watched itself, for folders
-/// made, removed or renamed in it. A one-project folder is watched from
-/// its parent, for it alone, so saving a file in the project is no change.
-/// A folder that doesn't exist yet is watched from the nearest folder
-/// above, and counts as changed when it appears (see `config_watch`).
+/// Starts the watch on one gathered folder, which tells the clients in
+/// `folders` when what it brings to its place may have changed; `None`
+/// (logged) when it can't start. A folder that holds many is watched
+/// itself, for a folder made, removed or renamed in it; a file saved there
+/// is no change. A one-project folder is watched from its parent, for it
+/// alone, so saving a file in the project is no change either. A folder
+/// that doesn't exist yet is watched from the nearest folder above, and
+/// counts as changed when it appears (see `config_watch`).
+///
+/// Known gap: a folder that is a link is not followed to its target, so
+/// its target going away is seen only at the next listing.
 fn watch_folder(
     (place, path, holds): &(Gathering, PathBuf, Holds),
-    shared: &Weak<Shared>,
+    folders: Weak<Mutex<Folders>>,
 ) -> Option<ConfigWatch> {
-    let shared = Weak::clone(shared);
     let place = *place;
+    let tell = move || {
+        if let Some(folders) = folders.upgrade() {
+            let event = Event::GatheredChanged(place);
+            lock(&folders)
+                .listeners
+                .retain(|_, events| events.deliver(event.clone()).is_ok());
+        }
+    };
     let started = match holds {
-        Holds::Many => ConfigWatch::start(path.clone(), &[], move |_| {
-            if let Some(shared) = shared.upgrade() {
-                shared.contents_changed(place);
-            }
-        }),
+        Holds::Many => {
+            let folder = path.clone();
+            ConfigWatch::start(path.clone(), &[], move |changed| {
+                if changes_a_folder(&folder, changed) {
+                    tell();
+                }
+            })
+        }
         Holds::One => {
             let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
                 return None;
             };
             let name = name.to_owned();
             ConfigWatch::start(parent.to_owned(), &[], move |changed| {
-                if changed.touches_os(&name)
-                    && let Some(shared) = shared.upgrade()
-                {
-                    shared.contents_changed(place);
+                if changed.touches_os(&name) {
+                    tell();
                 }
             })
         }
@@ -429,6 +458,18 @@ fn watch_folder(
     started
         .map_err(|error| log::warn!("{} changing won't be seen: {error}", path.display()))
         .ok()
+}
+
+/// Whether `changed` in `folder` may have made, removed or renamed a
+/// folder in it: a name that is a folder now, or is gone (it may have
+/// been one).
+fn changes_a_folder(folder: &Path, changed: &Changed) -> bool {
+    match changed {
+        Changed::All => true,
+        Changed::Files(names) => names
+            .iter()
+            .any(|name| fs::metadata(folder.join(name)).map_or(true, |found| found.is_dir())),
+    }
 }
 
 /// Starts the watch that reads the file again when it changes; `None`
