@@ -3584,6 +3584,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-dbus",
+ "nova-files-picker-api",
  "nova-files-shell",
  "nova-files-trash-api",
  "nova-files-ui",
@@ -3626,6 +3627,7 @@ dependencies = [
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
+ "nova-files-picker-api",
  "nova-files-trash-api",
  "nova-files-trash-core",
  "rustix 1.1.6",
@@ -3643,6 +3645,7 @@ dependencies = [
  "futures",
  "nova-files-api",
  "nova-files-core",
+ "nova-files-picker-api",
  "rustix 1.1.6",
  "zbus",
 ]
@@ -3689,6 +3692,13 @@ name = "nova-files-messages"
 version = "0.1.0"
 dependencies = [
  "log",
+]
+
+[[package]]
+name = "nova-files-picker-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
 ]
 
 [[package]]
@@ -3744,6 +3754,7 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
+ "nova-files-picker-api",
  "nova-files-shell",
  "nova-files-trash-api",
  "unicode-segmentation",

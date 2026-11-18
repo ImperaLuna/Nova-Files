@@ -3,7 +3,8 @@ use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::PathBuf;
 
-use nova_files_api::{FileFilter, FilterRule, ParentWindow, PickAnswer, PickKind, uri};
+use nova_files_api::uri;
+use nova_files_picker_api::{FileFilter, FilterRule, ParentWindow, PickAnswer, PickKind};
 use zbus::zvariant::{OwnedValue, Value};
 
 pub const SUCCESS: u32 = 0;
@@ -147,7 +148,7 @@ mod tests {
     use std::os::unix::ffi::OsStringExt as _;
     use std::path::PathBuf;
 
-    use nova_files_api::{FileFilter, FilterRule, PickAnswer, PickKind};
+    use nova_files_picker_api::{FileFilter, FilterRule, PickAnswer, PickKind};
     use zbus::zvariant::{OwnedValue, Value};
 
     use super::{CANCELLED, Options, SUCCESS, open, results, save};

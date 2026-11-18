@@ -3,9 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use futures::channel::oneshot;
 use gpui::{Context, Pixels, Point};
-use nova_files_api::{
-    BookmarkChange, Command, PickAnswer, PickId, PickKind, PickReply, PickRequest,
-};
+use nova_files_api::{BookmarkChange, Command};
+use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
 
 use super::MainWindow;
 use crate::assets::Icon;
