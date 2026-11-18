@@ -16,9 +16,8 @@ use gpui::{
     AnyWindowHandle, App, AppContext as _, ClickEvent, Context, Entity, Focusable as _, Pixels,
     Size, Subscription, TitlebarOptions, Window,
 };
-use nova_files_api::{
-    Entry, EntryId, EntryKind, ListingId, PickAnswer, PickId, PickKind, PickRequest,
-};
+use nova_files_api::{Entry, EntryId, EntryKind, ListingId};
+use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickRequest};
 
 use self::accept::Jump;
 pub use self::opening::foreign_parent;
@@ -318,7 +317,7 @@ pub fn close(id: PickId, cx: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use nova_files_api::PickReply;
+    use nova_files_picker_api::PickReply;
 
     use super::*;
 
@@ -402,7 +401,7 @@ mod tests {
     fn a_picker_starts_on_the_type_the_app_asks_for_or_its_first() {
         let with = |count: usize, chosen| PickRequest {
             filters: (0..count)
-                .map(|at| nova_files_api::FileFilter {
+                .map(|at| nova_files_picker_api::FileFilter {
                     name: at.to_string(),
                     rules: Vec::new(),
                 })
@@ -420,7 +419,7 @@ mod tests {
     #[test]
     fn the_menu_names_each_type_and_marks_the_one_chosen() {
         let request = PickRequest {
-            filters: vec![nova_files_api::FileFilter {
+            filters: vec![nova_files_picker_api::FileFilter {
                 name: "Text".to_owned(),
                 rules: Vec::new(),
             }],

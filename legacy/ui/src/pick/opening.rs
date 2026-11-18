@@ -1,5 +1,6 @@
 use gpui::{Context, ForeignParent, Pixels, Size, Subscription, Window};
-use nova_files_api::{Command, ParentWindow};
+use nova_files_api::Command;
+use nova_files_picker_api::ParentWindow;
 
 use super::Picker;
 use crate::window::MainWindow;
