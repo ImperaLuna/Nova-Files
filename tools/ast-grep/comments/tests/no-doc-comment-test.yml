@@ -1,0 +1,24 @@
+# Invalid cases are doc comments the 2026-11-18 audit found false or hiding
+# a defect, copied from main at cc1b603.
+id: no-doc-comment
+valid:
+  - |
+    // A plain comment is no-comment's to judge.
+    fn f() {}
+  - |
+    /// Follows the icon theme spec:
+    /// https://specifications.freedesktop.org/icon-theme-spec/latest/
+    fn lookup() {}
+invalid:
+  - |
+    /// Passes over an entry that vanished between the folder read and this
+    /// one: it is simply not there any more. Any other error is the folder's.
+    fn vanished(error: io::Error) -> Result<(), Stopped> {}
+  - |
+    //! [`replace`] saves one whole: it writes a temporary file beside it,
+    //! with its mode from the start, and renames it over the old one, so a crash
+    //! never leaves half a file and a reader sees the old file or the new one.
+    use std::fs;
+  - |
+    /** A block doc comment. */
+    fn f() {}

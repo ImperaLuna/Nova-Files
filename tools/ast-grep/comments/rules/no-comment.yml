@@ -1,0 +1,30 @@
+id: no-comment
+language: rust
+severity: error
+message: >-
+  Comment outside the keep list. Delete it. If the code is unclear without
+  it, rename or reshape the code; a rule or limit becomes a type, a test or
+  a lint.
+note: >-
+  Kept: `// SAFETY:` on an unsafe block, a licence header
+  (`// SPDX-License-Identifier:`), an exception (`// ast-grep-ignore:` with
+  its reason, end date and approval on the line above), and a fact forced by the kernel, a
+  filesystem, a spec or a dependency, in one or two lines that link its
+  source (`https://`). Doc comments have their own rule, no-doc-comment.
+files:
+  - "crates/**/*.rs"
+utils:
+  kept:
+    kind: line_comment
+    regex: '^//\s*(SAFETY:|SPDX-License-Identifier:|ast-grep-ignore:)|https?://'
+  run-break: { not: { kind: line_comment } }
+rule:
+  any:
+    - kind: line_comment
+    - kind: block_comment
+  not:
+    any:
+      - regex: '^(///($|[^/])|//!|/\*\*[^*/]|/\*!)'
+      - matches: kept
+      - follows: { matches: kept, stopBy: { matches: run-break } }
+      - precedes: { matches: kept, stopBy: { matches: run-break } }
