@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use nova_files_api::{DriveAction, DriveFailure, DriveId, VolumeId};
+use nova_files_drives_api::{DriveAction, DriveFailure, DriveId, VolumeId};
 use zbus::DBusError as _;
 use zbus::blocking::fdo::ObjectManagerProxy;
 use zbus::blocking::{Connection, Proxy, proxy};
