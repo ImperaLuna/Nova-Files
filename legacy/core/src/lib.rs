@@ -2,9 +2,6 @@
 
 mod accounts;
 mod archive;
-mod capped;
-mod change_writer;
-mod config_watch;
 mod details;
 mod details_queue;
 mod disk_space;
@@ -12,7 +9,6 @@ mod drives;
 mod file_icons;
 mod folder_views;
 mod gathered;
-mod hand_edited;
 mod icon_theme;
 mod index;
 mod inside;
@@ -21,7 +17,6 @@ mod list;
 mod measure;
 mod memory;
 mod mime;
-mod mount_root;
 mod open;
 mod ops;
 mod order;
@@ -30,12 +25,10 @@ mod preview;
 mod properties;
 mod recent;
 mod run;
-mod saver;
 mod search;
 mod settings;
 mod theme;
 mod thumbs;
-mod timed;
 mod trace;
 mod trash;
 mod vulkan_drivers;
@@ -47,7 +40,9 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::Connector;
-use nova_files_disk::private_file;
+use nova_files_disk::{
+    capped, change_writer, config_watch, hand_edited, mount_root, private_file, saver, timed,
+};
 
 use search::Searcher;
 

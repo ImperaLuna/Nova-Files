@@ -17,7 +17,7 @@ use super::failure::failure;
 use super::folders::{Folders, Unreached};
 use super::journal::{Record, word};
 use super::keep_both::{Naming, free_path};
-use super::make::{How, Made, Making, make, size};
+use super::make::{How, Made, Making, make};
 use super::place::rename_no_replace;
 use super::plan::{Item, Kind, Plan, check, check_pairs, pairs_into, plan_pairs};
 use super::running::Running;
@@ -104,7 +104,7 @@ impl Done {
                 if folder {
                     self.detours.settled = Some(item.to.clone());
                 }
-                running.reporter.item(size(item));
+                running.reporter.item(item.size());
             }
             Placed::Merged => {
                 if moving {
@@ -329,7 +329,7 @@ fn place_each(
             done.detours = Detours::default();
         }
         let Some(planned) = done.detours.target(&item.to) else {
-            running.reporter.item(size(item));
+            running.reporter.item(item.size());
             continue;
         };
         let making = Making {
@@ -364,7 +364,7 @@ fn place(
         .filter(|made| made.parent() == target.parent())
     {
         let made_before = Made {
-            left: size(item),
+            left: item.size(),
             carried: false,
         };
         return Ok((Placed::Made(made_before), made.to_path_buf()));
