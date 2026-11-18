@@ -15,13 +15,13 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
+# - nova-files-archives-core
 # - nova-files-clipboard-api
 # - nova-files-disk
 # - nova-files-entries
 # - nova-files-index
 # - nova-files-jobs
 # - nova-files-messages
-# - nova-files-rename-api
 # - nova-files-rename-core
 # - nova-files-settings-api
 # - nova-files-settings-core
@@ -60,12 +60,12 @@ toml_edit = { version = "0.25.18", default-features = false, features = ["displa
 # /etc/passwd). The standard library and rustix have no such lookup.
 uzers = { version = "0.12.2", default-features = false }
 nova-files-api.workspace = true
+nova-files-archives-core.workspace = true
 nova-files-disk.workspace = true
 nova-files-entries.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true
 nova-files-messages.workspace = true
-nova-files-rename-api.workspace = true
 nova-files-rename-core.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-settings-core.workspace = true

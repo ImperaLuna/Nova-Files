@@ -4,15 +4,15 @@ use std::path::{Path, PathBuf};
 
 use nova_files_api::{ConflictKind, Failure, Outcome, Packing};
 
-use super::Ended;
-use super::extract::{ask_password, steer};
-use super::journal::PART_PREFIX;
-use super::keep_both::take_free_name;
-use super::running::Running;
-use super::stop::Stop;
+use crate::extract::{ask_password, steer};
+use nova_files_jobs::Ended;
+use nova_files_jobs::journal::PART_PREFIX;
+use nova_files_jobs::keep_both::take_free_name;
+use nova_files_jobs::running::Running;
+use nova_files_jobs::stop::Stop;
 use nova_files_rename_api::is_plain_name;
 
-use crate::archive::{ArchiveFailure, Archiver, Recipe};
+use crate::{ArchiveFailure, Archiver, Recipe};
 
 pub struct Asked<'a> {
     pub sources: &'a [PathBuf],
@@ -102,7 +102,10 @@ fn locking_password(
     }
 }
 
-fn totals(sources: &[PathBuf], control: &super::control::Control) -> Result<(u64, u64), Stop> {
+fn totals(
+    sources: &[PathBuf],
+    control: &nova_files_jobs::control::Control,
+) -> Result<(u64, u64), Stop> {
     let mut bytes = 0_u64;
     let mut items = 0_u64;
     let mut left: Vec<PathBuf> = sources.to_vec();
@@ -143,7 +146,7 @@ fn stop_for(failure: ArchiveFailure, first: &Path, target: &Path) -> Stop {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ops::test_folder::TestFolder;
+    use nova_files_jobs::test_folder::TestFolder;
 
     #[test]
     fn totals_count_file_bytes_and_every_entry_once() {
@@ -154,7 +157,7 @@ mod tests {
         let notes = folder.file("notes.txt", "notes");
         let sources = [folder.path().join("docs"), notes];
         assert_eq!(
-            totals(&sources, &crate::ops::control::Control::default()),
+            totals(&sources, &nova_files_jobs::control::Control::default()),
             Ok((14, 5))
         );
     }

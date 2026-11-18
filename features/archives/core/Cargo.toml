@@ -1,0 +1,38 @@
+# nova-files-archives-core
+#
+# Makes and unpacks archives through the nova-files-archiver helper, and
+# reads what an archive holds.
+#
+# Allowed outside crates:
+# - chrono
+# - log
+# - rustix
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-jobs
+# - nova-files-rename-api
+
+[package]
+name = "nova-files-archives-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Local time for the dates an archive lists.
+chrono = "0.4.45"
+log = { version = "0.4.35", features = ["std"] }
+# Talks to the helper process: pidfds, polling its pipes, signals.
+rustix = { version = "1.1.6", default-features = false, features = ["event", "fs", "process", "std", "time"] }
+nova-files-api.workspace = true
+nova-files-jobs.workspace = true
+nova-files-rename-api.workspace = true
+
+[dev-dependencies]
+nova-files-jobs = { workspace = true, features = ["test-support"] }

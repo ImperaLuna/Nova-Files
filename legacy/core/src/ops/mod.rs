@@ -1,11 +1,9 @@
 mod access;
 mod ahead;
 mod attrs;
-mod compress;
 mod copy_file;
 mod delete;
 mod dropped;
-mod extract;
 mod make;
 mod transfer;
 mod undo;
@@ -28,13 +26,12 @@ pub use dropped::answer as answer_drop_would;
 #[cfg(test)]
 pub use nova_files_jobs::test_folder::{self, TestFolder};
 
-use crate::archive::Archiver;
 use crate::inside;
 use crate::trash::Trashes;
 use access::change_access;
 use delete::delete;
-use extract::{Taking, extract};
 use make::How;
+use nova_files_archives_core::{Archiver, Asked, Taking, compress, extract};
 use nova_files_rename_core::{new_folder, rename};
 use nova_files_trash_core::{Trasher, delete_from_trash, empty_trash, restore, trash};
 use transfer::transfer;
@@ -123,9 +120,13 @@ impl nova_files_jobs::JobKind for Files {
             Operation::Rename { path, name } => rename(path, name),
             Operation::NewFolder { inside, name } => new_folder(inside, name),
             Operation::Copy { sources, into } => match copied_out(sources) {
-                Some((archive, picked)) => {
-                    extract(running, archiver, &archive, into, Taking::Picked(&picked))
-                }
+                Some((archive, picked)) => extract(
+                    running,
+                    (archiver, &self.mover),
+                    &archive,
+                    into,
+                    Taking::Picked(&picked),
+                ),
                 None => transfer(running, sources, into, How::Copy),
             },
             Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
@@ -138,9 +139,13 @@ impl nova_files_jobs::JobKind for Files {
             }
             Operation::EmptyTrash => empty_trash(running, trashes, &self.mover),
             Operation::Undo { .. } => undo::run(running, undo.cloned(), trashes, &self.mover),
-            Operation::Extract { archive, into, to } => {
-                extract(running, archiver, archive, into, Taking::All(*to))
-            }
+            Operation::Extract { archive, into, to } => extract(
+                running,
+                (archiver, &self.mover),
+                archive,
+                into,
+                Taking::All(*to),
+            ),
             Operation::Compress {
                 sources,
                 into,
@@ -149,7 +154,7 @@ impl nova_files_jobs::JobKind for Files {
                 level,
                 locked,
             } => {
-                let asked = compress::Asked {
+                let asked = Asked {
                     sources,
                     into,
                     name,
@@ -157,7 +162,7 @@ impl nova_files_jobs::JobKind for Files {
                     level: *level,
                     locked: *locked,
                 };
-                compress::compress(running, archiver, &asked)
+                compress(running, archiver, &asked)
             }
         }
     }
