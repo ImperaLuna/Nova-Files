@@ -6,6 +6,7 @@
 //! screen read again when the core moved on from it (see `window`).
 
 use std::collections::HashMap;
+use std::mem;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -47,7 +48,7 @@ impl MainWindow {
         if !same_folder {
             // A menu belongs to the place it opened in.
             self.menu = None;
-            let fell_back = std::mem::take(&mut self.falling_back);
+            let fell_back = mem::take(&mut self.falling_back);
             if let (Location::Folder(folder), false) = (&arrived, fell_back) {
                 self.used(folder);
             }
@@ -264,10 +265,11 @@ impl MainWindow {
                     self.falling_back = self.request(&fallback);
                 }
             }
-            Some(_) if self.core_moved && self.place_on_screen_now() != Some(refused) => {
-                self.read_again(cx);
+            Some(_) => {
+                if mem::take(&mut self.core_moved) && self.place_on_screen_now() != Some(refused) {
+                    self.read_again(cx);
+                }
             }
-            Some(_) => {}
         }
         // A recent folder's card that can't be opened goes from Start.
         self.ask_for_recent();

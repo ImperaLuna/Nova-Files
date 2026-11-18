@@ -201,7 +201,8 @@ pub struct MainWindow {
     /// The order of the listing on screen, which the column heads show.
     shown_order: Order,
     /// Whether the core sent a listing since the one on screen, which the
-    /// window dropped: the core now serves rows of that one, not this.
+    /// window dropped: the core now serves rows of that one, not this,
+    /// until the window asks for the one on screen again.
     core_moved: bool,
     next_listing: u64,
     /// Where to go, in order, while the window has no folder and the one
