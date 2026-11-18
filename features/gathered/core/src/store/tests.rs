@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::{Gathering, Holds};
+use nova_files_gathered_api::{Gathering, Holds};
 
 use super::*;
 

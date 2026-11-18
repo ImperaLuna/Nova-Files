@@ -1,27 +1,20 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use nova_files_api::{ClientId, Command, HiddenFiles};
+use nova_files_api::{Command, HiddenFiles};
 use nova_files_settings_api::Thumbnails;
 
 use super::Setup;
-use crate::gathered;
 use crate::jobs::{self, Client};
 use crate::preview::{self, Request};
 use crate::trash;
 use nova_files_jobs::trash_info::FILES;
 
-pub(super) fn answer(id: ClientId, client: &Client, command: Command, setup: &Setup) {
+pub(super) fn answer(client: &Client, command: Command, setup: &Setup) {
     match command {
         Command::ListFolder { id, path, order } => {
             let hidden = hidden_files(setup, &path);
             jobs::list_folder(client, (id, path), order, hidden, &setup.inside);
-        }
-        Command::Gathered => setup.gathered.listen(id, client.events()),
-        Command::ChangeGathered(change) => setup.gathered.change(change),
-        Command::ListGathered { id, place, order } => {
-            let hidden = setup.settings.current().hidden_files;
-            gathered::list(client, id, setup.gathered.folders_of(place), order, hidden);
         }
         Command::Rows {
             id,

@@ -4,17 +4,16 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Once, Weak};
 use std::thread;
 
-use nova_files_api::{
-    ClientId, Event, EventSink, Gathered, GatheredChange, GatheredFolder, Gathering, Holds,
-};
+use nova_files_disk::change_writer::ChangeWriter;
+use nova_files_disk::config_watch::{self, Changed, ConfigWatch};
+use nova_files_disk::hand_edited::lock;
+use nova_files_disk::home::Home;
+use nova_files_disk::private_file::{self, Read};
+use nova_files_gathered_api::{Event, Gathered, GatheredChange, GatheredFolder, Gathering, Holds};
+use nova_files_messages::{ClientId, EventSink};
 
 use super::file::{self, Edit};
 use super::{FILE, guess, usual_folders};
-use crate::change_writer::ChangeWriter;
-use crate::config_watch::{self, Changed, ConfigWatch};
-use crate::hand_edited::lock;
-use crate::private_file::{self, Read};
-use nova_files_disk::home::Home;
 
 const MAX_BYTES: usize = 256 * 1024;
 const LOAD_THREAD: &str = "nova-files-gathered";

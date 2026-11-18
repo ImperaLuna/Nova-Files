@@ -5,13 +5,11 @@ use std::sync::Arc;
 use std::thread;
 
 use nova_files_api::{
-    Entry, EntryId, EntryKind, Event, GatheredFolder, HiddenFiles, Holds, Listing, ListingId,
-    Order, Unreadable,
+    Entry, EntryId, EntryKind, Event, HiddenFiles, Listing, ListingId, Order, Unreadable,
 };
-
-use crate::jobs::Client;
-use crate::list::{self, Stopped};
-use crate::{memory, order};
+use nova_files_entries_core::list::{self, Stopped};
+use nova_files_entries_core::{Client, memory, order};
+use nova_files_gathered_api::{GatheredFolder, Holds};
 
 const THREAD: &str = "nova-files-list-gathered";
 

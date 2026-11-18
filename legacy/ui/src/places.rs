@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use gpui::SharedString;
-use nova_files_api::Gathering;
+use nova_files_gathered_api::Gathering;
 use nova_files_places_api::{Bookmark, Place, PlaceKind};
 
 use crate::assets::Icon;

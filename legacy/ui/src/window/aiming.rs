@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 
 use gpui::{Context, SharedString};
-use nova_files_api::{Command, DropAskId, DropKind, Gathering};
+use nova_files_api::{Command, DropAskId, DropKind};
+use nova_files_gathered_api::Gathering;
 
 use super::MainWindow;
 use super::dragging::Drag;

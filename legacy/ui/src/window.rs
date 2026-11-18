@@ -54,10 +54,11 @@ use gpui::{
     UniformListScrollHandle,
 };
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView, Gathering,
+    ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
     HiddenFiles, Listing, ListingId, Order,
 };
 use nova_files_drives_api as drives_api;
+use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_properties_api as properties_api;
 use nova_files_settings_api::{self as settings_api, Settings};
@@ -331,6 +332,10 @@ impl MainWindow {
         };
         let envelope = match envelope.open::<drives_api::Event>() {
             Ok(event) => return self.drive_event(event, cx),
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<gathered_api::Event>() {
+            Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
         };
         let envelope = match envelope.open::<places_api::Event>() {

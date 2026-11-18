@@ -1,16 +1,3 @@
-//! Gathered folders: Games and Projects, the places that gather folders
-//! from several spots into one list.
-//!
-//! The core keeps them in `gathered.toml` in its config folder, which
-//! people may also write by hand or from Nix. A client asks for them with
-//! [`Command::Gathered`] and changes them with [`Command::ChangeGathered`];
-//! every client that asked hears [`Event::Gathered`] after each change,
-//! from any client or the file.
-//!
-//! [`Command::Gathered`]: crate::Command::Gathered
-//! [`Command::ChangeGathered`]: crate::Command::ChangeGathered
-//! [`Event::Gathered`]: crate::Event::Gathered
-
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 

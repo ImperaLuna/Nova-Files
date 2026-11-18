@@ -4,7 +4,8 @@ use std::mem;
 use std::path::{Path, PathBuf};
 
 use gpui::{ClickEvent, Context, SharedString, UniformListScrollHandle, Window};
-use nova_files_api::{EntryId, Gathering, Listing, ListingId, Order};
+use nova_files_api::{EntryId, Listing, ListingId, Order};
+use nova_files_gathered_api::Gathering;
 
 use super::MainWindow;
 use super::rows::release;

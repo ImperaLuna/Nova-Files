@@ -7,6 +7,8 @@ use nova_files_api::{ClientId, Command, CoreMessage, Envelope, Event, EventSink,
 use nova_files_disk::home::Home;
 use nova_files_drives_api::{Command as DrivesCommand, DriveOffer, Event as DrivesEvent};
 use nova_files_drives_core::{Store as DrivesStore, disk_space};
+use nova_files_gathered_api as gathered_api;
+use nova_files_gathered_core::Store as GatheredStore;
 use nova_files_messages::{Routed, Routes};
 use nova_files_places_api as places_api;
 use nova_files_places_core::Store as PlacesStore;
@@ -20,7 +22,6 @@ use nova_files_trash_api as trash_api;
 
 use crate::file_icons::FileIcons;
 use crate::folder_views::Store as FolderViewsStore;
-use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
 use crate::jobs::Client;
 use crate::mime::MimeTypes;
@@ -66,6 +67,22 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
             drives(id, client, command, setup)
         },
     )?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
+            gathered_api::Command::Gathered => setup.gathered.listen(id, client.events()),
+            gathered_api::Command::ChangeGathered(change) => setup.gathered.change(change),
+            gathered_api::Command::ListGathered {
+                id: listing,
+                place,
+                order,
+            } => {
+                let hidden = setup.settings.current().hidden_files;
+                let folders = setup.gathered.folders_of(place);
+                nova_files_gathered_core::list(client.entries(), listing, folders, order, hidden);
+            }
+        }
+        Ok(())
+    })?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
             places_api::Command::Places => setup.places.listen(id, client.events()),
@@ -123,6 +140,7 @@ pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
         MessageType::of::<DrivesEvent>(),
+        MessageType::of::<gathered_api::Event>(),
         MessageType::of::<places_api::Event>(),
         MessageType::of::<properties_api::Event>(),
         MessageType::of::<settings_api::Event>(),
@@ -217,16 +235,13 @@ fn answer(
     match command {
         Command::Ping => client.deliver(Event::Pong),
         command @ (Command::ListFolder { .. }
-        | Command::Gathered
-        | Command::ChangeGathered(_)
-        | Command::ListGathered { .. }
         | Command::Rows { .. }
         | Command::Search { .. }
         | Command::Find { .. }
         | Command::Preview { .. }
         | Command::OpenFile { .. }
         | Command::OpenWith(_)) => {
-            folders::answer(id, client, command, setup);
+            folders::answer(client, command, setup);
             Ok(())
         }
         command @ (Command::WindowState

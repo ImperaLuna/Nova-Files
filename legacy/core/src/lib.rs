@@ -2,7 +2,6 @@
 
 mod file_icons;
 mod folder_views;
-mod gathered;
 mod icon_theme;
 mod index;
 mod inside;
@@ -26,9 +25,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::Connector;
-use nova_files_disk::{
-    capped, change_writer, config_watch, hand_edited, private_file, saver, timed,
-};
+use nova_files_disk::{capped, config_watch, hand_edited, private_file, saver, timed};
 use nova_files_entries_core::{list, memory, order};
 
 use search::Searcher;
@@ -106,7 +103,7 @@ pub fn spawn_with_archiver(
             let theme = theme::Store::open(config);
             theme.follow(&settings);
             let places = nova_files_places_core::Store::open(home.clone());
-            let gathered = gathered::Store::open(home.clone());
+            let gathered = nova_files_gathered_core::Store::open(home.clone());
             let state_home = home.as_ref().map(|home| home.state.as_path());
             let recent = nova_files_start_core::Store::open(state_home);
             let folder_views = folder_views::Store::open(state_home);

@@ -7,9 +7,8 @@
 //! [`Theme`] gets it again whenever it changes. The core reads the other end of the channel
 //! as [`CoreMessage`]s. File
 //! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
-//! quick look shows of a file or folder.
-//! [`Gathered`] folders make up the Games and Projects places. A
-//! [`FolderView`] is how a folder is shown. A [`FileIcon`] is how an
+//! quick look shows of a file or folder. A [`FolderView`] is how a folder
+//! is shown. A [`FileIcon`] is how an
 //! entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
 //! A [`WindowRequest`] is a window another program asks for.
 
@@ -20,7 +19,6 @@ mod file_icon;
 mod file_type;
 mod folder;
 mod folder_view;
-mod gathered;
 mod hidden_files;
 mod job;
 mod message;
@@ -39,7 +37,6 @@ pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Order, SortKey, Unreadable,
 };
 pub use folder_view::{FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode};
-pub use gathered::{Gathered, GatheredChange, GatheredFolder, Gathering, Holds};
 pub use hidden_files::HiddenFiles;
 pub use job::{
     Answer, Conflict, ConflictKind, DropAskId, DropKind, ExtractTo, Failure, JobId, JobTag,

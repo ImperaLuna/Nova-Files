@@ -3585,6 +3585,7 @@ dependencies = [
  "nova-files-core",
  "nova-files-dbus",
  "nova-files-drives-api",
+ "nova-files-gathered-api",
  "nova-files-picker-api",
  "nova-files-places-api",
  "nova-files-properties-api",
@@ -3651,6 +3652,8 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-drives-core",
  "nova-files-entries-core",
+ "nova-files-gathered-api",
+ "nova-files-gathered-core",
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
@@ -3727,6 +3730,26 @@ version = "0.1.0"
 dependencies = [
  "nova-files-api",
  "nova-files-disk",
+]
+
+[[package]]
+name = "nova-files-gathered-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-gathered-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-entries-core",
+ "nova-files-gathered-api",
+ "nova-files-messages",
+ "toml_edit 0.25.18+spec-1.1.0",
 ]
 
 [[package]]
@@ -3924,6 +3947,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-clipboard-api",
  "nova-files-drives-api",
+ "nova-files-gathered-api",
  "nova-files-picker-api",
  "nova-files-places-api",
  "nova-files-properties-api",

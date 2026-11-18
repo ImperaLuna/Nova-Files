@@ -6,7 +6,6 @@ use std::sync::Arc;
 use crate::file_icon::FileIcon;
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Unreadable};
 use crate::folder_view::{FolderView, FolderViews};
-use crate::gathered::{Gathered, GatheredChange, Gathering};
 use crate::job::{
     Answer, Conflict, DropAskId, DropKind, JobId, JobTag, Operation, Outcome, Progress, Scope,
     Tally,
@@ -43,26 +42,6 @@ pub enum Command {
     ListFolder {
         id: ListingId,
         path: PathBuf,
-        order: Order,
-    },
-    /// Ask for the folders Games and Projects gather from: the answer is
-    /// [`Event::Gathered`], and from then on the client gets it again
-    /// whenever they change (from any client, or `gathered.toml` edited).
-    Gathered,
-    /// Add or remove a gathered folder and save it. Every client that
-    /// asked, this one included, then gets [`Event::Gathered`]; nothing is
-    /// sent when nothing changed.
-    ChangeGathered(GatheredChange),
-    /// List what `place` gathers in `order`: the folders inside each of
-    /// its folders that holds many, and each one-project folder itself,
-    /// folders only, as the hidden-files setting says. The answer is
-    /// [`Event::FolderListed`] with `id`, each entry in its own folder
-    /// (see [`Listing::folders`]) and an empty [`Listing::path`]. It is
-    /// the client's listing like a [`Command::ListFolder`]: either one
-    /// asked for later cancels it, and [`Command::Rows`] serves its rows.
-    ListGathered {
-        id: ListingId,
-        place: Gathering,
         order: Order,
     },
     /// The entries of listing `id` the client shows or is about to show:
@@ -252,14 +231,6 @@ pub enum Event {
         size: ThumbnailSize,
         png: Arc<[u8]>,
     },
-    /// The folders Games and Projects gather from (see
-    /// [`Command::Gathered`]).
-    Gathered(Arc<Gathered>),
-    /// What is inside `place`'s folders changed (a folder made, removed or
-    /// renamed in one, or one of them appeared or went away): a client
-    /// showing it lists it again. Sent to the clients that asked with
-    /// [`Command::Gathered`].
-    GatheredChanged(Gathering),
     /// One stage of [`Command::Search`] `id`: names as typed come first,
     /// then letters in order and typos. `done` marks the last stage. A path
     /// shows at most once per search.

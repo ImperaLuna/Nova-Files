@@ -163,8 +163,6 @@ impl MainWindow {
             | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. } => {}
-            Event::Gathered(gathered) => self.gathered_arrived(gathered, cx),
-            Event::GatheredChanged(place) => self.gathered_changed(place),
             Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
             Event::FolderViews(views) => self.folder_views_arrived(&views, cx),
         }

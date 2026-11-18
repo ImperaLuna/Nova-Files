@@ -27,6 +27,8 @@ nova-files-disk = { path = "framework/disk" }
 nova-files-drives-api = { path = "features/drives/api" }
 nova-files-drives-core = { path = "features/drives/core" }
 nova-files-entries-core = { path = "framework/entries/core" }
+nova-files-gathered-api = { path = "features/gathered/api" }
+nova-files-gathered-core = { path = "features/gathered/core" }
 nova-files-index = { path = "helpers/index" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-messages = { path = "framework/messages" }

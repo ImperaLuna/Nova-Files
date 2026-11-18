@@ -20,6 +20,8 @@
 # - nova-files-drives-api
 # - nova-files-drives-core
 # - nova-files-entries-core
+# - nova-files-gathered-api
+# - nova-files-gathered-core
 # - nova-files-index
 # - nova-files-jobs
 # - nova-files-messages
@@ -69,6 +71,8 @@ nova-files-disk.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-drives-core.workspace = true
 nova-files-entries-core.workspace = true
+nova-files-gathered-api.workspace = true
+nova-files-gathered-core.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true
 nova-files-messages.workspace = true

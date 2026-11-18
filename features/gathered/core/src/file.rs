@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use nova_files_api::{Gathered, GatheredFolder, Gathering, Holds};
+use nova_files_gathered_api::{Gathered, GatheredFolder, Gathering, Holds};
 use toml_edit::{ArrayOfTables, DocumentMut, InlineTable, Item, Table, TableLike, Value};
 
 const PROJECTS: &str = "projects";

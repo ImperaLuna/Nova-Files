@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod file;
 mod list;
 mod store;
@@ -5,12 +7,11 @@ mod store;
 use std::fs;
 use std::path::Path;
 
-use nova_files_api::{GatheredFolder, Gathering, Holds};
+use nova_files_disk::home::Home;
+use nova_files_gathered_api::{GatheredFolder, Gathering, Holds};
 
 pub use list::list;
 pub use store::Store;
-
-use nova_files_disk::home::Home;
 
 const FILE: &str = "gathered.toml";
 const PROJECT_MARKERS: [&str; 5] = [
