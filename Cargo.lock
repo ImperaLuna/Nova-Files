@@ -3672,7 +3672,6 @@ dependencies = [
 name = "nova-files-entries"
 version = "0.1.0"
 dependencies = [
- "log",
  "nova-files-api",
  "nova-files-disk",
 ]
