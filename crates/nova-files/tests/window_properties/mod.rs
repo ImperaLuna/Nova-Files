@@ -207,6 +207,64 @@ fn last_crumb(cx: &mut VisualTestContext) -> &'static str {
 }
 
 #[gpui::test]
+async fn one_of_two_coming_back_keeps_the_page(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("properties-one-back");
+    let notes = tree.path().join("notes.txt");
+    let (view, cx) = properties_window(cx, tree.path()).await;
+    click(cx, "name-0");
+    click_with(cx, "name-1", Modifiers::secondary_key());
+    view.update(cx, MainWindow::show_properties);
+    read_page(&view, cx).await;
+
+    let shown_again = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
+        view.update(cx, |view, cx| view.switch_tab(0, cx));
+        view.update(cx, |view, cx| view.switch_tab(1, cx));
+    };
+    fs::remove_file(&notes).unwrap();
+    shown_again(&view, cx);
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.properties_page()
+            .is_some_and(|page| page.read().len() == 1)
+    })
+    .await;
+    fs::write(&notes, "").unwrap();
+    shown_again(&view, cx);
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.properties_page()
+            .is_some_and(|page| page.read().len() == 2)
+    })
+    .await;
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.properties_page().is_some()));
+}
+
+#[gpui::test]
+async fn a_search_ends_when_the_page_shows_again(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("properties-search");
+    let (view, cx) = properties_window(cx, tree.path()).await;
+    click(cx, "name-1");
+    view.update(cx, MainWindow::show_properties);
+    read_page(&view, cx).await;
+    click(cx, "up");
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.simulate_keystrokes("ctrl-f");
+    cx.run_until_parked();
+    cx.simulate_input("notes");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.searching()));
+
+    view.update(cx, MainWindow::go_back);
+    cx.run_until_parked();
+    view.read_with(cx, |view, cx| {
+        assert!(view.properties_page().is_some());
+        assert!(!view.searching());
+        assert_eq!(view.query(cx), "");
+    });
+}
+
+#[gpui::test]
 async fn the_trash_has_no_properties(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("properties-trash");
