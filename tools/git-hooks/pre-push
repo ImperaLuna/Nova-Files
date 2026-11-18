@@ -3,7 +3,8 @@
 # directly on main) whose own commits change anything besides code, so the
 # push never reaches CI. tools/ci-stack-guard.sh has the list; CI runs the
 # same check as "stack holds code only". It also refuses a commit that
-# `just check` and `just mutants` haven't passed on (tools/local-pass.sh).
+# `just check`, and `just mutants` while tools/mutation-tests reads `on`,
+# haven't passed on (tools/local-pass.sh).
 # Then tools/pre-push-lint.sh runs rustfmt and Clippy on the crates the
 # push changes.
 #

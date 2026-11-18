@@ -13,7 +13,8 @@
 # key CI's cache uses (tools/ci-mutants-key.sh), from the merge base with
 # <base> to the commit, so it holds while only <base> moves. Nothing is
 # recorded while tracked files differ from HEAD: the markers name commits.
-# They live in target/passed/, which `cargo clean` empties.
+# They live in target/passed/, which `cargo clean` empties. verify asks for
+# a mutants pass only while tools/mutation-tests reads `on`.
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
@@ -42,7 +43,8 @@ case ${1:-} in
         sha=${3:?usage: local-pass.sh verify <base> <sha>}
         missing=()
         [ -e "$dir/check-$(git rev-parse "$sha^{tree}")" ] || missing+=("just check")
-        if ! git diff --quiet "$(git merge-base "$base" "$sha")" "$sha" -- '*.rs' &&
+        if [ "$(cat "$root/tools/mutation-tests")" = on ] &&
+            ! git diff --quiet "$(git merge-base "$base" "$sha")" "$sha" -- '*.rs' &&
             [ ! -e "$dir/$(mutants_key "$base" "$sha")" ]; then
             missing+=("just mutants ${base#refs/remotes/}")
         fi

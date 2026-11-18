@@ -114,9 +114,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
-  # On pull requests: mutation tests on the changed lines, split over up to
-  # four runners (tools/ci-mutants-shard.sh decides how many the mutants are
-  # worth), unless the same changes already passed. On main: one runner and only a build, to save the cargo cache.
+  # On pull requests, while tools/mutation-tests reads `on`: mutation tests
+  # on the changed lines, split over up to four runners
+  # (tools/ci-mutants-shard.sh decides how many the mutants are worth),
+  # unless the same changes already passed. On main: one runner and only a build, to save the cargo cache.
   # GitHub lets a PR restore caches saved on main but not ones saved on other
   # PR branches, so main keeps it warm.
   mutants:
@@ -132,6 +133,7 @@ jobs:
     outputs:
       key: ${{ steps.key.outputs.key }}
       passed: ${{ steps.passed.outputs.cache-hit }}
+      off: ${{ steps.changes.outputs.off }}
     env:
       CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
     steps:
@@ -156,7 +158,11 @@ jobs:
         env:
           PASSED: ${{ steps.passed.outputs.cache-hit }}
         run: |
-          if [ "$PASSED" = true ]; then
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ "$(cat tools/mutation-tests)" != on ]; then
+            echo "Mutation tests are off (tools/mutation-tests)."
+            echo "run=false" >>"$GITHUB_OUTPUT"
+            echo "off=true" >>"$GITHUB_OUTPUT"
+          elif [ "$PASSED" = true ]; then
             echo "These changes passed their mutation tests in an earlier run."
             echo "run=false" >>"$GITHUB_OUTPUT"
           else
@@ -256,7 +262,7 @@ jobs:
     # Saving the marker can wait on the cache service a little.
     timeout-minutes: 5
     env:
-      SAVE: ${{ github.event_name == 'pull_request' && needs.mutants.outputs.passed != 'true' }}
+      SAVE: ${{ github.event_name == 'pull_request' && needs.mutants.outputs.passed != 'true' && needs.mutants.outputs.off != 'true' }}
     steps:
       - name: Every shard passed
         env:

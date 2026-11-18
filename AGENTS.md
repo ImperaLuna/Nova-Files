@@ -122,8 +122,9 @@ real home. A bug fix comes with a test that fails without it.
 Work inside `nix develop`. `just` lists one command per job (`just test`,
 `just clippy nova-files-core`); most take an optional crate. Run
 Every commit you push has passed `just check` (`nix flake check`) and, when
-it changes Rust, `just mutants <base>` locally, where `<base>` is the PR's
-base branch (`origin/main`, or `origin/<parent>` in a stack). A missed
+it changes Rust and `tools/mutation-tests` reads `on`, `just mutants <base>`
+locally, where `<base>` is the PR's base branch (`origin/main`, or
+`origin/<parent>` in a stack). A missed
 mutant gets a test, and the run goes again; reruns test only mutants that
 are new or were missed. Both commands record their pass for that commit,
 and the pre-push hook refuses a commit without them. CI runs both again as
