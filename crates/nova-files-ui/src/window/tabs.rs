@@ -15,9 +15,10 @@
 //! arrives in place: the scroll stays and the selection is kept by name
 //! (see `events`), so it also brings in what changed meanwhile, and the
 //! sidebar's tree opens down to it. A folder still on its way when the
-//! tab was left is asked for again; a search is run again and shows from
-//! its top, since what it finds may have changed; a Properties page asks
-//! for what it shows again (see `properties`). A tab whose folder is
+//! tab was left is asked for again, and so are Games and Projects; a
+//! search is run again and shows from its top, since what it finds may
+//! have changed; a Properties page asks for what it shows again (see
+//! `properties`). A tab whose folder is
 //! gone by then (deleted, or its drive unplugged) goes to Start, and so
 //! does a new tab whose folder can't be read. A drive still mounting
 //! when the tab is left isn't opened.
@@ -34,7 +35,7 @@ use std::mem;
 use std::path::{Path, PathBuf};
 
 use gpui::{ClickEvent, Context, SharedString, UniformListScrollHandle, Window};
-use nova_files_api::{EntryId, Listing, ListingId, Order};
+use nova_files_api::{EntryId, Gathering, Listing, ListingId, Order};
 
 use super::MainWindow;
 use super::rows::release;
@@ -64,8 +65,10 @@ pub struct Tab {
     scroll: UniformListScrollHandle,
     search: Search,
     counted: SharedString,
-    /// The folder asked for that hadn't arrived when the tab was left.
-    on_its_way: Option<PathBuf>,
+    /// The gathered place whose listing it holds, if any.
+    gathered: Option<Gathering>,
+    /// The place asked for that hadn't arrived when the tab was left.
+    on_its_way: Option<Location>,
     properties: Option<super::properties::Page>,
 }
 
@@ -74,7 +77,6 @@ impl Tab {
     fn place(&self) -> Option<Location> {
         self.on_its_way
             .clone()
-            .map(Location::Folder)
             .or_else(|| self.history.here().cloned())
     }
 }
@@ -131,7 +133,6 @@ impl MainWindow {
     fn place_on_screen(&self) -> Option<Location> {
         self.asked
             .and_then(|_| self.requested.clone())
-            .map(Location::Folder)
             .or_else(|| self.location().cloned())
     }
 
@@ -149,6 +150,10 @@ impl MainWindow {
             Location::Folder(folder) => {
                 self.open(folder);
                 // A folder that can't be read leaves the tab on Start.
+                self.tabs.start_if_refused = self.asked;
+            }
+            Location::Gathered(gathered) => {
+                self.open_gathered(*gathered, cx);
                 self.tabs.start_if_refused = self.asked;
             }
             Location::Properties(paths) => self.arrive_at_properties(paths, cx),
@@ -225,6 +230,10 @@ impl MainWindow {
     fn tab_look(&self, place: Option<&Location>, shown: &[places::Shown]) -> (SharedString, Icon) {
         match place {
             Some(Location::Start) => (START_LABEL.into(), Icon::Start),
+            Some(Location::Gathered(gathered)) => {
+                let (label, icon) = places::gathering_look(*gathered);
+                (label.into(), icon)
+            }
             Some(Location::Properties(paths)) => (island::what(paths).into(), Icon::Info),
             Some(Location::Folder(folder)) if *folder == self.trash.folder => {
                 (TRASH_LABEL.into(), Icon::Trash)
@@ -366,6 +375,7 @@ impl MainWindow {
             scroll: mem::replace(&mut self.scroll, UniformListScrollHandle::new()),
             search: mem::replace(&mut self.search, Search::new(cx)),
             counted: mem::take(&mut self.counted),
+            gathered: self.gathered.shown.take(),
             on_its_way,
             properties: self.properties.take(),
         }
@@ -387,12 +397,15 @@ impl MainWindow {
         self.search = tab.search;
         self.counted = tab.counted;
         self.properties = tab.properties;
+        self.gathered.shown = tab.gathered;
         // The core serves another listing's rows now.
         self.core_moved = true;
-        if let Some(folder) = tab.on_its_way {
-            self.request(&folder);
+        if let Some(place) = tab.on_its_way {
+            self.request_place(&place);
         } else if self.searching() {
             self.find(cx);
+        } else if let Some(place) = self.gathered_shown() {
+            self.request_gathered(place);
         } else if let Some(listing) = self.listing.clone() {
             // The sidebar's tree comes along to the tab's folder.
             self.tree_follows(&listing, true);

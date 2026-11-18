@@ -38,6 +38,8 @@ pub enum Icon {
     List,
     Tiles,
     Trash,
+    Projects,
+    Games,
     Copy,
     Cut,
     Rename,
@@ -56,7 +58,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 41] = [
+    const ALL: [Self; 43] = [
         Self::Folder,
         Self::File,
         Self::FileText,
@@ -83,6 +85,8 @@ impl Icon {
         Self::List,
         Self::Tiles,
         Self::Trash,
+        Self::Projects,
+        Self::Games,
         Self::Copy,
         Self::Cut,
         Self::Rename,
@@ -129,6 +133,8 @@ impl Icon {
             Self::List => "icons/list.svg",
             Self::Tiles => "icons/tiles.svg",
             Self::Trash => "icons/trash.svg",
+            Self::Projects => "icons/projects.svg",
+            Self::Games => "icons/games.svg",
             Self::Copy => "icons/copy.svg",
             Self::Cut => "icons/cut.svg",
             Self::Rename => "icons/rename.svg",
@@ -175,6 +181,8 @@ impl Icon {
             Self::List => svg::LIST,
             Self::Tiles => svg::TILES,
             Self::Trash => svg::TRASH,
+            Self::Projects => svg::PROJECTS,
+            Self::Games => svg::GAMES,
             Self::Copy => svg::COPY,
             Self::Cut => svg::CUT,
             Self::Rename => svg::RENAME,

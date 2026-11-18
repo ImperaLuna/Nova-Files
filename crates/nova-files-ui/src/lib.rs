@@ -17,6 +17,7 @@ mod commands;
 mod crumbs;
 mod drives;
 mod dropping;
+mod grid;
 mod history;
 mod island;
 mod jump;
@@ -42,11 +43,11 @@ mod window_state;
 
 use std::cell::Cell;
 use std::io::{self, Write as _};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::Rc;
 
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
-use nova_files_api::{Connector, PickRequest};
+use nova_files_api::{Connector, PickRequest, WindowRequest};
 
 pub use assets::Icon;
 pub use columns::ColumnText;
@@ -77,8 +78,8 @@ pub enum Ended {
 /// What the first window of a run opens on.
 #[derive(Debug)]
 pub enum Opening {
-    /// A main window on this folder, or on the Start page.
-    Folder(Option<PathBuf>),
+    /// A main window as asked: on a folder, or on the Start page.
+    Folder(WindowRequest),
     /// A picker window for another app's request.
     Pick(Box<PickRequest>),
 }
@@ -113,8 +114,8 @@ pub fn run(
                 loop {
                     let request = requests.next().await;
                     let keep_going = cx.update(|cx| match request {
-                        Some(Request::OpenWindow(folder)) => {
-                            open_window(&connector, Opening::Folder(folder), &recover_gpu, cx);
+                        Some(Request::OpenWindow(request)) => {
+                            open_window(&connector, Opening::Folder(request), &recover_gpu, cx);
                             true
                         }
                         Some(Request::Pick(request)) => {
@@ -157,7 +158,8 @@ pub(crate) fn open_picker(connector: &Connector, request: Box<PickRequest>, cx: 
     open_window(connector, Opening::Pick(request), &recover_gpu, cx);
 }
 
-/// Opens a main window on its folder (or the Start page), or a picker
+/// Opens a main window on its folder (or the Start page), with the files
+/// it was asked to show selected, or a picker
 /// window titled as the asking app wants and dialog-sized, over the app's
 /// window when it names one, else centred on the main display.
 /// When a main window fails with no window open, `recover_gpu` gets the
@@ -165,9 +167,9 @@ pub(crate) fn open_picker(connector: &Connector, request: Box<PickRequest>, cx: 
 /// would lose the asking app's call.
 fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu, cx: &mut App) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
-    let (folder, pick) = match opening {
-        Opening::Folder(folder) => (folder, None),
-        Opening::Pick(mut request) => (request.folder.take(), Some(request)),
+    let (folder, select, pick) = match opening {
+        Opening::Folder(request) => (request.folder, request.select, None),
+        Opening::Pick(mut request) => (request.folder.take(), Vec::new(), Some(request)),
     };
     let recovers = pick.is_none();
     let mut options = WindowOptions {
@@ -194,6 +196,9 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
     let opened = cx.open_window(options, move |window, cx| {
         cx.new(|cx| {
             let mut view = MainWindow::at(&connector, &location, home_folder(), cx);
+            if let Some(folder) = location.folder() {
+                view.select_on_arrival(folder.to_path_buf(), select);
+            }
             if let Some(request) = pick {
                 view.set_pick(request, window, cx);
             }

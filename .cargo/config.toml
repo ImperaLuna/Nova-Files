@@ -8,6 +8,7 @@
 NOVA_FILES_APP_ID = "io.github.ImperaLuna.NovaFiles"
 
 # The file picker's xdg-desktop-portal backend name. Rust reads it with
-# `env!("NOVA_FILES_PORTAL_BUS_NAME")`; nix/build.nix names the `.portal`
-# file after its last part, which is what `portals.conf` picks.
+# `env!("NOVA_FILES_PORTAL_BUS_NAME")`; data/install.sh names the `.portal`
+# file after its last part, which is what `portals.conf` picks, and
+# nix/build.nix derives the same name for the NixOS module.
 NOVA_FILES_PORTAL_BUS_NAME = "org.freedesktop.impl.portal.desktop.novafiles"

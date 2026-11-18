@@ -29,6 +29,7 @@ fn shared(entries: Vec<Entry>, wanted: Range<usize>, done: &[usize]) -> Shared {
                 folders: None,
             })),
             wanted,
+            size: ThumbnailSize::Normal,
             done: done.iter().copied().collect(),
             closed: false,
         }),
@@ -44,13 +45,15 @@ fn only_wanted_entries_of_the_shown_open_listing_are_still_wanted() {
             entry(1, "b", EntryKind::File),
         ]
     };
+    let normal = ThumbnailSize::Normal;
     let queue = shared(files(), 0..1, &[]);
-    assert!(queue.still_wanted(LISTING, 0));
-    assert!(!queue.still_wanted(LISTING, 1));
-    assert!(!queue.still_wanted(ListingId(2), 0));
+    assert!(queue.still_wanted(LISTING, 0, normal));
+    assert!(!queue.still_wanted(LISTING, 1, normal));
+    assert!(!queue.still_wanted(ListingId(2), 0, normal));
+    assert!(!queue.still_wanted(LISTING, 0, ThumbnailSize::Large));
 
     queue.update(|state| state.closed = true);
-    assert!(!queue.still_wanted(LISTING, 0));
+    assert!(!queue.still_wanted(LISTING, 0, normal));
 }
 
 #[test]
@@ -66,9 +69,12 @@ fn a_batch_holds_only_wanted_files_not_done_yet() {
     let (sender, batches) = mpsc::channel();
     let worker = Arc::clone(&queue);
     thread::spawn(move || sender.send(worker.next_batch()));
-    let (shown, batch) = batches.recv_timeout(WAIT).unwrap().unwrap();
+    let batch = batches.recv_timeout(WAIT).unwrap().unwrap();
 
-    assert_eq!((shown.id, batch), (LISTING, vec![1]));
+    assert_eq!(
+        (batch.shown.id, batch.size, batch.entries),
+        (LISTING, ThumbnailSize::Normal, vec![1])
+    );
     let state = queue.state.lock().unwrap();
     assert_eq!(state.done, HashSet::from([1, 2]));
 }
@@ -110,6 +116,42 @@ fn the_environment_names_the_thumbnails_folder_and_helper() {
 }
 
 #[test]
+fn a_new_size_sends_every_wanted_thumbnail_again() {
+    let files = vec![
+        entry(0, "a.png", EntryKind::File),
+        entry(1, "b.png", EntryKind::File),
+    ];
+    let queue = Queue {
+        shared: Arc::new(shared(files, 0..2, &[0, 1])),
+    };
+
+    queue.want(LISTING, EntryId(0), 2, Some(ThumbnailSize::Normal));
+    assert_eq!(queue.shared.state.lock().unwrap().done.len(), 2);
+
+    queue.want(LISTING, EntryId(0), 2, Some(ThumbnailSize::Large));
+    let state = queue.shared.state.lock().unwrap();
+    let (size, done) = (state.size, state.done.len());
+    drop(state);
+    assert_eq!((size, done), (ThumbnailSize::Large, 0));
+}
+
+#[test]
+fn hiding_thumbnails_keeps_the_size() {
+    let files = vec![entry(0, "a.png", EntryKind::File)];
+    let queue = Queue {
+        shared: Arc::new(shared(files, 0..1, &[0])),
+    };
+    queue.want(LISTING, EntryId(0), 1, Some(ThumbnailSize::Large));
+
+    queue.want(LISTING, EntryId(0), 0, None);
+
+    let state = queue.shared.state.lock().unwrap();
+    let size = state.size;
+    drop(state);
+    assert_eq!(size, ThumbnailSize::Large);
+}
+
+#[test]
 fn showing_a_listing_starts_over_unless_a_newer_one_came() {
     let queue = Queue {
         shared: Arc::new(shared(vec![entry(0, "a", EntryKind::File)], 0..1, &[0])),
@@ -121,7 +163,7 @@ fn showing_a_listing_starts_over_unless_a_newer_one_came() {
         folders: None,
     };
     queue.show(&newer, || false);
-    assert!(queue.shared.still_wanted(LISTING, 0));
+    assert!(queue.shared.still_wanted(LISTING, 0, ThumbnailSize::Normal));
 
     queue.show(&newer, || true);
     let state = queue.shared.state.lock().unwrap();

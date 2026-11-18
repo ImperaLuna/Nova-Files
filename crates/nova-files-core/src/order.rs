@@ -10,7 +10,7 @@
 //! id is then its new position.
 
 use std::cmp::Ordering;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use nova_files_api::{Details, Entry, EntryId, EntryKind, Order, SortKey};
 
@@ -24,23 +24,42 @@ pub fn arrange(
     order: Order,
     cancelled: impl Fn() -> bool,
 ) -> Option<Vec<Entry>> {
+    let paired = entries.into_iter().map(|entry| (entry, ())).collect();
+    let arranged = arrange_paired(
+        paired,
+        |entry, ()| folder.join(&entry.name),
+        order,
+        cancelled,
+    )?;
+    Some(arranged.into_iter().map(|(entry, ())| entry).collect())
+}
+
+/// [`arrange`] for entries each carrying a `T` that moves with it (such
+/// as the folder it is in, for entries from several folders); `path` says
+/// where each entry is, for its details.
+pub fn arrange_paired<T>(
+    entries: Vec<(Entry, T)>,
+    path: impl Fn(&Entry, &T) -> PathBuf,
+    order: Order,
+    cancelled: impl Fn() -> bool,
+) -> Option<Vec<(Entry, T)>> {
     let mut entries = match order.key {
         SortKey::Name if order.descending => {
             let mut entries = entries;
-            let folders = entries.partition_point(|entry| entry.kind == EntryKind::Folder);
+            let folders = entries.partition_point(|(entry, _)| entry.kind == EntryKind::Folder);
             let (folders, files) = entries.split_at_mut(folders);
             folders.reverse();
             files.reverse();
             entries
         }
-        SortKey::Name => return Some(entries),
+        SortKey::Name => entries,
         SortKey::Modified | SortKey::Size => {
             let paths = entries
                 .iter()
-                .map(|entry| (folder.join(&entry.name), entry.kind));
+                .map(|(entry, carried)| (path(entry, carried), entry.kind));
             let read = details::read_batch(paths, cancelled)?;
-            let mut paired: Vec<(Entry, Details)> = entries.into_iter().zip(read).collect();
-            paired.sort_by(|(left, left_details), (right, right_details)| {
+            let mut paired: Vec<((Entry, T), Details)> = entries.into_iter().zip(read).collect();
+            paired.sort_by(|((left, _), left_details), ((right, _), right_details)| {
                 group(left)
                     .cmp(&group(right))
                     .then_with(|| by_key(order, left_details, right_details))
@@ -48,7 +67,7 @@ pub fn arrange(
             paired.into_iter().map(|(entry, _)| entry).collect()
         }
     };
-    for (entry, index) in entries.iter_mut().zip(0..) {
+    for ((entry, _), index) in entries.iter_mut().zip(0..) {
         entry.id = EntryId(index);
     }
     Some(entries)
@@ -83,7 +102,6 @@ fn known_first<T: Ord>(left: Option<T>, right: Option<T>, descending: bool) -> O
 mod tests {
     use std::cell::Cell;
     use std::fs::{self, File};
-    use std::path::PathBuf;
     use std::time::{Duration, SystemTime};
 
     use super::*;
