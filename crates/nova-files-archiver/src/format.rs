@@ -3,7 +3,8 @@
 //! turned away. A tar archive inside gzip, xz, zstd or bzip2 is found by
 //! the compression's magic; a plain tar by the `ustar` mark at offset 257
 //! (or, for very old archives, by a header whose checksum adds up); an
-//! empty tar is only zero blocks.
+//! empty tar is only zero blocks. 7z and rar are found by their magic
+//! and read through the installed 7-Zip (see `seven`).
 
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
@@ -13,6 +14,8 @@ use std::io::{self, Read, Seek, SeekFrom};
 pub enum Format {
     Zip,
     Tar(Compression),
+    /// 7z or rar.
+    Seven,
 }
 
 /// What a tar archive is wrapped in.
@@ -36,6 +39,9 @@ const GZIP: &[u8] = b"\x1f\x8b";
 const XZ: &[u8] = b"\xfd7zXZ\x00";
 const ZSTD: &[u8] = b"\x28\xb5\x2f\xfd";
 const BZIP2: &[u8] = b"BZh";
+const SEVEN_ZIP: &[u8] = b"7z\xbc\xaf\x27\x1c";
+/// Rar 1.5 to 4, and rar 5, whose mark goes on with `\x01\x00`.
+const RAR: &[u8] = b"Rar!\x1a\x07";
 /// Where a tar header keeps its `ustar` mark, and the mark.
 const USTAR_AT: usize = 257;
 const USTAR: &[u8] = b"ustar";
@@ -62,6 +68,9 @@ fn of_head(head: &[u8]) -> Option<Format> {
         .any(|magic| head.starts_with(magic))
     {
         return Some(Format::Zip);
+    }
+    if [SEVEN_ZIP, RAR].iter().any(|magic| head.starts_with(magic)) {
+        return Some(Format::Seven);
     }
     compression(GZIP, Compression::Gzip)
         .or_else(|| compression(XZ, Compression::Xz))
@@ -155,6 +164,10 @@ mod tests {
             Some(Format::Tar(Compression::Zstd))
         );
         assert_eq!(of_head(b"BZh91AY"), Some(Format::Tar(Compression::Bzip2)));
+        assert_eq!(of_head(b"7z\xbc\xaf\x27\x1c\x00\x04"), Some(Format::Seven));
+        assert_eq!(of_head(b"Rar!\x1a\x07\x00"), Some(Format::Seven));
+        assert_eq!(of_head(b"Rar!\x1a\x07\x01\x00"), Some(Format::Seven));
+        assert_eq!(of_head(b"7z\xbc\xaf\x27"), None);
         assert_eq!(
             of_head(&tar_block(true)),
             Some(Format::Tar(Compression::Plain))

@@ -140,6 +140,9 @@ pub enum Packing {
     TarGzip,
     /// `.tar.xz`.
     TarXz,
+    /// `.7z`, made by the installed 7-Zip: the smallest, and a password
+    /// hides its names too.
+    SevenZip,
 }
 
 /// Where an archive's entries go.

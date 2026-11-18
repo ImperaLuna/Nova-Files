@@ -3,6 +3,7 @@
 
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
+use std::path::Path;
 
 use chrono::TimeZone as _;
 use zip::ZipArchive;
@@ -13,6 +14,7 @@ use crate::ending::Ending;
 use crate::format::{self, Format};
 use crate::list::{FILE_MODE, MAX_LINK, tar_kind, zip_kind, zip_modified};
 use crate::progress::{Told, Unheard};
+use crate::seven::Seven;
 use crate::unpack::{Stamp, Unpacking, WriteError, parts};
 use crate::wire::{Clock, Kind};
 
@@ -37,20 +39,21 @@ impl From<WriteError> for Stopped {
     }
 }
 
-/// Unpacks every entry of `archive` into `into`, opening locked entries
-/// with `password`.
+/// Unpacks every entry of `archive` into `into`, the folder `folder`,
+/// opening locked entries with the password `seven` holds.
 pub fn extract(
     mut archive: File,
     into: Unpacking,
-    password: Option<&[u8]>,
+    folder: &Path,
+    seven: Seven<'_>,
     out: &mut impl Write,
 ) -> Ending {
-    let mut told = Told::new(out);
     let result = match format::sniff(&mut archive) {
-        Ok(Some(Format::Zip)) => extract_zip(archive, into, password, &mut told),
+        Ok(Some(Format::Seven)) => return seven.extract(folder, out),
+        Ok(Some(Format::Zip)) => extract_zip(archive, into, seven.password, &mut Told::new(out)),
         Ok(Some(Format::Tar(compression))) => tar_stream(archive, compression)
             .map_or(Err(Stopped::Read), |stream| {
-                extract_tar(stream, into, &mut told)
+                extract_tar(stream, into, &mut Told::new(out))
             }),
         Ok(None) => return Ending::Unsupported,
         Err(_) => return Ending::Broken,

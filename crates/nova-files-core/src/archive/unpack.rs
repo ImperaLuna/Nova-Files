@@ -6,7 +6,6 @@
 //! caller holds it, the helper's group is stopped.
 
 use std::ffi::OsStr;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::Packing;
@@ -17,8 +16,8 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::io::{self, Errno};
 use rustix::process::{self, Pid, Signal};
 
-use super::helper::{end, ended, spawn};
-use super::{ArchiveFailure, Recipe};
+use super::helper::{end, ended, give, spawn};
+use super::{ArchiveFailure, Archiver, Recipe};
 
 /// How long the caller waits between asks.
 pub const TICK: Duration = Duration::from_millis(100);
@@ -53,32 +52,34 @@ pub enum Flow {
 }
 
 pub fn extract(
-    helper: &Path,
+    archiver: &Archiver,
     archive: &Path,
     into: &Path,
     password: Option<&str>,
     tell: impl FnMut(Extracting) -> Flow,
 ) -> Result<(), ArchiveFailure> {
-    let args = [EXTRACT.as_ref(), archive.as_os_str(), into.as_os_str()];
-    run(helper, &args, password, tell)
+    let mut args = archiver.lead();
+    args.extend([EXTRACT.as_ref(), archive.as_os_str(), into.as_os_str()]);
+    run(&archiver.helper, &args, password, tell)
 }
 
 pub fn compress(
-    helper: &Path,
+    archiver: &Archiver,
     sources: &[PathBuf],
     archive: &Path,
     recipe: &Recipe<'_>,
     tell: impl FnMut(Extracting) -> Flow,
 ) -> Result<(), ArchiveFailure> {
     let level = recipe.level.to_string();
-    let mut args: Vec<&OsStr> = vec![
+    let mut args = archiver.lead();
+    args.extend([
         COMPRESS.as_ref(),
         packing_word(recipe.packing).as_ref(),
         level.as_ref(),
         archive.as_os_str(),
-    ];
+    ]);
     args.extend(sources.iter().map(|source| source.as_os_str()));
-    run(helper, &args, recipe.password, tell)
+    run(&archiver.helper, &args, recipe.password, tell)
 }
 
 /// The helper's word for `packing`.
@@ -89,6 +90,7 @@ const fn packing_word(packing: Packing) -> &'static str {
         Packing::TarZstd => "tar-zst",
         Packing::TarGzip => "tar-gz",
         Packing::TarXz => "tar-xz",
+        Packing::SevenZip => "7z",
     }
 }
 
@@ -100,10 +102,7 @@ fn run(
     mut tell: impl FnMut(Extracting) -> Flow,
 ) -> Result<(), ArchiveFailure> {
     let mut child = spawn(helper, args, Stdio::piped())?;
-    if let (Some(mut input), Some(password)) = (child.stdin.take(), password) {
-        // A helper that exits before reading it has said why.
-        input.write_all(password.as_bytes()).ok();
-    }
+    give(&mut child, password);
     let followed = follow(&mut child, &mut tell);
     let wait = if followed.is_ok() {
         EXIT_TIME

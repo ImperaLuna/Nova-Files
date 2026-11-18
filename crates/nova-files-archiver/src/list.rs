@@ -12,6 +12,7 @@ use zip::extra_fields::ExtraField;
 use crate::decompress::tar_stream;
 use crate::ending::Ending;
 use crate::format::{self, Format};
+use crate::seven::Seven;
 use crate::wire::{self, Clock, Entry, Kind};
 
 /// The longest link target read out of a zip: `PATH_MAX`.
@@ -23,8 +24,9 @@ const TYPE_BITS: u32 = 0o170_000;
 const LINK_TYPE: u32 = 0o120_000;
 
 /// Writes every entry of `archive` to `out`.
-pub fn list(mut archive: File, out: &mut impl Write) -> Ending {
+pub fn list(mut archive: File, seven: Seven<'_>, out: &mut impl Write) -> Ending {
     let result = match format::sniff(&mut archive) {
+        Ok(Some(Format::Seven)) => return seven.list(out),
         Ok(Some(Format::Zip)) => list_zip(archive, out),
         Ok(Some(Format::Tar(compression))) => {
             tar_stream(archive, compression).and_then(|stream| list_tar(stream, out))
