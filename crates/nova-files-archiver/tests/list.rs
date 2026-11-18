@@ -22,6 +22,20 @@ fn folder(name: &str) -> PathBuf {
     folder
 }
 
+/// The Unix time of a wall-clock time in the local zone, the zone the
+/// helper reads zip times in.
+fn local_seconds(time: &str) -> i64 {
+    let out = std::process::Command::new("date")
+        .args(["-d", time, "+%s"])
+        .output()
+        .unwrap();
+    String::from_utf8(out.stdout)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap()
+}
+
 fn paths(entries: &[ArchiveEntry]) -> Vec<&Path> {
     entries.iter().map(|entry| entry.path.as_path()).collect()
 }
@@ -140,7 +154,7 @@ fn lists_zip_with_its_unix_details_and_locked_entries() {
     assert_eq!(entries[0].mode, 0o750);
     assert_eq!(entries[1].size, 5);
     assert_eq!(entries[1].mode, 0o640);
-    assert_eq!(entries[1].modified, 1_714_979_290);
+    assert_eq!(entries[1].modified, local_seconds("2024-05-06T07:08:10"));
     assert_eq!(entries[2].kind, ArchiveKind::Link);
     assert_eq!(entries[2].link, Path::new("a.txt"));
     assert!(!entries[1].locked);
