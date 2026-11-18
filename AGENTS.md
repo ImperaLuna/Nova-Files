@@ -43,8 +43,6 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
   component uses them (`radius::ROW`, not `14.0`); a component only refers
   to tokens or derives ratios from them. When logic shows up twice, move it
   into a shared function or component before adding a third copy.
-- Each module and file opens with a comment saying what it does and how.
-  Read it before changing that code and keep it true in the same change.
 - Small, focused files and components: each does one job.
 - Handle errors where they happen and show them in a useful form. No silent
   error swallowing or `unwrap()` on input that can fail (tests excepted).
@@ -58,6 +56,24 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
   remove it.
 - Reference apps (Sigma, Dux Files, Flea, Strata and others) are for
   learning the approach only. Write Nova Files' own code; never copy theirs.
+
+## Comments
+
+Code carries no comments. Names say what the code does; when they can't,
+reshape the code. A rule or limit the code relies on ("never", "only", "at
+most") becomes a type, a test or a lint, not a sentence. What a change
+leaves unsolved goes under "Known gaps" in the PR body. Only these stay:
+
+- `// SAFETY:` on an unsafe block.
+- Docs (`///`, `//!`) in `nova-files-api`: the contract other apps build on.
+- A licence header (`// SPDX-License-Identifier:`).
+- A fact forced by the kernel, a filesystem, a spec or a dependency, true
+  today, in one or two plain lines that link its source (`https://`). A
+  workaround for an upstream bug links the issue and says how to remove it.
+
+A lint's reason goes in `#[expect(lint, reason = "...")]`. When a change
+makes a kept comment false, fix it in the same change. `just comments`
+checks Rust files (rules and their tests in `tools/ast-grep/comments`).
 
 ## State, threads and files
 
@@ -150,6 +166,39 @@ changes. A
 stacked pull request (base isn't main) changes code only: `crates/`,
 `data/`, `Cargo.toml` and `Cargo.lock`, without Markdown or lint configs.
 Everything else goes in its own pull request off main.
+
+## Rules and their checks
+
+Each rule above and what enforces it. "Review" means nothing does yet.
+
+| Rule | Enforced by |
+|---|---|
+| No comments outside the keep list | `just comments` (report only until FIL-108 removes them) |
+| No hard-coded numbers | ast-grep `no-bare-number` (`just numbers`) |
+| Logic shows up twice: share it | PMD CPD (`just duplicates`) |
+| Small files and functions | `just lengths` (800 lines); Clippy `too_many_lines`, `too_many_arguments`, `excessive_nesting` |
+| No `unwrap`, `expect`, `panic` or `todo` outside tests | Clippy restriction lints |
+| No silent error swallowing (`.ok()` on I/O) | Review |
+| No polling loops | Clippy `disallowed-methods` (`std::thread::sleep`) |
+| The window never touches the disk or starts processes | `crates/nova-files-ui/clippy.toml` bans; `just clippy-config` keeps it in step with the root |
+| A crate depends only on what its `Cargo.toml` allows | `just deps`; cargo-deny for licences and sources |
+| Unsafe code only where allowed, each block with `// SAFETY:` | rustc `unsafe_code`; Clippy `undocumented_unsafe_blocks` |
+| `#[expect]` with a reason, never `#[allow]` | Clippy `allow_attributes`, `allow_attributes_without_reason` |
+| Config and state files reject unknown fields | Review |
+| No shell strings; argv lists only | Review |
+| Every wait on another process or the network has a timeout | Review |
+| A bug fix comes with a test that fails without it | Review |
+| No explaining text in UI | Review |
+| A stacked pull request changes code only | `tools/ci-stack-guard.sh` in CI |
+| Formatting | rustfmt (`just fmt`), nixfmt |
+
+When a rule marked Review is broken twice, fix it at the highest level that
+works: the architecture, then a type, then a lint whose message names the
+fix, then a test; a line here is the last resort. A new check comes with
+tests that fail on a real past mistake. An exception sits on the line it
+excuses (`#[expect(lint, reason = "...")]`, or `// ast-grep-ignore: <rule>`
+under a comment line) and names its reason, an end date and the user's
+approval.
 
 ## Review guidelines
 
