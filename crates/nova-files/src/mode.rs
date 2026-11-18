@@ -2,7 +2,8 @@
 //!
 //! `nova-files` opens a window on the home folder, `nova-files <folder>`
 //! (a path or a `file://` URI, as launchers pass it) on that folder, and
-//! `nova-files --service` runs only the core. `nova-files --index <folder>`
+//! `nova-files --service` runs only the core; `nova-files --file-manager`
+//! does too, and answers apps' "Show in folder". `nova-files --index <folder>`
 //! builds the file index of that folder and exits, for the bench.
 
 use std::ffi::OsString;
@@ -14,6 +15,9 @@ use nova_files_api::uri;
 
 /// D-Bus passes it when it starts the program for a launcher.
 const SERVICE_FLAG: &str = "--service";
+/// D-Bus passes it when it starts the program for an app's "Show in
+/// folder" (`org.freedesktop.FileManager1`).
+const FILE_MANAGER_FLAG: &str = "--file-manager";
 /// Builds the index of the folder after it, then exits.
 const INDEX_FLAG: &str = "--index";
 /// Anything else starting with this is a flag the program doesn't take.
@@ -27,6 +31,8 @@ pub enum Mode {
     Window(Option<PathBuf>),
     /// Run only the core until something asks for a window.
     Service,
+    /// Run only the core and answer apps' "Show in folder", as D-Bus asked.
+    FileManager,
     /// Build the file index of the folder, then exit.
     Index(PathBuf),
 }
@@ -42,6 +48,7 @@ impl Mode {
         let mode = match args.next() {
             None => Self::Window(None),
             Some(flag) if flag == SERVICE_FLAG => Self::Service,
+            Some(flag) if flag == FILE_MANAGER_FLAG => Self::FileManager,
             Some(flag) if flag == INDEX_FLAG => {
                 let missing = || UsageError(flag.clone());
                 Self::Index(folder(args.next().ok_or_else(missing)?)?)
@@ -103,7 +110,7 @@ impl fmt::Display for UsageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "unexpected argument {}; usage: nova-files [{SERVICE_FLAG} | {INDEX_FLAG} <{FOLDER_ARGUMENT}> | <{FOLDER_ARGUMENT}>]",
+            "unexpected argument {}; usage: nova-files [{SERVICE_FLAG} | {FILE_MANAGER_FLAG} | {INDEX_FLAG} <{FOLDER_ARGUMENT}> | <{FOLDER_ARGUMENT}>]",
             self.0.display()
         )
     }
@@ -130,6 +137,12 @@ mod tests {
     #[test]
     fn service_flag_runs_only_the_core() {
         assert_eq!(mode(&["--service"]).unwrap(), Mode::Service);
+    }
+
+    #[test]
+    fn file_manager_flag_runs_the_core_for_show_in_folder() {
+        assert_eq!(mode(&["--file-manager"]).unwrap(), Mode::FileManager);
+        assert!(mode(&["--file-manager", "/srv"]).is_err());
     }
 
     #[test]
@@ -211,7 +224,7 @@ mod tests {
         let error = mode(&["--frobnicate"]).unwrap_err();
         assert_eq!(
             error.to_string(),
-            "unexpected argument --frobnicate; usage: nova-files [--service | --index <folder> | <folder>]"
+            "unexpected argument --frobnicate; usage: nova-files [--service | --file-manager | --index <folder> | <folder>]"
         );
     }
 }

@@ -9,7 +9,8 @@
 #   launcher  the programs and the D-Bus service launchers search through,
 #             without the desktop entry, icon or picker that list it as an
 #             app
-#   basic     the app: also its desktop entry, icon and file picker
+#   basic     the app: also its desktop entry, icon, file picker and apps'
+#             "Show in folder"
 #   full      basic; the extras it uses come from the distro's packages
 #             (ffmpegthumbnailer, udisks2), so it names any that are missing
 # Installing a mode over another removes the files the new one leaves out.
@@ -90,6 +91,11 @@ root=${DESTDIR:-}$prefix
 #   launchers and docks find it in hicolor whatever icon theme is set.
 # - The file picker: xdg-desktop-portal reads the .portal file, and D-Bus
 #   starts the program in service mode when the portal first calls it.
+# - Apps' "Show in folder" (org.freedesktop.FileManager1): when no file
+#   manager holds the name, D-Bus may start the program for it, which then
+#   answers. The file is named after the app id, so it never clashes with
+#   another file manager's file in a merged share folder; D-Bus still
+#   picks one of the files that name it.
 layout() {
     cat <<EOF
 program all $PROGRAM bin/$PROGRAM
@@ -99,6 +105,7 @@ template app desktop-entry.in share/applications/$app_id.desktop
 copy app app-icon.svg share/icons/hicolor/scalable/apps/$app_id.svg
 template app portal.in share/xdg-desktop-portal/portals/$portal_name.portal
 template app portal-dbus-service.in share/dbus-1/services/$portal_bus_name.service
+template app file-manager-dbus-service.in share/dbus-1/services/$app_id.FileManager1.service
 EOF
 }
 

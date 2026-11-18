@@ -7,18 +7,17 @@
 //! the same receiver, without a GPU, for the next request.
 
 use std::cell::RefCell;
-use std::path::PathBuf;
 use std::rc::Rc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use nova_files_api::{PickId, PickRequest};
+use nova_files_api::{PickId, PickRequest, WindowRequest};
 
 /// What the program asks of the UI.
 #[derive(Debug)]
 pub enum Request {
-    /// Open another window, on this folder or on the home folder.
-    OpenWindow(Option<PathBuf>),
+    /// Open another window, as asked.
+    OpenWindow(WindowRequest),
     /// Open a picker window for another app's request.
     Pick(Box<PickRequest>),
     /// Close the picker window for this request, if it is still open.

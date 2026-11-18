@@ -31,7 +31,10 @@
 //! It hands the core the D-Bus watcher of the system's drives (see
 //! `nova_files_dbus::Udisks`). It also hands the core a way to give freed memory back to the system
 //! after heavy work (see `memory`), and the D-Bus service a way to open
-//! picker windows for other apps (see `picker`).
+//! picker windows for other apps (see `picker`). When Nova Files is the
+//! user's default for folders, or D-Bus started it for apps' "Show in
+//! folder" (`--file-manager`), it also answers that (see
+//! `nova_files_dbus::Service::serve_file_manager_when`).
 
 mod memory;
 mod mode;
@@ -48,7 +51,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use nova_files_api::Connector;
+use nova_files_api::{Connector, WindowRequest};
 use nova_files_dbus::{Bus, Service, Started};
 use nova_files_ui::{Ended, Opening, RecoverGpu, Request, RequestSender, Requests};
 
@@ -150,13 +153,18 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let on_open = {
         let requests = requests.clone();
-        move |folder| requests.send(Request::OpenWindow(folder))
+        move |request| requests.send(Request::OpenWindow(request))
     };
     let started =
         nova_files_dbus::start_waiting(Bus::Session, core.connector.clone(), on_open, name_wait());
     let service = match started {
         Ok(Started::Service(mut service)) => {
             service.serve_file_picker(core.connector.clone(), UiPicker::new(requests.clone()));
+            let asked = mode == Mode::FileManager;
+            let should = move || asked || nova_files_core::opens_folders();
+            if let Err(error) = service.serve_file_manager_when(should) {
+                report(&format!("can't answer apps' \"Show in folder\": {error}"));
+            }
             if let Err(error) = service.follow_desktop_look(core.connector.clone()) {
                 report(&format!(
                     "can't follow the desktop's light or dark: {error}"
@@ -176,11 +184,12 @@ fn run() -> Result<(), Box<dyn Error>> {
             match &mode {
                 Mode::Window(Some(folder)) => running.open(folder)?,
                 Mode::Window(None) => running.activate()?,
+                Mode::FileManager => running.serve_file_manager()?,
                 Mode::Service | Mode::Index(_) => {}
             }
             return Ok(());
         }
-        Err(error) if mode != Mode::Service => {
+        Err(error) if !matches!(mode, Mode::Service | Mode::FileManager) => {
             // Still useful without a session bus: windows, no handover.
             report(&format!("no D-Bus session ({error}); running on its own"));
             None
@@ -222,11 +231,14 @@ fn show_windows(
         ));
     });
     if let Mode::Window(folder) = mode {
-        requests.send(Request::OpenWindow(folder));
+        requests.send(Request::OpenWindow(WindowRequest {
+            folder,
+            select: Vec::new(),
+        }));
     }
     loop {
         let first = match received.wait() {
-            Some(Request::OpenWindow(folder)) => Opening::Folder(folder),
+            Some(Request::OpenWindow(request)) => Opening::Folder(request),
             Some(Request::Pick(request)) => Opening::Pick(request),
             // No window is open, so no picker is left to close.
             Some(Request::ClosePick(_)) => continue,
