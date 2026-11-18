@@ -4,8 +4,12 @@
 # percent-encoding of paths in them, the XDG home folders, watching and
 # saving config files, and the ports to the icon theme and MIME database.
 #
-# Allowed outside crates: log, rustix
-# Allowed workspace crates: nova-files-api
+# Allowed outside crates:
+# - log
+# - rustix
+#
+# Allowed workspace crates:
+# - nova-files-api
 
 [package]
 name = "nova-files-disk"

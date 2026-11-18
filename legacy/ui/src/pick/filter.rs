@@ -3,7 +3,8 @@ use gpui::{
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, anchored,
     deferred, div, prelude::FluentBuilder as _,
 };
-use nova_files_api::{Entry, EntryKind, FilterRule, PickRequest};
+use nova_files_api::{Entry, EntryKind};
+use nova_files_picker_api::{FilterRule, PickRequest};
 
 use super::{Mode, Picker};
 use crate::theme::{Colors, radius, size};

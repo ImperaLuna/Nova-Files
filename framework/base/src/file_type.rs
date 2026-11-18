@@ -1,16 +1,9 @@
-//! Whether a file fits one of an app's file filters, by its name.
-//!
-//! A filter's globs match the name, ignoring case, as GTK's own dialog
-//! does. Its MIME types need the system's MIME database, which the core
-//! reads; a [`FileTypes`] hands the answers over without the caller
-//! touching the disk. A name the database knows nothing about can't be
-//! judged without reading the file, so a filter with MIME types lets it
-//! through rather than block a file that may be fine.
+//! File types by name: shell globs, and the system's MIME database as the
+//! core reads it. A [`FileTypes`] hands the database's answers over
+//! without the caller touching the disk.
 
 use std::ffi::OsStr;
 use std::fmt;
-
-use crate::pick::{FileFilter, FilterRule};
 
 /// The MIME types of file names, from the system's MIME database.
 pub trait FileTypes: Send + Sync + fmt::Debug {
@@ -21,35 +14,6 @@ pub trait FileTypes: Send + Sync + fmt::Debug {
     /// subclass of it (`text/markdown` of `text/plain`), or any type of a
     /// `wanted` media like `image/*`.
     fn is_a(&self, mime: &str, wanted: &str) -> bool;
-}
-
-impl FileFilter {
-    /// Whether a file called `name` fits this filter, with `types` for its
-    /// MIME rules (without it, they let every file through).
-    pub fn admits(&self, name: &OsStr, types: Option<&dyn FileTypes>) -> bool {
-        let text = name.to_string_lossy();
-        let mut wants_type = false;
-        for rule in &self.rules {
-            match rule {
-                FilterRule::Glob(pattern) => {
-                    if glob_matches(pattern, &text, false) {
-                        return true;
-                    }
-                }
-                FilterRule::MimeType(_) => wants_type = true,
-            }
-        }
-        if !wants_type {
-            return false;
-        }
-        let Some(mime) = types.and_then(|types| types.of(name)) else {
-            return true;
-        };
-        self.rules.iter().any(|rule| match rule {
-            FilterRule::MimeType(wanted) => types.is_some_and(|types| types.is_a(mime, wanted)),
-            FilterRule::Glob(_) => false,
-        })
-    }
 }
 
 /// Whether `name` matches the shell glob `pattern`: `*` is any run of

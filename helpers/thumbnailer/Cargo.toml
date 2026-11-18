@@ -3,7 +3,9 @@
 # The sandboxed thumbnail helper. It renders one batch of thumbnails, then
 # exits.
 #
-# Allowed outside crates: image, landlock
+# Allowed outside crates:
+# - image
+# - landlock
 # Allowed workspace crates: none
 
 [package]
