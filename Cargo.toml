@@ -22,6 +22,7 @@ nova-files-clipboard-api = { path = "features/clipboard/api" }
 nova-files-core = { path = "legacy/core" }
 nova-files-dbus = { path = "fronts/dbus" }
 nova-files-disk = { path = "framework/disk" }
+nova-files-entries = { path = "framework/entries" }
 nova-files-index = { path = "helpers/index" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-messages = { path = "framework/messages" }

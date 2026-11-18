@@ -2,8 +2,6 @@
 
 mod accounts;
 mod archive;
-mod details;
-mod details_queue;
 mod disk_space;
 mod drives;
 mod file_icons;
@@ -13,13 +11,10 @@ mod icon_theme;
 mod index;
 mod inside;
 mod jobs;
-mod list;
 mod measure;
-mod memory;
 mod mime;
 mod open;
 mod ops;
-mod order;
 mod places;
 mod preview;
 mod properties;
@@ -42,6 +37,7 @@ use nova_files_api::Connector;
 use nova_files_disk::{
     capped, change_writer, config_watch, hand_edited, mount_root, private_file, saver, timed,
 };
+use nova_files_entries::{list, memory, order};
 
 use search::Searcher;
 
