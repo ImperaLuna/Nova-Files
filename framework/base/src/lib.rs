@@ -8,8 +8,7 @@
 //! again whenever they change. The core reads the other end of the channel
 //! as [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
 //! operations run as jobs (see [`Operation`]); what is in the desktop's
-//! trash is listed as [`Trashed`] entries. A [`PickRequest`] carries
-//! another app's file picker request from D-Bus to the UI. A [`Preview`] is
+//! trash is listed as [`Trashed`] entries. A [`Preview`] is
 //! what a quick look shows of a file or folder. Files cut or
 //! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
 //! a paste is a job. A [`Size`] is what a scan of files and folders
@@ -35,7 +34,6 @@ mod gathered;
 mod job;
 mod message;
 mod open_with;
-mod pick;
 mod preview;
 mod properties;
 mod recent;
@@ -77,9 +75,6 @@ pub use nova_files_messages::{
     Message, MessageType, Routed, Routes, channel, missing_routes,
 };
 pub use open_with::{App, NotOpened, OpenWith, OpenWithAnswer, OpenWithId};
-pub use pick::{
-    FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,
-};
 pub use preview::{
     Fit, MAX_FIT_SIDE, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Picture, Preview, PreviewContent,
     PreviewId,

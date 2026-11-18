@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use futures::channel::oneshot;
-use nova_files_api::{ParentWindow, PickAnswer, PickId, PickReply, PickRequest};
+use nova_files_picker_api::{ParentWindow, PickAnswer, PickId, PickReply, PickRequest};
 use zbus::message::Header;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -181,7 +181,7 @@ impl<P: Picker> Request<P> {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use nova_files_api::{PickId, PickKind, PickReply, PickRequest};
+    use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
     use zbus::object_server::Interface as _;
 
     use super::{FileChooser, INTERFACE, Picker, Request, lock, show_unless_closed};
