@@ -51,7 +51,7 @@ pub fn jobs(
     wake: Connector,
     archiver: Option<Archiver>,
 ) -> Jobs {
-    let set_aside = Arc::new(Trasher::new(trashes.home.clone()));
+    let set_aside = Arc::new(Trasher::new(trashes.clone(), Arc::new(Moves)));
     let files = Files {
         trashes,
         archiver,
@@ -170,7 +170,6 @@ impl nova_files_jobs::JobKind for Files {
     fn undo(&self, running: &mut Running, operation: &Operation, ended: &Ended) -> Option<Undo> {
         let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
         undo_of(operation, &steps, &ended.0, &self.trashes)
-            .map(|undo| undo::putting_back(undo, &running.replaced))
     }
 
     fn undoes(&self, operation: &Operation) -> Option<JobId> {

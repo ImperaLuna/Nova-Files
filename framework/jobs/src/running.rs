@@ -5,7 +5,7 @@ use std::ops::Bound;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use nova_files_api::{Answer, Conflict, ConflictKind, Failure, JobId, Scope, Tally};
+use nova_files_api::{Answer, Conflict, ConflictKind, Failure, JobId, Outcome, Scope, Tally};
 
 use super::clash::conflict_for;
 use super::control::Cancelled;
@@ -15,6 +15,7 @@ use super::journal::{Journal, Record, remove_journal, word};
 use super::left::{Done, Left};
 use super::plan::{Kind, kind};
 use super::progress::Reporter;
+use super::runner::Ended;
 use super::set_aside::{Aside, SetAsideForJob};
 use super::stop::Stop;
 
@@ -73,12 +74,35 @@ impl Running {
     }
 
     pub fn set_aside(&mut self, at: (usize, &Path), shown: &Path) -> Aside {
-        let Some(mut aside) = self.aside.take() else {
-            return Aside::Nowhere;
-        };
-        let put = aside.set_aside(self, at, shown);
+        self.with_aside(|aside, running| aside.set_aside(running, at, shown))
+            .unwrap_or(Aside::Nowhere)
+    }
+
+    pub fn trash(&mut self, paths: &[PathBuf]) -> Ended {
+        self.with_aside(|aside, running| aside.trash(running, paths))
+            .unwrap_or_else(|| {
+                let path = paths.first().cloned().unwrap_or_default();
+                let outcome = Outcome::Failed {
+                    path,
+                    reason: Failure::Unsupported,
+                };
+                (outcome, Vec::new())
+            })
+    }
+
+    pub fn put_back(&mut self, items: &[PathBuf]) -> Option<Ended> {
+        self.with_aside(|aside, running| aside.put_back(running, items))
+            .flatten()
+    }
+
+    fn with_aside<T>(
+        &mut self,
+        act: impl FnOnce(&mut dyn SetAsideForJob, &mut Self) -> T,
+    ) -> Option<T> {
+        let mut aside = self.aside.take()?;
+        let done = act(aside.as_mut(), self);
         self.aside = Some(aside);
-        put
+        Some(done)
     }
 
     pub fn resuming(&mut self, left: Left, names: u64) {
