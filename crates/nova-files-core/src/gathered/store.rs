@@ -285,7 +285,9 @@ impl Shared {
         let Some(home) = &self.home else {
             return;
         };
-        let change = self.guessed(change);
+        let Some(change) = self.guessed(change) else {
+            return;
+        };
         let disk = lock(&self.disk);
         write_usual(home);
         let target = private_file::saved_at(&file_of(home));
@@ -313,15 +315,22 @@ impl Shared {
     }
 
     /// `change` with what an added folder holds: what the client said, or
-    /// guessed from the folder's top when it isn't gathered yet.
-    fn guessed(&self, change: GatheredChange) -> Change {
-        match change {
+    /// guessed from the folder's top when it isn't gathered yet. `None`
+    /// for a file, which is never gathered; a folder missing (on a drive
+    /// not plugged in, or an Undo of its removal) still is.
+    fn guessed(&self, change: GatheredChange) -> Option<Change> {
+        Some(match change {
             GatheredChange::Add {
                 place,
                 path,
                 holds,
                 at,
+                name,
             } => {
+                if fs::metadata(&path).is_ok_and(|found| !found.is_dir()) {
+                    log::warn!("{} not gathered: it is a file", path.display());
+                    return None;
+                }
                 let holds = holds.unwrap_or_else(|| {
                     let known = lock(&self.folders).gathered.has(place, &path);
                     if known {
@@ -332,16 +341,12 @@ impl Shared {
                 });
                 Change::Add {
                     place,
-                    folder: GatheredFolder {
-                        path,
-                        holds,
-                        name: None,
-                    },
+                    folder: GatheredFolder { path, holds, name },
                     at: at.and_then(|at| usize::try_from(at).ok()),
                 }
             }
             GatheredChange::Remove { place, path } => Change::Remove { place, path },
-        }
+        })
     }
 }
 

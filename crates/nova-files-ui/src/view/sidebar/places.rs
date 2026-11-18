@@ -9,7 +9,8 @@
 //! the head, or at the end of the row in a narrow window, picks a folder
 //! to pin, and right-click on a pinned folder opens
 //! its menu (see `window/pin`). Files dropped on a folder's row go into
-//! it, and on the trash's to the trash (see `drop`); anything dragged and
+//! it, on the trash's to the trash, and folders dropped on Projects or
+//! Games are added to it (see `drop`); anything dragged and
 //! held over a row opens it.
 
 use gpui::{
@@ -162,6 +163,7 @@ impl MainWindow {
                 this.new_tab(&Location::Gathered(place), cx);
             })
         })
+        .map(|row| self.drop_target(row, Aim::gathered(place), cx))
     }
 
     /// The trash's row, last in Places, with how many items it holds.

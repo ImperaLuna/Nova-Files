@@ -101,6 +101,7 @@ fn a_change_before_the_first_read_keeps_the_usual_folders() {
         path: PathBuf::from("/mnt/games"),
         holds: None,
         at: None,
+        name: None,
     });
     let (sink, events) = mpsc::channel();
     store.listen(ClientId(1), &(Arc::new(sink) as Arc<dyn EventSink>));
@@ -168,6 +169,7 @@ fn a_change_is_saved_and_told_to_every_client() {
         path: project.clone(),
         holds: None,
         at: None,
+        name: None,
     });
     let gathered = next(&events);
     assert_eq!(paths(&gathered.projects), [project.as_path()]);
@@ -195,6 +197,7 @@ fn a_folder_said_to_hold_many_is_not_guessed() {
         path: project,
         holds: Some(Holds::Many),
         at: None,
+        name: None,
     });
     assert_eq!(next(&events).projects[0].holds, Holds::Many);
 }
@@ -227,6 +230,7 @@ fn a_file_being_fixed_keeps_the_folders_and_takes_no_change() {
         path: PathBuf::from("/x"),
         holds: Some(Holds::Many),
         at: None,
+        name: None,
     });
     // Nothing changed, so nothing is told; the text stays the user's.
     assert!(events.recv_timeout(Duration::from_millis(500)).is_err());
@@ -248,6 +252,7 @@ fn a_forgotten_client_hears_nothing_more() {
         path: PathBuf::from("/g"),
         holds: None,
         at: None,
+        name: None,
     });
     assert!(events.recv_timeout(Duration::from_millis(500)).is_err());
 }
@@ -263,6 +268,7 @@ fn without_a_home_nothing_is_gathered_or_saved() {
         path: PathBuf::from("/g"),
         holds: None,
         at: None,
+        name: None,
     });
     assert!(events.recv_timeout(Duration::from_millis(300)).is_err());
 }
@@ -346,4 +352,31 @@ fn listing_before_any_client_asked_still_follows_the_file() {
     scratch.write("[[games]]\npath = \"/mnt/games\"\n");
     assert_eq!(paths(&next(&events).games), [Path::new("/mnt/games")]);
     assert_eq!(store.folders_of(Gathering::Games)().len(), 1);
+}
+
+#[test]
+fn an_added_folder_keeps_its_name_and_a_file_is_never_added() {
+    let scratch = Scratch::new("named");
+    let (store, events) = scratch.listening();
+    assert_eq!(*next(&events), Gathered::default());
+    let file = scratch.0.join("notes.txt");
+    fs::write(&file, "").unwrap();
+    store.change(GatheredChange::Add {
+        place: Gathering::Games,
+        path: file,
+        holds: None,
+        at: None,
+        name: None,
+    });
+    // Missing: on a drive not plugged in.
+    store.change(GatheredChange::Add {
+        place: Gathering::Games,
+        path: PathBuf::from("/mnt/games"),
+        holds: Some(Holds::Many),
+        at: None,
+        name: Some("Games SSD".to_owned()),
+    });
+    let gathered = next(&events);
+    assert_eq!(paths(&gathered.games), [Path::new("/mnt/games")]);
+    assert_eq!(gathered.games[0].name.as_deref(), Some("Games SSD"));
 }

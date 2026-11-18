@@ -81,6 +81,7 @@ fn a_change_reaches_every_window_and_the_file() {
         path: skills.clone(),
         holds: None,
         at: None,
+        name: None,
     }));
     let gathered = next(&window);
     assert_eq!(gathered.projects[0].holds, Holds::One);
@@ -94,6 +95,7 @@ fn a_change_reaches_every_window_and_the_file() {
         path: bench.at("home/Work"),
         holds: Some(Holds::Many),
         at: None,
+        name: None,
     }));
     next(&window);
     window.send(Command::ChangeGathered(GatheredChange::Remove {
@@ -109,6 +111,7 @@ fn a_change_reaches_every_window_and_the_file() {
         path: skills.clone(),
         holds: Some(Holds::One),
         at: Some(0),
+        name: None,
     }));
     assert_eq!(
         paths(&next(&window), Gathering::Projects),

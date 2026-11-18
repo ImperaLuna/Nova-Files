@@ -18,7 +18,7 @@
 //! its path), its Folder for Projects.
 
 use std::mem;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::Context;
@@ -45,11 +45,7 @@ impl MainWindow {
     /// is: the window moves there once it answers, ending a search under
     /// way. Whether the ask was sent.
     pub(super) fn request_gathered(&mut self, place: Gathering) -> bool {
-        if !self.gathered.asked
-            && let Some(connection) = &self.connection
-        {
-            self.gathered.asked = connection.send(Command::Gathered).is_ok();
-        }
+        self.ask_gathered();
         self.ask_listing(Location::Gathered(place), |id, order| {
             Command::ListGathered { id, place, order }
         })
@@ -91,8 +87,20 @@ impl MainWindow {
                     self.gathered_changed(place);
                 }
             }
+            self.note_added(cx);
+        } else if let Some((place, paths)) = self.gathered.to_gather.take() {
+            self.gather(place, paths, cx);
         }
         cx.notify();
+    }
+
+    /// Asks the core for the gathered folders, once.
+    pub(super) fn ask_gathered(&mut self) {
+        if !self.gathered.asked
+            && let Some(connection) = &self.connection
+        {
+            self.gathered.asked = connection.send(Command::Gathered).is_ok();
+        }
     }
 
     /// What `place` gathers changed: listed again if it is on screen with
@@ -143,13 +151,27 @@ impl MainWindow {
 #[derive(Debug, Default)]
 pub struct GatheredState {
     /// The folders they gather from, as the core last sent them.
-    folders: Arc<Gathered>,
+    pub(super) folders: Arc<Gathered>,
     /// Whether the window asked the core for them.
     asked: bool,
     /// Whether the core sent them yet.
-    heard: bool,
+    pub(super) heard: bool,
     /// The place whose listing is on screen, if one is.
     pub(super) shown: Option<Gathering>,
+    /// Folders to add once the core has sent what is gathered already.
+    pub(super) to_gather: Option<(Gathering, Vec<PathBuf>)>,
+    /// The add sent last, for its note.
+    pub(super) adding: Option<Adding>,
+}
+
+/// Folders sent to the core to add to `place`.
+#[derive(Debug)]
+pub(super) struct Adding {
+    pub(super) place: Gathering,
+    /// The folders the core hasn't added yet.
+    pub(super) asked: Vec<PathBuf>,
+    /// The folders the core added, in the order it added them.
+    pub(super) added: Vec<PathBuf>,
 }
 
 #[cfg(test)]
