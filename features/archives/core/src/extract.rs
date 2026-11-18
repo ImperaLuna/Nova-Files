@@ -6,14 +6,13 @@ use std::path::{Path, PathBuf};
 
 use nova_files_api::{Conflict, ConflictKind, ExtractTo, Failure, Outcome};
 
-use super::Ended;
-use super::journal::word;
-use super::make::How;
-use super::plan::pairs_into;
-use super::running::Running;
-use super::stop::Stop;
-use super::transfer::transfer_to;
-use crate::archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow};
+use crate::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow};
+use nova_files_jobs::Ended;
+use nova_files_jobs::journal::word;
+use nova_files_jobs::mover::Mover;
+use nova_files_jobs::plan::pairs_into;
+use nova_files_jobs::running::Running;
+use nova_files_jobs::stop::Stop;
 
 pub const STAGING_PREFIX: &str = ".nova-extract-";
 const ENDINGS: [&str; 13] = [
@@ -31,7 +30,7 @@ pub enum Taking<'a> {
 
 pub fn extract(
     running: &mut Running,
-    archiver: Option<&Archiver>,
+    (archiver, files): (Option<&Archiver>, &dyn Mover),
     archive: &Path,
     into: &Path,
     taking: Taking<'_>,
@@ -56,7 +55,7 @@ pub fn extract(
         Ok(None) => return (Outcome::Cancelled, Vec::new()),
         Err(stop) => return (stop.outcome(), Vec::new()),
     };
-    let placed = place(running, &staging, into, taking);
+    let placed = place(running, files, &staging, (into, taking));
     clear(&staging.root);
     match placed {
         Ok(changed) => (Outcome::Done, changed),
@@ -200,9 +199,9 @@ fn staging(into: &Path, id: u64, attempt: u64, folder: &OsStr) -> Result<Staging
 
 fn place(
     running: &mut Running,
+    files: &dyn Mover,
     staging: &Staging,
-    into: &Path,
-    taking: Taking<'_>,
+    (into, taking): (&Path, Taking<'_>),
 ) -> Result<Vec<PathBuf>, (Stop, Vec<PathBuf>)> {
     let unpacked = top(&staging.named).map_err(|error| (Stop::at(into, &error), Vec::new()))?;
     let sources = match taking {
@@ -220,7 +219,7 @@ fn place(
     let locked = writable(&sources);
     running.record_job(word::MOVE, Some(into), &sources);
     running.reporter.start_over();
-    let (result, touched) = transfer_to(running, &pairs_into(&sources, into), How::Move);
+    let (result, touched) = files.move_pairs(running, &pairs_into(&sources, into));
     for (source, mode) in locked {
         let target = running.steps.get(&source).cloned();
         if let Some(target) = target {

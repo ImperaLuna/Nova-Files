@@ -11,10 +11,10 @@ use nova_files_disk::ports::Icons;
 pub use nova_files_entries_core::ListingJob;
 use nova_files_entries_core::RowWatch;
 
-use crate::archive::ArchiveFailure;
 use crate::file_icons::FileIcons;
 use crate::inside::{self, Inside, Within};
 use crate::thumbs::{Queue, Thumbnails};
+use nova_files_archives_core::ArchiveFailure;
 
 use crate::list::{self, Stopped};
 use crate::memory;

@@ -8,10 +8,10 @@ use rustix::io::Errno;
 
 use nova_files_api::Failure;
 
-use super::attrs::{copy_mode_and_times, copy_xattrs};
-use super::control::Control;
-use super::folders::At;
-use super::stop::Stop;
+use crate::attrs::{copy_mode_and_times, copy_xattrs};
+use nova_files_jobs::control::Control;
+use nova_files_jobs::folders::At;
+use nova_files_jobs::stop::Stop;
 
 const PART_MODE: u32 = 0o600;
 pub const CHUNK: u64 = 0x80_0000;

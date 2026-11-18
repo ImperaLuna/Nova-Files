@@ -8,21 +8,21 @@ use std::path::{Path, PathBuf};
 use nova_files_api::{Answer, Conflict, ConflictKind, Failure, Outcome};
 use rustix::fs::{AtFlags, Mode, OFlags, openat, unlinkat};
 
-use super::Ended;
-use super::ahead::Ahead;
-use super::attrs::{copy_mode_and_times, copy_xattrs};
-use super::clash::{clash, conflict_for};
-use super::control::{Cancelled, Control};
-use super::failure::failure;
-use super::folders::{Folders, Unreached};
-use super::journal::{Record, word};
-use super::keep_both::{Naming, free_path};
-use super::make::{How, Made, Making, make};
-use super::place::rename_no_replace;
-use super::plan::{Item, Kind, Plan, check, check_pairs, pairs_into, plan_pairs};
-use super::running::Running;
-use super::stop::Stop;
-use super::sync::sync_folders;
+use crate::ahead::Ahead;
+use crate::attrs::{copy_mode_and_times, copy_xattrs};
+use crate::make::{How, Made, Making, make};
+use nova_files_jobs::Ended;
+use nova_files_jobs::clash::{clash, conflict_for};
+use nova_files_jobs::control::{Cancelled, Control};
+use nova_files_jobs::failure::failure;
+use nova_files_jobs::folders::{Folders, Unreached};
+use nova_files_jobs::journal::{Record, word};
+use nova_files_jobs::keep_both::{Naming, free_path};
+use nova_files_jobs::place::rename_no_replace;
+use nova_files_jobs::plan::{Item, Kind, Plan, check, check_pairs, pairs_into, plan_pairs};
+use nova_files_jobs::running::Running;
+use nova_files_jobs::stop::Stop;
+use nova_files_jobs::sync::sync_folders;
 
 const LOOK_AGAIN: u32 = 3;
 

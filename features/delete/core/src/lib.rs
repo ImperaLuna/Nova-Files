@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -5,13 +7,13 @@ use nova_files_api::Outcome;
 use rustix::fs::{AtFlags, unlinkat};
 use rustix::io::Errno;
 
-use super::Ended;
-use super::failure::failure;
-use super::folders::{Folders, Unreached};
-use super::journal::{Record, word};
-use super::plan::{Item, Kind, Plan, plan_delete};
-use super::running::Running;
-use super::stop::Stop;
+use nova_files_jobs::Ended;
+use nova_files_jobs::failure::failure;
+use nova_files_jobs::folders::{Folders, Unreached};
+use nova_files_jobs::journal::{Record, word};
+use nova_files_jobs::plan::{Item, Kind, Plan, plan_delete};
+use nova_files_jobs::running::Running;
+use nova_files_jobs::stop::Stop;
 
 pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
     running.record_job(word::DELETE, None, paths);
@@ -125,8 +127,8 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::*;
-    use crate::ops::control::Control;
-    use crate::ops::test_folder::TestFolder;
+    use nova_files_jobs::control::Control;
+    use nova_files_jobs::test_folder::TestFolder;
 
     #[test]
     fn a_folder_swapped_for_a_link_is_not_followed() {

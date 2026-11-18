@@ -1,3 +1,7 @@
+#![forbid(unsafe_code)]
+
+mod compress;
+mod extract;
 mod helper;
 mod unpack;
 mod wire;
@@ -9,6 +13,8 @@ use std::path::{Path, PathBuf};
 
 use nova_files_api::Packing;
 
+pub use compress::{Asked, compress};
+pub use extract::{Taking, extract};
 pub use unpack::{Extracting, Flow};
 pub use wire::{ArchiveEntry, ArchiveKind};
 
