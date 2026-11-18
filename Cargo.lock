@@ -3638,6 +3638,7 @@ dependencies = [
  "nova-files-jobs",
  "nova-files-messages",
  "nova-files-open-api",
+ "nova-files-open-core",
  "nova-files-picker-api",
  "nova-files-settings-api",
  "nova-files-trash-api",
@@ -3701,6 +3702,17 @@ dependencies = [
 [[package]]
 name = "nova-files-open-api"
 version = "0.1.0"
+
+[[package]]
+name = "nova-files-open-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-open-api",
+ "nova-files-picker-api",
+]
 
 [[package]]
 name = "nova-files-picker-api"

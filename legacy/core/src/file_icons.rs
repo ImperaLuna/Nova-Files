@@ -11,7 +11,7 @@ use nova_files_api::{
 };
 
 use crate::icon_theme::{self, IconThemes, name};
-use crate::mime::MimeTypes;
+use nova_files_open_core::MimeTypes;
 
 const ANY_FILE: &str = "application/octet-stream";
 const SVG_EXTENSION: &str = "svg";

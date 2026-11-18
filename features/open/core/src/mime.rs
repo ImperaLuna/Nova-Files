@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use nova_files_api::{FileTypes, glob_matches};
 
-use crate::capped;
+use nova_files_disk::capped;
 
 const DATA_HOME_VAR: &str = "XDG_DATA_HOME";
 const DATA_DIRS_VAR: &str = "XDG_DATA_DIRS";

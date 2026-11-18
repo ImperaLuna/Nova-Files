@@ -76,7 +76,7 @@ mod tests {
 
     use super::*;
 
-    use crate::open::tree::Tree;
+    use crate::tree::Tree;
 
     trait Apps {
         fn app(&self, id: &str, extra: &str) -> &Self;

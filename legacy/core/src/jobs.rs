@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
@@ -8,9 +8,6 @@ use nova_files_api::{
     ThumbnailSize, Unreadable,
 };
 
-use nova_files_open_api::{self as open_api, NotOpened};
-
-use crate::archive::ArchiveFailure;
 use crate::details_queue;
 use crate::file_icons::FileIcons;
 use crate::inside::{self, Inside, Within};
@@ -18,13 +15,10 @@ use crate::thumbs::{Queue, Thumbnails};
 
 use crate::list::{self, Stopped};
 use crate::memory;
-use crate::mime::MimeTypes;
-use crate::open;
 use crate::order;
 use crate::preview;
 
 const LIST_THREAD: &str = "nova-files-list";
-const OPEN_THREAD: &str = "nova-files-open";
 
 const NO_LISTING: u64 = u64::MAX;
 
@@ -232,48 +226,6 @@ fn list_inside(
         }
         Err(reason) => job.answer(Event::FolderUnreadable { id, path, reason }),
     }
-}
-
-pub fn open_file(
-    client: &Client,
-    (types, inside): (Arc<OnceLock<MimeTypes>>, Arc<Inside>),
-    path: PathBuf,
-    activation: Option<String>,
-) {
-    let events = Arc::clone(&client.events);
-    let failed_path = path.clone();
-    let spawned = thread::Builder::new()
-        .name(OPEN_THREAD.to_owned())
-        .spawn(move || {
-            let types = types.get_or_init(MimeTypes::from_env);
-            let opened = match opened_copy(&path, &inside) {
-                Some(Ok(copy)) => open::open_file(&copy, types, activation.as_deref()),
-                Some(Err(_)) => Err(NotOpened::Failed),
-                None => open::open_file(&path, types, activation.as_deref()),
-            };
-            let event = match opened {
-                Ok(()) => open_api::Event::Opened { path },
-                Err(reason) => open_api::Event::NotOpened { path, reason },
-            };
-            events.deliver(event).ok();
-        });
-    if let Err(error) = spawned {
-        log::warn!("can't start a thread to open a file: {error}");
-        client
-            .events
-            .deliver(open_api::Event::NotOpened {
-                path: failed_path,
-                reason: NotOpened::Failed,
-            })
-            .ok();
-    }
-}
-
-fn opened_copy(path: &Path, inside: &Inside) -> Option<Result<PathBuf, ArchiveFailure>> {
-    if path.symlink_metadata().is_ok() {
-        return None;
-    }
-    inside::within(path).map(|within| inside.take_out(&within))
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// A request from a client to the open feature's core half.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,4 +106,14 @@ pub enum OpenWithAnswer {
     /// sandboxed, for an app that runs in a terminal or can't take files,
     /// or when its program couldn't start.
     Launched { id: OpenWithId, started: bool },
+}
+
+/// Takes a file out of the archive it lies in, so it can be opened. The
+/// archives feature fills it; the open feature asks it for any path that
+/// isn't on disk.
+pub trait TakeOut: Send + Sync {
+    /// A copy of the file at `path` taken out of its archive, `None` when
+    /// `path` lies in no archive, or [`NotOpened::Failed`] when the archive
+    /// gave nothing.
+    fn take_out(&self, path: &Path) -> Option<Result<PathBuf, NotOpened>>;
 }

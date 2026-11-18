@@ -7,7 +7,8 @@ use nova_files_api::{
     ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
 };
 use nova_files_messages::{Routed, Routes};
-use nova_files_open_api as open_api;
+use nova_files_open_api::{self as open_api, TakeOut};
+use nova_files_open_core::{MimeTypes, OpenWithWorker};
 use nova_files_settings_api as settings_api;
 use nova_files_trash_api as trash_api;
 
@@ -19,8 +20,6 @@ use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
 use crate::jobs::Client;
 use crate::measure::Measurer;
-use crate::mime::MimeTypes;
-use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
@@ -75,8 +74,9 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
     routes.on(|setup: &Setup, _, client: &Client, command| {
         match command {
             open_api::Command::OpenFile { path, activation } => {
-                let opening = (Arc::clone(&setup.mime_types), Arc::clone(&setup.inside));
-                crate::jobs::open_file(client, opening, path, activation);
+                let archives: Arc<dyn TakeOut> = Arc::<Inside>::clone(&setup.inside);
+                let opening = (Arc::clone(&setup.mime_types), archives);
+                nova_files_open_core::open(client.events(), opening, path, activation);
             }
             open_api::Command::OpenWith(request) => {
                 setup.open_with.answer(client.events(), request);

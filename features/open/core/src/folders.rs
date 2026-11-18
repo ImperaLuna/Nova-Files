@@ -57,8 +57,8 @@ impl std::error::Error for NotDefault {}
 
 #[cfg(test)]
 mod tests {
-    use super::super::tree::Tree;
     use super::{NotDefault, OWN_DESKTOP_ID, make_default_in, opens_folders_in};
+    use crate::tree::Tree;
 
     const ENTRY: &str = "[Desktop Entry]\nType=Application\nExec=app %u\n";
 

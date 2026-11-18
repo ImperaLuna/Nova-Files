@@ -5,7 +5,7 @@ use super::defaults::{
     ADDED, DEFAULTS, DESKTOP_LIST_SUFFIX, ID_SEPARATOR, LIST, MAX_LIST_BYTES, Places, REMOVED,
     installed,
 };
-use crate::private_file::{self, Read};
+use nova_files_disk::private_file::{self, Read};
 
 const GROUP_START: char = '[';
 const GROUP_END: char = ']';
@@ -310,7 +310,7 @@ image/png=view.desktop;
         }
     }
 
-    use crate::open::tree::Tree;
+    use crate::tree::Tree;
 
     fn tree(name: &str) -> (Tree, Places) {
         let tree = Tree::new(&format!("associate-{name}"));

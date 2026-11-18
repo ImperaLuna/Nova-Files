@@ -26,6 +26,7 @@ nova-files-index = { path = "helpers/index" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-messages = { path = "framework/messages" }
 nova-files-open-api = { path = "features/open/api" }
+nova-files-open-core = { path = "features/open/core" }
 nova-files-picker-api = { path = "features/picker/api" }
 nova-files-settings-api = { path = "features/settings/api" }
 nova-files-shell = { path = "framework/shell" }

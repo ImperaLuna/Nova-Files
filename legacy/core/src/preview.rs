@@ -13,8 +13,8 @@ use nova_files_api::{
 use rustix::fs::OFlags;
 
 use crate::list::{self, Stopped};
-use crate::mime::MimeTypes;
 use crate::thumbs::{self, Running};
+use nova_files_open_core::MimeTypes;
 
 const THREAD_NAME: &str = "nova-files-preview";
 

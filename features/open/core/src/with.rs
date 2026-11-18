@@ -10,8 +10,8 @@ use super::apps::{self, Listed};
 use super::associate::{self, NotSet};
 use super::defaults::{Places, installed};
 use super::{FLATPAK_INFO, commands, environment_places, launch};
-use crate::hand_edited::lock;
 use crate::mime::MimeTypes;
+use nova_files_disk::hand_edited::lock;
 
 const THREAD_NAME: &str = "nova-files-open-with";
 
