@@ -19,6 +19,7 @@ use std::sync::Arc;
 use common::{Bench, Client};
 use nova_files_api::{
     Command, EntryId, Event, Gathered, GatheredChange, Gathering, Holds, Listing, ListingId, Order,
+    ThumbnailSize,
 };
 
 fn gathered_file(bench: &Bench) -> PathBuf {
@@ -177,6 +178,7 @@ fn a_place_lists_and_says_when_its_folders_change() {
         id: ListingId(1),
         first: EntryId(0),
         count: 2,
+        size: ThumbnailSize::Normal,
     });
     loop {
         if let Event::DetailsRead { id, .. } = client.next() {

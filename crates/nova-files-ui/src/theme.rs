@@ -290,7 +290,25 @@ pub mod size {
     pub const SHEET_PAD: Pixels = px(8.0);
     /// A file or folder icon in a row, and a thumbnail in its place.
     pub const ROW_ICON: Pixels = px(22.0);
-    pub const THUMBNAIL: Pixels = px(22.0);
+    /// Space around an icon cell's icon and name, and between the icon
+    /// and a name under it.
+    pub const ICON_CELL_PAD: Pixels = px(8.0);
+    pub const ICON_NAME_GAP: Pixels = px(6.0);
+    /// The narrowest icon cell with its name under the icon, so small
+    /// icons still leave room for a name, and with its name beside it.
+    pub const ICON_CELL_UNDER: Pixels = px(104.0);
+    pub const ICON_CELL_BESIDE: Pixels = px(240.0);
+    /// One line of a name under its icon, and room either side of it for
+    /// a line cut short, which GPUI lets overrun by about the ellipsis.
+    pub const ICON_NAME_LINE: Pixels = px(17.0);
+    pub const ICON_NAME_OVERRUN: Pixels = px(6.0);
+    /// Space around Gallery's stage, the caption under it, and the space
+    /// above and below its strip.
+    pub const STAGE_PAD: Pixels = px(16.0);
+    pub const STAGE_CAPTION: Pixels = px(40.0);
+    pub const STRIP_PAD: Pixels = px(8.0);
+    /// The icons of Icons at each of its sizes, smallest first.
+    pub const ICON_SIDES: [Pixels; 5] = [px(48.0), px(64.0), px(96.0), px(128.0), px(192.0)];
     /// The Modified and Size columns; Name takes the rest.
     pub const MODIFIED_WIDTH: Pixels = px(150.0);
     pub const SIZE_WIDTH: Pixels = px(92.0);

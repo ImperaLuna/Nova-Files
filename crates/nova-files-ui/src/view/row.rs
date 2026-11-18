@@ -9,16 +9,16 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, Context, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Pixels, RenderImage, Rgba, SharedString,
-    StatefulInteractiveElement as _, Styled as _, StyledText, div, img,
-    prelude::FluentBuilder as _, svg,
+    AnyElement, Context, Div, HighlightStyle, Hsla, InteractiveElement as _, IntoElement,
+    MouseButton, MouseDownEvent, ObjectFit, ParentElement as _, Pixels, RenderImage, Rgba,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, StyledImage as _,
+    StyledText, div, img, prelude::FluentBuilder as _, svg,
 };
-use nova_files_api::{EntryKind, IconKind};
+use nova_files_api::{Entry, EntryKind, IconKind, Listing};
 
 use crate::assets::Icon;
 use crate::theme::{Colors, radius, size, text};
-use crate::window::{DraggedRow, MainWindow};
+use crate::window::{Aim, DraggedRow, MainWindow};
 
 /// Which corners of a row stay rounded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,22 +92,50 @@ pub fn entry_name(
 ) -> impl IntoElement {
     let mark = mark_style(&Colors::of(cx));
     let text = StyledText::new(name).with_highlights(marks.into_iter().map(|range| (range, mark)));
+    drags(
+        div()
+            .id(("name", index))
+            .debug_selector(move || format!("name-{index}"))
+            .min_w_0()
+            .truncate(),
+        row,
+        cx,
+    )
+    .child(text)
+}
+
+/// `handle`, where a press is left for dragging files: it marks itself
+/// for `band`, and when it carries `row`, moving the press drags the
+/// selection (see `window::dragging`).
+pub fn drags(
+    handle: Stateful<Div>,
+    row: Option<DraggedRow>,
+    cx: &Context<MainWindow>,
+) -> Stateful<Div> {
     let window = cx.entity();
-    div()
-        .id(("name", index))
-        .debug_selector(move || format!("name-{index}"))
-        .min_w_0()
-        .truncate()
+    handle
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(|this, _: &MouseDownEvent, _, _| this.pressed_name = true),
         )
-        .when_some(row, |name, row| {
-            name.on_drag(row, move |row, _, _, cx| {
+        .when_some(row, |handle, row| {
+            handle.on_drag(row, move |row, _, _, cx| {
                 window.update(cx, |this, cx| this.drag_started(row, cx))
             })
         })
-        .child(text)
+}
+
+impl MainWindow {
+    /// Whether entries drag: not in a picker, and not in the trash.
+    pub(super) fn entries_drag(&self) -> bool {
+        self.pick.is_none() && !self.in_trash()
+    }
+}
+
+/// Where files dropped on `entry` of `listing`, named `name`, go: into
+/// it when it is a folder.
+pub fn folder_aim(listing: &Listing, entry: &Entry, name: &str) -> Option<Aim> {
+    (entry.kind == EntryKind::Folder).then(|| Aim::folder(listing.path_of(entry), name.to_owned()))
 }
 
 /// How a search's match shows in a name: full-strength text on orange.
@@ -123,6 +151,7 @@ fn mark_style(colors: &Colors) -> HighlightStyle {
 /// shifts nothing.
 pub fn cursor_ring(colors: &Colors) -> impl IntoElement {
     div()
+        .debug_selector(|| "cursor".to_owned())
         .absolute()
         .inset_0()
         .rounded(radius::ROW)
@@ -142,24 +171,31 @@ pub enum RowIcon<'a> {
 
 /// The icon slot of an entry row, the same size whatever it shows, so
 /// nothing shifts when a thumbnail or theme icon arrives.
-pub fn entry_icon(shown: RowIcon<'_>, colors: &Colors) -> impl IntoElement {
+pub fn entry_icon(shown: RowIcon<'_>, colors: &Colors) -> Div {
+    entry_icon_sized(shown, size::ROW_ICON, colors)
+}
+
+/// An entry's icon slot `side` across, as [`entry_icon`]. A thumbnail
+/// keeps its shape inside it.
+pub fn entry_icon_sized(shown: RowIcon<'_>, side: Pixels, colors: &Colors) -> Div {
     let slot = div()
         .relative()
         .flex()
         .flex_none()
         .items_center()
         .justify_center()
-        .size(size::ROW_ICON);
+        .size(side);
     match shown {
         RowIcon::Thumbnail(image) => slot.child(
             img(Arc::clone(image))
-                .size(size::THUMBNAIL)
+                .size(side)
+                .object_fit(ObjectFit::Contain)
                 .rounded(radius::SMALL),
         ),
-        RowIcon::Theme(image) => slot.child(img(Arc::clone(image)).size(size::ROW_ICON)),
+        RowIcon::Theme(image) => slot.child(img(Arc::clone(image)).size(side)),
         RowIcon::BuiltIn(kind) => {
             let (glyph, tint) = built_in(kind, colors);
-            slot.child(icon(glyph, size::ROW_ICON, tint))
+            slot.child(icon(glyph, side, tint))
         }
     }
 }
