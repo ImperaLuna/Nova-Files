@@ -74,7 +74,7 @@ struct Shared {
 
 #[derive(Default)]
 struct Folders {
-    /// The file has been read once.
+    /// The clients have been sent the folders once.
     loaded: bool,
     gathered: Arc<Gathered>,
     /// The clients that asked for the folders.
@@ -192,46 +192,60 @@ impl Shared {
 
     /// Writes the usual folders when there is no file, then reads it.
     fn first_read(&self) {
-        {
+        let changed = {
             let _disk = lock(&self.disk);
             if let Some(home) = &self.home {
                 write_usual(home);
             }
-            self.reload_holding_disk();
-        }
-        self.rewatch();
+            self.read_holding_disk()
+        };
+        self.rewatch_and_tell(changed);
     }
 
     /// Reads the file again and tells the listening clients when the
     /// folders changed.
     fn reload(&self) {
-        {
+        let changed = {
             let _disk = lock(&self.disk);
-            self.reload_holding_disk();
-        }
-        self.rewatch();
+            self.read_holding_disk()
+        };
+        self.rewatch_and_tell(changed);
     }
 
-    fn reload_holding_disk(&self) {
+    /// Reads the file into the folders; true when the clients must hear.
+    fn read_holding_disk(&self) -> bool {
         let read = self
             .home
             .as_ref()
             .map_or_else(|| Some(Gathered::default()), read_folders);
         let mut folders = lock(&self.folders);
         let first = !folders.loaded;
-        folders.loaded = true;
         let gathered = match read {
             Some(gathered) => gathered,
             None if first => Gathered::default(),
-            None => return,
+            None => return false,
         };
-        if first || *folders.gathered != gathered {
+        let changed = first || *folders.gathered != gathered;
+        if changed {
             folders.gathered = Arc::new(gathered);
-            let event = Event::Gathered(Arc::clone(&folders.gathered));
-            folders
-                .listeners
-                .retain(|_, events| events.deliver(event.clone()).is_ok());
         }
+        drop(folders);
+        changed
+    }
+
+    /// Watches the folders, then sends them to the listening clients when
+    /// `changed`, so a client hears of them only once they are watched.
+    fn rewatch_and_tell(&self, changed: bool) {
+        self.rewatch();
+        if !changed {
+            return;
+        }
+        let mut folders = lock(&self.folders);
+        folders.loaded = true;
+        let event = Event::Gathered(Arc::clone(&folders.gathered));
+        folders
+            .listeners
+            .retain(|_, events| events.deliver(event.clone()).is_ok());
     }
 
     /// Watches each folder gathered now (see [`watch_folder`]), keeping
@@ -293,9 +307,9 @@ impl Shared {
                 Edit::Refused(why) => log::warn!("{} not changed: {why}", target.display()),
             }
         }
-        self.reload_holding_disk();
+        let changed = self.read_holding_disk();
         drop(disk);
-        self.rewatch();
+        self.rewatch_and_tell(changed);
     }
 
     /// `change` with what an added folder holds: what the client said, or
