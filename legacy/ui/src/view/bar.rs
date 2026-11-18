@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use super::row::icon;
-use nova_files_api::ViewMode;
+use nova_files_folders_api::ViewMode;
 
 use crate::assets::Icon;
 use crate::commands::{GoBack, GoForward, GoUp, ShowDetails, ShowIcons};

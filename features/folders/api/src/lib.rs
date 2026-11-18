@@ -1,6 +1,11 @@
 //! How a folder is shown: as rows with columns, as a grid of icons at one
 //! of five sizes, or as a gallery of one big preview. Each folder keeps
 //! the view it was last given; the core saves them between runs.
+//!
+//! A client asks with [`Command::Views`] and gets [`Event::Views`] then and
+//! after every change; [`Command::SetView`] gives one folder its view.
+
+#![forbid(unsafe_code)]
 
 use std::path::PathBuf;
 
@@ -77,6 +82,26 @@ pub struct FolderView {
 
 /// A folder and the view it was given.
 pub type FolderViews = std::sync::Arc<[(PathBuf, FolderView)]>;
+
+/// A request from a client to the folders feature's core half.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    /// Ask for the folders' views: the answer is [`Event::Views`], sent
+    /// again whenever one changes.
+    Views,
+    /// Show `folder` with `view` from now on, and save it. Every client
+    /// that asked for the views, this one included, then gets
+    /// [`Event::Views`]. A path that isn't absolute is ignored.
+    SetView { folder: PathBuf, view: FolderView },
+}
+
+/// Something the folders feature's core half tells one client.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Event {
+    /// Every folder given a view, newest first, answering
+    /// [`Command::Views`] and after each change.
+    Views(FolderViews),
+}
 
 #[cfg(test)]
 mod tests {

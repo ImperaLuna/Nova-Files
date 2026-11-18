@@ -3584,6 +3584,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-dbus",
+ "nova-files-folders-api",
  "nova-files-picker-api",
  "nova-files-shell",
  "nova-files-trash-api",
@@ -3623,6 +3624,7 @@ dependencies = [
  "log",
  "nova-files-api",
  "nova-files-disk",
+ "nova-files-folders-api",
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
@@ -3655,6 +3657,10 @@ version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
 ]
+
+[[package]]
+name = "nova-files-folders-api"
+version = "0.1.0"
 
 [[package]]
 name = "nova-files-index"
@@ -3742,6 +3748,7 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
+ "nova-files-folders-api",
  "nova-files-picker-api",
  "nova-files-shell",
  "nova-files-trash-api",

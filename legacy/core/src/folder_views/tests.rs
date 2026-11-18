@@ -102,11 +102,8 @@ struct Listener(mpsc::Sender<FolderViews>);
 
 impl EventSink for Listener {
     fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
-        let event = envelope.open::<Event>().map_err(|_| ClientGone)?;
-        match event {
-            Event::FolderViews(views) => self.0.send(views).map_err(|_| ClientGone),
-            _ => Ok(()),
-        }
+        let Event::Views(views) = envelope.open::<Event>().map_err(|_| ClientGone)?;
+        self.0.send(views).map_err(|_| ClientGone)
     }
 }
 

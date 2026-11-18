@@ -19,8 +19,8 @@ use std::sync::mpsc::Receiver;
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
     Appearance, Bookmark, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind,
-    Event, EventSink, HiddenFiles, Listing, ListingId, Mode, Order, Palette, Place, PlaceKind,
-    SettingChange, Settings, SortKey, Theme, ThumbnailSize, Thumbnails, Unreadable,
+    Event, EventSink, HiddenFiles, Listing, ListingId, Message, Mode, Order, Palette, Place,
+    PlaceKind, SettingChange, Settings, SortKey, Theme, ThumbnailSize, Thumbnails, Unreadable,
 };
 use nova_files_ui::{Colors, MainWindow, WindowEvent};
 
@@ -79,16 +79,20 @@ impl Core {
     }
 
     fn commands(&mut self) -> Vec<Command> {
+        self.commands_of::<Command>()
+    }
+
+    fn commands_of<C: Message>(&mut self) -> Vec<C> {
         let mut commands = Vec::new();
         while let Some(message) = self.try_recv() {
-            if let Some(command) = message.into_command::<Command>() {
+            if let Some(command) = message.into_command::<C>() {
                 commands.push(command);
             }
         }
         commands
     }
 
-    fn send(&self, event: Event) {
+    fn send<M: Message>(&self, event: M) {
         self.events.as_ref().unwrap().deliver(event).unwrap();
     }
 

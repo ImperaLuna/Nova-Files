@@ -5,8 +5,9 @@ use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use nova_files_api::{
-    ClientId, Event, EventSink, FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode,
+use nova_files_api::{ClientId, EventSink};
+use nova_files_folders_api::{
+    Event, FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode,
 };
 
 use crate::private_file::{self, Read};
@@ -43,7 +44,7 @@ impl Store {
 
     pub fn listen(&self, client: ClientId, events: &Arc<dyn EventSink>) {
         let views = Arc::clone(&self.views.borrow());
-        if events.deliver(Event::FolderViews(views)).is_ok() {
+        if events.deliver(Event::Views(views)).is_ok() {
             self.listeners
                 .borrow_mut()
                 .insert(client, Arc::clone(events));
@@ -76,11 +77,9 @@ impl Store {
             *views = changed.into();
             Arc::clone(&views)
         };
-        self.listeners.borrow_mut().retain(|_, events| {
-            events
-                .deliver(Event::FolderViews(Arc::clone(&views)))
-                .is_ok()
-        });
+        self.listeners
+            .borrow_mut()
+            .retain(|_, events| events.deliver(Event::Views(Arc::clone(&views))).is_ok());
         self.saver.save(to_bytes(&views).into());
     }
 }

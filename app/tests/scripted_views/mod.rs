@@ -1,7 +1,9 @@
 mod gallery;
 mod icons;
 
-use nova_files_api::{FolderView, IconSize, ViewMode};
+use nova_files_folders_api::{
+    Command as ViewsCommand, Event as ViewsEvent, FolderView, IconSize, ViewMode,
+};
 
 use super::*;
 
@@ -15,11 +17,11 @@ fn shown(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext
 }
 
 fn views_set(core: &mut Core) -> Vec<(PathBuf, FolderView)> {
-    core.commands()
+    core.commands_of::<ViewsCommand>()
         .into_iter()
         .filter_map(|command| match command {
-            Command::SetFolderView { folder, view } => Some((folder, view)),
-            _ => None,
+            ViewsCommand::SetView { folder, view } => Some((folder, view)),
+            ViewsCommand::Views => None,
         })
         .collect()
 }
@@ -107,7 +109,7 @@ fn the_views_the_core_sends_win(cx: &mut TestAppContext) {
         icons: IconSize::Small,
     };
 
-    core.send(Event::FolderViews(Arc::from([
+    core.send(ViewsEvent::Views(Arc::from([
         (PathBuf::from(OTHER), icons(IconSize::Large)),
         (PathBuf::from(SHOWN), gallery),
         (PathBuf::from(SHOWN), icons(IconSize::Small)),
@@ -115,7 +117,7 @@ fn the_views_the_core_sends_win(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(showing(&view, cx), gallery);
 
-    core.send(Event::FolderViews(Arc::from([])));
+    core.send(ViewsEvent::Views(Arc::from([])));
     cx.run_until_parked();
     assert_eq!(showing(&view, cx), FolderView::default());
 }
@@ -129,16 +131,16 @@ fn a_change_the_core_hasnt_taken_yet_stays(cx: &mut TestAppContext) {
     };
 
     cx.simulate_keystrokes("ctrl-3");
-    core.send(Event::FolderViews(Arc::from([])));
+    core.send(ViewsEvent::Views(Arc::from([])));
     cx.run_until_parked();
     assert_eq!(showing(&view, cx), gallery);
 
-    core.send(Event::FolderViews(Arc::from([(
+    core.send(ViewsEvent::Views(Arc::from([(
         PathBuf::from(SHOWN),
         gallery,
     )])));
     cx.run_until_parked();
-    core.send(Event::FolderViews(Arc::from([])));
+    core.send(ViewsEvent::Views(Arc::from([])));
     cx.run_until_parked();
     assert_eq!(showing(&view, cx), FolderView::default());
 }

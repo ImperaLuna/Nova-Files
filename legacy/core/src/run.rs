@@ -6,6 +6,7 @@ use std::time::Duration;
 use nova_files_api::{
     ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
 };
+use nova_files_folders_api as folders_api;
 use nova_files_messages::{Routed, Routes};
 use nova_files_trash_api as trash_api;
 
@@ -63,6 +64,13 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
         }
     })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
+            folders_api::Command::Views => setup.folder_views.listen(id, client.events()),
+            folders_api::Command::SetView { folder, view } => setup.folder_views.set(folder, view),
+        }
+        Ok(())
+    })?;
     routes.on_leave(forget);
     Ok(routes)
 }
@@ -75,6 +83,7 @@ pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
         MessageType::of::<trash_api::Event>(),
+        MessageType::of::<folders_api::Event>(),
     ]
 }
 
@@ -183,8 +192,6 @@ fn answer(
         }
         command @ (Command::WindowState
         | Command::SaveWindowState(_)
-        | Command::FolderViews
-        | Command::SetFolderView { .. }
         | Command::Settings
         | Command::ChangeSetting(_)
         | Command::Theme

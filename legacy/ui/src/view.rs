@@ -24,7 +24,7 @@ use gpui::{
     ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
     prelude::FluentBuilder as _,
 };
-use nova_files_api::ViewMode;
+use nova_files_folders_api::ViewMode;
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,

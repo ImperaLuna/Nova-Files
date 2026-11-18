@@ -524,14 +524,16 @@ fn hidden_files_shown_mid_search_leave_the_search_alone(cx: &mut TestAppContext)
 
 #[gpui::test]
 fn search_results_show_as_details_whatever_their_folder_shows(cx: &mut TestAppContext) {
-    use nova_files_api::{FolderView, IconSize, ViewMode};
+    use nova_files_folders_api::{
+        Command as ViewsCommand, Event as ViewsEvent, FolderView, IconSize, ViewMode,
+    };
 
     let (view, cx, mut core) = searching(cx);
     let icons = FolderView {
         mode: ViewMode::Icons,
         icons: IconSize::Medium,
     };
-    core.send(Event::FolderViews(Arc::from([(
+    core.send(ViewsEvent::Views(Arc::from([(
         PathBuf::from(SHOWN),
         icons,
     )])));
@@ -541,11 +543,11 @@ fn search_results_show_as_details_whatever_their_folder_shows(cx: &mut TestAppCo
         FolderView::default()
     );
 
-    core.commands();
+    core.commands_of::<ViewsCommand>();
     cx.simulate_keystrokes("down ctrl-2");
     let kept = core
-        .commands()
+        .commands_of::<ViewsCommand>()
         .into_iter()
-        .any(|command| matches!(command, Command::SetFolderView { .. }));
+        .any(|command| matches!(command, ViewsCommand::SetView { .. }));
     assert!(!kept);
 }
