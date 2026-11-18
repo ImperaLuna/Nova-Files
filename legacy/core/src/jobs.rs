@@ -4,12 +4,14 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
-    ClientGone, Details, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId,
-    NotOpened, Order, ThumbnailSize, Unreadable,
+    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, NotOpened,
+    Order, ThumbnailSize, Unreadable,
 };
+use nova_files_disk::ports::Icons;
+pub use nova_files_entries::ListingJob;
+use nova_files_entries::RowWatch;
 
 use crate::archive::ArchiveFailure;
-use crate::details_queue;
 use crate::file_icons::FileIcons;
 use crate::inside::{self, Inside, Within};
 use crate::thumbs::{Queue, Thumbnails};
@@ -27,12 +29,9 @@ const OPEN_THREAD: &str = "nova-files-open";
 const NO_LISTING: u64 = u64::MAX;
 
 pub struct Client {
-    events: Arc<dyn EventSink>,
-    current_listing: Arc<AtomicU64>,
+    entries: nova_files_entries::Client,
     current_search: Arc<AtomicU64>,
     current_preview: Arc<preview::Current>,
-    details: Option<Arc<details_queue::Queue>>,
-    thumbnails: Option<Arc<Queue>>,
 }
 
 impl Client {
@@ -41,18 +40,14 @@ impl Client {
         thumbnails: Option<&Thumbnails>,
         icons: &Arc<FileIcons>,
     ) -> Self {
-        let thumbnails = thumbnails
+        let rows = thumbnails
             .and_then(|setup| Queue::start(setup.clone(), Arc::clone(&events)))
-            .map(Arc::new);
-        let details =
-            details_queue::Queue::start(Arc::clone(&events), Arc::clone(icons)).map(Arc::new);
+            .map(|queue| Arc::new(queue) as Arc<dyn RowWatch>);
+        let icons: Arc<dyn Icons> = Arc::<FileIcons>::clone(icons);
         Self {
-            events,
-            details,
-            current_listing: Arc::new(AtomicU64::new(NO_LISTING)),
+            entries: nova_files_entries::Client::new(events, rows, &icons),
             current_search: Arc::new(AtomicU64::new(NO_LISTING)),
             current_preview: Arc::new(preview::Current::new()),
-            thumbnails,
         }
     }
 
@@ -63,20 +58,15 @@ impl Client {
         count: u32,
         thumbnails: Option<ThumbnailSize>,
     ) {
-        if let Some(queue) = &self.details {
-            queue.want(id, first, count);
-        }
-        if let Some(queue) = &self.thumbnails {
-            queue.want(id, first, thumbnails.map_or(0, |_| count), thumbnails);
-        }
+        self.entries.want_rows(id, first, count, thumbnails);
     }
 
     pub fn deliver(&self, event: Event) -> Result<(), ClientGone> {
-        self.events.deliver(event)
+        self.entries.deliver(event)
     }
 
     pub const fn events(&self) -> &Arc<dyn EventSink> {
-        &self.events
+        self.entries.events()
     }
 
     pub const fn current_search(&self) -> &Arc<AtomicU64> {
@@ -87,67 +77,25 @@ impl Client {
         &self.current_preview
     }
 
-    fn cancel_listing(&self) {
-        self.current_listing.store(NO_LISTING, Ordering::SeqCst);
+    pub fn start_listing(&self, id: ListingId) -> ListingJob {
+        self.entries.start_listing(id)
     }
 }
 
 impl Drop for Client {
     fn drop(&mut self) {
-        self.cancel_listing();
         self.current_search.store(NO_LISTING, Ordering::SeqCst);
         self.current_preview.cancel();
     }
 }
 
-pub struct ListingJob {
-    id: ListingId,
-    events: Arc<dyn EventSink>,
-    current: Arc<AtomicU64>,
-    details: Option<Arc<details_queue::Queue>>,
-    thumbnails: Option<Arc<Queue>>,
-}
-
-impl ListingJob {
-    pub fn cancelled(&self) -> bool {
-        self.current.load(Ordering::SeqCst) != self.id.0
+impl RowWatch for Queue {
+    fn show(&self, listing: &Listing, current: &dyn Fn() -> bool) {
+        Self::show(self, listing, current);
     }
 
-    pub fn answer(&self, event: Event) {
-        if !self.cancelled() {
-            self.events.deliver(event).ok();
-        }
-    }
-
-    pub fn send(&self, listing: Listing) {
-        self.send_known(listing, None);
-    }
-
-    pub fn send_known(&self, listing: Listing, known: Option<Arc<[Details]>>) {
-        if self.cancelled() {
-            return;
-        }
-        let current = || !self.cancelled();
-        if let Some(queue) = &self.details {
-            queue.show(&listing, known, current);
-        }
-        if let Some(queue) = &self.thumbnails {
-            queue.show(&listing, current);
-        }
-        self.events.deliver(Event::FolderListed(listing)).ok();
-    }
-}
-
-impl Client {
-    pub fn start_listing(&self, id: ListingId) -> ListingJob {
-        self.current_listing.store(id.0, Ordering::SeqCst);
-        ListingJob {
-            id,
-            events: Arc::clone(&self.events),
-            current: Arc::clone(&self.current_listing),
-            details: self.details.clone(),
-            thumbnails: self.thumbnails.clone(),
-        }
+    fn want(&self, id: ListingId, first: EntryId, count: u32, size: Option<ThumbnailSize>) {
+        Self::want(self, id, first, count, size);
     }
 }
 
@@ -238,7 +186,7 @@ pub fn open_file(
     path: PathBuf,
     activation: Option<String>,
 ) {
-    let events = Arc::clone(&client.events);
+    let events = Arc::clone(client.events());
     let failed_path = path.clone();
     let spawned = thread::Builder::new()
         .name(OPEN_THREAD.to_owned())
@@ -271,29 +219,4 @@ fn opened_copy(path: &Path, inside: &Inside) -> Option<Result<PathBuf, ArchiveFa
         return None;
     }
     inside::within(path).map(|within| inside.take_out(&within))
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::mpsc;
-
-    use super::*;
-
-    #[test]
-    fn a_replaced_listing_answers_nothing() {
-        let (sender, events) = mpsc::channel::<Event>();
-        let client = Client::new(Arc::new(sender), None, &FileIcons::plain());
-        let older = client.start_listing(ListingId(1));
-        let newer = client.start_listing(ListingId(2));
-
-        assert!(older.cancelled());
-        assert!(!newer.cancelled());
-        older.answer(Event::FolderListed(Listing {
-            id: ListingId(1),
-            path: PathBuf::from("/"),
-            entries: Arc::new([]),
-            folders: None,
-        }));
-        assert!(events.try_recv().is_err());
-    }
 }

@@ -8,6 +8,7 @@ use nova_files_drives_api::{Command as DrivesCommand, DriveOffer, Event as Drive
 use nova_files_drives_core::{Store as DrivesStore, disk_space};
 use nova_files_messages::{Routed, Routes};
 use nova_files_settings_api as settings_api;
+use nova_files_settings_core::Store as SettingsStore;
 use nova_files_trash_api as trash_api;
 
 use crate::file_icons::FileIcons;
@@ -22,7 +23,6 @@ use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
 use crate::search::Searcher;
-use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
 use crate::trash;
