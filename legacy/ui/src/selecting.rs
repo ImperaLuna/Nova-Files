@@ -1,5 +1,5 @@
 use gpui::{ClickEvent, Context, KeyDownEvent};
-use nova_files_api::{Command, EntryId, EntryKind, Listing, ListingId};
+use nova_files_api::{EntryId, EntryKind, Listing, ListingId};
 
 use crate::jump;
 use crate::selection::{Click, Move, Selection, entry_at};

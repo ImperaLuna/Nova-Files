@@ -68,7 +68,7 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         match command {
             open_api::Command::OpenFile { path, activation } => {
                 let opening = (Arc::clone(&setup.mime_types), Arc::clone(&setup.inside));
-                jobs::open_file(client, opening, path, activation);
+                crate::jobs::open_file(client, opening, path, activation);
             }
             open_api::Command::OpenWith(request) => {
                 setup.open_with.answer(client.events(), request);

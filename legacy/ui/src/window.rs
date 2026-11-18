@@ -55,8 +55,8 @@ use nova_files_api::{
     Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
     Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
-use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
 use nova_files_open_api as open_api;
+use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
 use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;

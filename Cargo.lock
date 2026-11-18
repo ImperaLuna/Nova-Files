@@ -3584,6 +3584,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-dbus",
+ "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-shell",
  "nova-files-trash-api",
@@ -3609,6 +3610,7 @@ dependencies = [
  "lzma-rust2",
  "nova-files-api",
  "nova-files-core",
+ "nova-files-open-api",
  "rustix 1.1.6",
  "tar",
  "zip",
@@ -3626,6 +3628,7 @@ dependencies = [
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
+ "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-trash-api",
  "nova-files-trash-core",
@@ -3644,6 +3647,7 @@ dependencies = [
  "futures",
  "nova-files-api",
  "nova-files-core",
+ "nova-files-open-api",
  "nova-files-picker-api",
  "rustix 1.1.6",
  "zbus",
@@ -3681,6 +3685,10 @@ version = "0.1.0"
 dependencies = [
  "log",
 ]
+
+[[package]]
+name = "nova-files-open-api"
+version = "0.1.0"
 
 [[package]]
 name = "nova-files-picker-api"
@@ -3742,6 +3750,7 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
+ "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-shell",
  "nova-files-trash-api",

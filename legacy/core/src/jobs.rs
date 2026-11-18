@@ -4,8 +4,8 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
-    ClientGone, Details, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId,
-    Order, ThumbnailSize, Unreadable,
+    ClientGone, Details, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, Order,
+    ThumbnailSize, Unreadable,
 };
 
 use nova_files_open_api::{self as open_api, NotOpened};
@@ -260,6 +260,7 @@ pub fn open_file(
     if let Err(error) = spawned {
         log::warn!("can't start a thread to open a file: {error}");
         client
+            .events
             .deliver(open_api::Event::NotOpened {
                 path: failed_path,
                 reason: NotOpened::Failed,

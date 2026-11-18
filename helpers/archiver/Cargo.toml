@@ -4,7 +4,16 @@
 # makes them) for the core, locked in so that a hostile archive can't
 # reach anything but what it is given.
 #
-# Allowed outside crates: bzip2, chrono, flate2, landlock, lzma-rust2, rustix, tar, zip, zstd
+# Allowed outside crates:
+# - bzip2
+# - chrono
+# - flate2
+# - landlock
+# - lzma-rust2
+# - rustix
+# - tar
+# - zip
+# - zstd
 # Allowed workspace crates: none
 
 [package]
@@ -43,3 +52,4 @@ zstd = { version = "0.14", default-features = false }
 # The tests run the helper the way the core does, and jobs through a core.
 nova-files-api.workspace = true
 nova-files-core.workspace = true
+nova-files-open-api.workspace = true

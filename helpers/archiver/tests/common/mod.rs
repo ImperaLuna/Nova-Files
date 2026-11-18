@@ -5,8 +5,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_api::{
-    ClientGone, Command, Conflict, Connection, Envelope, Event, EventSink, JobId, JobTag,
-    Message, Operation, Outcome, Tally,
+    ClientGone, Command, Conflict, Connection, Envelope, Event, EventSink, JobId, JobTag, Message,
+    Operation, Outcome, Tally,
 };
 use nova_files_core::{Archiver, Home, IDLE_EXIT, RunningCore};
 
