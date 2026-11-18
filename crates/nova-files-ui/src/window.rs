@@ -171,6 +171,8 @@ pub struct MainWindow {
     rows_wanted: Range<usize>,
     /// The rows the list drew last; see [`Self::rows_drawn`].
     pub(crate) rows_drawn: Range<usize>,
+    /// What the view's layout keeps between frames.
+    sizing: views::Sizing,
     /// What is selected, and the row the keyboard is on (see `selecting`).
     pub(crate) selection: Option<Selection>,
     /// The letters typed to jump to a name (see `jump`).
@@ -345,6 +347,7 @@ impl MainWindow {
             thumbnails: ShownThumbnails::default(),
             rows_wanted: 0..0,
             rows_drawn: 0..0,
+            sizing: views::Sizing::default(),
             selection: None,
             jump: TypeJump::default(),
             quick_looks: QuickLooks::default(),

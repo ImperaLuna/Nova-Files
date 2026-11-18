@@ -41,6 +41,8 @@ mod actions {
             SelectPageDown,
             SelectFirst,
             SelectLast,
+            SelectLeft,
+            SelectRight,
             SelectAll,
             ToggleSelected,
             ClearSelection,
@@ -148,6 +150,8 @@ pub const ACTIONS: &[ActionSpec] = &[
     SELECT_PAGE_DOWN,
     SELECT_FIRST,
     SELECT_LAST,
+    SELECT_LEFT,
+    SELECT_RIGHT,
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
@@ -225,6 +229,22 @@ spec!(
     "select.down",
     "Select next",
     ["shift-down"]
+);
+spec!(
+    /// In Icons, adds the entry before to the selection.
+    SELECT_LEFT,
+    SelectLeft,
+    "select.left",
+    "Select left",
+    ["shift-left"]
+);
+spec!(
+    /// In Icons, adds the entry after to the selection.
+    SELECT_RIGHT,
+    SelectRight,
+    "select.right",
+    "Select right",
+    ["shift-right"]
 );
 spec!(
     SELECT_PAGE_UP,

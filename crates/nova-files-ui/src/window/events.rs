@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{Context, ScrollStrategy, UniformListScrollHandle};
+use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{
     Bookmark, Event, Listing, ListingId, Settings, Theme, Thumbnails, Unreadable,
 };
@@ -70,7 +70,7 @@ impl MainWindow {
         if (!same_folder || reordered || made)
             && let Some(cursor) = self.cursor()
         {
-            self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
+            self.scroll_to_entry(cursor);
         }
         cx.emit(WindowEvent::Opened(path));
         cx.notify();

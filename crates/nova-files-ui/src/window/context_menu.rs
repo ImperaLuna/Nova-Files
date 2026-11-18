@@ -189,17 +189,18 @@ impl MainWindow {
         ]
     }
 
-    /// Just under the row the keyboard is on, kept within the list.
+    /// Just under the entry the keyboard is on, kept within the list.
     fn under_cursor(&self) -> Point<Pixels> {
+        let grid = self.grid();
         let state = self.scroll.0.borrow();
         let list = state.base_handle.bounds();
         let scrolled = state.base_handle.offset().y;
-        let row = self.cursor().unwrap_or_default();
-        // Rows are counted in screens of a few thousand at most.
-        #[expect(clippy::cast_precision_loss, reason = "a row index fits in f32")]
-        let below = size::ROW_HEIGHT * (row as f32 + 1.0);
+        let entry = self.cursor().unwrap_or_default();
+        #[expect(clippy::cast_precision_loss, reason = "a line index fits in f32")]
+        let (line, column) = (grid.line_of(entry) as f32, grid.column_of(entry) as f32);
+        let below = grid.cell.height * (line + 1.0);
         let y = (list.top() + scrolled + below).clamp(list.top(), list.bottom());
-        point(list.left() + size::ROW_PAD, y)
+        point(list.left() + grid.cell.width * column + size::ROW_PAD, y)
     }
 
     /// The top left of the list.

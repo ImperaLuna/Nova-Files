@@ -15,7 +15,7 @@ use nova_files_api::{
 
 use super::MainWindow;
 use crate::columns::{self, ColumnText};
-use crate::theme::size;
+use crate::grid::Grid;
 use crate::view::{RowIcon, entry_kind};
 use crate::{theme_icons, thumbnail};
 
@@ -164,18 +164,34 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// The list drew rows `range`. It also draws its first row alone, each
-    /// frame, to measure it; asking for that row alone would swap
-    /// the request back and forth every frame, and each answer would draw
-    /// another frame. The rows on screen are the last range drawn, so the
-    /// request waits until the frame is done.
+    /// The list drew `lines`, laid out as `drawn`. It also draws its first
+    /// line alone, each frame, to measure it; asking for that line alone
+    /// would swap the request back and forth every frame, and each answer
+    /// would draw another frame. The rows on screen are those of the last
+    /// lines drawn, so the request waits until the frame is done.
+    ///
+    /// The list is laid out across its width when it last drew, which is
+    /// known only once it is drawing; if that width now lays it out
+    /// otherwise, the window draws again, the cursor kept in view.
     pub(crate) fn rows_drawn(
         &mut self,
-        range: Range<usize>,
+        (lines, drawn): (Range<usize>, Grid),
         window: &Window,
         cx: &mut Context<Self>,
     ) {
-        self.rows_drawn = range;
+        self.sizing.list_width = self.scroll.0.borrow().base_handle.bounds().size.width;
+        let grid = self.grid();
+        if grid.relaid(&drawn) {
+            if let Some(cursor) = self.cursor() {
+                self.scroll_to_entry(cursor);
+            }
+            cx.notify();
+        }
+        let len = self
+            .listing
+            .as_ref()
+            .map_or(0, |listing| listing.entries.len());
+        self.rows_drawn = drawn.entries_of(&lines, len);
         cx.defer_in(window, |this, window, cx| {
             this.show_rows(this.rows_drawn.clone(), window, cx);
         });
@@ -211,21 +227,19 @@ impl MainWindow {
         self.rows_wanted = wanted;
     }
 
-    /// The window is drawing at `scale_factor`. Thumbnails shrunk for
-    /// another scale (the window moved to another screen) are dropped and
-    /// asked for again: an empty request first, so the core sends them anew.
-    /// Theme icons are dropped and made again from the icons the rows have.
-    /// Called each frame, so the same scale returns at once.
+    /// The window is drawing at `scale_factor`, its icons as big as the
+    /// view on screen draws them. Thumbnails shrunk to another size (the
+    /// window moved to another screen, or the view or its icons' size
+    /// changed) are dropped and asked for again: an empty request first,
+    /// so the core sends them anew. Theme icons are dropped and made again
+    /// from the icons the rows have. Called each frame, so the same sizes
+    /// return at once.
     pub fn set_scale_factor(
         &mut self,
         scale_factor: f32,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if scale_factor.to_bits() == self.scale_factor.to_bits() {
-            return;
-        }
-        let before = self.thumbnail_side();
         self.scale_factor = scale_factor;
         if let Some(gone) = self.theme_icons.resize(self.icon_side()) {
             release(gone, Some(window), cx);
@@ -236,9 +250,11 @@ impl MainWindow {
                 .collect();
             self.make_theme_icons(icons.iter(), cx);
         }
-        if self.thumbnail_side() == before {
+        let side = self.thumbnail_side();
+        if side == self.sizing.thumbnails_side {
             return;
         }
+        self.sizing.thumbnails_side = side;
         release(self.thumbnails.take_all(), Some(window), cx);
         self.forget_rows();
     }
@@ -264,7 +280,7 @@ impl MainWindow {
 
     /// A theme icon's side in device pixels at the current scale.
     fn icon_side(&self) -> u32 {
-        thumbnail::device_side(size::ROW_ICON, self.scale_factor)
+        thumbnail::device_side(self.icon_slot(), self.scale_factor)
     }
 
     /// The size of thumbnail the core sends: the smallest that fills a
@@ -275,7 +291,7 @@ impl MainWindow {
 
     /// A thumbnail's side in device pixels at the current scale.
     fn thumbnail_side(&self) -> u32 {
-        thumbnail::device_side(size::THUMBNAIL, self.scale_factor)
+        thumbnail::device_side(self.icon_slot(), self.scale_factor)
     }
 
     /// A thumbnail for `entry` of listing `id` at `size` arrived from the
