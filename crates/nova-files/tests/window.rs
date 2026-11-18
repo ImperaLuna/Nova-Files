@@ -10,8 +10,9 @@
 //! `window_jump`, the path bar in `window_path`, the sidebar in
 //! `window_sidebar`, the quick look in `window_preview`, the island
 //! and its file actions in `window_island`, tabs in `window_tabs`,
-//! dragging files in `window_drag`, and Games and Projects in
-//! `window_gathered`.
+//! dragging files in `window_drag`, Games and Projects in
+//! `window_gathered`, and the Properties page in `window_properties` (its
+//! Opens with in `window_opens_with`).
 
 #![expect(
     clippy::unwrap_used,
@@ -26,6 +27,7 @@ mod window_gathered;
 mod window_island;
 mod window_jump;
 mod window_keys;
+mod window_opens_with;
 mod window_path;
 mod window_preview;
 mod window_properties;
@@ -45,7 +47,7 @@ use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, px};
 use nova_files_api::{
     Color, EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest, Thumbnails,
 };
-use nova_files_ui::{Colors, CoreStatus, Location, MainWindow, WindowEvent};
+use nova_files_ui::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent};
 
 use common::{TempFolder, Watchdog, click_with, double_click};
 

@@ -179,6 +179,7 @@ impl MainWindow {
             }
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
+            Event::OpenWith(answer) => self.open_with_answered(answer, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
             event @ (Event::JobProgress { .. }
@@ -203,7 +204,6 @@ impl MainWindow {
             | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. }
-            | Event::OpenWith(_)
             | Event::SpaceMeasured { .. }
             | Event::SpaceUnreadable { .. } => {}
             Event::Gathered(gathered) => self.gathered_arrived(gathered, cx),

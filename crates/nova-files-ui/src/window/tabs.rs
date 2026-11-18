@@ -416,6 +416,7 @@ impl MainWindow {
         } else if self.properties_paths().is_some() {
             self.ask_properties();
             self.measure();
+            self.ask_apps();
         }
         cx.notify();
     }

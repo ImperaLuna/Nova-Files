@@ -34,6 +34,8 @@ pub struct Page {
     items: Vec<Item>,
     /// What is under its paths, as measured so far (see `measuring`).
     pub(super) measure: Option<super::measuring::Measure>,
+    /// The apps that open its lone path (see `opens_with`).
+    pub(super) opens_with: super::opens_with::OpensWith,
     /// The item each request out is for, by its id.
     asked: HashMap<PropertiesId, usize>,
     /// How many items are gone.
@@ -65,6 +67,7 @@ impl Page {
             asked: HashMap::new(),
             gone: 0,
             measure: None,
+            opens_with: super::opens_with::OpensWith::default(),
         }
     }
 
@@ -145,6 +148,7 @@ impl MainWindow {
         self.history.arrived(&Location::Properties(paths.to_vec()));
         self.ask_properties();
         self.measure();
+        self.ask_apps();
         cx.notify();
     }
 
