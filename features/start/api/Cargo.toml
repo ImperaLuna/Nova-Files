@@ -1,0 +1,23 @@
+# nova-files-start-api
+#
+# The folders a person opened lately, and what the Start page's two halves
+# say to each other about them: its command and its event.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
+
+[package]
+name = "nova-files-start-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

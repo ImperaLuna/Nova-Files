@@ -3589,6 +3589,7 @@ dependencies = [
  "nova-files-places-api",
  "nova-files-settings-api",
  "nova-files-shell",
+ "nova-files-start-api",
  "nova-files-trash-api",
  "nova-files-ui",
  "zbus",
@@ -3658,6 +3659,8 @@ dependencies = [
  "nova-files-rename-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
+ "nova-files-start-api",
+ "nova-files-start-core",
  "nova-files-thumbnailer-launch",
  "nova-files-transfer-core",
  "nova-files-trash-api",
@@ -3814,6 +3817,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-start-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-start-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-entries-core",
+ "nova-files-messages",
+ "nova-files-start-api",
+]
+
+[[package]]
 name = "nova-files-thumbnailer"
 version = "0.1.0"
 dependencies = [
@@ -3882,6 +3904,7 @@ dependencies = [
  "nova-files-places-api",
  "nova-files-settings-api",
  "nova-files-shell",
+ "nova-files-start-api",
  "nova-files-trash-api",
  "unicode-segmentation",
  "usvg",

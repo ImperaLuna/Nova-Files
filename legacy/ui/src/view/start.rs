@@ -10,7 +10,8 @@ use gpui::{
     Pixels, Radians, SharedString, StatefulInteractiveElement as _, Styled as _, Transformation,
     div, linear_color_stop, linear_gradient, prelude::FluentBuilder as _, svg,
 };
-use nova_files_api::{EntryKind, Peeked, RecentFolder};
+use nova_files_api::EntryKind;
+use nova_files_start_api::{Peeked, RecentFolder};
 
 use super::row::{RowIcon, entry_icon, icon, kind_glyph};
 use crate::assets::Icon;

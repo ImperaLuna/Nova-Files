@@ -55,12 +55,13 @@ use gpui::{
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView, Gathering,
-    HiddenFiles, Listing, ListingId, Order, RecentFolder, RecentId,
+    HiddenFiles, Listing, ListingId, Order,
 };
 use nova_files_drives_api as drives_api;
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
+use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;
@@ -339,6 +340,12 @@ impl MainWindow {
         let envelope = match envelope.open::<settings_api::Event>() {
             Ok(settings_api::Event::Settings(settings)) => {
                 return self.settings_arrived(settings, cx);
+            }
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<start_api::Event>() {
+            Ok(start_api::Event::RecentFolders { id, folders }) => {
+                return self.recent_arrived(id, folders, cx);
             }
             Err(envelope) => envelope,
         };

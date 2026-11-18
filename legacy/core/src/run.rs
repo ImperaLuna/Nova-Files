@@ -12,6 +12,8 @@ use nova_files_places_api as places_api;
 use nova_files_places_core::Store as PlacesStore;
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
+use nova_files_start_api as start_api;
+use nova_files_start_core::Store as RecentStore;
 use nova_files_trash_api as trash_api;
 
 use crate::file_icons::FileIcons;
@@ -23,7 +25,6 @@ use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
-use crate::recent::Store as RecentStore;
 use crate::search::Searcher;
 use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
@@ -78,6 +79,16 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| {
+        match command {
+            start_api::Command::FolderUsed(folder) => setup.recent.used(folder),
+            start_api::Command::RecentFolders { id, count, skip } => {
+                let count = usize::try_from(count).unwrap_or(usize::MAX);
+                setup.recent.answer(client.events(), id, count, skip);
+            }
+        }
+        Ok(())
+    })?;
     routes.on(|setup: &Setup, _, client: &Client, command| match command {
         trash_api::Command::List => {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
@@ -97,6 +108,7 @@ pub fn emitted_types() -> Vec<MessageType> {
         MessageType::of::<DrivesEvent>(),
         MessageType::of::<places_api::Event>(),
         MessageType::of::<settings_api::Event>(),
+        MessageType::of::<start_api::Event>(),
         MessageType::of::<trash_api::Event>(),
     ]
 }
@@ -196,9 +208,7 @@ fn answer(
         | Command::Properties { .. }
         | Command::Preview { .. }
         | Command::OpenFile { .. }
-        | Command::OpenWith(_)
-        | Command::FolderUsed(_)
-        | Command::RecentFolders { .. }) => {
+        | Command::OpenWith(_)) => {
             folders::answer(id, client, command, setup);
             Ok(())
         }

@@ -14,7 +14,6 @@ use crate::job::{
 use crate::open_with::{NotOpened, OpenWith, OpenWithAnswer};
 use crate::preview::{Fit, Preview, PreviewId};
 use crate::properties::{Properties, PropertiesId};
-use crate::recent::{RecentFolder, RecentId};
 use crate::search::{Hit, SearchFailed, SearchId};
 use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::theme::{DesktopLook, Theme};
@@ -161,18 +160,6 @@ pub enum Command {
     /// change. The core takes the first one installed when the toolkits'
     /// settings files name none; nothing answers.
     DesktopIconThemes(Vec<String>),
-    /// A person opened `folder` (an absolute path); it goes first among the
-    /// recent folders. Nothing answers.
-    FolderUsed(PathBuf),
-    /// Ask for the newest `count` recent folders that can still be read,
-    /// leaving out those in `skip` (the ones a client already shows
-    /// elsewhere). The answer is [`Event::RecentFolders`] with the same
-    /// `id`.
-    RecentFolders {
-        id: RecentId,
-        count: u32,
-        skip: Vec<PathBuf>,
-    },
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -347,12 +334,6 @@ pub enum Event {
     /// client that asked whenever it changes: from the theme file, or the
     /// appearance setting.
     Theme(Arc<Theme>),
-    /// The recent folders, answering [`Command::RecentFolders`] `id`,
-    /// newest first.
-    RecentFolders {
-        id: RecentId,
-        folders: Vec<RecentFolder>,
-    },
     /// [`Command::DropWould`] `id`'s drop would `kind` its files. Only the
     /// client that asked hears it.
     DropWould { id: DropAskId, kind: DropKind },

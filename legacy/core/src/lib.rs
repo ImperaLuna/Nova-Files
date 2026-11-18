@@ -14,7 +14,6 @@ mod open;
 mod ops;
 mod preview;
 mod properties;
-mod recent;
 mod run;
 mod search;
 mod theme;
@@ -112,7 +111,7 @@ pub fn spawn_with_archiver(
             let places = nova_files_places_core::Store::open(home.clone());
             let gathered = gathered::Store::open(home.clone());
             let state_home = home.as_ref().map(|home| home.state.as_path());
-            let recent = recent::Store::open(state_home);
+            let recent = nova_files_start_core::Store::open(state_home);
             let folder_views = folder_views::Store::open(state_home);
             let mime_types = Arc::default();
             let file_icons = Arc::new(file_icons::FileIcons::from_env(

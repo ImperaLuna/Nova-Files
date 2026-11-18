@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-use nova_files_api::{Command, Connector, Event, RecentId};
+use nova_files_api::Connector;
+use nova_files_start_api::{Command, Event, RecentId};
 
 use super::*;
 
@@ -44,12 +45,8 @@ fn recent_folders(connector: &Connector) -> Vec<PathBuf> {
             skip: Vec::new(),
         })
         .unwrap();
-    match events.recv_timeout(common::WAIT).unwrap() {
-        Event::RecentFolders { folders, .. } => {
-            folders.into_iter().map(|folder| folder.path).collect()
-        }
-        other => vec![PathBuf::from(format!("not the recent folders: {other:?}"))],
-    }
+    let Event::RecentFolders { folders, .. } = events.recv_timeout(common::WAIT).unwrap();
+    folders.into_iter().map(|folder| folder.path).collect()
 }
 
 #[gpui::test]

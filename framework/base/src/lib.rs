@@ -8,7 +8,7 @@
 //! as [`CoreMessage`]s. File
 //! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
 //! quick look shows of a file or folder. A [`Size`] is what a scan of files
-//! and folders counted. A [`RecentFolder`] is one a person opened lately, for the Start page.
+//! and folders counted.
 //! [`Gathered`] folders make up the Games and Projects places. A
 //! [`FolderView`] is how a folder is shown. A [`FileIcon`] is how an
 //! entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
@@ -28,7 +28,6 @@ mod message;
 mod open_with;
 mod preview;
 mod properties;
-mod recent;
 mod search;
 mod size;
 mod theme;
@@ -60,7 +59,6 @@ pub use preview::{
     PreviewId,
 };
 pub use properties::{Account, PathKind, Properties, PropertiesId};
-pub use recent::{MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};

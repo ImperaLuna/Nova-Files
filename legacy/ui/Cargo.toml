@@ -22,6 +22,7 @@
 # - nova-files-places-api
 # - nova-files-settings-api
 # - nova-files-shell
+# - nova-files-start-api
 # - nova-files-trash-api
 
 [package]
@@ -45,6 +46,7 @@ nova-files-picker-api.workspace = true
 nova-files-places-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
+nova-files-start-api.workspace = true
 nova-files-trash-api.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }

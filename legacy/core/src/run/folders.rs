@@ -52,11 +52,6 @@ pub(super) fn answer(id: ClientId, client: &Client, command: Command, setup: &Se
             jobs::open_file(client, opening, path, activation);
         }
         Command::OpenWith(request) => setup.open_with.answer(client.events(), request),
-        Command::FolderUsed(folder) => setup.recent.used(folder),
-        Command::RecentFolders { id, count, skip } => {
-            let count = usize::try_from(count).unwrap_or(usize::MAX);
-            setup.recent.answer(client.events(), id, count, skip);
-        }
         _ => {}
     }
 }

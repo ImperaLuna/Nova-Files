@@ -6,16 +6,42 @@
 //! [`Command::RecentFolders`] and hears [`Event::RecentFolders`]: the
 //! newest first, each still a folder that can be read, with a peek at its
 //! first few entries.
-//!
-//! [`Command::FolderUsed`]: crate::Command::FolderUsed
-//! [`Command::RecentFolders`]: crate::Command::RecentFolders
-//! [`Event::RecentFolders`]: crate::Event::RecentFolders
+
+#![forbid(unsafe_code)]
 
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use crate::folder::EntryKind;
+use nova_files_api::EntryKind;
+
+/// What a client asks of the Start page's recent folders.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    /// A person opened `folder` (an absolute path); it goes first among the
+    /// recent folders. Nothing answers.
+    FolderUsed(PathBuf),
+    /// Ask for the newest `count` recent folders that can still be read,
+    /// leaving out those in `skip` (the ones a client already shows
+    /// elsewhere). The answer is [`Event::RecentFolders`] with the same
+    /// `id`.
+    RecentFolders {
+        id: RecentId,
+        count: u32,
+        skip: Vec<PathBuf>,
+    },
+}
+
+/// What the recent folders tell a client.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Event {
+    /// The recent folders, answering [`Command::RecentFolders`] `id`,
+    /// newest first.
+    RecentFolders {
+        id: RecentId,
+        folders: Vec<RecentFolder>,
+    },
+}
 
 /// Names one ask for the recent folders. The client picks it; the core
 /// echoes it, so a client that asked twice keeps the newest answer.

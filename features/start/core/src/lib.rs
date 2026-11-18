@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fs;
@@ -7,15 +9,16 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use nova_files_api::{
-    EntryKind, Event, EventSink, MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId,
-};
-
-use crate::list;
-use crate::private_file::{self, Read};
-use crate::saver::Saver;
-use crate::timed;
+use nova_files_api::EntryKind;
+use nova_files_disk::private_file::{self, Read};
+use nova_files_disk::saver::Saver;
 use nova_files_disk::stored_path::{END, MAX_PATH, fits};
+use nova_files_disk::timed;
+use nova_files_entries_core::list;
+use nova_files_messages::EventSink;
+use nova_files_start_api::{
+    Event, MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId,
+};
 
 const FILE: &str = "nova-files/recent-folders";
 const HEADER: &[u8] = b"nova-files recent-folders 1\n";
