@@ -37,18 +37,15 @@ fn time_left_reads_in_seconds_minutes_and_hours_rounded_up() {
 fn time_left_comes_from_the_speed_since_the_totals_were_known() {
     let start = Instant::now();
     let mut job = Running::new(copy(&["a", "b"]), start);
-    // Looking at what to do: no totals yet.
     job.advanced(progress(0, 0, 0, 0), start + Duration::from_secs(5));
     assert_eq!(job.counted_from, None);
     let counted = start + Duration::from_secs(10);
     job.advanced(progress(100, 1000, 0, 2), counted);
-    // Too soon to say.
     job.advanced(
         progress(200, 1000, 0, 2),
         counted + Duration::from_millis(500),
     );
     assert_eq!(job.time_left(counted + Duration::from_millis(500)), None);
-    // 200 bytes in 2 s: the 700 left take 7 s.
     let now = counted + Duration::from_secs(2);
     job.advanced(progress(300, 1000, 1, 2), now);
     assert_eq!(job.time_left(now), Some(Duration::from_secs(7)));
@@ -110,7 +107,6 @@ fn nothing_done_since_the_count_gives_no_time() {
     let later = start + Duration::from_secs(5);
     job.advanced(progress(500, 1000, 1, 2), later);
     assert_eq!(job.time_left(later), None);
-    // A clock read before the count began gives none either.
     assert_eq!(
         job.time_left(start.checked_sub(Duration::from_secs(1)).unwrap()),
         None

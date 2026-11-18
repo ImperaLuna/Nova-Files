@@ -1,17 +1,3 @@
-//! The Properties page, drawn on the sheet in place of the rows, built
-//! from the Start page's parts: its column, cards, labels and spacing.
-//!
-//! The top card has the drive card's layout: the icon, the name with one
-//! dim line under it (what it is and where), and the size large on the
-//! right. Several items show a fan of their kinds, how many they are and
-//! where. Under it, for one item, three small cards say when it was
-//! modified, made and last opened, each a date over its name; a date the
-//! drive doesn't keep has no card. Then a lone file's Opens with (see
-//! `opens_with`), and who may do what (see `access`). Until the core answers, the page is empty.
-//!
-//! Debug selectors: `properties` for the page, `properties-top` for the
-//! top card and `properties-date-<n>` for each date card shown.
-
 mod access;
 mod opens_with;
 
@@ -40,19 +26,15 @@ const CREATED_LABEL: &str = "Created";
 const OPENED_LABEL: &str = "Opened";
 const LINK_LABEL: &str = "Link";
 const SPECIAL_LABEL: &str = "Special file";
-/// A file whose name has no extension.
 const FILE_LABEL: &str = "File";
-/// Between what an item is and where it is.
 const SEPARATOR: &str = " · ";
 const FILE_WORD: &str = "file";
 const FILES_WORD: &str = "files";
 const FOLDER_WORD: &str = "folder";
 const FOLDERS_WORD: &str = "folders";
-/// Digits between two commas in a large count.
 const GROUP: usize = 3;
 
 impl MainWindow {
-    /// The Properties page `page`, filling the sheet.
     pub(super) fn properties_view(
         &self,
         page: &PropertiesPage,
@@ -90,7 +72,6 @@ impl MainWindow {
             )
     }
 
-    /// The first group: the top card, and the dates of a lone item.
     fn about(&self, read: &[Arc<Properties>], colors: &Colors) -> AnyElement {
         let head = match read {
             [one] => {
@@ -116,23 +97,15 @@ impl MainWindow {
             .into_any_element()
     }
 
-    /// What the top card of the page on screen says, once it has its
-    /// answers.
     pub fn properties_top(&self) -> Option<TopFacts> {
         let read = self.properties_page()?.read();
         (!read.is_empty()).then(|| self.top_of(&read))
     }
 
-    /// The top card's name and the dim line under it, once the page on
-    /// screen has its answers.
     pub fn properties_titles(&self) -> Option<(String, String)> {
         self.properties_top().map(|top| (top.name, top.line))
     }
 
-    /// What the top card says of `read`: a lone folder's name, where and
-    /// what it holds, its size and its share of the drive; a lone file's
-    /// name, what it is and where, and its size; or how many items there
-    /// are, of what, where, and their size.
     fn top_of(&self, read: &[Arc<Properties>]) -> TopFacts {
         let measured = self.measured().map(|measure| measure.shown());
         let amount = measured.map(|size| columns::size(size.bytes));
@@ -161,7 +134,6 @@ impl MainWindow {
         }
     }
 
-    /// What several items are and where: "2 folders, 3 files · ~/Downloads".
     fn several_line(&self, read: &[Arc<Properties>]) -> String {
         let folders = read
             .iter()
@@ -177,15 +149,11 @@ impl MainWindow {
         }
     }
 
-    /// How much of its drive `size`, measured under `path`, takes, from 0
-    /// to 1, once the drive's size is known.
     fn share_of_drive(&self, path: &Path, size: Size) -> Option<f32> {
         let space = self.drive_space_of(path)?;
         share(size.on_disk, space.total)
     }
 
-    /// The icon of the lone path a Properties page shows, once read: its
-    /// kind's, or `None` for a folder, whose own icon stays.
     pub fn properties_icon(&self) -> Option<Icon> {
         match &self.properties_page()?.read()[..] {
             [one] if one.kind != PathKind::Folder => Some(lone_glyph(one)),
@@ -194,22 +162,15 @@ impl MainWindow {
     }
 }
 
-/// What the top card of a Properties page says.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopFacts {
     pub name: String,
-    /// The dim line under the name.
     pub line: String,
-    /// The size, large on the right, once known.
     pub amount: Option<String>,
-    /// Whether it has a bar: a folder's, for its share of the drive.
     pub has_bar: bool,
-    /// The bar's share, from 0 to 1, once known.
     pub share: Option<f32>,
 }
 
-/// The top card, in the drive card's layout: `head` (an icon or a fan)
-/// and what `top` says.
 fn top_card(head: AnyElement, top: TopFacts, colors: &Colors) -> AnyElement {
     let row = div()
         .flex()
@@ -249,9 +210,6 @@ fn top_card(head: AnyElement, top: TopFacts, colors: &Colors) -> AnyElement {
         .into_any_element()
 }
 
-/// A folder's dim line: where it is, then what it holds once measured:
-/// "~/Projects · 18,240 files, 1,312 folders". The count of folders
-/// leaves out the folder itself.
 fn folder_line(place: &str, measured: Option<Size>) -> String {
     let Some(size) = measured else {
         return place.to_owned();
@@ -268,13 +226,11 @@ fn folder_line(place: &str, measured: Option<Size>) -> String {
     }
 }
 
-/// "1 file", "18,240 files".
 fn counted(number: u64, one: &str, many: &str) -> String {
     let word = if number == 1 { one } else { many };
     format!("{} {word}", grouped(number))
 }
 
-/// `number` with a comma between each three digits: "18,240".
 fn grouped(number: u64) -> String {
     let digits = number.to_string();
     let mut out = String::new();
@@ -287,7 +243,6 @@ fn grouped(number: u64) -> String {
     out
 }
 
-/// How much of `total` `part` is, from 0 to 1; `None` for an empty total.
 fn share(part: u64, total: u64) -> Option<f32> {
     #[expect(
         clippy::cast_precision_loss,
@@ -297,8 +252,6 @@ fn share(part: u64, total: u64) -> Option<f32> {
     ratio
 }
 
-/// The date cards of `one`, side by side: Modified, Created, Opened,
-/// each only when known. `None` when none is.
 fn date_cards(one: &Properties, colors: &Colors) -> Option<AnyElement> {
     let cards: Vec<AnyElement> = dates(one)
         .into_iter()
@@ -324,7 +277,6 @@ fn date_cards(one: &Properties, colors: &Colors) -> Option<AnyElement> {
     })
 }
 
-/// `one`'s dates as shown, with their names, leaving out those not known.
 fn dates(one: &Properties) -> Vec<(String, &'static str)> {
     [
         (one.modified, MODIFIED_LABEL),
@@ -336,13 +288,10 @@ fn dates(one: &Properties) -> Vec<(String, &'static str)> {
     .collect()
 }
 
-/// A date as a card shows it; `None` when not known or not writable.
 fn shown_date(time: Option<SystemTime>) -> Option<String> {
     time.map(columns::modified).filter(|date| !date.is_empty())
 }
 
-/// The kind of icon `one` gets: a folder's, or a file's by its name. A
-/// link or a device is a file of its own.
 fn lone_kind(one: &Properties) -> IconKind {
     match one.kind {
         PathKind::Folder => IconKind::Folder,
@@ -359,8 +308,6 @@ fn lone_tint(one: &Properties, colors: &Colors) -> gpui::Rgba {
     built_in(lone_kind(one), colors).1
 }
 
-/// The dim line under a lone item's name: what it is, then where. A
-/// folder needs no word for what it is; its icon says so.
 fn lone_line(one: &Properties, home: &Path) -> String {
     let place = where_is(&one.path, home);
     let what = match one.kind {
@@ -376,7 +323,6 @@ fn lone_line(one: &Properties, home: &Path) -> String {
     }
 }
 
-/// What a file is, by its name: "PNG image", "TXT document", "File".
 fn file_kind(name: &OsStr) -> String {
     let word = match icon_kind(name, EntryKind::File) {
         IconKind::Picture => "image",
@@ -392,15 +338,12 @@ fn file_kind(name: &OsStr) -> String {
     )
 }
 
-/// How wide a full fan is: its icons, each after the first tucked under
-/// the one before.
 fn fan_width() -> gpui::Pixels {
     #[expect(clippy::cast_precision_loss, reason = "a fan holds three icons")]
     let entries = FAN_ENTRIES as f32;
     start::FAN_ICON * entries - start::FAN_OVERLAP * (entries - 1.0)
 }
 
-/// Several items as a fan shows them: a folder or a file each.
 fn peeked(read: &[Arc<Properties>]) -> Vec<Peeked> {
     read.iter()
         .map(|one| Peeked {
@@ -508,7 +451,6 @@ mod tests {
             dates(&one),
             [(shown.clone(), MODIFIED_LABEL), (shown, OPENED_LABEL)]
         );
-        // A date past what can be written has no card.
         one.created = Some(UNIX_EPOCH + Duration::from_secs(1 << 62));
         assert_eq!(dates(&one).len(), 2);
     }

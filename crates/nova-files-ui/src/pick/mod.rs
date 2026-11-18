@@ -1,35 +1,3 @@
-//! Pick mode: the main window opened for another app's Open or Save
-//! dialog, with the pick bar along its bottom (see `bar`).
-//!
-//! The window holds the app's request and answers it once, then closes.
-//! Closing it any other way drops the request, which answers cancelled;
-//! the portal may close the request first, and [`close`] then closes its
-//! window.
-//!
-//! A click selects an entry and, for files, copies its name into the name
-//! box. A double-click on a file picks it in an Open dialog for files; in
-//! one for folders a double-click goes into the folder, since a click
-//! selects it. Enter in the name box, or the Open or Save button, reads
-//! what is typed (see `typed`): `~/`, `/etc` and other paths go there, a
-//! name in the folder on screen is opened, picked or saved at, and nothing
-//! typed picks the selection (or, for folders, the folder on screen). A
-//! save onto a file that is there asks in the bar: Replace, or Keep both
-//! under a numbered name, which Enter chooses.
-//!
-//! The window never touches the disk, so what is there is what the folder
-//! on screen lists, and a typed path is tried as a folder first: if the
-//! core can't list it, the window goes to the folder it is in instead,
-//! with its last part as the name. A save answers only from a fresh
-//! listing of its folder (see `save`). A name a click put in the box means
-//! the entry clicked, until the box is edited.
-//!
-//! The arrow keys, which the name box passes on, move through the
-//! entries as in a main window, and Enter with nothing typed goes into a
-//! folder they landed on. When the app asks for several entries,
-//! Ctrl+click and Shift+click select more (see `select`). The box then
-//! shows each file's name in quotes, and Open, while the box is
-//! unchanged, picks them all.
-
 mod accept;
 mod bar;
 mod filter;
@@ -59,14 +27,10 @@ use crate::selection::Click;
 use crate::text::{TextField, TextFieldEvent};
 use crate::window::MainWindow;
 
-/// What a picker is for, from what the app asked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    /// Files to open.
     Files,
-    /// A folder to open.
     Folders,
-    /// A place to save one file.
     Save,
 }
 
@@ -79,7 +43,6 @@ impl Mode {
         }
     }
 
-    /// The window title and the button's label when the app gives none.
     const fn label(self) -> &'static str {
         match self {
             Self::Files | Self::Folders => "Open",
@@ -88,8 +51,6 @@ impl Mode {
     }
 }
 
-/// The title bar of a picker for `request`, titled as the app asks or by
-/// what it is for; the portal lets an app leave the title out.
 pub fn titlebar(request: &PickRequest) -> TitlebarOptions {
     let title = if request.title.is_empty() {
         Mode::of(&request.kind).label()
@@ -102,7 +63,6 @@ pub fn titlebar(request: &PickRequest) -> TitlebarOptions {
     }
 }
 
-/// The label on the Open or Save button: the app's, or what it is for.
 pub fn accept_label(request: &PickRequest) -> String {
     request.accept_label.as_deref().map_or_else(
         || Mode::of(&request.kind).label().to_owned(),
@@ -110,9 +70,6 @@ pub fn accept_label(request: &PickRequest) -> String {
     )
 }
 
-/// GTK's mnemonic marks: `_` before the letter to underline (`_OK`), and
-/// `__` for an underscore itself. The bar has no mnemonics, so a single
-/// `_` goes.
 fn without_mnemonic(label: &str) -> String {
     let mut plain = String::with_capacity(label.len());
     let mut chars = label.chars();
@@ -131,50 +88,29 @@ fn without_mnemonic(label: &str) -> String {
 
 const MNEMONIC: char = '_';
 
-/// A window's pick: the app's request and the bar's state.
 pub struct Picker {
     request: Box<PickRequest>,
     mode: Mode,
-    /// The name box.
     pub name: Entity<TextField>,
-    /// A save onto a file that is there, waiting for Replace or Keep both.
     pub conflict: Option<Conflict>,
-    /// A typed path the window is going to.
     jump: Option<Jump>,
-    /// The entries clicks put in the name box and the text they put
-    /// there: while the box still holds that text, it means those entries,
-    /// whatever their names' bytes or spaces.
     copied: Option<(Vec<EntryId>, String)>,
-    /// A name the window put in the box, the app's suggestion or a typed
-    /// path's last part: until the user edits the box, it is that exact
-    /// name, never typed text to read again.
     placed: Option<OsString>,
-    /// A save waiting for a fresh listing of its folder (see `save`).
     recheck: Option<save::Recheck>,
-    /// The picker's window, to close once a save is answered from a
-    /// listing.
     window: AnyWindowHandle,
-    /// The type filter chosen, as an index into the app's filters; `None`
-    /// for All files.
     filter: Option<usize>,
-    /// Whether the filter menu is open.
     filter_menu: bool,
-    /// The window's size, kept as it changes.
     size: Size<Pixels>,
     _name_events: Subscription,
     _bounds: Subscription,
 }
 
-/// A save onto a file the folder on screen has.
 pub struct Conflict {
-    /// The file that is there.
     pub path: PathBuf,
-    /// The free name that keeps both.
     pub keep_both: OsString,
 }
 
 impl Picker {
-    /// What the picker picks: a range holds only these.
     pub const fn wanted(&self) -> EntryKind {
         match self.mode {
             Mode::Folders => EntryKind::Folder,
@@ -182,13 +118,10 @@ impl Picker {
         }
     }
 
-    /// Whether the app takes more than one entry.
     pub(crate) const fn several(&self) -> bool {
         matches!(self.request.kind, PickKind::Open { multiple: true, .. })
     }
 
-    /// The exact name the window put in the box, while the box still
-    /// shows it unedited.
     fn exact_name(&self, text: &str) -> Option<OsString> {
         self.placed
             .clone()
@@ -196,7 +129,6 @@ impl Picker {
     }
 }
 
-/// Whether `name` is one file name, not a path or a folder's dots.
 fn is_plain_name(name: &OsStr) -> bool {
     let mut parts = Path::new(name).components();
     matches!(
@@ -206,8 +138,6 @@ fn is_plain_name(name: &OsStr) -> bool {
 }
 
 impl MainWindow {
-    /// Puts the window in pick mode for `request`. A save starts with the
-    /// app's name in the box, the part before its extension selected.
     pub fn set_pick(
         &mut self,
         request: Box<PickRequest>,
@@ -227,7 +157,6 @@ impl MainWindow {
         let name_events =
             cx.subscribe_in(&name, window, |this, _, event, window, cx| match event {
                 TextFieldEvent::Submitted => this.accept(window, cx),
-                // Escape takes back a question first, then cancels.
                 TextFieldEvent::Cancelled => {
                     let asking = this
                         .pick
@@ -240,9 +169,6 @@ impl MainWindow {
                     cx.notify();
                 }
                 TextFieldEvent::Changed => {
-                    // A new name takes back the question, any save still
-                    // waiting on the old one, and the name a typed path
-                    // would leave in the box.
                     if let Some(pick) = &mut this.pick {
                         pick.conflict = None;
                         pick.recheck = None;
@@ -253,9 +179,6 @@ impl MainWindow {
                     cx.notify();
                 }
             });
-        // Only a plain suggestion is taken as it came: one with a `/`, or
-        // `.` or `..`, is read as typed, so a save never lands outside the
-        // folder on screen unasked.
         let placed = match &request.kind {
             PickKind::Save { name } if is_plain_name(name) => Some(name.clone()),
             _ => None,
@@ -281,31 +204,24 @@ impl MainWindow {
         });
     }
 
-    /// The request the window answers, while it is a picker that hasn't.
     pub fn pick_id(&self) -> Option<PickId> {
         self.pick.as_ref().map(|pick| pick.request.id)
     }
 
-    /// The listing on screen, which names the entries a pick refers to.
     pub fn listing_id(&self) -> Option<ListingId> {
         self.listing.as_ref().map(|listing| listing.id)
     }
 
-    /// The text in the picker's name box.
     pub fn pick_name(&self, cx: &App) -> Option<String> {
         let pick = self.pick.as_ref()?;
         Some(pick.name.read(cx).text().to_owned())
     }
 
-    /// The numbered name a save onto a file that is there would keep both
-    /// under, while the bar asks.
     pub fn pick_conflict(&self) -> Option<&OsStr> {
         let conflict = self.pick.as_ref()?.conflict.as_ref()?;
         Some(&conflict.keep_both)
     }
 
-    /// A click on the entry `id` of `listing`. Outside a picker a click
-    /// selects and a double-click opens (see `selecting`).
     pub fn entry_clicked(
         &mut self,
         (listing, id): (ListingId, EntryId),
@@ -327,8 +243,6 @@ impl MainWindow {
             (EntryKind::Folder, Mode::Folders, Click::Only) if double => self.open_entry(id),
             (EntryKind::Folder, Mode::Folders, _) => self.select(listing, id, click, cx),
             (EntryKind::Folder, _, Click::Only) => self.open_entry(id),
-            // Ctrl or Shift on a folder in a picker for files would lose
-            // the files selected, so it does nothing.
             (EntryKind::Folder, _, _) | (EntryKind::File, Mode::Folders, _) => {}
             (EntryKind::File, Mode::Files, Click::Only) if double => {
                 if self.pick_entry(listing, id) {
@@ -340,7 +254,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// The entry `id` of `listing`, while that listing is on screen.
     fn entry(&self, listing: ListingId, id: EntryId) -> Option<&Entry> {
         let shown = self.listing.as_ref().filter(|shown| shown.id == listing)?;
         usize::try_from(id.0)
@@ -348,10 +261,6 @@ impl MainWindow {
             .and_then(|index| shown.entries.get(index))
     }
 
-    /// Picks the file `id` of `listing` and answers an Open dialog for
-    /// files. Whether it answered, so the window can close. Nothing is
-    /// picked once another listing replaced that one, or while a folder
-    /// asked for is loading, since the user has already moved on.
     pub fn pick_entry(&mut self, listing: ListingId, id: EntryId) -> bool {
         if self.waiting() || self.pick.as_ref().map(|pick| pick.mode) != Some(Mode::Files) {
             return false;
@@ -366,20 +275,15 @@ impl MainWindow {
         self.answer(path)
     }
 
-    /// Cancel, or Escape in the name box: answers cancelled and closes.
     pub fn cancel(&mut self, window: &mut Window) {
-        // Answered now, not when the window's view is freed.
         drop(self.take_pick());
         window.remove_window();
     }
 
-    /// Answers the app with `path`. Whether it answered, so the window can
-    /// close.
     pub fn answer(&mut self, path: PathBuf) -> bool {
         self.answer_all(vec![path])
     }
 
-    /// Answers the app with `paths`. Whether it answered.
     fn answer_all(&mut self, paths: Vec<PathBuf>) -> bool {
         let Some(pick) = self.take_pick() else {
             return false;
@@ -392,8 +296,6 @@ impl MainWindow {
     }
 }
 
-/// Closes the picker window for `id`, if one is open, and drops its
-/// request, which answers cancelled.
 pub fn close(id: PickId, cx: &mut App) {
     for handle in cx.windows() {
         let Some(handle) = handle.downcast::<MainWindow>() else {
@@ -405,9 +307,6 @@ pub fn close(id: PickId, cx: &mut App) {
             }
         });
         if let Err(error) = closed {
-            // A window that is going away anyway; its request is answered
-            // when it is freed. Until there is a log, stderr is where this
-            // goes.
             writeln!(
                 io::stderr(),
                 "nova-files: could not close a picker: {error:#}"

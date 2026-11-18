@@ -1,14 +1,3 @@
-//! The windows' state between runs: for now, the size a picker had when it
-//! closed, so the next one opens at that size, apart from the main
-//! window's.
-//!
-//! The core keeps the state as bytes it never reads; this module owns what
-//! they say. The first line names the format and its version, then each
-//! line is one window's entry, such as `picker 900x600`. A state with an
-//! entry this version doesn't know, or anything else it can't read, reads
-//! as no state, and the theme's sizes apply; a later version that adds
-//! entries raises the version.
-
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -17,29 +6,19 @@ use nova_files_api::{Command, Connector, Event};
 
 use crate::theme;
 
-/// The first line, naming the format and its version.
 const HEADER: &str = "nova-files window-state 1";
-/// The key of a picker's entry.
 const PICKER: &str = "picker";
-/// Between an entry's width and height.
 const BY: char = 'x';
-/// The smallest a window opens at, whatever was saved.
 const MIN_WIDTH: Pixels = px(400.0);
 const MIN_HEIGHT: Pixels = px(300.0);
-/// How long a picker's opening waits for the state. The core runs in this
-/// program, so it answers in well under a millisecond; this only bounds a
-/// core that is shutting down.
 const FETCH_WAIT: Duration = Duration::from_millis(100);
 
-/// The windows' state, as saved.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct WindowState {
-    /// A picker's size, in whole logical pixels.
     picker: Option<(f32, f32)>,
 }
 
 impl WindowState {
-    /// The state `bytes` say, or none when they aren't one.
     pub fn parse(bytes: &[u8]) -> Self {
         let Ok(text) = str::from_utf8(bytes) else {
             return Self::default();
@@ -58,7 +37,6 @@ impl WindowState {
         state
     }
 
-    /// The bytes that say this state.
     pub fn to_bytes(&self) -> Vec<u8> {
         let picker = self
             .picker
@@ -70,8 +48,6 @@ impl WindowState {
             .into_bytes()
     }
 
-    /// The size a picker opens at: the one saved, kept within the smallest
-    /// size and the `display`, or the theme's.
     pub fn picker_size(&self, display: Option<Size<Pixels>>) -> Size<Pixels> {
         let Some((width, height)) = self.picker else {
             return size(theme::window::PICK_WIDTH, theme::window::PICK_HEIGHT);
@@ -85,7 +61,6 @@ impl WindowState {
         size(width, height)
     }
 
-    /// This state with a picker's size set to `picker`.
     #[must_use]
     pub fn with_picker(mut self, picker: Size<Pixels>) -> Self {
         let whole = |pixels: Pixels| f32::from(pixels).round();
@@ -94,7 +69,6 @@ impl WindowState {
     }
 }
 
-/// `900x600` as a width and a height, both finite and above zero.
 fn parse_size(value: &str) -> Option<(f32, f32)> {
     let (width, height) = value.split_once(BY)?;
     let width: f32 = width.parse().ok()?;
@@ -103,8 +77,6 @@ fn parse_size(value: &str) -> Option<(f32, f32)> {
     (fits(width) && fits(height)).then_some((width, height))
 }
 
-/// The state the core keeps, asked for over a connection of its own, or
-/// none when the core doesn't answer in time.
 pub fn fetch(connector: &Connector) -> WindowState {
     let (sink, events) = mpsc::channel();
     let Ok(connection) = connector.connect(sink) else {

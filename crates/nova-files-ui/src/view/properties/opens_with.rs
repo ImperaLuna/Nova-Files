@@ -1,11 +1,3 @@
-//! The Properties page's Opens with group, for a lone file: one card
-//! with the file's icon, the name of the app that opens it, and an arrow.
-//! A press on it opens the menu of the apps that can (see
-//! `window::opens_with`). Without a default app the card names none.
-//! Without any app the group isn't drawn.
-//!
-//! Debug selector: `opens-with` for the card.
-
 use std::f32::consts::FRAC_PI_2;
 
 use gpui::{
@@ -25,7 +17,6 @@ const LABEL: &str = "Opens with";
 const NO_DEFAULT: &str = "None";
 
 impl MainWindow {
-    /// The Opens with group for `one`, when it is a file some app opens.
     pub(super) fn opens_with(&self, one: &Properties, cx: &Context<Self>) -> Option<AnyElement> {
         if one.kind != PathKind::File {
             return None;

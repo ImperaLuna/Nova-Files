@@ -1,12 +1,3 @@
-//! Where the entries sit: one to a line in Details, several to a line in
-//! Icons. The list scrolls by lines, each the same height, so the window
-//! builds only the lines on screen whichever view shows.
-//!
-//! In Icons the cells share out the list's width: as many as fit at their
-//! narrowest, each widened to fill the line, so a click anywhere on the
-//! line lands in a cell. At the smallest size the name sits beside the
-//! icon; from the next size up it sits under it, on up to two lines.
-
 use std::ops::Range;
 
 use gpui::{Pixels, Size, size};
@@ -18,26 +9,18 @@ use crate::theme::size::{
     ICON_CELL_UNDER as NARROWEST_UNDER, ICON_NAME_GAP as NAME_GAP, ICON_NAME_LINE as NAME_LINE,
 };
 
-/// The lines a name under its icon may take before it is cut short.
 pub const NAME_LINES: usize = 2;
 
-/// How the entries are laid out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Grid {
-    /// Entries to a line; one in Details.
     pub per_line: usize,
-    /// Each cell's size; in Details, a row.
     pub cell: Size<Pixels>,
-    /// The icon's side.
     pub icon: Pixels,
-    /// Whether the name sits beside the icon rather than under it.
     pub beside: bool,
-    /// Whether cells show names at all.
     pub names: bool,
 }
 
 impl Grid {
-    /// Details: a row each, as wide as the list.
     pub const fn details(width: Pixels) -> Self {
         Self {
             per_line: 1,
@@ -48,7 +31,6 @@ impl Grid {
         }
     }
 
-    /// Icons of `icons` across a list `width` wide.
     pub fn icons(icons: IconSize, width: Pixels) -> Self {
         let icon = icon_side(icons);
         let beside = icons == IconSize::Smallest;
@@ -74,8 +56,6 @@ impl Grid {
         }
     }
 
-    /// Gallery's strip: icons of `icons`, without names, one entry to a
-    /// step.
     pub fn strip(icons: IconSize) -> Self {
         let icon = icon_side(icons);
         Self {
@@ -87,29 +67,23 @@ impl Grid {
         }
     }
 
-    /// Whether a list drawn as `drawn` was laid out otherwise than this
-    /// grid would lay it out, so it has to be drawn again.
     pub fn relaid(&self, drawn: &Self) -> bool {
         self != drawn
     }
 
-    /// The lines `len` entries take.
     pub const fn lines(&self, len: usize) -> usize {
         len.div_ceil(self.per_line)
     }
 
-    /// The line entry `index` is on.
     pub const fn line_of(&self, index: usize) -> usize {
         index / self.per_line
     }
 
-    /// The entries of `lines`, of `len` in all.
     pub fn entries_of(&self, lines: &Range<usize>, len: usize) -> Range<usize> {
         let at = |line: usize| line.saturating_mul(self.per_line).min(len);
         at(lines.start)..at(lines.end)
     }
 
-    /// The column `x` across the list falls in, kept to the line.
     pub fn column_at(&self, x: Pixels) -> usize {
         let column = (x / self.cell.width).floor().max(0.0);
         #[expect(
@@ -121,18 +95,15 @@ impl Grid {
         column.min(self.per_line - 1)
     }
 
-    /// The column entry `index` is in.
     pub const fn column_of(&self, index: usize) -> usize {
         index % self.per_line
     }
 }
 
-/// `inside` with a cell's padding either side.
 fn padded(inside: Pixels) -> Pixels {
     inside + CELL_PAD + CELL_PAD
 }
 
-/// The side of an icon of `icons`.
 pub const fn icon_side(icons: IconSize) -> Pixels {
     sizes::ICON_SIDES[icons.index()]
 }
@@ -160,7 +131,6 @@ mod tests {
 
     #[test]
     fn icons_share_the_width_out_among_as_many_as_fit() {
-        // 96 px icons fit at 112 px, so 5 to 600 px, 120 px each.
         let grid = Grid::icons(IconSize::Medium, px(600.0));
         assert_eq!(grid.per_line, 5);
         assert_eq!(grid.cell.width, px(120.0));
@@ -170,9 +140,7 @@ mod tests {
             grid.cell.height,
             px(96.0) + NAME_GAP + NAME_LINE * 2.0 + CELL_PAD * 2.0
         );
-        // Small icons still leave room for a name.
         assert_eq!(Grid::icons(IconSize::Small, px(600.0)).per_line, 5);
-        // A list too narrow for one still has one, as wide as it takes.
         let narrow = Grid::icons(IconSize::Largest, px(100.0));
         assert_eq!(narrow.per_line, 1);
         assert_eq!(narrow.cell.width, px(208.0));
@@ -182,7 +150,6 @@ mod tests {
     fn a_grid_is_relaid_when_its_lines_hold_another_number() {
         let wide = Grid::icons(IconSize::Medium, px(600.0));
         assert!(!wide.relaid(&Grid::icons(IconSize::Medium, px(600.0))));
-        // The same number to a line, each a little wider.
         assert!(wide.relaid(&Grid::icons(IconSize::Medium, px(610.0))));
         assert!(wide.relaid(&Grid::icons(IconSize::Medium, px(300.0))));
     }

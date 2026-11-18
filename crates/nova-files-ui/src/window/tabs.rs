@@ -1,34 +1,3 @@
-//! Tabs: several places open in one main window, drawn as the sidebar's
-//! Open list (see `view/sidebar/open`). A new tab opens on Start, or on a
-//! folder middle-clicked; the last tab can't be closed.
-//!
-//! The tab on screen keeps its state in the window's own fields, as a
-//! window without tabs would, so nothing else needs to know about tabs.
-//! Leaving a tab stashes what is its own in a [`Tab`]: its history (and
-//! with it where it is), its listing, selection, order, search and scroll
-//! position, and a Properties page. What only the screen needs is let go: details, thumbnails,
-//! the rows the core serves, a quick look, a menu, a rename, a typed path.
-//!
-//! Coming back puts the stash on screen at once, so the list shows at its
-//! scroll position with its selection, then asks the core for it again,
-//! since the core serves the rows of one listing per window. That answer
-//! arrives in place: the scroll stays and the selection is kept by name
-//! (see `events`), so it also brings in what changed meanwhile, and the
-//! sidebar's tree opens down to it. A folder still on its way when the
-//! tab was left is asked for again, and so are Games and Projects; a
-//! search is run again and shows from its top, since what it finds may
-//! have changed; a Properties page asks for what it shows again (see
-//! `properties`). A tab whose folder is
-//! gone by then (deleted, or its drive unplugged) goes to Start, and so
-//! does a new tab whose folder can't be read. A drive still mounting
-//! when the tab is left isn't opened.
-//!
-//! The keys go back to the window on each change of tab, once it draws: a
-//! field of the tab left (its search box, a rename) may have held them.
-//!
-//! A tab in the background holds its listing's names and nothing per row
-//! beyond them.
-
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::mem;
@@ -49,13 +18,10 @@ use crate::location::Location;
 use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::selection::Selection;
 
-/// What a menu item that opens a folder in a new tab says.
 pub const OPEN_IN_NEW_TAB_LABEL: &str = "Open in new tab";
 
-/// How many tabs a window keeps at least: the last can't be closed.
 const LAST: usize = 1;
 
-/// What a tab keeps while another is on screen.
 pub struct Tab {
     history: History,
     listing: Option<Listing>,
@@ -65,15 +31,12 @@ pub struct Tab {
     scroll: UniformListScrollHandle,
     search: Search,
     counted: SharedString,
-    /// The gathered place whose listing it holds, if any.
     gathered: Option<Gathering>,
-    /// The place asked for that hadn't arrived when the tab was left.
     on_its_way: Option<Location>,
     properties: Option<super::properties::Page>,
 }
 
 impl Tab {
-    /// Where the tab is going, else where it is.
     fn place(&self) -> Option<Location> {
         self.on_its_way
             .clone()
@@ -81,16 +44,10 @@ impl Tab {
     }
 }
 
-/// A window's tabs.
 pub struct Tabs {
-    /// Every tab, in the Open list's order. The one on screen is `None`:
-    /// its state is the window's.
     list: Vec<Option<Tab>>,
     current: usize,
-    /// The tab on screen changed since the window last drew.
     changed: bool,
-    /// The ask that puts the tab on Start if refused: a new tab's first
-    /// folder, or the folder of a tab shown again (it may be gone).
     start_if_refused: Option<ListingId>,
 }
 
@@ -106,18 +63,14 @@ impl Default for Tabs {
 }
 
 impl MainWindow {
-    /// How many tabs the window has.
     pub const fn tab_count(&self) -> usize {
         self.tabs.list.len()
     }
 
-    /// The tab on screen, counted from 0.
     pub const fn current_tab(&self) -> usize {
         self.tabs.current
     }
 
-    /// Where each tab is going, else where it is, in order; `None` for
-    /// one that has been nowhere yet and isn't going anywhere.
     pub fn tab_places(&self) -> Vec<Option<Location>> {
         self.tabs
             .list
@@ -129,14 +82,12 @@ impl MainWindow {
             .collect()
     }
 
-    /// Where the tab on screen is going, else where it is.
     fn place_on_screen(&self) -> Option<Location> {
         self.asked
             .and_then(|_| self.requested.clone())
             .or_else(|| self.location().cloned())
     }
 
-    /// Opens a new tab at `place`, after the others, and shows it.
     pub fn new_tab(&mut self, place: &Location, cx: &mut Context<Self>) {
         if self.pick.is_some() {
             return;
@@ -149,7 +100,6 @@ impl MainWindow {
             Location::Start => self.open_start(cx),
             Location::Folder(folder) => {
                 self.open(folder);
-                // A folder that can't be read leaves the tab on Start.
                 self.tabs.start_if_refused = self.asked;
             }
             Location::Gathered(gathered) => {
@@ -161,13 +111,10 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Opens `folder` in a new tab.
     pub fn open_in_new_tab(&mut self, folder: PathBuf, cx: &mut Context<Self>) {
         self.new_tab(&Location::Folder(folder), cx);
     }
 
-    /// A click other than the left one on entry `entry`: a middle-click
-    /// on a folder opens it in a new tab, in a main window.
     pub(crate) fn entry_aux_clicked(
         &mut self,
         entry: (ListingId, EntryId),
@@ -179,8 +126,6 @@ impl MainWindow {
         }
     }
 
-    /// Opens the folder of entry `entry` of the list on screen in a new
-    /// tab, if it is a folder.
     fn open_entry_in_new_tab(
         &mut self,
         (listing, entry): (ListingId, EntryId),
@@ -194,28 +139,23 @@ impl MainWindow {
         }
     }
 
-    /// Opens the trash in a new tab.
     pub fn open_trash_in_new_tab(&mut self, cx: &mut Context<Self>) {
         self.open_in_new_tab(self.trash.folder.clone(), cx);
     }
 
-    /// Opens `drive` in a new tab, mounting it first when needed.
     pub(crate) fn open_drive_in_new_tab(&mut self, drive: ShownDrive, cx: &mut Context<Self>) {
         if let Some(folder) = drive.folder.clone() {
             self.open_in_new_tab(folder, cx);
         } else {
-            // The new tab waits on Start until the drive is mounted.
             self.new_tab(&Location::Start, cx);
             self.open_drive(drive);
         }
     }
 
-    /// The name of each tab in the Open list, in order.
     pub fn tab_names(&self) -> Vec<SharedString> {
         self.tab_looks().into_iter().map(|(name, _)| name).collect()
     }
 
-    /// The name and icon of each tab in the Open list, in order.
     pub(crate) fn tab_looks(&self) -> Vec<(SharedString, Icon)> {
         let shown = places::shown(self.places(), self.pinned());
         self.tab_places()
@@ -224,9 +164,6 @@ impl MainWindow {
             .collect()
     }
 
-    /// The name and icon of a tab at `place` in the Open list: as Places
-    /// shows it when it is one of `shown`, Places' rows, else the
-    /// folder's own.
     fn tab_look(&self, place: Option<&Location>, shown: &[places::Shown]) -> (SharedString, Icon) {
         match place {
             Some(Location::Start) => (START_LABEL.into(), Icon::Start),
@@ -253,14 +190,12 @@ impl MainWindow {
         }
     }
 
-    /// The name `folder` goes by: as a tab on it is named.
     pub(crate) fn folder_name(&self, folder: &Path) -> SharedString {
         let shown = places::shown(self.places(), self.pinned());
         self.tab_look(Some(&Location::Folder(folder.to_path_buf())), &shown)
             .0
     }
 
-    /// Shows tab `index`.
     pub fn switch_tab(&mut self, index: usize, cx: &mut Context<Self>) {
         if index == self.tabs.current || index >= self.tabs.list.len() {
             return;
@@ -271,31 +206,24 @@ impl MainWindow {
         self.enter_tab(cx);
     }
 
-    /// Makes tab `from` tab `to`, the others closing up around it; the
-    /// tab on screen stays on screen.
     pub(super) fn reorder_tab(&mut self, from: usize, to: usize) {
         let tab = self.tabs.list.remove(from);
         self.tabs.list.insert(to, tab);
-        // The tab on screen is the one without a stash.
         if let Some(current) = self.tabs.list.iter().position(Option::is_none) {
             self.tabs.current = current;
         }
     }
 
-    /// Shows the tab after the one on screen, the first after the last.
     pub fn next_tab(&mut self, cx: &mut Context<Self>) {
         let count = self.tab_count();
         self.switch_tab((self.tabs.current + 1) % count, cx);
     }
 
-    /// Shows the tab before the one on screen, the last before the first.
     pub fn previous_tab(&mut self, cx: &mut Context<Self>) {
         let count = self.tab_count();
         self.switch_tab((self.tabs.current + count - 1) % count, cx);
     }
 
-    /// Closes tab `index`, unless it is the last one. Closing the tab on
-    /// screen shows the one after it, or before it when it was the last.
     pub fn close_tab(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.tab_count() <= LAST || index >= self.tab_count() {
             return;
@@ -319,15 +247,10 @@ impl MainWindow {
         }
     }
 
-    /// Closes the tab on screen, unless it is the last one.
     pub fn close_current_tab(&mut self, cx: &mut Context<Self>) {
         self.close_tab(self.tabs.current, cx);
     }
 
-    /// Listing `id` was refused. When it was a new tab's first folder or
-    /// a tab's folder asked for again on coming back (deleted, or its
-    /// drive gone meanwhile), the tab goes to Start rather than stay
-    /// blank or show what is no longer there. Whether it did.
     pub(super) fn tab_folder_refused(&mut self, id: ListingId, cx: &mut Context<Self>) -> bool {
         if self.tabs.start_if_refused != Some(id) {
             return false;
@@ -337,19 +260,15 @@ impl MainWindow {
         true
     }
 
-    /// Gives the keys back to the window after a change of tab.
     pub(crate) fn settle_tab_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if mem::take(&mut self.tabs.changed) {
             window.focus(&self.keys_home(cx), cx);
         }
     }
 
-    /// Takes the tab on screen's state out of the window, letting go of
-    /// what only the screen needs. The window is left as a fresh one.
     fn leave_tab(&mut self, cx: &mut Context<Self>) -> Tab {
         self.forget_rows();
         self.stop_measuring();
-        // A drive mounting opens in the tab that asked, or nowhere.
         self.forget_drive_to_open();
         self.close_preview(None, cx);
         self.close_menu(cx);
@@ -381,8 +300,6 @@ impl MainWindow {
         }
     }
 
-    /// Puts the current tab's stash on screen and asks the core for what
-    /// it shows (see the module's comment).
     fn enter_tab(&mut self, cx: &mut Context<Self>) {
         let Some(tab) = self.tabs.list[self.tabs.current].take() else {
             return;
@@ -398,7 +315,6 @@ impl MainWindow {
         self.counted = tab.counted;
         self.properties = tab.properties;
         self.gathered.shown = tab.gathered;
-        // The core serves another listing's rows now.
         self.core_moved = true;
         if let Some(place) = tab.on_its_way {
             self.request_place(&place);
@@ -407,7 +323,6 @@ impl MainWindow {
         } else if let Some(place) = self.gathered_shown() {
             self.request_gathered(place);
         } else if let Some(listing) = self.listing.clone() {
-            // The sidebar's tree comes along to the tab's folder.
             self.tree_follows(&listing, true);
             self.request(&listing.path);
             self.tabs.start_if_refused = self.asked;

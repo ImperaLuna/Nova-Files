@@ -1,13 +1,3 @@
-//! Draws the window's menu (see `menu`) over everything else, its top
-//! left corner at the point it opened, moved back inside the window when
-//! it would cross an edge. Each item is its icon and name, with the key
-//! that does the same at its right; a line runs between groups. The
-//! marked item (by key or pointer) is lit; an item that is on is strong
-//! with an orange icon, and one that removes something is in the error
-//! color. While open, the menu holds the keys (see `menu`). Its items
-//! carry the debug selectors `menu` and `menu-<n>`, counted from 0, and
-//! its lines `menu-line-<n>`, by the item they sit above.
-
 use gpui::{
     Action, AnyElement, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement as _,
     IntoElement, KeyBinding, ParentElement as _, Rgba, Stateful, StatefulInteractiveElement as _,
@@ -21,11 +11,9 @@ use crate::menu::{
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
-/// The menu draws over the sheet and the sidebar.
 const MENU_PRIORITY: usize = 1;
 
 impl MainWindow {
-    /// The menu, while one is open.
     pub(super) fn menu_overlay(
         &self,
         window: &Window,
@@ -88,12 +76,10 @@ impl MainWindow {
     }
 }
 
-/// The card the items sit on.
 fn menu_card(colors: &Colors) -> Stateful<Div> {
     div()
         .id("menu")
         .debug_selector(|| "menu".to_owned())
-        // Clicks on the menu are the menu's, never the rows' under it.
         .occlude()
         .flex()
         .flex_col()
@@ -113,8 +99,6 @@ fn menu_card(colors: &Colors) -> Stateful<Div> {
         }])
 }
 
-/// The keys that do what `item` does, when it sends one of the window's
-/// actions and a key is bound to it; `bound` gives the binding in force.
 fn item_keys(
     item: &MenuItem,
     bound: impl FnOnce(&dyn Action) -> Option<KeyBinding>,
@@ -125,12 +109,9 @@ fn item_keys(
     bound(&*spec.action()).and_then(|binding| key_label(&binding))
 }
 
-/// How an item of `look` is drawn, `marked` or not.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ItemStyle {
-    /// The icon's color.
     tint: Rgba,
-    /// The name's color.
     name: Rgba,
     strong: bool,
 }
@@ -151,7 +132,6 @@ impl ItemStyle {
     }
 }
 
-/// The line above item `index`, between two groups.
 fn menu_line(index: usize, colors: &Colors) -> Div {
     div()
         .debug_selector(move || format!("menu-line-{index}"))
@@ -162,8 +142,6 @@ fn menu_line(index: usize, colors: &Colors) -> Div {
         .bg(colors.line)
 }
 
-/// Item `index`: its icon and its name; its keys go at the right (see
-/// [`key_cell`]).
 fn menu_item(
     index: usize,
     item: &MenuItem,
@@ -199,7 +177,6 @@ fn menu_item(
         .child(div().min_w_0().truncate().child(item.label.clone()))
 }
 
-/// An item's keys, at its right.
 fn key_cell(keys: gpui::SharedString, colors: &Colors) -> Div {
     div()
         .flex_none()

@@ -1,39 +1,22 @@
-//! The text and selection of a one-line text field, apart from drawing and
-//! keys, so every editing rule is a plain function of its state.
-//!
-//! Offsets are bytes into the text and always sit on a character boundary.
-//! The caret moves by grapheme (what reads as one character) or by word. A
-//! word is a run of letters, digits and `_`, so the dots and dashes of a
-//! file name split it.
-
 use std::ops::Range;
 
 use unicode_segmentation::UnicodeSegmentation as _;
 
-/// How far a caret move or delete goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
-    /// One grapheme.
     Grapheme,
-    /// To the edge of a word.
     Word,
 }
 
-/// A field's text, its selection and any text an input method is still
-/// composing.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TextEdit {
     text: String,
-    /// `start <= end`; empty when it is just the caret.
     selection: Range<usize>,
-    /// The caret is at the selection's start rather than its end.
     reversed: bool,
-    /// What an input method is composing, shown underlined.
     marked: Option<Range<usize>>,
 }
 
 impl TextEdit {
-    /// `text` with the caret at its end.
     pub fn new(text: &str) -> Self {
         Self {
             text: text.to_owned(),
@@ -59,7 +42,6 @@ impl TextEdit {
         self.marked.clone()
     }
 
-    /// Where the caret is: the end of the selection it moved last.
     pub const fn caret(&self) -> usize {
         if self.reversed {
             self.selection.start
@@ -68,7 +50,6 @@ impl TextEdit {
         }
     }
 
-    /// The end of the selection that stays put while it grows.
     const fn anchor(&self) -> usize {
         if self.reversed {
             self.selection.end
@@ -77,8 +58,6 @@ impl TextEdit {
         }
     }
 
-    /// Selects `range`, kept inside the text and on character boundaries.
-    /// Moving the caret ends any composing: the next text goes at the caret.
     pub fn select_range(&mut self, range: Range<usize>) {
         let start = self.floor(range.start);
         let end = self.floor(range.end);
@@ -91,8 +70,6 @@ impl TextEdit {
         self.select_range(0..self.text.len());
     }
 
-    /// Selects the word, space or punctuation run at `offset`, as a
-    /// double-click does.
     pub fn select_word_at(&mut self, offset: usize) {
         let offset = self.floor(offset);
         let Some(kind) = self.text[offset..]
@@ -116,8 +93,6 @@ impl TextEdit {
         self.select_range(start..end);
     }
 
-    /// Moves the caret left by `step`, or grows the selection when
-    /// `extend`. Without `extend`, a selection collapses to its start.
     pub fn move_left(&mut self, step: Step, extend: bool) {
         if extend {
             self.select_to(self.before(self.caret(), step));
@@ -128,8 +103,6 @@ impl TextEdit {
         }
     }
 
-    /// Moves the caret right by `step`, or grows the selection when
-    /// `extend`. Without `extend`, a selection collapses to its end.
     pub fn move_right(&mut self, step: Step, extend: bool) {
         if extend {
             self.select_to(self.after(self.caret(), step));
@@ -156,8 +129,6 @@ impl TextEdit {
         }
     }
 
-    /// Deletes the selection, or `step` before the caret. Whether the text
-    /// changed.
     pub fn delete_backward(&mut self, step: Step) -> bool {
         if self.selection.is_empty() {
             let caret = self.caret();
@@ -166,8 +137,6 @@ impl TextEdit {
         self.delete_selection()
     }
 
-    /// Deletes the selection, or `step` after the caret. Whether the text
-    /// changed.
     pub fn delete_forward(&mut self, step: Step) -> bool {
         if self.selection.is_empty() {
             let caret = self.caret();
@@ -180,16 +149,10 @@ impl TextEdit {
         self.replace_selection("")
     }
 
-    /// Replaces the selection with `new`, as a key, a cut or a paste does,
-    /// and puts the caret after it. Whether the text changed.
     pub fn replace_selection(&mut self, new: &str) -> bool {
         self.replace(Some(self.selection.clone()), new)
     }
 
-    /// Replaces `range`, or else the text being composed, or else the
-    /// selection, with `new`, and puts the caret after it. This is how an
-    /// input method's text arrives, typed or composed. Whether the text
-    /// changed.
     pub fn replace(&mut self, range: Option<Range<usize>>, new: &str) -> bool {
         let range = self.target(range);
         let changed = !(range.is_empty() && new.is_empty());
@@ -198,8 +161,6 @@ impl TextEdit {
         changed
     }
 
-    /// Like [`Self::replace`], but `new` stays marked as text an input
-    /// method is still composing, with `selected` (within `new`) selected.
     pub fn replace_and_mark(
         &mut self,
         range: Option<Range<usize>>,
@@ -214,13 +175,10 @@ impl TextEdit {
         self.marked = (!new.is_empty()).then(|| start..start + new.len());
     }
 
-    /// The input method is done composing; the text stays as it is.
     pub const fn unmark(&mut self) {
         self.marked = None;
     }
 
-    /// The range a replacement changes: `range` kept inside the text, or
-    /// what is being composed, or the selection.
     fn target(&self, range: Option<Range<usize>>) -> Range<usize> {
         range
             .map(|range| {
@@ -235,20 +193,16 @@ impl TextEdit {
         self.select_range(offset..offset);
     }
 
-    /// Moves the caret to `offset`, keeping the anchor, as a shift-click
-    /// or a drag does.
     pub fn select_to(&mut self, offset: usize) {
         let anchor = self.anchor();
         self.select_range(anchor..offset);
     }
 
-    /// The boundary `step` before `offset`.
     fn before(&self, offset: usize, step: Step) -> usize {
         let mut graphemes = self.text[..offset].grapheme_indices(true).rev();
         match step {
             Step::Grapheme => graphemes.next().map_or(0, |(index, _)| index),
             Step::Word => {
-                // Past any separators, then to the start of the word.
                 let mut start = offset;
                 let mut in_word = false;
                 for (index, grapheme) in graphemes {
@@ -266,7 +220,6 @@ impl TextEdit {
         }
     }
 
-    /// The boundary `step` after `offset`.
     fn after(&self, offset: usize, step: Step) -> usize {
         let mut graphemes = self.text[offset..]
             .grapheme_indices(true)
@@ -276,7 +229,6 @@ impl TextEdit {
                 .next()
                 .map_or(offset, |(index, grapheme)| index + grapheme.len()),
             Step::Word => {
-                // Past any separators, then to the end of the word.
                 let mut in_word = false;
                 graphemes
                     .find(|&(_, grapheme)| {
@@ -290,17 +242,14 @@ impl TextEdit {
         }
     }
 
-    /// `offset` kept inside the text, moved back to a character boundary.
     fn floor(&self, offset: usize) -> usize {
         self.text.floor_char_boundary(offset)
     }
 
-    /// `offset` in UTF-16 code units, as input methods count.
     pub fn offset_to_utf16(&self, offset: usize) -> usize {
         self.text[..self.floor(offset)].encode_utf16().count()
     }
 
-    /// The byte offset of `utf16` UTF-16 code units in.
     pub fn offset_from_utf16(&self, utf16: usize) -> usize {
         offset_from_utf16(&self.text, utf16)
     }
@@ -314,7 +263,6 @@ impl TextEdit {
     }
 }
 
-/// The byte offset of `utf16` UTF-16 code units into `text`.
 pub fn offset_from_utf16(text: &str, utf16: usize) -> usize {
     let mut units = 0;
     for (index, c) in text.char_indices() {
@@ -326,7 +274,6 @@ pub fn offset_from_utf16(text: &str, utf16: usize) -> usize {
     text.len()
 }
 
-/// What a character counts as for word moves and double-clicks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Word,
@@ -335,8 +282,6 @@ enum Kind {
 }
 
 impl Kind {
-    /// What `grapheme` counts as, by its first character, so an accent
-    /// that follows a letter stays with it.
     fn of(grapheme: &str) -> Self {
         let c = grapheme.chars().next().unwrap_or(' ');
         if c.is_alphanumeric() || c == '_' {

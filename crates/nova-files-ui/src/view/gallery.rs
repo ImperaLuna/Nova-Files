@@ -1,11 +1,3 @@
-//! Draws Gallery: the stage, with the cursor's entry large and its name,
-//! kind and size under it, over the strip of small icons (see
-//! `window::gallery`). The strip's cells are Icons' cells without names,
-//! so a click, a drag, a drop or a right-click does what it does there.
-//!
-//! Selectors for tests: `gallery`, `stage` and `strip`; the stage's art
-//! has the quick look's selectors (see `preview`).
-
 use gpui::{
     Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
     SharedString, Styled as _, canvas, div,
@@ -18,7 +10,6 @@ use crate::theme::{Colors, size, text};
 use crate::window::MainWindow;
 
 impl MainWindow {
-    /// Gallery, its strip laid out as `grid`.
     pub(super) fn gallery(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         let bounds = self.gallery_bounds().clone();
@@ -45,7 +36,6 @@ impl MainWindow {
             .child(self.strip(grid, cx))
     }
 
-    /// The cursor's entry, large, with its name and what it is under it.
     fn stage(&self, colors: &Colors) -> impl IntoElement {
         let room = self.stage_room();
         let scale_factor = self.scale_factor;
@@ -119,7 +109,6 @@ impl MainWindow {
             }))
     }
 
-    /// The strip: as many of the folder's entries as fit, as icons.
     fn strip(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         let cells = self.listing.as_ref().map(|listing| {

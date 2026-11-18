@@ -1,66 +1,39 @@
-//! Where a window has been, for Back and Forward.
-//!
-//! A place is a [`Location`]: the Start page or a folder. It joins the
-//! history only once it is on screen ([`History::arrived`]), so a folder
-//! that can't be read never does.
-//! Going somewhere new clears Forward, as in a browser. Back and Forward
-//! only say where to go ([`History::back`], [`History::forward`]); the
-//! window goes there (for a folder, asks the core for it) and the history
-//! moves when it is on screen. If that place is refused, it is dropped from the history and
-//! the window stays where it was; if that leaves the place on screen next
-//! in line, it goes too, so the next step always moves. Each side holds
-//! at most [`MAX_PLACES`]; the oldest go first.
-//!
-//! A window owns one history now; each tab will own its own.
-
 use crate::location::Location;
 use std::collections::VecDeque;
 
-/// The most places Back (or Forward) remembers.
 pub const MAX_PLACES: usize = 100;
 
-/// Which way a trip through the history goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     Back,
     Forward,
 }
 
-/// A window's history.
 #[derive(Debug, Default)]
 pub struct History {
-    /// Places before the one on screen, newest last.
     back: VecDeque<Location>,
-    /// The place on screen, once one has arrived.
     here: Option<Location>,
-    /// Places after the one on screen, nearest last.
     forward: Vec<Location>,
-    /// The trip asked for and not yet arrived or refused.
     going: Option<(Step, Location)>,
 }
 
 impl History {
-    /// Where Back goes, if anywhere.
     pub fn back_target(&self) -> Option<&Location> {
         self.back.back()
     }
 
-    /// Where Forward goes, if anywhere.
     pub fn forward_target(&self) -> Option<&Location> {
         self.forward.last()
     }
 
-    /// Where the window is, once it has been anywhere.
     pub const fn here(&self) -> Option<&Location> {
         self.here.as_ref()
     }
 
-    /// Starts a step back: returns where to go.
     pub fn back(&mut self) -> Option<Location> {
         self.start(Step::Back)
     }
 
-    /// Starts a step forward: returns where to go.
     pub fn forward(&mut self) -> Option<Location> {
         self.start(Step::Forward)
     }
@@ -75,16 +48,12 @@ impl History {
         Some(target)
     }
 
-    /// The window went somewhere without Back or Forward: forgets a trip
-    /// still on its way, so its answer counts as a new place.
     pub fn leave(&mut self) {
         self.going = None;
     }
 
-    /// `place` is now on screen.
     pub fn arrived(&mut self, place: &Location) {
         if self.here.as_ref() == Some(place) {
-            // Read again in place.
             self.going = None;
             return;
         }
@@ -116,13 +85,10 @@ impl History {
         }
     }
 
-    /// `place` couldn't be read. If Back or Forward was going there, it is
-    /// dropped from that side.
     pub fn refused(&mut self, place: &Location) {
         match self.going.take() {
             Some((Step::Back, target)) if target == *place => {
                 self.back.pop_back();
-                // Dropping it may leave the place on screen next in line.
                 if self.back.back() == self.here.as_ref() {
                     self.back.pop_back();
                 }
@@ -215,7 +181,6 @@ mod tests {
         history.refused(&at("/gone"));
         assert_eq!(history.back_target(), Some(&at("/a")));
 
-        // The same the other way: /gone was read once, then went away.
         let mut history = walked(&["/b", "/gone", "/b"]);
         history.back();
         history.arrived(&at("/gone"));
@@ -252,7 +217,6 @@ mod tests {
         history.back();
         history.leave();
         history.arrived(&at("/a"));
-        // Not a step back: /b stays behind, nothing ahead.
         assert_eq!(history.back_target(), Some(&at("/b")));
         assert_eq!(history.forward_target(), None);
     }

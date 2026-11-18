@@ -1,10 +1,3 @@
-//! The rows on screen: which rows the core is told about, the details,
-//! icons and thumbnails it sends for them, and their text. Thumbnails are
-//! shrunk off the UI thread to the size they're drawn (see `thumbnail`),
-//! and one the window lets go of is dropped from GPUI's image atlas too
-//! (see `shown_thumbnails`). Theme icons are made the same way, once per
-//! icon (see `theme_icons`).
-
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -19,14 +12,11 @@ use crate::grid::Grid;
 use crate::view::{RowIcon, entry_kind};
 use crate::{theme_icons, thumbnail};
 
-/// What the core sent for one row.
 pub struct RowRead {
     pub details: Details,
     pub icon: FileIcon,
 }
 
-/// A thumbnail shrunk for row `index` of listing `id`, `side` device
-/// pixels across.
 struct Shrunk {
     id: ListingId,
     index: usize,
@@ -35,8 +25,6 @@ struct Shrunk {
 }
 
 impl MainWindow {
-    /// The Modified and Size text of entry `index` on screen, empty until
-    /// the core has read that entry's details.
     pub fn columns(&self, index: usize) -> Option<ColumnText> {
         if index >= self.listing.as_ref()?.entries.len() {
             return None;
@@ -52,12 +40,10 @@ impl MainWindow {
         })
     }
 
-    /// The thumbnail of row `index`, once the core has sent it.
     pub fn thumbnail(&self, index: usize) -> Option<&Arc<RenderImage>> {
         self.thumbnails.get(index)
     }
 
-    /// The theme icon of row `index`, once made.
     pub fn theme_icon(&self, index: usize) -> Option<&Arc<RenderImage>> {
         match &self.details.get(&index)?.icon {
             FileIcon::Theme { icon, .. } => self.theme_icons.get(&icon.path),
@@ -65,9 +51,6 @@ impl MainWindow {
         }
     }
 
-    /// What row `index`, an entry of `kind`, shows in its icon slot: its
-    /// thumbnail, else its theme icon once made, else the built-in icon
-    /// for what the core says it is (until it says, for `kind`).
     pub fn row_icon(&self, index: usize, kind: EntryKind) -> RowIcon<'_> {
         if let Some(image) = self.thumbnail(index) {
             return RowIcon::Thumbnail(image);
@@ -81,8 +64,6 @@ impl MainWindow {
         }
     }
 
-    /// Keeps the details and icons of the listing's rows `first` onward,
-    /// and starts making the theme icons not made yet.
     pub(super) fn details_arrived(
         &mut self,
         first: EntryId,
@@ -95,7 +76,6 @@ impl MainWindow {
             return;
         };
         let entries = listing.entries.get(first..).unwrap_or_default();
-        // A row the core sent no icon for draws its entry's built-in one.
         let read = entries
             .iter()
             .zip(details)
@@ -116,8 +96,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Makes each theme icon of `icons` not made or being made yet, off
-    /// the UI thread, at the row's size.
     fn make_theme_icons<'a>(
         &mut self,
         icons: impl Iterator<Item = &'a FileIcon>,
@@ -150,9 +128,6 @@ impl MainWindow {
         }
     }
 
-    /// Keeps a theme icon made at `side`. One that didn't decode is no
-    /// longer being made: its rows keep their built-in icon, and it is
-    /// tried again when the rows next arrive.
     fn theme_icon_ready(
         &mut self,
         (icon, image): (Arc<ThemeIcon>, Option<Arc<RenderImage>>),
@@ -164,15 +139,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// The list drew `lines`, laid out as `drawn`. It also draws its first
-    /// line alone, each frame, to measure it; asking for that line alone
-    /// would swap the request back and forth every frame, and each answer
-    /// would draw another frame. The rows on screen are those of the last
-    /// lines drawn, so the request waits until the frame is done.
-    ///
-    /// The list is laid out across its width when it last drew, which is
-    /// known only once it is drawing; if that width now lays it out
-    /// otherwise, the window draws again, the cursor kept in view.
     pub(crate) fn rows_drawn(
         &mut self,
         (lines, drawn): (Range<usize>, Grid),
@@ -194,8 +160,6 @@ impl MainWindow {
         self.entries_drawn(drawn.entries_of(&lines, len), window, cx);
     }
 
-    /// Entries `range` are on screen; the core is asked about them once
-    /// the frame is done.
     pub(crate) fn entries_drawn(
         &mut self,
         range: Range<usize>,
@@ -208,8 +172,6 @@ impl MainWindow {
         });
     }
 
-    /// Rows `visible` are on screen: asks for their details and thumbnails
-    /// and one screen either side, and forgets thumbnails now out of range.
     fn show_rows(&mut self, visible: Range<usize>, window: &mut Window, cx: &mut App) {
         let Some(listing) = &self.listing else { return };
         let screen = visible.len();
@@ -238,13 +200,6 @@ impl MainWindow {
         self.rows_wanted = wanted;
     }
 
-    /// The window is drawing at `scale_factor`, its icons as big as the
-    /// view on screen draws them. Thumbnails shrunk to another size (the
-    /// window moved to another screen, or the view or its icons' size
-    /// changed) are dropped and asked for again: an empty request first,
-    /// so the core sends them anew. Theme icons are dropped and made again
-    /// from the icons the rows have. Called each frame, so the same sizes
-    /// return at once.
     pub fn set_scale_factor(
         &mut self,
         scale_factor: f32,
@@ -270,9 +225,6 @@ impl MainWindow {
         self.forget_rows();
     }
 
-    /// Tells the core no rows are wanted, so it counts every thumbnail as
-    /// not sent and makes them again when the next frame asks for its
-    /// rows.
     pub(super) fn forget_rows(&mut self) {
         if let Some(listing) = &self.listing
             && !self.rows_wanted.is_empty()
@@ -289,27 +241,18 @@ impl MainWindow {
         self.rows_wanted = 0..0;
     }
 
-    /// A theme icon's side in device pixels at the current scale.
     fn icon_side(&self) -> u32 {
         thumbnail::device_side(self.icon_slot(), self.scale_factor)
     }
 
-    /// The size of thumbnail the core sends: the smallest that fills a
-    /// thumbnail's side.
     pub(super) fn thumbnail_size(&self) -> ThumbnailSize {
         ThumbnailSize::to_fill(self.thumbnail_side())
     }
 
-    /// A thumbnail's side in device pixels at the current scale.
     fn thumbnail_side(&self) -> u32 {
         thumbnail::device_side(self.icon_slot(), self.scale_factor)
     }
 
-    /// A thumbnail for `entry` of listing `id` at `size` arrived from the
-    /// core. It is shrunk if its row is still
-    /// wanted, thumbnails are shown and it is the size asked for now (one
-    /// asked for before is left for that); its listing is checked once
-    /// shrunk, when it counts.
     pub(super) fn thumbnail_arrived(
         &self,
         (id, entry, size): (ListingId, EntryId, ThumbnailSize),
@@ -325,7 +268,6 @@ impl MainWindow {
         }
     }
 
-    /// Shrinks row `index`'s thumbnail off the UI thread, then keeps it.
     fn shrink_thumbnail(&self, id: ListingId, index: usize, png: Arc<[u8]>, cx: &Context<Self>) {
         let side = self.thumbnail_side();
         let shrinking = cx
@@ -345,13 +287,10 @@ impl MainWindow {
         .detach();
     }
 
-    /// Keeps a thumbnail shrunk to `side` if its row is still wanted and
-    /// the window still draws at that size.
     fn thumbnail_ready(&mut self, made: Shrunk, cx: &mut Context<Self>) {
         if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
             && self.rows_wanted.contains(&made.index)
             && made.side == self.thumbnail_side()
-            // Hidden while it was being shrunk.
             && self.settings.thumbnails == Thumbnails::Shown
         {
             let replaced = self.thumbnails.insert(made.index, Arc::new(made.image));
@@ -361,9 +300,8 @@ impl MainWindow {
     }
 }
 
-/// Drops `images` from GPUI's image atlas. `window` is the window being
-/// drawn or updated, if any: GPUI takes it out of its list meanwhile, so
-/// it has to be named.
+// GPUI takes the window being drawn out of its list, so drop_image needs it passed in.
+// https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 pub(super) fn release(
     images: impl IntoIterator<Item = Arc<RenderImage>>,
     mut window: Option<&mut Window>,

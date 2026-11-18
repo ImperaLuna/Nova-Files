@@ -1,14 +1,3 @@
-//! Icons: the folder's entries as a grid of icons with their names, at
-//! one of five sizes (see `grid`). Like Details it is a `uniform_list`,
-//! here of lines of cells, so only the lines on screen are built.
-//!
-//! A cell does what a row does: a click selects, a double-click opens, a
-//! right-click opens the entry's menu, a middle-click opens a folder in a
-//! new tab, a folder takes files dropped on it, and the icon and the name
-//! drag the selection. A press elsewhere in a cell, or in the space after
-//! the last one, drags a box (see `band`). A rename puts its field where
-//! the name was. There are no column heads.
-
 use std::ops::Range;
 
 use gpui::{
@@ -25,7 +14,6 @@ use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::{DraggedRow, MainWindow};
 
 impl MainWindow {
-    /// The entries as lines of cells laid out as `grid`.
     pub(super) fn icons(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
         let len = self
             .listing
@@ -60,8 +48,6 @@ impl MainWindow {
         .pb(size::ISLAND_CLEARANCE)
     }
 
-    /// The cell of entry `index`: its icon, and its name beside or under
-    /// it.
     pub(super) fn icon_cell(
         &self,
         listing: &Listing,
@@ -126,8 +112,6 @@ impl MainWindow {
             .into_any_element()
     }
 
-    /// Entry `index`'s name in a cell: on one line beside the icon, over
-    /// its size; centred under it on up to two lines.
     fn cell_name(
         &self,
         (index, name): (usize, String),
@@ -170,10 +154,6 @@ impl MainWindow {
     }
 }
 
-/// Entry `index`'s cell box, `at` in its listing, sized and laid out as
-/// `grid` says, highlighted under the pointer. A right-click on it opens
-/// its entry's menu (see `window::context_menu`). It keeps the clear edge
-/// a folder lights up as a drop target (see `drop`), so all cells line up.
 fn cell(
     index: usize,
     at: (nova_files_api::ListingId, nova_files_api::EntryId),

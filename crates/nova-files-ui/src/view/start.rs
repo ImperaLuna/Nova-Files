@@ -1,15 +1,3 @@
-//! The Start page, drawn in the sheet's place when the window is on Start:
-//! a soft orange glow at the top, then "Jump back in", the folders a
-//! person opened lately that the sidebar doesn't already show.
-//!
-//! The newest is a large card with the folder's first entries (each
-//! file's size or each folder's item count) and how many more it holds;
-//! up to four smaller cards beside it show each folder's icon with a fan
-//! of three entries and where the folder is. A click on a card opens its
-//! folder. With no recent folders the group isn't drawn. Each card
-//! carries a debug selector, `recent-<n>`, counted from 0. Under them,
-//! "Drives": how full each mounted drive is (see `drives`).
-
 mod drives;
 
 pub(super) use drives::bar;
@@ -34,15 +22,11 @@ use crate::window::MainWindow;
 
 const RECENT_LABEL: &str = "Jump back in";
 const DRIVES_LABEL: &str = "Drives";
-/// Between the folder and its date under the large card's name.
 const SEPARATOR: &str = " · ";
-/// The small cards sit two by two beside the large one.
 const SMALL_PER_ROW: usize = 2;
-/// The entries a small card's fan shows.
 pub(super) const FAN_ENTRIES: usize = 3;
 
 impl MainWindow {
-    /// The Start page, filling the sheet.
     pub(super) fn start_page(&self, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         div()
@@ -76,8 +60,6 @@ impl MainWindow {
             )
     }
 
-    /// The large card for the newest folder on the left half, and the
-    /// small ones beside it, two by two, stretched to its height.
     fn recent_cards(&self, cx: &Context<Self>) -> AnyElement {
         let colors = Colors::of(cx);
         let mut folders = self.recent.iter().enumerate();
@@ -120,8 +102,6 @@ impl MainWindow {
             .into_any_element()
     }
 
-    /// A small card: the folder's icon and a fan of its entries, then its
-    /// name and where it is.
     fn small_card(&self, index: usize, folder: &RecentFolder, cx: &Context<Self>) -> AnyElement {
         let colors = Colors::of(cx);
         Self::card(index, &folder.path, cx)
@@ -146,7 +126,6 @@ impl MainWindow {
             .into_any_element()
     }
 
-    /// A card's box, which opens `folder` when clicked.
     fn card(index: usize, folder: &Path, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
         let colors = Colors::of(cx);
         let (target, in_new_tab) = (folder.to_owned(), folder.to_owned());
@@ -169,7 +148,6 @@ impl MainWindow {
     }
 }
 
-/// A labelled group of cards.
 pub(super) fn group(label: &'static str, cards: AnyElement, colors: &Colors) -> impl IntoElement {
     div()
         .flex()
@@ -186,8 +164,6 @@ pub(super) fn group(label: &'static str, cards: AnyElement, colors: &Colors) -> 
         .child(cards)
 }
 
-/// The large card's head: a big folder icon, the name, and where the
-/// folder is with when it last changed.
 fn hero_head(folder: &RecentFolder, home: &Path, colors: &Colors) -> impl IntoElement {
     let subtitle = hero_subtitle(folder, home);
     div()
@@ -204,7 +180,6 @@ fn hero_head(folder: &RecentFolder, home: &Path, colors: &Colors) -> impl IntoEl
         )))
 }
 
-/// Where the large card's folder is, then when it last changed if known.
 fn hero_subtitle(folder: &RecentFolder, home: &Path) -> String {
     let place = where_is(&folder.path, home);
     match folder.modified.map(columns::modified) {
@@ -213,7 +188,6 @@ fn hero_subtitle(folder: &RecentFolder, home: &Path) -> String {
     }
 }
 
-/// A card's name in bold and the dim line under it, each cut to fit.
 pub(super) fn titles(
     name: String,
     subtitle: String,
@@ -243,8 +217,6 @@ pub(super) fn titles(
         )
 }
 
-/// The large card's first entries, each with its size or item count, and
-/// how many more the folder holds.
 fn peek(folder: &RecentFolder, colors: &Colors) -> impl IntoElement {
     let rows = folder.peek.iter().map(|entry| {
         div()
@@ -297,7 +269,6 @@ fn peek(folder: &RecentFolder, colors: &Colors) -> impl IntoElement {
         })
 }
 
-/// A small card's fan: up to three entries, the outer two leaning out.
 pub(super) fn fan(entries: &[Peeked], colors: &Colors) -> impl IntoElement {
     let shown = entries.iter().take(FAN_ENTRIES);
     let count = shown.len();
@@ -316,7 +287,6 @@ pub(super) fn fan(entries: &[Peeked], colors: &Colors) -> impl IntoElement {
         }))
 }
 
-/// How far fan entry `index` tucks under the one before it.
 fn overlap(index: usize) -> Pixels {
     if index == 0 {
         Pixels::ZERO
@@ -325,8 +295,6 @@ fn overlap(index: usize) -> Pixels {
     }
 }
 
-/// How far fan entry `index` of `count` leans: the first left, the last
-/// right, any between upright.
 fn lean(index: usize, count: usize) -> Radians {
     let degrees = if count < FAN_ENTRIES {
         0.0
@@ -340,17 +308,14 @@ fn lean(index: usize, count: usize) -> Radians {
     Radians(degrees.to_radians())
 }
 
-/// A folder's name: its last part, or the whole path for the root.
 pub(super) fn name_of(path: &Path) -> String {
     name_os(path).to_string_lossy().into_owned()
 }
 
-/// The last part of `path`, or all of it for the root, as the disk has it.
 pub(super) fn name_os(path: &Path) -> &OsStr {
     path.file_name().unwrap_or(path.as_os_str())
 }
 
-/// Where a folder is: its parent, with home written `~`.
 pub(super) fn where_is(path: &Path, home: &Path) -> String {
     let parent = path.parent().map_or_else(PathBuf::new, Path::to_path_buf);
     match parent.strip_prefix(home) {
@@ -360,7 +325,6 @@ pub(super) fn where_is(path: &Path, home: &Path) -> String {
     }
 }
 
-/// A peeked entry's size, or how many entries a folder holds.
 fn amount(entry: &Peeked) -> String {
     match (entry.kind, entry.amount) {
         (_, None) => String::new(),
@@ -369,7 +333,6 @@ fn amount(entry: &Peeked) -> String {
     }
 }
 
-/// "1 item", "12 items".
 fn items(count: u64) -> String {
     if count == 1 {
         format!("{count} item")
@@ -378,7 +341,6 @@ fn items(count: u64) -> String {
     }
 }
 
-/// "3 more" when the folder holds more than its peek shows.
 fn more_than_peeked(folder: &RecentFolder) -> Option<String> {
     let peeked = u64::try_from(folder.peek.len()).unwrap_or(u64::MAX);
     let more = folder.entries.saturating_sub(peeked);
@@ -453,7 +415,6 @@ mod tests {
             hero_subtitle(&newest, home),
             format!("~/Projects{SEPARATOR}{}", columns::modified(time))
         );
-        // A date past what can be written shows no date.
         let unwritable = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1 << 62);
         assert_eq!(columns::modified(unwritable), "");
         newest.modified = Some(unwritable);
@@ -465,7 +426,6 @@ mod tests {
         assert_eq!(overlap(0), Pixels::ZERO);
         assert_eq!(overlap(1), -start::FAN_OVERLAP);
         assert_eq!(overlap(2), -start::FAN_OVERLAP);
-        // "N more" lines up with the peek's names.
         assert_eq!(start::PEEK_MORE_INSET, size::ROW_ICON + start::PEEK_GAP);
     }
 

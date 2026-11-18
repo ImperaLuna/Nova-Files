@@ -1,20 +1,8 @@
-//! Type to jump: letters typed in a main window move the cursor to the
-//! next name that starts with them.
-//!
-//! Letters typed within [`PAUSE`] of each other build one prefix; a longer
-//! pause starts a new one. A prefix is looked for from the cursor's row
-//! on, wrapping round to the top, so typing more of the same name keeps
-//! the cursor where it is while it still matches. The same letter typed
-//! again and again steps through the names that start with it. Names are
-//! compared as shown, ignoring case.
-
 use std::ffi::OsStr;
 use std::time::{Duration, Instant};
 
-/// How long a pause starts a new prefix.
 pub const PAUSE: Duration = Duration::from_secs(1);
 
-/// The letters typed so far.
 #[derive(Debug, Default)]
 pub struct TypeJump {
     prefix: String,
@@ -22,8 +10,6 @@ pub struct TypeJump {
 }
 
 impl TypeJump {
-    /// Whether `now` is soon enough after the last letter to add to the
-    /// prefix, so a space is part of a name rather than a key of its own.
     pub fn continues(&self, now: Instant) -> bool {
         !self.prefix.is_empty()
             && self
@@ -31,9 +17,6 @@ impl TypeJump {
                 .is_some_and(|last| now.saturating_duration_since(last) < PAUSE)
     }
 
-    /// `typed` arrived at `now`: returns the prefix to look for, and
-    /// whether to step past the cursor's row (a new prefix, or a letter
-    /// repeated).
     pub fn typed(&mut self, typed: &str, now: Instant) -> (String, bool) {
         let fresh = self
             .last
@@ -53,9 +36,6 @@ impl TypeJump {
     }
 }
 
-/// The row of the first name in `names` starting with `prefix` (lower
-/// case), looking from `from` on (from the row after it with `past`),
-/// wrapping round.
 pub fn find<'a>(
     names: impl ExactSizeIterator<Item = &'a OsStr> + Clone,
     prefix: &str,
@@ -77,14 +57,10 @@ pub fn find<'a>(
         .map(|(row, _)| row)
 }
 
-/// `text` in lower case letter by letter, so a prefix typed a key at a
-/// time folds the same as a whole name (no context-dependent forms such as
-/// a final sigma).
 fn fold(text: &str) -> impl Iterator<Item = char> + '_ {
     text.chars().flat_map(char::to_lowercase)
 }
 
-/// Whether `name`, folded, starts with the folded `prefix`.
 fn starts_with(name: &str, prefix: &str) -> bool {
     let mut name = fold(name);
     prefix.chars().all(|letter| name.next() == Some(letter))
@@ -108,7 +84,6 @@ mod tests {
         assert_eq!(at("b", Some(1), true), Some(2));
         assert_eq!(at("b", Some(2), false), Some(2));
         assert_eq!(at("b", Some(4), true), Some(1));
-        // Wraps round to the top.
         assert_eq!(at("a", Some(3), true), Some(0));
         assert_eq!(at("z", Some(2), false), None);
     }

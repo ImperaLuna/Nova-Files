@@ -1,7 +1,3 @@
-//! Draws a [`TextField`]: its line, the selection or caret, and the
-//! underline under text an input method is composing. It also hands the
-//! window the field's input handler while the field has focus.
-
 use std::ops::Range;
 
 use gpui::{
@@ -29,7 +25,6 @@ pub struct Prepainted {
     mark: Mark,
 }
 
-/// The selection, or the caret when nothing is selected.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Mark {
     Caret(Bounds<Pixels>),
@@ -37,8 +32,6 @@ enum Mark {
 }
 
 impl Mark {
-    /// The selection from `start` to `end` along a line drawn in `bounds`
-    /// and scrolled by `scroll`, or the caret when the two meet.
     fn new(bounds: Bounds<Pixels>, scroll: Pixels, start: Pixels, end: Pixels) -> Self {
         if start == end {
             Self::Caret(span(bounds, scroll, start, start + CARET_WIDTH))
@@ -47,8 +40,6 @@ impl Mark {
         }
     }
 
-    /// What to paint: the selection always, the caret only while the
-    /// field has focus.
     fn quad(self, focused: bool, colors: &Colors) -> Option<PaintQuad> {
         match self {
             Self::Caret(caret) => focused.then(|| fill(caret, colors.caret)),
@@ -116,7 +107,6 @@ impl Element for TextElement {
             underline: None,
             strikethrough: None,
         };
-        // Composed text is never empty, so the placeholder has none.
         let runs = runs(run, edit.marked());
         let font_size = style.font_size.to_pixels(window.rem_size());
         let line = window
@@ -161,8 +151,6 @@ impl Element for TextElement {
                 window.paint_quad(quad);
             }
             let origin = span(bounds, scroll, px(0.0), px(0.0)).origin;
-            // Painting a shaped line only fails when the glyph atlas is
-            // full; the next frame tries again.
             line.paint(
                 origin,
                 window.line_height(),
@@ -174,13 +162,11 @@ impl Element for TextElement {
             .ok();
         });
         self.field.update(cx, |field, _| {
-            // The placeholder is no text to point into.
             field.layout = (!field.edit.text().is_empty()).then_some((line, bounds));
         });
     }
 }
 
-/// The runs that draw `run`'s text, with `marked` underlined.
 fn runs(run: TextRun, marked: Option<Range<usize>>) -> Vec<TextRun> {
     let Some(marked) = marked else {
         return vec![run];
@@ -210,9 +196,6 @@ fn runs(run: TextRun, marked: Option<Range<usize>>) -> Vec<TextRun> {
     .collect()
 }
 
-/// How far a line `line_width` wide scrolls in a field `width` wide: from
-/// `previous`, just enough to keep the caret at `caret_x` in view, and
-/// never past the line's end, so shorter text scrolls back.
 fn scroll(previous: Pixels, caret_x: Pixels, line_width: Pixels, width: Pixels) -> Pixels {
     let room = (width - CARET_WIDTH).max(px(0.0));
     previous
@@ -221,8 +204,6 @@ fn scroll(previous: Pixels, caret_x: Pixels, line_width: Pixels, width: Pixels) 
         .max(caret_x - room)
 }
 
-/// The box from `start` to `end` along a line drawn in `bounds` and
-/// scrolled left by `scroll`.
 pub fn span(bounds: Bounds<Pixels>, scroll: Pixels, start: Pixels, end: Pixels) -> Bounds<Pixels> {
     let left = bounds.left() - scroll;
     Bounds::from_corners(

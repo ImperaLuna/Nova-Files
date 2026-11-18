@@ -1,13 +1,3 @@
-//! The folder tree's own line to the core. The tree lists folders on a
-//! connection of its own, so its listings never cancel the folder on
-//! screen (the core keeps one listing per client). Its events arrive on
-//! its own task, like the window's. One listing is asked for at a time;
-//! when it answers, the next waiting folder is asked for (see `tree`).
-//!
-//! The window's own listings feed the tree too: a folder on screen is a
-//! folder listed, and the tree opens itself down to a folder the window
-//! goes to.
-
 use std::path::{Path, PathBuf};
 
 use futures::StreamExt as _;
@@ -17,17 +7,14 @@ use nova_files_api::{Command, Connection, Connector, Event, Listing, ListingId, 
 
 use super::{ChannelSink, MainWindow};
 
-/// The tree's connection and the folder it asked for.
 pub struct TreeLine {
     connection: Option<Connection>,
-    /// The listing asked for and its folder, until it answers.
     asked: Option<(ListingId, PathBuf)>,
     next_listing: u64,
     _events: Task<()>,
 }
 
 impl TreeLine {
-    /// Connects the tree to the core; without a core, it lists nothing.
     pub fn connect(connector: &Connector, cx: &Context<MainWindow>) -> Self {
         let (sink, mut events) = mpsc::unbounded();
         let connection = connector.connect(ChannelSink(sink)).ok();
@@ -51,21 +38,16 @@ impl TreeLine {
 }
 
 impl MainWindow {
-    /// Opens or closes the tree's folder at `path`.
     pub fn toggle_tree(&mut self, path: &Path, cx: &mut Context<Self>) {
         self.tree.toggle(path);
         self.list_tree_folder();
         cx.notify();
     }
 
-    /// Whether the tree has every listing it asked the core for.
     pub const fn tree_settled(&self) -> bool {
         self.tree_line.asked.is_none()
     }
 
-    /// Takes the window's own listing of a folder into the tree, and opens
-    /// the tree down to it when the window has just `arrived` there, so a
-    /// folder read again in place never reopens what the user closed.
     pub(super) fn tree_follows(&mut self, listing: &Listing, arrived: bool) {
         self.tree.listed(&listing.path, &listing.entries);
         if arrived {
@@ -85,14 +67,12 @@ impl MainWindow {
                 self.tree_line.asked = None;
                 self.tree.unreadable(&path);
             }
-            // The tree asks for nothing else.
             _ => return,
         }
         self.list_tree_folder();
         cx.notify();
     }
 
-    /// Asks for the next waiting folder, unless a listing is under way.
     fn list_tree_folder(&mut self) {
         let line = &mut self.tree_line;
         if line.asked.is_some() {
@@ -111,8 +91,6 @@ impl MainWindow {
             path: path.clone(),
             order: Order::default(),
         });
-        // A core gone ends the window's events, which shows it; the tree
-        // stays as it is.
         if sent.is_ok() {
             line.asked = Some((id, path));
         }

@@ -1,14 +1,3 @@
-//! The Properties page's Access group: one row each for the owner, the
-//! group and everyone else, with the level each has on a chip that opens
-//! a menu of levels (see `window::access`), then a tick: "Run as a
-//! program" for a lone file, "Also everything inside" when there are
-//! folders. Several items with different levels show "Mixed". Where the
-//! user can't change it, the chips and ticks do nothing.
-//!
-//! Debug selectors: `access-<n>` for each row's chip, counted from 0 in
-//! the order owner, group, everyone else; `access-runs` and
-//! `access-inside` for the ticks.
-
 use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
 
@@ -35,7 +24,6 @@ const RUNS_LABEL: &str = "Run as a program";
 const INSIDE_LABEL: &str = "Also everything inside";
 
 impl MainWindow {
-    /// The Access group for `read`, what the page shows.
     pub(super) fn access(&self, read: &[Arc<Properties>], cx: &Context<Self>) -> AnyElement {
         let colors = Colors::of(cx);
         let may = self.may_change_access();
@@ -83,7 +71,6 @@ impl MainWindow {
     }
 }
 
-/// The parts of the row for `who`.
 struct RowParts {
     name: String,
     role: &'static str,
@@ -117,8 +104,6 @@ impl RowParts {
     }
 }
 
-/// The row for `who`, the `index`th: who they are, and their level on a
-/// chip that opens its menu when the user `may` change it.
 fn access_row(
     index: usize,
     who: Who,
@@ -163,8 +148,6 @@ fn access_row(
     RowParts { name, role, chip }
 }
 
-/// A row's name and the dim word after it: the account and its role
-/// when every item shares it, else the role alone.
 fn names(who: Who, read: &[Arc<Properties>]) -> (String, &'static str) {
     let account = |one: &Properties| match who {
         Who::Owner => Some(one.owner.clone()),
@@ -186,7 +169,6 @@ fn names(who: Who, read: &[Arc<Properties>]) -> (String, &'static str) {
     }
 }
 
-/// An account's name, or its number when the system has no name for it.
 fn account_name(account: &Account) -> String {
     account.name.as_ref().map_or_else(
         || account.id.to_string(),
@@ -194,17 +176,14 @@ fn account_name(account: &Account) -> String {
     )
 }
 
-/// A tick row: its box and its label.
 struct Tick {
     selector: &'static str,
     label: &'static str,
     ticked: bool,
-    /// Whether the user may change it.
     may: bool,
 }
 
 impl Tick {
-    /// The row, which `toggle` flips when the user may change it.
     fn row(
         self,
         toggle: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,

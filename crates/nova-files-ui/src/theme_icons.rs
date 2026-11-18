@@ -1,14 +1,3 @@
-//! The icon theme's icons a window draws, each made once at the size it
-//! is drawn and shared by every row of its type.
-//!
-//! The core sends the icon file as it is (see `FileIcon`); a PNG is
-//! decoded and shrunk as a thumbnail is, an SVG is drawn by GPUI's SVG
-//! renderer straight at the row's size in device pixels, whatever size the
-//! file declares. Both happen off
-//! the UI thread. A window draws a few dozen types at most, so the images
-//! are kept while it draws at one scale; a new scale hands them all back,
-//! so the window drops them from GPUI's image atlas and makes them again.
-
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,36 +7,27 @@ use nova_files_api::{IconFormat, ThemeIcon};
 
 use crate::thumbnail;
 
-/// GPUI's renderer draws at twice the scale it is asked for.
+// GPUI's renderer draws at twice the scale it is asked for.
+// https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 const RENDERER_SCALE: f32 = 2.0;
-/// Added to the side before working out the scale, so the renderer's
-/// rounding down still lands on the whole side.
 const ROUNDING: f32 = 0.5;
 
-/// The theme icons made so far, `side` device pixels across.
 #[derive(Default)]
 pub struct ThemeIcons {
     side: u32,
     made: HashMap<PathBuf, Arc<RenderImage>>,
-    /// Icons being made.
     pending: HashSet<PathBuf>,
 }
 
 impl ThemeIcons {
-    /// The image of the icon at `path`, once made.
     pub fn get(&self, path: &Path) -> Option<&Arc<RenderImage>> {
         self.made.get(path)
     }
 
-    /// Whether `icon` still has to be made; if so, it counts as being made
-    /// from now on.
     pub fn start(&mut self, icon: &ThemeIcon) -> bool {
         !self.made.contains_key(&icon.path) && self.pending.insert(icon.path.clone())
     }
 
-    /// Keeps `image`, made for `path` at `side`, if the window still
-    /// draws at that size; otherwise hands it back. An image it replaces
-    /// is handed back too.
     #[must_use]
     pub fn finish(
         &mut self,
@@ -63,8 +43,6 @@ impl ThemeIcons {
         self.made.insert(path, image)
     }
 
-    /// Starts again at `side`, handing back every image made so far;
-    /// `None`, keeping them, when they are already made at `side`.
     #[must_use]
     pub fn resize(&mut self, side: u32) -> Option<Vec<Arc<RenderImage>>> {
         if side == self.side {
@@ -76,8 +54,6 @@ impl ThemeIcons {
     }
 }
 
-/// `icon` made to fit a square `side` device pixels across; `None` when
-/// its file doesn't decode.
 pub fn make(icon: &ThemeIcon, side: u32, svg: &SvgRenderer) -> Option<Arc<RenderImage>> {
     match icon.format {
         IconFormat::Png => thumbnail::shrink(&icon.bytes, side).map(Arc::new),
@@ -93,8 +69,6 @@ pub fn make(icon: &ThemeIcon, side: u32, svg: &SvgRenderer) -> Option<Arc<Render
             )]
             let wanted = side as f32 + ROUNDING;
             let scale = wanted / (longest * RENDERER_SCALE);
-            // Checked before drawing, so a wrong scale never draws a huge
-            // image.
             #[expect(
                 clippy::cast_possible_truncation,
                 clippy::cast_sign_loss,
@@ -137,15 +111,12 @@ mod tests {
         let svg = SvgRenderer::new(Arc::new(()));
         let drawn = make(&icon(IconFormat::Svg, SQUARE.into()), 44, &svg).unwrap();
         assert_eq!(side_of(&drawn), (44, 44));
-        // GPUI draws in BGRA: red is the third byte.
         assert_eq!(&drawn.as_bytes(0).unwrap()[..4], [0, 0, 255, 255]);
-        // A 48 px icon at 44 px, and at 1.25 times 22 px.
         let big = SQUARE.replace("16", "48");
         let shrunk = make(&icon(IconFormat::Svg, big.clone().into()), 44, &svg).unwrap();
         assert_eq!(side_of(&shrunk), (44, 44));
         let odd = make(&icon(IconFormat::Svg, big.into()), 28, &svg).unwrap();
         assert_eq!(side_of(&odd), (28, 28));
-        // A huge declared size costs no huge image.
         let huge = SQUARE.replace("16", "30000");
         let made = make(&icon(IconFormat::Svg, huge.into()), 22, &svg).unwrap();
         assert_eq!(side_of(&made), (22, 22));
@@ -170,7 +141,6 @@ mod tests {
         assert!(icons.start(&first));
         assert!(!icons.start(&first));
         let image = Arc::new(RenderImage::new([image::Frame::new(RgbaImage::new(1, 1))]));
-        // Made for a size the window left meanwhile: handed back.
         let stale = icons.finish(first.path.clone(), 22, Some(Arc::clone(&image)));
         assert!(stale.is_some());
         assert!(
@@ -181,7 +151,6 @@ mod tests {
         assert_eq!(icons.get(&first.path).map(|made| made.id), Some(image.id));
         assert!(!icons.start(&first));
 
-        // Already at that size: nothing is made again.
         assert!(icons.resize(44).is_none());
         assert_eq!(icons.get(&first.path).map(|made| made.id), Some(image.id));
 
@@ -190,7 +159,6 @@ mod tests {
         assert!(icons.get(&first.path).is_none());
         assert!(icons.resize(22).is_none());
         assert!(icons.start(&first));
-        // One that doesn't decode can be tried again.
         assert!(icons.finish(first.path.clone(), 22, None).is_none());
         assert!(icons.start(&first));
     }

@@ -1,10 +1,3 @@
-//! The search's parts of the window: the box in the top bar, the chip in
-//! the path's slot that says where it looks, each found file's Folder
-//! cell, the count of files found at the sheet's bottom left, and what
-//! shows when nothing was found. The box's keys are handled here too: Down in it moves into
-//! the results, and the window's own keys (`/`, Ctrl+F) bring the caret
-//! back (see `window/search`).
-
 use std::path::PathBuf;
 
 use gpui::{
@@ -25,13 +18,9 @@ const HERE_ONLY: &str = "Here only";
 const NO_MATCHES: &str = "No matches";
 const CANT_SEARCH: &str = "Can't search";
 const SEARCH_LABEL: &str = "Search";
-/// Typed outside a text field, it puts the caret in the search box.
 const SEARCH_KEY: &str = "/";
 
 impl MainWindow {
-    /// The search capsule's contents: the icon and the box. Down in the
-    /// box moves into the results. A picker shows the label alone, since
-    /// it doesn't search yet (see `window/search`).
     pub(super) fn search_box(&self, capsule: Div, colors: &Colors, cx: &Context<Self>) -> Div {
         if self.pick.is_some() {
             return capsule
@@ -54,9 +43,6 @@ impl MainWindow {
             )
     }
 
-    /// The chip at the end of the path's slot that says where the search
-    /// looks; a click switches between the whole index and the folder.
-    /// Only while a search is under way.
     pub(super) fn scope_chip(&self, colors: &Colors, cx: &Context<Self>) -> Option<AnyElement> {
         if !self.searching() {
             return None;
@@ -89,8 +75,6 @@ impl MainWindow {
         )
     }
 
-    /// Row `index`'s Folder cell: where the found file `path` is, as a
-    /// link that goes there with it selected.
     pub(super) fn folder_link(
         &self,
         path: PathBuf,
@@ -115,7 +99,6 @@ impl MainWindow {
             .text_color(colors.text_dim)
             .cursor_pointer()
             .hover(|link| link.bg(colors.press).text_color(colors.text))
-            // Like a name, a press here is not the start of a band.
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _: &MouseDownEvent, _, _| this.pressed_name = true),
@@ -129,8 +112,6 @@ impl MainWindow {
             .into_any_element()
     }
 
-    /// How many files the search found, over the sheet's bottom left;
-    /// nothing while no search is under way or none were found.
     pub(super) fn match_count(&self, colors: &Colors) -> Option<impl IntoElement> {
         let found = self.found_count().filter(|&count| count > 0)?;
         let label = match_label(found);
@@ -151,8 +132,6 @@ impl MainWindow {
         )
     }
 
-    /// A quiet icon and "No matches" in the middle of the sheet, when a
-    /// search found nothing, or "Can't search" when it couldn't run.
     pub(super) fn no_matches(&self, colors: &Colors) -> Option<impl IntoElement> {
         let label = if self.search.failed {
             CANT_SEARCH
@@ -175,15 +154,11 @@ impl MainWindow {
         })
     }
 
-    /// How many files the search on screen found; `None` while the list
-    /// shows a folder, or the first answer hasn't come.
     fn found_count(&self) -> Option<usize> {
         let listing = self.listing.as_ref()?;
         (self.searching() && listing.folders.is_some()).then(|| listing.entries.len())
     }
 
-    /// A key typed while no text field has the keys: `/` puts the caret
-    /// in the search box. Whether it was taken.
     pub(super) fn search_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
         let held = event.keystroke.modifiers;
         let plain = !(held.control || held.alt || held.platform || held.function);
@@ -195,8 +170,6 @@ impl MainWindow {
         false
     }
 
-    /// Moves the keyboard where the search asked it to go, now that there
-    /// is a window.
     pub(super) fn settle_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.search.focus_to.take() {
             Some(FocusTo::Box) => {
@@ -218,7 +191,6 @@ impl MainWindow {
     }
 }
 
-/// The count's words for `found` files.
 fn match_label(found: usize) -> String {
     if found == 1 {
         ONE_MATCH.to_owned()

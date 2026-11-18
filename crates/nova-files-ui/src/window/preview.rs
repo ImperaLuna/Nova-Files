@@ -1,23 +1,3 @@
-//! The quick look: the selected file or folder, large, over the window.
-//!
-//! Space opens it on the entry the keyboard is on, or else the first one
-//! selected, and closes it again; Escape closes it too. While it is open,
-//! the arrow keys move the cursor as they do in the list, the selection
-//! follows, and the quick look shows the entry the cursor lands on, as it
-//! does whatever else moves the cursor. Enter
-//! opens that entry as a double-click would, and closes the quick look.
-//! Going to another folder closes it.
-//!
-//! The window never touches the disk: it asks the core for a
-//! [`Command::Preview`] of the entry and draws the answer (see
-//! `view::preview`). An answer for any request but the newest is dropped.
-//! Until the answer comes, the quick look keeps showing what it showed
-//! before, so stepping through a folder never flashes empty. A picture
-//! comes decoded at the size it is drawn; it is turned into GPUI's pixel
-//! order off the UI thread, and the one before is dropped from GPUI's
-//! image atlas once replaced, as is the last one when the quick look
-//! closes.
-
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -31,28 +11,21 @@ use super::MainWindow;
 use super::rows::release;
 use crate::selection::{Move, entry_at};
 
-/// GPUI draws images in BGRA order; the core sends RGBA.
+// GPUI draws images in BGRA order.
+// https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 const RED: usize = 0;
 const BLUE: usize = 2;
 const BYTES_PER_PIXEL: usize = 4;
 
-/// The quick look's part of the window.
 #[derive(Default)]
 pub struct QuickLooks {
-    /// The quick look on screen, if any.
     pub(crate) open: Option<QuickLook>,
-    /// The box a picture is decoded to fit: the room the quick look has,
-    /// in device pixels, as of the last frame.
     fit: Option<Fit>,
-    /// Whether the quick look shows on Gallery's stage rather than over
-    /// the window (see `gallery`).
     pub(crate) docked: bool,
     next_id: u64,
 }
 
 impl QuickLook {
-    /// What the core sent for the entry on screen, once it came; until
-    /// then [`Self::shown`] is still the entry before.
     pub(crate) fn current(&self) -> Option<&Shown> {
         self.shown
             .as_ref()
@@ -61,49 +34,33 @@ impl QuickLook {
 }
 
 impl QuickLooks {
-    /// A request id no earlier request had.
     const fn next_id(&mut self) -> PreviewId {
         self.next_id += 1;
         PreviewId(self.next_id)
     }
 }
 
-/// What the quick look shows, as [`MainWindow::previewed`] tells it.
 #[derive(Debug, Clone)]
 pub struct Previewed {
-    /// The name of the entry it is on.
     pub name: String,
-    /// What the core sent for that entry, once it came.
     pub preview: Option<Arc<Preview>>,
-    /// Whether that entry's picture is ready to draw.
     pub picture: bool,
 }
 
-/// The quick look on screen.
 pub struct QuickLook {
-    /// The entry shown, in the listing on screen.
     pub listing: ListingId,
     pub entry: EntryId,
-    /// The request for that entry; only its answer counts.
     asked: PreviewId,
-    /// What the core last sent, for this entry or the one before.
     pub shown: Option<Shown>,
 }
 
-/// What the quick look draws large.
 pub struct Shown {
     pub entry: EntryId,
-    /// `None` when the core couldn't look into it.
     pub preview: Option<Arc<Preview>>,
-    /// The preview's picture, ready to draw.
     pub picture: Option<Arc<RenderImage>>,
 }
 
 impl MainWindow {
-    /// Space: opens the quick look on the cursor's entry, or the first one
-    /// selected, or closes it. In a picker it does nothing.
-    /// In Gallery, Space shows its stage's entry over the window, and
-    /// puts it back on the stage.
     pub(crate) fn toggle_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.quick_looks.open.is_some() {
             if self.quick_looks.docked {
@@ -134,8 +91,6 @@ impl MainWindow {
         self.preview_entry(listing, entry, None, cx);
     }
 
-    /// Escape, a click beside it or its Close button: the quick look
-    /// goes back on Gallery's stage, or else closes.
     pub(crate) fn dismiss_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.showing_gallery() {
             self.quick_looks.docked = true;
@@ -145,8 +100,6 @@ impl MainWindow {
         }
     }
 
-    /// Closes the quick look, letting go of its picture. `window` is the
-    /// window being updated, if any (see `rows::release`).
     pub(crate) fn close_preview(&mut self, window: Option<&mut Window>, cx: &mut Context<Self>) {
         self.quick_looks.docked = false;
         if let Some(open) = self.quick_looks.open.take() {
@@ -155,33 +108,21 @@ impl MainWindow {
         }
     }
 
-    /// Left or right: the quick look shows the entry before or after;
-    /// without one, Icons moves the cursor there.
     pub(crate) fn step_sideways(&mut self, step: Move, cx: &mut Context<Self>) {
         if !self.step_preview(step, cx) && self.showing_icons() {
             self.move_cursor(step, false, cx);
         }
     }
 
-    /// An arrow key while the quick look is open: the cursor moves as in
-    /// the list, the selection follows, and the quick look with it (see
-    /// [`Self::preview_follow_cursor`]). Whether the quick look was open to
-    /// take it.
     pub(crate) fn step_preview(&mut self, step: Move, cx: &mut Context<Self>) -> bool {
         let Some(open) = &self.quick_looks.open else {
             return false;
         };
-        // From the entry shown, which may not be where the cursor was.
         let shown = usize::try_from(open.entry.0).ok();
         self.move_cursor_from(shown, step, cx);
         true
     }
 
-    /// The selection changed: an open quick look moves to the entry the
-    /// cursor is on now, whatever moved it, keeping what it shows until
-    /// the core answers. (Its listing is the one on screen: a listing
-    /// that arrives moves or closes it first, see
-    /// [`Self::preview_listing_arrived`].)
     pub(crate) fn preview_follow_cursor(&mut self, cx: &mut Context<Self>) {
         let Some(open) = &self.quick_looks.open else {
             return;
@@ -199,9 +140,6 @@ impl MainWindow {
         self.preview_entry(listing, entry, shown, cx);
     }
 
-    /// Enter while the quick look is open: opens its entry as a
-    /// double-click would and closes the quick look. Whether the quick
-    /// look was open to take it.
     pub(crate) fn open_previewed(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if !self.previewing() {
             return false;
@@ -214,12 +152,10 @@ impl MainWindow {
         true
     }
 
-    /// Whether the quick look is open over the window.
     pub const fn previewing(&self) -> bool {
         self.quick_looks.open.is_some() && !self.quick_looks.docked
     }
 
-    /// What the quick look shows, while it is open.
     pub fn previewed(&self) -> Option<Previewed> {
         let open = self.quick_looks.open.as_ref()?;
         let listing = self.listing.as_ref()?;
@@ -232,21 +168,14 @@ impl MainWindow {
         })
     }
 
-    /// The box the next picture is asked to fit, once the window has
-    /// drawn.
     pub const fn preview_fit(&self) -> Option<Fit> {
         self.quick_looks.fit
     }
 
-    /// The quick look on screen.
     pub(crate) const fn quick_look(&self) -> Option<&QuickLook> {
         self.quick_looks.open.as_ref()
     }
 
-    /// The room the quick look has this frame, `scale_factor` device
-    /// pixels to a pixel. When it changes, an open quick look asks for its
-    /// entry again, so a picture comes at the new size; what it shows stays
-    /// until the answer comes.
     pub(crate) fn set_preview_room(
         &mut self,
         room: Size<Pixels>,
@@ -267,8 +196,6 @@ impl MainWindow {
         }
     }
 
-    /// Shows entry `entry` of listing `listing`, keeping `shown` on screen
-    /// until the core answers.
     pub(super) fn preview_entry(
         &mut self,
         listing: ListingId,
@@ -301,8 +228,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// The path of entry `entry` of listing `listing`, while it is the
-    /// listing on screen.
     fn entry_path(&self, listing: ListingId, entry: EntryId) -> Option<PathBuf> {
         let on_screen = self.listing.as_ref().filter(|shown| shown.id == listing)?;
         let index = usize::try_from(entry.0).ok()?;
@@ -310,9 +235,6 @@ impl MainWindow {
         Some(on_screen.path_of(entry))
     }
 
-    /// The core answered request `id`: `preview`, or `None` when it
-    /// couldn't look. A picture is made ready to draw first, off the UI
-    /// thread.
     pub(super) fn preview_arrived(
         &mut self,
         id: PreviewId,
@@ -329,7 +251,6 @@ impl MainWindow {
             return;
         };
         let picture = picture.clone();
-        // Kept without its pixels, which the image drawn holds instead.
         let preview = preview.map(|preview| Arc::new(without_pixels(&preview)));
         let converting = cx
             .background_executor()
@@ -344,8 +265,6 @@ impl MainWindow {
         .detach();
     }
 
-    /// Puts request `id`'s answer on screen, if it is still the newest,
-    /// and lets go of the picture it replaces.
     fn show_preview(
         &mut self,
         id: PreviewId,
@@ -372,11 +291,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// A listing arrived, in place of `before`: a quick look of another
-    /// folder closes, and in a fresh read of the same folder it stays on
-    /// its entry by name, or closes when that is gone. It asks for that
-    /// entry again, since it may have changed, and shows what it showed
-    /// until the answer comes.
     pub(super) fn preview_listing_arrived(
         &mut self,
         before: Option<&Listing>,
@@ -411,8 +325,6 @@ impl MainWindow {
     }
 }
 
-/// `shown` once its entry `from` is at `to` in a fresh read; what was
-/// shown for another entry keeps its place.
 fn moved(mut shown: Shown, from: EntryId, to: EntryId) -> Shown {
     if shown.entry == from {
         shown.entry = to;
@@ -420,13 +332,11 @@ fn moved(mut shown: Shown, from: EntryId, to: EntryId) -> Shown {
     shown
 }
 
-/// The box a picture fits before the window has drawn once.
 const DEFAULT_FIT: Fit = Fit {
     width: 1920,
     height: 1080,
 };
 
-/// `preview` with its picture's pixels left out, its size kept.
 fn without_pixels(preview: &Preview) -> Preview {
     let content = match &preview.content {
         PreviewContent::Picture(picture) => PreviewContent::Picture(Picture {
@@ -441,8 +351,6 @@ fn without_pixels(preview: &Preview) -> Preview {
     }
 }
 
-/// `picture` in GPUI's pixel order; `None` when its pixels don't match
-/// its size.
 fn render_image(picture: &Picture) -> Option<RenderImage> {
     let mut pixels = picture.pixels.to_vec();
     for pixel in pixels.as_chunks_mut::<BYTES_PER_PIXEL>().0 {
@@ -488,7 +396,6 @@ mod tests {
         };
         let moved_entry = |entry, from, to| moved(shown(entry), EntryId(from), EntryId(to)).entry;
         assert_eq!(moved_entry(2, 2, 5), EntryId(5));
-        // Shown for the entry before: left where it was.
         assert_eq!(moved_entry(1, 2, 5), EntryId(1));
     }
 

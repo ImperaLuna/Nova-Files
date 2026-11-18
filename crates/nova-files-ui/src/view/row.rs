@@ -1,10 +1,3 @@
-//! The pieces of one row in the sheet, shared by the column heads and the
-//! entries so their columns line up: the cells, an entry's icon and name,
-//! and the ring around the row the keyboard is on. Icons are drawn here
-//! for every part of the window. An entry's icon is its thumbnail, else
-//! its type's icon from the system icon theme, else the window's own icon
-//! for its kind.
-
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -20,7 +13,6 @@ use crate::assets::Icon;
 use crate::theme::{Colors, radius, size, text};
 use crate::window::{Aim, DraggedRow, MainWindow};
 
-/// Which corners of a row stay rounded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Corners {
     pub top: bool,
@@ -28,9 +20,6 @@ pub struct Corners {
 }
 
 impl Corners {
-    /// Row `index`'s corners when `selected` says which rows are
-    /// selected: a selected row squares the corners it shares with a
-    /// selected neighbour, so touching rows join into one block.
     pub fn of(index: usize, selected: impl Fn(usize) -> bool) -> Self {
         let joined = selected(index);
         Self {
@@ -40,11 +29,6 @@ impl Corners {
     }
 }
 
-/// One line of the columns: the name takes what the others leave, then
-/// the Folder column while a search's files are on screen (in the trash,
-/// Was in), and Size sits flush right. The Modified cell carries
-/// `modified_selector`. Modified and Size are drawn as details: smaller
-/// and dimmer.
 pub fn cells(
     name: impl IntoElement,
     folder: Option<AnyElement>,
@@ -69,7 +53,6 @@ pub fn cells(
         .child(column(size::SIZE_WIDTH).justify_end().child(size_cell))
 }
 
-/// An entry's Modified or Size text, as a detail.
 pub fn detail(text_content: String, colors: &Colors) -> impl IntoElement {
     div()
         .text_size(text::DETAIL)
@@ -79,10 +62,6 @@ pub fn detail(text_content: String, colors: &Colors) -> impl IntoElement {
         .child(text_content)
 }
 
-/// An entry's name, the parts in `marks` (byte ranges) marked as a
-/// search's match. A press on it is left for dragging files, so it marks
-/// itself for `band`; when it carries `row`, moving the press drags the
-/// selection (see `window::dragging`).
 pub fn entry_name(
     name: SharedString,
     marks: Vec<Range<usize>>,
@@ -104,9 +83,6 @@ pub fn entry_name(
     .child(text)
 }
 
-/// `handle`, where a press is left for dragging files: it marks itself
-/// for `band`, and when it carries `row`, moving the press drags the
-/// selection (see `window::dragging`).
 pub fn drags(
     handle: Stateful<Div>,
     row: Option<DraggedRow>,
@@ -126,19 +102,15 @@ pub fn drags(
 }
 
 impl MainWindow {
-    /// Whether entries drag: not in a picker, and not in the trash.
     pub(super) fn entries_drag(&self) -> bool {
         self.pick.is_none() && !self.in_trash()
     }
 }
 
-/// Where files dropped on `entry` of `listing`, named `name`, go: into
-/// it when it is a folder.
 pub fn folder_aim(listing: &Listing, entry: &Entry, name: &str) -> Option<Aim> {
     (entry.kind == EntryKind::Folder).then(|| Aim::folder(listing.path_of(entry), name.to_owned()))
 }
 
-/// How a search's match shows in a name: full-strength text on orange.
 fn mark_style(colors: &Colors) -> HighlightStyle {
     HighlightStyle {
         color: Some(colors.text.into()),
@@ -147,8 +119,6 @@ fn mark_style(colors: &Colors) -> HighlightStyle {
     }
 }
 
-/// The ring around the row the keyboard is on, laid over the row so it
-/// shifts nothing.
 pub fn cursor_ring(colors: &Colors) -> impl IntoElement {
     div()
         .debug_selector(|| "cursor".to_owned())
@@ -159,24 +129,17 @@ pub fn cursor_ring(colors: &Colors) -> impl IntoElement {
         .border_color(colors.ring)
 }
 
-/// What an entry's icon slot shows.
 #[derive(Debug, Clone, Copy)]
 pub enum RowIcon<'a> {
     Thumbnail(&'a Arc<RenderImage>),
-    /// Its type's icon from the system icon theme, in its own colors.
     Theme(&'a Arc<RenderImage>),
-    /// The window's own icon for its kind.
     BuiltIn(IconKind),
 }
 
-/// The icon slot of an entry row, the same size whatever it shows, so
-/// nothing shifts when a thumbnail or theme icon arrives.
 pub fn entry_icon(shown: RowIcon<'_>, colors: &Colors) -> Div {
     entry_icon_sized(shown, size::ROW_ICON, colors)
 }
 
-/// An entry's icon slot `side` across, as [`entry_icon`]. A thumbnail
-/// keeps its shape inside it.
 pub fn entry_icon_sized(shown: RowIcon<'_>, side: Pixels, colors: &Colors) -> Div {
     let slot = div()
         .relative()
@@ -200,7 +163,6 @@ pub fn entry_icon_sized(shown: RowIcon<'_>, side: Pixels, colors: &Colors) -> Di
     }
 }
 
-/// The kind of icon an entry of `kind` has before the core says more.
 pub const fn entry_kind(kind: EntryKind) -> IconKind {
     match kind {
         EntryKind::Folder => IconKind::Folder,
@@ -208,12 +170,10 @@ pub const fn entry_kind(kind: EntryKind) -> IconKind {
     }
 }
 
-/// The icon and tint an entry of `kind` is drawn with.
 pub const fn kind_glyph(kind: EntryKind, colors: &Colors) -> (Icon, Rgba) {
     built_in(entry_kind(kind), colors)
 }
 
-/// The window's own icon for `kind`, and its tint.
 pub const fn built_in(kind: IconKind, colors: &Colors) -> (Icon, Rgba) {
     let tint = match kind {
         IconKind::Folder => colors.folder,
@@ -222,7 +182,6 @@ pub const fn built_in(kind: IconKind, colors: &Colors) -> (Icon, Rgba) {
     (glyph_of(kind), tint)
 }
 
-/// The window's own icon for `kind`.
 pub const fn glyph_of(kind: IconKind) -> Icon {
     match kind {
         IconKind::Folder => Icon::Folder,
@@ -236,7 +195,6 @@ pub const fn glyph_of(kind: IconKind) -> Icon {
     }
 }
 
-/// `glyph`, `side` across, in `tint`.
 pub fn icon(glyph: Icon, side: Pixels, tint: Rgba) -> impl IntoElement {
     svg()
         .path(glyph.path())
@@ -264,7 +222,6 @@ mod tests {
 
     #[test]
     fn touching_selected_rows_join_into_one_block() {
-        // Rows 0, 1 and 2 selected, 3 not, 4 selected alone.
         let selected = |index| matches!(index, 0..=2 | 4);
         let corners = |index| Corners::of(index, selected);
         assert_eq!(
@@ -296,7 +253,6 @@ mod tests {
     fn a_row_not_selected_stays_round_between_selected_ones() {
         let selected = |index| index != 1;
         assert_eq!(Corners::of(1, selected), ROUND);
-        // No row comes after the last one there can be.
         assert!(Corners::of(usize::MAX, |_| true).bottom);
     }
 }

@@ -1,12 +1,3 @@
-//! Accepting what the pick bar says: Enter in the name box, or the Open or
-//! Save button. A typed path is tried as a folder first and, if the core
-//! can't list it, the window goes to the folder it is in with the last part
-//! as the name (a `Jump`). A name in the folder on screen is opened,
-//! picked or saved at; nothing typed picks the selection, or for folders
-//! the folder on screen. When the folder a jump asked for answers or is
-//! refused, the box and any pending save follow it here too. See `pick`
-//! for the whole flow.
-
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
@@ -16,21 +7,13 @@ use nova_files_api::{EntryId, EntryKind, ListingId};
 use super::{Mode, typed};
 use crate::window::{MainWindow, tidy};
 
-/// A typed path the window asked the core for.
 pub(super) struct Jump {
-    /// Whether a refusal goes to the folder the path is in instead.
     fallback: bool,
-    /// What the name box holds once the window is there.
     name: OsString,
-    /// The listing it asked for; any other one means the user went
-    /// somewhere else, which drops it.
     listing: Option<ListingId>,
 }
 
 impl MainWindow {
-    /// Enter in the name box, or the Open or Save button: does what the
-    /// box says (see the module's notes). A save onto a file that is there
-    /// asks first; asked, Enter keeps both.
     pub fn accept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.waiting() {
             return;
@@ -55,7 +38,6 @@ impl MainWindow {
                     .pop()
                     .is_some_and(|found| self.accept_found(&folder, found))
             } else {
-                // Only files are copied into the box.
                 let paths = found.into_iter().map(|(_, _, name)| folder.join(name));
                 self.answer_all(paths.collect())
             };
@@ -65,8 +47,6 @@ impl MainWindow {
             cx.notify();
             return;
         }
-        // The app's own name, or one the window put there, unchanged, is a
-        // name with its exact bytes, never a path to read.
         if let Some(suggested) = pick.exact_name(&text) {
             if self.accept_exact(&folder, suggested) {
                 window.remove_window();
@@ -86,8 +66,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// With nothing typed: picks the files or folders selected, or for
-    /// folders the folder on screen. Whether it answered.
     fn accept_selection(&mut self, folder: &Path) -> bool {
         let Some(pick) = &self.pick else { return false };
         let mode = pick.mode;
@@ -110,8 +88,6 @@ impl MainWindow {
         match (mode, paths.is_empty()) {
             (_, false) => self.answer_all(paths),
             (Mode::Folders, true) => self.answer(folder.to_path_buf()),
-            // A folder the keys moved to, in a picker for files: Enter
-            // goes into it.
             (Mode::Files | Mode::Save, true) => {
                 if let [(EntryKind::Folder, id, _)] = selected[..] {
                     self.open_entry(id);
@@ -121,13 +97,8 @@ impl MainWindow {
         }
     }
 
-    /// `name` typed in the folder on screen: goes into it if it is a
-    /// folder there; otherwise opens it as a file, or saves at it. Whether
-    /// it answered.
     fn accept_name(&mut self, folder: &Path, name: &str) -> bool {
         let found = self.listing.as_ref().and_then(|listing| {
-            // A name shown the same way as another, but not its bytes,
-            // never stands in for the one typed.
             let entry = listing
                 .entries
                 .iter()
@@ -146,8 +117,6 @@ impl MainWindow {
         }
     }
 
-    /// The app's suggested `name`, unchanged: the entry with exactly that
-    /// name, or a save under it. Whether it answered.
     fn accept_exact(&mut self, folder: &Path, name: OsString) -> bool {
         let found = self.listing.as_ref().and_then(|listing| {
             let entry = listing.entries.iter().find(|entry| entry.name == name)?;
@@ -159,8 +128,6 @@ impl MainWindow {
         }
     }
 
-    /// A save under `name`, free in the listing on screen, once a fresh
-    /// listing agrees. Never answers now.
     fn save_at(&mut self, folder: &Path, name: OsString) -> bool {
         if self
             .pick
@@ -172,9 +139,6 @@ impl MainWindow {
         false
     }
 
-    /// The entry `found` of the folder on screen, named or clicked: goes
-    /// into a folder (emptying the box), picks a file, or asks before a
-    /// save over it. Whether it answered.
     fn accept_found(
         &mut self,
         folder: &Path,
@@ -192,9 +156,6 @@ impl MainWindow {
         }
     }
 
-    /// Goes to the typed `path`. With `fallback`, a path the core can't
-    /// list sends the window to the folder it is in, with its last part
-    /// in the name box. Never answers.
     fn jump(&mut self, path: &Path, fallback: bool) -> bool {
         let path = tidy(path);
         self.open(&path);
@@ -209,15 +170,9 @@ impl MainWindow {
         false
     }
 
-    /// A folder is now on screen: a new listing drops the
-    /// selection and any question, and a typed jump that led here leaves
-    /// its name in the box. The same folder in a new order keeps them.
     pub fn pick_folder_opened(&mut self, reordered: bool, cx: &mut Context<Self>) {
         let listed = self.listing_id();
         let Some(pick) = &self.pick else { return };
-        // The same folder in a new order keeps its selection, which the
-        // window carried to the new ids; files copied into the name box
-        // and still there are copied again, so Open still answers them.
         if reordered {
             let text = pick.name.read(cx).text();
             let unchanged = pick
@@ -243,8 +198,6 @@ impl MainWindow {
             });
             pick.placed = Some(jump.name).filter(|name| !name.is_empty());
         }
-        // Only the listing a save asked for answers it; any other one came
-        // from going somewhere else, which drops the save.
         if let Some(recheck) = pick.recheck.take()
             && recheck.listing == listed
         {
@@ -252,12 +205,8 @@ impl MainWindow {
         }
     }
 
-    /// The core couldn't list `path`. A typed path that may name a file
-    /// goes to the folder it is in instead.
     pub fn pick_folder_refused(&mut self, id: ListingId, path: &Path) {
         let Some(pick) = &mut self.pick else { return };
-        // A save whose folder is gone waits for the user again, and one
-        // that going somewhere else replaced is dropped.
         pick.recheck = None;
         let Some(jump) = pick.jump.take().filter(|jump| jump.listing == Some(id)) else {
             return;

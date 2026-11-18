@@ -1,6 +1,5 @@
 use super::{Step, TextEdit};
 
-/// `text` with `selection` selected, the caret at its end.
 fn at(text: &str, selection: std::ops::Range<usize>) -> TextEdit {
     let mut edit = TextEdit::new(text);
     edit.select_range(selection);
@@ -48,7 +47,6 @@ fn a_range_past_the_end_is_kept_inside_the_text() {
 
 #[test]
 fn grapheme_moves_step_over_a_whole_character() {
-    // "e" and a combining accent read as one character.
     let mut edit = TextEdit::new("cafe\u{301}!");
     edit.move_left(Step::Grapheme, false);
     assert_eq!(edit.caret(), 6);
@@ -149,7 +147,6 @@ fn select_all_and_select_range() {
     edit.select_range(5..0);
     assert_eq!(edit.selection(), 0..5);
     assert_eq!(edit.caret(), 0);
-    // Inside a character, a range moves back to its start.
     let mut accented = TextEdit::new("é!");
     accented.select_range(1..3);
     assert_eq!(accented.selection(), 0..3);
@@ -199,7 +196,6 @@ fn double_click_selects_the_run_under_it() {
     assert_eq!(edit.selected_text(), " ");
     edit.select_word_at(9);
     assert_eq!(edit.selected_text(), "-");
-    // At the very end, the word before.
     edit.select_word_at(18);
     assert_eq!(edit.selected_text(), "pdf");
     let mut empty = TextEdit::new("");
@@ -214,12 +210,10 @@ fn an_input_method_composes_then_commits() {
     assert_eq!(edit.text(), "aに");
     assert_eq!(edit.marked(), Some(1..4));
     assert_eq!(edit.selection(), 4..4);
-    // The next composing step replaces what is marked.
     edit.replace_and_mark(None, "にほ", Some(0..3));
     assert_eq!(edit.text(), "aにほ");
     assert_eq!(edit.marked(), Some(1..7));
     assert_eq!(edit.selection(), 1..4);
-    // The commit replaces the marked text too.
     edit.replace(None, "日本");
     assert_eq!(edit.text(), "a日本");
     assert_eq!(edit.marked(), None);
@@ -240,7 +234,6 @@ fn composing_nothing_marks_nothing() {
 
 #[test]
 fn utf16_offsets_count_as_input_methods_do() {
-    // "é" is two bytes and one unit; the emoji is four bytes and two units.
     let edit = TextEdit::new("é😀a");
     assert_eq!(edit.offset_to_utf16(0), 0);
     assert_eq!(edit.offset_to_utf16(2), 1);
@@ -275,7 +268,6 @@ fn moving_the_caret_ends_composing() {
 
 #[test]
 fn a_word_keeps_its_accents() {
-    // A decomposed "é": "e" and a combining accent.
     let mut edit = TextEdit::new("cafe\u{301}.txt");
     edit.move_home(false);
     edit.move_right(Step::Word, false);

@@ -1,18 +1,3 @@
-//! What a view has selected, and the row the keyboard is on.
-//!
-//! A selection belongs to one listing: the entries selected, an anchor a
-//! Shift range starts from, and a cursor, the row the keyboard moves from.
-//! A click selects one entry; Ctrl+click adds an entry or takes it out,
-//! and Shift+click selects from the anchor to the entry clicked (the
-//! anchor stays, so another Shift+click redraws the range from it). The
-//! keyboard moves the cursor and selects the row it lands on, or with
-//! Shift the range from the anchor to it. A range holds only the entries
-//! the view picks (a picker for files picks only files).
-//!
-//! When the same folder is read again, [`Selection::carried`] keeps the
-//! entries by name, as raw bytes, since names needn't be UTF-8; a cursor
-//! whose row is gone goes to the nearest row left.
-
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::hash::Hash;
@@ -20,20 +5,14 @@ use std::hash::Hash;
 use gpui::Modifiers;
 use nova_files_api::{Entry, EntryId, ListingId};
 
-/// How a click changes the selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Click {
-    /// Selects only the entry clicked.
     Only,
-    /// Ctrl+click: adds the entry clicked or takes it out.
     Toggle,
-    /// Shift+click: selects from the anchor to the entry clicked.
     Range,
 }
 
 impl Click {
-    /// What a click with `modifiers` does, in a view that allows several
-    /// entries when `several`; one that doesn't ignores the keys held.
     pub fn of(modifiers: Modifiers, several: bool) -> Self {
         if !several {
             Self::Only
@@ -47,32 +26,19 @@ impl Click {
     }
 }
 
-/// Where a key moves the cursor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Move {
-    /// A line up: a row, or in Icons the cell above.
     Up,
-    /// A line down: a row, or in Icons the cell below.
     Down,
-    /// The entry before.
     Left,
-    /// The entry after.
     Right,
-    /// A screen of rows up.
     PageUp,
-    /// A screen of rows down.
     PageDown,
     First,
     Last,
 }
 
 impl Move {
-    /// The entry a move from `from` lands on, in a list of `len` entries
-    /// laid out `per_line` to a line, with `page` entries on screen (a
-    /// page moves by the whole lines in it). With
-    /// no entry yet, a move down or right starts at the first entry and a
-    /// move up or left at the last. A move up from the first line stays;
-    /// one down from the line before a short last line goes to its end.
     pub fn to(
         self,
         from: Option<usize>,
@@ -96,21 +62,15 @@ impl Move {
     }
 }
 
-/// The entries selected in one listing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selection {
-    /// The listing the entries belong to.
     pub listing: ListingId,
-    /// The entries, in the order the listing shows them.
     ids: Vec<EntryId>,
-    /// The entry a Shift range starts from.
     anchor: EntryId,
-    /// The row the keyboard is on.
     cursor: EntryId,
 }
 
 impl Selection {
-    /// Just `id` of `listing`.
     pub fn only(listing: ListingId, id: EntryId) -> Self {
         Self {
             listing,
@@ -120,8 +80,6 @@ impl Selection {
         }
     }
 
-    /// Every entry of `listing`'s `len` that `picks` allows; the cursor
-    /// stays where it was in `before`, if it was in this listing.
     pub fn all(
         before: Option<&Self>,
         listing: ListingId,
@@ -141,23 +99,18 @@ impl Selection {
         })
     }
 
-    /// The entries selected, in the order the listing shows them.
     pub fn ids(&self) -> &[EntryId] {
         &self.ids
     }
 
-    /// Whether `id` is selected.
     pub fn contains(&self, id: EntryId) -> bool {
         self.ids.binary_search(&id).is_ok()
     }
 
-    /// The row the keyboard is on.
     pub const fn cursor(&self) -> EntryId {
         self.cursor
     }
 
-    /// `click` on `id` of `listing`. A click in another listing than this
-    /// one's starts over there. `picks` says which entries a range holds.
     #[must_use]
     pub fn clicked(
         selection: Option<Self>,
@@ -181,8 +134,6 @@ impl Selection {
         selection
     }
 
-    /// The cursor moved to `id` of `listing` by a key: selects just that
-    /// entry, or with `extend` the range from the anchor to it.
     #[must_use]
     pub fn moved(
         selection: Option<Self>,
@@ -195,8 +146,6 @@ impl Selection {
         Self::clicked(selection, listing, id, click, picks)
     }
 
-    /// A box dragged from the entry `from` to the entry `to` of `listing`:
-    /// `ids`, the entries it covers, added to `before` with `add`.
     #[must_use]
     pub fn banded(
         before: Option<&Self>,
@@ -219,7 +168,6 @@ impl Selection {
         }
     }
 
-    /// Ctrl+Space: adds the entry at the cursor or takes it out.
     pub fn toggle_cursor(&mut self) {
         self.toggle(self.cursor);
         self.anchor = self.cursor;
@@ -243,17 +191,11 @@ impl Selection {
         self.ids = (from..=to).map(EntryId).filter(|&id| picks(id)).collect();
     }
 
-    /// This selection, made in `before`, carried to `after`, a fresh
-    /// listing `listing` of the same folder: the same names stay selected,
-    /// and a cursor whose entry is gone goes to the nearest row left.
     pub fn carried(&self, before: &[Entry], listing: ListingId, after: &[Entry]) -> Option<Self> {
         let key_before = |id: EntryId| entry_at(before, id).map(name_of);
         self.carried_by(listing, key_before, after, name_of)
     }
 
-    /// [`Self::carried`], with the entry `id` of the listing before the
-    /// same as an entry of `after` when `key_before` gives what
-    /// `key_after` does.
     pub fn carried_by<'a, K: Eq + Hash>(
         &self,
         listing: ListingId,
@@ -279,9 +221,6 @@ impl Selection {
         })
     }
 
-    /// At most one entry, for a view that takes only one: the cursor's if
-    /// it is selected, otherwise the selected one nearest it (a box can end
-    /// on a row the view doesn't pick).
     #[must_use]
     pub fn at_most_one(mut self) -> Self {
         let cursor = self.cursor;
@@ -297,13 +236,10 @@ impl Selection {
         self
     }
 
-    /// Just the entry named `name` in `entries` of `listing`, if there is one.
     pub fn named(listing: ListingId, entries: &[Entry], name: &OsStr) -> Option<Self> {
         find(entries, name).map(|id| Self::only(listing, id))
     }
 
-    /// The entries of `listing` named exactly as one of `names`, with the
-    /// cursor on the first the listing shows; `None` when none is there.
     pub fn named_all(
         listing: ListingId,
         entries: &[Entry],
@@ -324,12 +260,10 @@ impl Selection {
     }
 }
 
-/// The entry `id` of a listing's `entries`.
 pub fn entry_at(entries: &[Entry], id: EntryId) -> Option<&Entry> {
     usize::try_from(id.0).ok().and_then(|at| entries.get(at))
 }
 
-/// The id of the entry named exactly `name` in `entries`.
 fn name_of(entry: &Entry) -> &OsStr {
     entry.name.as_os_str()
 }
@@ -408,12 +342,10 @@ mod tests {
     fn shift_click_selects_from_the_anchor_and_keeps_it() {
         let start = Selection::only(SHOWN, EntryId(2));
         let down = click(start, 5, Click::Range);
-        // 3 isn't something this view picks.
         assert_eq!(ids(&down), [2, 4, 5]);
         assert_eq!(down.cursor(), EntryId(5));
         let up = click(down, 0, Click::Range);
         assert_eq!(ids(&up), [0, 1, 2]);
-        // Ctrl+click moves the anchor a range starts from.
         let moved = click(click(up, 5, Click::Toggle), 6, Click::Range);
         assert_eq!(ids(&moved), [5, 6]);
     }
@@ -438,7 +370,6 @@ mod tests {
         assert_eq!(Move::PageDown.to(Some(0), 10, (3, 1)), Some(3));
         assert_eq!(Move::PageUp.to(Some(4), 10, (3, 1)), Some(1));
         assert_eq!(Move::PageUp.to(Some(2), 10, (3, 1)), Some(0));
-        // An empty screen still moves a row.
         assert_eq!(Move::PageDown.to(Some(1), 10, (0, 1)), Some(2));
         assert_eq!(Move::First.to(Some(4), 5, (3, 1)), Some(0));
         assert_eq!(Move::Last.to(Some(0), 5, (3, 1)), Some(4));
@@ -451,14 +382,11 @@ mod tests {
 
     #[test]
     fn in_icons_up_and_down_move_a_line_and_left_and_right_an_entry() {
-        // 11 entries, 4 to a line: 0-3, 4-7, 8-10.
         let to = |step: Move, from| step.to(Some(from), 11, (8, 4));
         assert_eq!(to(Move::Down, 1), Some(5));
         assert_eq!(to(Move::Up, 5), Some(1));
-        // The first line goes no higher; the last no lower.
         assert_eq!(to(Move::Up, 3), Some(3));
         assert_eq!(to(Move::Down, 9), Some(9));
-        // Down from under the short last line's end goes to its end.
         assert_eq!(to(Move::Down, 7), Some(10));
         assert_eq!(to(Move::Down, 6), Some(10));
         assert_eq!(to(Move::Down, 5), Some(9));
@@ -467,13 +395,10 @@ mod tests {
         assert_eq!(to(Move::Right, 3), Some(4));
         assert_eq!(to(Move::Right, 10), Some(10));
         assert_eq!(Move::Right.to(None, 11, (8, 4)), Some(0));
-        // A page is whole lines: 7 on screen is one line of 4.
         assert_eq!(Move::PageUp.to(Some(10), 11, (7, 4)), Some(6));
         assert_eq!(Move::PageDown.to(Some(1), 11, (7, 4)), Some(5));
-        // Fewer than a line on screen still moves a line.
         assert_eq!(Move::PageDown.to(Some(1), 11, (2, 4)), Some(5));
         assert_eq!(Move::Left.to(None, 11, (8, 4)), Some(10));
-        // No entries to a line still moves.
         assert_eq!(Move::Down.to(Some(0), 3, (8, 0)), Some(1));
     }
 
@@ -569,7 +494,6 @@ mod tests {
         let mut none = one;
         none.toggle_cursor();
         assert_eq!(none.clone().at_most_one(), none);
-        // One entry away from the cursor stays as it is.
         let mut away = Selection::clicked(
             Some(Selection::only(SHOWN, EntryId(0))),
             SHOWN,

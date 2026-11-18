@@ -1,8 +1,3 @@
-//! The app's one text field (see [`TextField`]), and the keys it takes.
-//!
-//! The keys are bound under [`KEY_CONTEXT`], so they act only while a field
-//! has focus; [`bind_keys`] binds them once per app.
-
 mod edit;
 mod element;
 mod field;
@@ -11,7 +6,6 @@ use gpui::{App, KeyBinding};
 
 pub use field::{TextField, TextFieldEvent};
 
-/// The key context a focused field sets.
 pub const KEY_CONTEXT: &str = "TextField";
 
 #[expect(
@@ -54,7 +48,6 @@ pub use actions::{
     SelectWordRight, Submit, WordLeft, WordRight,
 };
 
-/// Binds the field's keys, the Linux and Windows way.
 pub fn bind_keys(cx: &mut App) {
     let context = Some(KEY_CONTEXT);
     cx.bind_keys([
@@ -77,7 +70,6 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-delete", DeleteWordRight, context),
         KeyBinding::new("ctrl-c", Copy, context),
         KeyBinding::new("ctrl-x", Cut, context),
-        // Also keeps the window's Shift+Delete off the files while typing.
         KeyBinding::new("shift-delete", Cut, context),
         KeyBinding::new("ctrl-v", Paste, context),
         KeyBinding::new("enter", Submit, context),

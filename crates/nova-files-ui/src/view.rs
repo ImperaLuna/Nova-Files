@@ -1,33 +1,3 @@
-//! Draws the main window as on the design page: the sidebar and the top
-//! bar sit on the window itself, and the folder's entries are one sheet
-//! that runs to the window's right and bottom edges, with a rounded corner
-//! where the sidebar and the bar meet. In pick mode the pick bar runs along
-//! the bottom (see `pick`).
-//!
-//! A narrow window folds the sidebar into one row above the bar (see
-//! `sidebar`).
-//!
-//! Each part is drawn in a file of its own, so a feature changes only its
-//! part: the top bar in `bar`, its path bar in `path`, the sidebar in
-//! `sidebar`, the sheet with its column heads and rows in `sheet`, the
-//! pieces of one row in `row`, a right-click menu in `menu`, the Start
-//! page, drawn on the sheet in place of the rows, in `start`, a
-//! Properties page, drawn there too, in `properties`, and the
-//! quick look over it all in `preview`.
-//!
-//! The window sets the key context its actions are bound in and handles
-//! each action it takes; buttons and the mouse's side buttons send actions
-//! rather than doing the work (see `commands`). A press on the entries
-//! that isn't on a name can drag a box to select (see `band`). Every
-//! element a test clicks carries a debug selector: `back`, `forward`, `up`,
-//! `place-<n>`, `entry-<n>` and its name `name-<n>`, counted from 0, and
-//! the box `band`. Each line's Modified cell carries one too,
-//! `modified-header` and `modified-<n>`, so a test can check the columns
-//! line up. The slots later features fill carry one each: `sidebar`,
-//! `path`, `search` and `views`; the search's parts carry `search-box`,
-//! `match-count` and `no-matches`, and the path bar's own are listed in
-//! `path`. The island over the bottom of the sheet is drawn in `island`.
-
 mod bar;
 mod drop;
 mod gallery;
@@ -91,14 +61,12 @@ impl Render for MainWindow {
 }
 
 impl MainWindow {
-    /// The window without the quick look over it.
     fn window_root(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
         self.set_scale_factor(window.scale_factor(), window, cx);
         self.start_wanted_rename(window, cx);
         self.settle_search(window, cx);
         self.settle_tab_focus(window, cx);
         let colors = Colors::of(cx);
-        // Keys always land somewhere (see `keys_home`).
         let main = self.pick.is_none();
         let narrow = window.viewport_size().width < theme::window::NARROW_WIDTH;
         if window.focused(cx).is_none() {
@@ -107,13 +75,11 @@ impl MainWindow {
         self.focus_menu(window, cx);
         div()
             .key_context(commands::KEY_CONTEXT)
-            // The drag chip says what Ctrl or Shift makes of a drop.
             .on_modifiers_changed(|_, window, cx| {
                 if cx.has_active_drag() {
                     window.refresh();
                 }
             })
-            // After every row under the pointer (see `hover_open`).
             .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, window, cx| {
                 this.pointer_moved(cx.has_active_drag(), window, cx);
             }))
@@ -140,9 +106,6 @@ impl MainWindow {
             .size_full()
             .flex()
             .flex_col()
-            // The sheet's color fills the window once, and the window's
-            // own color is painted only around the sheet: a software
-            // renderer pays for every layer it fills.
             .bg(colors.sheet)
             .text_color(colors.text_soft)
             .font_family(text::FAMILY)
@@ -155,8 +118,6 @@ impl MainWindow {
 }
 
 impl MainWindow {
-    /// A box being dragged follows the pointer anywhere in the window
-    /// (see `band`).
     fn band_events(root: Div, cx: &Context<Self>) -> Div {
         root.on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
             this.band_moved(event, cx);
@@ -170,7 +131,6 @@ impl MainWindow {
         )
     }
 
-    /// The actions that change how the folder shows (see `window::views`).
     fn view_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &ShowDetails, _, cx| {
             this.show_as(ViewMode::Details, cx);
@@ -183,7 +143,6 @@ impl MainWindow {
         .on_action(cx.listener(|this, _: &SmallerIcons, _, cx| this.zoom_icons(false, cx)))
     }
 
-    /// The tabs' actions, in a main window (see `window::tabs`).
     fn tab_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &NewTab, _, cx| {
             this.new_tab(&crate::location::Location::Start, cx);
@@ -194,7 +153,6 @@ impl MainWindow {
         .on_action(cx.listener(|this, _: &ShowProperties, _, cx| this.show_properties(cx)))
     }
 
-    /// The actions on the files selected (see `window::acting`).
     fn file_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &CopySelected, _, cx| this.copy_selected(false, cx)))
             .on_action(cx.listener(|this, _: &CutSelected, _, cx| this.copy_selected(true, cx)))
@@ -210,8 +168,6 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &NewFolder, _, _| this.new_folder()))
     }
 
-    /// The sidebar beside the bar and sheet; above them when `narrow`.
-    /// Only the strips around the sheet are painted the window's color.
     fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {
         div()
             .flex()
@@ -249,9 +205,6 @@ impl MainWindow {
 }
 
 impl MainWindow {
-    /// What typing does on the window's root: Ctrl+F and `/` go to the
-    /// search box in a main window, other letters jump to a name. Keys
-    /// typed in a text field are its own.
     fn typed_keys(root: Div, main: bool, cx: &Context<Self>) -> Div {
         root.when(main, |root| {
             root.on_action(cx.listener(|this, _: &FocusSearch, _, cx| {
@@ -259,7 +212,6 @@ impl MainWindow {
             }))
         })
         .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-            // Letters typed into a text field are the field's.
             if !this.focus.is_focused(window) {
                 return;
             }
@@ -269,9 +221,6 @@ impl MainWindow {
         }))
     }
 
-    /// Where the keys go when nothing else holds them: in a main window
-    /// the window itself, which a click inside takes focus back to; in a
-    /// picker its name box, whose keys pass the window's on.
     pub fn keys_home(&self, cx: &App) -> FocusHandle {
         self.pick.as_ref().map_or_else(
             || self.focus.clone(),
@@ -279,7 +228,6 @@ impl MainWindow {
         )
     }
 
-    /// The selection's actions on the window's root (see `selecting`).
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &OpenSelected, window, cx| {
             if !this.open_previewed(window, cx) {
@@ -347,11 +295,6 @@ impl MainWindow {
         }))
     }
 
-    /// The quick look's actions on the window's root (see
-    /// `window::preview`). A key it doesn't take goes on as typed: a space
-    /// inside a name being jumped to stays part of the name, and one typed
-    /// into a text field (a picker's name, a path, a search) stays there.
-    /// (A text field takes the arrows itself before they get here.)
     fn preview_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &TogglePreview, window, cx| {
             if !this.focus.is_focused(window) || this.jumping(cx) {

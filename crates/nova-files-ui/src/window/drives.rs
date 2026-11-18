@@ -1,16 +1,3 @@
-//! The drives as the window takes them: the core's list (asked for once,
-//! then sent on each change), how full each mounted one is, and what
-//! a click or the drive's menu asks for.
-//!
-//! How full the drives are is asked again whenever the list changes and
-//! whenever a folder's listing arrives, so the numbers follow copies and
-//! deletes without polling. One ask is out at a time: asks made meanwhile
-//! become one more once it answers, so a drive that stopped answering
-//! never piles up the core's threads and answers land in order. A drive
-//! that goes away takes its number with it. A click on a volume not mounted mounts it,
-//! then opens it, unless the user went somewhere else meanwhile. A drive that goes away (ejected, unplugged) while the
-//! window is in it sends the window home.
-
 use std::collections::HashMap;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
@@ -29,27 +16,20 @@ use crate::menu::{MenuAction, MenuItem};
 const OPEN_LABEL: &str = "Open";
 const EJECT_LABEL: &str = "Eject";
 
-/// What the window knows of the drives.
 #[derive(Debug, Default)]
 pub struct Drives {
     pub list: Arc<DriveList>,
-    /// How full each mounted drive is, by its folder.
     pub space: HashMap<PathBuf, DiskSpace>,
-    /// The volume being mounted to be opened.
     opening: Option<VolumeId>,
-    /// Whether an ask for the space is out, and whether to ask again once
-    /// it answers.
     asking: bool,
     ask_again: bool,
 }
 
 impl MainWindow {
-    /// The rows of the sidebar's Drives section.
     pub fn shown_drives(&self) -> Vec<ShownDrive> {
         drives::shown(&self.drives.list)
     }
 
-    /// How full the drive at `folder` is, once the core has said.
     pub fn disk_space(&self, folder: &Path) -> Option<DiskSpace> {
         self.drives.space.get(folder).copied()
     }
@@ -96,15 +76,12 @@ impl MainWindow {
         match result {
             Ok(Some(folder)) if opening => self.open(&folder),
             Ok(_) => {}
-            // Until the island shows notes, stderr is where this goes.
             Err(failure) => {
                 writeln!(io::stderr(), "nova-files: {action:?} failed: {failure:?}").ok();
             }
         }
     }
 
-    /// Asks how full the system drive and each mounted volume are, or
-    /// asks again once the ask that is out answers.
     pub(super) fn ask_disk_space(&mut self) {
         if self.drives.asking {
             self.drives.ask_again = true;
@@ -118,12 +95,9 @@ impl MainWindow {
             .into_iter()
             .filter_map(|drive| drive.folder)
             .collect();
-        // A core gone ends the window's events, which shows it.
         self.drives.asking = connection.send(Command::DiskSpace(folders)).is_ok();
     }
 
-    /// Sends the window home when the folder on screen was on a volume
-    /// `next` no longer has mounted there.
     fn leave_gone_drive(&mut self, next: &DriveList) {
         let Some(here) = self.folder().map(Path::to_owned) else {
             return;
@@ -144,17 +118,13 @@ impl MainWindow {
         }
     }
 
-    /// Going somewhere else drops the wish to open the volume being
-    /// mounted, so its mount finishing late doesn't take the window away.
     pub(super) fn forget_drive_to_open(&mut self) {
         self.drives.opening = None;
     }
 
-    /// Goes to `drive`, mounting it first when it isn't mounted.
     pub fn open_drive(&mut self, drive: ShownDrive) {
         match (drive.folder, drive.volume) {
             (Some(folder), _) => self.open(&folder),
-            // Clicked again while it mounts: the first mount opens it.
             (None, Some(volume)) if self.drives.opening.as_ref() == Some(&volume) => {}
             (None, Some(volume)) => {
                 self.drives.opening = Some(volume.clone());
@@ -166,13 +136,10 @@ impl MainWindow {
 
     pub(crate) fn act_on_drive(&self, action: DriveAction) {
         if let Some(connection) = &self.connection {
-            // A core gone ends the window's events, which shows it.
             connection.send(Command::Drive(action)).ok();
         }
     }
 
-    /// Opens `drive`'s menu at `at`: Open, Open in new tab, and Eject for
-    /// a drive that can be unplugged.
     pub(crate) fn open_drive_menu(
         &mut self,
         drive: ShownDrive,

@@ -1,13 +1,5 @@
-//! The window. It sends commands to the core and draws from its events; it
-//! never touches the disk. A window opens on the Start page unless the
-//! program names a folder. A picker window is the same window in pick mode,
-//! opened for another app's request (see `pick`).
-//!
-//! [`run`] takes over the calling thread with a GPUI app, opens a window,
-//! and follows the program's [`Request`]s until the last window closes or
-//! a [`Request::Quit`] arrives. GPUI on Linux ends its run when the last
-//! window closes, so the program calls [`run`] again for the next window.
-
+// GPUI on Linux ends its run when the last window closes.
+// https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 #![forbid(unsafe_code)]
 
 mod assets;
@@ -67,33 +59,20 @@ pub use window::{
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
 pub use window_state::{WindowState, fetch as fetch_window_state};
 
-/// Why [`run`] returned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ended {
-    /// The last window closed; the program carries on without a window.
     WindowsClosed,
-    /// A [`Request::Quit`] arrived, or every request sender is gone.
     Quit,
 }
 
-/// What the first window of a run opens on.
 #[derive(Debug)]
 pub enum Opening {
-    /// A main window as asked: on a folder, or on the Start page.
     Folder(WindowRequest),
-    /// A picker window for another app's request.
     Pick(Box<PickRequest>),
 }
 
-/// Called when the first window can't set up its GPU.
-///
-/// It gets the window's folder, or none for the Start page. The program
-/// uses it to start again with every Vulkan driver; it returns only when
-/// it didn't.
 pub type RecoverGpu = Rc<dyn Fn(Option<&Path>)>;
 
-/// Runs the UI on this thread with one window open as `first` asks, until
-/// the last window closes or the program asks it to quit.
 pub fn run(
     connector: &Connector,
     requests: &Requests,
@@ -143,29 +122,17 @@ pub fn run(
     ended.get()
 }
 
-/// The task that follows the program's requests. The app owns it, so it is
-/// dropped with the app when the run ends and never touches a released app.
 struct RequestLoop {
     _follow: Task<()>,
 }
 
 impl Global for RequestLoop {}
 
-/// Opens a picker window of the app's own for `request`, such as the
-/// folder picker that pins a folder to Places.
 pub(crate) fn open_picker(connector: &Connector, request: Box<PickRequest>, cx: &mut App) {
-    // Only a main window failing restarts the program for its GPU.
     let recover_gpu: RecoverGpu = Rc::new(|_: Option<&Path>| {});
     open_window(connector, Opening::Pick(request), &recover_gpu, cx);
 }
 
-/// Opens a main window on its folder (or the Start page), with the files
-/// it was asked to show selected, or a picker
-/// window titled as the asking app wants and dialog-sized, over the app's
-/// window when it names one, else centred on the main display.
-/// When a main window fails with no window open, `recover_gpu` gets the
-/// folder. A picker that fails to open answers cancelled: restarting
-/// would lose the asking app's call.
 fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu, cx: &mut App) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
     let (folder, select, pick) = match opening {
@@ -187,7 +154,6 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
         options.foreign_parent = request.parent.as_ref().map(pick::foreign_parent);
     }
     let connector = connector.clone();
-    // A picker always shows a folder: the one asked for, or home.
     let location = match folder {
         Some(folder) => Location::Folder(folder),
         None if pick.is_some() => Location::Folder(home_folder()),
@@ -210,8 +176,6 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
         if recovers && cx.windows().is_empty() {
             recover_gpu(recover_folder.as_deref());
         }
-        // The display refused a window; any open ones carry on. Until there
-        // is a log, stderr is where this goes.
         writeln!(
             io::stderr(),
             "nova-files: could not open a window: {error:#}"

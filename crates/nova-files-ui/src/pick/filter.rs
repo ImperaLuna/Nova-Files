@@ -1,11 +1,3 @@
-//! The picker's type filter: the app's file types, plus All files unless
-//! one of them already takes every file, in a
-//! menu that opens up from the pick bar. Files the chosen type leaves out
-//! are dimmed, not hidden, and can still be picked; a folder picker dims
-//! every file. Each menu item carries a debug selector: `pick-filter`
-//! opens the menu, `pick-filter-<n>` (counted from 0) and
-//! `pick-filter-all` choose.
-
 use gpui::{
     AnyElement, ClickEvent, Context, Corner, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, anchored,
@@ -18,13 +10,9 @@ use crate::theme::{Colors, radius, size};
 use crate::window::MainWindow;
 
 const ALL_FILES_LABEL: &str = "All files";
-/// The glob that matches every name.
 const EVERY_NAME: &str = "*";
-/// The menu draws over the list.
 const MENU_PRIORITY: usize = 1;
 
-/// The filter a picker starts on: the one the app asks for, or else its
-/// first, as GTK's dialog does. `None` is All files.
 pub fn first(request: &PickRequest) -> Option<usize> {
     let count = request.filters.len();
     request
@@ -33,8 +21,6 @@ pub fn first(request: &PickRequest) -> Option<usize> {
         .or_else(|| (count > 0).then_some(0))
 }
 
-/// Whether one of the app's own types already takes every file, as
-/// browsers' "All Files" does; then the menu adds no All files of its own.
 pub fn offers_all(request: &PickRequest) -> bool {
     request.filters.iter().any(|filter| {
         filter
@@ -44,8 +30,6 @@ pub fn offers_all(request: &PickRequest) -> bool {
     })
 }
 
-/// What the menu and its button call `filter`: the app's name for it, or
-/// All files.
 pub fn label(request: &PickRequest, filter: Option<usize>) -> SharedString {
     filter
         .and_then(|filter| request.filters.get(filter))
@@ -55,13 +39,11 @@ pub fn label(request: &PickRequest, filter: Option<usize>) -> SharedString {
         )
 }
 
-/// Whether the menu item for `filter` shows as the one `chosen`.
 pub fn is_chosen(chosen: Option<usize>, filter: Option<usize>) -> bool {
     chosen == filter
 }
 
 impl Picker {
-    /// Whether the chosen type leaves `entry` out.
     pub fn dims(&self, entry: &Entry) -> bool {
         if entry.kind != EntryKind::File {
             return false;
@@ -76,13 +58,10 @@ impl Picker {
 }
 
 impl MainWindow {
-    /// The type filter chosen, as an index into the app's filters; `None`
-    /// for All files.
     pub fn pick_filter(&self) -> Option<usize> {
         self.pick.as_ref()?.filter
     }
 
-    /// Whether a picker leaves the entry at `index` on screen out.
     pub fn pick_dims(&self, index: usize) -> bool {
         let entry = self
             .listing
@@ -107,8 +86,6 @@ impl MainWindow {
         }
     }
 
-    /// The filter button, and its menu while open. Nothing when the app
-    /// offers no types, or for a folder picker.
     pub fn filter_button(pick: &Picker, cx: &Context<Self>) -> Option<impl IntoElement> {
         if pick.request.filters.is_empty() || pick.mode == Mode::Folders {
             return None;
@@ -120,7 +97,6 @@ impl MainWindow {
             false,
             &colors,
         )
-        // A long name gives way to the name box and the other buttons.
         .flex_shrink()
         .min_w_0()
         .max_w_full()
@@ -135,7 +111,6 @@ impl MainWindow {
                 .chain(all)
                 .map(|filter| menu_item(pick, filter, cx))
                 .collect();
-            // Pinned to the button's top left, opening upward.
             div().absolute().top_0().left_0().child(
                 deferred(
                     anchored()
@@ -147,7 +122,6 @@ impl MainWindow {
                                 .debug_selector(|| "pick-filter-menu".to_owned())
                                 .flex()
                                 .flex_col()
-                                // Many types scroll rather than run off the window.
                                 .max_h(size::FILTER_MENU_MAX_HEIGHT)
                                 .overflow_y_scroll()
                                 .p(size::MENU_PAD)

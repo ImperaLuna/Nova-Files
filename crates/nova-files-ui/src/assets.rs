@@ -1,15 +1,9 @@
-//! The icons, built into the program so the window never reads them from
-//! the disk. GPUI asks for them by path; [`Icon`] names each one. Their
-//! shapes are in `svg`; they are drawn as masks, and the UI colors them
-//! with theme tokens.
-
 mod svg;
 
 use std::borrow::Cow;
 
 use gpui::{AssetSource, Result, SharedString};
 
-/// The icons the UI draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Icon {
     Folder,
@@ -106,7 +100,6 @@ impl Icon {
         Self::Person,
     ];
 
-    /// The path GPUI asks the asset source for.
     pub const fn path(self) -> &'static str {
         match self {
             Self::Folder => "icons/folder.svg",
@@ -207,7 +200,6 @@ impl Icon {
     }
 }
 
-/// Serves the built-in icons to GPUI.
 pub struct Assets;
 
 impl AssetSource for Assets {

@@ -1,12 +1,5 @@
-//! Which parts of a name a search matched, to mark them: each word of the
-//! query where it first shows in the name, ignoring case. The core finds
-//! more than this (letters in order, one typo, accents folded away); a
-//! name found that way shows no mark rather than a wrong one.
-
 use std::ops::Range;
 
-/// The byte ranges of `name` that the words of `query` match, in order
-/// and joined where they touch or overlap.
 pub fn matched(name: &str, query: &str) -> Vec<Range<usize>> {
     let mut ranges: Vec<Range<usize>> = query
         .split_whitespace()
@@ -23,7 +16,6 @@ pub fn matched(name: &str, query: &str) -> Vec<Range<usize>> {
     joined
 }
 
-/// Where `word` first shows in `name`, letter for letter ignoring case.
 fn find_ignoring_case(name: &str, word: &str) -> Option<Range<usize>> {
     name.char_indices().find_map(|(start, _)| {
         let mut rest = name[start..].char_indices();

@@ -1,21 +1,11 @@
-//! What the island says when a file the user opened started no app:
-//! "Can't open notes.txt: no app opens it". Files that fail while that
-//! note is up join it, each named with its own reason, so several opened
-//! at once all say how they went: "Can't open a.txt, b.txt: no app opens
-//! them · c.pdf: its app didn't start". Past a few names, a reason
-//! counts its files instead.
-
 use std::path::PathBuf;
 
 use nova_files_api::NotOpened;
 
 use super::{FILE, FILES, LIST_GAP, PART_GAP, count, name_of};
 
-/// The most names one reason lists before it counts its files.
 const MOST_NAMES: usize = 3;
 
-/// The note for the files in `failed` (each with why), in the order they
-/// failed; `None` when there are none.
 pub fn note(failed: &[(PathBuf, NotOpened)]) -> Option<String> {
     let mut reasons: Vec<(NotOpened, Vec<&PathBuf>)> = Vec::new();
     for (path, reason) in failed {
@@ -39,7 +29,6 @@ pub fn note(failed: &[(PathBuf, NotOpened)]) -> Option<String> {
     (!parts.is_empty()).then(|| format!("Can't open {}", parts.join(PART_GAP)))
 }
 
-/// Why, as a user reads it, for one file or for `several`.
 const fn why(reason: NotOpened, several: bool) -> &'static str {
     match (reason, several) {
         (NotOpened::NoApp, false) => "no app opens it",

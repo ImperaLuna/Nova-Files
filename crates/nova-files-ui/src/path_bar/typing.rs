@@ -1,18 +1,3 @@
-//! Typing a path into the path bar. A click on the bar's empty part turns
-//! it into the app's text field (see `text`) holding the folder on
-//! screen's path, `~` for the home folder, all selected. Enter goes where
-//! the text says, read as a picker's name box reads it (see
-//! `pick::typed`): `~` is the home folder and a path without a leading
-//! `/` is taken from the folder on screen. The field stays until that
-//! folder is on screen; a folder that can't be read selects the text
-//! again, so the next keys replace it. Enter on the path as it was, or on
-//! nothing, just puts the crumbs back. Escape puts them back too, and the
-//! window takes the keys again; so does a press anywhere else, or the
-//! field losing the keys.
-//!
-//! The text shown is the path as text; a name that isn't valid UTF-8 can't
-//! be typed, but Enter on the unchanged text never goes anywhere else.
-
 use std::path::{Path, PathBuf};
 
 use gpui::{AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
@@ -23,18 +8,14 @@ use crate::pick::typed::{self, HOME, Typed};
 use crate::text::{TextField, TextFieldEvent};
 use crate::window::MainWindow;
 
-/// The path bar while it is a text field.
 pub struct PathField {
     pub(crate) field: Entity<TextField>,
-    /// The text it started with.
     shown: String,
-    /// The listing Enter asked for, while it is on its way.
     going: Option<ListingId>,
     _events: Subscription,
     _blur: Subscription,
 }
 
-/// How the path bar shows `folder`: `~` for `home` and what is in it.
 pub fn shown_path(folder: &Path, home: &Path) -> String {
     match under_home(folder, home) {
         Some(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
@@ -44,13 +25,10 @@ pub fn shown_path(folder: &Path, home: &Path) -> String {
 }
 
 impl MainWindow {
-    /// The path bar's text field, while it is one.
     pub fn path_field(&self) -> Option<&Entity<TextField>> {
         self.path_bar.field.as_ref().map(|typing| &typing.field)
     }
 
-    /// Turns the path bar into a text field holding the folder on screen's
-    /// path, all selected, and gives it the keys.
     pub(crate) fn start_typing_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(folder) = self.folder() else { return };
         let shown = shown_path(folder, &self.home);
@@ -80,8 +58,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Puts the crumbs back; with `window`, the keys go back where they
-    /// were before (see `keys_home`).
     pub(crate) fn stop_typing_path(&mut self, window: Option<&mut Window>, cx: &mut Context<Self>) {
         if self.path_bar.field.take().is_some()
             && let Some(window) = window
@@ -91,7 +67,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Goes where the typed text says.
     fn submit_typed_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(path_field) = &self.path_bar.field else {
             return;
@@ -114,15 +89,11 @@ impl MainWindow {
             return;
         };
         path_field.going = asked;
-        // Not sent: the core has stopped. The text is selected again.
         if asked.is_none() {
             select_all(&path_field.field, cx);
         }
     }
 
-    /// A folder's listing is on screen: the path bar shows crumbs again,
-    /// unless it is the folder on screen read again and nothing typed is
-    /// on its way.
     pub(crate) fn typed_path_arrived(&mut self, same_folder: bool) {
         let ends = self
             .path_bar
@@ -134,8 +105,6 @@ impl MainWindow {
         }
     }
 
-    /// The listing `id` was refused: if it was the one typed, the text is
-    /// selected again for the next try.
     pub(crate) fn typed_path_refused(&mut self, id: ListingId, cx: &mut Context<Self>) {
         let Some(path_field) = &mut self.path_bar.field else {
             return;
@@ -148,7 +117,6 @@ impl MainWindow {
     }
 }
 
-/// Selects all of `field`'s text, so the next keys replace it.
 fn select_all(field: &Entity<TextField>, cx: &mut Context<MainWindow>) {
     field.update(cx, |field, cx| {
         let all = 0..field.text().len();
@@ -156,8 +124,6 @@ fn select_all(field: &Entity<TextField>, cx: &mut Context<MainWindow>) {
     });
 }
 
-/// Where `text`, typed in `folder` with `~` for `home`, goes; none for
-/// nothing typed.
 fn typed_target(text: &str, home: &Path, folder: &Path) -> Option<PathBuf> {
     match typed::read(text, home, folder) {
         Typed::Nothing => None,

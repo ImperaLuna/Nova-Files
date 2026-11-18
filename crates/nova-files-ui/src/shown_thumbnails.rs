@@ -1,12 +1,5 @@
-//! The thumbnails a window holds, by row.
-//!
-//! Drawing an image copies it into GPUI's image atlas, and dropping the
-//! last `Arc` doesn't take it out again: only `drop_image` does. So every
-//! way a thumbnail leaves this set (a row scrolled out of range, a new
-//! folder, another scale, a newer thumbnail for the same row) hands the
-//! image back, and the window drops it from the atlas. Without that, each
-//! thumbnail ever shown stays in memory for the window's lifetime.
-
+// GPUI keeps a drawn image in its atlas until drop_image, even after the last Arc goes.
+// https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::Arc;
@@ -17,18 +10,15 @@ use gpui::RenderImage;
 pub struct ShownThumbnails(HashMap<usize, Arc<RenderImage>>);
 
 impl ShownThumbnails {
-    /// The thumbnail of `row`, if there is one.
     pub fn get(&self, row: usize) -> Option<&Arc<RenderImage>> {
         self.0.get(&row)
     }
 
-    /// Keeps `image` for `row`, handing back the one it replaces.
     #[must_use]
     pub fn insert(&mut self, row: usize, image: Arc<RenderImage>) -> Option<Arc<RenderImage>> {
         self.0.insert(row, image)
     }
 
-    /// Forgets the thumbnails of rows outside `rows`, handing them back.
     #[must_use]
     pub fn keep_rows(&mut self, rows: &Range<usize>) -> Vec<Arc<RenderImage>> {
         self.0
@@ -37,7 +27,6 @@ impl ShownThumbnails {
             .collect()
     }
 
-    /// Forgets every thumbnail, handing them back.
     #[must_use]
     pub fn take_all(&mut self) -> Vec<Arc<RenderImage>> {
         self.0.drain().map(|(_, image)| image).collect()

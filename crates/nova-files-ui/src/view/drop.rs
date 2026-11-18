@@ -1,16 +1,3 @@
-//! Drop targets: a folder row, the list of the folder on screen, and in
-//! the sidebar and path bar the places, tree folders, drives, crumbs and
-//! the trash. While dragged files would drop on one, it is filled and
-//! edged in orange; a target where they can't drop (see `dropping`) stays
-//! as it is and takes nothing. Files dragged out of a list and files from
-//! another app drop alike. The innermost target under the pointer that
-//! takes files dragged from a list aims the drag at itself, so its chip
-//! names the drop (see `window::aiming`). Rows in the sidebar also open
-//! when something dragged is held over them (see `window::hover_open`).
-//!
-//! Each target keeps a clear edge of [`size::DROP_EDGE`], so the orange
-//! edge shifts nothing; a target's padding gives that width back.
-
 use std::any::Any;
 use std::rc::Rc;
 
@@ -23,13 +10,11 @@ use crate::dropping::Sources;
 use crate::theme::{Colors, size};
 use crate::window::{Aim, DraggedRow, DraggedTab, HoverOpens, MainWindow};
 
-/// The padding that, with the clear drop edge, makes `pad`.
 pub(super) fn inside_edge(pad: Pixels) -> Pixels {
     pad - size::DROP_EDGE
 }
 
 impl MainWindow {
-    /// Makes `target` take files dropped at `aim`, lit while they would.
     pub(super) fn drop_target<E: InteractiveElement + Styled>(
         &self,
         target: E,
@@ -46,8 +31,6 @@ impl MainWindow {
             .drag_over::<ExternalPaths>(move |style, _, _, _| lit(style))
     }
 
-    /// Makes `target` open `opens` when something dragged is held over it
-    /// (see `window::hover_open`).
     pub(super) fn opens_on_hover<E: InteractiveElement>(
         target: E,
         opens: HoverOpens,
@@ -60,8 +43,6 @@ impl MainWindow {
         }))
     }
 
-    /// Makes `target` take files dropped at `aim`, without lighting up:
-    /// for the list of the folder on screen, whose rows light up.
     pub(super) fn takes_drops<E: InteractiveElement>(
         &self,
         target: E,
@@ -85,15 +66,12 @@ impl MainWindow {
                 }
             }))
             .can_drop(move |dragged: &dyn Any, _, _| {
-                // A tab's row reorders tabs dropped on it (see
-                // `window::tab_order`); nothing else here takes one.
                 if dragged.is::<DraggedTab>() {
                     return true;
                 }
                 if let Some(row) = dragged.downcast_ref::<DraggedRow>() {
                     return row.sources().is_some_and(|sources| rule(&asked, sources));
                 }
-                // Another app's files, known only once they arrive.
                 dragged
                     .downcast_ref::<ExternalPaths>()
                     .is_some_and(|paths| rule(&asked, &Sources::new(paths.paths().to_vec())))

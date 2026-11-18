@@ -1,17 +1,3 @@
-//! What the sidebar's Places section lists, in order: the home folder and
-//! the standard folders a person opens most (Desktop, Documents,
-//! Downloads, Pictures) that exist, then the folders the user pinned, in
-//! the user's order. Music and Videos stay out of Places; the folder tree
-//! still reaches them.
-//!
-//! A pinned folder that is already listed (a pinned Documents) shows once,
-//! where it is first listed, and counts as pinned there, so it can still
-//! be unpinned. A pinned folder that is missing (on a drive
-//! not plugged in) is still listed, so it can be unpinned. A standard
-//! folder is named by its folder's own name, which follows the user's
-//! language ("Dokumente"); the home folder is "Home"; a pinned folder by
-//! the label the user gave it, else its folder's name.
-
 use std::path::{Path, PathBuf};
 
 use gpui::SharedString;
@@ -20,16 +6,11 @@ use nova_files_api::{Bookmark, Gathering, Place, PlaceKind};
 use crate::assets::Icon;
 
 pub const HOME_LABEL: &str = "Home";
-/// The Start page's name, in Places and on its tab.
 pub const START_LABEL: &str = "Start";
-/// The trash's name, in Places, the path bar and on its tab.
 pub const TRASH_LABEL: &str = "Trash";
-/// Projects' name, in Places, the path bar and on its tab.
 pub const PROJECTS_LABEL: &str = "Projects";
-/// Games' name, in Places, the path bar and on its tab.
 pub const GAMES_LABEL: &str = "Games";
 
-/// The name and icon of `place`, Games or Projects.
 pub const fn gathering_look(place: Gathering) -> (&'static str, Icon) {
     match place {
         Gathering::Projects => (PROJECTS_LABEL, Icon::Projects),
@@ -37,18 +18,14 @@ pub const fn gathering_look(place: Gathering) -> (&'static str, Icon) {
     }
 }
 
-/// One row of Places.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shown {
     pub path: PathBuf,
     pub name: SharedString,
     pub icon: Icon,
-    /// Whether the user pinned it, so can unpin it.
     pub pinned: bool,
 }
 
-/// The rows of Places for the standard folders `places` and the pinned
-/// folders `pinned`.
 pub fn shown(places: &[Place], pinned: &[Bookmark]) -> Vec<Shown> {
     let standard = places.iter().filter_map(|place| {
         let icon = standard_icon(place.kind)?;
@@ -79,15 +56,11 @@ pub fn shown(places: &[Place], pinned: &[Bookmark]) -> Vec<Shown> {
 }
 
 impl Shown {
-    /// Whether the window is in this place: `here` is the folder on
-    /// screen, if any.
     pub fn is_here(&self, here: Option<&Path>) -> bool {
         here == Some(self.path.as_path())
     }
 }
 
-/// The icon a standard folder is drawn with, wherever it shows (Places,
-/// the path bar).
 pub const fn place_icon(kind: PlaceKind) -> Icon {
     match kind {
         PlaceKind::Home => Icon::Home,
@@ -100,8 +73,6 @@ pub const fn place_icon(kind: PlaceKind) -> Icon {
     }
 }
 
-/// The icon a standard folder has in Places; `None` for one Places leaves
-/// out.
 const fn standard_icon(kind: PlaceKind) -> Option<Icon> {
     match kind {
         PlaceKind::Music | PlaceKind::Videos => None,
@@ -113,8 +84,6 @@ const fn standard_icon(kind: PlaceKind) -> Option<Icon> {
     }
 }
 
-/// The icon of the standard folder at `path`, if it is one of `places`,
-/// wherever it is drawn (the folder tree shows Music and Videos too).
 pub fn standard_icon_at(places: &[Place], path: &Path) -> Option<Icon> {
     places
         .iter()
@@ -134,7 +103,6 @@ fn standard_name(place: &Place) -> SharedString {
     }
 }
 
-/// A folder's own name; the root, which has none, by its path.
 pub fn folder_name(path: &Path) -> SharedString {
     path.file_name()
         .unwrap_or(path.as_os_str())
