@@ -1,4 +1,4 @@
-# nova-files-entries
+# nova-files-entries-core
 #
 # The core side of the list on screen: reading a folder, ordering it,
 # reading its details and icons a screenful at a time, and the per-client
@@ -12,7 +12,7 @@
 # - nova-files-disk
 
 [package]
-name = "nova-files-entries"
+name = "nova-files-entries-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
