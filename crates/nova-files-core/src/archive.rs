@@ -6,11 +6,13 @@
 //! entries without unpacking any.
 
 mod helper;
+mod unpack;
 mod wire;
 
 use std::env;
 use std::path::{Path, PathBuf};
 
+pub use unpack::{Extracting, Flow};
 pub use wire::{ArchiveEntry, ArchiveKind};
 
 const HELPER_NAME: &str = "nova-files-archiver";
@@ -28,6 +30,18 @@ pub enum ArchiveFailure {
     Unsupported,
     /// The helper couldn't run, or ran out of time.
     NotRead,
+    /// An entry is locked and no password was given.
+    NeedsPassword,
+    /// The password given doesn't open an entry.
+    WrongPassword,
+    /// The drive it unpacks to is full.
+    NoSpace,
+    /// The drive it unpacks to is mounted read-only.
+    ReadOnly,
+    /// Writing where it unpacks failed for another reason.
+    NotWritten,
+    /// The caller stopped it.
+    Cancelled,
 }
 
 /// Runs the helper.
@@ -57,6 +71,25 @@ impl Archiver {
     pub fn list(&self, archive: &Path) -> Result<Vec<ArchiveEntry>, ArchiveFailure> {
         let output = helper::list(&self.helper, archive)?;
         wire::entries(&output).ok_or(ArchiveFailure::Broken)
+    }
+
+    /// Unpacks `archive` into the folder `into`, which the helper may
+    /// write inside and nowhere else, opening locked entries with
+    /// `password`. `tell` hears of each entry unpacked, and is asked
+    /// at least every tenth of a second whether to go on. What was
+    /// unpacked before a failure stays in `into`.
+    ///
+    /// # Errors
+    /// When the archive can't be read, `into` can't be written, or `tell`
+    /// stops it; see [`ArchiveFailure`].
+    pub fn extract(
+        &self,
+        archive: &Path,
+        into: &Path,
+        password: Option<&str>,
+        tell: impl FnMut(Extracting) -> Flow,
+    ) -> Result<(), ArchiveFailure> {
+        unpack::extract(&self.helper, archive, into, password, tell)
     }
 }
 
