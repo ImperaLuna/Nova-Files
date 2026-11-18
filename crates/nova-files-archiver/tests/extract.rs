@@ -365,3 +365,75 @@ fn damage_and_missing_folders_are_told_apart() {
     );
     fs::remove_dir_all(&folder).ok();
 }
+
+/// Names left under `folder`, relative, sorted.
+fn found(folder: &Path) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut waiting = vec![folder.to_path_buf()];
+    while let Some(next) = waiting.pop() {
+        for entry in fs::read_dir(next).unwrap() {
+            let path = entry.unwrap().path();
+            names.push(
+                path.strip_prefix(folder)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            if path.is_dir() {
+                waiting.push(path);
+            }
+        }
+    }
+    names.sort();
+    names
+}
+
+#[test]
+fn picked_entries_come_out_with_all_inside_them_and_nothing_else() {
+    let folder = folder("picked");
+    let mut builder = tar::Builder::new(Vec::new());
+    for (path, contents) in [
+        ("docs/a.txt", "a"),
+        ("docs/inner/b.txt", "b"),
+        ("docsx/c.txt", "c"),
+        ("top.txt", "t"),
+    ] {
+        let mut header = header(tar::EntryType::Regular, 0o644, 0, contents.len() as u64);
+        builder
+            .append_data(&mut header, path, contents.as_bytes())
+            .unwrap();
+    }
+    let tar_archive = folder.join("a.tar");
+    fs::write(&tar_archive, builder.into_inner().unwrap()).unwrap();
+    let zip_archive = folder.join("a.zip");
+    let mut zip = zip::ZipWriter::new(File::create(&zip_archive).unwrap());
+    for (path, contents) in [("docs/a.txt", "a"), ("docsx/c.txt", "c"), ("top.txt", "t")] {
+        zip.start_file(path, SimpleFileOptions::default()).unwrap();
+        zip.write_all(contents.as_bytes()).unwrap();
+    }
+    zip.finish().unwrap();
+
+    let picked = [PathBuf::from("docs"), PathBuf::from("top.txt")];
+    for (archive, expected) in [
+        (
+            &tar_archive,
+            vec![
+                "docs",
+                "docs/a.txt",
+                "docs/inner",
+                "docs/inner/b.txt",
+                "top.txt",
+            ],
+        ),
+        (&zip_archive, vec!["docs", "docs/a.txt", "top.txt"]),
+    ] {
+        let into = folder.join("into");
+        fs::remove_dir_all(&into).unwrap();
+        fs::create_dir(&into).unwrap();
+        archiver()
+            .extract_picked((archive, &picked), &into, None, |_| Flow::Go)
+            .unwrap();
+        assert_eq!(found(&into), expected, "{}", archive.display());
+    }
+    fs::remove_dir_all(&folder).ok();
+}

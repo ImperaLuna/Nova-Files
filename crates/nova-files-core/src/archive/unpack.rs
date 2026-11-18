@@ -53,13 +53,14 @@ pub enum Flow {
 
 pub fn extract(
     archiver: &Archiver,
-    archive: &Path,
+    (archive, picked): (&Path, &[PathBuf]),
     into: &Path,
     password: Option<&str>,
     tell: impl FnMut(Extracting) -> Flow,
 ) -> Result<(), ArchiveFailure> {
     let mut args = archiver.lead();
     args.extend([EXTRACT.as_ref(), archive.as_os_str(), into.as_os_str()]);
+    args.extend(picked.iter().map(|path| path.as_os_str()));
     run(&archiver.helper, &args, password, tell)
 }
 

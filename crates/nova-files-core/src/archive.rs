@@ -146,7 +146,22 @@ impl Archiver {
         password: Option<&str>,
         tell: impl FnMut(Extracting) -> Flow,
     ) -> Result<(), ArchiveFailure> {
-        unpack::extract(self, archive, into, password, tell)
+        unpack::extract(self, (archive, &[]), into, password, tell)
+    }
+
+    /// As [`Self::extract`], but only the entries at the paths `picked`
+    /// inside the archive, each with all inside it, keeping their paths.
+    ///
+    /// # Errors
+    /// As [`Self::extract`].
+    pub fn extract_picked(
+        &self,
+        (archive, picked): (&Path, &[PathBuf]),
+        into: &Path,
+        password: Option<&str>,
+        tell: impl FnMut(Extracting) -> Flow,
+    ) -> Result<(), ArchiveFailure> {
+        unpack::extract(self, (archive, picked), into, password, tell)
     }
 
     /// Makes `archive`, a new file, of `sources` (absolute paths), each

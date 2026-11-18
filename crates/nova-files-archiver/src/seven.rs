@@ -7,7 +7,7 @@
 //! at its `Path` line; a name with a line break in it reads wrong.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::{self, BufRead as _, BufReader, Write};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
@@ -71,11 +71,12 @@ impl Seven<'_> {
         })
     }
 
-    /// Unpacks every entry of the archive into `folder`; unsupported
-    /// without 7-Zip.
-    pub fn extract(self, folder: &Path, out: &mut impl Write) -> Ending {
+    /// Unpacks the `picked` entries of the archive, with all inside them,
+    /// or every entry when none are, into `folder`; unsupported without
+    /// 7-Zip.
+    pub fn extract(self, folder: &Path, picked: &[OsString], out: &mut impl Write) -> Ending {
         self.program.map_or(Ending::Unsupported, |program| {
-            extract(program, self.archive, folder, self.password, out)
+            extract(program, self, folder, picked, out)
         })
     }
 }
@@ -139,14 +140,16 @@ fn list(program: &Path, archive: &Path, password: Option<&[u8]>, out: &mut impl 
     })
 }
 
-/// Unpacks every entry of `archive` into `folder`.
+/// Unpacks the `picked` entries of `seven`'s archive, or all, into
+/// `folder`.
 fn extract(
     program: &Path,
-    archive: &Path,
+    seven: Seven<'_>,
     folder: &Path,
-    password: Option<&[u8]>,
+    picked: &[OsString],
     out: &mut impl Write,
 ) -> Ending {
+    let (archive, password) = (seven.archive, seven.password);
     let mut sizes = HashMap::new();
     let listed = listing(program, archive, password, |entry| {
         sizes.insert(entry.path.clone(), entry.size);
@@ -158,6 +161,8 @@ fn extract(
     let into = [b"-o".as_slice(), folder.as_os_str().as_bytes()].concat();
     let mut args: Vec<&OsStr> = vec!["x".as_ref(), archive.as_os_str(), OsStr::from_bytes(&into)];
     args.extend(SWITCHES.iter().map(OsStr::new));
+    args.push("--".as_ref());
+    args.extend(picked.iter().map(OsString::as_os_str));
     let mut told = Told::new(out);
     follow(program, &args, password, false, |path| {
         let path = path.strip_suffix(b"/").unwrap_or(path);

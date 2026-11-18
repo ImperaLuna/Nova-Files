@@ -2,11 +2,11 @@
 //! exits.
 //!
 //! `nova-files-archiver [--seven <7-zip>] list <archive>`
-//! `nova-files-archiver [--seven <7-zip>] extract <archive> <folder>`
+//! `nova-files-archiver [--seven <7-zip>] extract <archive> <folder> [<entry>...]`
 //! `nova-files-archiver [--seven <7-zip>] compress <packing> <level> <archive> <source>...`
 //!
 //! `extract` unpacks into `folder`, which it may write inside and nowhere
-//! else. `compress` makes `archive`, a new file, of the sources, which it
+//! else: the entries named, with all inside them, or every one. `compress` makes `archive`, a new file, of the sources, which it
 //! may read and nothing else. A password, when one is needed, comes on
 //! standard input. Given the installed 7-Zip, it reads 7z and rar through
 //! it (see `seven`), and makes 7z with it (packing `7z`).
@@ -49,7 +49,7 @@ const EXTRACT: &str = "extract";
 const COMPRESS: &str = "compress";
 const SEVEN: &str = "--seven";
 const SEVEN_ZIP: &str = "7z";
-const USAGE: &str = "usage: nova-files-archiver [--seven <7-zip>] list <archive>\n       nova-files-archiver [--seven <7-zip>] extract <archive> <folder>\n       nova-files-archiver [--seven <7-zip>] compress <packing> <level> <archive> <source>...";
+const USAGE: &str = "usage: nova-files-archiver [--seven <7-zip>] list <archive>\n       nova-files-archiver [--seven <7-zip>] extract <archive> <folder> [<entry>...]\n       nova-files-archiver [--seven <7-zip>] compress <packing> <level> <archive> <source>...";
 /// A source to compress, held open only to name it to the sandbox.
 const SOURCE: OFlags = OFlags::PATH.union(OFlags::NOFOLLOW).union(OFlags::CLOEXEC);
 /// The folder a 7z is made in, held open only to name it to the sandbox.
@@ -65,8 +65,8 @@ fn main() -> ExitCode {
     };
     let ending = match args {
         [mode, archive] if mode == LIST => run_list(Path::new(archive), seven),
-        [mode, archive, folder] if mode == EXTRACT => {
-            run_extract(Path::new(archive), Path::new(folder), seven)
+        [mode, archive, folder, picked @ ..] if mode == EXTRACT => {
+            run_extract(Path::new(archive), Path::new(folder), picked, seven)
         }
         [mode, packing, level, archive, sources @ ..]
             if mode == COMPRESS && !sources.is_empty() =>
@@ -133,7 +133,12 @@ fn run_list(path: &Path, seven: Option<&Path>) -> Ending {
     ending
 }
 
-fn run_extract(path: &Path, folder_path: &Path, seven: Option<&Path>) -> Ending {
+fn run_extract(
+    path: &Path,
+    folder_path: &Path,
+    picked: &[OsString],
+    seven: Option<&Path>,
+) -> Ending {
     let archive = match File::open(path) {
         Ok(archive) => archive,
         Err(error) => return Ending::of_open(&error),
@@ -165,7 +170,12 @@ fn run_extract(path: &Path, folder_path: &Path, seven: Option<&Path>) -> Ending 
         password: (!password.is_empty()).then_some(password.as_slice()),
     };
     let mut out = io::BufWriter::new(io::stdout().lock());
-    let ending = extract::extract(archive, into, folder_path, seven, &mut out);
+    let target = extract::Target {
+        into,
+        folder: folder_path,
+        picked,
+    };
+    let ending = extract::extract(archive, target, seven, &mut out);
     if out.flush().is_err() {
         return Ending::Usage;
     }
