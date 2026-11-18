@@ -109,6 +109,37 @@ pub enum Operation {
         into: PathBuf,
         to: ExtractTo,
     },
+    /// Make an archive named `name` in the folder `into` of `sources`,
+    /// each under its own name, a folder with all it holds, packed as
+    /// `packing` at `level`, from 1, fastest, to 9, smallest. A name
+    /// already taken gives the archive the next free name, as "keep
+    /// both" does. With `locked`, the job first holds at a
+    /// [`ConflictKind::PasswordNeeded`] for the password that locks a
+    /// zip's files.
+    Compress {
+        sources: Vec<PathBuf>,
+        into: PathBuf,
+        name: OsString,
+        packing: Packing,
+        level: u8,
+        locked: bool,
+    },
+}
+
+/// What kind of archive a compress makes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Packing {
+    /// `.zip`, compressed with Deflate, which every system opens.
+    ZipDeflate,
+    /// `.zip`, compressed with Zstandard: faster and smaller, but older
+    /// tools can't open it.
+    ZipZstd,
+    /// `.tar.zst`.
+    TarZstd,
+    /// `.tar.gz`.
+    TarGzip,
+    /// `.tar.xz`.
+    TarXz,
 }
 
 /// Where an archive's entries go.

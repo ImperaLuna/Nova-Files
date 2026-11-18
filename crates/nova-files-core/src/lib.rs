@@ -58,7 +58,7 @@ use nova_files_api::Connector;
 
 use search::Searcher;
 
-pub use archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow};
+pub use archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
 pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
 pub use mime::MimeTypes;

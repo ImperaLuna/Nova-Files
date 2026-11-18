@@ -188,13 +188,16 @@ const fn doing(operation: &Operation) -> (&'static str, &'static str) {
         Operation::ChangeAccess { .. } => ("Changing", ""),
         Operation::Undo { .. } => ("Undoing", ""),
         Operation::Extract { .. } => ("Extracting", ""),
+        Operation::Compress { .. } => ("Compressing", ""),
     }
 }
 
 /// What a job works on, as its request named it.
 pub fn sources(operation: &Operation) -> &[std::path::PathBuf] {
     match operation {
-        Operation::Copy { sources, .. } | Operation::Move { sources, .. } => sources,
+        Operation::Copy { sources, .. }
+        | Operation::Move { sources, .. }
+        | Operation::Compress { sources, .. } => sources,
         Operation::Trash { paths }
         | Operation::Delete { paths }
         | Operation::ChangeAccess { paths, .. } => paths,

@@ -180,9 +180,10 @@ pub fn undo_of(
     };
     let done = *outcome == Outcome::Done;
     let undo = match operation {
-        Operation::Copy { .. } | Operation::Restore { .. } | Operation::Extract { .. } => {
-            Undo::Trash(at(given()))
-        }
+        Operation::Copy { .. }
+        | Operation::Restore { .. }
+        | Operation::Extract { .. }
+        | Operation::Compress { .. } => Undo::Trash(at(given())),
         Operation::Move { .. } => Undo::MoveBack(given()),
         Operation::Trash { .. } => Undo::Restore(
             at(given())

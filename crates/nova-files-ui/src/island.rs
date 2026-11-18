@@ -266,6 +266,7 @@ fn done_note(operation: &Operation) -> Option<String> {
         }
         Operation::EmptyTrash => format!("{TRASH} emptied"),
         Operation::Rename { name, .. } => format!("Renamed to {}", lossy(name)),
+        Operation::Compress { name, .. } => format!("Made {}", lossy(name)),
         // Copies, moves and extracts say what their answers did
         // (`answered_note`, `extracted_note`).
         Operation::Copy { .. }
@@ -292,6 +293,7 @@ const fn verb(operation: &Operation) -> (&'static str, bool) {
         Operation::EmptyTrash => ("empty Trash", false),
         Operation::Undo { .. } => ("undo", false),
         Operation::Extract { .. } => ("extract", true),
+        Operation::Compress { .. } => ("compress", true),
     }
 }
 
