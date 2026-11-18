@@ -2,9 +2,9 @@ use std::fs;
 use std::os::unix::fs::symlink;
 
 use super::*;
-use crate::ops::control::Control;
-use crate::ops::plan::plan_delete;
-use crate::ops::test_folder::TestFolder;
+use crate::control::Control;
+use crate::plan::plan_delete;
+use crate::test_folder::TestFolder;
 
 fn folders_of(paths: &[PathBuf]) -> Folders {
     let plan = plan_delete(paths, &Control::default(), &|_| true).unwrap();

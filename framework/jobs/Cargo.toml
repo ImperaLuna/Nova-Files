@@ -1,0 +1,29 @@
+# nova-files-jobs
+#
+# Runs file jobs: the runner, each job's journal and progress, conflicts,
+# pause and cancel, the undo history, and the ports a feature fills in.
+#
+# Allowed outside crates: log, rustix
+# Allowed workspace crates: nova-files-api, nova-files-disk, nova-files-messages
+
+[package]
+name = "nova-files-jobs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+test-support = []
+
+[dependencies]
+# Renames without replacing, opens folders by handle and locks the journal.
+rustix = { version = "1.1.6", default-features = false, features = ["fs", "std"] }
+log = { version = "0.4.35", features = ["std"] }
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+nova-files-messages.workspace = true

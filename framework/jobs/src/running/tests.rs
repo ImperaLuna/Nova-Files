@@ -2,8 +2,8 @@ use std::fs::{self, File};
 use std::time::{Duration, Instant};
 
 use super::*;
-use crate::ops::journal::hold;
-use crate::ops::test_folder::TestFolder;
+use crate::journal::hold;
+use crate::test_folder::TestFolder;
 
 const ASK_WAIT: Duration = Duration::from_secs(5);
 

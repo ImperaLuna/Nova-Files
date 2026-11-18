@@ -170,7 +170,7 @@ impl Folders {
         Ok(())
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn opened(&self) -> impl Iterator<Item = &Path> {
         self.open.keys().map(PathBuf::as_path)
     }

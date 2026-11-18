@@ -4,7 +4,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use super::{HEADER, entry_from, word};
-use crate::percent::unescape;
+use nova_files_disk::percent::unescape;
 
 const MAX_BYTES: u64 = 268_435_456;
 
@@ -24,7 +24,7 @@ pub fn read(file: &File, path: &Path) -> io::Result<Written> {
     read_at_most(file, path, MAX_BYTES)
 }
 
-pub(super) fn read_at_most(file: &File, path: &Path, limit: u64) -> io::Result<Written> {
+pub fn read_at_most(file: &File, path: &Path, limit: u64) -> io::Result<Written> {
     let mut bytes = Vec::new();
     file.take(limit.saturating_add(1)).read_to_end(&mut bytes)?;
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > limit {

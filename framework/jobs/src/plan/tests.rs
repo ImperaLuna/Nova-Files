@@ -3,7 +3,7 @@ use std::os::unix::fs::symlink;
 use std::os::unix::net::UnixListener;
 
 use super::*;
-use crate::ops::test_folder::TestFolder;
+use crate::test_folder::TestFolder;
 use nova_files_api::Outcome;
 
 #[test]

@@ -11,8 +11,9 @@ use nova_files_api::{EntryKind, Trashed};
 use rustix::fs::OFlags;
 use rustix::process::getuid;
 
+use super::INFO_SUFFIX;
 use super::folder::{OWN_PREFIX, SHARED, TrashFolder, is_own, mount_trash_at};
-use super::info::{DATE_FORMAT, DATE_KEY, HEADER, INFO_SUFFIX, PATH_KEY};
+use super::info::{DATE_FORMAT, DATE_KEY, HEADER, PATH_KEY};
 use super::{FILES, Trashes};
 use crate::percent::unescape;
 

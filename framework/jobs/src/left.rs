@@ -10,7 +10,7 @@ use super::journal::{BACKUP_PREFIX, PART_PREFIX, entry_from, hold, word};
 use super::place::rename_no_replace;
 use super::plan::Entry;
 use super::sync::remove;
-use crate::trash;
+use crate::trash_info;
 
 #[derive(Debug)]
 pub struct Left {
@@ -117,7 +117,9 @@ fn clean(lines: &[Line]) -> Done {
                 done.trashed.insert(from.clone());
             }
             (word::TRASH_INFO, [info, _, item]) => {
-                if let (Some(stored), Some(item)) = (trash::item_of_info(info), entry_from(item)) {
+                if let (Some(stored), Some(item)) =
+                    (trash_info::item_of_info(info), entry_from(item))
+                {
                     done.leaving.insert(stored, item);
                 }
             }
@@ -156,8 +158,8 @@ fn clean(lines: &[Line]) -> Done {
     done
 }
 
-pub(super) fn remove_lone_info(info: &Path, entry: Entry, item: Entry) {
-    let Some(stored) = trash::item_of_info(info) else {
+pub fn remove_lone_info(info: &Path, entry: Entry, item: Entry) {
+    let Some(stored) = trash_info::item_of_info(info) else {
         return;
     };
     let ours = info

@@ -22,6 +22,7 @@ use crate::trash::{
     FILES, INFO_SUFFIX, TrashFolder, add_folder_sizes, folder_for, folder_size, info_text,
     stored_name,
 };
+use nova_files_jobs::set_aside::{Aside, SetAside, SetAsideForJob};
 
 type Known = HashMap<PathBuf, TrashFolder>;
 
@@ -73,33 +74,49 @@ pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>
     )
 }
 
-pub enum SetAside {
-    Trashed(PathBuf),
-    Gone,
-    NoTrash,
-    Refused,
+pub struct Trasher {
+    home: Option<PathBuf>,
 }
 
-pub fn trash_set_aside(
-    running: &mut Running,
-    (index, left): (usize, &Path),
-    shown: &Path,
-) -> SetAside {
-    let home_trash = running.home_trash.clone();
-    let mut known = std::mem::take(&mut running.replaced_trashes);
-    let at = (index, left, shown.file_name());
-    let sent = send(running, at, (home_trash.as_deref(), &mut known));
-    running.replaced_trashes = known;
-    match sent {
-        Ok(Some((_, item, _))) => SetAside::Trashed(item),
-        Ok(None) => SetAside::Gone,
-        Err(Refused::NoTrash) => SetAside::NoTrash,
-        Err(Refused::Failed(reason)) => {
-            log::warn!(
-                "can't set {} aside in the trash: {reason:?}",
-                left.display()
-            );
-            SetAside::Refused
+impl Trasher {
+    pub const fn new(home: Option<PathBuf>) -> Self {
+        Self { home }
+    }
+}
+
+impl SetAside for Trasher {
+    fn for_job(&self) -> Box<dyn SetAsideForJob> {
+        Box::new(TrashForJob {
+            home: self.home.clone(),
+            known: Known::new(),
+        })
+    }
+}
+
+struct TrashForJob {
+    home: Option<PathBuf>,
+    known: Known,
+}
+
+impl SetAsideForJob for TrashForJob {
+    fn set_aside(
+        &mut self,
+        running: &mut Running,
+        (index, left): (usize, &Path),
+        shown: &Path,
+    ) -> Aside {
+        let at = (index, left, shown.file_name());
+        match send(running, at, (self.home.as_deref(), &mut self.known)) {
+            Ok(Some((_, item, _))) => Aside::Kept(item),
+            Ok(None) => Aside::Gone,
+            Err(Refused::NoTrash) => Aside::Nowhere,
+            Err(Refused::Failed(reason)) => {
+                log::warn!(
+                    "can't set {} aside in the trash: {reason:?}",
+                    left.display()
+                );
+                Aside::Refused
+            }
         }
     }
 }

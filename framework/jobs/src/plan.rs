@@ -75,7 +75,7 @@ pub struct Plan {
     pub bytes: u64,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub fn plan(sources: &[PathBuf], into: &Path, control: &Control) -> Result<Plan, Stop> {
     check(sources, into)?;
     add_pairs(&pairs_into(sources, into), control)

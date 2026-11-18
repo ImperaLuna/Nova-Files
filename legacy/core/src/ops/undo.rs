@@ -1,13 +1,12 @@
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::time::SystemTime;
 
-use nova_files_api::{Event, Failure, JobId, Operation, Outcome};
+use nova_files_api::{Failure, Operation, Outcome};
 
-use super::audience::Audience;
+use super::Ended;
 use super::journal::{Record, word};
 use super::make::How;
 use super::one_step;
@@ -17,10 +16,7 @@ use super::running::Running;
 use super::stop::Stop;
 use super::transfer::transfer_to;
 use super::trash::trash;
-use super::{Ended, lock};
 use crate::trash::{self, Trashes};
-
-pub const KEPT: usize = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Identity {
@@ -47,58 +43,6 @@ pub fn putting_back(undo: Undo, replaced: &[(PathBuf, PathBuf)]) -> Undo {
         undo
     } else {
         Undo::ThenPutBack(Box::new(undo), items)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Undoable {
-    pub job: JobId,
-    pub operation: Operation,
-    pub undo: Undo,
-}
-
-#[derive(Debug, Default)]
-pub struct History {
-    jobs: Mutex<VecDeque<Undoable>>,
-}
-
-impl History {
-    pub fn add(&self, undoable: Undoable, audience: &Audience) {
-        let mut jobs = lock(&self.jobs);
-        audience.tell(&Event::Undoable {
-            job: undoable.job,
-            operation: undoable.operation.clone(),
-        });
-        let (Ok(at) | Err(at)) = jobs.binary_search_by_key(&undoable.job, |kept| kept.job);
-        jobs.insert(at, undoable);
-        if jobs.len() > KEPT
-            && let Some(gone) = jobs.pop_front()
-        {
-            audience.tell(&Event::UndoGone(gone.job));
-        }
-        drop(jobs);
-    }
-
-    pub fn take(&self, job: JobId, audience: &Audience) -> Option<Undoable> {
-        let mut jobs = lock(&self.jobs);
-        let at = jobs.iter().position(|kept| kept.job == job)?;
-        let taken = jobs.remove(at)?;
-        audience.tell(&Event::UndoGone(job));
-        drop(jobs);
-        Some(taken)
-    }
-
-    pub fn told(&self, then: impl FnOnce(Vec<Event>)) {
-        let jobs = lock(&self.jobs);
-        then(
-            jobs.iter()
-                .map(|kept| Event::Undoable {
-                    job: kept.job,
-                    operation: kept.operation.clone(),
-                })
-                .collect(),
-        );
-        drop(jobs);
     }
 }
 

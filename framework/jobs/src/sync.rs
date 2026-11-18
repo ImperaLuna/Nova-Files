@@ -2,7 +2,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-pub use crate::private_file::sync_folder;
+pub use nova_files_disk::private_file::sync_folder;
 
 pub fn sync_folders<'a>(folders: impl IntoIterator<Item = &'a Path>) {
     for folder in folders {

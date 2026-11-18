@@ -3619,7 +3619,9 @@ dependencies = [
  "chrono",
  "log",
  "nova-files-api",
+ "nova-files-disk",
  "nova-files-index",
+ "nova-files-jobs",
  "nova-files-messages",
  "rustix 1.1.6",
  "serde",
@@ -3641,10 +3643,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-disk"
+version = "0.1.0"
+dependencies = [
+ "rustix 1.1.6",
+]
+
+[[package]]
 name = "nova-files-index"
 version = "0.1.0"
 dependencies = [
  "memmap2",
+ "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-jobs"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-messages",
  "rustix 1.1.6",
 ]
 

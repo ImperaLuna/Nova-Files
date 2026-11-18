@@ -15,8 +15,8 @@ use super::journal::{Journal, Record, remove_journal, word};
 use super::left::{Done, Left};
 use super::plan::{Kind, kind};
 use super::progress::Reporter;
+use super::set_aside::{Aside, SetAsideForJob};
 use super::stop::Stop;
-use crate::trash::TrashFolder;
 
 pub struct Running {
     pub job: JobId,
@@ -34,9 +34,8 @@ pub struct Running {
     sources: HashSet<PathBuf>,
     pub steps: BTreeMap<PathBuf, PathBuf>,
     pub tally: Tally,
-    pub home_trash: Option<PathBuf>,
     pub replaced: Vec<(PathBuf, PathBuf)>,
-    pub replaced_trashes: HashMap<PathBuf, TrashFolder>,
+    aside: Option<Box<dyn SetAsideForJob>>,
     placed: HashSet<PathBuf>,
 }
 
@@ -63,11 +62,23 @@ impl Running {
             sources: HashSet::new(),
             steps: BTreeMap::new(),
             tally: Tally::default(),
-            home_trash: None,
             replaced: Vec::new(),
-            replaced_trashes: HashMap::new(),
+            aside: None,
             placed: HashSet::new(),
         }
+    }
+
+    pub fn set_aside_with(&mut self, aside: Box<dyn SetAsideForJob>) {
+        self.aside = Some(aside);
+    }
+
+    pub fn set_aside(&mut self, at: (usize, &Path), shown: &Path) -> Aside {
+        let Some(mut aside) = self.aside.take() else {
+            return Aside::Nowhere;
+        };
+        let put = aside.set_aside(self, at, shown);
+        self.aside = Some(aside);
+        put
     }
 
     pub fn resuming(&mut self, left: Left, names: u64) {
@@ -262,7 +273,7 @@ impl Running {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl Running {
     pub fn for_test() -> Self {
         let shared = Arc::new(Job::new(nova_files_api::Operation::Copy {
@@ -270,7 +281,7 @@ impl Running {
             into: PathBuf::from("/"),
         }));
         let reporter = Reporter::new(
-            super::audience::Audience::default(),
+            crate::audience::Audience::default(),
             Arc::default(),
             JobId(1),
             Arc::clone(&shared),

@@ -1,5 +1,6 @@
 use super::*;
 use crate::ops::TestFolder;
+use nova_files_api::JobId;
 
 fn done() -> Outcome {
     Outcome::Done
@@ -178,41 +179,6 @@ fn deletes_and_undos_are_never_undone() {
             "{operation:?}"
         );
     }
-}
-
-#[test]
-fn the_history_keeps_the_last_jobs_and_gives_each_once() {
-    let history = History::default();
-    let audience = Audience::default();
-    let undoable = |job| Undoable {
-        job: JobId(job),
-        operation: Operation::EmptyTrash,
-        undo: Undo::RemoveFolder(PathBuf::from("/a"), entry(Path::new("/")).unwrap()),
-    };
-    for job in (0..=u64::try_from(KEPT).unwrap()).filter(|job| *job != 3) {
-        history.add(undoable(job), &audience);
-    }
-    history.add(undoable(3), &audience);
-
-    let mut told = Vec::new();
-    history.told(|events| told = events);
-
-    let told_of = |job| Event::Undoable {
-        job: JobId(job),
-        operation: Operation::EmptyTrash,
-    };
-    assert_eq!(told.len(), KEPT);
-    assert_eq!(
-        told[0],
-        Event::Undoable {
-            job: JobId(1),
-            operation: Operation::EmptyTrash
-        }
-    );
-    assert_eq!(history.take(JobId(0), &audience), None, "pushed out");
-    assert_eq!(told[2], told_of(3));
-    assert_eq!(history.take(JobId(3), &audience), Some(undoable(3)));
-    assert_eq!(history.take(JobId(3), &audience), None, "taken once");
 }
 
 #[test]

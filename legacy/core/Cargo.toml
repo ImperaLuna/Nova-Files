@@ -4,7 +4,7 @@
 # never draws anything.
 #
 # Allowed outside crates: chrono, log, rustix, serde, serde_json, toml, toml_edit, uzers
-# Allowed workspace crates: nova-files-api, nova-files-index, nova-files-messages
+# Allowed workspace crates: nova-files-api, nova-files-disk, nova-files-index, nova-files-jobs, nova-files-messages
 
 [package]
 name = "nova-files-core"
@@ -40,7 +40,10 @@ uzers = { version = "0.12.2", default-features = false }
 nova-files-api.workspace = true
 nova-files-messages.workspace = true
 nova-files-index.workspace = true
+nova-files-disk.workspace = true
+nova-files-jobs.workspace = true
 
 [dev-dependencies]
+nova-files-jobs = { workspace = true, features = ["test-support"] }
 # Gives a test's own thread other groups (accounts tests).
 rustix = { version = "1.1.6", default-features = false, features = ["thread"] }

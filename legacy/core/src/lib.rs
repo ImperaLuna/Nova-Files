@@ -25,10 +25,8 @@ mod mount_root;
 mod open;
 mod ops;
 mod order;
-mod percent;
 mod places;
 mod preview;
-mod private_file;
 mod properties;
 mod recent;
 mod run;
@@ -49,6 +47,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::Connector;
+use nova_files_disk::{percent, private_file};
 
 use search::Searcher;
 
@@ -111,7 +110,7 @@ pub fn spawn_with_archiver(
         archiver.clone(),
         inside::opened_folder(std::env::var_os("XDG_RUNTIME_DIR")),
     ));
-    let jobs = ops::Jobs::new(
+    let jobs = ops::jobs(
         home.as_ref().map(|home| home.state.as_path()),
         trash::Trashes::of(home.as_ref()),
         connector.clone(),
