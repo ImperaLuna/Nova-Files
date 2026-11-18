@@ -85,8 +85,6 @@ impl MainWindow {
         self.folder_views.insert(folder.clone(), view);
         self.pending_views.insert(folder.clone(), view);
         if let Some(connection) = &self.connection {
-            // A core that stopped can't keep it; the window says so
-            // already (see `CoreStatus`).
             connection
                 .send(Command::SetFolderView { folder, view })
                 .ok();
@@ -97,7 +95,6 @@ impl MainWindow {
     /// Takes the views the core sent, newest first, in place of those
     /// known before, keeping the changes it hasn't taken yet on top.
     pub(super) fn folder_views_arrived(&mut self, views: &FolderViews, cx: &mut Context<Self>) {
-        // Collected oldest first, so the newest view of a folder wins.
         let mut known = views.iter().rev().cloned().collect::<HashMap<PathBuf, _>>();
         self.pending_views
             .retain(|folder, view| known.get(folder) != Some(view));
