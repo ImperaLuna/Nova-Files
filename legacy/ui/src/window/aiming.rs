@@ -9,7 +9,7 @@ use nova_files_api::{Command, DropAskId, DropKind, Gathering};
 use super::MainWindow;
 use super::dragging::Drag;
 use crate::dropping::DropAt;
-use crate::places::{self, TRASH_LABEL};
+use crate::places;
 
 #[derive(Debug, Clone)]
 pub struct Aim {
@@ -38,10 +38,10 @@ impl Aim {
         }
     }
 
-    pub fn trash() -> Self {
+    pub const fn trash(name: SharedString) -> Self {
         Self {
             at: DropAt::Trash,
-            name: TRASH_LABEL.into(),
+            name,
         }
     }
 }

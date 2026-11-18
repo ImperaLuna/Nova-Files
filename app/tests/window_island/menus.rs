@@ -245,7 +245,7 @@ async fn the_trash_offers_restore_and_empty_trash(cx: &mut TestAppContext) {
     click(cx, "name-1");
     cx.simulate_keystrokes("delete");
     wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
-    view.update(cx, MainWindow::open_trash);
+    open_trash(&view, cx, false).await;
     wait_for_names(&view, cx, &["notes.txt"]).await;
 
     right_click_space(cx, 1);
@@ -277,7 +277,7 @@ async fn inside_a_trashed_folder_only_select_all_is_offered(cx: &mut TestAppCont
     click(cx, "name-0");
     cx.simulate_keystrokes("delete");
     wait_for_note(&view, cx, "Moved Projects to Trash").await;
-    view.update(cx, MainWindow::open_trash);
+    open_trash(&view, cx, false).await;
     wait_for_names(&view, cx, &["Projects"]).await;
     double_click(cx, "name-0");
     wait_for_names(&view, cx, &["nova"]).await;
@@ -330,8 +330,8 @@ async fn an_empty_trash_offers_nothing(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("menu-trash-none");
     let home = TempFolder::tree("menu-trash-none-home");
     let (view, cx) = island_window(cx, tree.path(), &home).await;
-    view.update(cx, MainWindow::open_trash);
-    view.condition::<WindowEvent>(cx, |view, _| view.trash_count() == Some(0))
+    open_trash(&view, cx, false).await;
+    view.condition::<WindowEvent>(cx, |view, cx| trash_count(view, cx) == Some(0))
         .await;
     wait_for_names(&view, cx, &[]).await;
     cx.simulate_keystrokes("shift-f10");

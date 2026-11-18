@@ -19,8 +19,8 @@ use std::sync::mpsc::Receiver;
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
     Appearance, Bookmark, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind,
-    Event, EventSink, HiddenFiles, Listing, ListingId, Mode, Order, Palette, Place, PlaceKind,
-    SettingChange, Settings, SortKey, Theme, ThumbnailSize, Thumbnails, Unreadable,
+    Event, EventSink, HiddenFiles, Listing, ListingId, Message, Mode, Order, Palette, Place,
+    PlaceKind, SettingChange, Settings, SortKey, Theme, ThumbnailSize, Thumbnails, Unreadable,
 };
 use nova_files_ui::{Colors, MainWindow, WindowEvent};
 
@@ -88,8 +88,8 @@ impl Core {
         commands
     }
 
-    fn send(&self, event: Event) {
-        self.events.as_ref().unwrap().deliver(event).unwrap();
+    fn send<M: Message>(&self, message: M) {
+        self.events.as_ref().unwrap().deliver(message).unwrap();
     }
 
     fn refuse(&self, id: ListingId, path: &Path) {
@@ -102,6 +102,13 @@ impl Core {
 }
 
 fn window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
+    cx.update(|cx| cx.set_global(nova_files::parts()));
+    window_with_parts(cx)
+}
+
+fn window_with_parts(
+    cx: &mut TestAppContext,
+) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     let (connector, messages) = nova_files_api::channel();
     let (view, cx) = cx.add_window_view(|_, cx| {
         MainWindow::with_home(&connector, Path::new(SHOWN), PathBuf::from(SHOWN), cx)

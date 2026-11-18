@@ -4,7 +4,7 @@
 # window, and holds no logic of its own.
 #
 # Allowed outside crates: libc
-# Allowed workspace crates: nova-files-api, nova-files-core, nova-files-dbus, nova-files-index, nova-files-ui
+# Allowed workspace crates: nova-files-api, nova-files-core, nova-files-dbus, nova-files-index, nova-files-shell, nova-files-trash-ui, nova-files-ui
 
 [package]
 name = "nova-files"
@@ -23,10 +23,11 @@ libc = "0.2.189"
 nova-files-api.workspace = true
 nova-files-core.workspace = true
 nova-files-dbus.workspace = true
+nova-files-shell.workspace = true
+nova-files-trash-ui.workspace = true
 nova-files-ui.workspace = true
 
 [dev-dependencies]
-nova-files-shell.workspace = true
 nova-files-trash-api.workspace = true
 gpui = { workspace = true, features = ["test-support"] }
 # To call the running program over D-Bus, as a launcher would.

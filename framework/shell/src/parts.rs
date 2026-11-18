@@ -1,10 +1,12 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 use std::rc::Rc;
 
 use gpui::{
     AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, SharedString, Subscription,
 };
-use nova_files_api::Entry;
+use nova_files_api::{Entry, Event};
+
+use crate::assets::Icon;
 use nova_files_messages::{Envelope, MessageType};
 
 use crate::command::CommandSpec;
@@ -39,6 +41,9 @@ trait OpenPart {
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
     fn start_cards(&self) -> Vec<AnyView>;
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
+    fn watch(&self, event: &Event, cx: &mut App);
+    fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)>;
+    fn as_any(&self) -> &dyn Any;
 }
 
 struct Opened<P: Part> {
@@ -123,12 +128,36 @@ impl<P: Part> OpenPart for Opened<P> {
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription {
         cx.observe(&self.entity, move |_, cx| changed(cx))
     }
+
+    fn watch(&self, event: &Event, cx: &mut App) {
+        if self.slots.watches.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for watch in &self.slots.watches {
+                watch(part, event, cx);
+            }
+        });
+    }
+
+    fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)> {
+        let part = self.entity.read(cx);
+        self.slots
+            .empty_notes
+            .iter()
+            .find_map(|note| note(part, scene, cx))
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(Clone, Copy)]
 struct Kind {
     open: fn(&Host, &mut App) -> Box<dyn OpenPart>,
     takes: fn() -> Vec<MessageType>,
+    sends: fn() -> Vec<MessageType>,
     specs: fn() -> Vec<&'static CommandSpec>,
 }
 
@@ -144,12 +173,17 @@ impl Parts {
         self.kinds.push(Kind {
             open: open::<P>,
             takes: takes::<P>,
+            sends: sends::<P>,
             specs: specs::<P>,
         });
     }
 
     pub fn takes(&self) -> Vec<MessageType> {
         self.kinds.iter().flat_map(|kind| (kind.takes)()).collect()
+    }
+
+    pub fn sends(&self) -> Vec<MessageType> {
+        self.kinds.iter().flat_map(|kind| (kind.sends)()).collect()
     }
 
     pub fn bindings(&self) -> Vec<KeyBinding> {
@@ -229,6 +263,10 @@ fn takes<P: Part>() -> Vec<MessageType> {
     slots_of::<P>().takes()
 }
 
+fn sends<P: Part>() -> Vec<MessageType> {
+    slots_of::<P>().sent()
+}
+
 fn specs<P: Part>() -> Vec<&'static CommandSpec> {
     slots_of::<P>().specs()
 }
@@ -293,6 +331,26 @@ impl WindowParts {
             .iter()
             .flat_map(|part| part.start_cards())
             .collect()
+    }
+
+    pub fn watch(&self, event: &Event, cx: &mut App) {
+        for part in &self.opened {
+            part.watch(event, cx);
+        }
+    }
+
+    pub fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)> {
+        self.opened
+            .iter()
+            .find_map(|part| part.empty_note(scene, cx))
+    }
+
+    pub fn part<P: Part>(&self) -> Option<Entity<P>> {
+        self.opened.iter().find_map(|part| {
+            part.as_any()
+                .downcast_ref::<Opened<P>>()
+                .map(|opened| opened.entity.clone())
+        })
     }
 
     pub fn observe(&self, changed: impl Fn(&mut App) + 'static, cx: &mut App) -> Vec<Subscription> {

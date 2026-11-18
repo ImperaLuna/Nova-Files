@@ -11,7 +11,7 @@ use nova_files_shell::{Look, MenuAt};
 use super::row::icon;
 use crate::assets::Icon;
 use crate::commands::{
-    ClearSelection, CopySelected, CutSelected, RenameSelected, RestoreSelected, TrashSelected, Undo,
+    ClearSelection, CopySelected, CutSelected, RenameSelected, TrashSelected, Undo,
 };
 use crate::island::progress::Running;
 use crate::island::{self, Confirm, Note, asking};
@@ -22,7 +22,6 @@ mod several;
 
 const UNDO_LABEL: &str = "Undo";
 const CANCEL_LABEL: &str = "Cancel";
-const RESTORE_LABEL: &str = "Restore";
 
 impl MainWindow {
     pub(super) fn island(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -75,18 +74,7 @@ impl MainWindow {
                 .child(rest)
                 .into_any_element(),
         ];
-        if self.trash_open() {
-            parts.push(
-                text_button(
-                    "island-restore",
-                    RESTORE_LABEL,
-                    &RestoreSelected,
-                    colors.accept,
-                    colors,
-                )
-                .into_any_element(),
-            );
-        } else if !self.in_trash() {
+        if !self.folder_rules().trashed {
             file_buttons(count, &mut parts, colors);
         }
         let from_parts = self.parts.menu(MenuAt::Island, &self.scene(), cx);

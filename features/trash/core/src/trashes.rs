@@ -29,6 +29,10 @@ impl Trashes {
         }
     }
 
+    pub fn files(&self) -> Option<PathBuf> {
+        self.home.as_ref().map(|home| home.join(FILES))
+    }
+
     pub fn all(&self) -> Vec<TrashFolder> {
         read::trashes(self.home.as_deref(), self.drives)
     }

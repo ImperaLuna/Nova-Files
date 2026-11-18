@@ -27,6 +27,7 @@ nova-files-jobs = { path = "framework/jobs" }
 nova-files-shell = { path = "framework/shell" }
 nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }
+nova-files-trash-ui = { path = "features/trash/ui" }
 nova-files-index = { path = "helpers/index" }
 nova-files-ui = { path = "legacy/ui" }
 

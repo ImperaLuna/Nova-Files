@@ -27,10 +27,11 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, px};
+use gpui::{App, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext, px};
 use nova_files_api::{
     Color, EntryId, PickAnswer, PickId, PickKind, PickReply, PickRequest, Thumbnails,
 };
+use nova_files_trash_ui::TrashPart;
 use nova_files_ui::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent};
 
 use common::{TempFolder, Watchdog, click_with, double_click};
@@ -59,6 +60,7 @@ fn window_showing<'a>(
     names: Vec<std::ffi::OsString>,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     cx.executor().allow_parking();
+    with_parts(cx);
     let core_home = nova_files_core::Home {
         folder: home.to_owned(),
         config: home.join(".config"),
@@ -74,6 +76,45 @@ fn window_showing<'a>(
         view.select_on_arrival(start.clone(), names);
         view
     })
+}
+
+fn with_parts(cx: &TestAppContext) {
+    cx.update(|cx| cx.set_global(nova_files::parts()));
+}
+
+fn trash_part(view: &MainWindow) -> Entity<TrashPart> {
+    view.part::<TrashPart>().unwrap()
+}
+
+fn trash_count(view: &MainWindow, cx: &App) -> Option<usize> {
+    trash_part(view).read(cx).count()
+}
+
+fn trash_open(view: &MainWindow, cx: &App) -> bool {
+    let trash = trash_part(view);
+    let folder = trash.read(cx).folder();
+    folder.is_some() && view.folder() == folder
+}
+
+fn trash_was_in(view: &MainWindow, index: usize, cx: &App) -> Option<SharedString> {
+    let listing = view.host().entries.read(cx).listing()?;
+    trash_part(view)
+        .read(cx)
+        .was_in(listing.entries.get(index)?)
+}
+
+async fn open_trash(view: &Entity<MainWindow>, cx: &mut VisualTestContext, new_tab: bool) {
+    let trash = view.read_with(cx, |view, _| trash_part(view));
+    view.condition::<WindowEvent>(cx, |view, cx| trash_part(view).read(cx).folder().is_some())
+        .await;
+    trash.update(cx, |trash, cx| {
+        if new_tab {
+            trash.open_in_new_tab(cx);
+        } else {
+            trash.open(cx);
+        }
+    });
+    cx.run_until_parked();
 }
 
 async fn wait_for_folder(view: &Entity<MainWindow>, cx: &VisualTestContext, folder: &Path) {

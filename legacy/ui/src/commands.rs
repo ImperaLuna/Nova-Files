@@ -45,8 +45,6 @@ mod actions {
             PreviewPrevious,
             PreviewNext,
             FocusSearch,
-            RestoreSelected,
-            EmptyTrash,
             NewTab,
             CloseTab,
             NextTab,
@@ -99,8 +97,6 @@ pub const ACTIONS: &[CommandSpec] = &[
     PREVIEW_PREVIOUS,
     PREVIEW_NEXT,
     FIND,
-    RESTORE,
-    EMPTY_TRASH,
     NEW_TAB,
     CLOSE_TAB,
     NEXT_TAB,
@@ -257,15 +253,6 @@ spec!(
 );
 spec!(PREVIEW_NEXT, PreviewNext, "preview.next", "Next", ["right"]);
 spec!(FIND, FocusSearch, "search.focus", "Search", ["ctrl-f"]);
-
-spec!(RESTORE, RestoreSelected, "file.restore", "Restore", []);
-spec!(
-    EMPTY_TRASH,
-    EmptyTrash,
-    "file.empty-trash",
-    "Empty Trash",
-    []
-);
 
 spec!(NEW_TAB, NewTab, "tab.new", "New tab", ["ctrl-t"]);
 spec!(CLOSE_TAB, CloseTab, "tab.close", "Close tab", ["ctrl-w"]);
