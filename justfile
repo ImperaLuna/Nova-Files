@@ -18,6 +18,25 @@ check:
 build crate="":
     cargo build {{ if crate == "" { "--workspace" } else { "--package " + crate } }}
 
+# The app id and the portal's bus name, defined once in .cargo/config.toml.
+app_id := `sed -n 's/^NOVA_FILES_APP_ID = "\(.*\)"$/\1/p' .cargo/config.toml`
+portal_bus_name := `sed -n 's/^NOVA_FILES_PORTAL_BUS_NAME = "\(.*\)"$/\1/p' .cargo/config.toml`
+
+# Where cargo builds, as it decides it.
+target_dir := env("CARGO_TARGET_DIR", "target")
+
+# Build a release and install it under `prefix` in a mode: launcher, basic
+# or full (see data/install.sh). Works on any distro, outside Nix too.
+install mode="basic" prefix=(env("HOME") / ".local"):
+    cargo build --release --package nova-files --package nova-files-thumbnailer
+    data/install.sh --mode "{{ mode }}" --prefix "{{ prefix }}" --from "{{ target_dir }}/release" \
+        --app-id "{{ app_id }}" --portal-bus-name "{{ portal_bus_name }}"
+
+# Remove what `just install` put under `prefix`, in any mode.
+uninstall prefix=(env("HOME") / ".local"):
+    data/install.sh --uninstall --prefix "{{ prefix }}" \
+        --app-id "{{ app_id }}" --portal-bus-name "{{ portal_bus_name }}"
+
 # Format the code.
 fmt:
     cargo fmt --all
