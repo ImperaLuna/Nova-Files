@@ -134,6 +134,34 @@ fn a_large_batch_makes_large_thumbnails_in_their_own_folder() {
     );
 }
 
+#[test]
+fn a_picture_smaller_than_the_size_keeps_its_own() {
+    let folder = TempFolder::new("small");
+    let thumbnails = folder.0.join("thumbnails");
+    let small = folder.0.join("b.png");
+    RgbImage::new(LARGE_SIZE / 2, LARGE_SIZE / 4)
+        .save_with_format(&small, ImageFormat::Png)
+        .unwrap();
+    // Wide and short: only its width is past the size.
+    let wide = folder.0.join("c.png");
+    RgbImage::new(LARGE_SIZE * 2, LARGE_SIZE / 4)
+        .save_with_format(&wide, ImageFormat::Png)
+        .unwrap();
+    let jobs: [(&Path, &str); 2] = [(&small, "b.png"), (&wide, "c.png")];
+
+    assert_eq!(
+        run_sized(&thumbnails, LARGE, &jobs, &folder.0),
+        ["ok", "ok"]
+    );
+
+    let side = |name: &str| {
+        let thumb = image::open(thumbnails.join(LARGE).join(name)).unwrap();
+        (thumb.width(), thumb.height())
+    };
+    assert_eq!(side("b.png"), (LARGE_SIZE / 2, LARGE_SIZE / 4));
+    assert_eq!(side("c.png"), (LARGE_SIZE, LARGE_SIZE / 8));
+}
+
 /// A photo-sized image, several MB once decoded: well inside the decode
 /// limit.
 const PHOTO_WIDTH: u32 = 1600;

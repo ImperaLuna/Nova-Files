@@ -136,6 +136,22 @@ fn a_new_size_sends_every_wanted_thumbnail_again() {
 }
 
 #[test]
+fn asking_for_no_rows_keeps_the_size() {
+    let files = vec![entry(0, "a.png", EntryKind::File)];
+    let queue = Queue {
+        shared: Arc::new(shared(files, 0..1, &[0])),
+    };
+    queue.want(LISTING, EntryId(0), 1, ThumbnailSize::Large);
+
+    queue.want(LISTING, EntryId(0), 0, ThumbnailSize::Normal);
+
+    let state = queue.shared.state.lock().unwrap();
+    let size = state.size;
+    drop(state);
+    assert_eq!(size, ThumbnailSize::Large);
+}
+
+#[test]
 fn showing_a_listing_starts_over_unless_a_newer_one_came() {
     let queue = Queue {
         shared: Arc::new(shared(vec![entry(0, "a", EntryKind::File)], 0..1, &[0])),

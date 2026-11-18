@@ -1,5 +1,7 @@
-//! Makes one thumbnail: decode the file, scale it to fit the spec's
-//! "normal" size, and write it into `normal/` with its URI and mtime. A
+//! Makes one thumbnail: decode the file, scale it down to fit the size
+//! asked for ("normal" or "large" in the spec), and write it into that
+//! size's folder with its URI and mtime. A picture already small enough
+//! keeps its own size: enlarged, it would only be blurry. A
 //! file whose data can't be decoded gets a failure marker in
 //! `fail/nova-files/` instead, so nobody tries it again until it changes.
 //! A file that couldn't be read (no permission, say) or was too big to
@@ -89,7 +91,11 @@ pub fn render(folder: &Path, size: Size, job: &Job, system: &System) -> Outcome 
             return Outcome::Failed;
         }
     };
-    let thumb = image.thumbnail(size.side(), size.side());
+    // Never past the picture's own sides, so a small one isn't enlarged.
+    let thumb = image.thumbnail(
+        image.width().min(size.side()),
+        image.height().min(size.side()),
+    );
     // A write that fails (a full disk) leaves no marker: the file is fine.
     if write(&folder.join(size.folder()), job, &thumb).is_ok() {
         Outcome::Ok

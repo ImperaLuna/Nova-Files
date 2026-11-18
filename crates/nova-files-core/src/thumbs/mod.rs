@@ -124,7 +124,8 @@ impl Queue {
                 let count = usize::try_from(count.min(MAX_ROWS)).unwrap_or_default();
                 state.wanted = first..first.saturating_add(count);
                 // Thumbnails sent at another size don't fit the new one.
-                if state.size != size {
+                // Asking for none says nothing about the size.
+                if count > 0 && state.size != size {
                     state.size = size;
                     state.done.clear();
                 }

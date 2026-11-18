@@ -44,10 +44,11 @@ impl ThumbnailSize {
     /// across; the largest when none does.
     #[must_use]
     pub fn to_fill(device_side: u32) -> Self {
+        let largest = Self::ALL[Self::ALL.len() - 1];
         Self::ALL
             .into_iter()
             .find(|size| size.side() >= device_side)
-            .unwrap_or(Self::Large)
+            .unwrap_or(largest)
     }
 }
 
