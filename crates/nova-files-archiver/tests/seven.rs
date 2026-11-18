@@ -313,7 +313,9 @@ fn a_job_asks_for_the_password_a_locked_7z_needs_to_list() {
     let mut planned = None;
     loop {
         match bench.next() {
-            Event::JobProgress { progress, .. } => planned = Some(progress.total_items),
+            Event::JobProgress { progress, .. } => {
+                planned = planned.or(Some(progress.total_bytes));
+            }
             Event::JobFinished { outcome, .. } => {
                 assert_eq!(outcome, Outcome::Done);
                 break;
@@ -321,7 +323,11 @@ fn a_job_asks_for_the_password_a_locked_7z_needs_to_list() {
             _ => {}
         }
     }
-    assert_eq!(planned, Some(1), "the entry the password showed counts");
+    assert_eq!(
+        planned,
+        Some(1),
+        "the plan counts the bytes the password showed"
+    );
     assert_eq!(bench.landed(), ["docs"]);
     assert_eq!(fs::read(bench.at("into/docs/a.txt")).unwrap(), b"a");
 }
