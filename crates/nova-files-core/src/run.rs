@@ -19,6 +19,8 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 use crate::disk_space;
 use crate::drives::Store as DrivesStore;
 use crate::file_icons::FileIcons;
+use crate::folder_views::Store as FolderViewsStore;
+use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
 use crate::jobs::Client;
 use crate::measure::Measurer;
@@ -43,6 +45,8 @@ pub struct Setup {
     pub home: Option<Home>,
     /// The places list and the pinned folders.
     pub places: PlacesStore,
+    /// The folders Games and Projects gather from.
+    pub gathered: GatheredStore,
     pub window_state: WindowStateStore,
     pub settings: SettingsStore,
     pub theme: ThemeStore,
@@ -64,6 +68,8 @@ pub struct Setup {
     pub drives: DrivesStore,
     /// The folders a person opened lately.
     pub recent: RecentStore,
+    /// How each folder is shown.
+    pub folder_views: FolderViewsStore,
     /// What the archives browsed last hold.
     pub inside: Arc<Inside>,
 }
@@ -119,6 +125,8 @@ fn forget(client: ClientId, setup: &Setup) {
     setup.settings.forget(client);
     setup.theme.forget(client);
     setup.places.forget(client);
+    setup.gathered.forget(client);
+    setup.folder_views.forget(client);
     setup.drives.forget(client);
     setup.jobs.audience().leave(client);
     setup.measurer.forget(client);
@@ -143,6 +151,9 @@ fn answer(
         command @ (Command::ListFolder { .. }
         | Command::Places
         | Command::ChangeBookmark(_)
+        | Command::Gathered
+        | Command::ChangeGathered(_)
+        | Command::ListGathered { .. }
         | Command::ListTrash
         | Command::Rows { .. }
         | Command::Search { .. }
@@ -155,6 +166,8 @@ fn answer(
         | Command::RecentFolders { .. }) => folders::answer(id, client, command, setup),
         command @ (Command::WindowState
         | Command::SaveWindowState(_)
+        | Command::FolderViews
+        | Command::SetFolderView { .. }
         | Command::Settings
         | Command::ChangeSetting(_)
         | Command::Theme

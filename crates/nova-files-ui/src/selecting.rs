@@ -14,13 +14,14 @@
 //! while a rename's field takes them.
 //!
 //! When a listing arrives, a fresh read of the same folder keeps the
-//! selection by name; arriving in the folder that holds the one just left
+//! selection by name, and of Games or Projects by path; arriving in the
+//! folder that holds the one just left
 //! (Up, Back, or any other way) selects the folder left, so the keyboard
 //! carries on from there. Anything else starts with nothing selected, and
 //! so does every list a search shows and the folder after it, unless a
 //! found file's Folder cell was clicked: it is selected in its folder.
 
-use gpui::{ClickEvent, Context, KeyDownEvent, ScrollStrategy};
+use gpui::{ClickEvent, Context, KeyDownEvent};
 use nova_files_api::{Command, EntryId, EntryKind, Listing, ListingId};
 
 use crate::jump;
@@ -84,7 +85,7 @@ impl MainWindow {
         self.pick_selection_changed(cx);
         self.preview_follow_cursor(cx);
         if let Some(cursor) = self.cursor() {
-            self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
+            self.scroll_to_entry(cursor);
         }
         cx.notify();
     }
@@ -137,8 +138,9 @@ impl MainWindow {
         };
         let len = self.entry_count();
         let page = self.rows_on_screen();
+        let per_line = self.grid().per_line;
         let Some(to) = step
-            .to(from, len, page)
+            .to(from, len, (page, per_line))
             .and_then(|to| u32::try_from(to).ok())
         else {
             return;
@@ -279,21 +281,30 @@ impl MainWindow {
     }
 
     /// The selection the listing `next` starts with, given the one on
-    /// screen before it: see the module's notes.
-    pub(crate) fn selection_for(&self, next: &Listing) -> Option<Selection> {
+    /// screen before it, which shows the same place when `same_place`:
+    /// see the module's notes.
+    pub(crate) fn selection_for(&self, next: &Listing, same_place: bool) -> Option<Selection> {
         let shown = self.listing.as_ref()?;
+        if same_place {
+            let selection = self
+                .selection
+                .as_ref()
+                .filter(|selection| selection.listing == shown.id)?;
+            return if shown.folders.is_some() {
+                let key_before =
+                    |id| entry_at(&shown.entries, id).map(|entry| shown.path_of(entry));
+                selection.carried_by(next.id, key_before, &next.entries, |entry| {
+                    next.path_of(entry)
+                })
+            } else {
+                selection.carried(&shown.entries, next.id, &next.entries)
+            };
+        }
         if shown.folders.is_some() {
             let reveal = self.search.reveal.as_deref()?;
             return (reveal.parent() == Some(next.path.as_path()))
                 .then(|| Selection::named(next.id, &next.entries, reveal.file_name()?))
                 .flatten();
-        }
-        if shown.path == next.path {
-            return self
-                .selection
-                .as_ref()
-                .filter(|selection| selection.listing == shown.id)?
-                .carried(&shown.entries, next.id, &next.entries);
         }
         let left = shown.path.file_name()?;
         (shown.path.parent() == Some(next.path.as_path()))

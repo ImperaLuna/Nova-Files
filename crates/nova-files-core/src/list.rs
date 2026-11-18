@@ -112,8 +112,8 @@ fn kind_of(item: &fs::DirEntry) -> io::Result<EntryKind> {
 
 /// Folders before files; then by name ignoring case; then by the exact
 /// bytes, so the order is the same on every run. Worked out once per entry,
-/// not once per comparison.
-fn sort_key((name, kind): &(OsString, EntryKind)) -> (bool, String, OsString) {
+/// not once per comparison. Gathered places order their entries by it too.
+pub fn sort_key((name, kind): &(OsString, EntryKind)) -> (bool, String, OsString) {
     (
         *kind == EntryKind::File,
         name.to_string_lossy().to_lowercase(),

@@ -7,8 +7,9 @@
 //! trash an entry offers Restore; inside a trashed folder, nothing.
 //!
 //! On empty space: New folder and Paste (only with files on the
-//! clipboard), Select all (with something to select), then Show hidden
-//! files, which shows a tick while they show. In the trash: Empty Trash
+//! clipboard), Select all (with something to select), Details, Icons and
+//! Gallery (a tick on the view showing), then Show hidden files, which
+//! shows a tick while they show. In the trash: Empty Trash
 //! while any trash holds anything, and Select all. A search's files aren't a folder, so there
 //! only Select all is offered. The Start page and a picker have no menu.
 //!
@@ -19,13 +20,13 @@
 use std::path::PathBuf;
 
 use gpui::{Context, Modifiers, Pixels, Point, point};
-use nova_files_api::{EntryId, HiddenFiles, ListingId};
+use nova_files_api::{EntryId, HiddenFiles, ListingId, ViewMode};
 
 use super::MainWindow;
 use crate::assets::Icon;
 use crate::commands::{
-    COPY, CUT, EMPTY_TRASH, HIDDEN, NEW_FOLDER, OPEN, PASTE, PREVIEW, RENAME, RESTORE, SELECT_ALL,
-    TRASH,
+    COPY, CUT, DETAILS, EMPTY_TRASH, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PASTE, PREVIEW,
+    RENAME, RESTORE, SELECT_ALL, TRASH,
 };
 use crate::menu::{Look, MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
@@ -94,6 +95,7 @@ impl MainWindow {
         }
         let one = self.selected_count() == 1;
         let lone = |item: MenuItem| one.then_some(item);
+        let rename = lone(MenuItem::run(Icon::Rename, &RENAME)).filter(|_| self.folder().is_some());
         let new_tab = self.lone_folder().map(|folder| {
             MenuItem::new(
                 Icon::Plus,
@@ -113,7 +115,7 @@ impl MainWindow {
             [
                 Some(MenuItem::run(Icon::Cut, &CUT)),
                 Some(MenuItem::run(Icon::Copy, &COPY)),
-                lone(MenuItem::run(Icon::Rename, &RENAME)),
+                rename,
             ]
             .into_iter()
             .flatten()
@@ -128,6 +130,25 @@ impl MainWindow {
             [id] => self.folder_of_entry(id),
             _ => None,
         }
+    }
+
+    /// One item for each view, the one showing ticked.
+    fn view_items(&self) -> Vec<MenuItem> {
+        let showing = self.folder_view().mode;
+        [
+            (ViewMode::Details, Icon::List, &DETAILS),
+            (ViewMode::Icons, Icon::Tiles, &ICONS),
+            (ViewMode::Gallery, Icon::Pictures, &GALLERY),
+        ]
+        .into_iter()
+        .map(|(mode, icon, spec)| {
+            if mode == showing {
+                MenuItem::run(Icon::Check, spec).with_look(Look::On)
+            } else {
+                MenuItem::run(icon, spec)
+            }
+        })
+        .collect()
     }
 
     /// The menu for the sheet's empty space.
@@ -149,6 +170,12 @@ impl MainWindow {
                 select_all.into_iter().collect(),
             ];
         }
+        if let Some(place) = self.gathered_shown() {
+            return vec![
+                vec![super::gathering::add_item(place)],
+                select_all.into_iter().collect(),
+            ];
+        }
         if self.showing_found() {
             return vec![select_all.into_iter().collect()];
         }
@@ -164,21 +191,23 @@ impl MainWindow {
                 .flatten()
                 .collect(),
             select_all.into_iter().collect(),
+            self.view_items(),
             vec![hidden],
         ]
     }
 
-    /// Just under the row the keyboard is on, kept within the list.
+    /// Just under the entry the keyboard is on, kept within the list.
     fn under_cursor(&self) -> Point<Pixels> {
+        let grid = self.grid();
         let state = self.scroll.0.borrow();
         let list = state.base_handle.bounds();
         let scrolled = state.base_handle.offset().y;
-        let row = self.cursor().unwrap_or_default();
-        // Rows are counted in screens of a few thousand at most.
-        #[expect(clippy::cast_precision_loss, reason = "a row index fits in f32")]
-        let below = size::ROW_HEIGHT * (row as f32 + 1.0);
+        let entry = self.cursor().unwrap_or_default();
+        #[expect(clippy::cast_precision_loss, reason = "a line index fits in f32")]
+        let (line, column) = (grid.line_of(entry) as f32, grid.column_of(entry) as f32);
+        let below = grid.cell.height * (line + 1.0);
         let y = (list.top() + scrolled + below).clamp(list.top(), list.bottom());
-        point(list.left() + size::ROW_PAD, y)
+        point(list.left() + grid.cell.width * column + size::ROW_PAD, y)
     }
 
     /// The top left of the list.

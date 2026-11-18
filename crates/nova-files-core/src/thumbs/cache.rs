@@ -11,12 +11,13 @@ use std::fs::File;
 use std::io::{self, Read as _};
 use std::path::{Path, PathBuf};
 
+use nova_files_api::ThumbnailSize;
+
 use super::md5;
 
-pub const NORMAL_FOLDER: &str = "normal";
 pub const FAIL_FOLDER: &str = "fail/nova-files";
 const EXTENSION: &str = ".png";
-/// A "normal" thumbnail is a few tens of KB; anything this big isn't one.
+/// A thumbnail is at most a few hundred KB; anything this big isn't one.
 const MAX_THUMBNAIL_BYTES: u64 = 4 * 1024 * 1024;
 const MTIME_KEY: &[u8] = b"Thumb::MTime";
 const PNG_SIGNATURE_LENGTH: usize = 8;
@@ -39,8 +40,9 @@ pub fn read_if_current(folder: &Path, name: &str, mtime: u64) -> Option<Vec<u8>>
     (stored == mtime.to_string().as_bytes()).then_some(png)
 }
 
-pub fn normal(thumbnails: &Path) -> PathBuf {
-    thumbnails.join(NORMAL_FOLDER)
+/// The folder of `size`'s thumbnails.
+pub fn sized(thumbnails: &Path, size: ThumbnailSize) -> PathBuf {
+    thumbnails.join(size.folder())
 }
 
 pub fn failed(thumbnails: &Path) -> PathBuf {
@@ -163,10 +165,13 @@ mod tests {
     }
 
     #[test]
-    fn markers_live_in_the_apps_own_fail_folder() {
+    fn markers_live_in_the_apps_own_fail_folder_and_sizes_in_theirs() {
         let thumbnails = Path::new("/cache/thumbnails");
         assert_eq!(failed(thumbnails), thumbnails.join("fail/nova-files"));
-        assert_eq!(normal(thumbnails), thumbnails.join("normal"));
+        let normal = sized(thumbnails, ThumbnailSize::Normal);
+        assert_eq!(normal, thumbnails.join("normal"));
+        let large = sized(thumbnails, ThumbnailSize::Large);
+        assert_eq!(large, thumbnails.join("large"));
     }
 
     #[test]

@@ -5,7 +5,9 @@
 //! root shows its icon too. A press on an arrow opens a menu of the
 //! folders in the crumb before it; the folder on screen has an arrow only
 //! when it holds folders. A long path folds its middle into a "…" crumb
-//! whose menu lists the folders it hides (see `path_menu`).
+//! whose menu lists the folders it hides (see `path_menu`). Games and
+//! Projects are one crumb each, with no folder to type a path from, and
+//! end with a chip for the folders they gather from.
 //!
 //! The crumbs sit at the bar's right end of their own box, so a narrow
 //! window cuts the root side off and keeps the folder on screen in view.
@@ -25,6 +27,7 @@ use gpui::{
     MouseDownEvent, ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _,
     Styled as _, div, prelude::FluentBuilder as _, transparent_black,
 };
+use nova_files_api::Gathering;
 
 use super::bar::capsule;
 use super::drop::inside_edge;
@@ -34,7 +37,7 @@ use crate::assets::Icon;
 use crate::commands::EmptyTrash;
 use crate::crumbs::{self, Crumb, Shown};
 use crate::path_bar::{MenuItem, MenuOwner};
-use crate::places::TRASH_LABEL;
+use crate::places::{self, TRASH_LABEL};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::{Aim, MainWindow};
 
@@ -59,6 +62,14 @@ impl MainWindow {
                     }))
                     .child(typing.field.clone()),
             );
+        }
+        if let Some(place) = self.gathered_here() {
+            let chip = self.gathered_chip(place, colors, cx);
+            return bar
+                .child(gathered_crumb(place, colors, cx))
+                .child(div().flex_1())
+                .children(self.scope_chip(colors, cx))
+                .child(self.drop_target(chip, Aim::gathered(place), cx));
         }
         let crumbs = self.crumbs();
         let mut row = div()
@@ -208,6 +219,53 @@ fn crumb_button(
             button.child(icon(crumb.icon, size::CRUMB_ICON, tint))
         })
         .child(crumb.label.clone())
+}
+
+/// The one crumb of Games or Projects, `place`, which is on screen: a
+/// click lists it again.
+fn gathered_crumb(place: Gathering, colors: &Colors, cx: &Context<MainWindow>) -> Stateful<Div> {
+    let (label, glyph) = places::gathering_look(place);
+    crumb_box("crumb-0".into(), colors)
+        .bg(colors.hover)
+        .text_color(colors.text)
+        .font_weight(text::STRONG_WEIGHT)
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            this.open_gathered(place, cx);
+        }))
+        .child(icon(glyph, size::CRUMB_ICON, colors.here))
+        .child(label)
+}
+
+impl MainWindow {
+    /// The "N folders" chip at the end of `place`'s path bar, which opens
+    /// the menu of the folders it gathers from (see `window::gathering`).
+    fn gathered_chip(
+        &self,
+        place: Gathering,
+        colors: &Colors,
+        cx: &Context<Self>,
+    ) -> Stateful<Div> {
+        div()
+            .id("gathered-folders")
+            .debug_selector(|| "gathered-folders".to_owned())
+            .flex()
+            .flex_none()
+            .items_center()
+            .h(size::CHIP_HEIGHT)
+            .px(inside_edge(size::CHIP_PAD))
+            .rounded(radius::ROW)
+            .text_color(colors.text_soft)
+            .cursor_pointer()
+            .hover(|chip| chip.bg(colors.hover).text_color(colors.text))
+            .active(|chip| chip.bg(colors.press))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    this.open_gathered_menu(place, event.position, cx);
+                }),
+            )
+            .child(self.gathered_count(place))
+    }
 }
 
 /// A crumb's box, with `selector` as its id and debug selector.

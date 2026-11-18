@@ -10,12 +10,15 @@
 mod accounts;
 mod archive;
 mod capped;
+mod change_writer;
 mod config_watch;
 mod details;
 mod details_queue;
 mod disk_space;
 mod drives;
 mod file_icons;
+mod folder_views;
+mod gathered;
 mod hand_edited;
 mod icon_theme;
 mod index;
@@ -156,7 +159,10 @@ pub fn spawn_with_archiver(
             let theme = theme::Store::open(config);
             theme.follow(&settings);
             let places = places::Store::open(home.clone());
-            let recent = recent::Store::open(home.as_ref().map(|home| home.state.as_path()));
+            let gathered = gathered::Store::open(home.clone());
+            let state_home = home.as_ref().map(|home| home.state.as_path());
+            let recent = recent::Store::open(state_home);
+            let folder_views = folder_views::Store::open(state_home);
             let mime_types = Arc::default();
             let file_icons = Arc::new(file_icons::FileIcons::from_env(
                 Arc::clone(&mime_types),
@@ -165,6 +171,7 @@ pub fn spawn_with_archiver(
             let setup = run::Setup {
                 home,
                 places,
+                gathered,
                 window_state,
                 settings,
                 theme,
@@ -177,6 +184,7 @@ pub fn spawn_with_archiver(
                 measurer: measure::Measurer::default(),
                 drives: drives::Store::default(),
                 recent,
+                folder_views,
                 inside,
             };
             run::run(&receiver, idle_exit, &setup);

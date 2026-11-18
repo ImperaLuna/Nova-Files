@@ -1,14 +1,15 @@
 //! The commands about folders and the files in them: listing, rows,
-//! places, the trash, search, properties, previews, opening files and
+//! places, the gathered folders, the trash, search, properties, previews, opening files and
 //! the recent folders. `run` sends only these here. Folders list their
 //! hidden entries as the settings say, but the trash lists all of them.
 
 use std::path::Path;
 use std::sync::Arc;
 
-use nova_files_api::{ClientGone, ClientId, Command, HiddenFiles};
+use nova_files_api::{ClientGone, ClientId, Command, HiddenFiles, Thumbnails};
 
 use super::Setup;
+use crate::gathered;
 use crate::jobs::{self, Client};
 use crate::preview::{self, Request};
 use crate::properties;
@@ -28,9 +29,21 @@ pub(super) fn answer(
         }
         Command::Places => setup.places.listen(id, client.events()),
         Command::ChangeBookmark(change) => setup.places.change(change),
+        Command::Gathered => setup.gathered.listen(id, client.events()),
+        Command::ChangeGathered(change) => setup.gathered.change(change),
+        Command::ListGathered { id, place, order } => {
+            let hidden = setup.settings.current().hidden_files;
+            gathered::list(client, id, setup.gathered.folders_of(place), order, hidden);
+        }
         Command::ListTrash => return jobs::list_trash(client, setup.home.clone()),
-        Command::Rows { id, first, count } => {
-            client.want_rows(id, first, count, setup.settings.current().thumbnails);
+        Command::Rows {
+            id,
+            first,
+            count,
+            size,
+        } => {
+            let shown = setup.settings.current().thumbnails == Thumbnails::Shown;
+            client.want_rows(id, first, count, shown.then_some(size));
         }
         Command::Search { id, query, limit } => setup.searcher.search(client, id, query, limit),
         Command::Find { id, query, within } => setup.searcher.find(client, id, query, within),
