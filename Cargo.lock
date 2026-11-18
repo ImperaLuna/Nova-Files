@@ -3645,6 +3645,7 @@ dependencies = [
  "nova-files-rename-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
+ "nova-files-thumbnailer-launch",
  "nova-files-trash-api",
  "nova-files-trash-core",
  "rustix 1.1.6",
@@ -3783,6 +3784,14 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-ui",
+]
+
+[[package]]
+name = "nova-files-thumbnailer-launch"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+ "rustix 1.1.6",
 ]
 
 [[package]]

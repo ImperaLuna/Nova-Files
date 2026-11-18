@@ -13,8 +13,8 @@ use nova_files_api::{
 use rustix::fs::OFlags;
 
 use crate::list::{self, Stopped};
-use crate::thumbs::{self, Running};
 use nova_files_open_core::MimeTypes;
+use nova_files_thumbnailer_launch::{self as launch, Running};
 
 const THREAD_NAME: &str = "nova-files-preview";
 
@@ -160,7 +160,7 @@ fn picture(request: &Request, helper: &Path) -> Option<PreviewContent> {
     }
     let current = &request.current;
     let wanted = || current.is(request.id);
-    let picture = thumbs::picture(helper, &request.path, request.fit, &current.running, wanted);
+    let picture = launch::picture(helper, &request.path, request.fit, &current.running, wanted);
     Some(picture.map_or(PreviewContent::Icon, PreviewContent::Picture))
 }
 

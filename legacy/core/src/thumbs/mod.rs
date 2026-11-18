@@ -1,5 +1,4 @@
 mod cache;
-mod helper;
 mod md5;
 #[cfg(test)]
 mod tests;
@@ -13,11 +12,10 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::UNIX_EPOCH;
 
-pub use helper::{Running, picture};
-
 use nova_files_api::{
     EntryId, EntryKind, Event, EventSink, Listing, ListingId, MAX_ROWS, ThumbnailSize, uri,
 };
+use nova_files_thumbnailer_launch as launch;
 
 const THUMBNAILS_FOLDER: &str = "thumbnails";
 const HELPER_NAME: &str = "nova-files-thumbnailer";
@@ -216,8 +214,8 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
         if misses.is_empty() {
             continue;
         }
-        let jobs: Vec<helper::Job> = misses.iter().map(|(_, job)| job.clone()).collect();
-        helper::run(&setup.helper, &setup.folder, size, &jobs);
+        let jobs: Vec<launch::Job> = misses.iter().map(|(_, job)| job.clone()).collect();
+        launch::run(&setup.helper, &setup.folder, size, &jobs);
         for (index, job) in misses {
             if !wanted(index) {
                 continue;
@@ -231,7 +229,7 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
     }
 }
 
-fn job_for(shown: &Listing, index: usize) -> Option<helper::Job> {
+fn job_for(shown: &Listing, index: usize) -> Option<launch::Job> {
     let entry = shown.entries.get(index)?;
     let source = shown.path_of(entry);
     let mtime = fs::metadata(&source)
@@ -243,7 +241,7 @@ fn job_for(shown: &Listing, index: usize) -> Option<helper::Job> {
         .as_secs();
     let uri = uri::file_uri(&absolute(&source));
     let name = cache::name(&uri);
-    Some(helper::Job {
+    Some(launch::Job {
         source,
         uri,
         mtime,
