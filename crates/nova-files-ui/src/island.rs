@@ -109,7 +109,6 @@ const SELECTED: &str = "selected";
 const PART_GAP: &str = " · ";
 const LIST_GAP: &str = ", ";
 const TRASH: &str = "Trash";
-const NOTHING_EXTRACTED: &str = "Nothing extracted";
 const ROOT: &str = "/";
 
 /// A lone path by its name, several by how many.
@@ -229,12 +228,9 @@ fn answered_note(
     Some(with_answers(vec![done], tally))
 }
 
-/// The note for an extract of `archive`: "Extracted photos.zip", or
-/// "Nothing extracted" when its password was skipped.
+/// The note for an extract of `archive`, with what its answers did:
+/// "Extracted photos.zip, skipped 1".
 fn extracted_note(archive: &Path, tally: Tally) -> String {
-    if tally.skipped > 0 {
-        return NOTHING_EXTRACTED.to_owned();
-    }
     with_answers(vec![format!("Extracted {}", name_of(archive))], tally)
 }
 

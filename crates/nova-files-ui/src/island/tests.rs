@@ -273,7 +273,7 @@ fn a_note_says_what_the_answers_to_clashes_did() {
     );
     assert_eq!(
         note(&extract, None, tally(0, 1)).as_deref(),
-        Some("Nothing extracted")
+        Some("Extracted photos.zip, skipped 1")
     );
     assert_eq!(
         note(&extract, None, tally(1, 0)).as_deref(),
