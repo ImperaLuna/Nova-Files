@@ -47,9 +47,9 @@ exclude_re = [
     # check the selection itself.
     "legacy/ui/src/view/sheet\\.rs:.*replace == with != in MainWindow::entries",
     # The trash (FIL-21). A folder sync only matters across a power cut.
-    "legacy/core/src/ops/sync\\.rs:.*replace sync_folders with \\(\\)",
+    "framework/jobs/src/sync\\.rs:.*replace sync_folders with \\(\\)",
     # Only picks what is logged when a leftover can't be removed.
-    "legacy/core/src/ops/sync\\.rs:.*replace != with == in remove$",
+    "framework/jobs/src/sync\\.rs:.*replace != with == in remove$",
     # Another program removing the entry, or taking a name in the trash,
     # between the trash job's look and its rename: a race no test can time.
     "legacy/core/src/ops/trash\\.rs:.*replace match guard error\\.kind\\(\\) == io::ErrorKind::NotFound with true in send$",

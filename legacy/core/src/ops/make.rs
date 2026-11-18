@@ -18,7 +18,7 @@ use super::plan::{Item, Kind};
 use super::running::Running;
 use super::stop::Stop;
 use super::sync::sync_folder;
-use super::trash::{SetAside, trash_set_aside};
+use nova_files_jobs::set_aside::Aside;
 
 const FILLING_MODE: u32 = 0o700;
 
@@ -278,19 +278,19 @@ fn set_aside(running: &mut Running, making: &Making<'_>, left: Option<&Path>) {
     };
     let target = making.target;
     let ours = running.placed_here(target);
-    match trash_set_aside(running, (making.index, left), target) {
-        SetAside::Trashed(item) => {
+    match running.set_aside((making.index, left), target) {
+        Aside::Kept(item) => {
             if !ours {
                 running.replaced.push((target.to_path_buf(), item));
             }
         }
-        SetAside::Gone => {}
-        SetAside::NoTrash => {
+        Aside::Gone => {}
+        Aside::Nowhere => {
             if let Err(error) = fs::remove_file(left) {
                 log::warn!("can't remove the replaced {}: {error}", left.display());
             }
         }
-        SetAside::Refused => match take_free_name(left, target) {
+        Aside::Refused => match take_free_name(left, target) {
             Ok(kept) => log::warn!(
                 "the replaced {} is kept as {}",
                 target.display(),

@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt as _;
 
 use super::*;
-use crate::ops::test_folder::TestFolder;
+use crate::test_folder::TestFolder;
 
 #[test]
 fn escapes_every_byte_a_line_cant_hold() {

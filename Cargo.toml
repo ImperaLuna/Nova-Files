@@ -21,6 +21,8 @@ nova-files-api = { path = "framework/base" }
 nova-files-core = { path = "legacy/core" }
 nova-files-dbus = { path = "fronts/dbus" }
 nova-files-messages = { path = "framework/messages" }
+nova-files-disk = { path = "framework/disk" }
+nova-files-jobs = { path = "framework/jobs" }
 nova-files-index = { path = "helpers/index" }
 nova-files-ui = { path = "legacy/ui" }
 

@@ -4,7 +4,7 @@ use nova_files_api::{ClientGone, ClientId, Command};
 
 use super::Setup;
 use crate::jobs::Client;
-use crate::ops::answer_drop_would;
+use crate::ops::{self, answer_drop_would};
 
 pub(super) fn answer(
     id: ClientId,
@@ -16,11 +16,11 @@ pub(super) fn answer(
         Command::WatchJobs => setup.jobs.watch(id, client.events()),
         Command::StartJob { tag, operation } => {
             setup.jobs.audience().join(id, Arc::clone(client.events()));
-            return setup.jobs.start(client, tag, operation);
+            return setup.jobs.start(client.events().as_ref(), tag, operation);
         }
         Command::DropFiles { tag, sources, into } => {
             setup.jobs.audience().join(id, Arc::clone(client.events()));
-            setup.jobs.start_drop(client.events(), tag, sources, into);
+            ops::start_drop(&setup.jobs, client.events(), tag, sources, into);
         }
         Command::DropWould { id, sources, into } => {
             answer_drop_would(client.events(), id, sources, into);

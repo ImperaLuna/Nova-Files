@@ -9,7 +9,7 @@ use chrono::{DateTime, Local};
 
 use crate::percent;
 
-pub const INFO_SUFFIX: &str = ".trashinfo";
+use super::INFO_SUFFIX;
 pub(super) const HEADER: &str = "[Trash Info]";
 pub(super) const PATH_KEY: &str = "Path=";
 pub(super) const DATE_KEY: &str = "DeletionDate=";

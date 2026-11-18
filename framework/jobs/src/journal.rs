@@ -9,7 +9,7 @@ use nova_files_api::JobId;
 use rustix::fs::{FlockOperation, flock};
 
 use super::plan::Entry;
-use crate::percent;
+use nova_files_disk::percent;
 
 pub const FOLDER: &str = "nova-files/jobs";
 const HEADER: &str = "nova-files-job 1";
@@ -218,7 +218,7 @@ pub fn hold(journal: &File) -> io::Result<()> {
 }
 
 pub mod read;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl Journal {
     pub fn over(file: File, path: PathBuf) -> Self {
         Self {

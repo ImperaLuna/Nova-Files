@@ -1,3 +1,5 @@
+#![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;

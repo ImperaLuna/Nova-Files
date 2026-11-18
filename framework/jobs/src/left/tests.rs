@@ -1,5 +1,5 @@
 use super::*;
-use crate::ops::test_folder::TestFolder;
+use crate::test_folder::TestFolder;
 use std::os::unix::fs::MetadataExt as _;
 
 fn entry_of(path: &Path) -> PathBuf {
