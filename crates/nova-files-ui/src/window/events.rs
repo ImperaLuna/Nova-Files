@@ -110,9 +110,13 @@ impl MainWindow {
             Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
                 self.find_failed(id, cx);
             }
-            Event::Properties { id, .. } => self.save_probed(id, false, cx),
+            Event::Properties { id, properties } => {
+                self.save_probed(id, false, cx);
+                self.properties_arrived(id, Some(properties), cx);
+            }
             Event::PropertiesUnreadable { id, reason, .. } => {
                 self.save_probed(id, reason == Unreadable::Missing, cx);
+                self.properties_arrived(id, None, cx);
             }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);

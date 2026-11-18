@@ -12,6 +12,7 @@
 
 mod drives;
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use gpui::{
@@ -339,10 +340,12 @@ fn lean(index: usize, count: usize) -> Radians {
 
 /// A folder's name: its last part, or the whole path for the root.
 pub(super) fn name_of(path: &Path) -> String {
-    path.file_name().map_or_else(
-        || path.to_string_lossy().into_owned(),
-        |name| name.to_string_lossy().into_owned(),
-    )
+    name_os(path).to_string_lossy().into_owned()
+}
+
+/// The last part of `path`, or all of it for the root, as the disk has it.
+pub(super) fn name_os(path: &Path) -> &OsStr {
+    path.file_name().unwrap_or(path.as_os_str())
 }
 
 /// Where a folder is: its parent, with home written `~`.

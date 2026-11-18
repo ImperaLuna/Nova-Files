@@ -8,7 +8,7 @@
 //! `clipboard`, dragging and dropping files in `dragging` (naming the
 //! drop under the pointer in `aiming`, opening rows held over in
 //! `hover_open`), renaming and
-//! New folder in `renaming`, the jobs they start in `jobs`, the tabs in
+//! New folder in `renaming`, the Properties page in `properties`, the jobs they start in `jobs`, the tabs in
 //! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
@@ -59,6 +59,7 @@ mod jobs;
 mod navigate;
 mod pin;
 mod preview;
+mod properties;
 mod renaming;
 mod rows;
 mod search;
@@ -74,6 +75,7 @@ pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
 pub use preview::{Previewed, Shown};
+pub use properties::Page as PropertiesPage;
 pub use search::{FocusTo, Scope, short_folder};
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
 
@@ -254,6 +256,11 @@ pub struct MainWindow {
     /// A tab being dragged to another place in the Open list (see
     /// `tab_order`).
     tab_order: tab_order::TabOrder,
+    /// The Properties page of the tab on screen, while it has one (see
+    /// `properties`).
+    properties: Option<properties::Page>,
+    /// The id the next properties request gets.
+    next_properties: u64,
     _events: Task<()>,
 }
 
@@ -370,13 +377,21 @@ impl MainWindow {
             drop_asks: aiming::Asks::default(),
             hover_open: hover_open::HoverOpen::default(),
             tab_order: tab_order::TabOrder::default(),
+            properties: None,
+            next_properties: 0,
             _events: events,
         };
-        match location {
-            Location::Start => window.open_start(cx),
-            Location::Folder(folder) => window.open(folder),
-        }
+        window.go_first(location, cx);
         window
+    }
+
+    /// Goes to `location`, the first place of a new window.
+    fn go_first(&mut self, location: &Location, cx: &mut Context<Self>) {
+        match location {
+            Location::Start => self.open_start(cx),
+            Location::Folder(folder) => self.open(folder),
+            Location::Properties(paths) => self.arrive_at_properties(paths, cx),
+        }
     }
 
     /// Hands the core's events to the window as they come, until the core

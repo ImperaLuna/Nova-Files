@@ -1,5 +1,6 @@
 //! The sheet the folder's entries sit on: the column heads, then the rows;
-//! on Start, the Start page instead (see `start`).
+//! on Start, the Start page instead (see `start`), and on a Properties
+//! page, that page (see `properties`).
 //!
 //! The rows are a `uniform_list`, which builds only the rows on screen, so
 //! a folder of any size costs the same to draw. Each row is an icon and a
@@ -67,6 +68,8 @@ impl MainWindow {
                 if self.is_on_start() {
                     // The page runs to the sheet's edges, glow and all.
                     sheet.px_0().child(self.start_page(cx))
+                } else if let Some(page) = self.properties_page() {
+                    sheet.px_0().child(self.properties_view(page, cx))
                 } else {
                     sheet
                         .child(self.column_heads(&colors, cx))

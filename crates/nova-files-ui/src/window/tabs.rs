@@ -6,7 +6,7 @@
 //! window without tabs would, so nothing else needs to know about tabs.
 //! Leaving a tab stashes what is its own in a [`Tab`]: its history (and
 //! with it where it is), its listing, selection, order, search and scroll
-//! position. What only the screen needs is let go: details, thumbnails,
+//! position, and a Properties page. What only the screen needs is let go: details, thumbnails,
 //! the rows the core serves, a quick look, a menu, a rename, a typed path.
 //!
 //! Coming back puts the stash on screen at once, so the list shows at its
@@ -16,7 +16,8 @@
 //! (see `events`), so it also brings in what changed meanwhile, and the
 //! sidebar's tree opens down to it. A folder still on its way when the
 //! tab was left is asked for again; a search is run again and shows from
-//! its top, since what it finds may have changed. A tab whose folder is
+//! its top, since what it finds may have changed; a Properties page asks
+//! for what it shows again (see `properties`). A tab whose folder is
 //! gone by then (deleted, or its drive unplugged) goes to Start, and so
 //! does a new tab whose folder can't be read. A drive still mounting
 //! when the tab is left isn't opened.
@@ -41,6 +42,7 @@ use super::search::Search;
 use crate::assets::Icon;
 use crate::drives::ShownDrive;
 use crate::history::History;
+use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::places::{self, START_LABEL, TRASH_LABEL};
@@ -64,6 +66,7 @@ pub struct Tab {
     counted: SharedString,
     /// The folder asked for that hadn't arrived when the tab was left.
     on_its_way: Option<PathBuf>,
+    properties: Option<super::properties::Page>,
 }
 
 impl Tab {
@@ -148,6 +151,7 @@ impl MainWindow {
                 // A folder that can't be read leaves the tab on Start.
                 self.tabs.start_if_refused = self.asked;
             }
+            Location::Properties(paths) => self.arrive_at_properties(paths, cx),
         }
         cx.notify();
     }
@@ -221,6 +225,7 @@ impl MainWindow {
     fn tab_look(&self, place: Option<&Location>, shown: &[places::Shown]) -> (SharedString, Icon) {
         match place {
             Some(Location::Start) => (START_LABEL.into(), Icon::Start),
+            Some(Location::Properties(paths)) => (island::what(paths).into(), Icon::Info),
             Some(Location::Folder(folder)) if *folder == self.trash.folder => {
                 (TRASH_LABEL.into(), Icon::Trash)
             }
@@ -361,6 +366,7 @@ impl MainWindow {
             search: mem::replace(&mut self.search, Search::new(cx)),
             counted: mem::take(&mut self.counted),
             on_its_way,
+            properties: self.properties.take(),
         }
     }
 
@@ -379,6 +385,7 @@ impl MainWindow {
         self.scroll = tab.scroll;
         self.search = tab.search;
         self.counted = tab.counted;
+        self.properties = tab.properties;
         // The core serves another listing's rows now.
         self.core_moved = true;
         if let Some(folder) = tab.on_its_way {
@@ -392,6 +399,8 @@ impl MainWindow {
             self.tabs.start_if_refused = self.asked;
         } else if self.is_on_start() {
             self.arrive_at_start(cx);
+        } else if self.properties_paths().is_some() {
+            self.ask_properties();
         }
         cx.notify();
     }

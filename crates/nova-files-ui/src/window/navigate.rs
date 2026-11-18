@@ -1,7 +1,9 @@
 //! Going places: a new folder, Back, Forward, Up and into an entry. Each
 //! folder asks the core for a listing with a new id, in the window's
 //! order; the window moves once that id answers (see `events`). Back or
-//! Forward to the Start page arrives at once (see `start`). Changing the
+//! Forward to the Start page or a Properties page arrives at once (see
+//! `start` and `properties`); Up on a Properties page goes to the folder
+//! that holds what it shows. Changing the
 //! order reads the folder again, except while a search's files are on
 //! screen, which stay best first. Going anywhere ends a search (see
 //! `search`) and closes the path bar's menu. Paths are tidied by their
@@ -47,6 +49,7 @@ impl MainWindow {
             Location::Folder(folder) => {
                 self.request(folder);
             }
+            Location::Properties(paths) => self.arrive_at_properties(paths, cx),
         }
     }
 
@@ -132,8 +135,12 @@ impl MainWindow {
         (entry.kind == EntryKind::Folder).then(|| listing.path_of(entry))
     }
 
-    /// The folder Up goes to, if there is one.
+    /// The folder Up goes to, if there is one; on a Properties page, the
+    /// folder that holds what it shows.
     pub fn parent(&self) -> Option<PathBuf> {
+        if self.properties_paths().is_some() {
+            return self.properties_folder().map(Path::to_path_buf);
+        }
         self.folder()?.parent().map(Path::to_path_buf)
     }
 

@@ -11,7 +11,8 @@
 //! part: the top bar in `bar`, its path bar in `path`, the sidebar in
 //! `sidebar`, the sheet with its column heads and rows in `sheet`, the
 //! pieces of one row in `row`, a right-click menu in `menu`, the Start
-//! page, drawn on the sheet in place of the rows, in `start`, and the
+//! page, drawn on the sheet in place of the rows, in `start`, a
+//! Properties page, drawn there too, in `properties`, and the
 //! quick look over it all in `preview`.
 //!
 //! The window sets the key context its actions are bound in and handles
@@ -34,6 +35,7 @@ mod menu;
 mod path;
 mod path_menu;
 mod preview;
+mod properties;
 mod row;
 mod search;
 mod sheet;
@@ -58,7 +60,7 @@ use crate::commands::{
 };
 use crate::commands::{
     CloseTab, CopySelected, CutSelected, DeleteSelected, EmptyTrash, NewFolder, NewTab, NextTab,
-    Paste, PreviousTab, RenameSelected, RestoreSelected, TrashSelected, Undo,
+    Paste, PreviousTab, RenameSelected, RestoreSelected, ShowProperties, TrashSelected, Undo,
 };
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
@@ -164,6 +166,7 @@ impl MainWindow {
         .on_action(cx.listener(|this, _: &CloseTab, _, cx| this.close_current_tab(cx)))
         .on_action(cx.listener(|this, _: &NextTab, _, cx| this.next_tab(cx)))
         .on_action(cx.listener(|this, _: &PreviousTab, _, cx| this.previous_tab(cx)))
+        .on_action(cx.listener(|this, _: &ShowProperties, _, cx| this.show_properties(cx)))
     }
 
     /// The actions on the files selected (see `window::acting`).

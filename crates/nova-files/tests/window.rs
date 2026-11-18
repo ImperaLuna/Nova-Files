@@ -26,6 +26,7 @@ mod window_jump;
 mod window_keys;
 mod window_path;
 mod window_preview;
+mod window_properties;
 mod window_select;
 mod window_sidebar;
 mod window_start;
