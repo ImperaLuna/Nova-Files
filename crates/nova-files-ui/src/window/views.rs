@@ -137,10 +137,13 @@ impl MainWindow {
             return false;
         }
         self.sizing.zoom_scroll += delta.pixel_delta(ZOOM_STEP).y;
-        while self.sizing.zoom_scroll.abs() >= ZOOM_STEP {
-            let bigger = self.sizing.zoom_scroll > Pixels::ZERO;
-            self.sizing.zoom_scroll -= if bigger { ZOOM_STEP } else { -ZOOM_STEP };
-            self.zoom_icons(bigger, cx);
+        let steps = (self.sizing.zoom_scroll / ZOOM_STEP).trunc();
+        if steps != 0.0 {
+            self.sizing.zoom_scroll -= ZOOM_STEP * steps;
+            let view = self.folder_view();
+            #[expect(clippy::cast_possible_truncation, reason = "a few steps of a wheel")]
+            let icons = view.icons.stepped(steps as isize);
+            self.change_view(FolderView { icons, ..view }, cx);
         }
         true
     }

@@ -14,11 +14,11 @@ use gpui::{
     SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, StyledImage as _,
     StyledText, div, img, prelude::FluentBuilder as _, svg,
 };
-use nova_files_api::{EntryKind, IconKind};
+use nova_files_api::{Entry, EntryKind, IconKind, Listing};
 
 use crate::assets::Icon;
 use crate::theme::{Colors, radius, size, text};
-use crate::window::{DraggedRow, MainWindow};
+use crate::window::{Aim, DraggedRow, MainWindow};
 
 /// Which corners of a row stay rounded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,6 +125,19 @@ pub fn drags(
         })
 }
 
+impl MainWindow {
+    /// Whether entries drag: not in a picker, and not in the trash.
+    pub(super) fn entries_drag(&self) -> bool {
+        self.pick.is_none() && !self.in_trash()
+    }
+}
+
+/// Where files dropped on `entry` of `listing`, named `name`, go: into
+/// it when it is a folder.
+pub fn folder_aim(listing: &Listing, entry: &Entry, name: &str) -> Option<Aim> {
+    (entry.kind == EntryKind::Folder).then(|| Aim::folder(listing.path_of(entry), name.to_owned()))
+}
+
 /// How a search's match shows in a name: full-strength text on orange.
 fn mark_style(colors: &Colors) -> HighlightStyle {
     HighlightStyle {
@@ -138,6 +151,7 @@ fn mark_style(colors: &Colors) -> HighlightStyle {
 /// shifts nothing.
 pub fn cursor_ring(colors: &Colors) -> impl IntoElement {
     div()
+        .debug_selector(|| "cursor".to_owned())
         .absolute()
         .inset_0()
         .rounded(radius::ROW)

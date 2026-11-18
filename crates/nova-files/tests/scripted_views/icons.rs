@@ -218,10 +218,10 @@ fn left_and_right_step_the_quick_look_once(cx: &mut TestAppContext) {
 fn the_menu_key_opens_the_menu_under_the_cell(cx: &mut TestAppContext) {
     let (view, cx, _) = icons(cx);
     let across = per_line(cx);
-    cx.simulate_keystrokes("right right down");
+    cx.simulate_keystrokes("right right right down");
     cx.simulate_keystrokes("menu");
     let at = view.read_with(cx, |view, _| view.menu().unwrap().at);
-    let under = cell(cx, across + 1);
+    let under = cell(cx, across + 2);
     assert!(
         at.x > under.left() && at.x < under.right(),
         "{at:?} {under:?}"
@@ -281,4 +281,72 @@ fn a_rename_under_an_icon_takes_the_cells_width(cx: &mut TestAppContext) {
         field.size.width > under.size.width / 2.0,
         "{field:?} {under:?}"
     );
+}
+
+#[gpui::test]
+fn ctrl_scroll_takes_whole_steps_at_once(cx: &mut TestAppContext) {
+    let (view, cx, _) = icons(cx);
+    ctrl_scroll(cx, 2.5);
+    assert_eq!(icon_size(&view, cx), IconSize::Largest);
+    // The half step left over counts toward the next.
+    ctrl_scroll(cx, -3.5);
+    assert_eq!(icon_size(&view, cx), IconSize::Small);
+}
+
+#[gpui::test]
+fn only_ctrl_scroll_over_the_entries_steps_the_icons(cx: &mut TestAppContext) {
+    let (view, cx, _) = icons(cx);
+    let position = cell(cx, 0).center();
+    cx.simulate_mouse_move(position, None, Modifiers::none());
+    cx.simulate_event(ScrollWheelEvent {
+        position,
+        delta: ScrollDelta::Lines(point(0.0, 1.0)),
+        modifiers: Modifiers::none(),
+        touch_phase: TouchPhase::Moved,
+    });
+    cx.run_until_parked();
+    assert_eq!(icon_size(&view, cx), IconSize::Medium);
+
+    let outside = point(px(1.0), px(1.0));
+    cx.simulate_mouse_move(outside, None, Modifiers::none());
+    cx.simulate_event(ScrollWheelEvent {
+        position: outside,
+        delta: ScrollDelta::Lines(point(0.0, 1.0)),
+        modifiers: Modifiers::secondary_key(),
+        touch_phase: TouchPhase::Moved,
+    });
+    cx.run_until_parked();
+    assert_eq!(icon_size(&view, cx), IconSize::Medium);
+}
+
+#[gpui::test]
+fn ctrl_scroll_does_not_scroll_the_entries(cx: &mut TestAppContext) {
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx, mut core) = window(cx);
+    answer_listing(&mut core, 400);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("ctrl-2 ctrl-- ctrl--");
+    cx.run_until_parked();
+    let top = cell(cx, 0).top();
+    ctrl_scroll(cx, -1.0);
+    assert_eq!(icon_size(&view, cx), IconSize::Smallest);
+    assert_eq!(cell(cx, 0).top(), top);
+}
+
+#[gpui::test]
+fn the_cursor_ring_is_on_the_cursors_cell(cx: &mut TestAppContext) {
+    let (_, cx, _) = icons(cx);
+    cx.simulate_keystrokes("right right");
+    cx.run_until_parked();
+    let ring = cx.debug_bounds("cursor").unwrap();
+    assert!(cell(cx, 1).contains(&ring.center()), "{ring:?}");
+}
+
+#[gpui::test]
+fn an_icon_beside_its_name_has_the_same_room_above_as_before(cx: &mut TestAppContext) {
+    let (_, cx, _) = icons(cx);
+    cx.simulate_keystrokes("ctrl-- ctrl--");
+    cx.run_until_parked();
+    let (icon, around) = (cx.debug_bounds("icon-0").unwrap(), cell(cx, 0));
+    assert_eq!(icon.left() - around.left(), icon.top() - around.top());
 }

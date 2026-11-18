@@ -34,10 +34,10 @@ use gpui::{
     transparent_black, uniform_list,
 };
 
-use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId, Order, SortKey};
+use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
 
 use super::drop::inside_edge;
-use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
+use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon};
 
 use crate::assets::Icon;
 use crate::marks;
@@ -169,8 +169,7 @@ impl MainWindow {
                         let folder = this.folder_cell(listing, entry, index, cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
-                        let folder_at = (entry.kind == EntryKind::Folder)
-                            .then(|| Aim::folder(listing.path_of(entry), name.clone()));
+                        let folder_at = folder_aim(listing, entry, &name);
                         let line = cells(
                             this.name_cell(
                                 entry,
@@ -222,7 +221,7 @@ impl MainWindow {
         (name, marks): (String, Vec<std::ops::Range<usize>>),
         cx: &Context<Self>,
     ) -> Div {
-        let draggable = self.pick.is_none() && !self.in_trash();
+        let draggable = self.entries_drag();
         let colors = &Colors::of(cx);
         let hidden = entry.is_hidden();
         div()

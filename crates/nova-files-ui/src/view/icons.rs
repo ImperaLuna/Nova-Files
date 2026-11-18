@@ -16,13 +16,13 @@ use gpui::{
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
     prelude::FluentBuilder as _, transparent_black, uniform_list,
 };
-use nova_files_api::{EntryKind, Listing};
+use nova_files_api::Listing;
 
-use super::row::{cursor_ring, detail, drags, entry_icon_sized};
+use super::row::{cursor_ring, detail, drags, entry_icon_sized, folder_aim};
 use super::sheet::rename_box;
 use crate::grid::{Grid, NAME_LINES};
 use crate::theme::{Colors, opacity, radius, size, text};
-use crate::window::{Aim, DraggedRow, MainWindow};
+use crate::window::{DraggedRow, MainWindow};
 
 impl MainWindow {
     /// The entries as lines of cells laid out as `grid`.
@@ -74,14 +74,14 @@ impl MainWindow {
         };
         let colors = Colors::of(cx);
         let at = (listing.id, entry.id);
-        let row = (self.pick.is_none() && !self.in_trash()).then(|| DraggedRow::new(at.0, at.1));
+        let row = self.entries_drag().then(|| DraggedRow::new(at.0, at.1));
         let name = entry.name.to_string_lossy().into_owned();
         let hidden = entry.is_hidden();
-        let folder_at = (entry.kind == EntryKind::Folder)
-            .then(|| Aim::folder(listing.path_of(entry), name.clone()));
+        let folder_at = folder_aim(listing, entry, &name);
         let picture = drags(
             div()
                 .id(("icon", index))
+                .debug_selector(move || format!("icon-{index}"))
                 .flex_none()
                 .when(hidden, |slot| slot.opacity(opacity::HIDDEN)),
             row.clone(),

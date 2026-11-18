@@ -44,13 +44,13 @@ impl IconSize {
     /// The next size up; the largest stays.
     #[must_use]
     pub fn bigger(self) -> Self {
-        self.step(1)
+        self.stepped(1)
     }
 
     /// The next size down; the smallest stays.
     #[must_use]
     pub fn smaller(self) -> Self {
-        self.step(-1)
+        self.stepped(-1)
     }
 
     /// Where it stands in [`Self::ALL`].
@@ -60,7 +60,9 @@ impl IconSize {
         self as usize
     }
 
-    fn step(self, by: isize) -> Self {
+    /// `by` sizes up, or down when negative, kept to the sizes there are.
+    #[must_use]
+    pub fn stepped(self, by: isize) -> Self {
         let last = Self::ALL.len() - 1;
         Self::ALL[self.index().saturating_add_signed(by).min(last)]
     }
@@ -89,6 +91,10 @@ mod tests {
         assert_eq!(IconSize::Smallest.smaller(), IconSize::Smallest);
         assert_eq!(IconSize::Smallest.bigger(), IconSize::Small);
         assert_eq!(IconSize::Largest.smaller(), IconSize::Large);
+        assert_eq!(IconSize::Smallest.stepped(3), IconSize::Large);
+        assert_eq!(IconSize::Large.stepped(-3), IconSize::Smallest);
+        assert_eq!(IconSize::Small.stepped(9), IconSize::Largest);
+        assert_eq!(IconSize::Large.stepped(-9), IconSize::Smallest);
         for (at, size) in IconSize::ALL.into_iter().enumerate() {
             assert_eq!(size.index(), at);
         }
