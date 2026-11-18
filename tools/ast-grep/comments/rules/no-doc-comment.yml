@@ -2,16 +2,18 @@ id: no-doc-comment
 language: rust
 severity: error
 message: >-
-  Doc comment outside nova-files-api. Delete it. Name the item so it says
-  what it does; a promise the item makes becomes a type or a test.
+  Doc comment outside nova-files-api and the features' api crates. Delete
+  it. Name the item so it says what it does; a promise the item makes
+  becomes a type or a test.
 note: >-
-  Only the docs of nova-files-api, the public contract other apps build
-  on, are kept, plus a doc line that links the outside source of a fact
-  (`https://`).
+  Only the docs of nova-files-api and the features' api crates, the
+  contract other apps and features build on, are kept, plus a doc line
+  that links the outside source of a fact (`https://`).
 files:
   - "**/*.rs"
 ignores:
   - "framework/base/**"
+  - "features/*/api/**"
 utils:
   linked: { kind: line_comment, regex: 'https?://' }
   run-break: { not: { kind: line_comment } }
