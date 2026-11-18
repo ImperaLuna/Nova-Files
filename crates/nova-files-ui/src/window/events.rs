@@ -174,7 +174,8 @@ impl MainWindow {
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
             | Event::SpaceUnreadable { .. }
-            | Event::Gathered(_) => {}
+            | Event::Gathered(_)
+            | Event::GatheredChanged(_) => {}
             Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
             Event::Trash(items) => self.trash_listed(items, cx),
             Event::Places(places) => self.places_arrived(places, cx),

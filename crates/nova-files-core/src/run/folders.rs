@@ -9,6 +9,7 @@ use std::sync::Arc;
 use nova_files_api::{ClientGone, ClientId, Command, HiddenFiles, Thumbnails};
 
 use super::Setup;
+use crate::gathered;
 use crate::jobs::{self, Client};
 use crate::preview::{self, Request};
 use crate::properties;
@@ -30,6 +31,10 @@ pub(super) fn answer(
         Command::ChangeBookmark(change) => setup.places.change(change),
         Command::Gathered => setup.gathered.listen(id, client.events()),
         Command::ChangeGathered(change) => setup.gathered.change(change),
+        Command::ListGathered { id, place, order } => {
+            let hidden = setup.settings.current().hidden_files;
+            gathered::list(client, id, setup.gathered.folders_of(place), order, hidden);
+        }
         Command::ListTrash => return jobs::list_trash(client, setup.home.clone()),
         Command::Rows {
             id,

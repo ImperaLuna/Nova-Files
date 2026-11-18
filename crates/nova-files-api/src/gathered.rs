@@ -27,7 +27,7 @@ impl Gathering {
 }
 
 /// What one gathered folder brings to its place.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub enum Holds {
     /// Each folder inside it is one row: a folder of projects, or a game
     /// library.

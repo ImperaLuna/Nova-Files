@@ -1,6 +1,7 @@
 //! Games and Projects' folders through the real core, in a temp home: the
 //! usual folders on first start, changes from a client saved to
-//! `gathered.toml` and told to every window, and the file edited by hand.
+//! `gathered.toml` and told to every window, the file edited by hand, and
+//! a place listed and listed again when its folders change.
 
 #![expect(
     clippy::unwrap_used,
@@ -16,7 +17,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use common::{Bench, Client};
-use nova_files_api::{Command, Event, Gathered, GatheredChange, Gathering, Holds};
+use nova_files_api::{
+    Command, EntryId, Event, Gathered, GatheredChange, Gathering, Holds, Listing, ListingId, Order,
+    ThumbnailSize,
+};
 
 fn gathered_file(bench: &Bench) -> PathBuf {
     bench.at("home/.config/nova-files/gathered.toml")
@@ -125,5 +129,80 @@ fn the_file_edited_by_hand_reaches_the_windows() {
     assert_eq!(
         paths(&next(&client), Gathering::Games),
         [Path::new("/mnt/games")]
+    );
+}
+
+/// Lists `place` as listing `id` and returns the listing.
+fn listed(client: &Client, id: u64, place: Gathering) -> Listing {
+    client.send(Command::ListGathered {
+        id: ListingId(id),
+        place,
+        order: Order::default(),
+    });
+    loop {
+        match client.next() {
+            Event::FolderListed(listing) if listing.id == ListingId(id) => return listing,
+            Event::Gathered(_) | Event::GatheredChanged(_) => {}
+            other => panic!("expected listing {id}, got {other:?}"),
+        }
+    }
+}
+
+fn names(listing: &Listing) -> Vec<String> {
+    listing
+        .entries
+        .iter()
+        .map(|entry| entry.name.to_string_lossy().into_owned())
+        .collect()
+}
+
+#[test]
+fn a_place_lists_and_says_when_its_folders_change() {
+    let bench = Bench::with("gathered-list", nova_files_core::IDLE_EXIT, |root| {
+        fs::create_dir_all(root.join("home/Projects/nova")).unwrap();
+        fs::create_dir_all(root.join("home/Projects/bench")).unwrap();
+        fs::write(root.join("home/Projects/notes.txt"), "").unwrap();
+    });
+    let client = bench.client();
+    // Listing before asking for the folders reads them first.
+    let listing = listed(&client, 1, Gathering::Projects);
+    assert_eq!(names(&listing), ["bench", "nova"]);
+    assert_eq!(
+        listing.path_of(&listing.entries[1]),
+        bench.at("home/Projects/nova")
+    );
+    assert_eq!(listing.path, PathBuf::new());
+
+    // Its rows are served like a folder's.
+    client.send(Command::Rows {
+        id: ListingId(1),
+        first: EntryId(0),
+        count: 2,
+        size: ThumbnailSize::Normal,
+    });
+    loop {
+        if let Event::DetailsRead { id, .. } = client.next() {
+            assert_eq!(id, ListingId(1));
+            break;
+        }
+    }
+
+    client.send(Command::Gathered);
+    next(&client);
+    fs::create_dir(bench.at("home/Projects/zed")).unwrap();
+    loop {
+        match client.next() {
+            Event::GatheredChanged(Gathering::Projects) => break,
+            Event::DetailsRead { .. } | Event::Thumbnail { .. } => {}
+            other => panic!("expected Projects to change, got {other:?}"),
+        }
+    }
+    assert_eq!(
+        names(&listed(&client, 2, Gathering::Projects)),
+        ["bench", "nova", "zed"]
+    );
+    assert_eq!(
+        names(&listed(&client, 3, Gathering::Games)),
+        Vec::<String>::new()
     );
 }

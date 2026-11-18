@@ -150,6 +150,7 @@ fn answer(
         | Command::ChangeBookmark(_)
         | Command::Gathered
         | Command::ChangeGathered(_)
+        | Command::ListGathered { .. }
         | Command::ListTrash
         | Command::Rows { .. }
         | Command::Search { .. }
