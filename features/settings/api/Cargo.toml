@@ -4,7 +4,8 @@
 # each other: its command and its event.
 #
 # Allowed outside crates: none
-# Allowed workspace crates: nova-files-api
+# Allowed workspace crates:
+# - nova-files-api
 
 [package]
 name = "nova-files-settings-api"
