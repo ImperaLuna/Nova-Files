@@ -8,13 +8,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use nova_files_api::{ClientId, EventSink};
-use nova_files_folders_api::{
-    Event, FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode,
-};
-
 use nova_files_disk::private_file::{self, Read};
 use nova_files_disk::saver::Saver;
 use nova_files_disk::stored_path::{END, MAX_PATH, fits};
+use nova_files_folders_api::{
+    Event, FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode,
+};
 
 const FILE: &str = "nova-files/folder-views";
 const HEADER: &[u8] = b"nova-files folder-views 1\n";
