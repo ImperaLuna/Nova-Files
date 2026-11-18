@@ -33,13 +33,24 @@ const ENDINGS: [&str; 13] = [
 const OWNER_WRITE: u32 = 0o200;
 const OWNER_ALL: u32 = 0o700;
 
-/// Extracts `archive` into `into` as `to` says, with `archiver`.
+/// What an extract takes out of its archive.
+#[derive(Debug, Clone, Copy)]
+pub enum Taking<'a> {
+    /// Every entry, put as `ExtractTo` says.
+    All(ExtractTo),
+    /// The entries at these paths inside it, each with all inside it,
+    /// each put straight into the folder: a copy out of the archive.
+    Picked(&'a [PathBuf]),
+}
+
+/// Extracts from `archive` into `into` what `taking` says, with
+/// `archiver`.
 pub fn extract(
     running: &mut Running,
     archiver: Option<&Archiver>,
     archive: &Path,
     into: &Path,
-    to: ExtractTo,
+    taking: Taking<'_>,
 ) -> Ended {
     if !archive.is_absolute() || archive.file_name().is_none() {
         return (
@@ -56,12 +67,12 @@ pub fn extract(
     let Some(archiver) = archiver else {
         return (Stop::because(archive, Failure::Other).outcome(), Vec::new());
     };
-    let staging = match unpack(running, archiver, archive, into) {
+    let staging = match unpack(running, archiver, (archive, taking), into) {
         Ok(Some(staging)) => staging,
         Ok(None) => return (Outcome::Cancelled, Vec::new()),
         Err(stop) => return (stop.outcome(), Vec::new()),
     };
-    let placed = place(running, &staging, into, to);
+    let placed = place(running, &staging, into, taking);
     clear(&staging.root);
     match placed {
         Ok(changed) => (Outcome::Done, changed),
@@ -76,17 +87,25 @@ struct Staging {
     named: PathBuf,
 }
 
-/// Unpacks `archive` into a hidden folder in `into`, asking for its
-/// password while one is needed; `None` when the user skips it.
+/// Unpacks what `taking` takes of `archive` into a hidden folder in
+/// `into`, asking for its password while one is needed; `None` when the
+/// user skips it.
 fn unpack(
     running: &mut Running,
     archiver: &Archiver,
-    archive: &Path,
+    (archive, taking): (&Path, Taking<'_>),
     into: &Path,
 ) -> Result<Option<Staging>, Stop> {
-    let Some((entries, mut password)) = listed(running, archiver, archive, into)? else {
+    let Some((mut entries, mut password)) = listed(running, archiver, archive, into)? else {
         return Ok(None);
     };
+    let picked = match taking {
+        Taking::All(_) => &[][..],
+        Taking::Picked(picked) => picked,
+    };
+    if !picked.is_empty() {
+        entries.retain(|entry| picked.iter().any(|path| entry.path.starts_with(path)));
+    }
     let (bytes, items) = totals(&entries);
     running.reporter.planned(bytes, items);
     if password.is_none() && entries.iter().any(|entry| entry.locked) {
@@ -98,9 +117,12 @@ fn unpack(
     }
     for attempt in 0_u64.. {
         let staging = staging(into, running.names, attempt, &folder_name(archive))?;
-        let unpacked = archiver.extract(archive, &staging.named, password.as_deref(), |told| {
-            steer(running, told)
-        });
+        let unpacked = archiver.extract_picked(
+            (archive, picked),
+            &staging.named,
+            password.as_deref(),
+            |told| steer(running, told),
+        );
         let kind = match unpacked {
             Ok(()) => return Ok(Some(staging)),
             Err(ArchiveFailure::NeedsPassword) => ConflictKind::PasswordNeeded,
@@ -206,18 +228,23 @@ fn staging(into: &Path, id: u64, attempt: u64, folder: &OsStr) -> Result<Staging
     Ok(Staging { root, named })
 }
 
-/// Moves what `staging` holds into `into` as `to` says, and says which
-/// folders changed.
+/// Moves what `staging` holds into `into` as `taking` says, and says
+/// which folders changed.
 fn place(
     running: &mut Running,
     staging: &Staging,
     into: &Path,
-    to: ExtractTo,
+    taking: Taking<'_>,
 ) -> Result<Vec<PathBuf>, (Stop, Vec<PathBuf>)> {
     let unpacked = top(&staging.named).map_err(|error| (Stop::at(into, &error), Vec::new()))?;
-    let sources = match to {
-        ExtractTo::Here if unpacked.len() > 1 => vec![staging.named.clone()],
-        ExtractTo::Here | ExtractTo::Inside => unpacked,
+    let sources = match taking {
+        Taking::All(ExtractTo::Here) if unpacked.len() > 1 => vec![staging.named.clone()],
+        Taking::All(ExtractTo::Here | ExtractTo::Inside) => unpacked,
+        Taking::Picked(picked) => picked
+            .iter()
+            .map(|path| staging.named.join(path))
+            .filter(|path| path.symlink_metadata().is_ok())
+            .collect(),
     };
     if sources.is_empty() {
         return Ok(Vec::new());

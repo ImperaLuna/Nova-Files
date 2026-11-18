@@ -21,6 +21,7 @@ use crate::drives::Store as DrivesStore;
 use crate::file_icons::FileIcons;
 use crate::folder_views::Store as FolderViewsStore;
 use crate::gathered::Store as GatheredStore;
+use crate::inside::Inside;
 use crate::jobs::Client;
 use crate::measure::Measurer;
 use crate::mime::MimeTypes;
@@ -69,6 +70,8 @@ pub struct Setup {
     pub recent: RecentStore,
     /// How each folder is shown.
     pub folder_views: FolderViewsStore,
+    /// What the archives browsed last hold.
+    pub inside: Arc<Inside>,
 }
 
 /// Runs until idle.

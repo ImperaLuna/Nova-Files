@@ -22,6 +22,7 @@ mod gathered;
 mod hand_edited;
 mod icon_theme;
 mod index;
+mod inside;
 mod jobs;
 mod list;
 mod measure;
@@ -138,6 +139,10 @@ pub fn spawn_with_archiver(
     let (connector, receiver) = nova_files_api::channel();
     let searcher = Searcher::new(index, home.as_ref().map(|home| home.folder.clone()));
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
+    let inside = Arc::new(inside::Inside::new(
+        archiver.clone(),
+        inside::opened_folder(std::env::var_os("XDG_RUNTIME_DIR")),
+    ));
     let jobs = ops::Jobs::new(
         home.as_ref().map(|home| home.state.as_path()),
         trash::Trashes::of(home.as_ref()),
@@ -180,6 +185,7 @@ pub fn spawn_with_archiver(
                 drives: drives::Store::default(),
                 recent,
                 folder_views,
+                inside,
             };
             run::run(&receiver, idle_exit, &setup);
         })?;
