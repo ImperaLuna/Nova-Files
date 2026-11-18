@@ -56,7 +56,8 @@ impl MainWindow {
                     })
                     .when_some(self.drive_cards(cx), |page, cards| {
                         page.child(group(DRIVES_LABEL, cards, &colors))
-                    }),
+                    })
+                    .children(self.parts.start_cards()),
             )
     }
 

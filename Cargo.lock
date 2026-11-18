@@ -3648,7 +3648,7 @@ dependencies = [
  "nova-files-disk",
  "nova-files-drives-api",
  "nova-files-drives-core",
- "nova-files-entries",
+ "nova-files-entries-core",
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-look-api",
@@ -3718,7 +3718,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nova-files-entries"
+name = "nova-files-entries-core"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
@@ -3815,6 +3815,7 @@ name = "nova-files-shell"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "nova-files-api",
  "nova-files-messages",
 ]
 

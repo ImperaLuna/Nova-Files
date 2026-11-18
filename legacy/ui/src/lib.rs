@@ -2,7 +2,6 @@
 // https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 #![forbid(unsafe_code)]
 
-mod assets;
 mod band;
 mod columns;
 mod commands;
@@ -25,7 +24,6 @@ mod selecting;
 mod selection;
 mod shown_thumbnails;
 mod text;
-mod theme;
 mod theme_icons;
 mod thumbnail;
 mod tree;
@@ -44,10 +42,11 @@ use nova_files_picker_api::PickRequest;
 
 pub use assets::Icon;
 pub use columns::ColumnText;
-pub use commands::{ACTIONS, ActionSpec, bind_keys as bind_window_keys};
+pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note, NoteUndo};
 pub use location::Location;
 pub use menu::{Look, Menu, MenuAction, MenuItem};
+use nova_files_shell::{assets, theme};
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};

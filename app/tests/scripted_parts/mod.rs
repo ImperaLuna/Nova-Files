@@ -5,6 +5,8 @@ use nova_files_ui::CoreStatus;
 
 use super::*;
 
+mod shelf;
+
 #[derive(Debug)]
 struct Claim(PathBuf);
 
