@@ -1,8 +1,8 @@
 //! The top bar: a row of capsules on the window. Back, Forward and Up;
 //! the path bar (see `path`), which takes what the others leave, with the
 //! search's scope chip at its end; the search box (see `search`); and the
-//! list and tiles switch. The tiles view is a feature of its own that
-//! fills its slot; until then the slot does nothing.
+//! list and tiles switch, which shows Details or Icons as Ctrl+1 and
+//! Ctrl+2 do (see `window::views`), lit on the one showing.
 
 use gpui::{
     Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -10,8 +10,10 @@ use gpui::{
 };
 
 use super::row::icon;
+use nova_files_api::ViewMode;
+
 use crate::assets::Icon;
-use crate::commands::{GoBack, GoForward, GoUp};
+use crate::commands::{GoBack, GoForward, GoUp, ShowDetails, ShowIcons};
 use crate::theme::{Colors, radius, size};
 use crate::window::MainWindow;
 
@@ -68,8 +70,7 @@ impl MainWindow {
                     .debug_selector(|| "views".to_owned())
                     .px(size::CAPSULE_PAD)
                     .gap(size::CAPSULE_BUTTON_GAP)
-                    .child(switch_button("view-list", Icon::List, true, colors))
-                    .child(switch_button("view-tiles", Icon::Tiles, false, colors)),
+                    .children(self.view_switch(colors)),
             )
     }
 }
@@ -111,8 +112,44 @@ pub(super) fn icon_button(
         })
 }
 
+impl MainWindow {
+    /// The list and tiles switch, lit on the view showing. Search results
+    /// and the trash show Details only, so there a click does nothing.
+    fn view_switch(&self, colors: &Colors) -> Vec<gpui::Stateful<Div>> {
+        let showing = self.folder_view().mode;
+        [
+            (
+                "view-list",
+                Icon::List,
+                ViewMode::Details,
+                &ShowDetails as &dyn Action,
+            ),
+            ("view-tiles", Icon::Tiles, ViewMode::Icons, &ShowIcons),
+        ]
+        .into_iter()
+        .map(|(name, glyph, mode, action)| {
+            let on = showing == mode;
+            switch_button(name, glyph, on, colors).when(!on, |button| {
+                let action = action.boxed_clone();
+                button
+                    .cursor_pointer()
+                    .hover(|button| button.bg(colors.hover))
+                    .on_click(move |_: &ClickEvent, window, cx| {
+                        window.dispatch_action(action.boxed_clone(), cx);
+                    })
+            })
+        })
+        .collect()
+    }
+}
+
 /// One side of the list and tiles switch; `on` marks the view showing.
-fn switch_button(name: &'static str, glyph: Icon, on: bool, colors: &Colors) -> impl IntoElement {
+fn switch_button(
+    name: &'static str,
+    glyph: Icon,
+    on: bool,
+    colors: &Colors,
+) -> gpui::Stateful<Div> {
     let tone = if on { colors.text } else { colors.text_faint };
     square(name)
         .when(on, |button| button.bg(colors.press))

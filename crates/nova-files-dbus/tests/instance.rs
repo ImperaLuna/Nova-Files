@@ -69,8 +69,8 @@ fn activate_fails_once_the_core_has_stopped() {
 /// on the receiver, with its folder.
 fn serve(bus: &PrivateBus, connector: &Connector) -> (Started, Receiver<Option<PathBuf>>) {
     let (sender, requests) = mpsc::channel();
-    let started = nova_files_dbus::start(bus.bus(), connector.clone(), move |folder| {
-        sender.send(folder).ok();
+    let started = nova_files_dbus::start(bus.bus(), connector.clone(), move |request| {
+        sender.send(request.folder).ok();
     })
     .unwrap();
     (started, requests)

@@ -13,7 +13,7 @@
 //! entries by name, as raw bytes, since names needn't be UTF-8; a cursor
 //! whose row is gone goes to the nearest row left.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::hash::Hash;
 
@@ -50,8 +50,14 @@ impl Click {
 /// Where a key moves the cursor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Move {
+    /// A line up: a row, or in Icons the cell above.
     Up,
+    /// A line down: a row, or in Icons the cell below.
     Down,
+    /// The entry before.
+    Left,
+    /// The entry after.
+    Right,
     /// A screen of rows up.
     PageUp,
     /// A screen of rows down.
@@ -61,18 +67,30 @@ pub enum Move {
 }
 
 impl Move {
-    /// The row a move from `from` lands on, in a list of `len` rows with
-    /// `page` rows on screen. With no row yet, a move down starts at the
-    /// first row and a move up at the last.
-    pub fn to(self, from: Option<usize>, len: usize, page: usize) -> Option<usize> {
+    /// The entry a move from `from` lands on, in a list of `len` entries
+    /// laid out `per_line` to a line, with `page` entries on screen (a
+    /// page moves by the whole lines in it). With
+    /// no entry yet, a move down or right starts at the first entry and a
+    /// move up or left at the last. A move up from the first line stays;
+    /// one down from the line before a short last line goes to its end.
+    pub fn to(
+        self,
+        from: Option<usize>,
+        len: usize,
+        (page, per_line): (usize, usize),
+    ) -> Option<usize> {
         let last = len.checked_sub(1)?;
-        let page = page.max(1);
+        let per_line = per_line.max(1);
+        let page = (page / per_line).max(1) * per_line;
         Some(match (self, from) {
-            (Self::First, _) | (Self::Down | Self::PageDown, None) => 0,
-            (Self::Last, _) | (Self::Up | Self::PageUp, None) => last,
-            (Self::Up, Some(from)) => from.saturating_sub(1),
+            (Self::First, _) | (Self::Down | Self::Right | Self::PageDown, None) => 0,
+            (Self::Last, _) | (Self::Up | Self::Left | Self::PageUp, None) => last,
+            (Self::Up, Some(from)) => from.checked_sub(per_line).unwrap_or(from),
+            (Self::Left, Some(from)) => from.saturating_sub(1),
             (Self::PageUp, Some(from)) => from.saturating_sub(page),
-            (Self::Down, Some(from)) => from.saturating_add(1).min(last),
+            (Self::Down, Some(from)) if from / per_line == last / per_line => from,
+            (Self::Down, Some(from)) => from.saturating_add(per_line).min(last),
+            (Self::Right, Some(from)) => from.saturating_add(1).min(last),
             (Self::PageDown, Some(from)) => from.saturating_add(page).min(last),
         })
     }
@@ -177,26 +195,22 @@ impl Selection {
         Self::clicked(selection, listing, id, click, picks)
     }
 
-    /// A box dragged from the row `from` to the row `to` of `listing`: the rows
-    /// it touches that `picks` allows, added to `before` with `add`.
+    /// A box dragged from the entry `from` to the entry `to` of `listing`:
+    /// `ids`, the entries it covers, added to `before` with `add`.
     #[must_use]
     pub fn banded(
         before: Option<&Self>,
         listing: ListingId,
+        ids: impl IntoIterator<Item = EntryId>,
         (from, to): (EntryId, EntryId),
         add: bool,
-        picks: impl Fn(EntryId) -> bool,
     ) -> Self {
-        let (low, high) = if from <= to { (from, to) } else { (to, from) };
-        let mut ids: Vec<EntryId> = (low.0..=high.0)
-            .map(EntryId)
-            .filter(|&id| picks(id))
-            .collect();
+        let mut ids: Vec<EntryId> = ids.into_iter().collect();
         if let Some(before) = before.filter(|before| add && before.listing == listing) {
             ids.extend_from_slice(&before.ids);
-            ids.sort_unstable();
-            ids.dedup();
         }
+        ids.sort_unstable();
+        ids.dedup();
         Self {
             listing,
             ids,
@@ -286,6 +300,27 @@ impl Selection {
     /// Just the entry named `name` in `entries` of `listing`, if there is one.
     pub fn named(listing: ListingId, entries: &[Entry], name: &OsStr) -> Option<Self> {
         find(entries, name).map(|id| Self::only(listing, id))
+    }
+
+    /// The entries of `listing` named exactly as one of `names`, with the
+    /// cursor on the first the listing shows; `None` when none is there.
+    pub fn named_all(
+        listing: ListingId,
+        entries: &[Entry],
+        names: &HashSet<&OsStr>,
+    ) -> Option<Self> {
+        let ids: Vec<EntryId> = entries
+            .iter()
+            .filter(|entry| names.contains(entry.name.as_os_str()))
+            .map(|entry| entry.id)
+            .collect();
+        let first = *ids.first()?;
+        Some(Self {
+            listing,
+            ids,
+            anchor: first,
+            cursor: first,
+        })
     }
 }
 
@@ -395,23 +430,51 @@ mod tests {
 
     #[test]
     fn moves_stop_at_the_ends_and_start_from_an_end() {
-        assert_eq!(Move::Down.to(Some(2), 5, 3), Some(3));
-        assert_eq!(Move::Down.to(Some(4), 5, 3), Some(4));
-        assert_eq!(Move::Up.to(Some(0), 5, 3), Some(0));
-        assert_eq!(Move::Up.to(Some(3), 5, 3), Some(2));
-        assert_eq!(Move::PageDown.to(Some(1), 5, 3), Some(4));
-        assert_eq!(Move::PageDown.to(Some(0), 10, 3), Some(3));
-        assert_eq!(Move::PageUp.to(Some(4), 10, 3), Some(1));
-        assert_eq!(Move::PageUp.to(Some(2), 10, 3), Some(0));
+        assert_eq!(Move::Down.to(Some(2), 5, (3, 1)), Some(3));
+        assert_eq!(Move::Down.to(Some(4), 5, (3, 1)), Some(4));
+        assert_eq!(Move::Up.to(Some(0), 5, (3, 1)), Some(0));
+        assert_eq!(Move::Up.to(Some(3), 5, (3, 1)), Some(2));
+        assert_eq!(Move::PageDown.to(Some(1), 5, (3, 1)), Some(4));
+        assert_eq!(Move::PageDown.to(Some(0), 10, (3, 1)), Some(3));
+        assert_eq!(Move::PageUp.to(Some(4), 10, (3, 1)), Some(1));
+        assert_eq!(Move::PageUp.to(Some(2), 10, (3, 1)), Some(0));
         // An empty screen still moves a row.
-        assert_eq!(Move::PageDown.to(Some(1), 10, 0), Some(2));
-        assert_eq!(Move::First.to(Some(4), 5, 3), Some(0));
-        assert_eq!(Move::Last.to(Some(0), 5, 3), Some(4));
-        assert_eq!(Move::Down.to(None, 5, 3), Some(0));
-        assert_eq!(Move::PageDown.to(None, 5, 3), Some(0));
-        assert_eq!(Move::Up.to(None, 5, 3), Some(4));
-        assert_eq!(Move::PageUp.to(None, 5, 3), Some(4));
-        assert_eq!(Move::Down.to(None, 0, 3), None);
+        assert_eq!(Move::PageDown.to(Some(1), 10, (0, 1)), Some(2));
+        assert_eq!(Move::First.to(Some(4), 5, (3, 1)), Some(0));
+        assert_eq!(Move::Last.to(Some(0), 5, (3, 1)), Some(4));
+        assert_eq!(Move::Down.to(None, 5, (3, 1)), Some(0));
+        assert_eq!(Move::PageDown.to(None, 5, (3, 1)), Some(0));
+        assert_eq!(Move::Up.to(None, 5, (3, 1)), Some(4));
+        assert_eq!(Move::PageUp.to(None, 5, (3, 1)), Some(4));
+        assert_eq!(Move::Down.to(None, 0, (3, 1)), None);
+    }
+
+    #[test]
+    fn in_icons_up_and_down_move_a_line_and_left_and_right_an_entry() {
+        // 11 entries, 4 to a line: 0-3, 4-7, 8-10.
+        let to = |step: Move, from| step.to(Some(from), 11, (8, 4));
+        assert_eq!(to(Move::Down, 1), Some(5));
+        assert_eq!(to(Move::Up, 5), Some(1));
+        // The first line goes no higher; the last no lower.
+        assert_eq!(to(Move::Up, 3), Some(3));
+        assert_eq!(to(Move::Down, 9), Some(9));
+        // Down from under the short last line's end goes to its end.
+        assert_eq!(to(Move::Down, 7), Some(10));
+        assert_eq!(to(Move::Down, 6), Some(10));
+        assert_eq!(to(Move::Down, 5), Some(9));
+        assert_eq!(to(Move::Left, 4), Some(3));
+        assert_eq!(to(Move::Left, 0), Some(0));
+        assert_eq!(to(Move::Right, 3), Some(4));
+        assert_eq!(to(Move::Right, 10), Some(10));
+        assert_eq!(Move::Right.to(None, 11, (8, 4)), Some(0));
+        // A page is whole lines: 7 on screen is one line of 4.
+        assert_eq!(Move::PageUp.to(Some(10), 11, (7, 4)), Some(6));
+        assert_eq!(Move::PageDown.to(Some(1), 11, (7, 4)), Some(5));
+        // Fewer than a line on screen still moves a line.
+        assert_eq!(Move::PageDown.to(Some(1), 11, (2, 4)), Some(5));
+        assert_eq!(Move::Left.to(None, 11, (8, 4)), Some(10));
+        // No entries to a line still moves.
+        assert_eq!(Move::Down.to(Some(0), 3, (8, 0)), Some(1));
     }
 
     #[test]
@@ -481,11 +544,11 @@ mod tests {
 
     #[test]
     fn at_most_one_keeps_the_nearest_selected_when_the_cursor_is_not() {
-        let not_picked = |id: EntryId| id != EntryId(3);
-        let band = Selection::banded(None, SHOWN, (EntryId(0), EntryId(3)), false, not_picked);
+        let covered = || [2, 0, 1].map(EntryId);
+        let band = Selection::banded(None, SHOWN, covered(), (EntryId(0), EntryId(3)), false);
         assert_eq!(ids(&band), [0, 1, 2]);
         assert_eq!(ids(&band.at_most_one()), [2]);
-        let up = Selection::banded(None, SHOWN, (EntryId(3), EntryId(0)), false, not_picked);
+        let up = Selection::banded(None, SHOWN, covered(), (EntryId(3), EntryId(0)), false);
         assert_eq!(ids(&up.at_most_one()), [0]);
     }
 
@@ -531,6 +594,17 @@ mod tests {
             .unwrap();
         assert_eq!(same_row.cursor(), EntryId(1));
         assert_eq!(selection.carried(&before, NEXT, &[]), None);
+    }
+
+    #[test]
+    fn named_all_selects_the_names_there_with_the_cursor_on_the_first() {
+        let shown = entries(&[b"a", b"b", b"c"]);
+        let names = HashSet::from([OsStr::new("c"), OsStr::new("gone"), OsStr::new("a")]);
+        let selection = Selection::named_all(SHOWN, &shown, &names).unwrap();
+        assert_eq!(selection.ids(), [EntryId(0), EntryId(2)]);
+        assert_eq!(selection.cursor(), EntryId(0));
+        let missing = HashSet::from([OsStr::new("x")]);
+        assert_eq!(Selection::named_all(SHOWN, &shown, &missing), None);
     }
 
     #[test]

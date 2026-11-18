@@ -21,7 +21,7 @@
 //! so does every list a search shows and the folder after it, unless a
 //! found file's Folder cell was clicked: it is selected in its folder.
 
-use gpui::{ClickEvent, Context, KeyDownEvent, ScrollStrategy};
+use gpui::{ClickEvent, Context, KeyDownEvent};
 use nova_files_api::{Command, EntryId, EntryKind, Listing, ListingId};
 
 use crate::jump;
@@ -85,7 +85,7 @@ impl MainWindow {
         self.pick_selection_changed(cx);
         self.preview_follow_cursor(cx);
         if let Some(cursor) = self.cursor() {
-            self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
+            self.scroll_to_entry(cursor);
         }
         cx.notify();
     }
@@ -138,8 +138,9 @@ impl MainWindow {
         };
         let len = self.entry_count();
         let page = self.rows_on_screen();
+        let per_line = self.grid().per_line;
         let Some(to) = step
-            .to(from, len, page)
+            .to(from, len, (page, per_line))
             .and_then(|to| u32::try_from(to).ok())
         else {
             return;
