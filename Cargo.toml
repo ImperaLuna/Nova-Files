@@ -32,6 +32,7 @@ nova-files-rename-core = { path = "features/rename/core" }
 nova-files-settings-api = { path = "features/settings/api" }
 nova-files-settings-core = { path = "features/settings/core" }
 nova-files-shell = { path = "framework/shell" }
+nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
 nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }
 nova-files-ui = { path = "legacy/ui" }

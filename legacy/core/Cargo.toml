@@ -25,6 +25,7 @@
 # - nova-files-rename-core
 # - nova-files-settings-api
 # - nova-files-settings-core
+# - nova-files-thumbnailer-launch
 # - nova-files-trash-api
 # - nova-files-trash-core
 
@@ -69,6 +70,7 @@ nova-files-rename-api.workspace = true
 nova-files-rename-core.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-settings-core.workspace = true
+nova-files-thumbnailer-launch.workspace = true
 nova-files-trash-api.workspace = true
 nova-files-trash-core.workspace = true
 

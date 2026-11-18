@@ -1,0 +1,31 @@
+# nova-files-thumbnailer-launch
+#
+# Starts the sandboxed thumbnail helper and reads its answer: a batch of
+# thumbnails, or one picture for a quick look. Thumbnails and preview share
+# it, so neither feature's core needs the other's.
+#
+# Allowed outside crates:
+# - rustix
+#
+# Allowed workspace crates:
+# - nova-files-api
+
+[package]
+name = "nova-files-thumbnailer-launch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+# Kills the helper's process group when it runs too long or is no longer
+# wanted.
+rustix = { version = "1.1.6", default-features = false, features = ["process", "std"] }
+nova-files-api.workspace = true
