@@ -196,7 +196,6 @@ impl MainWindow {
         let list = state.base_handle.bounds();
         let scrolled = state.base_handle.offset().y;
         let entry = self.cursor().unwrap_or_default();
-        // Lines and columns are counted in thousands at most.
         #[expect(clippy::cast_precision_loss, reason = "a line index fits in f32")]
         let (line, column) = (grid.line_of(entry) as f32, grid.column_of(entry) as f32);
         let below = grid.cell.height * (line + 1.0);

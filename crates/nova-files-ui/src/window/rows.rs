@@ -182,7 +182,6 @@ impl MainWindow {
         self.sizing.list_width = self.scroll.0.borrow().base_handle.bounds().size.width;
         let grid = self.grid();
         if grid.relaid(&drawn) {
-            // The cursor was scrolled to as the list was laid out before.
             if let Some(cursor) = self.cursor() {
                 self.scroll_to_entry(cursor);
             }

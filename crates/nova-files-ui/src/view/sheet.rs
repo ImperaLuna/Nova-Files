@@ -276,7 +276,6 @@ fn ctrl_scroll(cx: &Context<MainWindow>) -> impl IntoElement {
         |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
         move |_, hitbox, window, _| {
             window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
-                // Not under a menu or anything else over the entries.
                 if phase != DispatchPhase::Capture
                     || !event.modifiers.secondary()
                     || !hitbox.is_hovered(window)

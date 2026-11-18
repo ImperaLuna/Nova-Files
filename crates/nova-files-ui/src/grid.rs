@@ -56,7 +56,6 @@ impl Grid {
             (padded(icon).max(NARROWEST_UNDER), tall)
         };
         let fit = (width / narrowest).floor();
-        // A list is a few thousand pixels across at most.
         #[expect(
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss,

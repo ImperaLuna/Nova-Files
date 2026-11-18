@@ -80,7 +80,6 @@ impl Move {
     ) -> Option<usize> {
         let last = len.checked_sub(1)?;
         let per_line = per_line.max(1);
-        // Whole lines, so a page keeps to its column.
         let page = (page / per_line).max(1) * per_line;
         Some(match (self, from) {
             (Self::First, _) | (Self::Down | Self::Right | Self::PageDown, None) => 0,
