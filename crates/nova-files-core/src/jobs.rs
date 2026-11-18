@@ -14,20 +14,22 @@
 //! the client asked for an order by modified time or size: then it reads
 //! every entry's details before it answers (see `order`).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
-    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, NotOpened,
-    Order, Unreadable,
+    ClientGone, Details, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId,
+    NotOpened, Order, Unreadable,
 };
 
 use nova_files_api::Thumbnails as ThumbnailsSetting;
 
+use crate::archive::ArchiveFailure;
 use crate::details_queue;
 use crate::file_icons::FileIcons;
+use crate::inside::{self, Inside, Within};
 use crate::thumbs::{Queue, Thumbnails};
 
 use crate::list::{self, Stopped};
@@ -166,12 +168,18 @@ impl ListingJob {
     /// details and thumbnail queues it is the one on screen, so the
     /// client's first rows request finds it.
     pub fn send(&self, listing: Listing) {
+        self.send_known(listing, None);
+    }
+
+    /// As [`Self::send`], for a listing whose details are `known`, by
+    /// entry, so they are never read from the disk.
+    pub fn send_known(&self, listing: Listing, known: Option<Arc<[Details]>>) {
         if self.cancelled() {
             return;
         }
         let current = || !self.cancelled();
         if let Some(queue) = &self.details {
-            queue.show(&listing, current);
+            queue.show(&listing, known, current);
         }
         if let Some(queue) = &self.thumbnails {
             queue.show(&listing, current);
@@ -200,16 +208,18 @@ impl Client {
 }
 
 /// Lists `path` for `client` as listing `id` in `order`, with its hidden
-/// entries as `hidden` says, replacing any listing before.
+/// entries as `hidden` says, replacing any listing before. A path inside
+/// an archive lists what `inside` finds there.
 pub fn list_folder(
     client: &Client,
-    id: ListingId,
-    path: PathBuf,
+    (id, path): (ListingId, PathBuf),
     order: Order,
     hidden: HiddenFiles,
+    inside: &Arc<Inside>,
 ) {
     let job = client.start_listing(id);
     let job_path = path.clone();
+    let inside = Arc::clone(inside);
     let spawned = thread::Builder::new()
         .name(LIST_THREAD.to_owned())
         .spawn(move || {
@@ -221,11 +231,17 @@ pub fn list_folder(
             let entries: Arc<[Entry]> = match listed {
                 Ok(Some(entries)) => entries.into(),
                 Err(Stopped::Unreadable(reason)) => {
-                    job.answer(Event::FolderUnreadable {
-                        id,
-                        path: job_path,
-                        reason,
-                    });
+                    match (reason, inside::within(&job_path)) {
+                        (Unreadable::NotAFolder | Unreadable::Missing, Some(within)) => {
+                            let asked = (order, hidden);
+                            list_inside(&job, (id, job_path), &within, asked, &inside);
+                        }
+                        _ => job.answer(Event::FolderUnreadable {
+                            id,
+                            path: job_path,
+                            reason,
+                        }),
+                    }
                     return;
                 }
                 // Nobody wants the answer any more.
@@ -250,6 +266,34 @@ pub fn list_folder(
                 reason: Unreadable::Failed,
             })
             .ok();
+    }
+}
+
+/// Answers `job`, listing `id` of `path`, with the folder `within` is
+/// inside its archive, in `order` and with hidden entries as `hidden`
+/// says.
+fn list_inside(
+    job: &ListingJob,
+    (id, path): (ListingId, PathBuf),
+    within: &Within,
+    (order, hidden): (Order, HiddenFiles),
+    inside: &Inside,
+) {
+    let listed = inside
+        .tree(&within.archive)
+        .and_then(|tree| tree.folder(&within.inner));
+    match listed {
+        Ok(listed) => {
+            let (entries, details) = inside::arrange(listed, order, hidden);
+            let listing = Listing {
+                id,
+                path,
+                entries: entries.into(),
+                folders: None,
+            };
+            job.send_known(listing, Some(details.into()));
+        }
+        Err(reason) => job.answer(Event::FolderUnreadable { id, path, reason }),
     }
 }
 
@@ -280,7 +324,7 @@ pub fn list_trash(client: &Client, home: Option<Home>) -> Result<(), ClientGone>
 /// first if no open has yet, and answers whether the app started.
 pub fn open_file(
     client: &Client,
-    types: Arc<OnceLock<MimeTypes>>,
+    (types, inside): (Arc<OnceLock<MimeTypes>>, Arc<Inside>),
     path: PathBuf,
     activation: Option<String>,
 ) {
@@ -290,7 +334,12 @@ pub fn open_file(
         .name(OPEN_THREAD.to_owned())
         .spawn(move || {
             let types = types.get_or_init(MimeTypes::from_env);
-            let event = match open::open_file(&path, types, activation.as_deref()) {
+            let opened = match opened_copy(&path, &inside) {
+                Some(Ok(copy)) => open::open_file(&copy, types, activation.as_deref()),
+                Some(Err(_)) => Err(NotOpened::Failed),
+                None => open::open_file(&path, types, activation.as_deref()),
+            };
+            let event = match opened {
                 Ok(()) => Event::FileOpened { path },
                 Err(reason) => Event::FileNotOpened { path, reason },
             };
@@ -306,6 +355,15 @@ pub fn open_file(
             })
             .ok();
     }
+}
+
+/// A copy of `path` taken out of the archive it is inside, or `None`
+/// when it is no path inside an archive.
+fn opened_copy(path: &Path, inside: &Inside) -> Option<Result<PathBuf, ArchiveFailure>> {
+    if path.symlink_metadata().is_ok() {
+        return None;
+    }
+    inside::within(path).map(|within| inside.take_out(&within))
 }
 
 #[cfg(test)]

@@ -71,12 +71,13 @@ pub use dropped::answer as answer_drop_would;
 pub use test_folder::TestFolder;
 
 use crate::archive::Archiver;
+use crate::inside;
 use crate::jobs::Client;
 use crate::trash::Trashes;
 use access::change_access;
 use control::{Cancelled, Control};
 use delete::delete;
-use extract::extract;
+use extract::{Taking, extract};
 use job::Job;
 use left::Left;
 use make::How;
@@ -520,7 +521,13 @@ fn run(running: &mut Running, operation: &Operation, tools: &Tools, undo: Option
     match operation {
         Operation::Rename { path, name } => one_step::rename(path, name),
         Operation::NewFolder { inside, name } => one_step::new_folder(inside, name),
-        Operation::Copy { sources, into } => transfer(running, sources, into, How::Copy),
+        Operation::Copy { sources, into } => match copied_out(sources) {
+            Some((archive, picked)) => {
+                let taking = Taking::Picked(&picked);
+                extract(running, tools.archiver.as_ref(), &archive, into, taking)
+            }
+            None => transfer(running, sources, into, How::Copy),
+        },
         Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
         Operation::Delete { paths } => delete(running, paths),
         Operation::ChangeAccess { paths, change } => change_access(running, paths, change),
@@ -529,9 +536,13 @@ fn run(running: &mut Running, operation: &Operation, tools: &Tools, undo: Option
         Operation::DeleteFromTrash { items } => delete_from_trash(running, items, trashes),
         Operation::EmptyTrash => empty_trash(running, trashes),
         Operation::Undo { .. } => undo::run(running, undo, trashes),
-        Operation::Extract { archive, into, to } => {
-            extract(running, tools.archiver.as_ref(), archive, into, *to)
-        }
+        Operation::Extract { archive, into, to } => extract(
+            running,
+            tools.archiver.as_ref(),
+            archive,
+            into,
+            Taking::All(*to),
+        ),
         Operation::Compress {
             sources,
             into,
@@ -551,6 +562,28 @@ fn run(running: &mut Running, operation: &Operation, tools: &Tools, undo: Option
             compress::compress(running, tools.archiver.as_ref(), &asked)
         }
     }
+}
+
+/// The archive `sources` are all inside, and their paths in it, when
+/// they are: a copy out of an archive.
+fn copied_out(sources: &[PathBuf]) -> Option<(PathBuf, Vec<PathBuf>)> {
+    let mut found = sources.iter().map(|source| {
+        source
+            .symlink_metadata()
+            .is_err()
+            .then(|| inside::within(source))
+            .flatten()
+    });
+    let first = found.next()??;
+    let mut picked = vec![first.inner];
+    for within in found {
+        let within = within.filter(|within| within.archive == first.archive)?;
+        picked.push(within.inner);
+    }
+    picked
+        .iter()
+        .all(|inner| inner.file_name().is_some())
+        .then_some((first.archive, picked))
 }
 
 /// When job `running` resumes what a crash `left`, takes up its journal

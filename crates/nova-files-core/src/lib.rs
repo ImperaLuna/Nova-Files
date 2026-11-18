@@ -19,6 +19,7 @@ mod file_icons;
 mod hand_edited;
 mod icon_theme;
 mod index;
+mod inside;
 mod jobs;
 mod list;
 mod measure;
@@ -135,6 +136,10 @@ pub fn spawn_with_archiver(
     let (connector, receiver) = nova_files_api::channel();
     let searcher = Searcher::new(index, home.as_ref().map(|home| home.folder.clone()));
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
+    let inside = Arc::new(inside::Inside::new(
+        archiver.clone(),
+        inside::opened_folder(),
+    ));
     let jobs = ops::Jobs::new(
         home.as_ref().map(|home| home.state.as_path()),
         trash::Trashes::of(home.as_ref()),
@@ -172,6 +177,7 @@ pub fn spawn_with_archiver(
                 measurer: measure::Measurer::default(),
                 drives: drives::Store::default(),
                 recent,
+                inside,
             };
             run::run(&receiver, idle_exit, &setup);
         })?;

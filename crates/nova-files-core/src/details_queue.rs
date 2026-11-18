@@ -10,7 +10,9 @@
 //! the old one and its work. Before each read the worker asks whether its
 //! run is still wanted (same listing, and some of it still asked for), so
 //! a run scrolled away stops at once and the rows now shown come next.
-//! Each entry's icon goes out with its details (see `file_icons`).
+//! Each entry's icon goes out with its details (see `file_icons`). A
+//! listing inside an archive comes with its details known, which go out
+//! in place of reads.
 
 use std::collections::HashSet;
 use std::ops::Range;
@@ -42,6 +44,8 @@ struct Shared {
 #[derive(Default)]
 struct State {
     listing: Option<Arc<Listing>>,
+    /// The listing's details by entry, when they came with it.
+    known: Option<Arc<[Details]>>,
     wanted: Range<usize>,
     /// Entries of the listing whose details were sent.
     read: HashSet<usize>,
@@ -63,6 +67,7 @@ impl State {
             .map_or(start, |last| last + 1);
         Some(Run {
             listed,
+            known: self.known.clone(),
             entries: start..end,
         })
     }
@@ -71,6 +76,7 @@ impl State {
 /// The next entries to read: `entries` of listing `listed`.
 struct Run {
     listed: Arc<Listing>,
+    known: Option<Arc<[Details]>>,
     entries: Range<usize>,
 }
 
@@ -92,13 +98,20 @@ impl Queue {
     /// The client now shows listing `id`; earlier work is dropped. Called
     /// before the client hears of the listing, so its first request finds
     /// it. `current` is asked under the queue's lock, so a listing that was
-    /// replaced meanwhile can't overwrite the one after it.
-    pub fn show(&self, listing: &Listing, current: impl FnOnce() -> bool) {
+    /// replaced meanwhile can't overwrite the one after it. Details in
+    /// `known`, by entry, are never read from the disk.
+    pub fn show(
+        &self,
+        listing: &Listing,
+        known: Option<Arc<[Details]>>,
+        current: impl FnOnce() -> bool,
+    ) {
         self.shared.update(|state| {
             if !current() {
                 return;
             }
             state.listing = Some(Arc::new(listing.clone()));
+            state.known = known;
             state.wanted = 0..0;
             state.read.clear();
         });
@@ -210,8 +223,13 @@ impl Shared {
 fn work(shared: &Shared, events: &dyn EventSink, icons: &FileIcons) {
     while let Some(run) = shared.next_run() {
         // `want` keeps the wanted entries inside the listing.
-        let entries = details::listed(&run.listed, run.entries.clone());
-        let Some(read) = details::read_batch(entries, || !shared.still_wanted(&run)) else {
+        let read = if let Some(known) = &run.known {
+            Some(known.get(run.entries.clone()).unwrap_or_default().to_vec())
+        } else {
+            let entries = details::listed(&run.listed, run.entries.clone());
+            details::read_batch(entries, || !shared.still_wanted(&run))
+        };
+        let Some(read) = read else {
             continue;
         };
         if !shared.still_wanted(&run) {
@@ -255,6 +273,7 @@ mod tests {
                 folders: None,
             })),
             wanted,
+            known: None,
             read: read.iter().copied().collect(),
             closed: false,
         }
@@ -280,6 +299,7 @@ mod tests {
                 entries: Arc::new([]),
                 folders: None,
             }),
+            known: None,
             entries,
         }
     }

@@ -24,7 +24,7 @@ pub(super) fn answer(
     match command {
         Command::ListFolder { id, path, order } => {
             let hidden = hidden_files(setup, &path);
-            jobs::list_folder(client, id, path, order, hidden);
+            jobs::list_folder(client, (id, path), order, hidden, &setup.inside);
         }
         Command::Places => setup.places.listen(id, client.events()),
         Command::ChangeBookmark(change) => setup.places.change(change),
@@ -47,7 +47,8 @@ pub(super) fn answer(
             preview::answer(client.events(), request);
         }
         Command::OpenFile { path, activation } => {
-            jobs::open_file(client, Arc::clone(&setup.mime_types), path, activation);
+            let opening = (Arc::clone(&setup.mime_types), Arc::clone(&setup.inside));
+            jobs::open_file(client, opening, path, activation);
         }
         Command::OpenWith(request) => setup.open_with.answer(client.events(), request),
         Command::FolderUsed(folder) => setup.recent.used(folder),

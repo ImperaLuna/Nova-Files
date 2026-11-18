@@ -19,6 +19,7 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 use crate::disk_space;
 use crate::drives::Store as DrivesStore;
 use crate::file_icons::FileIcons;
+use crate::inside::Inside;
 use crate::jobs::Client;
 use crate::measure::Measurer;
 use crate::mime::MimeTypes;
@@ -63,6 +64,8 @@ pub struct Setup {
     pub drives: DrivesStore,
     /// The folders a person opened lately.
     pub recent: RecentStore,
+    /// What the archives browsed last hold.
+    pub inside: Arc<Inside>,
 }
 
 /// Runs until idle.

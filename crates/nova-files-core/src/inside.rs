@@ -1,0 +1,487 @@
+//! Browsing inside an archive as a read-only folder. A path inside one is
+//! the archive's own path with the path inside it after
+//! (`/home/me/a.zip/docs`), so it lists, opens and copies out like any
+//! other path. The core lists each archive once through the helper and
+//! keeps what it found, for the last [`KEPT`] archives, while the archive
+//! keeps its size and modified time.
+
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::env;
+use std::ffi::OsString;
+use std::fs::{self, DirBuilder};
+use std::io;
+use std::os::unix::fs::DirBuilderExt as _;
+use std::path::{Component, Path, PathBuf};
+use std::process;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use nova_files_api::{Details, Entry, EntryId, EntryKind, HiddenFiles, Order, SortKey, Unreadable};
+
+use crate::archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Flow};
+use crate::private_file::FOLDER_MODE;
+
+/// How many archives' contents the core keeps.
+const KEPT: usize = 4;
+const RUNTIME_DIR: &str = "XDG_RUNTIME_DIR";
+const OPENED: &str = "nova-files/opened";
+
+/// A path inside an archive: the archive, and the path in it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Within {
+    pub archive: PathBuf,
+    /// Relative; empty for the archive's top.
+    pub inner: PathBuf,
+}
+
+/// Where `path` is when it is inside an archive: the nearest part of it
+/// that exists is a file. `None` when that part is a folder, or nothing
+/// of it exists.
+pub fn within(path: &Path) -> Option<Within> {
+    if !path.is_absolute() {
+        return None;
+    }
+    let (archive, metadata) = path
+        .ancestors()
+        .find_map(|part| fs::metadata(part).ok().map(|metadata| (part, metadata)))?;
+    let inner = path.strip_prefix(archive).ok()?;
+    let normal = inner
+        .components()
+        .all(|part| matches!(part, Component::Normal(_)));
+    (metadata.is_file() && normal).then(|| Within {
+        archive: archive.to_path_buf(),
+        inner: inner.to_path_buf(),
+    })
+}
+
+/// One thing in a folder inside an archive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Item {
+    pub kind: EntryKind,
+    pub details: Details,
+}
+
+/// An archive's folders, each with what is in it by name. A folder an
+/// entry is in counts even when the archive has no entry of its own for
+/// it. A link counts as a file.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Tree {
+    folders: HashMap<PathBuf, BTreeMap<OsString, Item>>,
+}
+
+impl Tree {
+    pub fn of(entries: &[ArchiveEntry]) -> Self {
+        let mut tree = Self::default();
+        tree.folders.insert(PathBuf::new(), BTreeMap::new());
+        for entry in entries {
+            let kind = match entry.kind {
+                ArchiveKind::Folder => EntryKind::Folder,
+                ArchiveKind::File | ArchiveKind::Link => EntryKind::File,
+            };
+            let details = Details {
+                size: (kind == EntryKind::File).then_some(entry.size),
+                modified: time(entry.modified),
+            };
+            tree.add(&entry.path, Some(Item { kind, details }));
+        }
+        tree
+    }
+
+    /// Adds `item` at `path`, with the folders it is in; `None` is a
+    /// folder only a path names, which an entry of its own replaces.
+    fn add(&mut self, path: &Path, item: Option<Item>) {
+        let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+            return;
+        };
+        if !self.folders.contains_key(parent) {
+            self.add(parent, None);
+        }
+        let item = item.unwrap_or_else(|| Item {
+            kind: EntryKind::Folder,
+            details: Details::default(),
+        });
+        if item.kind == EntryKind::Folder {
+            self.folders.entry(path.to_path_buf()).or_default();
+        }
+        let items = self.folders.entry(parent.to_path_buf()).or_default();
+        items.insert(name.to_os_string(), item);
+    }
+
+    /// The folder `inner`'s entries, folders first and each group A to Z,
+    /// with their details.
+    ///
+    /// # Errors
+    /// [`Unreadable::NotAFolder`] when `inner` is a file in the archive,
+    /// [`Unreadable::Missing`] when it is nothing.
+    pub fn folder(&self, inner: &Path) -> Result<(Vec<Entry>, Vec<Details>), Unreadable> {
+        let Some(items) = self.folders.get(inner) else {
+            let file = inner
+                .parent()
+                .zip(inner.file_name())
+                .and_then(|(parent, name)| self.folders.get(parent)?.get(name));
+            return Err(file.map_or(Unreadable::Missing, |_| Unreadable::NotAFolder));
+        };
+        let mut sorted: Vec<_> = items.iter().collect();
+        sorted.sort_by_key(|(_, item)| item.kind == EntryKind::File);
+        Ok(sorted
+            .into_iter()
+            .zip(0..)
+            .map(|((name, item), index)| {
+                let entry = Entry {
+                    id: EntryId(index),
+                    name: name.clone(),
+                    kind: item.kind,
+                };
+                (entry, item.details)
+            })
+            .unzip())
+    }
+}
+
+/// `listed`, a folder's entries and their details, folders first and
+/// each group A to Z, in `order`, without hidden entries unless `hidden`
+/// shows them; an unknown size or time sorts as the smallest. Each
+/// entry's id is then its new position.
+pub fn arrange(
+    (entries, details): (Vec<Entry>, Vec<Details>),
+    order: Order,
+    hidden: HiddenFiles,
+) -> (Vec<Entry>, Vec<Details>) {
+    let mut paired: Vec<(Entry, Details)> = entries
+        .into_iter()
+        .zip(details)
+        .filter(|(entry, _)| hidden == HiddenFiles::Shown || !entry.is_hidden())
+        .collect();
+    paired.sort_by(|(left, left_details), (right, right_details)| {
+        let by_key = match order.key {
+            SortKey::Name => left.name.cmp(&right.name),
+            SortKey::Modified => left_details.modified.cmp(&right_details.modified),
+            SortKey::Size => left_details.size.cmp(&right_details.size),
+        };
+        let by_key = if order.descending {
+            by_key.reverse()
+        } else {
+            by_key
+        };
+        (left.kind == EntryKind::File)
+            .cmp(&(right.kind == EntryKind::File))
+            .then(by_key)
+    });
+    paired
+        .into_iter()
+        .zip(0..)
+        .map(|((mut entry, details), index)| {
+            entry.id = EntryId(index);
+            (entry, details)
+        })
+        .unzip()
+}
+
+/// Where files opened from inside archives go: under the user's runtime
+/// folder, or the temporary folder without one.
+pub fn opened_folder() -> PathBuf {
+    env::var_os(RUNTIME_DIR)
+        .map_or_else(env::temp_dir, PathBuf::from)
+        .join(OPENED)
+}
+
+/// `seconds` since 1970 as a time; `None` past what a time holds.
+fn time(seconds: i64) -> Option<SystemTime> {
+    let since = Duration::from_secs(seconds.unsigned_abs());
+    if seconds < 0 {
+        UNIX_EPOCH.checked_sub(since)
+    } else {
+        UNIX_EPOCH.checked_add(since)
+    }
+}
+
+/// An archive's size and modified time, which say it is still the one
+/// listed.
+type Stamp = (u64, Option<SystemTime>);
+
+/// The contents of the archives browsed last, newest first.
+#[derive(Default)]
+struct Kept(VecDeque<(PathBuf, Stamp, Arc<Tree>)>);
+
+impl Kept {
+    fn find(&self, archive: &Path, stamp: Stamp) -> Option<Arc<Tree>> {
+        self.0
+            .iter()
+            .find(|(path, kept, _)| path == archive && *kept == stamp)
+            .map(|(_, _, tree)| Arc::clone(tree))
+    }
+
+    /// Keeps `tree` as what `archive` holds while it has `stamp`, in
+    /// place of what it held before, forgetting the oldest past [`KEPT`].
+    fn keep(&mut self, archive: &Path, stamp: Stamp, tree: Arc<Tree>) {
+        self.0.retain(|(path, _, _)| path != archive);
+        self.0.push_front((archive.to_path_buf(), stamp, tree));
+        self.0.truncate(KEPT);
+    }
+}
+
+/// Lists archives for browsing, keeping what it found, and takes out the
+/// files opened from inside them.
+pub struct Inside {
+    archiver: Option<Archiver>,
+    kept: Mutex<Kept>,
+    /// Holds a folder for each file opened from inside an archive.
+    opened: PathBuf,
+    taken: AtomicU64,
+}
+
+impl Inside {
+    pub fn new(archiver: Option<Archiver>, opened: PathBuf) -> Self {
+        Self {
+            archiver,
+            kept: Mutex::default(),
+            opened,
+            taken: AtomicU64::new(0),
+        }
+    }
+
+    /// Unpacks the file `within` names into a new folder of its own, and
+    /// says where it is.
+    ///
+    /// # Errors
+    /// As [`Archiver::extract`]; [`ArchiveFailure::NeedsPassword`] for a
+    /// locked file; [`ArchiveFailure::NotWritten`] when the folder can't
+    /// be made; [`ArchiveFailure::Gone`] when the archive has no such
+    /// entry.
+    pub fn take_out(&self, within: &Within) -> Result<PathBuf, ArchiveFailure> {
+        let archiver = self.archiver.as_ref().ok_or(ArchiveFailure::NotRead)?;
+        let folder = self.new_folder().map_err(|_| ArchiveFailure::NotWritten)?;
+        let picked = std::slice::from_ref(&within.inner);
+        archiver.extract_picked((&within.archive, picked), &folder, None, |_| Flow::Go)?;
+        let copy = folder.join(&within.inner);
+        if copy.symlink_metadata().is_err() {
+            return Err(ArchiveFailure::Gone);
+        }
+        Ok(copy)
+    }
+
+    fn new_folder(&self) -> io::Result<PathBuf> {
+        DirBuilder::new()
+            .recursive(true)
+            .mode(FOLDER_MODE)
+            .create(&self.opened)?;
+        loop {
+            let taken = self.taken.fetch_add(1, AtomicOrdering::Relaxed);
+            let folder = self.opened.join(format!("{}-{taken}", process::id()));
+            match DirBuilder::new().mode(FOLDER_MODE).create(&folder) {
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                made => return made.map(|()| folder),
+            }
+        }
+    }
+
+    /// What `archive` holds, kept or listed now.
+    ///
+    /// # Errors
+    /// When it can't be listed, as [`Unreadable`] says; [`Unreadable::NotAFolder`]
+    /// when it is no archive, or nothing reads archives.
+    pub fn tree(&self, archive: &Path) -> Result<Arc<Tree>, Unreadable> {
+        let metadata = fs::metadata(archive).map_err(|error| crate::list::unreadable(&error))?;
+        let stamp = (metadata.len(), metadata.modified().ok());
+        let kept = self.lock().find(archive, stamp);
+        if let Some(tree) = kept {
+            return Ok(tree);
+        }
+        let archiver = self.archiver.as_ref().ok_or(Unreadable::NotAFolder)?;
+        let entries = archiver.list(archive).map_err(unreadable)?;
+        let tree = Arc::new(Tree::of(&entries));
+        self.lock().keep(archive, stamp, Arc::clone(&tree));
+        Ok(tree)
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Kept> {
+        self.kept.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Why an archive's contents can't be shown.
+const fn unreadable(failure: ArchiveFailure) -> Unreadable {
+    match failure {
+        ArchiveFailure::Gone => Unreadable::Missing,
+        ArchiveFailure::Denied | ArchiveFailure::NeedsPassword => Unreadable::PermissionDenied,
+        ArchiveFailure::Unsupported => Unreadable::NotAFolder,
+        _ => Unreadable::Failed,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(path: &str, kind: ArchiveKind, size: u64) -> ArchiveEntry {
+        ArchiveEntry {
+            kind,
+            locked: false,
+            size,
+            modified: 60,
+            mode: 0o644,
+            path: path.into(),
+            link: PathBuf::new(),
+        }
+    }
+
+    fn names(listed: &(Vec<Entry>, Vec<Details>)) -> Vec<(String, EntryKind)> {
+        listed
+            .0
+            .iter()
+            .map(|entry| (entry.name.to_string_lossy().into_owned(), entry.kind))
+            .collect()
+    }
+
+    #[test]
+    fn folders_come_from_their_entries_and_paths() {
+        let tree = Tree::of(&[
+            entry("b.txt", ArchiveKind::File, 2),
+            entry("docs/inner/deep.txt", ArchiveKind::File, 4),
+            entry("docs", ArchiveKind::Folder, 0),
+            entry("a-link", ArchiveKind::Link, 5),
+        ]);
+        let top = tree.folder(Path::new("")).unwrap();
+        assert_eq!(
+            names(&top),
+            [
+                ("docs".to_owned(), EntryKind::Folder),
+                ("a-link".to_owned(), EntryKind::File),
+                ("b.txt".to_owned(), EntryKind::File),
+            ]
+        );
+        assert_eq!(
+            top.0.iter().map(|entry| entry.id.0).collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        let modified = time(60);
+        assert_eq!(
+            top.1,
+            [
+                Details {
+                    size: None,
+                    modified
+                },
+                Details {
+                    size: Some(5),
+                    modified
+                },
+                Details {
+                    size: Some(2),
+                    modified
+                },
+            ]
+        );
+        let inner = tree.folder(Path::new("docs")).unwrap();
+        assert_eq!(names(&inner), [("inner".to_owned(), EntryKind::Folder)]);
+        assert_eq!(inner.1, [Details::default()]);
+        let deep = tree.folder(Path::new("docs/inner")).unwrap();
+        assert_eq!(
+            deep.1,
+            [Details {
+                size: Some(4),
+                modified
+            }]
+        );
+        assert_eq!(tree.folder(Path::new("b.txt")), Err(Unreadable::NotAFolder));
+        assert_eq!(tree.folder(Path::new("nothing")), Err(Unreadable::Missing));
+        assert_eq!(
+            tree.folder(Path::new("docs/nothing")),
+            Err(Unreadable::Missing)
+        );
+    }
+
+    #[test]
+    fn keeps_the_newest_archives_while_unchanged() {
+        let mut kept = Kept::default();
+        let stamp = (1, Some(UNIX_EPOCH));
+        let tree = |path: &str| Arc::new(Tree::of(&[entry(path, ArchiveKind::File, 1)]));
+        for name in ["a", "b", "c", "d", "e"] {
+            kept.keep(Path::new(name), stamp, tree(name));
+        }
+        assert_eq!(kept.find(Path::new("a"), stamp), None);
+        assert_eq!(kept.find(Path::new("b"), stamp), Some(tree("b")));
+        assert_eq!(kept.find(Path::new("e"), (2, Some(UNIX_EPOCH))), None);
+        assert_eq!(kept.find(Path::new("e"), (1, None)), None);
+        kept.keep(Path::new("e"), (2, None), tree("new"));
+        assert_eq!(kept.find(Path::new("e"), stamp), None);
+        assert_eq!(kept.find(Path::new("e"), (2, None)), Some(tree("new")));
+        assert_eq!(kept.0.len(), KEPT);
+    }
+
+    #[test]
+    fn an_entry_of_its_own_replaces_a_folder_a_path_named() {
+        let tree = Tree::of(&[
+            entry("docs/a.txt", ArchiveKind::File, 1),
+            entry("docs", ArchiveKind::Folder, 0),
+            entry("docs/b.txt", ArchiveKind::File, 1),
+        ]);
+        let top = tree.folder(Path::new("")).unwrap();
+        assert_eq!(
+            top.1,
+            [Details {
+                size: None,
+                modified: time(60)
+            }]
+        );
+        assert_eq!(tree.folder(Path::new("docs")).unwrap().0.len(), 2);
+    }
+
+    #[test]
+    fn an_empty_archive_has_an_empty_top() {
+        let tree = Tree::of(&[]);
+        assert_eq!(tree.folder(Path::new("")), Ok((Vec::new(), Vec::new())));
+    }
+
+    #[test]
+    fn times_before_1970_count() {
+        assert_eq!(time(-60), UNIX_EPOCH.checked_sub(Duration::from_secs(60)));
+        assert_eq!(time(0), Some(UNIX_EPOCH));
+        assert_eq!(time(60), UNIX_EPOCH.checked_add(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn a_path_is_inside_where_a_file_ends_it() {
+        let root = env::temp_dir().join(format!("nova-files-within-{}", process::id()));
+        fs::create_dir_all(root.join("folder")).unwrap();
+        fs::write(root.join("a.zip"), b"").unwrap();
+        assert_eq!(
+            within(&root.join("a.zip/docs/x.txt")),
+            Some(Within {
+                archive: root.join("a.zip"),
+                inner: "docs/x.txt".into(),
+            })
+        );
+        assert_eq!(
+            within(&root.join("a.zip")),
+            Some(Within {
+                archive: root.join("a.zip"),
+                inner: PathBuf::new(),
+            })
+        );
+        assert_eq!(within(&root.join("folder/gone")), None);
+        assert_eq!(within(&root.join("folder")), None);
+        assert_eq!(within(&root.join("a.zip/../folder")), None);
+        assert_eq!(within(Path::new("a.zip/docs")), None);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn failures_say_why_the_contents_are_unreadable() {
+        assert_eq!(unreadable(ArchiveFailure::Gone), Unreadable::Missing);
+        assert_eq!(
+            unreadable(ArchiveFailure::Denied),
+            Unreadable::PermissionDenied
+        );
+        assert_eq!(
+            unreadable(ArchiveFailure::NeedsPassword),
+            Unreadable::PermissionDenied
+        );
+        assert_eq!(
+            unreadable(ArchiveFailure::Unsupported),
+            Unreadable::NotAFolder
+        );
+        assert_eq!(unreadable(ArchiveFailure::Broken), Unreadable::Failed);
+    }
+}
