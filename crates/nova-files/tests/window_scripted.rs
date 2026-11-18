@@ -10,6 +10,7 @@ mod scripted_jobs;
 mod scripted_search;
 mod scripted_select;
 mod scripted_tree;
+mod scripted_views;
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};

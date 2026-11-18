@@ -8,6 +8,7 @@ use crate::disk_space::PathSpace;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::file_icon::FileIcon;
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
+use crate::folder_view::{FolderView, FolderViews};
 use crate::job::{
     Answer, Conflict, DropAskId, DropKind, JobId, JobTag, Operation, Outcome, Progress, Scope,
     Tally,
@@ -126,6 +127,13 @@ pub enum Command {
     /// List the apps that open some files, open them in one, or make one
     /// the default (see [`OpenWith`]).
     OpenWith(OpenWith),
+    /// Ask for the folders' views: the answer is [`Event::FolderViews`],
+    /// sent again whenever one changes.
+    FolderViews,
+    /// Show `folder` with `view` from now on, and save it. Every client
+    /// that asked for the views, this one included, then gets
+    /// [`Event::FolderViews`]. A path that isn't absolute is ignored.
+    SetFolderView { folder: PathBuf, view: FolderView },
     /// Ask for the UI's window state; the answer is [`Event::WindowState`].
     WindowState,
     /// Keep these bytes as the UI's window state, between runs too. The
@@ -331,6 +339,9 @@ pub enum Event {
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),
+    /// Every folder given a view, newest first, answering
+    /// [`Command::FolderViews`] and after each change.
+    FolderViews(FolderViews),
     /// The settings, answering [`Command::Settings`], and sent again to
     /// each client that asked whenever one changes: from a client, or from
     /// the settings file.

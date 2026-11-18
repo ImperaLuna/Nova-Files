@@ -49,6 +49,7 @@ use gpui::{
     ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
     prelude::FluentBuilder as _,
 };
+use nova_files_api::ViewMode;
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
@@ -56,6 +57,7 @@ use crate::commands::{
     PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp,
     SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
 };
+use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{
     CloseTab, CopySelected, CutSelected, DeleteSelected, EmptyTrash, NewFolder, NewTab, NextTab,
     Paste, PreviousTab, RenameSelected, RestoreSelected, TrashSelected, Undo,
@@ -109,6 +111,7 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .on_action(cx.listener(|this, _: &ToggleHidden, _, _| this.toggle_hidden()))
+            .map(|root| Self::view_keys(root, cx))
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
             .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
@@ -154,6 +157,19 @@ impl MainWindow {
             MouseButton::Left,
             cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
         )
+    }
+
+    /// The actions that change how the folder shows (see `window::views`).
+    fn view_keys(root: Div, cx: &Context<Self>) -> Div {
+        root.on_action(cx.listener(|this, _: &ShowDetails, _, cx| {
+            this.show_as(ViewMode::Details, cx);
+        }))
+        .on_action(cx.listener(|this, _: &ShowIcons, _, cx| this.show_as(ViewMode::Icons, cx)))
+        .on_action(cx.listener(|this, _: &ShowGallery, _, cx| {
+            this.show_as(ViewMode::Gallery, cx);
+        }))
+        .on_action(cx.listener(|this, _: &BiggerIcons, _, cx| this.zoom_icons(true, cx)))
+        .on_action(cx.listener(|this, _: &SmallerIcons, _, cx| this.zoom_icons(false, cx)))
     }
 
     /// The tabs' actions, in a main window (see `window::tabs`).

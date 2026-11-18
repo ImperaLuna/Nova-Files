@@ -1,5 +1,6 @@
 //! The commands about how the app looks and is set: settings, the theme,
-//! the desktop's look and icon theme, and the saved window state. `run`
+//! the desktop's look and icon theme, the saved window state and the
+//! folders' views. `run`
 //! sends only these here.
 
 use nova_files_api::{ClientGone, ClientId, Command, Event};
@@ -19,6 +20,8 @@ pub(super) fn answer(
             return client.deliver(Event::WindowState(setup.window_state.bytes()));
         }
         Command::SaveWindowState(bytes) => setup.window_state.save(bytes),
+        Command::FolderViews => setup.folder_views.listen(id, client.events()),
+        Command::SetFolderView { folder, view } => setup.folder_views.set(folder, view),
         Command::Settings => setup.settings.listen(id, client.events()),
         Command::ChangeSetting(change) => setup.settings.change(change),
         Command::Theme => setup.theme.listen(id, client.events()),

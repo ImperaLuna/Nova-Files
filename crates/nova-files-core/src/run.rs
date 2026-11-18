@@ -19,6 +19,7 @@ use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
 use crate::disk_space;
 use crate::drives::Store as DrivesStore;
 use crate::file_icons::FileIcons;
+use crate::folder_views::Store as FolderViewsStore;
 use crate::jobs::Client;
 use crate::measure::Measurer;
 use crate::mime::MimeTypes;
@@ -63,6 +64,8 @@ pub struct Setup {
     pub drives: DrivesStore,
     /// The folders a person opened lately.
     pub recent: RecentStore,
+    /// How each folder is shown.
+    pub folder_views: FolderViewsStore,
 }
 
 /// Runs until idle.
@@ -116,6 +119,7 @@ fn forget(client: ClientId, setup: &Setup) {
     setup.settings.forget(client);
     setup.theme.forget(client);
     setup.places.forget(client);
+    setup.folder_views.forget(client);
     setup.drives.forget(client);
     setup.jobs.audience().leave(client);
     setup.measurer.forget(client);
@@ -152,6 +156,8 @@ fn answer(
         | Command::RecentFolders { .. }) => folders::answer(id, client, command, setup),
         command @ (Command::WindowState
         | Command::SaveWindowState(_)
+        | Command::FolderViews
+        | Command::SetFolderView { .. }
         | Command::Settings
         | Command::ChangeSetting(_)
         | Command::Theme
