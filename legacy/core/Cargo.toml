@@ -23,6 +23,8 @@
 # - nova-files-messages
 # - nova-files-open-api
 # - nova-files-open-core
+# - nova-files-rename-api
+# - nova-files-rename-core
 # - nova-files-settings-api
 # - nova-files-settings-core
 # - nova-files-trash-api
@@ -67,6 +69,8 @@ nova-files-jobs.workspace = true
 nova-files-messages.workspace = true
 nova-files-open-api.workspace = true
 nova-files-open-core.workspace = true
+nova-files-rename-api.workspace = true
+nova-files-rename-core.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-settings-core.workspace = true
 nova-files-trash-api.workspace = true

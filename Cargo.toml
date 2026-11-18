@@ -29,6 +29,8 @@ nova-files-messages = { path = "framework/messages" }
 nova-files-open-api = { path = "features/open/api" }
 nova-files-open-core = { path = "features/open/core" }
 nova-files-picker-api = { path = "features/picker/api" }
+nova-files-rename-api = { path = "features/rename/api" }
+nova-files-rename-core = { path = "features/rename/core" }
 nova-files-settings-api = { path = "features/settings/api" }
 nova-files-settings-core = { path = "features/settings/core" }
 nova-files-shell = { path = "framework/shell" }

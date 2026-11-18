@@ -3641,6 +3641,8 @@ dependencies = [
  "nova-files-open-api",
  "nova-files-open-core",
  "nova-files-picker-api",
+ "nova-files-rename-api",
+ "nova-files-rename-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
  "nova-files-trash-api",
@@ -3729,6 +3731,19 @@ name = "nova-files-picker-api"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-rename-api"
+version = "0.1.0"
+
+[[package]]
+name = "nova-files-rename-core"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+ "nova-files-jobs",
+ "nova-files-rename-api",
 ]
 
 [[package]]
