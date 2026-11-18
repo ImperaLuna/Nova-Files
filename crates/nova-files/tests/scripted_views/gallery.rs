@@ -42,6 +42,9 @@ fn the_stage_shows_the_first_entry_selected(cx: &mut TestAppContext) {
     let (first, second) = (first.unwrap(), second.unwrap());
     assert_eq!(first.top(), second.top());
     assert!(first.top() >= stage.bottom(), "{first:?} {stage:?}");
+    // The island over the selection leaves the strip clear.
+    let island = cx.debug_bounds("island").unwrap();
+    assert!(first.bottom() <= island.top(), "{first:?} {island:?}");
 }
 
 #[gpui::test]
