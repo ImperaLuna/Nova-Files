@@ -65,7 +65,6 @@ mod actions {
 
 pub use actions::*;
 
-
 pub const ACTIONS: &[CommandSpec] = &[
     UP,
     BACK,

@@ -2,7 +2,9 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use gpui::{Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, SharedString, Window};
+use gpui::{
+    Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, SharedString, Window,
+};
 use nova_files_api::Entry;
 use nova_files_messages::{Envelope, Message, MessageType};
 
@@ -22,6 +24,7 @@ pub type Items<P> = fn(&P, &Scene, &App) -> Vec<MenuItem>;
 pub type Rows<P> = fn(&P, &Scene, &App) -> Vec<SidebarRow>;
 pub type Card<P> = fn(&mut P, &Scene, &mut Window, &mut Context<P>) -> Option<AnyElement>;
 pub type Cell<P> = fn(&P, &Entry, &App) -> Option<SharedString>;
+pub type Columns<P> = fn(&P, &Scene, &App) -> Option<Column<P>>;
 
 pub struct Column<P> {
     pub head: SharedString,
@@ -31,9 +34,10 @@ pub struct Column<P> {
 
 type EventSlot<P> = Box<dyn Fn(&mut P, Envelope, &mut Context<P>)>;
 type Bind<P> = Box<dyn Fn(Div, &Entity<P>, &Host) -> Div>;
-pub(crate) type PageSlot<P> = Rc<dyn Fn(&mut P, &PageRef, &mut Window, &mut Context<P>) -> Option<AnyElement>>;
+pub type PageSlot<P> =
+    Rc<dyn Fn(&mut P, &PageRef, &mut Window, &mut Context<P>) -> Option<AnyElement>>;
 
-pub(crate) struct CommandSlot<P> {
+pub struct CommandSlot<P> {
     pub(crate) spec: &'static CommandSpec,
     pub(crate) applies: Applies<P>,
     pub(crate) bind: Bind<P>,
@@ -44,7 +48,7 @@ pub struct Slots<P> {
     pub(crate) commands: Vec<CommandSlot<P>>,
     pub(crate) menus: Vec<(MenuAt, Items<P>)>,
     pub(crate) pages: Vec<(TypeId, PageSlot<P>)>,
-    pub(crate) columns: Vec<fn(&P, &Scene, &App) -> Option<Column<P>>>,
+    pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
     pub(crate) start_cards: Vec<Card<P>>,
 }
@@ -110,7 +114,7 @@ impl<P: Part> Slots<P> {
         self.pages.push((TypeId::of::<K>(), slot));
     }
 
-    pub fn column(&mut self, column: fn(&P, &Scene, &App) -> Option<Column<P>>) {
+    pub fn column(&mut self, column: Columns<P>) {
         self.columns.push(column);
     }
 

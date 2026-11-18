@@ -96,8 +96,14 @@ impl MainWindow {
                 Look::On => colors.accept,
                 Look::Danger => colors.danger,
             };
-            text_button(item.selector(), item.label, &*item.run.action(), tint, colors)
-                .into_any_element()
+            text_button(
+                item.selector(),
+                item.label,
+                &*item.run.action(),
+                tint,
+                colors,
+            )
+            .into_any_element()
         }));
         parts.extend([
             divider(colors).into_any_element(),

@@ -157,7 +157,8 @@ impl MainWindow {
                             .as_deref()
                             .map(|query| marks::matched(&name, query))
                             .unwrap_or_default();
-                        let folder = this.folder_cell(listing, entry, index, part_column.as_ref(), cx);
+                        let folder =
+                            this.folder_cell(listing, (entry, index), part_column.as_ref(), cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let folder_at = folder_aim(listing, entry, &name);
@@ -349,8 +350,7 @@ impl MainWindow {
     fn folder_cell(
         &self,
         listing: &Listing,
-        entry: &Entry,
-        index: usize,
+        (entry, index): (&Entry, usize),
         part_column: Option<&ShownColumn>,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {

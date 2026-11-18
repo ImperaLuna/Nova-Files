@@ -1,6 +1,6 @@
 use gpui::{Context, Subscription};
 use nova_files_shell::{
-    self as shell, IslandAsk, IslandAsked, NavAsk, NavEvent, PageRef, Scene, Shown, TabId,
+    self as shell, Host, IslandAsk, IslandAsked, NavAsk, NavEvent, PageRef, Scene, Shown, TabId,
 };
 
 use super::MainWindow;
@@ -28,6 +28,10 @@ impl MainWindow {
             }),
         ]);
         watching
+    }
+
+    pub const fn host(&self) -> &Host {
+        &self.host
     }
 
     pub fn scene(&self) -> Scene {

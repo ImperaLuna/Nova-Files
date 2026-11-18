@@ -1,14 +1,16 @@
-use gpui::{AnyElement, App, Context, IntoElement, ParentElement as _, Render, Styled as _, Window, div};
+use gpui::{
+    AnyElement, App, Context, IntoElement, ParentElement as _, Render, Styled as _, Window, div,
+};
 
-pub(crate) type Draw = Box<dyn Fn(&mut Window, &mut App) -> Option<AnyElement>>;
+pub type Draw = Box<dyn Fn(&mut Window, &mut App) -> Option<AnyElement>>;
 
-pub(crate) struct SlotView {
+pub struct SlotView {
     draw: Draw,
     fills: bool,
 }
 
 impl SlotView {
-    pub(crate) fn new(draw: Draw, fills: bool) -> Self {
+    pub fn new(draw: Draw, fills: bool) -> Self {
         Self { draw, fills }
     }
 }

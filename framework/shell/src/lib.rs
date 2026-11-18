@@ -24,7 +24,7 @@ pub use island::{Island, IslandAsk, IslandAsked, OnYes};
 pub use location::{Location, PageKind, PageRef};
 pub use menu::{Look, MenuAt, MenuItem, SidebarAt, SidebarRow};
 pub use navigator::{NavAsk, NavEvent, Navigator};
-pub use part::{Applies, Card, Cell, Column, Items, Part, Rows, Slots};
+pub use part::{Applies, Card, Cell, Column, Columns, Items, Part, Rows, Slots};
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};
 pub use published::Published;

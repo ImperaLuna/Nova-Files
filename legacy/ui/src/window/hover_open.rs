@@ -24,9 +24,7 @@ impl HoverOpens {
                 | Location::Gathered(_)
                 | Location::Properties(_)
                 | Location::Page(_),
-            ) => {
-                false
-            }
+            ) => false,
         }
     }
 }

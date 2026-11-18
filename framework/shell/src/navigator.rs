@@ -3,7 +3,7 @@ use gpui::{Context, EventEmitter};
 use crate::location::Location;
 use crate::per_tab::TabId;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NavAsk {
     Go(Location),
     NewTab(Location),

@@ -1,7 +1,7 @@
 use crate::location::Location;
 use crate::rules::FolderRules;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Scene {
     pub location: Option<Location>,
     pub rules: FolderRules,

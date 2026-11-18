@@ -1,7 +1,9 @@
 use std::any::TypeId;
 use std::rc::Rc;
 
-use gpui::{AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, SharedString, Subscription};
+use gpui::{
+    AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, SharedString, Subscription,
+};
 use nova_files_api::Entry;
 use nova_files_messages::{Envelope, MessageType};
 
@@ -13,10 +15,12 @@ use crate::part::{Part, Slots};
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
 
+type ShownCell = Box<dyn Fn(&Entry, &App) -> Option<SharedString>>;
+
 pub struct ShownColumn {
     pub head: SharedString,
     pub selector: &'static str,
-    cell: Box<dyn Fn(&Entry, &App) -> Option<SharedString>>,
+    cell: ShownCell,
 }
 
 impl ShownColumn {
@@ -55,10 +59,9 @@ impl<P: Part> OpenPart for Opened<P> {
     }
 
     fn bind(&self, root: Div) -> Div {
-        self.slots
-            .commands
-            .iter()
-            .fold(root, |root, command| (command.bind)(root, &self.entity, &self.host))
+        self.slots.commands.iter().fold(root, |root, command| {
+            (command.bind)(root, &self.entity, &self.host)
+        })
     }
 
     fn applies(&self, spec: &CommandSpec, scene: &Scene, cx: &App) -> Option<bool> {

@@ -101,13 +101,16 @@ impl MainWindow {
             .child(fill)
             .children(self.scope_chip(colors, cx))
             .when(empties, |bar| bar.child(empty_trash_chip(colors)))
-            .children(
-                self.parts
-                    .menu(MenuAt::PathBarEnd, &self.scene(), cx)
-                    .into_iter()
-                    .flatten()
-                    .map(|item| part_chip(item, colors)),
-            )
+            .children(self.part_chips(colors, cx))
+    }
+
+    fn part_chips(&self, colors: &Colors, cx: &Context<Self>) -> Vec<impl IntoElement> {
+        self.parts
+            .menu(MenuAt::PathBarEnd, &self.scene(), cx)
+            .into_iter()
+            .flatten()
+            .map(|item| part_chip(item, colors))
+            .collect()
     }
 
     fn crumbs(&self) -> Vec<Crumb> {
@@ -302,7 +305,9 @@ fn part_chip(item: nova_files_shell::MenuItem, colors: &Colors) -> impl IntoElem
     let selector = item.selector();
     let action = item.run.action();
     chip(selector, colors)
-        .when(item.look == Look::Danger, |chip| chip.text_color(colors.danger))
+        .when(item.look == Look::Danger, |chip| {
+            chip.text_color(colors.danger)
+        })
         .child(item.label)
         .on_click(move |_: &ClickEvent, window, cx| {
             window.dispatch_action(action.boxed_clone(), cx);

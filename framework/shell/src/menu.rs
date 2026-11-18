@@ -70,7 +70,7 @@ impl MenuItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SidebarRow {
     pub id: &'static str,
     pub icon: Icon,

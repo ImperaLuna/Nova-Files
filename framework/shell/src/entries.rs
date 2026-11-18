@@ -5,7 +5,7 @@ use nova_files_api::{Entry, EntryId, Listing};
 
 use crate::location::Location;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Shown {
     pub location: Option<Location>,
     pub listing: Option<Listing>,
@@ -31,7 +31,7 @@ impl Entries {
         self.shown.picker
     }
 
-    pub fn selected_count(&self) -> usize {
+    pub const fn selected_count(&self) -> usize {
         self.shown.selected.len()
     }
 

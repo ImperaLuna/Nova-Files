@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use gpui::{App, Context, Modifiers, Pixels, Point, point};
-use nova_files_shell::MenuAt;
 use nova_files_api::{EntryId, HiddenFiles, ListingId, ViewMode};
+use nova_files_shell::MenuAt;
 
 use super::MainWindow;
 use crate::assets::Icon;

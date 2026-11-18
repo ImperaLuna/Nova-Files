@@ -163,7 +163,7 @@ pub struct MainWindow {
     next_ask: u64,
     host: Host,
     pub(crate) parts: WindowParts,
-    _slots: Vec<Subscription>,
+    watching: Vec<Subscription>,
     _events: Task<()>,
 }
 
@@ -290,10 +290,10 @@ impl MainWindow {
             next_ask: 0,
             host,
             parts,
-            _slots: Vec::new(),
+            watching: Vec::new(),
             _events: events,
         };
-        window._slots = window.watch_slots(cx);
+        window.watching = window.watch_slots(cx);
         window.claim_trash_rules();
         window.go_first(location, cx);
         window
