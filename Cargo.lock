@@ -3585,6 +3585,7 @@ dependencies = [
  "nova-files-core",
  "nova-files-dbus",
  "nova-files-picker-api",
+ "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",
  "nova-files-trash-ui",
@@ -3632,11 +3633,13 @@ dependencies = [
  "nova-files-api",
  "nova-files-clipboard-api",
  "nova-files-disk",
- "nova-files-entries",
+ "nova-files-entries-core",
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
  "nova-files-picker-api",
+ "nova-files-settings-api",
+ "nova-files-settings-core",
  "nova-files-trash-api",
  "nova-files-trash-core",
  "rustix 1.1.6",
@@ -3669,7 +3672,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nova-files-entries"
+name = "nova-files-entries-core"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
@@ -3707,6 +3710,25 @@ name = "nova-files-picker-api"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-settings-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-settings-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-messages",
+ "nova-files-settings-api",
+ "toml_edit 0.25.18+spec-1.1.0",
 ]
 
 [[package]]
@@ -3775,6 +3797,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-clipboard-api",
  "nova-files-picker-api",
+ "nova-files-settings-api",
  "nova-files-shell",
  "unicode-segmentation",
  "usvg",

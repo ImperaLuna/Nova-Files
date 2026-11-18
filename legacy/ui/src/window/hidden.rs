@@ -1,4 +1,5 @@
-use nova_files_api::{Command, HiddenFiles, SettingChange};
+use nova_files_api::HiddenFiles;
+use nova_files_settings_api::{self as settings_api, SettingChange};
 
 use super::MainWindow;
 use crate::location::Location;
@@ -8,7 +9,9 @@ impl MainWindow {
         let hidden = self.settings.hidden_files.toggled();
         if let Some(connection) = &self.connection {
             connection
-                .send(Command::ChangeSetting(SettingChange::HiddenFiles(hidden)))
+                .send(settings_api::Command::Change(SettingChange::HiddenFiles(
+                    hidden,
+                )))
                 .ok();
         }
     }

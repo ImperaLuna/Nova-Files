@@ -3,8 +3,13 @@
 # The trash's window half: the Trash row in the sidebar, its folder's
 # rules and name, the "Was in" column, Restore and Empty Trash.
 #
-# Allowed outside crates: gpui
-# Allowed workspace crates: nova-files-api, nova-files-shell, nova-files-trash-api
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-shell
+# - nova-files-trash-api
 
 [package]
 name = "nova-files-trash-ui"
