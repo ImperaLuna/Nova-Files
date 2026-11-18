@@ -27,8 +27,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex, Once, Weak};
 use std::thread;
 
 use nova_files_api::{
@@ -56,15 +55,15 @@ pub struct Store {
     shared: Arc<Shared>,
     /// Saves each change, on a thread of its own.
     writer: ChangeWriter<GatheredChange>,
-    /// Held only here, so a watch is never dropped on its own thread (a
-    /// watch's callback may hold the last [`Shared`]); stop with the store.
+    /// The watches on the file and the gathered folders, which stop with
+    /// the store.
     _watches: Arc<Mutex<Watches>>,
 }
 
 struct Shared {
     home: Option<Home>,
-    /// Set once the watch on the file started and the first read began.
-    started: AtomicBool,
+    /// Runs the watch on the file and the first read, once.
+    started: Once,
     /// Held from each read of the disk until what it found is kept, and
     /// across each save.
     disk: Mutex<()>,
@@ -96,7 +95,7 @@ impl Store {
         let watches = Arc::default();
         let shared = Arc::new(Shared {
             home,
-            started: AtomicBool::new(false),
+            started: Once::new(),
             disk: Mutex::new(()),
             folders: Arc::default(),
             watches: Arc::downgrade(&watches),
@@ -123,7 +122,7 @@ impl Store {
                 folders.listeners.insert(client, Arc::clone(events));
             }
         }
-        if !self.shared.started.load(Ordering::SeqCst) {
+        if !self.shared.started.is_completed() {
             self.load();
         }
     }
@@ -131,8 +130,7 @@ impl Store {
     /// What gives the folders `place` gathers from, read first (and
     /// followed from then on) if no client asked yet; for a listing's
     /// thread, as that read may wait on the disk. Their folders are
-    /// watched before it returns, so a change after the listing is never
-    /// missed.
+    /// watched before it returns.
     pub fn folders_of(
         &self,
         place: Gathering,
@@ -140,12 +138,6 @@ impl Store {
         let shared = Arc::clone(&self.shared);
         move || {
             shared.start();
-            // Another thread may have started first and not read yet.
-            if !lock(&shared.folders).loaded {
-                shared.first_read();
-            }
-            // The thread that read first may not have watched them yet.
-            shared.rewatch();
             let folders = lock(&shared.folders);
             match place {
                 Gathering::Projects => Arc::clone(&folders.gathered.projects),
@@ -185,18 +177,17 @@ impl Store {
 
 impl Shared {
     /// The first time: starts the watch on the file, writes the usual
-    /// folders when there is no file and reads it. The watch goes in
-    /// before the first read, so no change is missed.
+    /// folders when there is no file, reads it and watches its folders.
+    /// A caller that comes while another runs it waits until it is done.
     fn start(self: &Arc<Self>) {
-        if self.started.swap(true, Ordering::SeqCst) {
-            return;
-        }
-        if let Some(home) = &self.home
-            && let Some(watches) = self.watches.upgrade()
-        {
-            lock(&watches).file = start_watch(home, &Arc::downgrade(self));
-        }
-        self.first_read();
+        self.started.call_once(|| {
+            if let Some(home) = &self.home
+                && let Some(watches) = self.watches.upgrade()
+            {
+                lock(&watches).file = start_watch(home, &Arc::downgrade(self));
+            }
+            self.first_read();
+        });
     }
 
     /// Writes the usual folders when there is no file, then reads it.
@@ -245,9 +236,8 @@ impl Shared {
 
     /// Watches each folder gathered now (see [`watch_folder`]), keeping
     /// the watches already in place, stopping those on folders gone and
-    /// trying again any that couldn't start before. Run after the disk is
-    /// let go, since a watch on a hung mount may take a while; the folders
-    /// are taken under the watches' lock, so the newest always wins.
+    /// trying again any that couldn't start before. It runs outside the
+    /// disk lock and takes the folders under the watches' lock.
     fn rewatch(&self) {
         let Some(watches) = self.watches.upgrade() else {
             return;
@@ -422,9 +412,6 @@ fn write_usual(home: &Home) {
 /// alone, so saving a file in the project is no change either. A folder
 /// that doesn't exist yet is watched from the nearest folder above, and
 /// counts as changed when it appears (see `config_watch`).
-///
-/// Known gap: a folder that is a link is not followed to its target, so
-/// its target going away is seen only at the next listing.
 fn watch_folder(
     (place, path, holds): &(Gathering, PathBuf, Holds),
     folders: Weak<Mutex<Folders>>,

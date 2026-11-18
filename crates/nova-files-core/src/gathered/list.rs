@@ -28,8 +28,7 @@ use crate::{memory, order};
 const THREAD: &str = "nova-files-list-gathered";
 
 /// Lists the folders `folders` gives, one place's, for `client` as
-/// listing `id` in `order`. `folders` is asked on the listing's thread,
-/// since the first ask may read the gathered folders file.
+/// listing `id` in `order`. `folders` is asked on the listing's thread.
 pub fn list(
     client: &Client,
     id: ListingId,
