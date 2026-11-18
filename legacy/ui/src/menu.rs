@@ -8,7 +8,7 @@ use nova_files_api::Gathering;
 use nova_files_drives_api::{DriveAction, DriveId};
 
 use crate::assets::Icon;
-use crate::commands::ActionSpec;
+use crate::commands::CommandSpec;
 use crate::drives::ShownDrive;
 use crate::window::{AccessLevel, MainWindow, Who};
 
@@ -43,13 +43,7 @@ pub struct MenuItem {
     pub detail: Option<SharedString>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Look {
-    #[default]
-    Plain,
-    On,
-    Danger,
-}
+pub use nova_files_shell::Look;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuAction {
@@ -60,7 +54,7 @@ pub enum MenuAction {
     OpenInNewTab(PathBuf),
     SetDefaultApp { mime: String, app: String },
     SetAccess(Who, AccessLevel),
-    Run(&'static ActionSpec),
+    Run(&'static CommandSpec),
     Ungather(Gathering, PathBuf),
     AddGathered(Gathering),
 }
@@ -82,7 +76,7 @@ impl MenuItem {
         }
     }
 
-    pub fn run(icon: Icon, spec: &'static ActionSpec) -> Self {
+    pub fn run(icon: Icon, spec: &'static CommandSpec) -> Self {
         Self::new(icon, spec.label, MenuAction::Run(spec))
     }
 
@@ -93,9 +87,24 @@ impl MenuItem {
     }
 
     #[must_use]
+    pub fn with_label(mut self, label: SharedString) -> Self {
+        self.label = label;
+        self
+    }
+
+    #[must_use]
     pub const fn with_look(mut self, look: Look) -> Self {
         self.look = look;
         self
+    }
+}
+
+impl From<nova_files_shell::MenuItem> for MenuItem {
+    fn from(item: nova_files_shell::MenuItem) -> Self {
+        Self::run(item.icon, item.run)
+            .with_label(item.label)
+            .with_look(item.look)
+            .with_detail(item.detail)
     }
 }
 
@@ -258,7 +267,7 @@ mod tests {
     use super::*;
     use crate::commands::{COPY, NEW_FOLDER, RENAME, TRASH};
 
-    fn label(spec: &ActionSpec) -> Option<String> {
+    fn label(spec: &CommandSpec) -> Option<String> {
         key_label(&spec.binding(spec.keys[0])).map(String::from)
     }
 

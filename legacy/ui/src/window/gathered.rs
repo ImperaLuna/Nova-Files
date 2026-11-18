@@ -28,7 +28,7 @@ impl MainWindow {
 
     pub(super) fn request_place(&mut self, place: &Location) -> bool {
         match place {
-            Location::Start | Location::Properties(_) => false,
+            Location::Start | Location::Properties(_) | Location::Page(_) => false,
             Location::Folder(folder) => self.request(folder),
             Location::Gathered(gathering) => self.request_gathered(*gathering),
         }

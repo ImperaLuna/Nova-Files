@@ -22,6 +22,7 @@ mod renaming;
 mod rows;
 mod search;
 mod showing;
+mod slots;
 mod start;
 mod tab_order;
 mod tabs;
@@ -49,7 +50,8 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
+    App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Subscription, Task,
+    UniformListScrollHandle,
 };
 use nova_files_api::{
     Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
@@ -57,7 +59,7 @@ use nova_files_api::{
 };
 use nova_files_drives_api as drives_api;
 use nova_files_settings_api::{self as settings_api, Settings};
-use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
+use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
 use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;
@@ -162,7 +164,8 @@ pub struct MainWindow {
     properties: Option<properties::Page>,
     next_ask: u64,
     host: Host,
-    parts: WindowParts,
+    pub(crate) parts: WindowParts,
+    watching: Vec<Subscription>,
     _events: Task<()>,
 }
 
@@ -287,8 +290,10 @@ impl MainWindow {
             next_ask: 0,
             host,
             parts,
+            watching: Vec::new(),
             _events: events,
         };
+        window.watching = window.watch_slots(cx);
         window.claim_trash_rules();
         window.go_first(location, cx);
         window
@@ -305,6 +310,7 @@ impl MainWindow {
             Location::Folder(folder) => self.open(folder),
             Location::Gathered(place) => self.open_gathered(*place, cx),
             Location::Properties(paths) => self.arrive_at_properties(paths, cx),
+            Location::Page(page) => self.open_page(page.clone(), cx),
         }
     }
 
@@ -428,10 +434,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
 }
 
 fn open_parts(connection: Option<Arc<Connection>>, cx: &mut App) -> (Host, WindowParts) {
-    let host = Host {
-        link: Link::new(connection),
-        rules: RulesBook::default(),
-    };
+    let host = Host::new(Link::new(connection), cx);
     let parts = cx
         .try_global::<Parts>()
         .cloned()

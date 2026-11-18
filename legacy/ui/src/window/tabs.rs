@@ -9,6 +9,8 @@ use nova_files_api::{EntryId, Gathering, Listing, ListingId, Order};
 use super::MainWindow;
 use super::rows::release;
 use super::search::Search;
+use nova_files_shell::TabId;
+
 use crate::assets::Icon;
 use crate::drives::ShownDrive;
 use crate::history::History;
@@ -46,7 +48,9 @@ impl Tab {
 
 pub struct Tabs {
     list: Vec<Option<Tab>>,
-    current: usize,
+    pub(super) ids: Vec<TabId>,
+    next_id: u64,
+    pub(super) current: usize,
     changed: bool,
     start_if_refused: Option<ListingId>,
 }
@@ -55,6 +59,8 @@ impl Default for Tabs {
     fn default() -> Self {
         Self {
             list: vec![None],
+            ids: vec![TabId(0)],
+            next_id: 1,
             current: 0,
             changed: false,
             start_if_refused: None,
@@ -95,6 +101,8 @@ impl MainWindow {
         let left = self.leave_tab(cx);
         self.tabs.list[self.tabs.current] = Some(left);
         self.tabs.list.push(None);
+        self.tabs.ids.push(TabId(self.tabs.next_id));
+        self.tabs.next_id += 1;
         self.tabs.current = self.tabs.list.len() - 1;
         match place {
             Location::Start => self.open_start(cx),
@@ -107,6 +115,7 @@ impl MainWindow {
                 self.tabs.start_if_refused = self.asked;
             }
             Location::Properties(paths) => self.arrive_at_properties(paths, cx),
+            Location::Page(page) => self.open_page(page.clone(), cx),
         }
         cx.notify();
     }
@@ -172,6 +181,7 @@ impl MainWindow {
                 (label.into(), icon)
             }
             Some(Location::Properties(paths)) => (island::what(paths).into(), Icon::Info),
+            Some(Location::Page(page)) => (page.title(), page.icon()),
             Some(Location::Folder(folder)) if *folder == self.trash.folder => {
                 (TRASH_LABEL.into(), Icon::Trash)
             }
@@ -209,6 +219,8 @@ impl MainWindow {
     pub(super) fn reorder_tab(&mut self, from: usize, to: usize) {
         let tab = self.tabs.list.remove(from);
         self.tabs.list.insert(to, tab);
+        let id = self.tabs.ids.remove(from);
+        self.tabs.ids.insert(to, id);
         if let Some(current) = self.tabs.list.iter().position(Option::is_none) {
             self.tabs.current = current;
         }
@@ -232,16 +244,19 @@ impl MainWindow {
             Ordering::Equal => {
                 drop(self.leave_tab(cx));
                 self.tabs.list.remove(index);
+                self.tabs.ids.remove(index);
                 self.tabs.current = index.min(self.tab_count() - 1);
                 self.enter_tab(cx);
             }
             Ordering::Less => {
                 self.tabs.list.remove(index);
+                self.tabs.ids.remove(index);
                 self.tabs.current -= 1;
                 cx.notify();
             }
             Ordering::Greater => {
                 self.tabs.list.remove(index);
+                self.tabs.ids.remove(index);
                 cx.notify();
             }
         }
