@@ -223,6 +223,12 @@ fn run_compress(
                 Ok(folder) => grants.push(sandbox::making_in(folder)),
                 Err(error) => return Ending::of_write(&error.into()),
             }
+            let parents = sources.iter().filter_map(|source| source.parent());
+            grants.extend(
+                parents
+                    .filter_map(|parent| rustix::fs::open(parent, SOURCE, Mode::empty()).ok())
+                    .map(sandbox::naming),
+            );
             Making::Seven(program)
         }
     };

@@ -22,8 +22,8 @@ const LOCALE: &str = "LC_ALL";
 const UTF8: &str = "C.UTF-8";
 /// Links stay links, each entry on its own line, errors with the rest,
 /// no percentages, yes to every question.
-const SWITCHES: [&str; 6] = ["-snl", "-bb1", "-bso1", "-bse1", "-bsp0", "-y"];
-const LISTING: [&str; 6] = ["l", "-slt", "-ba", "-bso1", "-bse1", "-bsp0"];
+const SWITCHES: [&str; 7] = ["-snl", "-spd", "-bb1", "-bso1", "-bse1", "-bsp0", "-y"];
+const LISTING: [&str; 7] = ["l", "-slt", "-ba", "-spd", "-bso1", "-bse1", "-bsp0"];
 const PATH: &[u8] = b"Path = ";
 const SIZE: &[u8] = b"Size = ";
 const MODIFIED: &[u8] = b"Modified = ";
