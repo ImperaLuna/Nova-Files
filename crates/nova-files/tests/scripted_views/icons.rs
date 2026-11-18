@@ -3,7 +3,9 @@
 //! the icons' size, thumbnails are asked for at the size drawn, and a box
 //! selects the cells it covers.
 
-use gpui::{Bounds, Modifiers, MouseButton, Pixels, ScrollDelta, ScrollWheelEvent, TouchPhase};
+use gpui::{
+    Bounds, Modifiers, MouseButton, Pixels, Point, ScrollDelta, ScrollWheelEvent, TouchPhase,
+};
 use nova_files_api::IconSize;
 
 use super::*;
@@ -73,6 +75,22 @@ fn ctrl_scroll(cx: &mut VisualTestContext, lines: f32) {
 
 fn icon_size(view: &Entity<MainWindow>, cx: &VisualTestContext) -> IconSize {
     view.read_with(cx, |view, _| view.folder_view().icons)
+}
+
+/// Drags a box from `from` to `to`.
+fn drag_box(cx: &mut VisualTestContext, from: Point<Pixels>, to: Point<Pixels>) {
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+}
+
+/// The names of the first two cells of the first two lines, `across` to
+/// a line.
+fn first_two_lines_two_across(across: u32) -> Vec<String> {
+    [0, 1, across, across + 1]
+        .map(|index| index.to_string())
+        .to_vec()
 }
 
 #[gpui::test]
@@ -171,12 +189,8 @@ fn a_box_selects_the_cells_it_covers(cx: &mut TestAppContext) {
     let inset = point(px(3.0), px(3.0));
     let from = cell(cx, 0).origin + inset;
     let to = cell(cx, across + 1).bottom_right() - inset;
-    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
-    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
-    cx.run_until_parked();
-    let names = |indices: [u32; 4]| indices.map(|index| index.to_string()).to_vec();
-    assert_eq!(selected(&view, cx), names([0, 1, across, across + 1]));
+    drag_box(cx, from, to);
+    assert_eq!(selected(&view, cx), first_two_lines_two_across(across));
     assert_eq!(
         cursor(&view, cx),
         Some(usize::try_from(across + 1).unwrap())
@@ -260,12 +274,8 @@ fn a_box_dragged_down_and_left_selects_the_cells_between(cx: &mut TestAppContext
     let inset = point(px(3.0), px(3.0));
     let from = point(cell(cx, 1).right(), cell(cx, 1).top()) + point(-inset.x, inset.y);
     let to = point(cell(cx, across).left(), cell(cx, across).bottom()) + point(inset.x, -inset.y);
-    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
-    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
-    cx.run_until_parked();
-    let names = |indices: [u32; 4]| indices.map(|index| index.to_string()).to_vec();
-    assert_eq!(selected(&view, cx), names([0, 1, across, across + 1]));
+    drag_box(cx, from, to);
+    assert_eq!(selected(&view, cx), first_two_lines_two_across(across));
     assert_eq!(cursor(&view, cx), Some(usize::try_from(across).unwrap()));
 }
 
