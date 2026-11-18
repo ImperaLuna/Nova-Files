@@ -94,3 +94,14 @@ fn the_strip_draws_only_what_fits(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("entry-399").is_some());
     assert_eq!(cx.debug_bounds("entry-0"), None);
 }
+
+#[gpui::test]
+fn the_stage_asks_for_less_room_than_the_lifted_look(cx: &mut TestAppContext) {
+    let (view, cx, _) = gallery(cx, 10);
+    let fit = |cx: &mut VisualTestContext| view.read_with(cx, |view, _| view.preview_fit());
+    let docked = fit(cx).unwrap();
+    cx.simulate_keystrokes("space");
+    cx.run_until_parked();
+    let lifted = fit(cx).unwrap();
+    assert!(docked.width < lifted.width && docked.height < lifted.height);
+}

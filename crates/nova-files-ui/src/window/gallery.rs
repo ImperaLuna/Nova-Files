@@ -49,11 +49,6 @@ impl MainWindow {
         self.pick.is_none() && self.folder_view().mode == ViewMode::Gallery
     }
 
-    /// The window's scale factor when it last drew.
-    pub(crate) const fn scale_factor(&self) -> f32 {
-        self.scale_factor
-    }
-
     /// Where Gallery drew last.
     pub(crate) const fn gallery_bounds(&self) -> &GalleryBounds {
         &self.sizing.gallery
@@ -62,16 +57,7 @@ impl MainWindow {
     /// The room the stage gives what it shows: Gallery less its strip,
     /// the island's room under it, and the caption under the stage.
     pub(crate) fn stage_room(&self) -> Size<Pixels> {
-        let all = self.sizing.gallery.get().size;
-        let below = self.grid().cell.height
-            + sizes::STRIP_PAD
-            + sizes::STRIP_PAD
-            + sizes::ISLAND_CLEARANCE
-            + sizes::STAGE_CAPTION;
-        size(
-            (all.width - sizes::STAGE_PAD - sizes::STAGE_PAD).max(Pixels::ZERO),
-            (all.height - below - sizes::STAGE_PAD - sizes::STAGE_PAD).max(Pixels::ZERO),
-        )
+        stage_room(self.sizing.gallery.get().size, self.grid().cell.height)
     }
 
     /// The entries the strip shows, out of `len`: as many as fit across,
@@ -117,6 +103,17 @@ impl MainWindow {
     }
 }
 
+/// The room the stage gives what it shows in a Gallery of size `all`
+/// whose strip's cells are `cell` high.
+fn stage_room(all: Size<Pixels>, cell: Pixels) -> Size<Pixels> {
+    let below =
+        cell + sizes::STRIP_PAD + sizes::STRIP_PAD + sizes::ISLAND_CLEARANCE + sizes::STAGE_CAPTION;
+    size(
+        (all.width - sizes::STAGE_PAD - sizes::STAGE_PAD).max(Pixels::ZERO),
+        (all.height - below - sizes::STAGE_PAD - sizes::STAGE_PAD).max(Pixels::ZERO),
+    )
+}
+
 /// The `len` entries a strip `width` wide shows, cells laid out as
 /// `grid`, with `cursor` in the middle unless the strip is at an end.
 fn strip(width: Pixels, grid: Grid, cursor: usize, len: usize) -> Range<usize> {
@@ -137,6 +134,29 @@ mod tests {
     use nova_files_api::IconSize;
 
     use super::*;
+
+    #[test]
+    fn the_stage_has_gallery_less_its_strip_caption_and_padding() {
+        // 16 px of padding round the stage, a 40 px caption, and a strip of
+        // 80 px cells with 8 px above and below and 68 px for the island.
+        assert_eq!(
+            stage_room(size(px(1000.0), px(800.0)), px(80.0)),
+            size(px(968.0), px(564.0))
+        );
+        assert_eq!(
+            stage_room(size(px(20.0), px(100.0)), px(80.0)),
+            size(Pixels::ZERO, Pixels::ZERO)
+        );
+    }
+
+    #[test]
+    fn bounds_say_when_they_change() {
+        let bounds = GalleryBounds::default();
+        let drawn = Bounds::new(gpui::point(px(1.0), px(2.0)), size(px(3.0), px(4.0)));
+        assert!(bounds.drawn(drawn));
+        assert!(!bounds.drawn(drawn));
+        assert_eq!(bounds.get(), drawn);
+    }
 
     #[test]
     fn the_strip_keeps_the_cursor_in_the_middle_until_an_end() {

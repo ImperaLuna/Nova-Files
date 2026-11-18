@@ -47,7 +47,7 @@ impl MainWindow {
     /// The cursor's entry, large, with its name and what it is under it.
     fn stage(&self, colors: &Colors) -> impl IntoElement {
         let room = self.stage_room();
-        let scale_factor = self.scale_factor();
+        let scale_factor = self.scale_factor;
         let shown = self.quick_look().and_then(|open| {
             let listing = self.listing.as_ref()?;
             let entry = listing.entries.get(usize::try_from(open.entry.0).ok()?)?;

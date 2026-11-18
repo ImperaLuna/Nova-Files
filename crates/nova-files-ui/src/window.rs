@@ -165,7 +165,7 @@ pub struct MainWindow {
     /// Thumbnails of the rows in `rows_wanted`, by row.
     thumbnails: ShownThumbnails,
     /// The window's scale factor when it last drew, for sizing thumbnails.
-    scale_factor: f32,
+    pub(crate) scale_factor: f32,
     /// The rows the core was last told about: on screen and one screen
     /// either side.
     rows_wanted: Range<usize>,
