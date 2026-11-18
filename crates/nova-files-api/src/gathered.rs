@@ -78,12 +78,15 @@ pub enum GatheredChange {
     /// `at`, or last when `at` is `None` or past the end. Without `holds`
     /// the core guesses: a Projects folder with a project's files at its
     /// top (`.git`, `Cargo.toml` and the like) is one project, anything
-    /// else holds many. A folder already gathered stays as it is.
+    /// else holds many. `name` is the name it goes by, as an Undo of its
+    /// removal gives back. A folder already gathered stays as it is, and
+    /// a file is never gathered.
     Add {
         place: Gathering,
         path: PathBuf,
         holds: Option<Holds>,
         at: Option<u32>,
+        name: Option<String>,
     },
     /// Stop gathering from the folder at `path`.
     Remove { place: Gathering, path: PathBuf },

@@ -2,7 +2,8 @@
 //! folder moves files on that folder's drive and copies files from
 //! another (the core looks at the drives, see `Command::DropFiles`); Ctrl
 //! held always copies, Shift held always moves. A drop on the trash sends
-//! the files there.
+//! the files there. Folders dropped on Games or Projects are added to
+//! it and stay where they are.
 //!
 //! While files are dragged over a target, the chip under the pointer says
 //! what dropping them there does and where: "Move to Documents", "Copy to
@@ -17,12 +18,14 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use gpui::Modifiers;
-use nova_files_api::{DropKind, Operation};
+use nova_files_api::{DropKind, Gathering, Operation};
 
 /// What the chip says before a target's name for a drop that moves.
 pub const MOVE_TO: &str = "Move to";
 /// What the chip says before a target's name for a drop that copies.
 pub const COPY_TO: &str = "Copy to";
+/// What the chip says before a place's name for a drop that adds to it.
+pub const ADD_TO: &str = "Add to";
 
 /// Where files can be dropped.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +34,9 @@ pub enum DropAt {
     Folder(PathBuf),
     /// Into the trash.
     Trash,
+    /// Gathered by Games or Projects: the folders are added to it, and
+    /// stay where they are.
+    Gathered(Gathering),
 }
 
 /// What a drop asks the core for.
@@ -38,6 +44,11 @@ pub enum DropAt {
 pub enum Dropped {
     /// A job of its own: a copy or move the keys held chose, or the trash.
     Job(Operation),
+    /// Folders for Games or Projects to gather.
+    Gather {
+        place: Gathering,
+        folders: Vec<PathBuf>,
+    },
     /// A copy or move the core picks by drive.
     ByDrive {
         sources: Vec<PathBuf>,
@@ -84,7 +95,7 @@ pub fn allowed(at: &DropAt, sources: &Sources, trash: &Path) -> bool {
         return false;
     }
     match at {
-        DropAt::Trash => true,
+        DropAt::Trash | DropAt::Gathered(_) => true,
         DropAt::Folder(into) => {
             !into.starts_with(trash)
                 && !sources.folders.contains(into)
@@ -97,6 +108,12 @@ pub fn allowed(at: &DropAt, sources: &Sources, trash: &Path) -> bool {
 pub fn dropped(at: DropAt, sources: Vec<PathBuf>, modifiers: Modifiers) -> Dropped {
     let into = match at {
         DropAt::Trash => return Dropped::Job(Operation::Trash { paths: sources }),
+        DropAt::Gathered(place) => {
+            return Dropped::Gather {
+                place,
+                folders: sources,
+            };
+        }
         DropAt::Folder(into) => into,
     };
     if modifiers.control {
@@ -119,6 +136,7 @@ pub fn label(
     modifiers: Modifiers,
 ) -> Option<String> {
     let kind = match at {
+        DropAt::Gathered(_) => return Some(format!("{ADD_TO} {name}")),
         DropAt::Trash => DropKind::Move,
         DropAt::Folder(_) if modifiers.control => DropKind::Copy,
         DropAt::Folder(_) if modifiers.shift => DropKind::Move,
@@ -260,6 +278,29 @@ mod tests {
         assert_eq!(
             label(&DropAt::Trash, "Trash", None, ctrl).as_deref(),
             Some("Move to Trash")
+        );
+    }
+
+    #[test]
+    fn folders_dropped_on_a_place_are_added_whatever_the_keys() {
+        let at = DropAt::Gathered(Gathering::Games);
+        let trash = Path::new(TRASH);
+        assert!(allowed(&at, &paths(&["/mnt/lib"]), trash));
+        assert!(!allowed(&at, &paths(&[&format!("{TRASH}/old")]), trash));
+        assert_eq!(
+            dropped(
+                at.clone(),
+                vec![PathBuf::from("/mnt/lib")],
+                Modifiers::control()
+            ),
+            Dropped::Gather {
+                place: Gathering::Games,
+                folders: vec![PathBuf::from("/mnt/lib")],
+            }
+        );
+        assert_eq!(
+            label(&at, "Games", None, Modifiers::shift()).as_deref(),
+            Some("Add to Games")
         );
     }
 }

@@ -3,7 +3,8 @@
 //! game's Library beside it, and the list follows what is made in its
 //! folders. Back leaves it as it leaves a folder; a tab keeps it; a
 //! search from it comes back to it. There is no folder there to make
-//! files in.
+//! files in. Its chip lists the folders it gathers from, and taking one
+//! out can be undone; a folder dropped on its row in Places is added.
 
 use gpui::point;
 use nova_files_api::Gathering;
@@ -185,7 +186,7 @@ async fn each_game_shows_the_library_that_brought_it(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-async fn a_place_offers_no_new_folder(cx: &mut TestAppContext) {
+async fn a_place_offers_adding_a_folder_not_making_one(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("gathered-no-new");
     let (view, cx) = open_on(cx, tree.path()).await;
@@ -212,7 +213,7 @@ async fn a_place_offers_no_new_folder(cx: &mut TestAppContext) {
             .iter()
             .map(|item| item.label.to_string())
             .collect();
-        assert_eq!(labels, ["Select all"]);
+        assert_eq!(labels, ["Add folder…", "Select all"]);
     });
 }
 
@@ -280,4 +281,92 @@ async fn a_fresh_read_keeps_the_folder_selected_not_its_namesake(cx: &mut TestAp
 
     wait_for_place(&view, cx, Gathering::Projects, &["app", "app", "beta"]).await;
     view.read_with(cx, |view, _| assert_eq!(view.selected_paths(), picked));
+
+async fn the_chip_lists_its_folders_and_undo_puts_one_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    cx.update(nova_files_ui::bind_window_keys);
+    let tree = TempFolder::tree("gathered-chip");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    click(cx, "place-projects");
+    wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.gathered_count(Gathering::Projects) == "1 folder"
+    })
+    .await;
+
+    click(cx, "gathered-folders");
+    view.read_with(cx, |view, _| {
+        let menu = view.menu().unwrap();
+        let labels: Vec<&str> = menu.items.iter().map(|item| item.label.as_ref()).collect();
+        assert_eq!(labels, ["~/Projects", "Add folder…"]);
+        assert_eq!(menu.items[0].detail, Some("Projects inside".into()));
+    });
+    click(cx, "menu-0");
+
+    wait_for_place(&view, cx, Gathering::Projects, &[]).await;
+    view.read_with(cx, |view, _| {
+        assert_eq!(
+            view.note().map(|note| note.label.to_string()).as_deref(),
+            Some("Removed ~/Projects from Projects")
+        );
+    });
+    cx.simulate_keystrokes("ctrl-z");
+    wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
+}
+
+#[gpui::test]
+async fn a_folder_dropped_on_games_is_added_to_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    cx.update(nova_files_ui::bind_window_keys);
+    let tree = TempFolder::tree("gathered-drop");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+    let (start, end) = (
+        cx.debug_bounds("name-0").unwrap().center(),
+        cx.debug_bounds("place-games").unwrap().center(),
+    );
+    cx.simulate_mouse_down(start, gpui::MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(end, Some(gpui::MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    cx.simulate_mouse_up(end, gpui::MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.note()
+            .is_some_and(|note| note.label == "Added Projects to Games")
+    })
+    .await;
+    click(cx, "place-games");
+    wait_for_place(&view, cx, Gathering::Games, &["nova"]).await;
+
+    cx.simulate_keystrokes("ctrl-z");
+    wait_for_place(&view, cx, Gathering::Games, &[]).await;
+}
+
+#[gpui::test]
+async fn a_file_dropped_on_games_is_not_added(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("gathered-drop-file");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+    assert_eq!(
+        view.read_with(cx, |view, _| view.entry_names())[1],
+        "notes.txt"
+    );
+    let (start, end) = (
+        cx.debug_bounds("name-1").unwrap().center(),
+        cx.debug_bounds("place-games").unwrap().center(),
+    );
+    cx.simulate_mouse_down(start, gpui::MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(end, Some(gpui::MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    cx.simulate_mouse_up(end, gpui::MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+
+    click(cx, "place-games");
+    wait_for_place(&view, cx, Gathering::Games, &[]).await;
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.gathered_count(Gathering::Games), "0 folders");
+        assert!(view.note().is_none());
+    });
 }

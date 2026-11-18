@@ -150,7 +150,13 @@ impl MainWindow {
                 select_all.into_iter().collect(),
             ];
         }
-        if self.showing_found() || self.gathered_shown().is_some() {
+        if let Some(place) = self.gathered_shown() {
+            return vec![
+                vec![super::gathering::add_item(place)],
+                select_all.into_iter().collect(),
+            ];
+        }
+        if self.showing_found() {
             return vec![select_all.into_iter().collect()];
         }
         let paste = Self::clipboard_has_files(cx).then(|| MenuItem::run(Icon::Paste, &PASTE));

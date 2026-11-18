@@ -55,6 +55,7 @@ mod dragging;
 mod drives;
 mod events;
 mod gathered;
+mod gathering;
 mod hidden;
 mod hover_open;
 mod jobs;
