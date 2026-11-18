@@ -153,7 +153,8 @@ pub(crate) fn open_picker(connector: &Connector, request: Box<PickRequest>, cx: 
     open_window(connector, Opening::Pick(request), &recover_gpu, cx);
 }
 
-/// Opens a main window on its folder (or the Start page), or a picker
+/// Opens a main window on its folder (or the Start page), with the files
+/// it was asked to show selected, or a picker
 /// window titled as the asking app wants and dialog-sized, over the app's
 /// window when it names one, else centred on the main display.
 /// When a main window fails with no window open, `recover_gpu` gets the
@@ -190,7 +191,9 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
     let opened = cx.open_window(options, move |window, cx| {
         cx.new(|cx| {
             let mut view = MainWindow::at(&connector, &location, home_folder(), cx);
-            view.select_on_arrival(select);
+            if let Some(folder) = location.folder() {
+                view.select_on_arrival(folder.to_path_buf(), select);
+            }
             if let Some(request) = pick {
                 view.set_pick(request, window, cx);
             }

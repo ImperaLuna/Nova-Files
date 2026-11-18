@@ -90,7 +90,7 @@ fn window_showing<'a>(
     let (start, home) = (folder.to_owned(), home.to_owned());
     cx.add_window_view(|_, cx| {
         let mut view = MainWindow::with_home(&core.connector, &start, home, cx);
-        view.select_on_arrival(names);
+        view.select_on_arrival(start.clone(), names);
         view
     })
 }

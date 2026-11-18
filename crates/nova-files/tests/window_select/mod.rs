@@ -142,3 +142,15 @@ async fn a_window_opened_to_show_files_has_them_selected(cx: &mut TestAppContext
     wait_for_folder(&view, cx, tree.path()).await;
     assert_eq!(selected(&view, cx), ["Projects"]);
 }
+
+#[gpui::test]
+async fn files_to_show_select_nothing_in_the_folder_fallen_back_to(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select");
+    let gone = tree.path().join("gone");
+    let (view, cx) = window_showing(cx, &gone, tree.path(), vec!["notes.txt".into()]);
+
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+    assert_eq!(selected(&view, cx), Vec::<String>::new());
+}

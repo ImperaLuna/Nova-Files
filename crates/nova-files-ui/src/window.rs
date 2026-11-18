@@ -9,7 +9,8 @@
 //! drop under the pointer in `aiming`, opening rows held over in
 //! `hover_open`), renaming and
 //! New folder in `renaming`, the jobs they start in `jobs`, the tabs in
-//! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, and the sheet's right-click
+//! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, the files an app asked to show
+//! selected in `showing`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
@@ -243,7 +244,7 @@ pub struct MainWindow {
     /// What a rename or a new folder waits for (see `renaming`).
     waiting: Waiting,
     /// Names to select in the first listing (see `showing`).
-    showing: Vec<std::ffi::OsString>,
+    showing: Option<showing::Showing>,
     /// The trash, and what the window knows of it (see `trash`).
     trash: TrashState,
     /// The tabs in the background, and which one is on screen (see
@@ -368,7 +369,7 @@ impl MainWindow {
             counted: SharedString::default(),
             renaming: None,
             waiting: Waiting::Nothing,
-            showing: Vec::new(),
+            showing: None,
             trash,
             tabs: Tabs::default(),
             drop_asks: aiming::Asks::default(),
