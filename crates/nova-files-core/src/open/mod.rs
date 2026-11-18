@@ -11,7 +11,7 @@
 //!
 //! Open With (`with`) lists the other apps for some files (`apps`), opens
 //! them in one, and makes one the user's default (`associate`). `folders`
-//! says whether Nova Files is the default for folders.
+//! says whether Nova Files is the default for folders, and makes it so.
 
 mod apps;
 mod associate;
@@ -37,7 +37,7 @@ pub use nova_files_api::NotOpened;
 
 use crate::mime::MimeTypes;
 
-pub use folders::opens_folders;
+pub use folders::{NotDefault, make_default_for_folders, opens_folders};
 pub use with::Worker as OpenWithWorker;
 
 /// Present inside a Flatpak sandbox, where the host's apps can't be run.

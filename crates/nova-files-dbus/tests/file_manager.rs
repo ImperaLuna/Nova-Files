@@ -3,7 +3,8 @@
 //! each folder holding the items with them selected, and refuses URIs that
 //! aren't local files. The service takes the bus name only when it
 //! should and it is free, waits behind another file manager without
-//! replacing it, and takes it when a second start asks it to.
+//! replacing it, and takes it when a second start (or `--make-default`,
+//! which finds the running instance without starting one) asks it to.
 
 #![expect(
     clippy::unwrap_used,
@@ -224,4 +225,41 @@ fn a_second_start_has_the_running_instance_answer() {
         running.windows.recv_timeout(WAIT),
         Ok(showing("/a", &["x"]))
     );
+}
+
+#[test]
+fn finding_the_running_instance_starts_none() {
+    let bus = PrivateBus::start();
+    assert!(nova_files_dbus::find_running(&bus.bus()).unwrap().is_none());
+
+    let running = running(&bus);
+    nova_files_dbus::find_running(&bus.bus())
+        .unwrap()
+        .expect("the instance is running")
+        .serve_file_manager()
+        .unwrap();
+
+    call(&client(&bus), "ShowItems", &uris(&["/a/x"])).unwrap();
+    assert_eq!(
+        running.windows.recv_timeout(WAIT),
+        Ok(showing("/a", &["x"]))
+    );
+}
+
+#[test]
+fn finding_the_running_instance_gives_up_on_a_bus_that_never_answers() {
+    let folder = std::env::temp_dir().join(format!("nova-files-silent-{}", std::process::id()));
+    std::fs::remove_dir_all(&folder).ok();
+    std::fs::create_dir_all(&folder).unwrap();
+    let socket = folder.join("bus");
+    let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    let _held = std::thread::spawn(move || listener.accept().map(|(stream, _)| stream));
+    let bus = nova_files_dbus::Bus::Address(format!("unix:path={}", socket.display()));
+    let (sender, found) = mpsc::channel();
+
+    std::thread::spawn(move || sender.send(nova_files_dbus::find_running(&bus).is_err()));
+
+    let gave_up = found.recv_timeout(WAIT);
+    std::fs::remove_dir_all(&folder).ok();
+    assert_eq!(gave_up, Ok(true));
 }

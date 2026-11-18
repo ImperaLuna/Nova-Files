@@ -264,6 +264,23 @@ impl RunningInstance {
     }
 }
 
+/// The process that owns the bus name on `bus`, if one does; never starts
+/// one, and serves nothing.
+///
+/// # Errors
+/// When the bus can't be reached within [`CALL_TIMEOUT`].
+pub fn find_running(bus: &Bus) -> zbus::Result<Option<RunningInstance>> {
+    let connection = connect_within_timeout(bus.clone(), Ok)?;
+    let owned = DBusProxy::new(&connection)?.name_has_owner(APP_ID.try_into()?)?;
+    if !owned {
+        return Ok(None);
+    }
+    Ok(Some(RunningInstance {
+        connection,
+        path: object_path()?,
+    }))
+}
+
 /// Claims the bus name on `bus` and, if it was free, starts serving.
 ///
 /// `connector` reaches the core for D-Bus calls the core answers.

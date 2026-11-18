@@ -7,7 +7,10 @@
 //! window. Either way the first process claims the bus name; a later launch
 //! asks that process for a window (on its folder) and exits.
 //! `nova-files --index <folder>` only builds that folder's file index, in
-//! the user's cache folder, and exits.
+//! the user's cache folder, and exits. `nova-files --make-default` only
+//! makes Nova Files the user's default for folders, in their
+//! `mimeapps.list`, asks a running instance to answer "Show in folder"
+//! from now on, and exits.
 //!
 //! Windows come and go: GPUI ends its run when the last one closes, and the
 //! process carries on without a GPU, waiting for the next window request.
@@ -144,6 +147,17 @@ fn run() -> Result<(), Box<dyn Error>> {
         let place = nova_files_core::IndexPlace::from_env().ok_or(NO_CACHE_FOLDER)?;
         return Ok(place.build(folder)?);
     }
+    if mode == Mode::MakeDefault {
+        nova_files_core::make_default_for_folders()?;
+        let told = nova_files_dbus::find_running(&Bus::Session)
+            .and_then(|running| running.map_or(Ok(()), |running| running.serve_file_manager()));
+        if let Err(error) = told {
+            report(&format!(
+                "the running Nova Files answers \"Show in folder\" from its next start: {error}"
+            ));
+        }
+        return Ok(());
+    }
     let core = nova_files_core::spawn()?;
     // Before anything connects, so the first client to ask finds it. It
     // reads nothing until then.
@@ -185,7 +199,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 Mode::Window(Some(folder)) => running.open(folder)?,
                 Mode::Window(None) => running.activate()?,
                 Mode::FileManager => running.serve_file_manager()?,
-                Mode::Service | Mode::Index(_) => {}
+                Mode::Service | Mode::MakeDefault | Mode::Index(_) => {}
             }
             return Ok(());
         }
