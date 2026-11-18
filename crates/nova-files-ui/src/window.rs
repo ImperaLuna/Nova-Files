@@ -204,6 +204,8 @@ pub struct MainWindow {
     /// The view each folder was given, as the core last sent them (see
     /// `views`).
     folder_views: HashMap<PathBuf, FolderView>,
+    /// Views given here that the core's list doesn't hold yet.
+    pending_views: HashMap<PathBuf, FolderView>,
     /// The sidebar's folder tree under Home, and its line to the core.
     pub(crate) tree: FolderTree,
     tree_line: TreeLine,
@@ -360,6 +362,7 @@ impl MainWindow {
             home,
             places: Vec::new(),
             folder_views: HashMap::new(),
+            pending_views: HashMap::new(),
             tree_line: TreeLine::connect(connector, cx),
             pinned: Arc::from([]),
             history: History::default(),

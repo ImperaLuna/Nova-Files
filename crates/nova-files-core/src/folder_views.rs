@@ -27,16 +27,13 @@ use nova_files_api::{
 };
 
 use crate::private_file::{self, Read};
+use crate::recent::{END, MAX_PATH, fits};
 use crate::saver::Saver;
 
 /// The file, under the state folder.
 const FILE: &str = "nova-files/folder-views";
 /// The first line, naming the format and its version.
 const HEADER: &[u8] = b"nova-files folder-views 1\n";
-/// Ends each path.
-const END: u8 = 0;
-/// The longest path Linux takes, in bytes.
-const MAX_PATH: usize = 4096;
 /// The mode and size bytes before each path.
 const VIEW_BYTES: usize = 2;
 /// A file this big is not one the core wrote; it is never read.
@@ -45,13 +42,11 @@ const SAVE_THREAD: &str = "nova-files-views";
 /// The file, as the log names it.
 const WHAT: &str = "folder views";
 /// Each mode's byte in the file.
-const MODES: [(ViewMode, u8); 3] = [
-    (ViewMode::Details, b'd'),
-    (ViewMode::Icons, b'i'),
-    (ViewMode::Gallery, b'g'),
-];
-/// The first icon size's byte; the others follow it.
-const FIRST_SIZE: u8 = b'1';
+const DETAILS: u8 = b'd';
+const ICONS: u8 = b'i';
+const GALLERY: u8 = b'g';
+/// Each icon size's byte in the file, smallest first.
+const SIZES: [u8; 5] = *b"12345";
 
 /// The folders' views, as the core keeps them.
 pub struct Store {
@@ -99,7 +94,10 @@ impl Store {
         }
         let views = {
             let mut views = self.views.borrow_mut();
-            if views.first() == Some(&(folder.clone(), view)) {
+            if views
+                .iter()
+                .any(|(kept, had)| *kept == folder && *had == view)
+            {
                 return;
             }
             let mut changed: Vec<(PathBuf, FolderView)> = views
@@ -121,12 +119,6 @@ impl Store {
     }
 }
 
-/// Whether `folder` can go in the list: absolute, and short enough.
-fn fits(folder: &Path) -> bool {
-    let bytes = folder.as_os_str().as_bytes();
-    folder.is_absolute() && bytes.len() <= MAX_PATH && !bytes.contains(&END)
-}
-
 /// The file's bytes for `views`.
 fn to_bytes(views: &[(PathBuf, FolderView)]) -> Vec<u8> {
     let mut bytes = HEADER.to_vec();
@@ -139,24 +131,31 @@ fn to_bytes(views: &[(PathBuf, FolderView)]) -> Vec<u8> {
     bytes
 }
 
-fn mode_byte(mode: ViewMode) -> u8 {
-    MODES
-        .iter()
-        .find(|(each, _)| *each == mode)
-        .map_or(MODES[0].1, |(_, byte)| *byte)
+const fn mode_byte(mode: ViewMode) -> u8 {
+    match mode {
+        ViewMode::Details => DETAILS,
+        ViewMode::Icons => ICONS,
+        ViewMode::Gallery => GALLERY,
+    }
 }
 
-fn size_byte(size: IconSize) -> u8 {
-    let at = IconSize::ALL.iter().position(|each| *each == size);
-    FIRST_SIZE.saturating_add(at.and_then(|at| u8::try_from(at).ok()).unwrap_or(0))
+const fn size_byte(size: IconSize) -> u8 {
+    SIZES[size.index()]
 }
 
 /// The view a record's first two bytes name, if they name one.
 fn view_of(mode: u8, size: u8) -> Option<FolderView> {
-    let mode = MODES.iter().find(|(_, byte)| *byte == mode)?.0;
-    let at = usize::from(size.checked_sub(FIRST_SIZE)?);
-    let icons = *IconSize::ALL.get(at)?;
-    Some(FolderView { mode, icons })
+    let mode = match mode {
+        DETAILS => ViewMode::Details,
+        ICONS => ViewMode::Icons,
+        GALLERY => ViewMode::Gallery,
+        _ => return None,
+    };
+    let at = SIZES.iter().position(|byte| *byte == size)?;
+    Some(FolderView {
+        mode,
+        icons: IconSize::ALL[at],
+    })
 }
 
 /// The views `bytes` hold, or none when they aren't a list the core wrote.

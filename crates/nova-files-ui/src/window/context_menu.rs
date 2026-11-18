@@ -7,8 +7,9 @@
 //! trash an entry offers Restore; inside a trashed folder, nothing.
 //!
 //! On empty space: New folder and Paste (only with files on the
-//! clipboard), Select all (with something to select), then Show hidden
-//! files, which shows a tick while they show. In the trash: Empty Trash
+//! clipboard), Select all (with something to select), Details, Icons and
+//! Gallery (a tick on the view showing), then Show hidden files, which
+//! shows a tick while they show. In the trash: Empty Trash
 //! while any trash holds anything, and Select all. A search's files aren't a folder, so there
 //! only Select all is offered. The Start page and a picker have no menu.
 //!

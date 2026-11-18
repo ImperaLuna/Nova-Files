@@ -8,7 +8,9 @@
 //!
 //! Ctrl+1, 2 and 3 pick the view, as does the empty space's right-click
 //! menu; Ctrl+plus and minus step the icons' size while Icons shows. A
-//! change shows at once and is sent to the core to keep.
+//! change shows at once and is sent to the core to keep. It stays pending
+//! until the core's list holds it, so a list the core sent before it
+//! arrived doesn't take it back.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -39,7 +41,7 @@ impl MainWindow {
         let pictures = self
             .places
             .iter()
-            .any(|place| PICTURE_PLACES.contains(&place.kind) && place.path == folder);
+            .any(|place| PICTURE_PLACES.contains(&place.kind) && folder.starts_with(&place.path));
         let mode = if pictures {
             ViewMode::Icons
         } else {
@@ -81,6 +83,7 @@ impl MainWindow {
             return;
         };
         self.folder_views.insert(folder.clone(), view);
+        self.pending_views.insert(folder.clone(), view);
         if let Some(connection) = &self.connection {
             // A core that stopped can't keep it; the window says so
             // already (see `CoreStatus`).
@@ -91,9 +94,19 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Takes the views the core sent, in place of those known before.
+    /// Takes the views the core sent, newest first, in place of those
+    /// known before, keeping the changes it hasn't taken yet on top.
     pub(super) fn folder_views_arrived(&mut self, views: &FolderViews, cx: &mut Context<Self>) {
-        self.folder_views = views.iter().cloned().collect::<HashMap<PathBuf, _>>();
+        // Collected oldest first, so the newest view of a folder wins.
+        let mut known = views.iter().rev().cloned().collect::<HashMap<PathBuf, _>>();
+        self.pending_views
+            .retain(|folder, view| known.get(folder) != Some(view));
+        known.extend(
+            self.pending_views
+                .iter()
+                .map(|(folder, view)| (folder.clone(), *view)),
+        );
+        self.folder_views = known;
         cx.notify();
     }
 }

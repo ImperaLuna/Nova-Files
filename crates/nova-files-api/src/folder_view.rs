@@ -53,10 +53,16 @@ impl IconSize {
         self.step(-1)
     }
 
+    /// Where it stands in [`Self::ALL`].
+    #[must_use]
+    pub const fn index(self) -> usize {
+        // Declared smallest first, as `ALL` lists them.
+        self as usize
+    }
+
     fn step(self, by: isize) -> Self {
-        let at = Self::ALL.iter().position(|size| *size == self).unwrap_or(0);
         let last = Self::ALL.len() - 1;
-        Self::ALL[at.saturating_add_signed(by).min(last)]
+        Self::ALL[self.index().saturating_add_signed(by).min(last)]
     }
 }
 
@@ -83,5 +89,8 @@ mod tests {
         assert_eq!(IconSize::Smallest.smaller(), IconSize::Smallest);
         assert_eq!(IconSize::Smallest.bigger(), IconSize::Small);
         assert_eq!(IconSize::Largest.smaller(), IconSize::Large);
+        for (at, size) in IconSize::ALL.into_iter().enumerate() {
+            assert_eq!(size.index(), at);
+        }
     }
 }

@@ -1,7 +1,8 @@
 //! The folders' views against a scripted core: Ctrl+1, 2 and 3 pick a
 //! view and send it to the core to keep, Ctrl+plus and minus step the
-//! icons' size while Icons shows, the Pictures place starts in Icons, and
-//! the views the core sends win.
+//! icons' size while Icons shows, the Pictures place and its folders start
+//! in Icons, and the views the core sends win over all but the changes it
+//! hasn't taken yet.
 
 use nova_files_api::{FolderView, IconSize, ViewMode};
 
@@ -97,6 +98,13 @@ fn the_pictures_place_starts_in_icons(cx: &mut TestAppContext) {
         cx.run_until_parked();
         assert_eq!(showing(&view, cx).mode, mode, "{kind:?}");
     }
+    // A folder inside the place starts in Icons too.
+    core.send(Event::Places(vec![Place {
+        kind: PlaceKind::Pictures,
+        path: Path::new(SHOWN).parent().unwrap().to_path_buf(),
+    }]));
+    cx.run_until_parked();
+    assert_eq!(showing(&view, cx).mode, ViewMode::Icons);
 }
 
 #[gpui::test]
@@ -107,13 +115,40 @@ fn the_views_the_core_sends_win(cx: &mut TestAppContext) {
         icons: IconSize::Small,
     };
 
+    // Newest first: a folder's first view is the one it has.
     core.send(Event::FolderViews(Arc::from([
         (PathBuf::from(OTHER), icons(IconSize::Large)),
         (PathBuf::from(SHOWN), gallery),
+        (PathBuf::from(SHOWN), icons(IconSize::Small)),
     ])));
     cx.run_until_parked();
     assert_eq!(showing(&view, cx), gallery);
 
+    core.send(Event::FolderViews(Arc::from([])));
+    cx.run_until_parked();
+    assert_eq!(showing(&view, cx), FolderView::default());
+}
+
+#[gpui::test]
+fn a_change_the_core_hasnt_taken_yet_stays(cx: &mut TestAppContext) {
+    let (view, cx, core) = shown(cx);
+    let gallery = FolderView {
+        mode: ViewMode::Gallery,
+        icons: IconSize::Medium,
+    };
+
+    cx.simulate_keystrokes("ctrl-3");
+    // A list the core sent before the change reached it.
+    core.send(Event::FolderViews(Arc::from([])));
+    cx.run_until_parked();
+    assert_eq!(showing(&view, cx), gallery);
+
+    // Once the core's list holds it, the core's lists win again.
+    core.send(Event::FolderViews(Arc::from([(
+        PathBuf::from(SHOWN),
+        gallery,
+    )])));
+    cx.run_until_parked();
     core.send(Event::FolderViews(Arc::from([])));
     cx.run_until_parked();
     assert_eq!(showing(&view, cx), FolderView::default());

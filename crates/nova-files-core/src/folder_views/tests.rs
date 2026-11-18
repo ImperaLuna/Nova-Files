@@ -148,19 +148,28 @@ fn listeners_hear_the_views_now_and_after_each_change() {
     );
 }
 
+/// A state folder of its own, removed when the test ends, pass or fail.
+struct TempState(PathBuf);
+
+impl Drop for TempState {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).ok();
+    }
+}
+
 #[test]
 fn views_set_are_there_after_a_restart() {
-    let state = std::env::temp_dir().join(format!("nova-files-views-{}", std::process::id()));
-    std::fs::create_dir_all(state.join("nova-files")).unwrap();
-    let store = Store::open(Some(&state));
+    let state =
+        TempState(std::env::temp_dir().join(format!("nova-files-views-{}", std::process::id())));
+    std::fs::create_dir_all(state.0.join("nova-files")).unwrap();
+    let store = Store::open(Some(&state.0));
     store.set(PathBuf::from("/a"), GALLERY);
     let wait = std::time::Instant::now();
-    while folders(&Store::open(Some(&state))).is_empty() {
+    while folders(&Store::open(Some(&state.0))).is_empty() {
         assert!(wait.elapsed() < WAIT, "never saved");
         std::thread::yield_now();
     }
 
-    let kept = folders(&Store::open(Some(&state)));
-    std::fs::remove_dir_all(&state).ok();
+    let kept = folders(&Store::open(Some(&state.0)));
     assert_eq!(kept, [("/a".to_owned(), GALLERY)]);
 }
