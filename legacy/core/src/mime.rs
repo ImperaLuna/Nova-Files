@@ -254,6 +254,16 @@ fn icon_pairs(path: &Path) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
+impl nova_files_disk::ports::Mimes for MimeTypes {
+    fn ancestry(&self, mime: &str) -> Vec<String> {
+        Self::ancestry(self, mime)
+    }
+
+    fn name(&self, mime: &str) -> Option<String> {
+        Self::name(self, mime)
+    }
+}
+
 pub fn data_dirs(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let set = |name: &str| var(name).filter(|value| !value.is_empty());
     let home = set(DATA_HOME_VAR)

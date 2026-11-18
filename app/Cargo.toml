@@ -36,6 +36,7 @@ nova-files-ui.workspace = true
 
 [dev-dependencies]
 nova-files-open-api.workspace = true
+nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 nova-files-trash-api.workspace = true
 gpui = { workspace = true, features = ["test-support"] }

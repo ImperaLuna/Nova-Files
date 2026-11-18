@@ -18,7 +18,6 @@ use crate::preview::{Fit, Preview, PreviewId};
 use crate::properties::{Properties, PropertiesId};
 use crate::recent::{RecentFolder, RecentId};
 use crate::search::{Hit, SearchFailed, SearchId};
-use crate::settings::{SettingChange, Settings};
 use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::theme::{DesktopLook, Theme};
 use crate::thumbnail_size::ThumbnailSize;
@@ -45,7 +44,7 @@ pub enum Command {
     /// `id`. A newer `ListFolder` from the same client cancels this one,
     /// which then may never answer. An order by modified time or size reads
     /// every entry's details before the listing goes out. Hidden entries
-    /// are listed only while [`crate::Settings::hidden_files`] shows them.
+    /// are listed only while the [`crate::HiddenFiles`] setting shows them.
     ListFolder {
         id: ListingId,
         path: PathBuf,
@@ -147,14 +146,6 @@ pub enum Command {
     /// core never reads them; the UI owns what they say. Bytes over the
     /// core's cap (64 KiB) are dropped.
     SaveWindowState(Vec<u8>),
-    /// Ask for the settings; the answer is [`Event::Settings`], and from
-    /// then on the client gets [`Event::Settings`] again each time one
-    /// changes. Clients that never ask never get them.
-    Settings,
-    /// Change one setting and save it. Every client that asked for the
-    /// settings, this one included, then gets [`Event::Settings`]; nothing
-    /// is sent when the value was already set.
-    ChangeSetting(SettingChange),
     /// Ask for the theme; the answer is [`Event::Theme`], and from then on
     /// the client gets [`Event::Theme`] again each time it changes. Clients
     /// that never ask never get it.
@@ -361,10 +352,6 @@ pub enum Event {
     /// Every folder given a view, newest first, answering
     /// [`Command::FolderViews`] and after each change.
     FolderViews(FolderViews),
-    /// The settings, answering [`Command::Settings`], and sent again to
-    /// each client that asked whenever one changes: from a client, or from
-    /// the settings file.
-    Settings(Arc<Settings>),
     /// The theme, answering [`Command::Theme`], and sent again to each
     /// client that asked whenever it changes: from the theme file, or the
     /// appearance setting.

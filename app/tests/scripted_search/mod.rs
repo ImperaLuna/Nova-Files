@@ -515,7 +515,7 @@ fn hidden_files_shown_mid_search_leave_the_search_alone(cx: &mut TestAppContext)
     found_reports(cx, &mut core, "rep");
     for hidden in [HiddenFiles::Left, HiddenFiles::Shown] {
         let settings = Settings::default().with(SettingChange::HiddenFiles(hidden));
-        core.send(Event::Settings(Arc::new(settings)));
+        core.send(settings_api::Event::Settings(Arc::new(settings)));
         cx.run_until_parked();
     }
     assert!(core.next_listing().is_none());

@@ -4,17 +4,15 @@
 //! A client (a window, the D-Bus service) gets a [`Connection`] from a
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
 //! through the [`EventSink`] it handed over. A client that asks for the
-//! [`Settings`], the [`Theme`], the [`DriveList`] or the places gets them
+//! [`Theme`], the [`DriveList`] or the places gets them
 //! again whenever they change. The core reads the other end of the channel
 //! as [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
-//! operations run as jobs (see [`Operation`]). A [`Preview`] is
-//! what a quick look shows of a file or folder. Files cut or
-//! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
-//! a paste is a job. A [`Size`] is what a scan of files and folders
-//! counted. A [`DiskSpace`] is how full a drive is. A [`RecentFolder`] is
-//! one a person opened lately, for the Start page. [`Gathered`] folders
-//! make up the Games and Projects places. A [`FolderView`] is how a
-//! folder is shown. A [`FileIcon`] is how an
+//! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
+//! quick look shows of a file or folder. A [`Size`] is what a scan of files
+//! and folders counted. A [`DiskSpace`] is how full a drive is. A
+//! [`RecentFolder`] is one a person opened lately, for the Start page.
+//! [`Gathered`] folders make up the Games and Projects places. A
+//! [`FolderView`] is how a folder is shown. A [`FileIcon`] is how an
 //! entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
 //! A [`WindowRequest`] is a window another program asks for.
 
@@ -22,7 +20,6 @@
 
 mod access;
 mod bookmark;
-mod clipboard;
 mod disk_space;
 mod drive;
 mod file_icon;
@@ -30,13 +27,13 @@ mod file_type;
 mod folder;
 mod folder_view;
 mod gathered;
+mod hidden_files;
 mod job;
 mod message;
 mod preview;
 mod properties;
 mod recent;
 mod search;
-mod settings;
 mod size;
 mod theme;
 mod thumbnail_size;
@@ -45,10 +42,6 @@ mod window;
 
 pub use access::{AccessChange, MODE_BITS, ModeChange, Reach};
 pub use bookmark::{Bookmark, BookmarkChange};
-pub use clipboard::{
-    ClipboardAction, FileClipboard, GNOME_COPIED_FILES, KDE_CUT_SELECTION, Offer, PLAIN_TEXT,
-    PLAIN_TEXT_UTF8, URI_LIST,
-};
 pub use disk_space::{DiskSpace, MAX_DISK_SPACE_PATHS, PathSpace};
 pub use drive::{
     Drive, DriveAction, DriveFailure, DriveId, DriveList, DriveOffer, DriveService, Volume,
@@ -62,6 +55,7 @@ pub use folder::{
 };
 pub use folder_view::{FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode};
 pub use gathered::{Gathered, GatheredChange, GatheredFolder, Gathering, Holds};
+pub use hidden_files::HiddenFiles;
 pub use job::{
     Answer, Conflict, ConflictKind, DropAskId, DropKind, ExtractTo, Failure, JobId, JobTag,
     Operation, Outcome, Packing, Progress, Scope, Tally,
@@ -78,7 +72,6 @@ pub use preview::{
 pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use recent::{MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
-pub use settings::{Appearance, HiddenFiles, SettingChange, Settings, Thumbnails};
 pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 pub use thumbnail_size::ThumbnailSize;

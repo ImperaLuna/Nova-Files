@@ -53,9 +53,10 @@ use gpui::{
 };
 use nova_files_api::{
     Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
-    Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
+    Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId,
 };
 use nova_files_open_api as open_api;
+use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
 use nova_files_trash_api as trash_api;
 
@@ -202,11 +203,10 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 6] = [
+    const FIRST_ASKS: [Command; 5] = [
         Command::Ping,
         Command::Places,
         Command::Drives,
-        Command::Settings,
         Command::FolderViews,
         Command::Theme,
     ];
@@ -330,6 +330,12 @@ impl MainWindow {
             Ok(event) => return self.open_event(event, cx),
             Err(envelope) => envelope,
         };
+        let envelope = match envelope.open::<settings_api::Event>() {
+            Ok(settings_api::Event::Settings(settings)) => {
+                return self.settings_arrived(settings, cx);
+            }
+            Err(envelope) => envelope,
+        };
         match envelope.open::<trash_api::Event>() {
             Ok(trash_api::Event::Listed(items)) => self.trash_listed(items, cx),
             Err(envelope) => {
@@ -414,6 +420,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             for command in MainWindow::FIRST_ASKS {
                 connection.send(command)?;
             }
+            connection.send(settings_api::Command::Watch)?;
             connection.send(trash_api::Command::List)?;
             Ok(connection)
         })

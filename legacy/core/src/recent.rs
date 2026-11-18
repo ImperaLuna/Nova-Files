@@ -15,11 +15,10 @@ use crate::list;
 use crate::private_file::{self, Read};
 use crate::saver::Saver;
 use crate::timed;
+use nova_files_disk::stored_path::{END, MAX_PATH, fits};
 
 const FILE: &str = "nova-files/recent-folders";
 const HEADER: &[u8] = b"nova-files recent-folders 1\n";
-pub const END: u8 = 0;
-pub const MAX_PATH: usize = 4096;
 const MAX_BYTES: usize = HEADER.len() + MAX_RECENT_FOLDERS * (MAX_PATH + 1);
 const SAVE_THREAD: &str = "nova-files-recent";
 const READ_THREAD: &str = "nova-files-recent-read";
@@ -88,11 +87,6 @@ impl Store {
             events.deliver(Event::RecentFolders { id, folders }).ok();
         }
     }
-}
-
-pub fn fits(folder: &Path) -> bool {
-    let bytes = folder.as_os_str().as_bytes();
-    folder.is_absolute() && bytes.len() <= MAX_PATH && !bytes.contains(&END)
 }
 
 fn look(folder: &Path) -> Option<RecentFolder> {
