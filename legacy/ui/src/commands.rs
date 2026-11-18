@@ -321,6 +321,11 @@ pub fn bind_keys(cx: &mut App) {
             .iter()
             .flat_map(|spec| spec.keys.iter().map(|keys| spec.binding(keys))),
     );
+    let from_parts = cx
+        .try_global::<nova_files_shell::Parts>()
+        .map(nova_files_shell::Parts::bindings)
+        .unwrap_or_default();
+    cx.bind_keys(from_parts);
 }
 
 #[cfg(test)]

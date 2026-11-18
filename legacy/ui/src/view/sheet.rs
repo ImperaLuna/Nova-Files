@@ -12,6 +12,8 @@ use nova_files_api::{Entry, EntryId, Gathering, Listing, ListingId, Order, SortK
 use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon};
 
+use nova_files_shell::ShownColumn;
+
 use crate::assets::Icon;
 use crate::grid::Grid;
 use crate::marks;
@@ -41,6 +43,11 @@ impl MainWindow {
             .map(|sheet| {
                 if self.is_on_start() {
                     sheet.px_0().child(self.start_page(cx))
+                } else if let Some(page) = self.page_shown() {
+                    sheet
+                        .px_0()
+                        .children(self.parts.page(page))
+                        .child(self.island(cx))
                 } else if let Some(page) = self.properties_page() {
                     sheet
                         .px_0()
@@ -129,6 +136,7 @@ impl MainWindow {
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
                 let query = this.searching().then(|| this.query(cx));
+                let part_column = this.parts.column(&this.scene(), cx);
                 let selected = |index: usize| {
                     listing
                         .entries
@@ -149,7 +157,7 @@ impl MainWindow {
                             .as_deref()
                             .map(|query| marks::matched(&name, query))
                             .unwrap_or_default();
-                        let folder = this.folder_cell(listing, entry, index, cx);
+                        let folder = this.folder_cell(listing, entry, index, part_column.as_ref(), cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let folder_at = folder_aim(listing, entry, &name);
@@ -343,8 +351,13 @@ impl MainWindow {
         listing: &Listing,
         entry: &Entry,
         index: usize,
+        part_column: Option<&ShownColumn>,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
+        if let Some(column) = part_column {
+            let text = column.cell(entry, cx).unwrap_or_default();
+            return Some(detail(text.to_string(), &Colors::of(cx)).into_any_element());
+        }
         if self.trash_open() {
             let was_in = self.was_in(index).unwrap_or_default();
             let colors = Colors::of(cx);
@@ -363,7 +376,15 @@ impl MainWindow {
 
     fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let order = (!self.searching()).then(|| self.shown_order());
+        let part = self.parts.column(&self.scene(), cx).map(|column| {
+            let selector = column.selector;
+            div()
+                .debug_selector(move || selector.to_owned())
+                .child(column.head)
+                .into_any_element()
+        });
         let folder = match self.gathered_shown() {
+            _ if part.is_some() => part,
             _ if self.trash_open() => Some(was_in_head()),
             Some(Gathering::Games) => Some(library_head()),
             Some(Gathering::Projects) => Some(folder_head()),

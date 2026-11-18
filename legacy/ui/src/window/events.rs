@@ -40,7 +40,9 @@ impl MainWindow {
         }
         self.gathered.shown = match &arrived {
             Location::Gathered(place) => Some(*place),
-            Location::Start | Location::Folder(_) | Location::Properties(_) => None,
+            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
+                None
+            }
         };
         self.history.arrived(&arrived);
         let reordered = same_folder && self.shown_order != self.asked_order;
@@ -69,7 +71,7 @@ impl MainWindow {
         }
         cx.emit(match arrived {
             Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
-            Location::Start | Location::Folder(_) | Location::Properties(_) => {
+            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
                 WindowEvent::Opened(listing_path)
             }
         });

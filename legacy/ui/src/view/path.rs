@@ -11,6 +11,8 @@ use super::bar::capsule;
 use super::drop::inside_edge;
 use super::place_icon;
 use super::row::icon;
+use nova_files_shell::{Look, MenuAt};
+
 use crate::assets::Icon;
 use crate::commands::EmptyTrash;
 use crate::crumbs::{self, Crumb, Shown};
@@ -99,6 +101,13 @@ impl MainWindow {
             .child(fill)
             .children(self.scope_chip(colors, cx))
             .when(empties, |bar| bar.child(empty_trash_chip(colors)))
+            .children(
+                self.parts
+                    .menu(MenuAt::PathBarEnd, &self.scene(), cx)
+                    .into_iter()
+                    .flatten()
+                    .map(|item| part_chip(item, colors)),
+            )
     }
 
     fn crumbs(&self) -> Vec<Crumb> {
@@ -287,6 +296,33 @@ fn chevron(colors: &Colors) -> Div {
         .w(size::SEPARATOR_WIDTH)
         .h(size::SEPARATOR_HEIGHT)
         .child(icon(Icon::Chevron, size::SEPARATOR_ICON, colors.text_faint))
+}
+
+fn part_chip(item: nova_files_shell::MenuItem, colors: &Colors) -> impl IntoElement {
+    let selector = item.selector();
+    let action = item.run.action();
+    chip(selector, colors)
+        .when(item.look == Look::Danger, |chip| chip.text_color(colors.danger))
+        .child(item.label)
+        .on_click(move |_: &ClickEvent, window, cx| {
+            window.dispatch_action(action.boxed_clone(), cx);
+        })
+}
+
+fn chip(selector: &'static str, colors: &Colors) -> Stateful<Div> {
+    div()
+        .id(selector)
+        .debug_selector(move || selector.to_owned())
+        .flex()
+        .flex_none()
+        .items_center()
+        .h(size::CHIP_HEIGHT)
+        .px(size::CHIP_PAD)
+        .rounded(radius::ROW)
+        .text_color(colors.text_soft)
+        .cursor_pointer()
+        .hover(|chip| chip.bg(colors.hover).text_color(colors.text))
+        .active(|chip| chip.bg(colors.press))
 }
 
 fn empty_trash_chip(colors: &Colors) -> impl IntoElement {

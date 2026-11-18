@@ -42,13 +42,7 @@ pub struct MenuItem {
     pub detail: Option<SharedString>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Look {
-    #[default]
-    Plain,
-    On,
-    Danger,
-}
+pub use nova_files_shell::Look;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuAction {
@@ -92,9 +86,24 @@ impl MenuItem {
     }
 
     #[must_use]
+    pub fn with_label(mut self, label: SharedString) -> Self {
+        self.label = label;
+        self
+    }
+
+    #[must_use]
     pub const fn with_look(mut self, look: Look) -> Self {
         self.look = look;
         self
+    }
+}
+
+impl From<nova_files_shell::MenuItem> for MenuItem {
+    fn from(item: nova_files_shell::MenuItem) -> Self {
+        Self::run(item.icon, item.run)
+            .with_label(item.label)
+            .with_look(item.look)
+            .with_detail(item.detail)
     }
 }
 
