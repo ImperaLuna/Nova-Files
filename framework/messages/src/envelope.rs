@@ -47,6 +47,18 @@ impl Envelope {
         self.body.downcast_ref()
     }
 
+    pub fn taken_as<M: Message>(self) -> Option<M> {
+        self.open::<M>()
+            .map_err(|envelope| {
+                log::error!(
+                    "a {} reached a sink that takes only {}",
+                    envelope.kind.name(),
+                    type_name::<M>()
+                );
+            })
+            .ok()
+    }
+
     pub fn open<M: Message>(self) -> Result<M, Self> {
         let Self { body, kind, debug } = self;
         body.downcast::<M>()

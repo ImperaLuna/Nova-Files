@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use gpui::{Context, Pixels, ScrollDelta, ScrollStrategy, px};
 use nova_files_api::{Command, FolderView, FolderViews, IconSize, PlaceKind, ViewMode};
+use nova_files_shell::Views;
 
 use super::MainWindow;
 use crate::grid::Grid;
@@ -23,7 +24,7 @@ const PICTURE_PLACES: [PlaceKind; 2] = [PlaceKind::Pictures, PlaceKind::Videos];
 
 impl MainWindow {
     pub fn folder_view(&self) -> FolderView {
-        if self.showing_found() || self.in_trash() {
+        if self.showing_found() || self.folder_rules().views == Views::DetailsOnly {
             return FolderView::default();
         }
         self.folder()
@@ -113,7 +114,10 @@ impl MainWindow {
     }
 
     fn change_view(&mut self, view: FolderView, cx: &mut Context<Self>) {
-        if self.showing_found() || self.in_trash() || view == self.folder_view() {
+        if self.showing_found()
+            || self.folder_rules().views == Views::DetailsOnly
+            || view == self.folder_view()
+        {
             return;
         }
         let Some(folder) = self.folder().map(Path::to_path_buf) else {

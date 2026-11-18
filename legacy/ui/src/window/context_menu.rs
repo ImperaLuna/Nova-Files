@@ -61,7 +61,7 @@ impl MainWindow {
         if self.trash_open() {
             return vec![vec![MenuItem::run(Icon::Undo, &RESTORE)]];
         }
-        if self.in_trash() {
+        if self.folder_rules().replaces_menu {
             return Vec::new();
         }
         let one = self.selected_count() == 1;
@@ -127,7 +127,7 @@ impl MainWindow {
             .as_ref()
             .is_some_and(|listing| !listing.entries.is_empty());
         let select_all = any.then(|| MenuItem::run(Icon::SelectAll, &SELECT_ALL));
-        if self.in_trash() {
+        if self.folder_rules().replaces_menu {
             let full = self.trash_open() && self.trash_count().is_some_and(|count| count > 0);
             let empty_trash = full.then(|| MenuItem::run(Icon::Trash, &EMPTY_TRASH));
             return vec![

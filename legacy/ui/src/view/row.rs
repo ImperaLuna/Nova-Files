@@ -103,7 +103,7 @@ pub fn drags(
 
 impl MainWindow {
     pub(super) fn entries_drag(&self) -> bool {
-        self.pick.is_none() && !self.in_trash()
+        self.pick.is_none() && !self.folder_rules().read_only
     }
 }
 

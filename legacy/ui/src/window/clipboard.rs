@@ -10,7 +10,7 @@ use crate::island;
 
 impl MainWindow {
     pub(crate) fn copy_selected(&mut self, cut: bool, cx: &mut Context<Self>) {
-        if self.pick.is_some() || self.in_trash() {
+        if self.pick.is_some() || self.folder_rules().read_only {
             return;
         }
         let paths = self.selected_paths();
@@ -31,7 +31,7 @@ impl MainWindow {
     }
 
     pub(crate) fn paste(&mut self, cx: &Context<Self>) {
-        if self.pick.is_some() || self.in_trash() {
+        if self.pick.is_some() || self.folder_rules().read_only {
             return;
         }
         let Some(folder) = self.folder().map(PathBuf::from) else {

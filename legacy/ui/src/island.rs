@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use gpui::{SharedString, Task};
+use gpui::{App, SharedString, Task};
 use nova_files_api::{
     Command, Entry, EntryKind, Failure, JobId, NotOpened, Operation, Outcome, Tally,
 };
@@ -31,11 +31,10 @@ pub struct Note {
     pub undo: Option<NoteUndo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Confirm {
     pub label: SharedString,
     pub yes: &'static str,
-    pub operation: Operation,
+    pub on_yes: Box<dyn FnOnce(&mut App)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
