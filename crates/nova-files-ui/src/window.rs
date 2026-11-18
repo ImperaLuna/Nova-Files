@@ -54,6 +54,7 @@ mod context_menu;
 mod dragging;
 mod drives;
 mod events;
+mod gallery;
 mod hidden;
 mod hover_open;
 mod jobs;
@@ -76,7 +77,7 @@ pub use dragging::DraggedRow;
 pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
-pub use preview::{Previewed, Shown};
+pub use preview::{Previewed, QuickLook, Shown};
 pub use search::{FocusTo, Scope, short_folder};
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
 
@@ -165,7 +166,7 @@ pub struct MainWindow {
     /// Thumbnails of the rows in `rows_wanted`, by row.
     thumbnails: ShownThumbnails,
     /// The window's scale factor when it last drew, for sizing thumbnails.
-    scale_factor: f32,
+    pub(crate) scale_factor: f32,
     /// The rows the core was last told about: on screen and one screen
     /// either side.
     rows_wanted: Range<usize>,

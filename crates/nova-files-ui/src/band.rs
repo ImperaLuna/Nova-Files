@@ -47,7 +47,8 @@ impl MainWindow {
     /// The left button went down on the entries list, not on a name
     /// (`on_name` says it was).
     pub(crate) fn band_pressed(&mut self, event: &MouseDownEvent, on_name: bool) {
-        self.band = (event.button == MouseButton::Left && !on_name).then(|| Band {
+        let boxes = event.button == MouseButton::Left && !on_name && !self.showing_gallery();
+        self.band = boxes.then(|| Band {
             from: self.in_content(event.position),
             to: event.position,
             before: self.selection.clone(),

@@ -32,6 +32,8 @@ pub struct Grid {
     pub icon: Pixels,
     /// Whether the name sits beside the icon rather than under it.
     pub beside: bool,
+    /// Whether cells show names at all.
+    pub names: bool,
 }
 
 impl Grid {
@@ -42,6 +44,7 @@ impl Grid {
             cell: size(width, sizes::ROW_HEIGHT),
             icon: sizes::ROW_ICON,
             beside: true,
+            names: true,
         }
     }
 
@@ -67,6 +70,20 @@ impl Grid {
             cell: size((width / fit.max(1.0)).max(narrowest), height),
             icon,
             beside,
+            names: true,
+        }
+    }
+
+    /// Gallery's strip: icons of `icons`, without names, one entry to a
+    /// step.
+    pub fn strip(icons: IconSize) -> Self {
+        let icon = icon_side(icons);
+        Self {
+            per_line: 1,
+            cell: size(padded(icon), padded(icon)),
+            icon,
+            beside: false,
+            names: false,
         }
     }
 
@@ -168,6 +185,16 @@ mod tests {
         // The same number to a line, each a little wider.
         assert!(wide.relaid(&Grid::icons(IconSize::Medium, px(610.0))));
         assert!(wide.relaid(&Grid::icons(IconSize::Medium, px(300.0))));
+    }
+
+    #[test]
+    fn the_strip_is_icons_alone() {
+        let strip = Grid::strip(IconSize::Small);
+        assert_eq!(strip.per_line, 1);
+        assert_eq!(strip.cell, size(px(80.0), px(80.0)));
+        assert_eq!(strip.icon, px(64.0));
+        assert!(!strip.names);
+        assert!(Grid::details(px(10.0)).names && Grid::icons(IconSize::Small, px(10.0)).names);
     }
 
     #[test]

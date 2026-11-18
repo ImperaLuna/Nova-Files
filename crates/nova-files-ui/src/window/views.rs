@@ -16,11 +16,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use gpui::{Context, Pixels, ScrollDelta, ScrollStrategy, px};
-use nova_files_api::{Command, FolderView, FolderViews, PlaceKind, ViewMode};
+use nova_files_api::{Command, FolderView, FolderViews, IconSize, PlaceKind, ViewMode};
 
 use super::MainWindow;
-use crate::grid::{self, Grid};
-use crate::theme::size;
+use crate::grid::Grid;
 
 /// How far Ctrl+scroll goes for each step of the icons' size: one turn
 /// of a wheel, or that far on a touchpad.
@@ -37,7 +36,12 @@ pub struct Sizing {
     /// The side, in device pixels, the thumbnails held were shrunk to;
     /// none at first.
     pub(super) thumbnails_side: u32,
+    /// Where Gallery drew last.
+    pub(super) gallery: super::gallery::GalleryBounds,
 }
+
+/// The size of Gallery's strip's icons.
+const STRIP_ICONS: IconSize = IconSize::Small;
 
 /// The places whose folders are mostly pictures, so they start in Icons.
 const PICTURE_PLACES: [PlaceKind; 2] = [PlaceKind::Pictures, PlaceKind::Videos];
@@ -66,20 +70,20 @@ impl MainWindow {
                 mode: ViewMode::Icons,
                 icons,
             } => Grid::icons(icons, width),
+            _ if self.showing_gallery() => Grid::strip(STRIP_ICONS),
             _ => Grid::details(width),
         }
+    }
+
+    /// Whether the entries on screen show as Details.
+    pub fn showing_details(&self) -> bool {
+        !self.showing_icons() && !self.showing_gallery()
     }
 
     /// The side of an entry's icon in the view on screen, which its
     /// thumbnail fills.
     pub(super) fn icon_slot(&self) -> Pixels {
-        match self.folder_view() {
-            FolderView {
-                mode: ViewMode::Icons,
-                icons,
-            } => grid::icon_side(icons),
-            _ => size::THUMBNAIL,
-        }
+        self.grid().icon
     }
 
     /// Scrolls the list just far enough to show entry `index`.

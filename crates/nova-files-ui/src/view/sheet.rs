@@ -40,6 +40,7 @@ use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon};
 
 use crate::assets::Icon;
+use crate::grid::Grid;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::{Aim, DraggedRow, MainWindow};
@@ -70,7 +71,7 @@ impl MainWindow {
                     sheet.px_0().child(self.start_page(cx))
                 } else {
                     sheet
-                        .when(!self.showing_icons(), |sheet| {
+                        .when(self.showing_details(), |sheet| {
                             sheet.child(self.column_heads(&colors, cx))
                         })
                         .child(self.entries_area(cx))
@@ -131,6 +132,14 @@ impl MainWindow {
         if self.showing_icons() {
             return self.icons(grid, cx).into_any_element();
         }
+        if self.showing_gallery() {
+            return self.gallery(grid, cx).into_any_element();
+        }
+        self.details(grid, cx)
+    }
+
+    /// Details: a row each, laid out as `grid`.
+    fn details(&self, grid: Grid, cx: &Context<Self>) -> AnyElement {
         let count = self
             .listing
             .as_ref()

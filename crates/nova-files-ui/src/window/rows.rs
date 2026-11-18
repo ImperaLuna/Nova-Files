@@ -191,7 +191,18 @@ impl MainWindow {
             .listing
             .as_ref()
             .map_or(0, |listing| listing.entries.len());
-        self.rows_drawn = drawn.entries_of(&lines, len);
+        self.entries_drawn(drawn.entries_of(&lines, len), window, cx);
+    }
+
+    /// Entries `range` are on screen; the core is asked about them once
+    /// the frame is done.
+    pub(crate) fn entries_drawn(
+        &mut self,
+        range: Range<usize>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.rows_drawn = range;
         cx.defer_in(window, |this, window, cx| {
             this.show_rows(this.rows_drawn.clone(), window, cx);
         });

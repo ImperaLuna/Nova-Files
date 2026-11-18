@@ -4,6 +4,7 @@
 //! in Icons, and the views the core sends win over all but the changes it
 //! hasn't taken yet.
 
+mod gallery;
 mod icons;
 
 use nova_files_api::{FolderView, IconSize, ViewMode};
