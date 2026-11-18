@@ -317,10 +317,7 @@ fn kept_positions(
 /// Puts `table` into `tables` at `index`, or last. `ArrayOfTables` can
 /// only push, so the tables from `index` on are taken off and put back.
 fn insert_table(tables: &mut ArrayOfTables, index: Option<usize>, table: Table) {
-    let Some(index) = index.filter(|&index| index < tables.len()) else {
-        tables.push(table);
-        return;
-    };
+    let index = index.map_or(tables.len(), |index| index.min(tables.len()));
     let mut after = Vec::new();
     while tables.len() > index {
         let last = tables.len() - 1;
