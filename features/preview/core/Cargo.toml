@@ -1,0 +1,35 @@
+# nova-files-preview-core
+#
+# The preview feature's core half: looks into a file or folder for a quick
+# look, reading a text file's start, a folder's first entries, or a
+# picture through the thumbnail helper.
+#
+# Allowed outside crates:
+# - rustix
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-entries
+# - nova-files-preview-api
+# - nova-files-thumbnailer-launch
+
+[package]
+name = "nova-files-preview-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Opens a file without blocking on a pipe or device.
+rustix = { version = "1.1.6", default-features = false, features = ["fs", "std"] }
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+nova-files-entries.workspace = true
+nova-files-preview-api.workspace = true
+nova-files-thumbnailer-launch.workspace = true

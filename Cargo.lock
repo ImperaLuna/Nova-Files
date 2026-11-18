@@ -3585,6 +3585,7 @@ dependencies = [
  "nova-files-core",
  "nova-files-dbus",
  "nova-files-picker-api",
+ "nova-files-preview-api",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",
@@ -3637,6 +3638,8 @@ dependencies = [
  "nova-files-jobs",
  "nova-files-messages",
  "nova-files-picker-api",
+ "nova-files-preview-api",
+ "nova-files-preview-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
  "nova-files-thumbnailer-launch",
@@ -3713,6 +3716,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-preview-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-preview-core"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-entries",
+ "nova-files-preview-api",
+ "nova-files-thumbnailer-launch",
+ "rustix 1.1.6",
+]
+
+[[package]]
 name = "nova-files-settings-api"
 version = "0.1.0"
 dependencies = [
@@ -3748,6 +3770,7 @@ dependencies = [
  "landlock",
  "nova-files-api",
  "nova-files-core",
+ "nova-files-preview-api",
  "nova-files-ui",
 ]
 
@@ -3794,6 +3817,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-clipboard-api",
  "nova-files-picker-api",
+ "nova-files-preview-api",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",

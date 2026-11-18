@@ -145,8 +145,6 @@ impl MainWindow {
                 png,
             } => self.thumbnail_arrived((id, entry, size), png, cx),
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
-            Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
-            Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::Drives(_) | Event::DriveDone { .. } | Event::DiskSpace(_) => {
                 self.drive_event(event, cx);
             }

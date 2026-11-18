@@ -7,6 +7,8 @@ use nova_files_api::{
     ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
 };
 use nova_files_messages::{Routed, Routes};
+use nova_files_preview_api as preview_api;
+use nova_files_preview_core::Request as PreviewRequest;
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
 use nova_files_trash_api as trash_api;
@@ -18,6 +20,7 @@ use crate::folder_views::Store as FolderViewsStore;
 use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
 use crate::jobs::Client;
+use crate::lazy_types::LazyTypes;
 use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
@@ -71,6 +74,22 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
         }
     })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| {
+        match command {
+            preview_api::Command::Preview { id, path, fit } => {
+                let request = PreviewRequest {
+                    id,
+                    path,
+                    fit,
+                    current: Arc::clone(client.current_preview()),
+                    types: Arc::new(LazyTypes(Arc::clone(&setup.mime_types))),
+                    helper: setup.thumbnails.as_ref().map(|setup| setup.helper.clone()),
+                };
+                nova_files_preview_core::answer(client.events(), request);
+            }
+        }
+        Ok(())
+    })?;
     routes.on_leave(forget);
     Ok(routes)
 }
@@ -82,6 +101,7 @@ pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
 pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
+        MessageType::of::<preview_api::Event>(),
         MessageType::of::<settings_api::Event>(),
         MessageType::of::<trash_api::Event>(),
     ]
@@ -182,7 +202,6 @@ fn answer(
         | Command::Search { .. }
         | Command::Find { .. }
         | Command::Properties { .. }
-        | Command::Preview { .. }
         | Command::OpenFile { .. }
         | Command::OpenWith(_)
         | Command::FolderUsed(_)

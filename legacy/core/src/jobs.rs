@@ -21,7 +21,7 @@ use crate::memory;
 use crate::mime::MimeTypes;
 use crate::open;
 use crate::order;
-use crate::preview;
+use nova_files_preview_core as preview;
 
 const LIST_THREAD: &str = "nova-files-list";
 const OPEN_THREAD: &str = "nova-files-open";

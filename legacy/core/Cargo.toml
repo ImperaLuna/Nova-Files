@@ -21,6 +21,8 @@
 # - nova-files-index
 # - nova-files-jobs
 # - nova-files-messages
+# - nova-files-preview-api
+# - nova-files-preview-core
 # - nova-files-settings-api
 # - nova-files-settings-core
 # - nova-files-thumbnailer-launch
@@ -64,6 +66,8 @@ nova-files-entries.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true
 nova-files-messages.workspace = true
+nova-files-preview-api.workspace = true
+nova-files-preview-core.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-settings-core.workspace = true
 nova-files-thumbnailer-launch.workspace = true

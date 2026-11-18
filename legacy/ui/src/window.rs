@@ -55,6 +55,7 @@ use nova_files_api::{
     Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
     Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId,
 };
+use nova_files_preview_api as preview_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
 use nova_files_trash_api as trash_api;
@@ -323,6 +324,15 @@ impl MainWindow {
     fn take(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
         let envelope = match envelope.open::<Event>() {
             Ok(event) => return self.on_event(event, cx),
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<preview_api::Event>() {
+            Ok(preview_api::Event::Previewed { id, preview }) => {
+                return self.preview_arrived(id, Some(preview), cx);
+            }
+            Ok(preview_api::Event::Unreadable { id, .. }) => {
+                return self.preview_arrived(id, None, cx);
+            }
             Err(envelope) => envelope,
         };
         let envelope = match envelope.open::<settings_api::Event>() {

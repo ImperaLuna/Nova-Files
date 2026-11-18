@@ -1,20 +1,21 @@
+#![forbid(unsafe_code)]
+
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read as _};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
-use nova_files_api::{
-    Event, EventSink, FileTypes as _, Fit, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview,
-    PreviewContent, PreviewId, Unreadable,
+use nova_files_api::{EventSink, Fit, Unreadable};
+use nova_files_disk::ports::Mimes;
+use nova_files_entries::list::{self, Stopped};
+use nova_files_preview_api::{
+    Event, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent, PreviewId,
 };
-use rustix::fs::OFlags;
-
-use crate::list::{self, Stopped};
-use crate::mime::MimeTypes;
 use nova_files_thumbnailer_launch::{self as launch, Running};
+use rustix::fs::OFlags;
 
 const THREAD_NAME: &str = "nova-files-preview";
 
@@ -64,7 +65,7 @@ pub struct Request {
     pub path: PathBuf,
     pub fit: Fit,
     pub current: Arc<Current>,
-    pub types: Arc<OnceLock<MimeTypes>>,
+    pub types: Arc<dyn Mimes>,
     pub helper: Option<PathBuf>,
 }
 
@@ -85,16 +86,14 @@ pub fn answer(events: &Arc<dyn EventSink>, request: Request) {
     if spawned.is_err() {
         let reason = Unreadable::Failed;
         let path = asked;
-        events
-            .deliver(Event::PreviewUnreadable { id, path, reason })
-            .ok();
+        events.deliver(Event::Unreadable { id, path, reason }).ok();
     }
 }
 
 fn event(request: &Request) -> Option<Event> {
     let Request { id, path, .. } = request;
     let cancelled = || !request.current.is(*id);
-    let unreadable = |reason| Event::PreviewUnreadable {
+    let unreadable = |reason| Event::Unreadable {
         id: *id,
         path: path.clone(),
         reason,
@@ -125,7 +124,7 @@ fn event(request: &Request) -> Option<Event> {
     };
     let named = (!metadata.is_dir()).then(|| target(path));
     let kind_name = named.as_deref().and_then(Path::file_name).and_then(|name| {
-        let types = request.types.get_or_init(MimeTypes::from_env);
+        let types = &request.types;
         types.of(name).and_then(|mime| types.name(mime))
     });
     let bytes = if metadata.is_dir() { 0 } else { metadata.len() };
@@ -237,7 +236,7 @@ mod tests {
                 height: 1,
             },
             current: Arc::clone(&current),
-            types: Arc::new(OnceLock::new()),
+            types: Arc::new(PlainText),
             helper: None,
         };
         let (old, new) = (request(1), request(2));
@@ -248,16 +247,38 @@ mod tests {
         assert!(event(&new).is_none());
     }
 
-    fn previewed(dir: &Path, path: &Path) -> Arc<Preview> {
-        fs::create_dir_all(dir.join("data/mime/text")).unwrap();
-        fs::write(dir.join("data/mime/globs2"), "50:text/plain:*.txt\n").unwrap();
-        fs::write(
-            dir.join("data/mime/text/plain.xml"),
-            "<comment>Plain text</comment>",
-        )
-        .unwrap();
-        let types = OnceLock::new();
-        types.get_or_init(|| MimeTypes::load(&[dir.join("data")]));
+    #[derive(Debug)]
+    struct PlainText;
+
+    impl nova_files_api::FileTypes for PlainText {
+        fn of(&self, name: &std::ffi::OsStr) -> Option<&str> {
+            name.to_str()?.ends_with(".txt").then_some("text/plain")
+        }
+
+        fn is_a(&self, mime: &str, wanted: &str) -> bool {
+            mime == wanted
+        }
+    }
+
+    impl Mimes for PlainText {
+        fn ancestry(&self, mime: &str) -> Vec<String> {
+            vec![mime.to_owned()]
+        }
+
+        fn name(&self, mime: &str) -> Option<String> {
+            (mime == "text/plain").then(|| "Plain text".to_owned())
+        }
+
+        fn icon_names(&self, _: &str) -> Vec<String> {
+            Vec::new()
+        }
+
+        fn icon_kind(&self, _: &str) -> nova_files_api::IconKind {
+            nova_files_api::IconKind::Text
+        }
+    }
+
+    fn previewed(path: &Path) -> Arc<Preview> {
         let current = Arc::new(Current::new());
         current.set(PreviewId(1));
         let request = Request {
@@ -268,7 +289,7 @@ mod tests {
                 height: 1,
             },
             current,
-            types: Arc::new(types),
+            types: Arc::new(PlainText),
             helper: None,
         };
         match event(&request) {
@@ -285,7 +306,7 @@ mod tests {
         let folder = dir.join("b.txt");
         fs::create_dir_all(&folder).unwrap();
         fs::write(&file, "a".repeat(4096)).unwrap();
-        let (file, folder) = (previewed(&dir, &file), previewed(&dir, &folder));
+        let (file, folder) = (previewed(&file), previewed(&folder));
         fs::remove_dir_all(&dir).ok();
         assert_eq!(file.kind_name.as_deref(), Some("Plain text"));
         assert!(matches!(

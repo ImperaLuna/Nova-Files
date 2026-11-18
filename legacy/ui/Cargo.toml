@@ -18,6 +18,7 @@
 # - nova-files-api
 # - nova-files-clipboard-api
 # - nova-files-picker-api
+# - nova-files-preview-api
 # - nova-files-settings-api
 # - nova-files-shell
 # - nova-files-trash-api
@@ -39,6 +40,7 @@ chrono = "0.4.45"
 nova-files-api.workspace = true
 nova-files-clipboard-api.workspace = true
 nova-files-picker-api.workspace = true
+nova-files-preview-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 nova-files-trash-api.workspace = true

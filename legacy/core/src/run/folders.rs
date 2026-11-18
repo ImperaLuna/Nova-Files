@@ -7,7 +7,6 @@ use nova_files_settings_api::Thumbnails;
 use super::Setup;
 use crate::gathered;
 use crate::jobs::{self, Client};
-use crate::preview::{self, Request};
 use crate::properties;
 use crate::trash;
 use nova_files_jobs::trash_info::FILES;
@@ -38,17 +37,6 @@ pub(super) fn answer(id: ClientId, client: &Client, command: Command, setup: &Se
         Command::Search { id, query, limit } => setup.searcher.search(client, id, query, limit),
         Command::Find { id, query, within } => setup.searcher.find(client, id, query, within),
         Command::Properties { id, path } => properties::answer(client.events(), id, path),
-        Command::Preview { id, path, fit } => {
-            let request = Request {
-                id,
-                path,
-                fit,
-                current: Arc::clone(client.current_preview()),
-                types: Arc::clone(&setup.mime_types),
-                helper: setup.thumbnails.as_ref().map(|setup| setup.helper.clone()),
-            };
-            preview::answer(client.events(), request);
-        }
         Command::OpenFile { path, activation } => {
             let opening = (Arc::clone(&setup.mime_types), Arc::clone(&setup.inside));
             jobs::open_file(client, opening, path, activation);

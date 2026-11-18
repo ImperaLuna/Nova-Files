@@ -7,9 +7,8 @@
 //! [`Theme`], the [`DriveList`] or the places gets them
 //! again whenever they change. The core reads the other end of the channel
 //! as [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
-//! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
-//! quick look shows of a file or folder. A [`Size`] is what a scan of files
-//! and folders counted. A [`DiskSpace`] is how full a drive is. A
+//! operations run as jobs (see [`Operation`]). A [`Size`] is what a scan of
+//! files and folders counted. A [`DiskSpace`] is how full a drive is. A
 //! [`RecentFolder`] is one a person opened lately, for the Start page.
 //! [`Gathered`] folders make up the Games and Projects places. A
 //! [`FolderView`] is how a folder is shown. A [`FileIcon`] is how an
@@ -67,10 +66,7 @@ pub use nova_files_messages::{
     Message, MessageType, Routed, Routes, channel, missing_routes,
 };
 pub use open_with::{App, NotOpened, OpenWith, OpenWithAnswer, OpenWithId};
-pub use preview::{
-    Fit, MAX_FIT_SIDE, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Picture, Preview, PreviewContent,
-    PreviewId,
-};
+pub use preview::{Fit, MAX_FIT_SIDE, Picture};
 pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use recent::{MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};

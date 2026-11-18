@@ -35,6 +35,7 @@ nova-files-picker-api.workspace = true
 nova-files-ui.workspace = true
 
 [dev-dependencies]
+nova-files-preview-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 nova-files-trash-api.workspace = true
