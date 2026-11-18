@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use index::Index;
 
-use crate::capped;
+use nova_files_disk::capped;
 use nova_files_disk::home::data_dirs;
 
 const ICONS_FOLDER: &str = "icons";

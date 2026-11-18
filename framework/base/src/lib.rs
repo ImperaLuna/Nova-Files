@@ -4,7 +4,7 @@
 //! A client (a window, the D-Bus service) gets a [`Connection`] from a
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
 //! through the [`EventSink`] it handed over. A client that asks for the
-//! [`Theme`], the [`DriveList`] or the places gets them
+//! [`DriveList`] or the places gets them
 //! again whenever they change. The core reads the other end of the channel
 //! as [`CoreMessage`]s, and watches drives through a [`DriveService`]. File
 //! operations run as jobs (see [`Operation`]). A [`Preview`] is what a

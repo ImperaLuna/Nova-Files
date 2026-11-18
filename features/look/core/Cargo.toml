@@ -1,0 +1,38 @@
+# nova-files-look-core
+#
+# The look feature's core half: builds the theme from the theme file, the
+# appearance setting and the desktop's look, and finds each file's icon in
+# the chosen icon theme.
+#
+# Allowed outside crates:
+# - log
+# - toml_edit
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-look-api
+# - nova-files-settings-api
+
+[package]
+name = "nova-files-look-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+log = { version = "0.4.35", features = ["std"] }
+# Reads the theme file and edits it in place, keeping the user's comments;
+# already in the lock through zbus's macros.
+toml_edit = { version = "0.25.18", default-features = false, features = ["display", "parse"] }
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+nova-files-look-api.workspace = true
+nova-files-settings-api.workspace = true
+
+[dev-dependencies]
+nova-files-settings-core.workspace = true

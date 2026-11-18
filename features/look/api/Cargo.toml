@@ -1,0 +1,23 @@
+# nova-files-look-api
+#
+# What the look feature's two halves say to each other: its command and
+# its event. The theme's own types stay in nova-files-api, since the shell
+# draws with them.
+#
+# Allowed outside crates: none
+# Allowed workspace crates:
+# - nova-files-api
+
+[package]
+name = "nova-files-look-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

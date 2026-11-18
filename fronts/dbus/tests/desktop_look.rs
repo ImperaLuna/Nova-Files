@@ -6,11 +6,12 @@
 
 use std::sync::mpsc::Receiver;
 
-use nova_files_api::{Color, Command, Connector, CoreMessage, DesktopLook, Mode};
+use nova_files_api::{Color, Connector, CoreMessage, DesktopLook, Mode};
 use nova_files_dbus::{
     ACCENT_COLOR, APPEARANCE_NAMESPACE, COLOR_SCHEME, GNOME_ICON_THEME, GNOME_INTERFACE,
     KDE_ICON_THEME, KDE_ICONS, PORTAL_NAME, PORTAL_PATH, SETTINGS_INTERFACE, Service, Started,
 };
+use nova_files_look_api::Command;
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder;
 use zbus::fdo;

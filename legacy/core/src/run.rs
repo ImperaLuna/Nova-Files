@@ -6,6 +6,9 @@ use std::time::Duration;
 use nova_files_api::{
     ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
 };
+use nova_files_look_api as look_api;
+use nova_files_look_core::FileIcons;
+use nova_files_look_core::theme::Store as ThemeStore;
 use nova_files_messages::{Routed, Routes};
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
@@ -13,7 +16,6 @@ use nova_files_trash_api as trash_api;
 
 use crate::disk_space;
 use crate::drives::Store as DrivesStore;
-use crate::file_icons::FileIcons;
 use crate::folder_views::Store as FolderViewsStore;
 use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
@@ -25,7 +27,6 @@ use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
 use crate::search::Searcher;
-use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
 use crate::trash;
 use crate::window_state::Store as WindowStateStore;
@@ -66,6 +67,14 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
+            look_api::Command::Watch => setup.theme.listen(id, client.events()),
+            look_api::Command::DesktopLook(look) => setup.theme.follow_desktop(look),
+            look_api::Command::DesktopIconThemes(names) => setup.file_icons.follow_desktop(&names),
+        }
+        Ok(())
+    })?;
     routes.on(|setup: &Setup, _, client: &Client, command| match command {
         trash_api::Command::List => {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
@@ -82,6 +91,7 @@ pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
 pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
+        MessageType::of::<look_api::Event>(),
         MessageType::of::<settings_api::Event>(),
         MessageType::of::<trash_api::Event>(),
     ]
@@ -193,10 +203,7 @@ fn answer(
         command @ (Command::WindowState
         | Command::SaveWindowState(_)
         | Command::FolderViews
-        | Command::SetFolderView { .. }
-        | Command::Theme
-        | Command::DesktopLook(_)
-        | Command::DesktopIconThemes(_)) => look::answer(id, client, command, setup),
+        | Command::SetFolderView { .. }) => look::answer(id, client, command, setup),
         command @ (Command::WatchJobs
         | Command::StartJob { .. }
         | Command::DropFiles { .. }
