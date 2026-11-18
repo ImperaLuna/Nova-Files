@@ -4,8 +4,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::bookmark::{Bookmark, BookmarkChange};
-use crate::disk_space::PathSpace;
-use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::file_icon::FileIcon;
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
 use crate::folder_view::{FolderView, FolderViews};
@@ -158,18 +156,6 @@ pub enum Command {
     /// core never reads them; the UI owns what they say. Bytes over the
     /// core's cap (64 KiB) are dropped.
     SaveWindowState(Vec<u8>),
-    /// Ask for the drives and volumes; the answer is [`Event::Drives`],
-    /// and from then on the client gets [`Event::Drives`] again each time
-    /// one comes, goes or changes. Clients that never ask never get them.
-    Drives,
-    /// Mount, unmount or eject. The answer, once it is done, is
-    /// [`Event::DriveDone`]; the change itself reaches every client that
-    /// asked for the drives as [`Event::Drives`].
-    Drive(DriveAction),
-    /// Ask how full the drives holding `paths` (absolute paths) are. The
-    /// answer is [`Event::DiskSpace`], one entry per path in the same
-    /// order; paths past [`crate::MAX_DISK_SPACE_PATHS`] are left out.
-    DiskSpace(Vec<PathBuf>),
     /// A person opened `folder` (an absolute path); it goes first among the
     /// recent folders. Nothing answers.
     FolderUsed(PathBuf),
@@ -356,19 +342,6 @@ pub enum Event {
     /// Every folder given a view, newest first, answering
     /// [`Command::FolderViews`] and after each change.
     FolderViews(FolderViews),
-    /// The drives and volumes, answering [`Command::Drives`], and sent
-    /// again to each client that asked whenever one comes, goes or
-    /// changes.
-    Drives(Arc<DriveList>),
-    /// [`Command::Drive`] `action` is done: for a mount, with where the
-    /// volume is now. Only the client that asked hears it.
-    DriveDone {
-        action: DriveAction,
-        result: Result<Option<PathBuf>, DriveFailure>,
-    },
-    /// How full the drives are, answering [`Command::DiskSpace`]: one
-    /// entry per path asked, in the same order.
-    DiskSpace(Vec<PathSpace>),
     /// The recent folders, answering [`Command::RecentFolders`] `id`,
     /// newest first.
     RecentFolders {
