@@ -71,7 +71,10 @@ impl MainWindow {
                     // The page runs to the sheet's edges, glow and all.
                     sheet.px_0().child(self.start_page(cx))
                 } else if let Some(page) = self.properties_page() {
-                    sheet.px_0().child(self.properties_view(page, cx))
+                    sheet
+                        .px_0()
+                        .child(self.properties_view(page, cx))
+                        .child(self.island(cx))
                 } else {
                     sheet
                         .when(self.showing_details(), |sheet| {

@@ -61,7 +61,8 @@ pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
 pub use view::TopFacts;
 pub use window::{
-    CoreStatus, MainWindow, Previewed, PropertiesPage, Scope, WindowEvent, home_folder,
+    AccessLevel, CoreStatus, MainWindow, Previewed, PropertiesPage, Scope, Who, WindowEvent,
+    home_folder, shared_level,
 };
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
 pub use window_state::{WindowState, fetch as fetch_window_state};

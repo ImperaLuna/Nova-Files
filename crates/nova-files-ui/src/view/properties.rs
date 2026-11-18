@@ -7,11 +7,12 @@
 //! where. Under it, for one item, three small cards say when it was
 //! modified, made and last opened, each a date over its name; a date the
 //! drive doesn't keep has no card. Then a lone file's Opens with (see
-//! `opens_with`). Until the core answers, the page is empty.
+//! `opens_with`), and who may do what (see `access`). Until the core answers, the page is empty.
 //!
 //! Debug selectors: `properties` for the page, `properties-top` for the
 //! top card and `properties-date-<n>` for each date card shown.
 
+mod access;
 mod opens_with;
 
 use std::ffi::OsStr;
@@ -82,6 +83,9 @@ impl MainWindow {
                     .children(match &read[..] {
                         [one] => self.opens_with(one, cx),
                         _ => None,
+                    })
+                    .when(!read.is_empty(), |column| {
+                        column.child(self.access(&read, cx))
                     }),
             )
     }

@@ -212,7 +212,19 @@ fn for_all_tick(
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> impl IntoElement {
-    let tick = div()
+    square("island-for-all", colors)
+        .w_auto()
+        .px(size::TEXT_BUTTON_PAD)
+        .gap(size::TICK_GAP)
+        .text_color(colors.text_soft)
+        .child(tick_box(ticked, colors))
+        .child(words)
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_for_all(cx)))
+}
+
+/// A tick's small box, filled with a check while `ticked`.
+pub(super) fn tick_box(ticked: bool, colors: &Colors) -> Div {
+    div()
         .flex()
         .flex_none()
         .items_center()
@@ -228,15 +240,7 @@ fn for_all_tick(
             } else {
                 tick.border_color(colors.text_faint)
             }
-        });
-    square("island-for-all", colors)
-        .w_auto()
-        .px(size::TEXT_BUTTON_PAD)
-        .gap(size::TICK_GAP)
-        .text_color(colors.text_soft)
-        .child(tick)
-        .child(words)
-        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_for_all(cx)))
+        })
 }
 
 /// A running job's line and bar.

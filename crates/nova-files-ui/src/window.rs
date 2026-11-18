@@ -10,10 +10,11 @@
 //! drop under the pointer in `aiming`, opening rows held over in
 //! `hover_open`), renaming and
 //! New folder in `renaming`, the Properties page in `properties` (its
-//! size in `measuring`, its app in `opens_with`), the jobs they start in
-//! `jobs`, the tabs in `tabs` (reordered in `tab_order`), showing hidden
-//! files in `hidden`, the files an app asked to show selected in
-//! `showing`, the folders' views in `views`, and the sheet's right-click
+//! size in `measuring`, its app in `opens_with`, who may do what in
+//! `access`), the jobs they start in `jobs`, the tabs in `tabs`
+//! (reordered in `tab_order`), showing hidden files in `hidden`, the files
+//! an app asked to show selected in `showing`, the folders' views in
+//! `views`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
@@ -50,6 +51,7 @@
 //!
 //! A search puts the files it found in the list's place (see `search`).
 
+mod access;
 mod acting;
 mod aiming;
 mod clipboard;
@@ -80,6 +82,7 @@ mod trash;
 mod tree;
 mod views;
 
+pub use access::{Level as AccessLevel, Who, runs, shared_level};
 pub use aiming::Aim;
 pub use dragging::DraggedRow;
 pub use gathered::LIBRARY_LABEL;

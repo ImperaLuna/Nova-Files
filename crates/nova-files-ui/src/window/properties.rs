@@ -36,6 +36,9 @@ pub struct Page {
     pub(super) measure: Option<super::measuring::Measure>,
     /// The apps that open its lone path (see `opens_with`).
     pub(super) opens_with: super::opens_with::OpensWith,
+    /// Whether changes to its access reach inside its folders (see
+    /// `access`).
+    pub(super) inside: bool,
     /// The item each request out is for, by its id.
     asked: HashMap<PropertiesId, usize>,
     /// How many items are gone.
@@ -68,6 +71,7 @@ impl Page {
             gone: 0,
             measure: None,
             opens_with: super::opens_with::OpensWith::default(),
+            inside: false,
         }
     }
 
