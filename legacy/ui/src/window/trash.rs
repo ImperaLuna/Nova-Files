@@ -3,8 +3,9 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{Context, SharedString};
+use gpui::{App, Context, SharedString};
 use nova_files_api::{Command, Listing, ListingId, Operation, Trashed};
+use nova_files_shell::{FolderRules, Views};
 
 use super::MainWindow;
 use crate::island::{self, Confirm, ITEM, ITEMS};
@@ -12,6 +13,7 @@ use crate::island::{self, Confirm, ITEM, ITEMS};
 const TRASH_FILES: &str = "Trash/files";
 const DATA_IN_HOME: &str = ".local/share";
 const DELETE_LABEL: &str = "Delete";
+const TRASH_RULES_OWNER: &str = "trash";
 
 #[derive(Debug, Default)]
 pub struct TrashState {
@@ -48,6 +50,18 @@ impl MainWindow {
 
     pub fn trash_open(&self) -> bool {
         self.folder() == Some(self.trash.folder.as_path())
+    }
+
+    pub(super) fn claim_trash_rules(&self) {
+        self.host.rules.claim(
+            TRASH_RULES_OWNER,
+            self.trash.folder.clone(),
+            FolderRules {
+                read_only: true,
+                views: Views::DetailsOnly,
+                replaces_menu: true,
+            },
+        );
     }
 
     pub fn in_trash(&self) -> bool {
@@ -139,10 +153,25 @@ impl MainWindow {
     }
 
     pub(super) fn ask(&mut self, label: String, operation: Operation, cx: &mut Context<Self>) {
+        let window = cx.entity().downgrade();
+        let on_yes = move |cx: &mut App| {
+            window
+                .update(cx, |this, cx| {
+                    let deletes = matches!(
+                        operation,
+                        Operation::Delete { .. } | Operation::DeleteFromTrash { .. }
+                    );
+                    if !deletes || this.deleting_selected().as_ref() == Some(&operation) {
+                        this.start_job(operation);
+                    }
+                    cx.notify();
+                })
+                .ok();
+        };
         self.island.confirm = Some(Confirm {
             label: label.into(),
             yes: DELETE_LABEL,
-            operation,
+            on_yes: Box::new(on_yes),
         });
         cx.notify();
     }
@@ -150,12 +179,8 @@ impl MainWindow {
     pub(crate) fn answer_confirm(&mut self, yes: bool, cx: &mut Context<Self>) {
         if let Some(confirm) = self.island.confirm.take()
             && yes
-            && (!matches!(
-                confirm.operation,
-                Operation::Delete { .. } | Operation::DeleteFromTrash { .. }
-            ) || self.deleting_selected().as_ref() == Some(&confirm.operation))
         {
-            self.start_job(confirm.operation);
+            cx.defer(confirm.on_yes);
         }
         cx.notify();
     }

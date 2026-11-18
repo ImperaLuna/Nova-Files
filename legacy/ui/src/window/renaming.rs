@@ -37,7 +37,7 @@ pub enum Waiting {
 
 impl MainWindow {
     pub(crate) fn start_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.renaming.is_some() || self.in_trash() || self.folder().is_none() {
+        if self.renaming.is_some() || self.folder_rules().read_only || self.folder().is_none() {
             return;
         }
         let Some(listing) = &self.listing else { return };
@@ -134,7 +134,7 @@ impl MainWindow {
         let Some(listing) = &self.listing else { return };
         if self.pick.is_some()
             || self.renaming.is_some()
-            || self.in_trash()
+            || self.folder_rules().read_only
             || self.folder().is_none()
         {
             return;

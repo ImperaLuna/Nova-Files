@@ -1,0 +1,27 @@
+# nova-files-shell
+#
+# The window frame every feature's window half plugs into: parts and their
+# slots, the host each part gets, folder rules, per-tab state and values
+# one feature publishes for the others. It never touches the disk.
+#
+# Allowed outside crates: gpui
+# Allowed workspace crates: nova-files-messages
+
+[package]
+name = "nova-files-shell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+test = false
+doctest = false
+
+[dependencies]
+gpui.workspace = true
+nova-files-messages.workspace = true

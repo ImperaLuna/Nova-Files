@@ -55,6 +55,7 @@ use nova_files_api::{
     Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
     Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
+use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
 
 use self::drives::Drives;
 use self::preview::QuickLooks;
@@ -101,7 +102,7 @@ pub enum WindowEvent {
 pub struct MainWindow {
     status: CoreStatus,
     connector: Connector,
-    pub(crate) connection: Option<Connection>,
+    pub(crate) connection: Option<Arc<Connection>>,
     pub(crate) listing: Option<Listing>,
     details: HashMap<usize, RowRead>,
     theme_icons: ThemeIcons,
@@ -157,15 +158,25 @@ pub struct MainWindow {
     tab_order: tab_order::TabOrder,
     properties: Option<properties::Page>,
     next_ask: u64,
+    host: Host,
+    parts: WindowParts,
     _events: Task<()>,
 }
 
-pub struct ChannelSink(pub UnboundedSender<Event>);
+pub struct ChannelSink<M>(pub UnboundedSender<M>);
 
-impl EventSink for ChannelSink {
+impl EventSink for ChannelSink<Event> {
     fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
-        let event = envelope.open::<Event>().map_err(|_| ClientGone)?;
+        let Some(event) = envelope.taken_as::<Event>() else {
+            return Ok(());
+        };
         self.0.unbounded_send(event).map_err(|_| ClientGone)
+    }
+}
+
+impl EventSink for ChannelSink<Envelope> {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        self.0.unbounded_send(envelope).map_err(|_| ClientGone)
     }
 }
 
@@ -176,6 +187,7 @@ impl MainWindow {
             .map(PathBuf::from)
             .filter(|path| path.is_absolute());
         window.trash = TrashState::new(&window.home, data);
+        window.claim_trash_rules();
         window
     }
 
@@ -205,7 +217,7 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) -> Self {
         let (sink, events) = mpsc::unbounded();
-        let connection = connect(connector, ChannelSink(sink));
+        let connection = connect(connector, ChannelSink(sink)).map(Arc::new);
         let status = if connection.is_some() {
             CoreStatus::Connecting
         } else {
@@ -213,6 +225,7 @@ impl MainWindow {
         };
         let events = Self::listen(events, cx);
         let trash = TrashState::new(&home, None);
+        let (host, parts) = open_parts(connection.clone(), cx);
         let mut window = Self {
             connector: connector.clone(),
             status,
@@ -272,8 +285,11 @@ impl MainWindow {
             tab_order: tab_order::TabOrder::default(),
             properties: None,
             next_ask: 0,
+            host,
+            parts,
             _events: events,
         };
+        window.claim_trash_rules();
         window.go_first(location, cx);
         window
     }
@@ -292,18 +308,32 @@ impl MainWindow {
         }
     }
 
-    fn listen(mut events: UnboundedReceiver<Event>, cx: &Context<Self>) -> Task<()> {
+    fn listen(mut events: UnboundedReceiver<Envelope>, cx: &Context<Self>) -> Task<()> {
         cx.spawn(async move |this, cx| {
-            while let Some(event) = events.next().await {
-                if this
-                    .update(cx, |this, cx| this.on_event(event, cx))
-                    .is_err()
-                {
+            while let Some(envelope) = events.next().await {
+                if this.update(cx, |this, cx| this.take(envelope, cx)).is_err() {
                     return;
                 }
             }
             this.update(cx, |this, cx| this.set_status(CoreStatus::Gone, cx))
                 .ok();
+        })
+    }
+
+    fn take(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
+        match envelope.open::<Event>() {
+            Ok(event) => self.on_event(event, cx),
+            Err(envelope) => {
+                if let Err(envelope) = self.parts.deliver(envelope, cx) {
+                    log::error!("no part takes {envelope:?}");
+                }
+            }
+        }
+    }
+
+    pub fn folder_rules(&self) -> FolderRules {
+        self.folder().map_or_else(FolderRules::default, |folder| {
+            self.host.rules.for_folder(folder)
         })
     }
 
@@ -368,7 +398,7 @@ impl Focusable for MainWindow {
     }
 }
 
-fn connect(connector: &Connector, sink: ChannelSink) -> Option<Connection> {
+fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connection> {
     connector
         .connect(sink)
         .and_then(|connection| {
@@ -378,6 +408,19 @@ fn connect(connector: &Connector, sink: ChannelSink) -> Option<Connection> {
             Ok(connection)
         })
         .ok()
+}
+
+fn open_parts(connection: Option<Arc<Connection>>, cx: &mut App) -> (Host, WindowParts) {
+    let host = Host {
+        link: Link::new(connection),
+        rules: RulesBook::default(),
+    };
+    let parts = cx
+        .try_global::<Parts>()
+        .cloned()
+        .unwrap_or_default()
+        .open(&host, cx);
+    (host, parts)
 }
 
 pub const ROOT_FOLDER: &str = "/";
