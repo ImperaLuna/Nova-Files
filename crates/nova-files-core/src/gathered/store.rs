@@ -130,7 +130,9 @@ impl Store {
 
     /// What gives the folders `place` gathers from, read first (and
     /// followed from then on) if no client asked yet; for a listing's
-    /// thread, as that read may wait on the disk.
+    /// thread, as that read may wait on the disk. Their folders are
+    /// watched before it returns, so a change after the listing is never
+    /// missed.
     pub fn folders_of(
         &self,
         place: Gathering,
@@ -142,6 +144,8 @@ impl Store {
             if !lock(&shared.folders).loaded {
                 shared.first_read();
             }
+            // The thread that read first may not have watched them yet.
+            shared.rewatch();
             let folders = lock(&shared.folders);
             match place {
                 Gathering::Projects => Arc::clone(&folders.gathered.projects),
