@@ -4,12 +4,15 @@
 //! or from `.tar.` for compressed tarballs, so `backup.tar.gz` becomes
 //! `backup (2).tar.gz`. A name whose only dot leads it (`.bashrc`) has no
 //! extension, and neither has a folder. Names are handled as bytes, so one
-//! that isn't UTF-8 keeps its bytes.
+//! that isn't UTF-8 keeps its bytes. [`take_free_name`] gives an entry
+//! the first such name that is free.
 
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
+
+use super::place::rename_no_replace;
 
 /// Extensions that sit on top of `.tar` and count as one with it.
 const TARBALLS: [&[u8]; 4] = [b".tar.gz", b".tar.xz", b".tar.zst", b".tar.bz2"];
@@ -73,8 +76,29 @@ pub fn free_path(taken: &Path, naming: Naming) -> io::Result<PathBuf> {
     Err(io::ErrorKind::AlreadyExists.into())
 }
 
+/// Gives `from` the name `wanted`, or the first free one beside it for
+/// "keep both", and returns the path it took.
+///
+/// # Errors
+/// When a rename fails for any reason but a taken name, or every number
+/// is taken.
+pub fn take_free_name(from: &Path, wanted: &Path) -> io::Result<PathBuf> {
+    let mut to = wanted.to_path_buf();
+    loop {
+        let Err(error) = rename_no_replace(from, &to) else {
+            return Ok(to);
+        };
+        if error.kind() != io::ErrorKind::AlreadyExists {
+            return Err(error);
+        }
+        to = free_path(wanted, Naming::File)?;
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
     use crate::ops::test_folder::TestFolder;
 
@@ -127,5 +151,25 @@ mod tests {
         let file = folder.file("a", "");
 
         assert!(free_path(&file.join("b"), Naming::File).is_err());
+    }
+
+    #[test]
+    fn a_taken_name_gives_the_next_free_one() {
+        let folder = TestFolder::new("keep-both-take");
+        let part = folder.path().join(".part");
+        fs::write(&part, b"zip").unwrap();
+        fs::write(folder.path().join("a.zip"), b"mine").unwrap();
+        let placed = take_free_name(&part, &folder.path().join("a.zip")).unwrap();
+        assert_eq!(placed, folder.path().join("a (2).zip"));
+        assert_eq!(fs::read(&placed).unwrap(), b"zip");
+        assert_eq!(fs::read(folder.path().join("a.zip")).unwrap(), b"mine");
+    }
+
+    #[test]
+    fn a_name_that_cant_be_given_is_an_error() {
+        let folder = TestFolder::new("keep-both-take-missing");
+        let part = folder.file(".part", "zip");
+        let error = take_free_name(&part, &folder.path().join("gone/a.zip")).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
     }
 }
