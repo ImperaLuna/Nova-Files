@@ -441,8 +441,8 @@ pub mod size {
     pub const RENAME_PAD: Pixels = px(7.0);
     /// A worded button on the island (Undo).
     pub const TEXT_BUTTON_PAD: Pixels = px(12.0);
-    /// The "For all" tick on the island: its box, the box's edge, the
-    /// check inside, and the space before its words.
+    /// A tick (the island's "For all", the Properties page's): its box,
+    /// the box's edge, the check inside, and the space before its words.
     pub const TICK_BOX: Pixels = px(16.0);
     pub const TICK_LINE: Pixels = px(1.5);
     pub const TICK_ICON: Pixels = px(11.0);
