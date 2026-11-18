@@ -4,9 +4,8 @@
 //!
 //! `ShowFolders` asks for a window on each folder, `ShowItems` for one on
 //! each folder that holds the items, with them selected, in the order the
-//! folders first appear. `ShowItemProperties` does what `ShowItems` does
-//! until Nova Files has a properties view. Every URI must be a local
-//! `file://` one, or nothing opens.
+//! folders first appear. `ShowItemProperties` does what `ShowItems` does.
+//! Every URI must be a local `file://` one, or nothing opens.
 //!
 //! The object is served on the app's own connection. The bus name is asked
 //! for only when Nova Files should answer (see
@@ -27,8 +26,7 @@ pub const OBJECT_PATH: &str = "/org/freedesktop/FileManager1";
 /// The interface name. The `#[zbus::interface]` attribute needs the
 /// literal too; a test checks the two match.
 pub const INTERFACE: &str = "org.freedesktop.FileManager1";
-/// More URIs than one call can mean; the call is refused, rather than
-/// opening that many windows.
+/// The most URIs one call takes; a call with more is refused.
 pub const MAX_URIS: usize = 256;
 
 pub struct FileManager<F> {
@@ -58,8 +56,7 @@ impl<F: Fn(WindowRequest)> FileManager<F> {
 
 #[zbus::interface(name = "org.freedesktop.FileManager1")]
 impl<F: Fn(WindowRequest) + Send + Sync + 'static> FileManager<F> {
-    /// Opens a window on each folder. The startup id isn't used yet: the
-    /// window can't take an activation token.
+    /// Opens a window on each folder.
     fn show_folders(&self, uris: Vec<String>, startup_id: String) -> fdo::Result<()> {
         drop(startup_id);
         let folders = paths(uris)?;
@@ -73,7 +70,7 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> FileManager<F> {
         self.open(showing(paths(uris)?)?)
     }
 
-    /// The same as [`Self::show_items`] until there is a properties view.
+    /// Shows the items, as [`Self::show_items`] does.
     fn show_item_properties(&self, uris: Vec<String>, startup_id: String) -> fdo::Result<()> {
         self.show_items(uris, startup_id)
     }
