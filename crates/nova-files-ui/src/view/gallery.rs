@@ -12,6 +12,7 @@ use gpui::{
 };
 
 use super::preview::{meta, stage_art};
+use super::sheet::rename_box;
 use crate::grid::Grid;
 use crate::theme::{Colors, size, text};
 use crate::window::MainWindow;
@@ -50,8 +51,9 @@ impl MainWindow {
         let scale_factor = self.scale_factor;
         let shown = self.quick_look().and_then(|open| {
             let listing = self.listing.as_ref()?;
-            let entry = listing.entries.get(usize::try_from(open.entry.0).ok()?)?;
-            Some((open, listing, entry))
+            let index = usize::try_from(open.entry.0).ok()?;
+            let entry = listing.entries.get(index)?;
+            Some((open, listing, entry, index))
         });
         div()
             .debug_selector(|| "stage".to_owned())
@@ -63,7 +65,7 @@ impl MainWindow {
             .justify_center()
             .gap(size::STAGE_PAD)
             .p(size::STAGE_PAD)
-            .children(shown.map(|(open, listing, entry)| {
+            .children(shown.map(|(open, listing, entry, index)| {
                 let current = open.current().and_then(|shown| shown.preview.as_deref());
                 let name = SharedString::from(entry.name.to_string_lossy().into_owned());
                 let about = current.map(meta).unwrap_or_default();
@@ -86,16 +88,26 @@ impl MainWindow {
                             .flex_col()
                             .items_center()
                             .h(size::STAGE_CAPTION)
-                            .max_w_full()
-                            .child(
-                                div()
-                                    .debug_selector(|| "stage-name".to_owned())
-                                    .max_w_full()
-                                    .truncate()
-                                    .text_color(colors.text)
-                                    .font_weight(text::STRONG_WEIGHT)
-                                    .child(name),
-                            )
+                            .w_full()
+                            .child(self.rename_field(index).map_or_else(
+                                || {
+                                    div()
+                                        .debug_selector(|| "stage-name".to_owned())
+                                        .max_w_full()
+                                        .truncate()
+                                        .text_color(colors.text)
+                                        .font_weight(text::STRONG_WEIGHT)
+                                        .child(name)
+                                        .into_any_element()
+                                },
+                                |field| {
+                                    rename_box(field.clone(), colors)
+                                        .flex_none()
+                                        .w_full()
+                                        .ml_0()
+                                        .into_any_element()
+                                },
+                            ))
                             .child(
                                 div()
                                     .text_size(text::DETAIL)

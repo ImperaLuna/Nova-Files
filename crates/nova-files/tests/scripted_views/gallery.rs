@@ -105,3 +105,15 @@ fn the_stage_asks_for_less_room_than_the_lifted_look(cx: &mut TestAppContext) {
     let lifted = fit(cx).unwrap();
     assert!(docked.width < lifted.width && docked.height < lifted.height);
 }
+
+#[gpui::test]
+fn a_rename_shows_under_the_stage(cx: &mut TestAppContext) {
+    let (view, cx, _) = gallery(cx, 10);
+    cx.simulate_keystrokes("f2");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.renaming()));
+    let field = cx.debug_bounds("rename").unwrap();
+    // As wide as the art over it, not just its own padding.
+    assert!(field.size.width > px(100.0), "{field:?}");
+    assert_eq!(cx.debug_bounds("stage-name"), None);
+}
