@@ -268,9 +268,9 @@ fn without_a_home_nothing_is_gathered_or_saved() {
 }
 
 #[test]
-fn a_file_up_to_the_size_limit_is_read_and_a_bigger_one_is_not() {
+fn a_file_up_to_256_kib_is_read_and_a_bigger_one_is_not() {
     let scratch = Scratch::new("limit");
-    let line = "#".repeat(MAX_BYTES - 1) + "\n";
+    let line = "#".repeat(256 * 1024 - 1) + "\n";
     scratch.write(&line);
     assert_eq!(read_text(&scratch.file()).as_deref(), Some(line.as_str()));
     scratch.write(&format!("{line}\n"));
