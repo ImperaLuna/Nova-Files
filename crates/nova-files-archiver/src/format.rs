@@ -2,7 +2,8 @@
 //! renamed file still opens, and a file named `.zip` that isn't one is
 //! turned away. A tar archive inside gzip, xz, zstd or bzip2 is found by
 //! the compression's magic; a plain tar by the `ustar` mark at offset 257
-//! (or, for very old archives, by a header whose checksum adds up).
+//! (or, for very old archives, by a header whose checksum adds up); an
+//! empty tar is only zero blocks.
 
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
@@ -70,13 +71,14 @@ fn of_head(head: &[u8]) -> Option<Format> {
         .map(Format::Tar)
 }
 
-/// Whether `head` is a tar header: the `ustar` mark, or for the oldest
-/// archives a checksum that matches the block.
+/// Whether `head` is a tar header: the `ustar` mark, a zero block that
+/// ends the archive, or for the oldest archives a checksum that matches
+/// the block.
 fn is_tar(head: &[u8]) -> bool {
     if head.len() < SNIFF {
         return false;
     }
-    if head[USTAR_AT..].starts_with(USTAR) {
+    if head[USTAR_AT..].starts_with(USTAR) || head.iter().all(|&byte| byte == 0) {
         return true;
     }
     let field = &head[CHECKSUM_AT..CHECKSUM_AT + CHECKSUM_LEN];
@@ -174,8 +176,15 @@ mod tests {
     fn other_files_are_not_archives() {
         assert_eq!(of_head(b"%PDF-1.7"), None);
         assert_eq!(of_head(b""), None);
-        assert_eq!(of_head(&[0; SNIFF]), None);
         assert_eq!(of_head(&[0; SNIFF - 1]), None);
+    }
+
+    #[test]
+    fn an_empty_tar_is_zero_blocks() {
+        assert_eq!(of_head(&[0; SNIFF]), Some(Format::Tar(Compression::Plain)));
+        let mut nearly = [0; SNIFF];
+        nearly[SNIFF - 1] = 1;
+        assert_eq!(of_head(&nearly), None);
     }
 
     #[test]

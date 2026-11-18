@@ -15,10 +15,10 @@ use crate::format::{self, Format};
 use crate::wire::{self, Clock, Entry, Kind};
 
 /// The longest link target read out of a zip: `PATH_MAX`.
-const MAX_LINK: u64 = 4_096;
+pub const MAX_LINK: u64 = 4_096;
 /// The permission bits an entry gets when its archive has none at all.
-const FILE_MODE: u32 = 0o644;
-const FOLDER_MODE: u32 = 0o755;
+pub const FILE_MODE: u32 = 0o644;
+pub const FOLDER_MODE: u32 = 0o755;
 const TYPE_BITS: u32 = 0o170_000;
 const LINK_TYPE: u32 = 0o120_000;
 
@@ -42,14 +42,7 @@ fn list_zip(archive: File, out: &mut impl Write) -> io::Result<()> {
     let mut archive = ZipArchive::new(BufReader::new(archive)).map_err(io::Error::other)?;
     for index in 0..archive.len() {
         let entry = archive.by_index_raw(index).map_err(io::Error::other)?;
-        let mode = entry.unix_mode();
-        let kind = if entry.is_dir() {
-            Kind::Folder
-        } else if mode.is_some_and(|mode| mode & TYPE_BITS == LINK_TYPE) {
-            Kind::Link
-        } else {
-            Kind::File
-        };
+        let (kind, mode) = zip_kind(&entry);
         let locked = entry.encrypted();
         let path = entry.name_raw().to_vec();
         let size = entry.size();
@@ -71,11 +64,7 @@ fn list_zip(archive: File, out: &mut impl Write) -> io::Result<()> {
                 size,
                 modified,
                 clock,
-                mode: mode.unwrap_or(if kind == Kind::Folder {
-                    FOLDER_MODE
-                } else {
-                    FILE_MODE
-                }),
+                mode,
                 path: &path,
                 link: &link,
             },
@@ -84,9 +73,27 @@ fn list_zip(archive: File, out: &mut impl Write) -> io::Result<()> {
     Ok(())
 }
 
+/// What a zip entry is, and its permission bits.
+pub fn zip_kind<R: Read>(entry: &zip::read::ZipFile<'_, R>) -> (Kind, u32) {
+    let mode = entry.unix_mode();
+    let kind = if entry.is_dir() {
+        Kind::Folder
+    } else if mode.is_some_and(|mode| mode & TYPE_BITS == LINK_TYPE) {
+        Kind::Link
+    } else {
+        Kind::File
+    };
+    let mode = mode.unwrap_or(if kind == Kind::Folder {
+        FOLDER_MODE
+    } else {
+        FILE_MODE
+    });
+    (kind, mode)
+}
+
 /// When a zip entry was last changed: its Unix time when the zip has one,
 /// else its DOS wall time, else 1980-01-01, the first DOS date.
-fn zip_modified<R: Read>(entry: &zip::read::ZipFile<'_, R>) -> (i64, Clock) {
+pub fn zip_modified<R: Read>(entry: &zip::read::ZipFile<'_, R>) -> (i64, Clock) {
     let unix = entry.extra_data_fields().find_map(|field| match field {
         ExtraField::ExtendedTimestamp(stamp) => stamp.mod_time(),
         _ => None,
@@ -133,7 +140,7 @@ fn list_tar(stream: impl Read, out: &mut impl Write) -> io::Result<()> {
 /// What a tar entry is; `None` for devices, pipes and the like, which are
 /// never unpacked. Archives older than ustar mark a folder only by the `/`
 /// that ends its name.
-fn tar_kind(kind: tar::EntryType, path: &[u8]) -> Option<Kind> {
+pub fn tar_kind(kind: tar::EntryType, path: &[u8]) -> Option<Kind> {
     if kind.is_dir() || (kind.is_file() && path.ends_with(b"/")) {
         Some(Kind::Folder)
     } else if kind.is_symlink() {
