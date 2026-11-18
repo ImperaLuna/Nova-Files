@@ -94,8 +94,6 @@ impl MainWindow {
         }
         let one = self.selected_count() == 1;
         let lone = |item: MenuItem| one.then_some(item);
-        // Renaming works in the folder on screen, which Games and Projects
-        // have none of.
         let rename = lone(MenuItem::run(Icon::Rename, &RENAME)).filter(|_| self.folder().is_some());
         let new_tab = self.lone_folder().map(|folder| {
             MenuItem::new(

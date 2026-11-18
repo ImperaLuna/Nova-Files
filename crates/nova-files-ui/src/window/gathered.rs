@@ -11,8 +11,9 @@
 //!
 //! A gathered place has no folder: [`MainWindow::folder`] is `None` there,
 //! so what acts on the folder on screen (New folder, Paste, a drop on the
-//! list, Up, typing a path, search) has nothing to act on. Rows still
-//! open, copy, cut and go to the Trash. The column after Name says where
+//! list, Up, typing a path, Rename) has nothing to act on. Rows still
+//! open, copy, cut and go to the Trash. A search from a place looks
+//! everywhere (see `search`). The column after Name says where
 //! each row is: its Library for Games (the gathered folder's name, else
 //! its path), its Folder for Projects.
 
@@ -44,8 +45,6 @@ impl MainWindow {
     /// is: the window moves there once it answers, ending a search under
     /// way. Whether the ask was sent.
     pub(super) fn request_gathered(&mut self, place: Gathering) -> bool {
-        // Only a window that goes to Games or Projects follows their
-        // folders, so a picker's core never reads them.
         if !self.gathered.asked
             && let Some(connection) = &self.connection
         {
