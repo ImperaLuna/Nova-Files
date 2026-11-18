@@ -62,6 +62,7 @@ mod preview;
 mod renaming;
 mod rows;
 mod search;
+mod showing;
 mod start;
 mod tab_order;
 mod tabs;
@@ -241,6 +242,8 @@ pub struct MainWindow {
     renaming: Option<Renaming>,
     /// What a rename or a new folder waits for (see `renaming`).
     waiting: Waiting,
+    /// Names to select in the first listing (see `showing`).
+    showing: Vec<std::ffi::OsString>,
     /// The trash, and what the window knows of it (see `trash`).
     trash: TrashState,
     /// The tabs in the background, and which one is on screen (see
@@ -365,6 +368,7 @@ impl MainWindow {
             counted: SharedString::default(),
             renaming: None,
             waiting: Waiting::Nothing,
+            showing: Vec::new(),
             trash,
             tabs: Tabs::default(),
             drop_asks: aiming::Asks::default(),

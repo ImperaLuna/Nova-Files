@@ -14,7 +14,7 @@
 //! whose row is gone goes to the nearest row left.
 
 use std::collections::HashMap;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 
 use gpui::Modifiers;
 use nova_files_api::{Entry, EntryId, ListingId};
@@ -276,6 +276,24 @@ impl Selection {
     pub fn named(listing: ListingId, entries: &[Entry], name: &OsStr) -> Option<Self> {
         find(entries, name).map(|id| Self::only(listing, id))
     }
+
+    /// The entries of `listing` named exactly as one of `names`, with the
+    /// cursor on the first the listing shows; `None` when none is there.
+    pub fn named_all(listing: ListingId, entries: &[Entry], names: &[OsString]) -> Option<Self> {
+        let mut ids: Vec<EntryId> = names
+            .iter()
+            .filter_map(|name| find(entries, name))
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let first = *ids.first()?;
+        Some(Self {
+            listing,
+            ids,
+            anchor: first,
+            cursor: first,
+        })
+    }
 }
 
 /// The entry `id` of a listing's `entries`.
@@ -516,6 +534,23 @@ mod tests {
             .unwrap();
         assert_eq!(same_row.cursor(), EntryId(1));
         assert_eq!(selection.carried(&before, NEXT, &[]), None);
+    }
+
+    #[test]
+    fn named_all_selects_the_names_there_with_the_cursor_on_the_first() {
+        let shown = entries(&[b"a", b"b", b"c"]);
+        let names = [
+            OsString::from("c"),
+            OsString::from("gone"),
+            OsString::from("a"),
+        ];
+        let selection = Selection::named_all(SHOWN, &shown, &names).unwrap();
+        assert_eq!(selection.ids(), [EntryId(0), EntryId(2)]);
+        assert_eq!(selection.cursor(), EntryId(0));
+        assert_eq!(
+            Selection::named_all(SHOWN, &shown, &[OsString::from("x")]),
+            None
+        );
     }
 
     #[test]

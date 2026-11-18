@@ -1,6 +1,7 @@
 //! Selecting in a main window on a real core: arrows, Shift, Ctrl and
-//! Escape by key, Ctrl and Shift by click, Enter to open, and the folder
-//! left selected after going up or back.
+//! Escape by key, Ctrl and Shift by click, Enter to open, the folder
+//! left selected after going up or back, and the files an app asked to
+//! show selected when the window opens.
 
 use super::*;
 
@@ -113,4 +114,31 @@ async fn up_and_back_select_the_folder_left(cx: &mut TestAppContext) {
     // The keys carry on from there.
     cx.simulate_keystrokes("down");
     assert_eq!(selected(&view, cx), ["a.txt"]);
+}
+
+#[gpui::test]
+async fn a_window_opened_to_show_files_has_them_selected(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select");
+    fs::write(tree.path().join("a.txt"), "").unwrap();
+    fs::write(tree.path().join("b.txt"), "").unwrap();
+    cx.update(nova_files_ui::bind_window_keys);
+    let names = ["notes.txt", "gone.txt", "a.txt"].map(Into::into).to_vec();
+    let (view, cx) = window_showing(cx, tree.path(), tree.path(), names);
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+
+    assert_eq!(selected(&view, cx), ["a.txt", "notes.txt"]);
+    // The cursor is on the first of them in the folder, and the keys
+    // carry on from there.
+    view.read_with(cx, |view, _| assert_eq!(view.cursor(), Some(1)));
+    cx.simulate_keystrokes("down");
+    assert_eq!(selected(&view, cx), ["b.txt"]);
+
+    // Going into a folder and back doesn't select them again.
+    cx.simulate_keystrokes("home enter");
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+    cx.simulate_keystrokes("alt-left");
+    wait_for_folder(&view, cx, tree.path()).await;
+    assert_eq!(selected(&view, cx), ["Projects"]);
 }

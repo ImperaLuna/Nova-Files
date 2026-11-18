@@ -161,9 +161,9 @@ pub(crate) fn open_picker(connector: &Connector, request: Box<PickRequest>, cx: 
 /// would lose the asking app's call.
 fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu, cx: &mut App) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
-    let (folder, pick) = match opening {
-        Opening::Folder(request) => (request.folder, None),
-        Opening::Pick(mut request) => (request.folder.take(), Some(request)),
+    let (folder, select, pick) = match opening {
+        Opening::Folder(request) => (request.folder, request.select, None),
+        Opening::Pick(mut request) => (request.folder.take(), Vec::new(), Some(request)),
     };
     let recovers = pick.is_none();
     let mut options = WindowOptions {
@@ -190,6 +190,7 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
     let opened = cx.open_window(options, move |window, cx| {
         cx.new(|cx| {
             let mut view = MainWindow::at(&connector, &location, home_folder(), cx);
+            view.select_on_arrival(select);
             if let Some(request) = pick {
                 view.set_pick(request, window, cx);
             }
