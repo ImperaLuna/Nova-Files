@@ -181,7 +181,6 @@ impl Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        // The core may already have stopped; then there is no one to tell.
         let _ = self.sender.send(CoreMessage::Disconnected {
             client: self.client,
         });

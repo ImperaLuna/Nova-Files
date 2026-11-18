@@ -1,8 +1,3 @@
-//! Lists an archive's entries, in the archive's own order, without
-//! unpacking any file. A zip lists from its central directory; a tar is
-//! read from start to end, past end markers, so archives joined end to end
-//! list whole.
-
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 
@@ -15,15 +10,12 @@ use crate::format::{self, Format};
 use crate::seven::Seven;
 use crate::wire::{self, Clock, Entry, Kind};
 
-/// The longest link target read out of a zip: `PATH_MAX`.
 pub const MAX_LINK: u64 = 4_096;
-/// The permission bits an entry gets when its archive has none at all.
 pub const FILE_MODE: u32 = 0o644;
 pub const FOLDER_MODE: u32 = 0o755;
 const TYPE_BITS: u32 = 0o170_000;
 const LINK_TYPE: u32 = 0o120_000;
 
-/// Writes every entry of `archive` to `out`.
 pub fn list(mut archive: File, seven: Seven<'_>, out: &mut impl Write) -> Ending {
     let result = match format::sniff(&mut archive) {
         Ok(Some(Format::Seven)) => return seven.list(out),
@@ -75,7 +67,6 @@ fn list_zip(archive: File, out: &mut impl Write) -> io::Result<()> {
     Ok(())
 }
 
-/// What a zip entry is, and its permission bits.
 pub fn zip_kind<R: Read>(entry: &zip::read::ZipFile<'_, R>) -> (Kind, u32) {
     let mode = entry.unix_mode();
     let kind = if entry.is_dir() {
@@ -93,8 +84,6 @@ pub fn zip_kind<R: Read>(entry: &zip::read::ZipFile<'_, R>) -> (Kind, u32) {
     (kind, mode)
 }
 
-/// When a zip entry was last changed: its Unix time when the zip has one,
-/// else its DOS wall time, else 1980-01-01, the first DOS date.
 pub fn zip_modified<R: Read>(entry: &zip::read::ZipFile<'_, R>) -> (i64, Clock) {
     let unix = entry.extra_data_fields().find_map(|field| match field {
         ExtraField::ExtendedTimestamp(stamp) => stamp.mod_time(),
@@ -139,9 +128,6 @@ fn list_tar(stream: impl Read, out: &mut impl Write) -> io::Result<()> {
     Ok(())
 }
 
-/// What a tar entry is; `None` for devices, pipes and the like, which are
-/// never unpacked. Archives older than ustar mark a folder only by the `/`
-/// that ends its name.
 pub fn tar_kind(kind: tar::EntryType, path: &[u8]) -> Option<Kind> {
     if kind.is_dir() || (kind.is_file() && path.ends_with(b"/")) {
         Some(Kind::Folder)

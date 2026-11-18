@@ -1,44 +1,3 @@
-//! The program. Wiring only: it starts the core, the D-Bus service and the
-//! window, and holds no logic of its own.
-//!
-//! `nova-files` opens a window on the home folder, `nova-files <folder>` on
-//! that folder. `nova-files --service`, which is how D-Bus
-//! starts it for a launcher, runs only the core until something asks for a
-//! window. Either way the first process claims the bus name; a later launch
-//! asks that process for a window (on its folder) and exits.
-//! `nova-files --index <folder>` only builds that folder's file index, in
-//! the user's cache folder, and exits. `nova-files --make-default` only
-//! makes Nova Files the user's default for folders, in their
-//! `mimeapps.list`, asks a running instance to answer "Show in folder"
-//! from now on, and exits.
-//!
-//! Windows come and go: GPUI ends its run when the last one closes, and the
-//! process carries on without a GPU, waiting for the next window request.
-//! The process ends when the core stops, which it does once idle (see
-//! `nova_files_core::IDLE_EXIT`), or when its bus connection closes, as
-//! when the session bus stops: nothing can reach it any more, and a new bus
-//! would start an instance of its own. Open windows close with it, as a
-//! `GApplication`'s do.
-//!
-//! With `NOVA_FILES_STARTUP_TRACE` or `NOVA_FILES_FRAME_TRACE` set, it
-//! first starts the start-up or frame trace (see
-//! `nova_files_core::start_traces`).
-//!
-//! Then, while it is the only thread, it tells the Vulkan
-//! loader to skip drivers for GPUs the PC doesn't have (see
-//! `nova_files_core::absent_vendor_drivers`); each skipped driver is a set of
-//! libraries a cold start no longer reads. If the first window then can't
-//! set up its GPU, the program starts again on that folder with every
-//! driver (see `restart_with_every_driver`).
-//!
-//! It hands the core the D-Bus watcher of the system's drives (see
-//! `nova_files_dbus::Udisks`). It also hands the core a way to give freed memory back to the system
-//! after heavy work (see `memory`), and the D-Bus service a way to open
-//! picker windows for other apps (see `picker`). When Nova Files is the
-//! user's default for folders, or D-Bus started it for apps' "Show in
-//! folder" (`--file-manager`), it also answers that (see
-//! `nova_files_dbus::Service::serve_file_manager_when`).
-
 mod memory;
 mod mode;
 mod picker;
@@ -64,12 +23,8 @@ use crate::picker::UiPicker;
 const CORE_WATCH_THREAD: &str = "nova-files-core-watch";
 const NO_CACHE_FOLDER: &str = "no cache folder: set XDG_CACHE_HOME or HOME";
 
-/// Set on a restart that gives the Vulkan loader every driver, so the new
-/// process doesn't filter them again.
 const EVERY_DRIVER_VARIABLE: &str = "NOVA_FILES_EVERY_VULKAN_DRIVER";
 
-/// Whether this process set the Vulkan driver filter. A filter the user set
-/// is never taken back.
 static FILTER_SET: AtomicBool = AtomicBool::new(false);
 
 fn main() -> ExitCode {
@@ -87,11 +42,8 @@ fn main() -> ExitCode {
     }
 }
 
-/// How long a restarted process waits for the bus to free its old name
-/// before it takes the name as another instance's.
 const RESTART_NAME_WAIT: Duration = Duration::from_millis(500);
 
-/// How long to wait for the bus name: only a restart waits.
 fn name_wait() -> Duration {
     if every_driver_asked() {
         RESTART_NAME_WAIT
@@ -100,7 +52,6 @@ fn name_wait() -> Duration {
     }
 }
 
-/// Whether this process is a restart that must keep every driver.
 fn every_driver_asked() -> bool {
     std::env::var_os(EVERY_DRIVER_VARIABLE).is_some()
 }
@@ -121,14 +72,6 @@ fn skip_absent_vulkan_drivers() {
     }
 }
 
-/// The command that starts this program again on `folder` (or on the
-/// Start page, without one) with every Vulkan driver, or `None` when this
-/// process didn't filter any.
-///
-/// A window that can't set up its GPU with drivers filtered may still draw
-/// with the software driver (lavapipe): after an NVIDIA driver update
-/// without a reboot, NVIDIA's Vulkan and OpenGL both fail. The environment
-/// can't be changed once threads run, so the new process gets it instead.
 fn restart_with_every_driver(folder: Option<&Path>) -> Option<Command> {
     if !FILTER_SET.load(Ordering::SeqCst) {
         return None;
@@ -159,8 +102,6 @@ fn run() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
     let core = nova_files_core::spawn()?;
-    // Before anything connects, so the first client to ask finds it. It
-    // reads nothing until then.
     core.connector
         .offer_drives(nova_files_dbus::Udisks::new(Bus::System))?;
     let (requests, received) = nova_files_ui::channel();
@@ -204,7 +145,6 @@ fn run() -> Result<(), Box<dyn Error>> {
             return Ok(());
         }
         Err(error) if !matches!(mode, Mode::Service | Mode::FileManager) => {
-            // Still useful without a session bus: windows, no handover.
             report(&format!("no D-Bus session ({error}); running on its own"));
             None
         }
@@ -216,11 +156,6 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Opens the first window in window mode. Then each `OpenWindow` or `Pick`
-/// while no window is open starts the UI again, until something asks it to
-/// quit.
-///
-/// Holds the bus name (`service`) until the program ends or restarts.
 fn show_windows(
     mode: Mode,
     requests: &RequestSender,
@@ -229,13 +164,10 @@ fn show_windows(
     service: Option<Service>,
 ) {
     let service = Cell::new(service);
-    // Replaces this process, so it returns only when that failed.
     let restart: RecoverGpu = Rc::new(move |folder| {
         let Some(mut command) = restart_with_every_driver(folder) else {
             return;
         };
-        // The bus confirms the release, so the new process finds the name
-        // free.
         if let Some(Err(error)) = service.take().as_ref().map(Service::release) {
             report(&format!("could not give up the bus name: {error}"));
         }
@@ -254,7 +186,6 @@ fn show_windows(
         let first = match received.wait() {
             Some(Request::OpenWindow(request)) => Opening::Folder(request),
             Some(Request::Pick(request)) => Opening::Pick(request),
-            // No window is open, so no picker is left to close.
             Some(Request::ClosePick(_)) => continue,
             Some(Request::Quit) | None => break,
         };
@@ -264,8 +195,6 @@ fn show_windows(
     }
 }
 
-/// Asks the UI to quit once the core thread ends, so the process ends with
-/// the core.
 fn watch_core(core: JoinHandle<()>, requests: RequestSender) -> io::Result<()> {
     thread::Builder::new()
         .name(CORE_WATCH_THREAD.to_owned())
@@ -278,7 +207,6 @@ fn watch_core(core: JoinHandle<()>, requests: RequestSender) -> io::Result<()> {
     Ok(())
 }
 
-/// Until there is a log, errors go to stderr.
 fn report(message: &str) {
     writeln!(io::stderr(), "nova-files: {message}").ok();
 }
@@ -303,7 +231,6 @@ mod tests {
         let envs: Vec<_> = command.get_envs().collect();
         assert!(envs.contains(&(OsStr::new(nova_files_core::FILTER_VARIABLE), None)));
         assert!(envs.contains(&(OsStr::new(EVERY_DRIVER_VARIABLE), Some(OsStr::new("1")))));
-        // A window on the Start page starts again on it.
         let command = restart_with_every_driver(None).unwrap();
         assert_eq!(command.get_args().count(), 0);
     }

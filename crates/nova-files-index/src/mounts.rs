@@ -1,18 +1,3 @@
-//! Whether a folder is the root of a mount, which the crawl doesn't enter.
-//!
-//! A changed device number is not enough: a btrfs subvolume has its own
-//! device number without being a mount, and its files belong in the index.
-//! [`SystemMounts`] asks the kernel instead, through `statx`'s
-//! `STATX_ATTR_MOUNT_ROOT` (Linux 5.8+). On an older kernel, or when that
-//! call fails, it looks the folder up among the mount points in
-//! `/proc/self/mountinfo`, read once, on first need.
-//!
-//! The crawl takes any [`MountCheck`], so tests can say which folders are
-//! mounts without mounting anything. [`local_mount_points`] lists the
-//! mount points of local drives, for the core's trash listing: never a
-//! network or FUSE mount, where a look can hang, an automount, which a
-//! look would mount, or the kernel's own filesystems.
-
 use std::cell::OnceCell;
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -23,21 +8,13 @@ use std::path::{Path, PathBuf};
 use rustix::fs::{AtFlags, CWD, StatxAttributes, StatxFlags, statx};
 
 const MOUNTINFO: &str = "/proc/self/mountinfo";
-/// The mount point is the fifth field of a mountinfo line.
 const MOUNT_POINT_FIELD: usize = 4;
-/// Mountinfo writes a space, tab, newline or backslash in a path as a
-/// backslash and three octal digits.
 const ESCAPE: u8 = b'\\';
 const OCTAL_DIGITS: usize = 3;
 const OCTAL: u32 = 8;
-/// Ends a mountinfo line's optional fields; the filesystem type follows.
 const SEPARATOR: &[u8] = b"-";
-/// FUSE filesystems' types (`fuse.sshfs`, `fuse.rclone`): often over the
-/// network. A local drive through FUSE is `fuseblk`.
 const FUSE_PREFIX: &[u8] = b"fuse.";
-/// Filesystem types that aren't local drives.
 const NOT_LOCAL: &[&[u8]] = &[
-    // Over the network.
     b"nfs",
     b"nfs4",
     b"cifs",
@@ -50,9 +27,7 @@ const NOT_LOCAL: &[&[u8]] = &[
     b"sshfs",
     b"davfs",
     b"fuse",
-    // Mounted when looked at.
     b"autofs",
-    // The kernel's own.
     b"proc",
     b"sysfs",
     b"devpts",
@@ -74,20 +49,19 @@ const NOT_LOCAL: &[&[u8]] = &[
     b"nsfs",
 ];
 
-/// Answers whether a folder is where a filesystem is mounted.
 pub trait MountCheck {
     fn is_mount_root(&self, folder: &Path) -> bool;
 }
 
-/// The running system's mounts.
 #[derive(Debug, Default)]
 pub struct SystemMounts {
-    /// From mountinfo, read only if `statx` can't answer.
     listed: OnceCell<HashSet<PathBuf>>,
 }
 
 impl MountCheck for SystemMounts {
     fn is_mount_root(&self, folder: &Path) -> bool {
+        // STATX_ATTR_MOUNT_ROOT needs Linux 5.8; older kernels fall back to /proc/self/mountinfo.
+        // https://man7.org/linux/man-pages/man2/statx.2.html
         statx(CWD, folder, AtFlags::SYMLINK_NOFOLLOW, StatxFlags::empty())
             .ok()
             .and_then(|answer| mount_root(answer.stx_attributes_mask, answer.stx_attributes))
@@ -99,39 +73,29 @@ impl MountCheck for SystemMounts {
     }
 }
 
-/// What `statx` says about being a mount root: `None` when the kernel
-/// doesn't report it (`mask` lacks it).
 fn mount_root(mask: StatxAttributes, attributes: StatxAttributes) -> Option<bool> {
     mask.contains(StatxAttributes::MOUNT_ROOT)
         .then(|| attributes.contains(StatxAttributes::MOUNT_ROOT))
 }
 
-/// The mount points the running system has, from mountinfo; none when it
-/// can't be read.
 fn system_mount_points() -> HashSet<PathBuf> {
     fs::read(MOUNTINFO).map_or_else(|_| HashSet::new(), |text| mount_points(&text))
 }
 
-/// The mount points of the running system's local drives, from
-/// mountinfo; none when it can't be read.
 pub fn local_mount_points() -> HashSet<PathBuf> {
     fs::read(MOUNTINFO).map_or_else(|_| HashSet::new(), |text| local_points(&text))
 }
 
-/// The mount points a mountinfo file lists.
 fn mount_points(mountinfo: &[u8]) -> HashSet<PathBuf> {
     points_where(mountinfo, |_| true)
 }
 
-/// The mount points of local drives a mountinfo file lists.
 fn local_points(mountinfo: &[u8]) -> HashSet<PathBuf> {
     points_where(mountinfo, |kind| {
         !NOT_LOCAL.contains(&kind) && !kind.starts_with(FUSE_PREFIX)
     })
 }
 
-/// The mount points a mountinfo file lists whose filesystem type `keep`
-/// takes.
 fn points_where(mountinfo: &[u8], keep: impl Fn(&[u8]) -> bool) -> HashSet<PathBuf> {
     mountinfo
         .split(|&byte| byte == b'\n')
@@ -145,7 +109,6 @@ fn points_where(mountinfo: &[u8], keep: impl Fn(&[u8]) -> bool) -> HashSet<PathB
         .collect()
 }
 
-/// Turns mountinfo's `\040`-style escapes back into bytes.
 fn unescape(field: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(field.len());
     let mut rest = field;
@@ -226,7 +189,6 @@ mod tests {
         let mounts = SystemMounts::default();
         assert!(mounts.is_mount_root(Path::new("/")));
         assert!(!mounts.is_mount_root(&std::env::temp_dir().join("nova-files-surely-not-a-mount")));
-        // /proc is a mount nearly everywhere; skip where it isn't.
         let listed = fs::read(MOUNTINFO)
             .map(|text| mount_points(&text))
             .unwrap_or_default();
@@ -243,7 +205,6 @@ mod tests {
             .listed
             .set(std::iter::once(PathBuf::from("/nowhere/mounted")).collect())
             .unwrap();
-        // statx fails on a path that doesn't exist, so the list answers.
         assert!(mounts.is_mount_root(Path::new("/nowhere/mounted")));
         assert!(!mounts.is_mount_root(Path::new("/nowhere/else")));
     }

@@ -1,12 +1,7 @@
-//! Searching against a scripted core: what is typed in the box is asked
-//! for as a find, the files found take the list's place while the window
-//! stays in its folder, and clearing the box or going elsewhere ends it.
-
 use nova_files_api::Operation;
 
 use super::*;
 
-/// The next find the window asks for, skipping other commands.
 fn next_find(core: &mut Core) -> Option<(ListingId, String, Option<PathBuf>)> {
     while let Ok(message) = core.messages.try_recv() {
         match message {
@@ -21,7 +16,6 @@ fn next_find(core: &mut Core) -> Option<(ListingId, String, Option<PathBuf>)> {
     None
 }
 
-/// Answers find `id` with `found`: `(folder, name, kind)` each.
 fn answer_found(core: &Core, id: ListingId, found: &[(&str, &str, EntryKind)]) {
     let entries: Arc<[Entry]> = found
         .iter()
@@ -49,8 +43,6 @@ const REPORTS: &[(&str, &str, EntryKind)] = &[
     ("/old", "reports", EntryKind::Folder),
 ];
 
-/// A window on [`SHOWN`] with its keys bound, its folder on screen and
-/// the caret in the search box.
 fn searching(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     cx.update(|cx| {
         nova_files_ui::bind_window_keys(cx);
@@ -64,7 +56,6 @@ fn searching(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestCon
     (view, cx, core)
 }
 
-/// Types `query` and answers its find with [`REPORTS`].
 fn found_reports(cx: &mut VisualTestContext, core: &mut Core, query: &str) -> ListingId {
     cx.simulate_input(query);
     cx.run_until_parked();
@@ -85,8 +76,6 @@ fn names(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
 #[gpui::test]
 fn typing_finds_everywhere_and_the_window_stays_in_its_folder(cx: &mut TestAppContext) {
     let (view, cx, mut core) = searching(cx);
-    // Files dropped on the list go into the folder on screen, but not
-    // onto a search's files, which aren't in it.
     assert_eq!(
         view.read_with(cx, |view, _| view.list_drop_folder().map(Path::to_path_buf)),
         Some(PathBuf::from(SHOWN))
@@ -96,7 +85,6 @@ fn typing_finds_everywhere_and_the_window_stays_in_its_folder(cx: &mut TestAppCo
     cx.run_until_parked();
     let (id, query, within) = next_find(&mut core).unwrap();
     assert_eq!((query.as_str(), within), ("r", None));
-    // The folder is still on screen: no count over it yet.
     assert!(cx.debug_bounds("match-count").is_none());
     answer_found(&core, id, REPORTS);
     let (id, ..) = std::iter::from_fn(|| next_find(&mut core)).last().unwrap();
@@ -112,7 +100,6 @@ fn typing_finds_everywhere_and_the_window_stays_in_its_folder(cx: &mut TestAppCo
     });
     assert!(cx.debug_bounds("match-count").is_some());
     assert!(cx.debug_bounds("no-matches").is_none());
-    // Nothing else asked: the folder isn't read again.
     assert!(core.next_listing().is_none());
 }
 
@@ -246,7 +233,6 @@ fn ctrl_f_puts_the_caret_back_in_the_box(cx: &mut TestAppContext) {
 
     cx.simulate_keystrokes("ctrl-f");
     cx.run_until_parked();
-    // The whole text is selected: typing replaces it.
     cx.simulate_input("x");
     cx.run_until_parked();
     view.read_with(cx, |view, cx| assert_eq!(view.query(cx), "x"));
@@ -326,12 +312,9 @@ fn found_files_get_a_folder_column_and_a_folder_only_does_not(cx: &mut TestAppCo
     assert!(cx.debug_bounds("folder-header").is_some());
     assert!(cx.debug_bounds("folder-1").is_some());
     assert!(cx.debug_bounds("scope").is_some());
-    // The Modified column lines up with its head, Folder column or not.
     let head = cx.debug_bounds("modified-header").unwrap();
     let cell = cx.debug_bounds("modified-0").unwrap();
     assert_eq!(head.origin.x, cell.origin.x);
-    // A folder's text lines up with the head too: its link's padding
-    // hangs out to the left.
     let head = cx.debug_bounds("folder-header").unwrap();
     let link = cx.debug_bounds("folder-0").unwrap();
     assert!(link.origin.x < head.origin.x);
@@ -457,7 +440,6 @@ fn slash_with_a_modifier_leaves_the_box_alone(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("down");
     cx.run_until_parked();
 
-    // As a keyboard that types `/` with Alt or Fn held reports it.
     let function = gpui::Modifiers {
         function: true,
         ..gpui::Modifiers::default()
@@ -518,7 +500,6 @@ fn a_refusal_before_any_results_reads_the_folder_again(cx: &mut TestAppContext) 
 
 #[gpui::test]
 fn a_space_typed_into_the_box_stays_in_it(cx: &mut TestAppContext) {
-    // Space is also the quick look's.
     let (view, cx, _core) = searching(cx);
     cx.simulate_input("a");
     cx.simulate_keystrokes("space");
@@ -562,7 +543,6 @@ fn search_results_show_as_details_whatever_their_folder_shows(cx: &mut TestAppCo
         FolderView::default()
     );
 
-    // Ctrl+2 there keeps nothing.
     core.commands();
     cx.simulate_keystrokes("down ctrl-2");
     let kept = core

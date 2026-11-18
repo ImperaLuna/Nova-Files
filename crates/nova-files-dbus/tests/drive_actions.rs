@@ -1,9 +1,3 @@
-//! Against a private D-Bus daemon with a stand-in udisks2: mounting,
-//! unmounting and ejecting through the watcher answer with what udisks2
-//! did or why it didn't (mounting what is mounted answers where it is), eject unmounts first and never switches off a
-//! drive the system runs from, and a client of the real core hears how its
-//! action went.
-
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -20,7 +14,6 @@ use nova_files_dbus::{Bus, Udisks};
 mod support;
 mod udisks;
 
-/// A second volume on the stick, mounted inside the first.
 const STICK_INNER: &str = "/org/freedesktop/UDisks2/block_devices/sdb2";
 
 use support::{PrivateBus, WAIT};

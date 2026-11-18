@@ -1,18 +1,9 @@
-//! Games and Projects on a real core: Places lists both before the trash;
-//! a click shows what each gathers, with each project's Folder or each
-//! game's Library beside it, and the list follows what is made in its
-//! folders. Back leaves it as it leaves a folder; a tab keeps it; a
-//! search from it comes back to it. There is no folder there to make
-//! files in. Its chip lists the folders it gathers from, and taking one
-//! out can be undone; a folder dropped on its row in Places is added.
-
 use gpui::point;
 use nova_files_api::Gathering;
 
 use super::*;
 use crate::window_sidebar::right_click_at;
 
-/// Waits until `place` is on screen with `names`, in order.
 async fn wait_for_place(
     view: &Entity<MainWindow>,
     cx: &VisualTestContext,
@@ -29,7 +20,6 @@ async fn wait_for_place(
 async fn projects_lists_the_folders_it_gathers_and_follows_them(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("gathered-projects");
-    // A fresh install gathers `~/Projects`, the tree's.
     let (view, cx) = open_on(cx, tree.path()).await;
 
     click(cx, "place-projects");
@@ -47,7 +37,6 @@ async fn projects_lists_the_folders_it_gathers_and_follows_them(cx: &mut TestApp
     assert!(cx.debug_bounds("place-projects-here").is_some());
 
     fs::create_dir(tree.path().join("Projects/bench")).unwrap();
-    // A file is no project.
     fs::write(tree.path().join("Projects/README.md"), "").unwrap();
     wait_for_place(&view, cx, Gathering::Projects, &["bench", "nova"]).await;
 
@@ -120,7 +109,6 @@ async fn a_search_from_projects_comes_back_to_it(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("/");
     cx.run_until_parked();
     cx.simulate_input("nova");
-    // This core has no index: the find can't run and the list empties.
     view.condition::<WindowEvent>(cx, |view, _| {
         view.searching() && view.entry_names().is_empty()
     })
@@ -139,7 +127,6 @@ async fn a_search_from_projects_comes_back_to_it(cx: &mut TestAppContext) {
     wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
 }
 
-/// Writes `text` as the gathered folders file of the home at `tree`.
 fn write_gathered(tree: &Path, text: &str) {
     let config = tree.join(".config/nova-files");
     fs::create_dir_all(&config).unwrap();

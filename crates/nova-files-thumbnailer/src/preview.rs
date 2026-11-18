@@ -1,15 +1,3 @@
-//! A picture for the quick look: one file decoded, turned upright and
-//! scaled down to fit a box, sent on standard output.
-//!
-//! `nova-files-thumbnailer --preview <file> <width> <height>`
-//!
-//! Before it reads the file the helper locks itself in to reading alone
-//! (see `sandbox`). It decodes JPEG, PNG and WebP itself (see `render`),
-//! within the same decode limit as thumbnails; anything else, or a file
-//! that won't decode, exits with failure and prints nothing. The answer is
-//! a line `<width> <height>`, then that many RGBA pixels, row by row. A
-//! picture smaller than the box keeps its size.
-
 use std::ffi::OsString;
 use std::io::{self, Write as _};
 use std::path::PathBuf;
@@ -18,12 +6,9 @@ use std::process::ExitCode;
 use crate::render;
 use crate::sandbox;
 
-/// The first argument that asks for a preview rather than a batch. The
-/// core passes the same word.
 pub const FLAG: &str = "--preview";
 pub const USAGE: &str = "usage: nova-files-thumbnailer --preview <file> <width> <height>";
 
-/// What the core asks for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     pub file: PathBuf,
@@ -32,7 +17,6 @@ pub struct Request {
 }
 
 impl Request {
-    /// The arguments after [`FLAG`]; `None` when they don't form a request.
     pub fn from_args(args: impl IntoIterator<Item = OsString>) -> Option<Self> {
         let mut args = args.into_iter();
         let file = PathBuf::from(args.next()?);
@@ -53,7 +37,6 @@ impl Request {
     }
 }
 
-/// Answers `request` on standard output.
 pub fn run(request: &Request) -> ExitCode {
     if let Err(error) = sandbox::lock_in_read_only() {
         writeln!(io::stderr(), "could not start the sandbox: {error}").ok();
@@ -66,8 +49,6 @@ pub fn run(request: &Request) -> ExitCode {
         return ExitCode::FAILURE;
     };
     let fits = image.width() <= request.width && image.height() <= request.height;
-    // Averaging areas: smooth when scaling far down, and quicker than a
-    // filter (a 24 MP photo to 4K in 0.6 s against 0.75 s, decode included).
     let image = if fits {
         image
     } else {
@@ -81,7 +62,6 @@ pub fn run(request: &Request) -> ExitCode {
     if sent.is_ok() {
         ExitCode::SUCCESS
     } else {
-        // Nobody is reading the answer any more.
         ExitCode::FAILURE
     }
 }

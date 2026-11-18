@@ -1,10 +1,4 @@
-//! The arrow keys in a picker, passed on by the name box: they move
-//! through the entries, the box follows the files selected, and Enter
-//! with nothing typed goes into a folder they landed on.
-
 use super::*;
-
-// Rows on screen: 0 `Projects`, 1 `notes (2).txt`, 2 `notes.txt`.
 
 #[gpui::test]
 async fn arrows_put_the_file_selected_in_the_box(cx: &mut TestAppContext) {
@@ -14,7 +8,6 @@ async fn arrows_put_the_file_selected_in_the_box(cx: &mut TestAppContext) {
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
     cx.simulate_input("typed");
 
-    // A folder leaves what is typed alone.
     cx.simulate_keystrokes("down");
     assert_eq!(name(&view, cx).as_deref(), Some("typed"));
     cx.simulate_keystrokes("down down");

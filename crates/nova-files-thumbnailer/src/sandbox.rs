@@ -1,13 +1,3 @@
-//! Locks the helper in before it reads any file: it may read anywhere, but
-//! write, create or remove files only inside the thumbnails folder. It may
-//! also write to `/dev/null`, where the system thumbnailers it starts send
-//! their output. For a preview it may write nothing at all: the picture
-//! goes out on its standard output, which it already holds.
-//!
-//! Landlock does the locking. A kernel without Landlock (or an older ABI)
-//! gets as much of it as it supports; the helper still runs there, since a
-//! missing sandbox must not cost the user their thumbnails.
-
 use std::error::Error;
 use std::fs::DirBuilder;
 use std::os::unix::fs::DirBuilderExt as _;
@@ -18,14 +8,13 @@ use landlock::{
     RulesetCreatedAttr as _,
 };
 
-/// The newest Landlock ABI the rules are written for.
+// A kernel enforces only the Landlock ABI it supports, possibly none.
+// https://docs.kernel.org/userspace-api/landlock.html
 const ABI_VERSION: ABI = ABI::V3;
 const ROOT: &str = "/";
 const NULL_DEVICE: &str = "/dev/null";
-/// The thumbnails folder is private to the user, as the spec asks.
 pub const FOLDER_MODE: u32 = 0o700;
 
-/// Creates `writable` if needed, then locks the process in.
 pub fn lock_in(writable: &Path) -> Result<(), Box<dyn Error>> {
     DirBuilder::new()
         .recursive(true)
@@ -42,13 +31,11 @@ pub fn lock_in(writable: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Locks the process in to reading alone.
 pub fn lock_in_read_only() -> Result<(), Box<dyn Error>> {
     read_only()?.restrict_self()?;
     Ok(())
 }
 
-/// Rules that let the process read anywhere and change nothing.
 fn read_only() -> Result<RulesetCreated, Box<dyn Error>> {
     Ok(Ruleset::default()
         .handle_access(AccessFs::from_all(ABI_VERSION))?
@@ -65,7 +52,6 @@ mod tests {
 
     use super::*;
 
-    /// Whether this kernel enforces Landlock at all.
     fn kernel_has_landlock() -> bool {
         fs::read_to_string("/sys/kernel/security/lsm").is_ok_and(|lsms| lsms.contains("landlock"))
     }
@@ -75,8 +61,6 @@ mod tests {
         let root = std::env::temp_dir().join(format!("nova-thumb-sandbox-{}", std::process::id()));
         let inside = root.join("thumbnails");
         fs::create_dir_all(&root).unwrap();
-        // Landlock binds the thread that asks and what it starts, so the
-        // test locks a thread of its own.
         let outside = root.clone();
         let result = thread::spawn(move || {
             lock_in(&inside).unwrap();

@@ -1,8 +1,3 @@
-//! Makes an archive of files and folders. Each source goes in under its
-//! own name, a folder with all it holds; links go in as links, never
-//! followed; sockets, pipes and devices are left out. For each file it
-//! writes a line to the core: the bytes the file held, in decimal.
-
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Read, Write};
@@ -17,7 +12,6 @@ use zip::{AesMode, CompressionMethod};
 use crate::ending::Ending;
 use crate::progress::{Told, Unheard};
 
-/// What the archive is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Packing {
     ZipDeflate,
@@ -28,7 +22,6 @@ pub enum Packing {
 }
 
 impl Packing {
-    /// The packing the core names `word`.
     pub fn of(word: &OsStr) -> Option<Self> {
         Some(match word.as_bytes() {
             b"zip-deflate" => Self::ZipDeflate,
@@ -41,19 +34,14 @@ impl Packing {
     }
 }
 
-/// How hard to compress, from [`FASTEST`] to [`SMALLEST`].
 pub type Level = u32;
 pub const FASTEST: Level = 1;
 pub const SMALLEST: Level = 9;
-/// Zstandard's own levels for each of ours: its top levels are slow for
-/// little gain, so ours stop at 19.
 const ZSTD_LEVELS: [i32; 9] = [1, 3, 5, 7, 9, 12, 15, 17, 19];
 
 const FOLDER_TYPE: u32 = 0o040_000;
 const LINK_TYPE: u32 = 0o120_000;
 const FILE_TYPE: u32 = 0o100_000;
-/// A zip entry's Unix mode sits in the top half of its external
-/// attributes; the bottom half holds DOS attributes.
 const UNIX_SHIFT: u32 = 16;
 const DOS_FOLDER: u32 = 0x10;
 const PERMISSION_BITS: u32 = 0o7777;
@@ -71,15 +59,12 @@ impl From<Unheard> for Stopped {
     }
 }
 
-/// How to make an archive.
 pub struct Recipe<'a> {
     pub packing: Packing,
     pub level: Level,
-    /// Locks each zip file entry.
     pub password: Option<&'a str>,
 }
 
-/// Writes `sources` into `output` as `recipe` says.
 pub fn compress(
     output: File,
     sources: &[&Path],
@@ -144,12 +129,8 @@ fn zstd_level(level: Level) -> i32 {
     ZSTD_LEVELS.get(index).copied().unwrap_or_default()
 }
 
-/// The device and inode of the archive being made, which no walk takes.
 type Itself = (u64, u64);
 
-/// Calls `each` with every entry under `source`, `source` first, a
-/// folder before what it holds, each with its name in the archive; the
-/// archive being made is left out.
 fn walk(
     source: &Path,
     itself: Itself,
@@ -215,8 +196,6 @@ fn tar_all<W: Write>(
     builder.into_inner().map_err(Stopped::Write)
 }
 
-/// A tar error at `path`: reading it when `path` can't be opened now,
-/// else writing.
 fn sort(error: io::Error, path: &Path) -> Stopped {
     if File::open(path).is_err() {
         Stopped::Read(error)
@@ -309,8 +288,6 @@ fn copy(from: &mut impl Read, to: &mut impl Write) -> Result<u64, Stopped> {
     }
 }
 
-/// `seconds` since 1970 as a zip's DOS time: wall time in the user's
-/// zone, 1980 at the earliest.
 fn dos_time(seconds: i64) -> zip::DateTime {
     chrono::DateTime::from_timestamp(seconds, 0)
         .map(|time| time.with_timezone(&chrono::Local).naive_local())

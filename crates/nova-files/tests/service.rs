@@ -1,10 +1,3 @@
-//! The built program against a private D-Bus daemon, without a display:
-//! service mode answers `Ping`, a later launch hands its window (and its
-//! folder) to the first instance (or, in service mode, leaves it alone), the
-//! service stops when its bus does, and bad starts exit with an error. It
-//! answers apps' "Show in folder" when it is the default for folders or
-//! D-Bus started it for that, and not otherwise.
-
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -26,11 +19,8 @@ use support::{PrivateBus, WAIT};
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, Proxy};
 
-/// How long a test waits for something that should not happen.
 const QUIET: Duration = Duration::from_millis(500);
 
-/// The program, pointed at `address` as its session bus and with no
-/// display, so a window it should not open fails instead of showing.
 fn program(address: &str, args: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_nova-files"));
     command
@@ -46,8 +36,6 @@ fn program(address: &str, args: &[&str]) -> Command {
     command
 }
 
-/// Runs the program to its end, failing the test if it takes longer than
-/// [`WAIT`].
 fn finish(mut command: Command) -> Output {
     let child = command.spawn().unwrap();
     let (sender, output) = mpsc::channel();
@@ -66,7 +54,6 @@ fn client(bus: &PrivateBus) -> Connection {
         .unwrap()
 }
 
-/// A running program, killed when dropped.
 struct Running(Child);
 
 impl Drop for Running {
@@ -76,7 +63,6 @@ impl Drop for Running {
     }
 }
 
-/// Starts the program in service mode and waits until it owns the name.
 fn start_service(bus: &PrivateBus) -> Running {
     let watcher = client(bus);
     let owners = DBusProxy::new(&watcher)
@@ -116,7 +102,6 @@ fn service_mode_answers_ping() {
 fn service_mode_exits_when_its_bus_stops() {
     let bus = PrivateBus::start();
     let mut service = start_service(&bus);
-    // Its stderr closes when it exits.
     let stderr = service.0.stderr.take().unwrap();
     let (sender, closed) = mpsc::channel();
     thread::spawn(move || {
@@ -194,9 +179,6 @@ fn second_service_start_asks_for_no_window() {
     assert!(activated.recv_timeout(QUIET).is_err());
 }
 
-/// A process restarted with every Vulkan driver waits for the name its old
-/// self is still giving up, and serves, instead of handing over to a
-/// process that is gone.
 #[test]
 fn a_restart_takes_the_name_its_old_process_gives_up() {
     let bus = PrivateBus::start();
@@ -222,7 +204,6 @@ fn a_restart_takes_the_name_its_old_process_gives_up() {
     let mut restart = program(&bus.address, &["--service"]);
     restart.env("NOVA_FILES_EVERY_VULKAN_DRIVER", "1");
     let _restarted = Running(restart.spawn().unwrap());
-    // The old process lets go a little after the restart first asks.
     assert!(owned.recv_timeout(QUIET).is_err());
     old.release().unwrap();
 
@@ -275,8 +256,6 @@ fn unknown_flag_is_refused_with_the_usage() {
     );
 }
 
-/// A start that ends at once (a bad flag), with the start-up trace going to
-/// `trace`.
 fn traced_start(trace: &std::path::Path) -> Output {
     let mut command = program("unix:path=/nonexistent/nova-files-bus", &["--frobnicate"]);
     command.env(nova_files_core::STARTUP_TRACE_VARIABLE, trace);
@@ -324,8 +303,6 @@ fn a_frame_trace_that_cant_be_written_is_reported_and_the_start_goes_on() {
     );
 }
 
-/// `--make-default` writes the user's `mimeapps.list` and exits without a
-/// bus, once Nova Files' desktop entry is installed.
 #[test]
 fn make_default_makes_nova_files_open_folders() {
     let root = std::env::temp_dir().join(format!("nova-files-default-{}", std::process::id()));
@@ -372,7 +349,6 @@ fn make_default_makes_nova_files_open_folders() {
     );
 }
 
-/// Removes its folder when dropped, so a failed test leaves nothing behind.
 struct Removed(PathBuf);
 
 impl Drop for Removed {
@@ -381,8 +357,6 @@ impl Drop for Removed {
     }
 }
 
-/// XDG folders of their own, removed when dropped; with Nova Files the
-/// default for folders when `default`.
 struct Folders(PathBuf);
 
 impl Folders {
@@ -407,7 +381,6 @@ impl Folders {
         Self(root)
     }
 
-    /// `command`, reading only these folders.
     fn apply(&self, command: &mut Command) {
         command
             .env("XDG_CONFIG_HOME", self.0.join("config"))
@@ -424,7 +397,6 @@ impl Drop for Folders {
     }
 }
 
-/// Gets a message each time the file manager's name gets an owner.
 fn file_manager_owned(bus: &PrivateBus) -> mpsc::Receiver<()> {
     let watcher = client(bus);
     let owners = DBusProxy::new(&watcher)
@@ -443,7 +415,6 @@ fn file_manager_owned(bus: &PrivateBus) -> mpsc::Receiver<()> {
     owned
 }
 
-/// Starts the program with `args` and `folders`, killed when dropped.
 fn start_in(bus: &PrivateBus, args: &[&str], folders: &Folders) -> Running {
     let mut command = program(&bus.address, args);
     folders.apply(&mut command);

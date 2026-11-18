@@ -59,7 +59,6 @@ mod tests {
             clear: 0o027,
         };
 
-        // Bits already set stay set.
         assert_eq!(change.applied_to(0o644), 0o640);
         assert_eq!(change.applied_to(0o100_000 | 0o7777), 0o7750);
     }

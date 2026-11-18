@@ -1,13 +1,9 @@
-//! `check` against hand-made files: a good tree, then one fault at a time.
-
 use super::*;
 use crate::FileId;
 use crate::format::NO_STAMP;
 
 const NAMES: &[u8] = b"/homedocsa.txtb.txt";
 
-/// `/home` holding `docs/a.txt` and `b.txt`: parent, end, where the name
-/// starts and how long it is, and kind.
 const TREE: [(u32, u32, u32, u16, Kind); 4] = [
     (NO_PARENT, 4, 0, 5, Kind::Folder),
     (0, 3, 5, 4, Kind::Folder),
@@ -106,8 +102,6 @@ fn the_row_count_must_fit_a_row_number() {
     let header = |rows| file_with(Header::current(rows, 0, NO_STAMP), &[], &[]);
     assert_eq!(check(&header(0)), out_of_range);
     assert_eq!(check(&header(u64::from(NO_PARENT) + 1)), out_of_range);
-    // As many rows as a row number counts is allowed; this file just
-    // doesn't hold them.
     assert_eq!(
         check(&header(u64::from(NO_PARENT))),
         Err(OpenError::Damaged("length doesn't match the header"))
@@ -139,7 +133,6 @@ fn names_stay_inside_the_names_block() {
     let mut rows = tree();
     rows[3].name_len += 1;
     assert_eq!(damaged(&rows), "a name runs past the names block");
-    // Up to the very last byte is fine.
     let mut rows = tree();
     rows[3].name_at -= 1;
     assert!(check(&file(&rows)).is_ok());
@@ -162,21 +155,17 @@ fn a_row_names_the_folder_around_it_as_its_parent() {
 #[test]
 fn runs_nest() {
     let wrong = "a row's run doesn't fit its parent's";
-    // A folder's run past its parent's.
     let mut rows = tree();
     rows[0].end = 3;
     rows[1].end = 4;
     assert_eq!(damaged(&rows), wrong);
-    // A file with a run of more than itself.
     let mut rows = tree();
     rows[1].end = 4;
     rows[2].end = 4;
     assert_eq!(damaged(&rows), wrong);
-    // A run that ends before its row.
     let mut rows = tree();
     rows[1].end = 1;
     assert_eq!(damaged(&rows), wrong);
-    // The first row's run is the whole index.
     let mut rows = tree();
     rows[0].end = 3;
     assert_eq!(damaged(&rows), wrong);
@@ -185,7 +174,6 @@ fn runs_nest() {
 #[test]
 fn an_empty_folder_is_a_run_of_one() {
     let mut rows = tree();
-    // docs holds nothing; a.txt moves to the top level.
     rows[1].end = 2;
     rows[2].parent = 0;
     assert!(check(&file(&rows)).is_ok());

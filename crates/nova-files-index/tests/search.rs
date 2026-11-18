@@ -1,6 +1,3 @@
-//! Searching a crawled home: stages, ranking, hidden rows, and changes
-//! since the crawl.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 mod support;
@@ -12,12 +9,9 @@ use nova_files_index::{
 };
 use support::TempFolder;
 
-/// Enough for every test below.
 const LIMIT: usize = 50;
 const FEW: usize = 2;
-/// How many hits "tax" has as typed.
 const TAX_HITS: usize = 4;
-/// More than a search has, so a search that never ends shows.
 const STAGES_AND_ONE: usize = 3;
 
 const HOME: &[&str] = &[
@@ -51,12 +45,10 @@ impl Home {
         }
     }
 
-    /// Each stage's hits, as paths under home and kinds.
     fn stages(&self, query: &str, limit: usize) -> Vec<Vec<(PathBuf, MatchKind)>> {
         self.named(self.index.search(query, limit))
     }
 
-    /// Like [`Home::stages`], after `changes`.
     fn stages_now(
         &self,
         query: &str,
@@ -193,7 +185,6 @@ fn hidden_rows_rank_last_unless_the_query_starts_with_a_dot() {
 fn each_stage_keeps_its_best_hits() {
     let home = Home::new();
     let stages = home.stages("tax", FEW);
-    // The hits left out of the first stage don't come back in the second.
     assert_eq!(
         stages,
         [
@@ -258,10 +249,8 @@ fn nothing_to_look_for_finds_nothing() {
     let none: Vec<Vec<(PathBuf, MatchKind)>> = Vec::new();
     assert_eq!(home.stages("   ", LIMIT), none);
     assert_eq!(home.stages("tax", 0), none);
-    // A lone accent folds to nothing, so it is no word to look for.
     assert_eq!(home.stages("\u{301}", LIMIT), none);
     assert_eq!(home.stages("tax \u{301}", LIMIT), home.stages("tax", LIMIT));
-    // Home itself is never a result.
     let root = home
         .folder
         .path()
@@ -282,14 +271,11 @@ fn without_changes_a_live_search_finds_the_same() {
 #[test]
 fn moved_entries_rank_by_where_they_are_now() {
     let home = Home::new();
-    // Out of a hidden folder: no longer ranked after visible names.
     let changes = [home.moved(".config/tax-tool", "Documents/tax-tool")];
     assert_eq!(
         home.stages_now("tax", 1, &changes).remove(0),
         [at("Documents/tax-tool", MatchKind::WordStart)]
     );
-    // Into one: ranked after visible names of the same kind, so with both
-    // visible ones moved in, the shortest hidden name comes first.
     let changes = [
         home.moved("Documents/taxes 2024.pdf", ".config/taxes 2024.pdf"),
         home.moved("Documents/tax return.pdf", ".config/tax return.pdf"),
@@ -306,7 +292,6 @@ fn removed_entries_are_left_out() {
     let first = home
         .stages_now("tax", FEW, &[home.removed("Documents/tax return.pdf")])
         .remove(0);
-    // The next best fills the gap.
     assert_eq!(
         first,
         [
@@ -380,8 +365,6 @@ fn a_search_within_a_folder_keeps_only_what_is_inside_it() {
     let home = Home::new();
     let documents = home.at("Documents");
     let stages = home.named(home.index.search("tax", FEW).within(&documents));
-    // The best two inside Documents, though `.config/tax-tool` ranks
-    // above `syntax.txt` across home.
     assert_eq!(
         stages[0],
         [
@@ -390,7 +373,6 @@ fn a_search_within_a_folder_keeps_only_what_is_inside_it() {
         ]
     );
     let stages = home.named(home.index.search("documents", LIMIT).within(&documents));
-    // Not the folder itself.
     assert_eq!(stages, [vec![], vec![]]);
 }
 

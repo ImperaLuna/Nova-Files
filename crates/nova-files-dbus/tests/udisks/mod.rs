@@ -1,22 +1,3 @@
-//! A stand-in for udisks2 on a private bus, serving drives and volumes
-//! recorded from a real one, so the drive tests never need real disks.
-//!
-//! It serves udisks2's object manager and, for each object, the
-//! interfaces and properties Nova Files reads, under udisks2's own
-//! names. Adding or removing an object sends the object manager's signals
-//! and a changed mount point sends `PropertiesChanged`, as udisks2 does.
-//! Mounting, unmounting, ejecting and switching off do what udisks2 does
-//! to the properties (refusing, as udisks2 does, to mount a mounted volume
-//! or unmount one that isn't), or fail as set (`Filesystem::fails`), and each call
-//! is noted ([`StandIn::calls`]).
-//!
-//! The recordings ([`recorded`]) come from udisksd 2.10.1
-//! (`GetManagedObjects`, 2026-11-10) with loop disks: a FAT one, an ext4
-//! one, and a GPT one with two ext4 partitions. udisks2 gives a loop device
-//! no drive, so the USB stick and the laptop's `NVMe` disk are written from
-//! udisks2's documented properties, with the values a real stick and disk
-//! report.
-
 #![expect(dead_code, reason = "each test file uses part of it")]
 
 use std::collections::HashMap;
@@ -30,16 +11,12 @@ use zbus::blocking::connection::Builder;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
-/// Checks a call left udisks2's options at their defaults, as Nova Files
-/// does.
 fn no_options(options: HashMap<String, OwnedValue>) {
     assert!(options.into_keys().next().is_none(), "options were set");
 }
 
-/// The calls made to the stand-in, such as `unmount <object path>`.
 pub type Calls = Arc<Mutex<Vec<String>>>;
 
-/// The errors udisks2 answers with, by their D-Bus names.
 #[derive(Clone, Debug, zbus::DBusError)]
 #[zbus(prefix = "org.freedesktop.UDisks2.Error")]
 pub enum Failure {
@@ -53,10 +30,8 @@ pub enum Failure {
     Failed(String),
 }
 
-/// udisks2's object path for "none".
 const NONE: &str = "/";
 
-/// A path as udisks2 sends it: bytes ending in a NUL.
 pub fn path_bytes(path: &[u8]) -> Vec<u8> {
     let mut bytes = path.to_vec();
     bytes.push(0);
@@ -133,9 +108,7 @@ impl Block {
 pub struct Filesystem {
     pub path: String,
     pub mount_points: Vec<Vec<u8>>,
-    /// Where `Mount` mounts it.
     pub mounts_at: String,
-    /// What `Mount` and `Unmount` answer instead of doing it.
     pub fails: Option<Failure>,
     pub calls: Calls,
 }
@@ -273,7 +246,6 @@ impl Drive {
     }
 }
 
-/// One udisks2 object and the interfaces it has.
 #[derive(Clone)]
 pub struct Object {
     pub path: String,
@@ -295,8 +267,6 @@ impl Object {
     }
 }
 
-/// A block device as the loop recordings show them: no drive, marked as
-/// part of the system, nothing in it unless set.
 fn block(device: &str, size: u64) -> Block {
     Block {
         device: path_bytes(device.as_bytes()),
@@ -319,8 +289,6 @@ fn with_filesystem(mut block: Block, kind: &str, label: &str) -> Block {
     block
 }
 
-/// A filesystem mounted at `points`; the stand-in fills in the rest when
-/// it is added.
 fn mounted(points: &[&[u8]]) -> Filesystem {
     Filesystem {
         path: String::new(),
@@ -331,12 +299,10 @@ fn mounted(points: &[&[u8]]) -> Filesystem {
     }
 }
 
-/// A filesystem mounted at `point`.
 pub fn mounted_at(point: &[u8]) -> Filesystem {
     mounted(&[point])
 }
 
-/// A drive; the stand-in fills in its path and call log when it is added.
 fn drive(vendor: &str, model: &str) -> Drive {
     Drive {
         path: String::new(),
@@ -365,8 +331,6 @@ pub const NVME_ROOT: &str = "/org/freedesktop/UDisks2/block_devices/nvme0n1p2";
 pub const NVME_WINDOWS: &str = "/org/freedesktop/UDisks2/block_devices/nvme0n1p3";
 pub const NVME_RECOVERY: &str = "/org/freedesktop/UDisks2/block_devices/nvme0n1p4";
 
-/// What udisksd 2.10.1 held with the loop disks set up and two of them
-/// mounted, as recorded.
 pub fn recorded() -> Vec<Object> {
     const MIB_64: u64 = 67_108_864;
     vec![
@@ -434,7 +398,6 @@ pub fn recorded() -> Vec<Object> {
     ]
 }
 
-/// A USB stick with one FAT volume, mounted where udisks2 mounts it.
 pub fn stick() -> Vec<Object> {
     vec![
         Object {
@@ -462,9 +425,6 @@ pub fn stick() -> Vec<Object> {
     ]
 }
 
-/// A laptop's `NVMe` disk: the boot and root volumes the system runs from,
-/// an unmounted Windows partition, and a recovery partition a system rule
-/// hides.
 pub fn laptop_disk() -> Vec<Object> {
     let system = |device: &str, kind: &str| Block {
         drive: NVME.to_owned(),
@@ -505,14 +465,12 @@ pub fn laptop_disk() -> Vec<Object> {
     ]
 }
 
-/// udisks2 on a private bus.
 pub struct StandIn {
     connection: Connection,
     calls: Calls,
 }
 
 impl StandIn {
-    /// Serves `objects` on the bus at `address` and takes udisks2's name.
     pub fn start(address: &str, objects: &[Object]) -> Self {
         let connection = Builder::address(address)
             .unwrap()
@@ -531,7 +489,6 @@ impl StandIn {
         stand_in
     }
 
-    /// Adds `object`, as when a drive is plugged in.
     pub fn add(&self, object: &Object) {
         let server = self.connection.object_server();
         let path = object.path.as_str();
@@ -560,7 +517,6 @@ impl StandIn {
         }
     }
 
-    /// Removes the object at `path`, as when a drive is unplugged.
     pub fn remove(&self, path: &str) {
         let server = self.connection.object_server();
         server.remove::<Filesystem, _>(path).ok();
@@ -569,7 +525,6 @@ impl StandIn {
         server.remove::<Block, _>(path).ok();
     }
 
-    /// Mounts or unmounts the volume at `path`, as udisks2 reports it.
     pub fn set_mount_points(&self, path: &str, points: &[&[u8]]) {
         let filesystem = self
             .connection
@@ -585,8 +540,6 @@ impl StandIn {
         .unwrap();
     }
 
-    /// Stops serving the object manager while keeping udisks2's name, so
-    /// reading the objects fails as when udisks2 is stuck.
     pub fn stop_answering(&self) {
         self.connection
             .object_server()
@@ -594,7 +547,6 @@ impl StandIn {
             .unwrap();
     }
 
-    /// Says the block device at `path` changed, without changing it.
     pub fn poke(&self, path: &str) {
         let nothing: HashMap<String, zbus::zvariant::Value<'_>> = HashMap::new();
         self.connection
@@ -612,8 +564,6 @@ impl StandIn {
             .unwrap();
     }
 
-    /// Takes udisks2's name without serving anything, as a udisks2 that
-    /// can't answer yet.
     pub fn mute(address: &str) -> Self {
         let connection = Builder::address(address).unwrap().build().unwrap();
         connection.request_name(UDISKS).unwrap();
@@ -623,20 +573,15 @@ impl StandIn {
         }
     }
 
-    /// The calls made so far, in order.
     pub fn calls(&self) -> Vec<String> {
         self.calls.lock().unwrap().clone()
     }
 
-    /// Lets udisks2's name go, as when it stops.
     pub fn stop(self) {
         drop(self.connection);
     }
 }
 
-/// A client of a real core that watches udisks2 on `bus`: its connection
-/// and the events it hears. The core has no home, so it touches none of
-/// the real person's files.
 pub fn core_client(bus: Bus) -> (nova_files_api::Connection, Receiver<Event>) {
     let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, None, None, None).unwrap();
     core.connector.offer_drives(Udisks::new(bus)).unwrap();
@@ -644,8 +589,6 @@ pub fn core_client(bus: Bus) -> (nova_files_api::Connection, Receiver<Event>) {
     (core.connector.connect(events).unwrap(), received)
 }
 
-/// `objects` with the filesystem at `path` answering `failure` to every
-/// mount and unmount.
 pub fn failing(mut objects: Vec<Object>, path: &str, failure: &Failure) -> Vec<Object> {
     for object in &mut objects {
         if object.path == path

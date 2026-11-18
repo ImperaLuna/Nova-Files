@@ -1,24 +1,3 @@
-//! The change log: what changed on disk since the index was saved, in the
-//! order it happened, for any number of readers.
-//!
-//! The watcher appends [`Change`]s with [`ChangeLog::append`]; readers
-//! follow it with a [`LogReader`], each with its own place in the file, so
-//! search, and later content search, read the same log at their own pace.
-//! Nobody rewrites it: when the index is saved again, the log starts over
-//! in a new file, renamed over the old one.
-//!
-//! ```text
-//! header  LOG_HEADER_LEN bytes  magic, version, the index's crawl start
-//! record  length (u32, the whole record), what happened, the entry's
-//!         kind and flags, device, inode, size, modified, created, then
-//!         the path; a move holds both paths with a NUL between them
-//! ```
-//!
-//! The header's crawl start ties the log to one index: a log for another
-//! index is started over, not read. A record is written with one `write`
-//! on a file opened for appending, and a reader stops at a record that
-//! isn't whole yet, so it never reads half a change.
-
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read as _, Seek as _, SeekFrom, Write as _};
@@ -36,7 +15,6 @@ pub const LOG_HEADER_LEN: usize = 24;
 const H_VERSION: usize = 8;
 const H_CRAWLED: usize = 16;
 
-/// The fixed part of a record, before its path.
 const RECORD_FIXED: usize = 48;
 const R_OP: usize = 4;
 const R_KIND: usize = 5;
@@ -53,42 +31,25 @@ const OP_REMOVED: u8 = 3;
 const OP_MOVED: u8 = 4;
 const OP_RESCAN: u8 = 5;
 
-/// Between the two paths of a move; no path holds one.
 const PATH_GAP: u8 = 0;
 const FILE_MODE: u32 = 0o600;
 
-/// One change on disk. Paths are whole paths.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {
-    /// The entry exists, with these details. It may have existed already:
-    /// treat it as "now looks like this".
     Added { path: PathBuf, details: Details },
-    /// An indexed entry's contents or details changed.
     Changed { path: PathBuf, details: Details },
-    /// The entry, and anything inside it, is gone from the index.
     Removed { path: PathBuf },
-    /// The entry, and anything inside it, moved.
     Moved { from: PathBuf, to: PathBuf },
-    /// Changes under `folder` were lost (the kernel's event queue
-    /// overflowed); only reading it again tells what is there.
     Rescan { folder: PathBuf },
 }
 
-/// The writing end of a change log.
 #[derive(Debug)]
 pub struct ChangeLog {
     file: File,
 }
 
 impl ChangeLog {
-    /// Starts a new, empty log at `path` for the index whose crawl started
-    /// at `crawled`, replacing any log there in one step.
-    ///
-    /// # Errors
-    /// When the file can't be written.
     pub fn create(path: &Path, crawled: Option<Stamp>) -> io::Result<Self> {
-        // Held until the new log is in place, so two creators, even in two
-        // processes, never share the temp file.
         let lock = OpenOptions::new()
             .write(true)
             .create(true)
@@ -97,7 +58,6 @@ impl ChangeLog {
             .open(beside(path, ".lock"))?;
         lock.lock()?;
         let temp = beside(path, ".new");
-        // Left by a crash; if it can't be removed, creating it says why.
         fs::remove_file(&temp).ok();
         let mut file = OpenOptions::new()
             .append(true)
@@ -114,10 +74,6 @@ impl ChangeLog {
         written.map(|()| Self { file })
     }
 
-    /// Adds `change` to the end of the log.
-    ///
-    /// # Errors
-    /// When the write fails, for example on a full disk.
     pub fn append(&mut self, change: &Change) -> io::Result<()> {
         self.file.write_all(&record(change)?)
     }
@@ -129,7 +85,6 @@ fn beside(path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
-/// A reader's place in a change log.
 #[derive(Debug)]
 pub struct LogReader {
     file: File,
@@ -138,10 +93,6 @@ pub struct LogReader {
 }
 
 impl LogReader {
-    /// Opens the log at `path` from its first change.
-    ///
-    /// # Errors
-    /// When it can't be read, or isn't a change log of this version.
     pub fn open(path: &Path) -> io::Result<Self> {
         let file = File::open(path)?;
         let mut start = [0; LOG_HEADER_LEN];
@@ -155,15 +106,10 @@ impl LogReader {
         })
     }
 
-    /// The crawl start of the index this log belongs to.
     pub const fn crawled(&self) -> Option<Stamp> {
         self.crawled
     }
 
-    /// Every whole change added since the last call.
-    ///
-    /// # Errors
-    /// When the file can't be read or holds a damaged record.
     pub fn read_new(&mut self) -> io::Result<Vec<Change>> {
         let mut bytes = Vec::new();
         (&self.file).seek(SeekFrom::Start(self.at))?;
@@ -187,15 +133,12 @@ fn header(crawled: Option<Stamp>) -> [u8; LOG_HEADER_LEN] {
     out
 }
 
-/// The crawl start a log header names, as stored, or `None` when it
-/// isn't one.
 fn read_header(bytes: &[u8]) -> Option<i64> {
     let magic_ok = bytes.get(..LOG_MAGIC_LEN) == Some(LOG_MAGIC.as_slice());
     let version_ok = u32_at(bytes, H_VERSION) == Some(LOG_VERSION);
     (magic_ok && version_ok).then(|| i64_at(bytes, H_CRAWLED).unwrap_or(NO_STAMP))
 }
 
-/// One change as a record.
 fn record(change: &Change) -> io::Result<Vec<u8>> {
     let (op, details, path) = match change {
         Change::Added { path, details } => (OP_ADDED, Some(details), path_bytes(path)),
@@ -234,8 +177,6 @@ fn record(change: &Change) -> io::Result<Vec<u8>> {
     Ok(out)
 }
 
-/// The first record in `bytes` and its length, or `None` when `bytes`
-/// doesn't hold a whole one yet.
 fn parse(bytes: &[u8]) -> io::Result<Option<(Change, usize)>> {
     let Some(len) = u32_at(bytes, 0) else {
         return Ok(None);

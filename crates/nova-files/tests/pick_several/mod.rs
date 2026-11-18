@@ -1,7 +1,3 @@
-//! Several entries at once, when the app asks for more than one:
-//! Ctrl+click adds or takes out, Shift+click selects a range, the name box
-//! shows the files in quotes, and Open picks them all.
-
 use nova_files_api::ListingId;
 
 use super::*;
@@ -15,7 +11,6 @@ const SEVERAL_FOLDERS: PickKind = PickKind::Open {
     folders: true,
 };
 
-/// The shared tree plus a `docs` folder and `a.txt`, `b.txt`.
 fn several_tree() -> TempFolder {
     let tree = TempFolder::tree("several");
     fs::create_dir(tree.path().join("docs")).unwrap();
@@ -24,8 +19,6 @@ fn several_tree() -> TempFolder {
     tree
 }
 
-/// A picker for `kind` on [`several_tree`], checked to show its rows as
-/// the tests expect.
 async fn several<'a>(
     cx: &'a mut TestAppContext,
     tree: &TempFolder,
@@ -41,8 +34,6 @@ async fn several<'a>(
     (view, cx, answers)
 }
 
-// Rows on screen: 0 `docs`, 1 `Projects`, 2 `a.txt`, 3 `b.txt`, 4 `notes.txt`.
-
 fn ctrl_click(cx: &mut VisualTestContext, selector: &'static str) {
     click_with(cx, selector, Modifiers::control());
 }
@@ -51,7 +42,6 @@ fn shift_click(cx: &mut VisualTestContext, selector: &'static str) {
     click_with(cx, selector, Modifiers::shift());
 }
 
-/// The rows selected, by index.
 fn selected(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<u32> {
     let selection = view.read_with(cx, |view, _| view.selection());
     selection
@@ -123,7 +113,6 @@ async fn ctrl_click_takes_a_file_back_out(cx: &mut TestAppContext) {
     ctrl_click(cx, "entry-3");
     assert_eq!(view.read_with(cx, |view, _| view.selection()), None);
     assert_eq!(name(&view, cx).as_deref(), Some(""));
-    // Nothing selected and nothing typed: nothing to open.
     cx.simulate_keystrokes("enter");
     assert!(answers.try_recv().is_err());
     ctrl_click(cx, "entry-3");
@@ -160,7 +149,6 @@ async fn edited_names_are_read_as_typed(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("end");
     cx.simulate_input("x");
     cx.simulate_keystrokes("enter");
-    // No file has that name, so nothing opens.
     assert!(answers.try_recv().is_err());
     assert!(view.read_with(cx, |view, _| view.pick_id().is_some()));
 }
@@ -214,7 +202,6 @@ async fn a_folder_picker_picks_several_folders(cx: &mut TestAppContext) {
     let (view, cx, answers) = several(cx, &tree, SEVERAL_FOLDERS).await;
     click(cx, "entry-1");
     shift_click(cx, "entry-0");
-    // Files aren't what this picker picks.
     ctrl_click(cx, "entry-3");
     assert_eq!(selected(&view, cx), [0, 1]);
     assert_eq!(name(&view, cx).as_deref(), Some(""));
@@ -235,7 +222,6 @@ async fn files_selected_stay_picked_in_a_new_order(cx: &mut TestAppContext) {
     let (view, cx, answers) = several(cx, &tree, SEVERAL_FILES).await;
     click(cx, "entry-2");
     ctrl_click(cx, "entry-4");
-    // Name, the column in use, turns around: Z to A.
     click(cx, "head-name");
     view.condition::<WindowEvent>(cx, |view, _| {
         view.entry_names().first().map(String::as_str) == Some("Projects")

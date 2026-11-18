@@ -1,14 +1,8 @@
-//! The window's own keys, bound from its action table, and Back and
-//! Forward by key, toolbar button and mouse side button: each test drives
-//! a window on a real core and checks where it went. Ctrl+H shows hidden
-//! files and leaves them out again.
-
 use gpui::{MouseButton, NavigationDirection};
 use nova_files_api::HiddenFiles;
 
 use super::*;
 
-/// [`open_on`], with the window's keys bound as the program binds them.
 async fn keyed<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
@@ -30,8 +24,6 @@ async fn alt_up_goes_up(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, tree.path()).await;
 }
 
-/// Goes into `Projects`, then `nova`, from the tree's top, by
-/// double-clicks.
 async fn walk_in(view: &Entity<MainWindow>, cx: &mut VisualTestContext, tree: &TempFolder) {
     double_click(cx, "entry-0");
     wait_for_folder(view, cx, &tree.path().join("Projects")).await;
@@ -109,8 +101,6 @@ async fn a_place_gone_since_is_skipped_and_the_window_stays(cx: &mut TestAppCont
     wait_for_folder(&view, cx, &projects).await;
     fs::remove_dir(projects.join("nova")).unwrap();
 
-    // Back would go to nova, which is gone: the window stays, and the
-    // next Back goes on past it.
     cx.simulate_keystrokes("alt-left");
     view.condition::<WindowEvent>(cx, |view, _| !view.waiting())
         .await;
@@ -129,7 +119,6 @@ async fn ctrl_h_shows_hidden_files_and_leaves_them_out_again(cx: &mut TestAppCon
     let projects = tree.path().join("Projects");
     fs::write(projects.join(".secret"), "").unwrap();
     cx.update(nova_files_ui::bind_window_keys);
-    // Home is the tree, so the core's settings file stays out of Projects.
     let (view, cx) = window_on(cx, &projects, tree.path());
     wait_for_folder(&view, cx, &projects).await;
     cx.run_until_parked();

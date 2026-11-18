@@ -1,11 +1,3 @@
-//! The file picker portal's options and results, as plain types.
-//!
-//! xdg-desktop-portal passes an app's request as a map of named values
-//! (`multiple`, `directory`, `filters`, `current_filter`, `current_name`,
-//! `current_folder`, `current_file`, `accept_label`) and takes the answer
-//! as a response code plus a map (`uris`, `current_filter`). A value of the
-//! wrong type counts as missing, as the portal's own backends treat it.
-
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt as _;
@@ -14,21 +6,17 @@ use std::path::PathBuf;
 use nova_files_api::{FileFilter, FilterRule, ParentWindow, PickAnswer, PickKind, uri};
 use zbus::zvariant::{OwnedValue, Value};
 
-/// The portal's response codes.
 pub const SUCCESS: u32 = 0;
 pub const CANCELLED: u32 = 1;
 pub const FAILED: u32 = 2;
 
-/// A filter as the portal sends it: a name and `(kind, pattern)` rules.
 type WireFilter = (String, Vec<(u32, String)>);
 
-/// The rule kinds in a [`WireFilter`].
 const GLOB: u32 = 0;
 const MIME_TYPE: u32 = 1;
 
 pub type Options = HashMap<String, OwnedValue>;
 
-/// The parts of a request that come from its options.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Parsed {
     pub title: String,
@@ -37,11 +25,9 @@ pub struct Parsed {
     pub filters: Vec<FileFilter>,
     pub filter: Option<usize>,
     pub folder: Option<PathBuf>,
-    /// The app's window, which comes beside the options.
     pub parent: Option<ParentWindow>,
 }
 
-/// An `OpenFile` request's title and options.
 pub fn open(title: String, options: &Options) -> Parsed {
     let kind = PickKind::Open {
         multiple: get(options, "multiple").unwrap_or(false),
@@ -50,9 +36,6 @@ pub fn open(title: String, options: &Options) -> Parsed {
     parsed(title, options, kind, get_path(options, "current_folder"))
 }
 
-/// A `SaveFile` request's title and options. A `current_file` names both
-/// the folder and the name; otherwise they come from `current_folder` and
-/// `current_name`.
 pub fn save(title: String, options: &Options) -> Parsed {
     let file = get_path(options, "current_file");
     let name = file
@@ -75,8 +58,6 @@ fn parsed(title: String, options: &Options, kind: PickKind, folder: Option<PathB
         .into_iter()
         .map(filter_from_wire)
         .collect();
-    // The current filter should be one of the list; one that isn't is
-    // added, so it can still be shown and chosen.
     let filter = get::<WireFilter>(options, "current_filter")
         .map(filter_from_wire)
         .map(|current| {
@@ -99,12 +80,10 @@ fn parsed(title: String, options: &Options, kind: PickKind, folder: Option<PathB
     }
 }
 
-/// The response code and results for `answer`.
 pub fn results(answer: &PickAnswer, filters: &[FileFilter]) -> (u32, Options) {
     let PickAnswer::Picked { paths, filter } = answer else {
         return (CANCELLED, Options::new());
     };
-    // Nothing picked is no answer an app can use.
     if paths.is_empty() {
         return (CANCELLED, Options::new());
     }
@@ -146,14 +125,10 @@ fn filter_to_wire(filter: &FileFilter) -> WireFilter {
     (filter.name.clone(), rules)
 }
 
-/// The option `key` as a `T`, or `None` when it is missing or of another
-/// type.
 fn get<T: TryFrom<OwnedValue>>(options: &Options, key: &str) -> Option<T> {
     T::try_from(options.get(key)?.try_clone().ok()?).ok()
 }
 
-/// A path option: bytes ending in a NUL, as the portal sends paths. Only
-/// an absolute path counts; anything else is relative to nothing here.
 fn get_path(options: &Options, key: &str) -> Option<PathBuf> {
     let mut bytes: Vec<u8> = get(options, key)?;
     if bytes.last() == Some(&0) {

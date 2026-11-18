@@ -1,17 +1,3 @@
-//! `org.freedesktop.FileManager1`, the interface apps call for "Show in
-//! folder" (a browser's downloads, an editor's file tree, a chat app's
-//! attachments).
-//!
-//! `ShowFolders` asks for a window on each folder, `ShowItems` for one on
-//! each folder that holds the items, with them selected, in the order the
-//! folders first appear. `ShowItemProperties` does what `ShowItems` does.
-//! Every URI must be a local `file://` one, or nothing opens.
-//!
-//! The object is served on the app's own connection. The bus name is asked
-//! for only when Nova Files should answer (see
-//! [`crate::Service::serve_file_manager_when`]), since a user may keep
-//! another file manager as their default, and never taken from its owner.
-
 use std::path::PathBuf;
 
 use enumflags2::BitFlags;
@@ -20,13 +6,9 @@ use zbus::fdo::{self, RequestNameFlags, RequestNameReply};
 
 use crate::application::{keep_core_up, local_paths};
 
-/// The bus name and object path apps call.
 pub const BUS_NAME: &str = "org.freedesktop.FileManager1";
 pub const OBJECT_PATH: &str = "/org/freedesktop/FileManager1";
-/// The interface name. The `#[zbus::interface]` attribute needs the
-/// literal too; a test checks the two match.
 pub const INTERFACE: &str = "org.freedesktop.FileManager1";
-/// The most URIs one call takes; a call with more is refused.
 pub const MAX_URIS: usize = 256;
 
 pub struct FileManager<F> {
@@ -41,7 +23,6 @@ impl<F> FileManager<F> {
 }
 
 impl<F: Fn(WindowRequest)> FileManager<F> {
-    /// Asks for each window, once every URI has proved local.
     fn open(&self, requests: Vec<WindowRequest>) -> fdo::Result<()> {
         if requests.is_empty() {
             return Ok(());
@@ -56,44 +37,28 @@ impl<F: Fn(WindowRequest)> FileManager<F> {
 
 #[zbus::interface(name = "org.freedesktop.FileManager1")]
 impl<F: Fn(WindowRequest) + Send + Sync + 'static> FileManager<F> {
-    /// Opens a window on each folder.
     fn show_folders(&self, uris: Vec<String>, startup_id: String) -> fdo::Result<()> {
         drop(startup_id);
         let folders = paths(uris)?;
         self.open(folders.into_iter().map(WindowRequest::on).collect())
     }
 
-    /// Opens a window on each folder holding the items, with them
-    /// selected.
     fn show_items(&self, uris: Vec<String>, startup_id: String) -> fdo::Result<()> {
         drop(startup_id);
         self.open(showing(paths(uris)?)?)
     }
 
-    /// Shows the items, as [`Self::show_items`] does.
     fn show_item_properties(&self, uris: Vec<String>, startup_id: String) -> fdo::Result<()> {
         self.show_items(uris, startup_id)
     }
 }
 
-/// Asks for [`BUS_NAME`] on `connection`, waiting in the bus's queue while
-/// another file manager holds it.
-///
-/// # Errors
-/// When the bus refuses the call or doesn't answer.
 pub async fn queue_for_name(connection: &zbus::Connection) -> zbus::Result<RequestNameReply> {
-    // With no flags, the bus queues the request while the name is taken
-    // and never lets another program replace us.
     connection
         .request_name_with_flags(BUS_NAME, BitFlags::<RequestNameFlags>::EMPTY)
         .await
 }
 
-/// The local paths `uris` name.
-///
-/// # Errors
-/// When there are more than [`MAX_URIS`], or any isn't a local `file://`
-/// URI.
 fn paths(uris: Vec<String>) -> fdo::Result<Vec<PathBuf>> {
     if uris.len() > MAX_URIS {
         return Err(fdo::Error::InvalidArgs(format!(
@@ -104,11 +69,6 @@ fn paths(uris: Vec<String>) -> fdo::Result<Vec<PathBuf>> {
     local_paths(uris)
 }
 
-/// One window per folder holding `items`, in the order the folders first
-/// appear, each selecting its items once.
-///
-/// # Errors
-/// When an item has no folder, as the root.
 fn showing(items: Vec<PathBuf>) -> fdo::Result<Vec<WindowRequest>> {
     let mut windows: Vec<WindowRequest> = Vec::new();
     for item in items {

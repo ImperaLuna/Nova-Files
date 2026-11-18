@@ -1,7 +1,3 @@
-//! Jobs and the trash against a scripted core: the island follows what
-//! the core says about a job, arriving in the trash reads it again, and
-//! files that open in no app say so.
-
 use nova_files_api::{JobId, NotOpened, Operation, Outcome, Tally};
 
 use super::*;
@@ -40,8 +36,6 @@ fn a_paused_job_says_so_until_it_resumes(cx: &mut TestAppContext) {
     assert!(line().is_some_and(|line| !line.contains("paused")));
 }
 
-/// How many times the window asked the core for the trash since last
-/// asked.
 fn trash_asks(core: &mut Core) -> usize {
     core.commands()
         .into_iter()
@@ -66,7 +60,6 @@ fn the_trash_is_read_again_on_arriving_in_it(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(trash_asks(&mut core), 1);
 
-    // Reading it again where it is asks nothing more.
     let trash = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
     view.update(cx, |view, _| view.open(&trash.unwrap()));
     answer_listing(&mut core, 0);
@@ -74,14 +67,11 @@ fn the_trash_is_read_again_on_arriving_in_it(cx: &mut TestAppContext) {
     assert_eq!(trash_asks(&mut core), 0);
 }
 
-/// Clicks the element drawn with `selector`.
 fn press(cx: &mut VisualTestContext, selector: &'static str) {
     let at = cx.debug_bounds(selector).unwrap().center();
     cx.simulate_click(at, gpui::Modifiers::none());
 }
 
-/// The copies the window asked the core for since last asked, each
-/// started as a job, the first as 7.
 fn start_copies(core: &mut Core) -> Vec<JobId> {
     let asked: Vec<_> = core
         .commands()
@@ -142,8 +132,6 @@ fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContex
         "the newer one stops"
     );
 
-    // The first ends while the other runs: no note yet; one when the last
-    // ends.
     let finished = |job, outcome| Event::JobFinished {
         job,
         outcome,
@@ -153,7 +141,6 @@ fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContex
     let note = |cx: &mut VisualTestContext| {
         view.read_with(cx, |view, _| view.note().map(|note| note.label.to_string()))
     };
-    // What Ctrl+C said.
     let before = note(cx);
     core.send(finished(jobs[0], Outcome::Done));
     cx.run_until_parked();
@@ -175,7 +162,6 @@ fn copies_all_cancelled_leave_no_note(cx: &mut TestAppContext) {
     let note = |cx: &mut VisualTestContext| {
         view.read_with(cx, |view, _| view.note().map(|note| note.label.to_string()))
     };
-    // What Ctrl+C said.
     let before = note(cx);
     for job in jobs {
         core.send(Event::JobFinished {
@@ -281,7 +267,6 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
         note(cx).as_deref(),
         Some("Can't open 0: no app opens it · 1: its app didn't start")
     );
-    // The same file failing again is named once, with its latest reason.
     core.send(Event::FileNotOpened {
         path: opened[0].clone(),
         reason: NotOpened::Failed,
@@ -292,7 +277,6 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
         Some("Can't open 1, 0: their apps didn't start")
     );
 
-    // Gone by itself; a later failure starts its own note.
     cx.executor().advance_clock(nova_files_ui::NOTE_TIME);
     cx.run_until_parked();
     assert_eq!(note(cx), None);

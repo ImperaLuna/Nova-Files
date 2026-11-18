@@ -1,5 +1,3 @@
-//! The event rules, fed made-up events over real temp folders.
-
 use super::*;
 use rustix::fs::inotify::CreateFlags;
 
@@ -51,7 +49,6 @@ fn a_watch_the_kernel_dropped_is_forgotten() {
         cookie: 0,
         name: None,
     };
-    // Home itself went: what takes its place is read again.
     assert_eq!(
         folders.handle(&[ignored]),
         [Change::Rescan {
@@ -88,8 +85,6 @@ fn folders_not_read_by_the_crawl_are_not_watched() {
     fs::remove_dir_all(&root).ok();
 }
 
-/// A temp folder named after `test`, made afresh with `paths` in it
-/// (a path ending in `/` is a folder), and watched.
 fn watched_folder(test: &str, paths: &[&str], stopping: Stopping) -> (PathBuf, Folders) {
     let root = std::env::temp_dir().join(format!("nova-files-{test}-{}", std::process::id()));
     fs::remove_dir_all(&root).ok();
@@ -140,8 +135,6 @@ fn a_new_tree_is_not_read_while_stopping() {
 
 #[test]
 fn a_folder_made_and_moved_before_its_events_are_read_is_watched() {
-    // `old` was made, filled and renamed `new` before any event was
-    // read, so only `new` is on disk.
     let (root, mut folders) = watched_folder("made-moved", &["new/file"], Box::new(|| false));
     let changes = folders.handle(&[
         event(&folders, &root, ReadFlags::CREATE.union(DIR), 0, "old"),
@@ -168,7 +161,6 @@ fn a_file_moved_inside_home_is_added_at_its_new_path_too() {
 #[test]
 fn a_watched_folder_moved_inside_home_keeps_its_watches() {
     let (root, mut folders) = watched_folder("folder-moved", &["new/file"], Box::new(|| false));
-    // Watched as `old`, renamed `new` on disk before the events are read.
     let (old, new) = (root.join("old"), root.join("new"));
     fs::create_dir(&old).unwrap();
     let zone = policy::enters(&Zone::Home, OsStr::new("old")).unwrap();
@@ -242,7 +234,6 @@ fn home_moved_away_asks_for_a_rescan() {
         cookie: 0,
         name: None,
     };
-    // Another folder's own move is seen from its parent.
     assert_eq!(folders.handle(&[moved_self(folders.by_path[&a])]), []);
     assert_eq!(
         folders.handle(&[moved_self(folders.by_path[&root])]),
@@ -261,12 +252,10 @@ fn a_folder_watched_again_at_its_new_path_leaves_the_old_one() {
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone.clone()), None);
     let wd = folders.by_path[&a];
-    // Moved away and back under another name before the events were read.
     fs::rename(&a, &b).unwrap();
     assert_eq!(folders.watch(b.clone(), zone), None);
     assert_eq!(folders.by_path.get(&b), Some(&wd));
     assert!(!folders.by_path.contains_key(&a));
-    // Its old path's leaving doesn't take the watch with it.
     folders.handle(&[event(
         &folders,
         &root,
@@ -286,7 +275,6 @@ fn a_folder_that_left_its_parent_is_removed_before_the_parent_moves() {
     assert_eq!(folders.watch(a.clone(), zone.clone()), None);
     let inner = policy::enters(&zone, OsStr::new("sub")).unwrap();
     assert_eq!(folders.watch(sub.clone(), inner), None);
-    // `a/sub` leaves home, then `a` becomes `b`, before any event is read.
     let outside = std::env::temp_dir().join(format!("nova-files-left-{}", std::process::id()));
     fs::rename(&sub, &outside).unwrap();
     fs::rename(&a, &b).unwrap();
@@ -358,14 +346,12 @@ fn a_file_and_a_folder_swapped_are_both_read_again() {
         rustix::fs::RenameFlags::EXCHANGE,
     )
     .unwrap();
-    // The file moves first, then the folder.
     let changes = folders.handle(&[
         event(&folders, &root, ReadFlags::MOVED_FROM, 18, "a.txt"),
         event(&folders, &root, ReadFlags::MOVED_TO, 18, "b"),
         event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 19, "b"),
         event(&folders, &root, ReadFlags::MOVED_TO.union(DIR), 19, "a.txt"),
     ]);
-    // What is logged last for each path is what stands there now.
     let last = |path: &Path| {
         changes
             .iter()
@@ -432,7 +418,6 @@ fn a_hidden_folder_swapped_with_a_shown_one_is_read_as_it_is_now() {
             ".hidden",
         ),
     ]);
-    // What was hidden is now `shown`, and indexed.
     let last = changes.iter().rev().find(|change| match change {
         Change::Added { path, .. } | Change::Removed { path } => path == &shown,
         _ => false,
@@ -486,8 +471,6 @@ fn a_new_folder_where_one_left_from_inside_is_kept() {
     let inner = policy::enters(&zone, OsStr::new("sub")).unwrap();
     assert_eq!(folders.watch(sub.clone(), inner), None);
     let a_wd = folders.by_path[&a];
-    // `a/sub` leaves home, `a` goes, and a new `a/sub` is made, before any
-    // event is read.
     let outside =
         std::env::temp_dir().join(format!("nova-files-left-again-{}", std::process::id()));
     fs::rename(&sub, &outside).unwrap();
@@ -520,7 +503,6 @@ fn a_folder_made_inside_one_that_then_moved_is_read_where_it_went() {
     let (a, b) = (root.join("a"), root.join("b"));
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone), None);
-    // `a/sub/file` is made, then `a` becomes `b`, before any event is read.
     fs::create_dir_all(a.join("sub")).unwrap();
     fs::write(a.join("sub/file"), b"").unwrap();
     fs::rename(&a, &b).unwrap();
@@ -541,7 +523,6 @@ fn a_file_written_in_a_folder_that_then_moved_is_read_where_it_went() {
     let (a, b) = (root.join("a"), root.join("b"));
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone), None);
-    // `a/file` is written, then `a` becomes `b`, before any event is read.
     fs::write(a.join("file"), b"longer now").unwrap();
     fs::rename(&a, &b).unwrap();
     let changes = folders.handle(&[
@@ -583,7 +564,6 @@ fn swapped_folders_are_both_read_again() {
         added,
         [a.as_path(), &a.join("two.txt"), &b, &b.join("one.txt")]
     );
-    // Each path's watch is the one the kernel has on the folder there now.
     for path in [&a, &b] {
         let wd = folders.by_path[path];
         assert_eq!(inotify::add_watch(&folders.inotify, path, WATCHED), Ok(wd));
@@ -596,8 +576,6 @@ fn swapped_folders_are_both_read_again() {
 fn a_folder_moved_twice_before_its_events_are_read_follows_both() {
     let (root, mut folders) = watched_folder("twice", &["a/"], Box::new(|| false));
     let a = root.join("a");
-    // Watched as `a`; renamed `b`, then `.hidden`, before any event
-    // was read, so `b` is not on disk.
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone), None);
     fs::rename(&a, root.join(".hidden")).unwrap();
@@ -665,7 +643,6 @@ fn a_folder_made_where_one_moved_away_replaces_it() {
 
 #[test]
 fn a_folder_that_can_be_read_again_is_read() {
-    // Unreadable at the crawl, so not watched; its mode changed.
     let (root, mut folders) = watched_folder("readable", &["locked/file"], Box::new(|| false));
     let changes = folders.handle(&[event(
         &folders,
@@ -676,7 +653,6 @@ fn a_folder_that_can_be_read_again_is_read() {
     )]);
     assert!(added_paths(&changes).contains(&root.join("locked/file").as_path()));
     assert!(folders.by_path.contains_key(&root.join("locked")));
-    // Once watched, a change of mode is only a change.
     let again = folders.handle(&[event(
         &folders,
         &root,
@@ -693,7 +669,6 @@ fn a_folder_that_cant_be_watched_gets_a_rescan() {
     let mut folders = folders(Path::new("/"));
     let missing = PathBuf::from("/nowhere/at/all");
     assert_eq!(folders.watch(missing, Zone::Home), None);
-    // A file isn't a folder: watching it is refused as gone.
     let file = std::env::temp_dir().join(format!("nova-files-watch-file-{}", std::process::id()));
     fs::write(&file, b"").unwrap();
     assert_eq!(folders.watch(file.clone(), Zone::Home), None);

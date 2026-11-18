@@ -1,10 +1,3 @@
-//! The island and what it acts on, on a real core and a temp folder
-//! tree: the quiet count while nothing is selected, the selection's
-//! line and buttons, copy, cut and paste through the clipboard, moving
-//! to the trash by key or button, Undo, and a note going by itself.
-//! Renaming and New folder are in `renaming`, the trash in `trash`, and
-//! the right-click menus in `menus`.
-
 use std::fs;
 
 mod menus;
@@ -13,9 +6,6 @@ mod trash;
 
 use super::*;
 
-/// A window on `folder`, with the window's and text fields' keys bound
-/// as the program binds them, and a home of its own in `home`, so the trash and the
-/// core's state stay out of the folder on screen.
 async fn island_window<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
@@ -31,13 +21,11 @@ async fn island_window<'a>(
     (view, cx)
 }
 
-/// Waits until the folder on screen lists exactly `names`.
 async fn wait_for_names(view: &Entity<MainWindow>, cx: &VisualTestContext, names: &[&str]) {
     view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == names)
         .await;
 }
 
-/// Waits until the island's note reads `label`.
 async fn wait_for_note(view: &Entity<MainWindow>, cx: &VisualTestContext, label: &str) {
     view.condition::<WindowEvent>(cx, |view, _| {
         view.note().is_some_and(|note| note.label == label)
@@ -101,7 +89,6 @@ async fn the_island_trash_button_and_ctrl_z_do_the_same(cx: &mut TestAppContext)
     assert!(!tree.path().join("Projects").exists());
     wait_for_note(&view, cx, "Moved Projects to Trash").await;
 
-    // With the note gone, Ctrl+Z still undoes the window's last job.
     click(cx, "island-dismiss");
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.note().is_none()));
@@ -146,7 +133,6 @@ async fn cut_and_paste_moves_and_undo_moves_back(cx: &mut TestAppContext) {
     click(cx, "name-1");
     cx.simulate_keystrokes("ctrl-x");
     wait_for_note(&view, cx, "Cut notes.txt").await;
-    // Pasting where the files already are does nothing.
     cx.simulate_keystrokes("ctrl-v");
     cx.run_until_parked();
     double_click(cx, "entry-0");
@@ -158,7 +144,6 @@ async fn cut_and_paste_moves_and_undo_moves_back(cx: &mut TestAppContext) {
     wait_for_names(&view, cx, &["nova", "notes.txt"]).await;
     assert!(!tree.path().join("notes.txt").exists());
     wait_for_note(&view, cx, "Moved notes.txt to Projects").await;
-    // The cut pastes once.
     assert_eq!(cx.read_from_clipboard().and_then(|item| item.text()), None);
 
     click(cx, "island-undo");
@@ -182,8 +167,6 @@ async fn a_note_goes_by_itself(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("count").is_some());
 }
 
-/// Copies `notes.txt` into `projects`, where one is already, and waits
-/// until the job holds at the clash.
 async fn paste_onto_notes(view: &Entity<MainWindow>, cx: &mut VisualTestContext, projects: &Path) {
     click(cx, "name-1");
     cx.simulate_keystrokes("ctrl-c");
@@ -207,7 +190,6 @@ async fn a_clash_is_asked_on_the_island_and_undo_puts_the_replaced_back(cx: &mut
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
     paste_onto_notes(&view, cx, &projects).await;
-    // Asked at once, with what a file clash takes; one clash, no tick.
     cx.run_until_parked();
     for answer in ["island-skip", "island-keep-both", "island-replace"] {
         assert!(cx.debug_bounds(answer).is_some(), "{answer}");
@@ -279,7 +261,6 @@ async fn for_all_answers_every_clash_like_it_at_once(cx: &mut TestAppContext) {
     .await;
     cx.run_until_parked();
 
-    // Unticked, an answer goes for this clash alone.
     let number = |view: &MainWindow| view.newest_question().map(|asked| asked.number);
     assert_eq!(view.read_with(cx, |view, _| number(view)), Some(1));
     click(cx, "island-skip");
@@ -317,7 +298,6 @@ async fn shift_delete_asks_then_deletes_for_good(cx: &mut TestAppContext) {
     click(cx, "island-no");
     assert_eq!(confirm(cx), None);
     assert!(tree.path().join("notes.txt").exists());
-    // Asked about one selection, answered with another: nothing goes.
     cx.simulate_keystrokes("shift-delete");
     cx.run_until_parked();
     click(cx, "name-0");
@@ -364,7 +344,6 @@ async fn the_selection_line_counts_bytes_of_files_only(cx: &mut TestAppContext) 
     click(cx, "name-1");
     view.condition::<WindowEvent>(cx, |view, _| view.selected_bytes() == Some(11))
         .await;
-    // A folder selected too adds nothing.
     cx.simulate_keystrokes("ctrl-a");
     cx.run_until_parked();
     assert_eq!(
@@ -395,7 +374,6 @@ async fn a_note_stays_its_full_time_after_another_goes(cx: &mut TestAppContext) 
     view.update(cx, |view, cx| view.show_note("first", None, cx));
     cx.executor().advance_clock(nova_files_ui::NOTE_TIME / 2);
     view.update(cx, |view, cx| view.show_note("second", None, cx));
-    // The first note's time is up; the second's isn't.
     cx.executor()
         .advance_clock(nova_files_ui::NOTE_TIME / 2 + nova_files_ui::NOTE_TIME / 4);
     cx.run_until_parked();
@@ -437,8 +415,6 @@ async fn an_undone_job_is_not_undone_again(cx: &mut TestAppContext) {
     wait_for_names(&view, cx, &["Projects", "notes.txt"]).await;
     view.condition::<WindowEvent>(cx, |view, _| view.jobs_pending() == 0)
         .await;
-    // The core no longer offers it: another Ctrl+Z asks for nothing,
-    // rather than failing to undo it again.
     cx.simulate_keystrokes("ctrl-z");
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.note().is_none()));

@@ -1,26 +1,3 @@
-//! The search interface: what launchers call to find files by name, then
-//! open one or show it in its folder.
-//!
-//! `Search` returns at once; its stages come as `Found` signals sent only to
-//! the caller, names as typed first, letters in order and typos after,
-//! until one has `done` set. The caller picks the id, so it knows the
-//! signals before the reply arrives. A newer search from the same caller
-//! replaces the older one, whose stages stop; `Cancel` stops one. A search
-//! has a core connection of its own and a hold (see `holds`) until its
-//! last stage. `Failed` says a search couldn't run.
-//!
-//! Paths travel as strings: a path that isn't UTF-8 is left out of the
-//! results, since a launcher couldn't hand it back.
-//!
-//! `Open` opens a folder in a Nova Files window and a file with the user's
-//! default app. The core starts that app itself when it can (see
-//! `Command::OpenFile`); when it says it can't, as in a sandbox or for a
-//! type it finds no app for, the desktop portal's `OpenFile` does. `ShowInFolder` opens
-//! a window on the folder that holds the path, with it selected. Both take the launcher's
-//! `platform_data`, as `org.freedesktop.Application.Open` does, and pass
-//! its `activation-token` on, so the compositor lets the opened app take
-//! focus.
-
 use std::collections::HashMap;
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
@@ -45,33 +22,23 @@ use crate::application::keep_core_up;
 use crate::files::ask_core;
 use crate::holds::{Hold, Holds};
 
-/// The interface name. The `#[zbus::interface]` attribute needs the literal
-/// too; a test checks the two match.
 pub const INTERFACE: &str = "io.github.ImperaLuna.NovaFiles.Search1";
 
-/// The desktop portal and its interface for opening files.
 pub const PORTAL_NAME: &str = "org.freedesktop.portal.Desktop";
 pub const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 pub const OPEN_URI_INTERFACE: &str = "org.freedesktop.portal.OpenURI";
 
-/// The `platform_data` key `org.freedesktop.Application` uses for an XDG
-/// activation token, and the portal's option for it.
 pub const ACTIVATION_TOKEN: &str = "activation-token";
 const PORTAL_ACTIVATION_TOKEN: &str = "activation_token";
 
-/// How long `Open` waits to learn what a path is: well inside a caller's
-/// own call timeout, so the caller gets this error.
 const FILE_SYSTEM_TIMEOUT: Duration = Duration::from_secs(2);
 const LOOK_THREAD: &str = "nova-files-dbus-look";
 
 const FOUND: &str = "Found";
 const FAILED: &str = "Failed";
 
-/// One running search: a hold whose core connection runs it. Dropping it,
-/// or the caller leaving, ends the connection and so the search.
 type Search = Hold;
 
-/// Each caller's running search, by its unique bus name, with its id.
 struct Running<T> {
     searches: Mutex<HashMap<String, (u64, T)>>,
 }
@@ -85,8 +52,6 @@ impl<T> Default for Running<T> {
 }
 
 impl<T> Running<T> {
-    /// Makes `search` the caller's running one, ending the one before, and
-    /// hands it to `start` while no stage can be sent for it yet.
     fn put<R>(&self, caller: &str, id: u64, search: T, start: impl FnOnce(&T) -> R) -> R {
         start(
             &self
@@ -98,9 +63,6 @@ impl<T> Running<T> {
         )
     }
 
-    /// Runs `send` if `id` is the caller's running search, ending it after
-    /// when `last`. The map stays locked meanwhile, so once `end` or a
-    /// newer `put` returns, nothing more is sent for the older search.
     fn send_if_current<R>(
         &self,
         caller: &str,
@@ -130,13 +92,10 @@ impl<T> Running<T> {
             .is_some_and(|(running, _)| *running == id)
     }
 
-    /// Ends the caller's search `id`, if it is still the running one.
     fn end(&self, caller: &str, id: u64) {
         self.send_if_current(caller, id, true, || ());
     }
 
-    /// The map stays whole whatever panicked while holding it: each change
-    /// is one insert or remove.
     fn lock(&self) -> MutexGuard<'_, HashMap<String, (u64, T)>> {
         self.searches.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -161,8 +120,6 @@ impl<F> Searches<F> {
 }
 
 impl<F: Fn(WindowRequest)> Searches<F> {
-    /// Opens a window as `request` asks, first telling the core, so it
-    /// doesn't reach its idle exit while the window starts.
     fn open_window(&self, request: WindowRequest) -> fdo::Result<()> {
         keep_core_up(&self.connector)?;
         (self.on_open)(request);
@@ -172,8 +129,6 @@ impl<F: Fn(WindowRequest)> Searches<F> {
 
 #[zbus::interface(name = "io.github.ImperaLuna.NovaFiles.Search1")]
 impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
-    /// Starts search `id` for `query`, one word or several, with at most
-    /// `limit` hits per stage. The stages arrive as `Found` signals.
     #[expect(
         clippy::too_many_arguments,
         reason = "three D-Bus arguments, plus the header and emitter zbus hands in"
@@ -202,13 +157,11 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
             query,
             limit,
         };
-        // In first, so its stages count as current when they come.
         self.running
             .put(caller.as_str(), id, search, |search| search.send(command))
             .map_err(failed)
     }
 
-    /// Stops search `id`, if it is the caller's running one.
     fn cancel(&self, #[zbus(header)] header: Header<'_>, id: u64) {
         let caller = header.sender().map(ToString::to_string);
         drop(header);
@@ -217,8 +170,6 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
         }
     }
 
-    /// Opens `path`: a folder in a Nova Files window, a file with the
-    /// default app.
     async fn open(
         &self,
         #[zbus(connection)] bus: &zbus::Connection,
@@ -234,9 +185,6 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
                     path,
                     activation: token.clone(),
                 };
-                // Only a sure "not opened" goes to the portal: past the
-                // wait, the core may still start the app, and it would
-                // open twice.
                 match ask_core(&self.connector, command).await? {
                     Event::FileOpened { .. } => Ok(()),
                     Event::FileNotOpened { .. } => open_file(bus, file, token).await,
@@ -246,22 +194,17 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
         }
     }
 
-    /// Opens a Nova Files window on the folder that holds `path`, with
-    /// `path` selected.
     fn show_in_folder(
         &self,
         path: &str,
         platform_data: HashMap<String, OwnedValue>,
     ) -> fdo::Result<()> {
-        // The window can't take an activation token yet.
         drop(platform_data);
         let request = WindowRequest::showing(&absolute(path)?)
             .ok_or_else(|| fdo::Error::InvalidArgs(format!("no folder holds {path}")))?;
         self.open_window(request)
     }
 
-    /// One stage of search `id`: (path, how it matched) pairs, best first.
-    /// `done` marks the last.
     #[zbus(signal)]
     async fn found(
         emitter: &SignalEmitter<'_>,
@@ -270,13 +213,10 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
         done: bool,
     ) -> zbus::Result<()>;
 
-    /// Search `id` couldn't run: `no-index` without a home or cache
-    /// folder, `index-failed` when home couldn't be indexed.
     #[zbus(signal)]
     async fn failed(emitter: &SignalEmitter<'_>, id: u64, reason: String) -> zbus::Result<()>;
 }
 
-/// Sends one search's stages to its caller.
 struct Stages {
     bus: zbus::blocking::Connection,
     path: String,
@@ -311,13 +251,11 @@ impl EventSink for Stages {
         };
         match sent {
             Some(Ok(())) => Ok(()),
-            // Not the running search any more, or its caller is gone.
             _ => Err(ClientGone),
         }
     }
 }
 
-/// A hit as the signal carries it, or `None` for a path that isn't UTF-8.
 fn wire(hit: &Hit) -> Option<(String, String)> {
     let path = hit.path.to_str()?.to_owned();
     Some((path, matched_name(hit.matched).to_owned()))
@@ -352,29 +290,22 @@ fn absolute(path: &str) -> fdo::Result<PathBuf> {
     }
 }
 
-/// The launcher's activation token, if it gave one.
 fn token(platform_data: &HashMap<String, OwnedValue>) -> Option<String> {
     let value = platform_data.get(ACTIVATION_TOKEN)?;
     String::try_from(value.try_clone().ok()?).ok()
 }
 
-/// What a path to open is.
 enum Target {
     Folder,
-    /// A file, opened `O_PATH`.
     File(OwnedFd),
 }
 
-/// Looks at `path` on threads of its own, giving up after
-/// [`FILE_SYSTEM_TIMEOUT`]: on a mount that doesn't answer, the lookup
-/// blocks, and zbus answers every call on one executor.
 async fn look_at(path: PathBuf) -> fdo::Result<Target> {
     let (looked, look) = mpsc::channel();
     let (answer_sender, answer) = oneshot::channel();
     spawn(move || {
         looked.send(target(&path)).ok();
     })?;
-    // The lookup may never end; this one does.
     spawn(move || {
         answer_sender
             .send(look.recv_timeout(FILE_SYSTEM_TIMEOUT))
@@ -408,7 +339,6 @@ fn target(path: &Path) -> fdo::Result<Target> {
         .map_err(|error| fdo::Error::InvalidArgs(format!("{}: {error}", path.display())))
 }
 
-/// Asks the portal to open `file` with the user's default app.
 async fn open_file(
     bus: &zbus::Connection,
     file: OwnedFd,
@@ -419,7 +349,6 @@ async fn open_file(
         options.insert(PORTAL_ACTIVATION_TOKEN, Value::from(token));
     }
     let portal = zbus::Proxy::new(bus, PORTAL_NAME, PORTAL_PATH, OPEN_URI_INTERFACE).await?;
-    // No parent window: the launcher has closed by now.
     let request: zbus::zvariant::OwnedObjectPath = portal
         .call("OpenFile", &("", Fd::from(&file), options))
         .await?;
@@ -492,7 +421,6 @@ mod tests {
         assert_eq!(dropped.get(), 1);
     }
 
-    /// Counts its drops.
     struct Dropped<'a>(&'a Cell<u32>);
 
     impl Drop for Dropped<'_> {

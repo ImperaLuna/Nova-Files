@@ -1,10 +1,3 @@
-//! Hands the file picker portal's requests to the UI: a pick opens a
-//! picker window, a close closes it (see `nova_files_ui::Request`).
-//!
-//! A pick whose filters name MIME types gets the system's MIME database,
-//! read on the first such pick and kept, so the window can tell which
-//! files fit without touching the disk.
-
 use std::sync::{Arc, OnceLock};
 
 use nova_files_api::{FileTypes, FilterRule, PickId, PickRequest};
@@ -19,13 +12,10 @@ pub struct UiPicker {
 }
 
 impl UiPicker {
-    /// Reads the system's MIME database when a pick first needs it.
     pub const fn new(requests: RequestSender) -> Self {
         Self::with_loader(requests, MimeTypes::from_env)
     }
 
-    /// Gets the MIME database from `load` instead, which tests point at
-    /// a temporary folder.
     pub const fn with_loader(requests: RequestSender, load: fn() -> MimeTypes) -> Self {
         Self {
             requests,
@@ -83,7 +73,6 @@ mod tests {
             reply: PickReply::new(drop),
         });
         picker.close(PickId(4));
-        // With the sender gone, a close that sent nothing ends the wait.
         drop(picker);
 
         assert!(matches!(received.wait(), Some(Request::Pick(request)) if request.id == PickId(4)));
@@ -117,7 +106,6 @@ mod tests {
     #[test]
     fn only_a_pick_with_mime_rules_gets_the_database() {
         let (sender, received) = nova_files_ui::channel();
-        // No data folders, so nothing outside the test is read.
         let picker = UiPicker::with_loader(sender, || MimeTypes::load(&[]));
 
         picker.pick(open_with(vec![FilterRule::Glob("*.pdf".to_owned())]));

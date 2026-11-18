@@ -1,6 +1,3 @@
-//! A core with the real helper, in a scratch folder, and a client that
-//! starts jobs and follows them.
-
 use std::fs;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
@@ -14,7 +11,6 @@ use nova_files_core::{Archiver, Home, IDLE_EXIT, RunningCore};
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// A scratch folder with a core whose home is inside it, and a client.
 pub struct Bench {
     root: PathBuf,
     _core: RunningCore,
@@ -85,7 +81,6 @@ impl Bench {
         self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
     }
 
-    /// The conflict job `job` holds at next.
     pub fn held(&self, job: JobId) -> Conflict {
         loop {
             match self.next() {
@@ -96,7 +91,6 @@ impl Bench {
         }
     }
 
-    /// How job `job` ended, and what answers made of it.
     pub fn finished(&self, job: JobId) -> (Outcome, Tally) {
         loop {
             match self.next() {
@@ -112,7 +106,6 @@ impl Bench {
         }
     }
 
-    /// What `into` holds, by name, sorted.
     pub fn landed(&self) -> Vec<String> {
         let mut names: Vec<_> = fs::read_dir(self.at("into"))
             .unwrap()

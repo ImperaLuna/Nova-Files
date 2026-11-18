@@ -1,16 +1,9 @@
-//! Dragging a box over the entries on a real core: it selects the rows it
-//! touches, Ctrl adds them, a press on a name drags no box (it drags the
-//! file, see `window_drag`), and a click on the empty space below the
-//! rows selects nothing.
-
 use gpui::{
     Bounds, MouseButton, Pixels, Point, ScrollDelta, ScrollWheelEvent, TouchPhase, point, px,
 };
 
 use super::*;
 
-/// The shared tree plus `a.txt`, `b.txt` and `c.txt`:
-/// Projects, a.txt, b.txt, c.txt, notes.txt.
 async fn lettered<'a>(
     cx: &'a mut TestAppContext,
     tree: &TempFolder,
@@ -38,7 +31,6 @@ fn bounds(cx: &mut VisualTestContext, selector: &'static str) -> Bounds<Pixels> 
     cx.debug_bounds(selector).unwrap()
 }
 
-/// Presses at `from`, moves to `to` and lets go there, with `modifiers`.
 fn drag(cx: &mut VisualTestContext, from: Point<Pixels>, to: Point<Pixels>, modifiers: Modifiers) {
     cx.simulate_mouse_down(from, MouseButton::Left, modifiers);
     cx.simulate_mouse_move(to, Some(MouseButton::Left), modifiers);
@@ -46,8 +38,6 @@ fn drag(cx: &mut VisualTestContext, from: Point<Pixels>, to: Point<Pixels>, modi
     cx.run_until_parked();
 }
 
-/// Drags from `from` to `to`, checking the box is drawn from the press to
-/// the mouse while it's held and gone once let go.
 fn drag_drawn(cx: &mut VisualTestContext, from: Point<Pixels>, to: Point<Pixels>) {
     cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
@@ -69,11 +59,9 @@ async fn a_box_selects_the_rows_it_touches(cx: &mut TestAppContext) {
     assert_eq!(selected(&view, cx), ["a.txt", "b.txt", "c.txt"]);
     assert_eq!(view.read_with(cx, |view, _| view.cursor()), Some(3));
 
-    // A box along one row selects it, and letting go on it isn't a click.
     drag(cx, from, from + point(px(30.0), px(0.0)), Modifiers::none());
     assert_eq!(selected(&view, cx), ["a.txt"]);
 
-    // Past the last row it stops at the last row.
     let below = bounds(cx, "entry-4").bottom_left() + point(px(40.0), px(60.0));
     drag(cx, to, below, Modifiers::none());
     assert_eq!(selected(&view, cx), ["c.txt", "notes.txt"]);
@@ -90,7 +78,6 @@ async fn ctrl_adds_the_box_to_the_selection(cx: &mut TestAppContext) {
     let to = bounds(cx, "modified-2").center();
     drag(cx, from, to, Modifiers::control());
     assert_eq!(selected(&view, cx), ["a.txt", "b.txt", "notes.txt"]);
-    // Letting go on the row a box started on isn't a Ctrl+click on it.
     click(cx, "entry-4");
     drag(
         cx,
@@ -123,7 +110,6 @@ async fn a_box_starts_only_once_the_mouse_moves_a_few_pixels(cx: &mut TestAppCon
     );
     cx.run_until_parked();
     assert!(cx.debug_bounds("band").is_some());
-    // A move with the button up (let go outside the window) ends it.
     cx.simulate_mouse_move(from, None, Modifiers::none());
     cx.run_until_parked();
     assert_eq!(cx.debug_bounds("band"), None);
@@ -138,9 +124,7 @@ async fn a_press_on_a_name_drags_no_box(cx: &mut TestAppContext) {
     let from = bounds(cx, "name-1").center();
     let to = bounds(cx, "modified-3").center();
     drag(cx, from, to, Modifiers::none());
-    // It drags the file instead, which selects it alone.
     assert_eq!(selected(&view, cx), ["a.txt"]);
-    // The next press, off the name, can.
     let from = bounds(cx, "modified-1").center();
     drag(cx, from, to, Modifiers::none());
     assert_eq!(selected(&view, cx), ["a.txt", "b.txt", "c.txt"]);
@@ -155,7 +139,6 @@ async fn a_click_below_the_rows_selects_nothing(cx: &mut TestAppContext) {
     click(cx, "entry-2");
     assert_eq!(selected(&view, cx), ["b.txt"]);
     let below = bounds(cx, "entry-4").bottom_left() + point(px(40.0), px(60.0));
-    // Ctrl keeps what is selected.
     cx.simulate_click(below, Modifiers::control());
     assert_eq!(selected(&view, cx), ["b.txt"]);
     cx.simulate_click(below, Modifiers::none());
@@ -201,11 +184,8 @@ async fn a_box_in_a_scrolled_list_selects_the_rows_under_it(cx: &mut TestAppCont
     let from = bounds(cx, "modified-15").center();
     let to = bounds(cx, "modified-17").center() + point(px(40.0), px(0.0));
     drag_drawn(cx, from, to);
-    // Row 0 is `Projects`, so row 15 is `f14`.
     assert_eq!(selected(&view, cx), ["f14", "f15", "f16"]);
 
-    // Scrolling while the box is held selects what it covers then, and
-    // letting go keeps that.
     cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
     let row = bounds(cx, "entry-15").size.height;
@@ -216,7 +196,6 @@ async fn a_box_in_a_scrolled_list_selects_the_rows_under_it(cx: &mut TestAppCont
     assert_eq!(selected(&view, cx), ["f14", "f15", "f16", "f17", "f18"]);
 }
 
-/// Scrolls the list under `position` by `by` (down when negative).
 fn scroll(cx: &mut VisualTestContext, position: Point<Pixels>, by: Pixels) {
     cx.simulate_event(ScrollWheelEvent {
         position,

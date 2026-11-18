@@ -1,6 +1,3 @@
-//! The core lists archives through the real helper: every format it reads,
-//! entries of each kind, and hostile paths left out.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs::{self, File};
@@ -14,7 +11,6 @@ fn archiver() -> Archiver {
     Archiver::at(PathBuf::from(env!("CARGO_BIN_EXE_nova-files-archiver")))
 }
 
-/// A fresh, empty folder for one test.
 fn folder(name: &str) -> PathBuf {
     let folder = std::env::temp_dir().join(format!("nova-archiver-{name}-{}", std::process::id()));
     fs::remove_dir_all(&folder).ok();
@@ -22,8 +18,6 @@ fn folder(name: &str) -> PathBuf {
     folder
 }
 
-/// The Unix time of a wall-clock time in the local zone, the zone the
-/// helper reads zip times in.
 fn local_seconds(time: &str) -> i64 {
     let out = std::process::Command::new("date")
         .args(["-d", time, "+%s"])
@@ -40,7 +34,6 @@ fn paths(entries: &[ArchiveEntry]) -> Vec<&Path> {
     entries.iter().map(|entry| entry.path.as_path()).collect()
 }
 
-/// A tar holding a folder, a file and a link.
 fn tar_bytes() -> Vec<u8> {
     let mut builder = tar::Builder::new(Vec::new());
     let mut folder = tar::Header::new_gnu();
@@ -97,7 +90,6 @@ fn lists_tar_in_every_wrapping() {
     let mut bzip2 = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::default());
     bzip2.write_all(&tar).unwrap();
     for (name, bytes) in [
-        // Named wrong on purpose: the format comes from the bytes.
         ("plain.zip", tar.clone()),
         ("a.tar.gz", gzip.finish().unwrap()),
         ("a.tar.xz", xz.finish().unwrap()),
@@ -130,7 +122,6 @@ fn lists_zip_with_its_unix_details_and_locked_entries() {
     )
     .unwrap();
     zip.write_all(b"hidden").unwrap();
-    // A locked link lists without its target.
     zip.add_symlink(
         "locked-link",
         "secret.txt",
@@ -174,8 +165,6 @@ fn zip_with_no_permissions_gets_plain_ones() {
         .unwrap();
     zip.start_file("d/f", SimpleFileOptions::default()).unwrap();
     zip.finish().unwrap();
-    // Clears each entry's external attributes in the central directory,
-    // as some zip writers leave them.
     let mut bytes = fs::read(&path).unwrap();
     let headers: Vec<usize> = bytes
         .windows(4)
@@ -208,7 +197,6 @@ fn zip_from_dos_gets_permissions_from_its_attributes() {
     let entries = archiver().list(&path).unwrap();
     assert_eq!(entries[0].mode, 0o775);
     assert_eq!(entries[1].mode, 0o664);
-    // 1980-01-01 00:00, the first DOS date, on this system's clock.
     let first_dos_day = chrono::NaiveDate::from_ymd_opt(1980, 1, 1)
         .unwrap()
         .and_hms_opt(0, 0, 0)
@@ -235,7 +223,6 @@ fn hostile_paths_are_left_out() {
     }
     fs::write(&path, builder.into_inner().unwrap()).unwrap();
     let entries = archiver().list(&path).unwrap();
-    // The helper drops the leading slash; the core drops `..`.
     assert_eq!(
         paths(&entries),
         [Path::new("etc/evil"), Path::new("ok.txt")]

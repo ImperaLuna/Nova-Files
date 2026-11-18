@@ -96,7 +96,6 @@ fn matches(pattern: &[char], name: &[char]) -> bool {
                 p += width;
                 n += 1;
             }
-            // Back to the `*`, which takes one more character this time.
             (None, Some((star_p, star_n))) => {
                 p = star_p;
                 n = star_n + 1;
@@ -110,7 +109,6 @@ fn matches(pattern: &[char], name: &[char]) -> bool {
 /// How far a `[...]` set at the start of `pattern` reaches if it holds
 /// `c`, or `None` if it doesn't. An unclosed `[` matches only itself.
 fn set(pattern: &[char], c: char) -> Option<usize> {
-    // After `[!`, too, a `]` first in the set is one of its members.
     let first_close = FIRST_CLOSE_AT + usize::from(pattern.get(1) == Some(&SET_NOT));
     let Some(close) = pattern
         .iter()

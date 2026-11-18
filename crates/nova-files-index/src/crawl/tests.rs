@@ -1,11 +1,7 @@
-//! The crawl with made-up mounts: a mount point isn't entered, a folder
-//! with its own device number that isn't a mount (a btrfs subvolume) is.
-
 use std::collections::HashSet;
 
 use super::*;
 
-/// Says the folders it holds are mount points, and nothing else is.
 struct Mounts(HashSet<PathBuf>);
 
 impl MountCheck for Mounts {
@@ -14,7 +10,6 @@ impl MountCheck for Mounts {
     }
 }
 
-/// A temp folder with `drive/inside.txt`, removed when dropped.
 struct Home(PathBuf);
 
 impl Home {
@@ -67,8 +62,6 @@ fn a_folder_that_isnt_a_mount_is_entered() {
 
 #[test]
 fn a_folder_with_its_own_device_that_isnt_a_mount_is_entered() {
-    // /dev holds folders with their own device numbers on most systems
-    // (pts, shm); with no mounts claimed they stand in for subvolumes.
     let dev = Path::new("/dev");
     let device = fs::metadata(dev).unwrap().dev();
     let Some(other) = fs::read_dir(dev).unwrap().flatten().find(|item| {

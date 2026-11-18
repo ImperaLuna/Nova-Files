@@ -1,14 +1,3 @@
-//! The system's thumbnailers: the `thumbnailers/*.thumbnailer` files other
-//! programs install (ffmpegthumbnailer for video, gdk-pixbuf loaders for
-//! HEIC, and so on), found in the data folders.
-//!
-//! Each file names the MIME types it handles and an `Exec` line. The line
-//! is split into arguments the way desktop entries are (no shell), and its
-//! field codes are filled in: `%i` the input path, `%u` its URI, `%o` the
-//! output file, `%s` the size. The program runs inside the helper's
-//! sandbox, so it too can write only into the thumbnails folder, with
-//! [`RUN_TIMEOUT`] to finish.
-
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
@@ -27,9 +16,7 @@ const EXEC_KEY: &str = "Exec";
 const TRY_EXEC_KEY: &str = "TryExec";
 const MIME_KEY: &str = "MimeType";
 const LIST_SEPARATOR: char = ';';
-/// A thumbnailer file is a few lines; anything bigger isn't one.
 const MAX_FILE_BYTES: u64 = 64 * 1024;
-/// How long one file may take.
 const RUN_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_THREAD: &str = "thumbnailer-output";
 const PATH_VAR: &str = "PATH";
@@ -37,7 +24,6 @@ const QUOTE: char = '"';
 const ESCAPE: char = '\\';
 const FIELD: char = '%';
 
-/// What a thumbnailer is asked to make.
 pub struct Request<'a> {
     pub input: &'a Path,
     pub uri: &'a str,
@@ -45,12 +31,9 @@ pub struct Request<'a> {
     pub size: u32,
 }
 
-/// The installed thumbnailers, by MIME type.
 pub struct Thumbnailers(HashMap<String, Vec<String>>);
 
 impl Thumbnailers {
-    /// Reads the thumbnailer files in each of `data_dirs`; for a MIME type
-    /// two folders both handle, the first folder wins.
     pub fn load(data_dirs: &[PathBuf]) -> Self {
         let mut by_mime = HashMap::new();
         for dir in data_dirs {
@@ -64,7 +47,6 @@ impl Thumbnailers {
                         .is_some_and(|extension| extension == THUMBNAILER_EXTENSION)
                 })
                 .collect();
-            // The same order on every run.
             files.sort();
             for file in files {
                 let Some((exec, mimes)) = read_entry(&file) else {
@@ -78,15 +60,12 @@ impl Thumbnailers {
         Self(by_mime)
     }
 
-    /// Runs the thumbnailer for `mime`. `None` when there is none.
     pub fn run(&self, mime: &str, request: &Request) -> Option<io::Result<()>> {
         let exec = self.0.get(mime)?;
         Some(run(exec, request))
     }
 }
 
-/// The `Exec` arguments and MIME types of one thumbnailer file, if it is
-/// complete and its program is installed.
 fn read_entry(file: &Path) -> Option<(Vec<String>, Vec<String>)> {
     let text = read_capped(file)?;
     let mut in_group = false;
@@ -126,7 +105,6 @@ fn read_capped(path: &Path) -> Option<String> {
     Some(text)
 }
 
-/// Whether `program` is an absolute path that exists or is on `PATH`.
 fn installed(program: &str) -> bool {
     let program = Path::new(program);
     if program.is_absolute() {
@@ -136,9 +114,6 @@ fn installed(program: &str) -> bool {
         .is_some_and(|path| env::split_paths(&path).any(|dir| dir.join(program).is_file()))
 }
 
-/// Splits an `Exec` value into arguments: spaces separate them, double
-/// quotes group them, and a backslash inside quotes escapes the next
-/// character. `None` for an unclosed quote or an empty line.
 fn split_exec(line: &str) -> Option<Vec<String>> {
     let mut args = Vec::new();
     let mut current = String::new();
@@ -173,7 +148,6 @@ fn split_exec(line: &str) -> Option<Vec<String>> {
     (!args.is_empty()).then_some(args)
 }
 
-/// `arg` with its field codes filled in from `request`.
 fn fill(arg: &str, request: &Request) -> OsString {
     let mut out = OsString::new();
     let mut chars = arg.chars();
@@ -188,17 +162,12 @@ fn fill(arg: &str, request: &Request) -> OsString {
             Some('o') => out.push(request.output),
             Some('s') => out.push(request.size.to_string()),
             Some(FIELD) => out.push(FIELD.to_string()),
-            // An unknown field code stands for nothing.
             _ => {}
         }
     }
     out
 }
 
-/// Runs the thumbnailer and waits for it. `std` can't wait for a child
-/// with a timeout, so a thread drains its output, which ends when it
-/// exits; past [`RUN_TIMEOUT`] the child is killed. It is always waited on.
-/// A thumbnailer that ran and failed is [`io::ErrorKind::InvalidData`].
 fn run(exec: &[String], request: &Request) -> io::Result<()> {
     let (program, args) = exec
         .split_first()
@@ -211,7 +180,6 @@ fn run(exec: &[String], request: &Request) -> io::Result<()> {
         .spawn()?;
     let mut output = child.stdout.take();
     let (done, finished) = mpsc::channel();
-    // A reader that couldn't start drops `done`: not in time.
     thread::Builder::new()
         .name(READER_THREAD.to_owned())
         .spawn(move || {
@@ -297,7 +265,6 @@ mod tests {
                 program.display()
             )
         };
-        // Long, but well under the size limit.
         let padding = "# padding\n".repeat(500);
         fs::write(
             folder.join("long.thumbnailer"),

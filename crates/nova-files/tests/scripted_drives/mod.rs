@@ -1,7 +1,3 @@
-//! Drives against a scripted core: the list the core sends shows, a click
-//! on a volume not mounted mounts it and opens it once mounted (and only
-//! that one), and a volume unmounted under the window sends it home.
-
 use std::ffi::OsString;
 
 use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent};
@@ -31,8 +27,6 @@ fn drives(volumes: Vec<Volume>) -> Event {
     }))
 }
 
-/// A window on [`SHOWN`], its home, shown, with the core's drive list
-/// `volumes` arrived.
 fn with_drives(
     cx: &mut TestAppContext,
     volumes: Vec<Volume>,
@@ -44,7 +38,6 @@ fn with_drives(
     (view, cx, core)
 }
 
-/// The drive actions the window sent since last asked.
 fn drive_actions(core: &mut Core) -> Vec<DriveAction> {
     let mut actions = Vec::new();
     while let Some(message) = core.try_recv() {
@@ -91,7 +84,6 @@ fn the_space_the_core_tells_is_kept_by_folder(cx: &mut TestAppContext) {
 fn a_volume_clicked_is_mounted_then_opened(cx: &mut TestAppContext) {
     let (view, cx, mut core) = with_drives(cx, vec![volume("stick", None), volume("card", None)]);
     let stick = view.read_with(cx, |view, _| view.shown_drives()[1].clone());
-    // Clicked twice while it mounts: one mount.
     view.update(cx, |view, _| view.open_drive(stick.clone()));
     view.update(cx, |view, _| view.open_drive(stick));
     let stick_id = VolumeId("stick".to_owned());
@@ -100,7 +92,6 @@ fn a_volume_clicked_is_mounted_then_opened(cx: &mut TestAppContext) {
         [DriveAction::Mount(stick_id.clone())]
     );
 
-    // Another volume mounted meanwhile isn't opened.
     core.send(Event::DriveDone {
         action: DriveAction::Mount(VolumeId("card".to_owned())),
         result: Ok(Some(PathBuf::from("/media/card"))),
@@ -119,7 +110,6 @@ fn a_volume_clicked_is_mounted_then_opened(cx: &mut TestAppContext) {
     );
 }
 
-/// A window shown in the stick, mounted at [`STICK`].
 fn in_the_stick(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     let (view, cx, mut core) = with_drives(cx, vec![volume("stick", Some(STICK))]);
     view.update(cx, |view, _| view.open(Path::new(STICK)));
@@ -208,7 +198,6 @@ fn the_keys_go_round_a_drive_menu(cx: &mut TestAppContext) {
         click_count: 1,
     });
     cx.run_until_parked();
-    // Open and Open in new tab, a line, then Eject.
     assert_eq!(
         view.read_with(cx, |view, _| view.menu().unwrap().lines.clone()),
         [2]
@@ -218,9 +207,7 @@ fn the_keys_go_round_a_drive_menu(cx: &mut TestAppContext) {
         cx.simulate_keystrokes(key);
         marks.push(view.read_with(cx, |view, _| view.menu().unwrap().active.unwrap()));
     }
-    // Open, Open in new tab, Eject: round past each end.
     assert_eq!(marks, [0, 1, 2, 0, 2, 1, 0]);
-    // The pointer marks what it is over.
     let over = cx.debug_bounds("menu-1").unwrap().center();
     cx.simulate_mouse_move(over, None, Modifiers::none());
     cx.run_until_parked();

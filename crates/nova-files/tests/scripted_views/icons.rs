@@ -1,8 +1,3 @@
-//! Icons against a scripted core: the entries sit in lines of cells with
-//! no column heads, the arrows move through the grid, Ctrl+scroll steps
-//! the icons' size, thumbnails are asked for at the size drawn, and a box
-//! selects the cells it covers.
-
 use gpui::{
     Bounds, Modifiers, MouseButton, Pixels, Point, ScrollDelta, ScrollWheelEvent, TouchPhase,
 };
@@ -10,11 +5,8 @@ use nova_files_api::IconSize;
 
 use super::*;
 
-/// Enough entries for a few lines of icons.
-/// Prime, so the last line is short whatever fits on one.
 const CELLS: u32 = 61;
 
-/// A window on [`SHOWN`] showing [`CELLS`] entries as Icons.
 fn icons(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     cx.update(nova_files_ui::bind_window_keys);
     let (view, cx, mut core) = window(cx);
@@ -32,7 +24,6 @@ fn cell(cx: &mut VisualTestContext, index: u32) -> Bounds<Pixels> {
         .unwrap()
 }
 
-/// How many cells the first line holds.
 fn per_line(cx: &mut VisualTestContext) -> u32 {
     let top = cell(cx, 0).top();
     (0..CELLS)
@@ -50,7 +41,6 @@ fn selected(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
     view.read_with(cx, |view, _| view.selected_names())
 }
 
-/// The sizes of thumbnail the window asked for since last asked.
 fn sizes_asked(core: &mut Core) -> Vec<ThumbnailSize> {
     core.commands()
         .into_iter()
@@ -77,7 +67,6 @@ fn icon_size(view: &Entity<MainWindow>, cx: &VisualTestContext) -> IconSize {
     view.read_with(cx, |view, _| view.folder_view().icons)
 }
 
-/// Drags a box from `from` to `to`.
 fn drag_box(cx: &mut VisualTestContext, from: Point<Pixels>, to: Point<Pixels>) {
     cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
@@ -85,8 +74,6 @@ fn drag_box(cx: &mut VisualTestContext, from: Point<Pixels>, to: Point<Pixels>) 
     cx.run_until_parked();
 }
 
-/// The names of the first two cells of the first two lines, `across` to
-/// a line.
 fn first_two_lines_two_across(across: u32) -> Vec<String> {
     [0, 1, across, across + 1]
         .map(|index| index.to_string())
@@ -104,17 +91,13 @@ fn icons_sit_in_lines_of_cells_without_column_heads(cx: &mut TestAppContext) {
     assert_eq!(below.left(), first.left());
     assert_eq!(below.top(), first.bottom());
 
-    // A narrower window fits fewer to a line.
     let wide = cx.update(|window, _| window.viewport_size());
     cx.simulate_resize(gpui::size(wide.width / 2.0, wide.height));
-    // The window draws once on the new size, and again once it knows how
-    // wide the list is there.
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
     let narrow = per_line(cx);
     assert!(narrow < across, "{narrow} of {across}");
 
-    // Details has its heads and a row each.
     cx.simulate_keystrokes("ctrl-1");
     assert!(cx.debug_bounds("head-name").is_some());
     assert_eq!(cell(cx, 1).top(), cell(cx, 0).bottom());
@@ -139,7 +122,6 @@ fn the_arrows_move_through_the_grid(cx: &mut TestAppContext) {
     assert_eq!(selected(&view, cx), ["1", "2"]);
     cx.simulate_keystrokes("left");
 
-    // Details takes no notice of left and right.
     cx.simulate_keystrokes("ctrl-1 right shift-right shift-left");
     assert_eq!(cursor(&view, cx), Some(0));
     cx.simulate_keystrokes("down");
@@ -155,13 +137,11 @@ fn ctrl_scroll_steps_the_icons_size(cx: &mut TestAppContext) {
     assert_eq!(icon_size(&view, cx), IconSize::Large);
     ctrl_scroll(cx, -2.0);
     assert_eq!(icon_size(&view, cx), IconSize::Small);
-    // Half a step waits for the rest.
     ctrl_scroll(cx, 0.5);
     assert_eq!(icon_size(&view, cx), IconSize::Small);
     ctrl_scroll(cx, 0.5);
     assert_eq!(icon_size(&view, cx), IconSize::Medium);
 
-    // Details has no icons to size.
     cx.simulate_keystrokes("ctrl-1");
     ctrl_scroll(cx, 1.0);
     assert_eq!(icon_size(&view, cx), IconSize::Medium);
@@ -171,7 +151,6 @@ fn ctrl_scroll_steps_the_icons_size(cx: &mut TestAppContext) {
 fn thumbnails_are_asked_for_at_the_size_drawn(cx: &mut TestAppContext) {
     let (_, cx, mut core) = icons(cx);
 
-    // The largest icons are wider than a normal thumbnail.
     cx.simulate_keystrokes("ctrl-= ctrl-=");
     cx.run_until_parked();
     assert_eq!(sizes_asked(&mut core).last(), Some(&ThumbnailSize::Large));
@@ -184,8 +163,6 @@ fn thumbnails_are_asked_for_at_the_size_drawn(cx: &mut TestAppContext) {
 fn a_box_selects_the_cells_it_covers(cx: &mut TestAppContext) {
     let (view, cx, _) = icons(cx);
     let across = per_line(cx);
-    // From a corner of the first cell to one of the second line's second,
-    // clear of their icons and names.
     let inset = point(px(3.0), px(3.0));
     let from = cell(cx, 0).origin + inset;
     let to = cell(cx, across + 1).bottom_right() - inset;
@@ -196,7 +173,6 @@ fn a_box_selects_the_cells_it_covers(cx: &mut TestAppContext) {
         Some(usize::try_from(across + 1).unwrap())
     );
 
-    // A click below the last line selects nothing.
     let after = point(cell(cx, 0).left(), cell(cx, CELLS - 1).bottom()) + point(px(10.0), px(10.0));
     cx.simulate_mouse_down(after, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_up(after, MouseButton::Left, Modifiers::none());
@@ -269,8 +245,6 @@ fn the_cursor_stays_in_view_when_the_view_changes(cx: &mut TestAppContext) {
 fn a_box_dragged_down_and_left_selects_the_cells_between(cx: &mut TestAppContext) {
     let (view, cx, _) = icons(cx);
     let across = per_line(cx);
-    // From a corner of the first line's second cell to one of the second
-    // line's first, clear of their icons and names.
     let inset = point(px(3.0), px(3.0));
     let from = point(cell(cx, 1).right(), cell(cx, 1).top()) + point(-inset.x, inset.y);
     let to = point(cell(cx, across).left(), cell(cx, across).bottom()) + point(inset.x, -inset.y);
@@ -298,7 +272,6 @@ fn ctrl_scroll_takes_whole_steps_at_once(cx: &mut TestAppContext) {
     let (view, cx, _) = icons(cx);
     ctrl_scroll(cx, 2.5);
     assert_eq!(icon_size(&view, cx), IconSize::Largest);
-    // The half step left over counts toward the next.
     ctrl_scroll(cx, -3.5);
     assert_eq!(icon_size(&view, cx), IconSize::Small);
 }

@@ -1,6 +1,3 @@
-//! The core makes archives through the real helper, in every packing,
-//! and reads them back the same way.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs;
@@ -10,10 +7,8 @@ use std::path::{Path, PathBuf};
 use nova_files_api::Packing;
 use nova_files_core::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
 
-/// More asks with nothing new than a test archive takes.
 const MOST_WAITS: u32 = 100;
 
-/// Goes on, but stops a run asked this many times with nothing new.
 fn go() -> impl FnMut(Extracting) -> Flow {
     let mut waits = 0;
     move |extracting| {
@@ -32,8 +27,6 @@ fn archiver() -> Archiver {
     Archiver::at(PathBuf::from(env!("CARGO_BIN_EXE_nova-files-archiver")))
 }
 
-/// A fresh scratch folder holding `docs/` (a file, a folder inside, a
-/// link) and `notes.txt`.
 fn sources(name: &str) -> PathBuf {
     let folder = std::env::temp_dir().join(format!(
         "nova-archiver-compress-{name}-{}",
@@ -210,7 +203,6 @@ fn a_compress_without_sources_or_of_another_ask_is_a_usage_error() {
     fs::remove_dir_all(&folder).ok();
 }
 
-/// Text that compresses better the harder it is tried.
 fn wordy(folder: &Path) -> PathBuf {
     let words = [
         "archive", "folder", "nova", "files", "zip", "tar", "level", "bytes",

@@ -1,12 +1,5 @@
-//! The quick look in a main window on a real core: Space opens it on the
-//! selected entry and closes it, Escape closes it, the arrow keys step
-//! through the folder with the selection following, Enter opens what it
-//! shows, and going to another folder closes it.
-
 use super::*;
 
-/// The shared tree plus `a.txt` with some text: Projects, a.txt,
-/// notes.txt.
 async fn with_text<'a>(
     cx: &'a mut TestAppContext,
     tree: &TempFolder,
@@ -21,7 +14,6 @@ async fn with_text<'a>(
     (view, cx)
 }
 
-/// Waits until the quick look shows what the core sent for `name`.
 async fn wait_for_preview(view: &Entity<MainWindow>, cx: &VisualTestContext, name: &str) {
     view.condition::<WindowEvent>(cx, |view, _| {
         view.previewed()
@@ -44,7 +36,6 @@ async fn space_shows_the_selected_file_and_closes_it_again(cx: &mut TestAppConte
     let tree = TempFolder::tree("preview");
     let (view, cx) = with_text(cx, &tree).await;
 
-    // Nothing selected: nothing to show.
     cx.simulate_keystrokes("space");
     assert!(!view.read_with(cx, |view, _| view.previewing()));
 
@@ -66,7 +57,6 @@ async fn space_shows_the_selected_file_and_closes_it_again(cx: &mut TestAppConte
     assert_eq!(previewed_name(&view, cx), None);
     cx.run_until_parked();
     assert!(cx.debug_bounds("preview").is_none());
-    // The selection stays.
     assert_eq!(selected(&view, cx), ["a.txt"]);
 }
 
@@ -97,7 +87,6 @@ async fn the_arrow_keys_step_through_the_folder_and_the_selection_follows(cx: &m
     cx.simulate_keystrokes("right");
     wait_for_preview(&view, cx, "notes.txt").await;
     assert_eq!(selected(&view, cx), ["notes.txt"]);
-    // The last entry: Next goes nowhere.
     cx.simulate_keystrokes("down");
     assert_eq!(previewed_name(&view, cx).as_deref(), Some("notes.txt"));
 
@@ -127,7 +116,6 @@ async fn the_buttons_step_and_close(cx: &mut TestAppContext) {
     wait_for_preview(&view, cx, "notes.txt").await;
     click(cx, "preview-previous");
     wait_for_preview(&view, cx, "a.txt").await;
-    // A click on what is shown leaves it open.
     click(cx, "preview-art");
     assert!(view.read_with(cx, |view, _| view.previewing()));
     click(cx, "preview-close");
@@ -190,8 +178,6 @@ async fn a_fresh_read_keeps_the_quick_look_on_its_entry(cx: &mut TestAppContext)
     click(cx, "entry-2");
     cx.simulate_keystrokes("space");
     wait_for_preview(&view, cx, "notes.txt").await;
-    // Ordered Z to A, notes.txt moves; the quick look follows it. (Its
-    // scrim covers the column heads, so the test asks for the order.)
     view.update(cx, |view, cx| {
         view.sort_by(nova_files_api::SortKey::Name);
         cx.notify();
@@ -255,7 +241,6 @@ async fn stepping_starts_from_the_entry_shown(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("preview");
     let (view, cx) = with_text(cx, &tree).await;
 
-    // Projects selected, the cursor left on notes.txt, which isn't.
     click(cx, "entry-0");
     click_with(cx, "entry-2", Modifiers::control());
     click_with(cx, "entry-2", Modifiers::control());
@@ -303,7 +288,6 @@ async fn each_kind_of_entry_is_drawn_its_own_way(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("space");
     wait_for_preview(&view, cx, "Projects").await;
     assert_eq!(drawn(cx), ["preview-folder"]);
-    // Projects holds one entry, all of it shown.
     assert!(cx.debug_bounds("preview-more").is_none());
 
     cx.simulate_keystrokes("right");

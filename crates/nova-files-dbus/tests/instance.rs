@@ -1,11 +1,3 @@
-//! Against a private D-Bus daemon: the first start serves `Ping` through
-//! the real core, and a second start finds it and hands over a window
-//! request through `org.freedesktop.Application.Activate`. `Ping` fails
-//! once the core has stopped. `Open` hands a folder over the same way. The
-//! running instance serves search and the file picker, and owns the portal
-//! name unless another program does. A hold keeps a real core with a short
-//! idle time up, and ends when it is dropped or its caller leaves the bus.
-
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -30,7 +22,6 @@ mod support;
 
 use support::{PrivateBus, WAIT};
 
-/// How long a test waits for something that should not happen.
 const QUIET: Duration = Duration::from_millis(200);
 
 #[test]
@@ -65,8 +56,6 @@ fn activate_fails_once_the_core_has_stopped() {
     assert!(requests.recv_timeout(QUIET).is_err());
 }
 
-/// Starts the first instance on `bus`; each window it is asked for arrives
-/// on the receiver, with its folder.
 fn serve(bus: &PrivateBus, connector: &Connector) -> (Started, Receiver<Option<PathBuf>>) {
     let (sender, requests) = mpsc::channel();
     let started = nova_files_dbus::start(bus.bus(), connector.clone(), move |request| {
@@ -76,7 +65,6 @@ fn serve(bus: &PrivateBus, connector: &Connector) -> (Started, Receiver<Option<P
     (started, requests)
 }
 
-/// Starts a second instance, which finds the first.
 fn second(bus: &PrivateBus, connector: &Connector) -> RunningInstance {
     let started = nova_files_dbus::start(bus.bus(), connector.clone(), |_| {}).unwrap();
     let Started::AlreadyRunning(running) = started else {
@@ -85,7 +73,6 @@ fn second(bus: &PrivateBus, connector: &Connector) -> RunningInstance {
     running
 }
 
-/// A plain D-Bus client on `bus`, as a launcher would connect.
 fn client(bus: &PrivateBus) -> Connection {
     zbus::blocking::connection::Builder::address(bus.address.as_str())
         .unwrap()
@@ -94,7 +81,6 @@ fn client(bus: &PrivateBus) -> Connection {
         .unwrap()
 }
 
-/// Calls `Ping` on the service at the app id, as a launcher would.
 fn ping(bus: &PrivateBus) -> zbus::Result<()> {
     let client = client(bus);
     let files = Proxy::new(
@@ -178,7 +164,6 @@ fn a_released_name_is_free_at_once() {
     };
     first.release().unwrap();
 
-    // `first` still holds its connection, so only the release freed it.
     let again = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
     assert!(matches!(again, Started::Service(_)));
     drop(first);
@@ -193,7 +178,6 @@ fn a_waiting_start_takes_the_name_once_it_is_freed() {
     else {
         panic!("the first start owns the name");
     };
-    // Released a little after the second start first finds it taken.
     let (_hold, held) = mpsc::channel::<()>();
     let release = std::thread::spawn(move || {
         held.recv_timeout(QUIET).ok();
@@ -231,7 +215,6 @@ fn the_running_instance_serves_search_and_the_file_picker() {
     let portal = introspect(&bus, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH);
     assert!(portal.contains(FILE_CHOOSER_INTERFACE), "{portal}");
 
-    // A second start leaves the portal name with the first.
     drop(second(&bus, &core.connector));
     assert!(introspect(&bus, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH).contains(FILE_CHOOSER_INTERFACE));
 }
@@ -288,7 +271,6 @@ fn a_release_leaves_another_programs_portal_name_alone() {
     service.release().unwrap();
     other.release_name(PORTAL_BUS_NAME).unwrap();
 
-    // Out of the queue too: nobody takes the name over.
     let has_owner = zbus::blocking::fdo::DBusProxy::new(&client(&bus))
         .unwrap()
         .name_has_owner(PORTAL_BUS_NAME.try_into().unwrap())
@@ -296,7 +278,6 @@ fn a_release_leaves_another_programs_portal_name_alone() {
     assert!(!has_owner);
 }
 
-/// A first start that also serves a file picker which shows nothing.
 fn picker_service(bus: &PrivateBus, connector: &Connector) -> Service {
     let Started::Service(mut service) =
         nova_files_dbus::start(bus.bus(), connector.clone(), |_| {}).unwrap()
@@ -334,24 +315,18 @@ fn a_plain_start_serves_no_file_picker() {
     assert!(!has_owner);
 }
 
-/// The introspection XML of `path` on the service owning `name`.
 fn introspect(bus: &PrivateBus, name: &str, path: &str) -> String {
     let client = client(bus);
     let proxy = Proxy::new(&client, name, path, "org.freedesktop.DBus.Introspectable").unwrap();
     proxy.call::<_, _, String>("Introspect", &()).unwrap()
 }
 
-// Holds.
-
-/// The core's idle time in these tests.
 const IDLE: Duration = Duration::from_millis(300);
-/// Long enough that an unheld core would have stopped.
 const PAST_IDLE: Duration = Duration::from_millis(900);
 
 struct Setup {
     bus: PrivateBus,
     holds: Holds,
-    /// Gets a message once the core has stopped.
     core_ended: Receiver<()>,
 }
 
@@ -387,7 +362,6 @@ fn a_hold_keeps_the_core_up_until_its_caller_leaves_the_bus() {
     assert!(setup.core_ended.recv_timeout(PAST_IDLE).is_err());
     assert_eq!(setup.holds.count(&name.as_ref()), 1);
 
-    // The caller crashes: it never drops its hold, it just leaves the bus.
     drop(caller);
 
     setup.core_ended.recv_timeout(WAIT).unwrap();
@@ -450,7 +424,6 @@ fn no_hold_once_the_core_has_stopped() {
     assert!(matches!(take(&setup, &caller), Err(HoldError::CoreGone)));
 }
 
-/// Drops `caller` and waits until the bus has seen it leave.
 fn leave(bus: &PrivateBus, caller: Connection) {
     let name = caller.unique_name().unwrap().to_string();
     let watcher = client(bus);

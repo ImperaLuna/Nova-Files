@@ -1,11 +1,3 @@
-//! Against a private D-Bus daemon, as an app's "Show in folder" calls it:
-//! `org.freedesktop.FileManager1` asks for a window on each folder, or on
-//! each folder holding the items with them selected, and refuses URIs that
-//! aren't local files. The service takes the bus name only when it
-//! should and it is free, waits behind another file manager without
-//! replacing it, and takes it when a second start (or `--make-default`,
-//! which finds the running instance without starting one) asks it to.
-
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -28,10 +20,8 @@ mod support;
 
 use support::{PrivateBus, WAIT};
 
-/// How long a test waits for something that should not happen.
 const QUIET: Duration = Duration::from_millis(200);
 
-/// The running instance, with each window it is asked for on `windows`.
 struct Running {
     service: Service,
     windows: Receiver<WindowRequest>,
@@ -55,8 +45,6 @@ fn running(bus: &PrivateBus) -> Running {
     }
 }
 
-/// Asks for the file manager's name, as when Nova Files is the folder
-/// default; whether it owns it.
 fn serve(service: &Service) -> bool {
     service
         .serve_file_manager_when(|| true)
@@ -65,7 +53,6 @@ fn serve(service: &Service) -> bool {
         .unwrap()
 }
 
-/// A plain D-Bus client on `bus`, as an app would connect.
 fn client(bus: &PrivateBus) -> Connection {
     zbus::blocking::connection::Builder::address(bus.address.as_str())
         .unwrap()
@@ -74,7 +61,6 @@ fn client(bus: &PrivateBus) -> Connection {
         .unwrap()
 }
 
-/// Calls `method` on the file manager with `uris`, as an app would.
 fn call(client: &Connection, method: &str, uris: &[String]) -> zbus::Result<()> {
     let proxy = Proxy::new(
         client,

@@ -1,20 +1,3 @@
-//! The watcher: follows every indexed folder with inotify and appends what
-//! changes to the change log.
-//!
-//! [`Watcher::start`] installs a watch on each folder the index holds,
-//! then catches up with what changed since the crawl (`folders::catch_up`),
-//! before it returns: a change made after the watches went in is never
-//! missed, and one made before is found by the catch-up. Its thread then sleeps in `poll` until the kernel has events or
-//! [`Watcher::stop`] wakes it through an eventfd: no polling loop. Each
-//! batch of events becomes [`Change`]s (`folders` decides which), written
-//! to the log before `on_change` is called, so a reader woken by it finds
-//! them there.
-//!
-//! inotify watches one folder at a time without root. Since Linux 5.11 the
-//! watch limit grows with memory, up to 1,048,576, far past a home folder.
-//! A folder that can't be watched (over the limit, or not readable) gets a
-//! [`Change::Rescan`]: its changes won't be seen until it is read again.
-
 mod folders;
 
 use std::ffi::OsStr;
@@ -34,12 +17,9 @@ use crate::reader::Index;
 use folders::{Event, Folders};
 
 const THREAD_NAME: &str = "nova-files-watch";
-/// Room for a few hundred events per read.
 const READ_BUFFER: usize = 65_536;
-/// What [`Watcher::stop`] writes to the eventfd; any value wakes the poll.
 const WAKE: u64 = 1;
 
-/// Follows the indexed folders until stopped or dropped.
 #[derive(Debug)]
 pub struct Watcher {
     stop: Arc<OwnedFd>,
@@ -47,12 +27,6 @@ pub struct Watcher {
 }
 
 impl Watcher {
-    /// Watches every folder in `index`, catches up with what changed
-    /// since it was crawled, then appends changes to `log` and calls
-    /// `on_change` after each batch, the catch-up's included.
-    ///
-    /// # Errors
-    /// When inotify, the eventfd or the thread can't be set up.
     pub fn start(
         index: &Index,
         mut log: ChangeLog,
@@ -81,18 +55,10 @@ impl Watcher {
         })
     }
 
-    /// Stops the thread and waits for it.
-    ///
-    /// # Errors
-    /// The error that ended the thread early, for example a full disk
-    /// while writing the log.
     pub fn stop(mut self) -> io::Result<()> {
         self.finish()
     }
 
-    /// Whether the thread still follows the folders. It ends early only
-    /// on an error, such as a full disk while writing the log; changes
-    /// after that are missed until the index is crawled anew.
     pub fn is_running(&self) -> bool {
         self.thread
             .as_ref()
@@ -112,7 +78,6 @@ impl Watcher {
 
 impl Drop for Watcher {
     fn drop(&mut self) {
-        // Nobody is left to hear about an error.
         self.finish().ok();
     }
 }
@@ -147,7 +112,6 @@ fn run(
     }
 }
 
-/// Whether `fd` has something to read now, without waiting.
 fn is_readable(fd: &OwnedFd) -> bool {
     let mut fds = [PollFd::new(fd, PollFlags::IN)];
     let now = Timespec {
@@ -157,7 +121,6 @@ fn is_readable(fd: &OwnedFd) -> bool {
     poll(&mut fds, Some(&now)).is_ok_and(|ready| ready > 0)
 }
 
-/// Every event the kernel has queued, until a read would block.
 fn read_events(fd: &OwnedFd, buffer: &mut [MaybeUninit<u8>]) -> io::Result<Vec<Event>> {
     let mut reader = inotify::Reader::new(fd, buffer);
     let mut events = Vec::new();

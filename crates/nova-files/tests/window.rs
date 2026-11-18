@@ -1,19 +1,3 @@
-//! A window and the real core, wired as the program wires them, against a
-//! real temp folder tree: the window connects, opens its folder, selects
-//! an entry clicked, and goes into a folder double-clicked, up, or to a
-//! place clicked. A folder that can't be read leaves it where it was.
-//! Each entry's Modified and Size fill in once the core has read
-//! them, lined up under their headers whatever the length of each name. A
-//! picker window picks the file double-clicked when it asks for files,
-//! and answers cancelled when it is closed. Its own keys are tested in
-//! `window_keys`, selecting in `window_select`, type to jump in
-//! `window_jump`, the path bar in `window_path`, the sidebar in
-//! `window_sidebar`, the quick look in `window_preview`, the island
-//! and its file actions in `window_island`, tabs in `window_tabs`,
-//! dragging files in `window_drag`, Games and Projects in
-//! `window_gathered`, and the Properties page in `window_properties` (its
-//! Opens with in `window_opens_with`).
-
 #![expect(
     clippy::unwrap_used,
     clippy::future_not_send,
@@ -51,8 +35,6 @@ use nova_files_ui::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent}
 
 use common::{TempFolder, Watchdog, click_with, double_click};
 
-/// Opens a window on `folder` with a running core, and waits until the
-/// folder is on screen.
 async fn open_on<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
@@ -62,8 +44,6 @@ async fn open_on<'a>(
     (view, cx)
 }
 
-/// Opens a window on `folder` with a running core, both taking `home` as
-/// the home folder; doesn't wait.
 fn window_on<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
@@ -72,20 +52,16 @@ fn window_on<'a>(
     window_showing(cx, folder, home, Vec::new())
 }
 
-/// [`window_on`], opened to show `names` there, as an app's "Show in
-/// folder" asks.
 fn window_showing<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
     home: &Path,
     names: Vec<std::ffi::OsString>,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
-    // The core answers from its own threads.
     cx.executor().allow_parking();
     let core_home = nova_files_core::Home {
         folder: home.to_owned(),
         config: home.join(".config"),
-        // Beside the tree, so a saved recent folder never shows in it.
         state: home.with_extension("state"),
         data: home.join(".local/share"),
         drive_trashes: false,
@@ -105,7 +81,6 @@ async fn wait_for_folder(view: &Entity<MainWindow>, cx: &VisualTestContext, fold
         .await;
 }
 
-/// Clicks the element drawn with `selector`.
 fn click(cx: &mut VisualTestContext, selector: &'static str) {
     cx.run_until_parked();
     let bounds = cx.debug_bounds(selector).unwrap();
@@ -193,7 +168,6 @@ async fn unreadable_folder_leaves_the_window_where_it_was(cx: &mut TestAppContex
         })
     });
 
-    // The listing still shows Projects; the folder vanished meanwhile.
     double_click(cx, "entry-0");
     let seen = Rc::clone(&refused);
     view.condition::<WindowEvent>(cx, move |_, _| !seen.borrow().is_empty())
@@ -289,16 +263,12 @@ async fn a_click_on_a_column_head_orders_the_list_by_it(cx: &mut TestAppContext)
             .await;
     };
 
-    // Only the column in use carries the arrow.
     cx.run_until_parked();
     assert!(cx.debug_bounds("arrow-name").is_some());
     assert!(cx.debug_bounds("arrow-size").is_none());
-    // A head's highlight reaches past its text, which lines up with the
-    // column below.
     let head = cx.debug_bounds("head-modified").unwrap().left();
     let column = cx.debug_bounds("modified-header").unwrap().left();
     assert!(head < column, "{head:?} {column:?}");
-    // And the first and last heads sit as far in from the row's edges.
     let row = cx.debug_bounds("entry-0").unwrap();
     let first = cx.debug_bounds("head-name").unwrap().left() - row.left();
     let last = row.right() - cx.debug_bounds("head-size").unwrap().right();
@@ -317,8 +287,6 @@ async fn a_click_on_a_column_head_orders_the_list_by_it(cx: &mut TestAppContext)
     shows(cx, ["Projects", "notes.txt", "big.txt", "a.txt"]).await;
 }
 
-/// A pick request for files to open, or a place to save at, whose answer
-/// arrives on the receiver.
 fn pick_request(kind: PickKind) -> (Box<PickRequest>, mpsc::Receiver<PickAnswer>) {
     let (sender, answers) = mpsc::channel();
     let request = PickRequest {
@@ -389,12 +357,10 @@ async fn a_picker_picks_nothing_from_a_listing_it_has_left(cx: &mut TestAppConte
     let first = view.read_with(cx, |view, _| view.listing_id()).unwrap();
     let notes = EntryId(1);
 
-    // While the next folder loads, the old rows are still on screen.
     view.update(cx, |view, _| view.open(&tree.path().join("Projects")));
     assert!(!view.update(cx, |view, _| view.pick_entry(first, notes)));
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
 
-    // Back in the same folder, the same row, but a newer listing.
     view.update(cx, |view, _| view.go_up());
     wait_for_folder(&view, cx, tree.path()).await;
     assert!(!view.update(cx, |view, _| view.pick_entry(first, notes)));
@@ -428,8 +394,6 @@ async fn closing_a_picker_answers_cancelled(cx: &mut TestAppContext) {
     let (request, answers) = pick_request(OPEN_ONE);
     view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
-    // From the app, not a window: the UI closes pickers from its request
-    // loop, with no window borrowed.
     let app: &mut TestAppContext = cx;
     app.update(|cx| nova_files_ui::close_picker(PickId(8), cx));
     cx.run_until_parked();

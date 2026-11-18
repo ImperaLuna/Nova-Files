@@ -1,9 +1,3 @@
-//! The Properties page on a real core: the right-click menu and Alt+Enter
-//! open it in a new tab, it shows what the disk says, Up goes to the
-//! folder that holds what it shows, a tab shown again reads it again,
-//! and a page whose files are all gone goes to Start. A folder's size is
-//! measured while its page is on screen; Access is tested in `access`.
-
 use std::os::unix::fs::MetadataExt as _;
 use std::sync::Arc;
 
@@ -15,7 +9,6 @@ mod access;
 use super::*;
 use crate::window_sidebar::right_click;
 
-/// A window on `folder` with its keys bound, the folder on screen.
 async fn properties_window<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
@@ -27,8 +20,6 @@ async fn properties_window<'a>(
     open_on(cx, folder).await
 }
 
-/// Waits until the Properties page on screen has every answer in, and
-/// returns them.
 async fn read_page(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<Arc<Properties>> {
     view.condition::<WindowEvent>(cx, |view, _| {
         view.properties_page()
@@ -87,11 +78,9 @@ async fn the_menu_opens_a_files_properties_in_a_new_tab(cx: &mut TestAppContext)
         assert!(!top.has_bar);
         assert_eq!(top.share, None);
     });
-    // The path bar goes one crumb past the folder, to the file.
     let folder_index: usize = folder_crumb["crumb-".len()..].parse().unwrap();
     assert_eq!(last_crumb(cx), format!("crumb-{}", folder_index + 1));
 
-    // The file's own crumb is the page: a click there stays.
     let crumb = last_crumb(cx);
     click(cx, crumb);
     cx.run_until_parked();
@@ -100,7 +89,6 @@ async fn the_menu_opens_a_files_properties_in_a_new_tab(cx: &mut TestAppContext)
         Some(Location::Properties(vec![notes.clone()]))
     );
 
-    // Up goes to the folder that holds it.
     click(cx, "up");
     wait_for_folder(&view, cx, tree.path()).await;
     view.update(cx, MainWindow::go_back);
@@ -161,7 +149,6 @@ async fn a_page_shown_again_reads_again_and_goes_to_start_once_all_is_gone(
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-1");
     view.update(cx, MainWindow::show_properties);
-    // Nothing shows until the core answers.
     view.read_with(cx, |view, _| {
         assert!(!view.properties_page().unwrap().complete());
         assert_eq!(view.properties_titles(), None);
@@ -183,7 +170,6 @@ async fn a_page_shown_again_reads_again_and_goes_to_start_once_all_is_gone(
     view.condition::<WindowEvent>(cx, |view, _| view.is_on_start())
         .await;
 
-    // Once it is back, Back shows it again.
     fs::write(&notes, "back").unwrap();
     view.update(cx, MainWindow::go_back);
     view.condition::<WindowEvent>(cx, |view, _| {
@@ -193,10 +179,8 @@ async fn a_page_shown_again_reads_again_and_goes_to_start_once_all_is_gone(
     .await;
 }
 
-/// More crumbs than any test's path has.
 const CRUMBS_AT_MOST: usize = 64;
 
-/// The last crumb drawn in the path bar.
 fn last_crumb(cx: &mut VisualTestContext) -> &'static str {
     let drawn = |n: usize| -> &'static str { Box::leak(format!("crumb-{n}").into_boxed_str()) };
     (0..CRUMBS_AT_MOST)
@@ -284,7 +268,6 @@ async fn the_trash_has_no_properties(cx: &mut TestAppContext) {
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 2);
 }
 
-/// Waits until the Properties page on screen has measured all it holds.
 async fn measured(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Size {
     view.condition::<WindowEvent>(cx, |view, _| {
         view.measured()
@@ -307,17 +290,13 @@ async fn a_folder_is_measured_while_its_page_is_on_screen(cx: &mut TestAppContex
     let size = measured(&view, cx).await;
     assert_eq!(size.bytes, 1_234);
     assert_eq!(size.files, 2);
-    // The folder itself and nova inside it.
     assert_eq!(size.folders, 2);
     let top = view.read_with(cx, |view, _| view.properties_top().unwrap());
     assert!(top.amount.is_some());
     assert!(top.has_bar);
-    // A share of the drive that holds it: some, not all.
     let share = top.share.unwrap();
     assert!(share > 0.0 && share < 1.0, "{share}");
 
-    // Shown again, it is counted again, showing the size before until
-    // that count ends.
     view.update(cx, |view, cx| view.switch_tab(0, cx));
     assert_eq!(view.read_with(cx, |view, _| view.measured()), None);
     fs::write(nova.join("c.rs"), "x").unwrap();
@@ -353,7 +332,6 @@ async fn an_answer_for_another_page_stays_off_this_one(cx: &mut TestAppContext) 
     let projects = tree.path().join("Projects");
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-1");
-    // Two pages asked one after the other, the first one's answer still out.
     view.update(cx, MainWindow::show_properties);
     let place = Location::Properties(vec![projects.clone()]);
     view.update(cx, |view, cx| view.new_tab(&place, cx));
@@ -369,7 +347,6 @@ async fn leaving_the_page_stops_its_measuring(cx: &mut TestAppContext) {
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-0");
     view.update(cx, MainWindow::show_properties);
-    // Left before any answer: the scan is stopped and nothing is kept.
     view.update(cx, |view, cx| view.switch_tab(0, cx));
     cx.run_until_parked();
     view.update(cx, |view, cx| view.switch_tab(1, cx));

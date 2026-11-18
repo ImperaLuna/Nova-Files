@@ -1,14 +1,3 @@
-//! An index being built in memory, and saving it.
-//!
-//! The crawl adds rows in depth-first order with [`Built::push`] and
-//! [`Built::close`]s each folder once everything inside it is added, which
-//! records where the folder's run ends. [`Built::save`] writes the whole
-//! file to a temp file in the same folder and renames it over the old one:
-//! readers that mapped the old file keep reading it, and new readers get
-//! the new one, never a mix. The file isn't synced to disk first; after a
-//! crash a short or damaged file fails [`crate::Index::open`]'s checks and
-//! is crawled again.
-
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::{self, BufWriter, Write as _};
 use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
@@ -17,22 +6,14 @@ use std::path::{Path, PathBuf};
 use crate::format::{self, Header, NO_PARENT, Row};
 use crate::{Details, Flags, RowId, Stamp};
 
-/// The index file and its folder are the user's alone.
 const FILE_MODE: u32 = 0o600;
 const FOLDER_MODE: u32 = 0o700;
-/// Added to the index file's name for the file being written.
 const TEMP_SUFFIX: &str = ".new";
-/// Beside the index; held while a save writes the temp file and renames
-/// it, so two saves, even from two processes, never share the temp file.
 const LOCK_SUFFIX: &str = ".lock";
 
-/// The index can't hold more: more rows than a row number counts, more
-/// name bytes than a name offset reaches, or a name longer than its length
-/// field. Far past any home folder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TooBig;
 
-/// A whole index, in memory, ready to save.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Built {
     rows: Vec<Row>,
@@ -41,7 +22,6 @@ pub struct Built {
 }
 
 impl Built {
-    /// An empty index for a crawl that started at `crawled`.
     pub(crate) const fn new(crawled: Option<Stamp>) -> Self {
         Self {
             rows: Vec::new(),
@@ -50,8 +30,6 @@ impl Built {
         }
     }
 
-    /// Adds a row under `parent` (`None` only for the first row). Until
-    /// it is closed, a folder's run ends right after it.
     pub(crate) fn push(
         &mut self,
         parent: Option<RowId>,
@@ -82,7 +60,6 @@ impl Built {
         Ok(RowId(at))
     }
 
-    /// Ends `folder`'s run after the last row added so far.
     pub(crate) fn close(&mut self, RowId(folder): RowId) {
         let end = u32::try_from(self.rows.len()).unwrap_or(NO_PARENT);
         if let Some(row) = usize::try_from(folder)
@@ -93,7 +70,6 @@ impl Built {
         }
     }
 
-    /// Marks `row` with `flags`, on top of what it has.
     pub(crate) fn flag(&mut self, RowId(row): RowId, flags: Flags) {
         if let Some(row) = usize::try_from(row)
             .ok()
@@ -103,7 +79,6 @@ impl Built {
         }
     }
 
-    /// How many rows it has.
     pub const fn len(&self) -> usize {
         self.rows.len()
     }
@@ -112,7 +87,6 @@ impl Built {
         self.rows.is_empty()
     }
 
-    /// The whole file, as [`Built::save`] writes it.
     fn write_to(&self, out: &mut impl io::Write) -> io::Result<()> {
         let rows = u64::try_from(self.rows.len()).map_err(io::Error::other)?;
         let names_len = u64::try_from(self.names.len()).map_err(io::Error::other)?;
@@ -124,15 +98,6 @@ impl Built {
         out.write_all(&self.names)
     }
 
-    /// Writes the index to `path`, replacing what is there in one step,
-    /// and makes its folder if it is missing.
-    ///
-    /// # Errors
-    /// When the folder or file can't be written, for example on a full or
-    /// read-only disk, or [`io::ErrorKind::WouldBlock`] when another save
-    /// of the same index is running: waiting could take as long as that
-    /// save, or forever if its process hangs. The old index, if any, is
-    /// left as it was.
     pub fn save(&self, path: &Path) -> io::Result<()> {
         if let Some(folder) = path.parent() {
             DirBuilder::new()
@@ -158,9 +123,6 @@ impl Built {
     }
 
     fn write_temp(&self, temp: &Path) -> io::Result<()> {
-        // A temp file left by a crash is stale: the lock keeps out other
-        // saves.
-        // If it can't be removed, creating the new one says why.
         fs::remove_file(temp).ok();
         let file = OpenOptions::new()
             .write(true)

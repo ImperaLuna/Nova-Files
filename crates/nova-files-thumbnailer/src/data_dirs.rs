@@ -1,8 +1,3 @@
-//! The freedesktop data folders, most important first: `$XDG_DATA_HOME`
-//! (or `~/.local/share`), then each of `$XDG_DATA_DIRS` (or
-//! `/usr/local/share:/usr/share`). MIME types and thumbnailers are looked
-//! up there, so whatever the system has installed is found.
-
 use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -20,8 +15,6 @@ pub fn data_dirs() -> Vec<PathBuf> {
     )
 }
 
-/// The data folders for these values of the two variables and the home
-/// folder.
 fn from(
     data_home: Option<OsString>,
     data_dirs: Option<OsString>,

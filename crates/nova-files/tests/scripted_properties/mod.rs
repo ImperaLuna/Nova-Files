@@ -1,6 +1,3 @@
-//! A Properties page against a scripted core: leaving the page stops the
-//! size scan it started.
-
 use nova_files_ui::Location;
 
 use super::*;

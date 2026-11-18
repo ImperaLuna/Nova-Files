@@ -1,19 +1,3 @@
-//! Makes one thumbnail: decode the file, scale it down to fit the size
-//! asked for ("normal" or "large" in the spec), and write it into that
-//! size's folder with its URI and mtime. A picture already small enough
-//! keeps its own size: enlarged, it would only be blurry. A
-//! file whose data can't be decoded gets a failure marker in
-//! `fail/nova-files/` instead, so nobody tries it again until it changes.
-//! A file that couldn't be read (no permission, say) or was too big to
-//! decode gets no marker: that can change without the file changing.
-//!
-//! The helper decodes JPEG, PNG and WebP itself, known by their first
-//! bytes (or name). Any other file goes to the system's thumbnailer for its
-//! MIME type, if one is installed (see `system`), whose picture is then
-//! scaled and written the same way; with none it is `unsupported` and left
-//! alone. Each file is written to a temp file of this process's own in the
-//! same folder, then renamed over the old one.
-
 use std::fs::{self, OpenOptions};
 use std::io::{self, Cursor, Write as _};
 use std::os::unix::fs::DirBuilderExt as _;
@@ -34,22 +18,15 @@ use crate::png_text;
 use crate::sandbox::FOLDER_MODE;
 use crate::system::{Request, Thumbnailers};
 
-/// Failure markers, per application as the spec asks.
 const FAIL_FOLDER: &str = "fail/nova-files";
-/// Thumbnails are private to the user.
 const FILE_MODE: u32 = 0o600;
-/// The most a single decode may allocate, so one huge image can't take the
-/// machine's memory.
 const MAX_DECODE_BYTES: u64 = 256 * 1024 * 1024;
 const URI_KEY: &str = "Thumb::URI";
 const MTIME_KEY: &str = "Thumb::MTime";
 const TEMP_SUFFIX: &str = "part";
-/// A failure marker is a 1x1 image, as the spec suggests.
 const MARKER_SIZE: u32 = 1;
-/// What a system thumbnailer writes, next to the thumbnail it becomes.
 const SYSTEM_OUTPUT_SUFFIX: &str = ".system.png";
 
-/// What the system offers for formats the helper can't decode.
 pub struct System {
     pub mime: MimeTypes,
     pub thumbnailers: Thumbnailers,
@@ -85,7 +62,6 @@ pub fn render(folder: &Path, size: Size, job: &Job, system: &System) -> Outcome 
         Err(error) => {
             if is_bad_data(&error) {
                 let marker = DynamicImage::ImageRgba8(RgbaImage::new(MARKER_SIZE, MARKER_SIZE));
-                // Without a marker the file is simply tried again next time.
                 write(&folder.join(FAIL_FOLDER), job, &marker).ok();
             }
             return Outcome::Failed;
@@ -95,7 +71,6 @@ pub fn render(folder: &Path, size: Size, job: &Job, system: &System) -> Outcome 
         image.width().min(size.side()),
         image.height().min(size.side()),
     );
-    // A write that fails (a full disk) leaves no marker: the file is fine.
     if write(&folder.join(size.folder()), job, &thumb).is_ok() {
         Outcome::Ok
     } else {
@@ -103,8 +78,6 @@ pub fn render(folder: &Path, size: Size, job: &Job, system: &System) -> Outcome 
     }
 }
 
-/// The picture the system's thumbnailer makes for `job`; `None` when no
-/// thumbnailer handles its type.
 fn from_system(
     folder: &Path,
     size: Size,
@@ -132,13 +105,9 @@ fn from_system(
     };
     let image = match system.thumbnailers.run(mime, &request)? {
         Ok(()) => decode(&output),
-        // It ran and refused a file it could read: the file's data is the
-        // trouble.
         Err(error) if error.kind() == io::ErrorKind::InvalidData && readable(&job.source) => Err(
             ImageError::Decoding(DecodingError::new(ImageFormatHint::Unknown, error)),
         ),
-        // Out of time, or a file or program it couldn't reach: worth another
-        // try later.
         Err(error) => Err(error.into()),
     };
     fs::remove_file(&output).ok();
@@ -149,8 +118,6 @@ fn readable(path: &Path) -> bool {
     fs::File::open(path).is_ok()
 }
 
-/// Whether the helper decodes the file itself: by its first bytes, or by
-/// its name when they say nothing (or it can't be opened).
 pub fn built_in(path: &Path) -> bool {
     let format = ImageReader::open(path)
         .and_then(ImageReader::with_guessed_format)
@@ -169,18 +136,13 @@ pub fn decode(path: &Path) -> ImageResult<DynamicImage> {
     limits.max_alloc = Some(MAX_DECODE_BYTES);
     reader.limits(limits.clone());
     let mut decoder = reader.into_decoder()?;
-    // `into_decoder` leaves the pixel buffer itself to the caller.
     limits.reserve(decoder.total_bytes())?;
-    // Phones store a photo's rotation apart from its pixels; the thumbnail
-    // has none, so it is turned upright here.
     let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
     let mut image = DynamicImage::from_decoder(decoder)?;
     image.apply_orientation(orientation);
     Ok(image)
 }
 
-/// Whether `error` says the file's data is broken, rather than that it
-/// couldn't be read or was too big for the decode limit.
 const fn is_bad_data(error: &ImageError) -> bool {
     matches!(
         error,
@@ -200,12 +162,9 @@ fn write(into: &Path, job: &Job, image: &DynamicImage) -> io::Result<()> {
         .mode(FOLDER_MODE)
         .create(into)?;
     let target = into.join(&job.name);
-    // Two helpers may write the same thumbnail at once (two windows on one
-    // folder), so the temp file is this process's own.
     let mut temp_name = job.name.clone();
     temp_name.push(format!(".{}.{TEMP_SUFFIX}", process::id()));
     let temp = into.join(temp_name);
-    // One left by a killed helper that had this process id is replaced.
     fs::remove_file(&temp).ok();
     let mut file = OpenOptions::new()
         .write(true)

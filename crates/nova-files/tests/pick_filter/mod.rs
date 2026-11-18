@@ -1,7 +1,3 @@
-//! The type filter in a picker window: the app's types dim the files they
-//! leave out, the menu switches type or shows all files, MIME rules use a
-//! real database, and a folder picker dims every file.
-
 use std::sync::Arc;
 
 use nova_files_api::{FileFilter, FilterRule};
@@ -19,7 +15,6 @@ fn glob(pattern: &str) -> FilterRule {
     FilterRule::Glob(pattern.to_owned())
 }
 
-/// Which rows on screen the picker dims, of the first `rows`.
 fn dimmed(view: &Entity<MainWindow>, cx: &VisualTestContext, rows: usize) -> Vec<usize> {
     view.read_with(cx, |view, _| {
         (0..rows).filter(|&row| view.pick_dims(row)).collect()
@@ -38,16 +33,12 @@ fn picked_with(path: PathBuf, filter: Option<usize>) -> PickAnswer {
     }
 }
 
-/// Text first and PDFs second, as an app lists them.
 fn text_and_pdfs(request: &mut PickRequest) {
     request.filters = vec![
         filter("Text", vec![glob("*.TXT")]),
         filter("PDF documents", vec![glob("*.pdf")]),
     ];
 }
-
-// With `report.pdf` added, rows on screen: 0 `Projects`, 1 `notes (2).txt`,
-// 2 `notes.txt`, 3 `report.pdf`.
 
 #[gpui::test]
 async fn the_first_type_dims_the_files_it_leaves_out(cx: &mut TestAppContext) {
@@ -58,7 +49,6 @@ async fn the_first_type_dims_the_files_it_leaves_out(cx: &mut TestAppContext) {
     assert_eq!(view.read_with(cx, |view, _| view.pick_filter()), Some(0));
     assert_eq!(dimmed(&view, cx, 4), [3]);
 
-    // A dimmed file can still be picked.
     click(cx, "entry-3");
     click(cx, "pick-accept");
     assert_eq!(
@@ -132,8 +122,6 @@ async fn a_mime_type_admits_its_kinds_and_files_it_cant_judge(cx: &mut TestAppCo
     })
     .await;
 
-    // Rows: 0 `Projects`, 1 `notes (2).txt`, 2 `notes.txt`, 3 `photo.png`,
-    // 4 `README`.
     assert_eq!(dimmed(&view, cx, 5), [3]);
 }
 

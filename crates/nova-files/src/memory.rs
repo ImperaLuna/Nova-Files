@@ -1,13 +1,5 @@
-//! Gives the allocator's free pages back to the system; the core calls it
-//! after heavy work (see `nova_files_core::set_give_back`).
-//!
-//! glibc only gives back what sits free at the very top of its heap on its
-//! own. `malloc_trim` also releases free pages under live blocks, in every
-//! pool. Other C libraries (musl) have no such call, so it does nothing
-//! there.
-
-/// Returns the allocator's free pages to the system. It walks every pool,
-/// so the core calls it on a worker thread, never on the UI's.
+// glibc returns only the free memory at the top of its heap by itself; malloc_trim releases the rest.
+// https://man7.org/linux/man-pages/man3/malloc_trim.3.html
 #[cfg(target_env = "gnu")]
 #[expect(
     unsafe_code,
@@ -19,7 +11,6 @@ pub fn give_back() {
     unsafe { libc::malloc_trim(0) };
 }
 
-/// Other C libraries have nothing to give back.
 #[cfg(not(target_env = "gnu"))]
 pub const fn give_back() {}
 
@@ -29,12 +20,8 @@ mod tests {
 
     use super::*;
 
-    /// Frees 32 MiB of small blocks under one that stays, so glibc can't
-    /// give it back on its own; [`give_back`] must. nextest runs each test
-    /// in a fresh process, so nothing else frees or allocates meanwhile.
     #[test]
     fn freed_memory_under_a_live_block_goes_back() {
-        // KiB this process has in RAM right now.
         let resident_kib = || -> usize {
             let status = std::fs::read_to_string("/proc/self/status").unwrap();
             let line = status

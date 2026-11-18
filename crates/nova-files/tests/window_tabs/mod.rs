@@ -1,24 +1,15 @@
-//! Tabs on a real core: each tab keeps its own folder, history, selection,
-//! order, search and scroll position, and gets them back at once when
-//! shown again; the last tab can't be closed; Ctrl+T, Ctrl+W and
-//! Ctrl+Tab work them. The Open list draws them at the top of the sidebar,
-//! and middle-click opens folders in new tabs. A tab's row dragged along
-//! the list moves the tab.
-
 use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, point, size};
 use nova_files_api::SortKey;
 use nova_files_ui::HOVER_OPEN_AFTER;
 
 use super::*;
 
-/// Waits until the tab on screen has every answer it asked for.
 async fn settled(view: &Entity<MainWindow>, cx: &VisualTestContext) {
     view.condition::<WindowEvent>(cx, |view, _| !view.waiting())
         .await;
     cx.run_until_parked();
 }
 
-/// A window on `folder` with its keys bound, the folder on screen.
 async fn tabs_on<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
@@ -59,8 +50,6 @@ async fn a_tab_shown_again_has_its_folder_selection_and_scroll_at_once(cx: &mut 
     });
 
     view.update(cx, |view, cx| view.switch_tab(0, cx));
-    // Before the core answers: the folder, its rows, the selection and
-    // the scroll position are already back.
     view.read_with(cx, |view, _| {
         assert_eq!(view.folder(), Some(tree.path()));
         assert_eq!(view.entry_names().len(), 82);
@@ -68,7 +57,6 @@ async fn a_tab_shown_again_has_its_folder_selection_and_scroll_at_once(cx: &mut 
     });
     assert_eq!(offset(&view, cx), scrolled);
 
-    // Read again in place, and what changed meanwhile comes in.
     fs::write(tree.path().join("new.txt"), "").unwrap();
     view.update(cx, MainWindow::next_tab);
     view.update(cx, MainWindow::next_tab);
@@ -119,7 +107,6 @@ async fn a_folder_still_on_its_way_is_asked_for_again(cx: &mut TestAppContext) {
     let projects = tree.path().join("Projects");
     let (view, cx) = tabs_on(cx, tree.path()).await;
 
-    // Left before its answer can come: the answer is dropped.
     view.update(cx, |view, cx| {
         view.open(&projects);
         view.new_tab(&Location::Start, cx);
@@ -183,23 +170,19 @@ async fn the_last_tab_stays_open(cx: &mut TestAppContext) {
         view.new_tab(&Location::Start, cx);
     });
     cx.run_until_parked();
-    // With three tabs, back goes one step, not round to the first.
     cx.simulate_keystrokes("ctrl-shift-tab");
     wait_for_folder(&view, cx, &projects).await;
     assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 1);
     cx.simulate_keystrokes("ctrl-tab");
     cx.run_until_parked();
     assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 2);
-    // A tab past the end is no tab.
     view.update(cx, |view, cx| view.switch_tab(3, cx));
     assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 2);
-    // Closing a tab in the background leaves the one on screen.
     view.update(cx, |view, cx| view.close_tab(0, cx));
     view.read_with(cx, |view, _| {
         assert_eq!(view.current_tab(), 1);
         assert!(view.is_on_start());
     });
-    // Closing the last one in the list shows the one before it.
     cx.simulate_keystrokes("ctrl-w");
     wait_for_folder(&view, cx, &projects).await;
     view.read_with(cx, |view, _| {
@@ -211,12 +194,10 @@ async fn the_last_tab_stays_open(cx: &mut TestAppContext) {
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 1);
 }
 
-/// Middle-clicks the element drawn with `selector`.
 fn middle_click(cx: &mut VisualTestContext, selector: &'static str) {
     aux_click(cx, selector, MouseButton::Middle);
 }
 
-/// Clicks the element drawn with `selector` with `button`.
 fn aux_click(cx: &mut VisualTestContext, selector: &'static str, button: MouseButton) {
     cx.run_until_parked();
     let position = cx.debug_bounds(selector).unwrap().center();
@@ -243,7 +224,6 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
     let projects = tree.path().join("Projects");
     let (view, cx) = tabs_on(cx, tree.path()).await;
     cx.run_until_parked();
-    // One tab: the + is there, the x isn't.
     assert!(cx.debug_bounds("tab-0").is_some());
     assert!(cx.debug_bounds("tab-0-here").is_some());
     assert!(cx.debug_bounds("tab-close-0").is_none());
@@ -261,7 +241,6 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("tab-1-here").is_some());
     assert!(cx.debug_bounds("tab-0-here").is_none());
     assert!(cx.debug_bounds("tab-close-1").is_some());
-    // The x sits a short way in from the row's right end.
     let (row, close) = (
         cx.debug_bounds("tab-1").unwrap(),
         cx.debug_bounds("tab-close-1").unwrap(),
@@ -272,25 +251,20 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, tree.path()).await;
     assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 0);
 
-    // Middle-click on a folder opens it in a new tab.
     middle_click(cx, "entry-0");
     wait_for_folder(&view, cx, &projects).await;
     view.read_with(cx, |view, _| {
         assert_eq!(view.tab_count(), 3);
         assert_eq!(view.current_tab(), 2);
-        // A folder that isn't in Places goes by its own name.
         assert_eq!(view.tab_names()[1..], ["Start", "Projects"]);
     });
-    // On a file, nothing.
     click(cx, "tab-0");
     wait_for_folder(&view, cx, tree.path()).await;
     middle_click(cx, "entry-1");
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 3);
-    // Only the middle button opens a tab: not a right-click on a folder.
     aux_click(cx, "entry-0", MouseButton::Right);
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 3);
 
-    // Middle-click on a tab closes it, and so does its x.
     middle_click(cx, "tab-1");
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 2);
     click(cx, "tab-close-0");
@@ -299,7 +273,6 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(cx.debug_bounds("tab-close-0").is_none());
 
-    // Middle-click on a place opens it in a new tab.
     middle_click(cx, "place-0");
     wait_for_folder(&view, cx, tree.path()).await;
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 2);
@@ -326,7 +299,6 @@ async fn a_tab_whose_folder_is_gone_goes_to_start(cx: &mut TestAppContext) {
     view.condition::<WindowEvent>(cx, |view, _| view.is_on_start())
         .await;
 
-    // A new tab on a folder that isn't there waits on Start.
     view.update(cx, |view, cx| view.open_in_new_tab(projects.clone(), cx));
     view.condition::<WindowEvent>(cx, |view, _| view.is_on_start() && !view.waiting())
         .await;
@@ -351,8 +323,6 @@ async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut Te
     let before = names(&view, cx);
     let here = before[0].clone();
 
-    // The tab on screen, pressed and taken past the middle of Projects'
-    // tab, which takes files too.
     let start = cx.debug_bounds("tab-0").unwrap().center();
     let projects_tab = cx.debug_bounds("tab-1").unwrap();
     let below_middle = projects_tab.center() + point(px(0.0), projects_tab.size.height / 4.0);
@@ -363,15 +333,12 @@ async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut Te
         Modifiers::none(),
     );
     cx.run_until_parked();
-    // Over its own row it would stay put: no line.
     assert!(cx.debug_bounds("tab-landing").is_none());
     cx.simulate_mouse_move(below_middle, Some(MouseButton::Left), Modifiers::none());
     cx.run_until_parked();
-    // Along the bottom of Projects' row, and no other.
     let line = cx.debug_bounds("tab-landing").unwrap();
     assert!(projects_tab.contains(&line.center()));
     assert!(line.center().y > projects_tab.center().y);
-    // Held over another tab, a tab being moved shows nothing.
     cx.executor().advance_clock(HOVER_OPEN_AFTER);
     cx.run_until_parked();
     assert_eq!(view.read_with(cx, |view, _| view.current_tab()), 0);
@@ -383,7 +350,6 @@ async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut Te
         [before[1].clone(), here, before[2].clone()]
     );
     view.read_with(cx, |view, _| {
-        // The tab on screen came along, and nothing moved on the disk.
         assert_eq!(view.current_tab(), 1);
         assert_eq!(view.folder(), Some(tree.path()));
         assert_eq!(view.jobs_pending(), 0);
@@ -392,7 +358,6 @@ async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut Te
     assert!(tree.path().join("notes.txt").exists());
 }
 
-/// Drags tab `from`'s row and lets go at `to`.
 fn drag_tab(cx: &mut VisualTestContext, from: &'static str, to: Point<Pixels>) {
     let start = cx.debug_bounds(from).unwrap().center();
     cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
@@ -408,9 +373,6 @@ fn drag_tab(cx: &mut VisualTestContext, from: &'static str, to: Point<Pixels>) {
     cx.run_until_parked();
 }
 
-/// Tabs on the tree, Projects and Start reordered by dragging, in a
-/// window `width` wide: past a row's middle the tab lands after it, at
-/// its middle or before, before it.
 async fn reorder_tabs_by_halves(cx: &mut TestAppContext, test: &str, width: Pixels) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree(test);
@@ -425,19 +387,16 @@ async fn reorder_tabs_by_halves(cx: &mut TestAppContext, test: &str, width: Pixe
         view.read_with(cx, |view, _| view.tab_names())
     };
     let [a, b, c] = <[_; 3]>::try_from(names(&view, cx)).unwrap();
-    // No such tab, or no such place: nothing moves.
     view.update(cx, |view, cx| {
         view.move_tab(3, 0, cx);
         view.move_tab(0, 4, cx);
     });
     assert_eq!(names(&view, cx), [a.clone(), b.clone(), c.clone()]);
 
-    // Past the middle of the last row, along the list's run.
     let last = cx.debug_bounds("tab-2").unwrap();
     drag_tab(cx, "tab-0", last.center() + point(px(4.0), px(4.0)));
     assert_eq!(names(&view, cx), [b.clone(), c.clone(), a.clone()]);
 
-    // Right at the middle of the first row.
     let first = cx.debug_bounds("tab-0").unwrap().center();
     drag_tab(cx, "tab-2", first);
     assert_eq!(names(&view, cx), [a, b, c]);

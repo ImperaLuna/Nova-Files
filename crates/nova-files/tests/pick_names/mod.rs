@@ -1,10 +1,5 @@
-//! The picker keeps names exact: an app's suggestion, a clicked or typed
-//! name, and the name a typed path leaves, whatever their bytes or spaces.
-
 use super::*;
 
-/// The picker tree plus `caf\u{fffd}.txt` and `caf\x80.txt`, which is
-/// shown the same way and listed first.
 fn look_alike_tree() -> TempFolder {
     let tree = picker_tree();
     fs::write(
@@ -34,7 +29,6 @@ async fn a_save_keeps_a_suggested_name_that_is_not_utf8(cx: &mut TestAppContext)
 async fn a_suggested_name_is_not_mistaken_for_one_that_looks_the_same(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
-    // Shown the same way as the suggestion, but other bytes.
     fs::write(
         tree.path()
             .join(OsString::from_vec(b"caf\xff.txt".to_vec())),
@@ -85,7 +79,6 @@ async fn retyping_a_clicked_name_means_what_was_typed(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = look_alike_tree();
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
-    // The first of the two looking the same is the one that isn't UTF-8.
     let first = view.read_with(cx, |view, _| {
         view.entry_names()
             .iter()
@@ -102,7 +95,6 @@ async fn retyping_a_clicked_name_means_what_was_typed(cx: &mut TestAppContext) {
     );
 }
 
-/// Save with the app's `suggested` name as it came answers that name.
 async fn saves_as_suggested(cx: &mut TestAppContext, suggested: &str) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
@@ -131,7 +123,6 @@ async fn a_suggested_path_is_read_as_typed_not_saved_blindly(cx: &mut TestAppCon
     let projects = tree.path().join("Projects");
     let (view, cx, answers) = picker(cx, &tree, &projects, save("../notes.txt")).await;
     cx.simulate_keystrokes("enter");
-    // It goes to the folder the path names, with the name to save in the box.
     wait_for_folder(&view, cx, tree.path()).await;
     wait_for_name(&view, cx, "notes.txt").await;
     assert!(answers.try_recv().is_err());
@@ -158,7 +149,6 @@ async fn a_space_typed_into_the_name_stays_in_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
     fs::write(tree.path().join("a b.txt"), "").unwrap();
-    // With the main window's keys too: Space is also the quick look's.
     cx.update(nova_files_ui::bind_window_keys);
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
     cx.simulate_keystrokes("a space");

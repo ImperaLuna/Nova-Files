@@ -1,16 +1,11 @@
-//! Each kind on its own, then queries of several words.
-
 use super::*;
 use crate::search::fold::fold_into;
 
-/// Where matches start, and how far letters in order spread, in the
-/// examples below.
 const START: usize = 0;
 const SECOND_WORD: usize = 7;
 const MIDDLE: usize = 2;
 const AFTER_MY: usize = 3;
 const SPREAD: usize = 5;
-/// `rpt` in `my report.pdf`: from the r at 3 to the t at 8.
 const LATER_SPREAD: usize = 5;
 
 fn found(name: &str, query: &str, loose: bool) -> Option<Found> {
@@ -39,7 +34,6 @@ fn the_whole_name_or_its_stem_is_exact() {
         kind("archive.tar.gz", "archive.tar"),
         Some(MatchKind::Exact)
     );
-    // A leading dot is the name, not an extension.
     assert_eq!(kind(".bashrc", ".bashrc"), Some(MatchKind::Exact));
     assert_eq!(kind("Café", "cafe"), Some(MatchKind::Exact));
 }
@@ -62,7 +56,6 @@ fn a_word_starts_at_the_start_a_separator_or_a_capital() {
     );
     assert_eq!(kind("myTaxes", "tax"), Some(MatchKind::WordStart));
     assert_eq!(kind("2024_taxes", "tax"), Some(MatchKind::WordStart));
-    // A later occurrence at a word start beats an earlier one inside a word.
     assert_eq!(kind("syntax tax", "tax"), Some(MatchKind::WordStart));
 }
 
@@ -75,7 +68,6 @@ fn inside_a_word_is_contains() {
             cost: MIDDLE
         })
     );
-    // Café folds to plain letters, so its stored case can't mark a word.
     assert_eq!(kind("ÉcoleNormale", "normale"), Some(MatchKind::Contains));
 }
 
@@ -101,16 +93,13 @@ fn letters_in_order_only_when_loose() {
 
 #[test]
 fn one_typo_in_a_long_enough_word() {
-    // Replaced, missing, added, swapped.
     assert_eq!(kind("holiday photos", "photus"), Some(MatchKind::OneTypo));
     assert_eq!(kind("holiday photos", "photoz"), Some(MatchKind::OneTypo));
     assert_eq!(kind("holiday photos", "phtos"), Some(MatchKind::InOrder));
     assert_eq!(kind("holiday", "holidaay"), Some(MatchKind::OneTypo));
     assert_eq!(kind("holiday", "hloiday"), Some(MatchKind::OneTypo));
     assert_eq!(kind("holiday", "hoilday"), Some(MatchKind::OneTypo));
-    // The shortest word a typo is forgiven in.
     assert_eq!(kind("photo", "photz"), Some(MatchKind::OneTypo));
-    // Two edits, or a short word.
     assert_eq!(kind("holiday", "hlidya"), None);
     assert_eq!(kind("cats", "cass"), None);
     assert_eq!(found("holiday", "hloiday", false), None);

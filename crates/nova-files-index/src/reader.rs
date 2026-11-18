@@ -1,11 +1,3 @@
-//! Reading a saved index through a memory map.
-//!
-//! [`Index::open`] maps the file and checks all of it once: the header, the
-//! length, and that the rows form one tree in depth-first order (each row's
-//! parent is the folder whose run it sits in, and every run sits inside its
-//! parent's). After that, lookups only read the map. The kernel pages the
-//! file in as it is read, so a search touches only the names block.
-
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io;
@@ -17,19 +9,12 @@ use memmap2::Mmap;
 use crate::format::{self, HEADER_LEN, Header, MAGIC, NO_PARENT, ROW_LEN, Row, VERSION};
 use crate::{Entry, Flags, Kind, RowId, Stamp};
 
-/// Why [`Index::open`] gave no index. Each one means: crawl again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenError {
-    /// There is no index yet.
     Missing,
-    /// The file isn't an index.
     NotAnIndex,
-    /// An index from another version of Nova Files.
     OutOfDate,
-    /// The file is cut short or its rows don't form a tree, for example
-    /// after a crash while it was written. Says what failed first.
     Damaged(&'static str),
-    /// The file couldn't be read.
     Failed(io::ErrorKind),
 }
 
@@ -42,7 +27,6 @@ impl From<io::Error> for OpenError {
     }
 }
 
-/// A saved index, mapped and checked.
 #[derive(Debug)]
 pub struct Index {
     map: Mmap,
@@ -50,10 +34,6 @@ pub struct Index {
 }
 
 impl Index {
-    /// Maps and checks the index at `path`.
-    ///
-    /// # Errors
-    /// [`OpenError`] when there is no usable index there.
     pub fn open(path: &Path) -> Result<Self, OpenError> {
         let file = File::open(path)?;
         #[expect(unsafe_code, reason = "mapping the index is the point of this crate")]
@@ -69,7 +49,6 @@ impl Index {
         Ok(Self { map, header })
     }
 
-    /// How many rows it has; always at least one, the crawled folder.
     pub const fn rows(&self) -> u32 {
         #[expect(
             clippy::cast_possible_truncation,
@@ -79,28 +58,23 @@ impl Index {
         rows
     }
 
-    /// The file's size in bytes.
     pub fn bytes(&self) -> usize {
         self.map.len()
     }
 
-    /// When the crawl that built it started.
     pub const fn crawled(&self) -> Option<Stamp> {
         format::stamp(self.header.crawled)
     }
 
-    /// The folder that was crawled: row 0.
     pub fn root(&self) -> &Path {
         Path::new(self.name(RowId(0)).unwrap_or_default())
     }
 
-    /// The row `row`, or `None` past the end.
     pub fn entry(&self, row: RowId) -> Option<Entry> {
         let raw = self.raw(row)?;
         Some(Entry {
             parent: raw.parent(),
             end: RowId(raw.end),
-            // check() refused rows without a kind.
             kind: raw.kind.unwrap_or(Kind::File),
             flags: Flags(raw.flags),
             id: raw.id,
@@ -110,8 +84,6 @@ impl Index {
         })
     }
 
-    /// The name of `row`: the crawled folder's whole path for row 0, a
-    /// single name for every other row. Any bytes, not only UTF-8.
     pub fn name(&self, row: RowId) -> Option<&OsStr> {
         let raw = self.raw(row)?;
         let names = self.map.get(names_start(&self.header)?..)?;
@@ -120,9 +92,6 @@ impl Index {
         Some(OsStr::from_bytes(name))
     }
 
-    /// The rows directly inside `folder`, in order: each one's run is
-    /// skipped to reach the next. Opening checked that every run ends
-    /// after its row, so this always moves forward.
     pub fn children(&self, folder: RowId) -> impl Iterator<Item = RowId> + '_ {
         let end = self.entry(folder).map_or(folder, |entry| entry.end);
         let first = RowId(folder.0.saturating_add(1));
@@ -133,8 +102,6 @@ impl Index {
         })
     }
 
-    /// The row of `path`, if the index holds it: found name by name from
-    /// the crawled folder down.
     pub fn row_of(&self, path: &Path) -> Option<RowId> {
         let inside = path.strip_prefix(self.root()).ok()?;
         let mut row = RowId(0);
@@ -149,15 +116,12 @@ impl Index {
         Some(row)
     }
 
-    /// The full path of `row`, put together from its parents' names.
     pub fn path(&self, row: RowId) -> Option<PathBuf> {
         let mut names = Vec::new();
         let mut next = Some(row);
         while let Some(at) = next {
             names.push(self.name(at)?);
             next = self.raw(at)?.parent();
-            // check() made every parent come before its row; this keeps a
-            // bad read from ever looping.
             if next.is_some_and(|parent| parent >= at) {
                 return None;
             }
@@ -181,7 +145,6 @@ fn names_start(header: &Header) -> Option<usize> {
         .checked_add(HEADER_LEN)
 }
 
-/// Checks a whole index file and returns its header.
 fn check(bytes: &[u8]) -> Result<Header, OpenError> {
     let header = Header::read(bytes).ok_or(OpenError::Damaged("shorter than a header"))?;
     if header.magic != MAGIC {
@@ -203,14 +166,10 @@ fn check(bytes: &[u8]) -> Result<Header, OpenError> {
     Ok(header)
 }
 
-/// Checks that the rows form one tree in depth-first order, with names
-/// inside the names block.
 fn check_rows(bytes: &[u8], header: &Header) -> Result<(), OpenError> {
     let rows = names_start(header)
         .and_then(|end| bytes.get(HEADER_LEN..end))
         .ok_or(OpenError::Damaged("length doesn't match the header"))?;
-    // The folders whose runs the current row is inside, innermost last,
-    // with where each run ends.
     let mut open: Vec<(u32, u32)> = Vec::new();
     for (raw, at) in rows
         .as_chunks::<ROW_LEN>()
@@ -253,9 +212,6 @@ fn check_name(raw: &Row, header: &Header, at: u32) -> Result<(), OpenError> {
     Ok(())
 }
 
-/// A row's run starts after it, stays inside `limit` (its parent's run, or
-/// the whole index for row 0) and is just the row for anything but a
-/// folder. Row 0's run is the whole index.
 fn check_end(raw: &Row, at: u32, limit: u64) -> Result<(), OpenError> {
     let end = u64::from(raw.end);
     let next = u64::from(at) + 1;

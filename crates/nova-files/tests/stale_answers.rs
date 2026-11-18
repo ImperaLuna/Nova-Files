@@ -1,7 +1,3 @@
-//! A window against a stand-in core that answers by hand, in an order the
-//! real core only produces in a race: answers for a folder the window has
-//! since moved away from must not move it there.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -17,7 +13,6 @@ use gpui::TestAppContext;
 use nova_files_api::{Command, CoreMessage, Event, EventSink, Listing, ListingId, Unreadable};
 use nova_files_ui::{MainWindow, WindowEvent};
 
-/// The next `ListFolder` the window sent, skipping other messages.
 fn next_listing(core: &Receiver<CoreMessage>) -> (ListingId, PathBuf) {
     loop {
         if let CoreMessage::Command {
@@ -30,7 +25,6 @@ fn next_listing(core: &Receiver<CoreMessage>) -> (ListingId, PathBuf) {
     }
 }
 
-/// The window's event sink, from its `Connected` message.
 fn window_sink(core: &Receiver<CoreMessage>) -> Box<dyn EventSink> {
     match core.try_recv().unwrap() {
         CoreMessage::Connected { events, .. } => events,

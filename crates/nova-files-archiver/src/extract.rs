@@ -1,7 +1,3 @@
-//! Unpacks an archive, or some of its entries, into the folder it is
-//! given. For each entry done it writes a line to the core: the bytes the
-//! entry held, in decimal.
-
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
@@ -24,7 +20,6 @@ use crate::wire::{Clock, Kind};
 enum Stopped {
     Read,
     Write(io::Error),
-    /// The core stopped reading.
     Unheard,
     NeedsPassword,
     WrongPassword,
@@ -42,21 +37,15 @@ impl From<WriteError> for Stopped {
     }
 }
 
-/// Where an archive unpacks, and which of its entries.
 pub struct Target<'a> {
     pub into: Unpacking,
-    /// The folder `into` is.
     pub folder: &'a Path,
-    /// The paths inside the archive to unpack, with all inside them;
-    /// every entry when empty.
     pub picked: &'a [OsString],
 }
 
-/// Which entries to unpack: the parts of each picked path.
 struct Picked<'a>(Vec<Vec<&'a [u8]>>);
 
 impl<'a> Picked<'a> {
-    /// `None` when a picked path has a `..` part.
     fn of(picked: &'a [OsString]) -> Option<Self> {
         picked
             .iter()
@@ -65,14 +54,11 @@ impl<'a> Picked<'a> {
             .map(Self)
     }
 
-    /// Whether the entry with these `parts` is one to unpack.
     fn wants(&self, parts: &[&[u8]]) -> bool {
         self.0.is_empty() || self.0.iter().any(|picked| parts.starts_with(picked))
     }
 }
 
-/// Unpacks the entries of `archive` that `target` picks, opening locked
-/// entries with the password `seven` holds.
 pub fn extract(
     mut archive: File,
     target: Target<'_>,
@@ -217,8 +203,6 @@ fn extract_tar(
     Ok(())
 }
 
-/// `seconds` as UTC; local wall time is read in the user's zone, the
-/// earlier of two when the clocks went back.
 fn utc(seconds: i64, clock: Clock) -> i64 {
     match clock {
         Clock::Utc => seconds,

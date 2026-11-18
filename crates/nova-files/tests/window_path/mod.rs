@@ -1,15 +1,8 @@
-//! The path bar: a crumb for each level from Home down to the folder on
-//! screen, each going to its folder; an arrow after each opening a menu
-//! of the folders in it; a long path folding its middle into a "…" menu;
-//! and a narrow window keeping the folder on screen in view.
-
 use gpui::{px, size};
 use nova_files_ui::TextField;
 
 use super::*;
 
-/// A window on `folder`, with the tree's top as the home folder, once the
-/// folder is on screen.
 async fn path_window<'a>(
     cx: &'a mut TestAppContext,
     tree: &TempFolder,
@@ -21,7 +14,6 @@ async fn path_window<'a>(
     (view, cx)
 }
 
-/// Whether the element drawn with `selector` is on screen.
 fn drawn(cx: &mut VisualTestContext, selector: &'static str) -> bool {
     cx.debug_bounds(selector).is_some()
 }
@@ -46,7 +38,6 @@ async fn each_crumb_goes_to_its_folder(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, tree.path()).await;
 }
 
-/// Waits until the path bar's menu holds names, and returns them.
 async fn menu_names(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
     view.condition::<WindowEvent>(cx, |view, _| {
         view.path_menu_names()
@@ -57,7 +48,6 @@ async fn menu_names(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<St
     view.read_with(cx, |view, _| view.path_menu_names().unwrap())
 }
 
-/// Waits until the path bar's menu has closed.
 async fn menu_closed(view: &Entity<MainWindow>, cx: &mut VisualTestContext) {
     view.condition::<WindowEvent>(cx, |view, _| view.path_menu_names().is_none())
         .await;
@@ -92,7 +82,6 @@ async fn a_press_on_an_open_arrow_closes_its_menu(cx: &mut TestAppContext) {
     assert_eq!(menu_names(&view, cx).await, ["nova"]);
     click(cx, "arrow-1");
     menu_closed(&view, cx).await;
-    // Another arrow opens its own menu in its place.
     click(cx, "arrow-1");
     menu_names(&view, cx).await;
     click(cx, "arrow-0");
@@ -155,7 +144,6 @@ async fn a_long_path_folds_its_middle_into_a_menu(cx: &mut TestAppContext) {
     fs::create_dir_all(&deep).unwrap();
     let (view, cx) = path_window(cx, &tree, &deep).await;
 
-    // Home, …, d, e, f.
     for shown in ["crumb-0", "crumb-more", "crumb-4", "crumb-5", "crumb-6"] {
         assert!(drawn(cx, shown), "{shown} not drawn");
     }
@@ -201,11 +189,9 @@ async fn a_narrow_window_keeps_the_folder_on_screen_in_view(cx: &mut TestAppCont
     let here = cx.debug_bounds("crumb-3").unwrap();
     let home = cx.debug_bounds("crumb-0").unwrap();
     assert!(here.left() >= path.left() && here.right() <= path.right());
-    // The root side gives way first.
     assert!(home.left() < path.left());
 }
 
-/// [`path_window`], with the window's and the text field's keys bound.
 async fn typing_window<'a>(
     cx: &'a mut TestAppContext,
     tree: &TempFolder,
@@ -218,12 +204,10 @@ async fn typing_window<'a>(
     path_window(cx, tree, folder).await
 }
 
-/// The path bar's text field, if it is one.
 fn path_field(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Option<Entity<TextField>> {
     view.read_with(cx, |view, _| view.path_field().cloned())
 }
 
-/// The path bar's text and its selection.
 fn typed(view: &Entity<MainWindow>, cx: &VisualTestContext) -> (String, std::ops::Range<usize>) {
     let field = path_field(view, cx).unwrap();
     field.read_with(cx, |field, _| (field.text().to_owned(), field.selection()))
@@ -239,7 +223,6 @@ async fn a_click_on_the_empty_bar_types_a_path_from_the_folder_on_screen(cx: &mu
     click(cx, "path-fill");
     assert_eq!(typed(&view, cx), ("~/Projects".to_owned(), 0..10));
     assert!(!drawn(cx, "crumb-0"));
-    // Letters go to the field, not to the list's type to jump.
     cx.simulate_input("nova");
     cx.simulate_keystrokes("enter");
     wait_for_folder(&view, cx, &projects.join("nova")).await;
@@ -298,7 +281,6 @@ async fn escape_or_enter_on_the_same_path_puts_the_crumbs_back(cx: &mut TestAppC
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();
     assert!(path_field(&view, cx).is_none());
-    // The window has the keys again: Backspace goes back up.
     cx.simulate_keystrokes("alt-up");
     wait_for_folder(&view, cx, tree.path()).await;
 
@@ -348,7 +330,6 @@ async fn a_space_typed_into_the_path_stays_in_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("path");
     let projects = tree.path().join("Projects");
-    // With the window's keys bound, Space is also the quick look's.
     let (view, cx) = typing_window(cx, &tree, &projects).await;
 
     click(cx, "path-fill");

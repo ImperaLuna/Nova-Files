@@ -1,6 +1,3 @@
-//! The watcher against real temp folders: what each kind of change writes
-//! to the change log, and what the rules keep out of it.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs;
@@ -14,14 +11,10 @@ use support::TempFolder;
 
 use nova_files_index::{Change, ChangeLog, Index, Kind, LogReader, Watcher, crawl};
 
-/// How long a test waits for a change before it counts as a failure.
 const WAIT: Duration = Duration::from_secs(5);
-/// How long a test waits to be sure no change comes.
 const QUIET: Duration = Duration::from_millis(300);
 const SIGNATURE: &[u8] = b"Signature: 8a477f597d28d172789f06886806bc55";
 
-/// A watched home: the files at `paths` (a path ending in `/` is a
-/// folder) crawled, saved and watched.
 struct Watched {
     home: TempFolder,
     _cache: TempFolder,
@@ -36,7 +29,6 @@ impl Watched {
         Self::with_callback(paths, |_| {})
     }
 
-    /// As [`Watched::new`], with `extra` run after each batch too.
     fn with_callback(paths: &[&str], extra: impl Fn(&Path) + Send + 'static) -> Self {
         let home = TempFolder::new().with(paths);
         let cache = TempFolder::new();
@@ -70,8 +62,6 @@ impl Watched {
         self.home.path().join(relative)
     }
 
-    /// Waits until a change `wanted` accepts has been logged, and returns
-    /// it.
     fn until(&mut self, wanted: impl Fn(&Change) -> bool) -> Change {
         let deadline = Instant::now() + WAIT;
         loop {
@@ -88,7 +78,6 @@ impl Watched {
         }
     }
 
-    /// Waits a moment and returns every change logged so far.
     fn settle(&mut self) -> Vec<Change> {
         while self.woken.recv_timeout(QUIET).is_ok() {}
         self.seen.extend(self.reader.read_new().unwrap());
@@ -157,7 +146,6 @@ fn a_new_folder_is_added_with_everything_made_in_it() {
         let path = watched.path(relative);
         watched.until(added(&path));
     }
-    // The new folders are watched too.
     let later = watched.path("a/b/later.txt");
     fs::write(&later, b"").unwrap();
     watched.until(added(&later));
@@ -189,7 +177,6 @@ fn moves_across_the_rules_add_or_remove() {
     let hidden = watched.path(".ssh/key");
     fs::rename(&shown, &hidden).unwrap();
     watched.until(removed(&shown));
-    // .ssh isn't watched, so moving out of it looks like a new file.
     let back = watched.path("back.txt");
     fs::rename(&hidden, &back).unwrap();
     watched.until(added(&back));
@@ -202,7 +189,6 @@ fn a_move_out_of_home_is_a_removal() {
     let path = watched.path("leaving");
     fs::rename(&path, outside.path().join("gone")).unwrap();
     watched.until(removed(&path));
-    // Its watches went with it: changes out there aren't logged.
     fs::write(outside.path().join("gone/after.txt"), b"").unwrap();
     assert_eq!(watched.settle(), []);
 }
@@ -217,7 +203,6 @@ fn what_the_rules_skip_is_not_logged() {
     }
     fs::write(watched.path(".secret"), b"").unwrap();
     let changes = watched.settle();
-    // Made, then written: added, then changed.
     let mut touched = paths(&changes);
     touched.dedup();
     assert_eq!(touched, [watched.path(".secret").as_path()]);
@@ -256,10 +241,8 @@ fn a_folder_moved_out_of_a_hidden_place_is_read_again() {
     ]);
     let moved = watched.path("Documents/app");
     fs::rename(watched.path(".config/app"), &moved).unwrap();
-    // Caches are left out only inside hidden places.
     watched.until(added(&moved.join("Cache/blob")));
     watched.until(added(&moved.join("app.conf")));
-    // And the folder is watched under its new rules.
     let later = moved.join("Cache/later");
     fs::write(&later, b"").unwrap();
     watched.until(added(&later));
@@ -294,7 +277,6 @@ fn a_file_moved_onto_the_way_to_an_allowed_place_is_not_added() {
     let file = outside.path().join("note.txt");
     fs::write(&file, b"").unwrap();
     fs::rename(&file, watched.path(".local/note.txt")).unwrap();
-    // A file that is kept, so the test knows the watcher has caught up.
     let shown = watched.path(".local/bin/tool");
     fs::write(&shown, b"").unwrap();
     watched.until(added(&shown));
@@ -327,7 +309,6 @@ fn a_folder_that_cant_be_read_is_added_with_a_rescan() {
         .create(&locked)
         .unwrap();
     if fs::read_dir(&locked).is_ok() {
-        // Running as root, which reads and watches it anyway.
         return;
     }
     watched.until(added(&locked));
@@ -367,8 +348,6 @@ fn a_link_to_a_folder_moves_like_a_file() {
     let link = watched.path("docs-link");
     std::os::unix::fs::symlink(watched.path("docs"), &link).unwrap();
     watched.until(added(&link));
-    // Files aren't kept on the way to an allowed place; a folder named
-    // share would be, so following the link would get this wrong.
     let moved = watched.path(".local/share");
     fs::rename(&link, &moved).unwrap();
     watched.until(removed(&link));

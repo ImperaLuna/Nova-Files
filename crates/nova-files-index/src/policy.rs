@@ -1,28 +1,7 @@
-//! What the crawl indexes: the home folder, without hidden folders, except a
-//! few hidden places worth finding, and without caches and other folders
-//! nobody searches.
-//!
-//! Each folder is crawled in a [`Zone`] that says which of these rules
-//! apply inside it. The crawled folder is [`Zone::Home`]: its dotfiles are
-//! indexed and its hidden folders are entered only on the way to one of
-//! [`ALLOWED`]. Inside an allowed place the zone is open again, minus
-//! cache folders. Anywhere, a hidden folder outside the allowed places is
-//! skipped, as are `node_modules`, `__pycache__`, and folders that say what
-//! they are by a file inside them: a browser profile or a Wine or Proton
-//! prefix ([`marked`]), or a cache ([`CACHE_TAG`], when the crawl finds
-//! [`is_cache_signature`] in it). Hidden files are indexed
-//! wherever their folder is.
-//!
-//! Places never indexed (`~/.ssh`, `~/.gnupg`, `~/.mozilla`, `~/.var`
-//! for Flatpak data, `~/.wine`) need no rule of their own: they are hidden
-//! folders that aren't allowed.
-
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
-/// The hidden places that are indexed, relative to the crawled folder.
-/// Everything inside them is, under [`Zone::Open`]'s rules.
 pub const ALLOWED: [&str; 7] = [
     ".config",
     ".local/bin",
@@ -30,56 +9,33 @@ pub const ALLOWED: [&str; 7] = [
     ".local/share/fonts",
     ".themes",
     ".icons",
-    // Installed Steam games. Their Proton prefixes are in
-    // steamapps/compatdata, which stays out.
     ".local/share/Steam/steamapps/common",
 ];
 
-/// Folders skipped wherever they are: rebuilt by tools, never searched.
 const SKIPPED: [&str; 2] = ["node_modules", "__pycache__"];
 
-/// Inside an allowed place, a folder whose name ends in one of these, in
-/// any case, is a cache: `Cache`, `GPUCache`, `Code Cache`, `ShaderCache`.
 const CACHE_ENDINGS: [&str; 2] = ["cache", "caches"];
 
-/// A folder holding one of these files is skipped. `Local State` sits in
-/// every Chromium-family browser's profile folder, `profiles.ini` in every
-/// Mozilla one.
 const MARKERS: [&str; 2] = ["Local State", "profiles.ini"];
 
-/// The cache-folder standard's file (bford.info/cachedir), set by Cargo,
-/// pip and many more. It counts only when it starts with
-/// [`CACHE_TAG_SIGNATURE`], so a stray file of that name hides nothing.
 pub const CACHE_TAG: &str = "CACHEDIR.TAG";
 pub const CACHE_TAG_SIGNATURE: &[u8] = b"Signature: 8a477f597d28d172789f06886806bc55";
 
-/// A folder holding all of these is a Wine or Proton prefix.
 const WINE_PREFIX: [&str; 2] = ["drive_c", "system.reg"];
 
 const HIDDEN: u8 = b'.';
 
-/// Which rules apply to the entries of a folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Zone {
-    /// The crawled folder itself.
     Home,
-    /// A folder whose entries are indexed unless a rule skips them.
-    /// `allowed_place` is set inside one of [`ALLOWED`], where cache
-    /// folders are skipped too.
     Open { allowed_place: bool },
-    /// A hidden folder on the way to an allowed place, at this path
-    /// relative to the crawled folder. Only the folders on the way are
-    /// indexed.
     Toward(PathBuf),
 }
 
-/// Whether a file (or link) named `name` in a folder of `zone` is indexed.
 pub const fn keeps_file(zone: &Zone) -> bool {
     !matches!(zone, Zone::Toward(_))
 }
 
-/// The zone of the folder `name` inside a folder of `zone`, or `None`
-/// when the folder isn't indexed.
 pub fn enters(zone: &Zone, name: &OsStr) -> Option<Zone> {
     if SKIPPED.iter().any(|skipped| name == *skipped) {
         return None;
@@ -98,16 +54,12 @@ pub fn enters(zone: &Zone, name: &OsStr) -> Option<Zone> {
     }
 }
 
-/// The zone of the folder at `relative`, a path inside the crawled
-/// folder, or `None` when the folder isn't indexed. The empty path is the
-/// crawled folder.
 pub fn zone_of(relative: &Path) -> Option<Zone> {
     relative
         .iter()
         .try_fold(Zone::Home, |zone, name| enters(&zone, name))
 }
 
-/// Whether an entry named `name` in a folder of `zone` is indexed.
 pub fn keeps(zone: &Zone, name: &OsStr, is_folder: bool) -> bool {
     if is_folder {
         enters(zone, name).is_some()
@@ -116,27 +68,21 @@ pub fn keeps(zone: &Zone, name: &OsStr, is_folder: bool) -> bool {
     }
 }
 
-/// Whether a file named `name` is one that can make its folder
-/// [`marked`] or a cache.
 pub fn is_marker(name: &OsStr) -> bool {
     name == CACHE_TAG
         || MARKERS.iter().any(|marker| name == *marker)
         || WINE_PREFIX.iter().any(|file| name == *file)
 }
 
-/// Whether a folder holding `names` says it isn't worth indexing.
 pub fn marked(names: &[OsString]) -> bool {
     let holds = |wanted: &str| names.iter().any(|name| name == wanted);
     MARKERS.iter().any(|marker| holds(marker)) || WINE_PREFIX.iter().all(|file| holds(file))
 }
 
-/// Whether a [`CACHE_TAG`] file that starts with `start` marks a cache.
 pub fn is_cache_signature(start: &[u8]) -> bool {
     start == CACHE_TAG_SIGNATURE
 }
 
-/// The zone of the hidden folder at `path`: open inside an allowed place,
-/// on the way while it leads to one, otherwise skipped.
 fn toward(path: &Path) -> Option<Zone> {
     if ALLOWED.iter().any(|allowed| path == Path::new(allowed)) {
         Some(Zone::Open {

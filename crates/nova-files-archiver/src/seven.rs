@@ -1,11 +1,3 @@
-//! Reads and makes archives through the installed 7-Zip: 7z, and rar when
-//! that 7-Zip reads it. 7-Zip runs as the helper's child, locked in with
-//! it, with its errors on its output, which the helper turns into its own
-//! answers. A password goes on 7-Zip's standard input.
-//!
-//! 7-Zip's listing is one `key = value` line per field, an entry starting
-//! at its `Path` line; a name with a line break in it reads wrong.
-
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::io::{self, BufRead as _, BufReader, Write};
@@ -20,8 +12,6 @@ use crate::wire::{self, Clock, Entry, Kind};
 
 const LOCALE: &str = "LC_ALL";
 const UTF8: &str = "C.UTF-8";
-/// Links stay links, each entry on its own line, errors with the rest,
-/// no percentages, yes to every question.
 const SWITCHES: [&str; 7] = ["-snl", "-spd", "-bb1", "-bso1", "-bse1", "-bsp0", "-y"];
 const LISTING: [&str; 7] = ["l", "-slt", "-ba", "-spd", "-bso1", "-bse1", "-bsp0"];
 const PATH: &[u8] = b"Path = ";
@@ -34,8 +24,6 @@ const PACKED: &[u8] = b"+ ";
 const PART: u8 = b'/';
 const TIME: &str = "%Y-%m-%d %H:%M:%S";
 const TIME_LEN: usize = 19;
-/// `ls -l` permission letters, three groups of read, write and run: each
-/// letter's bit, and the bit an `s` or `t` in its place adds.
 const PERMISSIONS: [(u32, u32); 9] = [
     (0o400, 0),
     (0o200, 0),
@@ -48,13 +36,10 @@ const PERMISSIONS: [(u32, u32); 9] = [
     (0o1, 0o1000),
 ];
 const PERMISSION_LETTERS: usize = 10;
-/// 7-Zip's exit code for warnings: something was left out.
 const WARNING: i32 = 1;
 
-/// How hard 7z compresses, 1 to 9, as 7-Zip's own `-mx` levels.
 pub type Level = u32;
 
-/// The installed 7-Zip, when there is one, and the archive it reads.
 #[derive(Debug, Clone, Copy)]
 pub struct Seven<'a> {
     pub program: Option<&'a Path>,
@@ -63,17 +48,12 @@ pub struct Seven<'a> {
 }
 
 impl Seven<'_> {
-    /// Writes every entry of the archive to `out`; unsupported without
-    /// 7-Zip.
     pub fn list(self, out: &mut impl Write) -> Ending {
         self.program.map_or(Ending::Unsupported, |program| {
             list(program, self.archive, self.password, out)
         })
     }
 
-    /// Unpacks the `picked` entries of the archive, with all inside them,
-    /// or every entry when none are, into `folder`; unsupported without
-    /// 7-Zip.
     pub fn extract(self, folder: &Path, picked: &[OsString], out: &mut impl Write) -> Ending {
         self.program.map_or(Ending::Unsupported, |program| {
             extract(program, self, folder, picked, out)
@@ -81,7 +61,6 @@ impl Seven<'_> {
     }
 }
 
-/// What 7-Zip said besides its entries, most telling first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Said {
     WrongPassword,
@@ -114,8 +93,6 @@ impl Heard {
         }
     }
 
-    /// How a run that exited with `code` ended, given a password or not.
-    /// A warning ends a run that only reads well.
     fn ending(&self, code: Option<i32>, password: bool, writing: bool) -> Ending {
         match (code, self.0.first()) {
             (Some(0), _) => Ending::Done,
@@ -133,15 +110,12 @@ impl Heard {
     }
 }
 
-/// Writes every entry of `archive` to `out`.
 fn list(program: &Path, archive: &Path, password: Option<&[u8]>, out: &mut impl Write) -> Ending {
     listing(program, archive, password, |entry| {
         wire::write(out, &entry.as_entry())
     })
 }
 
-/// Unpacks the `picked` entries of `seven`'s archive, or all, into
-/// `folder`.
 fn extract(
     program: &Path,
     seven: Seven<'_>,
@@ -170,8 +144,6 @@ fn extract(
     })
 }
 
-/// Makes `archive`, a new 7z, of `sources`, each under its own name;
-/// with a password, its names are hidden too.
 pub fn compress(
     program: &Path,
     archive: &Path,
@@ -199,8 +171,6 @@ pub fn compress(
     })
 }
 
-/// The bytes the file `name` in the archive held, found among `sources`
-/// by its first part; 0 for anything else.
 fn packed_size(sources: &[&Path], name: &[u8]) -> u64 {
     let (top, rest) = name
         .iter()
@@ -217,7 +187,6 @@ fn packed_size(sources: &[&Path], name: &[u8]) -> u64 {
         .map_or(0, |metadata| metadata.len())
 }
 
-/// One entry of 7-Zip's listing.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct Found {
     path: Vec<u8>,
@@ -240,7 +209,6 @@ impl Found {
         }
     }
 
-    /// What it is, and its permission bits.
     fn kind(&self) -> (Kind, u32) {
         let mut words = self.attributes.split(|&byte| byte == b' ');
         let flags = words.next().unwrap_or_default();
@@ -269,8 +237,6 @@ impl Found {
     }
 }
 
-/// Lists `archive`, calling `each` with every entry; says how it ended,
-/// as a usage error when `each` fails.
 fn listing(
     program: &Path,
     archive: &Path,
@@ -313,8 +279,6 @@ fn listing(
     }
 }
 
-/// Runs 7-Zip with `args` and calls `each` with the name on every line
-/// that says an entry is done; says how it ended.
 fn follow(
     program: &Path,
     args: &[&OsStr],
@@ -344,8 +308,6 @@ fn follow(
     heard.ending(code, password.is_some(), writing)
 }
 
-/// Starts 7-Zip with `args`, `password` and a line break on its standard
-/// input, then nothing more.
 fn start(
     program: &Path,
     args: &[&OsStr],
@@ -360,7 +322,6 @@ fn start(
         .stderr(Stdio::inherit())
         .spawn()?;
     if let (Some(mut input), Some(password)) = (child.stdin.take(), password) {
-        // A 7-Zip that doesn't read it says why on its output.
         input.write_all(&[password, b"\n"].concat()).ok();
     }
     let output = child
@@ -374,14 +335,12 @@ fn decimal(text: &[u8]) -> Option<u64> {
     std::str::from_utf8(text).ok()?.parse().ok()
 }
 
-/// A wall time 7-Zip prints, as seconds since 1970 read as UTC.
 fn wall_time(text: &[u8]) -> Option<i64> {
     let text = std::str::from_utf8(text.get(..TIME_LEN)?).ok()?;
     let time = chrono::NaiveDateTime::parse_from_str(text, TIME).ok()?;
     Some(time.and_utc().timestamp())
 }
 
-/// The permission bits `ls -l` letters name, without the type letter.
 fn mode(letters: &[u8]) -> u32 {
     letters
         .iter()
