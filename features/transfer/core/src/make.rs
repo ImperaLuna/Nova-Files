@@ -9,16 +9,18 @@ use nova_files_api::Failure;
 use rustix::fs::{Access, AtFlags, accessat, readlinkat, unlinkat};
 use rustix::io::Errno;
 
-use super::copy_file::{CHUNK, FileCopy, copy_file, version};
-use super::folders::{At, Unreached};
-use super::journal::{BACKUP_PREFIX, PART_PREFIX, Record};
-use super::keep_both::take_free_name;
-use super::place::{rename_no_replace, rename_no_replace_at, replace, replace_through, same_entry};
-use super::plan::{Item, Kind};
-use super::running::Running;
-use super::stop::Stop;
-use super::sync::sync_folder;
+use crate::copy_file::{CHUNK, FileCopy, copy_file, version};
+use nova_files_jobs::folders::{At, Unreached};
+use nova_files_jobs::journal::{BACKUP_PREFIX, PART_PREFIX, Record};
+use nova_files_jobs::keep_both::take_free_name;
+use nova_files_jobs::place::{
+    rename_no_replace, rename_no_replace_at, replace, replace_through, same_entry,
+};
+use nova_files_jobs::plan::{Item, Kind};
+use nova_files_jobs::running::Running;
 use nova_files_jobs::set_aside::Aside;
+use nova_files_jobs::stop::Stop;
+use nova_files_jobs::sync::sync_folder;
 
 const FILLING_MODE: u32 = 0o700;
 

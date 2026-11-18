@@ -3654,6 +3654,7 @@ dependencies = [
  "nova-files-rename-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
+ "nova-files-transfer-core",
  "nova-files-trash-api",
  "nova-files-trash-core",
  "rustix 1.1.6",
@@ -3786,6 +3787,16 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-ui",
+]
+
+[[package]]
+name = "nova-files-transfer-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-jobs",
+ "rustix 1.1.6",
 ]
 
 [[package]]

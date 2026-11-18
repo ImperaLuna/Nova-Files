@@ -1,10 +1,5 @@
 mod access;
-mod ahead;
-mod attrs;
-mod copy_file;
 mod dropped;
-mod make;
-mod transfer;
 mod undo;
 
 use std::io;
@@ -18,8 +13,8 @@ use nova_files_jobs::kinds::Kinds;
 use nova_files_jobs::mover::{Moved, Mover};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, lock};
-use nova_files_jobs::{clash, control, failure, folders, journal, keep_both, place, plan};
-use nova_files_jobs::{running, stop, sync};
+use nova_files_jobs::{failure, journal, plan};
+use nova_files_jobs::{running, stop};
 
 pub use dropped::answer as answer_drop_would;
 #[cfg(test)]
@@ -28,12 +23,11 @@ pub use nova_files_jobs::test_folder::{self, TestFolder};
 use crate::inside;
 use crate::trash::Trashes;
 use access::change_access;
-use make::How;
 use nova_files_archives_core::{Archiver, Asked, Taking, compress, extract};
 use nova_files_delete_core::{delete, delete_paths};
 use nova_files_rename_core::{new_folder, rename};
+use nova_files_transfer_core::{How, transfer, transfer_to};
 use nova_files_trash_core::{Trasher, delete_from_trash, empty_trash, restore, trash};
-use transfer::transfer;
 use undo::{Undo, undo_of};
 
 const DROP_THREAD: &str = "nova-files-drop";
@@ -99,7 +93,7 @@ pub struct Moves;
 
 impl Mover for Moves {
     fn move_pairs(&self, running: &mut Running, pairs: &[(PathBuf, PathBuf)]) -> Moved {
-        let (result, moved) = transfer::transfer_to(running, pairs, How::Move);
+        let (result, moved) = transfer_to(running, pairs, How::Move);
         (result, moved.into_iter().collect())
     }
 
