@@ -1,17 +1,11 @@
 //! Syncing folders, so the names a job put in them, or took out, are on
 //! the disk and a crash can't lose them; and removing a job's leftovers.
 
-use std::fs::{self, File};
+use std::fs;
 use std::io;
 use std::path::Path;
 
-/// Syncs `folder`.
-///
-/// # Errors
-/// When it can't be opened or synced.
-pub fn sync_folder(folder: &Path) -> io::Result<()> {
-    File::open(folder)?.sync_all()
-}
+pub use crate::private_file::sync_folder;
 
 /// Syncs each of `folders` before a job says it is done. A failure means
 /// only that a crash right now could lose an entry, so it is logged.

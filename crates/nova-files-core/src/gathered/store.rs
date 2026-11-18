@@ -290,24 +290,10 @@ impl Shared {
         };
         let disk = lock(&self.disk);
         write_usual(home);
-        let target = private_file::saved_at(&file_of(home));
-        if let Some(text) = read_text(&target) {
-            let edit = match change {
-                Change::Add { place, folder, at } => {
-                    file::add(&text, &home.folder, place, &folder, at)
-                }
-                Change::Remove { place, path } => file::remove(&text, &home.folder, place, &path),
-            };
-            match edit {
-                Edit::Changed(text) => {
-                    let mode = private_file::mode_to_keep(&target);
-                    if let Err(error) = private_file::replace(&target, text.as_bytes(), mode) {
-                        log::warn!("can't save {}: {error}", target.display());
-                    }
-                }
-                Edit::Unchanged => {}
-                Edit::Refused(why) => log::warn!("{} not changed: {why}", target.display()),
-            }
+        let file = file_of(home);
+        match private_file::saved_at(&file) {
+            Ok(target) => make_change(&target, &home.folder, change),
+            Err(error) => log::warn!("can't save {}: {error}", file.display()),
         }
         let changed = self.read_holding_disk();
         drop(disk);
@@ -363,6 +349,27 @@ enum Change {
     },
 }
 
+/// Makes `change` in the file at `target`, of the user whose home folder
+/// is `home`. A file that can't be read is left as it is.
+fn make_change(target: &Path, home: &Path, change: Change) {
+    let Some(text) = read_text(target) else {
+        return;
+    };
+    let edit = match change {
+        Change::Add { place, folder, at } => file::add(&text, home, place, &folder, at),
+        Change::Remove { place, path } => file::remove(&text, home, place, &path),
+    };
+    match edit {
+        Edit::Changed(text) => {
+            let mode = private_file::mode_to_keep(target);
+            if let Err(error) = private_file::replace(target, text.as_bytes(), mode) {
+                log::warn!("can't save {}: {error}", target.display());
+            }
+        }
+        Edit::Unchanged => {}
+        Edit::Refused(why) => log::warn!("{} not changed: {why}", target.display()),
+    }
+}
 /// The gathered folders file of the user of `home`.
 fn file_of(home: &Home) -> PathBuf {
     config_watch::folder(&home.config).join(FILE)

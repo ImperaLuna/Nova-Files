@@ -3,8 +3,9 @@
 //!
 //! [`read`] reads a file up to a cap, so a huge file is never loaded.
 //! [`replace`] saves one whole: it writes a temporary file beside it,
-//! with its mode from the start, and renames it over the old one, so a crash
-//! never leaves half a file and a reader sees the old file or the new one.
+//! with its mode from the start, syncs it, renames it over the old one and
+//! syncs the folder, so a crash never leaves half a file and a reader sees
+//! the old file or the new one.
 
 use std::fs::{self, DirBuilder, OpenOptions, Permissions};
 use std::io::{self, Read as _, Write as _};
@@ -66,12 +67,21 @@ pub fn replace(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
             file.set_permissions(Permissions::from_mode(mode))
                 .map(|()| file)
         })
-        .and_then(|mut file| file.write_all(bytes))
+        .and_then(|mut file| file.write_all(bytes).and_then(|()| file.sync_all()))
         .and_then(|()| fs::rename(&temporary, path));
     if written.is_err() {
         fs::remove_file(&temporary).ok();
     }
-    written
+    written?;
+    path.parent().map_or(Ok(()), sync_folder)
+}
+
+/// Syncs `folder`, so the names in it are on the disk.
+///
+/// # Errors
+/// When it can't be opened or synced.
+pub fn sync_folder(folder: &Path) -> io::Result<()> {
+    fs::File::open(folder)?.sync_all()
 }
 
 /// The permission bits of a file's mode, kept across a save.
@@ -85,16 +95,33 @@ pub fn mode_to_keep(path: &Path) -> u32 {
     })
 }
 
-/// Where a save of `path` goes: the file a symlink points to, so a linked
-/// file stays linked; `path` itself otherwise.
-pub fn saved_at(path: &Path) -> PathBuf {
-    let is_link = fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_symlink());
-    if is_link {
-        // A link to nowhere is saved over: there is nothing to keep.
-        fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
-    } else {
-        path.to_owned()
+/// The most links a path is followed through, as many as Linux follows.
+const MAX_LINKS: u32 = 40;
+
+/// Where a save of `path` goes: where the links it leads through end, so
+/// a linked file stays linked, even when that file isn't there yet;
+/// `path` itself when it is no link.
+///
+/// # Errors
+/// When a link can't be read, leads through too many links, or ends in a
+/// folder that isn't there (a drive not mounted, say): the link stays.
+pub fn saved_at(path: &Path) -> io::Result<PathBuf> {
+    let mut at = path.to_owned();
+    for _ in 0..MAX_LINKS {
+        let points_to = match fs::read_link(&at) {
+            Ok(points_to) => points_to,
+            Err(error) if error.kind() == io::ErrorKind::InvalidInput => return Ok(at),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let reached = at == path || at.parent().is_some_and(Path::is_dir);
+                return if reached { Ok(at) } else { Err(error) };
+            }
+            Err(error) => return Err(error),
+        };
+        at = at
+            .parent()
+            .map_or_else(|| points_to.clone(), |folder| folder.join(&points_to));
     }
+    Err(rustix::io::Errno::LOOP.into())
 }
 
 #[cfg(test)]
@@ -157,6 +184,43 @@ mod tests {
         assert!(matches!(read(&path, CAP), Read::TooBig));
         // A folder where the file should be opens but can't be read.
         assert!(matches!(read(&home, CAP), Read::Failed(_)));
+        fs::remove_dir_all(home).ok();
+    }
+
+    #[test]
+    fn a_save_through_a_link_to_nowhere_keeps_the_link() {
+        let home = temp("dangling");
+        fs::create_dir_all(&home).unwrap();
+        let link = home.join("settings.toml");
+        std::os::unix::fs::symlink("dotfiles.toml", &link).unwrap();
+
+        let target = saved_at(&link).unwrap();
+        replace(&target, b"saved", FILE_MODE).unwrap();
+
+        assert_eq!(target, home.join("dotfiles.toml"));
+        assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
+        assert_eq!(bytes(read(&link, CAP)), b"saved");
+        fs::remove_dir_all(home).ok();
+    }
+
+    #[test]
+    fn a_link_into_a_missing_folder_is_not_saved_over() {
+        let home = temp("unmounted");
+        fs::create_dir_all(&home).unwrap();
+        let link = home.join("bookmarks");
+        std::os::unix::fs::symlink(home.join("drive/bookmarks"), &link).unwrap();
+        let chained = home.join("chained");
+        std::os::unix::fs::symlink("bookmarks", &chained).unwrap();
+        let looped = home.join("looped");
+        std::os::unix::fs::symlink("looped", &looped).unwrap();
+
+        assert_eq!(saved_at(&link).unwrap_err().kind(), io::ErrorKind::NotFound);
+        assert_eq!(
+            saved_at(&chained).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+        assert!(saved_at(&looped).is_err());
+        assert_eq!(saved_at(&home.join("new")).unwrap(), home.join("new"));
         fs::remove_dir_all(home).ok();
     }
 

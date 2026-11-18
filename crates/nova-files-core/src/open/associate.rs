@@ -70,7 +70,7 @@ enum Only {
 }
 
 fn save(path: &Path, mime: &str, app: &str, only: Only) -> Result<(), NotSet> {
-    let target = private_file::saved_at(path);
+    let target = private_file::saved_at(path).map_err(NotSet::Failed)?;
     let max = usize::try_from(MAX_LIST_BYTES).unwrap_or(usize::MAX);
     let text = match private_file::read(&target, max) {
         Read::Bytes(bytes) => String::from_utf8(bytes)

@@ -265,7 +265,13 @@ fn save_each(path: &Path, changes: &Receiver<SettingChange>, shared: &Weak<Mutex
 
 /// Makes `change` in the file at `path`, or logs why it can't.
 fn save(path: &Path, change: &SettingChange) {
-    let target = private_file::saved_at(path);
+    let target = match private_file::saved_at(path) {
+        Ok(target) => target,
+        Err(error) => {
+            log::warn!("can't save {}: {error}", path.display());
+            return;
+        }
+    };
     let text = match private_file::read(&target, MAX_BYTES) {
         Read::Bytes(bytes) => {
             let Ok(text) = String::from_utf8(bytes) else {
