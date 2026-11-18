@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod accounts;
+mod archive;
 mod capped;
 mod config_watch;
 mod details;
@@ -54,6 +55,7 @@ use nova_files_api::Connector;
 
 use search::Searcher;
 
+pub use archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver};
 pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
 pub use mime::MimeTypes;
