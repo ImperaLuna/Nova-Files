@@ -1,7 +1,8 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use nova_files_api::{ClientId, Command, HiddenFiles, Thumbnails};
+use nova_files_api::{ClientId, Command, HiddenFiles};
+use nova_files_settings_api::Thumbnails;
 
 use super::Setup;
 use crate::gathered;

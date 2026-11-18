@@ -18,11 +18,14 @@ use std::sync::mpsc::Receiver;
 
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
-    Appearance, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event,
-    EventSink, HiddenFiles, Listing, ListingId, Message, Mode, Order, Palette, SettingChange,
-    Settings, SortKey, Theme, ThumbnailSize, Thumbnails, Unreadable,
+    ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink,
+    HiddenFiles, Listing, ListingId, Message, Mode, Order, Palette, SortKey, Theme, ThumbnailSize,
+    Unreadable,
 };
 use nova_files_places_api::{self as places_api, Bookmark, Place, PlaceKind};
+use nova_files_settings_api::{
+    self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
+};
 use nova_files_ui::{Colors, MainWindow, WindowEvent};
 
 const SHOWN: &str = "/shown";
@@ -89,7 +92,7 @@ impl Core {
         commands
     }
 
-    fn send<M: Message>(&self, event: M) {
+    fn send(&self, event: impl Message) {
         self.events.as_ref().unwrap().deliver(event).unwrap();
     }
 
@@ -515,9 +518,13 @@ fn new_places_and_pinned_folders_are_told(cx: &mut TestAppContext) {
 #[gpui::test]
 fn the_window_asks_for_the_settings_and_the_theme(cx: &mut TestAppContext) {
     let (_view, _cx, mut core) = window(cx);
-    let commands = core.commands();
-    assert!(commands.contains(&Command::Settings), "{commands:?}");
-    assert!(commands.contains(&Command::Theme), "{commands:?}");
+    let (mut settings, mut theme) = (false, false);
+    while let Some(message) = core.try_recv() {
+        settings |=
+            message.command::<settings_api::Command>() == Some(&settings_api::Command::Watch);
+        theme |= message.command::<Command>() == Some(&Command::Theme);
+    }
+    assert!(settings && theme);
 }
 
 #[gpui::test]
@@ -542,7 +549,7 @@ fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppC
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_some()));
 
     let hidden = Settings::default().with(SettingChange::Thumbnails(Thumbnails::Hidden));
-    core.send(Event::Settings(Arc::new(hidden.clone())));
+    core.send(settings_api::Event::Settings(Arc::new(hidden.clone())));
     cx.run_until_parked();
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
     core.send(thumbnail(id, 2));
@@ -550,7 +557,7 @@ fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppC
     view.read_with(cx, |view, _| assert!(view.thumbnail(2).is_none()));
 
     core.commands();
-    core.send(Event::Settings(Arc::new(
+    core.send(settings_api::Event::Settings(Arc::new(
         hidden.with(SettingChange::Appearance(Appearance::Dark)),
     )));
     cx.run_until_parked();
@@ -561,7 +568,7 @@ fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppC
     };
     assert!(!asks_rows(core.commands()));
 
-    core.send(Event::Settings(Arc::default()));
+    core.send(settings_api::Event::Settings(Arc::default()));
     cx.run_until_parked();
     assert!(asks_rows(core.commands()));
     core.send(thumbnail(id, 2));
@@ -576,8 +583,8 @@ fn hiding_and_showing_before_a_frame_still_asks_for_thumbnails_anew(cx: &mut Tes
     cx.run_until_parked();
     core.thumbnail_requests();
     let hidden = Settings::default().with(SettingChange::Thumbnails(Thumbnails::Hidden));
-    core.send(Event::Settings(Arc::new(hidden)));
-    core.send(Event::Settings(Arc::default()));
+    core.send(settings_api::Event::Settings(Arc::new(hidden)));
+    core.send(settings_api::Event::Settings(Arc::default()));
     cx.run_until_parked();
     let requests = core.thumbnail_requests();
     let forgot = requests.iter().position(|&request| request == (0, 0));
@@ -591,7 +598,7 @@ fn a_thumbnail_shrunk_after_hiding_is_not_kept(cx: &mut TestAppContext) {
     let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
     let hidden = Settings::default().with(SettingChange::Thumbnails(Thumbnails::Hidden));
     core.send(thumbnail(id, 1));
-    core.send(Event::Settings(Arc::new(hidden)));
+    core.send(settings_api::Event::Settings(Arc::new(hidden)));
     cx.run_until_parked();
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
 }

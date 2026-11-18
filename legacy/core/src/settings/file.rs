@@ -1,4 +1,5 @@
-use nova_files_api::{Appearance, HiddenFiles, SettingChange, Settings, Thumbnails};
+use nova_files_api::HiddenFiles;
+use nova_files_settings_api::{Appearance, SettingChange, Settings, Thumbnails};
 use toml_edit::{Array, DocumentMut, Item, Table, TableLike, Value};
 
 const APPEARANCE: &str = "appearance";
