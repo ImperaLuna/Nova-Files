@@ -126,6 +126,7 @@ impl MainWindow {
                 NavAsk::Go(place) => self.go_to_shell(place, cx),
                 NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
                 NavAsk::Reload => self.reload(),
+                NavAsk::Reveal(path) => self.show_in_folder(&path),
             }
         }
     }
@@ -194,6 +195,14 @@ impl MainWindow {
             Location::Page(page) => Some(page),
             _ => None,
         }
+    }
+
+    fn show_in_folder(&mut self, path: &Path) {
+        let (Some(folder), Some(name)) = (path.parent(), path.file_name()) else {
+            return;
+        };
+        self.select_on_arrival(folder.to_path_buf(), vec![name.to_os_string()]);
+        self.open(folder);
     }
 
     fn reload(&mut self) {

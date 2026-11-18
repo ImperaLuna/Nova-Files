@@ -1,6 +1,6 @@
 use std::any::TypeId;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
@@ -31,6 +31,7 @@ pub type Columns<P> = fn(&P, &Scene, &App) -> Option<Column<P>>;
 pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
+pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
 
@@ -65,6 +66,11 @@ pub struct Slots<P> {
     pub(crate) name_cells: Vec<NameCell<P>>,
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
+    pub(crate) bars: Vec<Card<P>>,
+    pub(crate) overlays: Vec<Card<P>>,
+    pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
+    pub(crate) row_icons: Vec<NameCell<P>>,
+    pub(crate) opens: Vec<Opens<P>>,
 }
 
 impl<P> Default for Slots<P> {
@@ -83,6 +89,11 @@ impl<P> Default for Slots<P> {
             name_cells: Vec::new(),
             listed: Vec::new(),
             drops: Vec::new(),
+            bars: Vec::new(),
+            overlays: Vec::new(),
+            list_views: Vec::new(),
+            row_icons: Vec::new(),
+            opens: Vec::new(),
         }
     }
 }
@@ -169,6 +180,26 @@ impl<P: Part> Slots<P> {
             }
         });
         self.drops.push((TypeId::of::<K>(), slot));
+    }
+
+    pub fn bar(&mut self, bar: Card<P>) {
+        self.bars.push(bar);
+    }
+
+    pub fn overlay(&mut self, overlay: Card<P>) {
+        self.overlays.push(overlay);
+    }
+
+    pub fn list_view(&mut self, applies: Applies<P>, draw: Card<P>) {
+        self.list_views.push((applies, draw));
+    }
+
+    pub fn row_icon(&mut self, icon: NameCell<P>) {
+        self.row_icons.push(icon);
+    }
+
+    pub fn opens(&mut self, opens: Opens<P>) {
+        self.opens.push(opens);
     }
 
     pub fn sends<M: Message>(&mut self) {

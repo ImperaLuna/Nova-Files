@@ -25,8 +25,8 @@ pub use location::{Location, PageKind, PageRef};
 pub use menu::{Look, MenuAt, MenuItem, SidebarAt, SidebarRow};
 pub use navigator::{NavAsk, NavEvent, Navigator};
 pub use part::{
-    Applies, Card, Cell, Column, Columns, DropSlot, EmptyNote, Items, Listed, NameCell, Part, Rows,
-    Slots, Watch,
+    Applies, Card, Cell, Column, Columns, DropSlot, EmptyNote, Items, Listed, NameCell, Opens,
+    Part, Rows, Slots, Watch,
 };
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};

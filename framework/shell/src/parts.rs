@@ -1,5 +1,5 @@
 use std::any::{Any, TypeId};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
@@ -15,7 +15,7 @@ use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{Location, PageRef};
 use crate::menu::{MenuAt, MenuItem, SidebarAt, SidebarRow};
-use crate::part::{Part, Slots};
+use crate::part::{Card, Part, Slots};
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
 
@@ -42,6 +42,11 @@ trait OpenPart {
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
     fn start_cards(&self) -> Vec<AnyView>;
+    fn bars(&self) -> Vec<AnyView>;
+    fn overlays(&self) -> Vec<AnyView>;
+    fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
+    fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
+    fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
     fn watch(&self, event: &Event, cx: &mut App);
     fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)>;
@@ -63,6 +68,9 @@ struct Opened<P: Part> {
     slots: Slots<P>,
     pages: Vec<(TypeId, AnyView)>,
     cards: Vec<AnyView>,
+    bars: Vec<AnyView>,
+    overlays: Vec<AnyView>,
+    list_views: Vec<AnyView>,
 }
 
 impl<P: Part> OpenPart for Opened<P> {
@@ -134,6 +142,44 @@ impl<P: Part> OpenPart for Opened<P> {
 
     fn start_cards(&self) -> Vec<AnyView> {
         self.cards.clone()
+    }
+
+    fn bars(&self) -> Vec<AnyView> {
+        self.bars.clone()
+    }
+
+    fn overlays(&self) -> Vec<AnyView> {
+        self.overlays.clone()
+    }
+
+    fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
+        let part = self.entity.read(cx);
+        self.slots
+            .list_views
+            .iter()
+            .zip(&self.list_views)
+            .find(|((applies, _), _)| applies(part, scene, cx))
+            .map(|(_, view)| view.clone())
+    }
+
+    fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
+        let part = self.entity.read(cx);
+        self.slots
+            .row_icons
+            .iter()
+            .find_map(|icon| icon(part, entry, cx))
+    }
+
+    fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool {
+        if self.slots.opens.is_empty() {
+            return false;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .opens
+                .iter()
+                .any(|opens| opens(part, entry, path, cx))
+        })
     }
 
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription {
@@ -286,8 +332,31 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
             (*kind, slot_view(&entity, draw, true, cx))
         })
         .collect();
-    let cards = slots
-        .start_cards
+    let cards = card_views(&entity, host, &slots.start_cards, false, cx);
+    let bars = card_views(&entity, host, &slots.bars, false, cx);
+    let overlays = card_views(&entity, host, &slots.overlays, false, cx);
+    let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
+    let list_views = card_views(&entity, host, &views, true, cx);
+    Box::new(Opened {
+        entity,
+        host: host.clone(),
+        slots,
+        pages,
+        cards,
+        bars,
+        overlays,
+        list_views,
+    })
+}
+
+fn card_views<P: Part>(
+    entity: &Entity<P>,
+    host: &Host,
+    cards: &[Card<P>],
+    fills: bool,
+    cx: &mut App,
+) -> Vec<AnyView> {
+    cards
         .iter()
         .map(|&card| {
             let (part, host) = (entity.clone(), host.clone());
@@ -295,16 +364,9 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
                 let scene = host.scene(cx);
                 part.update(cx, |part, cx| card(part, &scene, window, cx))
             });
-            slot_view(&entity, draw, false, cx)
+            slot_view(entity, draw, fills, cx)
         })
-        .collect();
-    Box::new(Opened {
-        entity,
-        host: host.clone(),
-        slots,
-        pages,
-        cards,
-    })
+        .collect()
 }
 
 fn slot_view<P: Part>(part: &Entity<P>, draw: Draw, fills: bool, cx: &mut App) -> AnyView {
@@ -425,6 +487,33 @@ impl WindowParts {
                 Err(back) => paths = back,
             }
         }
+    }
+
+    pub fn bars(&self) -> Vec<AnyView> {
+        self.opened.iter().flat_map(|part| part.bars()).collect()
+    }
+
+    pub fn overlays(&self) -> Vec<AnyView> {
+        self.opened
+            .iter()
+            .flat_map(|part| part.overlays())
+            .collect()
+    }
+
+    pub fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
+        self.opened
+            .iter()
+            .find_map(|part| part.list_view(scene, cx))
+    }
+
+    pub fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
+        self.opened.iter().find_map(|part| part.row_icon(entry, cx))
+    }
+
+    pub fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool {
+        self.opened
+            .iter()
+            .any(|part| part.open_entry(entry, path, cx))
     }
 
     pub fn part<P: Part>(&self) -> Option<Entity<P>> {
