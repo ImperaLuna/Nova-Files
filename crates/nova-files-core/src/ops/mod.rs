@@ -23,6 +23,7 @@ mod ahead;
 mod attrs;
 mod audience;
 mod clash;
+mod compress;
 mod control;
 mod copy_file;
 mod delete;
@@ -531,6 +532,24 @@ fn run(running: &mut Running, operation: &Operation, tools: &Tools, undo: Option
         Operation::Extract { archive, into, to } => {
             extract(running, tools.archiver.as_ref(), archive, into, *to)
         }
+        Operation::Compress {
+            sources,
+            into,
+            name,
+            packing,
+            level,
+            locked,
+        } => {
+            let asked = compress::Asked {
+                sources,
+                into,
+                name,
+                packing: *packing,
+                level: *level,
+                locked: *locked,
+            };
+            compress::compress(running, tools.archiver.as_ref(), &asked)
+        }
     }
 }
 
@@ -616,9 +635,9 @@ fn first_path(operation: &Operation) -> PathBuf {
     match operation {
         Operation::Rename { path, .. } | Operation::Extract { archive: path, .. } => path.clone(),
         Operation::NewFolder { inside, name } => inside.join(name),
-        Operation::Copy { sources, into } | Operation::Move { sources, into } => {
-            sources.first().unwrap_or(into).clone()
-        }
+        Operation::Copy { sources, into }
+        | Operation::Move { sources, into }
+        | Operation::Compress { sources, into, .. } => sources.first().unwrap_or(into).clone(),
         Operation::Delete { paths }
         | Operation::Trash { paths }
         | Operation::ChangeAccess { paths, .. }

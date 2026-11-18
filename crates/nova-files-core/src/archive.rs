@@ -12,6 +12,8 @@ mod wire;
 use std::env;
 use std::path::{Path, PathBuf};
 
+use nova_files_api::Packing;
+
 pub use unpack::{Extracting, Flow};
 pub use wire::{ArchiveEntry, ArchiveKind};
 
@@ -42,6 +44,16 @@ pub enum ArchiveFailure {
     NotWritten,
     /// The caller stopped it.
     Cancelled,
+}
+
+/// How to make an archive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Recipe<'a> {
+    pub packing: Packing,
+    /// From 1, fastest, to 9, smallest.
+    pub level: u8,
+    /// Locks each file in a zip.
+    pub password: Option<&'a str>,
 }
 
 /// Runs the helper.
@@ -90,6 +102,24 @@ impl Archiver {
         tell: impl FnMut(Extracting) -> Flow,
     ) -> Result<(), ArchiveFailure> {
         unpack::extract(&self.helper, archive, into, password, tell)
+    }
+
+    /// Makes `archive`, a new file, of `sources` (absolute paths), each
+    /// under its own name, as `recipe` says. `tell` hears of each entry
+    /// packed, and is asked as for [`Self::extract`]. A failure can
+    /// leave `archive` part written.
+    ///
+    /// # Errors
+    /// When a source can't be read, `archive` can't be written, or `tell`
+    /// stops it; see [`ArchiveFailure`].
+    pub fn compress(
+        &self,
+        sources: &[PathBuf],
+        archive: &Path,
+        recipe: &Recipe<'_>,
+        tell: impl FnMut(Extracting) -> Flow,
+    ) -> Result<(), ArchiveFailure> {
+        unpack::compress(&self.helper, sources, archive, recipe, tell)
     }
 }
 

@@ -63,7 +63,7 @@ pub use folder::{
 };
 pub use job::{
     Answer, Conflict, ConflictKind, DropAskId, DropKind, ExtractTo, Failure, JobId, JobTag,
-    Operation, Outcome, Progress, Scope, Tally,
+    Operation, Outcome, Packing, Progress, Scope, Tally,
 };
 pub use message::{ClientId, Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
 pub use open_with::{App, NotOpened, OpenWith, OpenWithAnswer, OpenWithId};

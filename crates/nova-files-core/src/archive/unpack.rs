@@ -1,12 +1,15 @@
-//! Runs the helper to unpack an archive, following it as it goes.
+//! Runs the helper to unpack or make an archive, following it as it goes.
 //!
 //! The password goes on the helper's standard input, which is then
 //! closed. The helper writes a line for each entry it unpacked; between
 //! lines the caller is asked every [`TICK`] whether to go on. While the
 //! caller holds it, the helper's group is stopped.
 
+use std::ffi::OsStr;
 use std::io::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use nova_files_api::Packing;
 use std::process::{Child, ChildStdout, Stdio};
 use std::time::Duration;
 
@@ -14,8 +17,8 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::io::{self, Errno};
 use rustix::process::{self, Pid, Signal};
 
-use super::ArchiveFailure;
 use super::helper::{end, ended, spawn};
+use super::{ArchiveFailure, Recipe};
 
 /// How long the caller waits between asks.
 pub const TICK: Duration = Duration::from_millis(100);
@@ -23,13 +26,14 @@ pub const TICK: Duration = Duration::from_millis(100);
 /// that is stopped or went wrong is killed at once.
 const EXIT_TIME: Duration = Duration::from_secs(10);
 const EXTRACT: &str = "extract";
+const COMPRESS: &str = "compress";
 const DECIMAL: u32 = 10;
 const READ_SIZE: usize = 4_096;
 
 /// What the caller hears while an archive unpacks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Extracting {
-    /// One more entry is unpacked; it held this many bytes.
+    /// One more entry is unpacked or packed; it held this many bytes.
     Entry(u64),
     /// Nothing new since the last ask.
     Waiting,
@@ -53,13 +57,49 @@ pub fn extract(
     archive: &Path,
     into: &Path,
     password: Option<&str>,
+    tell: impl FnMut(Extracting) -> Flow,
+) -> Result<(), ArchiveFailure> {
+    let args = [EXTRACT.as_ref(), archive.as_os_str(), into.as_os_str()];
+    run(helper, &args, password, tell)
+}
+
+pub fn compress(
+    helper: &Path,
+    sources: &[PathBuf],
+    archive: &Path,
+    recipe: &Recipe<'_>,
+    tell: impl FnMut(Extracting) -> Flow,
+) -> Result<(), ArchiveFailure> {
+    let level = recipe.level.to_string();
+    let mut args: Vec<&OsStr> = vec![
+        COMPRESS.as_ref(),
+        packing_word(recipe.packing).as_ref(),
+        level.as_ref(),
+        archive.as_os_str(),
+    ];
+    args.extend(sources.iter().map(|source| source.as_os_str()));
+    run(helper, &args, recipe.password, tell)
+}
+
+/// The helper's word for `packing`.
+const fn packing_word(packing: Packing) -> &'static str {
+    match packing {
+        Packing::ZipDeflate => "zip-deflate",
+        Packing::ZipZstd => "zip-zstd",
+        Packing::TarZstd => "tar-zst",
+        Packing::TarGzip => "tar-gz",
+        Packing::TarXz => "tar-xz",
+    }
+}
+
+/// Runs the helper with `args`, giving it `password`, until it ends.
+fn run(
+    helper: &Path,
+    args: &[&OsStr],
+    password: Option<&str>,
     mut tell: impl FnMut(Extracting) -> Flow,
 ) -> Result<(), ArchiveFailure> {
-    let mut child = spawn(
-        helper,
-        &[EXTRACT.as_ref(), archive.as_os_str(), into.as_os_str()],
-        Stdio::piped(),
-    )?;
+    let mut child = spawn(helper, args, Stdio::piped())?;
     if let (Some(mut input), Some(password)) = (child.stdin.take(), password) {
         // A helper that exits before reading it has said why.
         input.write_all(password.as_bytes()).ok();
