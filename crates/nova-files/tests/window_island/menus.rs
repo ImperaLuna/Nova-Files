@@ -88,7 +88,8 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
     wait_for_note(&view, cx, "Copied notes.txt").await;
     assert!(view.read_with(cx, |view, _| view.menu().is_none()));
 
-    // The empty space: New folder and Paste, Select all, hidden files.
+    // The empty space: New folder and Paste, Select all, the views,
+    // hidden files.
     right_click_space(cx, 2);
     assert_eq!(
         view.read_with(cx, |view, _| view.selected_count()),
@@ -98,10 +99,18 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
     assert_eq!(
         offered(&view, cx),
         (
-            ["New folder", "Paste", "Select all", "Show hidden files"]
-                .map(str::to_owned)
-                .to_vec(),
-            vec![2, 3]
+            [
+                "New folder",
+                "Paste",
+                "Select all",
+                "Details",
+                "Icons",
+                "Gallery",
+                "Show hidden files"
+            ]
+            .map(str::to_owned)
+            .to_vec(),
+            vec![2, 3, 6]
         )
     );
     choose(&view, cx, "Paste");
@@ -151,7 +160,14 @@ async fn the_menu_key_opens_the_menu_with_its_first_item_marked(cx: &mut TestApp
     // Paste only with files on the clipboard.
     assert_eq!(
         offered(&view, cx).0,
-        ["New folder", "Select all", "Show hidden files"]
+        [
+            "New folder",
+            "Select all",
+            "Details",
+            "Icons",
+            "Gallery",
+            "Show hidden files"
+        ]
     );
     assert_eq!(
         view.read_with(cx, |view, _| view.menu().unwrap().active),
@@ -198,6 +214,31 @@ async fn show_hidden_files_is_ticked_while_they_show(cx: &mut TestAppContext) {
     assert_eq!(hidden_item(&view, cx), Look::On);
     choose(&view, cx, "Show hidden files");
     wait_for_names(&view, cx, &["Projects", "notes.txt"]).await;
+}
+
+#[gpui::test]
+async fn the_view_showing_is_ticked_and_another_can_be_picked(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-views");
+    let home = TempFolder::tree("menu-views-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let looks = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| {
+            let menu = view.menu().unwrap();
+            ["Details", "Icons", "Gallery"].map(|label| {
+                let item = menu.items.iter().find(|item| item.label == label);
+                item.unwrap().look
+            })
+        })
+    };
+
+    right_click_space(cx, 2);
+    assert_eq!(looks(&view, cx), [Look::On, Look::Plain, Look::Plain]);
+    choose(&view, cx, "Icons");
+    cx.run_until_parked();
+
+    right_click_space(cx, 2);
+    assert_eq!(looks(&view, cx), [Look::Plain, Look::On, Look::Plain]);
 }
 
 #[gpui::test]

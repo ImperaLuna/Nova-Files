@@ -2,7 +2,7 @@
 //! exits. Asked with `--preview`, it decodes one picture for the quick look
 //! instead (see `preview`).
 //!
-//! `nova-files-thumbnailer <thumbnails folder> (<file> <uri> <mtime> <name>)...`
+//! `nova-files-thumbnailer <thumbnails folder> <normal|large> (<file> <uri> <mtime> <name>)...`
 //!
 //! The core works out each thumbnail's name and the file's URI and mtime
 //! (the freedesktop thumbnail spec); the helper only decodes, scales and
@@ -49,7 +49,7 @@ fn main() -> ExitCode {
     };
     let mut out = io::stdout().lock();
     for job in &batch.jobs {
-        let outcome = render::render(&batch.folder, job, &system);
+        let outcome = render::render(&batch.folder, batch.size, job, &system);
         if writeln!(out, "{}", outcome.word()).is_err() {
             // Nobody is reading the answers any more.
             return ExitCode::FAILURE;

@@ -21,10 +21,8 @@ use std::thread;
 
 use nova_files_api::{
     ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, NotOpened,
-    Order, Unreadable,
+    Order, ThumbnailSize, Unreadable,
 };
-
-use nova_files_api::Thumbnails as ThumbnailsSetting;
 
 use crate::details_queue;
 use crate::file_icons::FileIcons;
@@ -83,25 +81,21 @@ impl Client {
     }
 
     /// The client shows `count` entries of listing `id` from `first`, or
-    /// is about to: it wants their details, and their thumbnails while
-    /// they are `Shown`. Hidden, none are made, and any still queued are
-    /// dropped.
+    /// is about to: it wants their details, and their thumbnails at
+    /// `thumbnails` while thumbnails are shown. With `None` (hidden) none
+    /// are made, and any still queued are dropped.
     pub fn want_rows(
         &self,
         id: ListingId,
         first: EntryId,
         count: u32,
-        thumbnails: ThumbnailsSetting,
+        thumbnails: Option<ThumbnailSize>,
     ) {
         if let Some(queue) = &self.details {
             queue.want(id, first, count);
         }
         if let Some(queue) = &self.thumbnails {
-            let count = match thumbnails {
-                ThumbnailsSetting::Shown => count,
-                ThumbnailsSetting::Hidden => 0,
-            };
-            queue.want(id, first, count);
+            queue.want(id, first, thumbnails.map_or(0, |_| count), thumbnails);
         }
     }
 

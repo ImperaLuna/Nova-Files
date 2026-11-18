@@ -1,5 +1,7 @@
-//! Makes one thumbnail: decode the file, scale it to fit the spec's
-//! "normal" size, and write it into `normal/` with its URI and mtime. A
+//! Makes one thumbnail: decode the file, scale it down to fit the size
+//! asked for ("normal" or "large" in the spec), and write it into that
+//! size's folder with its URI and mtime. A picture already small enough
+//! keeps its own size: enlarged, it would only be blurry. A
 //! file whose data can't be decoded gets a failure marker in
 //! `fail/nova-files/` instead, so nobody tries it again until it changes.
 //! A file that couldn't be read (no permission, say) or was too big to
@@ -26,15 +28,12 @@ use image::{
     RgbaImage,
 };
 
-use crate::batch::Job;
+use crate::batch::{Job, Size};
 use crate::mime::MimeTypes;
 use crate::png_text;
 use crate::sandbox::FOLDER_MODE;
 use crate::system::{Request, Thumbnailers};
 
-/// The spec's "normal" thumbnail fits in this square.
-const NORMAL_SIZE: u32 = 128;
-const NORMAL_FOLDER: &str = "normal";
 /// Failure markers, per application as the spec asks.
 const FAIL_FOLDER: &str = "fail/nova-files";
 /// Thumbnails are private to the user.
@@ -72,11 +71,11 @@ impl Outcome {
     }
 }
 
-pub fn render(folder: &Path, job: &Job, system: &System) -> Outcome {
+pub fn render(folder: &Path, size: Size, job: &Job, system: &System) -> Outcome {
     let decoded = if built_in(&job.source) {
         decode(&job.source)
     } else {
-        let Some(made) = from_system(folder, job, system) else {
+        let Some(made) = from_system(folder, size, job, system) else {
             return Outcome::Unsupported;
         };
         made
@@ -92,9 +91,12 @@ pub fn render(folder: &Path, job: &Job, system: &System) -> Outcome {
             return Outcome::Failed;
         }
     };
-    let thumb = image.thumbnail(NORMAL_SIZE, NORMAL_SIZE);
+    let thumb = image.thumbnail(
+        image.width().min(size.side()),
+        image.height().min(size.side()),
+    );
     // A write that fails (a full disk) leaves no marker: the file is fine.
-    if write(&folder.join(NORMAL_FOLDER), job, &thumb).is_ok() {
+    if write(&folder.join(size.folder()), job, &thumb).is_ok() {
         Outcome::Ok
     } else {
         Outcome::Failed
@@ -103,9 +105,14 @@ pub fn render(folder: &Path, job: &Job, system: &System) -> Outcome {
 
 /// The picture the system's thumbnailer makes for `job`; `None` when no
 /// thumbnailer handles its type.
-fn from_system(folder: &Path, job: &Job, system: &System) -> Option<ImageResult<DynamicImage>> {
+fn from_system(
+    folder: &Path,
+    size: Size,
+    job: &Job,
+    system: &System,
+) -> Option<ImageResult<DynamicImage>> {
     let mime = system.mime.of(&job.source)?;
-    let into = folder.join(NORMAL_FOLDER);
+    let into = folder.join(size.folder());
     if let Err(error) = fs::DirBuilder::new()
         .recursive(true)
         .mode(FOLDER_MODE)
@@ -121,7 +128,7 @@ fn from_system(folder: &Path, job: &Job, system: &System) -> Option<ImageResult<
         input: &job.source,
         uri: &job.uri,
         output: &output,
-        size: NORMAL_SIZE,
+        size: size.side(),
     };
     let image = match system.thumbnailers.run(mime, &request)? {
         Ok(()) => decode(&output),

@@ -34,7 +34,7 @@ use crate::columns;
 use crate::commands::{PreviewNext, PreviewPrevious};
 use crate::kind::{FileKind, icon_kind};
 use crate::theme::{Colors, preview, radius, size, text};
-use crate::window::{MainWindow, Shown};
+use crate::window::{MainWindow, QuickLook, Shown};
 
 /// Between the parts of the caption's text.
 const SEPARATOR: &str = " · ";
@@ -67,7 +67,7 @@ impl MainWindow {
         scale_factor: f32,
         cx: &Context<Self>,
     ) -> Option<impl IntoElement> {
-        let open = self.quick_look()?;
+        let open = self.quick_look().filter(|_| self.previewing())?;
         let listing = self
             .listing
             .as_ref()
@@ -75,21 +75,9 @@ impl MainWindow {
         let index = usize::try_from(open.entry.0).ok()?;
         let entry = listing.entries.get(index)?;
         let colors = Colors::of(cx);
-        let shown = open.shown.as_ref();
         // The preview itself, once it is this entry's.
         let current = open.current().and_then(|shown| shown.preview.as_deref());
-        let art = shown.map_or_else(
-            || big_icon(&entry.name, entry.kind, &colors),
-            |shown| {
-                art(
-                    shown,
-                    shown_entry(shown, listing, entry),
-                    room,
-                    scale_factor,
-                    &colors,
-                )
-            },
-        );
+        let art = stage_art(open, listing, entry, (room, scale_factor), &colors);
         let (previous, next) = steps(index, listing.entries.len());
         Some(
             div()
@@ -107,7 +95,7 @@ impl MainWindow {
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _: &MouseDownEvent, window, cx| {
-                        this.close_preview(Some(window), cx);
+                        this.dismiss_preview(window, cx);
                     }),
                 )
                 .child(kept_open(icon_button(
@@ -134,6 +122,30 @@ impl MainWindow {
                 ))),
         )
     }
+}
+
+/// What the quick look `open` on `entry` of `listing` draws large in
+/// `room` at a scale factor: what the core sent, or the entry's icon
+/// until it does.
+pub(super) fn stage_art(
+    open: &QuickLook,
+    listing: &nova_files_api::Listing,
+    entry: &Entry,
+    (room, scale_factor): (gpui::Size<Pixels>, f32),
+    colors: &Colors,
+) -> AnyElement {
+    open.shown.as_ref().map_or_else(
+        || big_icon(&entry.name, entry.kind, colors),
+        |shown| {
+            art(
+                shown,
+                shown_entry(shown, listing, entry),
+                room,
+                scale_factor,
+                colors,
+            )
+        },
+    )
 }
 
 /// `element` in a box a press doesn't pass through, so a click on it
@@ -425,14 +437,14 @@ fn caption(
                 .hover(|button| button.bg(colors.hover))
                 .active(|button| button.bg(colors.press))
                 .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                    this.close_preview(Some(window), cx);
+                    this.dismiss_preview(window, cx);
                 }))
                 .child(icon(Icon::Close, size::BUTTON_ICON, colors.text_soft)),
         )
 }
 
 /// "PNG image · 1.8 MB", or "Folder · 12 items".
-fn meta(preview: &Preview) -> String {
+pub(super) fn meta(preview: &Preview) -> String {
     if let PreviewContent::Folder { count, .. } = &preview.content {
         let unit = if *count == 1 { ITEM } else { ITEMS };
         return format!("{FOLDER_KIND}{SEPARATOR}{count} {unit}");

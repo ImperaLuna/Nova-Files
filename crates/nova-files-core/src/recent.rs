@@ -43,10 +43,10 @@ use crate::timed;
 const FILE: &str = "nova-files/recent-folders";
 /// The first line, naming the format and its version.
 const HEADER: &[u8] = b"nova-files recent-folders 1\n";
-/// Ends each path.
-const END: u8 = 0;
+/// Ends each path; no path holds it. The folder views' file uses it too.
+pub const END: u8 = 0;
 /// The longest path Linux takes, in bytes.
-const MAX_PATH: usize = 4096;
+pub const MAX_PATH: usize = 4096;
 /// A file this big is not one the core wrote; it is never read.
 const MAX_BYTES: usize = HEADER.len() + MAX_RECENT_FOLDERS * (MAX_PATH + 1);
 const SAVE_THREAD: &str = "nova-files-recent";
@@ -131,8 +131,9 @@ impl Store {
     }
 }
 
-/// Whether `folder` can go in the list: absolute, and short enough.
-fn fits(folder: &Path) -> bool {
+/// Whether `folder` can go in a saved list: absolute, short enough, and
+/// without the byte that ends each path.
+pub fn fits(folder: &Path) -> bool {
     let bytes = folder.as_os_str().as_bytes();
     folder.is_absolute() && bytes.len() <= MAX_PATH && !bytes.contains(&END)
 }

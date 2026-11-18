@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use nova_files_api::{ClientGone, ClientId, Command, HiddenFiles};
+use nova_files_api::{ClientGone, ClientId, Command, HiddenFiles, Thumbnails};
 
 use super::Setup;
 use crate::jobs::{self, Client};
@@ -31,8 +31,14 @@ pub(super) fn answer(
         Command::Gathered => setup.gathered.listen(id, client.events()),
         Command::ChangeGathered(change) => setup.gathered.change(change),
         Command::ListTrash => return jobs::list_trash(client, setup.home.clone()),
-        Command::Rows { id, first, count } => {
-            client.want_rows(id, first, count, setup.settings.current().thumbnails);
+        Command::Rows {
+            id,
+            first,
+            count,
+            size,
+        } => {
+            let shown = setup.settings.current().thumbnails == Thumbnails::Shown;
+            client.want_rows(id, first, count, shown.then_some(size));
         }
         Command::Search { id, query, limit } => setup.searcher.search(client, id, query, limit),
         Command::Find { id, query, within } => setup.searcher.find(client, id, query, within),
