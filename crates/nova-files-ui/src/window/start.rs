@@ -1,4 +1,5 @@
-//! Going to the Start page, its recent folders, and telling the core which
+//! Going to the Start page (and letting go of the folder on screen for
+//! any place without one), its recent folders, and telling the core which
 //! folders a person used.
 //!
 //! The Start page needs no listing, so going there arrives at once: the
@@ -35,6 +36,16 @@ impl MainWindow {
 
     /// Shows the Start page, leaving the history's trip as it is.
     pub(super) fn arrive_at_start(&mut self, cx: &mut Context<Self>) {
+        self.let_go_of_folder(cx);
+        self.history.arrived(&Location::Start);
+        self.ask_for_recent();
+        cx.emit(WindowEvent::StartShown);
+        cx.notify();
+    }
+
+    /// Drops the folder asked for, if any, and lets go of the folder on
+    /// screen, its rows and thumbnails, for a place that needs no listing.
+    pub(super) fn let_go_of_folder(&mut self, cx: &mut Context<Self>) {
         self.menu = None;
         self.asked = None;
         self.requested = None;
@@ -46,10 +57,6 @@ impl MainWindow {
         self.scroll = UniformListScrollHandle::new();
         self.jump = TypeJump::default();
         self.band = None;
-        self.history.arrived(&Location::Start);
-        self.ask_for_recent();
-        cx.emit(WindowEvent::StartShown);
-        cx.notify();
     }
 
     /// The recent folders the Start page shows.
