@@ -252,7 +252,10 @@ mod tests {
 
     impl nova_files_api::FileTypes for PlainText {
         fn of(&self, name: &std::ffi::OsStr) -> Option<&str> {
-            name.to_str()?.ends_with(".txt").then_some("text/plain")
+            Path::new(name)
+                .extension()
+                .is_some_and(|extension| extension == "txt")
+                .then_some("text/plain")
         }
 
         fn is_a(&self, mime: &str, wanted: &str) -> bool {
