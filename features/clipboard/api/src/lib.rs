@@ -21,10 +21,12 @@
 //! there and takes back. A paste becomes a copy or move job
 //! ([`FileClipboard::paste_into`]).
 
+#![forbid(unsafe_code)]
+
 use std::path::PathBuf;
 
-use crate::job::Operation;
-use crate::uri::{file_uri, path_from_file_uri};
+use nova_files_api::Operation;
+use nova_files_api::uri::{file_uri, path_from_file_uri};
 
 /// GNOME's format, which also says whether the files were cut.
 pub const GNOME_COPIED_FILES: &str = "x-special/gnome-copied-files";
