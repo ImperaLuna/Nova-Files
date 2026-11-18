@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
+use nova_files_api::WindowRequest;
 use nova_files_core::{Home, IDLE_EXIT, IndexPlace, RunningCore};
 use nova_files_dbus::{
     ACTIVATION_TOKEN, APP_ID, PORTAL_NAME, PORTAL_PATH, SEARCH_INTERFACE, Started,
@@ -97,7 +98,7 @@ impl Drop for Scratch {
 struct Service {
     bus: PrivateBus,
     _started: Started,
-    windows: Receiver<Option<PathBuf>>,
+    windows: Receiver<WindowRequest>,
     /// Gets a message once the core has stopped.
     core_ended: Receiver<()>,
 }
@@ -110,8 +111,8 @@ fn service_with(scratch: &Scratch, indexed: bool, idle_exit: Duration) -> Servic
     let bus = PrivateBus::start();
     let RunningCore { connector, thread } = scratch.core(indexed, idle_exit);
     let (sender, windows) = mpsc::channel();
-    let started = nova_files_dbus::start(bus.bus(), connector, move |folder| {
-        sender.send(folder).ok();
+    let started = nova_files_dbus::start(bus.bus(), connector, move |request| {
+        sender.send(request).ok();
     })
     .unwrap();
     let (ended, core_ended) = mpsc::channel();
@@ -373,19 +374,26 @@ fn open_hands_a_folder_to_a_window() {
     let launcher = Launcher::new(&service.bus);
     let folder = scratch.home().join("Documents");
     launcher.call("Open", &folder, Some(TOKEN)).unwrap();
-    assert_eq!(service.windows.recv_timeout(WAIT), Ok(Some(folder)));
+    assert_eq!(
+        service.windows.recv_timeout(WAIT),
+        Ok(WindowRequest::on(folder))
+    );
 }
 
 #[test]
-fn show_in_folder_opens_the_holding_folder() {
+fn show_in_folder_opens_the_holding_folder_with_the_file_selected() {
     let scratch = Scratch::new();
     let service = service(&scratch, true);
     let launcher = Launcher::new(&service.bus);
     launcher
         .call("ShowInFolder", &scratch.file(), None)
         .unwrap();
-    let folder = scratch.home().join("Documents");
-    assert_eq!(service.windows.recv_timeout(WAIT), Ok(Some(folder)));
+    let window = service.windows.recv_timeout(WAIT).unwrap();
+    assert_eq!(
+        window.folder,
+        scratch.file().parent().map(Path::to_path_buf)
+    );
+    assert_eq!(window.select, [scratch.file().file_name().unwrap()]);
     assert!(launcher.call("ShowInFolder", Path::new("/"), None).is_err());
 }
 
