@@ -5,8 +5,7 @@
 # listing a newer one cancels. Features list through it and watch rows
 # through the RowWatch port.
 #
-# Allowed outside crates:
-# - log
+# Allowed outside crates: none
 #
 # Allowed workspace crates:
 # - nova-files-api
@@ -24,6 +23,5 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-log = { version = "0.4.35", features = ["std"] }
 nova-files-api.workspace = true
 nova-files-disk.workspace = true
