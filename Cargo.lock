@@ -3644,6 +3644,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-archives-core",
  "nova-files-clipboard-api",
+ "nova-files-delete-core",
  "nova-files-disk",
  "nova-files-entries",
  "nova-files-index",
@@ -3673,6 +3674,16 @@ dependencies = [
  "nova-files-picker-api",
  "rustix 1.1.6",
  "zbus",
+]
+
+[[package]]
+name = "nova-files-delete-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-jobs",
+ "rustix 1.1.6",
 ]
 
 [[package]]

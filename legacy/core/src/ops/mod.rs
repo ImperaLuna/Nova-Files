@@ -2,7 +2,6 @@ mod access;
 mod ahead;
 mod attrs;
 mod copy_file;
-mod delete;
 mod dropped;
 mod make;
 mod transfer;
@@ -29,9 +28,9 @@ pub use nova_files_jobs::test_folder::{self, TestFolder};
 use crate::inside;
 use crate::trash::Trashes;
 use access::change_access;
-use delete::delete;
 use make::How;
 use nova_files_archives_core::{Archiver, Asked, Taking, compress, extract};
+use nova_files_delete_core::{delete, delete_paths};
 use nova_files_rename_core::{new_folder, rename};
 use nova_files_trash_core::{Trasher, delete_from_trash, empty_trash, restore, trash};
 use transfer::transfer;
@@ -105,7 +104,7 @@ impl Mover for Moves {
     }
 
     fn delete(&self, running: &mut Running, paths: &[PathBuf]) -> Moved {
-        delete::delete_paths(running, paths)
+        delete_paths(running, paths)
     }
 }
 
