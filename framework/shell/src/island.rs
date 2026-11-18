@@ -1,15 +1,42 @@
 use std::fmt;
+use std::rc::Rc;
 
 use gpui::{App, Context, EventEmitter, SharedString};
 use nova_files_api::{JobId, Operation};
 
 pub type OnYes = Box<dyn FnOnce(&mut App)>;
+pub type OnUndo = Rc<dyn Fn(&mut App)>;
+
+#[derive(Clone)]
+pub enum Undo {
+    Job(JobId),
+    Run(OnUndo),
+}
+
+impl fmt::Debug for Undo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Job(job) => f.debug_tuple("Job").field(job).finish(),
+            Self::Run(_) => f.debug_tuple("Run").finish_non_exhaustive(),
+        }
+    }
+}
+
+impl PartialEq for Undo {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Job(one), Self::Job(other)) => one == other,
+            (Self::Run(one), Self::Run(other)) => Rc::ptr_eq(one, other),
+            _ => false,
+        }
+    }
+}
 
 pub enum IslandAsk {
     StartJob(Operation),
     Note {
         label: SharedString,
-        undo: Option<JobId>,
+        undo: Option<Undo>,
     },
     Ask {
         question: SharedString,
@@ -50,7 +77,7 @@ impl Island {
     pub fn note(
         &mut self,
         label: impl Into<SharedString>,
-        undo: Option<JobId>,
+        undo: Option<Undo>,
         cx: &mut Context<Self>,
     ) {
         self.asks.push(IslandAsk::Note {

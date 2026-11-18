@@ -32,6 +32,7 @@ pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
+pub type Closing<P> = fn(&mut P, &mut Context<P>);
 pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
 
@@ -71,6 +72,7 @@ pub struct Slots<P> {
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
     pub(crate) row_icons: Vec<NameCell<P>>,
     pub(crate) opens: Vec<Opens<P>>,
+    pub(crate) closing: Vec<Closing<P>>,
 }
 
 impl<P> Default for Slots<P> {
@@ -94,6 +96,7 @@ impl<P> Default for Slots<P> {
             list_views: Vec::new(),
             row_icons: Vec::new(),
             opens: Vec::new(),
+            closing: Vec::new(),
         }
     }
 }
@@ -200,6 +203,10 @@ impl<P: Part> Slots<P> {
 
     pub fn opens(&mut self, opens: Opens<P>) {
         self.opens.push(opens);
+    }
+
+    pub fn closing(&mut self, closing: Closing<P>) {
+        self.closing.push(closing);
     }
 
     pub fn sends<M: Message>(&mut self) {

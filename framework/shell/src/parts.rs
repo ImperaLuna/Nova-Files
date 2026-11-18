@@ -47,6 +47,7 @@ trait OpenPart {
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
+    fn closing(&self, cx: &mut App);
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
     fn watch(&self, event: &Event, cx: &mut App);
     fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)>;
@@ -168,6 +169,17 @@ impl<P: Part> OpenPart for Opened<P> {
             .row_icons
             .iter()
             .find_map(|icon| icon(part, entry, cx))
+    }
+
+    fn closing(&self, cx: &mut App) {
+        if self.slots.closing.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for closing in &self.slots.closing {
+                closing(part, cx);
+            }
+        });
     }
 
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool {
@@ -514,6 +526,12 @@ impl WindowParts {
         self.opened
             .iter()
             .any(|part| part.open_entry(entry, path, cx))
+    }
+
+    pub fn closing(&self, cx: &mut App) {
+        for part in &self.opened {
+            part.closing(cx);
+        }
     }
 
     pub fn part<P: Part>(&self) -> Option<Entity<P>> {

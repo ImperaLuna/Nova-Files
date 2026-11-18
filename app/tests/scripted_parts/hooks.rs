@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::path::Path;
+use std::rc::Rc;
 
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, Modifiers, MouseButton,
@@ -7,7 +8,8 @@ use gpui::{
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_shell::{
-    Host, Location, PageKind, PageRef, Part, Parts, SidebarAt, SidebarRow, Slots, assets::Icon,
+    Host, Location, PageKind, PageRef, Part, Parts, SidebarAt, SidebarRow, Slots, Undo,
+    assets::Icon,
 };
 
 use super::super::*;
@@ -18,6 +20,8 @@ const TAGGED: &str = "1";
 thread_local! {
     static DROPPED: Cell<usize> = const { Cell::new(0) };
     static OPENED: Cell<usize> = const { Cell::new(0) };
+    static CLOSED: Cell<usize> = const { Cell::new(0) };
+    static UNDONE: Cell<usize> = const { Cell::new(0) };
 }
 
 const OWN: &str = "0";
@@ -91,6 +95,7 @@ impl Part for Tagger {
         );
         slots.row_icon(|_, entry, _| (entry.name == OWN).then(|| shown("tagger-icon")));
         slots.opens(opens);
+        slots.closing(|_, _| CLOSED.set(CLOSED.get() + 1));
         slots.page::<Basket>(basket);
         slots.drops::<Basket>(|_, _, paths, _| DROPPED.set(DROPPED.get() + paths.len()));
         slots.sidebar(SidebarAt::Places, |_, _, _| {
@@ -109,6 +114,8 @@ impl Part for Tagger {
 fn tagged(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     DROPPED.set(0);
     OPENED.set(0);
+    CLOSED.set(0);
+    UNDONE.set(0);
     let mut parts = Parts::default();
     parts.add::<Tagger>();
     cx.update(|cx| {
@@ -208,4 +215,25 @@ fn the_navigator_reveals_a_path_in_its_folder(cx: &mut TestAppContext) {
         view.read_with(cx, |view, _| view.selected_paths()),
         [target]
     );
+}
+
+#[gpui::test]
+fn a_part_hears_its_window_closing(cx: &mut TestAppContext) {
+    let (view, cx, _core) = tagged(cx);
+    drop(view);
+    cx.update(|window, _| window.remove_window());
+    cx.run_until_parked();
+    assert_eq!(CLOSED.get(), 1);
+}
+
+#[gpui::test]
+fn undo_on_a_part_note_runs_the_part_undo(cx: &mut TestAppContext) {
+    let (view, cx, _core) = tagged(cx);
+    let island = view.read_with(cx, |view, _| view.host().island.clone());
+    let undo = Undo::Run(Rc::new(|_| UNDONE.set(UNDONE.get() + 1)));
+    island.update(cx, |island, cx| island.note("Tagged", Some(undo), cx));
+    cx.run_until_parked();
+    cx.simulate_keystrokes("ctrl-z");
+    cx.run_until_parked();
+    assert_eq!(UNDONE.get(), 1);
 }

@@ -36,6 +36,7 @@ impl MainWindow {
             cx.subscribe(&self.host.entries, |this, _, _: &EntriesAsked, cx| {
                 this.take_entries_asks(cx);
             }),
+            cx.on_release(|this, cx| this.parts.closing(cx)),
         ]);
         watching
     }
@@ -160,7 +161,7 @@ impl MainWindow {
                     self.start_job(operation);
                 }
                 IslandAsk::Note { label, undo } => {
-                    self.show_note(label, undo.map(NoteUndo::Job), cx);
+                    self.show_note(label, undo.map(NoteUndo::from), cx);
                 }
                 IslandAsk::Ask {
                     question,
