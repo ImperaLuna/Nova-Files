@@ -14,6 +14,7 @@
 //! project, any other holds many.
 
 mod file;
+mod list;
 mod store;
 
 use std::fs;
@@ -21,6 +22,7 @@ use std::path::Path;
 
 use nova_files_api::{GatheredFolder, Gathering, Holds};
 
+pub use list::list;
 pub use store::Store;
 
 use crate::places::Home;

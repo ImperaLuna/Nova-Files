@@ -97,7 +97,8 @@ impl Changed {
         self.touches_os(OsStr::new(name))
     }
 
-    fn touches_os(&self, name: &OsStr) -> bool {
+    /// [`Changed::touches`] for a name that may not be UTF-8.
+    pub fn touches_os(&self, name: &OsStr) -> bool {
         match self {
             Self::Files(names) => names.contains(name),
             Self::All => true,
