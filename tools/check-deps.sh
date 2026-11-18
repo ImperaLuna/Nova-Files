@@ -2,24 +2,24 @@
 # Fails when a crate depends on a crate it may not use.
 #
 # Two checks. Each Cargo.toml lists the outside and workspace crates it may
-# use on its "# Allowed outside crates:" and "# Allowed workspace crates:"
-# lines. The layer rules below come from each crate's folder, so a new
-# crate can't opt out of them.
+# use under its "# Allowed outside crates:" and "# Allowed workspace crates:"
+# lines, one "# - name" line each, or "none" on the header line. The layer
+# rules below come from each crate's folder, so a new crate can't opt out
+# of them.
 set -euo pipefail
 
 allowed_list() { # <Cargo.toml> <label>
-    local line
-    line=$(grep -m1 "^# Allowed $2 crates:" "$1" || true)
-    if [[ -z "$line" ]]; then
-        echo "MISSING"
-        return
-    fi
-    line=${line#*:}
-    line=${line//,/ }
-    if [[ "$line" =~ ^[[:space:]]*none[[:space:]]*$ ]]; then
-        line=""
-    fi
-    echo "$line"
+    awk -v header="# Allowed $2 crates:" '
+        found && /^# - / { print substr($0, 5); next }
+        found { exit }
+        index($0, header) == 1 {
+            found = 1
+            rest = substr($0, length(header) + 1)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", rest)
+            if (rest != "" && rest != "none") { print "BAD " rest }
+        }
+        END { if (!found) print "MISSING" }
+    ' "$1" | tr '\n' ' '
 }
 
 root=$(pwd)
@@ -148,8 +148,13 @@ status=0
 while IFS=$'\t' read -r name manifest deps; do
     outside=$(allowed_list "$manifest" outside)
     inside=$(allowed_list "$manifest" workspace)
-    if [[ "$outside" == MISSING || "$inside" == MISSING ]]; then
+    if [[ "$outside" == *MISSING* || "$inside" == *MISSING* ]]; then
         echo "$manifest: needs '# Allowed outside crates:' and '# Allowed workspace crates:' lines"
+        status=1
+        continue
+    fi
+    if [[ "$outside" == *BAD* || "$inside" == *BAD* ]]; then
+        echo "$manifest: list allowed crates one per line as '# - name' under the header, or write 'none' on it"
         status=1
         continue
     fi
@@ -168,7 +173,7 @@ while IFS=$'\t' read -r name manifest deps; do
         fi
         if ! tr -s ' ' '\n' <<<"$allowed" | grep -qxF -- "$dep"; then
             echo "$name depends on $dep, which is not in its allowed $kind crates ($manifest)."
-            echo "  If it is really needed, add it to that line and say why in the PR."
+            echo "  If it is really needed, add it to that list and say why in the PR."
             status=1
         fi
     done
