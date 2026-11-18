@@ -534,6 +534,17 @@ pub mod start {
     pub const BAR: Pixels = px(6.0);
 }
 
+/// The Properties page (see `view::properties`); the rest of its look is
+/// the Start page's.
+pub mod properties {
+    use gpui::{Pixels, px};
+
+    /// A card that opens a menu: the space between its parts, and its
+    /// arrow, turned down.
+    pub const CHOICE_GAP: Pixels = px(12.0);
+    pub const CHOICE_ARROW: Pixels = px(12.0);
+}
+
 /// How much of an element shows through.
 pub mod opacity {
     /// A file the picker's type filter leaves out: still there, set back.

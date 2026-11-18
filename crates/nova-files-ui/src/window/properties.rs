@@ -33,6 +33,8 @@ pub struct Page {
     items: Vec<Item>,
     /// What is under its paths, as measured so far (see `measuring`).
     pub(super) measure: Option<super::measuring::Measure>,
+    /// The apps that open its lone path (see `opens_with`).
+    pub(super) opens_with: super::opens_with::OpensWith,
 }
 
 /// One path on a Properties page.
@@ -61,6 +63,7 @@ impl Page {
         Self {
             items,
             measure: None,
+            opens_with: super::opens_with::OpensWith::default(),
         }
     }
 
@@ -141,6 +144,7 @@ impl MainWindow {
         self.history.arrived(&Location::Properties(paths.to_vec()));
         self.ask_properties();
         self.measure();
+        self.ask_apps();
         cx.notify();
     }
 

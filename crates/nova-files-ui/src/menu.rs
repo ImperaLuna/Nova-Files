@@ -1,5 +1,6 @@
 //! A small menu that opens where the pointer was right-clicked: a file's
-//! actions, a pinned place's "Remove from Places" or a drive's Eject. The
+//! actions, a pinned place's "Remove from Places", a drive's Eject, or
+//! the apps that can open a file on its Properties page. The
 //! window holds at most one; it closes on a choice, on Escape, or on a
 //! press outside it. Drawing is in `view/menu`.
 //!
@@ -90,6 +91,8 @@ pub enum MenuAction {
     Eject(DriveId),
     /// Open a folder in a new tab.
     OpenInNewTab(PathBuf),
+    /// Make an app the default for a type of file.
+    SetDefaultApp { mime: String, app: String },
     /// Send one of the window's actions, as its key does.
     Run(&'static ActionSpec),
 }
@@ -231,6 +234,7 @@ impl MainWindow {
             MenuAction::OpenDriveInNewTab(drive) => self.open_drive_in_new_tab(drive, cx),
             MenuAction::OpenInNewTab(folder) => self.open_in_new_tab(folder, cx),
             MenuAction::Eject(drive) => self.act_on_drive(DriveAction::Eject(drive)),
+            MenuAction::SetDefaultApp { mime, app } => self.set_default_app(mime, app),
             MenuAction::Run(spec) => window.dispatch_action(spec.action(), cx),
         }
         cx.notify();

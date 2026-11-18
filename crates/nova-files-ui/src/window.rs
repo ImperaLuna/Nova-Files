@@ -8,7 +8,8 @@
 //! `clipboard`, dragging and dropping files in `dragging` (naming the
 //! drop under the pointer in `aiming`, opening rows held over in
 //! `hover_open`), renaming and
-//! New folder in `renaming`, the Properties page in `properties` (its size in `measuring`), the jobs they start in `jobs`, the tabs in
+//! New folder in `renaming`, the Properties page in `properties` (its size in `measuring`, its
+//! app in `opens_with`), the jobs they start in `jobs`, the tabs in
 //! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
@@ -58,6 +59,7 @@ mod hover_open;
 mod jobs;
 mod measuring;
 mod navigate;
+mod opens_with;
 mod pin;
 mod preview;
 mod properties;

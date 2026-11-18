@@ -6,11 +6,13 @@
 //! right. Several items show a fan of their kinds, how many they are and
 //! where. Under it, for one item, three small cards say when it was
 //! modified, made and last opened, each a date over its name; a date the
-//! drive doesn't keep has no card. Until the core answers, the page is
-//! empty.
+//! drive doesn't keep has no card. Then a lone file's Opens with (see
+//! `opens_with`). Until the core answers, the page is empty.
 //!
 //! Debug selectors: `properties` for the page, `properties-top` for the
 //! top card and `properties-date-<n>` for each date card shown.
+
+mod opens_with;
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -76,6 +78,10 @@ impl MainWindow {
                     .gap(start::GROUP_GAP)
                     .when(!read.is_empty(), |column| {
                         column.child(self.about(&read, &colors))
+                    })
+                    .children(match &read[..] {
+                        [one] => self.opens_with(one, cx),
+                        _ => None,
                     }),
             )
     }

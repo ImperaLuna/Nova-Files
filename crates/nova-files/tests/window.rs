@@ -9,8 +9,9 @@
 //! `window_keys`, selecting in `window_select`, type to jump in
 //! `window_jump`, the path bar in `window_path`, the sidebar in
 //! `window_sidebar`, the quick look in `window_preview`, the island
-//! and its file actions in `window_island`, tabs in `window_tabs`, and
-//! dragging files in `window_drag`.
+//! and its file actions in `window_island`, tabs in `window_tabs`,
+//! dragging files in `window_drag`, and the Properties page in
+//! `window_properties` (its Opens with in `window_opens_with`).
 
 #![expect(
     clippy::unwrap_used,
@@ -24,6 +25,7 @@ mod window_drag;
 mod window_island;
 mod window_jump;
 mod window_keys;
+mod window_opens_with;
 mod window_path;
 mod window_preview;
 mod window_properties;
