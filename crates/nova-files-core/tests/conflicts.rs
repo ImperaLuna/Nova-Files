@@ -105,6 +105,28 @@ fn replace_puts_the_new_file_in_and_leaves_no_backup() {
 }
 
 #[test]
+fn a_replaced_file_the_trash_refuses_is_kept_beside_its_replacement() {
+    let bench = Bench::new("conflict-replace-trash-full");
+    let (source, into) = file_over_file(&bench);
+    let trash = bench.at("home/.local/share/Trash");
+    fs::create_dir_all(trash.join("files")).unwrap();
+    fs::create_dir_all(trash.join("info")).unwrap();
+    // Every name the trash tries for `a.txt` is taken.
+    fs::write(trash.join("info/a.txt.trashinfo"), "").unwrap();
+    for number in 2..=10_000 {
+        fs::write(trash.join(format!("info/a.txt.{number}.trashinfo")), "").unwrap();
+    }
+    let client = bench.client();
+
+    let (_, outcome) = copy_answering(&client, source, &into, Answer::Replace);
+
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(text(into.join("a.txt")), "new");
+    assert_eq!(text(into.join("a (2).txt")), "old");
+    assert_eq!(hidden(&bench.root), Vec::<PathBuf>::new());
+}
+
+#[test]
 fn keep_both_numbers_the_new_file() {
     let bench = Bench::new("conflict-both");
     let (source, into) = file_over_file(&bench);

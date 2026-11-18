@@ -5,19 +5,85 @@ use super::*;
 use crate::ops::journal::hold;
 use crate::ops::test_folder::TestFolder;
 
+/// How long a test waits for the job to ask before it fails.
+const ASK_WAIT: Duration = Duration::from_secs(5);
+
+/// Answers the first question `shared`'s job asks with `answer` for
+/// `scope`, giving up after a while, so a job that never asks fails the
+/// test instead of hanging it.
+fn answer_once(shared: Arc<Job>, answer: Answer, scope: Scope) -> std::thread::JoinHandle<bool> {
+    std::thread::spawn(move || {
+        let deadline = Instant::now() + ASK_WAIT;
+        while Instant::now() < deadline {
+            if let Some(open) = shared.control.open() {
+                return shared.control.answer(&open, answer, scope, || {});
+            }
+            std::thread::yield_now();
+        }
+        false
+    })
+}
+
 #[test]
-fn a_journal_that_cant_be_written_goes() {
+fn a_journal_that_cant_be_written_stays_until_the_job_ends_and_stops_replaces() {
     let folder = TestFolder::new("running-journal-fails");
-    let path = folder.file("1", "");
+    let path = folder.file("1", "nova-files-job 1\n");
     // Opened to read only: every write fails.
     let file = File::open(&path).unwrap();
-    let mut running = Running::for_test();
-    running.journal = Some(Journal::over(file, path.clone()));
+    let mut running = Running::with_journal(Journal::over(file, path.clone()));
+    let (backup, of) = (Path::new("/b/.nova-backup-1-0"), Path::new("/b/a"));
 
     running.record(Record::Made(Path::new("/a"), Path::new("/b")));
 
     assert!(running.journal.is_none());
+    assert!(path.exists());
+    assert_eq!(
+        running.record_backup(backup, of),
+        Err(Stop::because(of, Failure::Other))
+    );
+    running.finish();
     assert!(!path.exists());
+}
+
+#[test]
+fn a_backup_is_recorded_only_with_a_journal() {
+    let folder = TestFolder::new("running-backup");
+    let path = folder.file("1", "");
+    let file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+    let mut journaled = Running::with_journal(Journal::over(file, path.clone()));
+    let (backup, of) = (Path::new("/b/.nova-backup-1-0"), Path::new("/b/a"));
+
+    assert_eq!(journaled.record_backup(backup, of), Ok(()));
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        "backup /b/.nova-backup-1-0 /b/a\n"
+    );
+    assert_eq!(
+        Running::for_test().record_backup(backup, of),
+        Err(Stop::because(of, Failure::Other))
+    );
+}
+
+#[test]
+fn a_question_puts_the_journal_on_the_disk_first() {
+    let folder = TestFolder::new("running-ask-settles");
+    let path = folder.file("1", "");
+    let file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+    let mut running = Running::with_journal(Journal::over(file, path));
+    let answering = answer_once(Arc::clone(&running.shared), Answer::Skip, Scope::ThisOne);
+    let before = running.journal_synced().unwrap();
+
+    let answer = running.ask(Conflict {
+        kind: ConflictKind::FileExists,
+        source: PathBuf::from("/a/x"),
+        target: PathBuf::from("/b/x"),
+        number: 0,
+        more: 0,
+    });
+
+    assert!(answering.join().unwrap());
+    assert_eq!(answer, Ok(Answer::Skip));
+    assert!(running.journal_synced().unwrap() > before);
 }
 
 #[test]
@@ -37,22 +103,8 @@ fn settling_syncs_the_journal() {
 #[test]
 fn a_failure_the_user_may_answer_is_asked_and_any_other_stops_the_job() {
     let mut running = Running::for_test();
-    let control = Arc::clone(&running.shared);
     let path = Path::new("/locked");
-    // Gives up after a while, so a job that never asks fails the test
-    // instead of hanging it.
-    let answering = std::thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while Instant::now() < deadline {
-            if let Some(open) = control.control.open() {
-                return control
-                    .control
-                    .answer(&open, Answer::Skip, Scope::ThisOne, || {});
-            }
-            std::thread::yield_now();
-        }
-        false
-    });
+    let answering = answer_once(Arc::clone(&running.shared), Answer::Skip, Scope::ThisOne);
 
     let skipped = running.retry_or_skip(path, || Err::<(), _>(Failure::PermissionDenied));
     let stopped = running.retry_or_skip(path, || Err::<(), _>(Failure::ReadOnly));
@@ -92,19 +144,11 @@ fn a_journal_that_cant_be_opened_again_still_goes_when_the_job_ends() {
 #[test]
 fn a_kind_is_answered_once_answered_for_all() {
     let mut running = Running::for_test();
-    let control = Arc::clone(&running.shared);
-    let answering = std::thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while Instant::now() < deadline {
-            if let Some(open) = control.control.open() {
-                return control
-                    .control
-                    .answer(&open, Answer::Skip, Scope::AllOfThisKind, || {});
-            }
-            std::thread::yield_now();
-        }
-        false
-    });
+    let answering = answer_once(
+        Arc::clone(&running.shared),
+        Answer::Skip,
+        Scope::AllOfThisKind,
+    );
     let clash = |name: &str| Conflict {
         kind: ConflictKind::FileExists,
         source: PathBuf::from("/a").join(name),

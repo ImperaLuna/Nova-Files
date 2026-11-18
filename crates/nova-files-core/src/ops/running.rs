@@ -33,10 +33,12 @@ pub struct Running {
     /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
     journal: Option<Journal>,
-    /// The journal of a resumed job that couldn't be opened again, held
-    /// so no other core takes the job up meanwhile: it still goes when the
-    /// job ends, or the job would seem cut short.
-    unopened: Option<(PathBuf, File)>,
+    /// The journal the job no longer writes to: a resumed job's that
+    /// couldn't be opened again, or one that failed. It is held so no
+    /// other core takes the job up, and left for the clean-up should the
+    /// core crash; it goes when the job ends, or the job would seem cut
+    /// short.
+    held: Option<(PathBuf, File)>,
     /// Answers given for every conflict of their kind.
     answers: HashMap<ConflictKind, Answer>,
     /// How many conflicts it asked about.
@@ -86,7 +88,7 @@ impl Running {
             reporter,
             journals,
             journal: None,
-            unopened: None,
+            held: None,
             answers: HashMap::new(),
             asked: 0,
             folders: Folders::default(),
@@ -118,7 +120,7 @@ impl Running {
             Err(error) => {
                 log::warn!("job {} resumes without its journal: {error}", self.job.0);
                 match held {
-                    Ok(held) => self.unopened = Some((path, held)),
+                    Ok(file) => self.held = Some((path, file)),
                     Err(error) => log::warn!("{} is let go: {error}", path.display()),
                 }
             }
@@ -149,12 +151,11 @@ impl Running {
         }
     }
 
-    /// The journal failed with `error`. A journal that misses a step
-    /// would mislead a resume, so it goes.
+    /// The journal failed with `error`: the job writes no more to it.
     fn drop_journal(&mut self, error: &io::Error) {
-        log::warn!("job {} drops its journal: {error}", self.job.0);
+        log::warn!("job {} stops its journal: {error}", self.job.0);
         if let Some(journal) = self.journal.take() {
-            journal.finish();
+            self.held = Some(journal.into_held());
         }
     }
 
@@ -165,8 +166,9 @@ impl Running {
     }
 
     /// Holds at `conflict` until a client answers, unless one already
-    /// answered for all of its kind. Retry is never kept for a kind: what
-    /// still fails would be retried for ever.
+    /// answered for all of its kind, with the journal on the disk first.
+    /// Retry is never kept for a kind: what still fails would be retried
+    /// for ever.
     ///
     /// # Errors
     /// [`Cancelled`] when a client cancels the job instead.
@@ -174,6 +176,7 @@ impl Running {
         if let Some(&answer) = self.answers.get(&conflict.kind) {
             return Ok(answer);
         }
+        self.settle();
         self.asked += 1;
         conflict.number = self.asked;
         let kind = conflict.kind;
@@ -230,9 +233,10 @@ impl Running {
     }
 
     /// Adds `record` to the job's journal, starting the journal with the
-    /// first record. Without a journal the job still runs: its part files
-    /// are hidden and a real name never holds half a file, so only a
-    /// resume after a crash is lost. That is logged once.
+    /// first record. Without a journal the job still runs, but replaces
+    /// nothing (see [`Self::record_backup`]): its part files are hidden
+    /// and a real name never holds half a file, so only a resume after a
+    /// crash is lost. That is logged once.
     pub fn record(&mut self, record: Record<'_>) {
         if let Record::Made(to, from) | Record::Moved(from, to) | Record::Trashed(from, to) = record
         {
@@ -261,6 +265,21 @@ impl Running {
             && let Err(error) = journal.record(record)
         {
             self.drop_journal(&error);
+        }
+    }
+
+    /// Records that the user's file at `of` is about to step aside to
+    /// `backup`, on the disk before it does.
+    ///
+    /// # Errors
+    /// [`Stop`] at `of` when the job has no journal to hold the record:
+    /// after a crash nothing would bring the file back.
+    pub fn record_backup(&mut self, backup: &Path, of: &Path) -> Result<(), Stop> {
+        self.record(Record::Backup(backup, of));
+        if self.journal.is_some() {
+            Ok(())
+        } else {
+            Err(Stop::because(of, Failure::Other))
         }
     }
 
@@ -321,7 +340,7 @@ impl Running {
         if let Some(journal) = self.journal.take() {
             journal.finish();
         }
-        if let Some((path, _held)) = self.unopened.take() {
+        if let Some((path, _held)) = self.held.take() {
             remove_journal(&path);
         }
     }
@@ -342,6 +361,18 @@ impl Running {
             Arc::clone(&shared),
         );
         Self::new(JobId(1), shared, reporter, None)
+    }
+
+    /// A job of its own writing to `journal`, for unit tests.
+    pub fn with_journal(journal: Journal) -> Self {
+        let mut running = Self::for_test();
+        running.journal = Some(journal);
+        running
+    }
+
+    /// When its journal was last synced, while it has one.
+    pub fn journal_synced(&self) -> Option<std::time::Instant> {
+        self.journal.as_ref().map(Journal::synced)
     }
 }
 
