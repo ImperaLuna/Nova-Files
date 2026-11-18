@@ -11,12 +11,12 @@ use super::journal::{Record, word};
 use super::make::How;
 use super::one_step;
 use super::plan::Entry;
-use super::restore::{make_folders, put_back, restore};
 use super::running::Running;
 use super::stop::Stop;
 use super::transfer::transfer_to;
-use super::trash::trash;
 use crate::trash::{self, Trashes};
+use nova_files_jobs::mover::Mover;
+use nova_files_trash_core::{make_folders, put_back, restore, trash};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Identity {
@@ -97,11 +97,16 @@ pub fn undo_of(
     (!empty).then_some(undo)
 }
 
-pub fn run(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ended {
+pub fn run(
+    running: &mut Running,
+    undo: Option<Undo>,
+    trashes: &Trashes,
+    mover: &dyn Mover,
+) -> Ended {
     let Some(Undo::ThenPutBack(first, replaced)) = undo else {
-        return run_one(running, undo, trashes);
+        return run_one(running, undo, trashes, mover);
     };
-    let (outcome, mut changed) = run_one(running, Some(*first), trashes);
+    let (outcome, mut changed) = run_one(running, Some(*first), trashes, mover);
     let free = outcome == Outcome::Done || is_gone(&outcome);
     if !free {
         return (outcome, changed);
@@ -116,7 +121,7 @@ pub fn run(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ende
     if items.is_empty() {
         return (outcome, changed);
     }
-    let (put, more) = put_back(running, &items, trashes);
+    let (put, more) = put_back(running, &items, trashes, mover);
     changed.extend(more);
     changed.sort();
     changed.dedup();
@@ -135,7 +140,12 @@ fn still(paths: Vec<(PathBuf, Identity)>) -> Vec<PathBuf> {
         .collect()
 }
 
-fn run_one(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ended {
+fn run_one(
+    running: &mut Running,
+    undo: Option<Undo>,
+    trashes: &Trashes,
+    mover: &dyn Mover,
+) -> Ended {
     let gone = || {
         let outcome = Outcome::Failed {
             path: PathBuf::new(),
@@ -158,7 +168,7 @@ fn run_one(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ende
             .collect::<Vec<_>>()
         {
             items if items.is_empty() => gone(),
-            items => restore(running, &items, trashes),
+            items => restore(running, &items, trashes, mover),
         },
         Undo::MoveBack(pairs) => {
             let pairs: Vec<_> = pairs

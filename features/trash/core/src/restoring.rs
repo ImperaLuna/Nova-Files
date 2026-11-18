@@ -3,18 +3,17 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Failure, Outcome, Trashed};
+use nova_files_api::{Failure, Outcome};
+use nova_files_jobs::Ended;
+use nova_files_jobs::journal::{Record, word};
+use nova_files_jobs::left::remove_lone_info;
+use nova_files_jobs::mover::Mover;
+use nova_files_jobs::plan::Entry;
+use nova_files_jobs::running::Running;
+use nova_files_jobs::stop::Stop;
+use nova_files_trash_api::Trashed;
 
-use super::Ended;
-use super::delete::delete_paths;
-use super::journal::{Record, word};
-use super::left::remove_lone_info;
-use super::make::How;
-use super::plan::Entry;
-use super::running::Running;
-use super::stop::Stop;
-use super::transfer::transfer_to;
-use crate::trash::{self, TrashFolder, Trashes};
+use crate::trashes::{self as trash, TrashFolder, Trashes};
 
 struct Leaving {
     item: PathBuf,
@@ -25,12 +24,22 @@ struct Leaving {
     trash: TrashFolder,
 }
 
-pub fn restore(running: &mut Running, items: &[PathBuf], trashes: &Trashes) -> Ended {
+pub fn restore(
+    running: &mut Running,
+    items: &[PathBuf],
+    trashes: &Trashes,
+    files: &dyn Mover,
+) -> Ended {
     running.record_job(word::RESTORE, None, items);
-    put_back(running, items, trashes)
+    put_back(running, items, trashes, files)
 }
 
-pub fn put_back(running: &mut Running, items: &[PathBuf], trashes: &Trashes) -> Ended {
+pub fn put_back(
+    running: &mut Running,
+    items: &[PathBuf],
+    trashes: &Trashes,
+    files: &dyn Mover,
+) -> Ended {
     let mut leaving = match leaving(running, items, trashes) {
         Ok(leaving) => leaving,
         Err(stop) => return (stop.outcome(), Vec::new()),
@@ -46,7 +55,7 @@ pub fn put_back(running: &mut Running, items: &[PathBuf], trashes: &Trashes) -> 
         .iter()
         .map(|left| (left.item.clone(), left.original.clone()))
         .collect();
-    let (result, moved) = transfer_to(running, &pairs, How::Move);
+    let (result, moved) = files.move_pairs(running, &pairs);
     let dropped = drop_infos(&leaving);
     let shown = leaving
         .iter()
@@ -63,15 +72,20 @@ pub fn put_back(running: &mut Running, items: &[PathBuf], trashes: &Trashes) -> 
     ended(result, touched)
 }
 
-pub fn delete_from_trash(running: &mut Running, items: &[PathBuf], trashes: &Trashes) -> Ended {
+pub fn delete_from_trash(
+    running: &mut Running,
+    items: &[PathBuf],
+    trashes: &Trashes,
+    files: &dyn Mover,
+) -> Ended {
     running.record_job(word::DELETE_FROM_TRASH, None, items);
     match leaving(running, items, trashes) {
-        Ok(leaving) => delete_leaving(running, &leaving),
+        Ok(leaving) => delete_leaving(running, &leaving, files),
         Err(stop) => (stop.outcome(), Vec::new()),
     }
 }
 
-pub fn empty_trash(running: &mut Running, trashes: &Trashes) -> Ended {
+pub fn empty_trash(running: &mut Running, trashes: &Trashes, files: &dyn Mover) -> Ended {
     running.record_job(word::EMPTY_TRASH, None, &[]);
     let leaving: Vec<_> = trashes
         .all()
@@ -83,13 +97,13 @@ pub fn empty_trash(running: &mut Running, trashes: &Trashes) -> Ended {
         })
         .filter_map(|(trash, listed)| leave(running, trash, listed).ok().flatten())
         .collect();
-    delete_leaving(running, &leaving)
+    delete_leaving(running, &leaving, files)
 }
 
-fn delete_leaving(running: &mut Running, leaving: &[Leaving]) -> Ended {
+fn delete_leaving(running: &mut Running, leaving: &[Leaving], files: &dyn Mover) -> Ended {
     note_infos(running, leaving);
     let items: Vec<_> = leaving.iter().map(|left| left.item.clone()).collect();
-    let (result, _) = delete_paths(running, &items);
+    let (result, _) = files.delete(running, &items);
     let dropped = drop_infos(leaving);
     let shown = leaving
         .iter()

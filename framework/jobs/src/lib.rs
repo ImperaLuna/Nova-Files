@@ -9,6 +9,7 @@ pub mod history;
 pub mod job;
 pub mod journal;
 pub mod left;
+pub mod mover;
 pub mod place;
 pub mod plan;
 pub mod progress;
