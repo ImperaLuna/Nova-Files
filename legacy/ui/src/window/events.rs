@@ -4,9 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
-use nova_files_api::{
-    Bookmark, Event, Listing, ListingId, Settings, Theme, Thumbnails, Unreadable,
-};
+use nova_files_api::{Bookmark, Event, Listing, ListingId, Theme, Unreadable};
+use nova_files_settings_api::{Settings, Thumbnails};
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -150,7 +149,6 @@ impl MainWindow {
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
-            Event::Settings(settings) => self.settings_arrived(settings, cx),
             Event::Drives(_) | Event::DriveDone { .. } | Event::DiskSpace(_) => {
                 self.drive_event(event, cx);
             }
@@ -250,7 +248,7 @@ impl MainWindow {
         cx.notify();
     }
 
-    fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
+    pub(super) fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
         let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
         let hidden_files = settings.hidden_files;
         self.settings = Arc::unwrap_or_clone(settings);

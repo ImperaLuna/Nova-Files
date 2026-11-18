@@ -11,11 +11,11 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::{
-    Appearance, Color, Command, Connection, DesktopLook, Event, Mode, SettingChange, Settings,
-    Theme, Thumbnails,
-};
+use nova_files_api::{Color, Command, Connection, DesktopLook, Event, Mode, Theme};
 use nova_files_core::{Home, IDLE_EXIT, RunningCore};
+use nova_files_settings_api::{
+    self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
+};
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
 const NOTHING_MORE: Duration = Duration::from_millis(600);
@@ -64,17 +64,17 @@ impl Drop for TempHome {
     }
 }
 
-fn listen(core: &RunningCore) -> (Connection, Receiver<Event>, Settings) {
+fn listen(core: &RunningCore) -> (Connection, Receiver<settings_api::Event>, Settings) {
     let (sink, events) = mpsc::channel();
     let connection = core.connector.connect(sink).unwrap();
-    connection.send(Command::Settings).unwrap();
+    connection.send(settings_api::Command::Watch).unwrap();
     let first = next(&events);
     (connection, events, first)
 }
 
-fn next(events: &Receiver<Event>) -> Settings {
+fn next(events: &Receiver<settings_api::Event>) -> Settings {
     match events.recv_timeout(ANSWER_TIMEOUT) {
-        Ok(Event::Settings(settings)) => Arc::unwrap_or_clone(settings),
+        Ok(settings_api::Event::Settings(settings)) => Arc::unwrap_or_clone(settings),
         other => panic!("expected settings, got {other:?}"),
     }
 }
@@ -113,11 +113,11 @@ fn a_change_reaches_every_listening_client_and_is_saved_once() {
     let core = home.core();
     let (first, first_events, _) = listen(&core);
     let (_second, second_events, _) = listen(&core);
-    let (sink, quiet) = mpsc::channel::<Event>();
+    let (sink, quiet) = mpsc::channel::<settings_api::Event>();
     let _quiet = core.connector.connect(sink).unwrap();
 
     first
-        .send(Command::ChangeSetting(SettingChange::Thumbnails(
+        .send(settings_api::Command::Change(SettingChange::Thumbnails(
             Thumbnails::Hidden,
         )))
         .unwrap();
@@ -140,7 +140,7 @@ fn a_client_that_left_hears_nothing_more() {
     let (leaving, left_events, _) = listen(&core);
     drop(leaving);
     staying
-        .send(Command::ChangeSetting(SettingChange::Thumbnails(
+        .send(settings_api::Command::Change(SettingChange::Thumbnails(
             Thumbnails::Hidden,
         )))
         .unwrap();
@@ -168,7 +168,7 @@ fn setting_a_value_already_set_sends_nothing() {
     let core = home.core();
     let (connection, events, _) = listen(&core);
     connection
-        .send(Command::ChangeSetting(SettingChange::Appearance(
+        .send(settings_api::Command::Change(SettingChange::Appearance(
             Appearance::System,
         )))
         .unwrap();
@@ -201,7 +201,7 @@ fn a_linked_file_is_saved_where_it_points() {
     let core = home.core();
     let (connection, events, _) = listen(&core);
     connection
-        .send(Command::ChangeSetting(SettingChange::Appearance(
+        .send(settings_api::Command::Change(SettingChange::Appearance(
             Appearance::Dark,
         )))
         .unwrap();
@@ -231,20 +231,15 @@ fn the_theme_follows_its_file_and_the_appearance_setting() {
     theme_client.send(Command::Theme).unwrap();
     assert_eq!(next_theme(&theme_events).mode, Mode::Dark);
 
-    let (settings_client, settings_events, _) = listen(&core);
+    let (settings_client, _settings_events, _) = listen(&core);
     settings_client
-        .send(Command::ChangeSetting(SettingChange::Appearance(
+        .send(settings_api::Command::Change(SettingChange::Appearance(
             Appearance::Light,
         )))
         .unwrap();
     let light = next_theme(&theme_events);
     assert_eq!(light.mode, Mode::Light);
     assert_eq!(light.palette.primary, Color(0x00C0_FFEE));
-    assert!(
-        !settings_events
-            .try_iter()
-            .any(|event| matches!(event, Event::Theme(_)))
-    );
 }
 
 #[test]
