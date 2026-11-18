@@ -4,7 +4,7 @@
 # never touches the disk.
 #
 # Allowed outside crates: chrono, futures, gpui, gpui-component, gpui_platform, image, unicode-segmentation, usvg
-# Allowed workspace crates: nova-files-api
+# Allowed workspace crates: nova-files-api, nova-files-clipboard-api
 
 [package]
 name = "nova-files-ui"
@@ -21,6 +21,7 @@ workspace = true
 # Local time for the Modified column; GPUI already builds it.
 chrono = "0.4.45"
 nova-files-api.workspace = true
+nova-files-clipboard-api.workspace = true
 # Async channels, so events from other threads wake the window's tasks.
 futures = { version = "0.3", default-features = false, features = ["std", "executor"] }
 gpui.workspace = true

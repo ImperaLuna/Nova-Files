@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use gpui::{ClipboardEntry, ClipboardItem, Context};
-use nova_files_api::{ClipboardAction, FileClipboard, GNOME_COPIED_FILES, Offer, PLAIN_TEXT_UTF8};
+use nova_files_clipboard_api::{
+    ClipboardAction, FileClipboard, GNOME_COPIED_FILES, Offer, PLAIN_TEXT_UTF8,
+};
 
 use super::MainWindow;
 use crate::island;
