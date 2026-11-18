@@ -9,7 +9,8 @@
 //! drop under the pointer in `aiming`, opening rows held over in
 //! `hover_open`), renaming and
 //! New folder in `renaming`, the jobs they start in `jobs`, the tabs in
-//! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, and the sheet's right-click
+//! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, the
+//! folders' views in `views`, and the sheet's right-click
 //! menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
@@ -67,6 +68,7 @@ mod tab_order;
 mod tabs;
 mod trash;
 mod tree;
+mod views;
 
 pub use aiming::Aim;
 pub use dragging::DraggedRow;
@@ -88,8 +90,8 @@ use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    Bookmark, ClientGone, Command, Connection, Connector, Event, EventSink, HiddenFiles, Listing,
-    ListingId, Order, Place, RecentFolder, RecentId, Settings,
+    Bookmark, ClientGone, Command, Connection, Connector, Event, EventSink, FolderView,
+    HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
 
 use self::drives::Drives;
@@ -199,6 +201,9 @@ pub struct MainWindow {
     /// it doesn't count as used.
     pub(crate) falling_back: bool,
     pub(crate) places: Vec<Place>,
+    /// The view each folder was given, as the core last sent them (see
+    /// `views`).
+    folder_views: HashMap<PathBuf, FolderView>,
     /// The sidebar's folder tree under Home, and its line to the core.
     pub(crate) tree: FolderTree,
     tree_line: TreeLine,
@@ -290,6 +295,17 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
+    /// What a window asks the core for as it opens.
+    const FIRST_ASKS: [Command; 7] = [
+        Command::Ping,
+        Command::Places,
+        Command::Drives,
+        Command::Settings,
+        Command::FolderViews,
+        Command::Theme,
+        Command::ListTrash,
+    ];
+
     /// Opens a window at `location`, with `home` as the home folder.
     pub fn at(
         connector: &Connector,
@@ -301,12 +317,9 @@ impl MainWindow {
         let connection = connector
             .connect(ChannelSink(sink))
             .and_then(|connection| {
-                connection.send(Command::Ping)?;
-                connection.send(Command::Places)?;
-                connection.send(Command::Drives)?;
-                connection.send(Command::Settings)?;
-                connection.send(Command::Theme)?;
-                connection.send(Command::ListTrash)?;
+                for command in Self::FIRST_ASKS {
+                    connection.send(command)?;
+                }
                 Ok(connection)
             })
             .ok();
@@ -346,6 +359,7 @@ impl MainWindow {
             falling_back: false,
             home,
             places: Vec::new(),
+            folder_views: HashMap::new(),
             tree_line: TreeLine::connect(connector, cx),
             pinned: Arc::from([]),
             history: History::default(),

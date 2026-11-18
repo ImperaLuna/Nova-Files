@@ -19,13 +19,13 @@
 use std::path::PathBuf;
 
 use gpui::{Context, Modifiers, Pixels, Point, point};
-use nova_files_api::{EntryId, HiddenFiles, ListingId};
+use nova_files_api::{EntryId, HiddenFiles, ListingId, ViewMode};
 
 use super::MainWindow;
 use crate::assets::Icon;
 use crate::commands::{
-    COPY, CUT, EMPTY_TRASH, HIDDEN, NEW_FOLDER, OPEN, PASTE, PREVIEW, RENAME, RESTORE, SELECT_ALL,
-    TRASH,
+    COPY, CUT, DETAILS, EMPTY_TRASH, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PASTE, PREVIEW,
+    RENAME, RESTORE, SELECT_ALL, TRASH,
 };
 use crate::menu::{Look, MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
@@ -130,6 +130,25 @@ impl MainWindow {
         }
     }
 
+    /// One item for each view, the one showing ticked.
+    fn view_items(&self) -> Vec<MenuItem> {
+        let showing = self.folder_view().mode;
+        [
+            (ViewMode::Details, Icon::List, &DETAILS),
+            (ViewMode::Icons, Icon::Tiles, &ICONS),
+            (ViewMode::Gallery, Icon::Pictures, &GALLERY),
+        ]
+        .into_iter()
+        .map(|(mode, icon, spec)| {
+            if mode == showing {
+                MenuItem::run(Icon::Check, spec).with_look(Look::On)
+            } else {
+                MenuItem::run(icon, spec)
+            }
+        })
+        .collect()
+    }
+
     /// The menu for the sheet's empty space.
     fn space_menu(&self, cx: &Context<Self>) -> Vec<Vec<MenuItem>> {
         let any = self
@@ -164,6 +183,7 @@ impl MainWindow {
                 .flatten()
                 .collect(),
             select_all.into_iter().collect(),
+            self.view_items(),
             vec![hidden],
         ]
     }
