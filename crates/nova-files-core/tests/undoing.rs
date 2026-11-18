@@ -1,7 +1,3 @@
-//! Undoing jobs through the real core: each client hears which jobs can
-//! be undone, an undo takes back what the job did and nothing that
-//! changed since, and runs once.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -19,8 +15,6 @@ use nova_files_api::{Answer, Command, Event, Failure, JobId, Operation, Outcome,
 
 use common::{Bench, Client};
 
-/// Runs `operation` to its end, hearing that it can be undone before
-/// that it ended.
 fn undoable(client: &Client, operation: Operation) -> JobId {
     let job = client.start(operation.clone());
     loop {
@@ -36,7 +30,6 @@ fn undoable(client: &Client, operation: Operation) -> JobId {
     job
 }
 
-/// Undoes job `job`, and returns how that went.
 fn undo(client: &Client, job: JobId) -> Outcome {
     let undo = client.start(Operation::Undo { job });
     assert_eq!(client.any_next(), Event::UndoGone(job));
@@ -63,7 +56,6 @@ fn undoing_a_copy_sends_the_copies_to_the_trash() {
         },
     );
 
-    // The folder goes whole, with what it holds.
     assert_eq!(undo(&client, job), Outcome::Done);
 
     assert!(!bench.at("into/a").exists() && !bench.at("into/dir").exists());
@@ -123,9 +115,6 @@ fn undoing_a_merged_move_takes_back_only_what_went_in() {
     assert_eq!(left, ["kept"]);
 }
 
-/// Copies or moves (as `operation` says) `a`, holding "new", over an
-/// `into/a` holding "old", answering Replace; checks the old one went to
-/// the trash, undoes the job and returns the bench.
 fn replace_then_undo(test: &str, operation: fn(PathBuf, PathBuf) -> Operation) -> Bench {
     let bench = Bench::new(test);
     fs::write(bench.at("a"), "new").unwrap();
@@ -216,7 +205,6 @@ fn a_replaced_file_whose_name_was_taken_again_stays_in_the_trash() {
     let clash = answers::held(&client, job);
     answers::answer(&client, job, &clash, Answer::Replace, Scope::ThisOne);
     assert_eq!(client.ended(job).0, Outcome::Done);
-    // Saved over by an editor: a new file under the copy's name.
     fs::remove_file(bench.at("into/a")).unwrap();
     fs::write(bench.at("into/a"), "edited").unwrap();
 
@@ -247,8 +235,6 @@ fn undoing_a_trash_restores_and_undoing_a_restore_trashes_again() {
         .unwrap()
         .join("a");
     assert!(!item.exists());
-    // The undo itself is a restore, which can't be undone; one asked for
-    // can.
     undoable(
         &client,
         Operation::Trash {
@@ -308,7 +294,6 @@ fn what_changed_since_is_left_alone() {
             name: "new".into(),
         },
     );
-    // Replaced by another file under the same name.
     fs::write(bench.at("other"), "someone else's").unwrap();
     fs::rename(bench.at("other"), bench.at("new")).unwrap();
 
@@ -327,7 +312,6 @@ fn what_changed_since_is_left_alone() {
     );
 }
 
-/// Whether `outcome` says there was nothing left to take back.
 const fn found_nothing(outcome: &Outcome) -> bool {
     matches!(
         outcome,
@@ -365,9 +349,6 @@ fn an_undo_with_nothing_left_to_take_back_finds_nothing() {
             name: "made".into(),
         },
     );
-    // The copy replaced by another file, the trashed entry gone from the
-    // trash, and the new folder replaced by another, made while it was
-    // still there.
     fs::write(bench.at("other"), "someone else's").unwrap();
     fs::rename(bench.at("other"), bench.at("into/a")).unwrap();
     fs::remove_file(home_trash_files(&bench.root).join("b")).unwrap();
@@ -408,7 +389,6 @@ fn an_undo_runs_once_and_a_watcher_hears_what_can_be_undone() {
     ));
     let first = client.start(Operation::Undo { job });
     assert_eq!(client.any_next(), Event::UndoGone(job));
-    // A done undo is spent: never offered again before it ends.
     loop {
         match client.any_next() {
             Event::JobProgress { .. } => {}

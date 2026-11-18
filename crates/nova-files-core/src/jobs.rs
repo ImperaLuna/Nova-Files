@@ -1,19 +1,3 @@
-//! Work that touches the disk, each on a thread of its own, answering the
-//! client directly when done.
-//!
-//! A client has at most one folder listing that counts: asking for another
-//! (or leaving) cancels the one before. A listing job checks before each
-//! read and before it answers, so a cancelled job stops early and its late
-//! result is never sent. The client also drops answers whose id isn't its
-//! newest, which covers the moment between that check and the send.
-//!
-//! Each client also has a details queue (see `details_queue`) and a
-//! thumbnail queue (see `thumbs`), both told which listing is on screen
-//! just before its listing is sent, and both told which of its rows the
-//! client shows. The listing itself reads names and kinds only, unless
-//! the client asked for an order by modified time or size: then it reads
-//! every entry's details before it answers (see `order`).
-
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -43,21 +27,14 @@ const LIST_THREAD: &str = "nova-files-list";
 const OPEN_THREAD: &str = "nova-files-open";
 const TRASH_THREAD: &str = "nova-files-trash";
 
-/// No listing counts: the client never asked, cancelled, or left.
 const NO_LISTING: u64 = u64::MAX;
 
-/// What the core keeps for one connected client.
 pub struct Client {
     events: Arc<dyn EventSink>,
-    /// The id of the listing that counts, or [`NO_LISTING`].
     current_listing: Arc<AtomicU64>,
-    /// The id of the search that counts, or [`NO_LISTING`].
     current_search: Arc<AtomicU64>,
-    /// The preview that counts (see `preview`).
     current_preview: Arc<preview::Current>,
-    /// `None` when its thread couldn't start: rows then show no details.
     details: Option<Arc<details_queue::Queue>>,
-    /// `None` without a cache folder, or when its thread couldn't start.
     thumbnails: Option<Arc<Queue>>,
 }
 
@@ -82,10 +59,6 @@ impl Client {
         }
     }
 
-    /// The client shows `count` entries of listing `id` from `first`, or
-    /// is about to: it wants their details, and their thumbnails at
-    /// `thumbnails` while thumbnails are shown. With `None` (hidden) none
-    /// are made, and any still queued are dropped.
     pub fn want_rows(
         &self,
         id: ListingId,
@@ -109,24 +82,19 @@ impl Client {
         &self.events
     }
 
-    /// The id of the client's search that counts.
     pub const fn current_search(&self) -> &Arc<AtomicU64> {
         &self.current_search
     }
 
-    /// The preview that counts.
     pub const fn current_preview(&self) -> &Arc<preview::Current> {
         &self.current_preview
     }
 
-    /// Stops the client's listing, if one is running.
     fn cancel_listing(&self) {
         self.current_listing.store(NO_LISTING, Ordering::SeqCst);
     }
 }
 
-/// A client the core forgets (it left, or stopped listening) needs no more
-/// answers, so its listing, search and preview stop too.
 impl Drop for Client {
     fn drop(&mut self) {
         self.cancel_listing();
@@ -135,8 +103,6 @@ impl Drop for Client {
     }
 }
 
-/// A job that answers with listing `id`, the client's listing that
-/// counts until another is asked for (see [`Client::start_listing`]).
 pub struct ListingJob {
     id: ListingId,
     events: Arc<dyn EventSink>,
@@ -146,27 +112,20 @@ pub struct ListingJob {
 }
 
 impl ListingJob {
-    /// Whether a newer listing replaced this one, or the client left.
     pub fn cancelled(&self) -> bool {
         self.current.load(Ordering::SeqCst) != self.id.0
     }
 
-    /// Sends `event` unless the job was cancelled.
     pub fn answer(&self, event: Event) {
         if !self.cancelled() {
             self.events.deliver(event).ok();
         }
     }
 
-    /// Sends `listing` unless the job was cancelled, first telling the
-    /// details and thumbnail queues it is the one on screen, so the
-    /// client's first rows request finds it.
     pub fn send(&self, listing: Listing) {
         self.send_known(listing, None);
     }
 
-    /// As [`Self::send`], for a listing whose details are `known`, by
-    /// entry, so they are never read from the disk.
     pub fn send_known(&self, listing: Listing, known: Option<Arc<[Details]>>) {
         if self.cancelled() {
             return;
@@ -183,12 +142,6 @@ impl ListingJob {
 }
 
 impl Client {
-    /// Makes listing `id` the one that counts, cancelling the one before.
-    /// The details and thumbnail queues keep the listing on screen until
-    /// this one is sent: a folder that can't be read leaves the client
-    /// where it was. A listing sent but dropped by the client as stale
-    /// has moved them on; the window then reads its folder again (see its
-    /// module).
     pub fn start_listing(&self, id: ListingId) -> ListingJob {
         self.current_listing.store(id.0, Ordering::SeqCst);
         ListingJob {
@@ -201,9 +154,6 @@ impl Client {
     }
 }
 
-/// Lists `path` for `client` as listing `id` in `order`, with its hidden
-/// entries as `hidden` says, replacing any listing before. A path inside
-/// an archive lists what `inside` finds there.
 pub fn list_folder(
     client: &Client,
     (id, path): (ListingId, PathBuf),
@@ -238,7 +188,6 @@ pub fn list_folder(
                     }
                     return;
                 }
-                // Nobody wants the answer any more.
                 Ok(None) | Err(Stopped::Cancelled) => return,
             };
             job.send(Listing {
@@ -247,8 +196,6 @@ pub fn list_folder(
                 entries: Arc::clone(&entries),
                 folders: None,
             });
-            // Reading the folder is the heaviest work the core does; most
-            // of what it built is free again now.
             drop(entries);
             memory::give_back();
         });
@@ -263,9 +210,6 @@ pub fn list_folder(
     }
 }
 
-/// Answers `job`, listing `id` of `path`, with the folder `within` is
-/// inside its archive, in `order` and with hidden entries as `hidden`
-/// says.
 fn list_inside(
     job: &ListingJob,
     (id, path): (ListingId, PathBuf),
@@ -291,10 +235,6 @@ fn list_inside(
     }
 }
 
-/// Answers with what is in each trash `home`'s user has.
-///
-/// # Errors
-/// [`ClientGone`] when the client stopped listening.
 pub fn list_trash(client: &Client, home: Option<Home>) -> Result<(), ClientGone> {
     let events = Arc::clone(&client.events);
     let spawned = thread::Builder::new()
@@ -308,14 +248,11 @@ pub fn list_trash(client: &Client, home: Option<Home>) -> Result<(), ClientGone>
             events.deliver(Event::Trash(listed)).ok();
         });
     if spawned.is_err() {
-        // As for places: an empty trash rather than no answer.
         return client.deliver(Event::Trash(Vec::new()));
     }
     Ok(())
 }
 
-/// Opens `path` in its default app, reading the MIME database into `types`
-/// first if no open has yet, and answers whether the app started.
 pub fn open_file(
     client: &Client,
     (types, inside): (Arc<OnceLock<MimeTypes>>, Arc<Inside>),
@@ -340,7 +277,6 @@ pub fn open_file(
             events.deliver(event).ok();
         });
     if let Err(error) = spawned {
-        // The portal can still open it.
         log::warn!("can't start a thread to open a file: {error}");
         client
             .deliver(Event::FileNotOpened {
@@ -351,8 +287,6 @@ pub fn open_file(
     }
 }
 
-/// A copy of `path` taken out of the archive it is inside, or `None`
-/// when it is no path inside an archive.
 fn opened_copy(path: &Path, inside: &Inside) -> Option<Result<PathBuf, ArchiveFailure>> {
     if path.symlink_metadata().is_ok() {
         return None;

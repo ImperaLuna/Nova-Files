@@ -1,20 +1,5 @@
-//! The system's MIME database (freedesktop shared-mime-info), read for
-//! the file picker's type filters and the quick look: which type a file
-//! name says, which types are kinds of others, and what a type is called.
-//!
-//! It reads `mime/globs2`, `mime/subclasses` and `mime/aliases` from the
-//! user's data folder and each of the system's (`XDG_DATA_HOME`, then
-//! `XDG_DATA_DIRS`), so it finds the database wherever the system keeps it;
-//! on `NixOS` that isn't `/usr/share`. A name's type is the pattern that
-//! matches it with the highest weight; on a tie a pattern that keeps case
-//! wins, then the longest. Every
-//! `text/*` type is also plain text, and every type is a kind of
-//! `application/octet-stream`. The file's content is never read. A type's
-//! name is the untranslated `<comment>` of its `mime/<type>.xml`, read
-//! when asked for, from the first data folder that has it. The icon names
-//! a type is drawn with come from `mime/icons` and `mime/generic-icons`
-//! (see `icons`).
-
+// Reads the shared-mime-info database.
+// https://specifications.freedesktop.org/shared-mime-info-spec/latest/
 use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 use std::env;
@@ -36,30 +21,23 @@ const SUBCLASSES_FILE: &str = "mime/subclasses";
 const ALIASES_FILE: &str = "mime/aliases";
 const ICONS_FILE: &str = "mime/icons";
 const GENERIC_ICONS_FILE: &str = "mime/generic-icons";
-/// Where each type's own file is: `mime/image/png.xml`.
 const TYPES_FOLDER: &str = "mime";
 const TYPE_FILE_EXTENSION: &str = "xml";
-/// A type's untranslated name; the translations carry an `xml:lang`.
 const COMMENT_OPEN: &str = "<comment>";
 const COMMENT_CLOSE: &str = "</comment>";
-/// The entities a type file's text may hold, and what they stand for.
 const ENTITIES: [(&str, &str); 5] = [
     ("&lt;", "<"),
     ("&gt;", ">"),
     ("&quot;", "\""),
     ("&apos;", "'"),
-    // Last, so `&amp;lt;` stays `&lt;`.
     ("&amp;", "&"),
 ];
-/// The real globs file is a few hundred KB.
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
 const COMMENT: char = '#';
 const FIELD: char = ':';
 const FLAG: char = ',';
 const CASE_SENSITIVE_FLAG: &str = "cs";
-/// A line that drops a type's patterns from folders read before; the
-/// patterns from every folder are kept, so it is skipped.
 const NO_GLOBS: &str = "__NOGLOBS__";
 const WILDCARDS: [char; 3] = ['*', '?', '['];
 const ANY_RUN: char = '*';
@@ -69,46 +47,32 @@ const TEXT_MEDIA: &str = "text/";
 const PLAIN_TEXT: &str = "text/plain";
 const ANY_FILE: &str = "application/octet-stream";
 
-/// One pattern of `globs2`.
 #[derive(Debug)]
 struct Glob {
     weight: u32,
     mime: String,
     pattern: String,
     case_sensitive: bool,
-    /// Its place in reading order: the first data folder's patterns come
-    /// first and win a tie.
     order: usize,
 }
 
-/// The MIME database, read once.
 #[derive(Debug, Default)]
 pub struct MimeTypes {
-    /// Whole names (`Makefile`), by their lower-case text.
     literals: HashMap<String, Vec<Glob>>,
-    /// `*` and then plain text (`*.tar.gz`), by that text in lower case.
     suffixes: HashMap<String, Vec<Glob>>,
-    /// Every other pattern (`*.[1-9]`, `README*`).
     others: Vec<Glob>,
-    /// Each type's parent types.
     parents: HashMap<String, Vec<String>>,
-    /// Other names to the type they stand for.
     aliases: HashMap<String, String>,
-    /// Each type's own icon name, where its package names one.
     icons: HashMap<String, String>,
-    /// Each type's generic icon name (`image-x-generic`).
     generic_icons: HashMap<String, String>,
-    /// The data folders it was read from, in order, for the types' names.
     dirs: Vec<PathBuf>,
 }
 
 impl MimeTypes {
-    /// Reads the database from the user's and the system's data folders.
     pub fn from_env() -> Self {
         Self::load(&data_dirs(|name| env::var_os(name)))
     }
 
-    /// Reads the database in each of `dirs`.
     pub fn load(dirs: &[PathBuf]) -> Self {
         let mut types = Self {
             dirs: dirs.to_vec(),
@@ -127,7 +91,6 @@ impl MimeTypes {
                 types.parents.entry(child).or_default().push(parent);
             }
             types.aliases.extend(pairs(&dir.join(ALIASES_FILE)));
-            // The first folder's names win, as its globs do.
             for (mime, icon) in icon_pairs(&dir.join(ICONS_FILE)) {
                 types.icons.entry(mime).or_insert(icon);
             }
@@ -159,9 +122,6 @@ impl MimeTypes {
         self.aliases.get(mime).map_or(mime, String::as_str)
     }
 
-    /// `mime` with its alias resolved, then every type it is a kind of,
-    /// nearest first, each once (`text/*` types end with `text/plain`).
-    /// `application/octet-stream`, which every type is, isn't listed.
     pub fn ancestry(&self, mime: &str) -> Vec<String> {
         let mut order: Vec<String> = Vec::new();
         let mut queue = VecDeque::from([self.canonical(mime).to_owned()]);
@@ -179,8 +139,6 @@ impl MimeTypes {
         order
     }
 
-    /// What type `mime` is called ("PNG image"), untranslated. `None` for
-    /// a type no data folder describes, or a name that isn't a type.
     pub fn name(&self, mime: &str) -> Option<String> {
         let (media, subtype) = self.canonical(mime).split_once(MEDIA_SEPARATOR)?;
         let part = |text: &str| {
@@ -189,7 +147,6 @@ impl MimeTypes {
         if !part(media) || !part(subtype) {
             return None;
         }
-        // Appended whole: a subtype may hold dots ("vnd.oasis.opendocument.text").
         let file = Path::new(TYPES_FOLDER)
             .join(media)
             .join(format!("{subtype}.{TYPE_FILE_EXTENSION}"));
@@ -200,7 +157,6 @@ impl MimeTypes {
     }
 }
 
-/// The untranslated `<comment>` of a type file, its entities replaced.
 fn comment(text: &str) -> Option<String> {
     let start = text.find(COMMENT_OPEN)? + COMMENT_OPEN.len();
     let length = text[start..].find(COMMENT_CLOSE)?;
@@ -254,7 +210,6 @@ impl FileTypes for MimeTypes {
     }
 }
 
-/// One `weight:type:pattern[:flags]` line of `globs2`.
 fn glob(line: &str) -> Option<Glob> {
     if line.starts_with(COMMENT) {
         return None;
@@ -275,7 +230,6 @@ fn glob(line: &str) -> Option<Glob> {
     })
 }
 
-/// The `first second` lines of `subclasses` or `aliases`.
 fn pairs(path: &Path) -> Vec<(String, String)> {
     read_capped(path)
         .map(|text| {
@@ -288,7 +242,6 @@ fn pairs(path: &Path) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
-/// The `type:icon` lines of `icons` or `generic-icons`.
 fn icon_pairs(path: &Path) -> Vec<(String, String)> {
     read_capped(path)
         .map(|text| {
@@ -301,8 +254,6 @@ fn icon_pairs(path: &Path) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
-/// The user's data folder, then the system's, as the XDG base directory
-/// spec lists them.
 pub fn data_dirs(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let set = |name: &str| var(name).filter(|value| !value.is_empty());
     let home = set(DATA_HOME_VAR)

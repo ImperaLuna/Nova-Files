@@ -1,16 +1,3 @@
-//! The apps that can open some files, for Open With: every app the
-//! association lists name for the files' shared type, then for the types
-//! it is a kind of, the default first.
-//!
-//! The files' shared type is the first in the first file's ancestry (its
-//! type, then the types it is a kind of) that every other file's ancestry
-//! holds too: a PNG and a JPEG share `image/*` only if the MIME database
-//! says so, and otherwise share whatever both are kinds of. A folder is
-//! `inode/directory`. Only files of one type have a default here: for a
-//! mix, the broader type's default isn't what opens any of them. Apps that
-//! run in a terminal (only the portal can start them) or whose command
-//! takes no file are left out.
-
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -19,27 +6,20 @@ use super::defaults::{App, Associations, Places, installed};
 use super::{opens_files, types_of};
 use crate::mime::MimeTypes;
 
-/// The MIME type of a folder.
 pub const FOLDER_TYPE: &str = "inode/directory";
 
-/// An app that opens the files, and whether it is the default.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Listed {
     pub app: App,
     pub default: bool,
 }
 
-/// The types `paths` share.
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct Shared {
-    /// The nearest type they all are, then the types it is a kind of;
-    /// empty when any path's name says no type, or there are no paths.
     pub ancestry: Vec<String>,
-    /// They all have that type as their own, not only as a kind.
     pub same: bool,
 }
 
-/// The types `paths` share.
 pub fn shared_types(paths: &[&Path], types: &MimeTypes) -> Shared {
     let mut each = paths.iter().map(|path| ancestry(path, types));
     let Some(first) = each.next() else {
@@ -59,8 +39,6 @@ pub fn shared_types(paths: &[&Path], types: &MimeTypes) -> Shared {
     }
 }
 
-/// A path's type and the types it is a kind of; a folder is
-/// [`FOLDER_TYPE`].
 fn ancestry(path: &Path, types: &MimeTypes) -> Vec<String> {
     if fs::metadata(path).is_ok_and(|found| found.is_dir()) {
         types.ancestry(FOLDER_TYPE)
@@ -69,10 +47,6 @@ fn ancestry(path: &Path, types: &MimeTypes) -> Vec<String> {
     }
 }
 
-/// The apps for `types` (a type, then the types it is a kind of), the
-/// default first when `with_default`, then each type's apps best first.
-/// Each app shows once; apps that can't be started on files here are left
-/// out.
 pub fn apps(types: &[&str], with_default: bool, places: &Places) -> Vec<Listed> {
     let associations = Associations::read(places);
     let default = with_default
@@ -155,8 +129,6 @@ mod tests {
             );
         assert_eq!(
             tree.ids(&["text/x-rust", "text/plain"]),
-            // The file's own type has apps, so plain open uses its best
-            // one, not the broader type's default.
             found(&[
                 ("added.desktop", true),
                 ("cached.desktop", false),
@@ -212,7 +184,6 @@ mod tests {
         let mixed = shared(&["a.png", "b.jpg"]);
         assert_eq!(mixed.ancestry[0], "image/x-nova-picture");
         assert!(!mixed.same);
-        // A PNG and a kind of PNG share the PNG type, but not as their own.
         let kind = shared(&["a.png", "b.apng"]);
         assert_eq!(kind.ancestry[0], "image/png");
         assert!(!kind.same);

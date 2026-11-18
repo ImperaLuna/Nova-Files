@@ -1,25 +1,3 @@
-//! Each entry's icon: its type's icon from the system icon theme, read
-//! once and shared by every entry of that type, or the kind of file it is
-//! when no theme has one. Folders always take the window's own icon.
-//!
-//! A name's type comes from the MIME database (the name alone, no read of
-//! the file); a name the database doesn't know is
-//! `application/octet-stream`. Answers are kept per type for as long as
-//! the core runs, and icon files per path, so a folder of a thousand
-//! photos costs one search. An icon file that can't be read, or is too big
-//! for an icon, counts as missing and the search goes on. The answers sit
-//! behind one lock shared by every client; a search under it costs a few
-//! hash lookups once the theme's folders are listed (see `icon_theme`).
-//!
-//! The theme is the one the toolkits' settings files name (see
-//! `icon_theme::name`), which is what a desktop without GNOME's settings
-//! sets up; when they name none, or one that isn't installed, it is the
-//! first installed one the desktop names through the settings portal.
-//! The portal's GNOME key goes second because it holds GNOME's default
-//! even where nobody set it. A change of theme forgets every answer, so
-//! icons asked for from then on come from the new theme; rows already
-//! sent keep theirs until listed again.
-
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsStr;
@@ -35,15 +13,11 @@ use nova_files_api::{
 use crate::icon_theme::{self, IconThemes, name};
 use crate::mime::MimeTypes;
 
-/// The type of a file whose name says nothing.
 const ANY_FILE: &str = "application/octet-stream";
 const SVG_EXTENSION: &str = "svg";
-/// Real icons are a few KB; anything far bigger isn't one.
 const MAX_ICON_BYTES: u64 = 1024 * 1024;
-/// Theme icons are picked for one scale; the window shrinks them.
 const SCALE: u32 = 1;
 
-/// The icons of every client's entries.
 #[derive(Debug)]
 pub struct FileIcons {
     types: Arc<OnceLock<MimeTypes>>,
@@ -53,16 +27,12 @@ pub struct FileIcons {
 #[derive(Debug)]
 struct State {
     themes: IconThemes,
-    /// The theme the settings files name, read at start.
     from_files: Option<String>,
     by_type: HashMap<String, FileIcon>,
     files: HashMap<PathBuf, Arc<ThemeIcon>>,
 }
 
 impl FileIcons {
-    /// Icons from the theme chosen in the settings under `config`, in the
-    /// system's icon folders; `types` is read at the first answer if no
-    /// one has read it yet.
     pub fn from_env(types: Arc<OnceLock<MimeTypes>>, config: Option<&Path>) -> Self {
         let from_files = config.and_then(name::chosen);
         Self::new(
@@ -72,8 +42,6 @@ impl FileIcons {
         )
     }
 
-    /// Icons from the theme `from_files`, in the icon folders `bases`,
-    /// until the desktop names one.
     pub fn new(
         types: Arc<OnceLock<MimeTypes>>,
         from_files: Option<String>,
@@ -90,15 +58,12 @@ impl FileIcons {
         }
     }
 
-    /// Icons with no MIME database and no themes: every file is a plain
-    /// file, for tests about something else.
     #[cfg(test)]
     pub fn plain() -> Arc<Self> {
         let types = Arc::new(OnceLock::from(MimeTypes::default()));
         Arc::new(Self::new(types, None, Vec::new()))
     }
 
-    /// The desktop names the icon themes `named`, in its order.
     pub fn follow_desktop(&self, named: &[String]) {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         let installed = |name: &String| state.themes.installed(name);
@@ -119,7 +84,6 @@ impl FileIcons {
         }
     }
 
-    /// The icon of an entry called `name`.
     #[expect(
         clippy::significant_drop_tightening,
         reason = "a type is searched once: the search and keeping its answer share the lock"
@@ -151,7 +115,6 @@ impl FileIcons {
     }
 }
 
-/// The icon file at `path`, read once and kept in `files`.
 fn read(files: &mut HashMap<PathBuf, Arc<ThemeIcon>>, path: PathBuf) -> Option<Arc<ThemeIcon>> {
     if let Some(icon) = files.get(&path) {
         return Some(Arc::clone(icon));
@@ -185,11 +148,8 @@ mod tests {
 
     use super::*;
 
-    /// The most an icon may hold, spelled out so a changed limit shows.
     const ICON_LIMIT: usize = 1024 * 1024;
 
-    /// A data folder with a MIME database and an icon theme, removed
-    /// afterwards.
     struct Data(PathBuf);
 
     impl Data {
@@ -291,14 +251,11 @@ mod tests {
         let mine = data.0.join("icons/Mine/m/text-plain.png");
         let desk = data.0.join("icons/Desk/m/text-plain.svg");
 
-        // The files name Mine: it stays.
         let with_files = data.icons();
         with_files.follow_desktop(&named(&["Desk"]));
         let text = with_files.of(OsStr::new("a.txt"), EntryKind::File);
         assert_eq!(theme(&text).path, mine);
 
-        // The files name none, or one not installed: the first installed
-        // one the desktop names, passing over names that aren't themes.
         for files in [None, Some("Gone".to_owned())] {
             let types = Arc::new(OnceLock::from(MimeTypes::load(std::slice::from_ref(
                 &data.0,
@@ -332,7 +289,6 @@ mod tests {
             of("Makefile", EntryKind::File),
             FileIcon::BuiltIn(IconKind::File)
         );
-        // As big as an icon can be, and one byte more.
         assert!(matches!(
             of("a.edge", EntryKind::File),
             FileIcon::Theme { .. }

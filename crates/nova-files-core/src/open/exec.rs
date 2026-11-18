@@ -1,15 +1,5 @@
-//! A desktop entry's `Exec` line, turned into the program and arguments
-//! that open one file (freedesktop Desktop Entry spec, "The Exec key").
-//!
-//! The line is split on spaces; a double-quoted argument keeps its spaces,
-//! and in it a backslash escapes `"`, `` ` ``, `$` and `\`. Field codes
-//! stand for the file: `%f` its path, `%u` its `file://` URI, and `%F` and
-//! `%U` the same as whole arguments. `%i` becomes `--icon` and the entry's
-//! icon, `%c` its name, `%k` the entry's own path and `%%` a percent sign.
-//! The deprecated codes are dropped. Codes inside quotes stay as written.
-//! A line with `%F` or `%U` opens many files at once; any other opens one
-//! per run.
-
+// Follows the Desktop Entry spec's Exec key.
+// https://specifications.freedesktop.org/desktop-entry-spec/latest/exec-variables.html
 use std::ffi::OsString;
 use std::path::Path;
 
@@ -18,34 +8,24 @@ use nova_files_api::uri::file_uri;
 const QUOTE: char = '"';
 const ESCAPE: char = '\\';
 const FIELD: char = '%';
-/// What a backslash may escape inside quotes.
 const QUOTED_ESCAPES: [char; 4] = ['"', '`', '$', '\\'];
-/// Codes the spec deprecates; they expand to nothing.
 const DEPRECATED: [char; 6] = ['d', 'D', 'n', 'N', 'v', 'm'];
 const ICON_OPTION: &str = "--icon";
-/// Codes that take every file, as whole arguments.
 const LIST_CODES: [&str; 2] = ["%F", "%U"];
 
-/// What the field codes besides the file stand for.
 #[derive(Debug, Clone, Copy)]
 pub struct Fields<'a> {
     pub name: &'a str,
     pub icon: Option<&'a str>,
-    /// The desktop entry file.
     pub entry: &'a Path,
 }
 
-/// One argument as written: its text, and whether it was quoted.
 #[derive(Debug, PartialEq, Eq)]
 struct Word {
     text: String,
     quoted: bool,
 }
 
-/// The command lines that open `files`: one taking them all when the line
-/// has `%F` or `%U` as a whole argument, else one per file. `None` when
-/// there are no files, or when the line is malformed, names no program,
-/// or takes no file at all.
 pub fn command_lines(
     exec: &str,
     files: &[&Path],
@@ -67,8 +47,6 @@ pub fn command_lines(
         .collect()
 }
 
-/// The line for `words` with `files`: all of them for `%F` and `%U` as a
-/// whole argument, the first for any other file code.
 fn line_for(words: &[Word], files: &[&Path], fields: Fields<'_>) -> Option<Vec<OsString>> {
     let first = files.first()?;
     let mut line = Vec::with_capacity(words.len() + files.len());
@@ -104,8 +82,6 @@ fn line_for(words: &[Word], files: &[&Path], fields: Fields<'_>) -> Option<Vec<O
     (took_file && !line.is_empty()).then_some(line)
 }
 
-/// Splits the line into words, or `None` for an unclosed quote or a bad
-/// escape.
 fn split(exec: &str) -> Option<Vec<Word>> {
     let mut words = Vec::new();
     let mut chars = exec.chars();
@@ -134,7 +110,6 @@ fn split(exec: &str) -> Option<Vec<Word>> {
     Some(words)
 }
 
-/// Reads a quoted run up to its closing quote into `text`.
 fn quoted(chars: &mut std::str::Chars<'_>, text: &mut String) -> Option<()> {
     loop {
         match chars.next()? {
@@ -151,8 +126,6 @@ fn quoted(chars: &mut std::str::Chars<'_>, text: &mut String) -> Option<()> {
     }
 }
 
-/// Expands the field codes inside one unquoted word, and says whether the
-/// file went in. `None` for an unknown code or a lone `%` at the end.
 fn expand(word: &str, file: &Path, fields: Fields<'_>) -> Option<(OsString, bool)> {
     let mut expanded = OsString::new();
     let mut took_file = false;
@@ -262,7 +235,6 @@ mod tests {
                 "--x".into()
             ]])
         );
-        // Inside quotes it is only text.
         assert_eq!(
             lines(r#"view "%F" %f"#, &["/h/a", "/h/b"]),
             Some(vec![

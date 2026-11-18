@@ -1,14 +1,3 @@
-//! Putting a folder's entries in the order a client asked for.
-//!
-//! `list` reads a folder folders first, each group A to Z. [`arrange`]
-//! takes that and orders each group by the client's key: by name it only
-//! turns a group around; by modified time or size it reads every entry's
-//! details first (see `details`), asking `cancelled` before each read.
-//! The sort is stable, so entries the key can't tell apart (folders by
-//! size, two files of one size) stay A to Z either way. An entry whose
-//! details can't be read (it vanished) goes last, either way. Each entry's
-//! id is then its new position.
-
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
@@ -16,8 +5,6 @@ use nova_files_api::{Details, Entry, EntryId, EntryKind, Order, SortKey};
 
 use crate::details;
 
-/// `entries`, listed folders first and each group A to Z, in `order`.
-/// `None` when `cancelled` said so before every detail was read.
 pub fn arrange(
     folder: &Path,
     entries: Vec<Entry>,
@@ -34,9 +21,6 @@ pub fn arrange(
     Some(arranged.into_iter().map(|(entry, ())| entry).collect())
 }
 
-/// [`arrange`] for entries each carrying a `T` that moves with it (such
-/// as the folder it is in, for entries from several folders); `path` says
-/// where each entry is, for its details.
 pub fn arrange_paired<T>(
     entries: Vec<(Entry, T)>,
     path: impl Fn(&Entry, &T) -> PathBuf,
@@ -73,12 +57,10 @@ pub fn arrange_paired<T>(
     Some(entries)
 }
 
-/// Folders before files.
 fn group(entry: &Entry) -> bool {
     entry.kind == EntryKind::File
 }
 
-/// How two entries' details compare under `order`'s key.
 fn by_key(order: Order, left: &Details, right: &Details) -> Ordering {
     match order.key {
         SortKey::Modified => known_first(left.modified, right.modified, order.descending),
@@ -87,7 +69,6 @@ fn by_key(order: Order, left: &Details, right: &Details) -> Ordering {
     }
 }
 
-/// Known values in the order asked, unknown ones after them.
 fn known_first<T: Ord>(left: Option<T>, right: Option<T>, descending: bool) -> Ordering {
     match (left, right) {
         (Some(left), Some(right)) if descending => right.cmp(&left),
@@ -107,7 +88,6 @@ mod tests {
     use super::*;
     use crate::list;
 
-    /// A temp folder, removed when dropped.
     struct TempFolder(PathBuf);
 
     impl TempFolder {
@@ -119,7 +99,6 @@ mod tests {
             Self(path)
         }
 
-        /// A file of `size` bytes, last changed `age` seconds ago.
         fn file(&self, name: &str, size: u64, age: u64) {
             let file = File::create(self.0.join(name)).unwrap();
             file.set_len(size).unwrap();
@@ -131,7 +110,6 @@ mod tests {
             fs::create_dir(self.0.join(name)).unwrap();
         }
 
-        /// The folder's entries in `order`, by name.
         fn names(&self, key: SortKey, descending: bool) -> Vec<String> {
             let entries = arranged(&self.0, Order { key, descending });
             entries
@@ -152,8 +130,6 @@ mod tests {
         arrange(folder, listed, order, || false).unwrap()
     }
 
-    /// Folders `b` and `a`, then files: `big` (old), `small` (new) and
-    /// `middle`, each a different size and age.
     fn mixed(name: &str) -> TempFolder {
         let folder = TempFolder::new(name);
         folder.folder("b");
@@ -264,7 +240,6 @@ mod tests {
             descending: false,
         };
         assert_eq!(arrange(&folder.0, listed.clone(), order, cancelled), None);
-        // By name nothing is read, so nothing is asked.
         let by_name = Order::default();
         assert_eq!(
             arrange(&folder.0, listed.clone(), by_name, || true),

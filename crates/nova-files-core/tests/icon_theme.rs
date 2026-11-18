@@ -1,10 +1,3 @@
-//! The core takes file icons from the icon theme the desktop names, once
-//! it is installed and the settings files name none.
-//!
-//! The core finds themes and the MIME database through the environment,
-//! so the test runs itself again with the environment pointed at folders
-//! of its own.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -25,7 +18,6 @@ use nova_files_api::{
 
 use own_folders::run_again_in;
 
-/// Set in the run that talks to the core: the folder it was given.
 const ROOT_VAR: &str = "NOVA_FILES_ICON_THEME_TEST_ROOT";
 const TEST_NAME: &str = "file_icons_follow_the_desktops_icon_theme";
 const IDLE_EXIT: Duration = Duration::from_secs(5);
@@ -87,7 +79,6 @@ fn icons_through_the_core(root: &Path) {
         }
     };
 
-    // No theme chosen anywhere and none installed by the default name.
     assert_eq!(icon_of_the_file(1), FileIcon::BuiltIn(IconKind::Picture));
 
     connection
@@ -105,7 +96,6 @@ fn icons_through_the_core(root: &Path) {
     );
 }
 
-/// The first event that `wanted` matches, skipping others.
 fn wait_for(events: &Receiver<Event>, wanted: impl Fn(&Event) -> bool) -> Event {
     loop {
         let event = events.recv_timeout(ANSWER_TIMEOUT).unwrap();

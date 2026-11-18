@@ -1,25 +1,3 @@
-//! Searching the home index by name, kept up to date by the watcher.
-//!
-//! Nothing is indexed until the first [`Command::Search`]: a core started
-//! for a window that never searches never crawls. That search starts a
-//! thread that opens the saved index (or crawls home when there is none, or
-//! it is of another folder or version), starts a fresh change log and the
-//! watcher, which catches up with what changed since the crawl. Searches
-//! wait for it, then each reads the log's new changes into the overlay
-//! before it runs, so results show the disk as it is now.
-//!
-//! After [`REBUILD_AFTER`] changes, or a [`Change::Rescan`] (changes were
-//! lost), the next search starts a fresh crawl in the background and keeps
-//! answering from the old index until the new one is in. When changes
-//! were lost and that crawl fails, searches fail too, each trying again,
-//! until a crawl works: the old index no longer shows the disk.
-//!
-//! [`Command::Find`] runs the same search for a window and answers with a
-//! listing (see `found`).
-//!
-//! [`Command::Search`]: nova_files_api::Command::Search
-//! [`Command::Find`]: nova_files_api::Command::Find
-
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -38,12 +16,8 @@ const INDEX_THREAD: &str = "nova-files-index";
 const SEARCH_THREAD: &str = "nova-files-search";
 const FIND_THREAD: &str = "nova-files-find";
 
-/// Changes after which the index is crawled anew: the overlay only grows,
-/// and putting hits through it costs more with each change.
 pub const REBUILD_AFTER: usize = 10_000;
 
-/// What one search looks for: `text` (one word or several), at most
-/// `limit` hits a stage, and with `within` only hits inside that folder.
 struct Query<'a> {
     text: &'a str,
     limit: usize,
@@ -51,7 +25,6 @@ struct Query<'a> {
 }
 
 impl<'a> Query<'a> {
-    /// `text` across the whole index.
     const fn everywhere(text: &'a str, limit: usize) -> Self {
         Self {
             text,
@@ -61,18 +34,14 @@ impl<'a> Query<'a> {
     }
 }
 
-/// The home index, and what changed since its crawl.
 #[derive(Clone)]
 pub struct Searcher {
     shared: Arc<Shared>,
 }
 
 struct Shared {
-    /// Where the index lives and the folder it covers; `None` without a
-    /// home or cache folder.
     place: Option<(IndexPlace, PathBuf)>,
     state: Mutex<State>,
-    /// Signalled when a build ends.
     built: Condvar,
 }
 
@@ -80,23 +49,19 @@ struct Shared {
 struct State {
     live: Option<Live>,
     building: bool,
-    /// The last build failed.
     failed: bool,
 }
 
-/// An open index with its watcher and what the log said so far.
 struct Live {
     index: Index,
     overlay: Overlay,
     log: LogReader,
     changes: usize,
-    /// Changes were lost, so the overlay no longer matches the disk.
     lost: bool,
     watcher: Watcher,
 }
 
 impl Searcher {
-    /// A searcher over `root`, its index kept in `place`.
     pub fn new(place: Option<IndexPlace>, root: Option<PathBuf>) -> Self {
         Self {
             shared: Arc::new(Shared {
@@ -107,7 +72,6 @@ impl Searcher {
         }
     }
 
-    /// Searches for `client`, replacing its search before.
     pub fn search(&self, client: &Client, id: SearchId, query: String, limit: u32) {
         client.current_search().store(id.0, Ordering::SeqCst);
         let current = Arc::clone(client.current_search());
@@ -123,8 +87,6 @@ impl Searcher {
         let spawned = thread::Builder::new()
             .name(SEARCH_THREAD.to_owned())
             .spawn(move || {
-                // Here, not on the core's thread: a running search holds the
-                // lock this takes.
                 searcher.start_build(false);
                 let wanted = || !cancelled();
                 let answer = |event| wanted() && events.deliver(event).is_ok();
@@ -143,8 +105,6 @@ impl Searcher {
         }
     }
 
-    /// Finds files for `client` as listing `id`, replacing its listing
-    /// before (see [`nova_files_api::Command::Find`]).
     pub fn find(&self, client: &Client, id: ListingId, query: String, within: Option<PathBuf>) {
         let job = client.start_listing(id);
         let Some((_, root)) = &self.shared.place else {
@@ -183,11 +143,6 @@ impl Searcher {
         }
     }
 
-    /// Waits for the index, then hands each stage's hits to `answer`
-    /// until it returns `false`. Stops before reading the log or a stage
-    /// once `wanted` says a newer search replaced this one. `false` when there is no index,
-    /// or changes were lost and the crawl to recover failed; that search
-    /// starts another.
     fn run(
         &self,
         query: &Query<'_>,
@@ -221,10 +176,8 @@ impl Searcher {
             search = search.within(folder);
         }
         if search.is_done() {
-            // Nothing to look for: no stages, one answer with no hits.
             answer(Vec::new(), true);
         }
-        // Never more than its stages, so a search can't keep the lock.
         for _ in 0..STAGES {
             if !wanted() {
                 break;
@@ -247,8 +200,6 @@ impl Searcher {
         true
     }
 
-    /// Opens or builds the index in the background unless one is open
-    /// (`fresh` crawls anew even then) or a build is running.
     fn start_build(&self, fresh: bool) {
         let shared = &self.shared;
         let Some((place, root)) = &shared.place else {
@@ -264,8 +215,6 @@ impl Searcher {
         let spawned = thread::Builder::new()
             .name(INDEX_THREAD.to_owned())
             .spawn(move || {
-                // A build that panics counts as failed, so the searches
-                // waiting for it go on rather than waiting forever.
                 let live =
                     panic::catch_unwind(AssertUnwindSafe(|| Live::start(&place, &root, fresh)))
                         .ok()
@@ -291,8 +240,6 @@ impl Searcher {
 }
 
 impl Live {
-    /// Opens the index of `root` in `place`, or crawls when there is none
-    /// or `fresh` asks, and starts following it.
     fn start(place: &IndexPlace, root: &Path, fresh: bool) -> Option<Self> {
         let opened = if fresh { None } else { place.open(root).ok() };
         let index = if let Some(index) = opened {
@@ -303,7 +250,6 @@ impl Live {
         };
         let log = ChangeLog::create(&place.changes(), index.crawled()).ok()?;
         let reader = LogReader::open(&place.changes()).ok()?;
-        // Searches read the log when they run; nothing to wake.
         let watcher = Watcher::start(&index, log, || {}).ok()?;
         Some(Self {
             index,
@@ -315,10 +261,8 @@ impl Live {
         })
     }
 
-    /// Takes in what the watcher logged since the last call.
     fn read_log(&mut self) {
         if !self.watcher.is_running() {
-            // Nothing logs changes any more.
             self.lost = true;
         }
         let Ok(changes) = self.log.read_new() else {

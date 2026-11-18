@@ -1,6 +1,3 @@
-//! Folders' views through the core: a client that asks hears every view
-//! set, and the next core reads them from the state folder.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs;
@@ -11,7 +8,6 @@ use std::time::{Duration, Instant};
 use nova_files_api::{Command, Event, FolderView, FolderViews, IconSize, ViewMode};
 use nova_files_core::{Home, IDLE_EXIT, RunningCore};
 
-/// How long a test waits for the core before it counts as a failure.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
 
 const ICONS: FolderView = FolderView {
@@ -45,7 +41,6 @@ impl TempHome {
 }
 
 impl TempHome {
-    /// Waits until the state file names `folder`.
     fn wait_for_save(&self, folder: &Path) {
         let file = self.0.join("state/nova-files/folder-views");
         let name = folder.as_os_str().as_encoded_bytes();
@@ -68,7 +63,6 @@ impl Drop for TempHome {
     }
 }
 
-/// The next folder views `events` gets.
 fn next_views(events: &Receiver<Event>) -> FolderViews {
     loop {
         if let Event::FolderViews(views) = events.recv_timeout(ANSWER_TIMEOUT).unwrap() {

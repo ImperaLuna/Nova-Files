@@ -1,8 +1,3 @@
-//! Moving through the real core: on one drive by renaming, across drives
-//! by copying and then removing each source item, and through the same
-//! conflicts a copy asks. A drop of files moves on one drive and copies
-//! across drives, and the core says which before the drop.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -30,7 +25,6 @@ use answers::{answer, held};
 use common::{Bench, Client};
 use files::{hidden, tree};
 
-/// Another drive than the scratch folders', where the system has one.
 const OTHER_DRIVE: &str = "/dev/shm";
 
 fn moving(sources: Vec<PathBuf>, into: &Path) -> Operation {
@@ -40,7 +34,6 @@ fn moving(sources: Vec<PathBuf>, into: &Path) -> Operation {
     }
 }
 
-/// A folder `src` in `inside`, holding a file, a nested file and a link.
 fn small_tree(inside: &Path) -> PathBuf {
     let source = inside.join("src");
     fs::create_dir_all(source.join("sub")).unwrap();
@@ -50,16 +43,12 @@ fn small_tree(inside: &Path) -> PathBuf {
     source
 }
 
-/// Answers the next conflict of job `job` with `with` and returns its
-/// kind.
 fn answer_next(client: &Client, job: JobId, with: Answer) -> ConflictKind {
     let conflict = held(client, job);
     answer(client, job, &conflict, with, Scope::ThisOne);
     conflict.kind
 }
 
-/// Drops `sources` onto `into` and returns the job the core started and
-/// what it does.
 fn drop_onto(client: &Client, sources: Vec<PathBuf>, into: &Path) -> (JobId, Operation) {
     let tag = JobTag(9);
     client.send(Command::DropFiles {
@@ -114,7 +103,6 @@ fn a_drop_on_one_drive_moves_and_across_drives_copies() {
     fs::remove_dir_all(&other).ok();
 }
 
-/// What dropping `sources` onto `into` would do, as the core says.
 fn drop_would(client: &Client, id: u64, sources: Vec<PathBuf>, into: &Path) -> DropKind {
     let id = DropAskId(id);
     client.send(Command::DropWould {
@@ -139,8 +127,6 @@ fn the_core_says_what_a_drop_would_do_and_does_nothing() {
 
     let kind = drop_would(&client, 1, vec![near.clone()], &into);
     assert_eq!(kind, DropKind::Move);
-    // `/proc` is never on the scratch folder's drive, and a file gone
-    // can't be moved: both copy.
     let far = PathBuf::from("/proc/self");
     assert_eq!(
         drop_would(&client, 2, vec![near.clone(), far], &into),
@@ -187,7 +173,6 @@ fn a_move_across_drives_copies_then_removes_each_source_item() {
     fs::create_dir_all(&from).unwrap();
     let source = small_tree(&from);
     let before = tree(&source);
-    // Renamed whole, beside the tree that can't be.
     let near = bench.at("near.txt");
     fs::write(&near, "near").unwrap();
     let into = bench.at("into");
@@ -212,7 +197,6 @@ fn a_move_across_drives_copies_then_removes_each_source_item() {
     assert!(!source.exists(), "every source item goes, folders last");
     assert_eq!(tree(&into.join("src")), before);
     assert_eq!(fs::read_to_string(into.join("near.txt")).unwrap(), "near");
-    // The tree's five items and the file renamed whole, each once.
     let progress = progress.unwrap();
     assert_eq!((progress.done_items, progress.total_items), (6, 6));
     assert_eq!(hidden(&bench.root), Vec::<PathBuf>::new());
@@ -358,7 +342,6 @@ fn a_bad_source_moves_nothing() {
     assert_eq!(tree(&into), Vec::new());
 }
 
-/// When a folder was last changed, in a test that keeps it.
 const LONG_AGO: Duration = Duration::from_secs(1_000_000_000);
 
 #[test]
@@ -392,7 +375,6 @@ fn a_cut_from_another_file_manager_pastes_as_a_move() {
     fs::write(bench.at("from/folder/inside"), b"kept").unwrap();
     fs::write(bench.at("from/a b.txt"), b"a").unwrap();
     fs::create_dir(bench.at("into")).unwrap();
-    // What Nautilus puts on the clipboard for a cut.
     let gnome = format!(
         "cut\n{}\n{}",
         file_uri(&bench.at("from/a b.txt")),
@@ -426,7 +408,6 @@ fn a_folder_swapped_for_a_link_while_the_move_waits_moves_nothing_from_outside()
 
     let job = client.start(moving(vec![source.clone()], &into));
     let conflict = held(&client, job);
-    // While the job waits, another program swaps `sub` for a link.
     fs::remove_dir_all(source.join("sub")).unwrap();
     symlink(&outside, source.join("sub")).unwrap();
     answer(&client, job, &conflict, Answer::Merge, Scope::AllOfThisKind);

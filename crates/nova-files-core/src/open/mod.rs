@@ -1,18 +1,3 @@
-//! Opening a file in the user's default app, the way a desktop does it,
-//! without the desktop portal: the portal asks which app to use for host
-//! apps until the user has picked one, so unsandboxed it only stays as the
-//! fallback (in the D-Bus service) for when this can't open the file.
-//!
-//! The default app comes from `mimeapps.list` and `mimeinfo.cache`
-//! (`defaults`), its command from the desktop entry's `Exec` line (`exec`).
-//! The app starts in its own process group with no input or output, and
-//! gets the caller's activation token, so the compositor lets it take
-//! focus.
-//!
-//! Open With (`with`) lists the other apps for some files (`apps`), opens
-//! them in one, and makes one the user's default (`associate`). `folders`
-//! says whether Nova Files is the default for folders, and makes it so.
-
 mod apps;
 mod associate;
 mod defaults;
@@ -40,11 +25,8 @@ use crate::mime::MimeTypes;
 pub use folders::{NotDefault, make_default_for_folders, opens_folders};
 pub use with::Worker as OpenWithWorker;
 
-/// Present inside a Flatpak sandbox, where the host's apps can't be run.
 const FLATPAK_INFO: &str = "/.flatpak-info";
-/// The token Wayland compositors read (xdg-activation).
 const ACTIVATION_TOKEN_VAR: &str = "XDG_ACTIVATION_TOKEN";
-/// The same for X11 startup notification.
 const STARTUP_ID_VAR: &str = "DESKTOP_STARTUP_ID";
 const CURRENT_DESKTOP_VAR: &str = "XDG_CURRENT_DESKTOP";
 const DESKTOP_SEPARATOR: char = ':';
@@ -59,15 +41,8 @@ const DATA_IN_HOME: &str = ".local/share";
 const DEFAULT_CONFIG_DIRS: &str = "/etc/xdg";
 const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 const REAPER_THREAD: &str = "nova-files-opened-app";
-/// A file to try an app's command line with.
 const ANY_FILE: &str = "/";
 
-/// Opens `file` in the default app for its type, as `types` tells it from
-/// the file's name, or for the nearest type that one is a kind of.
-///
-/// # Errors
-/// [`NotOpened`] says why nothing started; [`NotOpened::NoApp`] when the
-/// name says no type, which the portal may still tell from the contents.
 pub fn open_file(
     file: &Path,
     types: &MimeTypes,
@@ -81,8 +56,6 @@ pub fn open_file(
     open_in_default_app(file, &ancestry, activation)
 }
 
-/// `file`'s type and the types it is a kind of, nearest first; none when
-/// its name says no type.
 fn types_of(file: &Path, types: &MimeTypes) -> Vec<String> {
     file.file_name()
         .and_then(|name| types.of(name))
@@ -90,12 +63,6 @@ fn types_of(file: &Path, types: &MimeTypes) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Opens `file` in the default app for the first of `types` (its MIME
-/// type, then the types that one is a kind of) that has one. `activation`
-/// is the caller's activation token, if it has one.
-///
-/// # Errors
-/// [`NotOpened`] says why nothing started.
 pub fn open_in_default_app(
     file: &Path,
     types: &[&str],
@@ -107,12 +74,10 @@ pub fn open_in_default_app(
     open_from(file, types, activation, &environment_places())
 }
 
-/// The folders and desktop names this process's environment names.
 fn environment_places() -> Places {
     places_from(|name| std::env::var_os(name))
 }
 
-/// [`open_in_default_app`] with the apps and lists in `places`.
 fn open_from(
     file: &Path,
     types: &[&str],
@@ -126,9 +91,6 @@ fn open_from(
     launch(&line, app.entry.working_dir.as_deref(), activation).map_err(|_| NotOpened::Failed)
 }
 
-/// The app's command lines for `files`: one for all of them, or one per
-/// file (see `exec`). `None` when its `Exec` can't take a file, or it needs
-/// a terminal, which the portal can start.
 fn commands(app: &App, files: &[&Path]) -> Option<Vec<Vec<OsString>>> {
     if app.entry.terminal {
         return None;
@@ -141,15 +103,10 @@ fn commands(app: &App, files: &[&Path]) -> Option<Vec<Vec<OsString>>> {
     exec::command_lines(&app.entry.exec, files, fields)
 }
 
-/// Whether the app can be started here on files: it takes a file and
-/// needs no terminal.
 fn opens_files(app: &App) -> bool {
     commands(app, &[Path::new(ANY_FILE)]).is_some()
 }
 
-/// Starts `line` on its own, and reaps it on a thread when it exits. The
-/// thread starts first, so an app that runs is always reaped and reported
-/// as started.
 fn launch(
     line: &[OsString],
     working_dir: Option<&Path>,
@@ -160,18 +117,14 @@ fn launch(
         .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
     let mut command = prepare(program, args, working_dir, activation);
     let (hand_over, started) = mpsc::channel::<Child>();
-    // Without the app, the sender is dropped and the thread ends at once.
     thread::Builder::new()
         .name(REAPER_THREAD.to_owned())
         .spawn(move || started.recv().map(|mut child| child.wait()))?;
     let child = command.spawn()?;
-    // The thread only ends once it has the child, so this can't fail.
     hand_over.send(child).ok();
     Ok(())
 }
 
-/// The command for one launch: no input or output, its own process group,
-/// and only the activation token passed here, never one this process got.
 fn prepare(
     program: &OsStr,
     args: &[OsString],
@@ -200,8 +153,6 @@ fn prepare(
     command
 }
 
-/// The folders and desktop names the environment (`var`) names. Relative
-/// paths are ignored, as the base directory spec says.
 fn places_from(var: impl Fn(&str) -> Option<OsString>) -> Places {
     let home = var(HOME_VAR)
         .map(PathBuf::from)
@@ -332,7 +283,6 @@ mod tests {
     fn a_launched_app_gets_the_file_and_token() {
         let root = std::env::temp_dir().join(format!("nova-open-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
-        // Reading a FIFO waits for the app to write it, with no polling.
         let out = root.join("out");
         let made = Command::new("mkfifo").arg(&out).status().unwrap();
         assert!(made.success());
@@ -357,7 +307,6 @@ mod tests {
 
     #[test]
     fn a_type_nothing_opens_is_left_to_the_portal() {
-        // No folders, so none of the machine's own apps or lists are read.
         let places = Places::default();
         let opened = open_from(Path::new("/h/a"), &["image/png"], None, &places);
         assert!(matches!(opened, Err(NotOpened::NoApp)), "{opened:?}");

@@ -4,7 +4,6 @@ use std::{env, fs};
 use super::index::{Folder, Sizes};
 use super::*;
 
-/// A folder of icon themes of its own, removed afterwards.
 struct Base(PathBuf);
 
 impl Base {
@@ -91,7 +90,6 @@ fn names(names: &[&str]) -> Vec<String> {
     names.iter().map(|name| (*name).to_owned()).collect()
 }
 
-/// The icon size the tests look for, in pixels at scale 1.
 const SIZE: u32 = 48;
 
 fn themes(chosen: Option<&str>, bases: &[&Base]) -> IconThemes {
@@ -119,7 +117,6 @@ fn the_folder_made_for_the_size_wins() {
         scalable,
         Some(base.path("Mine", "scalable/mimetypes/text-plain.svg"))
     );
-    // Only file type folders count.
     assert_eq!(themes.find(&names(&["text-html"]), Some), None);
 }
 
@@ -127,7 +124,6 @@ fn the_folder_made_for_the_size_wins() {
 fn a_long_index_is_read_whole() {
     let base = Base::new("long");
     let comment = "x".repeat(64 * 1024);
-    // The folders come after the long line, so a cut index has none.
     let index = MINE.replacen(
         "[Icon Theme]\n",
         &format!("[Icon Theme]\nComment={comment}\n"),
@@ -169,7 +165,6 @@ fn hicolor_comes_last_even_when_no_theme_is_chosen() {
         .icon(HICOLOR, "48x48/mimetypes/text-plain.png")
         .icon(HICOLOR, "48x48/mimetypes/audio-x-generic.png");
 
-    // Parent lists hicolor before it is searched: hicolor still comes last.
     let mut chosen = themes(Some("Mine"), &[&base]);
     let found = chosen.find(&names(&["text-plain"]), Some);
     assert_eq!(found, Some(base.path("Parent", "mimes/text-plain.png")));
@@ -194,7 +189,6 @@ fn a_theme_spreads_over_several_folders() {
     let system = Base::new("spread-system");
     user.index("Mine", MINE)
         .icon("Mine", "48x48/mimetypes/a.png");
-    // The first index found counts: this one lists no folders.
     system
         .index("Mine", "[Icon Theme]\nDirectories=\n")
         .icon("Mine", "48x48/mimetypes/b.svg");
@@ -222,7 +216,6 @@ fn a_missing_theme_or_a_loop_of_themes_ends() {
         Some(base.path("Parent", "mimes/x.png"))
     );
     assert_eq!(looped.find(&names(&["y"]), Some), None);
-    // Each theme in the loop is searched once.
     let mut tried = 0;
     looped.find(&names(&["x"]), |_| {
         tried += 1;
@@ -248,7 +241,6 @@ fn an_index_lists_its_parents_and_file_type_folders() {
         ["16x16/mimetypes", "48x48/mimetypes", "scalable/mimetypes"]
     );
     assert_eq!(read.folders[2].sizes, Sizes::Scalable { min: 8, max: 512 });
-    // Listed twice, or with no section or size: once, or not at all.
     let odd = index::parse(
         "[Icon Theme]\nDirectories=a,a,b\nScaledDirectories=a@2,c\n\
          [a]\nSize=x\nSize=24\n[a@2]\nSize=24\nScale=2\n[c]\nContext=MimeTypes\n",
@@ -261,7 +253,6 @@ fn an_index_lists_its_parents_and_file_type_folders() {
     assert_eq!(paths, ["a", "a@2"]);
     assert_eq!(odd.folders[0].sizes, Sizes::Threshold(2));
     assert_eq!(odd.folders[1].scale, 2);
-    // Each kind of folder keeps the sizes its section gives.
     let kinds = index::parse(
         "[Icon Theme]\nDirectories=f,t\n[f]\nSize=16\nType=Fixed\n\
          [t]\nSize=32\nType=Threshold\nThreshold=5\n",
@@ -306,7 +297,6 @@ fn the_chosen_theme_comes_from_the_first_settings_file_naming_one() {
         fs::write(path, text).unwrap();
     };
     assert_eq!(name::chosen(&config.0), None);
-    // A long settings file is read whole.
     let comment = "x".repeat(64 * 1024);
     write(
         "kdeglobals",
@@ -318,7 +308,6 @@ fn the_chosen_theme_comes_from_the_first_settings_file_naming_one() {
         "[Settings]\ngtk-icon-theme-name = \"Papirus\"\n",
     );
     assert_eq!(name::chosen(&config.0).as_deref(), Some("Papirus"));
-    // A name that reaches outside the icons folder is passed over.
     write(
         "gtk-3.0/settings.ini",
         "[Settings]\ngtk-icon-theme-name=../x\n",
@@ -437,6 +426,5 @@ fn key_files_read_values_from_their_own_section() {
     assert_eq!(ini::value(text, "B", "Key"), Some("b"));
     assert_eq!(ini::value(text, "C", "Key"), None);
     assert_eq!(ini::value(text, "A", "Other"), None);
-    // Comments and blank lines are no lines at all.
     assert_eq!(ini::lines("\n# a = b\n\n").count(), 0);
 }

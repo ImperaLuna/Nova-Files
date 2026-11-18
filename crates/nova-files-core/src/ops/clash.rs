@@ -1,7 +1,3 @@
-//! Telling what stands in a copy's way: what already has the target's
-//! name, and which failed steps are the user's to decide rather than the
-//! job's end.
-
 use std::fs::Metadata;
 use std::io;
 use std::os::unix::fs::MetadataExt as _;
@@ -11,13 +7,6 @@ use nova_files_api::{ConflictKind, Failure};
 
 use super::plan::Kind;
 
-/// What clashes with copying `source`, a `kind`, to `target`, or `None`
-/// when the name is free. A source that is gone is a clash of its own;
-/// only a folder's is looked for at a free name, as making a file or link
-/// finds its source gone anyway, and one look per file adds up.
-///
-/// # Errors
-/// When `target` can't be looked at.
 pub fn clash(source: &Path, kind: Kind, target: &Path) -> io::Result<Option<ConflictKind>> {
     let there = match target.symlink_metadata() {
         Ok(there) => there,
@@ -47,9 +36,6 @@ pub fn clash(source: &Path, kind: Kind, target: &Path) -> io::Result<Option<Conf
     ))
 }
 
-/// What is at `source`, or [`ConflictKind::SourceGone`] when nothing is.
-/// Any other failure to look, such as a folder above it the user may no
-/// longer enter, is an error, which the user can fix and retry.
 fn look_at(source: &Path) -> io::Result<Result<Metadata, ConflictKind>> {
     match source.symlink_metadata() {
         Ok(there) => Ok(Ok(there)),
@@ -58,9 +44,6 @@ fn look_at(source: &Path) -> io::Result<Result<Metadata, ConflictKind>> {
     }
 }
 
-/// The conflict a step that failed at `path` for `reason` raises, or
-/// `None` when the failure ends the job. A taken name isn't here: the job
-/// looks at the target again.
 pub fn conflict_for(reason: Failure, path: &Path, source: &Path) -> Option<ConflictKind> {
     match reason {
         Failure::NoSpace => Some(ConflictKind::NoSpace),

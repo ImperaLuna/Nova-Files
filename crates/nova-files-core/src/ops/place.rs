@@ -1,24 +1,3 @@
-//! Putting a file or folder under a new name without ever replacing what
-//! already has that name.
-//!
-//! The kernel does it in one step with `renameat2(RENAME_NOREPLACE)`. Some
-//! filesystems (some FUSE ones, NFS, exFAT) refuse the flag. Then a file is
-//! hard-linked to its new name, which fails on a taken name just the same,
-//! and its old name removed, only while it still names the same file. A
-//! folder can't be linked, nor can anything on a filesystem without links;
-//! for those the new name is first taken with an empty entry of our own,
-//! made only if the name is free (`O_EXCL`, or a new folder), and the
-//! rename then replaces just that. Only a program that removed our empty
-//! entry and put its own there in that moment could lose it, so the
-//! fallback is logged.
-//!
-//! On a filesystem that ignores case, a new name that differs from the old
-//! only in case finds the entry itself taking it. That is no clash: the
-//! entry is renamed in place.
-//!
-//! What is renamed may be named through its open folder (see `folders`),
-//! so a move never follows a folder on the way swapped for a link.
-
 use std::fs::{self, Metadata, OpenOptions};
 use std::io;
 use std::os::unix::fs::MetadataExt as _;
@@ -29,25 +8,20 @@ use rustix::io::Errno;
 
 use super::folders::At;
 
-/// Renames `from` to `to`, failing with [`io::ErrorKind::AlreadyExists`]
-/// when something else has the name `to`.
 pub fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
     rename_no_replace_at(At::path(from), to)
 }
 
-/// [`rename_no_replace`] for `from` reached through its folder.
 pub fn rename_no_replace_at(from: At<'_>, to: &Path) -> io::Result<()> {
     rename_or_fall_back(from, to, |from, to| {
         renameat_with(from.folder, from.name, CWD, to, RenameFlags::NOREPLACE)
     })
 }
 
-/// Renames `from` to `to`, replacing what is there.
 fn rename_over(from: At<'_>, to: &Path) -> io::Result<()> {
     Ok(renameat(from.folder, from.name, CWD, to)?)
 }
 
-/// Tries `rename`, and the fallbacks when it says the filesystem refuses.
 fn rename_or_fall_back(
     from: At<'_>,
     to: &Path,
@@ -60,20 +34,12 @@ fn rename_or_fall_back(
     }
 }
 
-/// Puts `new` in the place of `old`, never a folder, and returns where
-/// what was at `old` is now, under a hidden name: the caller sets it
-/// aside (see `aside`). Where the filesystem can swap two names in one
-/// step it does, and the old entry ends up at `new`; elsewhere `old`
-/// steps aside to `backup` first, and comes back if `new` can't take its
-/// name. Should it not come back either, the error says where it was
-/// left.
 pub fn replace(new: &Path, old: &Path, backup: &Path) -> io::Result<PathBuf> {
     replace_or_fall_back(new, old, backup, |new, old| {
         renameat_with(CWD, new, CWD, old, RenameFlags::EXCHANGE)
     })
 }
 
-/// Tries `exchange`, and the backup route when the filesystem refuses.
 fn replace_or_fall_back(
     new: &Path,
     old: &Path,
@@ -81,13 +47,8 @@ fn replace_or_fall_back(
     exchange: impl Fn(&Path, &Path) -> rustix::io::Result<()>,
 ) -> io::Result<PathBuf> {
     let ours = new.symlink_metadata()?;
-    // A folder that took the name since it was looked at is never
-    // replaced: it goes back, and the name counts as taken.
     match exchange(new, old) {
-        // `new` now holds what was `old`.
         Ok(()) if is_folder(new) => {
-            // Swapped back only while `old` holds what `new` put there:
-            // a file saved there since is another program's, and stays.
             let still_ours = old
                 .symlink_metadata()
                 .is_ok_and(|there| same_entry(&ours, &there));
@@ -104,12 +65,6 @@ fn replace_or_fall_back(
     }
 }
 
-/// Puts `new` in the place of `old` by way of `backup`: `old` steps aside
-/// to it and `new` takes the name; returns `backup`, where the old entry
-/// now is. If `new` can't take the name, `old` comes back; should it not
-/// come back either, the error says where it was left. Every step leaves
-/// both files under a name a journal knows, unlike an exchange, after
-/// which `new`'s name holds the old file.
 pub fn replace_through(new: At<'_>, old: &Path, backup: &Path) -> io::Result<PathBuf> {
     rename_no_replace(old, backup)?;
     if is_folder(backup) {
@@ -124,12 +79,10 @@ pub fn replace_through(new: At<'_>, old: &Path, backup: &Path) -> io::Result<Pat
     Ok(backup.to_path_buf())
 }
 
-/// Whether a folder, not a link to one, is at `path`.
 fn is_folder(path: &Path) -> bool {
     path.symlink_metadata().is_ok_and(|there| there.is_dir())
 }
 
-/// The error for a folder at `old` that stepped to `at` and went `back`.
 fn taken_back(back: io::Result<()>, old: &Path, at: &Path) -> io::Error {
     let taken = io::ErrorKind::AlreadyExists.into();
     match back {
@@ -138,9 +91,6 @@ fn taken_back(back: io::Result<()>, old: &Path, at: &Path) -> io::Error {
     }
 }
 
-/// What was at `old` is stuck at `at`: `error`, then `stuck` on the way
-/// back. Not a name to look at again: the job ends here, and its journal
-/// says where it is.
 fn left_at(old: &Path, at: &Path, error: &io::Error, stuck: &io::Error) -> io::Error {
     io::Error::other(format!(
         "{} is left at {} ({error}, then {stuck})",
@@ -149,25 +99,19 @@ fn left_at(old: &Path, at: &Path, error: &io::Error, stuck: &io::Error) -> io::E
     ))
 }
 
-/// Whether `errno` says the filesystem can't rename without replacing,
-/// rather than that this rename is wrong.
+// Some filesystems (some FUSE ones, NFS, exFAT) refuse RENAME_NOREPLACE with these.
+// https://man7.org/linux/man-pages/man2/rename.2.html
 const fn refuses_flag(errno: Errno) -> bool {
     matches!(errno, Errno::INVAL | Errno::NOSYS | Errno::OPNOTSUPP)
 }
 
-/// The fallbacks, in order: a link, then a check.
 fn link_or_check(from: At<'_>, to: &Path) -> io::Result<()> {
     match linkat(from.folder, from.name, CWD, to, AtFlags::empty()) {
         Ok(()) => unlink_or_take_back(from, to),
-        // Taken, or no links here: the check tells which.
         Err(_) => check_then_rename(from, to),
     }
 }
 
-/// Removes `from`, now linked to `to`. When it can't be removed, or no
-/// longer names the linked file (another program saved a new one there
-/// since), the link is taken back: the file doesn't end up under both
-/// names, and a newer file at `from` is never removed.
 fn unlink_or_take_back(from: At<'_>, to: &Path) -> io::Result<()> {
     let still_linked = match (from.look(), to.symlink_metadata()) {
         (Ok(from), Ok(to)) => same_entry(&from, &to),
@@ -191,14 +135,11 @@ fn unlink_or_take_back(from: At<'_>, to: &Path) -> io::Result<()> {
     Err(errno.into())
 }
 
-/// Renames `from` to `to` once an empty entry of our own holds `to`, or
-/// when `to` is `from` itself.
 fn check_then_rename(from: At<'_>, to: &Path) -> io::Result<()> {
     if is_case_change(from, to) {
         return rename_over(from, to);
     }
     let folder = from.look()?.is_dir();
-    // Fails on a taken name, as the rename would have.
     if folder {
         fs::create_dir(to)?;
     } else {
@@ -223,8 +164,6 @@ fn check_then_rename(from: At<'_>, to: &Path) -> io::Result<()> {
     renamed
 }
 
-/// Whether `to` is `from` under a name that differs only in case, as a
-/// filesystem that ignores case finds it.
 fn is_case_change(from: At<'_>, to: &Path) -> bool {
     let (Some(old), Some(new)) = (from.name.file_name(), to.file_name()) else {
         return false;

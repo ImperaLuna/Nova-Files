@@ -1,7 +1,3 @@
-//! The commands about file operations: watching, starting, dropping
-//! files and saying what a drop would do, pausing, resuming, cancelling
-//! and forgetting jobs, and answering their conflicts, passwords too. `run` sends only these here.
-
 use std::sync::Arc;
 
 use nova_files_api::{ClientGone, ClientId, Command};
@@ -10,7 +6,6 @@ use super::Setup;
 use crate::jobs::Client;
 use crate::ops::answer_drop_would;
 
-/// Answers one of the job commands for client `id`.
 pub(super) fn answer(
     id: ClientId,
     client: &Client,
@@ -45,7 +40,6 @@ pub(super) fn answer(
             conflict,
             password,
         } => setup.jobs.give_password(job, &conflict, password),
-        // `run` sends the other commands elsewhere.
         _ => {}
     }
     Ok(())

@@ -1,10 +1,3 @@
-//! Saving one small state file in the background: each save replaces the
-//! file whole (see `private_file`), so a crash never leaves half a file.
-//! Saves go to one writer thread in the order they came, so the file
-//! always ends with the last one, and a slow disk never holds up the
-//! core. A save that fails is logged; the caller keeps its state in
-//! memory for this run.
-
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,21 +6,14 @@ use std::thread;
 
 use crate::private_file;
 
-/// Writes one file, on a thread started at the first save.
 pub struct Saver {
-    /// Where the file goes; `None` keeps nothing on disk.
     path: Option<PathBuf>,
-    /// What the file holds, for the log, such as "window state".
     what: &'static str,
-    /// The thread's name.
     thread: &'static str,
-    /// The writer thread's queue, started on the first save.
     writer: RefCell<Option<Sender<Arc<[u8]>>>>,
 }
 
 impl Saver {
-    /// Saves to `path`, or nowhere without one. `what` names the file in
-    /// the log and `thread` names the writer thread.
     pub const fn new(path: Option<PathBuf>, what: &'static str, thread: &'static str) -> Self {
         Self {
             path,
@@ -37,7 +23,6 @@ impl Saver {
         }
     }
 
-    /// Queues `bytes` to replace the file.
     pub fn save(&self, bytes: Arc<[u8]>) {
         let Some(path) = &self.path else {
             return;
@@ -56,14 +41,11 @@ impl Saver {
 
 #[cfg(test)]
 impl Saver {
-    /// Where the file goes, if anywhere.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
     }
 }
 
-/// Starts the thread that writes each save it is sent to `path`, in order,
-/// or none when no thread can start.
 fn start_writer(
     path: PathBuf,
     what: &'static str,
@@ -82,8 +64,6 @@ fn start_writer(
     }
 }
 
-/// Writes each save from `saves` to `path`, in order, until the saver is
-/// gone.
 fn write_each(path: &Path, what: &str, saves: &Receiver<Arc<[u8]>>) {
     for bytes in saves {
         if let Err(error) = private_file::replace(path, &bytes, private_file::FILE_MODE) {
@@ -99,7 +79,6 @@ mod tests {
     use super::*;
     use crate::private_file::Read;
 
-    /// Saves queued before the writer runs.
     const SAVES_IN_A_ROW: u32 = 20;
 
     fn temp(name: &str) -> PathBuf {
@@ -127,7 +106,6 @@ mod tests {
         drop(queue);
         write_each(&path, "test", &saves);
         assert_eq!(read(&path), SAVES_IN_A_ROW.to_string().as_bytes());
-        // A failed write is logged and the writer stops only with the saver.
         let blocked = temp("order-blocked");
         fs::write(&blocked, b"").unwrap();
         let (queue, saves) = mpsc::channel();

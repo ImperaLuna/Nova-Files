@@ -5,12 +5,8 @@ use super::*;
 use crate::ops::journal::hold;
 use crate::ops::test_folder::TestFolder;
 
-/// How long a test waits for the job to ask before it fails.
 const ASK_WAIT: Duration = Duration::from_secs(5);
 
-/// Answers the first question `shared`'s job asks with `answer` for
-/// `scope`, giving up after a while, so a job that never asks fails the
-/// test instead of hanging it.
 fn answer_once(shared: Arc<Job>, answer: Answer, scope: Scope) -> std::thread::JoinHandle<bool> {
     std::thread::spawn(move || {
         let deadline = Instant::now() + ASK_WAIT;
@@ -28,7 +24,6 @@ fn answer_once(shared: Arc<Job>, answer: Answer, scope: Scope) -> std::thread::J
 fn a_journal_that_cant_be_written_stays_until_the_job_ends_and_stops_replaces() {
     let folder = TestFolder::new("running-journal-fails");
     let path = folder.file("1", "nova-files-job 1\n");
-    // Opened to read only: every write fails.
     let file = File::open(&path).unwrap();
     let mut running = Running::with_journal(Journal::over(file, path.clone()));
     let (backup, of) = (Path::new("/b/.nova-backup-1-0"), Path::new("/b/a"));
@@ -120,7 +115,6 @@ fn a_failure_the_user_may_answer_is_asked_and_any_other_stops_the_job() {
 fn a_journal_that_cant_be_opened_again_still_goes_when_the_job_ends() {
     let folder = TestFolder::new("running-reopen-fails");
     let path = folder.file("1", "nova-files-job 1\n");
-    // Opened to read only: it can't be cut back to its whole lines.
     let left = Left {
         job: JobId(1),
         operation: nova_files_api::Operation::EmptyTrash,
@@ -163,6 +157,5 @@ fn a_kind_is_answered_once_answered_for_all() {
 
     assert!(running.answered(ConflictKind::FileExists));
     assert!(!running.answered(ConflictKind::FolderExists));
-    // Asked no more.
     assert_eq!(running.ask(clash("y")), Ok(Answer::Skip));
 }

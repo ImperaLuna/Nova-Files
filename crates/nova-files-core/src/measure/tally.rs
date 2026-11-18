@@ -1,15 +1,7 @@
-//! The running totals of a scan, one slot per thing measured, added to by
-//! every walking thread at once.
-//!
-//! Each slot keeps its counts in atomics, so threads add without a lock,
-//! and marks itself changed, so a report can send only the slots that
-//! moved since the one before (see [`Tally::take_changed`]).
-
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use nova_files_api::Size;
 
-/// The totals of every slot.
 pub struct Tally {
     slots: Box<[Slot]>,
 }
@@ -37,8 +29,6 @@ impl Slot {
 }
 
 impl Tally {
-    /// `slots` slots, all at zero, and all changed: the first report
-    /// names every slot, even one nothing is ever added to.
     pub fn new(slots: usize) -> Self {
         let fresh = || Slot {
             changed: AtomicBool::new(true),
@@ -49,7 +39,6 @@ impl Tally {
         }
     }
 
-    /// One more file (or link, or anything not a folder) in `slot`.
     pub fn file(&self, slot: usize, bytes: u64, on_disk: u64) {
         if let Some(slot) = self.slots.get(slot) {
             slot.bytes.fetch_add(bytes, Ordering::Relaxed);
@@ -59,7 +48,6 @@ impl Tally {
         }
     }
 
-    /// One more folder in `slot`, taking `on_disk` bytes itself.
     pub fn folder(&self, slot: usize, on_disk: u64) {
         if let Some(slot) = self.slots.get(slot) {
             slot.on_disk.fetch_add(on_disk, Ordering::Relaxed);
@@ -68,7 +56,6 @@ impl Tally {
         }
     }
 
-    /// One more folder in `slot` that couldn't be read.
     pub fn unreadable(&self, slot: usize) {
         if let Some(slot) = self.slots.get(slot) {
             slot.unreadable.fetch_add(1, Ordering::Relaxed);
@@ -76,14 +63,12 @@ impl Tally {
         }
     }
 
-    /// All slots added up.
     pub fn total(&self) -> Size {
         self.slots
             .iter()
             .fold(Size::default(), |total, slot| total.plus(slot.size()))
     }
 
-    /// Each slot that changed since the last call, with its totals now.
     pub fn take_changed(&self) -> Vec<(usize, Size)> {
         self.slots
             .iter()

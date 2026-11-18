@@ -1,9 +1,3 @@
-//! Answers Open With requests on one worker thread, so the core's loop
-//! never waits on the disk or an app, and requests are answered in the
-//! order they came: a list asked for after a new default shows it.
-//! The worker starts with the first request and stays while the core
-//! runs.
-
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -20,19 +14,14 @@ use crate::mime::MimeTypes;
 
 const THREAD_NAME: &str = "nova-files-open-with";
 
-/// A request and the client that asked.
 type Request = (Arc<dyn EventSink>, OpenWith);
 
-/// The worker that answers Open With requests.
 pub struct Worker {
-    /// The MIME database, shared with plain open.
     types: Arc<OnceLock<MimeTypes>>,
     queue: Mutex<Option<Sender<Request>>>,
 }
 
 impl Worker {
-    /// A worker that reads the MIME database into `types` when it first
-    /// needs it, if nothing has yet.
     pub fn new(types: Arc<OnceLock<MimeTypes>>) -> Self {
         Self {
             types,
@@ -40,14 +29,11 @@ impl Worker {
         }
     }
 
-    /// Answers `request` for the client behind `events`, after every
-    /// request before it.
     pub fn answer(&self, events: &Arc<dyn EventSink>, request: OpenWith) {
         let Some(request) = self.queue(events, request) else {
             return;
         };
         log::warn!("can't start the Open With worker");
-        // A list or a launch answers that nothing came of it.
         let answer = match request {
             OpenWith::Apps { id, .. } => OpenWithAnswer::Apps {
                 id,
@@ -60,8 +46,6 @@ impl Worker {
         events.deliver(Event::OpenWith(answer)).ok();
     }
 
-    /// Hands `request` to the worker, starting one if there is none or it
-    /// stopped; gives it back when no worker can take it.
     fn queue(&self, events: &Arc<dyn EventSink>, request: OpenWith) -> Option<OpenWith> {
         let mut queue = lock(&self.queue);
         let request = match queue.as_ref() {
@@ -86,7 +70,6 @@ impl Worker {
     }
 }
 
-/// Starts the worker thread, or none when it can't start.
 fn start(types: Arc<OnceLock<MimeTypes>>) -> Option<Sender<Request>> {
     let (sender, requests) = mpsc::channel::<Request>();
     thread::Builder::new()
@@ -102,7 +85,6 @@ fn start(types: Arc<OnceLock<MimeTypes>>) -> Option<Sender<Request>> {
     Some(sender)
 }
 
-/// What answers `request`, if anything does.
 fn handle(request: OpenWith, types: &OnceLock<MimeTypes>) -> Option<Event> {
     let places = environment_places();
     let answer = match request {
@@ -129,7 +111,6 @@ fn handle(request: OpenWith, types: &OnceLock<MimeTypes>) -> Option<Event> {
     Some(Event::OpenWith(answer))
 }
 
-/// The apps for every file in `paths`, answering request `id`.
 fn list(id: OpenWithId, paths: &[PathBuf], types: &MimeTypes, places: &Places) -> OpenWithAnswer {
     let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
     let shared = apps::shared_types(&paths, types);
@@ -153,10 +134,6 @@ fn list(id: OpenWithId, paths: &[PathBuf], types: &MimeTypes, places: &Places) -
     }
 }
 
-/// Opens `paths` in the app `id`; says whether any of its runs started.
-/// Sandboxed, an app that runs in a terminal or takes no file, or a
-/// relative path starts nothing. Only the first run gets the activation
-/// token: a compositor takes each token once.
 fn open_with(paths: &[PathBuf], id: &str, activation: Option<&str>, places: &Places) -> bool {
     if Path::new(FLATPAK_INFO).exists() || paths.iter().any(|path| !path.is_absolute()) {
         return false;

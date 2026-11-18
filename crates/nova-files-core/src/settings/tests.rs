@@ -1,6 +1,3 @@
-//! The store's bookkeeping: versions, queued saves and reads put off
-//! while saves are queued.
-
 use std::fs;
 use std::sync::mpsc::Receiver;
 
@@ -58,10 +55,8 @@ fn a_read_older_than_the_settings_is_done_again() {
     let shared = shared(None);
     let mut locked = lock(&shared);
     locked.set(dark());
-    // Read before that change: stale.
     assert!(locked.take(Settings::default(), 0));
     assert_eq!(*locked.settings, dark());
-    // Read after it: taken.
     assert!(!locked.take(Settings::default(), 1));
     assert_eq!(*locked.settings, Settings::default());
     drop(locked);
@@ -71,9 +66,7 @@ fn a_read_older_than_the_settings_is_done_again() {
 fn a_read_that_changed_nothing_still_outdates_older_reads() {
     let shared = shared(None);
     let mut locked = lock(&shared);
-    // The file was removed: defaults, as held.
     assert!(!locked.take(Settings::default(), 0));
-    // A read from before the removal comes in late: stale.
     assert!(locked.take(dark(), 0));
     assert_eq!(*locked.settings, Settings::default());
     drop(locked);
@@ -90,7 +83,6 @@ fn a_queued_change_counts_as_unsaved() {
     locked.queue(SettingChange::Thumbnails(Thumbnails::Shown), &weak);
     assert_eq!(locked.unsaved, 2);
     assert_eq!(queued.try_iter().count(), 2);
-    // A writer that stopped loses what it held: the file is the word.
     drop(queued);
     locked.read_when_saved = true;
     locked.queue(SettingChange::Thumbnails(Thumbnails::Hidden), &weak);
@@ -107,7 +99,6 @@ fn the_file_is_read_once_the_last_queued_save_is_done() {
     {
         let mut locked = lock(&shared);
         locked.unsaved = 2;
-        // The watcher saw a change while the saves were queued.
         locked.read_when_saved = true;
     }
     let (queue, changes) = mpsc::channel();
@@ -117,7 +108,6 @@ fn the_file_is_read_once_the_last_queued_save_is_done() {
     drop(queue);
     save_each(&path, &changes, &Arc::downgrade(&shared));
     {
-        // One of two saves is done: still waiting, nothing read.
         let locked = lock(&shared);
         assert_eq!(locked.unsaved, 1);
         assert!(locked.read_when_saved);
@@ -132,7 +122,6 @@ fn the_file_is_read_once_the_last_queued_save_is_done() {
     let locked = lock(&shared);
     assert_eq!(locked.unsaved, 0);
     assert!(!locked.read_when_saved);
-    // Two saves, then the read that took the file's settings.
     assert_eq!(locked.version, 3);
     assert_eq!(
         *locked.settings,

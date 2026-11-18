@@ -1,10 +1,3 @@
-//! A theme's `index.theme`: the themes it inherits from and its icon
-//! folders, each with the sizes it serves, as the freedesktop icon theme
-//! spec defines them. Only the folders whose icons stand for file types
-//! are kept. Keys the spec doesn't name, and values that don't parse, are
-//! skipped; a folder missing its `Size`, or reaching outside the theme
-//! (`..`, a root), is left out.
-
 use std::collections::HashSet;
 use std::path::{Component, Path};
 
@@ -24,22 +17,16 @@ const MAX_SIZE: &str = "MaxSize";
 const THRESHOLD: &str = "Threshold";
 const FIXED: &str = "Fixed";
 const SCALABLE: &str = "Scalable";
-/// The folders of file type icons.
 const MIME_CONTEXT: &str = "MimeTypes";
-/// The spec's defaults.
 const DEFAULT_SCALE: u32 = 1;
 const DEFAULT_THRESHOLD: u32 = 2;
 
-/// What a theme's index says.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Index {
-    /// The themes asked for when this one has no icon, in order.
     pub inherits: Vec<String>,
-    /// Its folders of file type icons, in the order it lists them.
     pub folders: Vec<Folder>,
 }
 
-/// One icon folder, relative to the theme's folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Folder {
     pub path: String,
@@ -48,7 +35,6 @@ pub struct Folder {
     pub sizes: Sizes,
 }
 
-/// The sizes a folder's icons may be drawn at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sizes {
     Fixed,
@@ -57,13 +43,11 @@ pub enum Sizes {
 }
 
 impl Folder {
-    /// Whether its icons are made for `size` at `scale`.
     pub fn serves(&self, size: u32, scale: u32) -> bool {
         let (low, high) = self.range();
         self.scale == scale && (low..=high).contains(&size)
     }
 
-    /// How far its icons are from `size` at `scale`, in device pixels.
     pub fn distance(&self, size: u32, scale: u32) -> u32 {
         let wanted = size.saturating_mul(scale);
         let (low, high) = self.range();
@@ -72,7 +56,6 @@ impl Folder {
         low.saturating_sub(wanted).max(wanted.saturating_sub(high))
     }
 
-    /// The smallest and largest size it serves.
     const fn range(&self) -> (u32, u32) {
         match self.sizes {
             Sizes::Fixed => (self.size, self.size),
@@ -85,7 +68,6 @@ impl Folder {
     }
 }
 
-/// The settings of one folder's section, as read.
 #[derive(Default)]
 struct Section {
     size: Option<u32>,
@@ -112,8 +94,6 @@ impl Section {
         }
     }
 
-    /// The folder at `path`, if its section names a size and it holds
-    /// file type icons (or doesn't say what it holds).
     fn folder(&self, path: &str) -> Option<Folder> {
         let size = self.size?;
         if self
@@ -140,7 +120,6 @@ impl Section {
     }
 }
 
-/// Reads an `index.theme`'s text.
 pub fn parse(text: &str) -> Index {
     let mut current: Option<&str> = None;
     let mut inherits = Vec::new();
@@ -180,15 +159,12 @@ pub fn parse(text: &str) -> Index {
     Index { inherits, folders }
 }
 
-/// Whether a folder `path` from the index stays inside its theme: no
-/// root, no `..`.
 fn inside(path: &str) -> bool {
     Path::new(path)
         .components()
         .all(|part| matches!(part, Component::Normal(_)))
 }
 
-/// A comma-separated list, without empty items.
 fn list(value: &str) -> Vec<String> {
     value
         .split(LIST)

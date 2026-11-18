@@ -1,5 +1,3 @@
-//! The file's format, the list's order and cap, and who hears of changes.
-
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -63,7 +61,6 @@ fn anything_else_reads_as_no_views() {
     assert_eq!(parse(&to_bytes(&full)), full);
     let longest = PathBuf::from(format!("/{}", "a".repeat(MAX_PATH - 1)));
     assert!(fits(&longest));
-    // The most the core writes is exactly the most it reads.
     let largest = to_bytes(&vec![(longest, ICONS); MAX_FOLDER_VIEWS]);
     assert_eq!(largest.len(), MAX_BYTES);
     assert!(!fits(&PathBuf::from(format!("/{}", "a".repeat(MAX_PATH)))));
@@ -101,7 +98,6 @@ fn a_view_set_goes_first_once_and_the_oldest_drop_off() {
     assert_eq!(kept[MAX_FOLDER_VIEWS - 1].0, "/1");
 }
 
-/// A client that keeps the views it hears, while its receiver is alive.
 struct Listener(mpsc::Sender<FolderViews>);
 
 impl EventSink for Listener {
@@ -134,7 +130,6 @@ fn listeners_hear_the_views_now_and_after_each_change() {
     forgotten_heard.try_recv().unwrap();
     store.forget(ClientId(3));
 
-    // The same view again changes nothing.
     store.set(PathBuf::from("/a"), ICONS);
     assert!(heard.try_recv().is_err());
 
@@ -148,7 +143,6 @@ fn listeners_hear_the_views_now_and_after_each_change() {
     );
 }
 
-/// A state folder of its own, removed when the test ends, pass or fail.
 struct TempState(PathBuf);
 
 impl Drop for TempState {

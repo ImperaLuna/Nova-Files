@@ -1,8 +1,3 @@
-//! The commands about folders and the files in them: listing, rows,
-//! places, the gathered folders, the trash, search, properties, previews, opening files and
-//! the recent folders. `run` sends only these here. Folders list their
-//! hidden entries as the settings say, but the trash lists all of them.
-
 use std::path::Path;
 use std::sync::Arc;
 
@@ -15,7 +10,6 @@ use crate::preview::{self, Request};
 use crate::properties;
 use crate::trash::{FILES, Trashes};
 
-/// Answers one of the folder commands for client `id`.
 pub(super) fn answer(
     id: ClientId,
     client: &Client,
@@ -69,15 +63,11 @@ pub(super) fn answer(
             let count = usize::try_from(count).unwrap_or(usize::MAX);
             setup.recent.answer(client.events(), id, count, skip);
         }
-        // `run` sends the other commands elsewhere.
         _ => {}
     }
     Ok(())
 }
 
-/// Whether a listing of `path` shows its hidden entries: as the settings
-/// say, except in the home trash, which lists all it holds so every item
-/// in it can be seen and put back.
 fn hidden_files(setup: &Setup, path: &Path) -> HiddenFiles {
     let trash = Trashes::of(setup.home.as_ref()).home;
     if trash.is_some_and(|trash| path.starts_with(trash.join(FILES))) {

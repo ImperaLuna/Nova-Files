@@ -4,7 +4,6 @@ use std::sync::mpsc::{self, Receiver};
 use super::*;
 use crate::ops::test_folder::TestFolder;
 
-/// Folders in a tree big enough that a scan still runs when it is cut.
 const MANY: usize = 2000;
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -13,7 +12,6 @@ fn client() -> (Arc<dyn EventSink>, Receiver<Event>) {
     (Arc::new(sink), events)
 }
 
-/// The state of scan `id`'s last answer.
 fn last_state(events: &Receiver<Event>, id: MeasureId) -> ScanState {
     loop {
         match events.recv_timeout(ANSWER_TIMEOUT).unwrap() {

@@ -1,14 +1,3 @@
-//! The core's loop: read one message at a time and answer it.
-//!
-//! While any client is connected or any job runs or is paused, the loop
-//! waits without a deadline. Otherwise it waits at most the idle time; any
-//! message (a D-Bus ping, a window about to open, a job ending) starts the
-//! wait again, and silence ends the loop.
-//!
-//! Commands that touch the disk run as jobs on threads of their own (see
-//! `jobs`, and `ops` for file operations), so a slow disk never holds up
-//! the loop or other clients.
-
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, OnceLock};
@@ -39,42 +28,26 @@ mod folders;
 mod look;
 mod operations;
 
-/// Where the core finds and keeps things.
 pub struct Setup {
-    /// The user's folders, for the trash listing.
     pub home: Option<Home>,
-    /// The places list and the pinned folders.
     pub places: PlacesStore,
-    /// The folders Games and Projects gather from.
     pub gathered: GatheredStore,
     pub window_state: WindowStateStore,
     pub settings: SettingsStore,
     pub theme: ThemeStore,
     pub thumbnails: Option<Thumbnails>,
     pub searcher: Searcher,
-    /// The MIME database, read at the first [`Command::OpenFile`],
-    /// [`Command::OpenWith`] or [`Command::Preview`] and kept while the
-    /// core runs.
     pub mime_types: Arc<OnceLock<MimeTypes>>,
-    /// The entries' icons, shared by every client.
     pub file_icons: Arc<FileIcons>,
-    /// Answers Open With requests, in order.
     pub open_with: OpenWithWorker,
-    /// File operations, and the clients that hear about them.
     pub jobs: Arc<Jobs>,
-    /// Size scans, each for the client that asked.
     pub measurer: Measurer,
-    /// The drives, and the clients that hear about them.
     pub drives: DrivesStore,
-    /// The folders a person opened lately.
     pub recent: RecentStore,
-    /// How each folder is shown.
     pub folder_views: FolderViewsStore,
-    /// What the archives browsed last hold.
     pub inside: Arc<Inside>,
 }
 
-/// Runs until idle.
 pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup) {
     let mut clients: HashMap<ClientId, Client> = HashMap::new();
     loop {
@@ -101,11 +74,9 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
             clients.insert(client, started);
         }
         CoreMessage::Disconnected { client } => {
-            // Dropping the client stops its listing.
             clients.remove(&client);
             forget(client, setup);
         }
-        // Receiving it already restarted the idle wait.
         CoreMessage::Activity => {}
         CoreMessage::DriveService(service) => setup.drives.offer(service),
         CoreMessage::Command { client, command } => {
@@ -120,7 +91,6 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
     }
 }
 
-/// Stops telling `client` about anything it asked to hear about.
 fn forget(client: ClientId, setup: &Setup) {
     setup.settings.forget(client);
     setup.theme.forget(client);
@@ -132,14 +102,6 @@ fn forget(client: ClientId, setup: &Setup) {
     setup.measurer.forget(client);
 }
 
-/// Answers `command`, at once or through a job. The folder, look and job
-/// commands are answered in a file each (see `folders`, `look` and
-/// `operations`); the few others here. This match is exhaustive, so a new
-/// command doesn't compile until it is sent somewhere; the area it goes to
-/// needs its arm too, as each area's own match passes over the rest.
-///
-/// # Errors
-/// [`nova_files_api::ClientGone`] when the client stopped listening.
 fn answer(
     id: ClientId,
     client: &Client,

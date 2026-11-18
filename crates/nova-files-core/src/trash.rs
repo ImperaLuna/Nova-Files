@@ -1,15 +1,5 @@
-//! The desktop's trash, as the freedesktop trash specification (1.0)
-//! lays it out, shared with every other app.
-//!
-//! A trash is a folder holding `files/`, where trashed entries sit under
-//! a name of their own, and `info/`, where `<that name>.trashinfo` says
-//! where each came from and when it was trashed (see `info`). The home
-//! trash, `$XDG_DATA_HOME/Trash`, takes what is on its own drive; every
-//! other drive has its own, at its top folder (see `folder`), so trashing
-//! is always a rename and never a copy. A folder's size goes in the
-//! trash's `directorysizes` cache, which other file managers read (see
-//! `sizes`).
-
+// Follows the freedesktop trash spec.
+// https://specifications.freedesktop.org/trash-spec/latest/
 mod folder;
 mod info;
 mod read;
@@ -26,25 +16,17 @@ use std::path::{Path, PathBuf};
 
 use crate::places::Home;
 
-/// The home trash's folder, under the user's data folder.
 pub const HOME_TRASH: &str = "Trash";
-/// The folder of a trash that holds the trashed entries.
 pub const FILES: &str = "files";
-/// The folder of a trash that holds the info files.
 pub const INFO: &str = "info";
 
-/// Where the user's trashes are.
 #[derive(Debug, Clone, Default)]
 pub struct Trashes {
-    /// The home trash, made when first needed; `None` without a data
-    /// folder.
     pub home: Option<PathBuf>,
-    /// Whether the trashes at the top of other drives count.
     pub drives: bool,
 }
 
 impl Trashes {
-    /// The trashes of the user `home` names.
     pub fn of(home: Option<&Home>) -> Self {
         Self {
             home: home.map(|home| home.data.join(HOME_TRASH)),
@@ -52,15 +34,11 @@ impl Trashes {
         }
     }
 
-    /// Each trash there is now: the home trash, when it is there, and,
-    /// when they count, each mounted drive's.
     pub fn all(&self) -> Vec<TrashFolder> {
         read::trashes(self.home.as_deref(), self.drives)
     }
 }
 
-/// Where the entry an info file at `info` describes sits in its trash,
-/// or `None` when `info` isn't an info file in a trash's `info` folder.
 pub fn item_of_info(info: &Path) -> Option<PathBuf> {
     let name = info.file_name()?.as_bytes();
     let stored = name.strip_suffix(INFO_SUFFIX.as_bytes())?;
@@ -69,7 +47,6 @@ pub fn item_of_info(info: &Path) -> Option<PathBuf> {
         return None;
     }
     let root = folder.parent()?;
-    // From bytes `info`'s own name held, cut at an ASCII suffix.
     let stored = OsStr::from_bytes(stored);
     Some(root.join(FILES).join(stored))
 }

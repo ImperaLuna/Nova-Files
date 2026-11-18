@@ -5,10 +5,6 @@ use super::*;
 use crate::ops::plan::Entry;
 use crate::ops::test_folder::TestFolder;
 
-/// Places a file whose every try finds a name taken, at the path `taken`
-/// names, as if another program kept taking it; returns what `place` did
-/// and how often it tried. Past the most tries it may take, the stand-in
-/// stops the job instead.
 fn place_with_name_taken(taken: impl Fn(&Item) -> PathBuf) -> (Result<PathBuf, Stop>, u32) {
     let folder = TestFolder::new("transfer-look-again");
     let item = Item {
@@ -113,7 +109,6 @@ fn a_folder_a_move_emptied_goes_unless_something_keeps_it() {
     assert!(full.exists());
     assert!(nothing.is_empty());
 
-    // A folder that became a file since isn't the one emptied.
     let file = folder.file("file", "f");
     remove_if_empty(&mut running, &mut Folders::default(), &file, &mut nothing).unwrap();
     assert!(file.exists());

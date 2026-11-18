@@ -1,27 +1,3 @@
-//! The folders a person opened lately ([`Command::FolderUsed`]), kept for
-//! the Start page between runs, and read for [`Command::RecentFolders`].
-//!
-//! The list lives in memory while the core runs and in
-//! `$XDG_STATE_HOME/nova-files/recent-folders` between runs, newest first,
-//! at most [`MAX_RECENT_FOLDERS`]. The file is read once, when the core
-//! starts; a missing or malformed one reads as no folders. Each change
-//! saves the whole list through a [`Saver`], except over a file that
-//! couldn't be read or is oversized: that run keeps its list in memory.
-//!
-//! The file starts with a line naming the format and its version, then
-//! holds each folder's path as raw bytes, ended by a NUL byte, which no
-//! path holds.
-//!
-//! An answer is read on a thread of its own, so the core never waits on
-//! it: for each folder in turn, whether it is still there, what it holds
-//! and a peek at its first entries. Each folder gets at most
-//! [`READ_WAIT`] (see `timed`), so a drive that stopped answering only
-//! leaves its folder out. A folder that can't be read is left out of the
-//! answer but kept in the list, since its drive may come back.
-//!
-//! [`Command::FolderUsed`]: nova_files_api::Command::FolderUsed
-//! [`Command::RecentFolders`]: nova_files_api::Command::RecentFolders
-
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fs;
@@ -40,36 +16,23 @@ use crate::private_file::{self, Read};
 use crate::saver::Saver;
 use crate::timed;
 
-/// The file, under the state folder.
 const FILE: &str = "nova-files/recent-folders";
-/// The first line, naming the format and its version.
 const HEADER: &[u8] = b"nova-files recent-folders 1\n";
-/// Ends each path; no path holds it. The folder views' file uses it too.
 pub const END: u8 = 0;
-/// The longest path Linux takes, in bytes.
 pub const MAX_PATH: usize = 4096;
-/// A file this big is not one the core wrote; it is never read.
 const MAX_BYTES: usize = HEADER.len() + MAX_RECENT_FOLDERS * (MAX_PATH + 1);
 const SAVE_THREAD: &str = "nova-files-recent";
 const READ_THREAD: &str = "nova-files-recent-read";
 const LOOK_THREAD: &str = "nova-files-recent-look";
-/// How long one folder's look may take before it is left out. A local
-/// folder of thousands of entries takes milliseconds.
 const READ_WAIT: Duration = Duration::from_secs(1);
-/// The file, as the log names it.
 const WHAT: &str = "recent folders";
 
-/// The recent folders, as the core keeps them.
 pub struct Store {
-    /// Newest first.
     folders: RefCell<Vec<PathBuf>>,
-    /// Saves them; to nowhere without a home folder, which keeps them in
-    /// memory only.
     saver: Saver,
 }
 
 impl Store {
-    /// The folders saved under the state folder `state_home`.
     pub fn open(state_home: Option<&Path>) -> Self {
         let path = state_home.map(|home| home.join(FILE));
         let read = path.as_deref().map(read);
@@ -80,9 +43,6 @@ impl Store {
         }
     }
 
-    /// Puts `folder` first, dropping the oldest past the cap, and saves the
-    /// list. A path that isn't absolute, or one too long for Linux, is
-    /// ignored.
     pub fn used(&self, folder: PathBuf) {
         if !fits(&folder) {
             return;
@@ -100,8 +60,6 @@ impl Store {
         self.saver.save(bytes.into());
     }
 
-    /// Sends `events` the newest `count` folders that are still there, can
-    /// be read and aren't in `skip`, read on a thread of their own.
     pub fn answer(
         &self,
         events: &Arc<dyn EventSink>,
@@ -126,22 +84,17 @@ impl Store {
                     .ok();
             });
         if spawned.is_err() {
-            // Nothing could be read; the client can ask again.
             let folders = Vec::new();
             events.deliver(Event::RecentFolders { id, folders }).ok();
         }
     }
 }
 
-/// Whether `folder` can go in a saved list: absolute, short enough, and
-/// without the byte that ends each path.
 pub fn fits(folder: &Path) -> bool {
     let bytes = folder.as_os_str().as_bytes();
     folder.is_absolute() && bytes.len() <= MAX_PATH && !bytes.contains(&END)
 }
 
-/// `folder` as the Start page shows it, or `None` when it isn't a folder
-/// that can be read.
 fn look(folder: &Path) -> Option<RecentFolder> {
     let entries = list::read_folder(folder, || false).ok()?;
     let modified = fs::metadata(folder).and_then(|meta| meta.modified()).ok();
@@ -162,7 +115,6 @@ fn look(folder: &Path) -> Option<RecentFolder> {
     })
 }
 
-/// A file's size, or how many entries a folder holds.
 fn amount(path: &Path, kind: EntryKind) -> Option<u64> {
     match kind {
         EntryKind::File => fs::metadata(path).ok().map(|meta| meta.len()),
@@ -173,7 +125,6 @@ fn amount(path: &Path, kind: EntryKind) -> Option<u64> {
     }
 }
 
-/// The file's bytes for `folders`.
 fn to_bytes(folders: &[PathBuf]) -> Vec<u8> {
     let mut bytes = HEADER.to_vec();
     for folder in folders {
@@ -183,8 +134,6 @@ fn to_bytes(folders: &[PathBuf]) -> Vec<u8> {
     bytes
 }
 
-/// The folders `bytes` hold, or none when they aren't a list the core
-/// wrote.
 fn parse(bytes: &[u8]) -> Vec<PathBuf> {
     let Some(body) = bytes.strip_prefix(HEADER) else {
         return Vec::new();
@@ -202,8 +151,6 @@ fn parse(bytes: &[u8]) -> Vec<PathBuf> {
     folders
 }
 
-/// The folders in the file at `path`, none when it is missing or
-/// malformed, or `None` when it couldn't be read or is oversized.
 fn read(path: &Path) -> Option<Vec<PathBuf>> {
     match private_file::read(path, MAX_BYTES) {
         Read::Bytes(bytes) => Some(parse(&bytes)),
@@ -263,7 +210,6 @@ mod tests {
         assert_eq!(parse(&to_bytes(&full)), full);
         let longest = PathBuf::from(format!("/{}", "a".repeat(MAX_PATH - 1)));
         assert!(fits(&longest));
-        // The most the core writes is exactly the most it reads.
         let largest = to_bytes(&vec![longest; MAX_RECENT_FOLDERS]);
         assert_eq!(largest.len(), MAX_BYTES);
         assert!(!fits(&PathBuf::from(format!("/{}", "a".repeat(MAX_PATH)))));

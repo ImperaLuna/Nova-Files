@@ -11,12 +11,10 @@ use crate::ops::test_folder::TestFolder;
 
 const FILE: u32 = 0o644;
 const FOLDER: u32 = 0o755;
-/// Group may write; others may not read.
 const SHARE_FILES: ModeChange = ModeChange {
     set: 0o020,
     clear: 0o004,
 };
-/// Group may write; others may not enter.
 const SHARE_FOLDERS: ModeChange = ModeChange {
     set: 0o020,
     clear: 0o005,
@@ -39,11 +37,8 @@ fn share(reach: Reach) -> AccessChange {
     }
 }
 
-/// The longest a job in these tests may take.
 const DEADLINE: Duration = Duration::from_secs(5);
 
-/// Does `work` with a job that is cancelled after [`DEADLINE`]: one that
-/// asks about a conflict no test answers fails instead of hanging.
 fn watched<T>(work: impl FnOnce(&mut Running) -> T) -> T {
     let mut running = Running::for_test();
     let job = Arc::clone(&running.shared);
@@ -62,8 +57,6 @@ fn run(paths: &[PathBuf], change: &AccessChange) -> Ended {
     watched(|running| change_access(running, paths, change))
 }
 
-/// A folder `tree` holding a file, a folder with a file, and a link to a
-/// file outside it; returns the tree and the file outside.
 fn tree(folder: &TestFolder) -> (PathBuf, PathBuf) {
     let tree = folder.path().join("tree");
     fs::create_dir_all(tree.join("sub")).unwrap();
@@ -120,7 +113,6 @@ fn a_chosen_link_is_passed_over() {
 
     let to_sub = tree.join("to-sub");
     symlink(tree.join("sub"), &to_sub).unwrap();
-    // A slash at the end would follow it.
     let mut slashed = to_sub.into_os_string();
     slashed.push("/");
 
@@ -248,7 +240,6 @@ fn a_cancelled_job_changes_nothing() {
 
 #[test]
 fn a_new_owner_and_group_take_the_set_user_bit_away_unless_asked_for() {
-    /// Runs as its owner, set-user.
     const SET_USER: u32 = 0o4755;
     let (owner, group) = (4242, 4343);
     if !geteuid().is_root() {
@@ -301,7 +292,6 @@ fn a_change_that_shuts_the_owner_out_does_what_is_inside_first() {
     };
 
     let (outcome, changed) = run(std::slice::from_ref(&tree), &shut);
-    // Opened again to look inside.
     for inner in [tree.clone(), tree.join("sub")] {
         set_mode(&inner, FOLDER);
     }
@@ -315,8 +305,6 @@ fn a_change_that_shuts_the_owner_out_does_what_is_inside_first() {
     assert_eq!(mode(&tree.join("sub/b")), 0o444);
 }
 
-/// Visits `path`, chosen, as `change` says; returns whether anything was
-/// left to change last, once what it holds is done.
 fn visit_chosen(path: &Path, change: &AccessChange) -> bool {
     let next = Next {
         path: path.to_path_buf(),
@@ -377,8 +365,6 @@ fn a_new_owner_alone_is_given_or_refused() {
         assert_eq!(given, Ok(true));
         assert_eq!(fs::metadata(&file).unwrap().uid(), 4242);
     } else {
-        // Refused, or, in a sandbox that has no such user, not even a
-        // number the system knows.
         assert!(
             matches!(given, Err(Errno::PERM | Errno::INVAL)),
             "{given:?}"

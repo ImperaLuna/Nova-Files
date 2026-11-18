@@ -1,6 +1,3 @@
-//! The jobs that are a single change: renaming an entry and making a
-//! folder. Neither ever replaces what already has the name.
-
 use std::ffi::OsStr;
 use std::fs::DirBuilder;
 use std::os::unix::fs::DirBuilderExt as _;
@@ -13,10 +10,8 @@ use super::failure::failure;
 use super::name::is_plain_name;
 use super::place::rename_no_replace;
 
-/// A new folder's mode before the user's umask, as `mkdir` gives it.
 const FOLDER_MODE: u32 = 0o777;
 
-/// Gives `path` the name `name` in its own folder.
 pub fn rename(path: &Path, name: &OsStr) -> Ended {
     let (Some(folder), Some(old_name)) = (path.parent(), path.file_name()) else {
         return failed(path, Failure::InvalidName);
@@ -25,7 +20,6 @@ pub fn rename(path: &Path, name: &OsStr) -> Ended {
         return failed(path, Failure::InvalidName);
     }
     if old_name == name {
-        // Nothing to change, as long as it is still there.
         return match path.symlink_metadata() {
             Ok(_) => (Outcome::Done, Vec::new()),
             Err(error) => failed(path, failure(&error)),
@@ -37,7 +31,6 @@ pub fn rename(path: &Path, name: &OsStr) -> Ended {
     }
 }
 
-/// Makes an empty folder `name` in `inside`.
 pub fn new_folder(inside: &Path, name: &OsStr) -> Ended {
     let path = inside.join(name);
     if !inside.is_absolute() || !is_plain_name(name) {

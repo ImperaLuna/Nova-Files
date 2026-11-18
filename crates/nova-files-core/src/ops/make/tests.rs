@@ -9,10 +9,8 @@ use crate::ops::journal::Journal;
 use crate::ops::plan::Entry;
 use crate::ops::test_folder::TestFolder;
 
-/// Another drive than the scratch folders', where the system has one.
 const OTHER_DRIVE: &str = "/dev/shm";
 
-/// Moves `from`, a `kind`, to `target`.
 fn move_to(from: PathBuf, kind: Kind, target: &Path) -> Result<Made, Stop> {
     let item = Item {
         from,
@@ -37,7 +35,6 @@ fn failed_at(made: Result<Made, Stop>) -> (PathBuf, Failure) {
     }
 }
 
-/// Making `item` by `how` over the file already at its target.
 fn replacing(item: &Item, how: How) -> Making<'_> {
     Making {
         item,
@@ -100,7 +97,6 @@ fn a_long_copy_puts_the_journal_on_the_disk_before_it_starts() {
 #[test]
 fn a_rename_that_fails_on_one_drive_copies_nothing() {
     let folder = TestFolder::new("make-rename-fails");
-    // A pipe: a copy would refuse it, so only the rename's error shows.
     let pipe = folder.path().join("pipe");
     mknodat(CWD, &pipe, FileType::Fifo, Mode::RUSR | Mode::WUSR, 0).unwrap();
     let taken = folder.file("taken", "kept");
@@ -200,7 +196,6 @@ fn a_target_saved_over_since_the_copy_stays() {
     let source = folder.file("a", "moved");
     let before = source.symlink_metadata().unwrap();
     let copy = folder.file("b", "moved").symlink_metadata().unwrap();
-    // Another program saves over the copy.
     let saved = folder.file("saved", "newer");
     let target = folder.path().join("b");
     fs::rename(&saved, &target).unwrap();

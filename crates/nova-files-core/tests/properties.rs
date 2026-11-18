@@ -1,6 +1,3 @@
-//! Properties through the real core: a client asks for a path's
-//! properties and hears them, or why they couldn't be read.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -16,7 +13,6 @@ use nova_files_api::{Command, Event, PathKind, PropertiesId, Unreadable};
 
 use common::Bench;
 
-/// The length of the file the test reads.
 const FILE_BYTES: u64 = 42;
 
 #[test]

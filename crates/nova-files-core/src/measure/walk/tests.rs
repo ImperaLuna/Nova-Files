@@ -10,21 +10,15 @@ use nova_files_api::Size;
 use super::*;
 use crate::ops::test_folder::TestFolder;
 
-/// No permissions at all.
 const NO_ACCESS: u32 = 0o000;
-/// Owner may read, write and enter.
 const OWNER_ALL: u32 = 0o700;
 
 fn write(path: &Path, bytes: usize) {
     fs::write(path, vec![b'x'; bytes]).unwrap();
 }
 
-/// The longest a walk in these tests may take: a walk that never ends
-/// fails the test instead of hanging it.
 const WALK_DEADLINE: Duration = Duration::from_secs(10);
 
-/// Walks `roots` on a thread of its own, failing the test after
-/// [`WALK_DEADLINE`].
 fn walk_within(
     roots: &[Root],
     tally: &Tally,
@@ -38,8 +32,6 @@ fn walk_within(
             done.send(()).ok();
         });
         if finished.recv_timeout(WALK_DEADLINE).is_err() {
-            // The scope would wait for the stuck walk forever: end the
-            // whole test process, which fails the test.
             eprintln!("the walk never ended");
             std::process::abort();
         }
@@ -64,7 +56,6 @@ fn one(path: &Path) -> Size {
     .total()
 }
 
-/// What `du` says `path` takes on the drive, by the same `statx` call.
 fn blocks(path: &Path) -> u64 {
     statx(CWD, path, AtFlags::SYMLINK_NOFOLLOW, WANTED)
         .unwrap()
@@ -159,7 +150,6 @@ fn hard_links_count_once_however_many_roots_reach_them() {
 fn a_big_flat_folder_reports_as_it_goes() {
     let folder = TestFolder::new("walk-flat");
     let root = folder.path();
-    // Two dot entries, then enough files for two reports inside.
     for name in 0..REPORT_EVERY * 2 + 10 {
         File::create(root.join(name.to_string())).unwrap();
     }
@@ -179,7 +169,6 @@ fn a_big_flat_folder_reports_as_it_goes() {
         },
     );
 
-    // Two inside the folder, one once it is read.
     assert_eq!(reports.load(Ordering::SeqCst), 3);
 }
 
@@ -235,7 +224,6 @@ fn a_folder_that_cannot_be_read_counts_as_unreadable_and_the_rest_still_adds_up(
     write(&root.join("locked/hidden"), 50);
     write(&root.join("open"), 5);
     fs::set_permissions(root.join("locked"), fs::Permissions::from_mode(NO_ACCESS)).unwrap();
-    // Root reads any folder; the test means nothing then.
     let readable = fs::read_dir(root.join("locked")).is_ok();
 
     let size = one(root);
@@ -279,7 +267,6 @@ fn a_walk_stopped_midway_reads_no_more_folders() {
         listed_in: None,
     }];
 
-    // Stops once the root's folder "a" is counted, before it is queued.
     walk_within(&roots, &tally, &|| tally.total().folders >= 2, &|| ());
 
     assert_eq!(tally.total().files, 0);
@@ -304,9 +291,6 @@ fn every_folder_reports_when_it_is_done() {
     assert_eq!(read.load(Ordering::SeqCst), 3);
 }
 
-/// A drive mounted inside the folder counts as a folder, and nothing
-/// inside it counts. Uses `/dev`, which has `/dev/shm` mounted inside it
-/// on any Linux this runs on; skipped where it doesn't.
 #[test]
 fn a_drive_mounted_inside_is_not_entered() {
     let dev = Path::new("/dev");
@@ -325,7 +309,6 @@ fn a_drive_mounted_inside_is_not_entered() {
     let Ok(file) = File::create(&big) else {
         return;
     };
-    // Sparse: takes no space, but its length counts if it is reached.
     let length = 1 << 50;
     file.set_len(length).unwrap();
 
@@ -339,7 +322,6 @@ fn a_drive_mounted_inside_is_not_entered() {
 
 #[test]
 fn entries_that_cannot_be_looked_at_count_as_unreadable() {
-    /// May list the folder, but not look at what is in it.
     const LIST_ONLY: u32 = 0o444;
     let folder = TestFolder::new("walk-list-only");
     let root = folder.path();
@@ -347,7 +329,6 @@ fn entries_that_cannot_be_looked_at_count_as_unreadable() {
     write(&root.join("listed/one"), 10);
     write(&root.join("listed/two"), 10);
     fs::set_permissions(root.join("listed"), fs::Permissions::from_mode(LIST_ONLY)).unwrap();
-    // Root looks at anything; the test means nothing then.
     let blocked = fs::symlink_metadata(root.join("listed/one")).is_err();
 
     let size = one(root);

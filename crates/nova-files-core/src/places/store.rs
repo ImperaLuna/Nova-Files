@@ -1,29 +1,3 @@
-//! The places list as the core keeps it: the standard folders that exist
-//! and the pinned folders, followed on disk and sent to the clients that
-//! asked, each time either changes.
-//!
-//! Nothing is read until the first client asks, and then on a thread of
-//! its own, so a slow Home (a folder on a hung network mount) never holds
-//! up the core's loop, and a core that only serves a file picker reads
-//! nothing. That thread starts three watches (see `config_watch`), then
-//! reads both lists and sends them to every client that asked so far:
-//! - the config folder, for `user-dirs.dirs`: the standard folders;
-//! - the bookmarks file's folder: the pinned folders;
-//! - Home, for a standard folder made or removed there. A standard folder
-//!   `user-dirs.dirs` puts deeper in Home is only looked at again when one
-//!   of the others changes.
-//!
-//! Every read of the disk and every save holds one lock, `disk`, from the
-//! read until the lists it found are kept, so a slow read never lands
-//! after a newer one. Clients are told under the lists' own lock, in the
-//! order the lists changed. A bookmarks file that can't be read keeps the
-//! pinned folders last read: a passing error never empties the list.
-//!
-//! A client's change goes to a writer thread (see `change_writer`), so
-//! the core's loop never waits on the disk; it edits the bookmarks file's current bytes, saves it
-//! whole with its mode (through a symlink, to where it points), then reads
-//! the pinned folders again.
-
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -40,47 +14,33 @@ use crate::config_watch::{Changed, ConfigWatch};
 use crate::hand_edited::lock;
 use crate::private_file::{self, Read};
 
-/// A bookmarks file this big isn't one; it is neither read nor saved.
-/// 1 MiB.
 const MAX_BYTES: usize = 1_048_576;
 const LOAD_THREAD: &str = "nova-files-places";
 const SAVE_THREAD: &str = "nova-files-bookmarks";
-/// What the writer saves, for the log.
 const WHAT: &str = "pinned folders";
 
-/// The places list and who hears about it.
 pub struct Store {
     shared: Arc<Shared>,
-    /// Set once the first client asked and the lists started loading.
     started: AtomicBool,
-    /// Saves each change, on a thread of its own.
     writer: ChangeWriter<BookmarkChange>,
-    /// Stop with the store.
     watches: Arc<Mutex<Vec<ConfigWatch>>>,
 }
 
 struct Shared {
     home: Option<Home>,
-    /// Held from each read of the disk until what it found is kept, and
-    /// across each save.
     disk: Mutex<()>,
     lists: Mutex<Lists>,
 }
 
 #[derive(Default)]
 struct Lists {
-    /// Both lists have been read once.
     loaded: bool,
-    /// The standard folders that exist.
     places: Vec<Place>,
-    /// Every standard folder, whether it exists or not.
     wanted: Vec<Place>,
     bookmarks: Arc<[Bookmark]>,
-    /// The clients that asked for the places.
     listeners: BTreeMap<ClientId, Arc<dyn EventSink>>,
 }
 
-/// Which list to read again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Reread {
     Places,
@@ -99,8 +59,6 @@ impl Reread {
 }
 
 impl Store {
-    /// The places under `home`, read once a client asks. Without `home`
-    /// both lists stay empty.
     pub fn open(home: Option<Home>) -> Self {
         let shared = Arc::new(Shared {
             home,
@@ -116,8 +74,6 @@ impl Store {
         }
     }
 
-    /// Sends the places and pinned folders to `client` once they are read
-    /// (now, when they already are), and each time they change.
     pub fn listen(&self, client: ClientId, events: &Arc<dyn EventSink>) {
         {
             let mut lists = lock(&self.shared.lists);
@@ -137,26 +93,20 @@ impl Store {
         }
     }
 
-    /// Stops sending the places to `client`.
     pub fn forget(&self, client: ClientId) {
         lock(&self.shared.lists).listeners.remove(&client);
     }
 
-    /// Makes `change` in the bookmarks file and tells the listening
-    /// clients, on the writer's thread.
     pub fn change(&self, change: BookmarkChange) {
         if self.shared.home.is_some() {
             self.writer.send(change);
         }
     }
 
-    /// Starts the watches and reads both lists, on a thread of its own.
     fn load(&self) {
         let shared = Arc::clone(&self.shared);
         let watches = Arc::clone(&self.watches);
         let load = move || {
-            // The watches go in before the first read, so no change is
-            // missed.
             if let Some(home) = &shared.home {
                 *lock(&watches) = watch(home, &Arc::downgrade(&shared));
             }
@@ -173,8 +123,6 @@ impl Store {
 }
 
 impl Shared {
-    /// Reads `which` list again and tells the listening clients what
-    /// changed; both lists, the first time.
     fn reload(&self, which: Reread) {
         let _disk = lock(&self.disk);
         self.reload_holding_disk(which);
@@ -182,8 +130,6 @@ impl Shared {
 
     fn reload_holding_disk(&self, which: Reread) {
         let places = which.places().then(|| places(self.home.as_ref()));
-        // `None` keeps the pinned folders as they are: not asked for, or
-        // the file can't be read.
         let bookmarks: Option<Arc<[Bookmark]>> = which
             .bookmarks()
             .then(|| {
@@ -213,8 +159,6 @@ impl Shared {
         }
     }
 
-    /// Whether `changed` in Home may have made or removed a standard
-    /// folder: one with a usual name, or the name `user-dirs.dirs` gave it.
     fn touches_a_place(&self, home: &Path, changed: &Changed) -> bool {
         let names = match changed {
             Changed::All => return true,
@@ -230,8 +174,6 @@ impl Shared {
         })
     }
 
-    /// Makes `change` in the bookmarks file, then reads the pinned folders
-    /// again. A file that can't be read is left as it is.
     fn save(&self, change: &BookmarkChange) {
         let Some(home) = &self.home else {
             return;
@@ -251,24 +193,18 @@ impl Shared {
             }
             Err(error) => log::warn!("can't save {}: {error}", file.display()),
         }
-        // The watch sees the save too, later; reading now tells the
-        // clients without waiting for it.
         self.reload_holding_disk(Reread::Bookmarks);
     }
 }
 
-/// Sends `event` to every client in `listeners`, dropping those gone.
 fn tell(listeners: &mut BTreeMap<ClientId, Arc<dyn EventSink>>, event: &Event) {
     listeners.retain(|_, events| events.deliver(event.clone()).is_ok());
 }
 
-/// The bookmarks file under `home`'s config folder.
 fn bookmarks_file(home: &Home) -> PathBuf {
     home.config.join(bookmarks::FOLDER).join(bookmarks::FILE)
 }
 
-/// The bookmarks file's lines: none when it is missing, `None` (logged)
-/// when it can't be read or is too big.
 fn read_lines(path: &Path) -> Option<Lines> {
     match private_file::read(path, MAX_BYTES) {
         Read::Bytes(bytes) => Some(Lines::parse(&bytes)),
@@ -284,8 +220,6 @@ fn read_lines(path: &Path) -> Option<Lines> {
     }
 }
 
-/// Starts the watches that read the lists again: the config folder, the
-/// bookmarks file's folder and Home. One that can't start is logged.
 fn watch(home: &Home, shared: &Weak<Shared>) -> Vec<ConfigWatch> {
     let config = {
         let shared = Weak::clone(shared);
@@ -341,7 +275,6 @@ mod tests {
 
     use super::*;
 
-    /// A home with its config folder, removed when dropped.
     struct Scratch(PathBuf);
 
     impl Scratch {
@@ -363,7 +296,6 @@ mod tests {
             }
         }
 
-        /// Shared lists already read once, and a client listening to them.
         fn listening(&self) -> (Shared, Receiver<Event>) {
             let shared = Shared {
                 home: Some(self.home()),
@@ -444,7 +376,6 @@ mod tests {
         assert!(shared.touches_a_place(home, &Changed::All));
         assert!(shared.touches_a_place(home, &names(&["notes.txt", "Documents"])));
         assert!(shared.touches_a_place(home, &names(&["Tunes"])));
-        // Clips is wanted, but deeper than Home, so a `Clips` here isn't it.
         assert!(!shared.touches_a_place(home, &names(&["Clips"])));
         assert!(!shared.touches_a_place(home, &names(&["notes.txt", "deep"])));
         assert!(!shared.touches_a_place(home, &names(&[])));

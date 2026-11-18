@@ -1,6 +1,3 @@
-//! Previews through the real core: a client asks to look into a file or
-//! folder and hears what a quick look shows, or why it couldn't look.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -23,13 +20,11 @@ use nova_files_api::{
 
 use common::{Bench, Client};
 
-/// The box pictures fit; this bench has no helper, so none decode.
 const FIT: Fit = Fit {
     width: 800,
     height: 600,
 };
 
-/// Asks `client` to preview `path` as request `id` and waits for the answer.
 fn preview(client: &Client, id: u64, path: PathBuf) -> Result<Arc<Preview>, Unreadable> {
     client.send(Command::Preview {
         id: PreviewId(id),
@@ -128,7 +123,6 @@ fn a_folder_shows_its_first_entries_and_how_many_it_holds() {
         PreviewContent::Folder { first, count } => {
             assert_eq!(*count, files + 1);
             assert_eq!(first.len(), PREVIEW_ENTRIES);
-            // Folders first, then A to Z.
             assert_eq!(first[0].name, "b-folder");
             assert_eq!(first[0].kind, EntryKind::Folder);
             assert_eq!(first[1].name, "a-00.txt");

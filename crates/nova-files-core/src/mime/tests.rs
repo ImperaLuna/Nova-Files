@@ -5,7 +5,6 @@ use nova_files_api::{FileFilter, FilterRule, IconKind};
 
 use super::*;
 
-/// A data folder of its own, removed afterwards.
 struct Dir(PathBuf);
 
 impl Dir {
@@ -68,13 +67,11 @@ fn of<'a>(types: &'a MimeTypes, name: &str) -> Option<&'a str> {
 fn a_name_gets_the_type_of_its_best_pattern() {
     let (_dir, types) = types("of");
     assert_eq!(of(&types, "report.PDF"), Some("application/pdf"));
-    // The longer pattern wins a tie on weight.
     assert_eq!(
         of(&types, "backup.tar.gz"),
         Some("application/x-compressed-tar")
     );
     assert_eq!(of(&types, "single.gz"), Some("application/gzip"));
-    // A higher weight wins over a longer pattern too.
     assert_eq!(of(&types, "a.special.md"), Some("text/x-markdown-special"));
     assert_eq!(of(&types, "Makefile"), Some("text/x-makefile"));
     assert_eq!(of(&types, "README.txt"), Some("text/x-readme"));
@@ -94,7 +91,6 @@ fn a_case_sensitive_pattern_keeps_its_case() {
 fn kinds_follow_subclasses_aliases_and_media() {
     let (_dir, types) = types("kinds");
     assert!(types.is_a("text/x-csrc", "text/plain"));
-    // Every text type is plain text, listed or not.
     assert!(types.is_a("text/markdown", "text/plain"));
     assert!(types.is_a("application/x-compressed-tar", "application/gzip"));
     assert!(!types.is_a("application/gzip", "application/x-compressed-tar"));
@@ -204,8 +200,6 @@ fn a_large_globs_file_is_read_to_its_end() {
     assert_eq!(types.of(OsStr::new("a.pdf")), Some("application/pdf"));
 }
 
-/// Run by `the_environment_names_the_data_folders`, in a process of its
-/// own with the environment set, since a test can't safely change its own.
 #[test]
 #[ignore = "run by the_environment_names_the_data_folders"]
 fn from_env_child() {
@@ -239,7 +233,6 @@ fn a_glob_rule_admits_by_name_alone() {
     let pdfs = filter(&[FilterRule::Glob("*.pdf".to_owned())]);
     assert!(pdfs.admits(OsStr::new("a.PDF"), Some(&types)));
     assert!(!pdfs.admits(OsStr::new("a.md"), Some(&types)));
-    // A name the database doesn't know is judged by the glob alone.
     assert!(!pdfs.admits(OsStr::new("a.xyz"), Some(&types)));
 }
 
@@ -250,7 +243,6 @@ fn a_mime_rule_admits_the_type_and_its_kinds() {
     assert!(text.admits(OsStr::new("notes.md"), Some(&types)));
     assert!(text.admits(OsStr::new("main.c"), Some(&types)));
     assert!(!text.admits(OsStr::new("photo.png"), Some(&types)));
-    // Nothing known about the name: let it through.
     assert!(text.admits(OsStr::new("blob"), Some(&types)));
 }
 
@@ -299,7 +291,6 @@ fn a_type_is_called_by_its_untranslated_comment() {
          <comment>PNG &amp; &lt;friends&gt;</comment>\n</mime-type>\n",
     );
     assert_eq!(types.name("image/png").as_deref(), Some("PNG & <friends>"));
-    // An alias is called what the type it stands for is.
     assert_eq!(
         types.name("image/x-old").as_deref(),
         Some("PNG & <friends>")
@@ -399,7 +390,6 @@ fn icon_names_go_from_the_type_to_its_generic_icon() {
         types.icon_names("application/pdf"),
         ["my-pdf", "application-pdf", "application-x-generic"]
     );
-    // An alias is drawn as the type it stands for.
     assert_eq!(
         types.icon_names("image/x-old"),
         ["image-png", "image-x-generic"]

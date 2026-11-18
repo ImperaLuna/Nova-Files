@@ -1,6 +1,3 @@
-//! Deleting for good through the real core: whole trees go, links go
-//! without what they point to, and bad paths delete nothing.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,

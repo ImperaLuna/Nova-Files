@@ -1,28 +1,3 @@
-//! Looking into a file or folder for [`Command::Preview`], the quick look.
-//!
-//! A folder shows its first entries, as a listing orders them, and how
-//! many it holds. A regular file is read from its start, at most
-//! [`PREVIEW_TEXT_BYTES`]. When its first bytes are those of a JPEG, PNG
-//! or WebP picture, it goes to the sandboxed thumbnail helper, which
-//! decodes it scaled down to the client's box (see `thumbs`); one client's
-//! pictures decode one at a time, a newer request stops the helper still
-//! decoding an older one, and a request replaced while it waited its turn
-//! never starts. Otherwise, when the start is UTF-8 text
-//! (allowing a character cut at the end) with no NUL byte, it shows as
-//! text. Anything else (a picture that wouldn't decode, a binary file, or
-//! anything that isn't a regular file: a device, pipe or socket, which is
-//! never opened) shows as its icon. A link shows what it points to, named
-//! by its target's name too. The kind's name comes from the file's name,
-//! through the MIME database.
-//!
-//! Each request reads on a thread of its own, so a drive that stopped
-//! answering never holds up the core. A client's newer request cancels
-//! the older one: the worker checks before each read from the disk and
-//! before it answers, so a late answer never lands. The client also drops
-//! answers whose id isn't its newest.
-//!
-//! [`Command::Preview`]: nova_files_api::Command::Preview
-
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read as _};
 use std::os::unix::fs::OpenOptionsExt as _;
@@ -43,31 +18,21 @@ use crate::thumbs::{self, Running};
 
 const THREAD_NAME: &str = "nova-files-preview";
 
-/// A NUL byte marks a file as binary.
 const NUL: u8 = 0;
 
-/// How the pictures the helper decodes begin: the bytes each holds at
-/// which place.
 const PICTURE_SIGNATURES: [&[(usize, &[u8])]; 3] = [
-    // JPEG
     &[(0, &[0xFF, 0xD8, 0xFF])],
-    // PNG
     &[(0, b"\x89PNG\r\n\x1a\n")],
-    // WebP: a RIFF file of WEBP data.
     &[(0, b"RIFF"), (8, b"WEBP")],
 ];
 
-/// The preview that counts for one client, or none, and the turn its
-/// pictures take to decode.
 #[derive(Debug, Default)]
 pub struct Current {
     id: AtomicU64,
     decoding: Mutex<()>,
-    /// The helper decoding the client's picture, if one is.
     running: Running,
 }
 
-/// No preview counts: the client never asked, or left.
 const NONE: u64 = u64::MAX;
 
 impl Current {
@@ -83,33 +48,26 @@ impl Current {
         self.id.load(Ordering::SeqCst) == id.0
     }
 
-    /// Request `id` counts from now on: an older one still decoding stops.
     fn set(&self, id: PreviewId) {
         self.id.store(id.0, Ordering::SeqCst);
         self.running.stop();
     }
 
-    /// Stops the preview running, if any.
     pub fn cancel(&self) {
         self.id.store(NONE, Ordering::SeqCst);
         self.running.stop();
     }
 }
 
-/// What one request needs.
 pub struct Request {
     pub id: PreviewId,
     pub path: PathBuf,
     pub fit: Fit,
     pub current: Arc<Current>,
     pub types: Arc<OnceLock<MimeTypes>>,
-    /// The thumbnail helper, which decodes pictures; without one, a
-    /// picture shows its icon.
     pub helper: Option<PathBuf>,
 }
 
-/// Looks into `request`'s path on a thread of its own and hands the answer
-/// to `events`, unless a newer request replaced it first.
 pub fn answer(events: &Arc<dyn EventSink>, request: Request) {
     request.current.set(request.id);
     let sink = Arc::clone(events);
@@ -125,7 +83,6 @@ pub fn answer(events: &Arc<dyn EventSink>, request: Request) {
             }
         });
     if spawned.is_err() {
-        // Nothing could be read; the client can ask again.
         let reason = Unreadable::Failed;
         let path = asked;
         events
@@ -134,7 +91,6 @@ pub fn answer(events: &Arc<dyn EventSink>, request: Request) {
     }
 }
 
-/// The answer to `request`, or `None` once it no longer counts.
 fn event(request: &Request) -> Option<Event> {
     let Request { id, path, .. } = request;
     let cancelled = || !request.current.is(*id);
@@ -185,7 +141,6 @@ fn event(request: &Request) -> Option<Event> {
     })
 }
 
-/// What `path` leads to: the path itself, or a link's final target.
 fn target(path: &Path) -> PathBuf {
     let is_link = fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_symlink());
     is_link
@@ -194,9 +149,6 @@ fn target(path: &Path) -> PathBuf {
         .unwrap_or_else(|| path.to_owned())
 }
 
-/// `request`'s picture, decoded by `helper` once the client's previous
-/// picture is done, or its icon when it wouldn't decode. `None` when the
-/// request was replaced meanwhile.
 fn picture(request: &Request, helper: &Path) -> Option<PreviewContent> {
     let _turn = request
         .current
@@ -212,7 +164,6 @@ fn picture(request: &Request, helper: &Path) -> Option<PreviewContent> {
     Some(picture.map_or(PreviewContent::Icon, PreviewContent::Picture))
 }
 
-/// A folder's first entries and how many it holds.
 fn folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<PreviewContent, Stopped> {
     let mut first = list::read_folder(path, cancelled)?;
     let count = first.len();
@@ -220,12 +171,10 @@ fn folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<PreviewContent, S
     Ok(PreviewContent::Folder { first, count })
 }
 
-/// The first bytes of a regular file; `None` for anything else.
 fn start(path: &Path, metadata: &Metadata) -> io::Result<Option<Vec<u8>>> {
     if !metadata.is_file() {
         return Ok(None);
     }
-    // Swapped for a pipe since the look, it still won't wait for a writer.
     let opened = File::options()
         .read(true)
         .custom_flags(OFlags::NONBLOCK.bits().cast_signed())
@@ -236,7 +185,6 @@ fn start(path: &Path, metadata: &Metadata) -> io::Result<Option<Vec<u8>>> {
     Ok(Some(start))
 }
 
-/// Whether a file starting with `start` is a picture the helper decodes.
 fn is_picture(start: &[u8]) -> bool {
     PICTURE_SIGNATURES.iter().any(|parts| {
         parts
@@ -245,8 +193,6 @@ fn is_picture(start: &[u8]) -> bool {
     })
 }
 
-/// `start`, the first bytes of a file `length` long, as text when it is
-/// text, else the file's icon.
 fn text(start: Vec<u8>, length: u64) -> PreviewContent {
     if start.is_empty() || start.contains(&NUL) {
         return PreviewContent::Icon;
@@ -254,7 +200,6 @@ fn text(start: Vec<u8>, length: u64) -> PreviewContent {
     let cut = u64::try_from(start.len()).is_ok_and(|read| read < length);
     let text = match String::from_utf8(start) {
         Ok(text) => text,
-        // A character cut at the end of what was read is still text.
         Err(error) if cut && error.utf8_error().error_len().is_none() => {
             let valid = error.utf8_error().valid_up_to();
             let mut bytes = error.into_bytes();
@@ -303,8 +248,6 @@ mod tests {
         assert!(event(&new).is_none());
     }
 
-    /// What request 1 for `path` answers, with a MIME database that knows
-    /// `*.txt` as "Plain text".
     fn previewed(dir: &Path, path: &Path) -> Arc<Preview> {
         fs::create_dir_all(dir.join("data/mime/text")).unwrap();
         fs::write(dir.join("data/mime/globs2"), "50:text/plain:*.txt\n").unwrap();
@@ -341,7 +284,6 @@ mod tests {
         let file = dir.join("a.txt");
         let folder = dir.join("b.txt");
         fs::create_dir_all(&folder).unwrap();
-        // Longer than a few KiB, and still shown whole.
         fs::write(&file, "a".repeat(4096)).unwrap();
         let (file, folder) = (previewed(&dir, &file), previewed(&dir, &folder));
         fs::remove_dir_all(&dir).ok();
@@ -395,13 +337,11 @@ mod tests {
     fn empty_binary_and_other_encodings_show_their_icon() {
         assert_eq!(shown(b"", 0), PreviewContent::Icon);
         assert_eq!(shown(b"PK\x03\x04\0\0", 6), PreviewContent::Icon);
-        // Latin-1 "é", whole: not UTF-8.
         assert_eq!(shown(b"caf\xe9", 4), PreviewContent::Icon);
     }
 
     #[test]
     fn a_character_cut_at_the_end_of_a_longer_file_is_dropped() {
-        // "é" is 0xC3 0xA9; the read stopped between them.
         assert_eq!(
             shown(b"caf\xc3", 100),
             PreviewContent::Text {
@@ -409,9 +349,7 @@ mod tests {
                 cut: true
             }
         );
-        // The file ends there: it isn't text.
         assert_eq!(shown(b"caf\xc3", 4), PreviewContent::Icon);
-        // A bad byte before the end isn't a cut character.
         assert_eq!(shown(b"ca\xc3f", 100), PreviewContent::Icon);
     }
 }

@@ -1,29 +1,3 @@
-//! The gathered folders file's text: reading the folders out of it, and
-//! adding or removing one in it.
-//!
-//! The file is TOML that people edit by hand or write from Nix, so a
-//! mistake costs only the entry it is in: each entry is read on its own,
-//! and one without a usable `path`, or with an unknown `holds`, is left out
-//! and reported. Unknown keys are reported and left out, as in
-//! `settings.toml`. A path starting `~/` is in the home folder; any other
-//! must be absolute. A folder listed twice in one place counts once.
-//!
-//! A change from the app edits the text in place (`toml_edit`), so the
-//! user's comments, order and other entries stay as they were. Entries
-//! may be an array of tables or an inline array; a new one joins in the
-//! same form. A folder in the home folder is written as `~/…`, so the file
-//! still reads right for the same user elsewhere.
-//!
-//! ```toml
-//! [[projects]]
-//! path = "~/Projects"
-//! holds = "many"            # "many" (each folder inside) or "one"
-//!
-//! [[games]]
-//! path = "/mnt/games/SteamLibrary/steamapps/common"
-//! name = "Games SSD"        # shown where its rows came from
-//! ```
-
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -37,11 +11,9 @@ const HOLDS: &str = "holds";
 const NAME: &str = "name";
 const MANY: &str = "many";
 const ONE: &str = "one";
-/// What starts a path in the home folder, and the home folder alone.
 const HOME_PREFIX: &str = "~/";
 const HOME_ALONE: &str = "~";
 
-/// The table a place's entries are under.
 const fn key(place: Gathering) -> &'static str {
     match place {
         Gathering::Projects => PROJECTS,
@@ -49,11 +21,6 @@ const fn key(place: Gathering) -> &'static str {
     }
 }
 
-/// The folders `text` gathers, with `~` meaning `home`, and what in it was
-/// left out and why.
-///
-/// # Errors
-/// Why, when `text` isn't TOML at all: the caller keeps what it had.
 pub fn read(text: &str, home: &Path) -> Result<(Gathered, Vec<String>), String> {
     let document = text
         .parse::<DocumentMut>()
@@ -87,8 +54,6 @@ pub fn read(text: &str, home: &Path) -> Result<(Gathered, Vec<String>), String> 
     Ok((gathered, problems))
 }
 
-/// Each entry under `place`'s key with its position there, `None` for one
-/// that isn't a table; none, and a problem, when the key holds no list.
 fn entries<'a>(
     document: &'a DocumentMut,
     place: Gathering,
@@ -110,8 +75,6 @@ fn entries<'a>(
     tables.into_iter().enumerate().collect()
 }
 
-/// The folder one entry names, or `None` (with the problem, said `at` it)
-/// when it names none.
 fn folder(
     entry: &dyn TableLike,
     home: &Path,
@@ -152,8 +115,6 @@ fn folder(
     Some(GatheredFolder { path, holds, name })
 }
 
-/// The path `text` names, with `~` meaning `home`; `None` when it is
-/// relative.
 fn expand(text: &str, home: &Path) -> Option<PathBuf> {
     if text == HOME_ALONE {
         return Some(home.to_owned());
@@ -165,8 +126,6 @@ fn expand(text: &str, home: &Path) -> Option<PathBuf> {
     path.is_absolute().then_some(path)
 }
 
-/// `path` as the file writes it: `~/…` inside `home`, else as it is.
-/// `None` when it isn't UTF-8 text, which TOML can't hold.
 fn written(path: &Path, home: &Path) -> Option<String> {
     match path.strip_prefix(home) {
         Ok(inside) if inside.as_os_str().is_empty() => Some(HOME_ALONE.to_owned()),
@@ -177,19 +136,13 @@ fn written(path: &Path, home: &Path) -> Option<String> {
     }
 }
 
-/// What [`add`] and [`remove`] made of the text.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Edit {
-    /// The new text to save.
     Changed(String),
-    /// Nothing to do: the folder is already there, or already gone.
     Unchanged,
-    /// The text can't take the change; it is left as it is.
     Refused(String),
 }
 
-/// `text` with `folder` gathered into `place`, before the folder now at
-/// position `at` of the place's list (as [`read`] gives it), or last.
 pub fn add(
     text: &str,
     home: &Path,
@@ -245,7 +198,6 @@ pub fn add(
     Edit::Changed(document.to_string())
 }
 
-/// `text` without `path` in `place`: every entry naming it goes.
 pub fn remove(text: &str, home: &Path, place: Gathering, path: &Path) -> Edit {
     let mut document = match text.parse::<DocumentMut>() {
         Ok(document) => document,
@@ -278,7 +230,6 @@ pub fn remove(text: &str, home: &Path, place: Gathering, path: &Path) -> Edit {
     }
 }
 
-/// The text of a new file gathering `folders` into each place.
 pub fn new_file(home: &Path, folders: &[(Gathering, GatheredFolder)]) -> String {
     let mut text = String::new();
     for (place, folder) in folders {
@@ -289,9 +240,6 @@ pub fn new_file(home: &Path, folders: &[(Gathering, GatheredFolder)]) -> String 
     text
 }
 
-/// For each folder [`read`] keeps in `place`, its entry's position in the
-/// document and its path. An error when the key holds anything but
-/// entries, which a change must not touch.
 fn kept_positions(
     document: &DocumentMut,
     home: &Path,
@@ -314,8 +262,6 @@ fn kept_positions(
     Ok(kept)
 }
 
-/// Puts `table` into `tables` at `index`, or last. `ArrayOfTables` can
-/// only push, so the tables from `index` on are taken off and put back.
 fn insert_table(tables: &mut ArrayOfTables, index: Option<usize>, table: Table) {
     let index = index.map_or(tables.len(), |index| index.min(tables.len()));
     let mut after = Vec::new();

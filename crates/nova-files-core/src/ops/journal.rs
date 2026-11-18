@@ -1,54 +1,3 @@
-//! The job journal: what a job is about to do and has done, on disk, so a
-//! job cut short by a crash can be cleaned up and resumed, and a finished
-//! one undone.
-//!
-//! Each job writes one file, `<state>/nova-files/jobs/<id>`, readable by
-//! the user alone. It is a list of lines, each a record word and the
-//! paths it is about. Paths are written byte by byte, with `%`, spaces, control bytes
-//! and bytes outside ASCII as `%` and two hex digits, so any name, UTF-8
-//! or not, fits on one line. A part file is recorded before it is made
-//! and a copy after it is made, so the journal may miss a copy but never
-//! claims one the job didn't make: undo can't remove what isn't the job's.
-//! A record reaches the disk with the first record written a second or
-//! more after the last sync, before a copy longer than one chunk starts,
-//! and before the job waits on the user, so a crash may leave the last
-//! short part files hidden and unrecorded, but costs no data; a backup,
-//! the user's own file stepping aside, is on the disk before it happens.
-//! A job whose journal fails replaces nothing more, and the journal stays
-//! for the clean-up after a crash. The file is removed when the job ends.
-//!
-//! ```text
-//! nova-files-job 1
-//! copy
-//! into /home/me/Backup
-//! source /home/me/My%20Photos
-//! sources-done
-//! part /home/me/Backup/.nova-part-4-0
-//! made /home/me/Backup/My%20Photos /home/me/My%20Photos
-//! ```
-//!
-//! `made` names what was made, then its source, so a copy made under
-//! another name (the user kept both) is found again. A move records each
-//! item it moved, from and to, instead of `made`; a delete records what
-//! it was asked to delete, then each entry it planned to, with its
-//! device and inode (and when it was born, where the filesystem keeps
-//! it), before it removes any.
-//!
-//! A trash job writes each info file as a part file in the trash, then
-//! records it (`trash-info`, with its device and inode) before it takes
-//! its name, and records the entry once moved, from and to (`trashed`).
-//!
-//! `sources-done` follows the last source: a journal cut short before it
-//! doesn't say all the job was asked to do, so it is cleaned up but not
-//! resumed.
-//!
-//! A line with a word this version doesn't write, or with the wrong
-//! number of fields, makes the whole journal unreadable: it is left
-//! alone rather than half understood.
-//!
-//! A running job holds a lock on its journal, so a second core never
-//! takes a live job for one a crash cut short.
-
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{self, Write as _};
 use std::os::unix::ffi::OsStrExt as _;
@@ -62,22 +11,15 @@ use rustix::fs::{FlockOperation, flock};
 use super::plan::Entry;
 use crate::percent;
 
-/// The journals' folder, under the state folder.
 pub const FOLDER: &str = "nova-files/jobs";
-/// The first line, naming the format and its version.
 const HEADER: &str = "nova-files-job 1";
 const FILE_MODE: u32 = 0o600;
 const FOLDER_MODE: u32 = 0o700;
-/// Bytes written as themselves: printable ASCII but `%` and the space.
 const PLAIN: std::ops::RangeInclusive<u8> = b'!'..=b'~';
 
-/// The start of the hidden name of a part file a job writes, followed by
-/// the job's id for names and the item's index.
 pub const PART_PREFIX: &str = ".nova-part-";
-/// The start of the hidden name a user's file steps aside to.
 pub const BACKUP_PREFIX: &str = ".nova-backup-";
 
-/// The record words, as written and read back.
 pub mod word {
     pub const COPY: &str = "copy";
     pub const MOVE: &str = "move";
@@ -99,14 +41,9 @@ pub mod word {
     pub const EMPTY_TRASH: &str = "empty-trash";
     pub const UNDO: &str = "undo";
 
-    /// The fields of a record about two paths, or a path and its entry.
     const PAIR: usize = 2;
-    /// The fields of a record about an info file, its entry, and the
-    /// entry it is for.
     const TRIPLE: usize = 3;
 
-    /// How many fields follow `word`, or `None` for a word this version
-    /// doesn't write.
     pub fn fields(word: &str) -> Option<usize> {
         match word {
             COPY | MOVE | DELETE | TRASH | RESTORE | DELETE_FROM_TRASH | EMPTY_TRASH | UNDO
@@ -119,11 +56,8 @@ pub mod word {
     }
 }
 
-/// Splits an entry's device, inode and birth in its field.
 const ENTRY_SPLIT: char = ':';
 
-/// `entry` as a journal field: its device, then its inode, then when it
-/// was born where that is known.
 fn entry_field(entry: Entry) -> PathBuf {
     let Entry {
         device,
@@ -136,7 +70,6 @@ fn entry_field(entry: Entry) -> PathBuf {
     ))
 }
 
-/// The entry `field` names, or `None` when it names none.
 pub fn entry_from(field: &Path) -> Option<Entry> {
     let mut parts = field.to_str()?.split(ENTRY_SPLIT);
     let entry = Entry {
@@ -147,49 +80,23 @@ pub fn entry_from(field: &Path) -> Option<Entry> {
     parts.next().is_none().then_some(entry)
 }
 
-/// One line of a journal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Record<'a> {
-    /// The operation's name, the first record after the header.
     Operation(&'static str),
-    /// The folder a copy or move goes into.
     Into(&'a Path),
-    /// One of the operation's sources.
     Source(&'a Path),
-    /// A part file about to be written. Left behind by a crash, it goes.
     Part(&'a Path),
-    /// Something the job made at the first path, from the source at the
-    /// second, which undo would remove.
     Made(&'a Path, &'a Path),
-    /// Something the job moved from the first path to the second, which
-    /// undo would move back.
     Moved(&'a Path, &'a Path),
-    /// The user's file at the second path is about to step aside to the
-    /// first while its replacement takes its name. Left behind by a
-    /// crash, it goes back if its name is free.
     Backup(&'a Path, &'a Path),
-    /// An entry a delete planned to remove, and which entry it was. A
-    /// resumed delete removes only these, never what came after, even
-    /// under the same name.
     Planned(&'a Path, Entry),
-    /// The delete's whole plan is recorded: a resume may keep to it.
     PlanDone,
-    /// Every source is recorded: the job says all it was asked to do,
-    /// so it may resume.
     SourcesDone,
-    /// An info file in a trash, which entry it is, and the entry it is
-    /// for, before that entry moves in (the info file made first under a
-    /// part file's name) or out (restored, or deleted). Left behind by a
-    /// crash without that entry in the trash, it goes; under that name,
-    /// any other info file is another app's and stays.
     TrashInfo(&'a Path, Entry, Entry),
-    /// Something the job moved from the first path into a trash, at the
-    /// second, which undo would restore.
     Trashed(&'a Path, &'a Path),
 }
 
 impl Record<'_> {
-    /// The record as a line, newline included.
     fn line(self) -> Vec<u8> {
         let entry;
         let entries;
@@ -226,20 +133,16 @@ impl Record<'_> {
     }
 }
 
-/// `bytes` with every byte outside [`PLAIN`] escaped.
 fn escape(bytes: &[u8]) -> Vec<u8> {
     percent::escape(bytes, |byte| PLAIN.contains(&byte))
 }
 
-/// How long after a sync a record syncs the journal again.
 const SYNC_EVERY: Duration = Duration::from_secs(1);
 
-/// Whether a journal last synced at `synced` is due a sync at `now`.
 fn sync_due(synced: Instant, now: Instant) -> bool {
     now.duration_since(synced) >= SYNC_EVERY
 }
 
-/// A job's open journal.
 pub struct Journal {
     file: File,
     path: PathBuf,
@@ -247,11 +150,6 @@ pub struct Journal {
 }
 
 impl Journal {
-    /// Starts job `job`'s journal in `folder`.
-    ///
-    /// # Errors
-    /// When the folder or the file can't be made, or a job with this id
-    /// already has a journal.
     pub fn start(folder: &Path, job: JobId) -> io::Result<Self> {
         DirBuilder::new()
             .recursive(true)
@@ -263,12 +161,10 @@ impl Journal {
             .create_new(true)
             .mode(FILE_MODE)
             .open(&path)?;
-        // Before the header, so a journal that says anything is held.
         hold(&file)?;
         file.write_all(HEADER.as_bytes())?;
         file.write_all(b"\n")?;
         file.sync_data()?;
-        // The journal's own entry in its folder, so a crash can't lose it.
         File::open(folder)?.sync_all()?;
         Ok(Self {
             file,
@@ -277,13 +173,6 @@ impl Journal {
         })
     }
 
-    /// Adds to the journal at `path` again, left by a crash and held
-    /// through `file` since, as its job resumes. What follows its first
-    /// `whole` bytes, a last line the crash cut short, goes first, so
-    /// the next record starts a line of its own.
-    ///
-    /// # Errors
-    /// When it can't be cut back.
     pub fn reopen(file: File, path: PathBuf, whole: u64) -> io::Result<Self> {
         file.set_len(whole)?;
         Ok(Self {
@@ -293,12 +182,6 @@ impl Journal {
         })
     }
 
-    /// Adds `record`, syncing the journal when it was last synced more
-    /// than [`SYNC_EVERY`] ago, or at once for a backup: the user's file
-    /// is about to leave its name, and a crash must not lose where to.
-    ///
-    /// # Errors
-    /// When it can't be written.
     pub fn record(&mut self, record: Record<'_>) -> io::Result<()> {
         self.file.write_all(&record.line())?;
         let now = Instant::now();
@@ -309,39 +192,27 @@ impl Journal {
         Ok(())
     }
 
-    /// Syncs what is written so far to the disk.
-    ///
-    /// # Errors
-    /// When it can't be synced.
     pub fn sync(&mut self) -> io::Result<()> {
         self.file.sync_data()?;
         self.synced = Instant::now();
         Ok(())
     }
 
-    /// The job is over: its journal goes.
     pub fn finish(self) {
         remove_journal(&self.path);
     }
 
-    /// The journal's path and file, held, as the job writes no more to it.
     pub fn into_held(self) -> (PathBuf, File) {
         (self.path, self.file)
     }
 }
 
-/// Removes the journal at `path`, of a job that is over.
 pub fn remove_journal(path: &Path) {
     if let Err(error) = fs::remove_file(path) {
         log::warn!("can't remove the job journal {}: {error}", path.display());
     }
 }
 
-/// Holds `journal` for as long as it is open, so no other core takes its
-/// job for one a crash cut short.
-///
-/// # Errors
-/// [`io::ErrorKind::WouldBlock`] when another holds it.
 pub fn hold(journal: &File) -> io::Result<()> {
     flock(journal, FlockOperation::NonBlockingLockExclusive).map_err(io::Error::from)
 }
@@ -349,7 +220,6 @@ pub fn hold(journal: &File) -> io::Result<()> {
 pub mod read;
 #[cfg(test)]
 impl Journal {
-    /// A journal written through `file`, which may refuse writes.
     pub fn over(file: File, path: PathBuf) -> Self {
         Self {
             file,
@@ -358,7 +228,6 @@ impl Journal {
         }
     }
 
-    /// When it was last synced.
     pub const fn synced(&self) -> Instant {
         self.synced
     }

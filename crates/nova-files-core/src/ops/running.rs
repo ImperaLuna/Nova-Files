@@ -1,7 +1,3 @@
-//! What a job's thread holds while it runs: its id, its switch, its
-//! progress, its journal once it has one, the answers a client gave for
-//! all conflicts of a kind, and what those answers made of it.
-
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io;
@@ -24,53 +20,23 @@ use crate::trash::TrashFolder;
 
 pub struct Running {
     pub job: JobId,
-    /// The id in the names of the job's part files and backups: the job's
-    /// own, or, once resumed, a new one, so none is a name a crash left.
     pub names: u64,
-    /// What the core keeps of the job while it runs.
     pub shared: Arc<Job>,
     pub reporter: Reporter,
-    /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
     journal: Option<Journal>,
-    /// The journal the job no longer writes to: a resumed job's that
-    /// couldn't be opened again, or one that failed. It is held so no
-    /// other core takes the job up, and left for the clean-up should the
-    /// core crash; it goes when the job ends, or the job would seem cut
-    /// short.
     held: Option<(PathBuf, File)>,
-    /// Answers given for every conflict of their kind.
     answers: HashMap<ConflictKind, Answer>,
-    /// How many conflicts it asked about.
     asked: u64,
-    /// The folders of the trees the job walks, opened so as never to
-    /// leave them.
     pub folders: Folders,
-    /// What the job did before a crash cut it short, taken as done now
-    /// that it resumes.
     pub before: Done,
-    /// Whether the job resumes, adding to the journal it already has.
     resumes: bool,
-    /// What the job was given, from its record, when it can be undone.
     sources: HashSet<PathBuf>,
-    /// What an undo takes back: where the job made, moved or trashed
-    /// entries from what it was given in this run, by where from, each
-    /// the outermost such entry. A folder merged into one already there
-    /// was never moved itself, so its entries are.
     pub steps: BTreeMap<PathBuf, PathBuf>,
-    /// What the answers to its conflicts made of the job so far.
     pub tally: Tally,
-    /// The home trash's folder, where files the job replaces go when
-    /// they are on the home drive.
     pub home_trash: Option<PathBuf>,
-    /// Each file the job replaced, by the path it had, and where in a
-    /// trash it went, so an undo can put it back.
     pub replaced: Vec<(PathBuf, PathBuf)>,
-    /// The trash found for each folder a replaced file went from, looked
-    /// for once per job.
     pub replaced_trashes: HashMap<PathBuf, TrashFolder>,
-    /// Where the steps kept went, so a replace can tell an entry this
-    /// job made from one that was there before it.
     placed: HashSet<PathBuf>,
 }
 
@@ -104,15 +70,11 @@ impl Running {
         }
     }
 
-    /// The job resumes after a crash, which `left` it as it was: its
-    /// journal, which already says what the job does, is added to, and
-    /// its hidden names take the id `names`.
     pub fn resuming(&mut self, left: Left, names: u64) {
         self.before = left.done;
         self.names = names;
         self.resumes = true;
         self.journals = None;
-        // Another handle on the journal keeps it held should it fail.
         let held = left.file.try_clone();
         let path = left.journal.clone();
         match Journal::reopen(left.file, left.journal, left.whole) {
@@ -127,9 +89,6 @@ impl Running {
         }
     }
 
-    /// Where the item from `from`, a `planned` kind, went before a crash,
-    /// if it is still there as that kind. A folder swapped for a link
-    /// since is not the job's, so it goes through the conflicts again.
     pub fn made_before(&self, from: &Path, planned: Kind) -> Option<&Path> {
         self.before
             .made
@@ -142,7 +101,6 @@ impl Running {
             })
     }
 
-    /// Makes sure what the journal says so far is on the disk.
     pub fn settle(&mut self) {
         if let Some(journal) = &mut self.journal
             && let Err(error) = journal.sync()
@@ -151,7 +109,6 @@ impl Running {
         }
     }
 
-    /// The journal failed with `error`: the job writes no more to it.
     fn drop_journal(&mut self, error: &io::Error) {
         log::warn!("job {} stops its journal: {error}", self.job.0);
         if let Some(journal) = self.journal.take() {
@@ -159,19 +116,10 @@ impl Running {
         }
     }
 
-    /// Whether an answer for all conflicts of `kind` is already given,
-    /// so [`Self::ask`] won't ask about one.
     pub fn answered(&self, kind: ConflictKind) -> bool {
         self.answers.contains_key(&kind)
     }
 
-    /// Holds at `conflict` until a client answers, unless one already
-    /// answered for all of its kind, with the journal on the disk first.
-    /// Retry is never kept for a kind: what still fails would be retried
-    /// for ever.
-    ///
-    /// # Errors
-    /// [`Cancelled`] when a client cancels the job instead.
     pub fn ask(&mut self, mut conflict: Conflict) -> Result<Answer, Cancelled> {
         if let Some(&answer) = self.answers.get(&conflict.kind) {
             return Ok(answer);
@@ -188,22 +136,10 @@ impl Running {
         Ok(answer)
     }
 
-    /// Asks about `conflict`, of a kind that takes only Skip or Retry,
-    /// and returns whether the answer is to skip it.
-    ///
-    /// # Errors
-    /// [`Cancelled`] when a client cancels the job instead.
     pub fn skips(&mut self, conflict: Conflict) -> Result<bool, Cancelled> {
         Ok(self.ask(conflict)? == Answer::Skip)
     }
 
-    /// Takes `step` on `path` until it works, asking the user what to do
-    /// each time it fails for a reason theirs to answer. `None` when they
-    /// skip it.
-    ///
-    /// # Errors
-    /// [`Stop`] when a client cancels the job, or when the failure isn't
-    /// the user's to answer.
     pub fn retry_or_skip<T>(
         &mut self,
         path: &Path,
@@ -222,7 +158,6 @@ impl Running {
                 kind,
                 source: path.to_path_buf(),
                 target: path.to_path_buf(),
-                // Numbered when asked.
                 number: 0,
                 more: 0,
             };
@@ -232,11 +167,6 @@ impl Running {
         }
     }
 
-    /// Adds `record` to the job's journal, starting the journal with the
-    /// first record. Without a journal the job still runs, but replaces
-    /// nothing (see [`Self::record_backup`]): its part files are hidden
-    /// and a real name never holds half a file, so only a resume after a
-    /// crash is lost. That is logged once.
     pub fn record(&mut self, record: Record<'_>) {
         if let Record::Made(to, from) | Record::Moved(from, to) | Record::Trashed(from, to) = record
         {
@@ -268,12 +198,6 @@ impl Running {
         }
     }
 
-    /// Records that the user's file at `of` is about to step aside to
-    /// `backup`, on the disk before it does.
-    ///
-    /// # Errors
-    /// [`Stop`] at `of` when the job has no journal to hold the record:
-    /// after a crash nothing would bring the file back.
     pub fn record_backup(&mut self, backup: &Path, of: &Path) -> Result<(), Stop> {
         self.record(Record::Backup(backup, of));
         if self.journal.is_some() {
@@ -283,8 +207,6 @@ impl Running {
         }
     }
 
-    /// Records what the job is asked to do: operation `name`, the folder
-    /// `into` when it has one, and each of `sources`.
     pub fn record_job(&mut self, name: &'static str, into: Option<&Path>, sources: &[PathBuf]) {
         self.record(Record::Operation(name));
         if let Some(into) = into {
@@ -299,9 +221,6 @@ impl Running {
         self.record(Record::SourcesDone);
     }
 
-    /// Keeps `from` going to `to` as a step to take back, when it is one
-    /// of the sources or inside one, and not inside an entry already kept;
-    /// the entries kept inside it go.
     fn step(&mut self, from: &Path, to: &Path) {
         if !from.ancestors().any(|path| self.sources.contains(path))
             || from
@@ -325,17 +244,14 @@ impl Running {
         self.placed.insert(to.to_path_buf());
     }
 
-    /// Whether `path` is, or is inside, an entry this job put there.
     pub fn placed_here(&self, path: &Path) -> bool {
         path.ancestors().any(|path| self.placed.contains(path))
     }
 
-    /// Whether the job resumed after a crash.
     pub const fn resumed(&self) -> bool {
         self.resumes
     }
 
-    /// The job is over: its journal goes.
     pub fn finish(mut self) {
         if let Some(journal) = self.journal.take() {
             journal.finish();
@@ -348,7 +264,6 @@ impl Running {
 
 #[cfg(test)]
 impl Running {
-    /// A job of its own, without a journal, for unit tests.
     pub fn for_test() -> Self {
         let shared = Arc::new(Job::new(nova_files_api::Operation::Copy {
             sources: Vec::new(),
@@ -363,14 +278,12 @@ impl Running {
         Self::new(JobId(1), shared, reporter, None)
     }
 
-    /// A job of its own writing to `journal`, for unit tests.
     pub fn with_journal(journal: Journal) -> Self {
         let mut running = Self::for_test();
         running.journal = Some(journal);
         running
     }
 
-    /// When its journal was last synced, while it has one.
     pub fn journal_synced(&self) -> Option<std::time::Instant> {
         self.journal.as_ref().map(Journal::synced)
     }

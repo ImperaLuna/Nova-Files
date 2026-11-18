@@ -1,7 +1,3 @@
-//! File operations through the real core, against real temp folders: the
-//! client that starts a job hears its id first, every client hears how it
-//! ended, and nothing is ever replaced.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -198,7 +194,6 @@ fn every_watching_client_hears_a_job_end_but_only_the_asker_hears_it_start() {
     let bench = Bench::new("audience");
     let watcher = bench.client();
     let client = bench.client();
-    // The watcher watches once the core has answered after it asked.
     watcher.send(Command::WatchJobs);
     watcher.send(Command::Ping);
     assert_eq!(
@@ -211,7 +206,6 @@ fn every_watching_client_hears_a_job_end_but_only_the_asker_hears_it_start() {
         name: "x".into(),
     });
 
-    // Hearing too, before, that the job can be undone.
     let Event::JobFinished { job: heard, .. } = watcher.next() else {
         panic!("the watcher heard the job end, and nothing before");
     };

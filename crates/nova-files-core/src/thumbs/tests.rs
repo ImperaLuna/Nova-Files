@@ -1,6 +1,3 @@
-//! The queue's own rules: which entries are still wanted, what a batch
-//! holds, and that dropping it stops its worker.
-
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -65,7 +62,6 @@ fn a_batch_holds_only_wanted_files_not_done_yet() {
     ];
     let queue = Arc::new(shared(entries, 0..3, &[2]));
 
-    // On a thread, so a queue that waits instead fails the test.
     let (sender, batches) = mpsc::channel();
     let worker = Arc::clone(&queue);
     thread::spawn(move || sender.send(worker.next_batch()));
@@ -79,7 +75,6 @@ fn a_batch_holds_only_wanted_files_not_done_yet() {
     assert_eq!(state.done, HashSet::from([1, 2]));
 }
 
-/// A client that never listens; its channel closes once it is dropped.
 struct Gone(#[expect(dead_code, reason = "only dropped")] mpsc::Sender<()>);
 
 impl EventSink for Gone {
@@ -99,7 +94,6 @@ fn dropping_the_queue_stops_its_worker() {
 
     drop(queue);
 
-    // The worker drops the client once it returns.
     assert_eq!(
         dropped.recv_timeout(WAIT),
         Err(mpsc::RecvTimeoutError::Disconnected)
@@ -108,7 +102,6 @@ fn dropping_the_queue_stops_its_worker() {
 
 #[test]
 fn the_environment_names_the_thumbnails_folder_and_helper() {
-    // Tests run with a home folder and a program path.
     let thumbnails = Thumbnails::from_env().unwrap();
     let cache = crate::places::cache_home().unwrap();
     assert_eq!(thumbnails.folder, cache.join(THUMBNAILS_FOLDER));

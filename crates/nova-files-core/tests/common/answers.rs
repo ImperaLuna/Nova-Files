@@ -1,11 +1,7 @@
-//! Holding at conflicts and answering them, for the tests that copy and
-//! move.
-
 use nova_files_api::{Answer, Command, Conflict, Event, JobId, Scope};
 
 use super::common::Client;
 
-/// The conflict job `job` holds at next, skipping its progress.
 pub fn held(client: &Client, job: JobId) -> Conflict {
     loop {
         match client.next() {
@@ -16,8 +12,6 @@ pub fn held(client: &Client, job: JobId) -> Conflict {
     }
 }
 
-/// Answers `conflict`, which job `job` holds at, and waits until every
-/// client is told.
 pub fn answer(client: &Client, job: JobId, conflict: &Conflict, answer: Answer, scope: Scope) {
     client.send(Command::AnswerConflict {
         job,

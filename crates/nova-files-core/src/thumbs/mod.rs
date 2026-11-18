@@ -1,16 +1,3 @@
-//! Thumbnails for the entries a client shows, from the shared freedesktop
-//! cache or, when it has none, from the sandboxed helper.
-//!
-//! Each client has a [`Queue`] with a worker thread of its own. The client
-//! names the entries it shows or is about to show and the size it draws
-//! them at; each request replaces the one before, and a new size sends
-//! every thumbnail again. The worker takes the first entries still wanted, in
-//! order, in batches: a current thumbnail or failure marker in the cache
-//! answers at once, the rest go to the helper as one batch. Before running
-//! the helper and before each answer it checks that the entry is still
-//! wanted, so rows scrolled away cost nothing more. A new listing replaces
-//! the old one and its work.
-
 mod cache;
 mod helper;
 mod md5;
@@ -32,27 +19,18 @@ use nova_files_api::{
     EntryId, EntryKind, Event, EventSink, Listing, ListingId, MAX_ROWS, ThumbnailSize, uri,
 };
 
-/// The thumbnails folder under the cache folder.
 const THUMBNAILS_FOLDER: &str = "thumbnails";
-/// The helper ships next to the program.
 const HELPER_NAME: &str = "nova-files-thumbnailer";
-/// Files per helper run: enough to spread the start-up cost, few enough
-/// that the first thumbnails arrive quickly.
 const BATCH: usize = 8;
 const WORKER_THREAD: &str = "nova-files-thumbnails";
 
-/// Where thumbnails go and the helper that makes them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Thumbnails {
-    /// The freedesktop thumbnails folder, shared with other apps.
     pub folder: PathBuf,
     pub helper: PathBuf,
 }
 
 impl Thumbnails {
-    /// `$XDG_CACHE_HOME/thumbnails` (or `~/.cache/thumbnails`) and the
-    /// helper next to the running program. `None` without a cache folder or
-    /// a program path.
     pub fn from_env() -> Option<Self> {
         let cache = crate::places::cache_home()?;
         let helper = env::current_exe().ok()?.parent()?.join(HELPER_NAME);
@@ -63,7 +41,6 @@ impl Thumbnails {
     }
 }
 
-/// One client's thumbnail work. Dropping it stops the worker.
 pub struct Queue {
     shared: Arc<Shared>,
 }
@@ -77,16 +54,12 @@ struct Shared {
 struct State {
     shown: Option<Arc<Listing>>,
     wanted: Range<usize>,
-    /// The size the wanted entries are drawn at.
     size: ThumbnailSize,
-    /// Entries of the shown listing already answered or given up on, at
-    /// [`Self::size`].
     done: HashSet<usize>,
     closed: bool,
 }
 
 impl Queue {
-    /// Starts the worker; `None` when the OS refuses a thread.
     pub fn start(setup: Thumbnails, events: Arc<dyn EventSink>) -> Option<Self> {
         let shared = Arc::new(Shared {
             state: Mutex::new(State::default()),
@@ -100,10 +73,6 @@ impl Queue {
         Some(Self { shared })
     }
 
-    /// The client now shows listing `id`; earlier work is dropped. Called
-    /// before the client hears of the listing, so its first request finds
-    /// it. `current` is asked under the queue's lock, so a listing that was
-    /// replaced meanwhile can't overwrite the one after it.
     pub fn show(&self, listing: &Listing, current: impl FnOnce() -> bool) {
         self.shared.update(|state| {
             if !current() {
@@ -115,9 +84,6 @@ impl Queue {
         });
     }
 
-    /// The client wants thumbnails for `count` entries of listing `id`
-    /// from `first`, in place of what it wanted before: at `size`, or
-    /// none at all with `None`, which keeps the size it had.
     pub fn want(&self, id: ListingId, first: EntryId, count: u32, size: Option<ThumbnailSize>) {
         self.shared.update(|state| {
             if state.shown.as_ref().is_some_and(|shown| shown.id == id) {
@@ -128,8 +94,6 @@ impl Queue {
                     state.size = size;
                     state.done.clear();
                 }
-                // Rows the client stopped showing may be asked for again,
-                // and it drops their thumbnails, so they count as not done.
                 let wanted = state.wanted.clone();
                 state.done.retain(|index| wanted.contains(index));
             }
@@ -151,7 +115,6 @@ impl Shared {
         self.wake.notify_all();
     }
 
-    /// Whether entry `index` of listing `id` is still wanted at `size`.
     fn still_wanted(&self, id: ListingId, index: usize, size: ThumbnailSize) -> bool {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         !state.closed
@@ -160,9 +123,6 @@ impl Shared {
             && state.wanted.contains(&index)
     }
 
-    /// Waits for the next batch: the shown listing, the size wanted and up
-    /// to [`BATCH`] wanted files not done yet, now marked done. `None` once
-    /// closed.
     fn next_batch(&self) -> Option<Batch> {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         loop {
@@ -199,7 +159,6 @@ impl Shared {
     }
 }
 
-/// Entries of one listing to make thumbnails for, at one size.
 struct Batch {
     shown: Arc<Listing>,
     size: ThumbnailSize,
@@ -233,8 +192,6 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
         let sized = cache::sized(&setup.folder, size);
         let failed = cache::failed(&setup.folder);
         let mut misses = Vec::new();
-        // Each read waits for its row to be still wanted, so rows the client
-        // moved away from cost nothing more.
         for index in batch {
             if !wanted(index) {
                 continue;
@@ -255,15 +212,12 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
                 misses.push((index, job));
             }
         }
-        // The client may have moved on while the cache was read.
         misses.retain(|(index, _)| wanted(*index));
         if misses.is_empty() {
             continue;
         }
         let jobs: Vec<helper::Job> = misses.iter().map(|(_, job)| job.clone()).collect();
         helper::run(&setup.helper, &setup.folder, size, &jobs);
-        // The cache is the answer, not the helper's word: a helper killed
-        // part-way still saved the files it finished.
         for (index, job) in misses {
             if !wanted(index) {
                 continue;
@@ -277,8 +231,6 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
     }
 }
 
-/// What the cache and the helper need to know about entry `index`; `None`
-/// when it vanished or has no mtime.
 fn job_for(shown: &Listing, index: usize) -> Option<helper::Job> {
     let entry = shown.entries.get(index)?;
     let source = shown.path_of(entry);
@@ -299,8 +251,6 @@ fn job_for(shown: &Listing, index: usize) -> Option<helper::Job> {
     })
 }
 
-/// URIs name absolute paths; a listing's folder already is one, but a
-/// relative one is made absolute rather than trusted.
 fn absolute(path: &Path) -> PathBuf {
     std::path::absolute(path).unwrap_or_else(|_| path.to_owned())
 }

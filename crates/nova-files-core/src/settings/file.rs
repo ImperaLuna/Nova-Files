@@ -1,26 +1,3 @@
-//! The settings file's text: reading settings out of it, and making one
-//! change in it.
-//!
-//! The file is TOML that people edit by hand, so a mistake costs only the
-//! value it is in: each known key is read on its own, and one with the
-//! wrong type or an unknown value keeps its default and is reported.
-//! Unknown keys are reported and left out. This is on purpose, unlike the
-//! `deny_unknown_fields` rule for other files: one typo must not throw the
-//! whole file away. Text that isn't TOML at all reads as all defaults.
-//!
-//! A change from the app edits the text in place (`toml_edit`), so the
-//! user's comments, order and other keys stay as they were. A key the
-//! file doesn't have is only added when its new value isn't the default.
-//!
-//! ```toml
-//! appearance = "system"   # "system", "light" or "dark"
-//! thumbnails = true
-//! hidden_files = false    # true lists names that start with a dot
-//!
-//! [keys]                  # action id = keys, in GPUI's keystroke syntax
-//! "go.back" = ["alt-left", "backspace"]
-//! ```
-
 use nova_files_api::{Appearance, HiddenFiles, SettingChange, Settings, Thumbnails};
 use toml_edit::{Array, DocumentMut, Item, Table, TableLike, Value};
 
@@ -33,7 +10,6 @@ const SYSTEM: &str = "system";
 const LIGHT: &str = "light";
 const DARK: &str = "dark";
 
-/// The settings `text` holds, and what in it was left out and why.
 pub fn read(text: &str) -> (Settings, Vec<String>) {
     let mut settings = Settings::default();
     let document = match text.parse::<DocumentMut>() {
@@ -66,7 +42,6 @@ pub fn read(text: &str) -> (Settings, Vec<String>) {
     (settings, problems)
 }
 
-/// The `[keys]` table's overrides, each read on its own.
 fn read_keys(item: &Item, settings: &mut Settings, problems: &mut Vec<String>) {
     let Some(table) = item.as_table_like() else {
         problems.push(format!("`{KEYS}` is a table"));
@@ -81,8 +56,6 @@ fn read_keys(item: &Item, settings: &mut Settings, problems: &mut Vec<String>) {
     }
 }
 
-/// `text` with `change` made, or `None` when `text` isn't TOML, so a file
-/// the user is still fixing is never overwritten.
 pub fn edit(text: &str, change: &SettingChange) -> Option<String> {
     let mut document = text.parse::<DocumentMut>().ok()?;
     let defaults = Settings::default();
@@ -126,8 +99,6 @@ pub fn edit(text: &str, change: &SettingChange) -> Option<String> {
     Some(document.to_string())
 }
 
-/// Sets `key` to `value`, keeping the comment around it; leaves a missing
-/// key out while the value is the default.
 fn set(document: &mut DocumentMut, key: &str, value: Value, is_default: bool) {
     match document.get_mut(key) {
         Some(Item::Value(old)) => {
@@ -143,8 +114,6 @@ fn set(document: &mut DocumentMut, key: &str, value: Value, is_default: bool) {
     }
 }
 
-/// The `[keys]` table, made when the file has none or has something else
-/// under that name.
 fn keys_table(document: &mut DocumentMut) -> Option<&mut dyn TableLike> {
     let item = document
         .entry(KEYS)
@@ -172,7 +141,6 @@ const fn appearance_name(appearance: Appearance) -> &'static str {
     }
 }
 
-/// A list of key strings, or `None` when `item` is anything else.
 fn key_list(item: &Item) -> Option<Vec<String>> {
     item.as_array()?
         .iter()

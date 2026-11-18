@@ -1,10 +1,3 @@
-//! The core opens a file in the default app for its type, read from the
-//! MIME database, `mimeapps.list` and the app's desktop entry, and says so;
-//! a file it can't open is left to the client.
-//!
-//! The core reads those from the environment, so the test runs itself
-//! again with the environment pointed at folders of its own.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs;
@@ -21,7 +14,6 @@ use nova_files_api::{Command, Event, NotOpened};
 
 use own_folders::run_again_in;
 
-/// Set in the run that talks to the core: the folder it was given.
 const ROOT_VAR: &str = "NOVA_FILES_OPEN_TEST_ROOT";
 const TEST_NAME: &str = "a_file_opens_in_its_default_app";
 const IDLE_EXIT: Duration = Duration::from_secs(5);
@@ -40,8 +32,6 @@ fn run_again_in_folders_of_its_own() {
     fs::create_dir_all(root.join("data/mime")).unwrap();
     fs::create_dir_all(root.join("data/applications")).unwrap();
     fs::create_dir_all(root.join("config")).unwrap();
-    // Only the parent type has a default app, so the core must look past
-    // the file's own type.
     write(
         &root,
         "data/mime/globs2",
@@ -75,7 +65,6 @@ fn run_again_in_folders_of_its_own() {
             viewer.display()
         ),
     );
-    // Reading a FIFO waits for the viewer to write it, with no polling.
     let made = Process::new("mkfifo")
         .arg(root.join("out"))
         .status()
@@ -99,7 +88,6 @@ fn open_through_the_core(root: &Path) {
         received.recv_timeout(ANSWER_TIMEOUT).unwrap()
     };
 
-    // No type from its name, so no app.
     let plain = root.join("plain");
     assert_eq!(
         open(plain.clone()),
@@ -110,7 +98,6 @@ fn open_through_the_core(root: &Path) {
     );
     let file = root.join("a.novatest");
     assert_eq!(open(file.clone()), Event::FileOpened { path: file.clone() });
-    // On a thread, so a viewer that never runs fails the test, not hangs it.
     let out = root.join("out");
     let (sender, written) = mpsc::channel();
     std::thread::spawn(move || sender.send(fs::read_to_string(out).unwrap()));

@@ -1,10 +1,3 @@
-//! Reading one folder: its entries, folders first, each group A to Z.
-//!
-//! [`read_folder`] asks `cancelled` before each read from the disk, so a
-//! listing nobody wants any more stops early. Links are followed only to
-//! learn whether they point at a folder. [`keep_shown`] leaves out hidden
-//! entries when the settings say so.
-
 use std::ffi::OsString;
 use std::fs;
 use std::io;
@@ -12,11 +5,9 @@ use std::path::Path;
 
 use nova_files_api::{Entry, EntryId, EntryKind, HiddenFiles, Unreadable};
 
-/// Why [`read_folder`] returned without entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stopped {
     Unreadable(Unreadable),
-    /// `cancelled` said so; nobody wants the answer.
     Cancelled,
 }
 
@@ -26,11 +17,6 @@ impl From<io::Error> for Stopped {
     }
 }
 
-/// Lists the folder at `path`, sorted.
-///
-/// # Errors
-/// [`Stopped`] when the folder can't be read or the listing was cancelled.
-/// An entry that vanishes while the folder is read is left out.
 pub fn read_folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<Vec<Entry>, Stopped> {
     if cancelled() {
         return Err(Stopped::Cancelled);
@@ -43,7 +29,6 @@ pub fn read_folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<Vec<Entr
     }
     let mut items = fs::read_dir(path)?;
     let mut found = Vec::new();
-    // Asked before each step, since each step can read the disk.
     while !cancelled() {
         let Some(item) = items.next() else {
             found.sort_by_cached_key(sort_key);
@@ -57,8 +42,6 @@ pub fn read_folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<Vec<Entr
     Err(Stopped::Cancelled)
 }
 
-/// `entries`, without the hidden ones unless `hidden` shows them, each
-/// with its position as its id again.
 pub fn keep_shown(entries: Vec<Entry>, hidden: HiddenFiles) -> Vec<Entry> {
     match hidden {
         HiddenFiles::Shown => entries,
@@ -72,8 +55,6 @@ pub fn keep_shown(entries: Vec<Entry>, hidden: HiddenFiles) -> Vec<Entry> {
     }
 }
 
-/// Passes over an entry that vanished between the folder read and this
-/// one: it is simply not there any more. Any other error is the folder's.
 fn vanished(error: io::Error) -> Result<(), Stopped> {
     if error.kind() == io::ErrorKind::NotFound {
         Ok(())
@@ -82,7 +63,6 @@ fn vanished(error: io::Error) -> Result<(), Stopped> {
     }
 }
 
-/// The sorted entries, each with its position as its id.
 fn numbered(found: Vec<(OsString, EntryKind)>) -> Vec<Entry> {
     found
         .into_iter()
@@ -98,7 +78,6 @@ fn numbered(found: Vec<(OsString, EntryKind)>) -> Vec<Entry> {
 fn kind_of(item: &fs::DirEntry) -> io::Result<EntryKind> {
     let file_type = item.file_type()?;
     let is_folder = if file_type.is_symlink() {
-        // A broken link is not an error: it is a file you can't open.
         fs::metadata(item.path()).is_ok_and(|target| target.is_dir())
     } else {
         file_type.is_dir()
@@ -110,9 +89,6 @@ fn kind_of(item: &fs::DirEntry) -> io::Result<EntryKind> {
     })
 }
 
-/// Folders before files; then by name ignoring case; then by the exact
-/// bytes, so the order is the same on every run. Worked out once per entry,
-/// not once per comparison. Gathered places order their entries by it too.
 pub fn sort_key((name, kind): &(OsString, EntryKind)) -> (bool, String, OsString) {
     (
         *kind == EntryKind::File,
@@ -121,7 +97,6 @@ pub fn sort_key((name, kind): &(OsString, EntryKind)) -> (bool, String, OsString
     )
 }
 
-/// Sorts one `io::Error` into the reasons a client acts on.
 pub fn unreadable(error: &io::Error) -> Unreadable {
     match error.kind() {
         io::ErrorKind::NotFound => Unreadable::Missing,

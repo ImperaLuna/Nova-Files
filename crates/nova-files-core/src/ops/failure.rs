@@ -1,11 +1,7 @@
-//! What a failed step tells the client: the system's error, sorted into
-//! the few reasons a window shows differently.
-
 use std::io;
 
 use nova_files_api::Failure;
 
-/// The reason `error` stands for.
 pub fn failure(error: &io::Error) -> Failure {
     match error.kind() {
         io::ErrorKind::AlreadyExists | io::ErrorKind::DirectoryNotEmpty => Failure::NameTaken,

@@ -1,13 +1,3 @@
-//! The UI's window state, kept for it between runs.
-//!
-//! The UI owns what the state says (window sizes, for now); the core only
-//! keeps the bytes, in memory while it runs and in
-//! `$XDG_STATE_HOME/nova-files/window-state` between runs. The file is read
-//! once, when the core starts; a missing, unreadable or oversized one reads
-//! as empty. Saves go through a [`Saver`], in order and off the core's
-//! thread; a save that fails is logged and the state stays in memory for
-//! this run.
-
 use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Arc;
@@ -15,24 +5,17 @@ use std::sync::Arc;
 use crate::private_file::{self, Read};
 use crate::saver::Saver;
 
-/// The file, under the state folder.
 const FILE: &str = "nova-files/window-state";
-/// A state this big is not one the UI wrote; it is never read or kept.
 pub const MAX_BYTES: usize = 64 * 1024;
 const SAVE_THREAD: &str = "nova-files-state";
-/// The file, as the log names it.
 const WHAT: &str = "window state";
 
-/// The window state, as the core keeps it.
 pub struct Store {
     bytes: RefCell<Arc<[u8]>>,
-    /// Saves it; to nowhere without a home folder, which keeps it in
-    /// memory only.
     saver: Saver,
 }
 
 impl Store {
-    /// The state saved under the state folder `state_home`.
     pub fn open(state_home: Option<&Path>) -> Self {
         let path = state_home.map(|home| home.join(FILE));
         let bytes = path.as_deref().map(read).unwrap_or_default();
@@ -42,13 +25,10 @@ impl Store {
         }
     }
 
-    /// The state as last saved.
     pub fn bytes(&self) -> Vec<u8> {
         self.bytes.borrow().to_vec()
     }
 
-    /// Keeps `bytes` as the state and writes it out. An oversized state is
-    /// dropped.
     pub fn save(&self, bytes: Vec<u8>) {
         if bytes.len() > MAX_BYTES {
             return;
@@ -59,7 +39,6 @@ impl Store {
     }
 }
 
-/// The file's bytes, or none when it is missing, unreadable or oversized.
 fn read(path: &Path) -> Vec<u8> {
     match private_file::read(path, MAX_BYTES) {
         Read::Bytes(bytes) => bytes,
@@ -101,13 +80,10 @@ mod tests {
         assert_eq!(store.bytes(), b"");
         store.save(b"picker 900x600".to_vec());
         assert_eq!(store.bytes(), b"picker 900x600");
-        // An oversized state is not kept; one at the cap, 64 KiB, is.
         store.save(vec![b'x'; MAX_BYTES + 1]);
         assert_eq!(store.bytes(), b"picker 900x600");
         store.save(vec![b'x'; 64 * 1024]);
         assert_eq!(store.bytes().len(), 64 * 1024);
-        // The last save differs from every earlier one, so once the file
-        // holds it no earlier write can still land.
         store.save(b"picker 800x500".to_vec());
         let path = home.join(FILE);
         let wait = std::time::Instant::now();

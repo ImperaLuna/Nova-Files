@@ -1,6 +1,3 @@
-//! Disk space through the real core: a client names paths and hears how
-//! full each one's drive is, in the order asked.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,

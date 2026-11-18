@@ -1,7 +1,3 @@
-//! Making an archive. The helper writes it under a hidden part name in
-//! the target folder (see `archive`); once whole, it takes its name, or
-//! the next free one when that is taken.
-
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,7 +13,6 @@ use super::running::Running;
 use super::stop::Stop;
 use crate::archive::{ArchiveFailure, Archiver, Recipe};
 
-/// What a compress job is asked.
 pub struct Asked<'a> {
     pub sources: &'a [PathBuf],
     pub into: &'a Path,
@@ -27,7 +22,6 @@ pub struct Asked<'a> {
     pub locked: bool,
 }
 
-/// Makes the archive `asked` names, with `archiver`.
 pub fn compress(running: &mut Running, archiver: Option<&Archiver>, asked: &Asked<'_>) -> Ended {
     match make(running, archiver, asked) {
         Ok(Some(made)) => {
@@ -39,8 +33,6 @@ pub fn compress(running: &mut Running, archiver: Option<&Archiver>, asked: &Aske
     }
 }
 
-/// Makes the archive; the part file it was written as, and where it
-/// went. `None` when the user skipped its password.
 fn make(
     running: &mut Running,
     archiver: Option<&Archiver>,
@@ -96,8 +88,6 @@ fn make(
     }
 }
 
-/// The password to lock the archive with, asked until one is given;
-/// `None` when the user skips it.
 fn locking_password(
     running: &mut Running,
     first: &Path,
@@ -111,9 +101,6 @@ fn locking_password(
     }
 }
 
-/// The bytes the files under `sources` hold, and how many entries there
-/// are, links not followed. Held or stopped through `control` at each
-/// entry.
 fn totals(sources: &[PathBuf], control: &super::control::Control) -> Result<(u64, u64), Stop> {
     let mut bytes = 0_u64;
     let mut items = 0_u64;
@@ -135,8 +122,6 @@ fn totals(sources: &[PathBuf], control: &super::control::Control) -> Result<(u64
     Ok((bytes, items))
 }
 
-/// Why making `target` of sources starting with `first` stopped, from
-/// the helper's `failure`.
 fn stop_for(failure: ArchiveFailure, first: &Path, target: &Path) -> Stop {
     let (path, reason) = match failure {
         ArchiveFailure::Cancelled => return Stop::Cancelled,

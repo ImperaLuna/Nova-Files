@@ -1,19 +1,3 @@
-//! Reading details only for the entries a client shows.
-//!
-//! Each client has a [`Queue`] with a worker thread of its own. A listing
-//! goes out with names alone; the client then names the entries it shows
-//! or is about to show (see `Command::Rows`), and the worker reads the
-//! details of those, a run of up to [`BATCH`] neighbours at a time, in
-//! entry order. An entry's details are read once per listing, so scrolling
-//! back costs nothing. Entries never shown are never read: a 100,000-entry
-//! folder costs a few screens of reads, not 100,000. A new listing replaces
-//! the old one and its work. Before each read the worker asks whether its
-//! run is still wanted (same listing, and some of it still asked for), so
-//! a run scrolled away stops at once and the rows now shown come next.
-//! Each entry's icon goes out with its details (see `file_icons`). A
-//! listing inside an archive comes with its details known, which go out
-//! in place of reads.
-
 use std::collections::HashSet;
 use std::ops::Range;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
@@ -26,12 +10,9 @@ use nova_files_api::{
 use crate::details;
 use crate::file_icons::FileIcons;
 
-/// Entries per [`Event::DetailsRead`]: a few screens of rows, so the
-/// rows asked for arrive in one or two events, each one redraw.
 const BATCH: usize = 256;
 const WORKER_THREAD: &str = "nova-files-details";
 
-/// One client's details work. Dropping it stops the worker.
 pub struct Queue {
     shared: Arc<Shared>,
 }
@@ -44,18 +25,13 @@ struct Shared {
 #[derive(Default)]
 struct State {
     listing: Option<Arc<Listing>>,
-    /// The listing's details by entry, when they came with it.
     known: Option<Arc<[Details]>>,
     wanted: Range<usize>,
-    /// Entries of the listing whose details were sent.
     read: HashSet<usize>,
     closed: bool,
 }
 
 impl State {
-    /// The next run to read: the first wanted entry not read yet and the
-    /// unread ones right after it, up to [`BATCH`]. `None` when every
-    /// wanted entry is read.
     fn next_run(&self) -> Option<Run> {
         let listed = self.listing.clone()?;
         let unread = |index: &usize| !self.read.contains(index);
@@ -73,7 +49,6 @@ impl State {
     }
 }
 
-/// The next entries to read: `entries` of listing `listed`.
 struct Run {
     listed: Arc<Listing>,
     known: Option<Arc<[Details]>>,
@@ -81,7 +56,6 @@ struct Run {
 }
 
 impl Queue {
-    /// Starts the worker; `None` when the OS refuses a thread.
     pub fn start(events: Arc<dyn EventSink>, icons: Arc<FileIcons>) -> Option<Self> {
         let shared = Arc::new(Shared {
             state: Mutex::new(State::default()),
@@ -95,11 +69,6 @@ impl Queue {
         Some(Self { shared })
     }
 
-    /// The client now shows listing `id`; earlier work is dropped. Called
-    /// before the client hears of the listing, so its first request finds
-    /// it. `current` is asked under the queue's lock, so a listing that was
-    /// replaced meanwhile can't overwrite the one after it. Details in
-    /// `known`, by entry, are never read from the disk.
     pub fn show(
         &self,
         listing: &Listing,
@@ -117,8 +86,6 @@ impl Queue {
         });
     }
 
-    /// The client wants the details of `count` entries of listing `id` from
-    /// `first`, in place of what it wanted before.
     pub fn want(&self, id: ListingId, first: EntryId, count: u32) {
         self.shared.update(|state| {
             if let Some(listing) = &state.listing
@@ -151,8 +118,6 @@ impl Shared {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Whether `run` is still wanted: its listing is the one shown, and
-    /// the client still asks for some of its entries.
     fn still_wanted(&self, run: &Run) -> bool {
         let state = self.lock();
         !state.closed
@@ -164,8 +129,6 @@ impl Shared {
             && run.entries.start < state.wanted.end
     }
 
-    /// Waits for the next run (see [`State::next_run`]). `None` once
-    /// closed.
     fn next_run(&self) -> Option<Run> {
         let mut state = self.lock();
         loop {
@@ -182,12 +145,6 @@ impl Shared {
         }
     }
 
-    /// Sends the details of `run`, read as `read`, and its `icons`, unless its listing was
-    /// replaced meanwhile. Marking them read and sending happen under one
-    /// lock, so a new listing can't slip in between.
-    ///
-    /// # Errors
-    /// [`ClientGone`] when the client stopped listening.
     #[expect(
         clippy::significant_drop_tightening,
         reason = "the lock is held through the send on purpose"
@@ -222,7 +179,6 @@ impl Shared {
 
 fn work(shared: &Shared, events: &dyn EventSink, icons: &FileIcons) {
     while let Some(run) = shared.next_run() {
-        // `want` keeps the wanted entries inside the listing.
         let read = if let Some(known) = &run.known {
             Some(known.get(run.entries.clone()).unwrap_or_default().to_vec())
         } else {
@@ -255,8 +211,6 @@ mod tests {
 
     use super::*;
 
-    /// A queue state showing `count` files as listing 0, wanting `wanted`,
-    /// with `read` already sent.
     fn state(count: u32, wanted: Range<usize>, read: &[usize]) -> State {
         let entries: Arc<[Entry]> = (0..count)
             .map(|index| Entry {
@@ -290,7 +244,6 @@ mod tests {
         state.next_run().map(|run| run.entries)
     }
 
-    /// A run of entries `entries` of a listing with id `id`.
     fn run(id: u64, entries: Range<usize>) -> Run {
         Run {
             listed: Arc::new(Listing {

@@ -1,32 +1,3 @@
-//! Undo: the core remembers, for each of the last [`KEPT`] jobs that
-//! changed something it can take back, what that is, and a client may
-//! ask for it to be taken back as a job of its own.
-//!
-//! What a job can take back comes from the steps it recorded (see
-//! `running`), each the outermost entry it made, moved or trashed from
-//! what it was given (inside a folder merged into one already there, the
-//! entries that went in): a copy's copies go to the trash; a move's
-//! entries go back where they were, into their folders made again when
-//! gone; trashed entries are restored; restored entries go back to the
-//! trash. A rename is renamed back, and a new folder goes while it is
-//! still empty. A delete, a delete from the trash, an empty trash and an
-//! undo can't be taken back, nor can a job that resumed after a crash,
-//! whose earlier steps this run never saw. The files a copy or move
-//! replaced went to the trash (see `make`); once what took their names is
-//! taken back, they are restored there.
-//!
-//! Each entry to take back is remembered with its device and inode, as
-//! it was when the job ended; one that has changed since (removed,
-//! replaced, renamed away, or its info file gone from the trash) is left
-//! alone, and an undo with nothing left to take back fails as not found.
-//! An undo is taken from the history when it starts, so it runs once; it
-//! goes back when it fails or is cancelled with something still to take
-//! back. Undoing a copy or a restore is a trash, and undoing a trash a
-//! restore, journalled as such: after a crash it waits as that job.
-//!
-//! The history lives in the core's memory: it is lost when the core
-//! exits, three minutes after its last client.
-
 use std::collections::{BTreeSet, VecDeque};
 use std::ffi::OsString;
 use std::fs;
@@ -49,39 +20,24 @@ use super::trash::trash;
 use super::{Ended, lock};
 use crate::trash::{self, Trashes};
 
-/// How many jobs the history keeps.
 pub const KEPT: usize = 50;
 
-/// Which entry is at a path: its device and inode, and when it was
-/// made where the filesystem says, as an inode freed by a delete may be
-/// given to the next file made.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Identity {
     entry: Entry,
     born: Option<SystemTime>,
 }
 
-/// What undoing one job does, each entry with which it was.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Undo {
-    /// Send these to the trash.
     Trash(Vec<(PathBuf, Identity)>),
-    /// Move each from the first path back to the second.
     MoveBack(Vec<(PathBuf, PathBuf, Identity)>),
-    /// Restore these entries from the trash.
     Restore(Vec<(PathBuf, Identity)>),
-    /// Give the entry at the path its old name back.
     Rename(PathBuf, Identity, OsString),
-    /// Remove this folder, while empty.
     RemoveFolder(PathBuf, Identity),
-    /// Undo as the first says, then restore these entries from the trash:
-    /// the files the job replaced, which go back once their names are
-    /// free again.
     ThenPutBack(Box<Self>, Vec<(PathBuf, Identity)>),
 }
 
-/// `undo`, and then the files a job `replaced` (each by the path it had
-/// and where in a trash it went) put back.
 pub fn putting_back(undo: Undo, replaced: &[(PathBuf, PathBuf)]) -> Undo {
     let items: Vec<_> = replaced
         .iter()
@@ -94,7 +50,6 @@ pub fn putting_back(undo: Undo, replaced: &[(PathBuf, PathBuf)]) -> Undo {
     }
 }
 
-/// A job that can be undone: its id, what it did, and how to undo it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Undoable {
     pub job: JobId,
@@ -102,26 +57,20 @@ pub struct Undoable {
     pub undo: Undo,
 }
 
-/// The jobs that can be undone, oldest first.
 #[derive(Debug, Default)]
 pub struct History {
     jobs: Mutex<VecDeque<Undoable>>,
 }
 
 impl History {
-    /// `undoable` can be undone: every client hears so, and of the job it
-    /// pushes out. One put back after its undo failed goes where its age
-    /// puts it.
     pub fn add(&self, undoable: Undoable, audience: &Audience) {
         let mut jobs = lock(&self.jobs);
         audience.tell(&Event::Undoable {
             job: undoable.job,
             operation: undoable.operation.clone(),
         });
-        // Job ids are never the same, so it is never found.
         let (Ok(at) | Err(at)) = jobs.binary_search_by_key(&undoable.job, |kept| kept.job);
         jobs.insert(at, undoable);
-        // One at a time: at most one too many.
         if jobs.len() > KEPT
             && let Some(gone) = jobs.pop_front()
         {
@@ -130,7 +79,6 @@ impl History {
         drop(jobs);
     }
 
-    /// Takes job `job` out of the history, telling every client.
     pub fn take(&self, job: JobId, audience: &Audience) -> Option<Undoable> {
         let mut jobs = lock(&self.jobs);
         let at = jobs.iter().position(|kept| kept.job == job)?;
@@ -140,9 +88,6 @@ impl History {
         Some(taken)
     }
 
-    /// Calls `then` with an [`Event::Undoable`] for each job that can be
-    /// undone, oldest first, with the history held, so no job is added
-    /// unheard meanwhile.
     pub fn told(&self, then: impl FnOnce(Vec<Event>)) {
         let jobs = lock(&self.jobs);
         then(
@@ -157,9 +102,6 @@ impl History {
     }
 }
 
-/// What undoing `operation` does, which made `steps` (from, to) as it
-/// ran and ended `outcome`; `None` when there is nothing to take back. A
-/// trashed entry counts only in a trash `trashes` can restore from.
 pub fn undo_of(
     operation: &Operation,
     steps: &[(PathBuf, PathBuf)],
@@ -211,20 +153,15 @@ pub fn undo_of(
     (!empty).then_some(undo)
 }
 
-/// Takes back what `undo` says, as job `running`; `None` when the job
-/// to undo can't be.
 pub fn run(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ended {
     let Some(Undo::ThenPutBack(first, replaced)) = undo else {
         return run_one(running, undo, trashes);
     };
     let (outcome, mut changed) = run_one(running, Some(*first), trashes);
-    // Taken back, or nothing was left to take back: the names are free.
     let free = outcome == Outcome::Done || is_gone(&outcome);
     if !free {
         return (outcome, changed);
     }
-    // Still in a trash, and its name free: one taken since (the new file
-    // saved over by an editor, say) stays the user's.
     let items: Vec<_> = still(replaced)
         .into_iter()
         .filter(|item| {
@@ -242,12 +179,10 @@ pub fn run(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ende
     (put, changed)
 }
 
-/// Whether `outcome` says an undo found nothing left to take back.
 fn is_gone(outcome: &Outcome) -> bool {
     matches!(outcome, Outcome::Failed { path, reason: Failure::NotFound } if path.as_os_str().is_empty())
 }
 
-/// The entries of `paths` still the entries they were.
 fn still(paths: Vec<(PathBuf, Identity)>) -> Vec<PathBuf> {
     paths
         .into_iter()
@@ -256,7 +191,6 @@ fn still(paths: Vec<(PathBuf, Identity)>) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Takes back what `undo` says, but for files to put back after.
 fn run_one(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ended {
     let gone = || {
         let outcome = Outcome::Failed {
@@ -274,7 +208,6 @@ fn run_one(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ende
             paths if paths.is_empty() => gone(),
             paths => trash(running, &paths, trashes.home.as_deref()),
         },
-        // One whose info file went can't be restored; the rest can.
         Undo::Restore(items) => match still(items)
             .into_iter()
             .filter(|item| trash::find(item, trashes).is_some())
@@ -306,18 +239,12 @@ fn run_one(running: &mut Running, undo: Option<Undo>, trashes: &Trashes) -> Ende
                 Err(stop) => (stop.outcome(), Vec::new()),
             }
         }
-        // A put back is built only around another undo, never inside one.
         Undo::Rename(..) | Undo::RemoveFolder(..) | Undo::ThenPutBack(..) => gone(),
     }
 }
 
-/// Moves each entry of `pairs` from its first path back to its second.
-/// Its journal says only that it undoes: after a crash its leftovers are
-/// cleaned up, and it isn't resumed.
 fn move_back(running: &mut Running, pairs: &[(PathBuf, PathBuf)]) -> Ended {
     running.record(Record::Operation(word::UNDO));
-    // The folders they were in, made again when gone since, as by a
-    // merge that emptied them.
     let mut made = BTreeSet::new();
     let mut targets: Vec<_> = pairs.iter().map(|(_, from)| from.as_path()).collect();
     targets.sort_by_key(|target| target.components().count());
@@ -339,7 +266,6 @@ fn move_back(running: &mut Running, pairs: &[(PathBuf, PathBuf)]) -> Ended {
     )
 }
 
-/// Removes the empty folder at `path`.
 fn remove_folder(path: &Path) -> Ended {
     match fs::remove_dir(path) {
         Ok(()) => (
@@ -350,7 +276,6 @@ fn remove_folder(path: &Path) -> Ended {
     }
 }
 
-/// Which entry is at `path` now, links not followed.
 fn entry(path: &Path) -> Option<Identity> {
     let there = path.symlink_metadata().ok()?;
     Some(Identity {

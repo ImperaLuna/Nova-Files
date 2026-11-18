@@ -1,23 +1,3 @@
-//! File operations, run as jobs: each on a thread of its own, reported to
-//! every client.
-//!
-//! [`Jobs::start`] gives the job an id, tells the client that asked, and
-//! starts the job's thread. A drop of files picks a copy or a move by
-//! drive first (see `dropped`). While it runs, every connected client hears
-//! its progress, and any client may pause, resume or cancel it (see
-//! `control`); the job checks before each change to the disk. When it
-//! ends, every client hears how and which folders changed (see
-//! `audience`). Nothing a job does ever replaces an existing entry unless
-//! the user chose that: what stands in a copy's or move's way, or what a
-//! delete may not remove, is a conflict the job holds at until a client
-//! answers it. Copies, moves, deletes and trashing write a journal of
-//! their steps (see `journal`); trashing moves entries to the desktop's
-//! trash (see `trash`).
-//!
-//! A job running or paused keeps the core up: the core's loop asks
-//! [`Jobs::busy`], and a job that ends wakes the loop so its idle wait
-//! starts from then.
-
 mod access;
 mod ahead;
 mod attrs;
@@ -89,46 +69,28 @@ use trash::trash;
 use undo::{History, Undo, Undoable, undo_of};
 
 const JOB_THREAD: &str = "nova-files-job";
-/// The thread that looks at the drives for a drop.
 const DROP_THREAD: &str = "nova-files-drop";
 const RECOVER_THREAD: &str = "nova-files-recover";
 const FORGET_THREAD: &str = "nova-files-forget";
 
-/// What a job ended with, and the folders whose entries it changed.
 pub type Ended = (Outcome, Vec<PathBuf>);
 
 type Registry = Arc<Mutex<HashMap<JobId, Arc<Job>>>>;
 type Interrupted = Arc<Mutex<HashMap<JobId, Left>>>;
 
-/// The core's jobs.
 pub struct Jobs {
     next: AtomicU64,
     audience: Audience,
-    /// The jobs running or paused. Changes to it, and what clients are
-    /// told about them, happen under its lock, so a client never hears a
-    /// job paused after it heard the job end.
     running: Registry,
-    /// Where journals go; `None` without a state folder.
     journals: Option<PathBuf>,
-    /// Where the user's trashes are.
     trashes: Trashes,
-    /// Jobs a crash cut short, waiting to be resumed or forgotten. Added
-    /// to under the lock of `running`, so a client never misses one.
     interrupted: Interrupted,
-    /// Wakes the core's loop when a job ends.
     wake: Connector,
-    /// The jobs that can be undone.
     history: Arc<History>,
-    /// Runs the archive helper; `None` when it isn't installed.
     archiver: Option<Archiver>,
 }
 
 impl Jobs {
-    /// Jobs whose journals go under the state folder `state`, that use
-    /// the trashes `trashes`, and that unpack archives with `archiver`.
-    /// Jobs a crash cut
-    /// short are found there, cleaned up, and wait as interrupted; on a
-    /// thread of their own, as the disk may be slow.
     pub fn new(
         state: Option<&Path>,
         trashes: Trashes,
@@ -153,8 +115,6 @@ impl Jobs {
         jobs
     }
 
-    /// Finds the jobs a crash cut short in `folder`, cleans them up, and
-    /// tells clients of each.
     fn recover(&self, folder: PathBuf) {
         let (running, interrupted, audience) = (
             Arc::clone(&self.running),
@@ -182,16 +142,11 @@ impl Jobs {
         }
     }
 
-    /// The clients that hear about jobs.
     pub const fn audience(&self) -> &Audience {
         &self.audience
     }
 
-    /// `client` watches jobs from now on, first hearing of each job that
-    /// already runs.
     pub fn watch(&self, client: ClientId, events: &Arc<dyn EventSink>) {
-        // Under the jobs' lock, so no job starts or ends unheard between
-        // the list and the watching.
         let running = lock(&self.running);
         for (&job, shared) in running.iter() {
             let event = Event::JobRunning {
@@ -219,15 +174,10 @@ impl Jobs {
         drop(running);
     }
 
-    /// Whether a job is running or paused.
     pub fn busy(&self) -> bool {
         !lock(&self.running).is_empty()
     }
 
-    /// Starts `operation` for `client`, which tagged it `tag`.
-    ///
-    /// # Errors
-    /// [`ClientGone`] when `client` stopped listening. The job runs anyway.
     pub fn start(
         &self,
         client: &Client,
@@ -237,8 +187,6 @@ impl Jobs {
         self.start_for(client.events().as_ref(), tag, operation)
     }
 
-    /// Starts `operation` for the client that hears through `events`,
-    /// which tagged it `tag`.
     fn start_for(
         &self,
         events: &dyn EventSink,
@@ -246,8 +194,6 @@ impl Jobs {
         operation: Operation,
     ) -> Result<(), ClientGone> {
         let job = JobId(self.next.fetch_add(1, Ordering::Relaxed));
-        // Before the thread starts, so the client hears of the job before
-        // it can end.
         let told = events.deliver(Event::JobStarted {
             tag,
             job,
@@ -257,12 +203,6 @@ impl Jobs {
         told
     }
 
-    /// Starts the job dropping `sources` onto the folder `into` runs (see
-    /// `dropped`), a move on one drive and a copy across drives, for the
-    /// client that hears through `events`. The drives are looked at on a
-    /// thread of their own, as a job's disk work is, so a drive that is
-    /// slow to answer holds up only this drop. When no thread can start,
-    /// the drop copies, which leaves every source where it was.
     pub fn start_drop(
         self: &Arc<Self>,
         events: &Arc<dyn EventSink>,
@@ -271,7 +211,6 @@ impl Jobs {
         into: PathBuf,
     ) {
         let jobs = Arc::clone(self);
-        // Taken by the thread, or back here when none starts.
         let asked = Arc::new(Mutex::new(Some((sources, into))));
         let taken = Arc::clone(&asked);
         let thread_events = Arc::clone(events);
@@ -281,7 +220,6 @@ impl Jobs {
                 let asked = lock(&taken).take();
                 if let Some((sources, into)) = asked {
                     let operation = dropped::dropped(sources, into);
-                    // A client gone hears nothing; the job runs anyway.
                     jobs.start_for(thread_events.as_ref(), tag, operation).ok();
                 }
             });
@@ -292,9 +230,6 @@ impl Jobs {
         }
     }
 
-    /// Runs `operation` as job `job` on a thread of its own, resuming it
-    /// after a crash when it `left` something. The job joins `registry`,
-    /// the jobs' lock held, before that is let go.
     fn spawn(
         &self,
         mut registry: MutexGuard<'_, HashMap<JobId, Arc<Job>>>,
@@ -314,10 +249,7 @@ impl Jobs {
         );
         let mut running = Running::new(job, shared, reporter, self.journals.clone());
         running.home_trash.clone_from(&self.trashes.home);
-        // New hidden names for a resumed job, never a crash's.
         let resume = left.map(|left| (left, self.next.fetch_add(1, Ordering::Relaxed)));
-        // Taken now, so an undo runs once however often it is asked for;
-        // put back unless it ends done.
         let taken = match &operation {
             Operation::Undo { job } => self.history.take(*job, &self.audience),
             _ => None,
@@ -344,8 +276,6 @@ impl Jobs {
                 };
                 let (tally, undoable) = after(&mut running, &operation, &ended, &tools.trashes);
                 running.finish();
-                // Before clients hear the job ended, so an undo asked for
-                // then finds it.
                 if let Some(undo) = undoable {
                     history.add(
                         Undoable {
@@ -356,7 +286,6 @@ impl Jobs {
                         &audience,
                     );
                 }
-                // Back unless done, or nothing was left to take back.
                 let spent = matches!(
                     ended.0,
                     Outcome::Done
@@ -369,7 +298,6 @@ impl Jobs {
                     history.add(taken, &audience);
                 }
                 finish(&registry, &audience, job, ended, tally);
-                // Into the loop's queue, so its idle wait starts again now.
                 wake.activity().ok();
             });
         if spawned.is_err() {
@@ -385,7 +313,6 @@ impl Jobs {
         }
     }
 
-    /// Holds job `job` before its next change to the disk.
     pub fn pause(&self, job: JobId) {
         let running = lock(&self.running);
         if running
@@ -396,7 +323,6 @@ impl Jobs {
         }
     }
 
-    /// Lets held job `job` go on, or starts interrupted job `job` again.
     pub fn resume(&self, job: JobId) {
         let running = lock(&self.running);
         if running
@@ -414,11 +340,6 @@ impl Jobs {
         self.spawn(running, job, operation, Some(left));
     }
 
-    /// Drops interrupted job `job`, and its journal. The journal goes on
-    /// a thread of its own, so a slow disk never holds up the core's
-    /// loop; clients hear the job ended once it has. A journal that
-    /// can't be removed keeps its job, interrupted, and clients hear so
-    /// again.
     pub fn forget(&self, job: JobId) {
         let Some(left) = lock(&self.interrupted).remove(&job) else {
             return;
@@ -434,12 +355,10 @@ impl Jobs {
             match removed {
                 Err(error) if error.kind() != io::ErrorKind::NotFound => {
                     log::warn!("can't remove {}: {error}", left.journal.display());
-                    // Back before clients hear, so an answer finds it.
                     let operation = left.operation.clone();
                     lock(&interrupted).insert(job, left);
                     audience.tell(&Event::JobInterrupted { job, operation });
                 }
-                // Held until now, so no other core takes the job meanwhile.
                 _ => {
                     drop(left);
                     audience.tell(&Event::JobFinished {
@@ -460,10 +379,6 @@ impl Jobs {
         }
     }
 
-    /// Answers `conflict`, which job `job` holds at, with `answer`, for
-    /// that conflict alone or for all of its kind as `scope` says. An
-    /// answer the conflict doesn't take, or to a conflict not open, is
-    /// dropped.
     pub fn answer(&self, job: JobId, conflict: &Conflict, answer: Answer, scope: Scope) {
         let running = lock(&self.running);
         if let Some(shared) = running.get(&job) {
@@ -474,9 +389,6 @@ impl Jobs {
         drop(running);
     }
 
-    /// Answers `conflict`, a password conflict job `job` holds at, with
-    /// `password`. Clients hear it answered with a retry; never the
-    /// password.
     pub fn give_password(&self, job: JobId, conflict: &Conflict, password: String) {
         let running = lock(&self.running);
         if let Some(shared) = running.get(&job) {
@@ -490,7 +402,6 @@ impl Jobs {
         drop(running);
     }
 
-    /// Stops job `job` before its next change to the disk.
     pub fn cancel(&self, job: JobId) {
         if let Some(shared) = lock(&self.running).get(&job) {
             shared.control.cancel();
@@ -498,9 +409,6 @@ impl Jobs {
     }
 }
 
-/// The first job id of this run: the time in microseconds, so ids never
-/// repeat across runs and a crashed run's journal and part files never
-/// share a name with this run's.
 fn first_id() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -509,13 +417,11 @@ fn first_id() -> u64 {
         })
 }
 
-/// What jobs work with besides the disk.
 struct Tools {
     trashes: Trashes,
     archiver: Option<Archiver>,
 }
 
-/// Runs `operation`; an undo runs `undo`, the one it took.
 fn run(running: &mut Running, operation: &Operation, tools: &Tools, undo: Option<Undo>) -> Ended {
     let trashes = &tools.trashes;
     match operation {
@@ -564,8 +470,6 @@ fn run(running: &mut Running, operation: &Operation, tools: &Tools, undo: Option
     }
 }
 
-/// The archive `sources` are all inside, and their paths in it, when
-/// they are: a copy out of an archive.
 fn copied_out(sources: &[PathBuf]) -> Option<(PathBuf, Vec<PathBuf>)> {
     let mut found = sources.iter().map(|source| {
         source
@@ -586,11 +490,6 @@ fn copied_out(sources: &[PathBuf]) -> Option<(PathBuf, Vec<PathBuf>)> {
         .then_some((first.archive, picked))
 }
 
-/// When job `running` resumes what a crash `left`, takes up its journal
-/// and returns what is left to do; `None` when it doesn't resume.
-///
-/// # Errors
-/// [`Cancelled`] when cancelled while what is left is found.
 fn resumed(
     running: &mut Running,
     resume: Option<(Left, u64)>,
@@ -601,9 +500,6 @@ fn resumed(
     Some(rest)
 }
 
-/// What the answers to `running`'s conflicts made of it, and how to undo
-/// it, once it ran `operation` and `ended`: what it made taken back, and
-/// then what it replaced put back.
 fn after(
     running: &mut Running,
     operation: &Operation,
@@ -618,15 +514,6 @@ fn after(
     (running.tally, undo)
 }
 
-/// What is left of `operation` after a crash: a move, delete or trash
-/// leaves out the sources already gone (moved whole, deleted, or in the
-/// trash); a copy does all of it again, taking what it made as done. A
-/// source that can't be looked at stays, so the job reports it. Each
-/// look is held or stopped through `control` first, so a long list on a
-/// slow disk never keeps a pause or cancel waiting.
-///
-/// # Errors
-/// [`Cancelled`] when cancelled.
 fn still_to_do(operation: &Operation, control: &Control) -> Result<Operation, Cancelled> {
     let there = |paths: &[PathBuf]| -> Result<Vec<PathBuf>, Cancelled> {
         let mut there = Vec::with_capacity(paths.len());
@@ -663,7 +550,6 @@ fn still_to_do(operation: &Operation, control: &Control) -> Result<Operation, Ca
     })
 }
 
-/// The path a job that couldn't start failed at.
 fn first_path(operation: &Operation) -> PathBuf {
     match operation {
         Operation::Rename { path, .. } | Operation::Extract { archive: path, .. } => path.clone(),
@@ -680,8 +566,6 @@ fn first_path(operation: &Operation) -> PathBuf {
     }
 }
 
-/// Forgets job `job` and tells every client how it ended, and what the
-/// answers to its conflicts made of it.
 #[expect(
     clippy::significant_drop_tightening,
     reason = "telling under the lock keeps a pause from being heard after the end"
@@ -728,7 +612,6 @@ mod tests {
     fn a_resumed_delete_keeps_a_source_it_cant_look_at() {
         let folder = TestFolder::new("ops-still-to-do");
         let file = folder.file("file", "f");
-        // Under a file: not missing, but it can't be looked at.
         let unreachable = file.join("x");
         let gone = folder.path().join("gone");
         let delete = Operation::Delete {

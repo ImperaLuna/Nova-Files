@@ -1,5 +1,3 @@
-//! Reading and editing gathered folders text.
-
 use super::*;
 
 const HOME: &str = "/home/me";
@@ -120,7 +118,6 @@ fn a_place_that_is_no_list_is_reported() {
     let (gathered, problems) = read_ok("projects = \"~/Projects\"");
     assert_eq!(gathered.projects.len(), 0);
     assert_eq!(problems.len(), 1);
-    // In an inline list, an entry that is no table costs only itself.
     let text = r#"projects = [{ path = "/a" }, "/b", { path = "/c" }]"#;
     let (gathered, problems) = read_ok(text);
     assert_eq!(paths(&gathered.projects), ["/a", "/c"]);
@@ -184,7 +181,6 @@ fn adding_to_an_empty_file_makes_the_place() {
         *gathered.games,
         [folder("/mnt/games", Holds::Many, Some("SSD"))]
     );
-    // What holds many by default isn't written out.
     assert!(!new.contains(HOLDS), "{new}");
     assert_eq!(gathered.projects.len(), 0);
 }
@@ -244,7 +240,6 @@ fn adding_a_folder_already_there_changes_nothing() {
         None,
     );
     assert_eq!(again, Edit::Unchanged);
-    // The other place is another list.
     let games = add(
         text,
         home(),
@@ -320,7 +315,6 @@ fn removing_takes_every_entry_naming_the_folder() {
         Gathering::Projects,
         Path::new("/home/me/a"),
     ));
-    // A comment goes with the entry it sits above, and stays with others.
     assert!(new.starts_with("# mine\n"), "{new}");
     assert_eq!(paths(&read_ok(&new).0.projects), ["/b"]);
     assert_eq!(

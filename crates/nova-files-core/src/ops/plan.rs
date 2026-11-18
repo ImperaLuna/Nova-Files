@@ -1,11 +1,3 @@
-//! A job's plan: everything a copy or move will make, or a delete will
-//! remove, found before it changes anything. Its totals are known up front, and since links are never
-//! followed and nothing is read twice, a tree that holds a link to itself
-//! can't make it loop.
-//!
-//! Items come folder first, then what the folder holds, so each folder
-//! exists before anything goes into it.
-
 use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
@@ -19,39 +11,25 @@ use super::stop::Stop;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Folder,
-    File {
-        size: u64,
-    },
+    File { size: u64 },
     Link,
-    /// A socket, device or pipe: the copy asks to skip it when it gets
-    /// there.
     Special,
 }
 
-/// One thing to make: `to`, a copy of `from`. In a delete's plan, `to`
-/// is `from`, the thing to remove.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
     pub from: PathBuf,
     pub to: PathBuf,
     pub kind: Kind,
-    /// Which entry `from` was when planned.
     pub entry: Entry,
 }
 
-/// Which entry on the disk a path names: its device and inode, which a
-/// new entry under the same name doesn't share while this one exists.
-/// Entries are equal by those two alone.
-///
-/// Once an entry is removed, a filesystem such as ext4 may give its inode
-/// number to a new one. Where the filesystem keeps when an entry was
-/// born, `born` tells the two apart: see [`Entry::is`].
+// A filesystem such as ext4 may give a removed entry's inode number to a new one.
+// https://man7.org/linux/man-pages/man7/inode.7.html
 #[derive(Debug, Clone, Copy, Default, Eq)]
 pub struct Entry {
     pub device: u64,
     pub inode: u64,
-    /// When the entry was made, in nanoseconds since 1970, where the
-    /// filesystem keeps it.
     pub born: Option<u128>,
 }
 
@@ -62,7 +40,6 @@ impl PartialEq for Entry {
 }
 
 impl Entry {
-    /// The entry `metadata` describes.
     pub fn of(metadata: &fs::Metadata) -> Self {
         Self {
             device: metadata.dev(),
@@ -75,7 +52,6 @@ impl Entry {
         }
     }
 
-    /// The entry `stat` describes; when it was born, a stat doesn't say.
     pub const fn of_stat(stat: &rustix::fs::Stat) -> Self {
         Self {
             device: stat.st_dev,
@@ -84,8 +60,6 @@ impl Entry {
         }
     }
 
-    /// Whether `other` is this very entry, not a later one that took its
-    /// inode number: equal, and born at the same time where both say when.
     pub fn is(&self, other: &Self) -> bool {
         self == other
             && match (self.born, other.born) {
@@ -98,23 +72,15 @@ impl Entry {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Plan {
     pub items: Vec<Item>,
-    /// The size of every file, holes included.
     pub bytes: u64,
 }
 
-/// Plans copying each of `sources` into `into`, under its own name.
-///
-/// # Errors
-/// [`Stop`] when cancelled, or when [`check`] refuses, or a source can't
-/// be read.
 #[cfg(test)]
 pub fn plan(sources: &[PathBuf], into: &Path, control: &Control) -> Result<Plan, Stop> {
     check(sources, into)?;
     add_pairs(&pairs_into(sources, into), control)
 }
 
-/// Each of `sources` with where it goes in `into`: there, under its own
-/// name. A source without a name has nowhere to go.
 pub fn pairs_into(sources: &[PathBuf], into: &Path) -> Vec<(PathBuf, PathBuf)> {
     sources
         .iter()
@@ -122,11 +88,6 @@ pub fn pairs_into(sources: &[PathBuf], into: &Path) -> Vec<(PathBuf, PathBuf)> {
         .collect()
 }
 
-/// Plans copying each source of `pairs` to its target.
-///
-/// # Errors
-/// [`Stop`] when cancelled, or when [`check_pairs`] refuses, or a source
-/// can't be read.
 pub fn plan_pairs(pairs: &[(PathBuf, PathBuf)], control: &Control) -> Result<Plan, Stop> {
     check_pairs(pairs)?;
     add_pairs(pairs, control)
@@ -140,12 +101,6 @@ fn add_pairs(pairs: &[(PathBuf, PathBuf)], control: &Control) -> Result<Plan, St
     Ok(plan)
 }
 
-/// Checks that each source of `pairs` can go to its target before
-/// anything is changed, so a bad one fails the job with nothing done.
-///
-/// # Errors
-/// [`Stop`] when a path isn't absolute, or a source has no name, isn't
-/// there, or is a folder its target is inside of.
 pub fn check_pairs(pairs: &[(PathBuf, PathBuf)]) -> Result<(), Stop> {
     for (source, target) in pairs {
         if !target.is_absolute() || target.file_name().is_none() {
@@ -154,7 +109,6 @@ pub fn check_pairs(pairs: &[(PathBuf, PathBuf)]) -> Result<(), Stop> {
         if !source.is_absolute() || source.file_name().is_none() {
             return Err(Stop::because(source, Failure::InvalidName));
         }
-        // Onto itself is a name taken; into itself, never.
         if target
             .parent()
             .is_some_and(|parent| parent.starts_with(source))
@@ -168,12 +122,6 @@ pub fn check_pairs(pairs: &[(PathBuf, PathBuf)]) -> Result<(), Stop> {
     Ok(())
 }
 
-/// Checks that each of `sources` can go into `into` before anything is
-/// changed, so a bad one fails the job with nothing done.
-///
-/// # Errors
-/// [`Stop`] when a path isn't absolute, or a source has no name, isn't
-/// there, or is a folder `into` is inside of.
 pub fn check(sources: &[PathBuf], into: &Path) -> Result<(), Stop> {
     if !into.is_absolute() {
         return Err(Stop::because(into, Failure::InvalidName));
@@ -192,14 +140,6 @@ pub fn check(sources: &[PathBuf], into: &Path) -> Result<(), Stop> {
     Ok(())
 }
 
-/// Plans deleting each of `paths`, folders with all they hold. Each item's
-/// `to` is its `from`; a folder comes before what it holds, so the items
-/// are deleted last to first. A path `wanted` refuses is left out with
-/// all it holds, unread.
-///
-/// # Errors
-/// [`Stop`] when cancelled, or when a path isn't absolute or has no name,
-/// or can't be read.
 pub fn plan_delete(
     paths: &[PathBuf],
     control: &Control,
@@ -215,8 +155,6 @@ pub fn plan_delete(
     Ok(plan)
 }
 
-/// Adds `from` and, for a folder, all it holds, but for what `wanted`
-/// refuses.
 fn add_tree(
     plan: &mut Plan,
     from: &Path,
@@ -243,7 +181,6 @@ fn add_tree(
                 let name = entry.map_err(|error| Stop::at(&from, &error))?.file_name();
                 children.push((from.join(&name), to.join(&name)));
             }
-            // Reversed, so the stack hands them out in the folder's order.
             pending.extend(children.into_iter().rev());
         }
         let entry = Entry::of(&metadata);
@@ -257,7 +194,6 @@ fn add_tree(
     Ok(())
 }
 
-/// What `metadata` describes.
 pub fn kind(metadata: &fs::Metadata) -> Kind {
     let file_type = metadata.file_type();
     if file_type.is_dir() {
