@@ -91,35 +91,12 @@ let
         cargoArtifacts = artifacts;
         # Tests run once, in the nextest check, not again in the package.
         doCheck = false;
+        # The same install script as `just install` (data/install.sh), so
+        # the two layouts can't drift apart. Crane has already put the
+        # programs in $out/bin.
         postInstall = ''
-          install -Dm644 ${../data/dbus-service.in} \
-            $out/share/dbus-1/services/${appId}.service
-          substituteInPlace $out/share/dbus-1/services/${appId}.service \
-            --replace-fail "@app_id@" "${appId}" \
-            --replace-fail "@bin@" "$out/bin/nova-files"
-          # Launchers list the app from this file. It is named after the app
-          # id, as DBusActivatable requires.
-          install -Dm644 ${../data/desktop-entry.in} \
-            $out/share/applications/${appId}.desktop
-          substituteInPlace $out/share/applications/${appId}.desktop \
-            --replace-fail "@bin@" "$out/bin/nova-files" \
-            --replace-fail "@app_id@" "${appId}"
-          # The desktop entry names this icon by the app id, so launchers and
-          # docks find it in hicolor whatever icon theme is set.
-          install -Dm644 ${../data/app-icon.svg} \
-            $out/share/icons/hicolor/scalable/apps/${appId}.svg
-          # The file picker: xdg-desktop-portal reads the .portal file, and
-          # D-Bus starts the program in service mode when the portal first
-          # calls it.
-          install -Dm644 ${../data/portal.in} \
-            $out/share/xdg-desktop-portal/portals/${portalName}.portal
-          substituteInPlace $out/share/xdg-desktop-portal/portals/${portalName}.portal \
-            --replace-fail "@portal_bus_name@" "${portalBusName}"
-          install -Dm644 ${../data/portal-dbus-service.in} \
-            $out/share/dbus-1/services/${portalBusName}.service
-          substituteInPlace $out/share/dbus-1/services/${portalBusName}.service \
-            --replace-fail "@portal_bus_name@" "${portalBusName}" \
-            --replace-fail "@bin@" "$out/bin/nova-files"
+          bash ${../data}/install.sh --mode basic --prefix $out \
+            --app-id ${appId} --portal-bus-name ${portalBusName}
         '';
         postFixup = ''
           wrapProgram $out/bin/nova-files \
@@ -145,6 +122,7 @@ in
     ciArtifacts
     runtimeLibs
     appId
+    portalBusName
     portalName
     ;
 

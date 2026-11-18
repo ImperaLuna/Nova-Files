@@ -1,7 +1,9 @@
 //! The built program against a private D-Bus daemon, without a display:
 //! service mode answers `Ping`, a later launch hands its window (and its
 //! folder) to the first instance (or, in service mode, leaves it alone), the
-//! service stops when its bus does, and bad starts exit with an error.
+//! service stops when its bus does, and bad starts exit with an error. It
+//! answers apps' "Show in folder" when it is the default for folders or
+//! D-Bus started it for that, and not otherwise.
 
 #![expect(
     clippy::unwrap_used,
@@ -19,7 +21,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use nova_files_dbus::{APP_ID, FILES_INTERFACE, Started};
+use nova_files_dbus::{APP_ID, FILE_MANAGER_BUS_NAME, FILES_INTERFACE, Started};
 use support::{PrivateBus, WAIT};
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, Proxy};
@@ -145,8 +147,8 @@ fn second_launch_hands_its_window_to_the_first() {
     let bus = PrivateBus::start();
     let (activations, activated) = mpsc::channel();
     let core = nova_files_core::spawn().unwrap();
-    let first = nova_files_dbus::start(bus.bus(), core.connector, move |folder| {
-        activations.send(folder).ok();
+    let first = nova_files_dbus::start(bus.bus(), core.connector, move |request| {
+        activations.send(request.folder).ok();
     })
     .unwrap();
     assert!(matches!(first, Started::Service(_)));
@@ -160,8 +162,8 @@ fn second_launch_with_a_folder_hands_it_to_the_first() {
     let bus = PrivateBus::start();
     let (opened, received) = mpsc::channel();
     let core = nova_files_core::spawn().unwrap();
-    let _first = nova_files_dbus::start(bus.bus(), core.connector, move |folder| {
-        opened.send(folder).ok();
+    let _first = nova_files_dbus::start(bus.bus(), core.connector, move |request| {
+        opened.send(request.folder).ok();
     })
     .unwrap();
 
@@ -179,8 +181,8 @@ fn second_service_start_asks_for_no_window() {
     let bus = PrivateBus::start();
     let (activations, activated) = mpsc::channel();
     let core = nova_files_core::spawn().unwrap();
-    let _first = nova_files_dbus::start(bus.bus(), core.connector, move |folder| {
-        activations.send(folder).ok();
+    let _first = nova_files_dbus::start(bus.bus(), core.connector, move |request| {
+        activations.send(request.folder).ok();
     })
     .unwrap();
 
@@ -236,6 +238,27 @@ fn service_mode_without_a_bus_fails() {
         &["--service"],
     ));
     assert!(!output.status.success());
+}
+
+#[test]
+fn a_window_without_a_bus_runs_on_its_own() {
+    let mut window = Running(
+        program("unix:path=/nonexistent/nova-files-bus", &["/tmp"])
+            .spawn()
+            .unwrap(),
+    );
+    let stderr = window.0.stderr.take().unwrap();
+    let (sender, lines) = mpsc::channel();
+    thread::spawn(move || {
+        for line in io::BufRead::lines(io::BufReader::new(stderr)) {
+            sender.send(line.unwrap_or_default()).ok();
+        }
+    });
+
+    let said = lines
+        .recv_timeout(WAIT)
+        .expect("the program reports the missing bus");
+    assert!(said.contains("running on its own"), "{said}");
 }
 
 #[test]
@@ -299,4 +322,203 @@ fn a_frame_trace_that_cant_be_written_is_reported_and_the_start_goes_on() {
         stderr.contains("unexpected argument --frobnicate"),
         "{stderr}"
     );
+}
+
+/// `--make-default` writes the user's `mimeapps.list` and exits without a
+/// bus, once Nova Files' desktop entry is installed.
+#[test]
+fn make_default_makes_nova_files_open_folders() {
+    let root = std::env::temp_dir().join(format!("nova-files-default-{}", std::process::id()));
+    std::fs::remove_dir_all(&root).ok();
+    let _removed = Removed(root.clone());
+    let (config, data) = (root.join("config"), root.join("data"));
+    let make_default = || {
+        let mut command = program("unix:path=/nonexistent/nova-files-bus", &["--make-default"]);
+        command
+            .env("XDG_CONFIG_HOME", &config)
+            .env("XDG_DATA_HOME", &data)
+            .env("XDG_DATA_DIRS", root.join("none"))
+            .env("XDG_CONFIG_DIRS", root.join("none"))
+            .env_remove("XDG_CURRENT_DESKTOP");
+        finish(command)
+    };
+
+    let refused = make_default();
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("install Nova Files first"),
+        "{}",
+        String::from_utf8_lossy(&refused.stderr)
+    );
+
+    let entry = data.join(format!("applications/{APP_ID}.desktop"));
+    std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+    std::fs::write(
+        &entry,
+        "[Desktop Entry]\nType=Application\nExec=nova-files %U\n",
+    )
+    .unwrap();
+    let made = make_default();
+    let list = std::fs::read_to_string(config.join("mimeapps.list")).unwrap_or_default();
+
+    assert!(
+        made.status.success(),
+        "{}",
+        String::from_utf8_lossy(&made.stderr)
+    );
+    assert!(
+        list.contains(&format!("inode/directory={APP_ID}.desktop")),
+        "{list}"
+    );
+}
+
+/// Removes its folder when dropped, so a failed test leaves nothing behind.
+struct Removed(PathBuf);
+
+impl Drop for Removed {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).ok();
+    }
+}
+
+/// XDG folders of their own, removed when dropped; with Nova Files the
+/// default for folders when `default`.
+struct Folders(PathBuf);
+
+impl Folders {
+    fn new(name: &str, default: bool) -> Self {
+        let root = std::env::temp_dir().join(format!("nova-files-{name}-{}", std::process::id()));
+        std::fs::remove_dir_all(&root).ok();
+        let entry = root.join(format!("data/applications/{APP_ID}.desktop"));
+        std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+        std::fs::write(
+            &entry,
+            "[Desktop Entry]\nType=Application\nExec=nova-files %U\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("config")).unwrap();
+        if default {
+            std::fs::write(
+                root.join("config/mimeapps.list"),
+                format!("[Default Applications]\ninode/directory={APP_ID}.desktop\n"),
+            )
+            .unwrap();
+        }
+        Self(root)
+    }
+
+    /// `command`, reading only these folders.
+    fn apply(&self, command: &mut Command) {
+        command
+            .env("XDG_CONFIG_HOME", self.0.join("config"))
+            .env("XDG_DATA_HOME", self.0.join("data"))
+            .env("XDG_CONFIG_DIRS", self.0.join("none"))
+            .env("XDG_DATA_DIRS", self.0.join("none"))
+            .env_remove("XDG_CURRENT_DESKTOP");
+    }
+}
+
+impl Drop for Folders {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).ok();
+    }
+}
+
+/// Gets a message each time the file manager's name gets an owner.
+fn file_manager_owned(bus: &PrivateBus) -> mpsc::Receiver<()> {
+    let watcher = client(bus);
+    let owners = DBusProxy::new(&watcher)
+        .unwrap()
+        .receive_name_owner_changed_with_args(&[(0, FILE_MANAGER_BUS_NAME)])
+        .unwrap();
+    let (sender, owned) = mpsc::channel();
+    thread::spawn(move || {
+        let _watcher = watcher;
+        for change in owners {
+            if change.args().unwrap().new_owner().is_some() {
+                sender.send(()).ok();
+            }
+        }
+    });
+    owned
+}
+
+/// Starts the program with `args` and `folders`, killed when dropped.
+fn start_in(bus: &PrivateBus, args: &[&str], folders: &Folders) -> Running {
+    let mut command = program(&bus.address, args);
+    folders.apply(&mut command);
+    Running(command.spawn().unwrap())
+}
+
+#[test]
+fn the_default_for_folders_answers_show_in_folder() {
+    let bus = PrivateBus::start();
+    let folders = Folders::new("default-answers", true);
+    let owned = file_manager_owned(&bus);
+
+    let _service = start_in(&bus, &["--service"], &folders);
+
+    owned
+        .recv_timeout(WAIT)
+        .expect("the default takes the file manager's name");
+}
+
+#[test]
+fn a_service_that_isnt_the_default_leaves_show_in_folder_alone() {
+    let bus = PrivateBus::start();
+    let folders = Folders::new("not-default", false);
+    let owned = file_manager_owned(&bus);
+    let names = client(&bus);
+    let app_owned = DBusProxy::new(&names)
+        .unwrap()
+        .receive_name_owner_changed_with_args(&[(0, APP_ID)])
+        .unwrap();
+    let (sender, started) = mpsc::channel();
+    thread::spawn(move || {
+        for _ in app_owned {
+            sender.send(()).ok();
+        }
+    });
+
+    let _service = start_in(&bus, &["--service"], &folders);
+
+    started
+        .recv_timeout(WAIT)
+        .expect("the service takes its name");
+    assert!(owned.recv_timeout(QUIET).is_err());
+}
+
+#[test]
+fn started_for_show_in_folder_it_answers_without_being_the_default() {
+    let bus = PrivateBus::start();
+    let folders = Folders::new("activated", false);
+    let owned = file_manager_owned(&bus);
+
+    let _service = start_in(&bus, &["--file-manager"], &folders);
+
+    owned
+        .recv_timeout(WAIT)
+        .expect("D-Bus started it for the name, so it takes it");
+}
+
+#[test]
+fn started_for_show_in_folder_while_running_has_the_first_answer() {
+    let bus = PrivateBus::start();
+    let folders = Folders::new("activated-running", false);
+    let core = nova_files_core::spawn().unwrap();
+    let Started::Service(first) =
+        nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
+    else {
+        panic!("the first start serves");
+    };
+    let owned = file_manager_owned(&bus);
+
+    let mut second = program(&bus.address, &["--file-manager"]);
+    folders.apply(&mut second);
+    assert!(finish(second).status.success());
+
+    owned
+        .recv_timeout(WAIT)
+        .expect("the running instance takes the name");
+    drop(first);
 }

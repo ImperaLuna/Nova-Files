@@ -115,17 +115,16 @@ impl Queue {
         });
     }
 
-    /// The client wants thumbnails at `size` for `count` entries of
-    /// listing `id` from `first`, in place of what it wanted before.
-    pub fn want(&self, id: ListingId, first: EntryId, count: u32, size: ThumbnailSize) {
+    /// The client wants thumbnails for `count` entries of listing `id`
+    /// from `first`, in place of what it wanted before: at `size`, or
+    /// none at all with `None`, which keeps the size it had.
+    pub fn want(&self, id: ListingId, first: EntryId, count: u32, size: Option<ThumbnailSize>) {
         self.shared.update(|state| {
             if state.shown.as_ref().is_some_and(|shown| shown.id == id) {
                 let first = usize::try_from(first.0).unwrap_or(usize::MAX);
                 let count = usize::try_from(count.min(MAX_ROWS)).unwrap_or_default();
                 state.wanted = first..first.saturating_add(count);
-                // Thumbnails sent at another size don't fit the new one.
-                // Asking for none says nothing about the size.
-                if count > 0 && state.size != size {
+                if let Some(size) = size.filter(|size| *size != state.size) {
                     state.size = size;
                     state.done.clear();
                 }
