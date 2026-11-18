@@ -12,6 +12,7 @@ use nova_files_api::{
     ClientGone, Command, Connector, Envelope, Event, EventSink, Hit, Matched, SearchFailed,
     SearchId, WindowRequest,
 };
+use nova_files_open_api as open_api;
 use rustix::fs::{Mode, OFlags};
 use zbus::fdo;
 use zbus::message::Header;
@@ -181,14 +182,16 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
             Target::Folder => self.open_window(WindowRequest::on(path)),
             Target::File(file) => {
                 let token = token(&platform_data);
-                let command = Command::OpenFile {
+                let command = open_api::Command::OpenFile {
                     path,
                     activation: token.clone(),
                 };
                 match ask_core(&self.connector, command).await? {
-                    Event::FileOpened { .. } => Ok(()),
-                    Event::FileNotOpened { .. } => open_file(bus, file, token).await,
-                    _ => Err(failed("the core gave an unexpected answer")),
+                    open_api::Event::Opened { .. } => Ok(()),
+                    open_api::Event::NotOpened { .. } => open_file(bus, file, token).await,
+                    open_api::Event::OpenWith(_) => {
+                        Err(failed("the core gave an unexpected answer"))
+                    }
                 }
             }
         }

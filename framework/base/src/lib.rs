@@ -26,7 +26,6 @@ mod gathered;
 mod hidden_files;
 mod job;
 mod message;
-mod open_with;
 mod preview;
 mod properties;
 mod recent;
@@ -56,7 +55,6 @@ pub use nova_files_messages::{
     ClientGone, ClientId, Connection, Connector, CoreGone, CoreMessage, Envelope, EventSink,
     Message, MessageType, Routed, Routes, channel, missing_routes,
 };
-pub use open_with::{App, NotOpened, OpenWith, OpenWithAnswer, OpenWithId};
 pub use preview::{
     Fit, MAX_FIT_SIDE, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Picture, Preview, PreviewContent,
     PreviewId,

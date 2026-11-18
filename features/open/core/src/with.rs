@@ -3,14 +3,15 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
-use nova_files_api::{App as ListedApp, Event, EventSink, OpenWith, OpenWithAnswer, OpenWithId};
+use nova_files_api::EventSink;
+use nova_files_open_api::{App as ListedApp, Event, OpenWith, OpenWithAnswer, OpenWithId};
 
 use super::apps::{self, Listed};
 use super::associate::{self, NotSet};
 use super::defaults::{Places, installed};
 use super::{FLATPAK_INFO, commands, environment_places, launch};
-use crate::hand_edited::lock;
 use crate::mime::MimeTypes;
+use nova_files_disk::hand_edited::lock;
 
 const THREAD_NAME: &str = "nova-files-open-with";
 

@@ -37,7 +37,9 @@ fn selected(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
 fn opened(core: &mut Core) -> Vec<PathBuf> {
     let mut opened = Vec::new();
     while let Some(message) = core.try_recv() {
-        if let Some(Command::OpenFile { path, .. }) = message.into_command::<Command>() {
+        if let Some(nova_files_open_api::Command::OpenFile { path, .. }) =
+            message.into_command::<nova_files_open_api::Command>()
+        {
             opened.push(path);
         }
     }

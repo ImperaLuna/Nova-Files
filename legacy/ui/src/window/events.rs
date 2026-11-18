@@ -149,7 +149,6 @@ impl MainWindow {
             Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
-            Event::OpenWith(answer) => self.open_with_answered(answer, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
             event @ (Event::JobProgress { .. }
@@ -166,7 +165,6 @@ impl MainWindow {
             | Event::Found { .. }
             | Event::SearchFailed { .. }
             | Event::FindFailed { .. }
-            | Event::FileOpened { .. }
             | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. }
@@ -174,7 +172,6 @@ impl MainWindow {
             | Event::SpaceUnreadable { .. } => {}
             Event::Gathered(gathered) => self.gathered_arrived(gathered, cx),
             Event::GatheredChanged(place) => self.gathered_changed(place),
-            Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
             Event::Places(places) => self.places_arrived(places, cx),
             Event::Bookmarks(pinned) => self.pinned_arrived(pinned, cx),
         }

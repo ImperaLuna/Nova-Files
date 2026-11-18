@@ -186,11 +186,11 @@ fn down_moves_into_the_results_and_enter_opens_a_file_where_it_is(cx: &mut TestA
     cx.run_until_parked();
 
     let opened: Vec<PathBuf> = core
-        .commands()
+        .commands_of::<nova_files_open_api::Command>()
         .into_iter()
         .filter_map(|command| match command {
-            Command::OpenFile { path, .. } => Some(path),
-            _ => None,
+            nova_files_open_api::Command::OpenFile { path, .. } => Some(path),
+            nova_files_open_api::Command::OpenWith(_) => None,
         })
         .collect();
     assert_eq!(opened, [PathBuf::from("/docs/report.pdf")]);
@@ -404,9 +404,9 @@ fn clicking_a_result_takes_the_keys_from_the_box(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     let opened = core
-        .commands()
+        .commands_of::<nova_files_open_api::Command>()
         .into_iter()
-        .any(|command| matches!(command, Command::OpenFile { path, .. } if path == Path::new("/docs/report.pdf")));
+        .any(|command| matches!(command, nova_files_open_api::Command::OpenFile { path, .. } if path == Path::new("/docs/report.pdf")));
     assert!(opened);
 }
 

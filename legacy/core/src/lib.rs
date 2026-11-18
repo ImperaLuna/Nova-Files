@@ -9,8 +9,6 @@ mod index;
 mod inside;
 mod jobs;
 mod measure;
-mod mime;
-mod open;
 mod ops;
 mod places;
 mod preview;
@@ -43,8 +41,8 @@ pub use archive::{
 };
 pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
-pub use mime::MimeTypes;
-pub use open::{NotDefault, make_default_for_folders, opens_folders};
+pub use nova_files_open_core::MimeTypes;
+pub use nova_files_open_core::{NotDefault, make_default_for_folders, opens_folders};
 pub use places::Home;
 pub use run::{emitted_types, routed_types};
 pub use thumbs::Thumbnails;
@@ -129,7 +127,7 @@ pub fn spawn_with_archiver(
                 theme,
                 thumbnails,
                 searcher,
-                open_with: open::OpenWithWorker::new(Arc::clone(&mime_types)),
+                open_with: nova_files_open_core::OpenWithWorker::new(Arc::clone(&mime_types)),
                 mime_types,
                 file_icons,
                 jobs: Arc::new(jobs),

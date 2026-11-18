@@ -1,17 +1,44 @@
-//! Open With: which apps can open some files, opening them in one of
-//! those, and making one the default for their type.
+//! Opening files: in the user's default app for their type, or in one
+//! picked from the apps that open them (Open With), and making one the
+//! default for their type.
 //!
-//! A client asks with [`Command::OpenWith`]. The apps come from the same
-//! lists every desktop reads (`mimeapps.list` and `mimeinfo.cache`), so the
-//! default set here is the default in other file managers too.
-//!
-//! [`Command::OpenWith`]: crate::Command::OpenWith
+//! A client opens a file with [`Command::OpenFile`] and asks about apps
+//! with [`Command::OpenWith`]. The apps come from the same lists every
+//! desktop reads (`mimeapps.list` and `mimeinfo.cache`), so the default set
+//! here is the default in other file managers too.
 
-use std::path::PathBuf;
+#![forbid(unsafe_code)]
+
+use std::path::{Path, PathBuf};
+
+/// A request from a client to the open feature's core half.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    /// Open the file at `path` in the user's default app for its type.
+    /// `activation` is the caller's activation token, so the app may take
+    /// focus. The answer is [`Event::Opened`] or [`Event::NotOpened`], when
+    /// the client should ask the desktop portal instead.
+    OpenFile {
+        path: PathBuf,
+        activation: Option<String>,
+    },
+    /// List the apps that open some files, open them in one, or make one
+    /// the default (see [`OpenWith`]).
+    OpenWith(OpenWith),
+}
+
+/// Something the open feature's core half tells one client.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Event {
+    /// [`Command::OpenFile`]'s app has started on `path`.
+    Opened { path: PathBuf },
+    /// [`Command::OpenFile`] started nothing for `path`, for `reason`.
+    NotOpened { path: PathBuf, reason: NotOpened },
+    /// The answer to a [`Command::OpenWith`] request.
+    OpenWith(OpenWithAnswer),
+}
 
 /// Why [`Command::OpenFile`] started no app.
-///
-/// [`Command::OpenFile`]: crate::Command::OpenFile
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NotOpened {
     /// Inside a sandbox, so the desktop portal must do it.
@@ -79,4 +106,14 @@ pub enum OpenWithAnswer {
     /// sandboxed, for an app that runs in a terminal or can't take files,
     /// or when its program couldn't start.
     Launched { id: OpenWithId, started: bool },
+}
+
+/// Takes a file out of the archive it lies in, so it can be opened. The
+/// archives feature fills it; the open feature asks it for any path that
+/// isn't on disk.
+pub trait TakeOut: Send + Sync {
+    /// A copy of the file at `path` taken out of its archive, `None` when
+    /// `path` lies in no archive, or [`NotOpened::Failed`] when the archive
+    /// gave nothing.
+    fn take_out(&self, path: &Path) -> Option<Result<PathBuf, NotOpened>>;
 }

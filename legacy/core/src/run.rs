@@ -9,6 +9,8 @@ use nova_files_drives_core::{Store as DrivesStore, disk_space};
 use nova_files_folders_api as folders_api;
 use nova_files_folders_core::Store as FolderViewsStore;
 use nova_files_messages::{Routed, Routes};
+use nova_files_open_api::{self as open_api, TakeOut};
+use nova_files_open_core::{MimeTypes, OpenWithWorker};
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
 use nova_files_trash_api as trash_api;
@@ -18,8 +20,6 @@ use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
 use crate::jobs::Client;
 use crate::measure::Measurer;
-use crate::mime::MimeTypes;
-use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
@@ -58,18 +58,6 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
     routes.on(|setup: &Setup, id, client: &Client, command: Command| {
         answer(id, client, command, setup)
     })?;
-    routes.on(|setup: &Setup, id, client: &Client, command| {
-        match command {
-            settings_api::Command::Watch => setup.settings.listen(id, client.events()),
-            settings_api::Command::Change(change) => setup.settings.change(change),
-        }
-        Ok(())
-    })?;
-    routes.on(|setup: &Setup, _, client: &Client, command| match command {
-        trash_api::Command::List => {
-            nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
-        }
-    })?;
     routes.on(
         |setup: &Setup, id, client: &Client, command: DrivesCommand| {
             drives(id, client, command, setup)
@@ -82,6 +70,31 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| {
+        match command {
+            open_api::Command::OpenFile { path, activation } => {
+                let archives: Arc<dyn TakeOut> = Arc::<Inside>::clone(&setup.inside);
+                let opening = (Arc::clone(&setup.mime_types), archives);
+                nova_files_open_core::open(client.events(), opening, path, activation);
+            }
+            open_api::Command::OpenWith(request) => {
+                setup.open_with.answer(client.events(), request);
+            }
+        }
+        Ok(())
+    })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
+            settings_api::Command::Watch => setup.settings.listen(id, client.events()),
+            settings_api::Command::Change(change) => setup.settings.change(change),
+        }
+        Ok(())
+    })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| match command {
+        trash_api::Command::List => {
+            nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
+        }
+    })?;
     routes.on_leave(forget);
     Ok(routes)
 }
@@ -93,10 +106,11 @@ pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
 pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
-        MessageType::of::<settings_api::Event>(),
-        MessageType::of::<trash_api::Event>(),
         MessageType::of::<DrivesEvent>(),
         MessageType::of::<folders_api::Event>(),
+        MessageType::of::<open_api::Event>(),
+        MessageType::of::<settings_api::Event>(),
+        MessageType::of::<trash_api::Event>(),
     ]
 }
 
@@ -196,8 +210,6 @@ fn answer(
         | Command::Find { .. }
         | Command::Properties { .. }
         | Command::Preview { .. }
-        | Command::OpenFile { .. }
-        | Command::OpenWith(_)
         | Command::FolderUsed(_)
         | Command::RecentFolders { .. }) => {
             folders::answer(id, client, command, setup);

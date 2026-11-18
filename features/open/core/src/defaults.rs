@@ -202,7 +202,7 @@ mod tests {
 
     use super::*;
 
-    use crate::open::tree::Tree;
+    use crate::tree::Tree;
 
     trait Defaults {
         fn app(&self, path: &str) -> &Self;

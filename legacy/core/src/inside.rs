@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use nova_files_api::{Details, Entry, EntryId, EntryKind, HiddenFiles, Order, SortKey, Unreadable};
+use nova_files_open_api::{NotOpened, TakeOut};
 
 use crate::archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Flow};
 use crate::private_file::FOLDER_MODE;
@@ -200,7 +201,7 @@ impl Inside {
         }
     }
 
-    pub fn take_out(&self, within: &Within) -> Result<PathBuf, ArchiveFailure> {
+    fn copy_out(&self, within: &Within) -> Result<PathBuf, ArchiveFailure> {
         let archiver = self.archiver.as_ref().ok_or(ArchiveFailure::NotRead)?;
         let folder = self.new_folder().ok_or(ArchiveFailure::NotWritten)?;
         let picked = std::slice::from_ref(&within.inner);
@@ -242,6 +243,12 @@ impl Inside {
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Kept> {
         self.kept.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl TakeOut for Inside {
+    fn take_out(&self, path: &Path) -> Option<Result<PathBuf, NotOpened>> {
+        within(path).map(|within| self.copy_out(&within).map_err(|_| NotOpened::Failed))
     }
 }
 

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use nova_files_api::{FileTypes, IconKind, glob_matches};
 
-use crate::capped;
+use nova_files_disk::capped;
 use nova_files_disk::home::data_dirs;
 
 const GLOBS_FILE: &str = "mime/globs2";

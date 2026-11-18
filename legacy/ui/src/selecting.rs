@@ -1,5 +1,5 @@
 use gpui::{ClickEvent, Context, KeyDownEvent};
-use nova_files_api::{Command, EntryId, EntryKind, Listing, ListingId};
+use nova_files_api::{EntryId, EntryKind, Listing, ListingId};
 
 use crate::jump;
 use crate::selection::{Click, Move, Selection, entry_at};
@@ -221,7 +221,7 @@ impl MainWindow {
         for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
             let path = listing.path_of(file);
             connection
-                .send(Command::OpenFile {
+                .send(nova_files_open_api::Command::OpenFile {
                     path,
                     activation: None,
                 })

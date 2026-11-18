@@ -57,6 +57,7 @@ use nova_files_api::{
 };
 use nova_files_drives_api as drives_api;
 use nova_files_folders_api::{self as folders_api, FolderView};
+use nova_files_open_api as open_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
 use nova_files_trash_api as trash_api;
@@ -321,12 +322,16 @@ impl MainWindow {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
         };
+        let envelope = match envelope.open::<drives_api::Event>() {
+            Ok(event) => return self.drive_event(event, cx),
+            Err(envelope) => envelope,
+        };
         let envelope = match envelope.open::<folders_api::Event>() {
             Ok(folders_api::Event::Views(views)) => return self.folder_views_arrived(&views, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<drives_api::Event>() {
-            Ok(event) => return self.drive_event(event, cx),
+        let envelope = match envelope.open::<open_api::Event>() {
+            Ok(event) => return self.open_event(event, cx),
             Err(envelope) => envelope,
         };
         let envelope = match envelope.open::<settings_api::Event>() {

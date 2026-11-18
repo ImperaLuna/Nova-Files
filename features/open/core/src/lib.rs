@@ -4,6 +4,7 @@ mod defaults;
 mod entry;
 mod exec;
 mod folders;
+mod mime;
 #[cfg(test)]
 mod tree;
 mod with;
@@ -12,17 +13,17 @@ use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{Arc, OnceLock, mpsc};
 use std::thread;
 
 use defaults::{App, Places};
 use exec::Fields;
-use nova_files_api::FileTypes as _;
-pub use nova_files_api::NotOpened;
-
-use crate::mime::MimeTypes;
+use nova_files_api::{EventSink, FileTypes as _};
+pub use nova_files_open_api::NotOpened;
+use nova_files_open_api::{Event, TakeOut};
 
 pub use folders::{NotDefault, make_default_for_folders, opens_folders};
+pub use mime::MimeTypes;
 pub use with::Worker as OpenWithWorker;
 
 const FLATPAK_INFO: &str = "/.flatpak-info";
@@ -41,13 +42,51 @@ const DATA_IN_HOME: &str = ".local/share";
 const DEFAULT_CONFIG_DIRS: &str = "/etc/xdg";
 const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 const REAPER_THREAD: &str = "nova-files-opened-app";
+const OPEN_THREAD: &str = "nova-files-open";
 const ANY_FILE: &str = "/";
 
-pub fn open_file(
-    file: &Path,
-    types: &MimeTypes,
-    activation: Option<&str>,
-) -> Result<(), NotOpened> {
+pub fn open(
+    events: &Arc<dyn EventSink>,
+    (types, archives): (Arc<OnceLock<MimeTypes>>, Arc<dyn TakeOut>),
+    path: PathBuf,
+    activation: Option<String>,
+) {
+    let thread_events = Arc::clone(events);
+    let failed_path = path.clone();
+    let spawned = thread::Builder::new()
+        .name(OPEN_THREAD.to_owned())
+        .spawn(move || {
+            let types = types.get_or_init(MimeTypes::from_env);
+            let opened = match opened_copy(&path, archives.as_ref()) {
+                Some(Ok(copy)) => open_file(&copy, types, activation.as_deref()),
+                Some(Err(reason)) => Err(reason),
+                None => open_file(&path, types, activation.as_deref()),
+            };
+            let event = match opened {
+                Ok(()) => Event::Opened { path },
+                Err(reason) => Event::NotOpened { path, reason },
+            };
+            thread_events.deliver(event).ok();
+        });
+    if let Err(error) = spawned {
+        log::warn!("can't start a thread to open a file: {error}");
+        events
+            .deliver(Event::NotOpened {
+                path: failed_path,
+                reason: NotOpened::Failed,
+            })
+            .ok();
+    }
+}
+
+fn opened_copy(path: &Path, archives: &dyn TakeOut) -> Option<Result<PathBuf, NotOpened>> {
+    if path.symlink_metadata().is_ok() {
+        return None;
+    }
+    archives.take_out(path)
+}
+
+fn open_file(file: &Path, types: &MimeTypes, activation: Option<&str>) -> Result<(), NotOpened> {
     let ancestry = types_of(file, types);
     let ancestry: Vec<&str> = ancestry.iter().map(String::as_str).collect();
     if ancestry.is_empty() {
