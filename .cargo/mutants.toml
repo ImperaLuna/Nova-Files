@@ -52,30 +52,30 @@ exclude_re = [
     "framework/jobs/src/sync\\.rs:.*replace != with == in remove$",
     # Another program removing the entry, or taking a name in the trash,
     # between the trash job's look and its rename: a race no test can time.
-    "legacy/core/src/ops/trash\\.rs:.*replace match guard error\\.kind\\(\\) == io::ErrorKind::NotFound with true in send$",
-    "legacy/core/src/ops/trash\\.rs:.*\\bgone_meanwhile\\b",
-    "legacy/core/src/ops/trash\\.rs:.*(match guard error\\.kind\\(\\) == io::ErrorKind::AlreadyExists|== with !=).* in take_names$",
+    "features/trash/core/src/trashing\\.rs:.*replace match guard error\\.kind\\(\\) == io::ErrorKind::NotFound with true in send$",
+    "features/trash/core/src/trashing\\.rs:.*\\bgone_meanwhile\\b",
+    "features/trash/core/src/trashing\\.rs:.*(match guard error\\.kind\\(\\) == io::ErrorKind::AlreadyExists|== with !=).* in take_names$",
     # A home trash path that can't be looked at for a reason other than
     # missing leads to the trash at the top of the real root drive.
-    "legacy/core/src/trash/folder\\.rs:.*NotFound with true in home_mount$",
+    "features/trash/core/src/trashes/folder\\.rs:.*NotFound with true in home_mount$",
     # Every kernel since 5.8 gives the mount id, so the mask test is true.
-    "legacy/core/src/trash/folder\\.rs:.*replace & with [|^] in mount_of$",
+    "features/trash/core/src/trashes/folder\\.rs:.*replace & with [|^] in mount_of$",
     # Only which error a failed make reports (a full drive), which no test
     # can cause.
-    "legacy/core/src/trash/folder\\.rs:.*match guard error\\.kind\\(\\) != io::ErrorKind::AlreadyExists with false in own_folder$",
+    "features/trash/core/src/trashes/folder\\.rs:.*match guard error\\.kind\\(\\) != io::ErrorKind::AlreadyExists with false in own_folder$",
     # Listing and restoring (FIL-21). A drive's trash must sit at the top
     # of a real mount, which tests can't make; its name rules are tested
     # in trash_top.
-    "legacy/core/src/trash/folder\\.rs:.*\\bmount_trash_at\\b",
+    "features/trash/core/src/trashes/folder\\.rs:.*\\bmount_trash_at\\b",
     # Whether drives are looked at: with them, only the real system's
     # mounts are read, and a CI runner's hold no trash to tell apart.
-    "legacy/core/src/trash/read\\.rs:.*delete ! in trashes$",
+    "features/trash/core/src/trashes/read\\.rs:.*delete ! in trashes$",
     # Read the real system's mountinfo; tests hand the parser recorded
     # text instead.
     "helpers/index/src/mounts\\.rs:.*\\b(system|local)_mount_points\\b",
     # A restore's info records are read only after a crash cuts it short.
-    "legacy/core/src/ops/restore\\.rs:.*replace note_infos with \\(\\)",
+    "features/trash/core/src/restoring\\.rs:.*replace note_infos with \\(\\)",
     # The open flags share no bits, so ^ is |; & leaves none, and the test
     # with a pipe then waits forever, a timeout rather than a catch.
-    "legacy/core/src/trash/read\\.rs:.*replace \\| with [&^] in read_info$",
+    "features/trash/core/src/trashes/read\\.rs:.*replace \\| with [&^] in read_info$",
 ]

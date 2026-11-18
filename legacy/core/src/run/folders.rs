@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use nova_files_api::{ClientGone, ClientId, Command, HiddenFiles};
+use nova_files_api::{ClientId, Command, HiddenFiles};
 use nova_files_settings_api::Thumbnails;
 
 use super::Setup;
@@ -9,14 +9,10 @@ use crate::gathered;
 use crate::jobs::{self, Client};
 use crate::preview::{self, Request};
 use crate::properties;
-use crate::trash::{FILES, Trashes};
+use crate::trash;
+use nova_files_jobs::trash_info::FILES;
 
-pub(super) fn answer(
-    id: ClientId,
-    client: &Client,
-    command: Command,
-    setup: &Setup,
-) -> Result<(), ClientGone> {
+pub(super) fn answer(id: ClientId, client: &Client, command: Command, setup: &Setup) {
     match command {
         Command::ListFolder { id, path, order } => {
             let hidden = hidden_files(setup, &path);
@@ -30,7 +26,6 @@ pub(super) fn answer(
             let hidden = setup.settings.current().hidden_files;
             gathered::list(client, id, setup.gathered.folders_of(place), order, hidden);
         }
-        Command::ListTrash => return jobs::list_trash(client, setup.home.clone()),
         Command::Rows {
             id,
             first,
@@ -66,11 +61,10 @@ pub(super) fn answer(
         }
         _ => {}
     }
-    Ok(())
 }
 
 fn hidden_files(setup: &Setup, path: &Path) -> HiddenFiles {
-    let trash = Trashes::of(setup.home.as_ref()).home;
+    let trash = trash::trashes(setup.home.as_ref()).home;
     if trash.is_some_and(|trash| path.starts_with(trash.join(FILES))) {
         HiddenFiles::Shown
     } else {

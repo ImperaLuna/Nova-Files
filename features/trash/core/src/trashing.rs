@@ -8,21 +8,21 @@ use std::time::SystemTime;
 
 use nova_files_api::{Conflict, ConflictKind, Failure, Outcome};
 
-use super::Ended;
-use super::clash::conflict_for;
-use super::failure::failure;
-use super::journal::{PART_PREFIX, Record, word};
-use super::place::rename_no_replace;
-use super::plan::Entry;
-use super::running::Running;
-use super::stop::Stop;
-use super::sync::{remove, sync_folder, sync_folders};
-use crate::private_file::FILE_MODE;
-use crate::trash::{
+use crate::trashes::{
     FILES, INFO_SUFFIX, TrashFolder, add_folder_sizes, folder_for, folder_size, info_text,
     stored_name,
 };
+use nova_files_disk::private_file::FILE_MODE;
+use nova_files_jobs::Ended;
+use nova_files_jobs::clash::conflict_for;
+use nova_files_jobs::failure::failure;
+use nova_files_jobs::journal::{PART_PREFIX, Record, word};
+use nova_files_jobs::place::rename_no_replace;
+use nova_files_jobs::plan::Entry;
+use nova_files_jobs::running::Running;
 use nova_files_jobs::set_aside::{Aside, SetAside, SetAsideForJob};
+use nova_files_jobs::stop::Stop;
+use nova_files_jobs::sync::{remove, sync_folder, sync_folders};
 
 type Known = HashMap<PathBuf, TrashFolder>;
 

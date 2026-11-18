@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, SharedString};
-use nova_files_api::{Command, Listing, ListingId, Operation, Trashed};
+use nova_files_api::{Listing, ListingId, Operation};
 use nova_files_shell::{FolderRules, Views};
+use nova_files_trash_api::{self as trash_api, Trashed};
 
 use super::MainWindow;
 use crate::island::{self, Confirm, ITEM, ITEMS};
@@ -75,7 +76,7 @@ impl MainWindow {
 
     pub(super) fn list_trash(&self) {
         if let Some(connection) = &self.connection {
-            connection.send(Command::ListTrash).ok();
+            connection.send(trash_api::Command::List).ok();
         }
     }
 

@@ -7,7 +7,7 @@ use std::time::SystemTime;
 
 use chrono::{DateTime, Local};
 
-use crate::percent;
+use nova_files_disk::percent;
 
 use super::INFO_SUFFIX;
 pub(super) const HEADER: &str = "[Trash Info]";

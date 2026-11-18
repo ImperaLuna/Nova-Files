@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 
 use super::info::escape;
-use crate::private_file;
+use nova_files_disk::private_file;
 
 const FILE: &str = "directorysizes";
 const FIELDS: usize = 3;
@@ -79,7 +79,7 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::*;
-    use crate::ops::TestFolder;
+    use nova_files_jobs::test_folder::TestFolder;
 
     #[test]
     fn a_folder_counts_its_files_and_links_but_not_what_links_point_to() {

@@ -57,6 +57,7 @@ use nova_files_api::{
 };
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
+use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;
 use self::preview::QuickLooks;
@@ -201,13 +202,12 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 6] = [
+    const FIRST_ASKS: [Command; 5] = [
         Command::Ping,
         Command::Places,
         Command::Drives,
         Command::FolderViews,
         Command::Theme,
-        Command::ListTrash,
     ];
 
     pub fn at(
@@ -325,8 +325,14 @@ impl MainWindow {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
         };
-        match envelope.open::<settings_api::Event>() {
-            Ok(settings_api::Event::Settings(settings)) => self.settings_arrived(settings, cx),
+        let envelope = match envelope.open::<settings_api::Event>() {
+            Ok(settings_api::Event::Settings(settings)) => {
+                return self.settings_arrived(settings, cx);
+            }
+            Err(envelope) => envelope,
+        };
+        match envelope.open::<trash_api::Event>() {
+            Ok(trash_api::Event::Listed(items)) => self.trash_listed(items, cx),
             Err(envelope) => {
                 if let Err(envelope) = self.parts.deliver(envelope, cx) {
                     log::error!("no part takes {envelope:?}");
@@ -410,6 +416,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
                 connection.send(command)?;
             }
             connection.send(settings_api::Command::Watch)?;
+            connection.send(trash_api::Command::List)?;
             Ok(connection)
         })
         .ok()
