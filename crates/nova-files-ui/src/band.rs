@@ -115,25 +115,24 @@ impl MainWindow {
         let lines = rows_touched(from.y, to.y, self.rows_height(), grid.lines(len));
         let columns = (grid.column_at(from.x), grid.column_at(to.x));
         let (left, right) = (columns.0.min(columns.1), columns.0.max(columns.1));
-        let entry = |line: u32, column: usize| {
-            usize::try_from(line)
-                .ok()?
-                .checked_mul(grid.per_line)?
-                .checked_add(column)
-                .filter(|&at| at < len)
-                .and_then(|at| u32::try_from(at).ok())
-                .map(EntryId)
+        let id = |at: usize| EntryId(u32::try_from(at).unwrap_or(u32::MAX));
+        let corner = |line: u32, column: usize| {
+            id(usize::try_from(line)
+                .unwrap_or(usize::MAX)
+                .saturating_mul(grid.per_line)
+                .saturating_add(column)
+                .min(len.saturating_sub(1)))
         };
-        let last = EntryId(u32::try_from(len.saturating_sub(1)).unwrap_or(u32::MAX));
-        let corner = |line: u32, column: usize| entry(line, column).unwrap_or(last);
         self.reselect(
             |_, picks| match lines {
                 Some((anchor, cursor)) => {
                     let (low, high) = (anchor.min(cursor), anchor.max(cursor));
-                    let covered = (low..=high)
-                        .flat_map(|line| {
-                            (left..=right).filter_map(move |column| entry(line, column))
-                        })
+                    let lines = usize::try_from(low).unwrap_or(usize::MAX)
+                        ..usize::try_from(high).map_or(usize::MAX, |high| high + 1);
+                    let covered = grid
+                        .entries_of(&lines, len)
+                        .filter(|&at| (left..=right).contains(&grid.column_of(at)))
+                        .map(id)
                         .filter(|&id| picks(id));
                     Some(Selection::banded(
                         before.as_ref(),
