@@ -25,6 +25,7 @@ nova-files-disk = { path = "framework/disk" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-shell = { path = "framework/shell" }
 nova-files-index = { path = "helpers/index" }
+nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
 nova-files-ui = { path = "legacy/ui" }
 
 # GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds fixes
