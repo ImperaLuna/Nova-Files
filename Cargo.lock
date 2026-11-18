@@ -3622,6 +3622,7 @@ dependencies = [
  "log",
  "nova-files-api",
  "nova-files-disk",
+ "nova-files-entries",
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
@@ -3653,6 +3654,15 @@ dependencies = [
  "log",
  "nova-files-api",
  "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-entries"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
 ]
 
 [[package]]
