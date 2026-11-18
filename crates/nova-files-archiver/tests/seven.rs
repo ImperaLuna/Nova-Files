@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use common::Bench;
-use nova_files_api::{Command, ConflictKind, ExtractTo, Operation, Outcome, Packing, Tally};
+use nova_files_api::{Command, ConflictKind, Event, ExtractTo, Operation, Outcome, Packing, Tally};
 use nova_files_core::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
 
 /// More asks with nothing new than a test archive takes.
@@ -310,7 +310,40 @@ fn a_job_asks_for_the_password_a_locked_7z_needs_to_list() {
         conflict: wrong,
         password: "pw".to_owned(),
     });
-    assert_eq!(bench.finished(job).0, Outcome::Done);
+    let mut planned = None;
+    loop {
+        match bench.next() {
+            Event::JobProgress { progress, .. } => planned = Some(progress.total_items),
+            Event::JobFinished { outcome, .. } => {
+                assert_eq!(outcome, Outcome::Done);
+                break;
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(planned, Some(1), "the entry the password showed counts");
     assert_eq!(bench.landed(), ["docs"]);
     assert_eq!(fs::read(bench.at("into/docs/a.txt")).unwrap(), b"a");
+}
+
+#[test]
+fn a_listing_no_one_reads_is_a_usage_error() {
+    let folder = sources("unheard");
+    let archive = make(&folder, None);
+    let seven = nova_files_core::seven_on(std::env::var_os("PATH").as_deref()).unwrap();
+    let full = fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_nova-files-archiver"))
+        .arg("--seven")
+        .arg(seven)
+        .arg("list")
+        .arg(&archive)
+        .stdin(std::process::Stdio::null())
+        .stdout(full)
+        .status()
+        .unwrap();
+    assert_eq!(status.code(), Some(1));
+    fs::remove_dir_all(&folder).ok();
 }
