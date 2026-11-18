@@ -125,4 +125,7 @@ in
       '';
 
   duplicates = toolCheck "duplicates" "tools/check-duplicates.sh" [ pkgs.pmd ];
+
+  # The NixOS module in each of its modes.
+  module = import ./module-check.nix { inherit pkgs build; };
 }

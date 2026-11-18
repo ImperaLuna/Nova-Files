@@ -144,6 +144,7 @@ in
     ciArgs
     ciArtifacts
     runtimeLibs
+    appId
     portalName
     ;
 
