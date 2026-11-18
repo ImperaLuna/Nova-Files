@@ -9,6 +9,7 @@
 
 mod accounts;
 mod capped;
+mod change_writer;
 mod config_watch;
 mod details;
 mod details_queue;
