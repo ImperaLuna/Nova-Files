@@ -2,8 +2,9 @@
 //! cache or, when it has none, from the sandboxed helper.
 //!
 //! Each client has a [`Queue`] with a worker thread of its own. The client
-//! names the entries it shows or is about to show; each request replaces
-//! the one before. The worker takes the first entries still wanted, in
+//! names the entries it shows or is about to show and the size it draws
+//! them at; each request replaces the one before, and a new size sends
+//! every thumbnail again. The worker takes the first entries still wanted, in
 //! order, in batches: a current thumbnail or failure marker in the cache
 //! answers at once, the rest go to the helper as one batch. Before running
 //! the helper and before each answer it checks that the entry is still
@@ -27,7 +28,9 @@ use std::time::UNIX_EPOCH;
 
 pub use helper::{Running, picture};
 
-use nova_files_api::{EntryId, EntryKind, Event, EventSink, Listing, ListingId, MAX_ROWS, uri};
+use nova_files_api::{
+    EntryId, EntryKind, Event, EventSink, Listing, ListingId, MAX_ROWS, ThumbnailSize, uri,
+};
 
 /// The thumbnails folder under the cache folder.
 const THUMBNAILS_FOLDER: &str = "thumbnails";
@@ -74,7 +77,10 @@ struct Shared {
 struct State {
     shown: Option<Arc<Listing>>,
     wanted: Range<usize>,
-    /// Entries of the shown listing already answered or given up on.
+    /// The size the wanted entries are drawn at.
+    size: ThumbnailSize,
+    /// Entries of the shown listing already answered or given up on, at
+    /// [`Self::size`].
     done: HashSet<usize>,
     closed: bool,
 }
@@ -109,14 +115,19 @@ impl Queue {
         });
     }
 
-    /// The client wants thumbnails for `count` entries of listing `id` from
-    /// `first`, in place of what it wanted before.
-    pub fn want(&self, id: ListingId, first: EntryId, count: u32) {
+    /// The client wants thumbnails at `size` for `count` entries of
+    /// listing `id` from `first`, in place of what it wanted before.
+    pub fn want(&self, id: ListingId, first: EntryId, count: u32, size: ThumbnailSize) {
         self.shared.update(|state| {
             if state.shown.as_ref().is_some_and(|shown| shown.id == id) {
                 let first = usize::try_from(first.0).unwrap_or(usize::MAX);
                 let count = usize::try_from(count.min(MAX_ROWS)).unwrap_or_default();
                 state.wanted = first..first.saturating_add(count);
+                // Thumbnails sent at another size don't fit the new one.
+                if state.size != size {
+                    state.size = size;
+                    state.done.clear();
+                }
                 // Rows the client stopped showing may be asked for again,
                 // and it drops their thumbnails, so they count as not done.
                 let wanted = state.wanted.clone();
@@ -140,17 +151,19 @@ impl Shared {
         self.wake.notify_all();
     }
 
-    /// Whether entry `index` of listing `id` is still wanted.
-    fn still_wanted(&self, id: ListingId, index: usize) -> bool {
+    /// Whether entry `index` of listing `id` is still wanted at `size`.
+    fn still_wanted(&self, id: ListingId, index: usize, size: ThumbnailSize) -> bool {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         !state.closed
             && state.shown.as_ref().is_some_and(|shown| shown.id == id)
+            && state.size == size
             && state.wanted.contains(&index)
     }
 
-    /// Waits for the next batch: the shown listing and up to [`BATCH`]
-    /// wanted files not done yet, now marked done. `None` once closed.
-    fn next_batch(&self) -> Option<(Arc<Listing>, Vec<usize>)> {
+    /// Waits for the next batch: the shown listing, the size wanted and up
+    /// to [`BATCH`] wanted files not done yet, now marked done. `None` once
+    /// closed.
+    fn next_batch(&self) -> Option<Batch> {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         loop {
             if state.closed {
@@ -171,7 +184,11 @@ impl Shared {
                     .collect();
                 if !batch.is_empty() {
                     state.done.extend(&batch);
-                    return Some((shown, batch));
+                    return Some(Batch {
+                        shown,
+                        size: state.size,
+                        entries: batch,
+                    });
                 }
             }
             state = self
@@ -182,10 +199,22 @@ impl Shared {
     }
 }
 
+/// Entries of one listing to make thumbnails for, at one size.
+struct Batch {
+    shown: Arc<Listing>,
+    size: ThumbnailSize,
+    entries: Vec<usize>,
+}
+
 fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
-    while let Some((shown, batch)) = shared.next_batch() {
+    while let Some(Batch {
+        shown,
+        size,
+        entries: batch,
+    }) = shared.next_batch()
+    {
         let answer = |index: usize, png: Vec<u8>| {
-            if !shared.still_wanted(shown.id, index) {
+            if !shared.still_wanted(shown.id, index, size) {
                 return true;
             }
             let Ok(entry) = u32::try_from(index) else {
@@ -195,12 +224,13 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
                 .deliver(Event::Thumbnail {
                     id: shown.id,
                     entry: EntryId(entry),
+                    size,
                     png: png.into(),
                 })
                 .is_ok()
         };
-        let wanted = |index: usize| shared.still_wanted(shown.id, index);
-        let normal = cache::normal(&setup.folder);
+        let wanted = |index: usize| shared.still_wanted(shown.id, index, size);
+        let sized = cache::sized(&setup.folder, size);
         let failed = cache::failed(&setup.folder);
         let mut misses = Vec::new();
         // Each read waits for its row to be still wanted, so rows the client
@@ -215,7 +245,7 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
             if !wanted(index) {
                 continue;
             }
-            if let Some(png) = cache::read_if_current(&normal, &job.name, job.mtime) {
+            if let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime) {
                 if !answer(index, png) {
                     return;
                 }
@@ -231,14 +261,14 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
             continue;
         }
         let jobs: Vec<helper::Job> = misses.iter().map(|(_, job)| job.clone()).collect();
-        helper::run(&setup.helper, &setup.folder, &jobs);
+        helper::run(&setup.helper, &setup.folder, size, &jobs);
         // The cache is the answer, not the helper's word: a helper killed
         // part-way still saved the files it finished.
         for (index, job) in misses {
             if !wanted(index) {
                 continue;
             }
-            if let Some(png) = cache::read_if_current(&normal, &job.name, job.mtime)
+            if let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime)
                 && !answer(index, png)
             {
                 return;

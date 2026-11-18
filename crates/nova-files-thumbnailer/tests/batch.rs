@@ -17,6 +17,9 @@ const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
 const SOURCE_WIDTH: u32 = 400;
 const SOURCE_HEIGHT: u32 = 200;
 const NORMAL_SIZE: u32 = 128;
+const LARGE_SIZE: u32 = 256;
+const NORMAL: &str = "normal";
+const LARGE: &str = "large";
 
 /// A folder under the system temp folder, removed when dropped.
 struct TempFolder(PathBuf);
@@ -38,7 +41,8 @@ impl Drop for TempFolder {
     }
 }
 
-/// Runs one batch of `(file, name)` and returns the helper's answers.
+/// Runs one batch of `(file, name)` at the normal size and returns the
+/// helper's answers.
 fn run(thumbnails: &Path, jobs: &[(&Path, &str)]) -> Vec<String> {
     run_with_data(thumbnails, jobs, &thumbnails.join("no-data"))
 }
@@ -46,9 +50,15 @@ fn run(thumbnails: &Path, jobs: &[(&Path, &str)]) -> Vec<String> {
 /// [`run`], with `data` as the only data folder (MIME types and system
 /// thumbnailers).
 fn run_with_data(thumbnails: &Path, jobs: &[(&Path, &str)], data: &Path) -> Vec<String> {
+    run_sized(thumbnails, NORMAL, jobs, data)
+}
+
+/// [`run_with_data`] at `size`, named by its folder.
+fn run_sized(thumbnails: &Path, size: &str, jobs: &[(&Path, &str)], data: &Path) -> Vec<String> {
     let mut command = Command::new(HELPER);
     command
         .arg(thumbnails)
+        .arg(size)
         .env("XDG_DATA_DIRS", data)
         .env("XDG_DATA_HOME", data);
     for (file, name) in jobs {
@@ -102,6 +112,26 @@ fn images_get_scaled_thumbnails_with_their_uri_and_mtime() {
             (NORMAL_SIZE, NORMAL_SIZE / 2)
         );
     }
+}
+
+#[test]
+fn a_large_batch_makes_large_thumbnails_in_their_own_folder() {
+    let folder = TempFolder::new("large");
+    let thumbnails = folder.0.join("thumbnails");
+    let file = folder.0.join("a.png");
+    RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
+        .save_with_format(&file, ImageFormat::Png)
+        .unwrap();
+
+    let answers = run_sized(&thumbnails, LARGE, &[(&file, "a.png")], &folder.0);
+
+    assert_eq!(answers, ["ok"]);
+    assert!(!thumbnails.join(NORMAL).exists());
+    let thumb = image::open(thumbnails.join(LARGE).join("a.png")).unwrap();
+    assert_eq!(
+        (thumb.width(), thumb.height()),
+        (LARGE_SIZE, LARGE_SIZE / 2)
+    );
 }
 
 /// A photo-sized image, several MB once decoded: well inside the decode
@@ -231,7 +261,7 @@ fn bad_arguments_are_refused() {
     let folder = TempFolder::new("refused");
     let status = Command::new(HELPER)
         .arg(&folder.0)
-        .args(["/a.jpg", "file:///a.jpg", "1", "../escape.png"])
+        .args([NORMAL, "/a.jpg", "file:///a.jpg", "1", "../escape.png"])
         .status()
         .unwrap();
     assert!(!status.success());

@@ -15,7 +15,7 @@
 //! a paste is a job. A [`Size`] is what a scan of files and folders
 //! counted. A [`DiskSpace`] is how full a drive is. A [`RecentFolder`] is
 //! one a person opened lately, for the Start page. A [`FileIcon`] is how an
-//! entry's icon is drawn.
+//! entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
 
 #![forbid(unsafe_code)]
 
@@ -39,6 +39,7 @@ mod search;
 mod settings;
 mod size;
 mod theme;
+mod thumbnail_size;
 mod trash;
 pub mod uri;
 
@@ -80,6 +81,7 @@ pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use settings::{Appearance, HiddenFiles, SettingChange, Settings, Thumbnails};
 pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
+pub use thumbnail_size::ThumbnailSize;
 pub use trash::Trashed;
 
 /// The application id: the D-Bus name, the Wayland app id and the name of

@@ -21,7 +21,7 @@ use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
     Appearance, Bookmark, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind,
     Event, EventSink, HiddenFiles, Listing, ListingId, Mode, Order, Palette, Place, PlaceKind,
-    SettingChange, Settings, SortKey, Theme, Thumbnails, Unreadable,
+    SettingChange, Settings, SortKey, Theme, ThumbnailSize, Thumbnails, Unreadable,
 };
 use nova_files_ui::{Colors, MainWindow, WindowEvent};
 
@@ -378,6 +378,9 @@ fn another_folder_starts_at_the_top(cx: &mut TestAppContext) {
     assert_eq!(offset(&view, cx), Point::default());
 }
 
+/// A scale at which a row's thumbnail is more than 128 device pixels wide.
+const DENSE_SCALE: f32 = 8.0;
+
 /// A 4 by 4 red PNG.
 const PNG: &[u8] = &[
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 6, 0,
@@ -390,6 +393,7 @@ fn thumbnail(id: ListingId, entry: u32) -> Event {
     Event::Thumbnail {
         id,
         entry: EntryId(entry),
+        size: ThumbnailSize::Normal,
         png: PNG.into(),
     }
 }
@@ -405,6 +409,43 @@ fn a_thumbnail_for_a_shown_row_is_kept(cx: &mut TestAppContext) {
         assert!(view.thumbnail(1).is_some());
         assert!(view.thumbnail(0).is_none());
     });
+}
+
+#[gpui::test]
+fn a_thumbnail_at_a_size_not_asked_for_is_dropped(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
+
+    // Rows draw small thumbnails, so they ask for normal ones.
+    core.send(Event::Thumbnail {
+        id,
+        entry: EntryId(1),
+        size: ThumbnailSize::Large,
+        png: PNG.into(),
+    });
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+}
+
+#[gpui::test]
+fn a_screen_dense_enough_asks_for_large_thumbnails(cx: &mut TestAppContext) {
+    let (view, cx, mut core, _) = shown_with_details(cx, ENTRIES);
+    core.commands();
+
+    // A row's thumbnail at this scale is wider than a normal one.
+    view.update_in(cx, |view, window, cx| {
+        view.set_scale_factor(DENSE_SCALE, window, cx);
+    });
+
+    let sizes: Vec<ThumbnailSize> = core
+        .commands()
+        .into_iter()
+        .filter_map(|command| match command {
+            Command::Rows { size, .. } => Some(size),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(sizes, [ThumbnailSize::Large]);
 }
 
 #[gpui::test]

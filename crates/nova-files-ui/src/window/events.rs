@@ -129,15 +129,12 @@ impl MainWindow {
             {
                 self.details_arrived(first, &details, &icons, cx);
             }
-            // Checked against the listing once shrunk, when it counts.
-            Event::Thumbnail { id, entry, png } => {
-                if let Ok(index) = usize::try_from(entry.0)
-                    && self.rows_wanted.contains(&index)
-                    && self.settings.thumbnails == Thumbnails::Shown
-                {
-                    self.shrink_thumbnail(id, index, png, cx);
-                }
-            }
+            Event::Thumbnail {
+                id,
+                entry,
+                size,
+                png,
+            } => self.thumbnail_arrived((id, entry, size), png, cx),
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),

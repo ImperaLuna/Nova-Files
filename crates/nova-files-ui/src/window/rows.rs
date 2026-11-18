@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use gpui::{App, Context, RenderImage, Window};
 use nova_files_api::{
-    Command, Details, EntryId, EntryKind, FileIcon, ListingId, ThemeIcon, Thumbnails,
+    Command, Details, EntryId, EntryKind, FileIcon, ListingId, ThemeIcon, ThumbnailSize, Thumbnails,
 };
 
 use super::MainWindow;
@@ -202,6 +202,7 @@ impl MainWindow {
             id: listing.id,
             first: EntryId(first),
             count,
+            size: self.thumbnail_size(),
         };
         if let Some(connection) = &self.connection {
             connection.send(command).ok();
@@ -254,6 +255,7 @@ impl MainWindow {
                 id: listing.id,
                 first: EntryId(0),
                 count: 0,
+                size: self.thumbnail_size(),
             };
             connection.send(forget).ok();
         }
@@ -265,19 +267,39 @@ impl MainWindow {
         thumbnail::device_side(size::ROW_ICON, self.scale_factor)
     }
 
+    /// The size of thumbnail the core sends: the smallest that fills a
+    /// thumbnail's side.
+    pub(super) fn thumbnail_size(&self) -> ThumbnailSize {
+        ThumbnailSize::to_fill(self.thumbnail_side())
+    }
+
     /// A thumbnail's side in device pixels at the current scale.
     fn thumbnail_side(&self) -> u32 {
         thumbnail::device_side(size::THUMBNAIL, self.scale_factor)
     }
 
-    /// Shrinks row `index`'s thumbnail off the UI thread, then keeps it.
-    pub(super) fn shrink_thumbnail(
+    /// A thumbnail for `entry` of listing `id` at `size` arrived from the
+    /// core. It is shrunk if its row is still
+    /// wanted, thumbnails are shown and it is the size asked for now (one
+    /// asked for before is left for that); its listing is checked once
+    /// shrunk, when it counts.
+    pub(super) fn thumbnail_arrived(
         &self,
-        id: ListingId,
-        index: usize,
+        (id, entry, size): (ListingId, EntryId, ThumbnailSize),
         png: Arc<[u8]>,
         cx: &Context<Self>,
     ) {
+        if let Ok(index) = usize::try_from(entry.0)
+            && size == self.thumbnail_size()
+            && self.rows_wanted.contains(&index)
+            && self.settings.thumbnails == Thumbnails::Shown
+        {
+            self.shrink_thumbnail(id, index, png, cx);
+        }
+    }
+
+    /// Shrinks row `index`'s thumbnail off the UI thread, then keeps it.
+    fn shrink_thumbnail(&self, id: ListingId, index: usize, png: Arc<[u8]>, cx: &Context<Self>) {
         let side = self.thumbnail_side();
         let shrinking = cx
             .background_executor()

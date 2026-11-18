@@ -18,7 +18,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_api::{
-    Command, Connection, Details, EntryId, EntryKind, Event, Listing, ListingId, Order, Unreadable,
+    Command, Connection, Details, EntryId, EntryKind, Event, Listing, ListingId, Order,
+    ThumbnailSize, Unreadable,
 };
 
 /// How long a test waits for the core before it counts as a failure.
@@ -109,6 +110,7 @@ impl Client {
                 id: ListingId(id),
                 first: EntryId(first),
                 count,
+                size: ThumbnailSize::Normal,
             })
             .unwrap();
         let mut start = None;
@@ -262,6 +264,7 @@ fn rows_of_an_older_listing_are_not_read() {
             id: ListingId(4),
             first: EntryId(0),
             count: 10,
+            size: ThumbnailSize::Normal,
         })
         .unwrap();
     let (start, _) = client.show_rows(5, 3, 1, 1);
