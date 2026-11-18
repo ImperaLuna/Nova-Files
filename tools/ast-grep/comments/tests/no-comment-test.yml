@@ -1,0 +1,65 @@
+# Invalid cases are comments the 2026-11-18 audit found false or hiding a
+# defect, copied from main at cc1b603.
+id: no-comment
+valid:
+  - |
+    pub fn open(path: &Path) -> Result<Self, OpenError> {
+        // SAFETY: the map is only sound while nobody changes the file under
+        // it. Nova Files never writes an index in place.
+        let map = unsafe { Mmap::map(&file)? };
+    }
+  - |
+    pub fn give_back() {
+        // SAFETY: malloc_trim takes a plain integer, locks each pool itself and
+        // releases only free pages; any thread may call it.
+        unsafe { libc::malloc_trim(0) };
+    }
+  - |
+    // SPDX-License-Identifier: GPL-3.0-or-later
+    fn f() {}
+  - |
+    fn f() {
+        // An xattr name holds at most 255 bytes:
+        // https://man7.org/linux/man-pages/man7/xattr.7.html
+        let max = XATTR_NAME_MAX;
+    }
+  - |
+    fn f() {
+        // Until 2027-01-31, approved by ImperaLuna: the theme lands in FIL-200.
+        // ast-grep-ignore: no-bare-number
+        let radius = 14.0;
+    }
+  - |
+    /// A doc comment is no-doc-comment's to judge.
+    fn f() {}
+invalid:
+  - |
+    let is_folder = if file_type.is_symlink() {
+        // A broken link is not an error: it is a file you can't open.
+        fs::metadata(item.path()).is_ok_and(|target| target.is_dir())
+    } else {
+        file_type.is_dir()
+    };
+  - |
+    if is_link {
+        // A link to nowhere is saved over: there is nothing to keep.
+        fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
+    }
+  - |
+    fn f() {
+        // Searches read the log when they run; nothing to wake.
+        let watcher = Watcher::start(&index, log, || {}).ok()?;
+    }
+  - |
+    fn f() {
+        // SAFETY: a SAFETY note keeps only its own run of lines.
+        unsafe { g() };
+        // A comment after the unsafe block is not part of it.
+        h();
+    }
+  - |
+    //// Four slashes is a plain comment, not a doc.
+    fn f() {}
+  - |
+    /* A block comment. */
+    fn f() {}

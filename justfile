@@ -65,6 +65,10 @@ deps:
 numbers:
     ast-grep scan --config tools/ast-grep/sgconfig.yml
 
+# Comments outside the keep list in AGENTS.md; `--report` only counts them.
+comments *flags:
+    tools/check-comments.sh {{ flags }}
+
 # Rust files past the line limit.
 lengths:
     tools/check-file-length.sh
