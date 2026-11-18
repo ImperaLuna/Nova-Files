@@ -9,7 +9,7 @@ use std::thread;
 
 use futures::{FutureExt as _, Stream, StreamExt as _, stream};
 
-use nova_files_api::{DriveAction, DriveFailure, DriveList, DriveService};
+use nova_files_drives_api::{DriveAction, DriveFailure, DriveList, DriveService};
 use zbus::fdo::{DBusProxy, ObjectManagerProxy};
 use zbus::message::Type;
 use zbus::names::BusName;

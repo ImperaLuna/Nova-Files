@@ -3584,6 +3584,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-dbus",
+ "nova-files-drives-api",
  "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-settings-api",
@@ -3634,6 +3635,8 @@ dependencies = [
  "nova-files-api",
  "nova-files-clipboard-api",
  "nova-files-disk",
+ "nova-files-drives-api",
+ "nova-files-drives-core",
  "nova-files-entries",
  "nova-files-index",
  "nova-files-jobs",
@@ -3663,6 +3666,7 @@ dependencies = [
  "futures",
  "nova-files-api",
  "nova-files-core",
+ "nova-files-drives-api",
  "nova-files-open-api",
  "nova-files-picker-api",
  "rustix 1.1.6",
@@ -3675,6 +3679,20 @@ version = "0.1.0"
 dependencies = [
  "log",
  "nova-files-api",
+ "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-drives-api"
+version = "0.1.0"
+
+[[package]]
+name = "nova-files-drives-core"
+version = "0.1.0"
+dependencies = [
+ "nova-files-disk",
+ "nova-files-drives-api",
+ "nova-files-messages",
  "rustix 1.1.6",
 ]
 
@@ -3828,6 +3846,7 @@ dependencies = [
  "log",
  "nova-files-api",
  "nova-files-clipboard-api",
+ "nova-files-drives-api",
  "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-settings-api",
