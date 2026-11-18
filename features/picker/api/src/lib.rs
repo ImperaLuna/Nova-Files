@@ -7,13 +7,22 @@
 //! stopped) answers [`PickAnswer::Cancelled`], so the asking app always
 //! hears back. The portal may also close a request first; the UI then gets
 //! the request's [`PickId`] to close its window.
+//!
+//! A [`FileFilter`]'s globs match a file's name ignoring case, as GTK's own
+//! dialog does. Its MIME types need the system's MIME database, which the
+//! core reads and hands over as [`FileTypes`]. A name the database knows
+//! nothing about can't be judged without reading the file, so a filter
+//! with MIME types lets it through rather than block a file that may be
+//! fine.
 
-use std::ffi::OsString;
+#![forbid(unsafe_code)]
+
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::file_type::FileTypes;
+use nova_files_api::{FileTypes, glob_matches};
 
 /// One pick request, unique while the program runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -139,11 +148,56 @@ pub struct PickRequest {
     pub reply: PickReply,
 }
 
+impl FileFilter {
+    /// Whether a file called `name` fits this filter, with `types` for its
+    /// MIME rules (without it, they let every file through).
+    pub fn admits(&self, name: &OsStr, types: Option<&dyn FileTypes>) -> bool {
+        let text = name.to_string_lossy();
+        let mut wants_type = false;
+        for rule in &self.rules {
+            match rule {
+                FilterRule::Glob(pattern) => {
+                    if glob_matches(pattern, &text, false) {
+                        return true;
+                    }
+                }
+                FilterRule::MimeType(_) => wants_type = true,
+            }
+        }
+        if !wants_type {
+            return false;
+        }
+        let Some(mime) = types.and_then(|types| types.of(name)) else {
+            return true;
+        };
+        self.rules.iter().any(|rule| match rule {
+            FilterRule::MimeType(wanted) => types.is_some_and(|types| types.is_a(mime, wanted)),
+            FilterRule::Glob(_) => false,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
     use std::sync::mpsc;
 
-    use super::{ParentWindow, PickAnswer, PickReply};
+    use super::{FileFilter, FilterRule, ParentWindow, PickAnswer, PickReply};
+
+    fn filter(rules: &[FilterRule]) -> FileFilter {
+        FileFilter {
+            name: "Some".to_owned(),
+            rules: rules.to_vec(),
+        }
+    }
+
+    #[test]
+    fn without_a_database_mime_rules_admit_everything() {
+        let text = filter(&[FilterRule::MimeType("text/plain".to_owned())]);
+        assert!(text.admits(OsStr::new("photo.png"), None));
+        let none = filter(&[]);
+        assert!(!none.admits(OsStr::new("photo.png"), None));
+    }
 
     #[test]
     fn the_portal_names_a_wayland_or_x11_window() {
