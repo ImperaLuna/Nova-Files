@@ -54,6 +54,14 @@ impl Saver {
     }
 }
 
+#[cfg(test)]
+impl Saver {
+    /// Where the file goes, if anywhere.
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+}
+
 /// Starts the thread that writes each save it is sent to `path`, in order,
 /// or none when no thread can start.
 fn start_writer(

@@ -4,8 +4,9 @@
 //! The list lives in memory while the core runs and in
 //! `$XDG_STATE_HOME/nova-files/recent-folders` between runs, newest first,
 //! at most [`MAX_RECENT_FOLDERS`]. The file is read once, when the core
-//! starts; a missing, unreadable, oversized or malformed one reads as no
-//! folders. Each change saves the whole list through a [`Saver`].
+//! starts; a missing or malformed one reads as no folders. Each change
+//! saves the whole list through a [`Saver`], except over a file that
+//! couldn't be read or is oversized: that run keeps its list in memory.
 //!
 //! The file starts with a line naming the format and its version, then
 //! holds each folder's path as raw bytes, ended by a NUL byte, which no
@@ -71,10 +72,11 @@ impl Store {
     /// The folders saved under the state folder `state_home`.
     pub fn open(state_home: Option<&Path>) -> Self {
         let path = state_home.map(|home| home.join(FILE));
-        let folders = path.as_deref().map(read).unwrap_or_default();
+        let read = path.as_deref().map(read);
+        let saved_to = path.filter(|_| read.as_ref().is_none_or(Option::is_some));
         Self {
-            folders: RefCell::new(folders),
-            saver: Saver::new(path, WHAT, SAVE_THREAD),
+            folders: RefCell::new(read.flatten().unwrap_or_default()),
+            saver: Saver::new(saved_to, WHAT, SAVE_THREAD),
         }
     }
 
@@ -200,12 +202,26 @@ fn parse(bytes: &[u8]) -> Vec<PathBuf> {
     folders
 }
 
-/// The folders in the file at `path`, or none when it is missing,
-/// unreadable, oversized or malformed.
-fn read(path: &Path) -> Vec<PathBuf> {
+/// The folders in the file at `path`, none when it is missing or
+/// malformed, or `None` when it couldn't be read or is oversized.
+fn read(path: &Path) -> Option<Vec<PathBuf>> {
     match private_file::read(path, MAX_BYTES) {
-        Read::Bytes(bytes) => parse(&bytes),
-        Read::Missing | Read::TooBig | Read::Failed(_) => Vec::new(),
+        Read::Bytes(bytes) => Some(parse(&bytes)),
+        Read::Missing => Some(Vec::new()),
+        Read::TooBig => {
+            log::warn!(
+                "{} is over {MAX_BYTES} bytes; it isn't read or saved over",
+                path.display()
+            );
+            None
+        }
+        Read::Failed(error) => {
+            log::warn!(
+                "can't read {}; it isn't saved over: {error}",
+                path.display()
+            );
+            None
+        }
     }
 }
 
@@ -251,6 +267,26 @@ mod tests {
         let largest = to_bytes(&vec![longest; MAX_RECENT_FOLDERS]);
         assert_eq!(largest.len(), MAX_BYTES);
         assert!(!fits(&PathBuf::from(format!("/{}", "a".repeat(MAX_PATH)))));
+    }
+
+    #[test]
+    fn a_file_that_cant_be_read_is_never_saved_over() {
+        let state = std::env::temp_dir().join(format!("nova-files-recent-{}", std::process::id()));
+        fs::remove_dir_all(&state).ok();
+        let file = state.join(FILE);
+        fs::create_dir_all(&file).unwrap();
+        let unreadable = Store::open(Some(&state));
+        fs::remove_dir(&file).unwrap();
+        fs::write(&file, vec![b'x'; MAX_BYTES + 1]).unwrap();
+        let too_big = Store::open(Some(&state));
+        fs::write(&file, to_bytes(&paths(&["/a"]))).unwrap();
+        let readable = Store::open(Some(&state));
+
+        assert_eq!(unreadable.saver.path(), None);
+        assert_eq!(too_big.saver.path(), None);
+        assert_eq!(readable.saver.path(), Some(file.as_path()));
+        assert_eq!(*readable.folders.borrow(), paths(&["/a"]));
+        fs::remove_dir_all(state).ok();
     }
 
     #[test]

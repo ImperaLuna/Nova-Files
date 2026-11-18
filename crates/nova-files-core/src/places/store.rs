@@ -237,14 +237,19 @@ impl Shared {
             return;
         };
         let _disk = lock(&self.disk);
-        let target = private_file::saved_at(&bookmarks_file(home));
-        if let Some(mut lines) = read_lines(&target)
-            && lines.apply(change)
-        {
-            let mode = private_file::mode_to_keep(&target);
-            if let Err(error) = private_file::replace(&target, &lines.to_bytes(), mode) {
-                log::warn!("can't save {}: {error}", target.display());
+        let file = bookmarks_file(home);
+        match private_file::saved_at(&file) {
+            Ok(target) => {
+                if let Some(mut lines) = read_lines(&target)
+                    && lines.apply(change)
+                {
+                    let mode = private_file::mode_to_keep(&target);
+                    if let Err(error) = private_file::replace(&target, &lines.to_bytes(), mode) {
+                        log::warn!("can't save {}: {error}", target.display());
+                    }
+                }
             }
+            Err(error) => log::warn!("can't save {}: {error}", file.display()),
         }
         // The watch sees the save too, later; reading now tells the
         // clients without waiting for it.
