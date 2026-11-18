@@ -1,15 +1,5 @@
 mod access;
-mod ahead;
-mod attrs;
-mod compress;
-mod copy_file;
-mod delete;
 mod dropped;
-mod extract;
-mod make;
-mod name;
-mod one_step;
-mod transfer;
 mod undo;
 
 use std::io;
@@ -23,22 +13,21 @@ use nova_files_jobs::kinds::Kinds;
 use nova_files_jobs::mover::{Moved, Mover};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, lock};
-use nova_files_jobs::{clash, control, failure, folders, journal, keep_both, place, plan};
-use nova_files_jobs::{running, stop, sync};
+use nova_files_jobs::{failure, journal, plan};
+use nova_files_jobs::{running, stop};
 
 pub use dropped::answer as answer_drop_would;
 #[cfg(test)]
 pub use nova_files_jobs::test_folder::{self, TestFolder};
 
-use crate::archive::Archiver;
 use crate::inside;
 use crate::trash::Trashes;
 use access::change_access;
-use delete::delete;
-use extract::{Taking, extract};
-use make::How;
+use nova_files_archives_core::{Archiver, Asked, Taking, compress, extract};
+use nova_files_delete_core::{delete, delete_paths};
+use nova_files_rename_core::{new_folder, rename};
+use nova_files_transfer_core::{How, transfer, transfer_to};
 use nova_files_trash_core::{Trasher, delete_from_trash, empty_trash, restore, trash};
-use transfer::transfer;
 use undo::{Undo, undo_of};
 
 const DROP_THREAD: &str = "nova-files-drop";
@@ -104,12 +93,12 @@ pub struct Moves;
 
 impl Mover for Moves {
     fn move_pairs(&self, running: &mut Running, pairs: &[(PathBuf, PathBuf)]) -> Moved {
-        let (result, moved) = transfer::transfer_to(running, pairs, How::Move);
+        let (result, moved) = transfer_to(running, pairs, How::Move);
         (result, moved.into_iter().collect())
     }
 
     fn delete(&self, running: &mut Running, paths: &[PathBuf]) -> Moved {
-        delete::delete_paths(running, paths)
+        delete_paths(running, paths)
     }
 }
 
@@ -121,12 +110,16 @@ impl nova_files_jobs::JobKind for Files {
         let trashes = &self.trashes;
         let archiver = self.archiver.as_ref();
         match operation {
-            Operation::Rename { path, name } => one_step::rename(path, name),
-            Operation::NewFolder { inside, name } => one_step::new_folder(inside, name),
+            Operation::Rename { path, name } => rename(path, name),
+            Operation::NewFolder { inside, name } => new_folder(inside, name),
             Operation::Copy { sources, into } => match copied_out(sources) {
-                Some((archive, picked)) => {
-                    extract(running, archiver, &archive, into, Taking::Picked(&picked))
-                }
+                Some((archive, picked)) => extract(
+                    running,
+                    (archiver, &self.mover),
+                    &archive,
+                    into,
+                    Taking::Picked(&picked),
+                ),
                 None => transfer(running, sources, into, How::Copy),
             },
             Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
@@ -139,9 +132,13 @@ impl nova_files_jobs::JobKind for Files {
             }
             Operation::EmptyTrash => empty_trash(running, trashes, &self.mover),
             Operation::Undo { .. } => undo::run(running, undo.cloned(), trashes, &self.mover),
-            Operation::Extract { archive, into, to } => {
-                extract(running, archiver, archive, into, Taking::All(*to))
-            }
+            Operation::Extract { archive, into, to } => extract(
+                running,
+                (archiver, &self.mover),
+                archive,
+                into,
+                Taking::All(*to),
+            ),
             Operation::Compress {
                 sources,
                 into,
@@ -150,7 +147,7 @@ impl nova_files_jobs::JobKind for Files {
                 level,
                 locked,
             } => {
-                let asked = compress::Asked {
+                let asked = Asked {
                     sources,
                     into,
                     name,
@@ -158,7 +155,7 @@ impl nova_files_jobs::JobKind for Files {
                     level: *level,
                     locked: *locked,
                 };
-                compress::compress(running, archiver, &asked)
+                compress(running, archiver, &asked)
             }
         }
     }

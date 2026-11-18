@@ -8,12 +8,44 @@ use super::{Row, new_tab_on_middle_click, on_middle_click, row, section_button, 
 use crate::assets::Icon;
 use nova_files_api::Gathering;
 
+use nova_files_shell::{SidebarAt, SidebarRow};
+
 use crate::location::Location;
 use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::theme::{Colors, size};
 use crate::window::{Aim, HoverOpens, MainWindow};
 
 const LABEL: &str = "Places";
+
+fn part_row(
+    place: SidebarRow,
+    narrow: bool,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> Stateful<Div> {
+    let (opens, new_tab) = (place.opens.clone(), place.opens.clone());
+    row(
+        Row {
+            id: place.id.into(),
+            selector: place.id.to_owned(),
+            glyph: place.icon,
+            name: place.name,
+            number: place.number.map(|number| (number, colors.text_dim)),
+            here: place.here,
+            pressed: false,
+        },
+        narrow,
+        colors,
+    )
+    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+        this.go_to_shell(opens.clone(), cx);
+    }))
+    .map(|row| {
+        on_middle_click(row, true, cx, move |this, cx| {
+            this.new_tab_at_shell(new_tab.clone(), cx);
+        })
+    })
+}
 
 impl MainWindow {
     pub(super) fn places_section(&self, narrow: bool, cx: &Context<Self>) -> Div {
@@ -65,6 +97,12 @@ impl MainWindow {
             .filter(|_| main)
             .map(|place| self.gathered_row(place, narrow, &colors, cx));
         let trash = main.then(|| self.trash_row(narrow, &colors, cx));
+        let from_parts = self
+            .parts
+            .sidebar(SidebarAt::Places, &self.scene(), cx)
+            .into_iter()
+            .filter(|_| main)
+            .map(|place| part_row(place, narrow, &colors, cx));
         let pin = main.then(|| {
             section_button("pin", Icon::Plus, &colors)
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder_to_pin(cx)))
@@ -75,7 +113,8 @@ impl MainWindow {
             .children(start)
             .children(rows)
             .children(gathered)
-            .children(trash);
+            .children(trash)
+            .children(from_parts);
         if narrow {
             return list.items_center().children(pin);
         }

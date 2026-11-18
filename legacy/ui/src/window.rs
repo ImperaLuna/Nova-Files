@@ -22,6 +22,7 @@ mod renaming;
 mod rows;
 mod search;
 mod showing;
+mod slots;
 mod start;
 mod tab_order;
 mod tabs;
@@ -49,15 +50,17 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
+    App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Subscription, Task,
+    UniformListScrollHandle,
 };
 use nova_files_api::{
     Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
     Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId,
 };
+use nova_files_drives_api as drives_api;
 use nova_files_preview_api as preview_api;
 use nova_files_settings_api::{self as settings_api, Settings};
-use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
+use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
 use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;
@@ -162,7 +165,8 @@ pub struct MainWindow {
     properties: Option<properties::Page>,
     next_ask: u64,
     host: Host,
-    parts: WindowParts,
+    pub(crate) parts: WindowParts,
+    watching: Vec<Subscription>,
     _events: Task<()>,
 }
 
@@ -203,10 +207,9 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 5] = [
+    const FIRST_ASKS: [Command; 4] = [
         Command::Ping,
         Command::Places,
-        Command::Drives,
         Command::FolderViews,
         Command::Theme,
     ];
@@ -288,8 +291,10 @@ impl MainWindow {
             next_ask: 0,
             host,
             parts,
+            watching: Vec::new(),
             _events: events,
         };
+        window.watching = window.watch_slots(cx);
         window.claim_trash_rules();
         window.go_first(location, cx);
         window
@@ -306,6 +311,7 @@ impl MainWindow {
             Location::Folder(folder) => self.open(folder),
             Location::Gathered(place) => self.open_gathered(*place, cx),
             Location::Properties(paths) => self.arrive_at_properties(paths, cx),
+            Location::Page(page) => self.open_page(page.clone(), cx),
         }
     }
 
@@ -324,6 +330,10 @@ impl MainWindow {
     fn take(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
         let envelope = match envelope.open::<Event>() {
             Ok(event) => return self.on_event(event, cx),
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<drives_api::Event>() {
+            Ok(event) => return self.drive_event(event, cx),
             Err(envelope) => envelope,
         };
         let envelope = match envelope.open::<preview_api::Event>() {
@@ -425,6 +435,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             for command in MainWindow::FIRST_ASKS {
                 connection.send(command)?;
             }
+            connection.send(drives_api::Command::Drives)?;
             connection.send(settings_api::Command::Watch)?;
             connection.send(trash_api::Command::List)?;
             Ok(connection)
@@ -433,10 +444,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
 }
 
 fn open_parts(connection: Option<Arc<Connection>>, cx: &mut App) -> (Host, WindowParts) {
-    let host = Host {
-        link: Link::new(connection),
-        rules: RulesBook::default(),
-    };
+    let host = Host::new(Link::new(connection), cx);
     let parts = cx
         .try_global::<Parts>()
         .cloned()

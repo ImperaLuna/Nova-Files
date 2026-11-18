@@ -7,7 +7,7 @@
 
 [workspace]
 resolver = "3"
-members = ["app", "features/*/*", "framework/*", "fronts/*", "helpers/*", "legacy/*"]
+members = ["app", "features/*/*", "framework/base", "framework/disk", "framework/entries/*", "framework/jobs", "framework/messages", "framework/shell", "fronts/*", "helpers/*", "legacy/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -18,21 +18,28 @@ publish = false
 
 [workspace.dependencies]
 nova-files-api = { path = "framework/base" }
+nova-files-archives-core = { path = "features/archives/core" }
 nova-files-clipboard-api = { path = "features/clipboard/api" }
 nova-files-core = { path = "legacy/core" }
 nova-files-dbus = { path = "fronts/dbus" }
+nova-files-delete-core = { path = "features/delete/core" }
 nova-files-disk = { path = "framework/disk" }
-nova-files-entries = { path = "framework/entries" }
+nova-files-drives-api = { path = "features/drives/api" }
+nova-files-drives-core = { path = "features/drives/core" }
+nova-files-entries-core = { path = "framework/entries/core" }
 nova-files-index = { path = "helpers/index" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-messages = { path = "framework/messages" }
 nova-files-picker-api = { path = "features/picker/api" }
 nova-files-preview-api = { path = "features/preview/api" }
 nova-files-preview-core = { path = "features/preview/core" }
+nova-files-rename-api = { path = "features/rename/api" }
+nova-files-rename-core = { path = "features/rename/core" }
 nova-files-settings-api = { path = "features/settings/api" }
 nova-files-settings-core = { path = "features/settings/core" }
 nova-files-shell = { path = "framework/shell" }
 nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
+nova-files-transfer-core = { path = "features/transfer/core" }
 nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }
 nova-files-ui = { path = "legacy/ui" }

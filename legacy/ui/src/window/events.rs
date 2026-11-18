@@ -39,7 +39,9 @@ impl MainWindow {
         }
         self.gathered.shown = match &arrived {
             Location::Gathered(place) => Some(*place),
-            Location::Start | Location::Folder(_) | Location::Properties(_) => None,
+            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
+                None
+            }
         };
         self.history.arrived(&arrived);
         let reordered = same_folder && self.shown_order != self.asked_order;
@@ -68,7 +70,7 @@ impl MainWindow {
         }
         cx.emit(match arrived {
             Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
-            Location::Start | Location::Folder(_) | Location::Properties(_) => {
+            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
                 WindowEvent::Opened(listing_path)
             }
         });
@@ -145,9 +147,6 @@ impl MainWindow {
                 png,
             } => self.thumbnail_arrived((id, entry, size), png, cx),
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
-            Event::Drives(_) | Event::DriveDone { .. } | Event::DiskSpace(_) => {
-                self.drive_event(event, cx);
-            }
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
             Event::OpenWith(answer) => self.open_with_answered(answer, cx),

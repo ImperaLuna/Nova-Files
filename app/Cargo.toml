@@ -10,6 +10,7 @@
 # - nova-files-api
 # - nova-files-core
 # - nova-files-dbus
+# - nova-files-drives-api
 # - nova-files-index
 # - nova-files-picker-api
 # - nova-files-ui
@@ -31,6 +32,7 @@ libc = "0.2.189"
 nova-files-api.workspace = true
 nova-files-core.workspace = true
 nova-files-dbus.workspace = true
+nova-files-drives-api.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-ui.workspace = true
 

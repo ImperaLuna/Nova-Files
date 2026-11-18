@@ -10,7 +10,7 @@
 # Allowed workspace crates:
 # - nova-files-api
 # - nova-files-disk
-# - nova-files-entries
+# - nova-files-entries-core
 # - nova-files-preview-api
 # - nova-files-thumbnailer-launch
 
@@ -30,6 +30,6 @@ workspace = true
 rustix = { version = "1.1.6", default-features = false, features = ["fs", "std"] }
 nova-files-api.workspace = true
 nova-files-disk.workspace = true
-nova-files-entries.workspace = true
+nova-files-entries-core.workspace = true
 nova-files-preview-api.workspace = true
 nova-files-thumbnailer-launch.workspace = true

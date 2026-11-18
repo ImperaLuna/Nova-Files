@@ -108,7 +108,7 @@ pub struct Row {
     pub pressed: bool,
 }
 
-fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
+pub(super) fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
     let Row {
         id,
         selector,

@@ -10,7 +10,7 @@ use std::thread;
 
 use nova_files_api::{EventSink, Fit, Unreadable};
 use nova_files_disk::ports::Mimes;
-use nova_files_entries::list::{self, Stopped};
+use nova_files_entries_core::list::{self, Stopped};
 use nova_files_preview_api::{
     Event, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent, PreviewId,
 };

@@ -19,9 +19,12 @@ impl HoverOpens {
         match self {
             Self::Place(Location::Folder(folder)) => here == Some(folder.as_path()) && !searching,
             Self::Tab(_)
-            | Self::Place(Location::Start | Location::Gathered(_) | Location::Properties(_)) => {
-                false
-            }
+            | Self::Place(
+                Location::Start
+                | Location::Gathered(_)
+                | Location::Properties(_)
+                | Location::Page(_),
+            ) => false,
         }
     }
 }
@@ -81,6 +84,7 @@ impl MainWindow {
                 cx.notify();
             }
             HoverOpens::Place(Location::Gathered(place)) => self.open_gathered(place, cx),
+            HoverOpens::Place(Location::Page(page)) => self.open_page(page, cx),
             HoverOpens::Place(Location::Properties(_)) => {}
         }
     }

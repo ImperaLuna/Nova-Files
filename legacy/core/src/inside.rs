@@ -11,8 +11,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use nova_files_api::{Details, Entry, EntryId, EntryKind, HiddenFiles, Order, SortKey, Unreadable};
 
-use crate::archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Flow};
 use crate::private_file::FOLDER_MODE;
+use nova_files_archives_core::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Flow};
 
 const KEPT: usize = 4;
 const OPENED: &str = "nova-files/opened";

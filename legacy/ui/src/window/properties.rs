@@ -85,7 +85,9 @@ impl MainWindow {
     pub fn properties_paths(&self) -> Option<&[PathBuf]> {
         match self.location()? {
             Location::Properties(paths) => Some(paths),
-            Location::Start | Location::Folder(_) | Location::Gathered(_) => None,
+            Location::Start | Location::Folder(_) | Location::Gathered(_) | Location::Page(_) => {
+                None
+            }
         }
     }
 
