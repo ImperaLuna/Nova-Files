@@ -3,8 +3,15 @@
 # The public D-Bus interface that launchers and shells use to search and open
 # files.
 #
-# Allowed outside crates: enumflags2, futures, rustix, zbus
-# Allowed workspace crates: nova-files-api, nova-files-picker-api
+# Allowed outside crates:
+# - enumflags2
+# - futures
+# - rustix
+# - zbus
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-picker-api
 
 [package]
 name = "nova-files-dbus"

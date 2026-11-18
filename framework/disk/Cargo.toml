@@ -3,7 +3,8 @@
 # The core side's own files on disk: private files saved whole, and the
 # percent-encoding of paths in them.
 #
-# Allowed outside crates: rustix
+# Allowed outside crates:
+# - rustix
 # Allowed workspace crates: none
 
 [package]
