@@ -119,6 +119,22 @@ async fn a_folder_reaches_inside_only_when_ticked(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn several_files_offer_neither_tick(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("properties-access-files");
+    let files = ["a.txt", "b.txt"].map(|name| tree.path().join(name));
+    for file in &files {
+        fs::write(file, "").unwrap();
+    }
+    let (view, cx) = properties_window(cx, tree.path()).await;
+    let place = Location::Properties(files.to_vec());
+    view.update(cx, |view, cx| view.new_tab(&place, cx));
+    assert_eq!(read_page(&view, cx).await.len(), 2);
+    assert!(cx.debug_bounds("access-runs").is_none());
+    assert!(cx.debug_bounds("access-inside").is_none());
+}
+
+#[gpui::test]
 async fn what_the_user_does_not_own_offers_no_changes(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("properties-access-not-own");
