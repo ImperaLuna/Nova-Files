@@ -4,7 +4,7 @@
 # never draws anything.
 #
 # Allowed outside crates: chrono, log, rustix, serde, serde_json, toml, toml_edit, uzers
-# Allowed workspace crates: nova-files-api, nova-files-disk, nova-files-index, nova-files-jobs, nova-files-messages
+# Allowed workspace crates: nova-files-api, nova-files-disk, nova-files-index, nova-files-jobs, nova-files-messages, nova-files-trash-api, nova-files-trash-core
 
 [package]
 name = "nova-files-core"
@@ -42,6 +42,8 @@ nova-files-messages.workspace = true
 nova-files-index.workspace = true
 nova-files-disk.workspace = true
 nova-files-jobs.workspace = true
+nova-files-trash-api.workspace = true
+nova-files-trash-core.workspace = true
 
 [dev-dependencies]
 nova-files-jobs = { workspace = true, features = ["test-support"] }
