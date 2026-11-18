@@ -22,6 +22,7 @@ nova-files-core = { path = "legacy/core" }
 nova-files-dbus = { path = "fronts/dbus" }
 nova-files-messages = { path = "framework/messages" }
 nova-files-disk = { path = "framework/disk" }
+nova-files-entries = { path = "framework/entries" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-shell = { path = "framework/shell" }
 nova-files-trash-api = { path = "features/trash/api" }
