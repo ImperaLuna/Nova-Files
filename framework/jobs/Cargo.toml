@@ -3,8 +3,14 @@
 # Runs file jobs: the runner, each job's journal and progress, conflicts,
 # pause and cancel, the undo history, and the ports a feature fills in.
 #
-# Allowed outside crates: log, rustix
-# Allowed workspace crates: nova-files-api, nova-files-disk, nova-files-messages
+# Allowed outside crates:
+# - log
+# - rustix
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-messages
 
 [package]
 name = "nova-files-jobs"

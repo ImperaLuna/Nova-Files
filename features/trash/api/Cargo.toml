@@ -4,7 +4,8 @@
 # event and the entries of a trash.
 #
 # Allowed outside crates: none
-# Allowed workspace crates: nova-files-api
+# Allowed workspace crates:
+# - nova-files-api
 
 [package]
 name = "nova-files-trash-api"
