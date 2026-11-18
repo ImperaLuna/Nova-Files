@@ -3616,12 +3616,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-clipboard-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
 name = "nova-files-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "log",
  "nova-files-api",
+ "nova-files-clipboard-api",
  "nova-files-disk",
  "nova-files-entries",
  "nova-files-index",
@@ -3755,6 +3763,7 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
+ "nova-files-clipboard-api",
  "nova-files-picker-api",
  "nova-files-shell",
  "nova-files-trash-api",

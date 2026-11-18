@@ -17,9 +17,10 @@ use std::time::{Duration, SystemTime};
 
 use nova_files_api::uri::file_uri;
 use nova_files_api::{
-    Answer, Command, ConflictKind, DropAskId, DropKind, Event, Failure, FileClipboard,
-    GNOME_COPIED_FILES, JobId, JobTag, Offer, Operation, Outcome, Scope,
+    Answer, Command, ConflictKind, DropAskId, DropKind, Event, Failure, JobId, JobTag, Operation,
+    Outcome, Scope,
 };
+use nova_files_clipboard_api::{FileClipboard, GNOME_COPIED_FILES, Offer};
 
 use answers::{answer, held};
 use common::{Bench, Client};
