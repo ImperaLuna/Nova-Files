@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use gpui::Context;
-use nova_files_api::{Command, DiskSpace, MeasureId, ScanState, Size};
+use nova_files_api::{Command, MeasureId, ScanState, Size};
+use nova_files_drives_api::DiskSpace;
 
 use super::MainWindow;
 

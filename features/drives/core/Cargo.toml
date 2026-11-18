@@ -1,0 +1,31 @@
+# nova-files-drives-core
+#
+# The core's half of drives: follows the drive service for the clients
+# that asked, runs their mount, unmount and eject, and reads how full a
+# drive is.
+#
+# Allowed outside crates:
+# - rustix
+#
+# Allowed workspace crates:
+# - nova-files-disk
+# - nova-files-drives-api
+# - nova-files-messages
+
+[package]
+name = "nova-files-drives-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Reads how full a drive is (statvfs).
+rustix = { version = "1.1.6", default-features = false, features = ["fs", "std"] }
+nova-files-disk.workspace = true
+nova-files-drives-api.workspace = true
+nova-files-messages.workspace = true
