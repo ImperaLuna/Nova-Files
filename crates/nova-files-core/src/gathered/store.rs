@@ -21,7 +21,6 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -318,13 +317,8 @@ fn read_folders(home: &Home) -> Option<Gathered> {
 /// not even a link to nowhere, which is the user's.
 fn write_usual(home: &Home) {
     let path = file_of(home);
-    match fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Ok(_) => return,
-        Err(error) => {
-            log::warn!("can't look at {}: {error}", path.display());
-            return;
-        }
+    if fs::symlink_metadata(&path).is_ok() {
+        return;
     }
     let text = file::new_file(&home.folder, &usual_folders(home));
     if let Err(error) = private_file::replace(&path, text.as_bytes(), private_file::FILE_MODE) {

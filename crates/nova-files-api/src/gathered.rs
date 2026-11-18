@@ -88,3 +88,24 @@ pub enum GatheredChange {
     /// Stop gathering from the folder at `path`.
     Remove { place: Gathering, path: PathBuf },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn has_looks_only_in_the_place_asked() {
+        let folder = GatheredFolder {
+            path: PathBuf::from("/home/a/Projects"),
+            holds: Holds::default(),
+            name: None,
+        };
+        let gathered = Gathered {
+            projects: Arc::from([folder]),
+            games: Arc::from([]),
+        };
+        assert!(gathered.has(Gathering::Projects, Path::new("/home/a/Projects")));
+        assert!(!gathered.has(Gathering::Projects, Path::new("/home/a/Other")));
+        assert!(!gathered.has(Gathering::Games, Path::new("/home/a/Projects")));
+    }
+}

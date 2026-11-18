@@ -365,3 +365,16 @@ fn a_new_file_holds_each_folder_given() {
     assert_eq!(gathered.games[0].name.as_deref(), Some("Steam"));
     assert_eq!(new_file(home(), &[]), "");
 }
+
+#[test]
+fn home_itself_is_written_as_a_lone_tilde() {
+    assert_eq!(written(home(), home()).as_deref(), Some("~"));
+    assert_eq!(
+        written(Path::new("/home/me/a"), home()).as_deref(),
+        Some("~/a")
+    );
+    assert_eq!(
+        written(Path::new("/srv/a"), home()).as_deref(),
+        Some("/srv/a")
+    );
+}
