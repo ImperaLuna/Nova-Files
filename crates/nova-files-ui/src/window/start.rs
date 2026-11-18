@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use gpui::{Context, UniformListScrollHandle};
+use gpui::{Context, SharedString, UniformListScrollHandle};
 use nova_files_api::{Command, RecentFolder, RecentId};
 
 use super::rows::release;
@@ -45,7 +45,8 @@ impl MainWindow {
     }
 
     /// Drops the folder asked for, if any, and lets go of the folder on
-    /// screen, its rows and thumbnails, for a place that needs no listing.
+    /// screen, its rows, thumbnails and count, for a place that needs no
+    /// listing.
     pub(super) fn let_go_of_folder(&mut self, cx: &mut Context<Self>) {
         self.menu = None;
         self.asked = None;
@@ -58,6 +59,7 @@ impl MainWindow {
         self.scroll = UniformListScrollHandle::new();
         self.jump = TypeJump::default();
         self.band = None;
+        self.counted = SharedString::default();
     }
 
     /// The recent folders the Start page shows.

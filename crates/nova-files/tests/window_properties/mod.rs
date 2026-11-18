@@ -1,13 +1,16 @@
 //! The Properties page on a real core: the right-click menu and Alt+Enter
 //! open it in a new tab, it shows what the disk says, Up goes to the
 //! folder that holds what it shows, a tab shown again reads it again,
-//! and a page whose files are all gone goes to Start.
+//! and a page whose files are all gone goes to Start. A folder's size is
+//! measured while its page is on screen; Access is tested in `access`.
 
 use std::os::unix::fs::MetadataExt as _;
 use std::sync::Arc;
 
 use nova_files_api::{PathKind, Properties, ScanState, Size};
 use nova_files_ui::Icon;
+
+mod access;
 
 use super::*;
 use crate::window_sidebar::right_click;

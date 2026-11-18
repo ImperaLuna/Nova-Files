@@ -1,6 +1,7 @@
 //! A small menu that opens where the pointer was right-clicked: a file's
 //! actions, a pinned place's "Remove from Places", a drive's Eject, or
-//! the apps that can open a file on its Properties page. The
+//! the apps that can open a file or the levels of access on its
+//! Properties page. The
 //! window holds at most one; it closes on a choice, on Escape, or on a
 //! press outside it. Drawing is in `view/menu`.
 //!
@@ -27,7 +28,7 @@ use nova_files_api::{DriveAction, DriveId};
 use crate::assets::Icon;
 use crate::commands::ActionSpec;
 use crate::drives::ShownDrive;
-use crate::window::MainWindow;
+use crate::window::{AccessLevel, MainWindow, Who};
 
 /// The key context an open menu sets.
 pub const KEY_CONTEXT: &str = "Menu";
@@ -93,6 +94,9 @@ pub enum MenuAction {
     OpenInNewTab(PathBuf),
     /// Make an app the default for a type of file.
     SetDefaultApp { mime: String, app: String },
+    /// Give one of owner, group or everyone else a level of access to
+    /// what the Properties page shows.
+    SetAccess(Who, AccessLevel),
     /// Send one of the window's actions, as its key does.
     Run(&'static ActionSpec),
 }
@@ -235,6 +239,7 @@ impl MainWindow {
             MenuAction::OpenInNewTab(folder) => self.open_in_new_tab(folder, cx),
             MenuAction::Eject(drive) => self.act_on_drive(DriveAction::Eject(drive)),
             MenuAction::SetDefaultApp { mime, app } => self.set_default_app(mime, app),
+            MenuAction::SetAccess(who, level) => self.set_access(who, level),
             MenuAction::Run(spec) => window.dispatch_action(spec.action(), cx),
         }
         cx.notify();

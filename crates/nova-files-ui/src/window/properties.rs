@@ -35,6 +35,9 @@ pub struct Page {
     pub(super) measure: Option<super::measuring::Measure>,
     /// The apps that open its lone path (see `opens_with`).
     pub(super) opens_with: super::opens_with::OpensWith,
+    /// Whether changes to its access reach inside its folders (see
+    /// `access`).
+    pub(super) inside: bool,
 }
 
 /// One path on a Properties page.
@@ -64,6 +67,7 @@ impl Page {
             items,
             measure: None,
             opens_with: super::opens_with::OpensWith::default(),
+            inside: false,
         }
     }
 

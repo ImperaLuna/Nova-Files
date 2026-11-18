@@ -6,8 +6,9 @@
 //! it by id. When any job ends, a folder it changed that is on screen is read
 //! again, so what changed shows. When one of this window's own jobs ends,
 //! the island says how it went, with Undo when the core said the job can
-//! be undone (see `island`). Jobs other windows started are only read
-//! for what they changed.
+//! be undone (see `island`), and a change of access shows on the
+//! Properties page (see `access`). Jobs other windows started are only
+//! read for what they changed.
 //!
 //! While one of its jobs runs, the island shows its progress and time
 //! left, once it has run for [`SHOW_AFTER`], so a quick job only leaves
@@ -250,6 +251,9 @@ impl MainWindow {
             return;
         };
         cx.notify();
+        if matches!(operation, Operation::ChangeAccess { .. }) {
+            self.access_changed();
+        }
         if *outcome != Outcome::Done
             && matches!(
                 operation,

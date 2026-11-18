@@ -86,3 +86,5 @@ pub const NEW_FOLDER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox
 pub const UNDO: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5 4 9l4 4M4 9h9.5a5.5 5.5 0 0 1 0 11H10"/></svg>"##;
 /// Properties: an i in a ring.
 pub const INFO: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><path d="M12 7.7v.1" stroke-width="2.4"/></svg>"##;
+/// Someone who may use a file: a head and shoulders.
+pub const PERSON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.6"/><path d="M5 19.5a7 7 0 0 1 14 0"/></svg>"##;

@@ -53,10 +53,11 @@ pub enum Icon {
     NewFolder,
     Undo,
     Info,
+    Person,
 }
 
 impl Icon {
-    const ALL: [Self; 41] = [
+    const ALL: [Self; 42] = [
         Self::Folder,
         Self::File,
         Self::FileText,
@@ -98,6 +99,7 @@ impl Icon {
         Self::NewFolder,
         Self::Undo,
         Self::Info,
+        Self::Person,
     ];
 
     /// The path GPUI asks the asset source for.
@@ -144,6 +146,7 @@ impl Icon {
             Self::NewFolder => "icons/new-folder.svg",
             Self::Undo => "icons/undo.svg",
             Self::Info => "icons/info.svg",
+            Self::Person => "icons/person.svg",
         }
     }
 
@@ -190,6 +193,7 @@ impl Icon {
             Self::NewFolder => svg::NEW_FOLDER,
             Self::Undo => svg::UNDO,
             Self::Info => svg::INFO,
+            Self::Person => svg::PERSON,
         };
         source.as_bytes()
     }

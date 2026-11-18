@@ -543,6 +543,13 @@ pub mod properties {
     /// arrow, turned down.
     pub const CHOICE_GAP: Pixels = px(12.0);
     pub const CHOICE_ARROW: Pixels = px(12.0);
+    /// The Access card: the space around its rows, between its rows'
+    /// parts, after a row's chip, and inside a chip, before its arrow.
+    pub const ACCESS_PAD: Pixels = px(6.0);
+    pub const ACCESS_ROW_GAP: Pixels = px(10.0);
+    pub const ACCESS_ROW_END: Pixels = px(3.0);
+    pub const CHIP_GAP: Pixels = px(4.0);
+    pub const CHIP_ARROW: Pixels = px(11.0);
 }
 
 /// How much of an element shows through.
