@@ -3,7 +3,8 @@ use std::rc::Rc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use nova_files_api::{PickId, PickRequest, WindowRequest};
+use nova_files_api::WindowRequest;
+use nova_files_picker_api::{PickId, PickRequest};
 
 #[derive(Debug)]
 pub enum Request {

@@ -11,11 +11,12 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use nova_files_api::{
-    Connector, FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickRequest,
-};
+use nova_files_api::Connector;
 use nova_files_dbus::{
     FILE_CHOOSER_INTERFACE, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH, Picker, Service, Started,
+};
+use nova_files_picker_api::{
+    FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickRequest,
 };
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedValue, Value};

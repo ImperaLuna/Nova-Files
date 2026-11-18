@@ -1,0 +1,21 @@
+# nova-files-picker-api
+#
+# What another app's file picker request carries from D-Bus to the window,
+# and the answer it gets back.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: nova-files-api
+
+[package]
+name = "nova-files-picker-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true
