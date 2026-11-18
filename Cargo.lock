@@ -3584,6 +3584,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-dbus",
+ "nova-files-picker-api",
  "nova-files-shell",
  "nova-files-ui",
  "zbus",
@@ -3632,6 +3633,7 @@ dependencies = [
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
+ "nova-files-picker-api",
  "rustix 1.1.6",
  "serde",
  "serde_json",
@@ -3647,6 +3649,7 @@ dependencies = [
  "futures",
  "nova-files-api",
  "nova-files-core",
+ "nova-files-picker-api",
  "rustix 1.1.6",
  "zbus",
 ]
@@ -3685,6 +3688,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-picker-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
 name = "nova-files-shell"
 version = "0.1.0"
 dependencies = [
@@ -3716,6 +3726,7 @@ dependencies = [
  "log",
  "nova-files-api",
  "nova-files-clipboard-api",
+ "nova-files-picker-api",
  "nova-files-shell",
  "unicode-segmentation",
  "usvg",

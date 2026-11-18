@@ -4,7 +4,7 @@
 # window, and holds no logic of its own.
 #
 # Allowed outside crates: libc
-# Allowed workspace crates: nova-files-api, nova-files-core, nova-files-dbus, nova-files-index, nova-files-ui
+# Allowed workspace crates: nova-files-api, nova-files-core, nova-files-dbus, nova-files-index, nova-files-picker-api, nova-files-ui
 
 [package]
 name = "nova-files"
@@ -21,6 +21,7 @@ workspace = true
 # malloc_trim, to give freed memory back after a listing (memory.rs).
 libc = "0.2.189"
 nova-files-api.workspace = true
+nova-files-picker-api.workspace = true
 nova-files-core.workspace = true
 nova-files-dbus.workspace = true
 nova-files-ui.workspace = true
