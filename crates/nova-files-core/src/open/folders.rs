@@ -71,14 +71,7 @@ impl fmt::Display for NotDefault {
     }
 }
 
-impl std::error::Error for NotDefault {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Failed(error) => Some(error),
-            Self::NotInstalled | Self::Sandboxed | Self::NoHome => None,
-        }
-    }
-}
+impl std::error::Error for NotDefault {}
 
 #[cfg(test)]
 mod tests {
