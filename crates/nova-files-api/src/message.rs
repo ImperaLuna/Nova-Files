@@ -8,6 +8,8 @@ use crate::disk_space::PathSpace;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::file_icon::FileIcon;
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
+use crate::folder_view::{FolderView, FolderViews};
+use crate::gathered::{Gathered, GatheredChange, Gathering};
 use crate::job::{
     Answer, Conflict, DropAskId, DropKind, JobId, JobTag, Operation, Outcome, Progress, Scope,
     Tally,
@@ -20,6 +22,7 @@ use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
 use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::theme::{DesktopLook, Theme};
+use crate::thumbnail_size::ThumbnailSize;
 use crate::trash::Trashed;
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -59,17 +62,39 @@ pub enum Command {
     /// that asked for the places, this one included, then gets
     /// [`Event::Bookmarks`]; nothing is sent when nothing changed.
     ChangeBookmark(BookmarkChange),
+    /// Ask for the folders Games and Projects gather from: the answer is
+    /// [`Event::Gathered`], and from then on the client gets it again
+    /// whenever they change (from any client, or `gathered.toml` edited).
+    Gathered,
+    /// Add or remove a gathered folder and save it. Every client that
+    /// asked, this one included, then gets [`Event::Gathered`]; nothing is
+    /// sent when nothing changed.
+    ChangeGathered(GatheredChange),
+    /// List what `place` gathers in `order`: the folders inside each of
+    /// its folders that holds many, and each one-project folder itself,
+    /// folders only, as the hidden-files setting says. The answer is
+    /// [`Event::FolderListed`] with `id`, each entry in its own folder
+    /// (see [`Listing::folders`]) and an empty [`Listing::path`]. It is
+    /// the client's listing like a [`Command::ListFolder`]: either one
+    /// asked for later cancels it, and [`Command::Rows`] serves its rows.
+    ListGathered {
+        id: ListingId,
+        place: Gathering,
+        order: Order,
+    },
     /// The entries of listing `id` the client shows or is about to show:
     /// `count` entries from `first`. The core reads the details of those it
     /// hasn't read yet, answering with [`Event::DetailsRead`], and makes
-    /// their thumbnails, answering each with [`Event::Thumbnail`]. Each
-    /// request replaces the one before, so entries scrolled away are
-    /// dropped. Entries never asked for never have their details read. At
-    /// most [`MAX_ROWS`] entries count.
+    /// their thumbnails at `size`, answering each with [`Event::Thumbnail`].
+    /// Each request replaces the one before, so entries scrolled away are
+    /// dropped; a new `size` sends every thumbnail again. Entries never
+    /// asked for never have their details read. At most [`MAX_ROWS`]
+    /// entries count.
     Rows {
         id: ListingId,
         first: EntryId,
         count: u32,
+        size: ThumbnailSize,
     },
     /// Find files under home whose names match `query`, one word or
     /// several separated by spaces. The answer is an [`Event::Found`] for
@@ -123,6 +148,13 @@ pub enum Command {
     /// List the apps that open some files, open them in one, or make one
     /// the default (see [`OpenWith`]).
     OpenWith(OpenWith),
+    /// Ask for the folders' views: the answer is [`Event::FolderViews`],
+    /// sent again whenever one changes.
+    FolderViews,
+    /// Show `folder` with `view` from now on, and save it. Every client
+    /// that asked for the views, this one included, then gets
+    /// [`Event::FolderViews`]. A path that isn't absolute is ignored.
+    SetFolderView { folder: PathBuf, view: FolderView },
     /// Ask for the UI's window state; the answer is [`Event::WindowState`].
     WindowState,
     /// Keep these bytes as the UI's window state, between runs too. The
@@ -274,16 +306,25 @@ pub enum Event {
         icons: Arc<[FileIcon]>,
     },
     /// A thumbnail for entry `entry` of listing `id`, as PNG bytes that fit
-    /// in 128 by 128 pixels.
+    /// in a square `size` across.
     Thumbnail {
         id: ListingId,
         entry: EntryId,
+        size: ThumbnailSize,
         png: Arc<[u8]>,
     },
     /// The standard folders that exist, in places-list order.
     Places(Vec<Place>),
     /// The pinned folders, in the user's order.
     Bookmarks(Arc<[Bookmark]>),
+    /// The folders Games and Projects gather from (see
+    /// [`Command::Gathered`]).
+    Gathered(Arc<Gathered>),
+    /// What is inside `place`'s folders changed (a folder made, removed or
+    /// renamed in one, or one of them appeared or went away): a client
+    /// showing it lists it again. Sent to the clients that asked with
+    /// [`Command::Gathered`].
+    GatheredChanged(Gathering),
     /// One stage of [`Command::Search`] `id`: names as typed come first,
     /// then letters in order and typos. `done` marks the last stage. A path
     /// shows at most once per search.
@@ -327,6 +368,9 @@ pub enum Event {
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),
+    /// Every folder given a view, newest first, answering
+    /// [`Command::FolderViews`] and after each change.
+    FolderViews(FolderViews),
     /// The settings, answering [`Command::Settings`], and sent again to
     /// each client that asked whenever one changes: from a client, or from
     /// the settings file.

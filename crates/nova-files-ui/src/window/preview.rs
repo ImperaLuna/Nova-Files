@@ -44,6 +44,9 @@ pub struct QuickLooks {
     /// The box a picture is decoded to fit: the room the quick look has,
     /// in device pixels, as of the last frame.
     fit: Option<Fit>,
+    /// Whether the quick look shows on Gallery's stage rather than over
+    /// the window (see `gallery`).
+    pub(crate) docked: bool,
     next_id: u64,
 }
 
@@ -99,9 +102,16 @@ pub struct Shown {
 impl MainWindow {
     /// Space: opens the quick look on the cursor's entry, or the first one
     /// selected, or closes it. In a picker it does nothing.
+    /// In Gallery, Space shows its stage's entry over the window, and
+    /// puts it back on the stage.
     pub(crate) fn toggle_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.quick_looks.open.is_some() {
-            self.close_preview(Some(window), cx);
+            if self.quick_looks.docked {
+                self.quick_looks.docked = false;
+                cx.notify();
+            } else {
+                self.dismiss_preview(window, cx);
+            }
             return;
         }
         if self.pick.is_some() {
@@ -124,12 +134,32 @@ impl MainWindow {
         self.preview_entry(listing, entry, None, cx);
     }
 
+    /// Escape, a click beside it or its Close button: the quick look
+    /// goes back on Gallery's stage, or else closes.
+    pub(crate) fn dismiss_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.showing_gallery() {
+            self.quick_looks.docked = true;
+            cx.notify();
+        } else {
+            self.close_preview(Some(window), cx);
+        }
+    }
+
     /// Closes the quick look, letting go of its picture. `window` is the
     /// window being updated, if any (see `rows::release`).
     pub(crate) fn close_preview(&mut self, window: Option<&mut Window>, cx: &mut Context<Self>) {
+        self.quick_looks.docked = false;
         if let Some(open) = self.quick_looks.open.take() {
             release(open.shown.and_then(|shown| shown.picture), window, cx);
             cx.notify();
+        }
+    }
+
+    /// Left or right: the quick look shows the entry before or after;
+    /// without one, Icons moves the cursor there.
+    pub(crate) fn step_sideways(&mut self, step: Move, cx: &mut Context<Self>) {
+        if !self.step_preview(step, cx) && self.showing_icons() {
+            self.move_cursor(step, false, cx);
         }
     }
 
@@ -173,6 +203,9 @@ impl MainWindow {
     /// double-click would and closes the quick look. Whether the quick
     /// look was open to take it.
     pub(crate) fn open_previewed(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if !self.previewing() {
+            return false;
+        }
         let Some(entry) = self.quick_looks.open.as_ref().map(|open| open.entry) else {
             return false;
         };
@@ -181,9 +214,9 @@ impl MainWindow {
         true
     }
 
-    /// Whether the quick look is open.
+    /// Whether the quick look is open over the window.
     pub const fn previewing(&self) -> bool {
-        self.quick_looks.open.is_some()
+        self.quick_looks.open.is_some() && !self.quick_looks.docked
     }
 
     /// What the quick look shows, while it is open.
@@ -236,7 +269,7 @@ impl MainWindow {
 
     /// Shows entry `entry` of listing `listing`, keeping `shown` on screen
     /// until the core answers.
-    fn preview_entry(
+    pub(super) fn preview_entry(
         &mut self,
         listing: ListingId,
         entry: EntryId,
@@ -274,7 +307,7 @@ impl MainWindow {
         let on_screen = self.listing.as_ref().filter(|shown| shown.id == listing)?;
         let index = usize::try_from(entry.0).ok()?;
         let entry = on_screen.entries.get(index)?;
-        Some(on_screen.path.join(&entry.name))
+        Some(on_screen.path_of(entry))
     }
 
     /// The core answered request `id`: `preview`, or `None` when it

@@ -30,6 +30,8 @@
 
 mod bar;
 mod drop;
+mod gallery;
+mod icons;
 mod island;
 mod menu;
 mod path;
@@ -52,13 +54,15 @@ use gpui::{
     ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
     prelude::FluentBuilder as _,
 };
+use nova_files_api::ViewMode;
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
     CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext,
-    PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp,
-    SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
+    PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown,
+    SelectPageUp, SelectRight, SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
 };
+use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{
     CloseTab, CopySelected, CutSelected, DeleteSelected, EmptyTrash, NewFolder, NewTab, NextTab,
     Paste, PreviousTab, RenameSelected, RestoreSelected, ShowProperties, TrashSelected, Undo,
@@ -71,8 +75,14 @@ impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let scale_factor = window.scale_factor();
         let viewport = window.viewport_size();
+        self.keep_gallery(window, cx);
         let room = preview::room(viewport.width, viewport.height);
-        self.set_preview_room(room, scale_factor, cx);
+        let fits = if self.showing_gallery() && !self.previewing() {
+            self.stage_room()
+        } else {
+            room
+        };
+        self.set_preview_room(fits, scale_factor, cx);
         self.window_root(window, cx)
             .map(|root| Self::preview_keys(root, cx))
             .relative()
@@ -112,6 +122,7 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .on_action(cx.listener(|this, _: &ToggleHidden, _, _| this.toggle_hidden()))
+            .map(|root| Self::view_keys(root, cx))
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
             .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
@@ -157,6 +168,19 @@ impl MainWindow {
             MouseButton::Left,
             cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
         )
+    }
+
+    /// The actions that change how the folder shows (see `window::views`).
+    fn view_keys(root: Div, cx: &Context<Self>) -> Div {
+        root.on_action(cx.listener(|this, _: &ShowDetails, _, cx| {
+            this.show_as(ViewMode::Details, cx);
+        }))
+        .on_action(cx.listener(|this, _: &ShowIcons, _, cx| this.show_as(ViewMode::Icons, cx)))
+        .on_action(cx.listener(|this, _: &ShowGallery, _, cx| {
+            this.show_as(ViewMode::Gallery, cx);
+        }))
+        .on_action(cx.listener(|this, _: &BiggerIcons, _, cx| this.zoom_icons(true, cx)))
+        .on_action(cx.listener(|this, _: &SmallerIcons, _, cx| this.zoom_icons(false, cx)))
     }
 
     /// The tabs' actions, in a main window (see `window::tabs`).
@@ -302,11 +326,21 @@ impl MainWindow {
         .on_action(cx.listener(|this, _: &SelectLast, _, cx| {
             this.move_cursor(Move::Last, true, cx);
         }))
+        .on_action(cx.listener(|this, _: &SelectLeft, _, cx| {
+            if this.showing_icons() {
+                this.move_cursor(Move::Left, true, cx);
+            }
+        }))
+        .on_action(cx.listener(|this, _: &SelectRight, _, cx| {
+            if this.showing_icons() {
+                this.move_cursor(Move::Right, true, cx);
+            }
+        }))
         .on_action(cx.listener(|this, _: &SelectAll, _, cx| this.select_all(cx)))
         .on_action(cx.listener(|this, _: &ToggleSelected, _, cx| this.toggle_cursor(cx)))
         .on_action(cx.listener(|this, _: &ClearSelection, window, cx| {
             if this.previewing() {
-                this.close_preview(Some(window), cx);
+                this.dismiss_preview(window, cx);
             } else {
                 this.clear_selection(cx);
             }
@@ -327,10 +361,10 @@ impl MainWindow {
             }
         }))
         .on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
-            this.step_preview(Move::Up, cx);
+            this.step_sideways(Move::Left, cx);
         }))
         .on_action(cx.listener(|this, _: &PreviewNext, _, cx| {
-            this.step_preview(Move::Down, cx);
+            this.step_sideways(Move::Right, cx);
         }))
     }
 }

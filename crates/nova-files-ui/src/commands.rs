@@ -41,6 +41,8 @@ mod actions {
             SelectPageDown,
             SelectFirst,
             SelectLast,
+            SelectLeft,
+            SelectRight,
             SelectAll,
             ToggleSelected,
             ClearSelection,
@@ -63,6 +65,11 @@ mod actions {
             NextTab,
             PreviousTab,
             ToggleHidden,
+            ShowDetails,
+            ShowIcons,
+            ShowGallery,
+            BiggerIcons,
+            SmallerIcons,
             OpenMenu,
             ShowProperties,
         ]
@@ -144,6 +151,8 @@ pub const ACTIONS: &[ActionSpec] = &[
     SELECT_PAGE_DOWN,
     SELECT_FIRST,
     SELECT_LAST,
+    SELECT_LEFT,
+    SELECT_RIGHT,
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
@@ -166,6 +175,11 @@ pub const ACTIONS: &[ActionSpec] = &[
     NEXT_TAB,
     PREVIOUS_TAB,
     HIDDEN,
+    DETAILS,
+    ICONS,
+    GALLERY,
+    BIGGER_ICONS,
+    SMALLER_ICONS,
     MENU,
     PROPERTIES,
 ];
@@ -217,6 +231,22 @@ spec!(
     "select.down",
     "Select next",
     ["shift-down"]
+);
+spec!(
+    /// In Icons, adds the entry before to the selection.
+    SELECT_LEFT,
+    SelectLeft,
+    "select.left",
+    "Select left",
+    ["shift-left"]
+);
+spec!(
+    /// In Icons, adds the entry after to the selection.
+    SELECT_RIGHT,
+    SelectRight,
+    "select.right",
+    "Select right",
+    ["shift-right"]
 );
 spec!(
     SELECT_PAGE_UP,
@@ -356,6 +386,27 @@ spec!(
 spec!(
     /// Lists the hidden entries in every folder, or leaves them out again.
     HIDDEN, ToggleHidden, "view.hidden", "Show hidden files", ["ctrl-h"]
+);
+
+spec!(
+    /// Shows the folder as rows with columns.
+    DETAILS, ShowDetails, "view.details", "Details", ["ctrl-1"]
+);
+spec!(
+    /// Shows the folder as a grid of icons.
+    ICONS, ShowIcons, "view.icons", "Icons", ["ctrl-2"]
+);
+spec!(
+    /// Shows the folder as one big preview over a strip of the others.
+    GALLERY, ShowGallery, "view.gallery", "Gallery", ["ctrl-3"]
+);
+spec!(
+    /// Makes the icons one size bigger.
+    BIGGER_ICONS, BiggerIcons, "view.bigger", "Bigger icons", ["ctrl-=", "ctrl-+"]
+);
+spec!(
+    /// Makes the icons one size smaller.
+    SMALLER_ICONS, SmallerIcons, "view.smaller", "Smaller icons", ["ctrl--"]
 );
 
 spec!(

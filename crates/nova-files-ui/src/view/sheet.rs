@@ -29,20 +29,22 @@
 use std::path::Path;
 
 use gpui::{
-    AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _,
-    div, prelude::FluentBuilder as _, transparent_black, uniform_list,
+    AnyElement, ClickEvent, Context, Div, HitboxBehavior, InteractiveElement as _, IntoElement,
+    MouseButton, MouseDownEvent, ParentElement as _, ScrollWheelEvent, Stateful,
+    StatefulInteractiveElement as _, Styled as _, canvas, div, prelude::FluentBuilder as _,
+    transparent_black, uniform_list,
 };
 
-use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId, Order, SortKey};
+use nova_files_api::{Entry, EntryId, Gathering, Listing, ListingId, Order, SortKey};
 
 use super::drop::inside_edge;
-use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
+use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon};
 
 use crate::assets::Icon;
+use crate::grid::Grid;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
-use crate::window::{Aim, DraggedRow, MainWindow};
+use crate::window::{Aim, DraggedRow, LIBRARY_LABEL, MainWindow};
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
@@ -75,7 +77,9 @@ impl MainWindow {
                         .child(self.island(cx))
                 } else {
                     sheet
-                        .child(self.column_heads(&colors, cx))
+                        .when(self.showing_details(), |sheet| {
+                            sheet.child(self.column_heads(&colors, cx))
+                        })
                         .child(self.entries_area(cx))
                         .child(self.island(cx))
                 }
@@ -110,6 +114,7 @@ impl MainWindow {
                 |area, at| self.takes_drops(area, at, cx),
             )
             .child(self.entries(cx))
+            .child(ctrl_scroll(cx))
             .children(self.empty_trash(&colors))
             .children(self.no_matches(&colors))
             .children(self.match_count(&colors))
@@ -128,7 +133,19 @@ impl MainWindow {
             }))
     }
 
-    fn entries(&self, cx: &Context<Self>) -> impl IntoElement {
+    fn entries(&self, cx: &Context<Self>) -> AnyElement {
+        let grid = self.grid();
+        if self.showing_icons() {
+            return self.icons(grid, cx).into_any_element();
+        }
+        if self.showing_gallery() {
+            return self.gallery(grid, cx).into_any_element();
+        }
+        self.details(grid, cx)
+    }
+
+    /// Details: a row each, laid out as `grid`.
+    fn details(&self, grid: Grid, cx: &Context<Self>) -> AnyElement {
         let count = self
             .listing
             .as_ref()
@@ -136,8 +153,8 @@ impl MainWindow {
         uniform_list(
             "entries",
             count,
-            cx.processor(|this, range: std::ops::Range<usize>, window, cx| {
-                this.rows_drawn(range.clone(), window, cx);
+            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
+                this.rows_drawn((range.clone(), grid), window, cx);
                 let Some(listing) = &this.listing else {
                     return Vec::new();
                 };
@@ -167,8 +184,7 @@ impl MainWindow {
                         let folder = this.folder_cell(listing, entry, index, cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
-                        let folder_at = (entry.kind == EntryKind::Folder)
-                            .then(|| Aim::folder(listing.path_of(entry), name.clone()));
+                        let folder_at = folder_aim(listing, entry, &name);
                         let line = cells(
                             this.name_cell(
                                 entry,
@@ -204,6 +220,7 @@ impl MainWindow {
         .track_scroll(&self.scroll)
         .size_full()
         .pb(size::ISLAND_CLEARANCE)
+        .into_any_element()
     }
 }
 
@@ -219,7 +236,7 @@ impl MainWindow {
         (name, marks): (String, Vec<std::ops::Range<usize>>),
         cx: &Context<Self>,
     ) -> Div {
-        let draggable = self.pick.is_none() && !self.in_trash();
+        let draggable = self.entries_drag();
         let colors = &Colors::of(cx);
         let hidden = entry.is_hidden();
         div()
@@ -265,6 +282,30 @@ impl MainWindow {
     }
 }
 
+/// Takes Ctrl+scroll over the entries before the list scrolls, for the
+/// icons' size (see `window::views`). It draws nothing.
+fn ctrl_scroll(cx: &Context<MainWindow>) -> impl IntoElement {
+    let view = cx.entity().downgrade();
+    canvas(
+        |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+        move |_, hitbox, window, _| {
+            window.on_mouse_event(move |event: &ScrollWheelEvent, _, window, cx| {
+                if !event.modifiers.secondary() || !hitbox.is_hovered(window) {
+                    return;
+                }
+                let taken = view
+                    .update(cx, |this, cx| this.zoom_scrolled(event.delta, cx))
+                    .unwrap_or(false);
+                if taken {
+                    cx.stop_propagation();
+                }
+            });
+        },
+    )
+    .absolute()
+    .inset_0()
+}
+
 /// The sheet's rounded corner where the sidebar and bar meet. The sheet
 /// itself is the window's fill (see `view`), so only this corner paints
 /// the window's color behind a rounded patch of the sheet's.
@@ -280,7 +321,7 @@ fn sheet_corner(colors: &Colors) -> impl IntoElement {
 
 /// The rename field over an entry's name, its text where the name was.
 /// A press in it stays in it: it neither clicks the row nor starts a box.
-fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> impl IntoElement {
+pub(super) fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> Div {
     div()
         .debug_selector(|| "rename".to_owned())
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -340,16 +381,18 @@ fn entry_row(
 
 impl MainWindow {
     /// Where files dropped on the list but not on a folder go: the
-    /// folder on screen; nowhere on a search's files or in the trash.
+    /// folder on screen; nowhere on a search's files, in the trash, or in
+    /// Games or Projects.
     pub fn list_drop_folder(&self) -> Option<&Path> {
-        if self.searching() || self.trash_open() {
+        if self.searching() || self.trash_open() || self.gathered_shown().is_some() {
             return None;
         }
         Some(&self.listing.as_ref()?.path)
     }
 
     /// The cell between Name and Modified: where the `index`th entry was
-    /// in the trash, or a search's file's folder; none in a folder.
+    /// in the trash, a game's library, or the folder of a search's file
+    /// or a project; none in a folder.
     fn folder_cell(
         &self,
         listing: &Listing,
@@ -362,6 +405,11 @@ impl MainWindow {
             let colors = Colors::of(cx);
             return Some(detail(was_in.to_string(), &colors).into_any_element());
         }
+        if self.gathered_shown() == Some(Gathering::Games) {
+            let library = self.library_of(&listing.path_of(entry)).unwrap_or_default();
+            let colors = Colors::of(cx);
+            return Some(detail(library, &colors).into_any_element());
+        }
         listing
             .folders
             .is_some()
@@ -372,13 +420,14 @@ impl MainWindow {
     /// one orders the list by it (see `navigate`); the one in use is
     /// bright and carries an arrow for its direction. A search's files
     /// stay best first: none is in use and a click does nothing, and they
-    /// add the Folder head.
+    /// add the Folder head, as Projects does; Games adds Library.
     fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let order = (!self.searching()).then(|| self.shown_order());
-        let folder = if self.trash_open() {
-            Some(was_in_head())
-        } else {
-            self.showing_found().then(folder_head)
+        let folder = match self.gathered_shown() {
+            _ if self.trash_open() => Some(was_in_head()),
+            Some(Gathering::Games) => Some(library_head()),
+            Some(Gathering::Projects) => Some(folder_head()),
+            None => self.showing_found().then(folder_head),
         };
         column_heads(order, folder, colors, cx)
     }
@@ -389,6 +438,14 @@ fn folder_head() -> AnyElement {
     div()
         .debug_selector(|| FOLDER_HEADER_SELECTOR.to_owned())
         .child(FOLDER_LABEL)
+        .into_any_element()
+}
+
+/// Games' Library head, which orders nothing.
+fn library_head() -> AnyElement {
+    div()
+        .debug_selector(|| "head-library".to_owned())
+        .child(LIBRARY_LABEL)
         .into_any_element()
 }
 

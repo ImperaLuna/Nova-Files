@@ -58,7 +58,7 @@ impl Drag {
         let aim = self.aims.aimed()?;
         let by_drive = match &aim.at {
             DropAt::Folder(into) => self.aims.by_drive(into),
-            DropAt::Trash => None,
+            DropAt::Trash | DropAt::Gathered(_) => None,
         };
         dropping::label(&aim.at, &aim.name, by_drive, modifiers)
     }
@@ -191,7 +191,13 @@ impl MainWindow {
 
     /// Drops `sources` at `at` with `modifiers` held, when this window
     /// takes them there.
-    pub(crate) fn drop_files(&mut self, at: DropAt, sources: &Sources, modifiers: Modifiers) {
+    pub(crate) fn drop_files(
+        &mut self,
+        at: DropAt,
+        sources: &Sources,
+        modifiers: Modifiers,
+        cx: &mut Context<Self>,
+    ) {
         if !self.drop_rule()(&at, sources) {
             return;
         }
@@ -202,6 +208,7 @@ impl MainWindow {
             Dropped::ByDrive { sources, into } => {
                 self.start_drop(sources, into);
             }
+            Dropped::Gather { place, folders } => self.gather(place, folders, cx),
         }
     }
 

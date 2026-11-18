@@ -52,6 +52,7 @@ impl MainWindow {
                         item_keys(item, |action| {
                             window.highest_precedence_binding_for_action(action)
                         })
+                        .or_else(|| item.detail.clone())
                         .map(|keys| key_cell(keys, &colors)),
                     )
                     .into_any_element(),
