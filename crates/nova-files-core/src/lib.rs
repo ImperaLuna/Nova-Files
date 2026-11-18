@@ -16,6 +16,7 @@ mod details_queue;
 mod disk_space;
 mod drives;
 mod file_icons;
+mod gathered;
 mod hand_edited;
 mod icon_theme;
 mod index;
@@ -130,6 +131,7 @@ pub fn spawn_with(
             let theme = theme::Store::open(config);
             theme.follow(&settings);
             let places = places::Store::open(home.clone());
+            let gathered = gathered::Store::open(home.clone());
             let recent = recent::Store::open(home.as_ref().map(|home| home.state.as_path()));
             let mime_types = Arc::default();
             let file_icons = Arc::new(file_icons::FileIcons::from_env(
@@ -139,6 +141,7 @@ pub fn spawn_with(
             let setup = run::Setup {
                 home,
                 places,
+                gathered,
                 window_state,
                 settings,
                 theme,

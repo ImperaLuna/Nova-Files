@@ -14,7 +14,8 @@
 //! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
 //! a paste is a job. A [`Size`] is what a scan of files and folders
 //! counted. A [`DiskSpace`] is how full a drive is. A [`RecentFolder`] is
-//! one a person opened lately, for the Start page. A [`FileIcon`] is how an
+//! one a person opened lately, for the Start page. [`Gathered`] folders
+//! make up the Games and Projects places. A [`FileIcon`] is how an
 //! entry's icon is drawn.
 
 #![forbid(unsafe_code)]
@@ -28,6 +29,7 @@ mod drive;
 mod file_icon;
 mod file_type;
 mod folder;
+mod gathered;
 mod job;
 mod message;
 mod open_with;
@@ -61,6 +63,7 @@ pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Order, Place, PlaceKind, SortKey,
     Unreadable,
 };
+pub use gathered::{Gathered, GatheredChange, GatheredFolder, Gathering, Holds};
 pub use job::{
     Answer, Conflict, ConflictKind, DropAskId, DropKind, Failure, JobId, JobTag, Operation,
     Outcome, Progress, Scope, Tally,

@@ -1,5 +1,5 @@
 //! The commands about folders and the files in them: listing, rows,
-//! places, the trash, search, properties, previews, opening files and
+//! places, the gathered folders, the trash, search, properties, previews, opening files and
 //! the recent folders. `run` sends only these here. Folders list their
 //! hidden entries as the settings say, but the trash lists all of them.
 
@@ -28,6 +28,8 @@ pub(super) fn answer(
         }
         Command::Places => setup.places.listen(id, client.events()),
         Command::ChangeBookmark(change) => setup.places.change(change),
+        Command::Gathered => setup.gathered.listen(id, client.events()),
+        Command::ChangeGathered(change) => setup.gathered.change(change),
         Command::ListTrash => return jobs::list_trash(client, setup.home.clone()),
         Command::Rows { id, first, count } => {
             client.want_rows(id, first, count, setup.settings.current().thumbnails);
