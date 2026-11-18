@@ -191,6 +191,7 @@ pub fn finished_note(
             Operation::Copy { sources, .. } | Operation::Move { sources, .. } => {
                 answered_note(operation, sources, here, tally)
             }
+            Operation::Extract { archive, .. } => Some(extracted_note(archive, tally)),
             _ => done_note(operation),
         },
         Outcome::Cancelled => None,
@@ -227,6 +228,12 @@ fn answered_note(
     Some(with_answers(vec![done], tally))
 }
 
+/// The note for an extract of `archive`, with what its answers did:
+/// "Extracted photos.zip, skipped 1".
+fn extracted_note(archive: &Path, tally: Tally) -> String {
+    with_answers(vec![format!("Extracted {}", name_of(archive))], tally)
+}
+
 /// `parts` of a note, then what the answers to clashes did: "Copied 4
 /// items, replaced 2, skipped 1".
 fn with_answers(mut parts: Vec<String>, tally: Tally) -> String {
@@ -259,9 +266,11 @@ fn done_note(operation: &Operation) -> Option<String> {
         }
         Operation::EmptyTrash => format!("{TRASH} emptied"),
         Operation::Rename { name, .. } => format!("Renamed to {}", lossy(name)),
-        // Copies and moves say what their answers did (`answered_note`).
+        // Copies, moves and extracts say what their answers did
+        // (`answered_note`, `extracted_note`).
         Operation::Copy { .. }
         | Operation::Move { .. }
+        | Operation::Extract { .. }
         | Operation::NewFolder { .. }
         | Operation::ChangeAccess { .. }
         | Operation::Undo { .. } => return None,
@@ -282,6 +291,7 @@ const fn verb(operation: &Operation) -> (&'static str, bool) {
         Operation::ChangeAccess { .. } => ("change", true),
         Operation::EmptyTrash => ("empty Trash", false),
         Operation::Undo { .. } => ("undo", false),
+        Operation::Extract { .. } => ("extract", true),
     }
 }
 
@@ -297,6 +307,8 @@ const fn failure(reason: Failure) -> &'static str {
         Failure::IntoItself => "a folder can't go inside itself",
         Failure::Unsupported => "it can't be copied",
         Failure::SourceChanged => "it changed while being copied",
+        Failure::Damaged => "the archive is damaged",
+        Failure::NotArchive => "it isn't an archive Nova Files opens",
         Failure::Other => "the system refused",
     }
 }

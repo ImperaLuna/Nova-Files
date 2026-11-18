@@ -262,6 +262,23 @@ fn a_note_says_what_the_answers_to_clashes_did() {
         note(&trash, None, tally(0, 1)).as_deref(),
         Some("Moved a to Trash")
     );
+    let extract = Operation::Extract {
+        archive: "/home/a/photos.zip".into(),
+        into,
+        to: nova_files_api::ExtractTo::Here,
+    };
+    assert_eq!(
+        note(&extract, None, tally(0, 0)).as_deref(),
+        Some("Extracted photos.zip")
+    );
+    assert_eq!(
+        note(&extract, None, tally(0, 1)).as_deref(),
+        Some("Extracted photos.zip, skipped 1")
+    );
+    assert_eq!(
+        note(&extract, None, tally(1, 0)).as_deref(),
+        Some("Extracted photos.zip, replaced 1")
+    );
 }
 
 #[test]

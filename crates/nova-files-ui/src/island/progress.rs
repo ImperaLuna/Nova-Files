@@ -187,6 +187,7 @@ const fn doing(operation: &Operation) -> (&'static str, &'static str) {
         Operation::NewFolder { .. } => ("Making", ""),
         Operation::ChangeAccess { .. } => ("Changing", ""),
         Operation::Undo { .. } => ("Undoing", ""),
+        Operation::Extract { .. } => ("Extracting", ""),
     }
 }
 
@@ -198,7 +199,9 @@ pub fn sources(operation: &Operation) -> &[std::path::PathBuf] {
         | Operation::Delete { paths }
         | Operation::ChangeAccess { paths, .. } => paths,
         Operation::Restore { items } | Operation::DeleteFromTrash { items } => items,
-        Operation::Rename { path, .. } => std::slice::from_ref(path),
+        Operation::Rename { path, .. } | Operation::Extract { archive: path, .. } => {
+            std::slice::from_ref(path)
+        }
         Operation::NewFolder { inside, .. } => std::slice::from_ref(inside),
         Operation::EmptyTrash | Operation::Undo { .. } => &[],
     }

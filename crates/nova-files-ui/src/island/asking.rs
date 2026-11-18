@@ -21,6 +21,8 @@ const ORDER: [Answer; 5] = [
 
 const ALREADY_HERE: &str = " is already here";
 const NO_TRASH: &str = "its drive has no trash";
+const PASSWORD_NEEDED: &str = "needs a password";
+const PASSWORD_WRONG: &str = "wrong password";
 
 /// What the island says about `conflict`: the name, drawn strong, and
 /// the rest.
@@ -36,6 +38,8 @@ pub fn words(conflict: &Conflict) -> (String, String) {
         ConflictKind::SourceChanged => failure(Failure::SourceChanged),
         ConflictKind::Unsupported => failure(Failure::Unsupported),
         ConflictKind::NoTrash => NO_TRASH,
+        ConflictKind::PasswordNeeded => PASSWORD_NEEDED,
+        ConflictKind::PasswordWrong => PASSWORD_WRONG,
     };
     (name_of(&conflict.source), format!(": {reason}"))
 }

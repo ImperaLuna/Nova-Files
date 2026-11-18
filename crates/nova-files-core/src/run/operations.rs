@@ -1,6 +1,6 @@
 //! The commands about file operations: watching, starting, dropping
 //! files and saying what a drop would do, pausing, resuming, cancelling
-//! and forgetting jobs, and answering their conflicts. `run` sends only these here.
+//! and forgetting jobs, and answering their conflicts, passwords too. `run` sends only these here.
 
 use std::sync::Arc;
 
@@ -40,6 +40,11 @@ pub(super) fn answer(
             answer,
             scope,
         } => setup.jobs.answer(job, &conflict, answer, scope),
+        Command::GivePassword {
+            job,
+            conflict,
+            password,
+        } => setup.jobs.give_password(job, &conflict, password),
         // `run` sends the other commands elsewhere.
         _ => {}
     }
