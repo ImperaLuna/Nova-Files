@@ -121,12 +121,14 @@ real home. A bug fix comes with a test that fails without it.
 
 Work inside `nix develop`. `just` lists one command per job (`just test`,
 `just clippy nova-files-core`); most take an optional crate. Run
-`just check` (`nix flake check`) before every push. CI runs the mutation
-tests on the changed lines, split over up to four runners, and lists any
-missed mutants: add tests for them and push again. `just mutants` runs the
-same tests locally when you want them, but a PR doesn't need a local run. A
-mutant no test can ever catch goes in `exclude_re` in `.cargo/mutants.toml`,
-with a reason, through its own PR off main.
+Every commit you push has passed `just check` (`nix flake check`) and, when
+it changes Rust, `just mutants <base>` locally, where `<base>` is the PR's
+base branch (`origin/main`, or `origin/<parent>` in a stack). A missed
+mutant gets a test, and the run goes again; reruns test only mutants that
+are new or were missed. Both commands record their pass for that commit,
+and the pre-push hook refuses a commit without them. CI runs both again as
+the safety net. A mutant no test can ever catch goes in `exclude_re` in
+`.cargo/mutants.toml`, with a reason, through its own PR off main.
 
 Before asking Codex for review, review the whole PR diff yourself with the
 `/code-review` skill (high effort) and fix what it finds: Codex is the last
@@ -143,7 +145,8 @@ the one checkout of each repo; don't clone extra copies.
 Every change goes through a pull request. Push with `git push`, never
 through GitHub's file API, so the repo's pre-push hook runs (`nix develop`
 turns it on; elsewhere run `git config core.hooksPath tools/git-hooks`); it
-also runs rustfmt and Clippy on the crates the push changes. A
+checks the passes above and runs rustfmt and Clippy on the crates the push
+changes. A
 stacked pull request (base isn't main) changes code only: `crates/`,
 `data/`, `Cargo.toml` and `Cargo.lock`, without Markdown or lint configs.
 Everything else goes in its own pull request off main.

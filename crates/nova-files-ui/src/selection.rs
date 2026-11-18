@@ -13,7 +13,7 @@
 //! entries by name, as raw bytes, since names needn't be UTF-8; a cursor
 //! whose row is gone goes to the nearest row left.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 
 use gpui::Modifiers;
@@ -276,6 +276,27 @@ impl Selection {
     pub fn named(listing: ListingId, entries: &[Entry], name: &OsStr) -> Option<Self> {
         find(entries, name).map(|id| Self::only(listing, id))
     }
+
+    /// The entries of `listing` named exactly as one of `names`, with the
+    /// cursor on the first the listing shows; `None` when none is there.
+    pub fn named_all(
+        listing: ListingId,
+        entries: &[Entry],
+        names: &HashSet<&OsStr>,
+    ) -> Option<Self> {
+        let ids: Vec<EntryId> = entries
+            .iter()
+            .filter(|entry| names.contains(entry.name.as_os_str()))
+            .map(|entry| entry.id)
+            .collect();
+        let first = *ids.first()?;
+        Some(Self {
+            listing,
+            ids,
+            anchor: first,
+            cursor: first,
+        })
+    }
 }
 
 /// The entry `id` of a listing's `entries`.
@@ -516,6 +537,17 @@ mod tests {
             .unwrap();
         assert_eq!(same_row.cursor(), EntryId(1));
         assert_eq!(selection.carried(&before, NEXT, &[]), None);
+    }
+
+    #[test]
+    fn named_all_selects_the_names_there_with_the_cursor_on_the_first() {
+        let shown = entries(&[b"a", b"b", b"c"]);
+        let names = HashSet::from([OsStr::new("c"), OsStr::new("gone"), OsStr::new("a")]);
+        let selection = Selection::named_all(SHOWN, &shown, &names).unwrap();
+        assert_eq!(selection.ids(), [EntryId(0), EntryId(2)]);
+        assert_eq!(selection.cursor(), EntryId(0));
+        let missing = HashSet::from([OsStr::new("x")]);
+        assert_eq!(Selection::named_all(SHOWN, &shown, &missing), None);
     }
 
     #[test]
