@@ -66,6 +66,7 @@ impl MainWindow {
         {
             self.scroll_to_entry(cursor);
         }
+        self.tell_parts_listed(cx);
         cx.emit(match arrived {
             Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
             Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {

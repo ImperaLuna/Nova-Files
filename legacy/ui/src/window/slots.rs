@@ -1,14 +1,18 @@
+use std::collections::HashSet;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
+use std::sync::Arc;
 
 use gpui::{Context, Entity, Subscription};
 use nova_files_shell::{
-    self as shell, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent, PageRef, Part,
-    Scene, Shown, TabId,
+    self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
+    PageRef, Part, Scene, Shown, TabId,
 };
 
 use super::MainWindow;
 use crate::island::{Confirm, NoteUndo};
 use crate::location::{Builtin, Location};
+use crate::selection::Selection;
 
 impl MainWindow {
     pub(super) fn watch_slots(&self, cx: &mut Context<Self>) -> Vec<Subscription> {
@@ -28,6 +32,9 @@ impl MainWindow {
             }),
             cx.subscribe(&self.host.island, |this, _, _: &IslandAsked, cx| {
                 this.take_island_asks(cx);
+            }),
+            cx.subscribe(&self.host.entries, |this, _, _: &EntriesAsked, cx| {
+                this.take_entries_asks(cx);
             }),
         ]);
         watching
@@ -67,6 +74,29 @@ impl MainWindow {
             return Some(shell::Location::Folder(folder.to_path_buf()));
         }
         self.location().map(Location::shell)
+    }
+
+    pub(super) fn tell_parts_listed(&mut self, cx: &mut Context<Self>) {
+        self.publish(cx);
+        if let Some(listing) = self.listing.clone() {
+            self.parts.listed(&listing, cx);
+        }
+    }
+
+    fn take_entries_asks(&mut self, cx: &mut Context<Self>) {
+        let Some(names) = self
+            .host
+            .entries
+            .update(cx, |entries, _| entries.take_select())
+        else {
+            return;
+        };
+        let Some(listing) = &self.listing else {
+            return;
+        };
+        let names: HashSet<&OsStr> = names.iter().map(OsString::as_os_str).collect();
+        let (id, entries) = (listing.id, Arc::clone(&listing.entries));
+        self.reselect(|_, _| Selection::named_all(id, &entries, &names), cx);
     }
 
     fn publish(&mut self, cx: &mut Context<Self>) {

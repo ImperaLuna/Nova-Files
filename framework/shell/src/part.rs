@@ -1,11 +1,12 @@
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, SharedString, Window,
 };
-use nova_files_api::{Entry, Event};
+use nova_files_api::{Entry, Event, Listing};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
@@ -29,6 +30,9 @@ pub type Cell<P> = fn(&P, &Entry, &App) -> Option<SharedString>;
 pub type Columns<P> = fn(&P, &Scene, &App) -> Option<Column<P>>;
 pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
+pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
+pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
+pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
 
 pub struct Column<P> {
     pub head: SharedString,
@@ -58,6 +62,9 @@ pub struct Slots<P> {
     pub(crate) watches: Vec<Watch<P>>,
     pub(crate) empty_notes: Vec<EmptyNote<P>>,
     pub(crate) sends: Vec<MessageType>,
+    pub(crate) name_cells: Vec<NameCell<P>>,
+    pub(crate) listed: Vec<Listed<P>>,
+    pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
 }
 
 impl<P> Default for Slots<P> {
@@ -73,6 +80,9 @@ impl<P> Default for Slots<P> {
             watches: Vec::new(),
             empty_notes: Vec::new(),
             sends: Vec::new(),
+            name_cells: Vec::new(),
+            listed: Vec::new(),
+            drops: Vec::new(),
         }
     }
 }
@@ -142,6 +152,23 @@ impl<P: Part> Slots<P> {
 
     pub fn empty_note(&mut self, note: EmptyNote<P>) {
         self.empty_notes.push(note);
+    }
+
+    pub fn name_cell(&mut self, cell: NameCell<P>) {
+        self.name_cells.push(cell);
+    }
+
+    pub fn listed(&mut self, listed: Listed<P>) {
+        self.listed.push(listed);
+    }
+
+    pub fn drops<K: PageKind>(&mut self, take: fn(&mut P, &K, Vec<PathBuf>, &mut Context<P>)) {
+        let slot: DropSlot<P> = Rc::new(move |part, page, paths, cx| {
+            if let Some(page) = page.get::<K>() {
+                take(part, page, paths, cx);
+            }
+        });
+        self.drops.push((TypeId::of::<K>(), slot));
     }
 
     pub fn sends<M: Message>(&mut self) {

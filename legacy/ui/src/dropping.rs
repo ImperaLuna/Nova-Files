@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use gpui::Modifiers;
 use nova_files_api::{DropKind, Gathering, Operation};
+use nova_files_shell::PageRef;
 
 pub const MOVE_TO: &str = "Move to";
 pub const COPY_TO: &str = "Copy to";
@@ -13,6 +14,7 @@ pub enum DropAt {
     Folder(PathBuf),
     Trash,
     Gathered(Gathering),
+    Page(PageRef),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +27,10 @@ pub enum Dropped {
     ByDrive {
         sources: Vec<PathBuf>,
         into: PathBuf,
+    },
+    Page {
+        page: PageRef,
+        paths: Vec<PathBuf>,
     },
 }
 
@@ -55,7 +61,7 @@ pub fn allowed(at: &DropAt, sources: &Sources, trashed: impl Fn(&Path) -> bool) 
         return false;
     }
     match at {
-        DropAt::Trash | DropAt::Gathered(_) => true,
+        DropAt::Trash | DropAt::Gathered(_) | DropAt::Page(_) => true,
         DropAt::Folder(into) => {
             !trashed(into)
                 && !sources.folders.contains(into)
@@ -71,6 +77,12 @@ pub fn dropped(at: DropAt, sources: Vec<PathBuf>, modifiers: Modifiers) -> Dropp
             return Dropped::Gather {
                 place,
                 folders: sources,
+            };
+        }
+        DropAt::Page(page) => {
+            return Dropped::Page {
+                page,
+                paths: sources,
             };
         }
         DropAt::Folder(into) => into,
@@ -91,7 +103,7 @@ pub fn label(
     modifiers: Modifiers,
 ) -> Option<String> {
     let kind = match at {
-        DropAt::Gathered(_) => return Some(format!("{ADD_TO} {name}")),
+        DropAt::Gathered(_) | DropAt::Page(_) => return Some(format!("{ADD_TO} {name}")),
         DropAt::Trash => DropKind::Move,
         DropAt::Folder(_) if modifiers.control => DropKind::Copy,
         DropAt::Folder(_) if modifiers.shift => DropKind::Move,

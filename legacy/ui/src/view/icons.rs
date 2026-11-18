@@ -79,6 +79,12 @@ impl MainWindow {
             &colors,
         ));
         let label = grid.names.then(|| {
+            if let Some(cell) = self.parts.name_cell(entry, cx) {
+                return div()
+                    .when(!grid.beside, |slot| slot.flex_none().w_full())
+                    .child(cell)
+                    .into_any_element();
+            }
             self.rename_field(index).map_or_else(
                 || {
                     self.cell_name((index, name), grid, row, cx)

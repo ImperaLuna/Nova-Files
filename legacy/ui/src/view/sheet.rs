@@ -221,13 +221,15 @@ impl MainWindow {
                     .when(hidden, |slot| slot.opacity(opacity::HIDDEN))
                     .child(entry_icon(self.row_icon(index, entry.kind), colors)),
             )
-            .child(self.rename_field(index).map_or_else(
-                || {
-                    entry_name(name.into(), marks, index, draggable.then_some(row), cx)
-                        .into_any_element()
-                },
-                |field| rename_box(field.clone(), colors).into_any_element(),
-            ))
+            .child(self.parts.name_cell(entry, cx).unwrap_or_else(|| {
+                self.rename_field(index).map_or_else(
+                    || {
+                        entry_name(name.into(), marks, index, draggable.then_some(row), cx)
+                            .into_any_element()
+                    },
+                    |field| rename_box(field.clone(), colors).into_any_element(),
+                )
+            }))
     }
 
     fn empty_note(&self, colors: &Colors, cx: &Context<Self>) -> Option<impl IntoElement> {

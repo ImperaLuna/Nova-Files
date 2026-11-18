@@ -1,6 +1,7 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 
-use gpui::Context;
+use gpui::{Context, EventEmitter};
 use nova_files_api::{Entry, EntryId, Listing};
 
 use crate::location::Location;
@@ -13,10 +14,16 @@ pub struct Shown {
     pub picker: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntriesAsked;
+
 #[derive(Debug, Default)]
 pub struct Entries {
     shown: Shown,
+    selects: Option<Vec<OsString>>,
 }
+
+impl EventEmitter<EntriesAsked> for Entries {}
 
 impl Entries {
     pub const fn location(&self) -> Option<&Location> {
@@ -65,5 +72,14 @@ impl Entries {
             self.shown = shown;
             cx.notify();
         }
+    }
+
+    pub fn select(&mut self, names: Vec<OsString>, cx: &mut Context<Self>) {
+        self.selects = Some(names);
+        cx.emit(EntriesAsked);
+    }
+
+    pub const fn take_select(&mut self) -> Option<Vec<OsString>> {
+        self.selects.take()
     }
 }

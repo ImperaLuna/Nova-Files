@@ -1,10 +1,12 @@
 use std::any::{Any, TypeId};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui::{
-    AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, SharedString, Subscription,
+    AnyElement, AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, SharedString,
+    Subscription,
 };
-use nova_files_api::{Entry, Event};
+use nova_files_api::{Entry, Event, Listing};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, MessageType};
@@ -43,6 +45,15 @@ trait OpenPart {
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
     fn watch(&self, event: &Event, cx: &mut App);
     fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)>;
+    fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
+    fn listed(&self, listing: &Listing, cx: &mut App);
+    fn takes_drops(&self, page: &PageRef) -> bool;
+    fn drop_on(
+        &self,
+        page: &PageRef,
+        paths: Vec<PathBuf>,
+        cx: &mut App,
+    ) -> Result<(), Vec<PathBuf>>;
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -146,6 +157,52 @@ impl<P: Part> OpenPart for Opened<P> {
             .empty_notes
             .iter()
             .find_map(|note| note(part, scene, cx))
+    }
+
+    fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
+        let part = self.entity.read(cx);
+        self.slots
+            .name_cells
+            .iter()
+            .find_map(|cell| cell(part, entry, cx))
+    }
+
+    fn listed(&self, listing: &Listing, cx: &mut App) {
+        if self.slots.listed.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for listed in &self.slots.listed {
+                listed(part, listing, cx);
+            }
+        });
+    }
+
+    fn takes_drops(&self, page: &PageRef) -> bool {
+        self.slots
+            .drops
+            .iter()
+            .any(|(kind, _)| *kind == page.kind())
+    }
+
+    fn drop_on(
+        &self,
+        page: &PageRef,
+        paths: Vec<PathBuf>,
+        cx: &mut App,
+    ) -> Result<(), Vec<PathBuf>> {
+        let Some((_, slot)) = self
+            .slots
+            .drops
+            .iter()
+            .find(|(kind, _)| *kind == page.kind())
+        else {
+            return Err(paths);
+        };
+        let slot = Rc::clone(slot);
+        self.entity
+            .update(cx, |part, cx| slot(part, page, paths, cx));
+        Ok(())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -343,6 +400,31 @@ impl WindowParts {
         self.opened
             .iter()
             .find_map(|part| part.empty_note(scene, cx))
+    }
+
+    pub fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
+        self.opened
+            .iter()
+            .find_map(|part| part.name_cell(entry, cx))
+    }
+
+    pub fn listed(&self, listing: &Listing, cx: &mut App) {
+        for part in &self.opened {
+            part.listed(listing, cx);
+        }
+    }
+
+    pub fn takes_drops(&self, page: &PageRef) -> bool {
+        self.opened.iter().any(|part| part.takes_drops(page))
+    }
+
+    pub fn drop_on(&self, page: &PageRef, mut paths: Vec<PathBuf>, cx: &mut App) {
+        for part in &self.opened {
+            match part.drop_on(page, paths, cx) {
+                Ok(()) => return,
+                Err(back) => paths = back,
+            }
+        }
     }
 
     pub fn part<P: Part>(&self) -> Option<Entity<P>> {
