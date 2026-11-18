@@ -281,7 +281,9 @@ async fn a_fresh_read_keeps_the_folder_selected_not_its_namesake(cx: &mut TestAp
 
     wait_for_place(&view, cx, Gathering::Projects, &["app", "app", "beta"]).await;
     view.read_with(cx, |view, _| assert_eq!(view.selected_paths(), picked));
+}
 
+#[gpui::test]
 async fn the_chip_lists_its_folders_and_undo_puts_one_back(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     cx.update(nova_files_ui::bind_window_keys);
@@ -369,4 +371,20 @@ async fn a_file_dropped_on_games_is_not_added(cx: &mut TestAppContext) {
         assert_eq!(view.gathered_count(Gathering::Games), "0 folders");
         assert!(view.note().is_none());
     });
+}
+
+#[gpui::test]
+async fn add_folder_opens_a_folder_picker(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("gathered-pick");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    click(cx, "place-projects");
+    wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
+    let windows = cx.windows().len();
+
+    click(cx, "gathered-folders");
+    click(cx, "menu-1");
+    cx.run_until_parked();
+
+    assert_eq!(cx.windows().len(), windows + 1);
 }
