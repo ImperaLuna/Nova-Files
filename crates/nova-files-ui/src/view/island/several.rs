@@ -1,13 +1,3 @@
-//! Draws several of the window's jobs on the island (see
-//! `island::several`): folded, one line, "**2 copies** · 9 s left", one
-//! bar for all and an arrow that opens the list; open, the island grows
-//! upward with a row per job (what it works on, its seconds left, its bar
-//! and a stop button) over the same line, its arrow turned down to fold
-//! it again; past a few rows the list scrolls. Selectors:
-//! `island-jobs-open`, the folded bar `island-jobs-bar`, the list
-//! `island-jobs`, and per row `island-job-N` and `island-stop-N`, counting
-//! from the oldest.
-
 use gpui::{
     ClickEvent, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, Transformation, div, radians, svg,
@@ -22,12 +12,9 @@ use crate::theme::{Colors, size, text};
 use crate::view::row::icon;
 use crate::window::MainWindow;
 
-/// The arrow's turn while the list is folded: pointing up, to open it.
 const POINT_UP: f32 = 270.0_f32.to_radians();
-/// The arrow's turn while the list is open: pointing down, to fold it.
 const POINT_DOWN: f32 = 90.0_f32.to_radians();
 
-/// The island for `jobs`, two or more, oldest first: folded, or `open`.
 pub(super) fn island(
     jobs: &[(JobId, &Running)],
     open: bool,
@@ -58,8 +45,6 @@ pub(super) fn island(
         );
     }
     parts.push(arrow(open, colors, cx).into_any_element());
-    // At most a few rows' height, the rest scrolled to, so a long list
-    // never grows past the window.
     let rows = open.then(|| {
         div()
             .id("island-jobs")
@@ -82,8 +67,6 @@ pub(super) fn island(
     floating(parts, rows, colors)
 }
 
-/// The arrow that opens the list, pointing up, or folds it, pointing
-/// down.
 fn arrow(open: bool, colors: &Colors, cx: &Context<MainWindow>) -> impl IntoElement {
     let angle = if open { POINT_DOWN } else { POINT_UP };
     square("island-jobs-open", colors)
@@ -98,8 +81,6 @@ fn arrow(open: bool, colors: &Colors, cx: &Context<MainWindow>) -> impl IntoElem
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_jobs_open(cx)))
 }
 
-/// The `index`th job's row: what it works on, its seconds left, its bar
-/// and a button that stops it.
 fn row(
     index: usize,
     id: JobId,

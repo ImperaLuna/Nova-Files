@@ -1,14 +1,3 @@
-//! What the sidebar's Drives section lists, in order: the system drive
-//! (the root folder), then each volume the core reports (see
-//! `nova_files_api::drive`), in its order. A volume is named by its own
-//! name, else its drive's, else its size ("16 GB drive"). A volume on a
-//! drive that can be unplugged and made safe to unplug offers Eject.
-//!
-//! The drive you're in is the one whose folder holds the folder on
-//! screen most closely; the system drive only counts outside Home, which
-//! Places and the tree already mark, while a drive mounted inside Home
-//! still does.
-
 use std::path::{Path, PathBuf};
 
 use gpui::SharedString;
@@ -18,22 +7,16 @@ use crate::columns;
 
 const SYSTEM_LABEL: &str = "System";
 const SYSTEM_FOLDER: &str = "/";
-/// From this full, in percent, a drive's free space shows red.
 pub const NEARLY_FULL: u8 = 90;
 
-/// One row of Drives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShownDrive {
     pub name: SharedString,
-    /// Where its files are; `None` while it isn't mounted.
     pub folder: Option<PathBuf>,
-    /// The volume to mount before opening it; `None` for the system drive.
     pub volume: Option<VolumeId>,
-    /// The drive Eject makes safe to unplug, when it can be.
     pub eject: Option<DriveId>,
 }
 
-/// The rows of Drives for `list`.
 pub fn shown(list: &DriveList) -> Vec<ShownDrive> {
     let system = ShownDrive {
         name: SYSTEM_LABEL.into(),
@@ -73,7 +56,6 @@ pub fn shown(list: &DriveList) -> Vec<ShownDrive> {
     std::iter::once(system).chain(volumes).collect()
 }
 
-/// The row of `drives` you're in when `here` is on screen, if any.
 pub fn here(drives: &[ShownDrive], here: &Path, home: &Path) -> Option<usize> {
     let inside_home = here.starts_with(home);
     drives
@@ -89,8 +71,6 @@ pub fn here(drives: &[ShownDrive], here: &Path, home: &Path) -> Option<usize> {
         .map(|(index, _)| index)
 }
 
-/// What a drive's row shows on its right: "381 GB free", and whether it
-/// is nearly full.
 pub fn free(space: DiskSpace) -> (SharedString, bool) {
     (
         format!("{} free", columns::size(space.free)).into(),

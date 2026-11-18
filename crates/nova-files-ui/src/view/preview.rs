@@ -1,22 +1,3 @@
-//! Draws the quick look over the whole window, as on the design page: a
-//! scrim, what is shown large in the middle with its caption under it, and
-//! round Previous and Next buttons either side.
-//!
-//! What is shown: a picture at the size the core decoded it (which fits
-//! the room, see `window::preview`), scaled down if the window has since
-//! shrunk, a text file's first lines as text, a
-//! folder's first entries with how many more it holds, and anything else
-//! as its large icon. The caption names the entry, its kind and its size
-//! (a folder's count of entries), with Open and Close buttons. A click on
-//! the scrim closes the quick look; a click on what is shown or the
-//! caption doesn't. While nothing has come yet for the entry, the caption
-//! shows its name and what was shown before stays.
-//!
-//! Selectors for tests: `preview`, `preview-art`, `preview-open`,
-//! `preview-close`, `preview-previous` and `preview-next`; what is shown
-//! is `preview-picture`, `preview-text`, `preview-folder` (with
-//! `preview-more` under it when the folder holds more) or `preview-icon`.
-
 use std::ffi::OsStr;
 use std::sync::Arc;
 
@@ -36,20 +17,15 @@ use crate::kind::{FileKind, icon_kind};
 use crate::theme::{Colors, preview, radius, size, text};
 use crate::window::{MainWindow, QuickLook, Shown};
 
-/// Between the parts of the caption's text.
 const SEPARATOR: &str = " · ";
-/// A file's kind when the MIME database has no name for it.
 const FILE_KIND: &str = "File";
 const FOLDER_KIND: &str = "Folder";
 const ITEM: &str = "item";
 const ITEMS: &str = "items";
 const MORE: &str = "more";
 const OPEN_LABEL: &str = "Open";
-/// A margin or padding counts once on each side.
 const BOTH_SIDES: f32 = 2.0;
 
-/// The room the quick look leaves what it shows, in a window `width` by
-/// `height`.
 pub fn room(width: Pixels, height: Pixels) -> gpui::Size<Pixels> {
     let sides = preview::MARGIN * BOTH_SIDES + (preview::NAV + preview::GAP) * BOTH_SIDES;
     let above_and_below = preview::MARGIN * BOTH_SIDES + preview::CAPTION_HEIGHT + preview::GAP;
@@ -60,7 +36,6 @@ pub fn room(width: Pixels, height: Pixels) -> gpui::Size<Pixels> {
 }
 
 impl MainWindow {
-    /// The quick look, while it is open.
     pub(super) fn preview_layer(
         &self,
         room: gpui::Size<Pixels>,
@@ -75,7 +50,6 @@ impl MainWindow {
         let index = usize::try_from(open.entry.0).ok()?;
         let entry = listing.entries.get(index)?;
         let colors = Colors::of(cx);
-        // The preview itself, once it is this entry's.
         let current = open.current().and_then(|shown| shown.preview.as_deref());
         let art = stage_art(open, listing, entry, (room, scale_factor), &colors);
         let (previous, next) = steps(index, listing.entries.len());
@@ -124,9 +98,6 @@ impl MainWindow {
     }
 }
 
-/// What the quick look `open` on `entry` of `listing` draws large in
-/// `room` at a scale factor: what the core sent, or the entry's icon
-/// until it does.
 pub(super) fn stage_art(
     open: &QuickLook,
     listing: &nova_files_api::Listing,
@@ -148,8 +119,6 @@ pub(super) fn stage_art(
     )
 }
 
-/// `element` in a box a press doesn't pass through, so a click on it
-/// doesn't reach the scrim and close the quick look.
 fn kept_open(element: impl IntoElement) -> Div {
     div()
         .flex_none()
@@ -157,8 +126,6 @@ fn kept_open(element: impl IntoElement) -> Div {
         .child(element)
 }
 
-/// The entry `shown` is of: the one on screen, or the one shown before
-/// while this one loads.
 fn shown_entry<'a>(
     shown: &Shown,
     listing: &'a nova_files_api::Listing,
@@ -170,7 +137,6 @@ fn shown_entry<'a>(
         .unwrap_or(entry)
 }
 
-/// What `shown` draws large: its picture, text, folder list or icon.
 fn art(
     shown: &Shown,
     entry: &Entry,
@@ -192,8 +158,6 @@ fn art(
     }
 }
 
-/// A picture at the size it was decoded, which fit the room when it was
-/// asked for; scaled down to fit `room` if the window has shrunk since.
 fn picture_art(
     picture: &Arc<RenderImage>,
     room: gpui::Size<Pixels>,
@@ -215,7 +179,6 @@ fn picture_art(
         .border_color(colors.line)
 }
 
-/// A side `device` pixels long, in pixels at `scale_factor`.
 fn logical_side(device: i32, scale_factor: f32) -> Pixels {
     #[expect(
         clippy::cast_precision_loss,
@@ -225,13 +188,10 @@ fn logical_side(device: i32, scale_factor: f32) -> Pixels {
     px(device / scale_factor)
 }
 
-/// Whether there is an entry before the one at `index` of `len`, and
-/// one after it, for Previous and Next.
 const fn steps(index: usize, len: usize) -> (bool, bool) {
     (index > 0, index + 1 < len)
 }
 
-/// How many lines of text fit a room `height` high: at least one.
 fn lines_fitting(height: Pixels) -> usize {
     let lines = (f32::from(height - preview::TEXT_PAD_Y * BOTH_SIDES)
         / f32::from(preview::TEXT_LINE))
@@ -245,13 +205,11 @@ fn lines_fitting(height: Pixels) -> usize {
     lines
 }
 
-/// A picture `size` scaled to fit `room`, never up.
 fn fitted(size: gpui::Size<Pixels>, room: gpui::Size<Pixels>) -> gpui::Size<Pixels> {
     let scale = fitting_scale(size, room);
     gpui::size(size.width * scale, size.height * scale)
 }
 
-/// How much a picture `size` is scaled to fit `room`: never up.
 fn fitting_scale(size: gpui::Size<Pixels>, room: gpui::Size<Pixels>) -> f32 {
     let ratio = |room: Pixels, side: Pixels| {
         if side > px(0.0) {
@@ -265,7 +223,6 @@ fn fitting_scale(size: gpui::Size<Pixels>, room: gpui::Size<Pixels>) -> f32 {
         .clamp(0.0, 1.0)
 }
 
-/// A text file's first lines, as many as fit the room.
 fn text_art(text_content: &str, room: gpui::Size<Pixels>, colors: &Colors) -> impl IntoElement {
     let lines = lines_fitting(room.height);
     card(preview::TEXT_WIDTH, colors)
@@ -285,7 +242,6 @@ fn text_art(text_content: &str, room: gpui::Size<Pixels>, colors: &Colors) -> im
         )
 }
 
-/// A folder's first entries, and how many more it holds.
 fn folder_art(first: &[Entry], count: usize, colors: &Colors) -> AnyElement {
     if first.is_empty() {
         return big_icon(OsStr::new(""), EntryKind::Folder, colors);
@@ -327,7 +283,6 @@ fn folder_art(first: &[Entry], count: usize, colors: &Colors) -> AnyElement {
         .into_any_element()
 }
 
-/// A card for what is shown, `width` wide at most.
 fn card(width: Pixels, colors: &Colors) -> Div {
     div()
         .w(width)
@@ -340,7 +295,6 @@ fn card(width: Pixels, colors: &Colors) -> Div {
         .border_color(colors.line)
 }
 
-/// The large icon of an entry called `name` of `kind`, on a card.
 fn big_icon(name: &OsStr, kind: EntryKind, colors: &Colors) -> AnyElement {
     let (glyph, tint) = match kind {
         EntryKind::Folder => (Icon::Folder, colors.folder),
@@ -359,7 +313,6 @@ fn big_icon(name: &OsStr, kind: EntryKind, colors: &Colors) -> AnyElement {
         .into_any_element()
 }
 
-/// The caption: the entry's name, kind and size, then Open and Close.
 fn caption(
     entry: &Entry,
     current: Option<&Preview>,
@@ -443,7 +396,6 @@ fn caption(
         )
 }
 
-/// "PNG image · 1.8 MB", or "Folder · 12 items".
 pub(super) fn meta(preview: &Preview) -> String {
     if let PreviewContent::Folder { count, .. } = &preview.content {
         let unit = if *count == 1 { ITEM } else { ITEMS };
@@ -481,7 +433,6 @@ mod tests {
             gpui::size(px(0.0), px(0.0)),
         );
         assert!(none.abs() < f32::EPSILON);
-        // A picture with no size is left as it is.
         let empty = fitting_scale(gpui::size(px(0.0), px(0.0)), gpui::size(px(0.0), px(0.0)));
         assert!((empty - 1.0).abs() < f32::EPSILON);
     }
@@ -516,7 +467,6 @@ mod tests {
         assert_eq!(lines_fitting(pads + line * 10.0), 10);
         assert_eq!(lines_fitting(pads + line * 10.5), 10);
         assert_eq!(lines_fitting(pads + line * 3.0), 3);
-        // Even a room too small for one shows one.
         assert_eq!(lines_fitting(px(0.0)), 1);
     }
 

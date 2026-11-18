@@ -1,14 +1,3 @@
-//! Copy, cut and paste. Copy and cut put the files selected on the
-//! clipboard, as other file managers read them (see `FileClipboard`);
-//! paste copies or moves them into the folder on screen as one of the
-//! core's jobs (see `jobs`).
-//!
-//! GPUI's clipboard carries text only, so the files go as their paths in
-//! plain text, with GNOME's list as the text's metadata, which a paste in
-//! any Nova Files window reads back whole, names that aren't UTF-8 too.
-//! Other apps get the paths as text, and a paste from them counts the
-//! text only in the forms `FileClipboard` accepts.
-
 use std::path::PathBuf;
 
 use gpui::{ClipboardEntry, ClipboardItem, Context};
@@ -18,9 +7,7 @@ use super::MainWindow;
 use crate::island;
 
 impl MainWindow {
-    /// Puts the files selected on the clipboard, to be moved when `cut`.
     pub(crate) fn copy_selected(&mut self, cut: bool, cx: &mut Context<Self>) {
-        // What is in the trash only goes back where it was.
         if self.pick.is_some() || self.in_trash() {
             return;
         }
@@ -34,7 +21,6 @@ impl MainWindow {
             action,
             paths: paths.clone(),
         };
-        // Nothing selected offers nothing.
         let Some(item) = clipboard_item(&files) else {
             return;
         };
@@ -42,9 +28,6 @@ impl MainWindow {
         self.show_note(island::clipboard_note(cut, &paths), None, cx);
     }
 
-    /// Copies or moves the files on the clipboard into the folder on
-    /// screen. Files cut from this folder stay where they are; files cut
-    /// elsewhere leave the clipboard once pasted.
     pub(crate) fn paste(&mut self, cx: &Context<Self>) {
         if self.pick.is_some() || self.in_trash() {
             return;
@@ -60,12 +43,10 @@ impl MainWindow {
             && self.start_job(operation)
             && cut
         {
-            // Cut files paste once: they are no longer where it says.
             cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
         }
     }
 
-    /// Whether the clipboard holds files a paste would bring here.
     pub(super) fn clipboard_has_files(cx: &Context<Self>) -> bool {
         cx.read_from_clipboard()
             .as_ref()
@@ -74,8 +55,6 @@ impl MainWindow {
     }
 }
 
-/// The clipboard item for `files`: their paths as text, GNOME's list as
-/// its metadata. `None` when there is no path to offer.
 fn clipboard_item(files: &FileClipboard) -> Option<ClipboardItem> {
     let offers = files.offers();
     let bytes_of = |mime: &str| {
@@ -89,7 +68,6 @@ fn clipboard_item(files: &FileClipboard) -> Option<ClipboardItem> {
     Some(ClipboardItem::new_string_with_metadata(text, gnome))
 }
 
-/// The files `item` holds, if it holds any.
 fn files_in(item: &ClipboardItem) -> Option<FileClipboard> {
     let mut offers = Vec::new();
     for entry in item.entries() {
@@ -100,7 +78,6 @@ fn files_in(item: &ClipboardItem) -> Option<FileClipboard> {
                 }
                 offers.push(Offer::new(PLAIN_TEXT_UTF8, text.text.as_bytes()));
             }
-            // Only macOS and Windows hand over files as paths.
             ClipboardEntry::ExternalPaths(_) | ClipboardEntry::Image(_) => {}
         }
     }

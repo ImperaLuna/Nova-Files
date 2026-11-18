@@ -1,22 +1,3 @@
-//! A small menu that opens where the pointer was right-clicked: a file's
-//! actions, a pinned place's "Remove from Places", a drive's Eject, or
-//! the folders Games or Projects gather from, or the apps that can open
-//! a file or the levels of access on its Properties page. The
-//! window holds at most one; it closes on a choice, on Escape, or on a
-//! press outside it. Drawing is in `view/menu`.
-//!
-//! Each item names what it does as a [`MenuAction`], which the window
-//! carries out once the item is chosen, so a menu holds no closures and
-//! a test can read what it offers. An item that runs one of the window's
-//! actions ([`MenuAction::Run`]) sends that action, exactly as its key
-//! does, so a menu and a key can't drift apart; the menu shows the key
-//! that starts it (see [`key_label`]).
-//!
-//! Items come in groups with a line between each. While it is open the
-//! menu holds the keys: Up and Down move along it (round from one end to
-//! the other), Enter chooses, Escape closes. The pointer moves the same
-//! mark the keys do.
-
 use std::path::PathBuf;
 
 use gpui::{
@@ -30,7 +11,6 @@ use crate::commands::ActionSpec;
 use crate::drives::ShownDrive;
 use crate::window::{AccessLevel, MainWindow, Who};
 
-/// The key context an open menu sets.
 pub const KEY_CONTEXT: &str = "Menu";
 
 #[expect(
@@ -43,79 +23,54 @@ mod actions {
 
 pub use actions::*;
 
-/// The menu on screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Menu {
-    /// Where its top left corner sits, in window coordinates.
     pub at: Point<Pixels>,
     pub items: Vec<MenuItem>,
-    /// The items a line is drawn above, by index.
     pub lines: Vec<usize>,
-    /// The item the keys or the pointer are on.
     pub active: Option<usize>,
-    /// Holds the keys while the menu is open.
     pub focus: FocusHandle,
-    /// Whether the menu still has to take the keys, at the next frame.
     wants_focus: bool,
 }
 
-/// One item of a [`Menu`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MenuItem {
     pub icon: Icon,
     pub label: SharedString,
     pub action: MenuAction,
     pub look: Look,
-    /// A word on it at its right, where an action's keys go.
     pub detail: Option<SharedString>,
 }
 
-/// How an item stands out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Look {
     #[default]
     Plain,
-    /// A choice that is on: strong, its icon orange.
     On,
-    /// It removes something: drawn in the error color.
     Danger,
 }
 
-/// What a menu item does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuAction {
-    /// Take a pinned folder out of Places.
     Unpin(PathBuf),
-    /// Open a drive, mounting it first when needed.
     OpenDrive(ShownDrive),
-    /// Open a drive in a new tab, mounting it first when needed.
     OpenDriveInNewTab(ShownDrive),
-    /// Make a drive safe to unplug.
     Eject(DriveId),
-    /// Open a folder in a new tab.
     OpenInNewTab(PathBuf),
-    /// Make an app the default for a type of file.
     SetDefaultApp { mime: String, app: String },
-    /// Give one of owner, group or everyone else a level of access to
-    /// what the Properties page shows.
     SetAccess(Who, AccessLevel),
-    /// Send one of the window's actions, as its key does.
     Run(&'static ActionSpec),
-    /// Stop gathering a place from a folder.
     Ungather(Gathering, PathBuf),
-    /// Pick a folder to add to a place.
     AddGathered(Gathering),
 }
 
 impl Menu {
-    /// Whether item `index` is the one marked.
     pub fn marks(&self, index: usize) -> bool {
         self.active == Some(index)
     }
 }
 
 impl MenuItem {
-    /// A plain item.
     pub fn new(icon: Icon, label: impl Into<SharedString>, action: MenuAction) -> Self {
         Self {
             icon,
@@ -126,19 +81,16 @@ impl MenuItem {
         }
     }
 
-    /// An item that sends `spec`'s action, named by its label.
     pub fn run(icon: Icon, spec: &'static ActionSpec) -> Self {
         Self::new(icon, spec.label, MenuAction::Run(spec))
     }
 
-    /// This item, with `detail` at its right.
     #[must_use]
     pub fn with_detail(mut self, detail: Option<SharedString>) -> Self {
         self.detail = detail;
         self
     }
 
-    /// This item, standing out as `look` says.
     #[must_use]
     pub const fn with_look(mut self, look: Look) -> Self {
         self.look = look;
@@ -147,7 +99,6 @@ impl MenuItem {
 }
 
 impl MainWindow {
-    /// Opens a menu of `items` at `at`, in place of any menu open.
     pub(crate) fn open_menu(
         &mut self,
         at: Point<Pixels>,
@@ -157,9 +108,6 @@ impl MainWindow {
         self.open_menu_groups(at, vec![items], false, cx);
     }
 
-    /// Opens a menu of `groups`, with a line between each, at `at`, in
-    /// place of any menu open. Empty groups are left out, and so is a menu
-    /// with no items. Opened `by_key`, its first item is marked.
     pub(crate) fn open_menu_groups(
         &mut self,
         at: Point<Pixels>,
@@ -186,14 +134,12 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Closes the menu, if one is open.
     pub(crate) fn close_menu(&mut self, cx: &mut Context<Self>) {
         if self.menu.take().is_some() {
             cx.notify();
         }
     }
 
-    /// Gives the keys to a menu that just opened.
     pub(crate) fn focus_menu(&mut self, window: &mut Window, cx: &mut App) {
         if let Some(menu) = self.menu.as_mut().filter(|menu| menu.wants_focus) {
             menu.wants_focus = false;
@@ -201,8 +147,6 @@ impl MainWindow {
         }
     }
 
-    /// Moves the menu's mark to the next item, or with `back` the one
-    /// before, round from one end to the other.
     pub(crate) fn step_menu(&mut self, back: bool, cx: &mut Context<Self>) {
         let Some(menu) = self.menu.as_mut() else {
             return;
@@ -217,7 +161,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Marks item `index`, under the pointer.
     pub(crate) fn mark_menu_item(&mut self, index: usize, cx: &mut Context<Self>) {
         if let Some(menu) = self.menu.as_mut()
             && menu.active != Some(index)
@@ -227,16 +170,12 @@ impl MainWindow {
         }
     }
 
-    /// Carries out the marked item, if any.
     pub(crate) fn choose_marked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(index) = self.menu.as_ref().and_then(|menu| menu.active) {
             self.choose(index, window, cx);
         }
     }
 
-    /// Carries out item `index` of the menu on screen and closes it. The
-    /// keys go back to the window first, so an action it sends lands
-    /// where its key would.
     pub(crate) fn choose(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(item) = self
             .menu
@@ -261,13 +200,11 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// The menu on screen, if any.
     pub const fn menu(&self) -> Option<&Menu> {
         self.menu.as_ref()
     }
 }
 
-/// Binds the keys an open menu takes.
 pub fn bind_keys(cx: &mut App) {
     let context = Some(KEY_CONTEXT);
     cx.bind_keys([
@@ -278,17 +215,13 @@ pub fn bind_keys(cx: &mut App) {
     ]);
 }
 
-/// How a menu shows the keys of `binding`: each key named as it reads on
-/// a keyboard, modifiers first (`Ctrl Shift N`, `Del`, `F2`).
 pub fn key_label(binding: &KeyBinding) -> Option<SharedString> {
     let keys: Vec<String> = binding.keystrokes().iter().map(keystroke_label).collect();
     (!keys.is_empty()).then(|| keys.join(KEY_GAP).into())
 }
 
-/// Between the words of a key label.
 const KEY_GAP: &str = " ";
 
-/// One keystroke's label.
 fn keystroke_label(keystroke: &KeybindingKeystroke) -> String {
     let modifiers = keystroke.modifiers();
     let held = [
@@ -305,8 +238,6 @@ fn keystroke_label(keystroke: &KeybindingKeystroke) -> String {
         .join(KEY_GAP)
 }
 
-/// A key's name as printed on the key: GPUI's name with its first letter
-/// a capital, and the long names keyboards shorten.
 fn key_name(key: &str) -> String {
     let short = match key {
         "delete" => "Del",

@@ -1,9 +1,3 @@
-//! Draws the pick bar along a picker window's bottom: the name box, Cancel
-//! and the Open or Save button, and under them, when a save would land on
-//! a file that is there, Replace and Keep both. Every element a test
-//! clicks carries a debug selector: `pick-name`, `pick-cancel`,
-//! `pick-accept`, `pick-replace` and `pick-keep-both`.
-
 use gpui::{
     ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
@@ -86,7 +80,6 @@ impl MainWindow {
     }
 }
 
-/// A bar button; `accept` marks the one Enter does.
 pub fn button(
     id: &'static str,
     label: SharedString,

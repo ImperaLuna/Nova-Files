@@ -1,14 +1,3 @@
-//! A path bar menu: a list of folders on a card that hangs below the
-//! crumb or arrow it opened from (see `path_bar`). Only the rows on screen
-//! are built, so a folder of any size opens at once; past
-//! [`size::MENU_MAX_HEIGHT`] it scrolls. A click on a folder goes there; a
-//! press anywhere else closes the menu. A folder marked `on` (in an
-//! arrow's menu, the one the folder on screen is or is inside of) is
-//! strong with its icon orange.
-//!
-//! Debug selectors: `path-menu`, and `path-menu-<n>` for its folders,
-//! counted from 0.
-
 use gpui::{
     AnyElement, ClickEvent, Context, Corner, Div, InteractiveElement as _, IntoElement,
     MouseDownEvent, ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _,
@@ -20,16 +9,12 @@ use crate::path_bar::MenuItem;
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
-/// The menu draws over the list.
 const MENU_PRIORITY: usize = 1;
 
 impl MainWindow {
-    /// The open menu, to draw in the element it hangs from.
     pub(super) fn path_menu_card(&self, cx: &Context<Self>) -> AnyElement {
         let colors = Colors::of(cx);
         let items = self.path_menu().map_or(&[][..], |menu| &menu.items);
-        // The longest name, by characters, sets the card's width, within
-        // its bounds.
         let widest = items
             .iter()
             .enumerate()
@@ -69,7 +54,6 @@ impl MainWindow {
                 cx.notify();
             }))
             .child(list);
-        // Pinned to the owner's bottom left, hanging down.
         div()
             .absolute()
             .bottom_0()
@@ -88,7 +72,6 @@ impl MainWindow {
     }
 }
 
-/// The `index`th folder of a menu.
 fn menu_item(
     index: usize,
     item: &MenuItem,

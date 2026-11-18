@@ -1,22 +1,3 @@
-//! Drag a box to select: a press on the entries list that isn't on a
-//! name, moved a few pixels, draws a box, and the rows it touches are
-//! selected. Ctrl adds them to what was selected. A press on empty space
-//! below the rows that isn't dragged selects nothing.
-//!
-//! A press on a name is left for dragging files (later). The box's start is
-//! kept in the list's content, so it stays put on its row while the list
-//! scrolls; the row under the mouse is the cursor, which `reselect` scrolls
-//! into view, so dragging past an edge scrolls, and a scroll while the box
-//! is held selects what it covers then. Moves and the release are taken on
-//! the window's root, so the box follows the mouse outside the list; a move
-//! with the button up (released outside the window) ends it, and so does a
-//! new folder.
-//!
-//! The list's lines are all one height, so a line is found from a
-//! position by sharing the list's content height out among its lines,
-//! whatever is drawn. In Icons a box selects the cells it touches: those
-//! in the lines it spans and the columns it spans (see `grid`).
-
 use gpui::{
     Bounds, ClickEvent, Context, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
     Point, Window, point, px,
@@ -26,26 +7,18 @@ use nova_files_api::{EntryId, ListingId};
 use crate::selection::Selection;
 use crate::window::MainWindow;
 
-/// How far the mouse moves before a press becomes a box.
 const START: Pixels = px(4.0);
 
-/// A press on the list, until it is released.
 #[derive(Debug)]
 pub struct Band {
-    /// Where the press was, in the list's content.
     from: Point<Pixels>,
-    /// Where the mouse is, in the window.
     to: Point<Pixels>,
-    /// The selection when the press came, which Ctrl adds to.
     before: Option<Selection>,
     add: bool,
-    /// Whether the mouse has moved far enough to draw a box.
     dragging: bool,
 }
 
 impl MainWindow {
-    /// The left button went down on the entries list, not on a name
-    /// (`on_name` says it was).
     pub(crate) fn band_pressed(&mut self, event: &MouseDownEvent, on_name: bool) {
         let boxes = event.button == MouseButton::Left && !on_name && !self.showing_gallery();
         self.band = boxes.then(|| Band {
@@ -57,7 +30,6 @@ impl MainWindow {
         });
     }
 
-    /// The mouse moved anywhere in the window.
     pub(crate) fn band_moved(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
         if self.band.is_none() {
             return;
@@ -78,16 +50,12 @@ impl MainWindow {
         self.band_select(cx);
     }
 
-    /// The list scrolled: a box being dragged now covers other rows.
     pub(crate) fn band_scrolled(&mut self, cx: &mut Context<Self>) {
         if self.band_dragged() {
             self.band_select(cx);
         }
     }
 
-    /// The button came up anywhere in the window: a box selects what it
-    /// covers there, and a press on empty space that wasn't dragged
-    /// selects nothing.
     pub(crate) fn band_released(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
         let Some(band) = &mut self.band else { return };
         band.to = event.position;
@@ -102,8 +70,6 @@ impl MainWindow {
         }
     }
 
-    /// Selects the rows the box covers, from its start in the content to
-    /// the mouse where the list is scrolled now.
     fn band_select(&mut self, cx: &mut Context<Self>) {
         let Some(band) = &self.band else { return };
         let (from, add, before) = (band.from, band.add, band.before.clone());
@@ -149,8 +115,6 @@ impl MainWindow {
         );
     }
 
-    /// A click on the entry `id` of `listing`, unless it ends a box
-    /// dragged to that row.
     pub(crate) fn row_clicked(
         &mut self,
         entry: (ListingId, EntryId),
@@ -163,13 +127,10 @@ impl MainWindow {
         }
     }
 
-    /// Whether the press under way has become a box, so a click on a row
-    /// it ends on isn't a click.
     pub(crate) fn band_dragged(&self) -> bool {
         self.band.as_ref().is_some_and(|band| band.dragging)
     }
 
-    /// The box to draw, in the list's own space, while dragging.
     pub(crate) fn band_box(&self) -> Option<Bounds<Pixels>> {
         let band = self.band.as_ref().filter(|band| band.dragging)?;
         let list = self.list_bounds();
@@ -182,7 +143,6 @@ impl MainWindow {
         ))
     }
 
-    /// The entry of the listing under `position` in the window, if any.
     fn row_at(&self, position: Point<Pixels>) -> Option<usize> {
         let at = self.in_content(position);
         let grid = self.grid();
@@ -195,7 +155,6 @@ impl MainWindow {
         (entry < len && self.list_bounds().contains(&position)).then_some(entry)
     }
 
-    /// `position` in the window as a point in the list's content.
     fn in_content(&self, position: Point<Pixels>) -> Point<Pixels> {
         position - self.list_bounds().origin - self.list_offset()
     }
@@ -208,7 +167,6 @@ impl MainWindow {
         self.scroll.0.borrow().base_handle.offset()
     }
 
-    /// The height of all the list's rows together.
     fn rows_height(&self) -> Pixels {
         self.scroll
             .0
@@ -224,16 +182,11 @@ impl MainWindow {
     }
 }
 
-/// The rows of `len`, `all` tall together, between the content heights
-/// `from` and `to`: the row at `from` and the row at `to`, each kept to
-/// the rows there are, or `None` when the span misses every row.
 fn rows_touched(from: Pixels, to: Pixels, all: Pixels, len: usize) -> Option<(u32, u32)> {
     let last = f64::from(u32::try_from(len.checked_sub(1)?).ok()?);
     if all <= px(0.0) {
         return None;
     }
-    // Far past either end counts as one row past it, which is enough to
-    // tell what the span misses.
     let row = |y: Pixels| {
         (f64::from(f32::from(y)) * (last + 1.0) / f64::from(f32::from(all)))
             .floor()

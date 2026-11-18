@@ -1,12 +1,3 @@
-//! The Properties page's Opens with: the app that opens a lone file, and
-//! making another app the default for its type.
-//!
-//! Arriving at a page of one path, or showing it again, asks the core
-//! which apps open it, and takes the answer to its newest ask. A press
-//! on the card opens a menu of those apps, the default ticked. Choosing
-//! one makes it the default for the file's type and asks again, so the
-//! card shows what the system now says.
-
 use gpui::{Context, Pixels, Point};
 use nova_files_api::{App, Command, OpenWith, OpenWithAnswer, OpenWithId};
 
@@ -14,19 +5,14 @@ use super::MainWindow;
 use crate::assets::Icon;
 use crate::menu::{Look, MenuAction, MenuItem};
 
-/// The apps that open a Properties page's lone path.
 #[derive(Debug, Default)]
 pub struct OpensWith {
     asked: Option<OpenWithId>,
-    /// The path's type, which a new default is set for.
     mime: Option<String>,
-    /// The default first, then the rest best first.
     apps: Vec<App>,
 }
 
 impl MainWindow {
-    /// Asks the core which apps open the Properties page's path, when it
-    /// shows one.
     pub(super) fn ask_apps(&mut self) {
         let id = OpenWithId(self.next_ask());
         let Some(page) = self.properties.as_mut() else {
@@ -44,7 +30,6 @@ impl MainWindow {
         page.opens_with.asked = sent.then_some(id);
     }
 
-    /// The core's answer to an Open With request.
     pub(super) fn open_with_answered(&mut self, answer: OpenWithAnswer, cx: &mut Context<Self>) {
         let OpenWithAnswer::Apps { id, mime, apps } = answer else {
             return;
@@ -63,20 +48,15 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// The apps that open the Properties page's lone path, the default
-    /// first; empty until known.
     pub fn apps_to_open_with(&self) -> &[App] {
         self.properties_page()
             .map_or(&[], |page| page.opens_with.apps.as_slice())
     }
 
-    /// The app that opens the Properties page's lone path, once known.
     pub fn default_app(&self) -> Option<&App> {
         self.apps_to_open_with().iter().find(|app| app.default)
     }
 
-    /// Opens the menu of the apps that open the page's path, at `at`: a
-    /// tick on the default.
     pub(crate) fn open_apps_menu(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
         let Some(opens_with) = self.properties_page().map(|page| &page.opens_with) else {
             return;
@@ -102,8 +82,6 @@ impl MainWindow {
         self.open_menu(at, items, cx);
     }
 
-    /// Makes `app` the default for `mime`, then asks again which apps
-    /// open the page's path.
     pub(crate) fn set_default_app(&mut self, mime: String, app: String) {
         if let Some(connection) = &self.connection {
             connection

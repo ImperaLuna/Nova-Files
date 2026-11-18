@@ -1,17 +1,3 @@
-//! Choosing what Games and Projects gather. In either place, the path
-//! bar's "N folders" chip opens a menu of the folders it gathers from,
-//! each with what it brings (Projects) or where it is (Games); choosing
-//! one stops gathering from it, with Undo on the island. "Add folder…",
-//! in that menu and in the list's empty-space menu, opens a folder
-//! picker; folders dropped on a place's row in Places, or on the chip,
-//! are added too. For Projects the core guesses whether a folder is one
-//! project or holds many (see the core's `gathered`). Undo takes an add
-//! out again, and puts a folder taken out back where it was, with its
-//! name.
-//!
-//! The core saves each change and tells every window, which lists the
-//! place again (see `gathered`).
-
 use std::mem;
 use std::path::PathBuf;
 
@@ -26,7 +12,6 @@ use crate::island::{self, NoteUndo};
 use crate::menu::{MenuAction, MenuItem};
 use crate::places;
 
-/// The menu item and picker that add a folder.
 pub const ADD_FOLDER_LABEL: &str = "Add folder…";
 const PICK_LABEL: &str = "Add";
 const ONE_PROJECT: &str = "One project";
@@ -35,13 +20,10 @@ const FOLDER: &str = "folder";
 const FOLDERS: &str = "folders";
 
 impl MainWindow {
-    /// What the chip in `place`'s path bar says: how many folders it
-    /// gathers from.
     pub fn gathered_count(&self, place: Gathering) -> String {
         island::count(self.gathered.folders.of(place).len(), FOLDER, FOLDERS)
     }
 
-    /// Opens the menu of the folders `place` gathers from, at `at`.
     pub(crate) fn open_gathered_menu(
         &mut self,
         place: Gathering,
@@ -66,7 +48,6 @@ impl MainWindow {
         self.open_menu_groups(at, vec![folders, add], false, cx);
     }
 
-    /// The name `folder` goes by in its place's menu and notes.
     fn folder_label(&self, folder: &GatheredFolder) -> String {
         folder.name.clone().unwrap_or_else(|| match folder.holds {
             Holds::One => island::name_of(&folder.path),
@@ -74,8 +55,6 @@ impl MainWindow {
         })
     }
 
-    /// What the menu says beside `folder`: what it brings to Projects, or
-    /// where a named library is.
     fn folder_detail(&self, place: Gathering, folder: &GatheredFolder) -> Option<SharedString> {
         match (place, folder.holds) {
             (Gathering::Projects, Holds::One) => Some(ONE_PROJECT.into()),
@@ -87,7 +66,6 @@ impl MainWindow {
         }
     }
 
-    /// Stops gathering `place` from the folder at `path`, with Undo.
     pub(crate) fn ungather(&mut self, place: Gathering, path: PathBuf, cx: &mut Context<Self>) {
         let folders = self.gathered.folders.of(place);
         let Some((at, folder)) = folders
@@ -115,7 +93,6 @@ impl MainWindow {
         }
     }
 
-    /// Opens a folder picker and adds the folder picked to `place`.
     pub fn pick_folder_to_gather(&mut self, place: Gathering, cx: &mut Context<Self>) {
         let title = format!("{ADD_TO} {}", places::gathering_look(place).0);
         self.pick_folder(&title, PICK_LABEL, cx, move |this, path, cx| {
@@ -123,9 +100,6 @@ impl MainWindow {
         });
     }
 
-    /// Adds the folders at `paths` to `place`; those it already gathers
-    /// from stay as they are. The note with Undo comes once the core has
-    /// added them (see `note_added`), as it refuses a file.
     pub(crate) fn gather(&mut self, place: Gathering, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
         if !self.gathered.heard {
             self.ask_gathered();
@@ -153,7 +127,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Shows what the core added of the add sent last, with Undo.
     pub(super) fn note_added(&mut self, cx: &mut Context<Self>) {
         let Some(adding) = &mut self.gathered.adding else {
             return;
@@ -186,7 +159,6 @@ impl MainWindow {
         self.show_note(label, Some(NoteUndo::Send(undo)), cx);
     }
 
-    /// Asks the core to make `change`. Whether it was sent.
     fn change_gathered(&self, change: GatheredChange) -> bool {
         self.connection
             .as_ref()
@@ -194,7 +166,6 @@ impl MainWindow {
     }
 }
 
-/// The item that adds a folder to `place`.
 pub fn add_item(place: Gathering) -> MenuItem {
     MenuItem::new(Icon::Plus, ADD_FOLDER_LABEL, MenuAction::AddGathered(place))
 }

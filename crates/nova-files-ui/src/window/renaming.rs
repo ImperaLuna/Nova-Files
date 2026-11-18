@@ -1,16 +1,3 @@
-//! Rename in place and New folder.
-//!
-//! F2 (or the island's Rename) puts a text field over the name of the one
-//! entry selected, with the name selected up to its extension, so typing
-//! replaces just the name. Enter, or a click away from the field, renames
-//! it as one of the core's jobs (see `jobs`); Escape, an empty name or the
-//! same name leaves it as it was. The field follows the entry by name, so
-//! a fresh read of the folder keeps it.
-//!
-//! New folder makes "New folder" (or the next free "New folder 2", ...)
-//! in the folder on screen. Once it is listed, the window selects it and
-//! starts renaming it. After a rename the new name is selected.
-
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::PathBuf;
@@ -25,9 +12,7 @@ use crate::text::{TextField, TextFieldEvent};
 
 const NEW_FOLDER: &str = "New folder";
 
-/// A rename under way.
 pub struct Renaming {
-    /// The folder the entry is in, and its name before the rename.
     pub folder: PathBuf,
     pub name: OsString,
     pub field: Entity<TextField>,
@@ -35,28 +20,22 @@ pub struct Renaming {
     _blur: Subscription,
 }
 
-/// What the window does once a listing of `folder` holds `name`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Wanted {
     pub folder: PathBuf,
     pub name: OsString,
-    /// Start renaming it too.
     pub rename: bool,
 }
 
-/// What the window waits for after a rename or a new folder.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Waiting {
     #[default]
     Nothing,
-    /// A listing that holds this entry, to select it.
     Entry(Wanted),
-    /// The next frame, to start renaming what is selected.
     Rename,
 }
 
 impl MainWindow {
-    /// Starts renaming the one entry selected in the folder on screen.
     pub(crate) fn start_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.renaming.is_some() || self.in_trash() || self.folder().is_none() {
             return;
@@ -91,9 +70,6 @@ impl MainWindow {
             TextFieldEvent::Changed => {}
         });
         let focus = field.read(cx).focus_handle(cx);
-        // A click elsewhere renames. The field also loses focus when its
-        // row scrolls out of the drawn rows; then a half-typed name is
-        // dropped rather than given.
         let blur = cx.on_blur(&focus, window, |this, window, cx| {
             let drawn = this
                 .rename_row()
@@ -111,8 +87,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Ends the rename under way, renaming the entry when `keep` and the
-    /// name changed. Keys go back to the window.
     fn finish_rename(&mut self, keep: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(renaming) = self.renaming.take() else {
             return;
@@ -135,7 +109,6 @@ impl MainWindow {
         });
     }
 
-    /// The row of the entry being renamed in the listing on screen.
     fn rename_row(&self) -> Option<usize> {
         let renaming = self.renaming.as_ref()?;
         let listing = self.listing.as_ref()?;
@@ -148,19 +121,15 @@ impl MainWindow {
             .position(|entry| entry.name == renaming.name)
     }
 
-    /// The text field of the rename under way on row `index` of the
-    /// listing on screen, if there is one.
     pub fn rename_field(&self, index: usize) -> Option<&Entity<TextField>> {
         let field = &self.renaming.as_ref()?.field;
         (self.rename_row()? == index).then_some(field)
     }
 
-    /// Whether a rename is under way.
     pub const fn renaming(&self) -> bool {
         self.renaming.is_some()
     }
 
-    /// Makes a new folder in the folder on screen, then renames it.
     pub fn new_folder(&mut self) {
         let Some(listing) = &self.listing else { return };
         if self.pick.is_some()
@@ -180,8 +149,6 @@ impl MainWindow {
         self.start_job(Operation::NewFolder { inside, name });
     }
 
-    /// The selection `listing` starts with when it holds the entry the
-    /// window waits for; a rename then starts on the next frame.
     pub(super) fn wanted_selection(&mut self, listing: &Listing) -> Option<Selection> {
         let Waiting::Entry(wanted) = &self.waiting else {
             return None;
@@ -198,8 +165,6 @@ impl MainWindow {
         Some(selection)
     }
 
-    /// Starts the rename a new folder asked for, now that the window can
-    /// give the field focus.
     pub(crate) fn start_wanted_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.waiting == Waiting::Rename {
             self.waiting = Waiting::Nothing;
@@ -208,11 +173,7 @@ impl MainWindow {
     }
 }
 
-/// The name `typed` makes of `original`, shown in the field as its lossy
-/// text: what the user left of the old name keeps its own bytes, so a
-/// name that isn't UTF-8 only changes where the user typed.
 fn renamed(original: &OsStr, typed: &str) -> OsString {
-    // Each character the field showed, with the bytes it stands for.
     let mut shown: Vec<(char, &[u8])> = Vec::new();
     for chunk in original.as_bytes().utf8_chunks() {
         let valid = chunk.valid();
@@ -250,8 +211,6 @@ fn renamed(original: &OsStr, typed: &str) -> OsString {
     OsString::from_vec(bytes)
 }
 
-/// "New folder", or the first of "New folder 2", "New folder 3", ... that
-/// `listing` doesn't hold.
 fn free_name(listing: &Listing) -> OsString {
     let taken = |name: &str| {
         listing
@@ -259,7 +218,6 @@ fn free_name(listing: &Listing) -> OsString {
             .iter()
             .any(|entry| entry.name == OsStr::new(name))
     };
-    // One more name than the folder holds is always enough.
     (1..=listing.entries.len() + 1)
         .map(|number| {
             if number == 1 {
@@ -307,7 +265,6 @@ mod tests {
         );
         assert_eq!(renamed(odd, "caf\u{FFFD} notes.txt"), odd);
         assert_eq!(renamed(odd, "plans.txt"), OsStr::new("plans.txt"));
-        // Typing over the odd byte gives the typed text.
         assert_eq!(renamed(odd, "cafe notes.txt"), OsStr::new("cafe notes.txt"));
         assert_eq!(
             renamed(OsStr::new("notes.txt"), "notes2.txt"),

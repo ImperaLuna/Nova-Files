@@ -1,19 +1,3 @@
-//! Draws the island over the bottom of the sheet (see `island`): a
-//! running job's line and orange bar, what it asks about a conflict the
-//! job holds at, with Cancel, an answer button each and a "For all N" tick, a
-//! question with Cancel and its answer, a note with its Undo, or the selection with what can be done
-//! to it (in the trash, Restore). While it
-//! is down, the sheet's quiet count shows at the bottom left instead.
-//!
-//! Its buttons send the window's actions, as keys do (see `commands`);
-//! only closing a note, which no key does, is handled here. Each part a
-//! test clicks carries a debug selector: `island`, `island-copy`,
-//! `island-cut`, `island-rename`, `island-trash`, `island-clear`, `island-undo`,
-//! `island-dismiss`, `island-progress`, `island-restore`, `island-no`,
-//! `island-yes`, the answers to a conflict (`island-skip`,
-//! `island-keep-both`, `island-merge`, `island-replace`, `island-retry`),
-//! its `island-cancel` and its `island-for-all` tick, and the count, `count`.
-
 use gpui::{
     Action, BoxShadow, ClickEvent, Context, Div, ElementId, Hsla, InteractiveElement as _,
     IntoElement, ParentElement as _, Pixels, Rgba, SharedString, Stateful,
@@ -40,11 +24,9 @@ const CANCEL_LABEL: &str = "Cancel";
 const RESTORE_LABEL: &str = "Restore";
 
 impl MainWindow {
-    /// The island, or the quiet count while the island is down.
     pub(super) fn island(&self, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         let job = self.job_on_island(cx);
-        // A question waits on the user, so it comes before a job's line.
         let parts = if self.pick.is_some() {
             None
         } else if let Some((id, conflict)) =
@@ -78,8 +60,6 @@ impl MainWindow {
         )
     }
 
-    /// "3 selected · 12 MB", then Copy, Cut, Rename (for one), Move to
-    /// Trash and Clear; in the trash, Restore and Clear.
     fn selection_parts(&self, colors: &Colors) -> Vec<gpui::AnyElement> {
         let count = self.selected_count();
         let (number, rest) = island::selection_line(count, self.selected_bytes());
@@ -137,7 +117,6 @@ impl MainWindow {
     }
 }
 
-/// Copy, Cut, Rename (for one) and Move to Trash.
 fn file_buttons(count: usize, parts: &mut Vec<gpui::AnyElement>, colors: &Colors) {
     parts.extend([
         icon_button("island-copy", Icon::Copy, &CopySelected, colors).into_any_element(),
@@ -151,10 +130,6 @@ fn file_buttons(count: usize, parts: &mut Vec<gpui::AnyElement>, colors: &Colors
     parts.push(icon_button("island-trash", Icon::Trash, &TrashSelected, colors).into_any_element());
 }
 
-/// What the island asks about `conflict`: the name, drawn strong, and
-/// what is wrong, then Cancel, which stops the job, an answer button
-/// for each answer it takes, the last in the accent, and the "For all N" tick, `ticked` or not, when
-/// more like it are coming.
 fn ask_parts(
     conflict: &Conflict,
     ticked: bool,
@@ -204,8 +179,6 @@ fn ask_parts(
     parts
 }
 
-/// The "For all N" tick: a small box, filled with a check while ticked,
-/// and its words.
 fn for_all_tick(
     words: String,
     ticked: bool,
@@ -222,7 +195,6 @@ fn for_all_tick(
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_for_all(cx)))
 }
 
-/// A tick's small box, filled with a check while `ticked`.
 pub(super) fn tick_box(ticked: bool, colors: &Colors) -> Div {
     div()
         .flex()
@@ -243,7 +215,6 @@ pub(super) fn tick_box(ticked: bool, colors: &Colors) -> Div {
         })
 }
 
-/// A running job's line and bar.
 fn job_parts(job: &Running, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gpui::AnyElement> {
     let now = cx.background_executor().now();
     vec![
@@ -255,7 +226,6 @@ fn job_parts(job: &Running, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gp
     ]
 }
 
-/// A bar `width` wide, filled `fraction` of the way in the accent.
 fn bar(fraction: f32, width: Pixels, colors: &Colors) -> Div {
     div()
         .flex_none()
@@ -273,7 +243,6 @@ fn bar(fraction: f32, width: Pixels, colors: &Colors) -> Div {
         )
 }
 
-/// A question's line, Cancel, and its answer in red.
 fn confirm_parts(
     confirm: &Confirm,
     colors: &Colors,
@@ -298,7 +267,6 @@ fn confirm_parts(
     ]
 }
 
-/// A note's line, its Undo when it has one, and a button to close it.
 fn note_parts(note: &Note, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gpui::AnyElement> {
     let mut parts = vec![label(colors).child(note.label.clone()).into_any_element()];
     if note.undo.is_some() {
@@ -315,10 +283,6 @@ fn note_parts(note: &Note, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gpu
     parts
 }
 
-/// The island itself, centred over the bottom of the sheet, holding
-/// `parts` in a row, and when `above` holds something, that over them:
-/// the island then grows upward. It takes the pointer, so a click on it
-/// never reaches a row under it.
 fn floating(
     parts: Vec<gpui::AnyElement>,
     above: Option<gpui::AnyElement>,
@@ -372,7 +336,6 @@ fn floating(
         )
 }
 
-/// The island's words, which give way first on a narrow sheet.
 fn label(colors: &Colors) -> Div {
     div()
         .flex()
@@ -382,7 +345,6 @@ fn label(colors: &Colors) -> Div {
         .text_color(colors.text_soft)
 }
 
-/// The hairline between the actions and Clear selection.
 fn divider(colors: &Colors) -> impl IntoElement {
     div()
         .flex_none()
@@ -392,7 +354,6 @@ fn divider(colors: &Colors) -> impl IntoElement {
         .bg(colors.line)
 }
 
-/// A square button on the island, with selector `name`.
 fn square(name: impl Into<SharedString>, colors: &Colors) -> Stateful<Div> {
     let name = name.into();
     div()
@@ -409,7 +370,6 @@ fn square(name: impl Into<SharedString>, colors: &Colors) -> Stateful<Div> {
         .active(|button| button.bg(colors.press))
 }
 
-/// An icon button that sends `action`.
 fn icon_button(
     name: &'static str,
     glyph: Icon,
@@ -424,7 +384,6 @@ fn icon_button(
         })
 }
 
-/// A worded button in `tint` that sends `action`.
 fn text_button(
     name: &'static str,
     words: &'static str,

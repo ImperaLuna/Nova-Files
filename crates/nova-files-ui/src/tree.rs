@@ -1,24 +1,3 @@
-//! The sidebar's folder tree, "This computer": the folders under Home,
-//! opened and closed in place. This file holds what the tree knows and
-//! shows; asking the core is in `window/tree`, drawing in
-//! `view/sidebar/tree`.
-//!
-//! The tree knows a folder's subfolders once it has been listed. It
-//! lists a folder when it is opened, again each time it is opened (so a
-//! folder made since shows), and whenever the window's own listing of it
-//! arrives. Until a folder is listed it is drawn with its arrow, since it
-//! may hold folders; once listed with none, the arrow goes, until its
-//! parent is opened again: then what it holds is unknown again, so a
-//! folder made in it since can be found. Folders whose
-//! names start with a dot stay out, as hidden files do.
-//!
-//! The tree opens itself down to the folder you're in: each folder
-//! between Home and it opens, so its row shows. It never closes what the
-//! user opened.
-//!
-//! Only one listing is asked for at a time (the core cancels a client's
-//! older listing for a newer one): the others wait in order.
-
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::f32::consts::FRAC_PI_2;
@@ -31,42 +10,32 @@ use nova_files_api::{Entry, EntryKind};
 
 use crate::places::folder_name;
 
-/// A hidden file's name starts with this byte.
 const HIDDEN: u8 = b'.';
 
-/// The folder tree under one root.
 #[derive(Debug)]
 pub struct FolderTree {
     root: PathBuf,
-    /// The folders opened, the root among them once opened.
     open: HashSet<PathBuf>,
-    /// The subfolders of each folder listed so far, in order.
     children: HashMap<PathBuf, Vec<OsString>>,
-    /// The folders to list, oldest first; none twice.
     waiting: VecDeque<PathBuf>,
 }
 
-/// Whether a row's folder can be opened, and whether it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Toggle {
-    /// Listed with no subfolders.
     None,
     Closed,
     Open,
 }
 
-/// One row of the tree as drawn.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TreeRow {
     pub path: PathBuf,
     pub name: SharedString,
-    /// How deep under the root: the root is 0.
     pub depth: usize,
     pub toggle: Toggle,
 }
 
 impl Toggle {
-    /// How far its arrow turns, in radians: down when open.
     pub const fn angle(self) -> f32 {
         match self {
             Self::Open => FRAC_PI_2,
@@ -76,20 +45,16 @@ impl Toggle {
 }
 
 impl TreeRow {
-    /// Whether it is the tree's root, Home.
     pub const fn is_root(&self) -> bool {
         self.depth == 0
     }
 
-    /// Whether the window is in its folder: `here` is the folder on
-    /// screen, if any.
     pub fn is_here(&self, here: Option<&Path>) -> bool {
         here == Some(self.path.as_path())
     }
 }
 
 impl FolderTree {
-    /// A tree under `root`, closed.
     pub fn new(root: PathBuf) -> Self {
         Self {
             root,
@@ -99,8 +64,6 @@ impl FolderTree {
         }
     }
 
-    /// The rows as drawn, from the root down, each open folder followed
-    /// by its subfolders.
     pub fn rows(&self) -> Vec<TreeRow> {
         let mut rows = Vec::new();
         self.push_rows(&self.root, folder_name(&self.root), 0, &mut rows);
@@ -130,9 +93,6 @@ impl FolderTree {
         }
     }
 
-    /// Opens `path` if closed, closes it if open. An opened folder is
-    /// listed again, and its subfolders known to hold none are unknown
-    /// again, and closed, so their arrow lists them when pressed.
     pub fn toggle(&mut self, path: &Path) {
         if !self.open.remove(path) {
             self.open.insert(path.to_owned());
@@ -150,9 +110,6 @@ impl FolderTree {
         }
     }
 
-    /// Opens each folder from the root down to the one holding `here`, so
-    /// `here`'s row shows; lists those not listed yet. Nothing when `here`
-    /// isn't under the root.
     pub fn reveal(&mut self, here: &Path) {
         let Ok(inside) = here.strip_prefix(&self.root) else {
             return;
@@ -171,7 +128,6 @@ impl FolderTree {
         }
     }
 
-    /// Opens `folder`, listing it unless it is listed already.
     fn open_listed(&mut self, folder: &Path) {
         if self.open.insert(folder.to_owned()) && !self.children.contains_key(folder) {
             self.wait_for(folder);
@@ -184,12 +140,10 @@ impl FolderTree {
         }
     }
 
-    /// The next folder to list, taken off the queue.
     pub fn next_to_list(&mut self) -> Option<PathBuf> {
         self.waiting.pop_front()
     }
 
-    /// Takes `entries`, a listing of `folder`, as its subfolders.
     pub fn listed(&mut self, folder: &Path, entries: &[Entry]) {
         let mut names: Vec<OsString> = entries
             .iter()
@@ -201,14 +155,11 @@ impl FolderTree {
         self.children.insert(folder.to_owned(), names);
     }
 
-    /// `folder` couldn't be listed: it shows no subfolders.
     pub fn unreadable(&mut self, folder: &Path) {
         self.children.insert(folder.to_owned(), Vec::new());
     }
 }
 
-/// A to Z as a person reads it, ignoring case; names that read the same
-/// by their bytes.
 fn by_name(a: &OsStr, b: &OsStr) -> Ordering {
     let read = |name: &OsStr| name.to_string_lossy().to_lowercase();
     read(a).cmp(&read(b)).then_with(|| a.cmp(b))
@@ -377,13 +328,11 @@ mod tests {
         tree.listed(a, &entries(&["x"], &[]));
         tree.listed(Path::new("/home/me/b"), &entries(&[], &[]));
         tree.listed(Path::new("/home/me/a/x"), &entries(&[], &[]));
-        // Opening a again forgets x's emptiness, not b's.
         tree.toggle(a);
         tree.toggle(a);
         let shown = shown(&tree);
         assert_eq!(shown[2], ("x".to_owned(), 2, Toggle::Closed));
         assert_eq!(shown[3], ("b".to_owned(), 1, Toggle::None));
-        // Opening the root again keeps what a holds.
         tree.toggle(root);
         tree.toggle(root);
         assert_eq!(tree.rows().len(), 4);

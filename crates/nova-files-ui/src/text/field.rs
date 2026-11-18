@@ -1,6 +1,3 @@
-//! The text field entity: keys, mouse, clipboard and input methods over a
-//! [`TextEdit`], drawn by [`TextElement`].
-
 use std::ops::Range;
 
 use gpui::{
@@ -19,33 +16,21 @@ use super::{
 };
 use crate::theme::{size, text as type_scale};
 
-/// The clicks in a double-click.
 const DOUBLE_CLICK: usize = 2;
 
-/// What a field tells its owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextFieldEvent {
-    /// The user changed the text.
     Changed,
-    /// Enter.
     Submitted,
-    /// Escape.
     Cancelled,
 }
 
-/// A one-line text field: the app's one text input, for the picker's name
-/// box and later search, rename and the path bar. It knows nothing of what
-/// its text means; its owner listens for [`TextFieldEvent`]s.
 pub struct TextField {
     focus: FocusHandle,
     pub(super) edit: TextEdit,
     pub(super) placeholder: SharedString,
-    /// The text's line as last drawn and where, for mouse positions and the
-    /// input method's caret box; none while the field is empty.
     pub(super) layout: Option<(ShapedLine, Bounds<Pixels>)>,
-    /// How far the line is scrolled left so the caret stays in view.
     pub(super) scroll: Pixels,
-    /// A mouse button is down and dragging selects.
     selecting: bool,
 }
 
@@ -61,7 +46,6 @@ impl TextField {
         }
     }
 
-    /// Shown, dimmed, while the field is empty.
     #[must_use]
     pub fn with_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = placeholder.into();
@@ -72,26 +56,20 @@ impl TextField {
         self.edit.text()
     }
 
-    /// The selection, in bytes; empty when it is just the caret.
     pub fn selection(&self) -> Range<usize> {
         self.edit.selection()
     }
 
-    /// Replaces the text, caret at its end. Not a user change, so no
-    /// [`TextFieldEvent::Changed`].
     pub fn set_text(&mut self, text: &str, cx: &mut Context<Self>) {
         self.edit = TextEdit::new(text);
         cx.notify();
     }
 
-    /// Selects `range` (bytes), kept inside the text.
     pub fn select_range(&mut self, range: Range<usize>, cx: &mut Context<Self>) {
         self.edit.select_range(range);
         cx.notify();
     }
 
-    /// Runs `change`, which says whether it changed the text, and tells
-    /// the owner when it did.
     fn edit(&mut self, cx: &mut Context<Self>, change: impl FnOnce(&mut TextEdit) -> bool) {
         if change(&mut self.edit) {
             cx.emit(TextFieldEvent::Changed);
@@ -99,7 +77,6 @@ impl TextField {
         cx.notify();
     }
 
-    /// Runs `step` on the selection alone.
     fn select(&mut self, cx: &mut Context<Self>, step: impl FnOnce(&mut TextEdit)) {
         step(&mut self.edit);
         cx.notify();
@@ -192,7 +169,6 @@ impl TextField {
         let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
             return;
         };
-        // One line: each line break becomes a space, and trailing ones go.
         let text = text
             .trim_end_matches(['\r', '\n'])
             .replace("\r\n", " ")
@@ -227,7 +203,6 @@ impl TextField {
         self.selecting = false;
     }
 
-    /// The text offset nearest the window point `position`.
     fn offset_at(&self, position: Point<Pixels>) -> usize {
         let Some((line, bounds)) = &self.layout else {
             return self.edit.text().len();
@@ -291,8 +266,8 @@ impl Render for TextField {
     }
 }
 
-/// How an input method reads and writes the text. GPUI counts in UTF-16
-/// units here; the edit counts in bytes.
+// GPUI's input handler counts UTF-16 units; the field counts bytes.
+// https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 impl EntityInputHandler for TextField {
     fn text_for_range(
         &mut self,
@@ -348,7 +323,6 @@ impl EntityInputHandler for TextField {
         cx: &mut Context<Self>,
     ) {
         let range = range.map(|range| self.edit.range_from_utf16(&range));
-        // `selected` counts within `text`.
         let selected = selected.map(|selected| {
             offset_from_utf16(text, selected.start)..offset_from_utf16(text, selected.end)
         });

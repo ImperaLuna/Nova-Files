@@ -1,18 +1,3 @@
-//! The Places section: the Start page first, then the standard folders
-//! and the pinned ones, as `places` lists them, then Projects and Games,
-//! then the trash with how many items it holds. Each listed folder's row
-//! carries the debug selector `place-<n>`, counted from 0 in the order
-//! shown; the others carry `place-start`, `place-projects`,
-//! `place-games` and `place-trash`. A picker shows only
-//! the folders: it has no Start page, Games and Projects aren't
-//! folders, and its trash isn't one to pick from. In a main window, the + (`pin`) on
-//! the head, or at the end of the row in a narrow window, picks a folder
-//! to pin, and right-click on a pinned folder opens
-//! its menu (see `window/pin`). Files dropped on a folder's row go into
-//! it, on the trash's to the trash, and folders dropped on Projects or
-//! Games are added to it (see `drop`); anything dragged and
-//! held over a row opens it.
-
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
     ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _, div,
@@ -31,7 +16,6 @@ use crate::window::{Aim, HoverOpens, MainWindow};
 const LABEL: &str = "Places";
 
 impl MainWindow {
-    /// The Places section; without its head when `narrow`.
     pub(super) fn places_section(&self, narrow: bool, cx: &Context<Self>) -> Div {
         let colors = Colors::of(cx);
         let here = self.folder();
@@ -93,8 +77,6 @@ impl MainWindow {
             .children(gathered)
             .children(trash);
         if narrow {
-            // No head to carry the +: it ends the row, so pinning stays
-            // within reach.
             return list.items_center().children(pin);
         }
         div()
@@ -108,7 +90,6 @@ impl MainWindow {
             .child(list.flex_col())
     }
 
-    /// The Start page's row, first in Places.
     fn start_row(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
         row(
             Row {
@@ -132,7 +113,6 @@ impl MainWindow {
         })
     }
 
-    /// The row of `place`, Projects or Games, before the trash's.
     fn gathered_row(
         &self,
         place: Gathering,
@@ -166,7 +146,6 @@ impl MainWindow {
         .map(|row| self.drop_target(row, Aim::gathered(place), cx))
     }
 
-    /// The trash's row, last in Places, with how many items it holds.
     fn trash_row(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
         let count = self
             .trash_count()

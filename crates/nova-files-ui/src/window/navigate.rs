@@ -1,14 +1,3 @@
-//! Going places: a new folder, Back, Forward, Up and into an entry. Each
-//! folder asks the core for a listing with a new id, in the window's
-//! order; the window moves once that id answers (see `events`). Back or
-//! Forward to the Start page or a Properties page arrives at once (see
-//! `start` and `properties`); Up on a Properties page goes to the folder
-//! that holds what it shows. Changing the
-//! order reads the folder again, except while a search's files are on
-//! screen, which stay best first. Going anywhere ends a search (see
-//! `search`) and closes the path bar's menu. Paths are tidied by their
-//! text alone, as a user reads them.
-
 use std::path::{Component, Path, PathBuf};
 
 use gpui::Context;
@@ -18,15 +7,12 @@ use super::MainWindow;
 use crate::location::Location;
 
 impl MainWindow {
-    /// Goes to `folder`, a new place in the history: asks the core for it,
-    /// and the window moves there once it answers.
     pub fn open(&mut self, folder: &Path) {
         self.forget_drive_to_open();
         self.history.leave();
         self.request(folder);
     }
 
-    /// Goes back to the place before this one, if there is one.
     pub fn go_back(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.back() {
             self.forget_drive_to_open();
@@ -34,7 +20,6 @@ impl MainWindow {
         }
     }
 
-    /// Goes forward again after Back, if there is somewhere to go.
     pub fn go_forward(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.forward() {
             self.forget_drive_to_open();
@@ -42,7 +27,6 @@ impl MainWindow {
         }
     }
 
-    /// Goes to `place` without starting a new step in the history.
     fn go_to(&mut self, place: &Location, cx: &mut Context<Self>) {
         match place {
             Location::Start => self.arrive_at_start(cx),
@@ -56,33 +40,25 @@ impl MainWindow {
         }
     }
 
-    /// Where Back goes, if anywhere.
     pub fn back_target(&self) -> Option<&Location> {
         self.history.back_target()
     }
 
-    /// Where Forward goes, if anywhere.
     pub fn forward_target(&self) -> Option<&Location> {
         self.history.forward_target()
     }
 
-    /// Asks the core for `folder`, leaving the history as it is: the
-    /// window moves there once it answers, ending a search under way.
-    /// Whether the ask was sent.
     pub(super) fn request(&mut self, folder: &Path) -> bool {
         let path = tidy(folder);
         let place = Location::Folder(path.clone());
         self.ask_listing(place, |id, order| Command::ListFolder { id, path, order })
     }
 
-    /// Sends the core `command`, made with a new listing id and the
-    /// window's order, to list `place`. Whether it was sent.
     pub(super) fn ask_listing(
         &mut self,
         place: Location,
         command: impl FnOnce(ListingId, Order) -> Command,
     ) -> bool {
-        // Only a fallback's own ask marks it, after this returns.
         self.falling_back = false;
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
@@ -95,8 +71,6 @@ impl MainWindow {
         if sent {
             self.stop_measuring();
             self.search.folder_asked();
-            // Going anywhere closes a path bar menu, and its connection
-            // with it, so the core stops reading that menu's folder.
             self.close_path_menu();
             self.asked = Some(id);
             self.asked_order = order;
@@ -105,19 +79,11 @@ impl MainWindow {
         sent
     }
 
-    /// The order of the listing on screen. A new order shows once its
-    /// listing arrives.
     pub const fn shown_order(&self) -> Order {
         self.shown_order
     }
 
-    /// Orders the list by `key`: the other way round when it already is,
-    /// otherwise A to Z by name and newest or largest first by the
-    /// others. The place asked for last (the one on screen, or the one
-    /// still on its way) is read again in the new order; the window keeps
-    /// its place in the history.
     pub fn sort_by(&mut self, key: SortKey) {
-        // A search's files stay best first.
         if self.searching() {
             return;
         }
@@ -131,14 +97,12 @@ impl MainWindow {
         }
     }
 
-    /// Goes into the entry `id` of the folder on screen, if it is a folder.
     pub fn open_entry(&mut self, id: EntryId) {
         if let Some(folder) = self.folder_of_entry(id) {
             self.open(&folder);
         }
     }
 
-    /// The path of entry `id` on screen, if it is a folder.
     pub(super) fn folder_of_entry(&self, id: EntryId) -> Option<PathBuf> {
         let listing = self.listing.as_ref()?;
         let entry = usize::try_from(id.0)
@@ -147,8 +111,6 @@ impl MainWindow {
         (entry.kind == EntryKind::Folder).then(|| listing.path_of(entry))
     }
 
-    /// The folder Up goes to, if there is one; on a Properties page, the
-    /// folder that holds what it shows.
     pub fn parent(&self) -> Option<PathBuf> {
         if self.properties_paths().is_some() {
             return self.properties_folder().map(Path::to_path_buf);
@@ -156,7 +118,6 @@ impl MainWindow {
         self.folder()?.parent().map(Path::to_path_buf)
     }
 
-    /// Goes to the parent of the folder on screen.
     pub fn go_up(&mut self) {
         if let Some(parent) = self.parent() {
             self.open(&parent);
@@ -164,7 +125,6 @@ impl MainWindow {
     }
 }
 
-/// The order after a click on `key`'s column head, from `current`.
 fn next_order(current: Order, key: SortKey) -> Order {
     let descending = if current.key == key {
         !current.descending
@@ -174,8 +134,6 @@ fn next_order(current: Order, key: SortKey) -> Order {
     Order { key, descending }
 }
 
-/// `path` with `.` dropped and each `..` taking off the part before it,
-/// worked out from the text alone. `..` at the root stays at the root.
 pub fn tidy(path: &Path) -> PathBuf {
     let mut tidy = PathBuf::new();
     for part in path.components() {
@@ -185,9 +143,7 @@ pub fn tidy(path: &Path) -> PathBuf {
                 Some(Component::Normal(_)) => {
                     tidy.pop();
                 }
-                // `..` at the root stays at the root.
                 Some(Component::RootDir | Component::Prefix(_)) => {}
-                // Nothing left to take off: the `..` stays.
                 Some(Component::ParentDir | Component::CurDir) | None => tidy.push(part),
             },
             Component::RootDir | Component::Prefix(_) | Component::Normal(_) => tidy.push(part),
@@ -200,7 +156,6 @@ pub fn tidy(path: &Path) -> PathBuf {
     }
 }
 
-/// The relative path that names the folder it is relative to.
 const CURRENT_FOLDER: &str = ".";
 
 #[cfg(test)]
@@ -242,7 +197,6 @@ mod tests {
         assert_eq!(tidy(Path::new("/a/./b/../c")), PathBuf::from("/a/c"));
         assert_eq!(tidy(Path::new("/..")), PathBuf::from("/"));
         assert_eq!(tidy(Path::new("/")), PathBuf::from("/"));
-        // A relative path keeps the `..` it can't take off.
         assert_eq!(tidy(Path::new("..")), PathBuf::from(".."));
         assert_eq!(tidy(Path::new("../../child")), PathBuf::from("../../child"));
         assert_eq!(tidy(Path::new("a/../../b")), PathBuf::from("../b"));

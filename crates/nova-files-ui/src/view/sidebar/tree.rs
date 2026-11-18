@@ -1,13 +1,3 @@
-//! The "This computer" section: the folder tree under Home (see `tree`),
-//! under Places and scrolling with them. Each row is indented by its
-//! depth, with a hairline down each level it sits in. The arrow opens and
-//! closes a folder in place; a click elsewhere on the row goes there, and
-//! files dropped on it go into it (see `drop`). The
-//! folder you're in has its name strong and its icon orange. Rows carry
-//! the debug selectors `tree-<n>`, their arrows `tree-toggle-<n>` and
-//! their hairlines `tree-guide-<n>-<level>`,
-//! counted from 0 down the tree.
-
 use std::path::PathBuf;
 
 use gpui::{
@@ -27,7 +17,6 @@ use crate::window::{Aim, HoverOpens, MainWindow};
 const LABEL: &str = "This computer";
 
 impl MainWindow {
-    /// The tree section, with its head.
     pub(super) fn tree_section(&self, cx: &Context<Self>) -> Div {
         let colors = Colors::of(cx);
         let rows = self
@@ -89,7 +78,6 @@ impl MainWindow {
             .w_full()
             .h(size::TREE_ROW_HEIGHT)
             .gap(size::TREE_ROW_GAP)
-            // A clear drop edge (see `drop`), inside the padding.
             .pl(inside_edge(indent(depth) + size::TREE_PAD_LEFT))
             .pr(inside_edge(size::TREE_PAD_RIGHT))
             .rounded(radius::ROW)
@@ -110,8 +98,6 @@ impl MainWindow {
     }
 }
 
-/// The arrow before a folder's icon: a button while it can open or close,
-/// an empty slot once it has no subfolders, so names line up.
 fn tree_toggle(
     index: usize,
     path: PathBuf,
@@ -146,16 +132,11 @@ fn tree_toggle(
         )
 }
 
-/// How far in a row at `depth` starts.
 fn indent(depth: usize) -> Pixels {
-    // A tree deeper than this is far off the sidebar's edge anyway.
     let depth = u16::try_from(depth).unwrap_or(u16::MAX);
     size::TREE_INDENT * f32::from(depth)
 }
 
-/// Where the hairline for `level` runs: at the start of that level's
-/// indent, a little before the rows inside it.
 fn guide_left(level: usize) -> Pixels {
-    // Placed inside the row's clear drop edge, so it gives that back.
     indent(level) - size::TREE_GUIDE_INSET - size::DROP_EDGE
 }

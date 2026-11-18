@@ -1,31 +1,3 @@
-//! The sheet the folder's entries sit on: the column heads, then the rows;
-//! on Start, the Start page instead (see `start`), and on a Properties
-//! page, that page (see `properties`).
-//!
-//! The rows are a `uniform_list`, which builds only the rows on screen, so
-//! a folder of any size costs the same to draw. Each row is an icon and a
-//! name, then Modified and Size; those two stay empty until the core has
-//! read that entry's details. Selected rows are grey, and selected rows
-//! that touch join into one block: a row squares the corners it shares
-//! with a selected neighbour. The row the keyboard is on has a ring (see
-//! `selecting`); a rename puts its text field where the name was (see
-//! `window::renaming`). Middle-click on a folder opens it in a new tab.
-//! A click on a column head orders the list by that column;
-//! folders always come first (see `navigate` and the core's `order`). A
-//! search's files stay best first, so their heads do nothing; they get a
-//! Folder column, and the part of each name that matched is marked. The
-//! count and the empty look are the search's (see `search`). The
-//! trash adds a Was in column, and says so when it is empty (see
-//! `window::trash`). A hidden entry's name and icon are dimmed (see
-//! `window::hidden`). A right-click on a row or on the empty space below
-//! opens its menu (see `window::context_menu`). A name can be dragged; a
-//! folder row takes files dropped on it, and the rest of the list takes
-//! them into the folder on screen (see `drop` and `window::dragging`).
-//!
-//! Every row spans the list's full width: `uniform_list` lays each row out
-//! on its own, and a row sized to its content would push its columns along
-//! by the width of its name.
-
 use std::path::Path;
 
 use gpui::{
@@ -68,7 +40,6 @@ impl MainWindow {
             .child(sheet_corner(&colors))
             .map(|sheet| {
                 if self.is_on_start() {
-                    // The page runs to the sheet's edges, glow and all.
                     sheet.px_0().child(self.start_page(cx))
                 } else if let Some(page) = self.properties_page() {
                     sheet
@@ -86,8 +57,6 @@ impl MainWindow {
             })
     }
 
-    /// The entries, where a press that isn't on a name can drag a box
-    /// (see `band`).
     fn entries_area(&self, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         div()
@@ -144,7 +113,6 @@ impl MainWindow {
         self.details(grid, cx)
     }
 
-    /// Details: a row each, laid out as `grid`.
     fn details(&self, grid: Grid, cx: &Context<Self>) -> AnyElement {
         let count = self
             .listing
@@ -225,10 +193,6 @@ impl MainWindow {
 }
 
 impl MainWindow {
-    /// The `index`th entry's icon and name, with the parts of the name in
-    /// `marks` marked, draggable as `row` outside a picker and the trash;
-    /// its rename field in place of the name while it is renamed. A hidden
-    /// entry is dimmed.
     fn name_cell(
         &self,
         entry: &Entry,
@@ -259,7 +223,6 @@ impl MainWindow {
             ))
     }
 
-    /// "Empty" in the middle of an empty trash.
     fn empty_trash(&self, colors: &Colors) -> Option<impl IntoElement> {
         let empty = self
             .listing
@@ -282,8 +245,6 @@ impl MainWindow {
     }
 }
 
-/// Takes Ctrl+scroll over the entries before the list scrolls, for the
-/// icons' size (see `window::views`). It draws nothing.
 fn ctrl_scroll(cx: &Context<MainWindow>) -> impl IntoElement {
     let view = cx.entity().downgrade();
     canvas(
@@ -306,9 +267,6 @@ fn ctrl_scroll(cx: &Context<MainWindow>) -> impl IntoElement {
     .inset_0()
 }
 
-/// The sheet's rounded corner where the sidebar and bar meet. The sheet
-/// itself is the window's fill (see `view`), so only this corner paints
-/// the window's color behind a rounded patch of the sheet's.
 fn sheet_corner(colors: &Colors) -> impl IntoElement {
     div()
         .absolute()
@@ -319,8 +277,6 @@ fn sheet_corner(colors: &Colors) -> impl IntoElement {
         .child(div().size_full().rounded_tl(radius::SHEET).bg(colors.sheet))
 }
 
-/// The rename field over an entry's name, its text where the name was.
-/// A press in it stays in it: it neither clicks the row nor starts a box.
 pub(super) fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> Div {
     div()
         .debug_selector(|| "rename".to_owned())
@@ -340,11 +296,6 @@ pub(super) fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &C
         .child(field)
 }
 
-/// Row `index`'s box, as wide as the list, highlighted under the pointer,
-/// with only the corners `corners` keeps rounded. A right-click on it
-/// opens its entry's menu (see `window::context_menu`). Every row keeps
-/// the clear edge a folder row lights up as a drop target (see `drop`),
-/// so all rows line up.
 fn entry_row(
     index: usize,
     entry: (ListingId, EntryId),
@@ -380,9 +331,6 @@ fn entry_row(
 }
 
 impl MainWindow {
-    /// Where files dropped on the list but not on a folder go: the
-    /// folder on screen; nowhere on a search's files, in the trash, or in
-    /// Games or Projects.
     pub fn list_drop_folder(&self) -> Option<&Path> {
         if self.searching() || self.trash_open() || self.gathered_shown().is_some() {
             return None;
@@ -390,9 +338,6 @@ impl MainWindow {
         Some(&self.listing.as_ref()?.path)
     }
 
-    /// The cell between Name and Modified: where the `index`th entry was
-    /// in the trash, a game's library, or the folder of a search's file
-    /// or a project; none in a folder.
     fn folder_cell(
         &self,
         listing: &Listing,
@@ -416,11 +361,6 @@ impl MainWindow {
             .then(|| self.folder_link(listing.path_of(entry), index, cx))
     }
 
-    /// The heads above the entries, lined up with [`cells`]. A click on
-    /// one orders the list by it (see `navigate`); the one in use is
-    /// bright and carries an arrow for its direction. A search's files
-    /// stay best first: none is in use and a click does nothing, and they
-    /// add the Folder head, as Projects does; Games adds Library.
     fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let order = (!self.searching()).then(|| self.shown_order());
         let folder = match self.gathered_shown() {
@@ -433,7 +373,6 @@ impl MainWindow {
     }
 }
 
-/// The Folder column's head, which orders nothing.
 fn folder_head() -> AnyElement {
     div()
         .debug_selector(|| FOLDER_HEADER_SELECTOR.to_owned())
@@ -441,7 +380,6 @@ fn folder_head() -> AnyElement {
         .into_any_element()
 }
 
-/// Games' Library head, which orders nothing.
 fn library_head() -> AnyElement {
     div()
         .debug_selector(|| "head-library".to_owned())
@@ -449,7 +387,6 @@ fn library_head() -> AnyElement {
         .into_any_element()
 }
 
-/// The trash's Was in head, which orders nothing.
 fn was_in_head() -> AnyElement {
     div()
         .debug_selector(|| "head-was-in".to_owned())
@@ -457,8 +394,6 @@ fn was_in_head() -> AnyElement {
         .into_any_element()
 }
 
-/// The heads, ordered by `order` (none in use without one), with the
-/// `folder` head between Name and Modified when there is one.
 fn column_heads(
     order: Option<Order>,
     folder: Option<AnyElement>,
@@ -496,7 +431,6 @@ fn column_heads(
         )
 }
 
-/// The head of `key`'s column, with selector `head-<label>`.
 fn column_head(
     key: SortKey,
     label: &'static str,

@@ -1,18 +1,3 @@
-//! The Properties page's Access: who may read and change what it shows,
-//! and changing that.
-//!
-//! The permission bits read as one level each for the owner, the group
-//! and everyone else: Read and write, Read only, or No access, from the
-//! read and write bits. Several items show a level where they all have
-//! the same one. Choosing a level starts one of the core's `ChangeAccess`
-//! jobs on the page's paths; a folder gets its search bit along with
-//! read, so a folder that can be read can also be opened. "Run as a
-//! program" turns a file's run bits on for whoever may read it, or off for
-//! all. "Also everything inside" makes the next changes reach what the
-//! folders hold too. When the job ends the page asks for its paths again,
-//! so it shows what the disk now says. A page whose paths the user can't
-//! change, or on a drive mounted read-only, offers no changes.
-
 use std::sync::Arc;
 
 use gpui::{Context, Pixels, Point};
@@ -22,26 +7,18 @@ use super::MainWindow;
 use crate::assets::Icon;
 use crate::menu::{Look, MenuAction, MenuItem};
 
-/// Read and write, for one of owner, group and everyone else, and the
-/// bits that go together.
 const READ: u32 = 0o4;
 const WRITE: u32 = 0o2;
 const READ_WRITE: u32 = 0o6;
 const READ_RUN: u32 = 0o5;
 const EVERY_BIT: u32 = 0o7;
-/// The run bit of all three.
 const RUN_ALL: u32 = 0o111;
-/// The read bits of all three, and how far each run bit sits after its
-/// read bit.
 const READ_ALL: u32 = 0o444;
 const READ_TO_RUN: u32 = 2;
-/// The bits each of owner, group and everyone else has.
 const CLASS_BITS: u32 = 3;
-/// Where the group's and the owner's bits start.
 const GROUP_SHIFT: u32 = CLASS_BITS;
 const OWNER_SHIFT: u32 = GROUP_SHIFT + CLASS_BITS;
 
-/// Whose access a row of the card shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Who {
     Owner,
@@ -49,7 +26,6 @@ pub enum Who {
     Others,
 }
 
-/// How much one of them may do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
     ReadWrite,
@@ -60,7 +36,6 @@ pub enum Level {
 impl Who {
     pub const ALL: [Self; 3] = [Self::Owner, Self::Group, Self::Others];
 
-    /// How far its bits sit from the lowest.
     const fn shift(self) -> u32 {
         match self {
             Self::Owner => OWNER_SHIFT,
@@ -69,7 +44,6 @@ impl Who {
         }
     }
 
-    /// Its level in `mode`.
     pub const fn level(self, mode: u32) -> Level {
         let bits = mode >> self.shift();
         if bits & READ == 0 {
@@ -81,7 +55,6 @@ impl Who {
         }
     }
 
-    /// What giving it `level` does to files and to folders.
     pub const fn change_to(self, level: Level) -> (ModeChange, ModeChange) {
         let shift = self.shift();
         match level {
@@ -136,13 +109,10 @@ impl Level {
     }
 }
 
-/// Whether a file with `mode` runs as a program: anyone may run it.
 pub const fn runs(mode: u32) -> bool {
     mode & RUN_ALL != 0
 }
 
-/// The change that makes files run as programs for whoever may read them,
-/// given `mode`, or for none of them.
 pub const fn run_change(run: bool, mode: u32) -> ModeChange {
     if run {
         ModeChange {
@@ -157,7 +127,6 @@ pub const fn run_change(run: bool, mode: u32) -> ModeChange {
     }
 }
 
-/// The level `who` has on every item of `read`, when they share one.
 pub fn shared_level(read: &[Arc<Properties>], who: Who) -> Option<Level> {
     let mut levels = read.iter().map(|one| who.level(one.mode));
     let first = levels.next()?;
@@ -165,7 +134,6 @@ pub fn shared_level(read: &[Arc<Properties>], who: Who) -> Option<Level> {
 }
 
 impl MainWindow {
-    /// Whether the user may change the access of everything on the page.
     pub fn may_change_access(&self) -> bool {
         self.properties_page().is_some_and(|page| {
             let read = page.read();
@@ -176,12 +144,10 @@ impl MainWindow {
         })
     }
 
-    /// Whether "Also everything inside" is ticked on the page on screen.
     pub fn reaches_inside(&self) -> bool {
         self.properties_page().is_some_and(|page| page.inside)
     }
 
-    /// Ticks or clears "Also everything inside".
     pub fn toggle_inside(&mut self, cx: &mut Context<Self>) {
         if self.properties_page().is_none() {
             return;
@@ -192,8 +158,6 @@ impl MainWindow {
         }
     }
 
-    /// Opens the menu of levels for `who` at `at`, a tick on the one it
-    /// has.
     pub(crate) fn open_access_menu(&mut self, who: Who, at: Point<Pixels>, cx: &mut Context<Self>) {
         if !self.may_change_access() {
             return;
@@ -215,13 +179,11 @@ impl MainWindow {
         self.open_menu(at, items, cx);
     }
 
-    /// Gives `who` `level` on everything on the page.
     pub(crate) fn set_access(&mut self, who: Who, level: Level) {
         let (files, folders) = who.change_to(level);
         self.change_access(files, folders);
     }
 
-    /// Makes the page's lone file run as a program, or stop.
     pub fn toggle_runs(&mut self) {
         let Some(mode) = self
             .properties_page()
@@ -232,8 +194,6 @@ impl MainWindow {
         self.change_access(run_change(!runs(mode), mode), ModeChange::default());
     }
 
-    /// Starts a job changing the page's paths as `files` and `folders`
-    /// say, reaching inside when the page says so.
     fn change_access(&mut self, files: ModeChange, folders: ModeChange) {
         if !self.may_change_access() {
             return;
@@ -259,7 +219,6 @@ impl MainWindow {
         });
     }
 
-    /// A job changing access ended: the page shows what the disk says now.
     pub(super) fn access_changed(&mut self) {
         if self.properties_page().is_some() {
             self.ask_properties();
@@ -271,7 +230,6 @@ impl MainWindow {
 mod tests {
     use super::*;
 
-    /// Run, for one of owner, group and everyone else.
     const RUN: u32 = 0o1;
 
     #[test]
@@ -280,7 +238,6 @@ mod tests {
         assert_eq!(Who::Owner.level(mode), Level::ReadWrite);
         assert_eq!(Who::Group.level(mode), Level::ReadOnly);
         assert_eq!(Who::Others.level(mode), Level::NoAccess);
-        // Write without read is no access.
         assert_eq!(Who::Others.level(0o002), Level::NoAccess);
     }
 

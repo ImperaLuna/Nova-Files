@@ -13,7 +13,6 @@ fn run(len: usize) -> TextRun {
     }
 }
 
-/// Each run's length and whether it is underlined.
 fn shape(runs: &[TextRun]) -> Vec<(usize, bool)> {
     runs.iter()
         .map(|run| (run.len, run.underline.is_some()))
@@ -48,7 +47,6 @@ fn a_caret_past_the_right_edge_scrolls_it_into_view() {
     let width = px(100.0);
     let scrolled = scroll(px(0.0), px(150.0), px(200.0), width);
     assert_eq!(scrolled, px(150.0) - (width - CARET_WIDTH));
-    // It stays put while the caret is in view.
     assert_eq!(scroll(scrolled, px(120.0), px(200.0), width), scrolled);
 }
 
@@ -60,7 +58,6 @@ fn a_caret_left_of_the_view_scrolls_back_to_it() {
 #[test]
 fn shorter_text_scrolls_back_to_fit() {
     let width = px(100.0);
-    // The line now ends 20 pixels past the field, the caret before that.
     let line = width - CARET_WIDTH + px(20.0);
     assert_eq!(scroll(px(90.0), px(60.0), line, width), px(20.0));
     assert_eq!(scroll(px(90.0), px(60.0), px(50.0), width), px(0.0));

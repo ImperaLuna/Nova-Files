@@ -1,28 +1,18 @@
-//! What the Modified and Size columns show for one entry: plain text
-//! worked out from its details, no disk reads.
-//!
-//! Sizes use decimal units (1 KB is 1,000 bytes), one decimal below 10.
-//! Dates are local time.
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local};
 
-/// The text of an entry's Modified and Size columns.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ColumnText {
     pub modified: String,
     pub size: String,
 }
 
-/// Decimal size units after bytes, each 1,000 times the one before.
 const SIZE_UNITS: [&str; 5] = ["KB", "MB", "GB", "TB", "PB"];
 const SIZE_STEP: f64 = 1000.0;
-/// Below this many units a size shows one decimal ("1.8 MB").
 const ONE_DECIMAL_BELOW: f64 = 10.0;
 const DATE_FORMAT: &str = "%Y-%m-%d %H:%M";
 
-/// "512 B", "1.8 MB", "640 KB".
 pub fn size(bytes: u64) -> String {
     #[expect(
         clippy::cast_precision_loss,
@@ -47,14 +37,11 @@ pub fn size(bytes: u64) -> String {
     }
 }
 
-/// The time in local time, to the minute; empty for a time too far from
-/// now to show.
 pub fn modified(time: SystemTime) -> String {
     let since_epoch = match time.duration_since(UNIX_EPOCH) {
         Ok(after) => i64::try_from(after.as_secs()).ok(),
         Err(before) => {
             let before = before.duration();
-            // Round away from the epoch, so 0.5 s before it is 1 s before.
             let secs = before.as_secs() + u64::from(before.subsec_nanos() > 0);
             i64::try_from(secs).ok().map(|secs| -secs)
         }
@@ -96,8 +83,6 @@ mod tests {
     #[test]
     fn times_before_the_epoch_round_away_from_it() {
         let before = |secs: f64| modified(UNIX_EPOCH - Duration::from_secs_f64(secs));
-        // A minute before the epoch starts a minute; a moment more is the
-        // minute before that.
         assert_eq!(before(60.5), before(61.0));
         assert_ne!(before(60.5), before(60.0));
     }

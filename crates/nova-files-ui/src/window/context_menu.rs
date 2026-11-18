@@ -1,22 +1,3 @@
-//! The right-click menus on the sheet, kept short as on the design page.
-//!
-//! On an entry: Open, Open in new tab (a folder) and Preview, Cut, Copy
-//! and Rename, then Move to Trash, then Properties; with several selected
-//! only what applies to all of them (Cut, Copy, Move to Trash, Properties). A right-click on an entry that isn't selected
-//! selects it alone first; one inside the selection keeps it. In the
-//! trash an entry offers Restore; inside a trashed folder, nothing.
-//!
-//! On empty space: New folder and Paste (only with files on the
-//! clipboard), Select all (with something to select), Details, Icons and
-//! Gallery (a tick on the view showing), then Show hidden files, which
-//! shows a tick while they show. In the trash: Empty Trash
-//! while any trash holds anything, and Select all. A search's files aren't a folder, so there
-//! only Select all is offered. The Start page and a picker have no menu.
-//!
-//! Each item sends the window action its key sends (see `menu`). The Menu
-//! key (or Shift+F10) opens the same menu from the keyboard, under the
-//! row the keyboard is on, or at the list's top for empty space.
-
 use std::path::PathBuf;
 
 use gpui::{Context, Modifiers, Pixels, Point, point};
@@ -33,7 +14,6 @@ use crate::selection::{Click, Selection};
 use crate::theme::size;
 
 impl MainWindow {
-    /// A right-click at `at` on the entry `id` of `listing`.
     pub(crate) fn entry_right_clicked(
         &mut self,
         (listing, id): (ListingId, EntryId),
@@ -54,7 +34,6 @@ impl MainWindow {
         self.open_menu_groups(at, groups, false, cx);
     }
 
-    /// A right-click at `at` on the sheet's empty space.
     pub(crate) fn space_right_clicked(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
         if self.has_menus() {
             let groups = self.space_menu(cx);
@@ -62,9 +41,6 @@ impl MainWindow {
         }
     }
 
-    /// The Menu key: the selection's menu under the row the keyboard is
-    /// on, or the empty space's menu at the list's top; its first item
-    /// marked.
     pub(crate) fn menu_key(&mut self, cx: &mut Context<Self>) {
         if !self.has_menus() {
             return;
@@ -77,19 +53,14 @@ impl MainWindow {
         self.open_menu_groups(at, groups, true, cx);
     }
 
-    /// Whether right-clicks on the sheet open a menu: a main window,
-    /// showing a folder or a search's files.
     fn has_menus(&self) -> bool {
         self.pick.is_none() && !self.is_on_start() && self.listing.is_some()
     }
 
-    /// The menu for the entries selected.
     fn entry_menu(&self) -> Vec<Vec<MenuItem>> {
         if self.trash_open() {
             return vec![vec![MenuItem::run(Icon::Undo, &RESTORE)]];
         }
-        // Inside a trashed folder nothing can be changed or put back on
-        // its own.
         if self.in_trash() {
             return Vec::new();
         }
@@ -125,7 +96,6 @@ impl MainWindow {
         ]
     }
 
-    /// The folder selected, when it is the only entry selected.
     fn lone_folder(&self) -> Option<PathBuf> {
         match self.selection()?.1[..] {
             [id] => self.folder_of_entry(id),
@@ -133,7 +103,6 @@ impl MainWindow {
         }
     }
 
-    /// One item for each view, the one showing ticked.
     fn view_items(&self) -> Vec<MenuItem> {
         let showing = self.folder_view().mode;
         [
@@ -152,7 +121,6 @@ impl MainWindow {
         .collect()
     }
 
-    /// The menu for the sheet's empty space.
     fn space_menu(&self, cx: &Context<Self>) -> Vec<Vec<MenuItem>> {
         let any = self
             .listing
@@ -160,7 +128,6 @@ impl MainWindow {
             .is_some_and(|listing| !listing.entries.is_empty());
         let select_all = any.then(|| MenuItem::run(Icon::SelectAll, &SELECT_ALL));
         if self.in_trash() {
-            // Every trash counts, not only the one listed here.
             let full = self.trash_open() && self.trash_count().is_some_and(|count| count > 0);
             let empty_trash = full.then(|| MenuItem::run(Icon::Trash, &EMPTY_TRASH));
             return vec![
@@ -197,7 +164,6 @@ impl MainWindow {
         ]
     }
 
-    /// Just under the entry the keyboard is on, kept within the list.
     fn under_cursor(&self) -> Point<Pixels> {
         let grid = self.grid();
         let state = self.scroll.0.borrow();
@@ -211,7 +177,6 @@ impl MainWindow {
         point(list.left() + grid.cell.width * column + size::ROW_PAD, y)
     }
 
-    /// The top left of the list.
     fn list_corner(&self) -> Point<Pixels> {
         let list = self.scroll.0.borrow().base_handle.bounds();
         point(list.left() + size::ROW_PAD, list.top() + size::ROW_PAD)

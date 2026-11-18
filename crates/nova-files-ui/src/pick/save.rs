@@ -1,21 +1,3 @@
-//! Saving: where a save lands, and what happens when a file is there.
-//!
-//! The folder on screen can be out of date by the time the user saves:
-//! another program may have made a file with the same name since it was
-//! listed. So before answering, the window asks the core to list the
-//! folder again, and answers only from that fresh listing. A name that is
-//! taken by then asks Replace or Keep both, with a free numbered name
-//! worked out from the same listing. Replace answers straight away, since
-//! the user chose to save over the file.
-//!
-//! A listing can leave out a hidden file (see `hidden`), so a name it
-//! shows as free is checked once more: the window asks the core what is at
-//! that path before answering, and a file there asks too.
-//!
-//! Names count as taken when they differ only in case: on a FAT drive
-//! `report.txt` is `REPORT.TXT`, and the window can't tell which file
-//! system a folder is on, so it asks rather than risk saving over a file.
-
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -28,22 +10,15 @@ use super::{Conflict, typed};
 use crate::selection::Selection;
 use crate::window::MainWindow;
 
-/// A save waiting for a fresh listing of `folder`.
 pub struct Recheck {
     folder: PathBuf,
-    /// The listing it asked for.
     pub listing: Option<ListingId>,
-    /// The name to save under, if it is still free.
     name: OsString,
-    /// For Keep both, the file it keeps: the one to ask about again.
     beside: Option<OsString>,
-    /// The look at the path a hidden name waits for, once the listing
-    /// showed nothing under it.
     pub probe: Option<PropertiesId>,
 }
 
 impl MainWindow {
-    /// Saves `name` in `folder` once a fresh listing shows it is free.
     pub fn save_new(&mut self, folder: &Path, name: OsString) {
         self.recheck(folder, name, None);
     }
@@ -62,8 +37,6 @@ impl MainWindow {
         }
     }
 
-    /// Asks Replace or Keep both about the file `name` in `folder`, with
-    /// that file selected.
     pub fn ask_over(&mut self, folder: &Path, name: OsString) {
         let names: HashSet<OsString> = self
             .listing
@@ -72,7 +45,6 @@ impl MainWindow {
             .map(|entry| folded(&entry.name))
             .collect();
         let keep_both = typed::keep_both(&name, |candidate| names.contains(&folded(candidate)));
-        // The file in the way shows as selected: that is the question.
         let there = self.listing.as_ref().and_then(|listing| {
             let entry = listing
                 .entries
@@ -96,8 +68,6 @@ impl MainWindow {
         }
     }
 
-    /// The fresh listing a save waited for is on screen: a name it has
-    /// asks Replace or Keep both; a free one is looked at once more.
     pub fn save_checked(&mut self, recheck: Recheck) {
         let name = folded(&recheck.name);
         let taken = self.listing.as_ref().is_some_and(|listing| {
@@ -114,10 +84,7 @@ impl MainWindow {
         self.probe(recheck);
     }
 
-    /// Asks the core what is at the path a free name would save to; the
-    /// save waits for the answer.
     fn probe(&mut self, mut recheck: Recheck) {
-        // One probe per listing asked, so the listing's id names it too.
         let Some(id) = recheck.listing.map(|listing| PropertiesId(listing.0)) else {
             return;
         };
@@ -132,8 +99,6 @@ impl MainWindow {
         }
     }
 
-    /// The core looked at the path of probe `id`: `missing` when nothing
-    /// is there. A save waiting on it answers, or asks about the file.
     pub fn save_probed(&mut self, id: PropertiesId, missing: bool, cx: &mut Context<Self>) {
         let Some(recheck) = self
             .pick
@@ -151,13 +116,11 @@ impl MainWindow {
         }
     }
 
-    /// Answers a save whose name is free, and closes the window.
     fn save_free(&mut self, recheck: Recheck, cx: &mut Context<Self>) {
         let Some(handle) = self.pick.as_ref().map(|pick| pick.window) else {
             return;
         };
         if self.answer(recheck.folder.join(recheck.name)) {
-            // Closed once this event is handled, outside the view's update.
             cx.defer(move |cx| {
                 handle
                     .update(cx, |_, window, _| window.remove_window())
@@ -166,7 +129,6 @@ impl MainWindow {
         }
     }
 
-    /// Replace: saves over the file that is there.
     pub fn replace(&mut self, window: &mut Window) {
         let Some(path) = self
             .pick
@@ -181,8 +143,6 @@ impl MainWindow {
         }
     }
 
-    /// Keep both: saves beside the file that is there, under the numbered
-    /// name, once a fresh listing shows that name is still free.
     pub fn keep_both(&mut self) {
         let Some(conflict) = self.pick.as_mut().and_then(|pick| pick.conflict.take()) else {
             return;
@@ -195,8 +155,6 @@ impl MainWindow {
     }
 }
 
-/// `name` as names are compared for a save: ignoring case. A name that
-/// isn't UTF-8 is compared by its bytes.
 fn folded(name: &OsStr) -> OsString {
     name.to_str()
         .map_or_else(|| name.to_owned(), |text| text.to_lowercase().into())

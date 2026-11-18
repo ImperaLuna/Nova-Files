@@ -17,7 +17,6 @@ fn nothing_typed_is_nothing() {
 fn a_plain_name_is_a_name_in_the_folder_on_screen() {
     assert_eq!(typed("notes.txt"), Typed::Name("notes.txt".to_owned()));
     assert_eq!(typed("  notes.txt "), Typed::Name("notes.txt".to_owned()));
-    // Only `~` alone or `~/` means home.
     assert_eq!(typed("~notes"), Typed::Name("~notes".to_owned()));
 }
 
@@ -40,7 +39,6 @@ fn a_path_is_tried_as_a_folder_unless_it_ends_in_a_slash() {
     assert_eq!(typed("/etc"), Typed::Path(PathBuf::from("/etc")));
     assert_eq!(typed("/etc/"), Typed::Folder(PathBuf::from("/etc")));
     assert_eq!(typed("/"), Typed::Folder(PathBuf::from("/")));
-    // Relative to the folder on screen.
     assert_eq!(
         typed("Work/plan.txt"),
         Typed::Path(PathBuf::from("/home/me/Documents/Work/plan.txt"))
@@ -58,7 +56,6 @@ fn the_stem_stops_at_the_extension() {
     assert_eq!(stem("backup.tar.gz"), 0..6);
     assert_eq!(stem("README"), 0..6);
     assert_eq!(stem(".bashrc"), 0..7);
-    // `.tar.gz` alone is all extension after a leading dot.
     assert_eq!(stem(".tar.gz"), 0..4);
 }
 
@@ -104,7 +101,6 @@ fn dots_alone_are_folders() {
         typed(" . "),
         Typed::Folder(PathBuf::from("/home/me/Documents/."))
     );
-    // A dot file is still a name.
     assert_eq!(typed("..notes"), Typed::Name("..notes".to_owned()));
 }
 

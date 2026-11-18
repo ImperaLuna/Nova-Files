@@ -1,9 +1,3 @@
-//! What kind of file an entry is, by its name, where the core hasn't said:
-//! the colored tag of the quick look's big icon, and the built-in icon of
-//! the entries the quick look and the Start page peek into. The kind comes
-//! from the name's extension alone, so it costs no disk read; a name
-//! without a known one is `Other`.
-
 use std::ffi::OsStr;
 use std::path::Path;
 
@@ -12,7 +6,6 @@ use nova_files_api::{EntryKind, IconKind};
 
 use crate::theme::Tags;
 
-/// The kinds a file icon's tag tells apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
     Image,
@@ -23,7 +16,6 @@ pub enum FileKind {
     Other,
 }
 
-/// Known extensions, lower case, and their kinds.
 const KNOWN: &[(&str, FileKind)] = &[
     ("jpg", FileKind::Image),
     ("jpeg", FileKind::Image),
@@ -78,11 +70,8 @@ const KNOWN: &[(&str, FileKind)] = &[
     ("wav", FileKind::Media),
 ];
 
-/// Media extensions that are sound; the rest of [`FileKind::Media`] is
-/// video.
 const AUDIO: [&str; 5] = ["mp3", "flac", "ogg", "opus", "wav"];
 
-/// The built-in icon of an entry called `name` of `kind`.
 pub fn icon_kind(name: &OsStr, kind: EntryKind) -> IconKind {
     if kind == EntryKind::Folder {
         return IconKind::Folder;
@@ -105,7 +94,6 @@ fn is_audio(name: &OsStr) -> bool {
 }
 
 impl FileKind {
-    /// The kind of a file called `name`.
     pub fn of(name: &OsStr) -> Self {
         let Some(extension) = Path::new(name).extension() else {
             return Self::Other;
@@ -117,7 +105,6 @@ impl FileKind {
             .map_or(Self::Other, |(_, kind)| *kind)
     }
 
-    /// The color of this kind's tag.
     pub const fn tag(self, tags: Tags) -> Rgba {
         match self {
             Self::Image => tags.image,

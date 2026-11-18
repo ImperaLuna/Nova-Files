@@ -1,13 +1,6 @@
-//! The icons' SVG sources, as drawn on the design page. Things you can
-//! open (folders, files, places) are solid two-tone shapes: the front at
-//! full strength, the back at half, so one tint draws both. Things you can
-//! do are thin line icons. GPUI draws each as a mask, so the color written
-//! here doesn't matter; only how much of it shows does.
-
-// Things: solid, two-tone.
+// GPUI draws an SVG as a mask, so only its alpha matters.
+// https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 pub const FOLDER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".5" d="M2.5 7A2.5 2.5 0 0 1 5 4.5h3.6c.75 0 1.45.33 1.93.9l.92 1.1H19A2.5 2.5 0 0 1 21.5 9v3h-19z"/><rect x="2.5" y="8.6" width="19" height="11.4" rx="2.8"/></svg>"##;
-/// A file's shape with `$mark` drawn over it, so every file icon shares
-/// one outline.
 macro_rules! file_with {
     ($mark:literal) => {
         concat!(
@@ -19,29 +12,21 @@ macro_rules! file_with {
 }
 
 pub const FILE: &str = file_with!("");
-/// The built-in icons for files no icon theme draws, one per kind: the
-/// file shape with a mark at full strength.
-/// A file of text: lines.
 pub const FILE_TEXT: &str = file_with!(
     r##"<rect x="7.2" y="11.2" width="9.2" height="1.7" rx=".85"/><rect x="7.2" y="14.4" width="9.2" height="1.7" rx=".85"/><rect x="7.2" y="17.6" width="5.6" height="1.7" rx=".85"/>"##
 );
-/// A picture: a sun over a hill.
 pub const FILE_PICTURE: &str = file_with!(
     r##"<circle cx="9.2" cy="12.6" r="1.7"/><path d="M6.6 19.1 10 15.2l2.1 2.2 2-2.1 3 3.8z"/>"##
 );
-/// A video: a play mark.
 pub const FILE_VIDEO: &str = file_with!(
     r##"<path d="M9.4 11.6v6.8c0 .5.5.8.9.5l5.2-3.4a.6.6 0 0 0 0-1l-5.2-3.4a.6.6 0 0 0-.9.5z"/>"##
 );
-/// A sound: a note.
 pub const FILE_AUDIO: &str = file_with!(
     r##"<path d="M11.4 11.4 16.4 10v6.8h-1.6v-4.6l-1.8.5v5.2h-1.6z"/><circle cx="10.4" cy="18" r="1.9"/><circle cx="14.8" cy="16.8" r="1.9"/>"##
 );
-/// An archive: a zip down the middle and its pull.
 pub const FILE_ARCHIVE: &str = file_with!(
     r##"<rect x="9.9" y="3" width="1.9" height="1.6" rx=".5"/><rect x="11.6" y="4.8" width="1.9" height="1.6" rx=".5"/><rect x="9.9" y="6.6" width="1.9" height="1.6" rx=".5"/><rect x="11.6" y="8.4" width="1.9" height="1.6" rx=".5"/><rect x="9.9" y="10.2" width="1.9" height="1.6" rx=".5"/><rect x="9.7" y="12.4" width="4" height="5.4" rx="1.2"/>"##
 );
-/// A program: a prompt.
 pub const FILE_PROGRAM: &str = file_with!(
     r##"<path fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="m7.6 12.3 2.8 2.6-2.8 2.6m4.6.4h4.2"/>"##
 );
@@ -55,16 +40,12 @@ pub const VIDEOS: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 pub const TRASH: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".5" d="M5.4 9h13.2l-.9 10.1a2.6 2.6 0 0 1-2.6 2.4H8.9a2.6 2.6 0 0 1-2.6-2.4z"/><rect x="3.5" y="5.2" width="17" height="2.5" rx="1.25"/><path d="M9 5.4V4.1a1.6 1.6 0 0 1 1.6-1.6h2.8A1.6 1.6 0 0 1 15 4.1v1.3z"/></svg>"##;
 pub const PROJECTS: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><rect opacity=".5" x="2.5" y="4" width="19" height="16" rx="3"/><path fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9.6 9.4 7 12l2.6 2.6m4.8-5.2L17 12l-2.6 2.6"/></svg>"##;
 pub const GAMES: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".5" d="M7.6 6.5h8.8a5.4 5.4 0 0 1 5.3 4.4l.9 4.9a2.6 2.6 0 0 1-4.6 2.1L16.4 16H7.6L6 17.9a2.6 2.6 0 0 1-4.6-2.1l.9-4.9a5.4 5.4 0 0 1 5.3-4.4z"/><path d="M7 9h1.8v1.8h1.8v1.8H8.8v1.8H7v-1.8H5.2v-1.8H7z"/><circle cx="14.9" cy="12.9" r="1.2"/><circle cx="17.8" cy="10.5" r="1.2"/></svg>"##;
-/// The Start page: a four-pointed spark.
 pub const START: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path d="M12 2c.8 5.6 4.4 9.2 10 10-5.6.8-9.2 4.4-10 10-.8-5.6-4.4-9.2-10-10 5.6-.8 9.2-4.4 10-10z"/></svg>"##;
 pub const DRIVE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><rect opacity=".5" x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="M2.5 13h19v3.5a3 3 0 0 1-3 3h-13a3 3 0 0 1-3-3z"/></svg>"##;
 
-// Actions: lines.
 pub const BACK: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6 8.5 12l6 6"/></svg>"##;
 pub const FORWARD: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 6 6 6-6 6"/></svg>"##;
 pub const UP: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5.5m-5.5 5.5L12 5.5l5.5 5.5"/></svg>"##;
-/// A column head's arrow while its column orders the list, A to Z or
-/// oldest or smallest first; [`SORT_DOWN`] the other way.
 pub const SORT_UP: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 16 7-7 7 7"/></svg>"##;
 pub const SORT_DOWN: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 7 7 7-7"/></svg>"##;
 pub const SEARCH: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>"##;
@@ -75,8 +56,6 @@ pub const CUT: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
 pub const RENAME: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1.1-4.6L16.4 4.1a2.1 2.1 0 0 1 3 3L8.1 18.4z"/></svg>"##;
 pub const PLUS: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m-7-7h14"/></svg>"##;
 pub const CLOSE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 6 12 12M18 6 6 18"/></svg>"##;
-/// The arrow after a crumb in the path bar, and the folder tree's arrow
-/// (turned down while open).
 pub const CHEVRON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>"##;
 pub const EJECT: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5 5.5 13.5h13zM5.5 18.5h13"/></svg>"##;
 pub const OPEN: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13.5m-5-5 5 5-5 5"/></svg>"##;
@@ -86,7 +65,5 @@ pub const PASTE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
 pub const SELECT_ALL: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3.2"/><path d="m8.5 12.3 2.5 2.5 4.5-5"/></svg>"##;
 pub const NEW_FOLDER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2a2.2 2.2 0 0 1 2.2-2.2h3.4l2 2.5h7.2a2.2 2.2 0 0 1 2.2 2.2V17a2.2 2.2 0 0 1-2.2 2.2H5.7A2.2 2.2 0 0 1 3.5 17zM12 10.8v4.8m-2.4-2.4h4.8"/></svg>"##;
 pub const UNDO: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5 4 9l4 4M4 9h9.5a5.5 5.5 0 0 1 0 11H10"/></svg>"##;
-/// Properties: an i in a ring.
 pub const INFO: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><path d="M12 7.7v.1" stroke-width="2.4"/></svg>"##;
-/// Someone who may use a file: a head and shoulders.
 pub const PERSON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.6"/><path d="M5 19.5a7 7 0 0 1 14 0"/></svg>"##;

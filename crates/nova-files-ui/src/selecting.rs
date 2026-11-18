@@ -1,26 +1,3 @@
-//! The window's selection: what clicks and keys select, and what Enter
-//! opens. The rules live in `selection`; this is where the window applies
-//! them.
-//!
-//! Every change goes through [`MainWindow::reselect`], which works out
-//! the new selection from the old one, lets a picker update its name box
-//! (see `pick::select`), moves an open quick look to the cursor (see
-//! `window::preview`), and scrolls the cursor's row into view. In a
-//! picker a range holds only what it picks, and a picker for one entry
-//! keeps at most one selected whatever the keys; a main window picks
-//! anything.
-//!
-//! Letters typed in a main window jump to a name (see `jump`), except
-//! while a rename's field takes them.
-//!
-//! When a listing arrives, a fresh read of the same folder keeps the
-//! selection by name, and of Games or Projects by path; arriving in the
-//! folder that holds the one just left
-//! (Up, Back, or any other way) selects the folder left, so the keyboard
-//! carries on from there. Anything else starts with nothing selected, and
-//! so does every list a search shows and the folder after it, unless a
-//! found file's Folder cell was clicked: it is selected in its folder.
-
 use gpui::{ClickEvent, Context, KeyDownEvent};
 use nova_files_api::{Command, EntryId, EntryKind, Listing, ListingId};
 
@@ -28,26 +5,21 @@ use crate::jump;
 use crate::selection::{Click, Move, Selection, entry_at};
 use crate::window::MainWindow;
 
-/// The clicks in a double-click.
 pub const DOUBLE_CLICK: usize = 2;
 
 impl MainWindow {
-    /// The entries selected, in the listing they belong to, while there
-    /// are any.
     pub fn selection(&self) -> Option<(ListingId, Vec<EntryId>)> {
         let selection = self.selection.as_ref()?;
         let ids = selection.ids();
         (!ids.is_empty()).then(|| (selection.listing, ids.to_vec()))
     }
 
-    /// Whether the row `entry` shows as selected.
     pub fn selects(&self, (listing, id): (ListingId, EntryId)) -> bool {
         self.selection
             .as_ref()
             .is_some_and(|selection| selection.listing == listing && selection.contains(id))
     }
 
-    /// The row the keyboard is on, if any.
     pub fn cursor(&self) -> Option<usize> {
         let selection = self.selection.as_ref()?;
         (self.listing_id() == Some(selection.listing))
@@ -55,8 +27,6 @@ impl MainWindow {
             .flatten()
     }
 
-    /// Replaces the selection with what `change` makes of it, given which
-    /// entries a range may hold.
     pub(crate) fn reselect(
         &mut self,
         change: impl FnOnce(Option<Selection>, &dyn Fn(EntryId) -> bool) -> Option<Selection>,
@@ -90,8 +60,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// A click on the entry `id` of `listing` in a main window: selects as
-    /// the keys held say, and a double-click opens it.
     pub(crate) fn main_clicked(
         &mut self,
         (listing, id): (ListingId, EntryId),
@@ -109,14 +77,10 @@ impl MainWindow {
         );
     }
 
-    /// Moves the cursor as `step` says and selects the row it lands on,
-    /// or with `extend` the range from the anchor to it.
     pub(crate) fn move_cursor(&mut self, step: Move, extend: bool, cx: &mut Context<Self>) {
         self.move_cursor_to(self.cursor(), step, extend, cx);
     }
 
-    /// Moves as `step` says from row `from` rather than the cursor, and
-    /// selects the row it lands on alone.
     pub(crate) fn move_cursor_from(
         &mut self,
         from: Option<usize>,
@@ -159,15 +123,10 @@ impl MainWindow {
         );
     }
 
-    /// Whether letters typed to jump to a name are still being typed, so
-    /// a space now is part of the name.
     pub(crate) fn jumping(&self, cx: &Context<Self>) -> bool {
         self.pick.is_none() && self.jump.continues(cx.background_executor().now())
     }
 
-    /// A key typed in a main window: a letter (or a space inside a name)
-    /// moves the cursor to the next name starting with what was typed
-    /// (see `jump`). Whether it was taken.
     pub(crate) fn jump_typed(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
         let held = event.keystroke.modifiers;
         if self.pick.is_some() || held.control || held.alt || held.platform || held.function {
@@ -205,7 +164,6 @@ impl MainWindow {
         true
     }
 
-    /// Selects every entry the view picks.
     pub(crate) fn select_all(&mut self, cx: &mut Context<Self>) {
         let Some(listing) = self.listing_id() else {
             return;
@@ -219,7 +177,6 @@ impl MainWindow {
         );
     }
 
-    /// Adds the entry at the cursor or takes it out.
     pub(crate) fn toggle_cursor(&mut self, cx: &mut Context<Self>) {
         self.reselect(
             |before, _| {
@@ -232,13 +189,10 @@ impl MainWindow {
         );
     }
 
-    /// Selects nothing.
     pub(crate) fn clear_selection(&mut self, cx: &mut Context<Self>) {
         self.reselect(|_, _| None, cx);
     }
 
-    /// Opens what is selected: a lone folder is gone into, and files open
-    /// in their default apps.
     pub(crate) fn open_selected(&mut self) {
         let ids = self
             .selection()
@@ -248,9 +202,6 @@ impl MainWindow {
         self.open_entries(&ids);
     }
 
-    /// Opens the entries `ids` of the listing on screen: a lone folder is
-    /// gone into, and files open in their default apps; folders among
-    /// several are left alone.
     pub(crate) fn open_entries(&mut self, ids: &[EntryId]) {
         let Some(listing) = &self.listing else { return };
         let entries: Vec<_> = ids
@@ -269,8 +220,6 @@ impl MainWindow {
         };
         for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
             let path = listing.path_of(file);
-            // The window can't fall back to the portal; an app that
-            // doesn't start is said on the island (see `file_not_opened`).
             connection
                 .send(Command::OpenFile {
                     path,
@@ -280,9 +229,6 @@ impl MainWindow {
         }
     }
 
-    /// The selection the listing `next` starts with, given the one on
-    /// screen before it, which shows the same place when `same_place`:
-    /// see the module's notes.
     pub(crate) fn selection_for(&self, next: &Listing, same_place: bool) -> Option<Selection> {
         let shown = self.listing.as_ref()?;
         if same_place {
@@ -318,13 +264,10 @@ impl MainWindow {
             .map_or(0, |listing| listing.entries.len())
     }
 
-    /// The rows on screen, which a page move steps by.
     pub fn rows_on_screen(&self) -> usize {
         self.rows_drawn.len()
     }
 
-    /// The names of the entries selected in the folder on screen, in
-    /// order.
     pub fn selected_names(&self) -> Vec<String> {
         let Some(listing) = &self.listing else {
             return Vec::new();

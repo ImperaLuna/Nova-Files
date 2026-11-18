@@ -1,24 +1,3 @@
-//! The sidebar, on the window to the left of the bar and the sheet, in
-//! three parts as on the design page: the Open list of tabs fixed at the
-//! top (`open`), then Places, which
-//! scroll, then the drives fixed at the very bottom (`drives`), which
-//! scroll on their own past a few. Each
-//! section is drawn in a file of its own; this file lays them out and
-//! draws the section heads and the rows they share.
-//!
-//! Places and the folder tree ("This computer") scroll together.
-//!
-//! A narrow window folds the sidebar into one row above the bar: the
-//! section heads and the tree go, and the places sit side by side and
-//! scroll across.
-//!
-//! A row is a place you can go: its icon, its name and, on the right, a
-//! number when it has one. Rows with a folder (and the trash) take files
-//! dropped on them (see `drop`). The row you're in has its name strong and its
-//! icon orange; pressed-in rows are left for the Open list, as on the
-//! design page. Middle-click on a place, a folder of the tree or a drive
-//! opens it in a new tab.
-
 mod drives;
 mod open;
 mod places;
@@ -39,7 +18,6 @@ use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
 impl MainWindow {
-    /// The sidebar; folded into one row across the window when `narrow`.
     pub(super) fn sidebar(&self, narrow: bool, cx: &Context<Self>) -> impl IntoElement {
         let open = self
             .open_section(narrow, cx)
@@ -88,7 +66,6 @@ impl MainWindow {
     }
 }
 
-/// A section's head: its name, and a button on the right when it has one.
 fn section_head(label: &'static str, button: Option<AnyElement>, colors: &Colors) -> Div {
     div()
         .flex()
@@ -106,8 +83,6 @@ fn section_head(label: &'static str, button: Option<AnyElement>, colors: &Colors
         .children(button)
 }
 
-/// The button on a section's head: `glyph` on a small square, carrying
-/// the debug selector `selector`. Ready for its click.
 fn section_button(selector: &'static str, glyph: Icon, colors: &Colors) -> Stateful<Div> {
     div()
         .id(selector)
@@ -123,23 +98,16 @@ fn section_button(selector: &'static str, glyph: Icon, colors: &Colors) -> State
         .child(icon(glyph, size::SECTION_BUTTON_ICON, colors.text_dim))
 }
 
-/// What a sidebar row shows. Its number carries the debug selector
-/// `<selector>-number`, and its icon `<selector>-here` while you're in it.
 pub struct Row {
     pub id: ElementId,
     pub selector: String,
     pub glyph: Icon,
     pub name: SharedString,
-    /// A number on the right, such as how much space is free.
     pub number: Option<(SharedString, Rgba)>,
-    /// Whether you're in it.
     pub here: bool,
-    /// Whether it is pressed in: the tab on screen.
     pub pressed: bool,
 }
 
-/// A sidebar row, ready for its click; compact when the sidebar is
-/// `narrow`.
 fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
     let Row {
         id,
@@ -170,8 +138,6 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
                 row.hover(|row| row.bg(colors.hover))
             }
         })
-        // Every row keeps the clear edge one lights up as a drop target
-        // (see `drop`), inside its padding, so all rows line up.
         .border(size::DROP_EDGE)
         .border_color(transparent_black())
         .map(|row| {
@@ -204,7 +170,6 @@ fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         }))
 }
 
-/// `element`, which does `act` on a middle-click when `enabled`.
 pub(super) fn on_middle_click(
     element: Stateful<Div>,
     enabled: bool,
@@ -220,8 +185,6 @@ pub(super) fn on_middle_click(
     })
 }
 
-/// `element`, which opens `folder` in a new tab on a middle-click in a
-/// main window (`main`).
 fn new_tab_on_middle_click(
     element: Stateful<Div>,
     folder: PathBuf,

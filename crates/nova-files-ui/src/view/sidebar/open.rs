@@ -1,24 +1,3 @@
-//! The Open list, fixed at the top of the sidebar: one row per tab, drawn
-//! like a place (see `window/tabs`). The tab on screen is pressed in,
-//! strong, its icon orange. A click shows a tab; middle-click closes it,
-//! and so does its x, which shows on the tab on screen and on the one
-//! under the pointer, and only while there is more than one tab. The + on
-//! the head opens a new tab on Start; it is always there, even with one
-//! tab. Many tabs scroll inside the list, which takes at most a share of
-//! the sidebar's height, so Places keep their room. A tab's row dragged
-//! along the list moves the tab (see `window/tab_order`).
-//!
-//! A narrow window shows the tabs side by side at the start of the folded
-//! row, the + after them and a hairline before Places. A picker has no
-//! tabs.
-//!
-//! Files dropped on a tab go into its folder, or to the trash on the
-//! trash's tab (see `drop`); a tab on Start takes none. Anything dragged
-//! and held over a tab shows it.
-//!
-//! Debug selectors: `tab-<n>` for each row, counted from 0, `tab-close-<n>`
-//! for its x, and `new-tab` for the +.
-
 use gpui::{
     AppContext as _, ClickEvent, Context, Div, DragMoveEvent, InteractiveElement as _, IntoElement,
     MouseButton, ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _,
@@ -35,7 +14,6 @@ use crate::window::{DraggedTab, HoverOpens, MainWindow, TabChip, TabSide};
 const LABEL: &str = "Open";
 
 impl MainWindow {
-    /// The Open list; without its head when `narrow`. None in a picker.
     pub(super) fn open_section(&self, narrow: bool, cx: &Context<Self>) -> Option<Div> {
         if self.pick.is_some() {
             return None;
@@ -91,8 +69,6 @@ impl MainWindow {
         )
     }
 
-    /// Tab `index`'s row, with its name and icon, `look`; with its x
-    /// while there is more than one tab.
     fn tab_row(
         &self,
         index: usize,
@@ -137,9 +113,6 @@ impl MainWindow {
 }
 
 impl MainWindow {
-    /// Lets the row of tab `dragged` be dragged to another place in the
-    /// list, and take a tab dropped on it, with a line on the side where
-    /// it would land (see `window/tab_order`).
     fn reorders(
         &self,
         row: Stateful<Div>,
@@ -177,8 +150,6 @@ impl MainWindow {
     }
 }
 
-/// The line on `side` of a tab's row where a dragged tab would land:
-/// along its top or bottom, or in a narrow window its start or end.
 fn landing_line(side: TabSide, narrow: bool, colors: &Colors) -> Div {
     let line = div()
         .debug_selector(|| "tab-landing".to_owned())
@@ -193,8 +164,6 @@ fn landing_line(side: TabSide, narrow: bool, colors: &Colors) -> Div {
     }
 }
 
-/// Tab `index`'s x: always shown on the tab on screen (`on`), else only
-/// while the pointer is over its row, `group`.
 fn close_button(index: usize, on: bool, group: &str, colors: &Colors) -> Stateful<Div> {
     let selector = format!("tab-close-{index}");
     div()
@@ -213,7 +182,6 @@ fn close_button(index: usize, on: bool, group: &str, colors: &Colors) -> Statefu
                 .group_hover(group.to_owned(), gpui::Styled::visible)
         })
         .hover(|button| button.bg(colors.press).text_color(colors.text))
-        // A press on the x closes the tab, and never drags its row.
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .child(icon(Icon::Close, size::TAB_CLOSE_ICON, colors.text_dim))
 }

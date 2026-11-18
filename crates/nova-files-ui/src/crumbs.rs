@@ -1,12 +1,3 @@
-//! The path bar's crumbs, worked out from a folder's path alone: one per
-//! level, from a root to the folder on screen. The root is Home for a
-//! folder under the home folder and Computer (`/`) for any other. Each
-//! crumb names the folder it goes to. A place's folder takes the place's
-//! icon; any other, the folder icon. Only the root and the folder on
-//! screen show theirs. A path of more than [`MOST_SHOWN`] crumbs folds its
-//! middle into one "…" crumb (see [`folded`]), keeping the root and the
-//! last [`KEPT_AT_END`] levels in view.
-
 use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
 
@@ -16,24 +7,18 @@ use nova_files_api::{Place, PlaceKind};
 use crate::assets::Icon;
 use crate::window::ROOT_FOLDER;
 
-/// The most crumbs a path shows before its middle folds.
 pub const MOST_SHOWN: usize = 5;
-/// The levels a folded path keeps after the "…" crumb.
 pub const KEPT_AT_END: usize = 3;
 
 const HOME_LABEL: &str = "Home";
 const COMPUTER_LABEL: &str = "Computer";
 
-/// One level of the path bar.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Crumb {
-    /// The folder a click goes to.
     pub path: PathBuf,
     pub label: SharedString,
     pub icon: Icon,
-    /// Whether the icon shows: on the root and the folder on screen.
     pub shows_icon: bool,
-    /// Whether this is the folder on screen, the last crumb.
     pub here: bool,
 }
 
@@ -49,9 +34,6 @@ impl Crumb {
     }
 }
 
-/// The part of `folder` below `home`, if `folder` is home or in it. A
-/// home that is relative or the root itself is no home: every path would
-/// be in it.
 pub fn under_home<'a>(folder: &'a Path, home: &Path) -> Option<&'a Path> {
     if !home.has_root() || home.parent().is_none() {
         return None;
@@ -59,8 +41,6 @@ pub fn under_home<'a>(folder: &'a Path, home: &Path) -> Option<&'a Path> {
     folder.strip_prefix(home).ok()
 }
 
-/// The crumbs from a root down to `folder`, with `home` as the home
-/// folder; a folder in `places` is drawn with `place_icon` of its kind.
 pub fn crumbs(
     folder: &Path,
     home: &Path,
@@ -96,8 +76,6 @@ pub fn crumbs(
     crumbs
 }
 
-/// The icon of the folder at `path`: its place's, with `place_icon`, when
-/// it is one of `places`, else the folder icon.
 pub fn folder_icon(path: &Path, places: &[Place], place_icon: fn(PlaceKind) -> Icon) -> Icon {
     places
         .iter()
@@ -105,23 +83,16 @@ pub fn folder_icon(path: &Path, places: &[Place], place_icon: fn(PlaceKind) -> I
         .map_or(Icon::Folder, |place| place_icon(place.kind))
 }
 
-/// What the path bar draws, in order, for a path of `count` crumbs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shown {
-    /// The crumb at this index.
     Crumb(usize),
-    /// The "…" crumb, standing for the crumbs in this range.
     Folded(Range<usize>),
 }
 
-/// The crumbs a path of `count` crumbs folds into the "…" crumb, if it
-/// folds: all but the root and the last [`KEPT_AT_END`].
 pub fn folded(count: usize) -> Option<Range<usize>> {
     (count > MOST_SHOWN).then(|| 1..count - KEPT_AT_END)
 }
 
-/// What the path bar draws for a path of `count` crumbs: each crumb, with
-/// the [`folded`] ones as one "…" crumb.
 pub fn shown(count: usize) -> Vec<Shown> {
     let Some(hidden) = folded(count) else {
         return (0..count).map(Shown::Crumb).collect();
@@ -138,7 +109,6 @@ mod tests {
 
     const HOME: &str = "/home/me";
 
-    /// A place's icon, as the sidebar would draw it.
     const fn place_icon(kind: PlaceKind) -> Icon {
         match kind {
             PlaceKind::Documents => Icon::Documents,

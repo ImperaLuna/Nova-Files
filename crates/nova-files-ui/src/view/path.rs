@@ -1,25 +1,3 @@
-//! The path bar, in the top bar's path slot: a crumb for each level from
-//! Home or Computer down to the folder on screen (see `crumbs`), with an
-//! arrow between each two. A click on a crumb goes to its folder. The
-//! folder on screen is pressed in, strong, with its icon in orange; the
-//! root shows its icon too. A press on an arrow opens a menu of the
-//! folders in the crumb before it; the folder on screen has an arrow only
-//! when it holds folders. A long path folds its middle into a "…" crumb
-//! whose menu lists the folders it hides (see `path_menu`). Games and
-//! Projects are one crumb each, with no folder to type a path from, and
-//! end with a chip for the folders they gather from.
-//!
-//! The crumbs sit at the bar's right end of their own box, so a narrow
-//! window cuts the root side off and keeps the folder on screen in view.
-//! The empty part of the bar after them always shows; a click there turns
-//! the bar into a text field to type a path in (see `path_bar`). A
-//! feature's button (search scope, Empty Trash) goes after it, at the
-//! bar's right end.
-//!
-//! Debug selectors: `crumb-<n>` for each crumb, counted from the root
-//! whether shown or folded, `arrow-<n>` for the arrow after it, and
-//! `crumb-more` for the "…" crumb, and `path-fill` for the empty part.
-
 use std::path::PathBuf;
 
 use gpui::{
@@ -123,11 +101,6 @@ impl MainWindow {
             .when(empties, |bar| bar.child(empty_trash_chip(colors)))
     }
 
-    /// The crumbs of the folder on screen; none before one arrives. The
-    /// trash is one crumb, Trash, whichever folder holds it. A Properties
-    /// page shows where what it shows is: down to a lone path, drawn with
-    /// its own icon, or to the folder that holds them all. Its last crumb
-    /// is the page itself, so a click or a drop there does nothing.
     fn crumbs(&self) -> Vec<Crumb> {
         if let Some(paths) = self.properties_paths() {
             return self.properties_crumbs(paths);
@@ -162,13 +135,10 @@ impl MainWindow {
         crumbs
     }
 
-    /// Whether `owner`'s menu is the one open.
     fn menu_open(&self, owner: MenuOwner) -> bool {
         self.path_menu().is_some_and(|menu| menu.owner == owner)
     }
 
-    /// The "…" crumb, which opens `items`, the folders it hides, as a
-    /// menu.
     fn folded_crumb(&self, items: Vec<MenuItem>, colors: &Colors, cx: &Context<Self>) -> Div {
         let open = self.menu_open(MenuOwner::Folded);
         let button = crumb_box("crumb-more".into(), colors)
@@ -188,8 +158,6 @@ impl MainWindow {
             .when(open, |slot| slot.child(self.path_menu_card(cx)))
     }
 
-    /// The arrow after the `index`th crumb, whose menu lists the folders
-    /// in `folder`.
     fn arrow(&self, index: usize, folder: PathBuf, colors: &Colors, cx: &Context<Self>) -> Div {
         let open = self.menu_open(MenuOwner::Arrow(index));
         let button = chevron(colors)
@@ -214,8 +182,6 @@ impl MainWindow {
     }
 }
 
-/// The `index`th crumb, which goes to its folder when `goes`. The folder
-/// on screen is pressed in with its icon orange.
 fn crumb_button(
     index: usize,
     crumb: &Crumb,
@@ -249,8 +215,6 @@ fn crumb_button(
         .child(crumb.label.clone())
 }
 
-/// The one crumb of Games or Projects, `place`, which is on screen: a
-/// click lists it again.
 fn gathered_crumb(place: Gathering, colors: &Colors, cx: &Context<MainWindow>) -> Stateful<Div> {
     let (label, glyph) = places::gathering_look(place);
     crumb_box("crumb-0".into(), colors)
@@ -265,8 +229,6 @@ fn gathered_crumb(place: Gathering, colors: &Colors, cx: &Context<MainWindow>) -
 }
 
 impl MainWindow {
-    /// The "N folders" chip at the end of `place`'s path bar, which opens
-    /// the menu of the folders it gathers from (see `window::gathering`).
     fn gathered_chip(
         &self,
         place: Gathering,
@@ -296,7 +258,6 @@ impl MainWindow {
     }
 }
 
-/// A crumb's box, with `selector` as its id and debug selector.
 fn crumb_box(selector: SharedString, colors: &Colors) -> Stateful<Div> {
     let name = selector.to_string();
     div()
@@ -307,8 +268,6 @@ fn crumb_box(selector: SharedString, colors: &Colors) -> Stateful<Div> {
         .items_center()
         .gap(size::CRUMB_GAP)
         .h(size::ICON_BUTTON)
-        // A clear drop edge (see `drop`), inside the padding, so every
-        // crumb lines up whether it takes drops or not.
         .px(inside_edge(size::CRUMB_PAD))
         .border(size::DROP_EDGE)
         .border_color(transparent_black())
@@ -319,7 +278,6 @@ fn crumb_box(selector: SharedString, colors: &Colors) -> Stateful<Div> {
         .hover(|button| button.bg(colors.hover).text_color(colors.text))
 }
 
-/// An arrow between two crumbs.
 fn chevron(colors: &Colors) -> Div {
     div()
         .flex()
@@ -331,8 +289,6 @@ fn chevron(colors: &Colors) -> Div {
         .child(icon(Icon::Chevron, size::SEPARATOR_ICON, colors.text_faint))
 }
 
-/// Empty Trash, at the path bar's right end in the trash; it asks
-/// first (see `window::trash`).
 fn empty_trash_chip(colors: &Colors) -> impl IntoElement {
     div()
         .id("empty-trash")

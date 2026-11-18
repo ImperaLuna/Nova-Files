@@ -1,10 +1,3 @@
-//! The Drives section, fixed at the bottom of the sidebar: each drive as
-//! `drives` lists it, with how much is free as a number on the right, red
-//! when nearly full. A click opens it (mounting it first when needed);
-//! middle-click opens it in a new tab; right-click opens its menu, which
-//! has Eject for a drive that can be unplugged. There is no eject button. Rows carry the debug selectors
-//! `drive-<n>`, counted from 0.
-
 use gpui::{
     ClickEvent, Context, Div, InteractiveElement as _, MouseButton, MouseDownEvent,
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
@@ -21,7 +14,6 @@ use crate::window::{Aim, HoverOpens, MainWindow};
 const LABEL: &str = "Drives";
 
 impl MainWindow {
-    /// The Drives section; without its head when `narrow`.
     pub(super) fn drives_section(&self, narrow: bool, cx: &Context<Self>) -> Div {
         let colors = Colors::of(cx);
         let shown = self.shown_drives();
@@ -40,7 +32,6 @@ impl MainWindow {
                     let (text, full) = drives::free(space);
                     (text, if full { colors.full } else { colors.text_dim })
                 })
-                // A narrow window keeps its drives to their names.
                 .filter(|_| !narrow);
             let row = row(
                 Row {
@@ -81,7 +72,6 @@ impl MainWindow {
         if narrow {
             return list;
         }
-        // Many drives scroll in their own part, so Places keep their room.
         div()
             .flex()
             .flex_col()

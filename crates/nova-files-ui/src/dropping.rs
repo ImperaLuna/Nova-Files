@@ -1,70 +1,37 @@
-//! What dropping files does, as other file managers do it: a drop on a
-//! folder moves files on that folder's drive and copies files from
-//! another (the core looks at the drives, see `Command::DropFiles`); Ctrl
-//! held always copies, Shift held always moves. A drop on the trash sends
-//! the files there. Folders dropped on Games or Projects are added to
-//! it and stay where they are.
-//!
-//! While files are dragged over a target, the chip under the pointer says
-//! what dropping them there does and where: "Move to Documents", "Copy to
-//! Backup" (see [`label`]).
-//!
-//! A drop that would change nothing, or can't be done, isn't offered: a
-//! folder onto itself or into a folder inside it, files onto the folder
-//! they are already in, and anything dropped out of the trash or into its
-//! folder of trashed entries, which only Restore changes.
-
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use gpui::Modifiers;
 use nova_files_api::{DropKind, Gathering, Operation};
 
-/// What the chip says before a target's name for a drop that moves.
 pub const MOVE_TO: &str = "Move to";
-/// What the chip says before a target's name for a drop that copies.
 pub const COPY_TO: &str = "Copy to";
-/// What the chip says before a place's name for a drop that adds to it.
 pub const ADD_TO: &str = "Add to";
 
-/// Where files can be dropped.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DropAt {
-    /// Into a folder.
     Folder(PathBuf),
-    /// Into the trash.
     Trash,
-    /// Gathered by Games or Projects: the folders are added to it, and
-    /// stay where they are.
     Gathered(Gathering),
 }
 
-/// What a drop asks the core for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Dropped {
-    /// A job of its own: a copy or move the keys held chose, or the trash.
     Job(Operation),
-    /// Folders for Games or Projects to gather.
     Gather {
         place: Gathering,
         folders: Vec<PathBuf>,
     },
-    /// A copy or move the core picks by drive.
     ByDrive {
         sources: Vec<PathBuf>,
         into: PathBuf,
     },
 }
 
-/// Files being dragged, sorted for asking where they may drop: as many
-/// targets ask on every frame of a drag, each asks in the time it takes
-/// to walk up its own path, however many files are dragged.
 #[derive(Debug, Default)]
 pub struct Sources {
     pub paths: Vec<PathBuf>,
-    /// `paths`, to look up.
     each: HashSet<PathBuf>,
-    /// The folders they are in.
     folders: HashSet<PathBuf>,
 }
 
@@ -83,8 +50,6 @@ impl Sources {
     }
 }
 
-/// Whether `sources` may be dropped at `at`, where `trash` is the folder
-/// of the trash's entries.
 pub fn allowed(at: &DropAt, sources: &Sources, trash: &Path) -> bool {
     if sources.paths.is_empty()
         || sources
@@ -104,7 +69,6 @@ pub fn allowed(at: &DropAt, sources: &Sources, trash: &Path) -> bool {
     }
 }
 
-/// What dropping `sources` at `at` with `modifiers` held does.
 pub fn dropped(at: DropAt, sources: Vec<PathBuf>, modifiers: Modifiers) -> Dropped {
     let into = match at {
         DropAt::Trash => return Dropped::Job(Operation::Trash { paths: sources }),
@@ -125,10 +89,6 @@ pub fn dropped(at: DropAt, sources: Vec<PathBuf>, modifiers: Modifiers) -> Dropp
     }
 }
 
-/// What the chip says while files are over the target `name`, where they
-/// would drop at `at` with `modifiers` held. `by_drive` is what the core
-/// said the drop does when no key picks; until it has said, a drop no key
-/// picks has nothing to say.
 pub fn label(
     at: &DropAt,
     name: &str,
@@ -174,11 +134,8 @@ mod tests {
     #[test]
     fn a_drop_that_changes_nothing_isnt_offered() {
         let trash = Path::new(TRASH);
-        // Nothing dragged.
         assert!(!allowed(&folder("/b"), &Sources::default(), trash));
-        // Where they already are.
         assert!(!allowed(&folder("/a"), &paths(&["/b/y", "/a/x"]), trash));
-        // A folder onto itself, or into what it holds.
         assert!(!allowed(&folder("/a/x"), &paths(&["/a/x"]), trash));
         assert!(!allowed(&folder("/a/x/in"), &paths(&["/a/x"]), trash));
     }
@@ -211,7 +168,6 @@ mod tests {
                 into: into.clone()
             })
         );
-        // Ctrl wins when both are held.
         let both = Modifiers {
             shift: true,
             ..ctrl
@@ -262,19 +218,16 @@ mod tests {
             Some("Copy to Backup")
         );
         assert_eq!(says(None, none), None);
-        // Keys win over the drive, and need no answer from the core.
         assert_eq!(
             says(Some(DropKind::Move), ctrl).as_deref(),
             Some("Copy to Backup")
         );
         assert_eq!(says(None, shift).as_deref(), Some("Move to Backup"));
-        // Ctrl wins when both are held.
         let both = Modifiers {
             shift: true,
             ..ctrl
         };
         assert_eq!(says(None, both).as_deref(), Some("Copy to Backup"));
-        // The trash takes files whatever is held.
         assert_eq!(
             label(&DropAt::Trash, "Trash", None, ctrl).as_deref(),
             Some("Move to Trash")

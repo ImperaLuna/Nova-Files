@@ -1,9 +1,3 @@
-//! What the window does to the files selected, and the island's notes:
-//! move them to the trash, delete them for good (after asking), undo,
-//! and say which files didn't open. Each becomes one of the core's jobs
-//! (see `jobs`); the island says what happened (see `island`). Copy, cut
-//! and paste are in `clipboard`.
-
 use std::path::PathBuf;
 
 use gpui::{Context, SharedString};
@@ -14,8 +8,6 @@ use crate::island::{self, ITEM, ITEMS, NOTE_TIME, Note, NoteUndo, opening};
 use crate::selection::entry_at;
 
 impl MainWindow {
-    /// The paths of the entries selected in the list on screen, in list
-    /// order, each where it is: a search's results in their own folders.
     pub fn selected_paths(&self) -> Vec<PathBuf> {
         let Some((listing, ids)) = self.selected_ids() else {
             return Vec::new();
@@ -26,20 +18,16 @@ impl MainWindow {
             .collect()
     }
 
-    /// The listing on screen and the entries selected in it.
     fn selected_ids(&self) -> Option<(&Listing, Vec<EntryId>)> {
         let listing = self.listing.as_ref()?;
         let (id, ids) = self.selection()?;
         (id == listing.id).then_some((listing, ids))
     }
 
-    /// How many entries are selected in the folder on screen.
     pub fn selected_count(&self) -> usize {
         self.selected_ids().map_or(0, |(_, ids)| ids.len())
     }
 
-    /// What the files selected take, once the core has read the size of
-    /// each; folders don't count. `None` while one isn't known yet.
     pub fn selected_bytes(&self) -> Option<u64> {
         let (listing, ids) = self.selected_ids()?;
         ids.into_iter().try_fold(0_u64, |total, id| {
@@ -53,8 +41,6 @@ impl MainWindow {
         })
     }
 
-    /// Moves the files selected to the trash; in the trash, asks before
-    /// deleting them for good.
     pub fn trash_selected(&mut self, cx: &mut Context<Self>) {
         if self.in_trash() {
             self.delete_selected(cx);
@@ -66,8 +52,6 @@ impl MainWindow {
         }
     }
 
-    /// Asks on the island before deleting the files selected for good;
-    /// in the trash, the entries selected there.
     pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
         let Some(operation) = self.deleting_selected() else {
             return;
@@ -81,8 +65,6 @@ impl MainWindow {
         self.ask(format!("Delete {what} for good?"), operation, cx);
     }
 
-    /// Deleting the selection for good, as the job that would do it;
-    /// `None` with nothing selected or in a picker.
     pub(super) fn deleting_selected(&self) -> Option<Operation> {
         if self.in_trash() {
             let items = self.selected_trashed();
@@ -91,10 +73,7 @@ impl MainWindow {
         deleting(self.selected_paths(), self.pick.is_some())
     }
 
-    /// Undoes what the note names, or else this window's newest job that
-    /// can still be undone.
     pub(crate) fn undo(&mut self, cx: &mut Context<Self>) {
-        // In a rename's field, Ctrl+Z is the field's.
         if self.renaming() {
             return;
         }
@@ -120,8 +99,6 @@ impl MainWindow {
         }
     }
 
-    /// Shows `label` on the island, with an Undo button when `undo` says
-    /// what it does. It goes by itself after a while.
     pub fn show_note(
         &mut self,
         label: impl Into<SharedString>,
@@ -132,8 +109,6 @@ impl MainWindow {
         self.put_note(label.into(), undo, cx);
     }
 
-    /// Says on the island that `path` started no app, and why. A note
-    /// already up for other files that didn't open takes it in too.
     pub(crate) fn file_not_opened(
         &mut self,
         path: PathBuf,
@@ -148,8 +123,6 @@ impl MainWindow {
         }
     }
 
-    /// Puts up a note, whose timer replaces, and so cancels, the old
-    /// one's.
     fn put_note(&mut self, label: SharedString, undo: Option<NoteUndo>, cx: &mut Context<Self>) {
         self.island.note = Some(Note { label, undo });
         self.island.note_timer = Some(cx.spawn(async move |this, cx| {
@@ -159,7 +132,6 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// Takes the note down.
     pub(crate) fn dismiss_note(&mut self, cx: &mut Context<Self>) {
         self.island.note = None;
         self.island.note_timer = None;
@@ -167,14 +139,11 @@ impl MainWindow {
         cx.notify();
     }
 
-    /// The note on the island, if any.
     pub const fn note(&self) -> Option<&Note> {
         self.island.note.as_ref()
     }
 }
 
-/// Deleting `paths` for good, as the job that would do it; `None` with
-/// none of them, or in a picker, which never deletes.
 fn deleting(paths: Vec<PathBuf>, picking: bool) -> Option<Operation> {
     (!paths.is_empty() && !picking).then_some(Operation::Delete { paths })
 }

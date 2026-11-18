@@ -1,9 +1,3 @@
-//! The Start page's Drives group: one card per mounted drive, in the
-//! sidebar's order, with its name, how much is free of how much, how full
-//! it is as a large percent, and one bar. A drive nearly full shows its
-//! percent and bar red. A click opens the drive. Cards carry the debug
-//! selectors `drive-card-<n>`, counted from 0 over the cards shown.
-
 use gpui::{
     AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _, relative,
@@ -18,14 +12,10 @@ use crate::theme::{Colors, radius, size, start, text};
 use crate::view::row::icon;
 use crate::window::MainWindow;
 
-/// The drive cards sit three to a row.
 const PER_ROW: usize = 3;
-/// A whole drive, in percent.
 const WHOLE: f32 = 100.0;
 
 impl MainWindow {
-    /// The drive cards, three to a row, or `None` when no drive is
-    /// mounted.
     pub(super) fn drive_cards(&self, cx: &Context<Self>) -> Option<AnyElement> {
         let mounted: Vec<ShownDrive> = self
             .shown_drives()
@@ -40,7 +30,6 @@ impl MainWindow {
             let cards = drives.iter().enumerate().map(|(column, drive)| {
                 self.drive_card(card_index(row, column), drive, &colors, cx)
             });
-            // Empty slots keep a short last row's cards as wide as the rest.
             let fillers = (drives.len()..PER_ROW).map(|_| div().flex_1().into_any_element());
             div()
                 .flex()
@@ -58,7 +47,6 @@ impl MainWindow {
         )
     }
 
-    /// One drive's card.
     fn drive_card(
         &self,
         index: usize,
@@ -119,8 +107,6 @@ impl MainWindow {
     }
 }
 
-/// A card's bar, filled `share` of the way (0 to 1) in `tint`; empty
-/// while the share isn't known.
 pub(in crate::view) fn bar(share: Option<f32>, tint: gpui::Rgba, colors: &Colors) -> AnyElement {
     div()
         .h(start::BAR)
@@ -139,22 +125,18 @@ pub(in crate::view) fn bar(share: Option<f32>, tint: gpui::Rgba, colors: &Colors
         .into_any_element()
 }
 
-/// The card at `column` of row `row`, counted over every card shown.
 const fn card_index(row: usize, column: usize) -> usize {
     row * PER_ROW + column
 }
 
-/// Whether a drive this full, if its space is known, shows red.
 fn nearly_full(percent: Option<u8>) -> bool {
     percent.is_some_and(|percent| percent >= NEARLY_FULL)
 }
 
-/// How much of the bar a drive `percent` full fills, from 0 to 1.
 fn filled(percent: u8) -> f32 {
     f32::from(percent) / WHOLE
 }
 
-/// "381 GB free of 1.0 TB".
 fn free_of(space: DiskSpace) -> String {
     format!(
         "{} free of {}",

@@ -1,9 +1,3 @@
-//! The top bar: a row of capsules on the window. Back, Forward and Up;
-//! the path bar (see `path`), which takes what the others leave, with the
-//! search's scope chip at its end; the search box (see `search`); and the
-//! list and tiles switch, which shows Details or Icons as Ctrl+1 and
-//! Ctrl+2 do (see `window::views`), lit on the one showing.
-
 use gpui::{
     Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
@@ -75,7 +69,6 @@ impl MainWindow {
     }
 }
 
-/// One capsule of the bar, raised from the window.
 pub(super) fn capsule(colors: &Colors) -> Div {
     div()
         .flex()
@@ -86,8 +79,6 @@ pub(super) fn capsule(colors: &Colors) -> Div {
         .bg(colors.raised)
 }
 
-/// An icon button in a capsule, with selector `name`. A click sends
-/// `action`; without one the button is dimmed and does nothing.
 pub(super) fn icon_button(
     name: &'static str,
     glyph: Icon,
@@ -113,8 +104,6 @@ pub(super) fn icon_button(
 }
 
 impl MainWindow {
-    /// The list and tiles switch, lit on the view showing. Search results
-    /// and the trash show Details only, so there a click does nothing.
     fn view_switch(&self, colors: &Colors) -> Vec<gpui::Stateful<Div>> {
         let showing = self.folder_view().mode;
         [
@@ -143,7 +132,6 @@ impl MainWindow {
     }
 }
 
-/// One side of the list and tiles switch; `on` marks the view showing.
 fn switch_button(
     name: &'static str,
     glyph: Icon,
@@ -156,7 +144,6 @@ fn switch_button(
         .child(icon(glyph, size::BUTTON_ICON, tone))
 }
 
-/// A square icon button's box, with selector `name`.
 fn square(name: &'static str) -> gpui::Stateful<Div> {
     div()
         .id(name)
