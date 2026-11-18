@@ -419,11 +419,25 @@ fn a_name_with_wildcards_picks_only_itself() {
     fs::remove_dir_all(&folder).ok();
 }
 
+/// The shell on PATH, by its real path: the sandbox lets 7-Zip run only
+/// programs under its own folder and the system folders.
+fn shell_on_path() -> PathBuf {
+    std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|folder| folder.join("sh"))
+        .find_map(|shell| fs::canonicalize(shell).ok())
+        .unwrap()
+}
+
 #[test]
 fn seven_zip_may_read_the_kernels_random_numbers() {
     let folder = sources("random");
     let program = folder.join("7zz");
-    fs::write(&program, "#!/bin/sh\nhead -c 1 /dev/urandom || exit 2\n").unwrap();
+    let shell = shell_on_path();
+    fs::write(
+        &program,
+        format!("#!{}\nhead -c 1 /dev/urandom || exit 2\n", shell.display()),
+    )
+    .unwrap();
     fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
     let archive = folder.join("any.7z");
     fs::write(&archive, b"7z\xbc\xaf\x27\x1c").unwrap();
