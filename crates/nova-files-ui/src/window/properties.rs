@@ -15,6 +15,7 @@
 //! drops off the page; when none is left the tab goes to Start, as a tab
 //! on a folder that is gone does.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -28,14 +29,16 @@ use crate::location::Location;
 #[derive(Debug)]
 pub struct Page {
     items: Vec<Item>,
+    /// The item each request out is for, by its id.
+    asked: HashMap<PropertiesId, usize>,
+    /// How many items are gone.
+    gone: usize,
 }
 
 /// One path on a Properties page.
 #[derive(Debug)]
 struct Item {
     path: PathBuf,
-    /// The request whose answer counts, while one is out.
-    asked: Option<PropertiesId>,
     /// What the core said last.
     read: Option<Arc<Properties>>,
     /// The core couldn't look at it: it is left off the page.
@@ -48,12 +51,15 @@ impl Page {
             .iter()
             .map(|path| Item {
                 path: path.clone(),
-                asked: None,
                 read: None,
                 gone: false,
             })
             .collect();
-        Self { items }
+        Self {
+            items,
+            asked: HashMap::new(),
+            gone: 0,
+        }
     }
 
     /// What the core said of each path still on the page, in order;
@@ -132,7 +138,8 @@ impl MainWindow {
         let Some(page) = self.properties.as_mut() else {
             return;
         };
-        for item in &mut page.items {
+        page.asked.clear();
+        for (index, item) in page.items.iter().enumerate() {
             let id = PropertiesId(self.next_properties);
             self.next_properties += 1;
             let sent = self.connection.as_ref().map(|connection| {
@@ -141,7 +148,9 @@ impl MainWindow {
                     path: item.path.clone(),
                 })
             });
-            item.asked = matches!(sent, Some(Ok(()))).then_some(id);
+            if matches!(sent, Some(Ok(()))) {
+                page.asked.insert(id, index);
+            }
         }
     }
 
@@ -156,13 +165,24 @@ impl MainWindow {
         let Some(page) = self.properties.as_mut() else {
             return;
         };
-        let Some(item) = page.items.iter_mut().find(|item| item.asked == Some(id)) else {
+        let Some(item) = page
+            .asked
+            .remove(&id)
+            .and_then(|index| page.items.get_mut(index))
+        else {
             return;
         };
-        item.asked = None;
-        item.gone = read.is_none();
+        let gone = read.is_none();
+        if gone != item.gone {
+            if gone {
+                page.gone += 1;
+            } else {
+                page.gone -= 1;
+            }
+        }
+        item.gone = gone;
         item.read = read;
-        let all_gone = page.items.iter().all(|item| item.gone);
+        let all_gone = page.gone == page.items.len();
         if all_gone && self.properties_page().is_some() {
             self.open_start(cx);
         }
