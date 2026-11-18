@@ -220,7 +220,7 @@ fn part_items_join_the_sheet_and_entry_menus_where_they_apply(cx: &mut TestAppCo
     let below = cx.debug_bounds("entry-2").unwrap();
     let space = point(below.center().x, below.bottom() + below.size.height * 2.0);
     right_click_at(cx, space);
-    assert!(!labels(&view, cx).is_empty());
+    assert_ne!(labels(&view, cx), Vec::<String>::new());
     assert!(!labels(&view, cx).contains(&"Poke".to_owned()));
 
     cx.simulate_keystrokes("escape");
