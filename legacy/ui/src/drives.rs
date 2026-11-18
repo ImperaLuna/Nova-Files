@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use gpui::SharedString;
-use nova_files_api::{DiskSpace, DriveId, DriveList, VolumeId};
+use nova_files_drives_api::{DiskSpace, DriveId, DriveList, VolumeId};
 
 use crate::columns;
 
@@ -80,7 +80,7 @@ pub fn free(space: DiskSpace) -> (SharedString, bool) {
 
 #[cfg(test)]
 mod tests {
-    use nova_files_api::{Drive, Volume};
+    use nova_files_drives_api::{Drive, Volume};
 
     use super::*;
 

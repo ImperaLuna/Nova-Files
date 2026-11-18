@@ -55,6 +55,7 @@ use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView, Gathering,
     HiddenFiles, Listing, ListingId, Order, RecentFolder, RecentId,
 };
+use nova_files_drives_api as drives_api;
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
@@ -203,12 +204,7 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 4] = [
-        Command::Ping,
-        Command::Drives,
-        Command::FolderViews,
-        Command::Theme,
-    ];
+    const FIRST_ASKS: [Command; 3] = [Command::Ping, Command::FolderViews, Command::Theme];
 
     pub fn at(
         connector: &Connector,
@@ -325,6 +321,10 @@ impl MainWindow {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
         };
+        let envelope = match envelope.open::<drives_api::Event>() {
+            Ok(event) => return self.drive_event(event, cx),
+            Err(envelope) => envelope,
+        };
         let envelope = match envelope.open::<places_api::Event>() {
             Ok(places_api::Event::Places(places)) => return self.places_arrived(places, cx),
             Ok(places_api::Event::Bookmarks(pinned)) => return self.pinned_arrived(pinned, cx),
@@ -420,6 +420,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             for command in MainWindow::FIRST_ASKS {
                 connection.send(command)?;
             }
+            connection.send(drives_api::Command::Drives)?;
             connection.send(places_api::Command::Places)?;
             connection.send(settings_api::Command::Watch)?;
             connection.send(trash_api::Command::List)?;
