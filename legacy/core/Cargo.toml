@@ -3,8 +3,25 @@
 # The core. Index, search, folder listing, watching, jobs and settings. It
 # never draws anything.
 #
-# Allowed outside crates: chrono, log, rustix, serde, serde_json, toml, toml_edit, uzers
-# Allowed workspace crates: nova-files-api, nova-files-clipboard-api, nova-files-disk, nova-files-index, nova-files-jobs, nova-files-messages, nova-files-trash-api, nova-files-trash-core
+# Allowed outside crates:
+# - chrono
+# - log
+# - rustix
+# - serde
+# - serde_json
+# - toml
+# - toml_edit
+# - uzers
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-clipboard-api
+# - nova-files-disk
+# - nova-files-index
+# - nova-files-jobs
+# - nova-files-messages
+# - nova-files-trash-api
+# - nova-files-trash-core
 
 [package]
 name = "nova-files-core"
@@ -38,10 +55,10 @@ toml_edit = { version = "0.25.18", default-features = false, features = ["displa
 # /etc/passwd). The standard library and rustix have no such lookup.
 uzers = { version = "0.12.2", default-features = false }
 nova-files-api.workspace = true
-nova-files-messages.workspace = true
-nova-files-index.workspace = true
 nova-files-disk.workspace = true
+nova-files-index.workspace = true
 nova-files-jobs.workspace = true
+nova-files-messages.workspace = true
 nova-files-trash-api.workspace = true
 nova-files-trash-core.workspace = true
 

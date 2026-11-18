@@ -4,7 +4,8 @@
 # in the formats other file managers read and write. Plain std types, no I/O.
 #
 # Allowed outside crates: none
-# Allowed workspace crates: nova-files-api
+# Allowed workspace crates:
+# - nova-files-api
 
 [package]
 name = "nova-files-clipboard-api"
