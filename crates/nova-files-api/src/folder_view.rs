@@ -56,7 +56,6 @@ impl IconSize {
     /// Where it stands in [`Self::ALL`].
     #[must_use]
     pub const fn index(self) -> usize {
-        // Declared smallest first, as `ALL` lists them.
         self as usize
     }
 
