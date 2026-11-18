@@ -21,10 +21,10 @@ pub use nova_files_jobs::test_folder::{self, TestFolder};
 use crate::inside;
 use crate::trash::Trashes;
 use access::change_access;
-use nova_files_archives_core::{Archiver, Asked, Taking, compress, extract};
-use nova_files_delete_core::{delete, delete_paths};
-use nova_files_rename_core::{new_folder, rename};
-use nova_files_transfer_core::{How, transfer, transfer_to};
+use nova_files_archives_core::{Archiver, Archives, Taking, extract};
+use nova_files_delete_core::{Deletes, delete_paths};
+use nova_files_rename_core::Renames;
+use nova_files_transfer_core::{How, Transfers, transfer, transfer_to};
 use nova_files_trash_core::{Trasher, delete_from_trash, empty_trash, restore, trash};
 use undo::{Undo, undo_of};
 
@@ -39,17 +39,31 @@ pub fn jobs(
     archiver: Option<Archiver>,
 ) -> Jobs {
     let set_aside = Arc::new(Trasher::new(trashes.home.clone()));
+    Jobs::new(state, Arc::new(kinds(trashes, archiver)), set_aside, wake)
+}
+
+fn kinds(trashes: Trashes, archiver: Option<Archiver>) -> Kinds {
     let files = Files {
-        trashes,
-        archiver,
+        trashes: trashes.clone(),
+        archiver: archiver.clone(),
         mover: Moves,
     };
-    Jobs::new(
-        state,
-        Arc::new(Kinds::default().with(files)),
-        set_aside,
-        wake,
-    )
+    let undoable = |kind| Undoable {
+        kind,
+        trashes: trashes.clone(),
+    };
+    Kinds::default()
+        .with(files)
+        .with(undoable(Box::new(Archives {
+            archiver,
+            files: Moves,
+        })))
+        .with(undoable(Box::new(Deletes)))
+        .with(undoable(Box::new(Renames)))
+        .with(Undoable {
+            kind: Box::new(Transfers),
+            trashes,
+        })
 }
 
 pub fn start_drop(
@@ -104,24 +118,32 @@ impl nova_files_jobs::JobKind for Files {
     type Op = Operation;
     type Undo = Undo;
 
+    fn claims(&self, operation: &Operation) -> bool {
+        match operation {
+            Operation::Copy { sources, .. } => copied_out(sources).is_some(),
+            Operation::ChangeAccess { .. }
+            | Operation::Trash { .. }
+            | Operation::Restore { .. }
+            | Operation::DeleteFromTrash { .. }
+            | Operation::EmptyTrash
+            | Operation::Undo { .. } => true,
+            _ => false,
+        }
+    }
+
     fn run(&self, running: &mut Running, operation: &Operation, undo: Option<&Undo>) -> Ended {
         let trashes = &self.trashes;
-        let archiver = self.archiver.as_ref();
         match operation {
-            Operation::Rename { path, name } => rename(path, name),
-            Operation::NewFolder { inside, name } => new_folder(inside, name),
             Operation::Copy { sources, into } => match copied_out(sources) {
                 Some((archive, picked)) => extract(
                     running,
-                    (archiver, &self.mover),
+                    (self.archiver.as_ref(), &self.mover),
                     &archive,
                     into,
                     Taking::Picked(&picked),
                 ),
                 None => transfer(running, sources, into, How::Copy),
             },
-            Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
-            Operation::Delete { paths } => delete(running, paths),
             Operation::ChangeAccess { paths, change } => change_access(running, paths, change),
             Operation::Trash { paths } => trash(running, paths, trashes.home.as_deref()),
             Operation::Restore { items } => restore(running, items, trashes, &self.mover),
@@ -129,32 +151,7 @@ impl nova_files_jobs::JobKind for Files {
                 delete_from_trash(running, items, trashes, &self.mover)
             }
             Operation::EmptyTrash => empty_trash(running, trashes, &self.mover),
-            Operation::Undo { .. } => undo::run(running, undo.cloned(), trashes, &self.mover),
-            Operation::Extract { archive, into, to } => extract(
-                running,
-                (archiver, &self.mover),
-                archive,
-                into,
-                Taking::All(*to),
-            ),
-            Operation::Compress {
-                sources,
-                into,
-                name,
-                packing,
-                level,
-                locked,
-            } => {
-                let asked = Asked {
-                    sources,
-                    into,
-                    name,
-                    packing: *packing,
-                    level: *level,
-                    locked: *locked,
-                };
-                compress(running, archiver, &asked)
-            }
+            _ => undo::run(running, undo.cloned(), trashes, &self.mover),
         }
     }
 
@@ -163,9 +160,7 @@ impl nova_files_jobs::JobKind for Files {
     }
 
     fn undo(&self, running: &mut Running, operation: &Operation, ended: &Ended) -> Option<Undo> {
-        let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
-        undo_of(operation, &steps, &ended.0, &self.trashes)
-            .map(|undo| undo::putting_back(undo, &running.replaced))
+        undo_after(running, operation, ended, &self.trashes)
     }
 
     fn undoes(&self, operation: &Operation) -> Option<JobId> {
@@ -178,6 +173,54 @@ impl nova_files_jobs::JobKind for Files {
     fn first_path(&self, operation: &Operation) -> PathBuf {
         first_path(operation)
     }
+}
+
+pub struct Undoable {
+    kind: Box<dyn nova_files_jobs::JobKind<Op = Operation, Undo = ()>>,
+    trashes: Trashes,
+}
+
+impl nova_files_jobs::JobKind for Undoable {
+    type Op = Operation;
+    type Undo = Undo;
+
+    fn claims(&self, operation: &Operation) -> bool {
+        self.kind.claims(operation)
+    }
+
+    fn run(&self, running: &mut Running, operation: &Operation, undo: Option<&Undo>) -> Ended {
+        match undo {
+            Some(undo) => undo::run(running, Some(undo.clone()), &self.trashes, &Moves),
+            None => self.kind.run(running, operation, None),
+        }
+    }
+
+    fn rest(&self, operation: &Operation, control: &Control) -> Result<Operation, Cancelled> {
+        still_to_do(operation, control)
+    }
+
+    fn undo(&self, running: &mut Running, operation: &Operation, ended: &Ended) -> Option<Undo> {
+        undo_after(running, operation, ended, &self.trashes)
+    }
+
+    fn undoes(&self, _: &Operation) -> Option<JobId> {
+        None
+    }
+
+    fn first_path(&self, operation: &Operation) -> PathBuf {
+        self.kind.first_path(operation)
+    }
+}
+
+fn undo_after(
+    running: &mut Running,
+    operation: &Operation,
+    ended: &Ended,
+    trashes: &Trashes,
+) -> Option<Undo> {
+    let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
+    undo_of(operation, &steps, &ended.0, trashes)
+        .map(|undo| undo::putting_back(undo, &running.replaced))
 }
 
 fn copied_out(sources: &[PathBuf]) -> Option<(PathBuf, Vec<PathBuf>)> {
@@ -238,17 +281,12 @@ fn still_to_do(operation: &Operation, control: &Control) -> Result<Operation, Ca
 
 fn first_path(operation: &Operation) -> PathBuf {
     match operation {
-        Operation::Rename { path, .. } | Operation::Extract { archive: path, .. } => path.clone(),
-        Operation::NewFolder { inside, name } => inside.join(name),
-        Operation::Copy { sources, into }
-        | Operation::Move { sources, into }
-        | Operation::Compress { sources, into, .. } => sources.first().unwrap_or(into).clone(),
-        Operation::Delete { paths }
-        | Operation::Trash { paths }
+        Operation::Copy { sources, into } => sources.first().unwrap_or(into).clone(),
+        Operation::Trash { paths }
         | Operation::ChangeAccess { paths, .. }
         | Operation::Restore { items: paths }
         | Operation::DeleteFromTrash { items: paths } => paths.first().cloned().unwrap_or_default(),
-        Operation::EmptyTrash | Operation::Undo { .. } => PathBuf::new(),
+        _ => PathBuf::new(),
     }
 }
 
@@ -304,9 +342,12 @@ mod tests {
             into: "/into".into(),
         };
 
-        assert_eq!(first_path(&rename), Path::new("/a/b"));
-        assert_eq!(first_path(&folder), Path::new("/a/new"));
-        assert_eq!(first_path(&copy(vec!["/s".into()])), Path::new("/s"));
-        assert_eq!(first_path(&copy(Vec::new())), Path::new("/into"));
+        let kinds = kinds(Trashes::default(), None);
+        let first_path = |operation| nova_files_jobs::JobKind::first_path(&kinds, &operation);
+
+        assert_eq!(first_path(rename), Path::new("/a/b"));
+        assert_eq!(first_path(folder), Path::new("/a/new"));
+        assert_eq!(first_path(copy(vec!["/s".into()])), Path::new("/s"));
+        assert_eq!(first_path(copy(Vec::new())), Path::new("/into"));
     }
 }
