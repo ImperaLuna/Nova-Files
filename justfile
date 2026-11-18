@@ -12,6 +12,7 @@ default:
 # which need git history and so can't run inside the sandbox.
 check:
     nix flake check
+    tools/local-pass.sh record check
 
 # Build one crate or the workspace.
 build crate="":
@@ -60,7 +61,10 @@ clippy-config:
 # Mutation tests on lines changed since `base`; a survivor is an untested change.
 # Four builds at once by default; set CARGO_MUTANTS_JOBS to change it, or pass
 # --in-place for one build in this tree. With no Rust lines changed there is
-# nothing to mutate, so it stops before building.
+# nothing to mutate, so it stops before building. Outside CI it retests only
+# mutants that are new or survived the last run (--iterate), and a clean run
+# of the whole workspace records a pass for the pre-push hook. A stacked
+# branch passes its parent as `base`, e.g. `just mutants origin/<parent>`.
 mutants base="origin/main" crate="" *flags:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -77,4 +81,9 @@ mutants base="origin/main" crate="" *flags:
     else
         export CARGO_MUTANTS_JOBS="${CARGO_MUTANTS_JOBS:-4}"
     fi
-    cargo mutants --test-tool nextest --in-diff target/mutants.diff {{ if crate == "" { "--workspace" } else { "--package " + crate } }} {{ flags }}
+    iterate=()
+    [ -n "${GITHUB_ACTIONS:-}" ] || iterate=(--iterate)
+    cargo mutants --test-tool nextest --in-diff target/mutants.diff {{ if crate == "" { "--workspace" } else { "--package " + crate } }} "${iterate[@]}" {{ flags }}
+    if [ ${#iterate[@]} -gt 0 ] && [ -z "{{ crate }}" ] && [[ " {{ flags }} " != *" --shard "* ]]; then
+        tools/local-pass.sh record mutants {{ base }}
+    fi
