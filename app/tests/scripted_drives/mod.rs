@@ -1,7 +1,10 @@
 use std::ffi::OsString;
 
 use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent};
-use nova_files_api::{DiskSpace, Drive, DriveAction, DriveId, DriveList, Volume, VolumeId};
+use nova_files_drives_api::{
+    Command as DrivesCommand, DiskSpace, Drive, DriveAction, DriveId, DriveList,
+    Event as DrivesEvent, Volume, VolumeId,
+};
 
 use super::*;
 
@@ -20,8 +23,8 @@ fn volume(id: &str, mount_point: Option<&str>) -> Volume {
     }
 }
 
-fn drives(volumes: Vec<Volume>) -> Event {
-    Event::Drives(Arc::new(DriveList {
+fn drives(volumes: Vec<Volume>) -> DrivesEvent {
+    DrivesEvent::Drives(Arc::new(DriveList {
         drives: Vec::new(),
         volumes,
     }))
@@ -41,7 +44,7 @@ fn with_drives(
 fn drive_actions(core: &mut Core) -> Vec<DriveAction> {
     let mut actions = Vec::new();
     while let Some(message) = core.try_recv() {
-        if let Some(Command::Drive(action)) = message.into_command::<Command>() {
+        if let Some(DrivesCommand::Drive(action)) = message.into_command::<DrivesCommand>() {
             actions.push(action);
         }
     }
@@ -65,10 +68,12 @@ fn the_space_the_core_tells_is_kept_by_folder(cx: &mut TestAppContext) {
         total: 100,
         free: 40,
     };
-    core.send(Event::DiskSpace(vec![nova_files_api::PathSpace {
-        path: PathBuf::from("/"),
-        space: Some(space),
-    }]));
+    core.send(DrivesEvent::DiskSpace(vec![
+        nova_files_drives_api::PathSpace {
+            path: PathBuf::from("/"),
+            space: Some(space),
+        },
+    ]));
     cx.run_until_parked();
     view.read_with(cx, |view, _| {
         assert_eq!(view.disk_space(Path::new("/")), Some(space));
@@ -88,14 +93,14 @@ fn a_volume_clicked_is_mounted_then_opened(cx: &mut TestAppContext) {
         [DriveAction::Mount(stick_id.clone())]
     );
 
-    core.send(Event::DriveDone {
+    core.send(DrivesEvent::DriveDone {
         action: DriveAction::Mount(VolumeId("card".to_owned())),
         result: Ok(Some(PathBuf::from("/media/card"))),
     });
     cx.run_until_parked();
     assert_eq!(core.next_listing(), None);
 
-    core.send(Event::DriveDone {
+    core.send(DrivesEvent::DriveDone {
         action: DriveAction::Mount(stick_id),
         result: Ok(Some(PathBuf::from(STICK))),
     });
@@ -147,7 +152,7 @@ fn going_elsewhere_while_a_volume_mounts_keeps_the_window_there(cx: &mut TestApp
         Some(PathBuf::from(OTHER))
     );
 
-    core.send(Event::DriveDone {
+    core.send(DrivesEvent::DriveDone {
         action: DriveAction::Mount(VolumeId("stick".to_owned())),
         result: Ok(Some(PathBuf::from(STICK))),
     });
@@ -169,7 +174,7 @@ fn the_keys_go_round_a_drive_menu(cx: &mut TestAppContext) {
     answer_listing(&mut core, ENTRIES);
     let mut stick = volume("stick", Some(STICK));
     stick.drive = Some(DriveId("usb".to_owned()));
-    core.send(Event::Drives(Arc::new(DriveList {
+    core.send(DrivesEvent::Drives(Arc::new(DriveList {
         drives: vec![Drive {
             id: DriveId("usb".to_owned()),
             name: String::new(),

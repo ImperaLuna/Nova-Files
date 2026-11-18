@@ -16,6 +16,7 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
+# - nova-files-drives-api
 # - nova-files-clipboard-api
 # - nova-files-picker-api
 # - nova-files-settings-api
@@ -36,6 +37,7 @@ workspace = true
 # Local time for the Modified column; GPUI already builds it.
 chrono = "0.4.45"
 nova-files-api.workspace = true
+nova-files-drives-api.workspace = true
 nova-files-clipboard-api.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-settings-api.workspace = true

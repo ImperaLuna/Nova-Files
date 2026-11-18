@@ -8,14 +8,13 @@ use nova_files_api::{Failure, Operation, Outcome};
 
 use super::Ended;
 use super::journal::{Record, word};
-use super::make::How;
-use super::one_step;
 use super::plan::Entry;
 use super::running::Running;
 use super::stop::Stop;
-use super::transfer::transfer_to;
 use crate::trash::{self, Trashes};
 use nova_files_jobs::mover::Mover;
+use nova_files_transfer_core::How;
+use nova_files_transfer_core::transfer_to;
 use nova_files_trash_core::{make_folders, put_back, restore, trash};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,7 +182,7 @@ fn run_one(
         }
         Undo::Rename(path, was, name) if same(&path, was) => {
             match running.shared.control.checkpoint().map_err(Stop::from) {
-                Ok(()) => one_step::rename(&path, &name),
+                Ok(()) => nova_files_rename_core::rename(&path, &name),
                 Err(stop) => (stop.outcome(), Vec::new()),
             }
         }

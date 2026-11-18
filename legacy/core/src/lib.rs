@@ -1,9 +1,6 @@
 #![forbid(unsafe_code)]
 
 mod accounts;
-mod archive;
-mod disk_space;
-mod drives;
 mod file_icons;
 mod folder_views;
 mod gathered;
@@ -41,12 +38,12 @@ use nova_files_entries_core::{list, memory, order};
 
 use search::Searcher;
 
-pub use archive::{
-    ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe, seven_on,
-};
 pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
 pub use mime::MimeTypes;
+pub use nova_files_archives_core::{
+    ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe, seven_on,
+};
 pub use open::{NotDefault, make_default_for_folders, opens_folders};
 pub use places::Home;
 pub use run::{emitted_types, routed_types};
@@ -137,7 +134,7 @@ pub fn spawn_with_archiver(
                 file_icons,
                 jobs: Arc::new(jobs),
                 measurer: measure::Measurer::default(),
-                drives: drives::Store::default(),
+                drives: nova_files_drives_core::Store::default(),
                 recent,
                 folder_views,
                 inside,

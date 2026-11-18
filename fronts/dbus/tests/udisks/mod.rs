@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 
-use nova_files_api::{DriveOffer, Event};
 use nova_files_dbus::{Bus, UDISKS, UDISKS_PATH, Udisks};
+use nova_files_drives_api::{DriveOffer, Event};
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder;
 use zbus::object_server::SignalEmitter;
