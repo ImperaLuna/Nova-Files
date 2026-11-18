@@ -1,38 +1,22 @@
-//! Reading and saving the small files the core keeps for the user: the
-//! window state, the settings and the pinned folders.
-//!
-//! [`read`] reads a file up to a cap, so a huge file is never loaded.
-//! [`replace`] saves one whole: it writes a temporary file beside it,
-//! with its mode from the start, syncs it, renames it over the old one and
-//! syncs the folder, so a crash never leaves half a file and a reader sees
-//! the old file or the new one.
-
 use std::fs::{self, DirBuilder, OpenOptions, Permissions};
 use std::io::{self, Read as _, Write as _};
 use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// The files and the folders made for them are the user's alone.
 pub const FILE_MODE: u32 = 0o600;
 pub const FOLDER_MODE: u32 = 0o700;
 
-/// Tells apart the temporary files of saves that overlap.
 static SAVES: AtomicU64 = AtomicU64::new(0);
 
-/// What [`read`] found.
 #[derive(Debug)]
 pub enum Read {
     Bytes(Vec<u8>),
-    /// There is no file.
     Missing,
-    /// The file is over the cap; it was not read.
     TooBig,
-    /// The file is there but couldn't be read.
     Failed(io::Error),
 }
 
-/// The bytes of the file at `path`, when there are at most `max_bytes`.
 pub fn read(path: &Path, max_bytes: usize) -> Read {
     let mut bytes = Vec::new();
     let cap = u64::try_from(max_bytes)
@@ -46,8 +30,6 @@ pub fn read(path: &Path, max_bytes: usize) -> Read {
     }
 }
 
-/// Replaces the file at `path` with `bytes` whole, making its folder
-/// private; the new file has `mode` from the start.
 pub fn replace(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
     if let Some(folder) = path.parent() {
         DirBuilder::new()
@@ -62,7 +44,6 @@ pub fn replace(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
         .create_new(true)
         .mode(mode)
         .open(&temporary)
-        // The umask took bits off `mode`; they are put back.
         .and_then(|file| {
             file.set_permissions(Permissions::from_mode(mode))
                 .map(|()| file)
@@ -76,35 +57,20 @@ pub fn replace(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
     path.parent().map_or(Ok(()), sync_folder)
 }
 
-/// Syncs `folder`, so the names in it are on the disk.
-///
-/// # Errors
-/// When it can't be opened or synced.
 pub fn sync_folder(folder: &Path) -> io::Result<()> {
     fs::File::open(folder)?.sync_all()
 }
 
-/// The permission bits of a file's mode, kept across a save.
 const PERMISSION_BITS: u32 = 0o7777;
 
-/// The mode a save of `path` gives the new file: the old file's own, so a
-/// file the user made keeps it; [`FILE_MODE`] for a new one.
 pub fn mode_to_keep(path: &Path) -> u32 {
     fs::metadata(path).map_or(FILE_MODE, |metadata| {
         metadata.permissions().mode() & PERMISSION_BITS
     })
 }
 
-/// The most links a path is followed through, as many as Linux follows.
 const MAX_LINKS: u32 = 40;
 
-/// Where a save of `path` goes: where the links it leads through end, so
-/// a linked file stays linked, even when that file isn't there yet;
-/// `path` itself when it is no link.
-///
-/// # Errors
-/// When a link can't be read, leads through too many links, or ends in a
-/// folder that isn't there (a drive not mounted, say): the link stays.
 pub fn saved_at(path: &Path) -> io::Result<PathBuf> {
     let mut at = path.to_owned();
     for _ in 0..MAX_LINKS {
@@ -128,7 +94,6 @@ pub fn saved_at(path: &Path) -> io::Result<PathBuf> {
 mod tests {
     use super::*;
 
-    /// The permission bits of a mode.
     const ALL_MODE_BITS: u32 = 0o777;
     const CAP: usize = 16;
 
@@ -165,7 +130,6 @@ mod tests {
     fn a_replace_keeps_bits_the_umask_would_take() {
         let home = temp("umask");
         let path = home.join("folder/file");
-        // Group write: the usual umask takes it off a new file.
         let shared = 0o664;
         replace(&path, b"shared", shared).unwrap();
         let mode = fs::metadata(&path).unwrap().permissions().mode() & ALL_MODE_BITS;
@@ -182,7 +146,6 @@ mod tests {
         assert_eq!(bytes(read(&path, CAP)).len(), CAP);
         replace(&path, &[b'x'; CAP + 1], FILE_MODE).unwrap();
         assert!(matches!(read(&path, CAP), Read::TooBig));
-        // A folder where the file should be opens but can't be read.
         assert!(matches!(read(&home, CAP), Read::Failed(_)));
         fs::remove_dir_all(home).ok();
     }
@@ -227,7 +190,6 @@ mod tests {
     #[test]
     fn a_failed_replace_is_an_error() {
         let home = temp("blocked");
-        // A file where the folder should be.
         fs::write(&home, b"").unwrap();
         assert!(replace(&home.join("file"), b"x", FILE_MODE).is_err());
         fs::remove_file(home).ok();

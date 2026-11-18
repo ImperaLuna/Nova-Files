@@ -1,8 +1,3 @@
-//! Recent folders through the real core: a client says which folders a
-//! person opened and hears them back newest first, with a peek inside,
-//! leaving out folders it skips or that are gone; the next run still has
-//! them.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -94,7 +89,6 @@ fn the_next_run_remembers_the_folders() {
         );
         std::thread::yield_now();
     }
-    // A second core with the same home reads what the first one saved.
     let home = nova_files_core::Home {
         folder: bench.at("home"),
         config: bench.at("home/.config"),

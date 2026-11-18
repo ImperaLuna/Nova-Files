@@ -1,8 +1,3 @@
-//! Percent escapes: a byte written as `%` and two hex digits, so any path,
-//! UTF-8 or not, fits on one line of text. The job journal and the
-//! trash's info files both write paths this way, each keeping its own set
-//! of bytes as themselves.
-
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::PathBuf;
@@ -10,11 +5,9 @@ use std::path::PathBuf;
 const ESCAPE: u8 = b'%';
 const HEX: &[u8; 16] = b"0123456789ABCDEF";
 const HEX_RADIX: u32 = 16;
-/// How far a byte's high hex digit is shifted.
 const HIGH: u8 = 4;
 const LOW_MASK: u8 = 0x0F;
 
-/// `bytes` with every byte `plain` refuses, and `%` itself, escaped.
 pub fn escape(bytes: &[u8], plain: impl Fn(u8) -> bool) -> Vec<u8> {
     let mut escaped = Vec::with_capacity(bytes.len());
     for &byte in bytes {
@@ -31,8 +24,6 @@ pub fn escape(bytes: &[u8], plain: impl Fn(u8) -> bool) -> Vec<u8> {
     escaped
 }
 
-/// The path `field` was escaped from, or `None` when an escape is cut
-/// short or isn't hex.
 pub fn unescape(field: &[u8]) -> Option<PathBuf> {
     let mut bytes = Vec::with_capacity(field.len());
     let mut rest = field.iter();

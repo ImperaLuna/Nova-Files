@@ -1,10 +1,7 @@
-//! Building and reopening an index in a temp cache folder.
-
 use std::fs;
 
 use super::*;
 
-/// A cache folder and two folders to index, removed on drop.
 struct Scratch {
     root: PathBuf,
 }
@@ -73,7 +70,6 @@ fn failures_say_what_failed() {
         .build(&scratch.root.join("home/docs/a.txt"))
         .unwrap_err();
     assert_eq!(error.to_string(), "can't index the folder: NotAFolder");
-    // A file where the cache folder should be.
     fs::create_dir_all(scratch.root.join("cache")).unwrap();
     fs::write(&place.folder, b"").unwrap();
     let error = place.build(&scratch.root.join("home")).unwrap_err();

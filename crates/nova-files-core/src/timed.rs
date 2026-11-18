@@ -1,15 +1,7 @@
-//! Waiting on a read that may never end: a drive that stopped answering
-//! (a network share whose server went away) blocks a `statvfs` or a
-//! folder read with no way to cancel it. [`within`] runs such a read on a
-//! thread of its own and waits a bounded time; a read that takes longer is
-//! given up on, and its thread ends whenever the drive answers.
-
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-/// Runs `work` on a thread named `name` and returns what it gives back,
-/// or `None` when it takes longer than `wait` or no thread can start.
 pub fn within<T: Send + 'static>(
     wait: Duration,
     name: &str,
@@ -19,7 +11,6 @@ pub fn within<T: Send + 'static>(
     thread::Builder::new()
         .name(name.to_owned())
         .spawn(move || {
-            // Nobody listens once the wait is over; that's fine.
             done.send(work()).ok();
         })
         .ok()?;

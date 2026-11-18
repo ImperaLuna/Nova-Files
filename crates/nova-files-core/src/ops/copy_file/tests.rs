@@ -15,22 +15,16 @@ use crate::ops::test_folder::TestFolder;
 const MODE: u32 = 0o640;
 const SPARSE_SIZE: u64 = 64 * 1024 * 1024;
 const TAG: &str = "user.xdg.tags";
-/// Another filesystem than the scratch folders', where the system has one.
 const OTHER_DRIVE: &str = "/dev/shm";
 
-/// Long enough for any copy here; a copy that takes longer is stuck.
 const STUCK: Duration = Duration::from_secs(10);
 
-/// Runs `step` on a thread of its own, failing the test if it takes
-/// longer than [`STUCK`] instead of hanging it.
 fn within<T: Send + 'static>(step: impl FnOnce() -> T + Send + 'static) -> T {
     let (done, result) = mpsc::channel();
     thread::spawn(move || done.send(step()));
     result.recv_timeout(STUCK).expect("the step got stuck")
 }
 
-/// Copies `from` to `to`, cancelled first when `cancelled`, and returns
-/// how it went and how many bytes it said it copied.
 fn copy(from: &Path, to: &Path, cancelled: bool) -> (Result<(), Stop>, u64) {
     let (from, to) = (from.to_path_buf(), to.to_path_buf());
     let part = to.with_file_name(".part");
@@ -227,7 +221,6 @@ fn plain_reads_and_writes_stop_when_cancelled_or_the_file_shrank() {
     };
     let mut copied = 0;
 
-    // Past the end of a file that shrank since it was planned.
     let shrank = read_and_write(&ends, (0, 10), &Control::default(), &mut |n| {
         copied += n;
     });
@@ -260,7 +253,6 @@ fn a_file_written_while_copied_isnt_kept() {
     let part = folder.path().join(".part");
     let mut written = false;
 
-    // The first bytes copied are the moment another program writes.
     let paths = FileCopy {
         source: At::path(&from),
         from: &from,
@@ -306,8 +298,6 @@ fn a_step_that_reads_and_writes_blames_the_right_end() {
     assert_eq!(path, from);
 }
 
-/// The open ends of a copy from `from` to `to`, `to` opened as `open`
-/// says.
 fn ends_of(from: &Path, to: &Path, open: &OpenOptions) -> (File, File) {
     (File::open(from).unwrap(), open.open(to).unwrap())
 }
@@ -393,7 +383,6 @@ fn a_kernel_copy_that_fails_for_another_reason_fails_the_step() {
     let folder = TestFolder::new("copy-range-refused");
     let from = folder.file("a", "abc");
     let to = folder.path().join("b");
-    // The kernel copies into no file opened to append.
     let (source, target) = ends_of(&from, &to, File::options().append(true).create(true));
     let ends = Ends {
         source: &source,
@@ -426,8 +415,6 @@ fn a_copy_between_two_kinds_of_filesystem_reads_and_writes() {
     assert_eq!(fs::read_to_string(&to).unwrap(), "across");
 }
 
-/// Copies a file that `change` writes to, with its modified time set
-/// back, once the copy has begun, and checks the copy isn't kept.
 fn changed_while_copied(test: &str, change: impl Fn(&Path)) {
     let folder = TestFolder::new(test);
     let from = folder.file("a", "before");
@@ -494,7 +481,6 @@ fn a_kernel_copy_stops_at_the_end_of_its_range() {
 
 #[test]
 fn a_file_rewritten_in_place_with_its_time_set_back_isnt_kept() {
-    // Same length, same modified time: only the change time tells.
     changed_while_copied("copy-rewritten", |from| {
         let file = File::options().write(true).open(from).unwrap();
         file.write_all_at(b"AFTER!", 0).unwrap();

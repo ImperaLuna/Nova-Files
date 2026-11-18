@@ -3,8 +3,6 @@ use crate::ops::TestFolder;
 use crate::trash::{Trashes, info_text};
 use std::time::{Duration, UNIX_EPOCH};
 
-/// A trash at `folder/name` with `files/` and `info/`, for a drive
-/// topped at `top` when given.
 fn trash(folder: &TestFolder, name: &str, top: Option<&Path>) -> TrashFolder {
     let root = folder.path().join(name);
     fs::create_dir_all(root.join("files")).unwrap();
@@ -132,7 +130,6 @@ fn what_isnt_an_info_file_is_left_out() {
     put(&home, "empty-path", b"[Trash Info]\nPath=\n");
     put(&home, "bad-escape", b"[Trash Info]\nPath=/a%zz\n");
     put(&home, "path-after", b"[Trash Info]\n[Other]\nPath=/a\n");
-    // An info file without its entry, and an entry without one.
     fs::write(
         info_of(&home, OsStr::new("gone")),
         b"[Trash Info]\nPath=/g\n",
@@ -179,7 +176,6 @@ fn an_info_file_of_the_most_bytes_is_read() {
     let folder = TestFolder::new("read-most");
     let home = trash(&folder, "Trash", None);
     let mut text = b"[Trash Info]\nPath=/a\n".to_vec();
-    // A long path's worth, and the most there may be.
     text.resize(4096, b'\n');
     put(&home, "a", &text);
     text.resize(usize::try_from(MAX_INFO_BYTES).unwrap(), b'\n');

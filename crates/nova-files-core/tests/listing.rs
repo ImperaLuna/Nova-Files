@@ -1,7 +1,3 @@
-//! Folder listing through the real core, against real temp folder trees:
-//! the order, links, hidden files, empty folders, names that aren't UTF-8,
-//! folders that can't be read, and the details of the rows a client shows.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -22,12 +18,9 @@ use nova_files_api::{
     ThumbnailSize, Unreadable,
 };
 
-/// How long a test waits for the core before it counts as a failure.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
-/// No permissions at all.
 const NO_ACCESS: u32 = 0o000;
 
-/// A folder under the system temp folder, removed when dropped.
 struct TempFolder(PathBuf);
 
 impl TempFolder {
@@ -60,7 +53,6 @@ struct Client {
     events: Receiver<Event>,
 }
 
-/// A client of a core whose home is `home`, never the real one.
 fn client_at(home: &Path) -> Client {
     let home = nova_files_core::Home {
         folder: home.to_owned(),
@@ -80,11 +72,9 @@ fn client_at(home: &Path) -> Client {
     }
 }
 
-/// A client of a core with an empty temp home.
 fn client() -> Client {
     let home = TempFolder::new();
     let client = client_at(home.path());
-    // The core reads the home folder only when asked for places.
     drop(home);
     client
 }
@@ -101,9 +91,6 @@ impl Client {
         self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
     }
 
-    /// Shows rows `first..first + count` of listing `id` and returns the
-    /// details that come back: the entry the first answer starts at, and
-    /// `expected` details from there on.
     fn show_rows(&self, id: u64, first: u32, count: u32, expected: usize) -> (u32, Vec<Details>) {
         self.connection
             .send(Command::Rows {
@@ -200,12 +187,10 @@ fn details_follow_the_listing() {
 
     let sizes: Vec<Option<u64>> = details.iter().map(|detail| detail.size).collect();
     let link_size = fs::symlink_metadata(root.join("broken")).unwrap().len();
-    // folder, broken, five.txt, link
     assert_eq!(sizes, [None, Some(link_size), Some(5), Some(5)]);
     assert!(details.iter().all(|detail| detail.modified.is_some()));
 }
 
-/// A client with a listing (id 4) of a folder of `files` empty files.
 fn big_folder(files: u32) -> (TempFolder, Client) {
     let folder = TempFolder::new();
     for index in 0..files {
@@ -222,7 +207,6 @@ fn only_the_rows_shown_get_details() {
 
     let (start, details) = client.show_rows(4, 1000, 40, 40);
 
-    // Nothing before row 1000 was read, though it was listed first.
     assert_eq!(start, 1000);
     assert!(details.iter().all(|detail| detail.size == Some(0)));
 }
@@ -312,7 +296,6 @@ fn the_trash_lists_its_hidden_items_too() {
             (".env".to_owned(), EntryKind::File)
         ]
     );
-    // A trashed folder's own hidden entries too.
     fs::write(trash.join(".old/.inside"), "").unwrap();
     let inside = listing(client.list(2, &trash.join(".old")));
     assert_eq!(names(&inside), [(".inside".to_owned(), EntryKind::File)]);
@@ -379,7 +362,6 @@ fn folder_without_permission_is_reported() {
     let locked = folder.path().join("locked");
     fs::create_dir(&locked).unwrap();
     fs::set_permissions(&locked, fs::Permissions::from_mode(NO_ACCESS)).unwrap();
-    // Root reads anything, so there is nothing to test when run as root.
     if fs::read_dir(&locked).is_ok() {
         return;
     }

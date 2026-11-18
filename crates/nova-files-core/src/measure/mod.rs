@@ -1,27 +1,3 @@
-//! Measuring how much space files and folders take, for the client that
-//! asks.
-//!
-//! [`Measurer::measure`] starts a scan on a thread of its own, which walks
-//! the paths on a few threads (see `walk`) into a tally (see `tally`). As
-//! folders are read, the client hears the totals so far at most every
-//! [`EVERY`], then once more when the scan ends. A scan changes nothing on
-//! the disk, so it is not a job: only its client hears of it.
-//!
-//! [`Measurer::space`] scans one folder's entries the same way, each into
-//! a slot of its own (see `space`), and reports only the entries whose
-//! totals changed since the report before.
-//!
-//! A client has at most one scan of each kind, like one search: asking
-//! again stops the one before, and so do [`Command::StopMeasure`] and the
-//! client leaving; such a scan says nothing more. [`Measurer::stop_under`] stops the scans
-//! under a folder (a drive about to be unmounted) and waits until they
-//! have let go of it; their clients hear [`ScanState::CutShort`].
-//!
-//! Each scan's state is set under the lock of the scans map. The walk asks
-//! it before each read from the disk, and every answer goes out under that
-//! same lock after asking it, so a stopped scan never says more than it
-//! should.
-
 mod space;
 mod tally;
 mod walk;
@@ -40,16 +16,12 @@ use nova_files_api::{
 use tally::Tally;
 use walk::{Root, walk};
 
-/// The least time between two reports of one scan.
 const EVERY: Duration = Duration::from_millis(100);
 
-/// The longest [`Measurer::stop_under`] waits for scans to let go: a scan
-/// stuck in a read from a drive that stopped answering may never.
 pub const LET_GO_WAIT: Duration = Duration::from_secs(5);
 
 const THREAD_NAME: &str = "nova-files-measure";
 
-/// What a scan that couldn't start reports: nothing could be read.
 const UNMEASURED: Size = Size {
     bytes: 0,
     on_disk: 0,
@@ -58,26 +30,19 @@ const UNMEASURED: Size = Size {
     unreadable: 1,
 };
 
-/// A scan that runs.
 const RUNNING: u8 = 0;
-/// A scan its client stopped or replaced: it says nothing more.
 const STOPPED: u8 = 1;
-/// A scan the core cut short: its client hears so, once.
 const CUT: u8 = 2;
 
-/// One scan, as the map and its threads share it.
 struct Shared {
     id: MeasureId,
     roots: Vec<PathBuf>,
-    /// [`RUNNING`], [`STOPPED`] or [`CUT`].
     state: AtomicU8,
-    /// Set once the scan's walk is over and its folders are closed.
     ended: Mutex<bool>,
     ended_signal: Condvar,
 }
 
 impl Shared {
-    /// Scan `id` of `roots`, running.
     const fn new(id: MeasureId, roots: Vec<PathBuf>) -> Self {
         Self {
             id,
@@ -92,7 +57,6 @@ impl Shared {
         self.state.load(Ordering::SeqCst) == RUNNING
     }
 
-    /// Moves a running scan to `state`; a scan already stopped stays so.
     fn halt(&self, state: u8) {
         self.state
             .compare_exchange(RUNNING, state, Ordering::SeqCst, Ordering::SeqCst)
@@ -104,7 +68,6 @@ impl Shared {
         self.ended_signal.notify_all();
     }
 
-    /// Waits until the scan ended, up to `deadline`; whether it did.
     fn wait_ended(&self, deadline: Instant) -> bool {
         let ended = self.ended.lock().unwrap_or_else(PoisonError::into_inner);
         let left = deadline.saturating_duration_since(Instant::now());
@@ -116,28 +79,20 @@ impl Shared {
     }
 }
 
-/// What a scan answers with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Purpose {
-    /// One total for all its paths: [`Command::Measure`].
     Total,
-    /// A total for each entry of one folder: [`Command::Space`].
     Space,
 }
 
-/// Each client's scans, one of each purpose at most.
 type Scans = HashMap<(ClientId, Purpose), Arc<Shared>>;
 
-/// The scans running.
 #[derive(Default)]
 pub struct Measurer {
     scans: Arc<Mutex<Scans>>,
 }
 
 impl Measurer {
-    /// Answers `client`'s [`Command::Measure`], [`Command::Space`] or
-    /// [`Command::StopMeasure`]; any other command is not a scan's and is
-    /// left alone.
     pub fn answer(&self, client: ClientId, events: &Arc<dyn EventSink>, command: Command) {
         match command {
             Command::Measure { id, paths } => self.measure(client, events, id, paths),
@@ -147,8 +102,6 @@ impl Measurer {
         }
     }
 
-    /// Measures everything under `paths` together for `client`, as scan
-    /// `id`, stopping the client's size scan before.
     pub fn measure(
         &self,
         client: ClientId,
@@ -176,8 +129,6 @@ impl Measurer {
         });
     }
 
-    /// Measures each entry of `folder` for `client`, as scan `id`,
-    /// stopping the client's space scan before.
     pub fn space(
         &self,
         client: ClientId,
@@ -196,8 +147,6 @@ impl Measurer {
         );
     }
 
-    /// Registers the scan `shared` under `key`, stopping the one there
-    /// before, and runs `work` on a thread of its own.
     fn start(
         &self,
         key: (ClientId, Purpose),
@@ -229,7 +178,6 @@ impl Measurer {
         }
     }
 
-    /// Stops `client`'s scan `id`, if it still runs. It says nothing more.
     pub fn stop(&self, client: ClientId, id: MeasureId) {
         let mut scans = lock(&self.scans);
         for purpose in [Purpose::Total, Purpose::Space] {
@@ -241,7 +189,6 @@ impl Measurer {
         }
     }
 
-    /// Stops the scans of `client`, which left.
     pub fn forget(&self, client: ClientId) {
         lock(&self.scans).retain(|&(owner, _), scan| {
             if owner == client {
@@ -251,10 +198,6 @@ impl Measurer {
         });
     }
 
-    /// Cuts short every scan of a path under `folder` (a drive about to be
-    /// unmounted), and waits until each has closed what it opened there,
-    /// up to [`LET_GO_WAIT`]. Whether they all did. Each scan's client
-    /// hears [`ScanState::CutShort`].
     #[cfg_attr(
         not(test),
         expect(dead_code, reason = "drives (FIL-35) call it before unmounting")
@@ -273,7 +216,6 @@ impl Measurer {
     }
 }
 
-/// One running scan, as its threads see it.
 #[derive(Clone)]
 struct Scan {
     scans: Arc<Mutex<Scans>>,
@@ -283,7 +225,6 @@ struct Scan {
 }
 
 impl Scan {
-    /// What a scan that couldn't start says: nothing could be read.
     fn unstarted(&self) -> Event {
         let (id, state) = (self.shared.id, ScanState::Done);
         match self.key.1 {
@@ -299,10 +240,6 @@ impl Scan {
         }
     }
 
-    /// Hands the client what `event` makes while the scan runs; under the
-    /// scans' lock, so a stop set before can't be missed. A stopped scan
-    /// never makes it, so nothing the report takes (changed entries) is
-    /// lost.
     fn tell(&self, event: impl FnOnce() -> Event) -> Result<(), ClientGone> {
         let scans = lock(&self.scans);
         if !self.shared.running() {
@@ -313,9 +250,6 @@ impl Scan {
         told
     }
 
-    /// Tells the client how the scan ended, with what `report` makes of
-    /// it: done, or cut short by the core. A scan its client stopped says
-    /// nothing.
     fn last(&self, report: impl FnOnce(ScanState) -> Event) {
         let scans = lock(&self.scans);
         let state = match self.shared.state.load(Ordering::SeqCst) {
@@ -329,12 +263,7 @@ impl Scan {
         drop(scans);
     }
 
-    /// Walks `roots` into `tally`, telling the client what `report` makes
-    /// of it as it goes and once at the end. A client that stopped
-    /// listening stops the scan.
     fn run(&self, roots: &[Root], tally: &Tally, report: impl Fn(ScanState) -> Event + Sync) {
-        // Also held while a report goes out, so two threads never send
-        // theirs out of order.
         let told: Mutex<Option<Instant>> = Mutex::new(None);
         let progress = || {
             let mut told = told.lock().unwrap_or_else(PoisonError::into_inner);
@@ -351,8 +280,6 @@ impl Scan {
         self.last(report);
     }
 
-    /// Forgets this scan, unless a newer one of the client took its place,
-    /// and tells anyone waiting that it let go of its folders.
     fn finish(&self) {
         let mut scans = lock(&self.scans);
         if scans
@@ -366,9 +293,6 @@ impl Scan {
     }
 }
 
-/// `paths` less any named twice or inside another, which a walk of that
-/// other counts already: it never follows a link, so that is the only way
-/// one path reaches another's files.
 fn outermost(mut paths: Vec<PathBuf>) -> Vec<PathBuf> {
     paths.sort();
     paths.dedup();

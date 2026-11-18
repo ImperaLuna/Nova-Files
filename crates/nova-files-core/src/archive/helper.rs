@@ -1,14 +1,3 @@
-//! Runs the helper once and reads what it writes.
-//!
-//! The helper gets an empty environment and, when listing, the password
-//! on its standard input, if any. It runs in a process group of its own. Its standard output is
-//! read on a thread of its own, up to [`MAX_OUTPUT`]. The whole run,
-//! reading and exiting, has [`RUN_TIME`]. Once the helper has exited or
-//! the time is up, its group is killed, while the helper is not yet
-//! waited on and so its id still names only that group; then it is waited
-//! on. How it ended is its exit code, the numbers the helper's `ending`
-//! uses.
-
 use std::ffi::OsStr;
 use std::io::{self, Read, Write as _};
 use std::os::unix::process::CommandExt as _;
@@ -23,9 +12,7 @@ use rustix::process::{self, Pid, PidfdFlags, Signal};
 
 use super::ArchiveFailure;
 
-/// How long one run may take, start to exit.
 const RUN_TIME: Duration = Duration::from_mins(10);
-/// The most output read from one run; more counts as broken.
 const MAX_OUTPUT: u64 = 67_108_864;
 const READER_THREAD: &str = "nova-files-archive-reader";
 const LIST: &str = "list";
@@ -40,8 +27,6 @@ const NO_SPACE: i32 = 10;
 const READ_ONLY: i32 = 11;
 const NOT_WRITTEN: i32 = 12;
 
-/// What the helper, given `lead` before its mode, wrote listing
-/// `archive` with `password`.
 pub fn list(
     helper: &Path,
     lead: &[&OsStr],
@@ -59,8 +44,6 @@ pub fn list(
     output
 }
 
-/// Starts the helper with `args`, in a process group of its own, with an
-/// empty environment and `input` on its standard input.
 pub fn spawn(helper: &Path, args: &[&OsStr], input: Stdio) -> Result<Child, ArchiveFailure> {
     Command::new(helper)
         .args(args)
@@ -73,15 +56,12 @@ pub fn spawn(helper: &Path, args: &[&OsStr], input: Stdio) -> Result<Child, Arch
         .map_err(|_| ArchiveFailure::NotRead)
 }
 
-/// Writes `password` to the helper's standard input, then closes it.
 pub fn give(child: &mut Child, password: Option<&str>) {
     if let (Some(mut input), Some(password)) = (child.stdin.take(), password) {
-        // A helper that exits before reading it has said why.
         input.write_all(password.as_bytes()).ok();
     }
 }
 
-/// What the helper's exit `status` says of its run.
 pub fn ended(status: Option<ExitStatus>) -> Result<(), ArchiveFailure> {
     Err(match status.and_then(|status| status.code()) {
         Some(DONE) => return Ok(()),
@@ -98,16 +78,12 @@ pub fn ended(status: Option<ExitStatus>) -> Result<(), ArchiveFailure> {
     })
 }
 
-/// All `reader` holds, or `None` inside when it holds more than `cap`
-/// bytes.
 fn capped(reader: impl Read, cap: u64) -> io::Result<Option<Vec<u8>>> {
     let mut bytes = Vec::new();
     reader.take(cap.saturating_add(1)).read_to_end(&mut bytes)?;
     Ok((bytes.len() as u64 <= cap).then_some(bytes))
 }
 
-/// Everything the helper writes: broken when that is more than
-/// [`MAX_OUTPUT`], not read when it didn't finish writing by `deadline`.
 fn read_output(child: &mut Child, deadline: Instant) -> Result<Vec<u8>, ArchiveFailure> {
     let output = child.stdout.take().ok_or(ArchiveFailure::NotRead)?;
     let (done, finished) = mpsc::channel();
@@ -124,8 +100,6 @@ fn read_output(child: &mut Child, deadline: Instant) -> Result<Vec<u8>, ArchiveF
     }
 }
 
-/// The helper's exit status, waiting up to `wait` for it to exit. Its
-/// group is killed either way, then it is waited on.
 pub fn end(mut child: Child, wait: Duration) -> Option<ExitStatus> {
     let pid = Pid::from_child(&child);
     if let Ok(exited) = process::pidfd_open(pid, PidfdFlags::empty())

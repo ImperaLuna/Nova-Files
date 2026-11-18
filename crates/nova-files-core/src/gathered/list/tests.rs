@@ -1,5 +1,3 @@
-//! Gathering a place's rows from real temp folders.
-
 use std::cell::Cell;
 use std::os::unix::fs::symlink;
 use std::path::Path;
@@ -9,7 +7,6 @@ use nova_files_api::SortKey;
 
 use super::*;
 
-/// A temp folder, removed when dropped.
 struct Scratch(PathBuf);
 
 impl Scratch {
@@ -54,7 +51,6 @@ fn one(path: PathBuf) -> GatheredFolder {
     }
 }
 
-/// Each row as `name` and the folder it is in, relative to `root`.
 fn rows(root: &Path, folders: &[GatheredFolder], order: Order) -> Vec<(String, String)> {
     let gathered = gather(folders, HiddenFiles::Left, order, || false).unwrap();
     gathered
@@ -151,7 +147,6 @@ fn hidden_folders_follow_the_setting_and_links_to_folders_count() {
     );
     let shown = gather(&folders, HiddenFiles::Shown, Order::default(), || false).unwrap();
     assert_eq!(shown.len(), 3);
-    // A hidden one-project folder follows the setting too.
     scratch.folders(&[".dotfiles"]);
     let dotfiles = [one(scratch.at(".dotfiles"))];
     assert_eq!(rows(&scratch.0, &dotfiles, Order::default()), []);

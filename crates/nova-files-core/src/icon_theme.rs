@@ -1,22 +1,5 @@
-//! Finding icons in the system's icon themes, as the freedesktop icon
-//! theme spec lays them out.
-//!
-//! Themes live in `~/.icons` and in `icons` under each data folder
-//! (`XDG_DATA_HOME`, then `XDG_DATA_DIRS`); one theme may be spread over
-//! several of them, and its `index.theme` is the first one found. The
-//! search goes through the chosen theme (or, when none is chosen, the
-//! system's `default` theme), then the themes it inherits from (depth
-//! first, each once), then `hicolor`. In each theme every name is tried
-//! before the next theme, so the theme's own generic icon beats a parent's
-//! exact one and the rows keep one look. Within a theme the folders made
-//! for the asked size come first, then the nearest. Only file type folders
-//! are looked in.
-//!
-//! A theme's folders are listed once, at its first search, so each later
-//! search is a few hash lookups instead of thousands of file checks. The
-//! caller reads the file it is handed; one it can't use (unreadable, too
-//! big) lets the search go on to the next.
-
+// Follows the freedesktop icon theme spec.
+// https://specifications.freedesktop.org/icon-theme-spec/latest/
 mod index;
 mod ini;
 pub mod name;
@@ -32,30 +15,21 @@ use index::Index;
 
 use crate::{capped, mime};
 
-/// Where the spec puts themes under a data folder.
 const ICONS_FOLDER: &str = "icons";
-/// The older place in home.
 const HOME_ICONS: &str = ".icons";
 const HOME_VAR: &str = "HOME";
 const INDEX_FILE: &str = "index.theme";
-/// Every theme falls back to it.
 pub const HICOLOR: &str = "hicolor";
-/// The theme systems set up for when the user chose none.
 pub const DEFAULT_THEME: &str = "default";
-/// The extensions looked for, in the spec's order; XPM isn't drawn.
 const EXTENSIONS: [&str; 2] = ["png", "svg"];
 const EXTENSION_SEPARATOR: char = '.';
-/// A theme's index is tens of KB.
 const MAX_INDEX_BYTES: u64 = 1024 * 1024;
-/// More inherited themes than any real chain, so a loop of themes ends.
 const MAX_THEMES: usize = 32;
 
-/// The themes to search, read once.
 #[derive(Debug)]
 pub struct IconThemes {
     chosen: Option<String>,
     bases: Vec<PathBuf>,
-    /// The chain, once read.
     chain: Option<Vec<Theme>>,
     size: u32,
     scale: u32,
@@ -64,13 +38,10 @@ pub struct IconThemes {
 #[derive(Debug)]
 struct Theme {
     name: String,
-    /// Folders made for the size first, then by distance.
     folders: Vec<String>,
-    /// Each folder's icons, by name, once listed.
     listed: Option<Vec<HashMap<String, Found>>>,
 }
 
-/// Where one icon file is: the base folder it is in and its extension.
 #[derive(Debug, Clone, Copy)]
 struct Found {
     base: usize,
@@ -78,8 +49,6 @@ struct Found {
 }
 
 impl IconThemes {
-    /// The themes in `bases`, starting from `chosen`, searched for icons
-    /// `size` pixels across at `scale`.
     pub const fn new(chosen: Option<String>, bases: Vec<PathBuf>, size: u32, scale: u32) -> Self {
         Self {
             chosen,
@@ -90,8 +59,6 @@ impl IconThemes {
         }
     }
 
-    /// Starts from `chosen` from now on; the chain is read again at the
-    /// next search. Whether that changed anything.
     pub fn choose(&mut self, chosen: Option<String>) -> bool {
         if chosen == self.chosen {
             return false;
@@ -101,16 +68,12 @@ impl IconThemes {
         true
     }
 
-    /// Whether a theme called `name` is installed: some base has its
-    /// index.
     pub fn installed(&self, name: &str) -> bool {
         self.bases
             .iter()
             .any(|base| base.join(name).join(INDEX_FILE).is_file())
     }
 
-    /// The first icon file of `names`, tried in order in each theme of the
-    /// chain, that `take` makes something of.
     pub fn find<T>(
         &mut self,
         names: &[String],
@@ -128,8 +91,6 @@ impl IconThemes {
 }
 
 impl Theme {
-    /// The first icon file of `names` in this theme that `take` makes
-    /// something of; its folders are listed at the first search.
     fn find<T>(
         &mut self,
         bases: &[PathBuf],
@@ -150,7 +111,6 @@ impl Theme {
     }
 }
 
-/// The icons in each of `folders` of `theme`, by name.
 fn list(bases: &[PathBuf], theme: &str, folders: &[String]) -> Vec<HashMap<String, Found>> {
     folders
         .iter()
@@ -169,9 +129,6 @@ fn list(bases: &[PathBuf], theme: &str, folders: &[String]) -> Vec<HashMap<Strin
         .collect()
 }
 
-/// Notes the icon in `file`, from base `base`, if it has an extension that
-/// is drawn. A name in several bases, or with both extensions, counts
-/// where it is first found, PNG before SVG.
 fn add(icons: &mut HashMap<String, Found>, file: &OsStr, base: usize) {
     let Some((name, extension)) = file
         .to_str()
@@ -189,7 +146,6 @@ fn add(icons: &mut HashMap<String, Found>, file: &OsStr, base: usize) {
     }
 }
 
-/// `chosen`, the themes it inherits from and `hicolor`, each read once.
 fn read_chain(chosen: &str, bases: &[PathBuf], size: u32, scale: u32) -> Vec<Theme> {
     let mut chain: Vec<Theme> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
@@ -202,7 +158,6 @@ fn read_chain(chosen: &str, bases: &[PathBuf], size: u32, scale: u32) -> Vec<The
         let Some(index) = read_index(&name, bases) else {
             continue;
         };
-        // Pushed last first, so the first parent is searched next.
         pending.extend(
             index
                 .inherits
@@ -220,10 +175,8 @@ fn read_chain(chosen: &str, bases: &[PathBuf], size: u32, scale: u32) -> Vec<The
     chain
 }
 
-/// The theme called `name` with its folders in search order.
 fn ordered(name: String, index: Index, size: u32, scale: u32) -> Theme {
     let mut folders = index.folders;
-    // Stable, so folders as near as each other keep the index's order.
     folders.sort_by_key(|folder| (!folder.serves(size, scale), folder.distance(size, scale)));
     Theme {
         name,
@@ -232,7 +185,6 @@ fn ordered(name: String, index: Index, size: u32, scale: u32) -> Theme {
     }
 }
 
-/// The first `index.theme` of the theme called `name`.
 fn read_index(name: &str, bases: &[PathBuf]) -> Option<Index> {
     bases
         .iter()
@@ -240,8 +192,6 @@ fn read_index(name: &str, bases: &[PathBuf]) -> Option<Index> {
         .map(|text| index::parse(&text))
 }
 
-/// The folders themes live in, in the spec's order: `~/.icons`, then
-/// `icons` in each data folder, from the environment `var` reads.
 pub fn bases(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let home = var(HOME_VAR)
         .filter(|home| !home.is_empty())

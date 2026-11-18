@@ -1,8 +1,3 @@
-//! Nova Files as the user's file manager: whether it is the default app
-//! for folders (`inode/directory`), read the same way as any other default
-//! (see `defaults`), and making it that default, as Open With's "Always
-//! use" does (see `associate`).
-
 use std::path::Path;
 use std::{fmt, io};
 
@@ -11,10 +6,8 @@ use super::associate::{self, NotSet};
 use super::defaults::{self, Places};
 use super::{FLATPAK_INFO, environment_places};
 
-/// Nova Files' desktop ID: its desktop entry is named after the app id.
 const OWN_DESKTOP_ID: &str = concat!(env!("NOVA_FILES_APP_ID"), ".desktop");
 
-/// Whether Nova Files is the user's default app for folders.
 pub fn opens_folders() -> bool {
     opens_folders_in(&environment_places())
 }
@@ -23,11 +16,6 @@ fn opens_folders_in(places: &Places) -> bool {
     defaults::default_app(&[FOLDER_TYPE], places).is_some_and(|app| app.id == OWN_DESKTOP_ID)
 }
 
-/// Makes Nova Files the user's default app for folders, in their
-/// `mimeapps.list`.
-///
-/// # Errors
-/// [`NotDefault`] says why it isn't the default.
 pub fn make_default_for_folders() -> Result<(), NotDefault> {
     if Path::new(FLATPAK_INFO).exists() {
         return Err(NotDefault::Sandboxed);
@@ -43,17 +31,11 @@ fn make_default_in(places: &Places) -> Result<(), NotDefault> {
     })
 }
 
-/// Why Nova Files didn't become the default for folders.
 #[derive(Debug)]
 pub enum NotDefault {
-    /// Its desktop entry isn't where apps are found, or can't be used
-    /// (hidden, or its program missing).
     NotInstalled,
-    /// It runs in a Flatpak, where the user's lists can't be reached.
     Sandboxed,
-    /// No config folder to save the choice in.
     NoHome,
-    /// A `mimeapps.list` couldn't be read or saved.
     Failed(io::Error),
 }
 

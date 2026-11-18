@@ -1,10 +1,7 @@
-//! Files the copy tests make and look at.
-
 use std::fs;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
-/// Hidden part and backup files left anywhere under `root`.
 pub fn hidden(root: &Path) -> Vec<PathBuf> {
     tree(root)
         .into_iter()
@@ -16,8 +13,6 @@ pub fn hidden(root: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Every path under `root`, relative to it, with what each holds: a
-/// folder, a link's target or a file's bytes.
 pub fn tree(root: &Path) -> Vec<(PathBuf, String)> {
     let mut found = Vec::new();
     let mut pending = vec![root.to_path_buf()];

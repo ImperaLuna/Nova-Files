@@ -1,24 +1,3 @@
-//! The trash job: each entry goes to the trash on its own mount (see
-//! `crate::trash`), one rename each, never a copy.
-//!
-//! For each entry its info file is first written whole under a part
-//! file's hidden name in the trash's `info/` and synced; then, recorded
-//! in the journal with its device and inode, it takes its real name,
-//! never over anything, and that folder is synced; only then is the entry
-//! renamed into the trash's `files/` under the same name, never over
-//! anything, and recorded as the path the user gave. A name another
-//! app's entry holds in `files/` sends the info file back to try the next
-//! name. After a crash, the part file goes as any part
-//! file does, and an info file still the job's own whose entry never got
-//! there goes too (see `left`), so a crash leaves neither half an info
-//! file nor one naming nothing. The trashed folders' sizes go in their
-//! trash's cache once every entry has gone.
-//!
-//! A mount with no trash the user may use, or an entry already in a
-//! trash, is a conflict (skip, or retry); so are a full drive and a
-//! denied permission. An entry gone since the job started is taken as
-//! gone where the user wanted: inside a folder trashed before it, say.
-
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
@@ -44,31 +23,21 @@ use crate::trash::{
     stored_name,
 };
 
-/// The trash found for each folder entries went from, so each folder's is
-/// looked for once.
 type Known = HashMap<PathBuf, TrashFolder>;
 
-/// How many names an entry tries in the trash before the job gives up
-/// on it: something keeps taking them.
 const MAX_ATTEMPTS: u32 = 10_000;
 
-/// Why an entry didn't go to the trash.
 enum Refused {
-    /// Its mount has no trash it may use.
     NoTrash,
-    /// A step failed for this reason.
     Failed(Failure),
 }
 
-/// A folder the job trashed, whose size its trash's cache is to hold.
 struct Trashed {
     trash: PathBuf,
     stored: OsString,
     info: PathBuf,
 }
 
-/// Moves each of `paths` to its trash; `home_trash` is the home trash's
-/// folder.
 pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>) -> Ended {
     running.record_job(word::TRASH, None, paths);
     if let Err(stop) = check(paths) {
@@ -79,13 +48,10 @@ pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>
     let mut touched = BTreeSet::new();
     let mut folders = Vec::new();
     let mut result = Ok(());
-    // Deepest first, so a path chosen through a chosen link goes before
-    // the link, and each path chosen goes as its own entry.
     let mut ordered: Vec<_> = paths.iter().collect();
     ordered.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
     let mut known = Known::new();
     for (index, path) in ordered.into_iter().enumerate() {
-        // Trashed before a crash: what has its name now came since.
         if !running.before.trashed.contains(path) {
             let at = (index, path.as_path());
             match trash_one(running, at, (home_trash, &mut known), &mut touched) {
@@ -98,7 +64,6 @@ pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>
         }
         running.reporter.item(0);
     }
-    // So what the job reports trashed is on the disk.
     sync_folders(touched.iter().map(PathBuf::as_path));
     note_sizes(running, folders);
     running.reporter.tell();
@@ -108,20 +73,13 @@ pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>
     )
 }
 
-/// What became of a file a replace set aside.
 pub enum SetAside {
-    /// It went to this path in a trash.
     Trashed(PathBuf),
-    /// It was gone already.
     Gone,
-    /// Its drive has no trash the user may use.
     NoTrash,
-    /// The trash refused it.
     Refused,
 }
 
-/// Moves `left`, a file a replace set aside under a hidden name as the
-/// job's `index`th item, to its trash as `shown`, the path it had.
 pub fn trash_set_aside(
     running: &mut Running,
     (index, left): (usize, &Path),
@@ -146,11 +104,6 @@ pub fn trash_set_aside(
     }
 }
 
-/// Checks every path before anything goes, so a bad one fails the job
-/// with nothing done.
-///
-/// # Errors
-/// [`Stop`] when a path isn't absolute, has no name, or isn't there.
 fn check(paths: &[PathBuf]) -> Result<(), Stop> {
     for path in paths {
         if !path.is_absolute() || path.file_name().is_none() {
@@ -162,12 +115,6 @@ fn check(paths: &[PathBuf]) -> Result<(), Stop> {
     Ok(())
 }
 
-/// Moves `path`, the job's `index`th, to its trash, asking what to do
-/// when it can't, and notes in `touched` the folders whose entries
-/// changed. Returns the folder trashed, if it was one.
-///
-/// # Errors
-/// [`Stop`] when cancelled, or when a failure isn't the user's to answer.
 fn trash_one(
     running: &mut Running,
     (index, path): (usize, &Path),
@@ -185,14 +132,12 @@ fn trash_one(
             }
             Ok(None) => return Ok(None),
             Err(refused) => {
-                // Looked for again on a retry: the trash may have changed.
                 known.clear();
                 refused
             }
         };
         let kind = match refused {
             Refused::NoTrash => ConflictKind::NoTrash,
-            // Gone is taken as done above, so not about the source.
             Refused::Failed(reason) => conflict_for(reason, Path::new(""), path)
                 .ok_or_else(|| Stop::because(path, reason))?,
         };
@@ -200,7 +145,6 @@ fn trash_one(
             kind,
             source: path.to_path_buf(),
             target: path.to_path_buf(),
-            // Numbered when asked.
             number: 0,
             more: 0,
         };
@@ -210,16 +154,8 @@ fn trash_one(
     }
 }
 
-/// What [`send`] did: `None` when the entry was gone already, else its
-/// trash, where in it the entry went, and, for a folder, what its size
-/// is noted under.
 type Sent = Option<(TrashFolder, PathBuf, Option<Trashed>)>;
 
-/// Moves `path`, the job's `index`th, into its trash under a free name,
-/// its info file first.
-///
-/// # Errors
-/// [`Refused`] when it stays where it is.
 fn send(
     running: &mut Running,
     (index, path, shown): (usize, &Path, Option<&OsStr>),
@@ -229,8 +165,6 @@ fn send(
         return Err(Refused::Failed(Failure::InvalidName));
     };
     let shown = shown.unwrap_or(name);
-    // Without links, so the trash is the one the entry is really on and
-    // the info file says where it really was.
     let found = parent.canonicalize().and_then(|parent| {
         let at = parent.join(name);
         let there = at.symlink_metadata()?;
@@ -241,8 +175,6 @@ fn send(
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(Refused::Failed(failure(&error))),
     };
-    // Where it was as the user knows it, which a file set aside under a
-    // hidden name is not.
     let original = parent.join(shown);
     let trash = if let Some(trash) = known.get(&parent) {
         trash.clone()
@@ -251,11 +183,9 @@ fn send(
         known.insert(parent, trash.clone());
         trash
     };
-    // Already in the trash: only a delete takes it further.
     if original.starts_with(&trash.root) {
         return Err(Refused::NoTrash);
     }
-    // It holds the trash itself, which can't go into itself.
     if trash.root.starts_with(&original) {
         return Err(Refused::Failed(Failure::Unsupported));
     }
@@ -285,18 +215,10 @@ fn send(
     }
 }
 
-/// Whether `error`, from moving `original` to the trash, means it was
-/// removed meanwhile.
 fn gone_meanwhile(error: &io::Error, original: &Path) -> bool {
     error.kind() == io::ErrorKind::NotFound && original.symlink_metadata().is_err()
 }
 
-/// Puts the info file written as `part`, the entry `entry`, and then
-/// the entry `item` at `original`, stored as `name`, into `trash`, each
-/// under the first name free for both, and returns that name.
-///
-/// # Errors
-/// When a step fails; the info file is then back at `part`, or gone.
 fn take_names(
     running: &mut Running,
     (part, entry): (&Path, Entry),
@@ -307,13 +229,10 @@ fn take_names(
         let stored = stored_name(name, attempt);
         let info = info_path(trash, &stored);
         let target = trash.files().join(&stored);
-        // An info file has it: on to the next name, with nothing to
-        // record. A stray entry without one is found below.
         if info.symlink_metadata().is_ok() {
             continue;
         }
         running.record(Record::TrashInfo(&info, entry, item));
-        // On the disk before the info file takes its name.
         running.settle();
         match rename_no_replace(part, &info) {
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -322,8 +241,6 @@ fn take_names(
         let moved = sync_folder(&trash.info()).and_then(|()| rename_no_replace(original, &target));
         match moved {
             Ok(()) => return Ok(stored),
-            // Another app's entry has the name: the info file steps back
-            // for the next one.
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                 rename_no_replace(&info, part).inspect_err(|_| remove(&info))?;
             }
@@ -336,29 +253,20 @@ fn take_names(
     Err(io::ErrorKind::AlreadyExists.into())
 }
 
-/// Where the info file of the entry stored as `stored` in `trash` goes.
 fn info_path(trash: &TrashFolder, stored: &OsStr) -> PathBuf {
     let mut name = stored.to_os_string();
     name.push(INFO_SUFFIX);
     trash.info().join(name)
 }
 
-/// Why the trash for `original` couldn't be used or made: a full or
-/// read-only drive is that; anything else means there is no trash there.
 fn no_trash(original: &Path, error: &io::Error) -> Refused {
     log::info!("{} has no trash: {error}", original.display());
     match failure(error) {
-        // The user's to free, or the drive's whole state: no delete would
-        // do there either.
         reason @ (Failure::NoSpace | Failure::ReadOnly) => Refused::Failed(reason),
         _ => Refused::NoTrash,
     }
 }
 
-/// What a failed step means. The trash is on the entry's own mount and
-/// device, so a rename refused as crossing drives, or as busy, means the
-/// entry is a mount's top: it can't move at all, and deleting it would
-/// empty the drive, so it is never offered as having no trash.
 fn refused(error: &io::Error) -> Refused {
     let crossing = [rustix::io::Errno::XDEV, rustix::io::Errno::BUSY]
         .iter()
@@ -370,8 +278,6 @@ fn refused(error: &io::Error) -> Refused {
     }
 }
 
-/// Writes `text` whole to a new part file at `part`, recorded before it
-/// is made, synced, and returns which entry it is.
 fn write_part(running: &mut Running, part: &Path, text: &[u8]) -> io::Result<Entry> {
     running.record(Record::Part(part));
     let mut file = OpenOptions::new()
@@ -384,8 +290,6 @@ fn write_part(running: &mut Running, part: &Path, text: &[u8]) -> io::Result<Ent
     Ok(Entry::of(&file.metadata()?))
 }
 
-/// Adds the size of each folder in `folders` to its trash's cache, one
-/// write per trash. Only a cache: a failure or a cancel leaves sizes out.
 fn note_sizes(running: &Running, folders: Vec<Trashed>) {
     let control = &running.shared.control;
     let go_on = || control.checkpoint().is_ok();
@@ -397,7 +301,6 @@ fn note_sizes(running: &Running, folders: Vec<Trashed>) {
                 .entry(folder.trash.clone())
                 .or_default()
                 .push((folder, size)),
-            // Cancelled: nothing more is written.
             Ok(None) => return,
             Err(error) => log::info!("{} has no size: {error}", path.display()),
         }

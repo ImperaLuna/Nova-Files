@@ -1,18 +1,8 @@
-//! A search's hits as a listing a window shows like a folder's: each hit
-//! an entry, best first, in the folder it is in.
-//!
-//! The index knows names, not what each is now, so each hit is looked at
-//! once to learn whether it is a folder (a link counts as what it points
-//! to). A hit gone since the index saw it is left out. [`listing`] asks
-//! `cancelled` before each look, so a search typed over stops at once.
-
 use std::fs;
 use std::path::PathBuf;
 
 use nova_files_api::{Entry, EntryId, EntryKind, Hit, Listing, ListingId};
 
-/// `hits` as listing `id` of what was looked for in `folder`. `None` when
-/// `cancelled` said so before every hit was looked at.
 pub fn listing(
     id: ListingId,
     folder: PathBuf,
@@ -31,8 +21,6 @@ pub fn listing(
         let kind = match fs::metadata(&hit.path) {
             Ok(metadata) if metadata.is_dir() => EntryKind::Folder,
             Ok(_) => EntryKind::File,
-            // A broken link is a file you can't open; anything else that
-            // can't be looked at is gone.
             Err(_) if fs::symlink_metadata(&hit.path).is_ok() => EntryKind::File,
             Err(_) => continue,
         };

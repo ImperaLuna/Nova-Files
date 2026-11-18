@@ -1,24 +1,9 @@
-//! Reads the entries the helper writes. The helper writes the same layout
-//! (`nova-files-archiver`'s `wire`); change both together.
-//!
-//! Each entry is eight fields, each ended by a NUL byte: kind (`f` file,
-//! `d` folder, `l` link), locked (`1` or `0`), size, modified (seconds
-//! since 1970, maybe negative), its clock (`u` UTC, `l` local wall time),
-//! permission bits (numbers in decimal), the path inside the archive
-//! (parts joined by `/`) and a link's target.
-//!
-//! The helper reads a hostile file, so its answers are outside data. A
-//! field off the layout, or more than [`MAX_ENTRIES`] entries, makes the
-//! whole answer unreadable. An entry whose path could reach outside the
-//! archive (absolute, or with an empty, `.` or `..` part) is left out.
-
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local, TimeZone as _};
 
-/// What an entry is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArchiveKind {
     File,
@@ -26,30 +11,22 @@ pub enum ArchiveKind {
     Link,
 }
 
-/// One entry of an archive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveEntry {
     pub kind: ArchiveKind,
-    /// Its contents need a password.
     pub locked: bool,
     pub size: u64,
-    /// Seconds since 1970, UTC.
     pub modified: i64,
-    /// Permission bits only (`0o7777` at most).
     pub mode: u32,
-    /// Relative, normal parts only.
     pub path: PathBuf,
-    /// What a link points to, as stored; empty for anything else.
     pub link: PathBuf,
 }
 
-/// The most entries one archive lists.
 pub const MAX_ENTRIES: usize = 1_000_000;
 const FIELDS: usize = 8;
 const END: u8 = 0;
 const MODE_BITS: u32 = 0o7777;
 
-/// The entries in `bytes`; `None` when it isn't the helper's layout.
 pub fn entries(bytes: &[u8]) -> Option<Vec<ArchiveEntry>> {
     let body = match bytes.split_last() {
         None => return Some(Vec::new()),
@@ -76,7 +53,6 @@ pub fn entries(bytes: &[u8]) -> Option<Vec<ArchiveEntry>> {
     }
 }
 
-/// One record as an entry; `None` when it isn't the layout.
 fn entry(record: &[&[u8]; FIELDS]) -> Option<ArchiveEntry> {
     let &[kind, locked, size, modified, clock, mode, path, link] = record;
     let kind = match kind {
@@ -111,8 +87,6 @@ fn entry(record: &[&[u8]; FIELDS]) -> Option<ArchiveEntry> {
     })
 }
 
-/// Seconds since 1970 of `wall`, a wall time read as UTC, in this
-/// system's time zone. A wall time a clock change skipped stays as read.
 fn from_local(wall: i64) -> i64 {
     DateTime::from_timestamp(wall, 0)
         .and_then(|utc| Local.from_local_datetime(&utc.naive_utc()).earliest())
@@ -123,7 +97,6 @@ fn number<T: std::str::FromStr>(field: &[u8]) -> Option<T> {
     std::str::from_utf8(field).ok()?.parse().ok()
 }
 
-/// Whether `path` is relative, not empty, and made of normal parts only.
 fn stays_inside(path: &Path) -> bool {
     let bytes = path.as_os_str().as_bytes();
     !bytes.is_empty()

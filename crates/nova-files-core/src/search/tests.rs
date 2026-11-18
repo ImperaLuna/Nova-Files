@@ -1,6 +1,3 @@
-//! The searcher's own rules: cancelling, and when the index is crawled
-//! anew. The rest is tested through the core, in `tests/search.rs`.
-
 use std::fs::{self, OpenOptions};
 use std::io::Write as _;
 use std::os::unix::fs::MetadataExt as _;
@@ -11,14 +8,10 @@ use super::*;
 use crate::file_icons::FileIcons;
 
 const LIMIT: u32 = 50;
-/// How long a test waits for an answer it expects.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
-/// How long a test waits to be sure an answer doesn't come.
 const QUIET: Duration = Duration::from_millis(200);
-/// A record that says it is shorter than its fixed part.
 const DAMAGED: &[u8] = &[0; 8];
 
-/// A home with one file and a cache folder, removed on drop.
 struct Scratch {
     root: PathBuf,
 }
@@ -67,7 +60,6 @@ impl Searcher {
         self.shared.state.lock().unwrap()
     }
 
-    /// Runs a search to its end and waits for any build it started.
     fn search_and_settle(&self) {
         self.start_build(false);
         assert!(self.run(
@@ -78,7 +70,6 @@ impl Searcher {
         self.settle();
     }
 
-    /// Waits for a running build to end.
     fn settle(&self) {
         let state = self.state();
         drop(
@@ -99,7 +90,6 @@ fn a_newer_search_cancels_one_waiting_for_the_index() {
     let scratch = Scratch::new("cancel");
     let searcher = scratch.searcher();
     let (client, events) = client();
-    // Searches wait for this "build", which the test ends itself.
     searcher.state().building = true;
     searcher.search(&client, SearchId(1), "report".to_owned(), LIMIT);
     searcher.search(&client, SearchId(2), "report".to_owned(), LIMIT);
@@ -140,7 +130,6 @@ fn a_replaced_search_stops_before_it_scans() {
 fn one_build_runs_at_a_time() {
     let scratch = Scratch::new("one-build");
     let searcher = scratch.searcher();
-    // As if a build were running.
     searcher.state().building = true;
     searcher.start_build(true);
     let (state, waited) = searcher
@@ -173,7 +162,6 @@ fn many_changes_crawl_anew() {
     searcher.live(|live| live.changes = REBUILD_AFTER + 1);
     searcher.search_and_settle();
     assert_ne!(scratch.index_inode(), built);
-    // The new index starts with no changes.
     searcher.live(|live| assert_eq!(live.changes, 0));
 }
 
@@ -219,11 +207,9 @@ fn a_failed_crawl_after_lost_changes_fails_searches_until_one_works() {
     searcher.search_and_settle();
     let home = scratch.root.join("home");
     searcher.live(|live| live.take(&[Change::Rescan { folder: home }]));
-    // A file where the cache folder was: no crawl can be saved.
     let cache = scratch.place().folder;
     fs::remove_dir_all(&cache).unwrap();
     fs::write(&cache, b"").unwrap();
-    // Answers from the old index, and the crawl it starts fails.
     searcher.search_and_settle();
     let search = || {
         searcher.run(
@@ -235,7 +221,6 @@ fn a_failed_crawl_after_lost_changes_fails_searches_until_one_works() {
     assert!(!search());
     searcher.settle();
     fs::remove_file(&cache).unwrap();
-    // Fails, and starts the crawl that works.
     assert!(!search());
     searcher.settle();
     assert!(search());

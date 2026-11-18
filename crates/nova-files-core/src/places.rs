@@ -1,15 +1,3 @@
-//! The standard folders for the places list: Home, then the user's
-//! Desktop, Documents, Downloads, Music, Pictures and Videos folders, each
-//! shown only if it exists. The pinned folders are read from the shared
-//! bookmarks file (`bookmarks`), and `store` keeps both lists, follows them
-//! on disk and tells the clients that asked.
-//!
-//! Where those folders are comes from the system's `user-dirs.dirs` file
-//! (the freedesktop xdg-user-dirs format), which every desktop writes and
-//! which follows the user's language. A folder the file doesn't mention is
-//! looked for under its usual name in Home; one it disables (`"$HOME/"`) or
-//! puts outside Home is left out.
-
 mod bookmarks;
 mod store;
 
@@ -21,8 +9,6 @@ use std::path::{Component, Path, PathBuf};
 
 use nova_files_api::{Place, PlaceKind};
 
-/// The places, in list order, with the `user-dirs.dirs` key and the folder
-/// name used when that file doesn't say.
 const STANDARD: [(PlaceKind, &str, &str); 6] = [
     (PlaceKind::Desktop, "XDG_DESKTOP_DIR", "Desktop"),
     (PlaceKind::Documents, "XDG_DOCUMENTS_DIR", "Documents"),
@@ -41,32 +27,20 @@ const DATA_HOME_VAR: &str = "XDG_DATA_HOME";
 const DATA_IN_HOME: &str = ".local/share";
 const CACHE_HOME_VAR: &str = "XDG_CACHE_HOME";
 const CACHE_IN_HOME: &str = ".cache";
-/// `user-dirs.dirs` is a few lines; anything bigger isn't one.
 const USER_DIRS_MAX_BYTES: u64 = 64 * 1024;
 const HOME_PREFIX: &str = "$HOME/";
 const ESCAPE: char = '\\';
 
-/// The user's home folder, its config folder, where the places come from,
-/// its state folder and its data folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Home {
     pub folder: PathBuf,
-    /// Holds `user-dirs.dirs`.
     pub config: PathBuf,
-    /// Holds the UI's window state.
     pub state: PathBuf,
-    /// Holds the home trash.
     pub data: PathBuf,
-    /// Whether the trashes at the top of other drives count, found from
-    /// the system's mount table. Tests leave them out, so they never
-    /// touch the real ones.
     pub drive_trashes: bool,
 }
 
 impl Home {
-    /// The home, config, state and data folders the environment names
-    /// (`HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_DATA_HOME`), or
-    /// `None` without a home folder.
     pub fn from_env() -> Option<Self> {
         let folder = env::home_dir()?;
         let config = xdg_home(&folder, env::var_os(CONFIG_HOME_VAR), CONFIG_IN_HOME);
@@ -82,8 +56,6 @@ impl Home {
     }
 }
 
-/// The user's cache folder: `$XDG_CACHE_HOME`, or `~/.cache` when that is
-/// unset or relative. `None` without either.
 pub fn cache_home() -> Option<PathBuf> {
     cache_home_from(env::var_os(CACHE_HOME_VAR), env::home_dir())
 }
@@ -97,9 +69,6 @@ fn cache_home_from(variable: Option<OsString>, home: Option<PathBuf>) -> Option<
 
 pub use store::Store;
 
-/// The places that exist under `home`, in list order, and every place
-/// whether it exists or not (to watch for it). Both empty without a home
-/// folder.
 fn places(home: Option<&Home>) -> (Vec<Place>, Vec<Place>) {
     let Some(home) = home else {
         return (Vec::new(), Vec::new());
@@ -114,14 +83,10 @@ fn places(home: Option<&Home>) -> (Vec<Place>, Vec<Place>) {
     (existing, wanted)
 }
 
-/// Whether `name` is the usual name of a standard folder in Home, which it
-/// has until `user-dirs.dirs` says otherwise.
 fn usual_name(name: &str) -> bool {
     STANDARD.iter().any(|&(_, _, usual)| usual == name)
 }
 
-/// The places under `home`, given the text of `user-dirs.dirs` (empty when
-/// there is none), whether they exist or not.
 fn places_in(home: &Path, user_dirs: &str) -> Vec<Place> {
     let home_place = Place {
         kind: PlaceKind::Home,
@@ -138,8 +103,6 @@ fn places_in(home: &Path, user_dirs: &str) -> Vec<Place> {
     std::iter::once(home_place).chain(standard).collect()
 }
 
-/// An XDG folder: its variable's value (`from_env`) when it is absolute,
-/// which the spec requires, else `in_home` in Home.
 fn xdg_home(home: &Path, from_env: Option<OsString>, in_home: &str) -> PathBuf {
     from_env
         .map(PathBuf::from)
@@ -147,7 +110,6 @@ fn xdg_home(home: &Path, from_env: Option<OsString>, in_home: &str) -> PathBuf {
         .unwrap_or_else(|| home.join(in_home))
 }
 
-/// The file's text, or empty when it is missing, unreadable or too big.
 fn read_user_dirs(path: &Path) -> String {
     let mut text = String::new();
     let read = fs::File::open(path)
@@ -160,19 +122,13 @@ fn read_user_dirs(path: &Path) -> String {
     }
 }
 
-/// What `user-dirs.dirs` says about one folder.
 #[derive(Debug, PartialEq, Eq)]
 enum Setting {
-    /// Nothing: the usual name under Home applies.
     Unset,
-    /// A folder inside Home.
     Folder(PathBuf),
-    /// Disabled, outside Home, or not in the format.
     Refused,
 }
 
-/// What `user_dirs` says about `key`. The format is `KEY="$HOME/Folder"`,
-/// one per line; the file is shell, so the last line for a key wins.
 fn user_dir(home: &Path, user_dirs: &str, key: &str) -> Setting {
     let value = user_dirs.lines().rev().find_map(|line| {
         let (name, value) = line.trim().split_once('=')?;
@@ -199,8 +155,6 @@ fn user_dir(home: &Path, user_dirs: &str, key: &str) -> Setting {
     }
 }
 
-/// `text` with the shell's backslash escapes inside double quotes taken
-/// off (`\$` is `$`), as xdg-user-dirs writes them. Nothing is run.
 fn unescape(text: &str) -> String {
     let mut plain = String::with_capacity(text.len());
     let mut chars = text.chars();
@@ -242,7 +196,6 @@ mod tests {
             dir(text, "XDG_DOCUMENTS_DIR"),
             Setting::Folder(PathBuf::from(r#"/home/someone/$Docs "x" \y"#))
         );
-        // A backslash with nothing after it stays.
         let lone = format!("a{ESCAPE}");
         assert_eq!(unescape(&lone), lone);
     }
@@ -266,14 +219,12 @@ mod tests {
             dir("XDG_DOCUMENTS_DIR=\"$HOME/../x\"", "XDG_DOCUMENTS_DIR"),
             Setting::Refused
         );
-        // `$HOME/` alone means "no such folder" in the format.
         assert_eq!(
             dir("XDG_DOCUMENTS_DIR=\"$HOME/\"", "XDG_DOCUMENTS_DIR"),
             Setting::Refused
         );
     }
 
-    /// A temp home folder, removed when dropped.
     struct TempHome(PathBuf);
 
     impl Drop for TempHome {
@@ -354,7 +305,6 @@ mod tests {
                 (PlaceKind::Pictures, home.0.join("Bilder")),
             ]
         );
-        // Downloads is turned off; the others are looked for.
         assert_eq!(
             found(wanted),
             [

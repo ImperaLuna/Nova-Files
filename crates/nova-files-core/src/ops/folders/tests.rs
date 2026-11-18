@@ -6,13 +6,11 @@ use crate::ops::control::Control;
 use crate::ops::plan::plan_delete;
 use crate::ops::test_folder::TestFolder;
 
-/// The folders of a plan of `paths`.
 fn folders_of(paths: &[PathBuf]) -> Folders {
     let plan = plan_delete(paths, &Control::default(), &|_| true).unwrap();
     Folders::of(&plan)
 }
 
-/// Which entry `source` names now.
 fn entry(source: &Source) -> Entry {
     Entry::of(&source.at().look().unwrap())
 }
@@ -68,7 +66,6 @@ fn a_chosen_folder_swapped_for_a_look_alike_is_refused() {
     fs::create_dir(&tree).unwrap();
     folder.file("tree/f", "planned");
     let mut folders = folders_of(std::slice::from_ref(&tree));
-    // Another program puts a folder of its own under the chosen name.
     fs::rename(&tree, folder.path().join("moved")).unwrap();
     fs::create_dir(&tree).unwrap();
     folder.file("tree/f", "look-alike");
@@ -93,7 +90,6 @@ fn a_folder_reached_once_stays_the_one_planned() {
     let planned = entry_at(&file);
     assert!(folders.planned_folder(&tree).is_ok());
     folders.open(&tree).unwrap();
-    // Moved away while held open: the job still works in the folder planned.
     fs::rename(&tree, folder.path().join("moved")).unwrap();
     fs::create_dir(&tree).unwrap();
     folder.file("tree/f", "look-alike");
@@ -110,7 +106,6 @@ fn where_the_user_named_it_a_link_is_followed() {
     fs::create_dir(&real).unwrap();
     let file = folder.file("real/f", "f");
     symlink(&real, tree.join("link")).unwrap();
-    // The tree, and a file named through a link inside it.
     let named = tree.join("link/f");
     let mut folders = folders_of(&[tree, named.clone()]);
 

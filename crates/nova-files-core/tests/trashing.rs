@@ -1,7 +1,3 @@
-//! Moving to the trash through the real core: entries go to the home
-//! trash with info files every other app reads, nothing in the trash is
-//! ever replaced, and a crash leaves no info file naming nothing.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -26,18 +22,15 @@ const fn trash(paths: Vec<PathBuf>) -> Operation {
     Operation::Trash { paths }
 }
 
-/// The home trash of the core under `root`.
 fn home_trash(root: &Path) -> PathBuf {
     root.join("home/.local/share/Trash")
 }
 
-/// The info file the home trash keeps for `stored`.
 fn info(bench: &Bench, stored: &str) -> String {
     let path = home_trash(&bench.root).join(format!("info/{stored}.trashinfo"));
     fs::read_to_string(path).unwrap()
 }
 
-/// The `Path=` an info file holds for `path`, escaped as it writes it.
 fn path_line(path: &Path) -> String {
     let real = path.parent().unwrap().canonicalize().unwrap();
     let path = real.join(path.file_name().unwrap());
@@ -107,7 +100,6 @@ fn an_entry_without_an_info_file_keeps_its_name_in_the_trash() {
     let files = home_trash(&bench.root).join("files");
     fs::create_dir_all(&files).unwrap();
     fs::create_dir_all(home_trash(&bench.root).join("info")).unwrap();
-    // Another app's entry, its info file not written yet.
     fs::write(files.join("a"), "theirs").unwrap();
     fs::write(bench.at("a"), "ours").unwrap();
     let client = bench.client();
@@ -182,7 +174,6 @@ fn a_bad_path_trashes_nothing() {
     assert!(bench.at("a").exists());
 }
 
-/// Waits for job `job`'s conflict, skipping its progress.
 fn conflict_of(client: &common::Client, job: JobId) -> nova_files_api::Conflict {
     loop {
         match client.next() {
@@ -233,7 +224,6 @@ fn a_home_trash_it_may_not_make_asks_and_retry_tries_again() {
     let bench = Bench::new("trash-no-trash");
     let share = bench.root.join("home/.local/share");
     fs::create_dir_all(&share).unwrap();
-    // A file where the trash should be: no trash can be made there.
     fs::write(home_trash(&bench.root), "in the way").unwrap();
     fs::write(bench.at("a"), "a").unwrap();
     let client = bench.client();
@@ -362,7 +352,6 @@ fn a_resumed_trash_job_leaves_what_took_a_trashed_name_since() {
         fs::create_dir_all(&files).unwrap();
         fs::create_dir_all(home_trash(root).join("info")).unwrap();
         fs::write(files.join("a"), "trashed before the crash").unwrap();
-        // Made at the old name after the crash.
         fs::write(root.join("a"), "new").unwrap();
         fs::write(root.join("b"), "b").unwrap();
         let journals = root.join("home/.local/state/nova-files/jobs");

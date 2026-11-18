@@ -5,7 +5,6 @@ fn done() -> Outcome {
     Outcome::Done
 }
 
-/// No trash at all.
 fn none() -> Trashes {
     Trashes {
         home: None,
@@ -99,7 +98,6 @@ fn a_trashed_entry_comes_back_only_from_a_trash_it_can_be_restored_from() {
         .unwrap()
         .join("a");
     fs::write(&item, "a").unwrap();
-    // In a files folder, though of no trash.
     fs::create_dir(folder.path().join("files")).unwrap();
     let elsewhere = folder.file("files/b", "b");
     let steps = [(source.clone(), item.clone()), (source, elsewhere)];
@@ -191,7 +189,6 @@ fn the_history_keeps_the_last_jobs_and_gives_each_once() {
         operation: Operation::EmptyTrash,
         undo: Undo::RemoveFolder(PathBuf::from("/a"), entry(Path::new("/")).unwrap()),
     };
-    // One put back after a failed undo goes where its age puts it.
     for job in (0..=u64::try_from(KEPT).unwrap()).filter(|job| *job != 3) {
         history.add(undoable(job), &audience);
     }

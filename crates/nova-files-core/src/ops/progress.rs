@@ -1,5 +1,3 @@
-//! A job's progress, told to every client a few times a second at most.
-
 use std::time::{Duration, Instant};
 
 use nova_files_api::{Conflict, Event, JobId, Progress};
@@ -10,15 +8,11 @@ use super::audience::Audience;
 use super::job::Job;
 use super::{Registry, lock};
 
-/// The least time between two progress events of one job.
 const EVERY: Duration = Duration::from_millis(100);
 
 pub struct Reporter {
     audience: Audience,
-    /// Held while a conflict is raised and told, as while a job pauses or
-    /// ends, so no client hears of it out of order.
     registry: Registry,
-    /// Where the latest progress is kept for windows that watch later.
     shared: Arc<Job>,
     job: JobId,
     progress: Progress,
@@ -42,13 +36,11 @@ impl Reporter {
         }
     }
 
-    /// The job starts its work over: nothing is done yet.
     pub const fn start_over(&mut self) {
         self.progress.done_bytes = 0;
         self.progress.done_items = 0;
     }
 
-    /// The job's totals are known: every client hears them now.
     pub fn planned(&mut self, total_bytes: u64, total_items: u64) {
         self.progress.total_bytes = total_bytes;
         self.progress.total_items = total_items;
@@ -60,14 +52,10 @@ impl Reporter {
         self.tell_if_due();
     }
 
-    /// `bytes` reported done weren't kept after all: the step that copied
-    /// them failed, and it is skipped or tried again.
     pub const fn take_back(&mut self, bytes: u64) {
         self.progress.done_bytes = self.progress.done_bytes.saturating_sub(bytes);
     }
 
-    /// One more item is done; `left` of its bytes were never copied (holes
-    /// in a sparse file) but count as done.
     pub fn item(&mut self, left: u64) {
         self.progress.done_items += 1;
         self.progress.done_bytes += left;
@@ -80,8 +68,6 @@ impl Reporter {
         }
     }
 
-    /// The job holds at `conflict` from now on: every client hears it,
-    /// with how far the job got.
     pub fn conflict(&mut self, conflict: Conflict) {
         self.tell();
         let registry = lock(&self.registry);
@@ -93,7 +79,6 @@ impl Reporter {
         drop(registry);
     }
 
-    /// Tells every client how far the job got, now.
     pub fn tell(&mut self) {
         self.told = Some(Instant::now());
         self.shared.set_progress(self.progress);
@@ -139,7 +124,6 @@ mod tests {
         assert_eq!(heard.try_iter().collect::<Vec<_>>(), [told(progress(0, 0))]);
         assert_eq!(shared.progress(), progress(0, 0));
 
-        // A wait without a sleep, as the lints ask.
         let (_never, quiet) = mpsc::channel::<()>();
         quiet.recv_timeout(EVERY).ok();
         reporter.item(5);

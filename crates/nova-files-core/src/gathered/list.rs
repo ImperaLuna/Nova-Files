@@ -1,15 +1,3 @@
-//! Listing a gathered place: the folders inside each of its folders that
-//! holds many, and each one-project folder itself, as one listing with
-//! each entry in its own folder, like a search's.
-//!
-//! Only folders count: a loose file in `~/Projects` is no project. A
-//! folder reached twice (a project inside a folder of projects, also
-//! added as one project) shows once, where it was first found. A gathered
-//! folder that is missing or can't be read adds nothing; the others still
-//! list. Hidden folders follow the hidden-files setting. Entries are
-//! ordered as a folder's are, across all the place's folders (see
-//! `order`), and [`gather`] asks `cancelled` before each read of the disk.
-
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
@@ -27,8 +15,6 @@ use crate::{memory, order};
 
 const THREAD: &str = "nova-files-list-gathered";
 
-/// Lists the folders `folders` gives, one place's, for `client` as
-/// listing `id` in `order`. `folders` is asked on the listing's thread.
 pub fn list(
     client: &Client,
     id: ListingId,
@@ -67,8 +53,6 @@ pub fn list(
     }
 }
 
-/// What `folders` gather, each entry with the folder it is in, in
-/// `order`. `None` when `cancelled` said so.
 pub fn gather(
     folders: &[GatheredFolder],
     hidden: HiddenFiles,
@@ -103,9 +87,6 @@ pub fn gather(
     )
 }
 
-/// The rows one gathered folder brings, each a name and the folder it is
-/// in: none when it is missing or can't be read. `None` when `cancelled`
-/// said so.
 fn rows_of(
     folder: &GatheredFolder,
     hidden: HiddenFiles,

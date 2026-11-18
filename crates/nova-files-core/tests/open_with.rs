@@ -1,12 +1,3 @@
-//! Open With through the real core: the apps for some files, opening many
-//! files in one app, and making an app the default, which the next list
-//! shows and the user's `mimeapps.list` keeps.
-//!
-//! The core reads the MIME database and the app lists from the
-//! environment, so the test runs itself again with every XDG folder
-//! pointed into a temp folder of its own: the machine's real apps never
-//! start.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -27,13 +18,11 @@ use nova_files_api::{Command, Connection, Event, OpenWith, OpenWithAnswer, OpenW
 
 use own_folders::run_again_in;
 
-/// Set in the run that talks to the core: the folder it was given.
 const ROOT_VAR: &str = "NOVA_FILES_OPEN_WITH_TEST_ROOT";
 const TEST_NAME: &str = "open_with_lists_launches_and_sets_the_default";
 const IDLE_EXIT: Duration = Duration::from_secs(5);
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
 const MIME: &str = "text/x-nova-test";
-/// Another type of the same kind as [`MIME`].
 const OTHER: &str = "text/x-nova-other";
 const PARENT: &str = "text/x-nova-parent";
 const EXECUTABLE: u32 = 0o755;
@@ -80,8 +69,6 @@ fn open_with_lists_launches_and_sets_the_default() {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, text).unwrap();
     }
-    // The app writes its arguments where the test reads them; a FIFO makes
-    // the read wait for it, with no polling.
     let app = root.join("app");
     fs::write(
         &app,
@@ -102,7 +89,6 @@ fn open_with_lists_launches_and_sets_the_default() {
     run_again_in(&root, ROOT_VAR, TEST_NAME);
 }
 
-/// A desktop entry running the test's app with `code` for the files.
 fn entry(name: &str, code: &str, extra: &str) -> String {
     format!("[Desktop Entry]\nType=Application\nName={name}\nExec=APP {code}\n{extra}")
 }
@@ -124,7 +110,6 @@ impl Client {
         }
     }
 
-    /// Opens `paths` in `app`; says whether it started.
     fn launch(&self, paths: &[PathBuf], app: &str) -> bool {
         let id = OpenWithId(5);
         self.send(OpenWith::Launch {
@@ -142,7 +127,6 @@ impl Client {
         }
     }
 
-    /// The apps for `paths` as (id, default) pairs, and the shared type.
     fn apps(&self, paths: &[PathBuf]) -> (Option<String>, Vec<(String, bool)>) {
         let id = OpenWithId(3);
         self.send(OpenWith::Apps {
@@ -164,8 +148,6 @@ impl Client {
 }
 
 fn through_the_core(root: &Path) {
-    // The entries name the app by a placeholder, so they could be written
-    // before the app's path was known.
     for id in ["one", "many", "term"] {
         let path = root.join(format!("data/applications/{id}.desktop"));
         let text = fs::read_to_string(&path).unwrap();
@@ -181,7 +163,6 @@ fn through_the_core(root: &Path) {
     let a = root.join("a.novatest");
     let b = root.join("b c.novatest");
 
-    // Terminal apps are left out; an untyped name has no apps.
     let (mime, apps) = client.apps(&[a.clone(), b.clone()]);
     assert_eq!(mime.as_deref(), Some(MIME));
     assert_eq!(
@@ -191,8 +172,6 @@ fn through_the_core(root: &Path) {
             ("many.desktop".to_owned(), false)
         ]
     );
-    // Files of two types get the apps for the type both are kinds of, with
-    // no type to set a default for and no default.
     assert_eq!(
         client.apps(&[a.clone(), root.join("x.novaother")]),
         (None, vec![("many.desktop".to_owned(), false)])
@@ -202,7 +181,6 @@ fn through_the_core(root: &Path) {
         (None, vec![])
     );
 
-    // `%F` takes both files in one run.
     assert!(client.launch(&[a.clone(), b.clone()], "many.desktop"));
     let out = root.join("out");
     let (sender, written) = mpsc::channel();
@@ -219,7 +197,6 @@ fn through_the_core(root: &Path) {
     }
     assert!(!client.launch(&[PathBuf::from("relative.novatest")], "one.desktop"));
 
-    // Setting the default answers nothing; the next list shows it.
     client.send(OpenWith::SetDefault {
         mime: MIME.to_owned(),
         app: "many.desktop".to_owned(),

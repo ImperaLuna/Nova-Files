@@ -1,14 +1,9 @@
-//! Whether a name a user typed can be one entry's name.
-
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 
-/// The byte that ends a C string; no name may hold it.
 const NUL: u8 = b'\0';
 const SEPARATOR: u8 = b'/';
 
-/// `true` for a name that names one entry inside a folder: not empty, not
-/// `.` or `..`, and without a `/` or a NUL byte.
 pub fn is_plain_name(name: &OsStr) -> bool {
     let bytes = name.as_bytes();
     !matches!(bytes, b"" | b"." | b"..") && !bytes.contains(&SEPARATOR) && !bytes.contains(&NUL)

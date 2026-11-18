@@ -1,11 +1,8 @@
-//! The watch against real temp folders.
-
 use std::fs;
 use std::sync::mpsc::{self, Receiver};
 
 use super::*;
 
-/// How long a test waits for a report before it counts as a failure.
 const REPORT_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn temp(name: &str) -> PathBuf {
@@ -42,7 +39,6 @@ fn a_save_by_rename_is_reported_once_with_its_file() {
     assert_eq!(changed, files(&["settings.toml", "settings.toml.tmp"]));
     assert!(changed.touches("settings.toml"));
     assert!(!changed.touches("theme.toml"));
-    // The burst came as one report.
     assert!(reports.recv_timeout(QUIET * 3).is_err());
     fs::remove_dir_all(config).ok();
 }
@@ -67,12 +63,10 @@ fn a_folder_made_later_is_watched_once_it_appears() {
     let config = home.join("config/nova-files");
     fs::create_dir_all(&home).unwrap();
     let (_watch, reports) = watch(&config);
-    // Two levels appear: the watch follows them down.
     fs::create_dir_all(&config).unwrap();
     assert_eq!(reports.recv_timeout(REPORT_TIMEOUT).unwrap(), Changed::All);
     fs::write(config.join("settings.toml"), "").unwrap();
     let mut changed = reports.recv_timeout(REPORT_TIMEOUT).unwrap();
-    // The folder's arrival and the file may land in one burst or two.
     while changed == Changed::All {
         changed = reports.recv_timeout(REPORT_TIMEOUT).unwrap();
     }
@@ -86,7 +80,6 @@ fn above_the_folder_only_the_way_down_matters() {
     let config = home.join("nova-files");
     fs::create_dir_all(&home).unwrap();
     let (_watch, reports) = watch(&config);
-    // Another app's config next to ours says nothing.
     fs::create_dir_all(home.join("other-app")).unwrap();
     fs::write(home.join("other-app.conf"), "").unwrap();
     assert!(reports.recv_timeout(QUIET * 3).is_err());
@@ -113,8 +106,6 @@ fn a_folder_that_goes_away_reports_everything_and_is_found_again() {
     fs::remove_dir_all(home).ok();
 }
 
-/// The first report other than `Changed::All`: a move and the save after
-/// it may land in one burst or two.
 fn first_files(reports: &Receiver<Changed>) -> Changed {
     loop {
         let changed = reports.recv_timeout(REPORT_TIMEOUT).unwrap();
@@ -138,7 +129,6 @@ fn a_linked_file_saved_where_it_lives_is_reported_under_its_link() {
     )
     .unwrap();
     let (_watch, reports) = watch(&config);
-    // Another file next to it says nothing.
     fs::write(dotfiles.join("other.toml"), "").unwrap();
     assert!(reports.recv_timeout(QUIET * 3).is_err());
     fs::write(dotfiles.join("nova-settings.toml"), "appearance = \"dark\"").unwrap();
@@ -191,7 +181,6 @@ fn a_link_within_the_folder_leaves_the_folder_watched() {
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
         files(&["real.toml", "settings.toml"])
     );
-    // Following the link again kept the folder's own watch.
     fs::write(config.join("theme.toml"), "").unwrap();
     assert_eq!(
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
@@ -216,7 +205,6 @@ fn a_link_to_the_folder_above_leaves_its_watch_for_a_swap() {
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
         files(&["settings.toml"])
     );
-    // Following the link again kept the watch for the folder's swap.
     fs::remove_file(&config).unwrap();
     std::os::unix::fs::symlink(&new, &config).unwrap();
     assert_eq!(reports.recv_timeout(REPORT_TIMEOUT).unwrap(), Changed::All);
@@ -240,10 +228,7 @@ fn a_linked_folder_pointed_elsewhere_is_watched_there() {
     fs::remove_dir_all(home).ok();
 }
 
-/// Saves `file` every `gap` for `how_long`; says how many times the
-/// machine held a save back past the quiet time, which may end a burst.
 fn keep_saving(file: &Path, gap: Duration, how_long: Duration) -> u32 {
-    // Never sent to: waiting on it is a pause.
     let (_never_sent, pause) = mpsc::channel::<()>();
     let start = Instant::now();
     let mut count = 0_u32;
@@ -274,8 +259,6 @@ fn saves_closer_than_the_quiet_time_are_one_report() {
             .iter()
             .all(|burst| *burst == files(&["settings.toml"]))
     );
-    // One report, and one more only where a busy machine held a save
-    // back past the quiet time.
     assert!(
         u32::try_from(bursts.len()).unwrap() <= 1 + late,
         "{} reports, {late} saves held back",
@@ -295,7 +278,6 @@ fn a_folder_that_never_goes_quiet_is_still_reported() {
         keep_saving(&file, QUIET / 4, LONGEST_WAIT * 2);
         done.send(()).ok();
     });
-    // Reported while the saves go on.
     assert_eq!(
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
         files(&["settings.toml"])
@@ -347,7 +329,6 @@ fn lost_events_move_the_watch_to_where_the_folder_is_now() {
     watched.arm().unwrap();
     fs::remove_file(&config).unwrap();
     std::os::unix::fs::symlink(&new, &config).unwrap();
-    // The swap's events were lost; only the overflow arrives.
     let lost = Event {
         wd: -1,
         mask: ReadFlags::QUEUE_OVERFLOW,

@@ -7,9 +7,7 @@ use rustix::process::{getegid, geteuid};
 use super::*;
 use crate::ops::test_folder::TestFolder;
 
-/// Owner reads and writes, group reads, others nothing.
 const PRIVATE_FILE: u32 = 0o640;
-/// Owner enters, group and others nothing, and the sticky bit.
 const STICKY_FOLDER: u32 = 0o1700;
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 

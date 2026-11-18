@@ -1,5 +1,3 @@
-//! The store against real temp folders.
-
 #![expect(
     clippy::unreadable_literal,
     reason = "colors are written as 0xRRGGBB, as in a theme file"
@@ -13,9 +11,7 @@ use nova_files_api::{Color, DesktopLook, Palette, SettingChange, Settings};
 
 use super::*;
 
-/// How long a test waits for the theme before it counts as a failure.
 const WAIT: Duration = Duration::from_secs(5);
-/// A comment longer than a few lines, well under the cap.
 const LONG_COMMENT: usize = 4096;
 
 fn temp(name: &str) -> PathBuf {
@@ -25,7 +21,6 @@ fn temp(name: &str) -> PathBuf {
     path
 }
 
-/// Hands each event to a channel.
 struct Inbox(Mutex<Sender<Event>>);
 
 impl EventSink for Inbox {
@@ -78,7 +73,6 @@ fn the_file_sets_its_colors_over_carbonfox() {
     let theme = next(&received);
     assert_eq!(theme.palette.primary, Color(0x123456));
     assert_eq!(theme.palette.bg, carbonfox(Mode::Dark).palette.bg);
-    // An edit reaches the listening client.
     fs::write(&path, "[dark]\nprimary = \"#654321\"\n").unwrap();
     assert_eq!(next(&received).palette.primary, Color(0x654321));
     fs::remove_dir_all(config).ok();
@@ -108,11 +102,9 @@ fn the_appearance_setting_picks_dark_or_light() {
     };
     assert_eq!(light.palette, expected);
 
-    // Another setting changes nothing here.
     settings.change(SettingChange::Thumbnails(
         nova_files_api::Thumbnails::Hidden,
     ));
-    // System is dark while the desktop doesn't say.
     settings.change(SettingChange::Appearance(Appearance::System));
     assert_eq!(next(&received).mode, Mode::Dark);
     assert!(received.recv_timeout(config_watch::QUIET * 3).is_err());
@@ -148,7 +140,6 @@ fn system_follows_the_desktop_and_its_accent_is_primary_unless_the_file_sets_one
     };
     assert_eq!(light.palette, expected);
 
-    // The file's own primary wins over the accent.
     store.follow_desktop(DesktopLook {
         mode: Some(Mode::Dark),
         accent: Some(accent),
@@ -157,8 +148,6 @@ fn system_follows_the_desktop_and_its_accent_is_primary_unless_the_file_sets_one
     assert_eq!(dark.mode, Mode::Dark);
     assert_eq!(dark.palette.primary, Color(0xABCDEF));
 
-    // A set appearance doesn't follow the desktop, and the same look
-    // again sends nothing.
     settings.change(SettingChange::Appearance(Appearance::Light));
     assert_eq!(next(&received).mode, Mode::Light);
     store.follow_desktop(DesktopLook {
@@ -203,7 +192,6 @@ fn a_read_older_than_the_theme_is_done_again() {
     let mut locked = lock(&store.shared);
     let version = locked.version;
     assert!(!locked.take(ThemeFile::default(), version));
-    // A read from before that one comes in late: stale.
     assert!(locked.take(ThemeFile::default(), version));
     drop(locked);
     drop(store);
@@ -214,7 +202,6 @@ fn a_read_older_than_the_theme_is_done_again() {
 fn an_unreadable_or_oversized_file_reads_as_carbonfox() {
     let config = temp("unreadable");
     let path = config_watch::folder(&config).join(FILE);
-    // A long file a person wrote, well under the cap, is read.
     let comment = format!("# {}\n", "x".repeat(LONG_COMMENT));
     fs::write(&path, comment + "[dark]\nbg = \"#000001\"\n").unwrap();
     assert_eq!(read(&path).dark.colors.len(), 1);

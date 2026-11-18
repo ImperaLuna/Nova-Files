@@ -1,25 +1,16 @@
-//! Who a user or group number names, the way the system says: through NSS,
-//! so users from LDAP, systemd-homed and the like are named as well as
-//! those in `/etc/passwd`. And the groups the core's user is in, which are
-//! the groups it may give its own files.
-
 use std::ffi::OsString;
 
 use rustix::process::{Gid, getegid, getgroups};
 
-/// The name of user `uid`, if the system knows one.
 pub fn user_name(uid: u32) -> Option<OsString> {
     uzers::get_user_by_uid(uid).map(|user| user.name().to_owned())
 }
 
-/// The name of group `gid`, if the system knows one.
 pub fn group_name(gid: u32) -> Option<OsString> {
     uzers::get_group_by_gid(gid).map(|group| group.name().to_owned())
 }
 
-/// The groups the core's user is in, each once, sorted.
 pub fn own_groups() -> Vec<u32> {
-    // The supplementary groups may leave out the user's own.
     let mut groups: Vec<u32> = getgroups()
         .unwrap_or_default()
         .into_iter()
@@ -38,7 +29,6 @@ mod tests {
 
     use super::*;
 
-    /// No system hands out this number.
     const NOBODY_HAS: u32 = u32::MAX - 7;
 
     #[test]
@@ -70,8 +60,6 @@ mod tests {
     fn own_groups_are_every_group_the_user_is_in() {
         let (one, other) = (4242, 4343);
         let given = [other, getegid().as_raw(), one].map(Gid::from_raw);
-        // Only root may change its groups; the change holds for this
-        // test's thread alone.
         if set_thread_groups(&given).is_err() {
             return;
         }

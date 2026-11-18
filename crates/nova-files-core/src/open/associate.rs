@@ -1,20 +1,3 @@
-//! Making an app the user's default for a MIME type, the way `gio mime`
-//! does: in `$XDG_CONFIG_HOME/mimeapps.list`, the app becomes the type's
-//! `Default Applications` entry, goes first in its `Added Associations`,
-//! and leaves its `Removed Associations`. A desktop's own list in the
-//! config home (`gnome-mimeapps.list`) is read before that one, so where
-//! it names a default for the type or removes the app, it gets the same
-//! change, or the new default wouldn't show.
-//!
-//! A file is edited as text: only the lines for that type change, and
-//! every other line, comment and group stays as it was. A group may appear
-//! more than once; the first line for the type in any of them is the one
-//! that counts, as the reader takes it, and the app leaves every removal.
-//! Each file is saved whole through a temporary file with its own mode,
-//! and through a symlink to where it points. The association lists are
-//! read fresh for every request, so the next Open With list shows the
-//! change.
-
 use std::io;
 use std::path::Path;
 
@@ -28,27 +11,16 @@ const GROUP_START: char = '[';
 const GROUP_END: char = ']';
 const KEY_END: char = '=';
 const TYPE_SEPARATOR: char = '/';
-/// What a MIME type's two halves may hold besides letters and digits
-/// (RFC 6838 "restricted-name").
 const TYPE_PUNCTUATION: &str = "!#$&-^_.+";
-/// What a desktop ID ends in.
 const DESKTOP_SUFFIX: &str = ".desktop";
 
-/// Why the default wasn't set.
 #[derive(Debug)]
 pub enum NotSet {
-    /// Not a MIME type, or not an installed app's desktop ID.
     Invalid,
-    /// No config home to save it in.
     NoHome,
-    /// A list couldn't be read or saved.
     Failed(io::Error),
 }
 
-/// Makes the app with desktop ID `app` the default for `mime`.
-///
-/// # Errors
-/// [`NotSet`] says why nothing changed.
 pub fn set_default(mime: &str, app: &str, places: &Places) -> Result<(), NotSet> {
     if !valid_type(mime) || !valid_id(app) || installed(app, places).is_none() {
         return Err(NotSet::Invalid);
@@ -61,11 +33,9 @@ pub fn set_default(mime: &str, app: &str, places: &Places) -> Result<(), NotSet>
     save(&home.join(LIST), mime, app, Only::Always)
 }
 
-/// Which lists [`save`] changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Only {
     Always,
-    /// Only a list that names a default for the type or removes the app.
     WhereItOverrides,
 }
 
@@ -93,7 +63,6 @@ fn save(path: &Path, mime: &str, app: &str, only: Only) -> Result<(), NotSet> {
     private_file::replace(&target, edited.as_bytes(), mode).map_err(NotSet::Failed)
 }
 
-/// `text` with `app` made the default for `mime`.
 fn edit(text: &str, mime: &str, app: &str) -> String {
     let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
     set(&mut lines, DEFAULTS, mime, &[app]);
@@ -102,8 +71,6 @@ fn edit(text: &str, mime: &str, app: &str) -> String {
         .chain(added.iter().map(String::as_str).filter(|id| *id != app))
         .collect();
     set(&mut lines, ADDED, mime, &added);
-    // Each pass takes the app out of one removal line; there are at most
-    // as many as there are lines.
     for _ in 0..lines.len() {
         let Some(index) = removal_of(&lines, mime, app) else {
             break;
@@ -125,20 +92,17 @@ fn edit(text: &str, mime: &str, app: &str) -> String {
     edited
 }
 
-/// The group a header line opens, if it is one.
 fn header(line: &str) -> Option<&str> {
     line.trim()
         .strip_prefix(GROUP_START)
         .and_then(|line| line.strip_suffix(GROUP_END))
 }
 
-/// Whether `line` sets `key`.
 fn sets(line: &str, key: &str) -> bool {
     line.split_once(KEY_END)
         .is_some_and(|(name, _)| name.trim() == key)
 }
 
-/// The IDs a key line lists.
 fn ids_on(line: &str) -> Vec<String> {
     line.split_once(KEY_END)
         .map(|(_, ids)| {
@@ -151,14 +115,12 @@ fn ids_on(line: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// The line setting `key` to `ids`.
 fn line_for(key: &str, ids: &[&str]) -> String {
     let mut line = format!("{key}{KEY_END}{}", ids.join(&ID_SEPARATOR.to_string()));
     line.push(ID_SEPARATOR);
     line
 }
 
-/// Each run of `group`'s lines, header included, in file order.
 fn groups(lines: &[String], group: &str) -> Vec<(usize, usize)> {
     let starts: Vec<usize> = lines
         .iter()
@@ -175,19 +137,16 @@ fn groups(lines: &[String], group: &str) -> Vec<(usize, usize)> {
         .collect()
 }
 
-/// The first line setting `key` in any run of `group`.
 fn key_line(lines: &[String], group: &str, key: &str) -> Option<usize> {
     groups(lines, group)
         .into_iter()
         .find_map(|(start, end)| (start..end).skip(1).find(|&index| sets(&lines[index], key)))
 }
 
-/// The IDs `group` lists for `key`.
 fn values(lines: &[String], group: &str, key: &str) -> Vec<String> {
     key_line(lines, group, key).map_or_else(Vec::new, |index| ids_on(&lines[index]))
 }
 
-/// A removal line for `key` that lists `app`, in any run of the group.
 fn removal_of(lines: &[String], key: &str, app: &str) -> Option<usize> {
     groups(lines, REMOVED).into_iter().find_map(|(start, end)| {
         (start..end).skip(1).find(|&index| {
@@ -196,9 +155,6 @@ fn removal_of(lines: &[String], key: &str, app: &str) -> Option<usize> {
     })
 }
 
-/// Makes `group` set `key` to `ids`: the line that counts is changed in
-/// place, or one is added after the first run's last line that isn't
-/// blank; a missing group is added at the end.
 fn set(lines: &mut Vec<String>, group: &str, key: &str, ids: &[&str]) {
     let value = line_for(key, ids);
     if let Some(index) = key_line(lines, group, key) {
@@ -219,8 +175,6 @@ fn set(lines: &mut Vec<String>, group: &str, key: &str, ids: &[&str]) {
     lines.insert(last + 1, value);
 }
 
-/// Whether `mime` is a MIME type (`type/subtype`), so it can't break the
-/// file's lines or keys.
 fn valid_type(mime: &str) -> bool {
     let half = |text: &str| {
         !text.is_empty()
@@ -232,8 +186,6 @@ fn valid_type(mime: &str) -> bool {
         .is_some_and(|(kind, sub)| half(kind) && half(sub))
 }
 
-/// Whether `id` is a desktop ID that can't break the file's lines or
-/// lists.
 fn valid_id(id: &str) -> bool {
     id.ends_with(DESKTOP_SUFFIX)
         && !id.chars().any(|c| {
@@ -385,7 +337,6 @@ image/png=view.desktop;
             private_file::FILE_MODE
         );
 
-        // A list kept elsewhere and linked in stays linked.
         let kept = tree.0.join("dotfiles-mimeapps.list");
         fs::write(&kept, "# mine\n").unwrap();
         fs::set_permissions(&kept, fs::Permissions::from_mode(0o644)).unwrap();
@@ -412,7 +363,6 @@ image/png=view.desktop;
         let config = tree.0.join("config");
         fs::create_dir_all(&config).unwrap();
         let gnome = "[Default Applications]\nimage/png=old.desktop\n";
-        // Removing another app for the type doesn't make it win.
         let kde = "[Default Applications]\ntext/plain=kate.desktop\n[Removed Associations]\nimage/png=other.desktop\n";
         fs::write(config.join("gnome-mimeapps.list"), gnome).unwrap();
         fs::write(config.join("kde-mimeapps.list"), kde).unwrap();
@@ -429,7 +379,6 @@ image/png=view.desktop;
             kde
         );
         assert!(config.join("mimeapps.list").exists());
-        // A desktop without a list of its own gets none.
         places.desktops.push("sway".to_owned());
         set_default("image/gif", "view.desktop", &places).unwrap();
         assert!(!config.join("sway-mimeapps.list").exists());

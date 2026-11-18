@@ -1,17 +1,3 @@
-//! Copying one file's bytes, safely.
-//!
-//! The copy goes to a part file (a hidden name the job picked) in the
-//! target's folder, made with only the user's rights. It is filled by a
-//! reflink when the filesystem shares blocks (btrfs, XFS), or else range
-//! by range with `copy_file_range`, which lets the kernel or a network
-//! filesystem copy without the bytes passing through here, or else with
-//! plain reads and writes. Only ranges that hold data are copied, so a
-//! sparse file stays sparse. Then it gets the source's attributes, mode
-//! and times, is synced, and takes its real name the way the caller says
-//! (see `place`: never replacing, or replacing once whole). A failure or a
-//! cancel anywhere removes the part file, so a real name never holds half
-//! a file.
-
 use std::fs::{self, File, Metadata, OpenOptions};
 use std::io;
 use std::os::unix::fs::{FileExt as _, MetadataExt as _, OpenOptionsExt as _};
@@ -27,15 +13,10 @@ use super::control::Control;
 use super::folders::At;
 use super::stop::Stop;
 
-/// A part file is the user's alone until it is whole.
 const PART_MODE: u32 = 0o600;
-/// The most bytes copied between two checks for a pause or cancel: 8 MiB.
 pub const CHUNK: u64 = 0x80_0000;
-/// The buffer for plain reads and writes: 1 MiB.
 const BUFFER: usize = 0x10_0000;
 
-/// One file's copy: the open source and part file, and the paths a
-/// failed step is named by.
 struct Ends<'a> {
     source: &'a File,
     target: &'a File,
@@ -52,8 +33,6 @@ impl Ends<'_> {
         Stop::at(self.to, error)
     }
 
-    /// A step that both read and wrote failed: a full or read-only drive
-    /// is the target's, anything else the source's.
     fn failed(&self, error: &io::Error) -> Stop {
         match error.kind() {
             io::ErrorKind::StorageFull
@@ -65,24 +44,13 @@ impl Ends<'_> {
     }
 }
 
-/// The paths of one file's copy.
 pub struct FileCopy<'a> {
-    /// The source, reached through its folder.
     pub source: At<'a>,
-    /// The source's path, which a failure is named by.
     pub from: &'a Path,
     pub to: &'a Path,
-    /// The hidden name the copy is written under until whole.
     pub part: &'a Path,
 }
 
-/// Copies the file `from` to `to` through the part file `part`, calling
-/// `copied` with each count of bytes copied, and has `place` give the
-/// whole part file the name `to`.
-///
-/// # Errors
-/// [`Stop`] when cancelled, or failed at `from` or `to`. The part file is
-/// gone either way.
 pub fn copy_file(
     paths: &FileCopy<'_>,
     control: &Control,
@@ -97,7 +65,6 @@ pub fn copy_file(
     } = *paths;
     control.checkpoint()?;
     let source = open_source(source).map_err(|error| Stop::at(from, &error))?;
-    // Planned as a file, but anything may stand there by now.
     if !source.metadata().is_ok_and(|metadata| metadata.is_file()) {
         return Err(Stop::because(from, Failure::Unsupported));
     }
@@ -123,8 +90,6 @@ pub fn copy_file(
     done
 }
 
-/// Opens `from` for reading without following a link it may have become,
-/// and without waiting for a writer should it have become a pipe.
 fn open_source(from: At<'_>) -> io::Result<File> {
     let flags = OFlags::RDONLY
         .union(OFlags::NOFOLLOW)
@@ -138,14 +103,11 @@ fn open_source(from: At<'_>) -> io::Result<File> {
     )?))
 }
 
-/// Fills `target` from `source`, gives it the source's attributes, mode
-/// and times, and syncs it.
 fn fill(ends: &Ends<'_>, control: &Control, copied: &mut dyn FnMut(u64)) -> Result<(), Stop> {
     let (source, target) = (ends.source, ends.target);
     let metadata = source.metadata().map_err(|error| ends.reading(&error))?;
     let size = metadata.len();
     if size == 0 {
-        // Some say they're empty and aren't, like those under /proc.
         read_to_end(ends, control, copied)?;
     } else if ioctl_ficlone(target, source).is_ok() {
         copied(size);
@@ -153,7 +115,6 @@ fn fill(ends: &Ends<'_>, control: &Control, copied: &mut dyn FnMut(u64)) -> Resu
         for (start, end) in data_ranges(source, size) {
             copy_range(ends, (start, end), control, copied)?;
         }
-        // A hole at the end has no data to copy, only a length.
         target.set_len(size).map_err(|error| ends.writing(&error))?;
     }
     if let Err(error) = copy_xattrs(source, target) {
@@ -162,7 +123,6 @@ fn fill(ends: &Ends<'_>, control: &Control, copied: &mut dyn FnMut(u64)) -> Resu
             ends.from.display()
         );
     }
-    // A file written to while it was copied may be torn; it isn't kept.
     let after = source.metadata().map_err(|error| ends.reading(&error))?;
     if version(&after) != version(&metadata) {
         return Err(Stop::because(ends.from, Failure::SourceChanged));
@@ -171,9 +131,6 @@ fn fill(ends: &Ends<'_>, control: &Control, copied: &mut dyn FnMut(u64)) -> Resu
     target.sync_all().map_err(|error| ends.writing(&error))
 }
 
-/// What tells one version of a file from another: its size, and when its
-/// contents and its inode last changed. A writer can set the first time
-/// back, but not the second.
 pub fn version(metadata: &Metadata) -> (u64, i64, i64, i64, i64) {
     (
         metadata.len(),
@@ -184,7 +141,6 @@ pub fn version(metadata: &Metadata) -> (u64, i64, i64, i64, i64) {
     )
 }
 
-/// Copies all `source` holds, however long it said it was.
 fn read_to_end(
     ends: &Ends<'_>,
     control: &Control,
@@ -209,15 +165,12 @@ fn read_to_end(
     }
 }
 
-/// The ranges of `source` that hold data, in order. A filesystem that
-/// can't tell holes from data has one range, the whole file.
 fn data_ranges(source: &File, size: u64) -> Vec<(u64, u64)> {
     let mut ranges = Vec::new();
     let mut at = 0;
     while at < size {
         let start = match seek(source, SeekFrom::Data(at)) {
             Ok(start) => start,
-            // No data past `at`: the rest is a hole.
             Err(Errno::NXIO) => break,
             Err(_) => return vec![(0, size)],
         };
@@ -228,7 +181,6 @@ fn data_ranges(source: &File, size: u64) -> Vec<(u64, u64)> {
     ranges
 }
 
-/// Copies bytes `start..end` of `source` to the same place in `target`.
 fn copy_range(
     ends: &Ends<'_>,
     (start, end): (u64, u64),
@@ -259,18 +211,15 @@ fn copy_range(
             Err(errno) => return Err(ends.failed(&errno.into())),
         };
         if moved == 0 {
-            // Some filesystems copy nothing before the end of a file;
-            // plain reads tell a file that shrank from one that didn't.
             return read_and_write(ends, (at, end), control, copied);
         }
         copied(moved);
-        // The kernel moved the offset past what it copied.
         at = read_at;
     }
 }
 
-/// Whether `errno` says `copy_file_range` can't copy between these two
-/// files at all, so plain reads and writes must.
+// copy_file_range fails with these when it can't copy between the two files at all.
+// https://man7.org/linux/man-pages/man2/copy_file_range.2.html
 const fn kernel_cant_copy(errno: Errno) -> bool {
     matches!(
         errno,
@@ -278,7 +227,6 @@ const fn kernel_cant_copy(errno: Errno) -> bool {
     )
 }
 
-/// Copies bytes `start..end` with plain reads and writes.
 fn read_and_write(
     ends: &Ends<'_>,
     (start, end): (u64, u64),
@@ -295,7 +243,6 @@ fn read_and_write(
             .read_at(&mut buffer[..wanted], at)
             .map_err(|error| ends.reading(&error))?;
         if read == 0 {
-            // It shrank since it was planned.
             return Err(Stop::because(ends.from, Failure::SourceChanged));
         }
         target

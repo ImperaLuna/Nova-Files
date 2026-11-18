@@ -1,21 +1,3 @@
-//! The job that changes owner, group and permissions.
-//!
-//! Each path is reached as the user named it, without following a link at
-//! its end; everything inside a folder is reached from the folder's own
-//! open handle, by name, never through a link and never by a long path,
-//! so the change stays in the trees the user chose even if one changes
-//! while it runs. A link is passed over: it keeps no permissions of its
-//! own, and its target is not what was chosen. A folder where another
-//! drive is mounted is passed over too, with all it holds.
-//!
-//! Each thing is changed before what it holds is looked at, so a folder
-//! the user may not yet enter can be opened up and then gone into. The
-//! owner and group change first, as that clears set-user and set-group;
-//! the permission bits after.
-//!
-//! The job keeps no journal: changing again what was changed already
-//! changes nothing, so after a crash the user may simply ask again.
-
 use std::collections::BTreeSet;
 use std::ffi::{CString, OsStr};
 use std::os::fd::{AsRawFd as _, OwnedFd};
@@ -36,54 +18,36 @@ use super::running::Running;
 use super::stop::Stop;
 use crate::mount_root::{Device, is_mount_root};
 
-/// Reaching a thing only to change it: never its target, nothing read.
 const AT_PATH: OFlags = OFlags::PATH.union(OFlags::NOFOLLOW).union(OFlags::CLOEXEC);
 
-/// Opening a reached folder again, to list it.
 const LIST: OFlags = OFlags::RDONLY
     .union(OFlags::DIRECTORY)
     .union(OFlags::CLOEXEC);
 
-/// What the job asks of each thing.
 const WANTED: StatxFlags = StatxFlags::TYPE
     .union(StatxFlags::MODE)
     .union(StatxFlags::UID)
     .union(StatxFlags::GID);
 
-/// The owner's leave to list a folder and to enter it: a change that
-/// takes either away changes a folder after what it holds.
 const OWNER_LIST_AND_ENTER: u32 = 0o500;
-/// The number the system reads as "keep the owner (or group) it has".
 const KEEP: u32 = u32::MAX;
 
-/// A thing waiting to be changed.
 struct Next {
     path: PathBuf,
     at: Place,
-    /// The drive of the folder it is in, when it was found inside one.
     inside: Option<Device>,
 }
 
-/// What the job does next.
 enum Task {
-    /// Reach a thing, change it, and, as the change reaches, queue what it
-    /// holds.
     Visit(Next),
-    /// Change a folder already reached, once what it holds is done: the
-    /// change takes away the owner's leave to list or enter it.
     Close { path: PathBuf, at: Arc<OwnedFd> },
 }
 
-/// Where a thing waiting to be changed is.
 enum Place {
-    /// A chosen path, as the user named it.
     Chosen,
-    /// `name` in the open folder `folder`, which stays open while any of
-    /// what it holds waits.
     In { folder: Arc<OwnedFd>, name: CString },
 }
 
-/// Changes each of `paths` as `change` says.
 pub fn change_access(running: &mut Running, paths: &[PathBuf], change: &AccessChange) -> Ended {
     if let Some(path) = paths.iter().find(|path| !path.is_absolute()) {
         return (
@@ -91,8 +55,6 @@ pub fn change_access(running: &mut Running, paths: &[PathBuf], change: &AccessCh
             Vec::new(),
         );
     }
-    // Deepest last, as the job takes from the end: one chosen inside
-    // another is changed before the other can shut it away.
     let mut chosen: Vec<&PathBuf> = paths.iter().collect();
     chosen.sort_by_key(|path| path.components().count());
     let mut waiting: Vec<Task> = chosen
@@ -134,11 +96,6 @@ pub fn change_access(running: &mut Running, paths: &[PathBuf], change: &AccessCh
     (outcome, changed.into_iter().collect())
 }
 
-/// Changes `next` and, as `change` reaches, adds what it holds to
-/// `waiting`. Returns its path when something changed.
-///
-/// # Errors
-/// [`Stop`] when cancelled, or when a failure isn't the user's to answer.
 fn visit(
     running: &mut Running,
     change: &AccessChange,
@@ -160,8 +117,6 @@ fn visit(
     let modes = if folder { change.folders } else { change.files };
     let into = folder && change.reach == Reach::Inside;
     if into && modes.clear & OWNER_LIST_AND_ENTER != 0 {
-        // Listed and gone into first, changed last.
-        // Skipped (or gone): left as it is, with what it holds.
         let Some(names) = attempt(running, &next.path, || names(&at))? else {
             return Ok(None);
         };
@@ -181,8 +136,6 @@ fn visit(
     Ok(did.then_some(next.path))
 }
 
-/// Queues `names`, in the open folder `folder` at `path` on drive
-/// `device`, to be visited in the order listed.
 fn queue(
     waiting: &mut Vec<Task>,
     path: &Path,
@@ -202,11 +155,6 @@ fn queue(
     }));
 }
 
-/// Tries `step` on `path` until it works, asking the user what to do
-/// when it may not. `None` when it is gone, or the user skips it.
-///
-/// # Errors
-/// [`Stop`] when cancelled, or when a failure isn't the user's to answer.
 fn attempt<T>(
     running: &mut Running,
     path: &Path,
@@ -214,17 +162,14 @@ fn attempt<T>(
 ) -> Result<Option<T>, Stop> {
     let done = running.retry_or_skip(path, || match step() {
         Ok(done) => Ok(Some(done)),
-        // Gone since it was listed: nothing left to change.
         Err(Errno::NOENT) => Ok(None),
         Err(errno) => Err(failure(&errno.into())),
     })?;
     Ok(done.flatten())
 }
 
-/// Opens a handle on `next` and looks at it.
 fn reach(next: &Next) -> rustix::io::Result<(OwnedFd, Statx)> {
     let at = match &next.at {
-        // Without a trailing slash, which would follow a link.
         Place::Chosen => openat(CWD, without_slash(&next.path), AT_PATH, Mode::empty())?,
         Place::In { folder, name } => openat(&**folder, name.as_c_str(), AT_PATH, Mode::empty())?,
     };
@@ -232,13 +177,10 @@ fn reach(next: &Next) -> rustix::io::Result<(OwnedFd, Statx)> {
     Ok((at, stat))
 }
 
-/// `path` with no `/` at its end, so naming it never follows a link.
 fn without_slash(path: &Path) -> PathBuf {
     path.components().collect()
 }
 
-/// Gives the thing `at` `change`'s owner and group and `modes`'
-/// permission bits. Whether anything changed.
 fn apply(at: &OwnedFd, change: &AccessChange, modes: ModeChange) -> rustix::io::Result<bool> {
     let mut stat = look(at)?;
     let owner = change
@@ -256,16 +198,11 @@ fn apply(at: &OwnedFd, change: &AccessChange, modes: ModeChange) -> rustix::io::
             group.map(Gid::from_raw),
             AtFlags::EMPTY_PATH,
         )?;
-        // The kernel may have taken set-user and set-group away, as it
-        // should: what someone else wrote must not run as the new owner.
-        // They stay off unless the change itself sets them.
         stat = look(at)?;
     }
     let mode = u32::from(stat.stx_mode) & MODE_BITS;
     let wanted = modes.applied_to(mode);
     if wanted != mode {
-        // A handle that only reaches can't change permission bits itself;
-        // the kernel's link to it can, and leads to that very thing.
         chmodat(
             CWD,
             by_proc(at),
@@ -277,19 +214,16 @@ fn apply(at: &OwnedFd, change: &AccessChange, modes: ModeChange) -> rustix::io::
     Ok(new_owner || wanted != mode)
 }
 
-/// Looks at the thing `at` again.
 fn look(at: &OwnedFd) -> rustix::io::Result<Statx> {
     statx(at, c"", AtFlags::EMPTY_PATH, WANTED)
 }
 
-/// The kernel's link to the thing `at`, in `/proc`.
+// An O_PATH handle can't change modes; its /proc link reaches the same file.
+// https://man7.org/linux/man-pages/man5/proc_pid_fd.5.html
 fn by_proc(at: &OwnedFd) -> String {
     format!("/proc/self/fd/{}", at.as_raw_fd())
 }
 
-/// `errno` from going through `/proc`. While its handle is open a thing
-/// can't be gone, so a missing link means a system without `/proc`: the
-/// job can't do its work there, which isn't the thing being gone.
 fn without_proc(errno: Errno) -> Errno {
     if errno == Errno::NOENT {
         Errno::OPNOTSUPP
@@ -298,10 +232,7 @@ fn without_proc(errno: Errno) -> Errno {
     }
 }
 
-/// The names in the folder `at`, `.` and `..` left out.
 fn names(at: &OwnedFd) -> rustix::io::Result<Vec<CString>> {
-    // Opened again through the kernel's link to the handle: listing needs
-    // leave to read the folder, not to look it up by name again.
     let listed = openat(CWD, by_proc(at), LIST, Mode::empty()).map_err(without_proc)?;
     let mut names = Vec::new();
     for entry in Dir::new(listed)? {

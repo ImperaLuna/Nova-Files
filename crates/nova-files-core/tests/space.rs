@@ -1,7 +1,3 @@
-//! Space scans through the real core, against real temp folders: each
-//! entry's share of a folder, folders that can't be listed, and a space
-//! scan running beside a size scan.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -21,7 +17,6 @@ use nova_files_api::{Command, EntryKind, Event, MeasureId, ScanState, Size, Unre
 
 use common::{Bench, Client};
 
-/// Each entry's last reported kind and totals, once scan `id` is done.
 fn shares(client: &Client, id: MeasureId) -> HashMap<OsString, (EntryKind, Size)> {
     let mut latest = HashMap::new();
     loop {
@@ -77,7 +72,6 @@ fn each_entry_gets_its_own_totals() {
     );
     let empty = shares[&OsString::from("empty")].1;
     assert_eq!((empty.bytes, empty.files, empty.folders), (0, 0, 1));
-    // The link counts as itself, never what it points to.
     let link = shares[&OsString::from("link")].1;
     assert_eq!(link.files, 1);
     assert!(link.bytes < 1500);
@@ -181,8 +175,6 @@ fn every_entry_is_named_even_one_that_adds_nothing() {
     assert_eq!(files, 1);
 }
 
-/// `/dev` has `/dev/shm` mounted inside it on any Linux this runs on;
-/// skipped where it doesn't, or where it can't be written.
 #[test]
 fn a_drive_mounted_on_an_entry_is_not_entered() {
     let shm = PathBuf::from("/dev/shm");
@@ -190,7 +182,6 @@ fn a_drive_mounted_on_an_entry_is_not_entered() {
     let Ok(file) = fs::File::create(&big) else {
         return;
     };
-    // Sparse: takes no space, but its length counts if it is reached.
     let length = 1 << 50;
     file.set_len(length).unwrap();
     let bench = Bench::new("space-mount");

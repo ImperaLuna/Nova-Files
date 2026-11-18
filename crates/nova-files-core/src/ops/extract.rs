@@ -1,9 +1,3 @@
-//! Extracting an archive. The helper unpacks it into a hidden folder in
-//! the target folder (see `archive`), then what it unpacked moves into
-//! place as a move does, asking about names already taken; the journal
-//! records that move, so a crash resumes it as one. A locked archive asks
-//! for its password, again each time it is wrong.
-
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io;
@@ -21,11 +15,7 @@ use super::stop::Stop;
 use super::transfer::transfer_to;
 use crate::archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow};
 
-/// The start of the hidden folder an archive unpacks into, followed by
-/// the job's id for names and the try.
 pub const STAGING_PREFIX: &str = ".nova-extract-";
-/// The endings an archive's name loses to name the folder it extracts
-/// to, longest first where one ends another.
 const ENDINGS: [&str; 13] = [
     ".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2", ".tgz", ".txz", ".tzst", ".tbz2", ".tbz", ".tar",
     ".zip", ".7z", ".rar",
@@ -33,18 +23,12 @@ const ENDINGS: [&str; 13] = [
 const OWNER_WRITE: u32 = 0o200;
 const OWNER_ALL: u32 = 0o700;
 
-/// What an extract takes out of its archive.
 #[derive(Debug, Clone, Copy)]
 pub enum Taking<'a> {
-    /// Every entry, put as `ExtractTo` says.
     All(ExtractTo),
-    /// The entries at these paths inside it, each with all inside it,
-    /// each put straight into the folder: a copy out of the archive.
     Picked(&'a [PathBuf]),
 }
 
-/// Extracts from `archive` into `into` what `taking` says, with
-/// `archiver`.
 pub fn extract(
     running: &mut Running,
     archiver: Option<&Archiver>,
@@ -80,16 +64,11 @@ pub fn extract(
     }
 }
 
-/// The hidden folder an archive unpacked into, and the folder inside it
-/// named after the archive, which holds what it unpacked.
 struct Staging {
     root: PathBuf,
     named: PathBuf,
 }
 
-/// Unpacks what `taking` takes of `archive` into a hidden folder in
-/// `into`, asking for its password while one is needed; `None` when the
-/// user skips it.
 fn unpack(
     running: &mut Running,
     archiver: &Archiver,
@@ -142,11 +121,8 @@ fn unpack(
     Err(Stop::because(archive, Failure::Other))
 }
 
-/// An archive's entries, and the password its names took, if any.
 type Listed = (Vec<ArchiveEntry>, Option<String>);
 
-/// The entries of `archive`, and the password its names took, asked
-/// while they need one; `None` when the user skips it.
 fn listed(
     running: &mut Running,
     archiver: &Archiver,
@@ -168,8 +144,6 @@ fn listed(
     }
 }
 
-/// Asks for the password of `archive` with a conflict of `kind`; `None`
-/// when the user skips it.
 pub fn ask_password(
     running: &mut Running,
     kind: ConflictKind,
@@ -180,7 +154,6 @@ pub fn ask_password(
         kind,
         source: archive.to_path_buf(),
         target: into.to_path_buf(),
-        // Numbered when asked.
         number: 0,
         more: 0,
     };
@@ -192,7 +165,6 @@ pub fn ask_password(
     ))
 }
 
-/// What the helper should do next, having told `told`.
 pub fn steer(running: &mut Running, told: Extracting) -> Flow {
     let control = &running.shared.control;
     match told {
@@ -215,8 +187,6 @@ pub fn steer(running: &mut Running, told: Extracting) -> Flow {
     }
 }
 
-/// Makes the hidden folder in `into` for try `attempt` of the job whose
-/// names take `id`, and the folder `folder` inside it.
 fn staging(into: &Path, id: u64, attempt: u64, folder: &OsStr) -> Result<Staging, Stop> {
     let root = into.join(format!("{STAGING_PREFIX}{id}-{attempt}"));
     fs::create_dir(&root).map_err(|error| Stop::at(into, &error))?;
@@ -228,8 +198,6 @@ fn staging(into: &Path, id: u64, attempt: u64, folder: &OsStr) -> Result<Staging
     Ok(Staging { root, named })
 }
 
-/// Moves what `staging` holds into `into` as `taking` says, and says
-/// which folders changed.
 fn place(
     running: &mut Running,
     staging: &Staging,
@@ -255,7 +223,6 @@ fn place(
     let (result, touched) = transfer_to(running, &pairs_into(&sources, into), How::Move);
     for (source, mode) in locked {
         let target = running.steps.get(&source).cloned();
-        // Put back on what moved whole; a merged folder stays as it was.
         if let Some(target) = target {
             fs::set_permissions(target, fs::Permissions::from_mode(mode)).ok();
         }
@@ -270,15 +237,12 @@ fn place(
         .map_err(|stop| (stop, changed))
 }
 
-/// The entries at the top of `folder`.
 fn top(folder: &Path) -> io::Result<Vec<PathBuf>> {
     fs::read_dir(folder)?
         .map(|entry| entry.map(|entry| entry.path()))
         .collect()
 }
 
-/// Lets the owner write in each folder of `sources`, as a folder that
-/// moves to another folder must be writable; says what each had before.
 fn writable(sources: &[PathBuf]) -> Vec<(PathBuf, u32)> {
     sources
         .iter()
@@ -294,8 +258,6 @@ fn writable(sources: &[PathBuf]) -> Vec<(PathBuf, u32)> {
         .collect()
 }
 
-/// Removes `path` and all inside it, letting the owner into each folder
-/// first, as an archive's folders may forbid it.
 fn clear(path: &Path) {
     let Ok(metadata) = path.symlink_metadata() else {
         return;
@@ -314,7 +276,6 @@ fn clear(path: &Path) {
     fs::remove_dir(path).ok();
 }
 
-/// The bytes and items `entries` hold.
 fn totals(entries: &[ArchiveEntry]) -> (u64, u64) {
     let bytes = entries
         .iter()
@@ -324,8 +285,6 @@ fn totals(entries: &[ArchiveEntry]) -> (u64, u64) {
     (bytes, u64::try_from(entries.len()).unwrap_or(u64::MAX))
 }
 
-/// The name of the folder `archive` extracts to: its name without the
-/// archive's ending.
 fn folder_name(archive: &Path) -> OsString {
     let name = archive.file_name().unwrap_or_default();
     let Some(text) = name.to_str() else {
@@ -340,8 +299,6 @@ fn folder_name(archive: &Path) -> OsString {
         .map_or_else(|| name.to_os_string(), Into::into)
 }
 
-/// Why extracting `archive` into `into` stopped, from the helper's
-/// `failure`.
 fn stop_for(failure: ArchiveFailure, archive: &Path, into: &Path) -> Stop {
     let (path, reason) = match failure {
         ArchiveFailure::Cancelled => return Stop::Cancelled,

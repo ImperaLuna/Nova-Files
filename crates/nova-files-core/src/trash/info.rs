@@ -1,21 +1,5 @@
-//! Info files: `info/<name>.trashinfo`, which says where the entry
-//! `files/<name>` came from and when it was trashed.
-//!
-//! ```text
-//! [Trash Info]
-//! Path=/home/me/My%20Photos
-//! DeletionDate=2026-11-10T04:38:19
-//! ```
-//!
-//! The path is written byte by byte, every byte but letters, digits,
-//! `-._~` and `/` as `%` and two hex digits, so any name, UTF-8 or not,
-//! fits. The date is local time, as the spec says and other apps read
-//! it.
-//!
-//! An entry keeps its own name in the trash when it is free, else the
-//! first free of `name.2`, `name.3` and so on, cut short so the info
-//! file's name still fits, between characters when the name is UTF-8.
-
+// DeletionDate is local time, as the trash spec says.
+// https://specifications.freedesktop.org/trash-spec/latest/
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::Path;
@@ -25,21 +9,15 @@ use chrono::{DateTime, Local};
 
 use crate::percent;
 
-/// The end of every info file's name.
 pub const INFO_SUFFIX: &str = ".trashinfo";
 pub(super) const HEADER: &str = "[Trash Info]";
 pub(super) const PATH_KEY: &str = "Path=";
 pub(super) const DATE_KEY: &str = "DeletionDate=";
-/// The longest name most filesystems take, in bytes.
 const MAX_NAME: usize = 255;
-/// Bytes a path keeps as themselves, besides letters and digits.
 const PLAIN_MARKS: &[u8] = b"-._~/";
 
-/// How `DeletionDate` is written: local time, without a zone.
 pub(super) const DATE_FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
 
-/// The info file's text for an entry from `path`, as the trash writes
-/// paths (see `TrashFolder::path_field`), trashed at `when`.
 pub fn info_text(path: &Path, when: SystemTime) -> Vec<u8> {
     let mut text = Vec::new();
     text.extend_from_slice(HEADER.as_bytes());
@@ -53,25 +31,18 @@ pub fn info_text(path: &Path, when: SystemTime) -> Vec<u8> {
     text
 }
 
-/// `bytes` with every byte but letters, digits and [`PLAIN_MARKS`]
-/// escaped.
 pub(super) fn escape(bytes: &[u8]) -> Vec<u8> {
     percent::escape(bytes, |byte| {
         byte.is_ascii_alphanumeric() || PLAIN_MARKS.contains(&byte)
     })
 }
 
-/// `when` as `YYYY-MM-DDThh:mm:ss` in local time. Without the system's
-/// time zone, chrono takes UTC.
 fn date(when: SystemTime) -> String {
     DateTime::<Local>::from(when)
         .format(DATE_FORMAT)
         .to_string()
 }
 
-/// The `attempt`th name an entry named `name` tries in the trash: its
-/// own first, then `name.2` and on, cut short so that the name with
-/// [`INFO_SUFFIX`] fits in a folder.
 pub fn stored_name(name: &OsStr, attempt: u32) -> OsString {
     let number = if attempt <= 1 {
         String::new()
@@ -79,7 +50,6 @@ pub fn stored_name(name: &OsStr, attempt: u32) -> OsString {
         format!(".{attempt}")
     };
     let mut room = MAX_NAME - INFO_SUFFIX.len() - number.len();
-    // A name in UTF-8 is cut between characters, so it stays UTF-8.
     if let Ok(text) = str::from_utf8(name.as_bytes()) {
         room = text.floor_char_boundary(room);
     }
@@ -148,7 +118,6 @@ mod tests {
 
     #[test]
     fn a_long_utf8_name_is_cut_between_characters() {
-        // 83 characters of 3 bytes: 249 bytes, cut inside the 82nd.
         let name = OsString::from("日".repeat(83));
 
         let stored = stored_name(&name, 1);

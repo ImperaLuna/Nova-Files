@@ -1,12 +1,6 @@
-//! Running a test again with every XDG folder pointed into a folder of
-//! its own, so the core reads that folder's apps and settings, never the
-//! machine's.
-
 use std::path::Path;
 use std::process::Command as Process;
 
-/// Runs the test `name` again in `root`'s folders, telling it `root` in
-/// `root_var`, then removes `root`; fails when that run fails.
 pub fn run_again_in(root: &Path, root_var: &str, name: &str) {
     let data = root.join("data");
     let config = root.join("config");

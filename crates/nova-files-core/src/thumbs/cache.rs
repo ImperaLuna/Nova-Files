@@ -1,12 +1,5 @@
-//! The freedesktop thumbnail cache: where a file's thumbnail lives, and
-//! whether the one there is still good.
-//!
-//! A thumbnail is named after the MD5 of its file's URI and stores the
-//! file's mtime in a `Thumb::MTime` text chunk; it is good while that
-//! matches. Failure markers, kept per application, follow the same rule.
-//! A file cut short (it doesn't reach its end chunk) or too big to be a
-//! thumbnail doesn't count, so it is made again.
-
+// Follows the freedesktop thumbnail spec.
+// https://specifications.freedesktop.org/thumbnail-spec/latest/
 use std::fs::File;
 use std::io::{self, Read as _};
 use std::path::{Path, PathBuf};
@@ -17,7 +10,6 @@ use super::md5;
 
 pub const FAIL_FOLDER: &str = "fail/nova-files";
 const EXTENSION: &str = ".png";
-/// A thumbnail is at most a few hundred KB; anything this big isn't one.
 const MAX_THUMBNAIL_BYTES: u64 = 4 * 1024 * 1024;
 const MTIME_KEY: &[u8] = b"Thumb::MTime";
 const PNG_SIGNATURE_LENGTH: usize = 8;
@@ -27,20 +19,16 @@ const CHUNK_CRC: usize = 4;
 const TEXT_TYPE: &[u8] = b"tEXt";
 const END_TYPE: &[u8] = b"IEND";
 
-/// The thumbnail's file name for the file at `uri`.
 pub fn name(uri: &str) -> String {
     md5::hex(uri.as_bytes()) + EXTENSION
 }
 
-/// The thumbnail or marker `name` in `folder`, if it was made from the
-/// file as it is now (`mtime`, in whole seconds).
 pub fn read_if_current(folder: &Path, name: &str, mtime: u64) -> Option<Vec<u8>> {
     let png = read_capped(&folder.join(name)).ok()?;
     let stored = text(&png, MTIME_KEY)?;
     (stored == mtime.to_string().as_bytes()).then_some(png)
 }
 
-/// The folder of `size`'s thumbnails.
 pub fn sized(thumbnails: &Path, size: ThumbnailSize) -> PathBuf {
     thumbnails.join(size.folder())
 }
@@ -49,22 +37,18 @@ pub fn failed(thumbnails: &Path) -> PathBuf {
     thumbnails.join(FAIL_FOLDER)
 }
 
-/// The file's bytes; an error for one bigger than a thumbnail can be.
 fn read_capped(path: &Path) -> io::Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let mut bytes = Vec::new();
     (&mut file)
         .take(MAX_THUMBNAIL_BYTES)
         .read_to_end(&mut bytes)?;
-    // A byte past the cap means the file is bigger than a thumbnail can be.
     if file.read(&mut [0])? != 0 {
         return Err(io::ErrorKind::FileTooLarge.into());
     }
     Ok(bytes)
 }
 
-/// The text of the first `tEXt` chunk named `key`, if the PNG's chunks run
-/// whole to its end chunk.
 fn text<'a>(png: &'a [u8], key: &[u8]) -> Option<&'a [u8]> {
     let mut rest = png.get(PNG_SIGNATURE_LENGTH..)?;
     let mut found = None;
@@ -96,8 +80,6 @@ fn split_once_nul(data: &[u8]) -> Option<(&[u8], &[u8])> {
 mod tests {
     use super::*;
 
-    /// A PNG-shaped byte string: signature, then `(type, data)` chunks with
-    /// dummy CRCs.
     fn png(chunks: &[(&[u8], &[u8])]) -> Vec<u8> {
         let mut out = vec![0; PNG_SIGNATURE_LENGTH];
         for (kind, data) in chunks {
@@ -133,7 +115,6 @@ mod tests {
         assert_eq!(text(b"short", MTIME_KEY), None);
     }
 
-    /// A thumbnail for mtime 42 that is exactly `size` bytes long.
     fn thumbnail_of_size(size: usize) -> Vec<u8> {
         let text: &[u8] = b"Thumb::MTime\x0042";
         let chunk = CHUNK_LENGTH + CHUNK_TYPE + CHUNK_CRC;
@@ -151,7 +132,6 @@ mod tests {
         let cap = usize::try_from(MAX_THUMBNAIL_BYTES).unwrap();
         let at_cap = thumbnail_of_size(cap);
         std::fs::write(folder.join("at-cap.png"), &at_cap).unwrap();
-        // Whole up to the cap, so only its size can refuse it.
         let mut over = at_cap.clone();
         over.push(0);
         std::fs::write(folder.join("over.png"), &over).unwrap();

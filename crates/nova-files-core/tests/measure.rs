@@ -1,7 +1,3 @@
-//! Size scans through the real core, against real temp folders: the client
-//! that asked hears the totals, a stopped scan goes quiet, and another
-//! client hears nothing.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -20,14 +16,9 @@ use nova_files_api::{Command, Event, MeasureId, ScanState, Size};
 
 use common::{Bench, Client};
 
-/// Folders in a tree big enough that a scan is still running when the
-/// client stops it.
 const MANY: usize = 2000;
-/// How long a test listens for an answer that should never come.
 const QUIET: Duration = Duration::from_millis(300);
 
-/// Waits for scan `id` to be done, skipping its reports so far, and
-/// checks they never went down.
 fn measured(client: &Client, id: MeasureId) -> Size {
     let mut last = Size::default();
     loop {
@@ -89,8 +80,6 @@ fn a_path_that_is_not_there_counts_as_unreadable() {
     );
 }
 
-/// Waits until the core says nothing for [`QUIET`], allowing only
-/// unfinished reports of scan `id`.
 fn only_reports_of(client: &Client, id: MeasureId) {
     loop {
         match client.events.recv_timeout(QUIET) {
@@ -121,7 +110,6 @@ fn a_stopped_scan_says_nothing_more() {
     measure(&client, id, vec![big]);
     client.send(Command::StopMeasure(id));
 
-    // Reports sent before the stop may still arrive; the last one never.
     only_reports_of(&client, id);
 }
 

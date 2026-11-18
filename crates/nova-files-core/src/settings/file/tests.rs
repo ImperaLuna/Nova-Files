@@ -1,5 +1,3 @@
-//! Reading and editing settings text.
-
 use std::collections::BTreeMap;
 
 use super::*;
@@ -44,7 +42,6 @@ hidden_files = true
         }
     );
     assert_eq!(read("appearance = \"dark\"").0.appearance, Appearance::Dark);
-    // The default, said out loud, is no mistake.
     assert_eq!(
         read("appearance = \"system\""),
         (Settings::default(), Vec::new())
@@ -147,7 +144,6 @@ fn key_overrides_are_added_and_removed() {
     };
     let edited = edit("", &back).unwrap();
     assert_eq!(read(&edited).0.keys, keys(&[("go.back", &["alt-left"])]));
-    // A non-table under the name is replaced.
     let edited_over = edit("keys = 3\n", &back).unwrap();
     assert_eq!(
         read(&edited_over).0.keys,
@@ -162,7 +158,6 @@ fn key_overrides_are_added_and_removed() {
     )
     .unwrap();
     assert_eq!(dropped, "");
-    // Dropping from a file without the table changes nothing.
     let none = SettingChange::Keys {
         action: "go.back".to_owned(),
         keys: None,
@@ -171,7 +166,6 @@ fn key_overrides_are_added_and_removed() {
         edit("thumbnails = false\n", &none).unwrap(),
         "thumbnails = false\n"
     );
-    // Another override keeps the table.
     let two = edit("[keys]\n\"go.back\" = []\n\"go.up\" = []\n", &none).unwrap();
     assert_eq!(read(&two).0.keys, keys(&[("go.up", &[])]));
 }

@@ -1,8 +1,3 @@
-//! Taking entries out of the trash through the real core: listing what
-//! it holds, restoring, deleting from it and emptying it. An info file
-//! goes once its entry has left, never before, and a crash leaves none
-//! naming nothing.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -25,12 +20,10 @@ use nova_files_api::{
 use answers::{answer, held};
 use common::{Bench, Client};
 
-/// The home trash of the core under `root`.
 fn home_trash(root: &Path) -> PathBuf {
     root.join("home/.local/share/Trash")
 }
 
-/// What the trash holds, by where each entry sits.
 fn listed(client: &Client) -> Vec<Trashed> {
     client.send(Command::ListTrash);
     match client.next() {
@@ -42,7 +35,6 @@ fn listed(client: &Client) -> Vec<Trashed> {
     }
 }
 
-/// Trashes each of `paths`, and returns where each sits in the trash.
 fn trashed(client: &Client, paths: &[PathBuf]) -> Vec<PathBuf> {
     let (_, outcome, _) = client.run(Operation::Trash {
         paths: paths.to_vec(),
@@ -267,7 +259,6 @@ fn emptying_the_trash_deletes_all_it_lists() {
     fs::create_dir(bench.at("dir")).unwrap();
     let client = bench.client();
     let items = trashed(&client, &[bench.at("a"), bench.at("dir")]);
-    // Another app's entry, its info file not written yet.
     let stray = items[0].with_file_name("stray");
     fs::write(&stray, "theirs").unwrap();
 
@@ -285,9 +276,6 @@ fn emptying_the_trash_deletes_all_it_lists() {
     assert_eq!((again, changed), (Outcome::Done, vec![]));
 }
 
-/// A core under a bench named `name` whose restore of `a` from the home trash a
-/// crash cut short, after recording its info file. `moved` says whether
-/// the entry got back before the crash.
 fn crashed_restore(name: &str, moved: bool) -> Bench {
     Bench::with(name, nova_files_core::IDLE_EXIT, |root| {
         let trash = home_trash(root);
@@ -395,7 +383,6 @@ fn a_resumed_restore_leaves_what_took_a_freed_name_since() {
     let client = bench.client();
     client.send(Command::WatchJobs);
     assert!(matches!(client.next(), Event::JobInterrupted { .. }));
-    // Trashed by another app after the crash, under the freed name.
     fs::write(trash.join("files/a"), "newcomer").unwrap();
     fs::write(
         trash.join("info/a.trashinfo"),

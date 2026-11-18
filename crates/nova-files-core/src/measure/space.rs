@@ -1,13 +1,3 @@
-//! A space scan: what each entry of one folder takes.
-//!
-//! [`run`] lists the folder the way a window does (see `list`), then walks
-//! every entry as a root of its own, each into its own tally slot, as an
-//! entry met in a walk: one that vanished since is left out, and a drive
-//! mounted there isn't entered. A
-//! report names the entries whose totals changed since the report before;
-//! since every entry is counted before the first report, that one names
-//! them all.
-
 use std::path::Path;
 
 use nova_files_api::{Entry, Event, MeasureId, ScanState, Share, Unreadable};
@@ -17,9 +7,7 @@ use super::tally::Tally;
 use super::walk::{Root, device_of};
 use crate::list::{self, Stopped};
 
-/// Runs `scan`, scan `id` of the entries of `folder`.
 pub fn run(scan: &Scan, id: MeasureId, folder: &Path) {
-    // A scan cut short still ends with that, whatever stopped it.
     let unreadable = |reason| {
         scan.last(|state| match state {
             ScanState::CutShort => Event::SpaceMeasured {
@@ -41,7 +29,6 @@ pub fn run(scan: &Scan, id: MeasureId, folder: &Path) {
             return;
         }
         Err(Stopped::Cancelled) => {
-            // Cut short (or stopped) before any entry was counted.
             scan.last(|state| Event::SpaceMeasured {
                 id,
                 shares: Vec::new(),
@@ -72,8 +59,6 @@ pub fn run(scan: &Scan, id: MeasureId, folder: &Path) {
     scan.run(&roots, &tally, report);
 }
 
-/// The entries whose totals changed since the last call, with their
-/// totals now.
 fn changed(entries: &[Entry], tally: &Tally) -> Vec<Share> {
     tally
         .take_changed()
@@ -98,8 +83,6 @@ mod tests {
     use super::*;
     use crate::measure::{CUT, Measurer, Purpose, RUNNING, Shared};
 
-    /// What a space scan of `folder` says, run as scan 7 and first moved
-    /// to `state`.
     fn space_in(state: u8, folder: &Path) -> Vec<Event> {
         let (sink, events) = mpsc::channel();
         let shared = Arc::new(Shared::new(MeasureId(7), Vec::new()));

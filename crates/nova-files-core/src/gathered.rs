@@ -1,18 +1,3 @@
-//! Games and Projects: the folders each place gathers from, kept in
-//! `$XDG_CONFIG_HOME/nova-files/gathered.toml` (see `file` for its text
-//! and `store` for keeping it and telling clients).
-//!
-//! Nothing is found by itself, with one exception: when the file doesn't
-//! exist yet, the first read writes one with the two usual folders, each
-//! only if it exists: `~/Projects` for Projects and Steam's own library in
-//! the data folder for Games. From then on the file is the only word, so a
-//! folder the user removes stays removed. A file deleted later is written
-//! again the next time the core starts.
-//!
-//! A Projects folder added without saying what it holds is guessed: one
-//! with a project's files at its top (see [`PROJECT_MARKERS`]) is one
-//! project, any other holds many.
-
 mod file;
 mod list;
 mod store;
@@ -27,9 +12,7 @@ pub use store::Store;
 
 use crate::places::Home;
 
-/// The file, in the config folder.
 const FILE: &str = "gathered.toml";
-/// What at the top of a folder makes it one project.
 const PROJECT_MARKERS: [&str; 5] = [
     ".git",
     "flake.nix",
@@ -37,14 +20,10 @@ const PROJECT_MARKERS: [&str; 5] = [
     "package.json",
     "justfile",
 ];
-/// The usual Projects folder, in the home folder.
 const PROJECTS_IN_HOME: &str = "Projects";
-/// Steam's own library, in the data folder.
 const STEAM_IN_DATA: &str = "Steam/steamapps/common";
-/// The name Steam's library shows under.
 const STEAM_NAME: &str = "Steam";
 
-/// What the folder at `path` holds in `place`, guessed from its top.
 fn guess(place: Gathering, path: &Path) -> Holds {
     let is_project = place == Gathering::Projects
         && PROJECT_MARKERS
@@ -53,8 +32,6 @@ fn guess(place: Gathering, path: &Path) -> Holds {
     if is_project { Holds::One } else { Holds::Many }
 }
 
-/// The folders a new file starts with: the usual ones under `home` that
-/// exist.
 fn usual_folders(home: &Home) -> Vec<(Gathering, GatheredFolder)> {
     let projects = (
         Gathering::Projects,
@@ -105,7 +82,6 @@ mod tests {
             assert_eq!(guess(Gathering::Projects, &folder), Holds::Many);
             fs::write(folder.join(marker), "").unwrap();
             assert_eq!(guess(Gathering::Projects, &folder), Holds::One, "{marker}");
-            // A game library is never one game by guess.
             assert_eq!(guess(Gathering::Games, &folder), Holds::Many);
         }
         let deeper = home.folder.join("deeper");
@@ -127,7 +103,6 @@ mod tests {
         let found = usual_folders(&home);
         assert_eq!(found[1].0, Gathering::Games);
         assert_eq!(found[1].1.name.as_deref(), Some(STEAM_NAME));
-        // A file where the folder should be is no folder.
         fs::remove_dir_all(home.folder.join(PROJECTS_IN_HOME)).unwrap();
         fs::write(home.folder.join(PROJECTS_IN_HOME), "").unwrap();
         assert_eq!(usual_folders(&home).len(), 1);

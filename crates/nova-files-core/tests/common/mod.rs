@@ -1,6 +1,3 @@
-//! What the job tests share: a scratch folder with a core whose home is
-//! inside it, and a client that starts jobs and waits for them.
-
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
@@ -8,10 +5,8 @@ use std::time::Duration;
 
 use nova_files_api::{Command, Connection, Event, JobId, JobTag, Operation, Outcome, Tally};
 
-/// How long a test waits for the core before it counts as a failure.
 pub const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// A scratch folder for one test, and a core whose home is `home` in it.
 pub struct Bench {
     pub root: PathBuf,
     pub core: nova_files_core::RunningCore,
@@ -22,8 +17,6 @@ impl Bench {
         Self::with(test, nova_files_core::IDLE_EXIT, |_| {})
     }
 
-    /// A bench whose core exits after `idle_exit` idle, started once
-    /// `prepare` has had the fresh scratch folder.
     pub fn with(test: &str, idle_exit: Duration, prepare: impl FnOnce(&Path)) -> Self {
         let root =
             std::env::temp_dir().join(format!("nova-files-jobs-{test}-{}", std::process::id()));
@@ -64,7 +57,6 @@ pub struct Client {
 }
 
 impl Client {
-    /// Starts `operation` and returns its id once the core names it.
     pub fn start(&self, operation: Operation) -> JobId {
         let tag = JobTag(7);
         self.connection
@@ -76,8 +68,6 @@ impl Client {
         }
     }
 
-    /// The next event but what says which jobs can be undone, failing
-    /// the test after [`ANSWER_TIMEOUT`].
     pub fn next(&self) -> Event {
         loop {
             match self.any_next() {
@@ -87,20 +77,15 @@ impl Client {
         }
     }
 
-    /// The next event, failing the test after [`ANSWER_TIMEOUT`].
     pub fn any_next(&self) -> Event {
         self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
     }
 
-    /// Waits for job `job` to end, skipping its progress, and returns how
-    /// it ended and the folders it changed.
     pub fn ended(&self, job: JobId) -> (Outcome, Vec<PathBuf>) {
         let (outcome, changed, _) = self.finished(job);
         (outcome, changed)
     }
 
-    /// Waits for job `job` to end, skipping its progress, and returns how
-    /// it ended, the folders it changed and what answers made of it.
     pub fn finished(&self, job: JobId) -> (Outcome, Vec<PathBuf>, Tally) {
         loop {
             match self.next() {
@@ -116,7 +101,6 @@ impl Client {
         }
     }
 
-    /// Runs `operation` to its end.
     pub fn run(&self, operation: Operation) -> (JobId, Outcome, Vec<PathBuf>) {
         let job = self.start(operation);
         let (outcome, changed) = self.ended(job);

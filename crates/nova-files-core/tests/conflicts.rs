@@ -1,7 +1,3 @@
-//! Conflicts through the real core: a copy holds at whatever stands in an
-//! item's way until a client answers, and does what the answer says, and
-//! nothing more.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -33,8 +29,6 @@ fn copy(sources: Vec<PathBuf>, into: &Path) -> Operation {
     }
 }
 
-/// Copies `source` into `into`, answers the one conflict it holds at with
-/// `with`, and returns that conflict and how the job ended.
 fn copy_answering(
     client: &Client,
     source: PathBuf,
@@ -48,8 +42,6 @@ fn copy_answering(
     (conflict, outcome)
 }
 
-/// A file `a.txt` holding "new", and a folder `into` already holding an
-/// `a.txt` with "old".
 fn file_over_file(bench: &Bench) -> (PathBuf, PathBuf) {
     let into = bench.at("into");
     fs::create_dir(&into).unwrap();
@@ -111,7 +103,6 @@ fn a_replaced_file_the_trash_refuses_is_kept_beside_its_replacement() {
     let trash = bench.at("home/.local/share/Trash");
     fs::create_dir_all(trash.join("files")).unwrap();
     fs::create_dir_all(trash.join("info")).unwrap();
-    // Every name the trash tries for `a.txt` is taken.
     fs::write(trash.join("info/a.txt.trashinfo"), "").unwrap();
     for number in 2..=10_000 {
         fs::write(trash.join(format!("info/a.txt.{number}.trashinfo")), "").unwrap();
@@ -390,12 +381,10 @@ fn replace_looks_again_at_what_has_the_name_now() {
 
     let job = client.start(copy(vec![source], &into));
     let file = held(&client, job);
-    // While the question is open, the file there becomes a folder.
     fs::remove_file(into.join("a.txt")).unwrap();
     fs::create_dir(into.join("a.txt")).unwrap();
     answer(&client, job, &file, Answer::Replace, Scope::ThisOne);
     let folder = held(&client, job);
-    // And then goes.
     fs::remove_dir(into.join("a.txt")).unwrap();
     answer(&client, job, &folder, Answer::KeepBoth, Scope::ThisOne);
     let (outcome, _) = client.ended(job);
@@ -506,7 +495,6 @@ fn a_folder_swapped_for_a_link_while_the_copy_waits_is_not_followed() {
 
     let job = client.start(copy(vec![taken, tree.clone()], &into));
     let conflict = held(&client, job);
-    // While the job waits, another program swaps `sub` for a link.
     fs::remove_dir_all(tree.join("sub")).unwrap();
     symlink(&outside, tree.join("sub")).unwrap();
     answer(&client, job, &conflict, Answer::Skip, Scope::ThisOne);
@@ -533,7 +521,6 @@ fn a_chosen_folder_swapped_for_a_look_alike_while_the_copy_waits_is_refused() {
 
     let job = client.start(copy(vec![taken, tree.clone()], &into));
     let conflict = held(&client, job);
-    // While the job waits, another program puts its own folder there.
     fs::rename(&tree, bench.at("moved")).unwrap();
     fs::create_dir(&tree).unwrap();
     fs::write(tree.join("f"), "look-alike").unwrap();

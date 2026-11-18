@@ -1,18 +1,3 @@
-//! Runs the sandboxed helper on one batch and reads its answers, or on one
-//! picture for the quick look and reads the picture.
-//!
-//! The helper gets only what it needs from the environment (where programs,
-//! MIME data and thumbnailers are: [`PASSED_VARS`]) and runs in a process
-//! group of its own; its output is read on a thread of its own. A batch
-//! has [`PER_FILE`] for each of its files; past that the helper is killed.
-//! Once it is done the rest of its group is killed too, so nothing a
-//! thumbnailer left running outlives the batch. It is always waited on. What it made is read from the cache, not from its
-//! answers, so a helper killed part-way still counts the files it saved.
-//! A preview's picture is read from the helper's output: its size line
-//! first, which must fit the box asked for, then exactly that many pixels
-//! into a buffer of that size, and nothing after. A newer preview stops
-//! the helper still decoding an older one (see [`Running`]).
-
 use std::env;
 use std::ffi::OsString;
 use std::io::{self, Read};
@@ -26,23 +11,15 @@ use std::time::Duration;
 use nova_files_api::{Fit, Picture, ThumbnailSize};
 use rustix::process::{self, Pid, Signal};
 
-/// How long each file of a batch may take; the helper gives a system
-/// thumbnailer less than this, so a batch of slow files still finishes.
 const PER_FILE: Duration = Duration::from_secs(15);
-/// Where the helper finds the system's thumbnailers and MIME data.
 const PASSED_VARS: [&str; 4] = ["PATH", "HOME", "XDG_DATA_HOME", "XDG_DATA_DIRS"];
 const READER_THREAD: &str = "nova-files-thumbnail-reader";
-/// The first argument that asks the helper for a preview; the helper
-/// checks for the same word.
 const PREVIEW_FLAG: &str = "--preview";
-/// A picture's pixels are RGBA.
 const BYTES_PER_PIXEL: u64 = 4;
-/// The size line: two numbers of at most ten digits, a space, a newline.
 const MAX_SIZE_LINE: usize = 22;
 const SIZE_LINE_END: u8 = b'\n';
 const SIZE_SEPARATOR: char = ' ';
 
-/// One file for the helper.
 #[derive(Debug, Clone)]
 pub struct Job {
     pub source: PathBuf,
@@ -51,8 +28,6 @@ pub struct Job {
     pub name: String,
 }
 
-/// Runs the helper on `jobs`, making thumbnails at `size`, until it exits
-/// or runs out of time.
 pub fn run(helper: &Path, thumbnails: &Path, size: ThumbnailSize, jobs: &[Job]) {
     let mut command = command(helper);
     command.arg(thumbnails).arg(size.folder());
@@ -68,7 +43,6 @@ pub fn run(helper: &Path, thumbnails: &Path, size: ThumbnailSize, jobs: &[Job]) 
     };
     let output = child.stdout.take();
     let (done, finished) = mpsc::channel();
-    // A reader that couldn't start drops `done`, which ends the wait at once.
     thread::Builder::new()
         .name(READER_THREAD.to_owned())
         .spawn(move || {
@@ -83,24 +57,16 @@ pub fn run(helper: &Path, thumbnails: &Path, size: ThumbnailSize, jobs: &[Job]) 
     end(&mut child);
 }
 
-/// The preview helper one client has running, so that a newer request can
-/// stop it.
 #[derive(Debug, Default)]
 pub struct Running(Mutex<Option<Pid>>);
 
 impl Running {
-    /// Nothing running yet.
     #[must_use]
     pub const fn new() -> Self {
         Self(Mutex::new(None))
     }
 
-    /// Kills the helper running and what it started, if any. Its group id
-    /// names it alone: the helper is taken out of here before it is
-    /// waited on, under the same lock.
     pub fn stop(&self) {
-        // Held through the kill, so the group can't be waited on and its
-        // id reused before the signal lands.
         let running = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(group) = *running {
             process::kill_process_group(group, Signal::KILL).ok();
@@ -108,9 +74,6 @@ impl Running {
         drop(running);
     }
 
-    /// Counts `group` as running, unless it is no longer `wanted`: then
-    /// it is killed at once. Asked under the lock [`Self::stop`] takes, so
-    /// a request replaced just before can't keep its helper running.
     fn start(&self, group: Option<Pid>, wanted: impl Fn() -> bool) {
         let mut running = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         if wanted() {
@@ -126,9 +89,6 @@ impl Running {
     }
 }
 
-/// `file` decoded by the helper, scaled down to fit `fit`; `None` when it
-/// isn't a picture the helper decodes, it ran out of time, or it stopped
-/// being `wanted` (whoever changes that then calls `running.stop()`).
 pub fn picture(
     helper: &Path,
     file: &Path,
@@ -150,7 +110,6 @@ pub fn picture(
     );
     let output = child.stdout.take();
     let (done, finished) = mpsc::channel();
-    // A reader that couldn't start drops `done`, which ends the wait at once.
     thread::Builder::new()
         .name(READER_THREAD.to_owned())
         .spawn(move || {
@@ -164,8 +123,6 @@ pub fn picture(
     picture
 }
 
-/// The helper with only the environment it needs, in a process group of
-/// its own, its output piped.
 fn command(helper: &Path) -> Command {
     let mut command = Command::new(helper);
     command
@@ -182,19 +139,13 @@ fn command(helper: &Path) -> Command {
     command
 }
 
-/// Kills what is left of the helper's group and waits for the helper.
 fn end(child: &mut Child) {
-    // The group is the helper's own: it, if still running, and what it
-    // started. Until the helper is waited on, its id can't name another
-    // group.
     if let Some(group) = i32::try_from(child.id()).ok().and_then(Pid::from_raw) {
         process::kill_process_group(group, Signal::KILL).ok();
     }
     child.wait().ok();
 }
 
-/// The picture the helper writes to `output`: a size line no bigger than
-/// `fit`, then exactly that many pixels.
 fn read_picture(mut output: impl Read, fit: Fit) -> Option<Picture> {
     let mut line = Vec::with_capacity(MAX_SIZE_LINE);
     let mut byte = [0];
@@ -216,7 +167,6 @@ fn read_picture(mut output: impl Read, fit: Fit) -> Option<Picture> {
     let length = u64::from(width) * u64::from(height) * BYTES_PER_PIXEL;
     let mut pixels = vec![0; usize::try_from(length).ok()?];
     output.read_exact(&mut pixels).ok()?;
-    // Anything after the pixels means the answer isn't what it says.
     (output.read(&mut byte).ok()? == 0).then(|| Picture {
         width,
         height,
@@ -268,10 +218,8 @@ mod tests {
                 "{line:?} {pixels}"
             );
         }
-        // The line must end within its longest length.
         let long = format!("{}2 3\n", "0".repeat(MAX_SIZE_LINE));
         assert!(parse(&answer(&long, 6), FIT).is_none());
-        // Its longest length counts the newline.
         let longest = format!("{:0>width$}\n", "2 3", width = MAX_SIZE_LINE - 1);
         assert!(parse(&answer(&longest, 6), FIT).is_some());
         let over = format!("{:0>width$}\n", "2 3", width = MAX_SIZE_LINE);
@@ -286,7 +234,6 @@ mod tests {
         running.stop();
     }
 
-    /// `sleep 30` in a process group of its own, and that group.
     fn sleeper() -> (Child, Option<Pid>) {
         use std::os::unix::process::CommandExt as _;
         let child = Command::new("sleep")
@@ -317,7 +264,6 @@ mod tests {
         running.start(group, || true);
         running.finish();
         running.stop();
-        // Ended by this test, not by the stop: the first signal wins.
         process::kill_process_group(group.unwrap(), Signal::TERM).unwrap();
         let status = child.wait().unwrap();
         assert_eq!(status.signal(), Some(Signal::TERM.as_raw()));

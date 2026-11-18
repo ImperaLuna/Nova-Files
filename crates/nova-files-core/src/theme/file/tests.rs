@@ -1,5 +1,3 @@
-//! Reading theme files key by key.
-
 #![expect(
     clippy::unreadable_literal,
     reason = "colors are written as 0xRRGGBB, as in a theme file"
@@ -68,7 +66,6 @@ madeUp = "#000000"
     );
     assert_eq!(theme.dark.swatches, [None; SWATCH_COUNT]);
     assert_eq!(problems.len(), 10, "{problems:?}");
-    // Each names the key it is about.
     assert!(
         problems
             .iter()

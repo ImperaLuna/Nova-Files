@@ -1,7 +1,3 @@
-//! One job as the core keeps it while it runs: what it does, its switch
-//! (see `control`) and how far it last said it got, so a window that
-//! starts watching jobs later can be told.
-
 use std::sync::{Mutex, PoisonError};
 
 use nova_files_api::{Operation, Progress};
@@ -23,7 +19,6 @@ impl Job {
         }
     }
 
-    /// How far the job last said it got.
     pub fn progress(&self) -> Progress {
         *self.progress.lock().unwrap_or_else(PoisonError::into_inner)
     }

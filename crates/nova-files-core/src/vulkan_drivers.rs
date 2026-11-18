@@ -1,31 +1,3 @@
-//! Which Vulkan drivers this PC can't use, so the program can tell the
-//! Vulkan loader to skip them.
-//!
-//! The loader opens every installed driver (each `vulkan/icd.d` manifest)
-//! when the window sets up the GPU, even drivers for GPUs the PC doesn't
-//! have. Each one loads its libraries, which costs a few milliseconds warm
-//! and much more on a cold start.
-//!
-//! [`absent_vendor_drivers`] reads the vendors of the display devices on the
-//! PCI bus and the library each manifest loads. A manifest whose library
-//! serves only one vendor, or only GPUs that aren't on PCI, and that vendor
-//! isn't present, goes in the filter. The software driver (lavapipe) goes
-//! too when a driver for a GPU that is present is installed: GPUI only
-//! draws with a software Vulkan driver when it has no other, and when the
-//! hardware driver fails it moves to OpenGL, which still has a software
-//! fallback of its own. Skipping lavapipe saves loading LLVM, the biggest
-//! library a start reads. Libraries not in [`LIBRARY_VENDORS`] are always
-//! kept. It decides nothing
-//! when the user already chose drivers (a `VK_*` driver variable or a loader
-//! settings file), when a GPU isn't on PCI, or when the system can't be read:
-//! then the loader works as it always does.
-//!
-//! The answer is the value for [`FILTER_VARIABLE`], which the program sets
-//! before it starts any thread. When a window's GPU setup still fails (a
-//! driver updated without a reboot breaks NVIDIA's Vulkan and OpenGL both),
-//! the program removes the filter and tries once more, so lavapipe can draw. Children inherit it, which is harmless: it
-//! only hides drivers for hardware that isn't there.
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsString;
@@ -35,11 +7,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-/// The loader's own filter: comma-separated globs over manifest file names,
-/// read when the GPU is set up.
 pub const FILTER_VARIABLE: &str = "VK_LOADER_DRIVERS_DISABLE";
 
-/// Each of these is the user choosing drivers, which is never second-guessed.
 const USER_CHOICE_VARIABLES: [&str; 5] = [
     "VK_DRIVER_FILES",
     "VK_ICD_FILENAMES",
@@ -47,24 +16,18 @@ const USER_CHOICE_VARIABLES: [&str; 5] = [
     "VK_LOADER_DRIVERS_SELECT",
     FILTER_VARIABLE,
 ];
-/// A loader settings file can add or choose drivers, so it is a choice too.
 const LOADER_SETTINGS_FILE: &str = "vulkan/loader_settings.d/vk_loader_settings.json";
 const MANIFEST_FOLDER: &str = "vulkan/icd.d";
 const MANIFEST_EXTENSION: &str = "json";
-/// A manifest is a few lines; anything bigger isn't one.
 const MANIFEST_MAX_BYTES: u64 = 64 * 1024;
-/// The loader reads only this many filter entries and drops the rest.
 const LOADER_FILTER_LIMIT: usize = 16;
 const FILTER_SEPARATOR: &str = ",";
 
 const PCI_DEVICES: &str = "/sys/bus/pci/devices";
 const DRM_DEVICES: &str = "/sys/class/drm";
-/// A DRM card is `card0`, `card1`, ...; render nodes and connectors aren't.
 const DRM_CARD_PREFIX: &str = "card";
 const DRM_CONNECTOR_SEPARATOR: char = '-';
 const PCI_SUBSYSTEM: &str = "pci";
-/// A PCI class code carries its base class in bits 16 to 23; 0x03 is a
-/// display controller (VGA, 3D or other display).
 const PCI_CLASS_SHIFT: u32 = 16;
 const PCI_CLASS_DISPLAY: u32 = 0x03;
 const HEX_PREFIX: &str = "0x";
@@ -81,16 +44,10 @@ const DEFAULT_CONFIG_DIRS: &str = "/etc/xdg";
 const SYSTEM_CONFIG: &str = "/etc";
 const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 
-/// Who a driver library serves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Serves {
-    /// GPUs of one PCI vendor.
     PciVendor(u32),
-    /// Only GPUs built into a chip (not on PCI), such as Arm boards and
-    /// Apple Silicon.
     OnChip,
-    /// Any machine, drawing on the CPU: needed only when no driver for a
-    /// present GPU is installed.
     Software,
 }
 
@@ -101,7 +58,6 @@ const VIRTIO: u32 = 0x1af4;
 const MICROSOFT: u32 = 0x1414;
 const IMAGINATION: u32 = 0x1010;
 
-/// The driver libraries known to serve one kind of GPU only, by file name.
 const LIBRARY_VENDORS: [(&str, Serves); 13] = [
     ("libvulkan_radeon.so", Serves::PciVendor(AMD)),
     ("libvulkan_intel.so", Serves::PciVendor(INTEL)),
@@ -118,7 +74,6 @@ const LIBRARY_VENDORS: [(&str, Serves); 13] = [
     ("libvulkan_lvp.so", Serves::Software),
 ];
 
-/// The part of a Vulkan driver manifest this reads.
 #[derive(Debug, Deserialize)]
 struct Manifest {
     #[serde(rename = "ICD")]
@@ -130,8 +85,6 @@ struct ManifestDriver {
     library_path: String,
 }
 
-/// The filter for [`FILTER_VARIABLE`] on this PC, or `None` to leave the
-/// loader alone.
 pub fn absent_vendor_drivers() -> Option<String> {
     let roots = search_roots(|name| env::var_os(name));
     decide(
@@ -142,8 +95,6 @@ pub fn absent_vendor_drivers() -> Option<String> {
     )
 }
 
-/// [`absent_vendor_drivers`] with the environment, the sysfs folders and the
-/// manifest search roots given, so tests can use recorded copies.
 fn decide(
     var: impl Fn(&str) -> Option<OsString>,
     pci: &Path,
@@ -170,8 +121,6 @@ fn decide(
     let hardware_driver = found
         .iter()
         .any(|(_, library)| serves_a_present_gpu(library, &present));
-    // The filter matches file names, so a name is skipped only when every
-    // manifest by that name serves nothing present.
     let mut by_name: BTreeMap<String, bool> = BTreeMap::new();
     for (name, library) in found {
         let absent = serves_nothing_present(&library, &present, hardware_driver);
@@ -188,24 +137,18 @@ fn decide(
     (!skipped.is_empty()).then(|| skipped.join(FILTER_SEPARATOR))
 }
 
-/// Whether the library is known to serve only GPUs this PC doesn't have,
-/// or is the software driver while `hardware_driver` (a driver for a
-/// present GPU) is installed.
 fn serves_nothing_present(library: &str, present: &BTreeSet<u32>, hardware_driver: bool) -> bool {
     known_serves(library).is_some_and(|serves| match serves {
         Serves::PciVendor(vendor) => !present.contains(&vendor),
-        // Only reached when every GPU is on PCI.
         Serves::OnChip => true,
         Serves::Software => hardware_driver,
     })
 }
 
-/// Whether the library is a known driver for a GPU this PC has.
 fn serves_a_present_gpu(library: &str, present: &BTreeSet<u32>) -> bool {
     matches!(known_serves(library), Some(Serves::PciVendor(vendor)) if present.contains(&vendor))
 }
 
-/// Who the library serves, when it is in [`LIBRARY_VENDORS`].
 fn known_serves(library: &str) -> Option<Serves> {
     let name = Path::new(library)
         .file_name()
@@ -216,8 +159,6 @@ fn known_serves(library: &str) -> Option<Serves> {
         .map(|(_, serves)| *serves)
 }
 
-/// Whether every DRM card's device sits on the PCI bus. `None` when the
-/// folder can't be read, which decides nothing.
 fn every_card_on_pci(drm: &Path) -> Option<bool> {
     for entry in fs::read_dir(drm).ok()? {
         let entry = entry.ok()?;
@@ -237,8 +178,6 @@ fn every_card_on_pci(drm: &Path) -> Option<bool> {
     Some(true)
 }
 
-/// The vendors of the display devices on the PCI bus. `None` when a device
-/// can't be read, since an unnamed GPU could need any driver.
 fn pci_display_vendors(pci: &Path) -> Option<BTreeSet<u32>> {
     let mut vendors = BTreeSet::new();
     for entry in fs::read_dir(pci).ok()? {
@@ -252,7 +191,6 @@ fn pci_display_vendors(pci: &Path) -> Option<BTreeSet<u32>> {
     Some(vendors)
 }
 
-/// A sysfs number such as `0x030000`.
 fn read_hex(file: &Path) -> Option<u32> {
     let text = fs::read_to_string(file).ok()?;
     let digits = text.trim();
@@ -260,9 +198,6 @@ fn read_hex(file: &Path) -> Option<u32> {
     u32::from_str_radix(digits, HEX_RADIX).ok()
 }
 
-/// Every manifest under the roots as (file name, library it loads), sorted
-/// by name. A manifest that can't be read or parsed is left out, so it is
-/// never filtered.
 fn manifests(roots: &[PathBuf]) -> BTreeSet<(String, String)> {
     let mut found = BTreeSet::new();
     for folder in roots.iter().map(|root| root.join(MANIFEST_FOLDER)) {
@@ -293,9 +228,6 @@ fn library_of(manifest: &Path) -> Option<String> {
     Some(parsed.icd.library_path)
 }
 
-/// Where the loader looks for manifests, in its own order: the user's and
-/// the system's config folders, then the user's and the system's data
-/// folders.
 fn search_roots(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
     let home = var(HOME_VAR).map(PathBuf::from);
     let in_home = |path: &str| home.as_ref().map(|home| home.join(path));
@@ -326,8 +258,6 @@ mod tests {
 
     use super::*;
 
-    /// The Vulkan drivers NixOS installs with Mesa and the NVIDIA driver, as
-    /// (manifest, library), recorded from the maintainer's `NixOS` PC.
     const NIXOS_DRIVERS: [(&str, &str); 14] = [
         (
             "asahi_icd.x86_64.json",
@@ -386,7 +316,6 @@ mod tests {
     const VGA_CLASS: &str = "0x030000";
     const USB_CLASS: &str = "0x0c0330";
 
-    /// A temp folder standing in for sysfs and the manifest folders.
     struct FakeSystem(PathBuf);
 
     impl FakeSystem {
@@ -532,7 +461,6 @@ mod tests {
 
     #[test]
     fn the_software_driver_stays_without_a_driver_for_the_gpu() {
-        // A VM's display device, which no installed driver serves.
         let system = FakeSystem::new("vm");
         system.pci_device("0000:00:02.0", VGA_CLASS, "0x1234");
         system.card("card0", "pci");

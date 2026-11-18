@@ -1,10 +1,3 @@
-//! Runs the helper to unpack or make an archive, following it as it goes.
-//!
-//! The password goes on the helper's standard input, which is then
-//! closed. The helper writes a line for each entry it unpacked; between
-//! lines the caller is asked every [`TICK`] whether to go on. While the
-//! caller holds it, the helper's group is stopped.
-
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -19,35 +12,24 @@ use rustix::process::{self, Pid, Signal};
 use super::helper::{end, ended, give, spawn};
 use super::{ArchiveFailure, Archiver, Recipe};
 
-/// How long the caller waits between asks.
 pub const TICK: Duration = Duration::from_millis(100);
-/// How long the helper has to exit once it has closed its output. One
-/// that is stopped or went wrong is killed at once.
 const EXIT_TIME: Duration = Duration::from_secs(10);
 const EXTRACT: &str = "extract";
 const COMPRESS: &str = "compress";
 const DECIMAL: u32 = 10;
 const READ_SIZE: usize = 4_096;
 
-/// What the caller hears while an archive unpacks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Extracting {
-    /// One more entry is unpacked or packed; it held this many bytes.
     Entry(u64),
-    /// Nothing new since the last ask.
     Waiting,
-    /// The helper is stopped, as the caller asked; asked again until the
-    /// caller lets it go on or stops it.
     Held,
 }
 
-/// What the caller wants of the unpacking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Flow {
     Go,
-    /// Stop the helper where it is until the caller says otherwise.
     Hold,
-    /// Kill the helper. What it unpacked stays.
     Stop,
 }
 
@@ -83,7 +65,6 @@ pub fn compress(
     run(&archiver.helper, &args, recipe.password, tell)
 }
 
-/// The helper's word for `packing`.
 const fn packing_word(packing: Packing) -> &'static str {
     match packing {
         Packing::ZipDeflate => "zip-deflate",
@@ -95,7 +76,6 @@ const fn packing_word(packing: Packing) -> &'static str {
     }
 }
 
-/// Runs the helper with `args`, giving it `password`, until it ends.
 fn run(
     helper: &Path,
     args: &[&OsStr],
@@ -115,7 +95,6 @@ fn run(
     ended(status)
 }
 
-/// Reads the helper's lines until it closes its output, asking `tell`.
 fn follow(
     child: &mut Child,
     tell: &mut impl FnMut(Extracting) -> Flow,
@@ -142,12 +121,10 @@ fn follow(
     }
 }
 
-/// One line of the helper's output: the number read so far.
 #[derive(Default)]
 struct Line(Option<u64>);
 
 impl Line {
-    /// Takes the next byte; the line's number once `byte` ends it.
     fn take(&mut self, byte: u8) -> Result<Option<u64>, ArchiveFailure> {
         if byte == b'\n' {
             return self.0.take().map(Some).ok_or(ArchiveFailure::Broken);
@@ -166,7 +143,6 @@ impl Line {
     }
 }
 
-/// Whether `output` has something to read within a [`TICK`].
 fn ready(output: &ChildStdout) -> Result<bool, ArchiveFailure> {
     let tick = Timespec::try_from(TICK).map_err(|_| ArchiveFailure::NotRead)?;
     match poll(&mut [PollFd::new(output, PollFlags::IN)], Some(&tick)) {
@@ -176,7 +152,6 @@ fn ready(output: &ChildStdout) -> Result<bool, ArchiveFailure> {
     }
 }
 
-/// Does what `flow` says to the helper's `group`.
 fn steer(
     group: Pid,
     mut flow: Flow,
@@ -211,7 +186,6 @@ mod tests {
 
     use super::*;
 
-    /// How long a test waits for the kernel to stop or wake a process.
     const SETTLE: Duration = Duration::from_secs(5);
 
     fn line(bytes: &[u8]) -> Result<Vec<u64>, ArchiveFailure> {
@@ -254,8 +228,6 @@ mod tests {
         talking.wait().ok();
     }
 
-    /// The state letter `/proc` gives `pid`, once it is `want` or
-    /// [`SETTLE`] has passed.
     fn state(pid: Pid, want: char) -> char {
         let path = format!("/proc/{}/stat", pid.as_raw_nonzero());
         let until = Instant::now() + SETTLE;

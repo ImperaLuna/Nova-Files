@@ -1,26 +1,3 @@
-//! Start-up phase times and frame times, for the benchmark.
-//!
-//! Each trace is off unless its variable names a file. [`start_traces`]
-//! opens the files that are named and installs one logger that writes GPUI's
-//! timing records to them; with neither variable set nothing is installed
-//! and nothing is written.
-//!
-//! - [`STARTUP_TRACE_VARIABLE`]: `<unix ms> process-start` first, then one
-//!   `<unix ms> <label>` line for each start-up phase GPUI logs under its
-//!   `gpui::startup` target (vulkan-instance, gpu-device, fonts-ready,
-//!   first-frame).
-//! - [`FRAME_TRACE_VARIABLE`]: one `<start ns> <end ns>` line for each frame
-//!   GPUI draws, both on `CLOCK_MONOTONIC` (the compositor's presentation
-//!   clock). GPUI logs a frame under `gpui::frame` with its duration right
-//!   after present returns, so the end is when the record arrives and the
-//!   start is that minus the duration. A frame that only re-presents, or
-//!   is skipped, writes nothing.
-//!
-//! Every other log record is ignored. Each line is one unbuffered write, so
-//! lines from different threads never interleave and a killed process loses
-//! none. The files are appended to, never truncated, so a reader removes
-//! them before each run.
-
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
@@ -33,18 +10,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use log::{LevelFilter, Log, Metadata, Record};
 use rustix::time::{ClockId, clock_gettime};
 
-/// Names the file the start-up phase times go to.
 pub const STARTUP_TRACE_VARIABLE: &str = "NOVA_FILES_STARTUP_TRACE";
-/// Names the file the frame times go to.
 pub const FRAME_TRACE_VARIABLE: &str = "NOVA_FILES_FRAME_TRACE";
 
-/// `gpui_wgpu::STARTUP_LOG_TARGET` in the ImperaLuna/zed fork. Nova Files
-/// doesn't depend on `gpui_wgpu` directly, so the name is repeated here.
 const GPUI_STARTUP_TARGET: &str = "gpui::startup";
-/// `gpui::FRAME_LOG_TARGET` in the ImperaLuna/zed fork; the core never
-/// depends on GPUI, so the name is repeated here.
 const GPUI_FRAME_TARGET: &str = "gpui::frame";
-/// GPUI logs its phases and frames at debug level.
 const TRACE_LEVEL: LevelFilter = LevelFilter::Debug;
 const PROCESS_START: &str = "process-start";
 const NANOS_PER_SECOND: u128 = 1_000_000_000;
@@ -53,8 +23,6 @@ const STARTUP_TRACE: &str = "start-up trace";
 const FRAME_TRACE: &str = "frame trace";
 const TRACES: &str = "traces";
 
-/// A trace file that couldn't be opened or written, or a logger that was
-/// already installed.
 #[derive(Debug)]
 pub struct TraceError {
     trace: &'static str,
@@ -69,10 +37,6 @@ impl fmt::Display for TraceError {
 
 impl std::error::Error for TraceError {}
 
-/// Starts the traces whose variables are set. Call it first in `main`, so
-/// `process-start` is as early as it can be.
-///
-/// A trace that fails is left off and reported; the others still start.
 pub fn start_traces() -> Vec<TraceError> {
     let (traces, mut errors) = open_traces(
         env::var_os(STARTUP_TRACE_VARIABLE),
@@ -91,8 +55,6 @@ pub fn start_traces() -> Vec<TraceError> {
     errors
 }
 
-/// Opens the trace files the variables name (`startup`, `frames`) and
-/// writes `process-start`. `None` when neither trace is on.
 fn open_traces(
     startup: Option<OsString>,
     frames: Option<OsString>,
@@ -118,7 +80,6 @@ fn open_traces(
     (traces, errors)
 }
 
-/// The file `path` names, if it names one.
 fn open_named(path: Option<OsString>) -> io::Result<Option<TraceFile>> {
     path.filter(|path| !path.is_empty())
         .map(|path| TraceFile::open(Path::new(&path)))
@@ -133,7 +94,6 @@ impl TraceFile {
         Ok(Self(Mutex::new(file)))
     }
 
-    /// Appends `line` in a single write.
     fn append(&self, line: &str) -> io::Result<()> {
         let mut file = self
             .0
@@ -149,7 +109,6 @@ impl TraceFile {
         self.append(&format!("{} {label}\n", since_epoch.as_millis()))
     }
 
-    /// A frame that took `duration` nanoseconds and ended just now.
     fn frame(&self, duration: &str) -> io::Result<()> {
         let duration: u128 = duration
             .trim()
@@ -161,7 +120,6 @@ impl TraceFile {
     }
 }
 
-/// Now on `CLOCK_MONOTONIC`, in nanoseconds.
 fn monotonic_nanos() -> u128 {
     let now = clock_gettime(ClockId::Monotonic);
     let seconds = u128::try_from(now.tv_sec).unwrap_or_default();
@@ -175,7 +133,6 @@ struct Traces {
 }
 
 impl Traces {
-    /// The file for records logged under `target`, if that trace is on.
     fn file(&self, target: &str) -> Option<&TraceFile> {
         match target {
             GPUI_STARTUP_TARGET => self.startup.as_ref(),
@@ -191,7 +148,6 @@ impl Log for Traces {
     }
 
     fn log(&self, record: &Record) {
-        // The log macros don't ask `enabled` first.
         let Some(file) = self.file(record.target()) else {
             return;
         };
@@ -232,7 +188,6 @@ mod tests {
             TraceFile::open(&self.0).unwrap()
         }
 
-        /// Each line split at its first space.
         fn lines(&self) -> Vec<(u128, String)> {
             fs::read_to_string(&self.0)
                 .unwrap_or_default()

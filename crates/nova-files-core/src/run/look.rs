@@ -1,14 +1,8 @@
-//! The commands about how the app looks and is set: settings, the theme,
-//! the desktop's look and icon theme, the saved window state and the
-//! folders' views. `run`
-//! sends only these here.
-
 use nova_files_api::{ClientGone, ClientId, Command, Event};
 
 use super::Setup;
 use crate::jobs::Client;
 
-/// Answers one of the look and settings commands for client `id`.
 pub(super) fn answer(
     id: ClientId,
     client: &Client,
@@ -27,7 +21,6 @@ pub(super) fn answer(
         Command::Theme => setup.theme.listen(id, client.events()),
         Command::DesktopLook(look) => setup.theme.follow_desktop(look),
         Command::DesktopIconThemes(names) => setup.file_icons.follow_desktop(&names),
-        // `run` sends the other commands elsewhere.
         _ => {}
     }
     Ok(())

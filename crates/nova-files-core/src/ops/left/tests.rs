@@ -2,7 +2,6 @@ use super::*;
 use crate::ops::test_folder::TestFolder;
 use std::os::unix::fs::MetadataExt as _;
 
-/// The journal field naming the entry at `path`.
 fn entry_of(path: &Path) -> PathBuf {
     let there = path.symlink_metadata().unwrap();
     PathBuf::from(format!("{}:{}", there.dev(), there.ino()))
@@ -61,11 +60,9 @@ fn an_info_file_whose_entry_never_reached_the_trash_goes() {
     };
     let (lone, kept, stranger, theirs) =
         (info("lone"), info("kept"), info("stranger"), info("theirs"));
-    // Got there, though the crash came before it was recorded.
     let user = folder.file("user", "the user's");
     fs::rename(&user, trash.join("files/kept")).unwrap();
     let user = entry_of(&trash.join("files/kept"));
-    // Another app's entry, without its info file, holds the name.
     fs::write(trash.join("files/stranger"), "theirs").unwrap();
     let elsewhere = PathBuf::from(format!("{}:0", lone.symlink_metadata().unwrap().dev()));
 
@@ -73,7 +70,6 @@ fn an_info_file_whose_entry_never_reached_the_trash_goes() {
         line(word::TRASH_INFO, &[&lone, &entry_of(&lone), &user]),
         line(word::TRASH_INFO, &[&kept, &entry_of(&kept), &user]),
         line(word::TRASH_INFO, &[&stranger, &entry_of(&stranger), &user]),
-        // Another app's info file took the name after the crash.
         line(word::TRASH_INFO, &[&theirs, &elsewhere, &user]),
     ]);
 
@@ -150,7 +146,6 @@ fn a_trash_job_cleans_up_only_its_last_info_file() {
 
     clean(&[
         line(word::TRASH, &[]),
-        // Settled by the job, its inode since another info file's.
         line(word::TRASH_INFO, &[&earlier, &entry_of(&earlier), &never]),
         line(word::TRASH_INFO, &[&done, &entry_of(&done), &never]),
         trashed("files/done"),

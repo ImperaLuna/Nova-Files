@@ -1,23 +1,3 @@
-//! The drives and volumes, as the program's [`DriveService`] reports them,
-//! sent to the clients that asked each time they change.
-//!
-//! The service arrives once, at start-up, and reads nothing until the
-//! first client asks ([`Store::listen`]); the core then starts it
-//! following the system's drives. Until its first list arrives, clients
-//! that ask wait for it, so none sees an empty list flash by. Without a
-//! service, a client gets an empty list at once, and the real one if a
-//! service arrives later.
-//!
-//! A client's mount, unmount or eject runs on a thread of its own, since
-//! it may wait on a person typing a password; only that client hears how
-//! it went, while the change itself reaches every listener in the next
-//! list.
-//!
-//! The service's thread hands each list to [`seen`], which keeps it and
-//! tells every listening client under one lock, so a client that asks at
-//! that moment gets either the old list and then the new one, or the new
-//! one alone. A list equal to the last sends nothing.
-
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::thread;
@@ -28,7 +8,6 @@ use nova_files_api::{
 
 const ACTION_THREAD: &str = "nova-files-drive-action";
 
-/// The drives and who hears about them.
 #[derive(Default)]
 pub struct Store {
     shared: Arc<Mutex<Shared>>,
@@ -36,20 +15,13 @@ pub struct Store {
 
 #[derive(Default)]
 struct Shared {
-    /// What watches the drives; `None` until the program hands it over.
     service: Option<Arc<dyn DriveService>>,
-    /// Whether the service was told to follow the drives.
     following: bool,
-    /// The newest list; `None` until the service's first one arrives.
     list: Option<Arc<DriveList>>,
-    /// The clients that asked for the drives.
     listeners: BTreeMap<ClientId, Arc<dyn EventSink>>,
 }
 
 impl Store {
-    /// Keeps `service` to watch the drives with, and starts it following
-    /// them if a client already asked. Only the first one counts; a later
-    /// one is dropped.
     pub fn offer(&self, service: Arc<dyn DriveService>) {
         let start = {
             let mut shared = lock(&self.shared);
@@ -65,20 +37,11 @@ impl Store {
         }
     }
 
-    /// Has `service` send its lists here, outside the lock, in case it
-    /// reports its first list before it returns.
     fn start(&self, service: &Arc<dyn DriveService>) {
         let shared = Arc::downgrade(&self.shared);
         service.follow(Box::new(move |list| seen(&shared, list)));
     }
 
-    /// Sends `client` the drives through `events`, and again each time
-    /// they change, until [`Self::forget`]. The first client to ask starts
-    /// the service following the drives.
-    ///
-    /// # Errors
-    /// [`ClientGone`] when the client stopped listening; it then isn't
-    /// kept.
     pub fn listen(&self, client: ClientId, events: &Arc<dyn EventSink>) -> Result<(), ClientGone> {
         let start = {
             let mut shared = lock(&self.shared);
@@ -87,10 +50,8 @@ impl Store {
                     events.deliver(Event::Drives(Arc::clone(list)))?;
                 }
                 (None, None) => {
-                    // No service to ask yet, so no drives known.
                     events.deliver(Event::Drives(Arc::new(DriveList::default())))?;
                 }
-                // The first list is on its way; it goes to every listener.
                 (None, Some(_)) => {}
             }
             shared.listeners.insert(client, Arc::clone(events));
@@ -107,12 +68,6 @@ impl Store {
         Ok(())
     }
 
-    /// Does `action` on a thread of its own and tells the client through
-    /// `events` once it is done.
-    ///
-    /// # Errors
-    /// [`ClientGone`] when the client stopped listening before it could be
-    /// told there is no service to ask.
     pub fn act(&self, events: &Arc<dyn EventSink>, action: DriveAction) -> Result<(), ClientGone> {
         let Some(service) = lock(&self.shared).service.clone() else {
             return events.deliver(Event::DriveDone {
@@ -126,8 +81,6 @@ impl Store {
             .name(ACTION_THREAD.to_owned())
             .spawn(move || {
                 let result = service.act(&asked);
-                // A client gone meanwhile hears nothing; the change still
-                // reaches the others in the next list.
                 answer
                     .deliver(Event::DriveDone {
                         action: asked,
@@ -144,14 +97,11 @@ impl Store {
         }
     }
 
-    /// Stops sending `client` the drives.
     pub fn forget(&self, client: ClientId) {
         lock(&self.shared).listeners.remove(&client);
     }
 }
 
-/// Keeps `list` as the newest and tells every listener, unless it is the
-/// list they already have. Does nothing once the store is gone.
 fn seen(shared: &Weak<Mutex<Shared>>, list: DriveList) {
     let Some(shared) = shared.upgrade() else {
         return;
@@ -167,8 +117,6 @@ fn seen(shared: &Weak<Mutex<Shared>>, list: DriveList) {
         .retain(|_, events| events.deliver(Event::Drives(Arc::clone(&list))).is_ok());
 }
 
-/// The shared state, even after a thread panicked holding it: each change
-/// to it is whole before the lock is let go.
 fn lock(shared: &Mutex<Shared>) -> std::sync::MutexGuard<'_, Shared> {
     shared.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -182,12 +130,9 @@ mod tests {
 
     use super::*;
 
-    /// A service the test drives by hand: it keeps the `seen` it was
-    /// given, and counts how often it was told to follow.
     #[derive(Default)]
     struct Hand {
         seen: Mutex<Vec<Seen>>,
-        /// The actions asked for, in order.
         acted: Mutex<Vec<DriveAction>>,
     }
 
@@ -205,7 +150,6 @@ mod tests {
         }
     }
 
-    /// What the store holds of a [`Hand`]; the test keeps the other end.
     struct Handle(Arc<Hand>);
 
     impl DriveService for Handle {

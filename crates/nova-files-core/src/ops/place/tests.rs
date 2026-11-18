@@ -10,9 +10,7 @@ use rustix::io::Errno;
 use super::*;
 use crate::ops::test_folder::TestFolder;
 
-/// A folder anyone may read and enter, and its owner write.
 const OPEN: u32 = 0o755;
-/// A folder anyone may read and enter, and no one write.
 const LOCKED: u32 = 0o555;
 
 #[test]
@@ -85,8 +83,6 @@ fn a_folder_falls_back_to_check_then_rename() {
 #[test]
 fn a_link_whose_source_cant_be_removed_is_taken_back() {
     let folder = TestFolder::new("place-unlink");
-    // `inside` sits in a folder the test can't write, so linking it works
-    // and removing it fails. Root may write anywhere.
     let from = folder.file("a", "new");
     let locked = folder.path().join("locked");
     fs::create_dir(&locked).unwrap();
@@ -110,7 +106,6 @@ fn a_link_whose_source_cant_be_removed_is_taken_back() {
 #[test]
 fn a_change_of_case_alone_is_no_clash() {
     let folder = TestFolder::new("place-case");
-    // Two links to one file stand in for one entry found under two cases.
     let from = folder.file("photo", "kept");
     let to = folder.path().join("Photo");
     fs::hard_link(&from, &to).unwrap();
@@ -163,13 +158,11 @@ fn a_refused_flag_falls_back_and_any_other_error_stands() {
     let from = folder.file("a", "new");
     let free = folder.path().join("b");
 
-    // Told the name is taken, though it is free: nothing is tried after.
     let error = rename_or_fall_back(At::path(&from), &free, |_, _| Err(Errno::EXIST)).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
     assert!(from.exists());
     assert!(!free.exists());
 
-    // Told the flag is refused: the fallback renames.
     rename_or_fall_back(At::path(&from), &free, |_, _| Err(Errno::INVAL)).unwrap();
     assert!(!from.exists());
     assert_eq!(fs::read_to_string(&free).unwrap(), "new");
@@ -187,7 +180,6 @@ fn a_file_saved_anew_after_the_link_is_never_removed() {
     let from = folder.file("a", "old");
     let to = folder.path().join("b");
     fs::hard_link(&from, &to).unwrap();
-    // An editor saves a new `a` by renaming over it.
     let saved = folder.file(".a.tmp", "new");
     fs::rename(&saved, &from).unwrap();
 
@@ -230,8 +222,6 @@ fn a_failed_rename_gives_the_name_back() {
     let folder = TestFolder::new("place-reserve-fail");
     let from = folder.path().join("dir");
     fs::create_dir_all(from.join("inside")).unwrap();
-    // A folder can't go into itself: the rename fails after the name is
-    // taken.
     let to = from.join("inside/dir");
 
     assert!(check_then_rename(At::path(&from), &to).is_err());
@@ -351,7 +341,6 @@ fn a_file_saved_while_a_folder_is_swapped_back_stays() {
     fs::create_dir(&old).unwrap();
     let saved = folder.file(".saved", "theirs");
     let swaps = Cell::new(0);
-    // The swap, then another program saving over the name at once.
     let swap_then_save = |new: &Path, old: &Path| {
         swaps.set(swaps.get() + 1);
         renameat_with(CWD, new, CWD, old, RenameFlags::EXCHANGE)?;

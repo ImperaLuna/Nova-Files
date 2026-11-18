@@ -1,14 +1,7 @@
-//! Reading a small text file whole, up to a cap, for the system and
-//! settings files the core reads (the MIME database, icon themes, toolkit
-//! settings). Bytes that aren't UTF-8 become U+FFFD, so one odd line (an
-//! old Latin-1 translation, say) never hides the rest of the file.
-
 use std::fs::File;
 use std::io::Read as _;
 use std::path::Path;
 
-/// The first `max_bytes` of the file at `path` as text; `None` when it
-/// can't be read.
 pub fn text(path: &Path, max_bytes: u64) -> Option<String> {
     let mut bytes = Vec::new();
     File::open(path)

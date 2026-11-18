@@ -1,10 +1,3 @@
-//! What a copy keeps besides the bytes: the permission bits, the access
-//! and modified times, and the extended attributes (tags such as
-//! `user.xdg.tags`, a file's origin URL, ACLs).
-//!
-//! An attribute the target's filesystem or the user's rights refuse (a
-//! `security.` label, say) is logged and left out; the copy itself counts.
-
 use std::fs::{File, FileTimes, Metadata, Permissions};
 use std::io;
 use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
@@ -14,7 +7,6 @@ use rustix::buffer::{SpareCapacity, spare_capacity};
 use rustix::fs::{XattrFlags, fgetxattr, fgetxattr_query, flistxattr, flistxattr_query, fsetxattr};
 use rustix::io::Errno;
 
-/// Gives `to` the permission bits and times of `from`.
 pub fn copy_mode_and_times(metadata: &Metadata, to: &File) -> io::Result<()> {
     to.set_permissions(Permissions::from_mode(metadata.mode() & MODE_BITS))?;
     let times = FileTimes::new()
@@ -23,11 +15,6 @@ pub fn copy_mode_and_times(metadata: &Metadata, to: &File) -> io::Result<()> {
     to.set_times(times)
 }
 
-/// Copies every extended attribute of `from` it can onto `to`.
-///
-/// # Errors
-/// When the attributes of `from` can't be read. A filesystem without them
-/// isn't an error.
 pub fn copy_xattrs(from: &File, to: &File) -> io::Result<()> {
     let names = match list(from) {
         Ok(names) => names,
@@ -51,15 +38,12 @@ pub fn copy_xattrs(from: &File, to: &File) -> io::Result<()> {
     Ok(())
 }
 
-/// The names of the attributes of `file`, each ended by a NUL byte.
 fn list(file: &File) -> rustix::io::Result<Vec<u8>> {
     read_sized(flistxattr_query(file)?, |buffer| {
         flistxattr(file, buffer).map(drop)
     })
 }
 
-/// Reads `size` bytes through `read`. Nothing is read for none: an empty
-/// buffer would ask the system for the size again.
 fn read_sized(
     size: usize,
     read: impl FnOnce(SpareCapacity<'_, u8>) -> rustix::io::Result<()>,

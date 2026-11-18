@@ -1,7 +1,3 @@
-//! The parts of a desktop entry (`.desktop` file) that launching it needs:
-//! its `[Desktop Entry]` group's `Type`, `Exec`, `Name`, `Icon`, `Path`,
-//! `Hidden`, `Terminal` and `TryExec`.
-
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Read as _;
@@ -14,26 +10,18 @@ const COMMENT: char = '#';
 const KEY_END: char = '=';
 const APPLICATION: &str = "Application";
 const TRUE: &str = "true";
-/// A real entry is a few KB.
-/// 256 KiB.
 const MAX_ENTRY_BYTES: u64 = 262_144;
-/// Any of the execute bits.
 const EXECUTABLE: u32 = 0o111;
 
-/// A desktop entry that can open files.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Entry {
     pub exec: String,
     pub name: String,
     pub icon: Option<String>,
-    /// The folder to run it in.
     pub working_dir: Option<PathBuf>,
-    /// It runs in a terminal, which only the portal knows how to start.
     pub terminal: bool,
 }
 
-/// The entry at `path`, or `None` when it is missing, isn't an app, is
-/// hidden, has no `Exec`, or its `TryExec` program isn't installed. `search_path` is `PATH`, for `TryExec`.
 pub fn read(path: &Path, search_path: Option<&OsStr>) -> Option<Entry> {
     let mut text = String::new();
     File::open(path)
@@ -49,7 +37,6 @@ pub fn read(path: &Path, search_path: Option<&OsStr>) -> Option<Entry> {
         .then_some(entry.entry)
 }
 
-/// An entry and the program its `TryExec` names.
 #[derive(Debug, PartialEq, Eq)]
 struct Parsed {
     entry: Entry,
@@ -100,8 +87,6 @@ fn parse(text: &str) -> Option<Parsed> {
     })
 }
 
-/// A string value with its escapes (`\s`, `\n`, `\t`, `\r`, `\\`) undone.
-/// Any other backslash stays, for the `Exec` quoting rules to read.
 fn unescape(value: &str) -> String {
     let mut text = String::with_capacity(value.len());
     let mut chars = value.chars();
@@ -122,8 +107,6 @@ fn unescape(value: &str) -> String {
     text
 }
 
-/// Whether `program`, a path or a name looked up in `search_path`, is an
-/// executable file.
 fn installed(program: &str, search_path: Option<&OsStr>) -> bool {
     let program = Path::new(program);
     if program.is_absolute() {
@@ -206,7 +189,6 @@ Name=New
         }
         let shown = "[Desktop Entry]\nType=Application\nExec=a %f\nHidden=false\nTerminal=false\n";
         assert_eq!(parse(shown).map(|p| p.entry), Some(entry("a %f")));
-        // Still the user's app, so it isn't passed over for another.
         let in_terminal = "[Desktop Entry]\nType=Application\nExec=a %f\nTerminal=true\n";
         let terminal = Entry {
             terminal: true,

@@ -1,15 +1,5 @@
-//! The user's default app for a MIME type (freedesktop "Association
-//! between MIME types and applications" spec).
-//!
-//! `mimeapps.list` files are read in the spec's order: the config home,
-//! then each config folder, then `applications` in the data home and each
-//! data folder; in each place the desktop's own `<desktop>-mimeapps.list`
-//! for every name in `XDG_CURRENT_DESKTOP` comes before the plain one. The
-//! first `Default Applications` entry that is installed wins. Without one,
-//! `Added Associations` follow in the same order, then each data folder's
-//! `mimeinfo.cache`. A `Removed Associations` entry hides the app from its
-//! own list and every lower one, defaults included.
-
+// Reads mimeapps.list in the order the MIME applications spec gives.
+// https://specifications.freedesktop.org/mime-apps-spec/latest/
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::File;
@@ -27,30 +17,18 @@ pub const ADDED: &str = "Added Associations";
 pub const REMOVED: &str = "Removed Associations";
 const CACHE_GROUP: &str = "MIME Cache";
 pub const ID_SEPARATOR: char = ';';
-/// A desktop ID names `applications/a/b.desktop` as `a-b.desktop`.
 const ID_FOLDER_SEPARATOR: char = '-';
-/// Big systems have a cache of a few hundred KB.
-/// 4 MiB.
 pub const MAX_LIST_BYTES: u64 = 4_194_304;
 
-/// Where to look.
 #[derive(Debug, Clone, Default)]
 pub struct Places {
-    /// The config home, then the config folders.
     pub config: Vec<PathBuf>,
-    /// The config home alone, where this user's choices are saved; `None`
-    /// without a home folder.
     pub config_home: Option<PathBuf>,
-    /// The data home, then the data folders.
     pub data: Vec<PathBuf>,
-    /// `XDG_CURRENT_DESKTOP`'s names, lower case, in order.
     pub desktops: Vec<String>,
-    /// `PATH`, for `TryExec`.
     pub search_path: Option<OsString>,
 }
 
-/// An app that opens files, its desktop ID and the desktop entry it came
-/// from.
 #[derive(Debug, PartialEq, Eq)]
 pub struct App {
     pub id: String,
@@ -58,15 +36,12 @@ pub struct App {
     pub file: PathBuf,
 }
 
-/// The association lists as read once: every `mimeapps.list`, highest
-/// first, and every `mimeinfo.cache`.
 pub struct Associations {
     lists: Vec<String>,
     caches: Vec<String>,
 }
 
 impl Associations {
-    /// Reads the lists and caches in `places`.
     pub fn read(places: &Places) -> Self {
         Self {
             lists: list_files(places)
@@ -81,8 +56,6 @@ impl Associations {
         }
     }
 
-    /// The default app for the first of `types` (a type, then the types
-    /// it is a kind of) that has one.
     pub fn default_app(&self, types: &[&str], places: &Places) -> Option<App> {
         types.iter().find_map(|mime| self.default_for(mime, places))
     }
@@ -96,10 +69,6 @@ impl Associations {
             .find_map(install)
     }
 
-    /// Every app ID associated with `mime`, best first: the defaults, then
-    /// the added associations, list by list, then the caches. Each shows
-    /// once; removed ones are left out the way [`Self::default_app`] skips
-    /// them. Not checked for being installed.
     pub fn ids_for(&self, mime: &str) -> Vec<&str> {
         let mut seen = HashSet::new();
         listed(&self.lists, DEFAULTS, mime)
@@ -110,7 +79,6 @@ impl Associations {
             .collect()
     }
 
-    /// The cache's apps for `mime` that no list removed.
     fn cached(&self, mime: &str) -> Vec<&str> {
         let removed: HashSet<&str> = self
             .lists
@@ -125,14 +93,10 @@ impl Associations {
     }
 }
 
-/// The default app for the first of `types` (a type, then the types it
-/// is a kind of) that has one.
 pub fn default_app(types: &[&str], places: &Places) -> Option<App> {
     Associations::read(places).default_app(types, places)
 }
 
-/// The apps `group` lists for `mime`, list by list, skipping any that
-/// list or a higher one removed.
 fn listed<'a>(lists: &'a [String], group: &str, mime: &str) -> Vec<&'a str> {
     let mut removed = HashSet::new();
     let mut found = Vec::new();
@@ -147,7 +111,6 @@ fn listed<'a>(lists: &'a [String], group: &str, mime: &str) -> Vec<&'a str> {
     found
 }
 
-/// Every `mimeapps.list` place, highest precedence first.
 fn list_files(places: &Places) -> Vec<PathBuf> {
     let in_dir = |dir: &Path| {
         places
@@ -170,7 +133,6 @@ fn list_files(places: &Places) -> Vec<PathBuf> {
         .collect()
 }
 
-/// The desktop IDs `group` lists for `mime` in an ini-style file.
 fn ids<'a>(text: &'a str, group: &str, mime: &str) -> Vec<&'a str> {
     let mut in_group = false;
     for line in text.lines().map(str::trim) {
@@ -195,8 +157,6 @@ fn ids<'a>(text: &'a str, group: &str, mime: &str) -> Vec<&'a str> {
     Vec::new()
 }
 
-/// The app desktop ID `id` names, from the first data folder that has it.
-/// A hidden or broken entry there hides the ones below it.
 pub fn installed(id: &str, places: &Places) -> Option<App> {
     let file = places
         .data
@@ -210,8 +170,6 @@ pub fn installed(id: &str, places: &Places) -> Option<App> {
     })
 }
 
-/// `id` under `apps`, as a file or, where its dashes may stand for
-/// folders, inside them (`a-b.desktop` is also `a/b.desktop`).
 fn find_entry(apps: &Path, id: &str) -> Option<PathBuf> {
     if id.contains('/') || id.starts_with('.') {
         return None;
@@ -261,7 +219,6 @@ mod tests {
             self.places_in(&["config", "etc"], &["local", "share"], &["nova", "gnome"])
         }
 
-        /// Where the default for `types` comes from, relative to the tree.
         fn default_for(&self, types: &[&str]) -> Option<String> {
             default_app(types, &self.all_places()).map(|app| {
                 app.file

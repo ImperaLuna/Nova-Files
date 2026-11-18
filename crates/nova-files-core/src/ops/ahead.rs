@@ -1,38 +1,19 @@
-//! How many of a transfer's items still to come will meet a name clash,
-//! so the question about one can say how many an answer for all of its
-//! kind settles ("For all 4").
-//!
-//! The plan is looked at once, at the job's first clash: each item whose
-//! target name is taken then is noted with its kind of clash. A count is
-//! what the job could see at that moment, not a promise: a folder skipped
-//! or kept under a new name takes what is inside it out of the way, and
-//! another program may change a folder meanwhile.
-
 use nova_files_api::ConflictKind;
 
 use super::clash::clash;
 use super::control::Control;
 use super::plan::Item;
 
-/// What a transfer knows of the clashes ahead of it.
 pub struct Ahead<'a> {
     items: &'a [Item],
-    /// For each kind of clash, the places in the plan, in order, of the
-    /// items whose target was taken that way when first looked; `None`
-    /// until a clash needs it.
     found: Option<Vec<(ConflictKind, Vec<usize>)>>,
 }
 
 impl<'a> Ahead<'a> {
-    /// Nothing looked at yet, for the transfer of `items`.
     pub const fn new(items: &'a [Item]) -> Self {
         Self { items, found: None }
     }
 
-    /// How many items after the `at`th will meet a clash of `kind`. Only
-    /// a taken name counts: other conflicts (a full drive, a gone source)
-    /// can't be seen before the job gets there. A cancel stops the look
-    /// short; the job ends then anyway.
     pub fn more(&mut self, at: usize, kind: ConflictKind, control: &Control) -> u64 {
         if !is_name_clash(kind) {
             return 0;
@@ -49,7 +30,6 @@ impl<'a> Ahead<'a> {
     }
 }
 
-/// Whether `kind` is about a name already taken at the target.
 const fn is_name_clash(kind: ConflictKind) -> bool {
     matches!(
         kind,
@@ -60,14 +40,12 @@ const fn is_name_clash(kind: ConflictKind) -> bool {
     )
 }
 
-/// Each of `items` whose target is taken, by how, in plan order.
 fn look(items: &[Item], control: &Control) -> Vec<(ConflictKind, Vec<usize>)> {
     let mut found: Vec<(ConflictKind, Vec<usize>)> = Vec::new();
     for (index, item) in items.iter().enumerate() {
         if control.checkpoint().is_err() {
             break;
         }
-        // One look for a free name, as most are.
         if item.to.symlink_metadata().is_err() {
             continue;
         }
@@ -127,7 +105,6 @@ mod tests {
         assert_eq!(ahead.more(1, ConflictKind::FileExists, &control), 1);
         assert_eq!(ahead.more(3, ConflictKind::FileExists, &control), 0);
         assert_eq!(ahead.more(0, ConflictKind::FolderExists, &control), 1);
-        // Seen as it was first looked at.
         fs::remove_file(into.join("d")).unwrap();
         assert_eq!(ahead.more(1, ConflictKind::FileExists, &control), 1);
     }

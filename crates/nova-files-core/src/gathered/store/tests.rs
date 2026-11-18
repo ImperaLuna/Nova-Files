@@ -1,5 +1,3 @@
-//! The gathered folders store against a real config folder.
-
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
@@ -8,10 +6,8 @@ use nova_files_api::{Gathering, Holds};
 
 use super::*;
 
-/// How long a test waits for the store's threads.
 const WAIT: Duration = Duration::from_secs(10);
 
-/// A home with nothing in it, removed when dropped.
 struct Scratch(PathBuf);
 
 impl Scratch {
@@ -42,7 +38,6 @@ impl Scratch {
         fs::write(self.file(), text).unwrap();
     }
 
-    /// A store with a client listening, and that client's events.
     fn listening(&self) -> (Store, Receiver<Event>) {
         let store = Store::open(Some(self.home()));
         let (sink, events) = mpsc::channel();
@@ -57,7 +52,6 @@ impl Drop for Scratch {
     }
 }
 
-/// The next gathered folders the client hears.
 fn next(events: &Receiver<Event>) -> Arc<Gathered> {
     match events.recv_timeout(WAIT) {
         Ok(Event::Gathered(gathered)) => gathered,
@@ -78,7 +72,6 @@ fn a_new_user_starts_with_the_usual_folders_that_exist() {
     let gathered = next(&events);
     assert_eq!(paths(&gathered.projects), [home.folder.join("Projects")]);
     assert!(gathered.games.is_empty(), "Steam isn't installed");
-    // The file is written, so a folder removed later stays removed.
     let text = fs::read_to_string(scratch.file()).unwrap();
     assert!(text.contains("~/Projects"), "{text}");
 }
@@ -232,7 +225,6 @@ fn a_file_being_fixed_keeps_the_folders_and_takes_no_change() {
         at: None,
         name: None,
     });
-    // Nothing changed, so nothing is told; the text stays the user's.
     assert!(events.recv_timeout(Duration::from_millis(500)).is_err());
     assert_eq!(
         fs::read_to_string(scratch.file()).unwrap(),
@@ -283,7 +275,6 @@ fn a_file_up_to_256_kib_is_read_and_a_bigger_one_is_not() {
     assert_eq!(read_text(&scratch.file()), None);
 }
 
-/// Waits for `place` to change, skipping the folders being sent again.
 fn changed(events: &Receiver<Event>, place: Gathering) {
     loop {
         match events.recv_timeout(WAIT) {
@@ -321,12 +312,10 @@ fn a_folder_of_projects_changes_when_one_is_made_and_stops_when_removed() {
     scratch.write(&format!("[[games]]\npath = \"{}\"\n", games.display()));
     let (store, events) = scratch.listening();
     next(&events);
-    // Not there yet: it counts once it appears.
     fs::create_dir(&games).unwrap();
     changed(&events, Gathering::Games);
     fs::create_dir(games.join("Celeste")).unwrap();
     changed(&events, Gathering::Games);
-    // A loose file saved there is no change.
     fs::write(games.join("steam.log"), "").unwrap();
     assert!(events.recv_timeout(Duration::from_millis(600)).is_err());
 
@@ -345,7 +334,6 @@ fn listing_before_any_client_asked_still_follows_the_file() {
     scratch.write("");
     let store = Store::open(Some(scratch.home()));
     assert_eq!(store.folders_of(Gathering::Games)().len(), 0);
-    // The listing started the watch; asking now starts nothing more.
     let (sink, events) = mpsc::channel();
     store.listen(ClientId(1), &(Arc::new(sink) as Arc<dyn EventSink>));
     assert_eq!(*next(&events), Gathered::default());
@@ -368,7 +356,6 @@ fn an_added_folder_keeps_its_name_and_a_file_is_never_added() {
         at: None,
         name: None,
     });
-    // Missing: on a drive not plugged in.
     store.change(GatheredChange::Add {
         place: Gathering::Games,
         path: PathBuf::from("/mnt/games"),

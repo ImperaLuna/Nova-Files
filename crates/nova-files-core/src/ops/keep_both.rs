@@ -1,12 +1,3 @@
-//! Names for "keep both": the first free name of the form `name (2).ext`.
-//!
-//! A file's number goes before its extension, the part from its last dot,
-//! or from `.tar.` for compressed tarballs, so `backup.tar.gz` becomes
-//! `backup (2).tar.gz`. A name whose only dot leads it (`.bashrc`) has no
-//! extension, and neither has a folder. Names are handled as bytes, so one
-//! that isn't UTF-8 keeps its bytes. [`take_free_name`] gives an entry
-//! the first such name that is free.
-
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
@@ -14,22 +5,16 @@ use std::path::{Path, PathBuf};
 
 use super::place::rename_no_replace;
 
-/// Extensions that sit on top of `.tar` and count as one with it.
 const TARBALLS: [&[u8]; 4] = [b".tar.gz", b".tar.xz", b".tar.zst", b".tar.bz2"];
-/// The first number tried; the original is the first.
 const FIRST: u32 = 2;
-/// The most numbers tried before giving up: a folder this crowded with
-/// copies of one name is not one a person keeps.
 const LAST: u32 = 10_000;
 
-/// Whether the name is a folder's, which never has an extension.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Naming {
     File,
     Folder,
 }
 
-/// `name` with `number` added, as "keep both" names its copy.
 pub fn numbered(name: &OsStr, number: u32, naming: Naming) -> OsString {
     let bytes = name.as_bytes();
     let split = match naming {
@@ -43,7 +28,6 @@ pub fn numbered(name: &OsStr, number: u32, naming: Naming) -> OsString {
     OsString::from_vec(numbered)
 }
 
-/// Where the extension of a file named `name` starts, if it has one.
 fn extension_start(name: &[u8]) -> Option<usize> {
     let lower = name.to_ascii_lowercase();
     if let Some(tarball) = TARBALLS.iter().find(|tarball| lower.ends_with(tarball)) {
@@ -57,10 +41,6 @@ fn extension_start(name: &[u8]) -> Option<usize> {
         .filter(|&dot| dot > 0)
 }
 
-/// The first free path next to `taken` for "keep both".
-///
-/// # Errors
-/// When the folder can't be looked in, or every number is taken.
 pub fn free_path(taken: &Path, naming: Naming) -> io::Result<PathBuf> {
     let (Some(folder), Some(name)) = (taken.parent(), taken.file_name()) else {
         return Err(io::ErrorKind::InvalidInput.into());
@@ -76,12 +56,6 @@ pub fn free_path(taken: &Path, naming: Naming) -> io::Result<PathBuf> {
     Err(io::ErrorKind::AlreadyExists.into())
 }
 
-/// Gives `from` the name `wanted`, or the first free one beside it for
-/// "keep both", and returns the path it took.
-///
-/// # Errors
-/// When a rename fails for any reason but a taken name, or every number
-/// is taken.
 pub fn take_free_name(from: &Path, wanted: &Path) -> io::Result<PathBuf> {
     let mut to = wanted.to_path_buf();
     loop {

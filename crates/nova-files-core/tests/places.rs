@@ -1,7 +1,3 @@
-//! The places list through the real core, in a temp home: the standard
-//! folders that exist, the pinned folders from the shared bookmarks file,
-//! both followed on disk, and pins changed by a client.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -17,14 +13,10 @@ use std::time::Duration;
 use nova_files_api::{Bookmark, BookmarkChange, Command, Connection, Event, Place, PlaceKind};
 use nova_files_core::{Home, IDLE_EXIT, RunningCore};
 
-/// How long a test waits for the core before it counts as a failure.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
-/// Long enough for the watcher's quiet wait and a read: no event in this
-/// time means none is coming.
 const NOTHING_MORE: Duration = Duration::from_millis(600);
 const SHARED_MODE: u32 = 0o644;
 const PERMISSION_BITS: u32 = 0o7777;
-/// One byte over the core's cap for the bookmarks file.
 const TOO_BIG: usize = 1_048_577;
 
 struct TempHome(PathBuf);
@@ -46,8 +38,6 @@ impl TempHome {
         self.at(".config/gtk-3.0/bookmarks")
     }
 
-    /// Writes the bookmarks file the way an editor or another app does: a
-    /// new file renamed over the old one.
     fn write_bookmarks(&self, text: &str) {
         let file = self.bookmarks();
         fs::create_dir_all(file.parent().unwrap()).unwrap();
@@ -86,7 +76,6 @@ impl Client {
         Self { connection, events }
     }
 
-    /// Asks for the places and returns the first answer.
     fn ask(&self) -> (Vec<Place>, Vec<Bookmark>) {
         self.connection.send(Command::Places).unwrap();
         (self.places(), self.bookmarks())
@@ -140,7 +129,6 @@ fn places_lists_existing_standard_folders_in_order() {
     fs::create_dir(home.at("Bilder")).unwrap();
     fs::create_dir(home.at("Downloads")).unwrap();
     fs::create_dir(home.at("Videos")).unwrap();
-    // A file with a folder's name isn't one.
     fs::write(home.at("Music"), b"").unwrap();
     fs::write(
         home.at(".config/user-dirs.dirs"),
@@ -180,7 +168,6 @@ fn a_standard_folder_made_or_removed_is_sent_again() {
         ]
     );
 
-    // Other files in Home send nothing.
     fs::write(home.at("notes.txt"), b"x").unwrap();
     client.nothing_more();
 
@@ -243,7 +230,6 @@ fn bookmarks_edited_by_another_app_are_sent_again() {
     home.write_bookmarks("file:///a A\n");
 
     assert_eq!(client.bookmarks(), [pinned(Path::new("/a"), Some("A"))]);
-    // The same pins again send nothing.
     home.write_bookmarks("file:///a A\n");
     client.nothing_more();
 }
@@ -256,10 +242,8 @@ fn a_bookmarks_file_that_cant_be_read_keeps_the_pins_last_read() {
     let client = Client::of(&core);
     assert_eq!(client.ask().1, [pinned(Path::new("/a"), None)]);
 
-    // Over the cap: not a bookmarks file anyone wrote by hand.
     home.write_bookmarks(&"x".repeat(TOO_BIG));
     client.nothing_more();
-    // Nor is it saved over.
     client.change(BookmarkChange::Add {
         path: PathBuf::from("/b"),
         label: None,
@@ -325,7 +309,6 @@ fn a_client_pins_renames_moves_and_unpins_and_every_listener_hears() {
         path: PathBuf::from("/a"),
     });
     assert_eq!(client.bookmarks(), [pinned(Path::new("/b"), Some("Bee"))]);
-    // A change that changes nothing sends nothing.
     client.change(BookmarkChange::Remove {
         path: PathBuf::from("/a"),
     });
@@ -349,7 +332,6 @@ fn the_first_pin_makes_the_file_and_a_linked_file_stays_linked() {
         "file:///first\n"
     );
 
-    // A bookmarks file kept elsewhere (dotfiles) and linked in.
     let kept = home.at("dotfiles-bookmarks");
     fs::rename(home.bookmarks(), &kept).unwrap();
     symlink(&kept, home.bookmarks()).unwrap();

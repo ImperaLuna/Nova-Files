@@ -1,21 +1,9 @@
-//! Reading entries' size and modified time, after their folder is listed.
-//!
-//! The listing goes out first, so the names show at once; the details of
-//! the entries on screen follow (see `details_queue`). [`read_batch`]
-//! asks `cancelled` before each read from the disk and gives up as soon as
-//! it says so. A link reports what it points to; a broken link reports
-//! itself. An entry that can't be read (it vanished, say) gets empty
-//! details instead of stopping the rest.
-
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::{Details, Entry, EntryKind, Listing};
 
-/// The details of each entry `entries` names by its path and kind, in
-/// the same order. `None` when `cancelled` said so before the batch was
-/// done.
 pub fn read_batch(
     entries: impl ExactSizeIterator<Item = (PathBuf, EntryKind)>,
     cancelled: impl Fn() -> bool,
@@ -27,8 +15,6 @@ pub fn read_batch(
     Some(details)
 }
 
-/// `listing`'s entries `range` as [`read_batch`] takes them; entries past
-/// its end are left out.
 pub fn listed(
     listing: &Listing,
     range: Range<usize>,
@@ -38,19 +24,16 @@ pub fn listed(
         .map(|entry| (listing.path_of(entry), entry.kind))
 }
 
-/// `listing`'s entries `range`; entries past its end are left out.
 pub fn entries(listing: &Listing, range: Range<usize>) -> &[Entry] {
     listing.entries.get(range).unwrap_or_default()
 }
 
-/// One entry's details; `None` when `cancelled` said so before a read.
 fn read_one(path: &Path, kind: EntryKind, cancelled: impl Fn() -> bool) -> Option<Details> {
     if cancelled() {
         return None;
     }
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
-        // Maybe a broken link, which reports itself.
         Err(_) if cancelled() => return None,
         Err(_) => match fs::symlink_metadata(path) {
             Ok(metadata) => metadata,

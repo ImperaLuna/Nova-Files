@@ -1,8 +1,3 @@
-//! Searching home through the real core, with its index in a temp cache
-//! folder: stages, changes made after the index was built, reusing a saved
-//! index, and searches that can't run. Finding files for a window too:
-//! hits as a listing whose rows are served like a folder's.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -22,15 +17,10 @@ use nova_files_api::{
 };
 use nova_files_core::{Home, IDLE_EXIT, IndexPlace, RunningCore};
 
-/// How long a test waits for the core before it counts as a failure; the
-/// first search crawls.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
-/// How long a change may take to reach search results.
 const CHANGE_TIMEOUT: Duration = Duration::from_secs(5);
 const LIMIT: u32 = 50;
 
-/// A home and a cache folder under the system temp folder, removed when
-/// dropped.
 struct Scratch(PathBuf);
 
 impl Scratch {
@@ -115,7 +105,6 @@ impl Client {
         id
     }
 
-    /// Asks for files named like `query` as a listing.
     fn find(&mut self, query: &str, within: Option<PathBuf>) -> ListingId {
         self.next += 1;
         let id = ListingId(self.next);
@@ -126,7 +115,6 @@ impl Client {
         id
     }
 
-    /// The listing of files named like `query`.
     fn found(&mut self, query: &str, within: Option<PathBuf>) -> Listing {
         let asked = self.find(query, within);
         let Event::FolderListed(listing) = self.answer() else {
@@ -136,7 +124,6 @@ impl Client {
         listing
     }
 
-    /// The listing's entries as paths under home, with their kinds.
     fn found_paths(&self, listing: &Listing) -> Vec<(PathBuf, EntryKind)> {
         listing
             .entries
@@ -155,7 +142,6 @@ impl Client {
         self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
     }
 
-    /// Each stage's hits, as paths under home.
     fn stages(&mut self, query: &str, limit: u32) -> Vec<Vec<(PathBuf, Matched)>> {
         let asked = self.send(query, limit);
         let mut stages = Vec::new();
@@ -176,9 +162,6 @@ impl Client {
         (path, hit.matched)
     }
 
-    /// The first stage's paths, once they are `wanted`. The client can't
-    /// know when the watcher has logged a change, so it searches again
-    /// until the change shows.
     fn first_stage_becomes(&mut self, query: &str, wanted: &[&str]) {
         let wanted: Vec<PathBuf> = wanted.iter().map(PathBuf::from).collect();
         let started = Instant::now();
@@ -236,7 +219,6 @@ fn a_saved_index_of_home_is_reused() {
     let scratch = Scratch::new(&["a/report.pdf"]);
     scratch.place().build(&scratch.home()).unwrap();
     let saved = scratch.index_inode();
-    // Made after the crawl: the watcher's catch-up finds it.
     scratch.add("a/report 2.pdf");
     let mut client = scratch.core(Some(scratch.place()));
     client.first_stage_becomes("report", &["a/report.pdf", "a/report 2.pdf"]);
@@ -286,7 +268,6 @@ fn without_a_cache_folder_search_fails() {
 #[test]
 fn an_index_that_cant_be_saved_fails() {
     let scratch = Scratch::new(&["a/report.pdf"]);
-    // A file where the cache folder should be.
     let blocked = scratch.0.join("blocked");
     fs::write(&blocked, b"").unwrap();
     let place = IndexPlace {
@@ -352,7 +333,6 @@ fn rows_of_found_files_get_their_details() {
 fn a_folder_asked_for_after_a_find_replaces_it() {
     let scratch = Scratch::new(&["Documents/report.pdf"]);
     let mut client = scratch.core(Some(scratch.place()));
-    // Indexed, so the next find is quick but still runs on its thread.
     client.found("report", None);
     client.find("report", None);
     client.next += 1;
@@ -363,7 +343,6 @@ fn a_folder_asked_for_after_a_find_replaces_it() {
         order: Order::default(),
     };
     client.connection.send(list).unwrap();
-    // Whatever the find managed to send first, the folder comes last.
     let started = Instant::now();
     loop {
         let Event::FolderListed(listing) = client.answer() else {

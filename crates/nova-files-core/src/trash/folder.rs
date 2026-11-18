@@ -1,17 +1,5 @@
-//! Which trash an entry goes to: the home trash when the entry is on the
-//! home trash's mount, otherwise its own mount's trash at the mount's top
-//! folder, `.Trash/<uid>` when the admin made a shared `.Trash` (a real
-//! folder with the sticky bit), else `.Trash-<uid>`. Either is made when
-//! missing and used only while it is a real folder the user owns.
-//!
-//! A trash takes entries by rename only, so it must be where a rename
-//! reaches: on the same mount (the kernel's mount id, `statx`'s
-//! `STATX_MNT_ID`, which also tells a bind mount from what it shows) and
-//! on the same device number, as btrfs refuses a rename from one
-//! subvolume to another on one mount. A subvolume's top folder counts as
-//! a mount's top, as other file managers take it. Kernels before 5.8
-//! don't give the mount id; there the device number alone tells.
-
+// btrfs refuses a rename between subvolumes on one mount; STATX_MNT_ID needs Linux 5.8.
+// https://man7.org/linux/man-pages/man2/statx.2.html
 use std::fs::{self, DirBuilder};
 use std::io;
 use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _};
@@ -23,16 +11,10 @@ use rustix::process::getuid;
 use super::{FILES, INFO};
 use crate::private_file::FOLDER_MODE;
 
-/// The sticky bit, which a shared `.Trash` must have.
 const STICKY: u32 = 0o1000;
-/// The shared trash folder an admin may make at a mount's top.
 pub(super) const SHARED: &str = ".Trash";
-/// The start of a user's own trash folder at a mount's top.
 pub(super) const OWN_PREFIX: &str = ".Trash-";
 
-/// One trash: its folder, and the top folder of its mount for a trash
-/// that isn't the home trash, which its info files' paths are relative
-/// to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrashFolder {
     pub root: PathBuf,
@@ -40,19 +22,14 @@ pub struct TrashFolder {
 }
 
 impl TrashFolder {
-    /// Where its trashed entries sit.
     pub fn files(&self) -> PathBuf {
         self.root.join(FILES)
     }
 
-    /// Where its info files sit.
     pub fn info(&self) -> PathBuf {
         self.root.join(INFO)
     }
 
-    /// `original`, a path without links, as this trash's info files
-    /// write it: whole for the home trash, from the mount's top
-    /// otherwise.
     pub fn path_field<'a>(&self, original: &'a Path) -> &'a Path {
         self.topdir
             .as_ref()
@@ -61,13 +38,6 @@ impl TrashFolder {
     }
 }
 
-/// The trash for entries in `folder`, a folder whose path holds no links,
-/// made ready to take one: the home trash at `home_trash` when a rename
-/// reaches it, else the one at the top of `folder`'s mount.
-///
-/// # Errors
-/// When `folder` can't be looked at, or no trash on its mount can be
-/// used or made.
 pub fn folder_for(folder: &Path, home_trash: Option<&Path>) -> io::Result<TrashFolder> {
     let mount = mount_of(folder, AtFlags::SYMLINK_NOFOLLOW)?;
     let home_reached = home_trash.filter(|home| match home_mount(home) {
@@ -78,8 +48,6 @@ pub fn folder_for(folder: &Path, home_trash: Option<&Path>) -> io::Result<TrashF
         }
     });
     if let Some(home) = home_reached {
-        // Made with its parents when missing; a link the user made to
-        // where they keep it is followed.
         DirBuilder::new()
             .recursive(true)
             .mode(FOLDER_MODE)
@@ -96,9 +64,6 @@ pub fn folder_for(folder: &Path, home_trash: Option<&Path>) -> io::Result<TrashF
     })
 }
 
-/// The mount of the home trash at `home`, or of the nearest folder above
-/// it while it doesn't exist yet. Links are followed: the home trash may
-/// be a link to where the user keeps it.
 fn home_mount(home: &Path) -> io::Result<Mount> {
     for folder in home.ancestors() {
         match mount_of(folder, AtFlags::empty()) {
@@ -109,16 +74,12 @@ fn home_mount(home: &Path) -> io::Result<Mount> {
     Err(io::ErrorKind::NotFound.into())
 }
 
-/// Where an entry is, as far as a rename can reach: its mount and its
-/// device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Mount {
-    /// `None` on a kernel that doesn't say.
     id: Option<u64>,
     device: (u32, u32),
 }
 
-/// The mount and device `path` is on.
 fn mount_of(path: &Path, flags: AtFlags) -> io::Result<Mount> {
     let answer = statx(CWD, path, flags, StatxFlags::MNT_ID)?;
     let id = (answer.stx_mask & StatxFlags::MNT_ID.bits() != 0).then_some(answer.stx_mnt_id);
@@ -128,9 +89,6 @@ fn mount_of(path: &Path, flags: AtFlags) -> io::Result<Mount> {
     })
 }
 
-/// The trash `root` is, when it is a mount's: `.Trash-<uid>`, or
-/// `<uid>` in a fit shared `.Trash`, at the top of its mount, as
-/// [`folder_for`] would pick it, and the user's own. Nothing is made.
 pub fn mount_trash_at(root: &Path) -> Option<TrashFolder> {
     let top = trash_top(root)?;
     let mount = mount_of(top, AtFlags::SYMLINK_NOFOLLOW).ok()?;
@@ -141,9 +99,6 @@ pub fn mount_trash_at(root: &Path) -> Option<TrashFolder> {
     })
 }
 
-/// Where the mount top would be were `root` a mount's trash, by its
-/// name: above `.Trash-<uid>`, or above a fit shared `.Trash` that holds
-/// `<uid>`.
 fn trash_top(root: &Path) -> Option<&Path> {
     let uid = getuid().as_raw().to_string();
     let name = root.file_name()?;
@@ -157,23 +112,18 @@ fn trash_top(root: &Path) -> Option<&Path> {
     }
 }
 
-/// Whether `root`, its `files` and its `info` are each a real folder the
-/// user owns, never reached through a link.
 pub fn is_own(root: &Path) -> bool {
     [root.to_path_buf(), root.join(FILES), root.join(INFO)]
         .iter()
         .all(|folder| fs::symlink_metadata(folder).is_ok_and(|there| owned_folder(&there).is_ok()))
 }
 
-/// Whether `shared`, a mount's `.Trash`, is one the admin made for every
-/// user: a real folder with the sticky bit.
 fn shared_fit(shared: &Path) -> bool {
     shared
         .symlink_metadata()
         .is_ok_and(|there| there.is_dir() && there.mode() & STICKY != 0)
 }
 
-/// The top folder of `mount`, which `folder` is on.
 fn topdir(folder: &Path, mount: Mount) -> io::Result<PathBuf> {
     let mut top = folder;
     while let Some(above) = top.parent() {
@@ -185,8 +135,6 @@ fn topdir(folder: &Path, mount: Mount) -> io::Result<PathBuf> {
     Ok(top.to_path_buf())
 }
 
-/// The user's trash at the mount top `top`: in the shared `.Trash` when
-/// it is fit, else `.Trash-<uid>`.
 fn mount_trash(top: &Path) -> io::Result<PathBuf> {
     let uid = getuid().as_raw();
     let shared = top.join(SHARED);
@@ -202,8 +150,6 @@ fn mount_trash(top: &Path) -> io::Result<PathBuf> {
     Ok(own)
 }
 
-/// Makes `root`, with `files` and `info` in it, each a folder of the
-/// user's alone, unless there; each must be a real folder the user owns.
 fn own_folder(root: &Path) -> io::Result<()> {
     for folder in [root.to_path_buf(), root.join(FILES), root.join(INFO)] {
         match DirBuilder::new().mode(FOLDER_MODE).create(&folder) {
@@ -214,7 +160,6 @@ fn own_folder(root: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Checks that `there` is a real folder the user owns.
 fn owned_folder(there: &fs::Metadata) -> io::Result<()> {
     if there.is_dir() && there.uid() == getuid().as_raw() {
         Ok(())
@@ -246,7 +191,6 @@ mod tests {
 
     #[test]
     fn the_kernel_names_the_mount() {
-        // Linux 5.8 and later give the mount id.
         let mount = mount_of(Path::new("/"), AtFlags::empty()).unwrap();
 
         assert!(mount.id.is_some());

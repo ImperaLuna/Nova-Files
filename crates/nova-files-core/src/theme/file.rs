@@ -1,30 +1,8 @@
-//! The theme file's text: the colors it sets for dark and for light.
-//!
-//! The file uses Nova's own theme keys (`themes/carbonfox.toml` in Nova),
-//! so Nova, matugen or pywal can write one file for both:
-//!
-//! ```toml
-//! name = "Carbonfox"
-//! [dark]
-//! bg = "#1D1D1D"
-//! primary = "#FD7014"
-//! # ... any of the keys below
-//! [light]
-//! bg = "#F6F2EA"
-//! ```
-//!
-//! Every key may be left out; the core then uses Carbonfox's value for it.
-//! As with the settings file, a mistake costs only its own key: a color
-//! that isn't `#RRGGBB` keeps the default and is reported, an unknown key
-//! is reported and left out. `glassTint` is Nova's and is read without
-//! complaint, but Nova Files draws a solid window and doesn't use it.
-
 use std::collections::BTreeMap;
 
 use nova_files_api::{Color, Mode, Palette, PaletteKey, SWATCH_COUNT};
 use toml_edit::{DocumentMut, Item};
 
-/// The colors one table sets; what it leaves out isn't there.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Overrides {
     pub colors: BTreeMap<PaletteKey, Color>,
@@ -32,7 +10,6 @@ pub struct Overrides {
 }
 
 impl Overrides {
-    /// `palette` with these colors in place of its own.
     pub fn over(&self, mut palette: Palette) -> Palette {
         for (&key, &color) in &self.colors {
             palette.set(key, color);
@@ -46,7 +23,6 @@ impl Overrides {
     }
 }
 
-/// What a theme file sets.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ThemeFile {
     pub dark: Overrides,
@@ -54,7 +30,6 @@ pub struct ThemeFile {
 }
 
 impl ThemeFile {
-    /// What the file sets for `mode`.
     pub const fn for_mode(&self, mode: Mode) -> &Overrides {
         match mode {
             Mode::Dark => &self.dark,
@@ -66,11 +41,9 @@ impl ThemeFile {
 const NAME: &str = "name";
 const DARK: &str = "dark";
 const LIGHT: &str = "light";
-/// Nova's glass tint: known, unused.
 const GLASS_TINT: &str = "glassTint";
 const SWATCH_PREFIX: &str = "swatch";
 
-/// The colors `text` sets, and what in it was left out and why.
 pub fn read(text: &str) -> (ThemeFile, Vec<String>) {
     let mut theme = ThemeFile::default();
     let document = match text.parse::<DocumentMut>() {
@@ -122,10 +95,8 @@ fn bad_color(table_name: &str, key: &str) -> String {
     format!("`{table_name}.{key}` is a \"#RRGGBB\" color; using the default")
 }
 
-/// The index of `swatch1` to `swatch8`, from 0.
 fn swatch_index(key: &str) -> Option<usize> {
     let digits = key.strip_prefix(SWATCH_PREFIX)?;
-    // Just the number as written: `swatch01` and `swatch+1` aren't keys.
     if digits.starts_with('0') || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }

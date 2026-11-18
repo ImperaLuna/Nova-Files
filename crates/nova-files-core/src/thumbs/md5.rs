@@ -1,13 +1,8 @@
-//! MD5, which the freedesktop thumbnail spec uses to name a thumbnail after
-//! its file's URI. Not for anything that needs security.
-
-/// Per-round shift amounts.
 const SHIFTS: [u32; 64] = [
     7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9,
     14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15,
     21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
 ];
-/// Per-round constants: the integer parts of `abs(sin(i + 1)) * 2^32`.
 const SINES: [u32; 64] = [
     0xd76a_a478,
     0xe8c7_b756,
@@ -74,13 +69,10 @@ const SINES: [u32; 64] = [
     0x2ad7_d2bb,
     0xeb86_d391,
 ];
-/// The digest is this many 32-bit words.
 const STATE_WORDS: usize = 4;
 const INITIAL: [u32; STATE_WORDS] = [0x6745_2301, 0xefcd_ab89, 0x98ba_dcfe, 0x1032_5476];
 const BLOCK: usize = 64;
 const WORD: usize = 4;
-/// The message is padded to this many bytes past a block boundary, then
-/// its bit length fills the last eight.
 const LENGTH_AT: usize = 56;
 const PAD_START: u8 = 0x80;
 const BITS_PER_BYTE: u64 = 8;
@@ -88,7 +80,6 @@ const ROUND: usize = 16;
 const HEX: &[u8; 16] = b"0123456789abcdef";
 const HIGH_NIBBLE: u32 = 4;
 const LOW_NIBBLE_MASK: u8 = 0x0f;
-/// Message-word index steps (multiply, then add) for rounds two to four.
 const STEP_TWO: (usize, usize) = (5, 1);
 const STEP_THREE: (usize, usize) = (3, 5);
 const STEP_FOUR: (usize, usize) = (7, 0);
@@ -96,7 +87,6 @@ const ROUND_ONE: usize = 0;
 const ROUND_TWO: usize = 1;
 const ROUND_THREE: usize = 2;
 
-/// The digest of `bytes` as 32 lowercase hex digits.
 pub fn hex(bytes: &[u8]) -> String {
     let mut state = INITIAL;
     let bit_length = (bytes.len() as u64).wrapping_mul(BITS_PER_BYTE);
@@ -125,8 +115,6 @@ fn compress(state: &mut [u32; STATE_WORDS], block: &[u8; BLOCK]) {
     for i in 0..BLOCK {
         let round = i / ROUND;
         let (mixed, index) = match round {
-            // `(b & c) | (!b & d)` and `(d & b) | (!d & c)`, written so no
-            // operator can be swapped for another without changing them.
             ROUND_ONE => (d ^ (b & (c ^ d)), i),
             ROUND_TWO => (c ^ (d & (b ^ c)), step(i, STEP_TWO)),
             ROUND_THREE => (b ^ c ^ d, step(i, STEP_THREE)),
@@ -181,9 +169,10 @@ mod tests {
         }
     }
 
+    // The thumbnail spec's own example.
+    // https://specifications.freedesktop.org/thumbnail-spec/latest/
     #[test]
     fn names_a_thumbnail_as_the_spec_example_does() {
-        // From the freedesktop thumbnail spec.
         assert_eq!(
             hex(b"file:///home/jens/photos/me.png"),
             "c6ee772d9e49320e97ec29a7eb5b1697"

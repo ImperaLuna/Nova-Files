@@ -1,7 +1,3 @@
-//! Copying through the real core, against real temp folders: whole trees
-//! arrive identical, progress adds up, a paused job holds and keeps the
-//! core up, and a cancelled one leaves nothing half-written.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -35,17 +31,11 @@ fn copy(sources: Vec<PathBuf>, into: &Path) -> Operation {
     }
 }
 
-/// Files in a tree big enough that a job is still running when a client
-/// answers its start.
 const MANY: usize = 400;
 const FILE_BYTES: usize = 16 * 1024;
-/// A folder mode no new folder gets by default.
 const FOLDER_MODE: u32 = 0o750;
-/// Long enough for a paused job to have moved, were it not paused.
 const HOLD: Duration = Duration::from_millis(300);
 
-/// A folder `src` holding files, an empty folder, a nested folder, a link
-/// and a name that isn't UTF-8.
 fn small_tree(bench: &Bench) -> PathBuf {
     let source = bench.at("src");
     fs::create_dir_all(source.join("sub/deeper")).unwrap();
@@ -58,7 +48,6 @@ fn small_tree(bench: &Bench) -> PathBuf {
     source
 }
 
-/// A folder `big` holding [`MANY`] files.
 fn big_tree(bench: &Bench) -> PathBuf {
     let source = bench.at("big");
     fs::create_dir(&source).unwrap();
@@ -68,7 +57,6 @@ fn big_tree(bench: &Bench) -> PathBuf {
     source
 }
 
-/// Pauses `job` and waits until every client is told.
 fn pause(client: &Client, job: JobId) {
     client.send(Command::PauseJob(job));
     loop {
@@ -80,7 +68,6 @@ fn pause(client: &Client, job: JobId) {
     }
 }
 
-/// The next event that isn't a job's progress.
 fn next_besides_progress(client: &Client) -> Event {
     loop {
         match client.next() {
@@ -90,8 +77,6 @@ fn next_besides_progress(client: &Client) -> Event {
     }
 }
 
-/// Lets a job that was just paused finish the step it was in: its last
-/// progress may still come.
 fn settle(client: &Client) {
     while let Ok(event) = client.events.recv_timeout(HOLD) {
         assert!(
@@ -105,7 +90,6 @@ fn settle(client: &Client) {
 fn copies_a_tree_identically() {
     let bench = Bench::new("copy-tree");
     let source = small_tree(&bench);
-    // A folder's own mode and time come along too, once it is full.
     let sub = source.join("sub");
     fs::set_permissions(&sub, fs::Permissions::from_mode(FOLDER_MODE)).unwrap();
     let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
@@ -210,7 +194,6 @@ fn a_cancelled_copy_leaves_only_whole_files() {
     let (outcome, changed) = client.ended(job);
 
     assert_eq!(outcome, Outcome::Cancelled);
-    // The pause may land before anything was made.
     let made = into.join("big").exists();
     assert_eq!(changed, if made { vec![into.clone()] } else { Vec::new() });
     let copied = if made {
@@ -241,7 +224,6 @@ fn pausing_or_resuming_twice_tells_once() {
 
     let (outcome, _) = client.ended(job);
     assert_eq!(outcome, Outcome::Cancelled);
-    // Commands for a job that has ended are ignored.
     client.send(Command::PauseJob(job));
     client.send(Command::Ping);
     assert_eq!(client.next(), Event::Pong);
@@ -251,7 +233,6 @@ fn pausing_or_resuming_twice_tells_once() {
 fn a_paused_job_keeps_the_core_up_after_its_window_closes() {
     let idle_exit = Duration::from_millis(200);
     let bench = Bench::with("copy-alive", idle_exit, |_| {});
-    // Connected first: making the tree may take longer than the idle exit.
     let client = bench.client();
     let source = big_tree(&bench);
     let operation = copy(vec![source], &bench.at("home"));
@@ -262,7 +243,6 @@ fn a_paused_job_keeps_the_core_up_after_its_window_closes() {
     wait(idle_exit * 3);
     assert!(!bench.core.thread.is_finished());
 
-    // A window opened later hears of the held job and can end it.
     let client = bench.client();
     client.send(Command::WatchJobs);
     let Event::JobRunning {
@@ -279,7 +259,6 @@ fn a_paused_job_keeps_the_core_up_after_its_window_closes() {
         (heard, doing, paused, conflict),
         (job, operation, true, None)
     );
-    // Held while planning, it has no totals yet.
     assert!([0, MANY as u64 + 1].contains(&progress.total_items));
     client.send(Command::CancelJob(job));
     client.ended(job);
@@ -288,13 +267,11 @@ fn a_paused_job_keeps_the_core_up_after_its_window_closes() {
     assert!(bench.core.thread.is_finished(), "the core stops once idle");
 }
 
-/// Waits `time` without polling.
 fn wait(time: Duration) {
     let (_never_sent, quiet) = mpsc::channel::<()>();
     assert_eq!(quiet.recv_timeout(time), Err(RecvTimeoutError::Timeout));
 }
 
-/// Where job `job`'s journal is while it runs.
 fn journal(bench: &Bench, job: JobId) -> PathBuf {
     bench
         .at("home/.local/state/nova-files/jobs")
@@ -307,7 +284,6 @@ fn a_copy_pastes_as_a_copy_and_leaves_the_files() {
     fs::create_dir(bench.at("from")).unwrap();
     fs::write(bench.at("from/a"), b"a").unwrap();
     fs::create_dir(bench.at("into")).unwrap();
-    // What Dolphin puts on the clipboard for a copy.
     let list = format!("{}\r\n", file_uri(&bench.at("from/a")));
     let files = FileClipboard::from_offers(&[Offer::new(URI_LIST, list)]).unwrap();
 

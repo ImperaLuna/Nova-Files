@@ -1,15 +1,3 @@
-//! The icon names a MIME type is drawn with, and the kind of file it is
-//! for the built-in icons.
-//!
-//! The names follow the shared MIME info spec, most specific first: the
-//! type's own icon from `mime/icons`, its name with `/` made `-`
-//! (`image-png`) and its generic icon from `mime/generic-icons`; then the
-//! same for each type it is a kind of, nearest first; last
-//! `<media>-x-generic`. So a Python script is drawn as a script
-//! (`text-x-script`) before as plain text. An icon
-//! theme is searched for each in turn. The kind comes from the type's
-//! media (`image/*` is a picture), else from its generic icon.
-
 use nova_files_api::IconKind;
 
 use super::{MEDIA_SEPARATOR, MimeTypes};
@@ -17,7 +5,6 @@ use super::{MEDIA_SEPARATOR, MimeTypes};
 const NAME_SEPARATOR: &str = "-";
 const GENERIC_SUFFIX: &str = "-x-generic";
 
-/// Media whose every type is one kind.
 const MEDIA_KINDS: [(&str, IconKind); 4] = [
     ("image", IconKind::Picture),
     ("video", IconKind::Video),
@@ -25,8 +12,6 @@ const MEDIA_KINDS: [(&str, IconKind); 4] = [
     ("text", IconKind::Text),
 ];
 
-/// Generic icons, from the shared MIME info database, and the kinds they
-/// stand for.
 const GENERIC_KINDS: [(&str, IconKind); 12] = [
     ("image-x-generic", IconKind::Picture),
     ("video-x-generic", IconKind::Video),
@@ -43,8 +28,6 @@ const GENERIC_KINDS: [(&str, IconKind); 12] = [
 ];
 
 impl MimeTypes {
-    /// The icon names to look for, for a file of type `mime`, most
-    /// specific first, each once.
     pub fn icon_names(&self, mime: &str) -> Vec<String> {
         let ancestry = self.ancestry(mime);
         let mut names: Vec<String> = Vec::new();
@@ -68,7 +51,6 @@ impl MimeTypes {
         names
     }
 
-    /// The kind of file a `mime` is, for its built-in icon.
     pub fn icon_kind(&self, mime: &str) -> IconKind {
         let ancestry = self.ancestry(mime);
         let by_media = ancestry.iter().find_map(|kind_of| {

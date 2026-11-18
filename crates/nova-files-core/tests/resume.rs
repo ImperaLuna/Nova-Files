@@ -1,7 +1,3 @@
-//! Resuming after a crash, through the real core: a core that finds a job
-//! journal cleans up what the job left half-done, lists the job as
-//! interrupted, and resumes or forgets it when a client asks.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -18,23 +14,16 @@ use nova_files_api::{Answer, Command, Event, Failure, JobId, Operation, Outcome,
 
 use common::{Bench, Client};
 
-/// The id the crashed job had.
 const CRASHED: JobId = JobId(42);
 
-/// Where the core under `root` keeps job journals.
 fn journals(root: &Path) -> PathBuf {
     root.join("home/.local/state/nova-files/jobs")
 }
 
-/// Leaves a journal of `lines` under `root` for job [`CRASHED`], as a
-/// crash would, and returns where.
 fn crashed_job(root: &Path, lines: &[String]) -> PathBuf {
     crashed(root, CRASHED, lines)
 }
 
-/// Leaves a journal of `lines` under `root` for job `job`, with
-/// `sources-done` after the operation, where to and its sources, as a
-/// job writes it.
 fn crashed(root: &Path, job: JobId, lines: &[String]) -> PathBuf {
     let says_what = |line: &String| {
         ["copy", "move", "delete"].contains(&line.as_str())
@@ -53,8 +42,6 @@ fn crashed(root: &Path, job: JobId, lines: &[String]) -> PathBuf {
     written(root, job, &text)
 }
 
-/// Leaves a journal of `text`, after its header, under `root` for job
-/// `job`.
 fn written(root: &Path, job: JobId, text: &str) -> PathBuf {
     fs::create_dir_all(journals(root)).unwrap();
     let journal = journals(root).join(job.0.to_string());
@@ -62,8 +49,6 @@ fn written(root: &Path, job: JobId, text: &str) -> PathBuf {
     journal
 }
 
-/// A core started after a crash that `prepare` sets up, and a client of
-/// it that watches jobs.
 fn restart(test: &str, prepare: impl FnOnce(&Path)) -> (Bench, Client) {
     let bench = Bench::with(test, nova_files_core::IDLE_EXIT, prepare);
     let client = bench.client();
@@ -81,7 +66,6 @@ fn line(word: &str, paths: &[&Path]) -> String {
     line
 }
 
-/// The `planned` line for `path`, as the entry it is now.
 fn planned(path: &Path) -> String {
     let metadata = path.symlink_metadata().unwrap();
     let entry = format!("{}:{}", metadata.dev(), metadata.ino());
@@ -96,7 +80,6 @@ fn a_crashed_copy_is_cleaned_up_and_resumes_where_it_left_off() {
         fs::write(source.join("a"), "a").unwrap();
         fs::write(source.join("b"), "b").unwrap();
         fs::create_dir_all(into.join("src")).unwrap();
-        // Made before the crash: taken as done, not asked about.
         fs::write(into.join("src/a"), "a").unwrap();
         fs::write(into.join("src/.nova-part-42-2"), "half").unwrap();
         crashed_job(
@@ -137,7 +120,6 @@ fn a_crashed_copy_is_cleaned_up_and_resumes_where_it_left_off() {
         !journals(&bench.root).join("42").exists(),
         "a finished job's journal goes"
     );
-    // What it did before the crash is unknown, so it can't be undone.
     let undo = client.start(Operation::Undo { job: CRASHED });
     assert!(matches!(
         client.ended(undo).0,
@@ -156,7 +138,6 @@ fn a_file_that_stepped_aside_comes_back_unless_its_replacement_is_in() {
         fs::write(into.join(".nova-backup-42-0"), "old").unwrap();
         fs::write(into.join("replaced"), "new").unwrap();
         fs::write(into.join(".nova-backup-42-1"), "older").unwrap();
-        // Something else took this name; the job's copy never did.
         fs::write(into.join("taken"), "theirs").unwrap();
         fs::write(into.join(".nova-backup-42-2"), "mine").unwrap();
         crashed_job(
@@ -228,7 +209,6 @@ fn a_job_whose_sources_were_cut_short_is_cleaned_up_not_resumed() {
             line("part", &[&part])
         );
         written(root, CRASHED, &text);
-        // A whole one, listed once every journal is cleaned up.
         crashed(
             root,
             JobId(43),
@@ -236,7 +216,6 @@ fn a_job_whose_sources_were_cut_short_is_cleaned_up_not_resumed() {
         );
     });
 
-    // Only the whole job is listed.
     assert!(matches!(
         client.next(),
         Event::JobInterrupted { job: JobId(43), .. }
@@ -255,7 +234,6 @@ fn a_journal_that_cant_be_removed_keeps_its_job() {
         );
     });
     assert!(matches!(client.next(), Event::JobInterrupted { .. }));
-    // A folder where the journal was: removing it as a file fails.
     let journal = journals(&bench.root).join("42");
     fs::remove_file(&journal).unwrap();
     fs::create_dir(&journal).unwrap();
@@ -276,7 +254,6 @@ fn a_resumed_move_moves_only_what_is_still_there() {
     let (bench, client) = restart("resume-move", |root| {
         let into = root.join("into");
         fs::create_dir(&into).unwrap();
-        // `a` moved before the crash; `b` didn't.
         fs::write(into.join("a"), "a").unwrap();
         fs::write(root.join("b"), "b").unwrap();
         crashed_job(
@@ -307,7 +284,6 @@ fn a_journal_that_is_not_one_is_left_alone() {
         fs::write(journals(root).join("7"), "not a journal\n").unwrap();
     });
 
-    // Its id comes first: no job was listed before it.
     let (_, outcome, _) = client.run(Operation::Delete { paths: Vec::new() });
 
     assert_eq!(outcome, Outcome::Done);
@@ -334,7 +310,6 @@ fn a_resumed_copy_finds_what_it_made_under_another_name() {
         fs::create_dir_all(&source).unwrap();
         fs::write(source.join("a"), "new").unwrap();
         fs::create_dir(&into).unwrap();
-        // The user kept both before the crash.
         fs::write(into.join("a"), "old").unwrap();
         fs::write(into.join("a (2)"), "new").unwrap();
         crashed_job(
@@ -353,7 +328,6 @@ fn a_resumed_copy_finds_what_it_made_under_another_name() {
     client.send(Command::ResumeJob(CRASHED));
 
     assert_eq!(client.next(), Event::JobResumed(CRASHED));
-    // Not asked about `a` again: the job ends.
     assert_eq!(client.ended(CRASHED).0, Outcome::Done);
     assert_eq!(fs::read_to_string(into.join("a")).unwrap(), "old");
     assert!(!into.join("a (3)").exists());
@@ -366,8 +340,6 @@ fn a_folder_made_before_and_swapped_for_a_link_is_asked_about() {
         fs::create_dir_all(&source).unwrap();
         fs::write(source.join("f"), "f").unwrap();
         fs::create_dir_all(&into).unwrap();
-        // The job made `into/src` and `f` in it; since, the folder went to
-        // `other` and a link to it took its name.
         fs::create_dir(&other).unwrap();
         fs::write(other.join("f"), "f").unwrap();
         std::os::unix::fs::symlink(&other, into.join("src")).unwrap();
@@ -403,7 +375,6 @@ fn a_folder_made_before_and_swapped_for_a_link_is_asked_about() {
     assert!(matches!(client.next(), Event::ConflictAnswered { .. }));
 
     assert_eq!(client.ended(CRASHED).0, Outcome::Done);
-    // What went into the old folder doesn't count for the new one.
     assert_eq!(fs::read_to_string(bench.at("into/src (2)/f")).unwrap(), "f");
     assert_eq!(fs::read_dir(bench.at("other")).unwrap().count(), 1);
 }
@@ -453,8 +424,6 @@ fn a_resumed_delete_keeps_what_was_added_since() {
             ],
         );
         fs::write(tree.join("added"), "new").unwrap();
-        // A new file under a planned name, made while the old one was
-        // still there, so it can't take the old one's inode.
         fs::write(tree.join("new"), "new").unwrap();
         fs::rename(tree.join("new"), tree.join("replaced")).unwrap();
     });
@@ -498,7 +467,6 @@ fn a_resumed_copy_skips_only_the_source_it_made() {
     assert!(matches!(client.next(), Event::JobInterrupted { .. }));
     client.send(Command::ResumeJob(job));
     assert_eq!(client.next(), Event::JobResumed(job));
-    // The second report still meets the first one's name.
     let conflict = loop {
         match client.next() {
             Event::JobConflict { conflict, .. } => break conflict,
@@ -548,7 +516,6 @@ fn a_journal_another_core_holds_is_left_alone() {
         crashed(root, JobId(43), &["delete".to_owned()]);
     });
 
-    // Only the job whose journal nobody holds is listed.
     assert_eq!(
         client.next(),
         Event::JobInterrupted {

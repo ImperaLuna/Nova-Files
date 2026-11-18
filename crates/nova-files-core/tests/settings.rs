@@ -1,7 +1,3 @@
-//! Settings and the theme through the core: read from their files, changed
-//! by a client or on disk, and sent to every client that asked, in a temp
-//! home.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -21,15 +17,10 @@ use nova_files_api::{
 };
 use nova_files_core::{Home, IDLE_EXIT, RunningCore};
 
-/// How long a test waits for the core before it counts as a failure.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
-/// Long enough for the watcher's quiet wait and a read: no event in this
-/// time means none is coming.
 const NOTHING_MORE: Duration = Duration::from_millis(600);
-/// A mode the user gave their own file, readable by others.
 const SHARED_MODE: u32 = 0o644;
 const PERMISSION_BITS: u32 = 0o7777;
-/// A comment longer than a few lines, well under the cap.
 const LONG_COMMENT: usize = 4096;
 
 struct TempHome(PathBuf);
@@ -73,7 +64,6 @@ impl Drop for TempHome {
     }
 }
 
-/// A connected client that asked for the settings, with the first answer.
 fn listen(core: &RunningCore) -> (Connection, Receiver<Event>, Settings) {
     let (sink, events) = mpsc::channel();
     let connection = core.connector.connect(sink).unwrap();
@@ -123,7 +113,6 @@ fn a_change_reaches_every_listening_client_and_is_saved_once() {
     let core = home.core();
     let (first, first_events, _) = listen(&core);
     let (_second, second_events, _) = listen(&core);
-    // A client that never asked hears nothing.
     let (sink, quiet) = mpsc::channel();
     let _quiet = core.connector.connect(sink).unwrap();
 
@@ -139,7 +128,6 @@ fn a_change_reaches_every_listening_client_and_is_saved_once() {
         &home.file(),
         "# mine\nappearance = \"dark\"\nthumbnails = false\n",
     );
-    // The save coming back through the watcher sends nothing more.
     assert!(first_events.recv_timeout(NOTHING_MORE).is_err());
     assert!(quiet.recv_timeout(NOTHING_MORE).is_err());
 }
@@ -156,7 +144,6 @@ fn a_client_that_left_hears_nothing_more() {
             Thumbnails::Hidden,
         )))
         .unwrap();
-    // Its events still have somewhere to go, but none come.
     assert!(left_events.recv_timeout(NOTHING_MORE).is_err());
 }
 
@@ -168,7 +155,6 @@ fn a_long_file_is_read_up_to_its_cap() {
     let core = home.core();
     let (_connection, _events, settings) = listen(&core);
     assert_eq!(settings.appearance, Appearance::Dark);
-    // Past the cap, 64 KiB, it isn't read at all.
     let huge = format!("# {}\n", "x".repeat(64 * 1024));
     home.write(&format!("{huge}appearance = \"dark\"\n"));
     let core = home.core();
@@ -195,7 +181,6 @@ fn an_edit_on_disk_reaches_the_clients() {
     let home = TempHome::new("disk");
     let core = home.core();
     let (_connection, events, _) = listen(&core);
-    // The folder doesn't exist yet: the watch follows it down.
     home.write("appearance = \"light\"\n");
     assert_eq!(next(&events).appearance, Appearance::Light);
     home.write("appearance = \"light\"\n[keys]\n\"go.back\" = [\"alt-left\"]\n");
@@ -223,7 +208,6 @@ fn a_linked_file_is_saved_where_it_points() {
     assert_eq!(next(&events).appearance, Appearance::Dark);
     wait_for_file(&real, "appearance = \"dark\"\n");
     assert!(fs::symlink_metadata(home.file()).unwrap().is_symlink());
-    // The user's file keeps its mode.
     let mode = fs::metadata(&real).unwrap().permissions().mode() & PERMISSION_BITS;
     assert_eq!(mode, SHARED_MODE);
 }
@@ -256,7 +240,6 @@ fn the_theme_follows_its_file_and_the_appearance_setting() {
     let light = next_theme(&theme_events);
     assert_eq!(light.mode, Mode::Light);
     assert_eq!(light.palette.primary, Color(0x00C0_FFEE));
-    // Only clients that asked hear about the theme.
     assert!(
         !settings_events
             .try_iter()

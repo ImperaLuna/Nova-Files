@@ -1,10 +1,3 @@
-//! Browsing inside an archive as a read-only folder. A path inside one is
-//! the archive's own path with the path inside it after
-//! (`/home/me/a.zip/docs`), so it lists, opens and copies out like any
-//! other path. The core lists each archive once through the helper and
-//! keeps what it found, for the last [`KEPT`] archives, while the archive
-//! keeps its size and modified time.
-
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::env;
 use std::ffi::OsString;
@@ -21,22 +14,16 @@ use nova_files_api::{Details, Entry, EntryId, EntryKind, HiddenFiles, Order, Sor
 use crate::archive::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Flow};
 use crate::private_file::FOLDER_MODE;
 
-/// How many archives' contents the core keeps.
 const KEPT: usize = 4;
 const OPENED: &str = "nova-files/opened";
 const TRIES: u32 = 64;
 
-/// A path inside an archive: the archive, and the path in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Within {
     pub archive: PathBuf,
-    /// Relative; empty for the archive's top.
     pub inner: PathBuf,
 }
 
-/// Where `path` is when it is inside an archive: the nearest part of it
-/// that exists is a file. `None` when that part is a folder, or nothing
-/// of it exists.
 pub fn within(path: &Path) -> Option<Within> {
     if !path.is_absolute() {
         return None;
@@ -54,16 +41,12 @@ pub fn within(path: &Path) -> Option<Within> {
     })
 }
 
-/// One thing in a folder inside an archive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
     pub kind: EntryKind,
     pub details: Details,
 }
 
-/// An archive's folders, each with what is in it by name. A folder an
-/// entry is in counts even when the archive has no entry of its own for
-/// it. A link counts as a file.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Tree {
     folders: HashMap<PathBuf, BTreeMap<OsString, Item>>,
@@ -87,8 +70,6 @@ impl Tree {
         tree
     }
 
-    /// Adds `item` at `path`, with the folders it is in; `None` is a
-    /// folder only a path names, which an entry of its own replaces.
     fn add(&mut self, path: &Path, item: Option<Item>) {
         let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
             return;
@@ -107,12 +88,6 @@ impl Tree {
         items.insert(name.to_os_string(), item);
     }
 
-    /// The folder `inner`'s entries, folders first and each group A to Z,
-    /// with their details.
-    ///
-    /// # Errors
-    /// [`Unreadable::NotAFolder`] when `inner` is a file in the archive,
-    /// [`Unreadable::Missing`] when it is nothing.
     pub fn folder(&self, inner: &Path) -> Result<(Vec<Entry>, Vec<Details>), Unreadable> {
         let Some(items) = self.folders.get(inner) else {
             let file = inner
@@ -138,10 +113,6 @@ impl Tree {
     }
 }
 
-/// `listed`, a folder's entries and their details, folders first and
-/// each group A to Z, in `order`, without hidden entries unless `hidden`
-/// shows them; an unknown size or time sorts as the smallest. Each
-/// entry's id is then its new position.
 pub fn arrange(
     (entries, details): (Vec<Entry>, Vec<Details>),
     order: Order,
@@ -177,15 +148,12 @@ pub fn arrange(
         .unzip()
 }
 
-/// Where files opened from inside archives go: under `runtime`, the
-/// user's runtime folder, or the temporary folder without one.
 pub fn opened_folder(runtime: Option<OsString>) -> PathBuf {
     runtime
         .map_or_else(env::temp_dir, PathBuf::from)
         .join(OPENED)
 }
 
-/// `seconds` since 1970 as a time; `None` past what a time holds.
 fn time(seconds: i64) -> Option<SystemTime> {
     let since = Duration::from_secs(seconds.unsigned_abs());
     if seconds.is_negative() {
@@ -195,11 +163,8 @@ fn time(seconds: i64) -> Option<SystemTime> {
     }
 }
 
-/// An archive's size and modified time, which say it is still the one
-/// listed.
 type Stamp = (u64, Option<SystemTime>);
 
-/// The contents of the archives browsed last, newest first.
 #[derive(Default)]
 struct Kept(VecDeque<(PathBuf, Stamp, Arc<Tree>)>);
 
@@ -211,8 +176,6 @@ impl Kept {
             .map(|(_, _, tree)| Arc::clone(tree))
     }
 
-    /// Keeps `tree` as what `archive` holds while it has `stamp`, in
-    /// place of what it held before, forgetting the oldest past [`KEPT`].
     fn keep(&mut self, archive: &Path, stamp: Stamp, tree: Arc<Tree>) {
         self.0.retain(|(path, _, _)| path != archive);
         self.0.push_front((archive.to_path_buf(), stamp, tree));
@@ -220,12 +183,9 @@ impl Kept {
     }
 }
 
-/// Lists archives for browsing, keeping what it found, and takes out the
-/// files opened from inside them.
 pub struct Inside {
     archiver: Option<Archiver>,
     kept: Mutex<Kept>,
-    /// Holds a folder for each file opened from inside an archive.
     opened: PathBuf,
     taken: AtomicU64,
 }
@@ -240,14 +200,6 @@ impl Inside {
         }
     }
 
-    /// Unpacks the file `within` names into a new folder of its own, and
-    /// says where it is.
-    ///
-    /// # Errors
-    /// As [`Archiver::extract`]; [`ArchiveFailure::NeedsPassword`] for a
-    /// locked file; [`ArchiveFailure::NotWritten`] when the folder can't
-    /// be made; [`ArchiveFailure::Gone`] when the archive has no such
-    /// entry.
     pub fn take_out(&self, within: &Within) -> Result<PathBuf, ArchiveFailure> {
         let archiver = self.archiver.as_ref().ok_or(ArchiveFailure::NotRead)?;
         let folder = self.new_folder().ok_or(ArchiveFailure::NotWritten)?;
@@ -260,7 +212,6 @@ impl Inside {
         Ok(copy)
     }
 
-    /// A new, empty folder in `opened`, trying at most [`TRIES`] names.
     fn new_folder(&self) -> Option<PathBuf> {
         DirBuilder::new()
             .recursive(true)
@@ -275,11 +226,6 @@ impl Inside {
             .find(|folder| DirBuilder::new().mode(FOLDER_MODE).create(folder).is_ok())
     }
 
-    /// What `archive` holds, kept or listed now.
-    ///
-    /// # Errors
-    /// When it can't be listed, as [`Unreadable`] says; [`Unreadable::NotAFolder`]
-    /// when it is no archive, or nothing reads archives.
     pub fn tree(&self, archive: &Path) -> Result<Arc<Tree>, Unreadable> {
         let metadata = fs::metadata(archive).map_err(|error| crate::list::unreadable(&error))?;
         let stamp = (metadata.len(), metadata.modified().ok());
@@ -299,7 +245,6 @@ impl Inside {
     }
 }
 
-/// Why an archive's contents can't be shown.
 const fn unreadable(failure: ArchiveFailure) -> Unreadable {
     match failure {
         ArchiveFailure::Gone => Unreadable::Missing,
