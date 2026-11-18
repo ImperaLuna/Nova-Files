@@ -99,6 +99,26 @@ pub enum Operation {
     ///
     /// [`Event::Undoable`]: crate::Event::Undoable
     Undo { job: JobId },
+    /// Unpack the archive `archive` (zip or tar, plain or compressed) into
+    /// the folder `into`, as `to` says. It unpacks first into a hidden
+    /// folder in `into`, then moves what it unpacked into place as
+    /// [`Operation::Move`] does, asking about names already taken. A
+    /// locked archive is a [`ConflictKind::PasswordNeeded`] conflict.
+    Extract {
+        archive: PathBuf,
+        into: PathBuf,
+        to: ExtractTo,
+    },
+}
+
+/// Where an archive's entries go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExtractTo {
+    /// Straight into the folder when the archive holds one entry at its
+    /// top; else into a new folder there named after the archive.
+    Here,
+    /// Straight into the folder.
+    Inside,
 }
 
 /// How far a job has got. Totals are known once the job has looked at
@@ -156,6 +176,10 @@ pub enum Failure {
     Unsupported,
     /// The file changed while it was copied, so the copy isn't kept.
     SourceChanged,
+    /// The archive is damaged or cut short.
+    Damaged,
+    /// The file isn't an archive Nova Files reads.
+    NotArchive,
     /// Anything else the system refused.
     Other,
 }
@@ -203,6 +227,14 @@ pub enum ConflictKind {
     /// The source's drive has no trash it may use, so it can't go to the
     /// trash; a client may offer to delete it for good instead.
     NoTrash,
+    /// The archive is locked. A client answers with a password
+    /// ([`Command::GivePassword`]), or skips it.
+    ///
+    /// [`Command::GivePassword`]: crate::Command::GivePassword
+    PasswordNeeded,
+    /// The password given doesn't open the archive; asked as
+    /// [`ConflictKind::PasswordNeeded`] is.
+    PasswordWrong,
 }
 
 impl ConflictKind {
@@ -220,7 +252,12 @@ impl ConflictKind {
             ),
             Answer::Retry => matches!(
                 self,
-                Self::NoSpace | Self::PermissionDenied | Self::SourceChanged | Self::NoTrash
+                Self::NoSpace
+                    | Self::PermissionDenied
+                    | Self::SourceChanged
+                    | Self::NoTrash
+                    | Self::PasswordNeeded
+                    | Self::PasswordWrong
             ),
         }
     }

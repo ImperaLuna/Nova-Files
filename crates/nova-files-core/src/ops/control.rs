@@ -10,7 +10,7 @@
 
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 
-use nova_files_api::{Answer, Conflict, Scope};
+use nova_files_api::{Answer, Conflict, ConflictKind, Scope};
 
 /// What clients last asked of a job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +25,9 @@ struct State {
     /// The conflict the job holds at, until answered.
     open: Option<Conflict>,
     answer: Option<(Answer, Scope)>,
+    /// The password a client answered a password conflict with, until the
+    /// job takes it.
+    password: Option<String>,
 }
 
 /// A job was cancelled; returned by [`Control::checkpoint`].
@@ -44,6 +47,7 @@ impl Default for Control {
                 wanted: Wanted::Run,
                 open: None,
                 answer: None,
+                password: None,
             }),
             changed: Condvar::new(),
         }
@@ -105,15 +109,45 @@ impl Control {
     /// Answers `conflict`, calling `heard` before the job can go on, so
     /// the answer is told before any news of what follows; `false` when
     /// it isn't the one open, or its kind doesn't take `answer`.
-    #[expect(
-        clippy::significant_drop_tightening,
-        reason = "telling under the lock keeps the job from going on unheard"
-    )]
     pub fn answer(
         &self,
         conflict: &Conflict,
         answer: Answer,
         scope: Scope,
+        heard: impl FnOnce(),
+    ) -> bool {
+        self.settle(conflict, (answer, scope), None, heard)
+    }
+
+    /// Answers `conflict`, a password conflict, with `password`: a retry
+    /// that the job takes the password for. `false` as [`Self::answer`],
+    /// and for a conflict of any other kind.
+    pub fn give_password(
+        &self,
+        conflict: &Conflict,
+        password: String,
+        heard: impl FnOnce(),
+    ) -> bool {
+        matches!(
+            conflict.kind,
+            ConflictKind::PasswordNeeded | ConflictKind::PasswordWrong
+        ) && self.settle(
+            conflict,
+            (Answer::Retry, Scope::ThisOne),
+            Some(password),
+            heard,
+        )
+    }
+
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "telling under the lock keeps the job from going on unheard"
+    )]
+    fn settle(
+        &self,
+        conflict: &Conflict,
+        (answer, scope): (Answer, Scope),
+        password: Option<String>,
         heard: impl FnOnce(),
     ) -> bool {
         let taken = {
@@ -125,12 +159,23 @@ impl Control {
             if takes {
                 state.open = None;
                 state.answer = Some((answer, scope));
+                state.password = password;
                 heard();
             }
             takes
         };
         self.changed.notify_all();
         taken
+    }
+
+    /// The password given since the last call, if any.
+    pub fn take_password(&self) -> Option<String> {
+        self.lock().password.take()
+    }
+
+    /// Whether a client cancelled the job.
+    pub fn cancelled(&self) -> bool {
+        self.lock().wanted == Wanted::Cancel
     }
 
     /// Waits for the answer to the conflict raised last.

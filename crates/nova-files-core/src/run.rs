@@ -165,7 +165,8 @@ fn answer(
         | Command::ResumeJob(_)
         | Command::ForgetJob(_)
         | Command::CancelJob(_)
-        | Command::AnswerConflict { .. }) => operations::answer(id, client, command, setup),
+        | Command::AnswerConflict { .. }
+        | Command::GivePassword { .. }) => operations::answer(id, client, command, setup),
         Command::Drives => setup.drives.listen(id, client.events()),
         Command::Drive(action) => setup.drives.act(client.events(), action),
         Command::DiskSpace(paths) => {

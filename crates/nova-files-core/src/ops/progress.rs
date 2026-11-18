@@ -42,6 +42,12 @@ impl Reporter {
         }
     }
 
+    /// The job starts its work over: nothing is done yet.
+    pub const fn start_over(&mut self) {
+        self.progress.done_bytes = 0;
+        self.progress.done_items = 0;
+    }
+
     /// The job's totals are known: every client hears them now.
     pub fn planned(&mut self, total_bytes: u64, total_items: u64) {
         self.progress.total_bytes = total_bytes;
@@ -162,5 +168,33 @@ mod tests {
         assert_eq!(reporter.progress.done_bytes, 2);
         reporter.take_back(3);
         assert_eq!(reporter.progress.done_bytes, 0, "never below none");
+    }
+
+    #[test]
+    fn starting_over_keeps_only_the_totals() {
+        let shared = Arc::new(Job::new(Operation::Copy {
+            sources: Vec::new(),
+            into: "/".into(),
+        }));
+        let mut reporter = Reporter::new(
+            Audience::default(),
+            Arc::default(),
+            JobId(1),
+            Arc::clone(&shared),
+        );
+
+        reporter.planned(10, 2);
+        reporter.bytes(4);
+        reporter.item(1);
+        reporter.start_over();
+        assert_eq!(
+            reporter.progress,
+            Progress {
+                done_bytes: 0,
+                total_bytes: 10,
+                done_items: 0,
+                total_items: 2,
+            }
+        );
     }
 }
