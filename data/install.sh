@@ -26,6 +26,7 @@ set -euo pipefail
 
 readonly PROGRAM=nova-files
 readonly HELPER=nova-files-thumbnailer
+readonly ARCHIVER=nova-files-archiver
 # What `full` uses from the distro, as `program:package`.
 readonly FULL_EXTRAS="ffmpegthumbnailer:ffmpegthumbnailer udisksctl:udisks2"
 # The prefix is written into Exec lines, which split on spaces and give
@@ -83,8 +84,8 @@ root=${DESTDIR:-}$prefix
 # Every file a mode may install, one per line: how it is made, the modes
 # that install it (`all`, or `app` for basic and full), its source and its
 # path under the prefix.
-# - The programs. The window looks for the thumbnail helper next to the
-#   program, and launcher mode opens windows too.
+# - The programs. The window looks for the thumbnail and archive helpers
+#   next to the program, and launcher mode opens windows too.
 # - D-Bus starts the program in service mode for a launcher's search.
 # - Launchers list the app from the desktop entry, named after the app id
 #   as DBusActivatable requires. It names the icon by the app id, so
@@ -100,6 +101,7 @@ layout() {
     cat <<EOF
 program all $PROGRAM bin/$PROGRAM
 program all $HELPER bin/$HELPER
+program all $ARCHIVER bin/$ARCHIVER
 template all dbus-service.in share/dbus-1/services/$app_id.service
 template app desktop-entry.in share/applications/$app_id.desktop
 copy app app-icon.svg share/icons/hicolor/scalable/apps/$app_id.svg
