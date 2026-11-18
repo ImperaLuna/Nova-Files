@@ -62,7 +62,7 @@ impl MainWindow {
 
     /// The cell of entry `index`: its icon, and its name beside or under
     /// it.
-    fn icon_cell(
+    pub(super) fn icon_cell(
         &self,
         listing: &Listing,
         index: usize,
@@ -92,17 +92,19 @@ impl MainWindow {
             grid.icon,
             &colors,
         ));
-        let label = self.rename_field(index).map_or_else(
-            || {
-                self.cell_name((index, name), grid, row, cx)
-                    .into_any_element()
-            },
-            |field| {
-                rename_box(field.clone(), &colors)
-                    .when(!grid.beside, |field| field.flex_none().w_full().ml_0())
-                    .into_any_element()
-            },
-        );
+        let label = grid.names.then(|| {
+            self.rename_field(index).map_or_else(
+                || {
+                    self.cell_name((index, name), grid, row, cx)
+                        .into_any_element()
+                },
+                |field| {
+                    rename_box(field.clone(), &colors)
+                        .when(!grid.beside, |field| field.flex_none().w_full().ml_0())
+                        .into_any_element()
+                },
+            )
+        });
         cell(index, at, grid, cx)
             .when(hidden, |cell| cell.text_color(colors.text_dim))
             .when_some(folder_at, |cell, at| self.drop_target(cell, at, cx))
@@ -110,7 +112,7 @@ impl MainWindow {
                 cell.bg(colors.selected).text_color(colors.text)
             })
             .child(picture)
-            .child(label)
+            .children(label)
             .when(self.cursor() == Some(index), |cell| {
                 cell.child(cursor_ring(&colors))
             })

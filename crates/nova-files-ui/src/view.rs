@@ -29,6 +29,7 @@
 
 mod bar;
 mod drop;
+mod gallery;
 mod icons;
 mod island;
 mod menu;
@@ -71,8 +72,14 @@ impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let scale_factor = window.scale_factor();
         let viewport = window.viewport_size();
+        self.keep_gallery(window, cx);
         let room = preview::room(viewport.width, viewport.height);
-        self.set_preview_room(room, scale_factor, cx);
+        let fits = if self.showing_gallery() && !self.previewing() {
+            self.stage_room()
+        } else {
+            room
+        };
+        self.set_preview_room(fits, scale_factor, cx);
         self.window_root(window, cx)
             .map(|root| Self::preview_keys(root, cx))
             .relative()
@@ -329,7 +336,7 @@ impl MainWindow {
         .on_action(cx.listener(|this, _: &ToggleSelected, _, cx| this.toggle_cursor(cx)))
         .on_action(cx.listener(|this, _: &ClearSelection, window, cx| {
             if this.previewing() {
-                this.close_preview(Some(window), cx);
+                this.dismiss_preview(window, cx);
             } else {
                 this.clear_selection(cx);
             }

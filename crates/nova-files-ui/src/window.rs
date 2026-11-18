@@ -54,6 +54,7 @@ mod context_menu;
 mod dragging;
 mod drives;
 mod events;
+mod gallery;
 mod hidden;
 mod hover_open;
 mod jobs;
@@ -75,7 +76,7 @@ pub use dragging::DraggedRow;
 pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
-pub use preview::{Previewed, Shown};
+pub use preview::{Previewed, QuickLook, Shown};
 pub use search::{FocusTo, Scope, short_folder};
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
 
