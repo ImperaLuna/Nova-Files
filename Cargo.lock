@@ -3621,7 +3621,6 @@ name = "nova-files-archives-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "log",
  "nova-files-api",
  "nova-files-jobs",
  "nova-files-rename-api",
@@ -3639,7 +3638,6 @@ dependencies = [
 name = "nova-files-core"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "log",
  "nova-files-api",
  "nova-files-archives-core",
