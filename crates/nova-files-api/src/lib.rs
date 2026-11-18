@@ -14,7 +14,8 @@
 //! copied go on the system clipboard as a [`FileClipboard`]'s offers, and
 //! a paste is a job. A [`Size`] is what a scan of files and folders
 //! counted. A [`DiskSpace`] is how full a drive is. A [`RecentFolder`] is
-//! one a person opened lately, for the Start page. A [`FolderView`] is how a
+//! one a person opened lately, for the Start page. [`Gathered`] folders
+//! make up the Games and Projects places. A [`FolderView`] is how a
 //! folder is shown. A [`FileIcon`] is how an
 //! entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
 //! A [`WindowRequest`] is a window another program asks for.
@@ -31,6 +32,7 @@ mod file_icon;
 mod file_type;
 mod folder;
 mod folder_view;
+mod gathered;
 mod job;
 mod message;
 mod open_with;
@@ -67,6 +69,7 @@ pub use folder::{
     Unreadable,
 };
 pub use folder_view::{FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode};
+pub use gathered::{Gathered, GatheredChange, GatheredFolder, Gathering, Holds};
 pub use job::{
     Answer, Conflict, ConflictKind, DropAskId, DropKind, Failure, JobId, JobTag, Operation,
     Outcome, Progress, Scope, Tally,

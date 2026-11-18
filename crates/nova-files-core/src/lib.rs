@@ -9,6 +9,7 @@
 
 mod accounts;
 mod capped;
+mod change_writer;
 mod config_watch;
 mod details;
 mod details_queue;
@@ -16,6 +17,7 @@ mod disk_space;
 mod drives;
 mod file_icons;
 mod folder_views;
+mod gathered;
 mod hand_edited;
 mod icon_theme;
 mod index;
@@ -131,6 +133,7 @@ pub fn spawn_with(
             let theme = theme::Store::open(config);
             theme.follow(&settings);
             let places = places::Store::open(home.clone());
+            let gathered = gathered::Store::open(home.clone());
             let state_home = home.as_ref().map(|home| home.state.as_path());
             let recent = recent::Store::open(state_home);
             let folder_views = folder_views::Store::open(state_home);
@@ -142,6 +145,7 @@ pub fn spawn_with(
             let setup = run::Setup {
                 home,
                 places,
+                gathered,
                 window_state,
                 settings,
                 theme,

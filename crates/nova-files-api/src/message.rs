@@ -9,6 +9,7 @@ use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::file_icon::FileIcon;
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
 use crate::folder_view::{FolderView, FolderViews};
+use crate::gathered::{Gathered, GatheredChange};
 use crate::job::{
     Answer, Conflict, DropAskId, DropKind, JobId, JobTag, Operation, Outcome, Progress, Scope,
     Tally,
@@ -61,6 +62,14 @@ pub enum Command {
     /// that asked for the places, this one included, then gets
     /// [`Event::Bookmarks`]; nothing is sent when nothing changed.
     ChangeBookmark(BookmarkChange),
+    /// Ask for the folders Games and Projects gather from: the answer is
+    /// [`Event::Gathered`], and from then on the client gets it again
+    /// whenever they change (from any client, or `gathered.toml` edited).
+    Gathered,
+    /// Add or remove a gathered folder and save it. Every client that
+    /// asked, this one included, then gets [`Event::Gathered`]; nothing is
+    /// sent when nothing changed.
+    ChangeGathered(GatheredChange),
     /// The entries of listing `id` the client shows or is about to show:
     /// `count` entries from `first`. The core reads the details of those it
     /// hasn't read yet, answering with [`Event::DetailsRead`], and makes
@@ -296,6 +305,9 @@ pub enum Event {
     Places(Vec<Place>),
     /// The pinned folders, in the user's order.
     Bookmarks(Arc<[Bookmark]>),
+    /// The folders Games and Projects gather from (see
+    /// [`Command::Gathered`]).
+    Gathered(Arc<Gathered>),
     /// One stage of [`Command::Search`] `id`: names as typed come first,
     /// then letters in order and typos. `done` marks the last stage. A path
     /// shows at most once per search.

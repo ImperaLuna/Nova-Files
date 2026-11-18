@@ -20,6 +20,7 @@ use crate::disk_space;
 use crate::drives::Store as DrivesStore;
 use crate::file_icons::FileIcons;
 use crate::folder_views::Store as FolderViewsStore;
+use crate::gathered::Store as GatheredStore;
 use crate::jobs::Client;
 use crate::measure::Measurer;
 use crate::mime::MimeTypes;
@@ -43,6 +44,8 @@ pub struct Setup {
     pub home: Option<Home>,
     /// The places list and the pinned folders.
     pub places: PlacesStore,
+    /// The folders Games and Projects gather from.
+    pub gathered: GatheredStore,
     pub window_state: WindowStateStore,
     pub settings: SettingsStore,
     pub theme: ThemeStore,
@@ -119,6 +122,7 @@ fn forget(client: ClientId, setup: &Setup) {
     setup.settings.forget(client);
     setup.theme.forget(client);
     setup.places.forget(client);
+    setup.gathered.forget(client);
     setup.folder_views.forget(client);
     setup.drives.forget(client);
     setup.jobs.audience().leave(client);
@@ -144,6 +148,8 @@ fn answer(
         command @ (Command::ListFolder { .. }
         | Command::Places
         | Command::ChangeBookmark(_)
+        | Command::Gathered
+        | Command::ChangeGathered(_)
         | Command::ListTrash
         | Command::Rows { .. }
         | Command::Search { .. }
