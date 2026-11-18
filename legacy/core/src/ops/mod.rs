@@ -12,7 +12,6 @@ mod one_step;
 mod transfer;
 mod undo;
 
-use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -21,6 +20,7 @@ use nova_files_api::{Connector, EventSink, JobId, JobTag, Operation};
 use nova_files_jobs::control::{Cancelled, Control};
 use nova_files_jobs::kinds::Kinds;
 use nova_files_jobs::mover::{Moved, Mover};
+use nova_files_jobs::rest::still_there;
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, lock};
 use nova_files_jobs::{clash, control, failure, folders, journal, keep_both, place, plan};
@@ -205,20 +205,7 @@ fn copied_out(sources: &[PathBuf]) -> Option<(PathBuf, Vec<PathBuf>)> {
 }
 
 fn still_to_do(operation: &Operation, control: &Control) -> Result<Operation, Cancelled> {
-    let there = |paths: &[PathBuf]| -> Result<Vec<PathBuf>, Cancelled> {
-        let mut there = Vec::with_capacity(paths.len());
-        for path in paths {
-            control.checkpoint()?;
-            let gone = matches!(
-                path.symlink_metadata(),
-                Err(error) if error.kind() == io::ErrorKind::NotFound
-            );
-            if !gone {
-                there.push(path.clone());
-            }
-        }
-        Ok(there)
-    };
+    let there = |paths: &[PathBuf]| still_there(paths, control);
     Ok(match operation {
         Operation::Move { sources, into } => Operation::Move {
             sources: there(sources)?,
@@ -259,39 +246,6 @@ fn first_path(operation: &Operation) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ops::test_folder::TestFolder;
-
-    #[test]
-    fn a_resumed_job_cancelled_while_its_sources_are_looked_at_stops() {
-        let folder = TestFolder::new("ops-still-to-do-cancel");
-        let delete = Operation::Delete {
-            paths: vec![folder.file("file", "f")],
-        };
-        let control = Control::default();
-        control.cancel();
-
-        assert_eq!(still_to_do(&delete, &control), Err(Cancelled));
-    }
-
-    #[test]
-    fn a_resumed_delete_keeps_a_source_it_cant_look_at() {
-        let folder = TestFolder::new("ops-still-to-do");
-        let file = folder.file("file", "f");
-        let unreachable = file.join("x");
-        let gone = folder.path().join("gone");
-        let delete = Operation::Delete {
-            paths: vec![file.clone(), unreachable.clone(), gone],
-        };
-
-        let left = still_to_do(&delete, &Control::default()).unwrap();
-
-        assert_eq!(
-            left,
-            Operation::Delete {
-                paths: vec![file, unreachable]
-            }
-        );
-    }
 
     #[test]
     fn a_job_that_cannot_start_fails_at_its_first_path() {

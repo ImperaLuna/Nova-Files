@@ -18,6 +18,7 @@ pub mod place;
 pub mod plan;
 pub mod progress;
 pub mod put_back;
+pub mod rest;
 pub mod running;
 pub mod set_aside;
 pub mod stop;
