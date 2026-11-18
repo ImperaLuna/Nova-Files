@@ -63,13 +63,16 @@ impl MainWindow {
         cx.notify();
     }
 
+    /// The apps that open the Properties page's lone path, the default
+    /// first; empty until known.
+    pub fn apps_to_open_with(&self) -> &[App] {
+        self.properties_page()
+            .map_or(&[], |page| page.opens_with.apps.as_slice())
+    }
+
     /// The app that opens the Properties page's lone path, once known.
     pub fn default_app(&self) -> Option<&App> {
-        self.properties_page()?
-            .opens_with
-            .apps
-            .iter()
-            .find(|app| app.default)
+        self.apps_to_open_with().iter().find(|app| app.default)
     }
 
     /// Opens the menu of the apps that open the page's path, at `at`: a

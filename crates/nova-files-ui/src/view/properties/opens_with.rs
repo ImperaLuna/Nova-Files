@@ -1,7 +1,8 @@
 //! The Properties page's Opens with group, for a lone file: one card
 //! with the file's icon, the name of the app that opens it, and an arrow.
 //! A press on it opens the menu of the apps that can (see
-//! `window::opens_with`). Without a default app the group isn't drawn.
+//! `window::opens_with`). Without a default app the card names none.
+//! Without any app the group isn't drawn.
 //!
 //! Debug selector: `opens-with` for the card.
 
@@ -21,15 +22,20 @@ use crate::view::start::group;
 use crate::window::MainWindow;
 
 const LABEL: &str = "Opens with";
+const NO_DEFAULT: &str = "None";
 
 impl MainWindow {
-    /// The Opens with group for `one`, when it is a file with a default
-    /// app.
+    /// The Opens with group for `one`, when it is a file some app opens.
     pub(super) fn opens_with(&self, one: &Properties, cx: &Context<Self>) -> Option<AnyElement> {
         if one.kind != PathKind::File {
             return None;
         }
-        let app = self.default_app()?;
+        if self.apps_to_open_with().is_empty() {
+            return None;
+        }
+        let name = self
+            .default_app()
+            .map_or_else(|| NO_DEFAULT.into(), |app| app.name.clone());
         let colors = Colors::of(cx);
         let card = div()
             .id("opens-with")
@@ -58,7 +64,7 @@ impl MainWindow {
                     .text_size(text::CARD_NAME)
                     .font_weight(text::STRONG_WEIGHT)
                     .text_color(colors.text)
-                    .child(app.name.clone()),
+                    .child(name),
             )
             .child(
                 svg()
