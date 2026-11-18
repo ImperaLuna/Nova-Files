@@ -9,9 +9,8 @@
 //! `nova-files --index <folder>` only builds that folder's file index, in
 //! the user's cache folder, and exits. `nova-files --make-default` only
 //! makes Nova Files the user's default for folders, in their
-//! `mimeapps.list`, and exits; a running instance needn't hear of it,
-//! since D-Bus starts `--file-manager` for the next "Show in folder" while
-//! no file manager answers.
+//! `mimeapps.list`, asks a running instance to answer "Show in folder"
+//! from now on, and exits.
 //!
 //! Windows come and go: GPUI ends its run when the last one closes, and the
 //! process carries on without a GPU, waiting for the next window request.
@@ -149,7 +148,16 @@ fn run() -> Result<(), Box<dyn Error>> {
         return Ok(place.build(folder)?);
     }
     if mode == Mode::MakeDefault {
-        return Ok(nova_files_core::open_folders()?);
+        nova_files_core::make_default_for_folders()?;
+        // A running instance read the default when it started.
+        let told = nova_files_dbus::find_running(&Bus::Session)
+            .and_then(|running| running.map_or(Ok(()), |running| running.serve_file_manager()));
+        if let Err(error) = told {
+            report(&format!(
+                "the running Nova Files answers \"Show in folder\" from its next start: {error}"
+            ));
+        }
+        return Ok(());
     }
     let core = nova_files_core::spawn()?;
     // Before anything connects, so the first client to ask finds it. It

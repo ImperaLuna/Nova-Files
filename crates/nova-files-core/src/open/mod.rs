@@ -37,7 +37,7 @@ pub use nova_files_api::NotOpened;
 
 use crate::mime::MimeTypes;
 
-pub use folders::{NotDefault, open_folders, opens_folders};
+pub use folders::{NotDefault, make_default_for_folders, opens_folders};
 pub use with::Worker as OpenWithWorker;
 
 /// Present inside a Flatpak sandbox, where the host's apps can't be run.

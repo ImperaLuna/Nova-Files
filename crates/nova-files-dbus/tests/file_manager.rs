@@ -3,7 +3,8 @@
 //! each folder holding the items with them selected, and refuses URIs that
 //! aren't local files. The service takes the bus name only when it
 //! should and it is free, waits behind another file manager without
-//! replacing it, and takes it when a second start asks it to.
+//! replacing it, and takes it when a second start (or `--make-default`,
+//! which finds the running instance without starting one) asks it to.
 
 #![expect(
     clippy::unwrap_used,
@@ -203,6 +204,25 @@ fn a_second_start_has_the_running_instance_answer() {
     };
 
     second.serve_file_manager().unwrap();
+
+    call(&client(&bus), "ShowItems", &uris(&["/a/x"])).unwrap();
+    assert_eq!(
+        running.windows.recv_timeout(WAIT),
+        Ok(showing("/a", &["x"]))
+    );
+}
+
+#[test]
+fn finding_the_running_instance_starts_none() {
+    let bus = PrivateBus::start();
+    assert!(nova_files_dbus::find_running(&bus.bus()).unwrap().is_none());
+
+    let running = running(&bus);
+    nova_files_dbus::find_running(&bus.bus())
+        .unwrap()
+        .expect("the instance is running")
+        .serve_file_manager()
+        .unwrap();
 
     call(&client(&bus), "ShowItems", &uris(&["/a/x"])).unwrap();
     assert_eq!(

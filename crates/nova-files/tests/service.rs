@@ -307,6 +307,7 @@ fn a_frame_trace_that_cant_be_written_is_reported_and_the_start_goes_on() {
 fn make_default_makes_nova_files_open_folders() {
     let root = std::env::temp_dir().join(format!("nova-files-default-{}", std::process::id()));
     std::fs::remove_dir_all(&root).ok();
+    let _removed = Removed(root.clone());
     let (config, data) = (root.join("config"), root.join("data"));
     let make_default = || {
         let mut command = program("unix:path=/nonexistent/nova-files-bus", &["--make-default"]);
@@ -322,7 +323,7 @@ fn make_default_makes_nova_files_open_folders() {
     let refused = make_default();
     assert!(!refused.status.success());
     assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("isn't installed"),
+        String::from_utf8_lossy(&refused.stderr).contains("install Nova Files first"),
         "{}",
         String::from_utf8_lossy(&refused.stderr)
     );
@@ -336,7 +337,6 @@ fn make_default_makes_nova_files_open_folders() {
     .unwrap();
     let made = make_default();
     let list = std::fs::read_to_string(config.join("mimeapps.list")).unwrap_or_default();
-    std::fs::remove_dir_all(&root).ok();
 
     assert!(
         made.status.success(),
@@ -347,4 +347,13 @@ fn make_default_makes_nova_files_open_folders() {
         list.contains(&format!("inode/directory={APP_ID}.desktop")),
         "{list}"
     );
+}
+
+/// Removes its folder when dropped, so a failed test leaves nothing behind.
+struct Removed(PathBuf);
+
+impl Drop for Removed {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).ok();
+    }
 }
