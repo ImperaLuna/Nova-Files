@@ -124,7 +124,7 @@ fn unpack(
 
 /// Asks for the password of `archive` with a conflict of `kind`; `None`
 /// when the user skips it.
-fn ask_password(
+pub fn ask_password(
     running: &mut Running,
     kind: ConflictKind,
     archive: &Path,
@@ -147,7 +147,7 @@ fn ask_password(
 }
 
 /// What the helper should do next, having told `told`.
-fn steer(running: &mut Running, told: Extracting) -> Flow {
+pub fn steer(running: &mut Running, told: Extracting) -> Flow {
     let control = &running.shared.control;
     match told {
         Extracting::Entry(bytes) => running.reporter.item(bytes),

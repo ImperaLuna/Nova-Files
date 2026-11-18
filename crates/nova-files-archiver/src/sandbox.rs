@@ -9,7 +9,7 @@
 //! missing sandbox must not cost the user their archives.
 
 use std::error::Error;
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, OwnedFd};
 
 use landlock::{
     ABI, Access as _, AccessFs, AccessNet, BitFlags, PathBeneath, RestrictionStatus, Ruleset,
@@ -47,6 +47,23 @@ pub fn lock_in_unpacking(unpack: impl AsFd) -> Result<RestrictionStatus, Box<dyn
         .create()?
         .add_rule(PathBeneath::new(unpack, unpacking))?
         .restrict_self()?)
+}
+
+/// Locks the process in as [`lock_in`] does, except that it may read the
+/// files `readable` are, and all inside the folders they are.
+pub fn lock_in_reading(readable: &[(OwnedFd, bool)]) -> Result<RestrictionStatus, Box<dyn Error>> {
+    let mut created = ruleset()?.create()?;
+    for (fd, folder) in readable {
+        let rights: BitFlags<AccessFs> = if *folder {
+            [AccessFs::ReadFile, AccessFs::ReadDir]
+                .into_iter()
+                .collect()
+        } else {
+            AccessFs::ReadFile.into()
+        };
+        created = created.add_rule(PathBeneath::new(fd, rights))?;
+    }
+    Ok(created.restrict_self()?)
 }
 
 fn ruleset() -> Result<Ruleset, Box<dyn Error>> {

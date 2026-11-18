@@ -12,6 +12,7 @@ use crate::decompress::tar_stream;
 use crate::ending::Ending;
 use crate::format::{self, Format};
 use crate::list::{FILE_MODE, MAX_LINK, tar_kind, zip_kind, zip_modified};
+use crate::progress::{Told, Unheard};
 use crate::unpack::{Stamp, Unpacking, WriteError, parts};
 use crate::wire::{Clock, Kind};
 
@@ -22,6 +23,12 @@ enum Stopped {
     Unheard,
     NeedsPassword,
     WrongPassword,
+}
+
+impl From<Unheard> for Stopped {
+    fn from(Unheard: Unheard) -> Self {
+        Self::Unheard
+    }
 }
 
 impl From<WriteError> for Stopped {
@@ -38,7 +45,7 @@ pub fn extract(
     password: Option<&[u8]>,
     out: &mut impl Write,
 ) -> Ending {
-    let mut told = Told { out };
+    let mut told = Told::new(out);
     let result = match format::sniff(&mut archive) {
         Ok(Some(Format::Zip)) => extract_zip(archive, into, password, &mut told),
         Ok(Some(Format::Tar(compression))) => tar_stream(archive, compression)
@@ -55,18 +62,6 @@ pub fn extract(
         Err(Stopped::Unheard) => Ending::Usage,
         Err(Stopped::NeedsPassword) => Ending::NeedsPassword,
         Err(Stopped::WrongPassword) => Ending::WrongPassword,
-    }
-}
-
-struct Told<'a, W> {
-    out: &'a mut W,
-}
-
-impl<W: Write> Told<'_, W> {
-    fn done(&mut self, bytes: u64) -> Result<(), Stopped> {
-        writeln!(self.out, "{bytes}")
-            .and_then(|()| self.out.flush())
-            .map_err(|_| Stopped::Unheard)
     }
 }
 

@@ -22,7 +22,7 @@ use rustix::io::Errno;
 const WRITABLE: u32 = 0o700;
 const PERMISSION_BITS: u32 = 0o777;
 const PART: u8 = b'/';
-const BUFFER_SIZE: usize = 65_536;
+pub const BUFFER_SIZE: usize = 65_536;
 const NEW_FILE: OFlags = OFlags::WRONLY
     .union(OFlags::CREATE)
     .union(OFlags::EXCL)
