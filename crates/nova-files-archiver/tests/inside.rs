@@ -17,7 +17,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use common::Bench;
 use nova_files_api::{
     Command, ConflictKind, Details, EntryId, EntryKind, Event, ListingId, NotOpened, Operation,
-    Order, Outcome, SortKey, Unreadable,
+    Order, Outcome, SortKey, ThumbnailSize, Unreadable,
 };
 use zip::DateTime;
 use zip::write::SimpleFileOptions;
@@ -69,6 +69,7 @@ fn details(bench: &Bench, count: u32) -> Vec<Details> {
         id,
         first: EntryId(0),
         count,
+        size: ThumbnailSize::Normal,
     });
     loop {
         if let Event::DetailsRead {
