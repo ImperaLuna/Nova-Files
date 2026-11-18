@@ -17,8 +17,6 @@ pub(super) fn answer(id: ClientId, client: &Client, command: Command, setup: &Se
             let hidden = hidden_files(setup, &path);
             jobs::list_folder(client, (id, path), order, hidden, &setup.inside);
         }
-        Command::Places => setup.places.listen(id, client.events()),
-        Command::ChangeBookmark(change) => setup.places.change(change),
         Command::Gathered => setup.gathered.listen(id, client.events()),
         Command::ChangeGathered(change) => setup.gathered.change(change),
         Command::ListGathered { id, place, order } => {

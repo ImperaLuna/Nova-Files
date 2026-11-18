@@ -3585,6 +3585,7 @@ dependencies = [
  "nova-files-core",
  "nova-files-dbus",
  "nova-files-picker-api",
+ "nova-files-places-api",
  "nova-files-shell",
  "nova-files-trash-api",
  "nova-files-ui",
@@ -3635,6 +3636,8 @@ dependencies = [
  "nova-files-jobs",
  "nova-files-messages",
  "nova-files-picker-api",
+ "nova-files-places-api",
+ "nova-files-places-core",
  "nova-files-trash-api",
  "nova-files-trash-core",
  "rustix 1.1.6",
@@ -3700,6 +3703,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-places-api"
+version = "0.1.0"
+
+[[package]]
+name = "nova-files-places-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-messages",
+ "nova-files-places-api",
+]
+
+[[package]]
 name = "nova-files-shell"
 version = "0.1.0"
 dependencies = [
@@ -3754,6 +3772,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-clipboard-api",
  "nova-files-picker-api",
+ "nova-files-places-api",
  "nova-files-shell",
  "nova-files-trash-api",
  "unicode-segmentation",

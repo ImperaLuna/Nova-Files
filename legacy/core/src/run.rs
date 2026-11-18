@@ -6,7 +6,10 @@ use std::time::Duration;
 use nova_files_api::{
     ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
 };
+use nova_files_disk::home::Home;
 use nova_files_messages::{Routed, Routes};
+use nova_files_places_api as places_api;
+use nova_files_places_core::Store as PlacesStore;
 use nova_files_trash_api as trash_api;
 
 use crate::disk_space;
@@ -20,7 +23,6 @@ use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
-use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
 use crate::search::Searcher;
 use crate::settings::Store as SettingsStore;
@@ -63,6 +65,13 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
         }
     })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
+            places_api::Command::Places => setup.places.listen(id, client.events()),
+            places_api::Command::ChangeBookmark(change) => setup.places.change(change),
+        }
+        Ok(())
+    })?;
     routes.on_leave(forget);
     Ok(routes)
 }
@@ -75,6 +84,7 @@ pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
         MessageType::of::<trash_api::Event>(),
+        MessageType::of::<places_api::Event>(),
     ]
 }
 
@@ -164,8 +174,6 @@ fn answer(
     match command {
         Command::Ping => client.deliver(Event::Pong),
         command @ (Command::ListFolder { .. }
-        | Command::Places
-        | Command::ChangeBookmark(_)
         | Command::Gathered
         | Command::ChangeGathered(_)
         | Command::ListGathered { .. }

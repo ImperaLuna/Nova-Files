@@ -1,0 +1,32 @@
+# nova-files-places-core
+#
+# The places feature's core half: finds the standard folders, reads and
+# saves the pinned ones in the bookmarks file other file managers share,
+# and tells the clients that asked whenever either changes.
+#
+# Allowed outside crates:
+# - log
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-messages
+# - nova-files-places-api
+
+[package]
+name = "nova-files-places-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+log = { version = "0.4.35", features = ["std"] }
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+nova-files-messages.workspace = true
+nova-files-places-api.workspace = true

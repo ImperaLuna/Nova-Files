@@ -3,11 +3,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::bookmark::{Bookmark, BookmarkChange};
 use crate::disk_space::PathSpace;
 use crate::drive::{DriveAction, DriveFailure, DriveList};
 use crate::file_icon::FileIcon;
-use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
+use crate::folder::{Details, EntryId, Listing, ListingId, Order, Unreadable};
 use crate::folder_view::{FolderView, FolderViews};
 use crate::gathered::{Gathered, GatheredChange, Gathering};
 use crate::job::{
@@ -52,15 +51,6 @@ pub enum Command {
         path: PathBuf,
         order: Order,
     },
-    /// Ask for the places list: the answer is [`Event::Places`] and
-    /// [`Event::Bookmarks`], and from then on the client gets each again
-    /// whenever it changes (a folder made or removed, the bookmarks file
-    /// edited). Clients that never ask never get them.
-    Places,
-    /// Pin, unpin, rename or move a pinned folder and save it. Every client
-    /// that asked for the places, this one included, then gets
-    /// [`Event::Bookmarks`]; nothing is sent when nothing changed.
-    ChangeBookmark(BookmarkChange),
     /// Ask for the folders Games and Projects gather from: the answer is
     /// [`Event::Gathered`], and from then on the client gets it again
     /// whenever they change (from any client, or `gathered.toml` edited).
@@ -322,10 +312,6 @@ pub enum Event {
         size: ThumbnailSize,
         png: Arc<[u8]>,
     },
-    /// The standard folders that exist, in places-list order.
-    Places(Vec<Place>),
-    /// The pinned folders, in the user's order.
-    Bookmarks(Arc<[Bookmark]>),
     /// The folders Games and Projects gather from (see
     /// [`Command::Gathered`]).
     Gathered(Arc<Gathered>),

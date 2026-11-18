@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use nova_files_api::uri::{file_uri, path_from_file_uri};
-use nova_files_api::{Bookmark, BookmarkChange};
+use nova_files_places_api::{Bookmark, BookmarkChange};
 
 pub const FOLDER: &str = "gtk-3.0";
 pub const FILE: &str = "bookmarks";

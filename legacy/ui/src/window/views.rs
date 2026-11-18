@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use gpui::{Context, Pixels, ScrollDelta, ScrollStrategy, px};
-use nova_files_api::{Command, FolderView, FolderViews, IconSize, PlaceKind, ViewMode};
+use nova_files_api::{Command, FolderView, FolderViews, IconSize, ViewMode};
+use nova_files_places_api::PlaceKind;
 use nova_files_shell::Views;
 
 use super::MainWindow;

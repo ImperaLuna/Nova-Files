@@ -4,9 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
-use nova_files_api::{
-    Bookmark, Event, Listing, ListingId, Settings, Theme, Thumbnails, Unreadable,
-};
+use nova_files_api::{Event, Listing, ListingId, Settings, Theme, Thumbnails, Unreadable};
+use nova_files_places_api::Bookmark;
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -180,18 +179,20 @@ impl MainWindow {
             Event::Gathered(gathered) => self.gathered_arrived(gathered, cx),
             Event::GatheredChanged(place) => self.gathered_changed(place),
             Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
-            Event::Places(places) => self.places_arrived(places, cx),
             Event::FolderViews(views) => self.folder_views_arrived(&views, cx),
-            Event::Bookmarks(pinned) => self.pinned_arrived(pinned, cx),
         }
     }
 
-    fn places_arrived(&mut self, places: Vec<nova_files_api::Place>, cx: &mut Context<Self>) {
+    pub(super) fn places_arrived(
+        &mut self,
+        places: Vec<nova_files_places_api::Place>,
+        cx: &mut Context<Self>,
+    ) {
         self.places = places;
         self.sidebar_changed(cx);
     }
 
-    fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
+    pub(super) fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
         self.pinned = pinned;
         self.sidebar_changed(cx);
     }

@@ -18,10 +18,11 @@ use std::sync::mpsc::Receiver;
 
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
-    Appearance, Bookmark, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind,
-    Event, EventSink, HiddenFiles, Listing, ListingId, Mode, Order, Palette, Place, PlaceKind,
-    SettingChange, Settings, SortKey, Theme, ThumbnailSize, Thumbnails, Unreadable,
+    Appearance, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event,
+    EventSink, HiddenFiles, Listing, ListingId, Message, Mode, Order, Palette, SettingChange,
+    Settings, SortKey, Theme, ThumbnailSize, Thumbnails, Unreadable,
 };
+use nova_files_places_api::{self as places_api, Bookmark, Place, PlaceKind};
 use nova_files_ui::{Colors, MainWindow, WindowEvent};
 
 const SHOWN: &str = "/shown";
@@ -88,7 +89,7 @@ impl Core {
         commands
     }
 
-    fn send(&self, event: Event) {
+    fn send<M: Message>(&self, event: M) {
         self.events.as_ref().unwrap().deliver(event).unwrap();
     }
 
@@ -496,13 +497,13 @@ fn new_places_and_pinned_folders_are_told(cx: &mut TestAppContext) {
         })
     });
 
-    core.send(Event::Places(vec![Place {
+    core.send(places_api::Event::Places(vec![Place {
         kind: PlaceKind::Home,
         path: PathBuf::from(SHOWN),
     }]));
     cx.run_until_parked();
     assert_eq!(told.get(), 1);
-    core.send(Event::Bookmarks(Arc::from([Bookmark {
+    core.send(places_api::Event::Bookmarks(Arc::from([Bookmark {
         path: PathBuf::from(OTHER),
         label: None,
     }])));
