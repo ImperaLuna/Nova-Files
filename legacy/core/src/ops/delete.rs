@@ -9,7 +9,6 @@ use super::Ended;
 use super::failure::failure;
 use super::folders::{Folders, Unreached};
 use super::journal::{Record, word};
-use super::make::size;
 use super::plan::{Item, Kind, Plan, plan_delete};
 use super::running::Running;
 use super::stop::Stop;
@@ -48,7 +47,7 @@ pub fn delete_paths(running: &mut Running, paths: &[PathBuf]) -> (Result<(), Sto
                 if removed && let Some(parent) = item.from.parent() {
                     changed.insert(parent.to_path_buf());
                 }
-                running.reporter.item(size(item));
+                running.reporter.item(item.size());
             }
             Err(stop) => {
                 result = Err(stop);
@@ -75,7 +74,7 @@ fn planned(running: &mut Running, mut plan: Plan) -> Result<Plan, Stop> {
                 .get(&item.from)
                 .is_some_and(|planned| planned.is(&item.entry))
         });
-        plan.bytes = plan.items.iter().map(size).sum();
+        plan.bytes = plan.items.iter().map(Item::size).sum();
     } else {
         for item in &plan.items {
             running.shared.control.checkpoint()?;

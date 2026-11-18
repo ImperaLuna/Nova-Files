@@ -28,6 +28,7 @@ nova-files-messages = { path = "framework/messages" }
 nova-files-picker-api = { path = "features/picker/api" }
 nova-files-rename-api = { path = "features/rename/api" }
 nova-files-rename-core = { path = "features/rename/core" }
+nova-files-settings-api = { path = "features/settings/api" }
 nova-files-shell = { path = "framework/shell" }
 nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }

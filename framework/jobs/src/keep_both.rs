@@ -3,7 +3,7 @@ use std::io;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
-use super::place::rename_no_replace;
+use crate::place::rename_no_replace;
 
 const TARBALLS: [&[u8]; 4] = [b".tar.gz", b".tar.xz", b".tar.zst", b".tar.bz2"];
 const FIRST: u32 = 2;
@@ -74,7 +74,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::ops::test_folder::TestFolder;
+    use crate::test_folder::TestFolder;
 
     fn file(name: &str, number: u32) -> OsString {
         numbered(OsStr::new(name), number, Naming::File)
