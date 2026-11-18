@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{Context, ScrollStrategy, UniformListScrollHandle};
+use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{
     Bookmark, Event, Listing, ListingId, Settings, Theme, Thumbnails, Unreadable,
 };
@@ -50,8 +50,10 @@ impl MainWindow {
         // In a new order the cursor's entry has moved: bring it into view.
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
-        // What a rename or a new folder made is brought into view.
-        let wanted = self.wanted_selection(&listing);
+        // What a rename or a new folder made, or what an app asked to
+        // show, is brought into view.
+        let shown = self.shown_selection(&listing);
+        let wanted = self.wanted_selection(&listing).or(shown);
         let made = wanted.is_some();
         self.selection = wanted.or_else(|| self.selection_for(&listing));
         self.tree_follows(&listing, !same_folder);
@@ -68,7 +70,7 @@ impl MainWindow {
         if (!same_folder || reordered || made)
             && let Some(cursor) = self.cursor()
         {
-            self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
+            self.scroll_to_entry(cursor);
         }
         cx.emit(WindowEvent::Opened(path));
         cx.notify();
@@ -129,15 +131,12 @@ impl MainWindow {
             {
                 self.details_arrived(first, &details, &icons, cx);
             }
-            // Checked against the listing once shrunk, when it counts.
-            Event::Thumbnail { id, entry, png } => {
-                if let Ok(index) = usize::try_from(entry.0)
-                    && self.rows_wanted.contains(&index)
-                    && self.settings.thumbnails == Thumbnails::Shown
-                {
-                    self.shrink_thumbnail(id, index, png, cx);
-                }
-            }
+            Event::Thumbnail {
+                id,
+                entry,
+                size,
+                png,
+            } => self.thumbnail_arrived((id, entry, size), png, cx),
             // An answer for a folder the window has since moved away from.
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
@@ -180,6 +179,7 @@ impl MainWindow {
             Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
             Event::Trash(items) => self.trash_listed(items, cx),
             Event::Places(places) => self.places_arrived(places, cx),
+            Event::FolderViews(views) => self.folder_views_arrived(&views, cx),
             Event::Bookmarks(pinned) => self.pinned_arrived(pinned, cx),
         }
     }
