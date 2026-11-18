@@ -8,12 +8,15 @@ use std::fs::{self, File};
 use std::io::Write as _;
 use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use nova_files_core::{ArchiveFailure, Archiver, Extracting, Flow};
 use zip::write::{FullFileOptions, SimpleFileOptions};
 
 /// The widest gap between a wall clock and UTC, rounded up.
 const DAY: i64 = 86_400;
+/// Well under the 10 s a helper gets to exit once its output ends.
+const QUICK: Duration = Duration::from_secs(5);
 
 fn archiver() -> Archiver {
     Archiver::at(PathBuf::from(env!("CARGO_BIN_EXE_nova-files-archiver")))
@@ -163,6 +166,23 @@ fn unpacks_a_zip_and_its_locked_entries_with_the_password() {
 }
 
 #[test]
+fn a_hard_link_to_its_own_name_keeps_the_file() {
+    let folder = folder("self-link");
+    let mut builder = tar::Builder::new(Vec::new());
+    let mut file = header(tar::EntryType::Regular, 0o644, 0, 1);
+    builder.append_data(&mut file, "a", &b"x"[..]).unwrap();
+    let mut hard = header(tar::EntryType::Link, 0o644, 0, 0);
+    builder.append_link(&mut hard, "./a", "a").unwrap();
+    let archive = folder.join("self.tar");
+    fs::write(&archive, builder.into_inner().unwrap()).unwrap();
+    let into = folder.join("into");
+
+    assert_eq!(extract(&archive, &into, None), Ok(2));
+    assert_eq!(fs::read(into.join("a")).unwrap(), b"x");
+    fs::remove_dir_all(&folder).ok();
+}
+
+#[test]
 fn unpacks_a_zip_with_no_password_and_its_times() {
     let folder = folder("zip-times");
     let archive = folder.join("a.zip");
@@ -272,6 +292,23 @@ fn the_caller_stops_it() {
     let archive = many(&folder, 3);
     let result = archiver().extract(&archive, &folder.join("into"), None, |_| Flow::Stop);
     assert_eq!(result, Err(ArchiveFailure::Cancelled));
+    fs::remove_dir_all(&folder).ok();
+}
+
+#[test]
+fn stopping_a_held_run_ends_it_at_once() {
+    let folder = folder("stop-held");
+    let archive = many(&folder, 3);
+    let started = Instant::now();
+    let result = archiver().extract(&archive, &folder.join("into"), None, |extracting| {
+        if extracting == Extracting::Held {
+            Flow::Stop
+        } else {
+            Flow::Hold
+        }
+    });
+    assert_eq!(result, Err(ArchiveFailure::Cancelled));
+    assert!(started.elapsed() < QUICK);
     fs::remove_dir_all(&folder).ok();
 }
 

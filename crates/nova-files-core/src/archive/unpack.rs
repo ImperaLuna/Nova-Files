@@ -19,7 +19,8 @@ use super::helper::{end, ended, spawn};
 
 /// How long the caller waits between asks.
 pub const TICK: Duration = Duration::from_millis(100);
-/// How long the helper has to exit once it has closed its output.
+/// How long the helper has to exit once it has closed its output. One
+/// that is stopped or went wrong is killed at once.
 const EXIT_TIME: Duration = Duration::from_secs(10);
 const EXTRACT: &str = "extract";
 const DECIMAL: u32 = 10;
@@ -64,7 +65,12 @@ pub fn extract(
         input.write_all(password.as_bytes()).ok();
     }
     let followed = follow(&mut child, &mut tell);
-    let status = end(child, EXIT_TIME);
+    let wait = if followed.is_ok() {
+        EXIT_TIME
+    } else {
+        Duration::ZERO
+    };
+    let status = end(child, wait);
     followed?;
     ended(status)
 }
