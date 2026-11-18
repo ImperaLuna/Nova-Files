@@ -60,6 +60,7 @@ pub use memory::set_give_back;
 pub use mime::MimeTypes;
 pub use open::{NotDefault, make_default_for_folders, opens_folders};
 pub use places::Home;
+pub use run::{emitted_types, routed_types};
 pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
 pub use vulkan_drivers::{FILTER_VARIABLE, absent_vendor_drivers};

@@ -9,11 +9,12 @@ use std::os::unix::process::CommandExt as _;
 use std::path::Path;
 use std::process::{Command, ExitCode};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use nova_files_api::{Connector, WindowRequest};
+use nova_files_api::{Connector, DriveOffer, WindowRequest};
 use nova_files_dbus::{Bus, Service, Started};
 use nova_files_ui::{Ended, Opening, RecoverGpu, Request, RequestSender, Requests};
 
@@ -103,7 +104,9 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     let core = nova_files_core::spawn()?;
     core.connector
-        .offer_drives(nova_files_dbus::Udisks::new(Bus::System))?;
+        .offer(DriveOffer(Arc::new(nova_files_dbus::Udisks::new(
+            Bus::System,
+        ))))?;
     let (requests, received) = nova_files_ui::channel();
 
     let on_open = {

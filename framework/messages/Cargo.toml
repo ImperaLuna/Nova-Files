@@ -1,0 +1,20 @@
+# nova-files-messages
+#
+# How the core and its clients talk: one connection per client, carrying
+# each feature's own message types, and the core's routes by type.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-messages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

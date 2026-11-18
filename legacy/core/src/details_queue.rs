@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn details_of_a_replaced_listing_are_not_sent() {
         let queue = shared(state(10, 0..10, &[]));
-        let (sink, events) = mpsc::channel();
+        let (sink, events) = mpsc::channel::<Event>();
 
         queue
             .send(&run(1, 0..1), vec![Details::default()], Vec::new(), &sink)

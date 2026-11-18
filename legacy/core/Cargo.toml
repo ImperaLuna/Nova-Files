@@ -4,7 +4,7 @@
 # never draws anything.
 #
 # Allowed outside crates: chrono, log, rustix, serde, serde_json, toml, toml_edit, uzers
-# Allowed workspace crates: nova-files-api, nova-files-index
+# Allowed workspace crates: nova-files-api, nova-files-index, nova-files-messages
 
 [package]
 name = "nova-files-core"
@@ -38,6 +38,7 @@ toml_edit = { version = "0.25.18", default-features = false, features = ["displa
 # /etc/passwd). The standard library and rustix have no such lookup.
 uzers = { version = "0.12.2", default-features = false }
 nova-files-api.workspace = true
+nova-files-messages.workspace = true
 nova-files-index.workspace = true
 
 [dev-dependencies]

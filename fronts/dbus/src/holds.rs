@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use nova_files_api::{ClientGone, Command, Connection, Connector, CoreGone, Event, EventSink};
+use nova_files_api::{ClientGone, Command, Connection, Connector, CoreGone, Envelope, EventSink};
 use zbus::blocking::fdo::DBusProxy;
 
 use crate::Bus;
@@ -144,7 +144,7 @@ impl Drop for Hold {
 struct Discard;
 
 impl EventSink for Discard {
-    fn deliver(&self, _event: Event) -> Result<(), ClientGone> {
+    fn deliver_envelope(&self, _envelope: Envelope) -> Result<(), ClientGone> {
         Ok(())
     }
 }

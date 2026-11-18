@@ -4,13 +4,11 @@ use super::*;
 
 fn next_find(core: &mut Core) -> Option<(ListingId, String, Option<PathBuf>)> {
     while let Ok(message) = core.messages.try_recv() {
-        match message {
-            CoreMessage::Connected { events, .. } => core.events = Some(events),
-            CoreMessage::Command {
-                command: Command::Find { id, query, within },
-                ..
-            } => return Some((id, query, within)),
-            _ => {}
+        if let CoreMessage::Connected { events, .. } = message {
+            core.events = Some(events);
+        } else if let Some(Command::Find { id, query, within }) = message.into_command::<Command>()
+        {
+            return Some((id, query, within));
         }
     }
     None

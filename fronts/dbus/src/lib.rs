@@ -17,7 +17,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use enumflags2::BitFlags;
-use nova_files_api::{Connector, WindowRequest, uri};
+use nova_files_api::{Command, Connector, Event, MessageType, WindowRequest, uri};
 use zbus::blocking::connection::Builder;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, Proxy};
@@ -157,6 +157,14 @@ impl RunningInstance {
             &(SERVE_FILE_MANAGER, parameter, platform_data),
         )
     }
+}
+
+pub fn sent_types() -> Vec<MessageType> {
+    vec![MessageType::of::<Command>()]
+}
+
+pub fn taken_types() -> Vec<MessageType> {
+    vec![MessageType::of::<Event>()]
 }
 
 pub fn find_running(bus: &Bus) -> zbus::Result<Option<RunningInstance>> {

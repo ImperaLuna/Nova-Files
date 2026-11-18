@@ -262,7 +262,7 @@ fn close_on_the_request_closes_the_picker() {
 #[test]
 fn a_pick_holds_the_core_until_it_is_answered() {
     let core = nova_files_core::spawn_with_idle_exit(IDLE).unwrap();
-    let (events, _received) = mpsc::channel();
+    let (events, _received) = mpsc::channel::<nova_files_api::Event>();
     let window = core.connector.connect(events).unwrap();
     let setup = setup(&core.connector);
     let (ended, core_ended) = mpsc::channel();

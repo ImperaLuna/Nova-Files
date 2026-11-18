@@ -3,7 +3,10 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use nova_files_api::{ClientId, Command, CoreMessage, Event, EventSink};
+use nova_files_api::{
+    ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
+};
+use nova_files_messages::{Routed, Routes};
 
 use crate::disk_space;
 use crate::drives::Store as DrivesStore;
@@ -48,7 +51,31 @@ pub struct Setup {
     pub inside: Arc<Inside>,
 }
 
+pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
+    let mut routes = Routes::new();
+    routes.on(|setup: &Setup, id, client: &Client, command: Command| {
+        answer(id, client, command, setup)
+    })?;
+    routes.on_leave(forget);
+    Ok(routes)
+}
+
+pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
+    Ok(routes()?.takes().collect())
+}
+
+pub fn emitted_types() -> Vec<MessageType> {
+    vec![MessageType::of::<Event>()]
+}
+
 pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup) {
+    let routes = match routes() {
+        Ok(routes) => routes,
+        Err(twice) => {
+            log::error!("two routes for {}", twice.name());
+            return;
+        }
+    };
     let mut clients: HashMap<ClientId, Client> = HashMap::new();
     loop {
         let message = if clients.is_empty() && !setup.jobs.busy() {
@@ -62,11 +89,16 @@ pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup)
                 Err(_) => return,
             }
         };
-        handle(&mut clients, message, setup);
+        handle(&mut clients, message, &routes, setup);
     }
 }
 
-fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: &Setup) {
+fn handle(
+    clients: &mut HashMap<ClientId, Client>,
+    message: CoreMessage,
+    routes: &Routes<Setup, Client>,
+    setup: &Setup,
+) {
     match message {
         CoreMessage::Connected { client, events } => {
             let events: Arc<dyn EventSink> = Arc::from(events);
@@ -75,23 +107,34 @@ fn handle(clients: &mut HashMap<ClientId, Client>, message: CoreMessage, setup: 
         }
         CoreMessage::Disconnected { client } => {
             clients.remove(&client);
-            forget(client, setup);
+            routes.leave(setup, client);
         }
         CoreMessage::Activity => {}
-        CoreMessage::DriveService(service) => setup.drives.offer(service),
+        CoreMessage::Offer(offer) => take_offer(offer, setup),
         CoreMessage::Command { client, command } => {
             let Some(target) = clients.get(&client) else {
                 return;
             };
-            if answer(client, target, command, setup).is_err() {
-                clients.remove(&client);
-                forget(client, setup);
+            match routes.route(setup, client, target, command) {
+                Ok(Routed::Handled) => {}
+                Ok(Routed::Unrouted(kind)) => log::error!("no route for {}", kind.name()),
+                Err(_) => {
+                    clients.remove(&client);
+                    routes.leave(setup, client);
+                }
             }
         }
     }
 }
 
-fn forget(client: ClientId, setup: &Setup) {
+fn take_offer(offer: Envelope, setup: &Setup) {
+    match offer.open::<DriveOffer>() {
+        Ok(DriveOffer(service)) => setup.drives.offer(service),
+        Err(other) => log::error!("no use for an offer of {}", other.kind().name()),
+    }
+}
+
+fn forget(setup: &Setup, client: ClientId) {
     setup.settings.forget(client);
     setup.theme.forget(client);
     setup.places.forget(client);

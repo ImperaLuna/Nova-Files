@@ -46,12 +46,12 @@ impl Core {
                     self.events = Some(events);
                 }
                 CoreMessage::Connected { client, events } => self.tree = Some((client, events)),
-                CoreMessage::Command {
-                    command: Command::ListFolder { id, path, .. },
-                    client,
-                } if Some(client) != self.window => self.tree_listings.push((id, path)),
-                CoreMessage::Command { client, .. } | CoreMessage::Disconnected { client }
-                    if Some(client) != self.window => {}
+                CoreMessage::Command { client, command } if Some(client) != self.window => {
+                    if let Some(Command::ListFolder { id, path, .. }) = command.get::<Command>() {
+                        self.tree_listings.push((*id, path.clone()));
+                    }
+                }
+                CoreMessage::Disconnected { client } if Some(client) != self.window => {}
                 message => return Some(message),
             }
         }
@@ -60,11 +60,7 @@ impl Core {
 
     fn next_listing(&mut self) -> Option<(ListingId, PathBuf)> {
         while let Some(message) = self.try_recv() {
-            if let CoreMessage::Command {
-                command: Command::ListFolder { id, path, .. },
-                ..
-            } = message
-            {
+            if let Some(Command::ListFolder { id, path, .. }) = message.into_command::<Command>() {
                 return Some((id, path));
             }
         }
@@ -74,11 +70,7 @@ impl Core {
     fn thumbnail_requests(&mut self) -> Vec<(u32, u32)> {
         let mut requests = Vec::new();
         while let Some(message) = self.try_recv() {
-            if let CoreMessage::Command {
-                command: Command::Rows { first, count, .. },
-                ..
-            } = message
-            {
+            if let Some(Command::Rows { first, count, .. }) = message.into_command::<Command>() {
                 requests.push((first.0, count));
             }
         }
@@ -88,7 +80,7 @@ impl Core {
     fn commands(&mut self) -> Vec<Command> {
         let mut commands = Vec::new();
         while let Some(message) = self.try_recv() {
-            if let CoreMessage::Command { command, .. } = message {
+            if let Some(command) = message.into_command::<Command>() {
                 commands.push(command);
             }
         }
@@ -605,11 +597,7 @@ fn a_thumbnail_shrunk_after_hiding_is_not_kept(cx: &mut TestAppContext) {
 fn listing_asked(core: &mut Core) -> (ListingId, PathBuf, Order) {
     let mut asked = Vec::new();
     while let Some(message) = core.try_recv() {
-        if let CoreMessage::Command {
-            command: Command::ListFolder { id, path, order },
-            ..
-        } = message
-        {
+        if let Some(Command::ListFolder { id, path, order }) = message.into_command::<Command>() {
             asked.push((id, path, order));
         }
     }

@@ -222,10 +222,8 @@ fn the_icon_theme_reaches_the_core_and_follows_changes() {
 
 fn next_icon_themes(core: &Receiver<CoreMessage>) -> Vec<String> {
     loop {
-        if let CoreMessage::Command {
-            command: Command::DesktopIconThemes(names),
-            ..
-        } = core.recv_timeout(WAIT).unwrap()
+        if let Some(Command::DesktopIconThemes(names)) =
+            core.recv_timeout(WAIT).unwrap().into_command::<Command>()
         {
             return names;
         }
@@ -275,10 +273,8 @@ fn look_until(core: &Receiver<CoreMessage>, wanted: DesktopLook) {
 
 fn next_look(core: &Receiver<CoreMessage>) -> DesktopLook {
     loop {
-        if let CoreMessage::Command {
-            command: Command::DesktopLook(look),
-            ..
-        } = core.recv_timeout(WAIT).unwrap()
+        if let Some(Command::DesktopLook(look)) =
+            core.recv_timeout(WAIT).unwrap().into_command::<Command>()
         {
             return look;
         }

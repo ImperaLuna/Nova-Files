@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 use std::time::Duration;
 
-use nova_files_api::ClientGone;
+use nova_files_api::{ClientGone, Envelope};
 
 use super::*;
 
@@ -101,7 +101,8 @@ fn a_view_set_goes_first_once_and_the_oldest_drop_off() {
 struct Listener(mpsc::Sender<FolderViews>);
 
 impl EventSink for Listener {
-    fn deliver(&self, event: Event) -> Result<(), ClientGone> {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        let event = envelope.open::<Event>().map_err(|_| ClientGone)?;
         match event {
             Event::FolderViews(views) => self.0.send(views).map_err(|_| ClientGone),
             _ => Ok(()),

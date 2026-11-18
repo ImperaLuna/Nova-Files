@@ -25,7 +25,6 @@
 mod access;
 mod bookmark;
 mod clipboard;
-mod connection;
 mod disk_space;
 mod drive;
 mod file_icon;
@@ -55,12 +54,10 @@ pub use clipboard::{
     ClipboardAction, FileClipboard, GNOME_COPIED_FILES, KDE_CUT_SELECTION, Offer, PLAIN_TEXT,
     PLAIN_TEXT_UTF8, URI_LIST,
 };
-pub use connection::{
-    ClientGone, Connection, Connector, CoreGone, CoreMessage, EventSink, channel,
-};
 pub use disk_space::{DiskSpace, MAX_DISK_SPACE_PATHS, PathSpace};
 pub use drive::{
-    Drive, DriveAction, DriveFailure, DriveId, DriveList, DriveService, Volume, VolumeId,
+    Drive, DriveAction, DriveFailure, DriveId, DriveList, DriveOffer, DriveService, Volume,
+    VolumeId,
 };
 pub use file_icon::{FILE_ICON_PIXELS, FileIcon, IconFormat, IconKind, ThemeIcon};
 pub use file_type::{FileTypes, glob_matches};
@@ -74,7 +71,11 @@ pub use job::{
     Answer, Conflict, ConflictKind, DropAskId, DropKind, ExtractTo, Failure, JobId, JobTag,
     Operation, Outcome, Packing, Progress, Scope, Tally,
 };
-pub use message::{ClientId, Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
+pub use message::{Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
+pub use nova_files_messages::{
+    ClientGone, ClientId, Connection, Connector, CoreGone, CoreMessage, Envelope, EventSink,
+    Message, MessageType, Routed, Routes, channel, missing_routes,
+};
 pub use open_with::{App, NotOpened, OpenWith, OpenWithAnswer, OpenWithId};
 pub use pick::{
     FileFilter, FilterRule, ParentWindow, PickAnswer, PickId, PickKind, PickReply, PickRequest,

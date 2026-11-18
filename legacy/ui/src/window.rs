@@ -52,8 +52,8 @@ use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    Bookmark, ClientGone, Command, Connection, Connector, Event, EventSink, FolderView, Gathering,
-    HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
+    Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
+    Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
 
 use self::drives::Drives;
@@ -163,7 +163,8 @@ pub struct MainWindow {
 pub struct ChannelSink(pub UnboundedSender<Event>);
 
 impl EventSink for ChannelSink {
-    fn deliver(&self, event: Event) -> Result<(), ClientGone> {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        let event = envelope.open::<Event>().map_err(|_| ClientGone)?;
         self.0.unbounded_send(event).map_err(|_| ClientGone)
     }
 }

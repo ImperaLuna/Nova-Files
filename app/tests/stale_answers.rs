@@ -15,10 +15,8 @@ use nova_files_ui::{MainWindow, WindowEvent};
 
 fn next_listing(core: &Receiver<CoreMessage>) -> (ListingId, PathBuf) {
     loop {
-        if let CoreMessage::Command {
-            command: Command::ListFolder { id, path, .. },
-            ..
-        } = core.try_recv().unwrap()
+        if let Some(Command::ListFolder { id, path, .. }) =
+            core.try_recv().unwrap().into_command::<Command>()
         {
             return (id, path);
         }
