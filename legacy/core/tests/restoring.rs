@@ -15,7 +15,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use nova_files_api::{
-    Answer, Command, ConflictKind, EntryKind, Event, Failure, JobId, Operation, Outcome, Scope,
+    Answer, Command, Conflict, ConflictKind, EntryKind, Event, Failure, JobId, Operation, Outcome,
+    Scope,
 };
 use nova_files_trash_api::{self as trash_api, Trashed};
 
@@ -118,18 +119,22 @@ fn a_restore_makes_the_folders_that_are_gone() {
     assert_eq!(fs::read_to_string(bench.at("x/y/a")).unwrap(), "a");
 }
 
-#[test]
-fn a_name_taken_where_it_goes_back_asks_and_skip_keeps_it_in_the_trash() {
-    let bench = Bench::new("restore-skip");
+fn restore_onto_a_taken_name(name: &str) -> (Bench, Client, Vec<PathBuf>, JobId, Conflict) {
+    let bench = Bench::new(name);
     fs::write(bench.at("a"), "trashed").unwrap();
     let client = bench.client();
     let items = trashed(&bench, &client, &[bench.at("a")]);
     fs::write(bench.at("a"), "new").unwrap();
-
     let job = client.start(Operation::Restore {
         items: items.clone(),
     });
     let conflict = held(&client, job);
+    (bench, client, items, job, conflict)
+}
+
+#[test]
+fn a_name_taken_where_it_goes_back_asks_and_skip_keeps_it_in_the_trash() {
+    let (bench, client, items, job, conflict) = restore_onto_a_taken_name("restore-skip");
     assert_eq!(conflict.kind, ConflictKind::FileExists);
     answer(&client, job, &conflict, Answer::Skip, Scope::ThisOne);
 
@@ -141,16 +146,7 @@ fn a_name_taken_where_it_goes_back_asks_and_skip_keeps_it_in_the_trash() {
 
 #[test]
 fn keep_both_puts_it_back_beside_what_took_its_name() {
-    let bench = Bench::new("restore-both");
-    fs::write(bench.at("a"), "trashed").unwrap();
-    let client = bench.client();
-    let items = trashed(&bench, &client, &[bench.at("a")]);
-    fs::write(bench.at("a"), "new").unwrap();
-
-    let job = client.start(Operation::Restore {
-        items: items.clone(),
-    });
-    let conflict = held(&client, job);
+    let (bench, client, items, job, conflict) = restore_onto_a_taken_name("restore-both");
     answer(&client, job, &conflict, Answer::KeepBoth, Scope::ThisOne);
 
     assert_eq!(client.ended(job).0, Outcome::Done);

@@ -142,6 +142,16 @@ fn read(files: &mut HashMap<PathBuf, Arc<ThemeIcon>>, path: PathBuf) -> Option<A
     Some(icon)
 }
 
+impl nova_files_disk::ports::Icons for FileIcons {
+    fn of(&self, name: &OsStr, kind: EntryKind) -> FileIcon {
+        Self::of(self, name, kind)
+    }
+
+    fn follow_desktop(&self, named: &[String]) {
+        Self::follow_desktop(self, named);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{env, fs};

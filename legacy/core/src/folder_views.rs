@@ -10,8 +10,8 @@ use nova_files_api::{
 };
 
 use crate::private_file::{self, Read};
-use crate::recent::{END, MAX_PATH, fits};
 use crate::saver::Saver;
+use nova_files_disk::stored_path::{END, MAX_PATH, fits};
 
 const FILE: &str = "nova-files/folder-views";
 const HEADER: &[u8] = b"nova-files folder-views 1\n";
