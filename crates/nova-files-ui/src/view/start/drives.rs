@@ -114,24 +114,29 @@ impl MainWindow {
                         )
                     }),
             )
-            .child(
-                div()
-                    .h(start::BAR)
-                    .rounded(radius::SMALL)
-                    .bg(colors.press)
-                    .overflow_hidden()
-                    .when_some(percent, |bar, percent| {
-                        bar.child(
-                            div()
-                                .h_full()
-                                .w(relative(filled(percent)))
-                                .rounded(radius::SMALL)
-                                .bg(tint),
-                        )
-                    }),
-            )
+            .child(bar(percent.map(filled), tint, colors))
             .into_any_element()
     }
+}
+
+/// A card's bar, filled `share` of the way (0 to 1) in `tint`; empty
+/// while the share isn't known.
+pub(in crate::view) fn bar(share: Option<f32>, tint: gpui::Rgba, colors: &Colors) -> AnyElement {
+    div()
+        .h(start::BAR)
+        .rounded(radius::SMALL)
+        .bg(colors.press)
+        .overflow_hidden()
+        .when_some(share, |bar, share| {
+            bar.child(
+                div()
+                    .h_full()
+                    .w(relative(share))
+                    .rounded(radius::SMALL)
+                    .bg(tint),
+            )
+        })
+        .into_any_element()
 }
 
 /// The card at `column` of row `row`, counted over every card shown.
