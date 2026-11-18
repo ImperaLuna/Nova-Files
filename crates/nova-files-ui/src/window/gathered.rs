@@ -75,7 +75,7 @@ impl MainWindow {
     /// or searched from.
     pub const fn gathered_here(&self) -> Option<Gathering> {
         match self.location() {
-            Some(Location::Gathered(place)) if self.listing.is_some() => Some(*place),
+            Some(Location::Gathered(place)) => Some(*place),
             _ => None,
         }
     }
@@ -98,7 +98,7 @@ impl MainWindow {
     /// What `place` gathers changed: listed again if it is on screen with
     /// nothing else on its way, or on its way itself, since that listing
     /// may have been read before the change.
-    pub(super) fn gathered_changed(&mut self, place: Gathering) {
+    pub fn gathered_changed(&mut self, place: Gathering) {
         let wanted = Some(Location::Gathered(place));
         let again = if self.waiting() {
             self.requested == wanted

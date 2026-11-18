@@ -5,9 +5,11 @@
 //! search from it comes back to it. There is no folder there to make
 //! files in.
 
+use gpui::point;
 use nova_files_api::Gathering;
 
 use super::*;
+use crate::window_sidebar::right_click_at;
 
 /// Waits until `place` is on screen with `names`, in order.
 async fn wait_for_place(
@@ -133,4 +135,120 @@ async fn a_search_from_projects_comes_back_to_it(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("escape");
 
     wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
+}
+
+/// Writes `text` as the gathered folders file of the home at `tree`.
+fn write_gathered(tree: &Path, text: &str) {
+    let config = tree.join(".config/nova-files");
+    fs::create_dir_all(&config).unwrap();
+    fs::write(config.join("gathered.toml"), text).unwrap();
+}
+
+#[gpui::test]
+async fn each_game_shows_the_library_that_brought_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("gathered-libraries");
+    let steam = tree.path().join("SteamLibrary");
+    let other = tree.path().join("Other");
+    let solo = tree.path().join("Solo");
+    fs::create_dir_all(steam.join("Celeste")).unwrap();
+    fs::create_dir_all(other.join("Hades")).unwrap();
+    fs::create_dir_all(&solo).unwrap();
+    write_gathered(
+        tree.path(),
+        &format!(
+            "[[games]]\npath = \"{}\"\nname = \"Steam\"\n\n\
+             [[games]]\npath = \"{}\"\nholds = \"one\"\nname = \"Mine\"\n\n\
+             [[games]]\npath = \"{}\"\n",
+            steam.display(),
+            solo.display(),
+            other.display()
+        ),
+    );
+    let (view, cx) = open_on(cx, tree.path()).await;
+
+    click(cx, "place-games");
+
+    wait_for_place(&view, cx, Gathering::Games, &["Celeste", "Hades", "Solo"]).await;
+    view.read_with(cx, |view, _| {
+        let libraries: Vec<_> = (0..3).map(|row| view.library_of_row(row)).collect();
+        assert_eq!(
+            libraries,
+            [
+                Some("Steam".to_owned()),
+                Some("~/Other".to_owned()),
+                Some("Mine".to_owned())
+            ]
+        );
+    });
+}
+
+#[gpui::test]
+async fn a_place_offers_no_new_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("gathered-no-new");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    click(cx, "place-projects");
+    wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
+
+    view.update(cx, |view, _| view.new_folder());
+
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.jobs_pending(), 0);
+        assert!(!view.renaming());
+    });
+    cx.run_until_parked();
+    let below = cx.debug_bounds("entry-0").unwrap();
+    right_click_at(
+        cx,
+        point(below.center().x, below.bottom() + below.size.height * 2.0),
+    );
+    view.read_with(cx, |view, _| {
+        let labels: Vec<_> = view
+            .menu()
+            .unwrap()
+            .items
+            .iter()
+            .map(|item| item.label.to_string())
+            .collect();
+        assert_eq!(labels, ["Select all"]);
+    });
+}
+
+#[gpui::test]
+async fn a_folder_added_to_the_file_lists_the_place_again(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("gathered-file-change");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    click(cx, "place-projects");
+    wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
+
+    let work = tree.path().join("Work");
+    fs::create_dir_all(work.join("zeta")).unwrap();
+    write_gathered(
+        tree.path(),
+        &format!(
+            "[[projects]]\npath = \"{}\"\n\n[[projects]]\npath = \"{}\"\n",
+            tree.path().join("Projects").display(),
+            work.display()
+        ),
+    );
+
+    wait_for_place(&view, cx, Gathering::Projects, &["nova", "zeta"]).await;
+}
+
+#[gpui::test]
+async fn a_place_that_changes_while_going_elsewhere_keeps_the_way(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("gathered-change-away");
+    let (view, cx) = open_on(cx, tree.path()).await;
+    click(cx, "place-projects");
+    wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
+
+    view.update(cx, |view, _| {
+        view.open(tree.path());
+        view.gathered_changed(Gathering::Projects);
+    });
+
+    wait_for_folder(&view, cx, tree.path()).await;
 }
