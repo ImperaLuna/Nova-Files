@@ -95,9 +95,7 @@ impl Client {
             queue.want(id, first, count);
         }
         if let Some(queue) = &self.thumbnails {
-            // Hidden asks for none, which leaves the queue's size as it was.
-            let (count, size) = thumbnails.map_or((0, ThumbnailSize::Normal), |size| (count, size));
-            queue.want(id, first, count, size);
+            queue.want(id, first, thumbnails.map_or(0, |_| count), thumbnails);
         }
     }
 

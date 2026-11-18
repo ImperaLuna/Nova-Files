@@ -91,7 +91,6 @@ pub fn render(folder: &Path, size: Size, job: &Job, system: &System) -> Outcome 
             return Outcome::Failed;
         }
     };
-    // Never past the picture's own sides, so a small one isn't enlarged.
     let thumb = image.thumbnail(
         image.width().min(size.side()),
         image.height().min(size.side()),

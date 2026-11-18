@@ -125,10 +125,10 @@ fn a_new_size_sends_every_wanted_thumbnail_again() {
         shared: Arc::new(shared(files, 0..2, &[0, 1])),
     };
 
-    queue.want(LISTING, EntryId(0), 2, ThumbnailSize::Normal);
+    queue.want(LISTING, EntryId(0), 2, Some(ThumbnailSize::Normal));
     assert_eq!(queue.shared.state.lock().unwrap().done.len(), 2);
 
-    queue.want(LISTING, EntryId(0), 2, ThumbnailSize::Large);
+    queue.want(LISTING, EntryId(0), 2, Some(ThumbnailSize::Large));
     let state = queue.shared.state.lock().unwrap();
     let (size, done) = (state.size, state.done.len());
     drop(state);
@@ -136,14 +136,14 @@ fn a_new_size_sends_every_wanted_thumbnail_again() {
 }
 
 #[test]
-fn asking_for_no_rows_keeps_the_size() {
+fn hiding_thumbnails_keeps_the_size() {
     let files = vec![entry(0, "a.png", EntryKind::File)];
     let queue = Queue {
         shared: Arc::new(shared(files, 0..1, &[0])),
     };
-    queue.want(LISTING, EntryId(0), 1, ThumbnailSize::Large);
+    queue.want(LISTING, EntryId(0), 1, Some(ThumbnailSize::Large));
 
-    queue.want(LISTING, EntryId(0), 0, ThumbnailSize::Normal);
+    queue.want(LISTING, EntryId(0), 0, None);
 
     let state = queue.shared.state.lock().unwrap();
     let size = state.size;
