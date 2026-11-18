@@ -13,7 +13,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use common::Bench;
-use nova_files_api::{Command, ConflictKind, Failure, Operation, Outcome, Packing, Tally};
+use nova_files_api::{
+    Answer, Command, ConflictKind, Failure, Operation, Outcome, Packing, Scope, Tally,
+};
 use nova_files_core::{ArchiveKind, Archiver};
 
 fn compress(bench: &Bench, name: &str, locked: bool) -> nova_files_api::JobId {
@@ -73,6 +75,13 @@ fn locked_asks_for_the_password_first() {
     bench.send(Command::GivePassword {
         job,
         conflict: needed,
+        password: String::new(),
+    });
+    let again = bench.held(job);
+    assert_eq!(again.kind, ConflictKind::PasswordNeeded);
+    bench.send(Command::GivePassword {
+        job,
+        conflict: again,
         password: "pw".to_owned(),
     });
     assert_eq!(bench.finished(job).0, Outcome::Done);
@@ -132,5 +141,20 @@ fn relative_paths_are_invalid_names() {
             reason: Failure::InvalidName,
         }
     );
+    assert_eq!(bench.landed(), Vec::<String>::new());
+}
+
+#[test]
+fn skipping_the_password_cancels_and_makes_nothing() {
+    let bench = with_sources("compress-skip");
+    let job = compress(&bench, "docs.zip", true);
+    let needed = bench.held(job);
+    bench.send(Command::AnswerConflict {
+        job,
+        conflict: needed,
+        answer: Answer::Skip,
+        scope: Scope::ThisOne,
+    });
+    assert_eq!(bench.finished(job), (Outcome::Cancelled, Tally::default()));
     assert_eq!(bench.landed(), Vec::<String>::new());
 }
