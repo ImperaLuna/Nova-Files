@@ -1,10 +1,3 @@
-//! The file picker against a private D-Bus daemon and a real core, called
-//! as xdg-desktop-portal calls it: `OpenFile` and `SaveFile` hand the
-//! request to the picker and answer what it picked; a `Close` on the
-//! request object closes the picker and the call answers cancelled, as it
-//! does when the picker drops the request unanswered; and a pick holds the
-//! core until it is answered.
-
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -31,17 +24,14 @@ mod support;
 
 use support::{PrivateBus, WAIT};
 
-/// Where the portal would put the request object for this call.
 const HANDLE: &str = "/org/freedesktop/portal/desktop/request/1_7/t1";
 const REQUEST_INTERFACE: &str = "org.freedesktop.impl.portal.Request";
 
-/// A short idle time for the core, and a wait past it.
 const IDLE: Duration = Duration::from_millis(300);
 const PAST_IDLE: Duration = Duration::from_millis(900);
 
 type Answer = (u32, HashMap<String, OwnedValue>);
 
-/// Hands each request and each close to the test.
 struct TestPicker {
     requests: Sender<PickRequest>,
     closes: Sender<PickId>,
@@ -96,8 +86,6 @@ fn client(bus: &PrivateBus) -> Connection {
         .unwrap()
 }
 
-/// Calls `method` as the portal does, on a thread of its own, since it
-/// returns only once the picker answers.
 fn call(
     bus: &PrivateBus,
     method: &'static str,
@@ -107,7 +95,6 @@ fn call(
     call_from(bus, method, "", title, options)
 }
 
-/// [`call`] from the app window `parent`, as the portal names it.
 fn call_from(
     bus: &PrivateBus,
     method: &'static str,
@@ -264,10 +251,8 @@ fn close_on_the_request_closes_the_picker() {
         .unwrap();
 
     assert_eq!(setup.closes.recv_timeout(WAIT), Ok(request.id));
-    // The UI closes the window, which drops the request.
     drop(request);
     assert_eq!(pending.join().unwrap().0, 1);
-    // The request object is gone with the pick.
     let gone = Proxy::new(&portal, PORTAL_BUS_NAME, HANDLE, REQUEST_INTERFACE)
         .unwrap()
         .call::<_, _, ()>("Close", &());
@@ -277,7 +262,6 @@ fn close_on_the_request_closes_the_picker() {
 #[test]
 fn a_pick_holds_the_core_until_it_is_answered() {
     let core = nova_files_core::spawn_with_idle_exit(IDLE).unwrap();
-    // Keeps the core up while the test sets up, as a window would.
     let (events, _received) = mpsc::channel();
     let window = core.connector.connect(events).unwrap();
     let setup = setup(&core.connector);

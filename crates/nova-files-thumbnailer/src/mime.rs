@@ -1,27 +1,17 @@
-//! A file's MIME type from its name, using the shared MIME database's
-//! `mime/globs2` files (freedesktop shared-mime-info).
-//!
-//! Only `*.ext` globs are used, matched without case; the highest weight
-//! wins, and on a tie the folder found first. That covers the formats
-//! thumbnailers handle, without reading the file.
-
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 const GLOBS_FILE: &str = "mime/globs2";
-/// The real file is a few hundred KB.
 const MAX_GLOBS_BYTES: u64 = 4 * 1024 * 1024;
 const EXTENSION_GLOB: &str = "*.";
 const COMMENT: char = '#';
 const SEPARATOR: char = ':';
 
-/// Extension (lower case) to MIME type.
 pub struct MimeTypes(HashMap<String, (u32, String)>);
 
 impl MimeTypes {
-    /// Reads `mime/globs2` in each of `data_dirs`.
     pub fn load(data_dirs: &[PathBuf]) -> Self {
         let mut types = HashMap::new();
         for dir in data_dirs {
@@ -106,7 +96,6 @@ mod tests {
     fn a_large_database_is_read_to_its_end() {
         let root = std::env::temp_dir().join(format!("nova-mime-large-{}", std::process::id()));
         fs::create_dir_all(root.join("mime")).unwrap();
-        // Bigger than any real globs2 file, still under the limit.
         let mut text = "# padding\n".repeat(200_000);
         text.push_str("50:video/mp4:*.mp4\n");
         fs::write(root.join(GLOBS_FILE), text).unwrap();

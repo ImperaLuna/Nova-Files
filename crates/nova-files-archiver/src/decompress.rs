@@ -1,13 +1,8 @@
-//! Opens the stream inside a compressed tar archive. Every compressor
-//! reads all its members or frames, so an archive written in parts (by
-//! `pigz`, `pixz` or a concatenation) reads to its end.
-
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 
 use crate::format::Compression;
 
-/// The tar stream inside `file`.
 pub fn tar_stream(file: File, compression: Compression) -> io::Result<Box<dyn Read>> {
     let file = BufReader::new(file);
     Ok(match compression {

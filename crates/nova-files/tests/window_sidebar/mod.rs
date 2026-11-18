@@ -1,26 +1,15 @@
-//! The sidebar on a real core: a folder pinned in the bookmarks file shows
-//! in Places after the home folder and opens when clicked, and a narrow
-//! window folds Places into one row. The + on Places opens a folder picker
-//! that pins what it picks, and right-click on a pinned folder takes it
-//! out.
-
 use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, size};
 
 use super::*;
 
-/// The window's width from which the sidebar stands beside the sheet.
 const NARROWEST_WIDE: Pixels = px(720.0);
 
-/// Waits until the tree has every listing it asked for. They come from the
-/// core's own threads, so `run_until_parked` alone can finish first.
 async fn wait_for_tree(view: &Entity<MainWindow>, cx: &VisualTestContext) {
     view.condition::<WindowEvent>(cx, |view, _| view.tree_settled())
         .await;
     cx.run_until_parked();
 }
 
-/// A window whose home is `tree`, with `Projects` pinned; waits until the
-/// pinned folder is listed.
 async fn with_projects_pinned<'a>(
     cx: &'a mut TestAppContext,
     tree: &TempFolder,
@@ -51,7 +40,6 @@ async fn a_pinned_folder_shows_after_home_and_opens(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
 }
 
-/// How far in from its row the home place's icon starts.
 fn icon_inset(cx: &mut VisualTestContext) -> Pixels {
     cx.debug_bounds("place-0-here").unwrap().left() - cx.debug_bounds("place-0").unwrap().left()
 }
@@ -61,7 +49,6 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("sidebar-narrow");
     let (_view, cx) = with_projects_pinned(cx, &tree).await;
-    // As narrow as a window gets with the sidebar still beside the sheet.
     cx.simulate_resize(size(NARROWEST_WIDE, px(600.0)));
     cx.run_until_parked();
     let (home, pinned) = (
@@ -71,8 +58,6 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     assert!(pinned.top() >= home.bottom(), "wide: one under the other");
     let sheet_left = cx.debug_bounds("modified-header").unwrap().left();
     assert!(home.right() < sheet_left, "wide: beside the sheet");
-    // The clear drop edge sits inside the padding, so the icon keeps its
-    // place: 10 px in from the row when wide, 12 px when narrow.
     assert_eq!(icon_inset(cx), px(10.0));
 
     cx.simulate_resize(size(NARROWEST_WIDE - px(1.0), px(600.0)));
@@ -86,7 +71,6 @@ async fn a_narrow_window_folds_places_into_one_row(cx: &mut TestAppContext) {
     assert!(pinned.left() >= home.right());
     let header = cx.debug_bounds("modified-header").unwrap();
     assert!(header.top() >= home.bottom(), "narrow: above the sheet");
-    // The + to pin a folder stays within reach.
     let pin = cx.debug_bounds("pin").unwrap();
     assert!(pin.left() >= pinned.right());
 }
@@ -96,11 +80,9 @@ async fn right_click_on_a_pinned_folder_takes_it_out(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("sidebar-unpin");
     let (view, cx) = with_projects_pinned(cx, &tree).await;
-    // Home is a standard folder: no menu.
     right_click(cx, "place-0");
     view.read_with(cx, |view, _| assert!(view.menu().is_none()));
 
-    // A press anywhere else closes the menu.
     right_click(cx, "place-1");
     view.read_with(cx, |view, _| assert!(view.menu().is_some()));
     right_click(cx, "place-0");
@@ -133,14 +115,12 @@ async fn a_menu_takes_the_keys_until_it_closes(cx: &mut TestAppContext) {
 
     right_click(cx, "place-1");
     assert_eq!(marked(&view, cx), Some(None));
-    // Down marks the first item, and goes round past the last.
     cx.simulate_keystrokes("down");
     assert_eq!(marked(&view, cx), Some(Some(0)));
     cx.simulate_keystrokes("down");
     assert_eq!(marked(&view, cx), Some(Some(0)));
     cx.simulate_keystrokes("up");
     assert_eq!(marked(&view, cx), Some(Some(0)));
-    // Escape closes the menu, and Enter with nothing marked does nothing.
     cx.simulate_keystrokes("escape");
     assert_eq!(marked(&view, cx), None);
     right_click(cx, "place-1");
@@ -186,14 +166,12 @@ async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
     .await;
 }
 
-/// Right-clicks the element drawn with `selector`.
 pub fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
     cx.run_until_parked();
     let position = cx.debug_bounds(selector).unwrap().center();
     right_click_at(cx, position);
 }
 
-/// Right-clicks the window at `position`.
 pub fn right_click_at(cx: &mut VisualTestContext, position: Point<Pixels>) {
     cx.run_until_parked();
     cx.simulate_event(MouseDownEvent {
@@ -220,26 +198,20 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     let (view, cx) = window_on(cx, tree.path(), tree.path());
     wait_for_folder(&view, cx, tree.path()).await;
     cx.run_until_parked();
-    // Home, closed: only its own row.
     assert!(cx.debug_bounds("tree-0").is_some());
     assert!(cx.debug_bounds("tree-1").is_none());
 
     click(cx, "tree-toggle-0");
     wait_for_tree(&view, cx).await;
-    // Projects, but not the hidden folder or the file.
     assert!(cx.debug_bounds("tree-1").is_some());
     assert!(cx.debug_bounds("tree-2").is_none());
 
-    // Going into Projects/nova opens the tree down to it.
     view.update(cx, |view, _| view.open(&tree.path().join("Projects/nova")));
     wait_for_folder(&view, cx, &tree.path().join("Projects/nova")).await;
     wait_for_tree(&view, cx).await;
     assert!(cx.debug_bounds("tree-2").is_some());
-    // nova holds no folders: no arrow.
     assert!(cx.debug_bounds("tree-toggle-1").is_some());
     assert!(cx.debug_bounds("tree-toggle-2").is_none());
-    // Each level steps in by one indent (22 px, past a 2 px pad), and
-    // each level's hairline runs 4 px before the rows inside it.
     let from_row = |cx: &mut VisualTestContext, row: &'static str, part: &'static str| {
         cx.debug_bounds(part).unwrap().left() - cx.debug_bounds(row).unwrap().left()
     };
@@ -248,8 +220,6 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     assert_eq!(from_row(cx, "tree-2", "tree-guide-2-1"), px(18.0));
     assert_eq!(from_row(cx, "tree-2", "tree-guide-2-2"), px(40.0));
 
-    // The arrow only opens and closes, and the folder on screen read again
-    // in place leaves closed what the user closed.
     click(cx, "tree-toggle-1");
     cx.run_until_parked();
     assert!(cx.debug_bounds("tree-2").is_none());
@@ -263,7 +233,6 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
         );
     });
 
-    // Clicking a row goes there.
     click(cx, "tree-0");
     wait_for_folder(&view, cx, tree.path()).await;
 }
@@ -277,7 +246,6 @@ async fn the_system_drive_shows_its_free_space_and_opens(cx: &mut TestAppContext
         .await;
     cx.run_until_parked();
     assert!(cx.debug_bounds("drive-0-number").is_some());
-    // A narrow window shows the drive by its name alone.
     cx.simulate_resize(size(NARROWEST_WIDE - px(1.0), px(600.0)));
     cx.run_until_parked();
     assert!(cx.debug_bounds("drive-0").is_some());
@@ -285,7 +253,6 @@ async fn the_system_drive_shows_its_free_space_and_opens(cx: &mut TestAppContext
     cx.simulate_resize(size(NARROWEST_WIDE, px(600.0)));
     cx.run_until_parked();
 
-    // The system drive can't be ejected: its menu only opens it.
     right_click(cx, "drive-0");
     view.read_with(cx, |view, _| {
         let labels: Vec<_> = view

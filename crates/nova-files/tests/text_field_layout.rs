@@ -1,8 +1,3 @@
-//! Where the text field puts its text: mouse clicks and drags land on the
-//! character under them, and the input method's caret box and hit tests
-//! follow the line, scrolled or not. The test text system gives every
-//! character the same width. Points are given from the field's left edge.
-
 use gpui::{
     AppContext as _, Bounds, Context, Entity, EntityInputHandler as _, Focusable as _, IntoElement,
     Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
@@ -10,13 +5,11 @@ use gpui::{
 };
 use nova_files_ui::TextField;
 
-/// A field `width` wide, [`INSET`] in from the window's left.
 struct Frame {
     field: Entity<TextField>,
     width: Pixels,
 }
 
-/// How far the field sits from the window's left edge.
 const INSET: Pixels = px(30.0);
 
 impl Render for Frame {
@@ -27,7 +20,6 @@ impl Render for Frame {
     }
 }
 
-/// A focused field `width` wide holding `text`.
 fn field<'a>(
     cx: &'a mut TestAppContext,
     width: Pixels,
@@ -45,7 +37,6 @@ fn field<'a>(
     (field, cx)
 }
 
-/// The box an input method gets for UTF-16 `range`.
 fn caret_box(
     field: &Entity<TextField>,
     cx: &mut VisualTestContext,
@@ -57,19 +48,15 @@ fn caret_box(
     })
 }
 
-/// One character's width.
 fn char_width(field: &Entity<TextField>, cx: &mut VisualTestContext) -> Pixels {
     char_width_at(field, cx, 0)
 }
 
-/// The width of the character at `index`.
 fn char_width_at(field: &Entity<TextField>, cx: &mut VisualTestContext, index: usize) -> Pixels {
     caret_box(field, cx, index..index + 1).map_or(px(0.0), |b| b.size.width)
 }
 
-/// Characters in a line far wider than its field.
 const LONG: usize = 200;
-/// The caret's width, as the field draws it.
 const CARET_WIDTH: Pixels = px(1.5);
 
 fn index_at(field: &Entity<TextField>, cx: &mut VisualTestContext, x: Pixels) -> Option<usize> {
@@ -162,16 +149,12 @@ fn a_long_line_scrolls_to_keep_the_caret_in_view(cx: &mut TestAppContext) {
     let w = char_width_at(&field, cx, LONG - 1);
     let line = caret_box(&field, cx, 0..LONG).map_or(px(0.0), |b| b.size.width);
     assert!(line > width * 2.0, "{line:?}");
-    // The caret at the end sits at the field's right edge.
     let end = caret_box(&field, cx, LONG..LONG).map(|b| b.origin.x);
     let edge = width - CARET_WIDTH;
     assert_eq!(end, Some(edge));
-    // Points near either edge find what has scrolled there.
     assert_eq!(index_at(&field, cx, edge - w * 0.2), Some(LONG - 1));
     let first = index_at(&field, cx, w * 0.2).unwrap_or(0);
     assert!(first > 0);
-    // The character at the left edge may be cut; a click lands on the
-    // nearest edge between characters, so aim inside the first whole one.
     let whole = (first..LONG)
         .find(|&index| caret_box(&field, cx, index..index + 1).is_some_and(|b| b.left() >= px(0.0)))
         .unwrap();
@@ -181,7 +164,6 @@ fn a_long_line_scrolls_to_keep_the_caret_in_view(cx: &mut TestAppContext) {
     up(cx, x);
     assert_eq!(selection(&field, cx), whole..whole);
 
-    // Shorter text scrolls back to the start.
     field.update(cx, |field, cx| field.set_text("ab", cx));
     cx.run_until_parked();
     assert_eq!(

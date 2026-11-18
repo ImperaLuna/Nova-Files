@@ -1,16 +1,3 @@
-//! The sandboxed thumbnail helper. It renders one batch of thumbnails, then
-//! exits. Asked with `--preview`, it decodes one picture for the quick look
-//! instead (see `preview`).
-//!
-//! `nova-files-thumbnailer <thumbnails folder> <normal|large> (<file> <uri> <mtime> <name>)...`
-//!
-//! The core works out each thumbnail's name and the file's URI and mtime
-//! (the freedesktop thumbnail spec); the helper only decodes, scales and
-//! writes. Before it reads any file it locks itself in (see `sandbox`):
-//! read anywhere, write only inside the thumbnails folder. For each file it
-//! prints one line, in order: `ok`, `failed` or `unsupported`. Formats it
-//! can't decode go to the system's thumbnailers, inside the same sandbox.
-
 #![forbid(unsafe_code)]
 
 mod batch;
@@ -51,7 +38,6 @@ fn main() -> ExitCode {
     for job in &batch.jobs {
         let outcome = render::render(&batch.folder, batch.size, job, &system);
         if writeln!(out, "{}", outcome.word()).is_err() {
-            // Nobody is reading the answers any more.
             return ExitCode::FAILURE;
         }
     }

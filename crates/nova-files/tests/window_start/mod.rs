@@ -1,8 +1,3 @@
-//! The Start page as a place: a new window can open on it, Back and
-//! Forward cross it, a folder that can't be read leaves the window on it,
-//! and each folder a person opens reaches the core's recent folders.
-//! Start heads Places, so a folder's window gets back to it in a click.
-
 use std::path::PathBuf;
 use std::sync::mpsc;
 
@@ -10,8 +5,6 @@ use nova_files_api::{Command, Connector, Event, RecentId};
 
 use super::*;
 
-/// Opens a window on the Start page with a running core whose home is
-/// `home`, and returns the core's connector too.
 fn start_window<'a>(
     cx: &'a mut TestAppContext,
     home: &Path,
@@ -19,7 +12,6 @@ fn start_window<'a>(
     window_at(cx, home, &Location::Start)
 }
 
-/// Opens a window at `location`, as [`start_window`] does.
 fn window_at<'a>(
     cx: &'a mut TestAppContext,
     home: &Path,
@@ -29,7 +21,6 @@ fn window_at<'a>(
     let core_home = nova_files_core::Home {
         folder: home.to_owned(),
         config: home.join(".config"),
-        // Beside the tree, so a saved recent folder never shows in it.
         state: home.with_extension("state"),
         data: home.join(".local/share"),
         drive_trashes: false,
@@ -43,7 +34,6 @@ fn window_at<'a>(
     (view, cx, connector)
 }
 
-/// The recent folders the core keeps, newest first.
 fn recent_folders(connector: &Connector) -> Vec<PathBuf> {
     let (sink, events) = mpsc::channel();
     let connection = connector.connect(sink).unwrap();
@@ -80,7 +70,6 @@ async fn back_and_forward_cross_the_start_page(cx: &mut TestAppContext) {
         assert_eq!(view.back_target(), Some(&Location::Start));
     });
 
-    // Start needs nothing from the core: Back is there at once.
     view.update(cx, MainWindow::go_back);
     view.read_with(cx, |view, _| {
         assert!(view.is_on_start());

@@ -1,11 +1,3 @@
-//! Folding a name or a query so that case and accents don't matter:
-//! Unicode lower case, then Latin letters without their accents (`É` and
-//! `é` become `e`, `ß` becomes `ss`), and combining accents dropped, as a
-//! name stored decomposed has them. Letters of other scripts stay as they
-//! are, lower-cased.
-
-/// `name` folded into `out`. ASCII is folded byte by byte; bytes that
-/// aren't UTF-8 stay as they are, ASCII letters among them lower-cased.
 pub fn fold_into(name: &[u8], out: &mut Vec<u8>) {
     out.clear();
     if name.is_ascii() {
@@ -25,8 +17,6 @@ pub fn fold_into(name: &[u8], out: &mut Vec<u8>) {
     }
 }
 
-/// A lower-case letter's plain form when it has an accent or is a
-/// ligature, `""` for a combining accent, `None` for anything else.
 const fn plain(letter: char) -> Option<&'static str> {
     Some(match letter {
         '\u{300}'..='\u{36f}' => "",
@@ -75,7 +65,6 @@ mod tests {
         assert_eq!(folded("ÉLAN Straße"), "elan strasse");
         assert_eq!(folded("Œuvre Łódź"), "oeuvre lodz");
         assert_eq!(folded("ÆØÅ þorn ĳs"), "aeoa thorn ijs");
-        // Stored decomposed: e and a combining acute accent.
         assert_eq!(folded("Cafe\u{301}"), "cafe");
     }
 

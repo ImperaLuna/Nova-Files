@@ -1,9 +1,3 @@
-//! The folders' views against a scripted core: Ctrl+1, 2 and 3 pick a
-//! view and send it to the core to keep, Ctrl+plus and minus step the
-//! icons' size while Icons shows, the Pictures place and its folders start
-//! in Icons, and the views the core sends win over all but the changes it
-//! hasn't taken yet.
-
 mod gallery;
 mod icons;
 
@@ -11,7 +5,6 @@ use nova_files_api::{FolderView, IconSize, ViewMode};
 
 use super::*;
 
-/// A window on [`SHOWN`], its keys bound and its listing on screen.
 fn shown(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     cx.update(nova_files_ui::bind_window_keys);
     let (view, cx, mut core) = window(cx);
@@ -21,7 +14,6 @@ fn shown(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext
     (view, cx, core)
 }
 
-/// The views the window sent the core to keep since last asked.
 fn views_set(core: &mut Core) -> Vec<(PathBuf, FolderView)> {
     core.commands()
         .into_iter()
@@ -63,7 +55,6 @@ fn ctrl_numbers_pick_the_view_and_the_core_keeps_it(cx: &mut TestAppContext) {
         .collect();
     assert_eq!(modes, [ViewMode::Gallery, ViewMode::Details]);
 
-    // The view showing already sends nothing.
     cx.simulate_keystrokes("ctrl-1");
     assert_eq!(views_set(&mut core), []);
 }
@@ -81,7 +72,6 @@ fn ctrl_plus_and_minus_step_the_icons_only_while_icons_show(cx: &mut TestAppCont
     cx.simulate_keystrokes("ctrl--");
     assert_eq!(showing(&view, cx), icons(IconSize::Large));
 
-    // The size is kept while another view shows.
     cx.simulate_keystrokes("ctrl-1 ctrl-2");
     assert_eq!(showing(&view, cx), icons(IconSize::Large));
 }
@@ -101,7 +91,6 @@ fn the_pictures_place_starts_in_icons(cx: &mut TestAppContext) {
         cx.run_until_parked();
         assert_eq!(showing(&view, cx).mode, mode, "{kind:?}");
     }
-    // A folder inside the place starts in Icons too.
     core.send(Event::Places(vec![Place {
         kind: PlaceKind::Pictures,
         path: Path::new(SHOWN).parent().unwrap().to_path_buf(),
@@ -118,7 +107,6 @@ fn the_views_the_core_sends_win(cx: &mut TestAppContext) {
         icons: IconSize::Small,
     };
 
-    // Newest first: a folder's first view is the one it has.
     core.send(Event::FolderViews(Arc::from([
         (PathBuf::from(OTHER), icons(IconSize::Large)),
         (PathBuf::from(SHOWN), gallery),
@@ -141,12 +129,10 @@ fn a_change_the_core_hasnt_taken_yet_stays(cx: &mut TestAppContext) {
     };
 
     cx.simulate_keystrokes("ctrl-3");
-    // A list the core sent before the change reached it.
     core.send(Event::FolderViews(Arc::from([])));
     cx.run_until_parked();
     assert_eq!(showing(&view, cx), gallery);
 
-    // Once the core's list holds it, the core's lists win again.
     core.send(Event::FolderViews(Arc::from([(
         PathBuf::from(SHOWN),
         gallery,

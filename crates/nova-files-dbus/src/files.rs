@@ -1,12 +1,3 @@
-//! The Nova Files interface: what launchers call. `Ping` answers once the
-//! core has answered, so a reply means the core itself is running.
-//!
-//! Each call opens its own connection to the core and drops it after the
-//! answer, so D-Bus traffic counts as activity without keeping the core
-//! awake on its own. The wait for the core happens on a thread of its own:
-//! zbus answers every call on one executor, and a blocking wait there would
-//! hold up every other call, such as a second launch's `Activate`.
-
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
@@ -15,13 +6,8 @@ use futures::channel::oneshot;
 use nova_files_api::{Command, Connector, Event};
 use zbus::fdo;
 
-/// The interface name, versioned on its own; it is not the application id.
-/// The `#[zbus::interface]` attribute needs the literal too; a test checks
-/// the two match.
 pub const INTERFACE: &str = "io.github.ImperaLuna.NovaFiles1";
 
-/// How long a call waits for the core: well inside the caller's own
-/// `CALL_TIMEOUT`, so the caller gets this error, not a timeout of its own.
 const CORE_ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
 
 const WAIT_THREAD: &str = "nova-files-dbus-call";
@@ -36,12 +22,11 @@ impl Files {
     }
 }
 
-/// Sends `command` to the core on a connection of its own and waits up to
-/// [`CORE_ANSWER_TIMEOUT`] for its answer, without blocking the D-Bus
-/// executor.
 pub async fn ask_core(connector: &Connector, command: Command) -> fdo::Result<Event> {
     let connector = connector.clone();
     let (answer_sender, answer) = oneshot::channel();
+    // zbus answers every call on one executor, so a blocking wait there holds up every other call.
+    // https://docs.rs/zbus/latest/zbus/struct.Connection.html
     thread::Builder::new()
         .name(WAIT_THREAD.to_owned())
         .spawn(move || {
@@ -68,7 +53,6 @@ fn wait_for_core(connector: &Connector, command: Command) -> fdo::Result<Event> 
 
 #[zbus::interface(name = "io.github.ImperaLuna.NovaFiles1")]
 impl Files {
-    /// Returns once the core has answered.
     async fn ping(&self) -> fdo::Result<()> {
         match ask_core(&self.connector, Command::Ping).await? {
             Event::Pong => Ok(()),

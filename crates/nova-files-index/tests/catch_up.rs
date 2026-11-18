@@ -1,6 +1,3 @@
-//! Catching up on start: a home is crawled, changed while nothing
-//! watches, then watched; the log must hold what changed.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 mod support;
@@ -14,13 +11,10 @@ use std::time::{Duration, SystemTime};
 use nova_files_index::{Change, ChangeLog, Index, LogReader, Watcher, crawl};
 use support::TempFolder;
 
-/// How long a test waits for a change the watcher should still report.
 const WAIT: Duration = Duration::from_secs(5);
 
-/// How long ago the folders' times are set when a test needs them settled.
 const LONG_AGO: Duration = Duration::from_hours(1);
 
-/// A home crawled from `paths`, waiting to be changed and caught up.
 struct Closed {
     home: TempFolder,
     cache: TempFolder,
@@ -31,8 +25,6 @@ impl Closed {
         Self::crawled(TempFolder::new().with(paths))
     }
 
-    /// Like `new`, with every folder's time an hour old, as if nothing
-    /// had happened in them lately.
     fn settled(paths: &[&str]) -> Self {
         let home = TempFolder::new().with(paths);
         let old = SystemTime::now() - LONG_AGO;
@@ -58,7 +50,6 @@ impl Closed {
         self.home.path().join(relative)
     }
 
-    /// Starts watching, with the catch-up already logged.
     fn open(&self) -> Opened {
         let index = Index::open(&self.cache.path().join("index")).unwrap();
         let log_path = self.cache.path().join("changes");
@@ -69,7 +60,6 @@ impl Closed {
             tell.send(()).ok();
         })
         .unwrap();
-        // The catch-up is logged, and told, before start returns.
         let caught = reader.read_new().unwrap();
         let told = woken.try_iter().count();
         Opened {
@@ -86,11 +76,8 @@ impl Closed {
     }
 }
 
-/// A watcher started on a closed home.
 struct Opened {
-    /// What the catch-up logged.
     caught: Vec<Change>,
-    /// How many times it was told before start returned.
     told: usize,
     _watcher: Watcher,
     reader: LogReader,
@@ -98,14 +85,12 @@ struct Opened {
 }
 
 impl Opened {
-    /// What the watcher logs next.
     fn next(&mut self) -> Vec<Change> {
         self.woken.recv_timeout(WAIT).unwrap();
         self.reader.read_new().unwrap()
     }
 }
 
-/// The changes that aren't a folder's own details changing.
 fn entries(changes: Vec<Change>) -> Vec<Change> {
     changes
         .into_iter()
@@ -153,7 +138,6 @@ fn new_and_deleted_files_are_found() {
 fn a_rewritten_file_is_changed_where_its_folder_changed() {
     let closed = Closed::new(&["docs/a.txt", "docs/b.txt"]);
     fs::write(closed.path("docs/a.txt"), b"much longer than before").unwrap();
-    // A new file moves the folder's time, so it is read again.
     fs::write(closed.path("docs/c.txt"), b"").unwrap();
     let changes = entries(closed.caught_up());
     let rewritten: Vec<&Path> = changes
@@ -204,7 +188,6 @@ fn a_file_moved_while_closed_is_removed_then_added() {
         (removed, added),
         (&closed.path("a/file.txt"), &closed.path("b/file.txt"))
     );
-    // The addition still tells it is the same file.
     assert_eq!(details.id.inode, inode);
 }
 
@@ -225,8 +208,6 @@ fn a_folder_moved_while_closed_asks_for_a_rescan() {
 fn a_name_holding_another_file_is_removed_then_added() {
     let closed = Closed::new(&["docs/a.txt"]);
     let path = closed.path("docs/a.txt");
-    // Made while the old one still holds its inode, so it gets another;
-    // the rename replaces the old file.
     fs::write(closed.path("a.tmp"), b"new").unwrap();
     fs::rename(closed.path("a.tmp"), &path).unwrap();
     let changes = entries(closed.caught_up());
@@ -253,7 +234,6 @@ fn a_folder_s_own_change_is_logged() {
 #[test]
 fn folders_untouched_lately_are_not_read_again() {
     let closed = Closed::settled(&["docs/a.txt"]);
-    // Rewriting a file leaves its folder's time alone.
     fs::write(closed.path("docs/a.txt"), b"longer now").unwrap();
     assert_eq!(closed.caught_up(), []);
 }
@@ -336,8 +316,6 @@ fn nothing_is_read_through_a_link_that_replaced_a_folder() {
 #[test]
 fn a_folder_replaced_by_another_while_closed_asks_for_a_rescan() {
     let closed = Closed::new(&["a/one.txt", "b/two.txt"]);
-    // `b` now holds what was `a`, and what was `b` is `c`: comparing the
-    // new `b` with the old one's rows would lose `two.txt`.
     fs::rename(closed.path("b"), closed.path("c")).unwrap();
     fs::rename(closed.path("a"), closed.path("b")).unwrap();
     assert_eq!(
@@ -355,7 +333,6 @@ fn swapped_names_are_logged_so_both_survive_a_replay() {
     fs::rename(closed.path("b.txt"), closed.path("a.txt")).unwrap();
     fs::rename(closed.path("tmp"), closed.path("b.txt")).unwrap();
     let changes = entries(closed.caught_up());
-    // Both leave before either comes back.
     let removed = changes
         .iter()
         .filter(|change| matches!(change, Change::Removed { .. }))

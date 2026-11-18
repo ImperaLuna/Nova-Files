@@ -337,7 +337,6 @@ mod tests {
             FileClipboard::from_offers(&offers),
             Some(files(ClipboardAction::Cut, &["/h/from-gnome"]))
         );
-        // A format with nothing local falls through to the next.
         let mut offers = one(GNOME_COPIED_FILES, "copy\nsmb://host/x");
         offers.push(Offer::new(PLAIN_TEXT, "file:///h/a"));
         assert_eq!(
@@ -352,7 +351,6 @@ mod tests {
             FileClipboard::from_offers(&one(PLAIN_TEXT_UTF8, "file:///h/a\nfile:///h/b%20c\n")),
             Some(files(ClipboardAction::Copy, &["/h/a", "/h/b c"]))
         );
-        // A path copied as text is text: pasting it starts no copy.
         for text in [
             "hello world",
             "/h/a",
@@ -367,7 +365,6 @@ mod tests {
                 "{text:?}"
             );
         }
-        // Bytes that aren't text are no paste.
         assert_eq!(
             FileClipboard::from_offers(&[Offer::new(PLAIN_TEXT, b"file:///h/\xff".to_vec())]),
             None
@@ -422,7 +419,6 @@ mod tests {
                 into: into.clone(),
             })
         );
-        // A cut pasted back where it came from moves nothing.
         assert_eq!(
             files(ClipboardAction::Cut, &["/h/into/b"]).paste_into(into),
             None

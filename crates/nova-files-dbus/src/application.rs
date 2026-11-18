@@ -1,12 +1,3 @@
-//! `org.freedesktop.Application`, the freedesktop interface a running app
-//! offers so a second launch (or a launcher using D-Bus activation) can
-//! hand over to it instead of starting a second process.
-//!
-//! `Activate` asks for a new window on the Start page, `Open` for one
-//! window per `file://` URI, on that folder. `ActivateAction`'s one action,
-//! [`SERVE_FILE_MANAGER`], has the running instance ask for apps' "Show in
-//! folder" name, when D-Bus started a second process for it.
-
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -16,11 +7,7 @@ use zbus::zvariant::OwnedValue;
 
 use crate::file_manager;
 
-/// The interface name. The `#[zbus::interface]` attribute needs the
-/// literal too; a test checks the two match.
 pub const INTERFACE: &str = "org.freedesktop.Application";
-/// The action that has the running instance ask for
-/// `org.freedesktop.FileManager1`.
 pub const SERVE_FILE_MANAGER: &str = "serve-file-manager";
 
 pub struct Application<F> {
@@ -34,10 +21,6 @@ impl<F> Application<F> {
     }
 }
 
-/// The local paths `uris` name.
-///
-/// # Errors
-/// When any isn't a local `file://` URI.
 pub fn local_paths(uris: Vec<String>) -> fdo::Result<Vec<PathBuf>> {
     uris.into_iter()
         .map(|text| {
@@ -47,9 +30,6 @@ pub fn local_paths(uris: Vec<String>) -> fdo::Result<Vec<PathBuf>> {
         .collect()
 }
 
-/// The core hears of a window first, so it doesn't stop while the window
-/// is still starting; if it has already stopped, the caller gets an error
-/// rather than a window that never appears.
 pub fn keep_core_up(connector: &Connector) -> fdo::Result<()> {
     connector
         .activity()
@@ -58,8 +38,6 @@ pub fn keep_core_up(connector: &Connector) -> fdo::Result<()> {
 
 #[zbus::interface(name = "org.freedesktop.Application")]
 impl<F: Fn(WindowRequest) + Send + Sync + 'static> Application<F> {
-    /// Opens a new window on the Start page. `platform_data` (startup
-    /// notification ids and the like) is not used yet.
     fn activate(&self, platform_data: HashMap<String, OwnedValue>) -> fdo::Result<()> {
         drop(platform_data);
         keep_core_up(&self.connector)?;
@@ -67,8 +45,6 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Application<F> {
         Ok(())
     }
 
-    /// Opens a window on each folder `uris` names. Nothing opens unless
-    /// every URI is a local `file://` one; no URIs opens the home folder.
     fn open(
         &self,
         uris: Vec<String>,
@@ -86,8 +62,6 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Application<F> {
         Ok(())
     }
 
-    /// Runs `name`: only [`SERVE_FILE_MANAGER`], which asks for
-    /// `org.freedesktop.FileManager1`, never taking it from its owner.
     async fn activate_action(
         &self,
         #[zbus(connection)] connection: &zbus::Connection,

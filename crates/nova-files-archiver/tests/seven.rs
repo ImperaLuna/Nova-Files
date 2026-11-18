@@ -1,7 +1,3 @@
-//! 7z through the installed 7-Zip, run by the real helper: made, listed
-//! and unpacked whole, locked with its names hidden, stopped, and turned
-//! away without 7-Zip. These tests need 7-Zip (`7zz` or `7z`) on `PATH`.
-
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -20,11 +16,8 @@ use common::Bench;
 use nova_files_api::{Command, ConflictKind, Event, ExtractTo, Operation, Outcome, Packing, Tally};
 use nova_files_core::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
 
-/// Entries whose listing outgrows the helper's output buffer.
 const MANY: u32 = 500;
-/// More asks with nothing new than a test archive takes.
 const MOST_WAITS: u32 = 100;
-/// Well under the 10 s a helper gets to exit once its output ends.
 const QUICK: Duration = Duration::from_secs(5);
 
 fn helper() -> Archiver {
@@ -37,8 +30,6 @@ fn archiver() -> Archiver {
     helper().with_seven(Some(seven))
 }
 
-/// Goes on, counting entries, but stops a run asked this many times with
-/// nothing new.
 fn go(entries: &mut u64) -> impl FnMut(Extracting) -> Flow + '_ {
     let mut waits = 0;
     move |extracting| {
@@ -55,8 +46,6 @@ fn go(entries: &mut u64) -> impl FnMut(Extracting) -> Flow + '_ {
     }
 }
 
-/// A fresh scratch folder holding `docs/` (a file, a folder inside, a
-/// link) and `notes.txt`.
 fn sources(name: &str) -> PathBuf {
     let folder =
         std::env::temp_dir().join(format!("nova-archiver-seven-{name}-{}", std::process::id()));
@@ -419,8 +408,6 @@ fn a_name_with_wildcards_picks_only_itself() {
     fs::remove_dir_all(&folder).ok();
 }
 
-/// The shell on PATH, by its real path: the sandbox lets 7-Zip run only
-/// programs under its own folder and the system folders.
 fn shell_on_path() -> PathBuf {
     std::env::split_paths(&std::env::var_os("PATH").unwrap())
         .map(|folder| folder.join("sh"))

@@ -29,7 +29,6 @@ fn sets_ranges_and_negation() {
     assert!(glob_matches("[!.]*", "notes", true));
     assert!(!glob_matches("[!.]*", ".hidden", true));
     assert!(glob_matches("[Mm]akefile", "makefile", true));
-    // An unclosed `[` is a plain character.
     assert!(glob_matches("a[b", "a[b", true));
     assert!(!glob_matches("a[b", "ab", true));
 }
@@ -59,7 +58,6 @@ fn without_a_database_mime_rules_admit_everything() {
 
 #[test]
 fn a_negated_set_can_hold_a_closing_bracket() {
-    // `]` right after `[!` is in the set, as in fnmatch.
     assert!(glob_matches("[!]]*.txt", "notes.txt", true));
     assert!(!glob_matches("[!]]*.txt", "]notes.txt", true));
     assert!(glob_matches("[]]x", "]x", true));

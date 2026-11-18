@@ -1,11 +1,5 @@
-//! Trash as a place: Was in, Restore, Delete (or Shift+Delete) for good
-//! and Empty Trash,
-//! on a real core with a home of its own.
-
 use super::*;
 
-/// Moves `name` in the folder on screen to the trash, then opens the
-/// trash and waits for it to list `listed`.
 async fn trash_and_open(
     view: &Entity<MainWindow>,
     cx: &mut VisualTestContext,
@@ -45,18 +39,14 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     assert_eq!(view.read_with(cx, |view, _| view.trash_count()), Some(1));
     cx.run_until_parked();
     assert!(cx.debug_bounds("head-was-in").is_some());
-    // Places' Trash row is the place on screen and says how many it holds.
     assert!(cx.debug_bounds("place-trash-here").is_some());
     assert!(cx.debug_bounds("place-trash-number").is_some());
-    // A tab on the trash goes by its name in Places, as does a new one.
     view.update(cx, MainWindow::open_trash_in_new_tab);
     view.read_with(cx, |view, _| {
         assert_eq!(view.tab_names(), ["Trash", "Trash"]);
     });
     click(cx, "tab-0");
     cx.run_until_parked();
-    // Empty Trash sits at the far end of the path bar, nearer its edge
-    // than the crumbs.
     let chip = cx.debug_bounds("empty-trash").unwrap();
     let slot = cx.debug_bounds("path").unwrap();
     assert!(slot.right() - chip.right() < chip.left() - slot.left());
@@ -65,7 +55,6 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     click(cx, "island-dismiss");
     click(cx, "name-0");
     cx.run_until_parked();
-    // In the trash, the selection can only go back.
     assert!(cx.debug_bounds("island-copy").is_none());
     click(cx, "island-restore");
     wait_for_names(&view, cx, &[]).await;
@@ -128,8 +117,6 @@ async fn shift_delete_in_the_trash_does_the_same(cx: &mut TestAppContext) {
     delete_in_the_trash(cx, "shift-delete").await;
 }
 
-/// Trashes a file, opens the trash, and deletes it there for good with
-/// `key`, which asks first.
 async fn delete_in_the_trash(cx: &mut TestAppContext, key: &str) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("trash-delete");
@@ -171,7 +158,6 @@ async fn a_trash_never_used_shows_empty(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(cx.debug_bounds("trash-empty").is_some());
     assert!(cx.debug_bounds("empty-trash").is_none());
-    // Back goes to where the window was.
     assert_eq!(
         view.read_with(cx, |view, _| view.back_target().cloned()),
         Some(Location::from(tree.path()))
@@ -185,7 +171,6 @@ async fn in_the_trash_files_only_go_back(cx: &mut TestAppContext) {
     let home = TempFolder::tree("trash-only-back-home");
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
-    // Something to paste.
     click(cx, "name-0");
     cx.simulate_keystrokes("ctrl-c");
     trash_and_open(
@@ -227,7 +212,6 @@ async fn undoing_elsewhere_stays_in_the_folder_on_screen(cx: &mut TestAppContext
     wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
     view.update(cx, |view, _| view.open(&projects));
     wait_for_names(&view, cx, &["nova"]).await;
-    // The undo changes the trash, which isn't on screen.
     cx.simulate_keystrokes("ctrl-z");
     view.condition::<WindowEvent>(cx, |view, _| view.jobs_pending() == 0)
         .await;
@@ -266,8 +250,6 @@ async fn the_path_bar_in_the_trash_is_one_crumb(cx: &mut TestAppContext) {
     )
     .await;
     cx.run_until_parked();
-    // Trash alone, with no arrow into the folder it keeps them in, even
-    // though that holds a folder.
     assert!(cx.debug_bounds("crumb-0").is_some());
     assert!(cx.debug_bounds("crumb-1").is_none());
     assert!(cx.debug_bounds("arrow-0").is_none());

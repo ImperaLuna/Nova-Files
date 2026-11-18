@@ -1,7 +1,3 @@
-//! Gallery against a scripted core: the stage shows the cursor's entry
-//! and follows the arrows, Space lifts it over the window and puts it
-//! back, and the strip draws only the entries that fit.
-
 use super::*;
 
 fn gallery(
@@ -13,8 +9,6 @@ fn gallery(
     answer_listing(&mut core, entries);
     cx.run_until_parked();
     cx.simulate_keystrokes("ctrl-3");
-    // The window draws once in Gallery, and again once it knows how much
-    // room Gallery has.
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
     (view, cx, core)
@@ -37,12 +31,10 @@ fn the_stage_shows_the_first_entry_selected(cx: &mut TestAppContext) {
     let stage = cx.debug_bounds("stage").unwrap();
     assert!(cx.debug_bounds("strip").is_some());
     assert_eq!(cx.debug_bounds("head-name"), None);
-    // The strip's cells sit in one line, under the stage.
     let (first, second) = (cx.debug_bounds("entry-0"), cx.debug_bounds("entry-1"));
     let (first, second) = (first.unwrap(), second.unwrap());
     assert_eq!(first.top(), second.top());
     assert!(first.top() >= stage.bottom(), "{first:?} {stage:?}");
-    // The island over the selection leaves the strip clear.
     let island = cx.debug_bounds("island").unwrap();
     assert!(first.bottom() <= island.top(), "{first:?} {island:?}");
 }
@@ -116,7 +108,6 @@ fn a_rename_shows_under_the_stage(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.renaming()));
     let field = cx.debug_bounds("rename").unwrap();
-    // As wide as the art over it, not just its own padding.
     assert!(field.size.width > px(100.0), "{field:?}");
     assert_eq!(cx.debug_bounds("stage-name"), None);
 }

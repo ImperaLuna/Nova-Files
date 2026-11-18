@@ -1,13 +1,7 @@
-//! Type to jump in a main window on a real core: letters move the cursor
-//! to the next name starting with them, a repeated letter steps through
-//! its names, and a pause starts a new prefix.
-
 use std::time::Duration;
 
 use super::*;
 
-/// The shared tree plus `banana.txt`, `blue.txt` and `my notes.txt`:
-/// Projects, banana.txt, blue.txt, my notes.txt, notes.txt.
 async fn named<'a>(
     cx: &'a mut TestAppContext,
     tree: &TempFolder,
@@ -37,7 +31,6 @@ fn selected(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
     view.read_with(cx, |view, _| view.selected_names())
 }
 
-/// Longer than the pause that starts a new prefix.
 const PAUSED: Duration = Duration::from_secs(2);
 
 #[gpui::test]
@@ -52,7 +45,6 @@ async fn letters_jump_to_a_name_and_build_a_prefix(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("b l");
     assert_eq!(selected(&view, cx), ["blue.txt"]);
     cx.executor().advance_clock(PAUSED);
-    // A space inside a name is part of it.
     cx.simulate_keystrokes("m y space n");
     assert_eq!(selected(&view, cx), ["my notes.txt"]);
 }
@@ -79,7 +71,6 @@ async fn a_name_nothing_starts_with_leaves_the_cursor(cx: &mut TestAppContext) {
 
     cx.simulate_keystrokes("b z");
     assert_eq!(selected(&view, cx), ["banana.txt"]);
-    // A space with nothing typed before it isn't a jump.
     cx.executor().advance_clock(PAUSED);
     cx.simulate_keystrokes("space");
     assert_eq!(selected(&view, cx), ["banana.txt"]);

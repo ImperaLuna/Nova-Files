@@ -1,12 +1,8 @@
-//! Records written and read back, a reader that waits for a record to be
-//! whole, and damaged logs.
-
 use super::*;
 use crate::Kind;
 
 const LONG_LOG: usize = 4_000;
 const CRAWLED: Option<Stamp> = Some(Stamp(1_700_000_000_000_000_000));
-/// Details with every field set to something that would show a mix-up.
 const DEVICE: u64 = 3;
 const INODE: u64 = 1 << 40;
 const SIZE: u64 = 1 << 33;
@@ -53,7 +49,6 @@ fn every_change() -> Vec<Change> {
     ]
 }
 
-/// A temp file path, removed when dropped.
 struct TempLog(PathBuf);
 
 impl TempLog {
@@ -80,7 +75,6 @@ fn every_change_reads_back_as_written() {
     }
     assert_eq!(reader.read_new().unwrap(), every_change());
     assert_eq!(reader.read_new().unwrap(), []);
-    // A second reader reads it all from the start, on its own.
     assert_eq!(
         LogReader::open(&path.0).unwrap().read_new().unwrap(),
         every_change()
@@ -111,7 +105,6 @@ fn a_long_log_is_read_in_full() {
     let change = Change::Removed {
         path: PathBuf::from("/home/me/a-fairly-long-folder-name/with-a-file-inside.txt"),
     };
-    // Past what one read of the file returns at once.
     let count = LONG_LOG;
     for _ in 0..count {
         log.append(&change).unwrap();
@@ -172,7 +165,6 @@ fn damaged_records_are_errors() {
     let mut one_path = record(&every_change()[3]).unwrap();
     one_path[R_OP] = OP_MOVED;
     assert_eq!(damaged(&one_path), io::ErrorKind::InvalidData);
-    // Exactly the fixed part, with an empty path, is a whole record.
     let empty = record(&Change::Removed {
         path: PathBuf::new(),
     })
@@ -187,7 +179,6 @@ fn logs_created_at_the_same_time_each_publish_their_own_file() {
     let lock = beside(&path.0, ".lock");
     for _ in 0..50 {
         let created: Vec<ChangeLog> = std::thread::scope(|scope| {
-            // All started before any is waited on.
             let mut creators = Vec::new();
             for _ in 0..4 {
                 creators.push(scope.spawn(|| ChangeLog::create(&path.0, CRAWLED)));
@@ -197,7 +188,6 @@ fn logs_created_at_the_same_time_each_publish_their_own_file() {
                 .map(|creator| creator.join().unwrap().unwrap())
                 .collect()
         });
-        // The last one in place is one of them: its record reaches readers.
         let rescan = Change::Rescan {
             folder: PathBuf::from("/home/me"),
         };

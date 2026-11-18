@@ -1,6 +1,3 @@
-//! Browsing inside an archive through the real core and helper: listing a
-//! folder in it, its details, copying out, and opening a file in it.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -22,7 +19,6 @@ use nova_files_api::{
 use zip::DateTime;
 use zip::write::SimpleFileOptions;
 
-/// A zip of `docs/` with two files and `top.txt` beside it.
 fn docs_zip(archive: &Path) {
     let mut zip = zip::ZipWriter::new(File::create(archive).unwrap());
     let options = SimpleFileOptions::default()

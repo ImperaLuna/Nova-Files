@@ -1,10 +1,3 @@
-//! Writes entries into the folder the helper unpacks into, and nowhere
-//! else. Every folder on the way is opened one part at a time, never
-//! following a link, so a link an archive made earlier can't lead a later
-//! entry out. A name already there is replaced, unless it is a folder,
-//! which stays and keeps the later entry out: the later of two entries
-//! with one name wins, as `tar` does.
-
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, Read};
@@ -17,8 +10,6 @@ use rustix::fs::{
 };
 use rustix::io::Errno;
 
-/// What a folder needs while the helper writes inside it; its own
-/// permissions go on once everything is in.
 const WRITABLE: u32 = 0o700;
 const PERMISSION_BITS: u32 = 0o777;
 const PART: u8 = b'/';
@@ -28,14 +19,11 @@ const NEW_FILE: OFlags = OFlags::WRONLY
     .union(OFlags::EXCL)
     .union(OFlags::NOFOLLOW)
     .union(OFlags::CLOEXEC);
-/// The unpack folder itself, opened again.
 const ROOT: OFlags = OFlags::RDONLY
     .union(OFlags::DIRECTORY)
     .union(OFlags::CLOEXEC);
-/// A folder inside it, never through a link.
 pub const FOLDER: OFlags = ROOT.union(OFlags::NOFOLLOW);
 
-/// A write that failed, apart from reading the archive.
 #[derive(Debug)]
 pub struct WriteError(pub io::Error);
 
@@ -51,8 +39,6 @@ impl From<io::Error> for WriteError {
     }
 }
 
-/// The parts of `path`, or `None` when one is `..`. Empty parts and `.`
-/// are left out.
 pub fn parts(path: &[u8]) -> Option<Vec<&[u8]>> {
     let mut parts = Vec::new();
     for part in path.split(|&byte| byte == PART) {
@@ -65,19 +51,14 @@ pub fn parts(path: &[u8]) -> Option<Vec<&[u8]>> {
     Some(parts)
 }
 
-/// When and with which permissions an entry was last changed.
 #[derive(Debug, Clone, Copy)]
 pub struct Stamp {
     pub mode: u32,
-    /// Seconds since 1970, UTC.
     pub modified: i64,
 }
 
-/// The folder being unpacked into, and the folders made inside it, whose
-/// permissions and times go on last.
 pub struct Unpacking {
     root: OwnedFd,
-    /// The permission bits the user's umask leaves.
     keep: u32,
     folders: Vec<(Vec<Vec<u8>>, Stamp)>,
 }
@@ -91,7 +72,6 @@ impl Unpacking {
         }
     }
 
-    /// Makes the folder `parts`, and those it is in.
     pub fn folder(&mut self, parts: &[&[u8]], stamp: Stamp) -> Result<(), WriteError> {
         let Some((name, inside)) = parts.split_last() else {
             return Ok(());
@@ -103,9 +83,6 @@ impl Unpacking {
         Ok(())
     }
 
-    /// Writes the file `parts` with what `contents` holds, and says how
-    /// many bytes that was. A read that fails comes back as an `Ok` error
-    /// inside, so it tells apart from a write.
     pub fn file(
         &self,
         parts: &[&[u8]],
@@ -134,7 +111,6 @@ impl Unpacking {
         Ok(Ok(written))
     }
 
-    /// Makes `parts` a link to `target`, which is never followed here.
     pub fn link(&self, parts: &[&[u8]], target: &[u8]) -> Result<(), WriteError> {
         let Some((name, inside)) = parts.split_last() else {
             return Ok(());
@@ -146,8 +122,6 @@ impl Unpacking {
         }
     }
 
-    /// Makes `parts` another name for the file `target` already unpacked;
-    /// `false` when there is no such file.
     pub fn hard_link(&self, parts: &[&[u8]], target: &[&[u8]]) -> Result<bool, WriteError> {
         let (Some((name, inside)), Some((target_name, target_inside))) =
             (parts.split_last(), target.split_last())
@@ -170,8 +144,6 @@ impl Unpacking {
         }
     }
 
-    /// Gives each folder made its own permissions and time, those inside
-    /// first, so a folder's time isn't changed by what goes in after.
     pub fn finish(mut self) -> Result<(), WriteError> {
         self.folders
             .sort_by_key(|(parts, _)| std::cmp::Reverse(parts.len()));
@@ -184,8 +156,6 @@ impl Unpacking {
         Ok(())
     }
 
-    /// Opens the folder `parts` inside the root, one part at a time and
-    /// never through a link; with `make`, makes the parts not there.
     fn open(&self, parts: &[&[u8]], make: bool) -> Result<OwnedFd, Errno> {
         let mut folder = openat(&self.root, c".", ROOT, Mode::empty())?;
         for part in parts {
@@ -202,8 +172,6 @@ fn open_folder(parent: &impl AsFd, name: &[u8]) -> Result<OwnedFd, Errno> {
     openat(parent, os(name), FOLDER, Mode::empty())
 }
 
-/// Makes the folder `name` in `parent`; one already there stays, and
-/// anything else there gives way.
 fn make_folder(parent: &impl AsFd, name: &[u8]) -> Result<(), Errno> {
     match mkdirat(parent, os(name), Mode::from_raw_mode(WRITABLE)) {
         Err(Errno::EXIST) if open_folder(parent, name).is_err() => {
@@ -215,9 +183,6 @@ fn make_folder(parent: &impl AsFd, name: &[u8]) -> Result<(), Errno> {
     }
 }
 
-/// Runs `make`, which makes `name` in `parent`; when the name is taken by
-/// anything but a folder, that goes and `make` runs again. A folder there
-/// stays, and the answer is `ISDIR`.
 fn replacing<T>(
     parent: &impl AsFd,
     name: &[u8],

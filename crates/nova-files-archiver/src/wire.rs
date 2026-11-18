@@ -1,20 +1,5 @@
-//! Writes entries to the core. The core reads the same layout
-//! (`nova-files-core`'s `archive::wire`); change both together.
-//!
-//! Each entry is eight fields, each ended by a NUL byte:
-//!
-//! 1. kind: `f` file, `d` folder, `l` link
-//! 2. locked: `1` when its contents need a password, else `0`
-//! 3. size in bytes, in decimal
-//! 4. modified, in seconds since 1970, in decimal, maybe negative
-//! 5. clock of the modified time: `u` UTC, `l` the reader's local time
-//! 6. permission bits (`0o7777` at most), in decimal
-//! 7. path inside the archive, its parts joined by `/`
-//! 8. what a link points to; empty for anything else
-
 use std::io::{self, Write};
 
-/// What an entry is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     File,
@@ -22,15 +7,12 @@ pub enum Kind {
     Link,
 }
 
-/// Which clock an entry's time was written by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Clock {
     Utc,
-    /// Wall time with no zone, as zip's own times are.
     Local,
 }
 
-/// One entry as the helper found it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry<'a> {
     pub kind: Kind,
@@ -46,7 +28,6 @@ pub struct Entry<'a> {
 const END: u8 = 0;
 const MODE_BITS: u32 = 0o7777;
 
-/// Writes `entry`, unless its path is empty once cleaned.
 pub fn write(out: &mut impl Write, entry: &Entry<'_>) -> io::Result<()> {
     let path = clean(entry.path);
     if path.is_empty() {
@@ -82,7 +63,6 @@ pub fn write(out: &mut impl Write, entry: &Entry<'_>) -> io::Result<()> {
     Ok(())
 }
 
-/// `path` without leading `./` or `/`s and without trailing `/`s.
 fn clean(path: &[u8]) -> &[u8] {
     let mut path = path;
     loop {

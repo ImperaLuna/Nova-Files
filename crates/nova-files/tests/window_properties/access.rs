@@ -1,20 +1,13 @@
-//! The Properties page's Access on a real core: a level chosen on a row's
-//! menu, "Run as a program" and "Also everything inside" change the disk
-//! and show on the page; what the user doesn't own offers no changes; and
-//! the island, with what jobs did, shows on the page.
-
 use std::os::unix::fs::PermissionsExt as _;
 
 use nova_files_ui::{AccessLevel, Look, Who};
 
 use super::*;
 
-/// The permission bits of `path`.
 fn mode_of(path: &Path) -> u32 {
     fs::symlink_metadata(path).unwrap().mode() & 0o7777
 }
 
-/// Waits until the page on screen shows `mode` for its first path.
 async fn shows_mode(view: &Entity<MainWindow>, cx: &VisualTestContext, mode: u32) {
     view.condition::<WindowEvent>(cx, |view, _| {
         view.properties_page()
@@ -24,7 +17,6 @@ async fn shows_mode(view: &Entity<MainWindow>, cx: &VisualTestContext, mode: u32
     .await;
 }
 
-/// Opens the menu of the access row `chip` and picks `level`.
 fn pick_level(
     view: &Entity<MainWindow>,
     cx: &mut VisualTestContext,
@@ -39,7 +31,6 @@ fn pick_level(
     let index = view.read_with(cx, |view, _| {
         let page = view.properties_page().unwrap().read();
         let items = &view.menu().unwrap().items;
-        // The level it has now is the one ticked.
         let on: Vec<&str> = items
             .iter()
             .filter(|item| item.look == Look::On)
@@ -73,13 +64,11 @@ async fn a_level_chosen_changes_the_disk_and_shows(cx: &mut TestAppContext) {
     pick_level(&view, cx, "access-0", AccessLevel::ReadOnly);
     shows_mode(&view, cx, 0o440).await;
 
-    // Runs for whoever may read it, then for none.
     click(cx, "access-runs");
     shows_mode(&view, cx, 0o550).await;
     click(cx, "access-runs");
     shows_mode(&view, cx, 0o440).await;
 
-    // Reopened, the page reads what the disk says.
     view.update(cx, MainWindow::close_current_tab);
     click(cx, "name-1");
     view.update(cx, MainWindow::show_properties);
@@ -166,7 +155,6 @@ async fn a_drive_mounted_read_only_offers_no_changes(cx: &mut TestAppContext) {
     assert!(!view.read_with(cx, |view, _| view.may_change_access()));
 }
 
-/// A folder on a drive mounted read-only, if this system has one.
 fn read_only_mount() -> Option<std::path::PathBuf> {
     let mounts = fs::read_to_string("/proc/self/mounts").ok()?;
     mounts.lines().find_map(|line| {

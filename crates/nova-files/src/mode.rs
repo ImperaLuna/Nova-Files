@@ -1,13 +1,3 @@
-//! How the program was started, from its command line.
-//!
-//! `nova-files` opens a window on the home folder, `nova-files <folder>`
-//! (a path or a `file://` URI, as launchers pass it) on that folder, and
-//! `nova-files --service` runs only the core; `nova-files --file-manager`
-//! does too, and answers apps' "Show in folder". `nova-files --make-default`
-//! makes Nova Files the user's default for folders and exits.
-//! `nova-files --index <folder>` builds the file index of that folder and
-//! exits, for the bench.
-
 use std::ffi::OsString;
 use std::fmt;
 use std::io;
@@ -15,41 +5,23 @@ use std::path::PathBuf;
 
 use nova_files_api::uri;
 
-/// D-Bus passes it when it starts the program for a launcher.
 const SERVICE_FLAG: &str = "--service";
-/// D-Bus passes it when it starts the program for an app's "Show in
-/// folder" (`org.freedesktop.FileManager1`).
 const FILE_MANAGER_FLAG: &str = "--file-manager";
-/// Makes Nova Files the default for folders, then exits.
 const MAKE_DEFAULT_FLAG: &str = "--make-default";
-/// Builds the index of the folder after it, then exits.
 const INDEX_FLAG: &str = "--index";
-/// Anything else starting with this is a flag the program doesn't take.
 const FLAG_PREFIX: &str = "-";
-/// What the usage line calls the folder argument.
 const FOLDER_ARGUMENT: &str = "folder";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
-    /// Open a window on the folder, or on the home folder.
     Window(Option<PathBuf>),
-    /// Run only the core until something asks for a window.
     Service,
-    /// Run only the core and answer apps' "Show in folder", as D-Bus asked.
     FileManager,
-    /// Make Nova Files the default for folders, then exit.
     MakeDefault,
-    /// Build the file index of the folder, then exit.
     Index(PathBuf),
 }
 
 impl Mode {
-    /// Reads the arguments after the program name. A folder may still be
-    /// relative; [`Mode::resolve`] makes it absolute.
-    ///
-    /// # Errors
-    /// [`UsageError`] for an unknown flag, more than one argument, or a URI
-    /// that doesn't name a local path.
     pub fn from_args(mut args: impl Iterator<Item = OsString>) -> Result<Self, UsageError> {
         let mode = match args.next() {
             None => Self::Window(None),
@@ -65,12 +37,6 @@ impl Mode {
         args.next().map_or(Ok(mode), |extra| Err(UsageError(extra)))
     }
 
-    /// Makes a relative folder absolute, from `working_folder`, which is
-    /// asked for only then: a launch without a relative folder works even
-    /// when the working folder is gone.
-    ///
-    /// # Errors
-    /// When `working_folder` fails.
     pub fn resolve(self, working_folder: impl FnOnce() -> io::Result<PathBuf>) -> io::Result<Self> {
         match self {
             Self::Window(Some(folder)) if folder.is_relative() => {
@@ -86,7 +52,6 @@ impl Mode {
 
 fn folder(argument: OsString) -> Result<PathBuf, UsageError> {
     let Some(text) = argument.to_str() else {
-        // Not UTF-8, so not a flag or a URI: a path.
         return Ok(PathBuf::from(argument));
     };
     if text.starts_with(FLAG_PREFIX) {
@@ -98,8 +63,6 @@ fn folder(argument: OsString) -> Result<PathBuf, UsageError> {
     Ok(PathBuf::from(argument))
 }
 
-/// Whether `text` starts with a URI scheme and `://` (`file://…`), not
-/// just holds `://` somewhere, as the path `/tmp/a://b` does.
 fn has_uri_scheme(text: &str) -> bool {
     text.split_once("://").is_some_and(|(scheme, _)| {
         scheme.starts_with(|first: char| first.is_ascii_alphabetic())
@@ -109,7 +72,6 @@ fn has_uri_scheme(text: &str) -> bool {
     })
 }
 
-/// An argument the program doesn't take.
 #[derive(Debug)]
 pub struct UsageError(OsString);
 

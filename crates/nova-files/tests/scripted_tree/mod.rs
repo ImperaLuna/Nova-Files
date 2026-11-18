@@ -1,12 +1,6 @@
-//! The sidebar's folder tree against a scripted core: it takes only the
-//! answer to the listing it asked for, on its own connection, whether the
-//! folder was listed or couldn't be read.
-
 use super::*;
 
 impl Core {
-    /// Drains the window's messages so the tree's are put aside, then
-    /// takes the oldest folder the tree asked for.
     fn tree_listing(&mut self) -> (ListingId, PathBuf) {
         while self.try_recv().is_some() {}
         assert!(!self.tree_listings.is_empty(), "the tree asked for nothing");
@@ -31,8 +25,6 @@ fn folders(names: &[&str]) -> Arc<[Entry]> {
         .collect()
 }
 
-/// A window on [`SHOWN`], its home, holding folders `a` and `b`, with the
-/// tree's root opened: the tree has asked to list the root.
 fn tree_opened(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     let (view, cx, mut core) = window(cx);
     let (id, path) = core.next_listing().unwrap();

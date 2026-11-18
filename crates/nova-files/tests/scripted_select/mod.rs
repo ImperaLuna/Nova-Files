@@ -1,10 +1,5 @@
-//! Selecting against a scripted core: a fresh read of the same folder
-//! keeps the names selected, Enter opens the files selected, a page move
-//! steps by the rows on screen, and the folder left is scrolled to.
-
 use super::*;
 
-/// Answers the window's next listing request with files named `names`.
 fn answer_names(core: &mut Core, names: &[&str]) {
     let (id, path) = core.next_listing().unwrap();
     let entries: Arc<[Entry]> = names
@@ -24,7 +19,6 @@ fn answer_names(core: &mut Core, names: &[&str]) {
     }));
 }
 
-/// A window on [`SHOWN`] with its keys bound, showing files `names`.
 fn keyed<'a>(
     cx: &'a mut TestAppContext,
     names: &[&str],
@@ -40,7 +34,6 @@ fn selected(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
     view.read_with(cx, |view, _| view.selected_names())
 }
 
-/// The files the window asked the core to open since last asked.
 fn opened(core: &mut Core) -> Vec<PathBuf> {
     let mut opened = Vec::new();
     while let Some(message) = core.try_recv() {

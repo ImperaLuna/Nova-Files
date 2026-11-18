@@ -1,18 +1,8 @@
-//! Adds `tEXt` chunks to an encoded PNG, which is how the freedesktop
-//! thumbnail spec stores a thumbnail's source URI and mtime.
-//!
-//! The chunks go right after `IHDR`, which the PNG format requires to come
-//! first. Each chunk carries a CRC-32 of its type and data.
-
-/// The PNG signature, then `IHDR`: length, type, 13 bytes of data, CRC.
 const IHDR_END: usize = 8 + 4 + 4 + 13 + 4;
 const TEXT_TYPE: &[u8; 4] = b"tEXt";
-/// The reflected CRC-32 polynomial PNG uses.
 const CRC_POLYNOMIAL: u32 = 0xEDB8_8320;
 const BITS_PER_BYTE: u32 = 8;
 
-/// `png` with a `tEXt` chunk for each `(keyword, text)`, or `None` when
-/// `png` is too short to hold an `IHDR`.
 pub fn with_text(png: &[u8], entries: &[(&str, &str)]) -> Option<Vec<u8>> {
     let (head, tail) = png.split_at_checked(IHDR_END)?;
     let mut out = Vec::with_capacity(png.len());

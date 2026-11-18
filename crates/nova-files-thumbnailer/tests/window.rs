@@ -1,7 +1,3 @@
-//! A window on a real core and the real helper: an image row in the list
-//! gets its thumbnail once the list has drawn it, and the quick look shows
-//! the picture itself.
-
 #![expect(
     clippy::future_not_send,
     clippy::unwrap_used,
@@ -25,12 +21,8 @@ use nova_files_ui::{MainWindow, WindowEvent};
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
 const SIDE: u32 = 300;
 
-/// How long the test may wait for the core and the helper.
 const WAIT: Duration = Duration::from_secs(5);
 
-/// Fails the test process if the test is still running after [`WAIT`]:
-/// GPUI's waits have no deadline of their own while the core answers from
-/// real threads, so a thumbnail that never comes would hang.
 struct Watchdog(Sender<()>);
 
 impl Watchdog {
@@ -52,7 +44,6 @@ impl Drop for Watchdog {
     }
 }
 
-/// A folder under the system temp folder, removed when dropped.
 struct TempFolder(PathBuf);
 
 impl Drop for TempFolder {
@@ -61,8 +52,6 @@ impl Drop for TempFolder {
     }
 }
 
-/// A window with the real helper on a folder holding `notes.txt` and
-/// `photo.jpg`, in that order, once that folder is on screen.
 async fn window_on_media<'a>(
     cx: &'a mut TestAppContext,
     test: &str,
@@ -77,7 +66,6 @@ async fn window_on_media<'a>(
     );
     let folder = temp.0.join("media");
     fs::create_dir_all(&folder).unwrap();
-    // Sorted: notes.txt, photo.jpg.
     fs::write(folder.join("notes.txt"), b"hello").unwrap();
     RgbImage::new(SIDE, SIDE)
         .save_with_format(folder.join("photo.jpg"), ImageFormat::Jpeg)
@@ -86,7 +74,6 @@ async fn window_on_media<'a>(
         folder: temp.0.join("thumbnails"),
         helper: PathBuf::from(HELPER),
     };
-    // The core and the helper answer from their own threads.
     cx.executor().allow_parking();
     let core = nova_files_core::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
     let (start, home) = (folder.clone(), temp.0.clone());
@@ -162,8 +149,6 @@ async fn a_smaller_window_gets_a_smaller_picture(cx: &mut TestAppContext) {
     .await;
     assert_eq!(side(&view, cx), Some(SIDE));
 
-    // Too small for the picture, even in device pixels: it is asked for
-    // again, smaller.
     cx.simulate_resize(gpui::size(gpui::px(200.0), gpui::px(200.0)));
     cx.run_until_parked();
     view.condition::<WindowEvent>(cx, |view, _| {

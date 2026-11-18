@@ -1,7 +1,3 @@
-//! Against a private D-Bus daemon with a stand-in settings portal: the
-//! running instance reads the desktop's light or dark, accent and icon
-//! theme at once, and passes each later change on to the core.
-
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -26,17 +22,12 @@ use support::{PrivateBus, WAIT};
 
 const PREFERS_LIGHT: u32 = 2;
 const PREFERS_DARK: u32 = 1;
-/// What the portal says before any change.
 const STARTING_SCHEME: u32 = PREFERS_LIGHT;
-/// Orange, as the portal sends it.
 const ACCENT: (f64, f64, f64) = (1.0, 0.5, 0.0);
 const ACCENT_RGB: Color = Color(0xFF_80_00);
-/// The icon themes the portal names: GNOME's and KDE's.
 const GNOME_THEME: &str = "Papirus-Dark";
 const KDE_THEME: &str = "breeze";
 
-/// The portal's settings, as a desktop that prefers light with an orange
-/// accent would answer.
 struct Portal {
     scheme: u32,
 }
@@ -55,8 +46,6 @@ impl Portal {
     }
 }
 
-/// A version 1 portal: only `Read`, which wraps the value in one more
-/// variant. It says dark and sets no accent.
 struct OldPortal;
 
 #[zbus::interface(name = "org.freedesktop.portal.Settings")]
@@ -86,8 +75,6 @@ fn a_version_1_portal_is_read_too() {
     assert_eq!(next_look(&core), dark);
 }
 
-/// A portal with both methods: `ReadOne` holds the scheme but no accent,
-/// and `Read` would give an accent. A key `ReadOne` lacks stays unset.
 struct BothMethods;
 
 #[zbus::interface(name = "org.freedesktop.portal.Settings")]
@@ -142,11 +129,8 @@ fn a_portal_that_starts_later_or_again_is_read_then() {
         mode: Some(Mode::Light),
         accent: Some(ACCENT_RGB),
     };
-    // The first read can race the portal starting and see only part of
-    // it; the read the portal's start brings on sees all of it.
     look_until(&core, light);
 
-    // Started again with another preference, and no signal about it.
     first.release_name(PORTAL_NAME).unwrap();
     drop(first);
     let _second = serve_portal(
@@ -195,8 +179,6 @@ fn the_desktop_look_reaches_the_core_and_follows_changes() {
     };
     assert_eq!(next_look(&core), dark);
 
-    // Another namespace, or the same look again, sends nothing; the next
-    // real change is the next look the core hears.
     changed_in(
         &portal,
         "org.example",
@@ -231,7 +213,6 @@ fn the_icon_theme_reaches_the_core_and_follows_changes() {
     let _service = follow(&bus, connector);
     assert_eq!(next_icon_themes(&core), [GNOME_THEME, KDE_THEME]);
 
-    // A change to the look only says nothing of icons.
     changed(&portal, COLOR_SCHEME, Value::U32(PREFERS_DARK));
     changed_in(&portal, KDE_ICONS, KDE_ICON_THEME, Value::from("oxygen"));
     assert_eq!(next_icon_themes(&core), [GNOME_THEME, "oxygen"]);
@@ -239,7 +220,6 @@ fn the_icon_theme_reaches_the_core_and_follows_changes() {
     assert_eq!(next_icon_themes(&core), ["oxygen"]);
 }
 
-/// The next icon themes sent to the core; other messages are skipped.
 fn next_icon_themes(core: &Receiver<CoreMessage>) -> Vec<String> {
     loop {
         if let CoreMessage::Command {
@@ -252,7 +232,6 @@ fn next_icon_themes(core: &Receiver<CoreMessage>) -> Vec<String> {
     }
 }
 
-/// Serves `portal` under the portal's name on `bus`.
 fn serve_portal(bus: &PrivateBus, portal: impl zbus::object_server::Interface) -> Connection {
     Builder::address(bus.address.as_str())
         .unwrap()
@@ -264,8 +243,6 @@ fn serve_portal(bus: &PrivateBus, portal: impl zbus::object_server::Interface) -
         .unwrap()
 }
 
-/// Starts the running instance on `bus` and has it follow the desktop for
-/// the core `connector` reaches.
 fn follow(bus: &PrivateBus, connector: Connector) -> Service {
     let Started::Service(service) =
         nova_files_dbus::start(bus.bus(), connector.clone(), |_| {}).unwrap()
@@ -292,12 +269,10 @@ fn changed_in(portal: &Connection, namespace: &str, key: &str, value: Value<'_>)
         .unwrap();
 }
 
-/// Waits for the core to hear `wanted`, skipping the looks before it.
 fn look_until(core: &Receiver<CoreMessage>, wanted: DesktopLook) {
     while next_look(core) != wanted {}
 }
 
-/// The next look sent to the core; other messages are skipped.
 fn next_look(core: &Receiver<CoreMessage>) -> DesktopLook {
     loop {
         if let CoreMessage::Command {

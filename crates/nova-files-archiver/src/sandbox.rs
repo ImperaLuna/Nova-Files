@@ -1,14 +1,3 @@
-//! Locks the helper in before it reads the archive: it may open no file,
-//! reach no network and signal no process outside itself. What it needs
-//! is already open (the archive, and its answers on standard output), so
-//! a hostile archive that takes over a decoder finds nothing to read and
-//! nowhere to send it. Given 7-Zip, it may also run it and read the
-//! system's programs and libraries; 7-Zip runs locked in with it.
-//!
-//! Landlock does the locking. A kernel without Landlock (or an older ABI)
-//! gets as much of it as it supports; the helper still runs there, since a
-//! missing sandbox must not cost the user their archives.
-
 use std::error::Error;
 use std::os::fd::OwnedFd;
 use std::path::Path;
@@ -19,24 +8,18 @@ use landlock::{
 };
 use rustix::fs::{Mode, OFlags};
 
-/// The newest Landlock ABI the rules are written for: V6 adds the network
-/// (V4) and signal (V6) scopes.
+// A kernel enforces only the Landlock ABI it supports, possibly none.
+// https://docs.kernel.org/userspace-api/landlock.html
 const ABI_VERSION: ABI = ABI::V6;
 const PATH_ONLY: OFlags = OFlags::PATH.union(OFlags::CLOEXEC);
-/// Where a program's libraries and loader live, on the systems the
-/// helper runs on.
 const SYSTEM: [&str; 4] = ["/nix/store", "/usr", "/lib", "/lib64"];
-/// Where 7-Zip reads the random numbers a locked archive starts from.
 const RANDOM: &str = "/dev/urandom";
 
-/// Rights the sandbox leaves open beneath one file or folder.
 pub struct Grant {
     fd: OwnedFd,
     rights: BitFlags<AccessFs>,
 }
 
-/// Locks the process in: every file, network and scope right handled,
-/// none granted but `grants`. Says how much of that this kernel enforces.
 pub fn lock_in(grants: Vec<Grant>) -> Result<RestrictionStatus, Box<dyn Error>> {
     let mut created = ruleset()?.create()?;
     for grant in grants {
@@ -45,8 +28,6 @@ pub fn lock_in(grants: Vec<Grant>) -> Result<RestrictionStatus, Box<dyn Error>> 
     Ok(created.restrict_self()?)
 }
 
-/// Inside the folder `unpack`: make, write and remove files, folders and
-/// links, and open folders.
 pub fn unpacking(unpack: OwnedFd) -> Grant {
     let rights = [
         AccessFs::ReadDir,
@@ -64,7 +45,6 @@ pub fn unpacking(unpack: OwnedFd) -> Grant {
     Grant { fd: unpack, rights }
 }
 
-/// Read the file `fd` is, or all inside the folder it is.
 pub fn reading(fd: OwnedFd, folder: bool) -> Grant {
     let rights = if folder {
         [AccessFs::ReadFile, AccessFs::ReadDir]
@@ -76,8 +56,6 @@ pub fn reading(fd: OwnedFd, folder: bool) -> Grant {
     Grant { fd, rights }
 }
 
-/// List the names in the folder `fd` is, and in those inside it, without
-/// reading any file.
 pub fn naming(fd: OwnedFd) -> Grant {
     Grant {
         fd,
@@ -85,7 +63,6 @@ pub fn naming(fd: OwnedFd) -> Grant {
     }
 }
 
-/// Make files in the folder `fd` is, and write them.
 pub fn making_in(fd: OwnedFd) -> Grant {
     let rights = [AccessFs::MakeReg, AccessFs::WriteFile]
         .into_iter()
@@ -93,8 +70,6 @@ pub fn making_in(fd: OwnedFd) -> Grant {
     Grant { fd, rights }
 }
 
-/// Run `program`: read and run what is in its folder and the system's
-/// library folders that exist, and read the kernel's random numbers.
 pub fn running(program: &Path) -> Vec<Grant> {
     let folder = program
         .canonicalize()
@@ -142,7 +117,6 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let inside = root.clone();
         let held = fs::File::open(root.join("there.txt")).unwrap();
-        // Landlock binds the thread that asks, so the test locks its own.
         let result = thread::spawn(move || {
             let status = lock_in(Vec::new()).unwrap();
             (
@@ -150,7 +124,6 @@ mod tests {
                 fs::read(inside.join("there.txt")).map_err(|error| error.kind()),
                 fs::write(inside.join("escaped.txt"), b"x").map_err(|error| error.kind()),
                 TcpStream::connect(address).is_ok(),
-                // What was open before still reads.
                 io::read_to_string(held).is_ok(),
             )
         })

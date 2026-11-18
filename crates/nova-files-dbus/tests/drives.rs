@@ -1,9 +1,3 @@
-//! Against a private D-Bus daemon with a stand-in udisks2 serving recorded
-//! drives: the watcher lists the volumes a person would open and hides the
-//! system's own, and follows drives being plugged in and out, volumes
-//! being mounted, and udisks2 starting late. Through the real core, a
-//! client that asks gets the list.
-
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -31,10 +25,8 @@ use udisks::{
     core_client, laptop_disk, recorded, stick,
 };
 
-/// How long a test waits for a list that should not come.
 const QUIET: Duration = Duration::from_millis(300);
 
-/// Follows udisks2 on `bus`; each list arrives on the receiver.
 fn follow(bus: &PrivateBus) -> Receiver<DriveList> {
     let (sender, lists) = mpsc::channel();
     Udisks::new(bus.bus()).follow(Box::new(move |list| {
@@ -43,12 +35,10 @@ fn follow(bus: &PrivateBus) -> Receiver<DriveList> {
     lists
 }
 
-/// The next list.
 fn next(lists: &Receiver<DriveList>) -> DriveList {
     lists.recv_timeout(WAIT).expect("a drive list")
 }
 
-/// The first list for which `wanted` holds, skipping earlier ones.
 fn until(lists: &Receiver<DriveList>, wanted: impl Fn(&DriveList) -> bool) -> DriveList {
     loop {
         let list = next(lists);

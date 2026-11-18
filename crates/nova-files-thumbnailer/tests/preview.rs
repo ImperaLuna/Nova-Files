@@ -1,7 +1,3 @@
-//! Pictures for the quick look, through the core and the real helper: a
-//! client previews a picture and gets it decoded, upright and scaled down
-//! to the box it asked for, never up.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -26,7 +22,6 @@ const HEIGHT: u32 = 200;
 const ORANGE: [u8; 3] = [253, 112, 20];
 const OPAQUE: u8 = 255;
 
-/// A folder under the system temp folder, removed when dropped.
 struct TempFolder(PathBuf);
 
 impl TempFolder {
@@ -97,7 +92,6 @@ fn orange_picture(path: &Path, format: ImageFormat) {
 #[test]
 fn a_big_picture_is_scaled_down_to_the_box() {
     let temp = TempFolder::new("down");
-    // Named as text: the first bytes say what it is.
     let path = temp.0.join("photo.txt");
     orange_picture(&path, ImageFormat::Png);
     let client = Client::new(&temp.0);
@@ -128,8 +122,6 @@ fn a_small_picture_keeps_its_size() {
     orange_picture(&path, ImageFormat::Jpeg);
     let client = Client::new(&temp.0);
 
-    // A box only a little bigger: were the picture scaled to it, it would
-    // grow, and quickly.
     let shown = client.preview(
         1,
         &path,
@@ -187,7 +179,6 @@ fn stepping_through_pictures_answers_the_last() {
             })
             .unwrap();
     }
-    // Answers for replaced requests may come first; the last one comes.
     let last = PreviewId(5);
     loop {
         match client.events.recv_timeout(WAIT).unwrap() {
@@ -208,7 +199,6 @@ fn a_picture_too_wide_for_the_box_is_scaled_down() {
     orange_picture(&path, ImageFormat::Png);
     let client = Client::new(&temp.0);
 
-    // Room enough in height; only the width is too small.
     let shown = client.preview(
         1,
         &path,

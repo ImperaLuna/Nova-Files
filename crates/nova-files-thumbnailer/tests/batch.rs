@@ -1,7 +1,3 @@
-//! The helper as the core runs it: a real process, a batch on its command
-//! line, real image files in a temp folder, and the thumbnails it leaves in
-//! the thumbnails folder.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs;
@@ -13,7 +9,6 @@ use image::codecs::jpeg::JpegEncoder;
 use image::{ImageEncoder as _, ImageFormat, RgbImage};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
-/// Bigger than a thumbnail, so the helper has to scale it down.
 const SOURCE_WIDTH: u32 = 400;
 const SOURCE_HEIGHT: u32 = 200;
 const NORMAL_SIZE: u32 = 128;
@@ -21,7 +16,6 @@ const LARGE_SIZE: u32 = 256;
 const NORMAL: &str = "normal";
 const LARGE: &str = "large";
 
-/// A folder under the system temp folder, removed when dropped.
 struct TempFolder(PathBuf);
 
 impl TempFolder {
@@ -41,19 +35,14 @@ impl Drop for TempFolder {
     }
 }
 
-/// Runs one batch of `(file, name)` at the normal size and returns the
-/// helper's answers.
 fn run(thumbnails: &Path, jobs: &[(&Path, &str)]) -> Vec<String> {
     run_with_data(thumbnails, jobs, &thumbnails.join("no-data"))
 }
 
-/// [`run`], with `data` as the only data folder (MIME types and system
-/// thumbnailers).
 fn run_with_data(thumbnails: &Path, jobs: &[(&Path, &str)], data: &Path) -> Vec<String> {
     run_sized(thumbnails, NORMAL, jobs, data)
 }
 
-/// [`run_with_data`] at `size`, named by its folder.
 fn run_sized(thumbnails: &Path, size: &str, jobs: &[(&Path, &str)], data: &Path) -> Vec<String> {
     let mut command = Command::new(HELPER);
     command
@@ -142,7 +131,6 @@ fn a_picture_smaller_than_the_size_keeps_its_own() {
     RgbImage::new(LARGE_SIZE / 2, LARGE_SIZE / 4)
         .save_with_format(&small, ImageFormat::Png)
         .unwrap();
-    // Wide and short: only its width is past the size.
     let wide = folder.0.join("c.png");
     RgbImage::new(LARGE_SIZE * 2, LARGE_SIZE / 4)
         .save_with_format(&wide, ImageFormat::Png)
@@ -162,8 +150,6 @@ fn a_picture_smaller_than_the_size_keeps_its_own() {
     assert_eq!(side("c.png"), (LARGE_SIZE, LARGE_SIZE / 8));
 }
 
-/// A photo-sized image, several MB once decoded: well inside the decode
-/// limit.
 const PHOTO_WIDTH: u32 = 1600;
 const PHOTO_HEIGHT: u32 = 1200;
 
@@ -179,8 +165,6 @@ fn a_photo_sized_image_is_within_the_decode_limit() {
     assert_eq!(run(&thumbnails, &[(&source, "b.png")]), ["ok"]);
 }
 
-/// A PNG whose header says 20000 by 20000 pixels (1.6 GB decoded), with
-/// almost no data.
 const HUGE_PNG: &[u8] = &[
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 78, 32, 0, 0, 78, 32, 8, 6,
     0, 0, 0, 227, 112, 70, 57, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 96, 64, 5, 0, 0, 16, 0,
@@ -255,12 +239,8 @@ fn no_temp_files_are_left_behind() {
     assert_eq!(left, ["a.png"]);
 }
 
-/// A TIFF-style EXIF block whose one entry says "rotate 90 degrees".
 const EXIF_ROTATE_90: &[u8] = &[
-    b'I', b'I', 42, 0, 8, 0, 0, 0, // little-endian header, first IFD at 8
-    1, 0, // one entry
-    0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, // Orientation, SHORT, 1, 6
-    0, 0, 0, 0, // no next IFD
+    b'I', b'I', 42, 0, 8, 0, 0, 0, 1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 #[test]
@@ -307,9 +287,6 @@ fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
         "50:image/heif:*.heic\n50:video/mp4:*.mp4\n50:video/x-matroska:*.mkv\n",
     )
     .unwrap();
-    // Real programs standing in for real thumbnailers: a script that closes
-    // its output early, then copies a ready PNG over its output file once it
-    // has checked its input is there; and one that fails.
     let made = folder.0.join("made.png");
     RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
         .save_with_format(&made, ImageFormat::Png)
@@ -337,7 +314,6 @@ fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
         "[Thumbnailer Entry]\nExec=false %i %o\nMimeType=video/mp4;\n",
     )
     .unwrap();
-    // Not something the helper decodes itself.
     let heic = folder.0.join("photo.heic");
     fs::write(&heic, b"\0\0\0\x18ftypheic").unwrap();
     let missing = folder.0.join("missing.heic");
@@ -363,7 +339,6 @@ fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
         (NORMAL_SIZE, NORMAL_SIZE / 2)
     );
     assert!(thumbnails.join("fail/nova-files/m.png").exists());
-    // A file that can't be read may be readable later.
     assert!(!thumbnails.join("fail/nova-files/x.png").exists());
     let left: Vec<_> = fs::read_dir(thumbnails.join("normal"))
         .unwrap()

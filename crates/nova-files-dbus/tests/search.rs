@@ -1,10 +1,3 @@
-//! The search interface against a private D-Bus daemon and a real core
-//! whose home and index are temp folders: stages arrive as signals for the
-//! caller only, `Open`
-//! hands folders to a window and files it finds no app for to a stand-in
-//! portal, and
-//! `ShowInFolder` opens the holding folder.
-
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -31,15 +24,12 @@ mod support;
 
 use support::{PrivateBus, WAIT};
 
-/// How long a test waits for something that should not happen.
 const QUIET: Duration = Duration::from_millis(300);
 const LIMIT: u32 = 50;
 const TOKEN: &str = "launcher-token";
 
-/// One `Found` signal: id, hits, done.
 type Found = (u64, Vec<(String, String)>, bool);
 
-/// A home with a few files and a cache folder, removed when dropped.
 struct Scratch(PathBuf);
 
 impl Scratch {
@@ -65,9 +55,6 @@ impl Scratch {
         self.home().join("Documents/report.pdf")
     }
 
-    /// A file whose name says no type, so the core finds no app for it and
-    /// leaves it to the portal, whatever apps the machine running the test
-    /// has.
     fn untyped(&self) -> PathBuf {
         self.home().join("Documents/notes")
     }
@@ -93,13 +80,10 @@ impl Drop for Scratch {
     }
 }
 
-/// The service on a private bus, with each window it is asked for on
-/// `windows`.
 struct Service {
     bus: PrivateBus,
     _started: Started,
     windows: Receiver<WindowRequest>,
-    /// Gets a message once the core has stopped.
     core_ended: Receiver<()>,
 }
 
@@ -128,11 +112,8 @@ fn service_with(scratch: &Scratch, indexed: bool, idle_exit: Duration) -> Servic
     }
 }
 
-/// A short idle time, for tests of what keeps the core up.
 const SHORT_IDLE: Duration = Duration::from_secs(1);
 
-/// A launcher: a bus connection, the search interface, and the signals it
-/// receives.
 struct Launcher {
     search: Proxy<'static>,
     found: Receiver<Found>,
@@ -164,7 +145,6 @@ impl Launcher {
             .unwrap();
     }
 
-    /// Every stage of search `id`, up to the one marked done.
     fn stages(&self, id: u64) -> Vec<Vec<(String, String)>> {
         let mut stages = Vec::new();
         loop {
@@ -195,8 +175,6 @@ fn connect(bus: &PrivateBus) -> Connection {
         .unwrap()
 }
 
-/// The bodies of `signal` from `proxy`, on a channel, turned into `T` by
-/// `read`. Subscribed before it returns.
 fn forward<T: Send + 'static>(
     proxy: &Proxy<'static>,
     signal: &'static str,
@@ -263,8 +241,6 @@ fn a_search_that_cant_run_says_why() {
     assert!(launcher.found.recv_timeout(QUIET).is_err());
 }
 
-/// Puts a FIFO where the saved index goes: the core's first search then
-/// waits, opening it, until [`release`] opens the other end.
 fn block_the_index(scratch: &Scratch) -> PathBuf {
     let cache = scratch.0.join("cache");
     fs::create_dir_all(&cache).unwrap();
@@ -284,12 +260,9 @@ fn fifo_at(path: &Path) {
     .unwrap();
 }
 
-/// Lets the core read the blocked index once it is waiting on it: it finds
-/// it empty and crawls.
 fn release(fifo: &Path) {
     use rustix::fs::{Mode, OFlags};
     let started = Instant::now();
-    // Without a reader yet, a writer that doesn't wait is refused.
     let flags = OFlags::WRONLY.union(OFlags::NONBLOCK);
     while matches!(
         rustix::fs::open(fifo, flags, Mode::empty()),
@@ -321,7 +294,6 @@ fn a_search_ends_when_its_caller_leaves() {
     let scratch = Scratch::new();
     let _fifo = block_the_index(&scratch);
     let service = service_with(&scratch, true, SHORT_IDLE);
-    // No signal streams, so dropping it leaves the bus.
     let caller = connect(&service.bus);
     let search = Proxy::new(
         &caller,
@@ -330,7 +302,6 @@ fn a_search_ends_when_its_caller_leaves() {
         SEARCH_INTERFACE,
     )
     .unwrap();
-    // Waits on the index for good: only the caller leaving ends it.
     search
         .call::<_, _, ()>("Search", &(1_u64, "report", LIMIT))
         .unwrap();
@@ -397,8 +368,6 @@ fn show_in_folder_opens_the_holding_folder_with_the_file_selected() {
     assert!(launcher.call("ShowInFolder", Path::new("/"), None).is_err());
 }
 
-/// Opening a window tells the core first, so it doesn't stop while the
-/// window starts.
 fn opening_a_window_keeps_the_core_up(method: &str, path: fn(&Scratch) -> PathBuf) {
     let scratch = Scratch::new();
     let service = service_with(&scratch, false, SHORT_IDLE);
@@ -411,7 +380,6 @@ fn opening_a_window_keeps_the_core_up(method: &str, path: fn(&Scratch) -> PathBu
     );
     launcher.call(method, &path(&scratch), None).unwrap();
     service.windows.recv_timeout(WAIT).unwrap();
-    // Past the first idle exit, short of the one from the call.
     assert!(
         service
             .core_ended
@@ -441,8 +409,6 @@ fn paths_must_be_absolute() {
     assert!(service.windows.recv_timeout(QUIET).is_err());
 }
 
-/// What the stand-in portal was asked to open: the file's inode and the
-/// activation token.
 type Opened = (u64, Option<String>);
 
 struct Portal {
@@ -520,7 +486,6 @@ fn never_waits_on_the_file(_apps: &Path) {
     let service = service(&scratch, true);
     let (_portal, opened) = portal(&service.bus);
     let launcher = Launcher::new(&service.bus);
-    // Opening a FIFO to read waits for a writer; a path descriptor doesn't.
     let fifo = scratch.home().join("pipe");
     fifo_at(&fifo);
     let inode = fs::metadata(&fifo).unwrap().ino();
@@ -547,7 +512,6 @@ fn fails_for_a_missing_file_or_without_a_portal(_apps: &Path) {
     assert!(opened.recv_timeout(QUIET).is_err());
 }
 
-/// Set in the run with apps of its own: their folder.
 const APPS_VAR: &str = "NOVA_FILES_DBUS_TEST_APPS";
 
 #[test]
@@ -558,9 +522,6 @@ fn open_starts_the_default_app_without_the_portal() {
     );
 }
 
-/// Runs `run` with the MIME database and default apps of its own: the core
-/// reads them from the environment, so test `name` runs itself again with
-/// the environment pointed at them, and never sees the machine's own apps.
 fn with_apps_of_its_own(name: &str, run: fn(&Path)) {
     match std::env::var_os(APPS_VAR) {
         Some(apps) => run(Path::new(&apps)),
@@ -596,7 +557,6 @@ fn run_again_with_apps_of_its_own(name: &str) {
         viewer.display()
     );
     fs::write(data.join("applications/nova-test-viewer.desktop"), entry).unwrap();
-    // Reading a FIFO waits for the viewer to write it, with no polling.
     fifo_at(&root.join("out"));
     let status = std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--exact", name, "--test-threads=1"])
@@ -619,7 +579,6 @@ fn open_in_the_default_app(apps: &Path) {
     let (_portal, opened) = portal(&service.bus);
     let launcher = Launcher::new(&service.bus);
     launcher.call("Open", &scratch.file(), Some(TOKEN)).unwrap();
-    // On a thread, so a viewer that never runs fails the test, not hangs it.
     let out = apps.join("out");
     let (sender, written) = mpsc::channel();
     std::thread::spawn(move || sender.send(fs::read_to_string(out).unwrap()));

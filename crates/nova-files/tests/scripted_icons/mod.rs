@@ -1,8 +1,3 @@
-//! File icons against a scripted core: a theme icon the core sends with
-//! a row's details is made once and shared by every row of its type, one
-//! that doesn't decode leaves the row's built-in icon, and a new scale
-//! makes them again.
-
 use nova_files_api::{FileIcon, IconFormat, IconKind, ThemeIcon};
 
 use super::*;
@@ -20,7 +15,6 @@ fn theme_icon(path: &str, bytes: &[u8]) -> FileIcon {
     }
 }
 
-/// A window on [`SHOWN`] whose rows came with `icons`.
 fn shown_with_icons(
     cx: &mut TestAppContext,
     icons: Vec<FileIcon>,

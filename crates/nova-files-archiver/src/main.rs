@@ -1,22 +1,3 @@
-//! The sandboxed archive helper. It reads one archive for the core, then
-//! exits.
-//!
-//! `nova-files-archiver [--seven <7-zip>] list <archive>`
-//! `nova-files-archiver [--seven <7-zip>] extract <archive> <folder> [<entry>...]`
-//! `nova-files-archiver [--seven <7-zip>] compress <packing> <level> <archive> <source>...`
-//!
-//! `extract` unpacks into `folder`, which it may write inside and nowhere
-//! else: the entries named, with all inside them, or every one. `compress` makes `archive`, a new file, of the sources, which it
-//! may read and nothing else. A password, when one is needed, comes on
-//! standard input. Given the installed 7-Zip, it reads 7z and rar through
-//! it (see `seven`), and makes 7z with it (packing `7z`).
-//!
-//! It opens the archive, then locks itself in before it reads a byte (see
-//! `sandbox`): no other file, no network, no signal outside itself. It finds the format from the file's first bytes, never its
-//! name (see `format`), and writes each entry to its standard output (see
-//! `wire`). How it ended is its exit code (see `Ending`), which the core
-//! checks with the same numbers.
-
 #![forbid(unsafe_code)]
 
 mod compress;
@@ -50,11 +31,8 @@ const COMPRESS: &str = "compress";
 const SEVEN: &str = "--seven";
 const SEVEN_ZIP: &str = "7z";
 const USAGE: &str = "usage: nova-files-archiver [--seven <7-zip>] list <archive>\n       nova-files-archiver [--seven <7-zip>] extract <archive> <folder> [<entry>...]\n       nova-files-archiver [--seven <7-zip>] compress <packing> <level> <archive> <source>...";
-/// A source to compress, held open only to name it to the sandbox.
 const SOURCE: OFlags = OFlags::PATH.union(OFlags::NOFOLLOW).union(OFlags::CLOEXEC);
-/// The folder a 7z is made in, held open only to name it to the sandbox.
 const MADE_IN: OFlags = OFlags::PATH.union(OFlags::DIRECTORY).union(OFlags::CLOEXEC);
-/// The longest password read.
 const MAX_PASSWORD: u64 = 4_096;
 
 fn main() -> ExitCode {
@@ -90,15 +68,12 @@ fn main() -> ExitCode {
     ending.code()
 }
 
-/// How a compress packs: the helper's own way, or 7-Zip's 7z.
 #[derive(Clone, Copy)]
 enum Packing<'a> {
     Own(compress::Packing),
     Seven(&'a Path),
 }
 
-/// A compress under way: the helper's own into the file it made, or 7-Zip
-/// making its own.
 enum Making<'a> {
     Own(compress::Packing, File),
     Seven(&'a Path),
@@ -127,7 +102,6 @@ fn run_list(path: &Path, seven: Option<&Path>) -> Ending {
     };
     let ending = list::list(archive, seven, &mut out);
     if out.flush().is_err() {
-        // Nobody is reading the answers any more.
         return Ending::Usage;
     }
     ending
@@ -152,7 +126,6 @@ fn run_extract(
     };
     let umask = rustix::process::umask(Mode::empty());
     rustix::process::umask(umask);
-    // Reads the user's time zone while files can still be read.
     chrono::Local::now();
     let locked_in = folder.try_clone().map_err(Into::into).and_then(|unpack| {
         let mut grants = seven_grants(seven, &archive)?;
@@ -182,8 +155,6 @@ fn run_extract(
     ending
 }
 
-/// What the sandbox leaves open for 7-Zip, when there is one, to read
-/// `archive`.
 fn seven_grants(seven: Option<&Path>, archive: &File) -> io::Result<Vec<Grant>> {
     let Some(program) = seven else {
         return Ok(Vec::new());
@@ -239,7 +210,6 @@ fn run_compress(
         return Ending::Usage;
     };
     let password = (!password.is_empty()).then_some(password);
-    // Reads the user's time zone while files can still be read.
     chrono::Local::now();
     if let Err(error) = sandbox::lock_in(grants) {
         writeln!(io::stderr(), "could not start the sandbox: {error}").ok();
@@ -265,7 +235,6 @@ fn run_compress(
     }
 }
 
-/// What comes on standard input, up to [`MAX_PASSWORD`] bytes.
 fn read_password() -> Option<Vec<u8>> {
     let mut password = Vec::new();
     io::stdin()

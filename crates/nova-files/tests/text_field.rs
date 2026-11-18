@@ -1,7 +1,3 @@
-//! The text field in a window, driven by simulated keys, clicks and an
-//! input method: moves and deletes by character and word, selections,
-//! the clipboard, Enter and Escape, and composed text.
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -11,7 +7,6 @@ use gpui::{
 };
 use nova_files_ui::{TextField, TextFieldEvent};
 
-/// A focused field filling a window, and the events it has sent.
 fn field(
     cx: &mut TestAppContext,
 ) -> (
@@ -79,7 +74,6 @@ fn caret_moves_by_character_word_and_line(cx: &mut TestAppContext) {
     assert_eq!(selection(&field, cx), 1..1);
     cx.simulate_keystrokes("end");
     assert_eq!(selection(&field, cx), 13..13);
-    // Moving changes no text.
     assert!(events.borrow().is_empty());
 }
 
@@ -119,10 +113,8 @@ fn copy_cut_and_paste(cx: &mut TestAppContext) {
     let cut = cx.update(|_, cx| cx.read_from_clipboard().and_then(|item| item.text()));
     assert_eq!(cut.as_deref(), Some("notesnotes"));
 
-    // Nothing selected: copy and cut leave the clipboard alone.
     cx.update(|_, cx| cx.write_to_clipboard(ClipboardItem::new_string("a\r\nb\nc\r\n".to_owned())));
     cx.simulate_keystrokes("ctrl-c ctrl-x ctrl-v");
-    // Each line break is one space; trailing ones go.
     assert_eq!(text(&field, cx), "a b c");
     events.borrow_mut().clear();
     cx.simulate_keystrokes("ctrl-x");
@@ -155,7 +147,6 @@ fn an_input_method_composes_then_commits(cx: &mut TestAppContext) {
     let marked = field.update_in(cx, |field, window, cx| field.marked_text_range(window, cx));
     assert_eq!(marked, Some(1..2));
 
-    // The input method counts in UTF-16 within its text.
     field.update_in(cx, |field, window, cx| {
         field.replace_and_mark_text_in_range(None, "にほ", Some(1..2), window, cx);
     });
@@ -193,7 +184,6 @@ fn the_owner_sets_text_and_selection(cx: &mut TestAppContext) {
     });
     assert_eq!(text(&field, cx), "report.pdf");
     assert_eq!(selection(&field, cx), 0..6);
-    // Not a user change.
     assert!(events.borrow().is_empty());
 
     cx.simulate_input("plan");

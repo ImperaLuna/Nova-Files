@@ -1,7 +1,3 @@
-//! The core unpacks archives through the real helper: what lands, with
-//! its permissions and times, what never lands outside, passwords, and
-//! the caller holding or stopping it.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs::{self, File};
@@ -13,16 +9,13 @@ use std::time::{Duration, Instant};
 use nova_files_core::{ArchiveFailure, Archiver, Extracting, Flow};
 use zip::write::{FullFileOptions, SimpleFileOptions};
 
-/// The widest gap between a wall clock and UTC, rounded up.
 const DAY: i64 = 86_400;
-/// Well under the 10 s a helper gets to exit once its output ends.
 const QUICK: Duration = Duration::from_secs(5);
 
 fn archiver() -> Archiver {
     Archiver::at(PathBuf::from(env!("CARGO_BIN_EXE_nova-files-archiver")))
 }
 
-/// A fresh, empty folder for one test.
 fn folder(name: &str) -> PathBuf {
     let folder = std::env::temp_dir().join(format!(
         "nova-archiver-extract-{name}-{}",
@@ -36,7 +29,6 @@ fn folder(name: &str) -> PathBuf {
     folder
 }
 
-/// Makes every folder under `path` writable again, so it can go.
 fn writable(path: &Path) {
     if path.is_dir() && !path.is_symlink() {
         fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
@@ -55,11 +47,8 @@ fn header(kind: tar::EntryType, mode: u32, mtime: u64, size: u64) -> tar::Header
     header
 }
 
-/// More asks with nothing new than a test archive takes: a run that gets
-/// this many is stopped.
 const MOST_WAITS: usize = 100;
 
-/// Unpacks `archive` into `into`, counting the entries told.
 fn extract(archive: &Path, into: &Path, password: Option<&str>) -> Result<u64, ArchiveFailure> {
     let mut entries = 0;
     let mut waits = 0;
@@ -97,7 +86,6 @@ fn unpacks_a_tar_with_its_permissions_times_and_links() {
     builder
         .append_link(&mut hard, "docs/same", "docs/a.txt")
         .unwrap();
-    // A folder never listed is made on the way.
     let mut deep = header(tar::EntryType::Regular, 0o600, 1_700_000_200, 2);
     builder
         .append_data(&mut deep, "made/on/way.txt", &b"hi"[..])
@@ -255,7 +243,6 @@ fn a_later_entry_takes_the_name_but_not_a_folders() {
             .append_data(&mut file, "ro/a.txt", contents)
             .unwrap();
     }
-    // A folder keeps its name from a later file or link.
     let mut file = header(tar::EntryType::Regular, 0o644, 0, 1);
     builder.append_data(&mut file, "ro", &b"x"[..]).unwrap();
     let mut link = header(tar::EntryType::Symlink, 0o777, 0, 0);
@@ -272,7 +259,6 @@ fn a_later_entry_takes_the_name_but_not_a_folders() {
     fs::remove_dir_all(&folder).ok();
 }
 
-/// A tar of `count` small files.
 fn many(folder: &Path, count: usize) -> PathBuf {
     let mut builder = tar::Builder::new(Vec::new());
     for index in 0..count {
@@ -366,7 +352,6 @@ fn damage_and_missing_folders_are_told_apart() {
     fs::remove_dir_all(&folder).ok();
 }
 
-/// Names left under `folder`, relative, sorted.
 fn found(folder: &Path) -> Vec<String> {
     let mut names = Vec::new();
     let mut waiting = vec![folder.to_path_buf()];

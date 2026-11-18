@@ -60,7 +60,6 @@ mod tests {
         assert_eq!(space(100, 0).percent_used(), 100);
         assert_eq!(space(1000, 381).percent_used(), 61);
         assert_eq!(space(3, 1).percent_used(), 66);
-        // Free past the size (a drive that changed between two reads).
         assert_eq!(space(10, 20).percent_used(), 0);
         assert_eq!(space(u64::MAX, 0).percent_used(), 100);
         assert_eq!(space(u64::MAX, u64::MAX / 2).percent_used(), 50);

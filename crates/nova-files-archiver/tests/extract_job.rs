@@ -1,6 +1,3 @@
-//! Extract jobs through the real core and helper: where entries land,
-//! names already taken, passwords, damage, and undo.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -29,7 +26,6 @@ fn extract(bench: &Bench, archive: &str, to: ExtractTo) -> JobId {
     })
 }
 
-/// Writes a tar of `files` (path, contents) and `folders` to `archive`.
 fn tar(archive: &Path, folders: &[(&str, u32)], files: &[(&str, &str)]) {
     let mut builder = tar::Builder::new(Vec::new());
     for (folder, mode) in folders {
@@ -115,7 +111,6 @@ fn a_name_already_taken_is_asked_about() {
     assert_eq!(fs::read(bench.at("into/docs (2)/a.txt")).unwrap(), b"new");
 }
 
-/// A zip whose one file is locked with `password`.
 fn locked_zip(archive: &Path, password: &str) {
     let mut zip = zip::ZipWriter::new(File::create(archive).unwrap());
     zip.start_file(
@@ -158,7 +153,6 @@ fn skipping_the_password_cancels_and_leaves_nothing() {
     locked_zip(&bench.at("secret.zip"), "pw");
     let job = extract(&bench, "secret.zip", ExtractTo::Here);
     let needed = bench.held(job);
-    // A password given to another kind of conflict is never taken.
     bench.send(Command::GivePassword {
         job,
         conflict: Conflict {

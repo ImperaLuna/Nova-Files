@@ -1,6 +1,3 @@
-//! Compress jobs through the real core and helper: the archive takes its
-//! name or the next free one, a password locks it, and undo takes it back.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,

@@ -1,7 +1,3 @@
-//! A picker's size between runs: however a picker closes, its size goes
-//! into the windows' state, which the core writes to the state folder and hands
-//! back to the next picker.
-
 use std::time::{Duration, Instant};
 
 use gpui::{Pixels, Size, px, size};
@@ -9,15 +5,12 @@ use nova_files_ui::{WindowState, fetch_window_state};
 
 use super::*;
 
-/// The state file in the state folder beside the tree, as `picker_with`
-/// sets it.
 fn state_file(tree: &TempFolder) -> PathBuf {
     tree.path()
         .with_extension("state")
         .join("nova-files/window-state")
 }
 
-/// Waits until the core has written `expected` to the state file.
 fn wait_for_state(tree: &TempFolder, expected: &WindowState) {
     let start = Instant::now();
     let want = expected.to_bytes();
@@ -68,9 +61,7 @@ async fn closing_the_window_saves_the_size(cx: &mut TestAppContext) {
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
     let opened = window_size(cx);
     cx.update(|window, _| window.remove_window());
-    // The test's handle is the last one keeping the view.
     drop(view);
-    // Freed entities are dropped at the end of the app's next update.
     let app: &mut TestAppContext = cx;
     app.update(|_| {});
     assert_eq!(answers.try_recv().ok(), Some(PickAnswer::Cancelled));
@@ -98,7 +89,6 @@ fn the_next_picker_gets_the_state_the_core_kept() {
         .send(nova_files_api::Command::SaveWindowState(saved.to_bytes()))
         .unwrap();
     assert_eq!(fetch_window_state(&core.connector), saved);
-    // A core started later reads it from the state folder.
     wait_for_state(&tree, &saved);
     let next =
         nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home), None, None).unwrap();

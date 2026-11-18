@@ -1,6 +1,3 @@
-//! What the window tests share: a temp folder tree, a watchdog for waits
-//! on the real core, a click with keys held, and a double-click.
-
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
@@ -12,12 +9,9 @@ use std::time::Duration;
 
 use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, VisualTestContext};
 
-/// A folder under the system temp folder, removed when dropped: a folder
-/// `Projects` (holding `nova`) and a file `notes.txt`.
 pub struct TempFolder(PathBuf);
 
 impl TempFolder {
-    /// The tree, in a folder named after `test` so runs don't collide.
     pub fn tree(test: &str) -> Self {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let name = format!(
@@ -26,9 +20,6 @@ impl TempFolder {
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
         let path = std::env::temp_dir().join(name);
-        // A core's state writer can finish after an earlier test's tree is
-        // gone and make its state folder again; a later test given the same
-        // process id would find it.
         fs::remove_dir_all(&path).ok();
         fs::remove_dir_all(path.with_extension("state")).ok();
         fs::create_dir_all(path.join("Projects").join("nova")).unwrap();
@@ -44,17 +35,12 @@ impl TempFolder {
 impl Drop for TempFolder {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.0).ok();
-        // Where the tests' cores keep their state.
         fs::remove_dir_all(self.0.with_extension("state")).ok();
     }
 }
 
-/// How long a test may wait for the core before it fails.
 pub const WAIT: Duration = Duration::from_secs(10);
 
-/// Fails the test process if the test is still running after [`WAIT`].
-/// GPUI's waits have no deadline of their own while the core answers from
-/// real threads, so a window that never gets there would hang.
 pub struct Watchdog(Sender<()>);
 
 impl Watchdog {
@@ -76,14 +62,12 @@ impl Drop for Watchdog {
     }
 }
 
-/// Clicks the element drawn with `selector` with `modifiers` held.
 pub fn click_with(cx: &mut VisualTestContext, selector: &'static str, modifiers: Modifiers) {
     cx.run_until_parked();
     let bounds = cx.debug_bounds(selector).unwrap();
     cx.simulate_click(bounds.center(), modifiers);
 }
 
-/// Double-clicks the element drawn with `selector`.
 pub fn double_click(cx: &mut VisualTestContext, selector: &'static str) {
     cx.run_until_parked();
     let position = cx.debug_bounds(selector).unwrap().center();

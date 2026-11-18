@@ -1,7 +1,3 @@
-//! Crawling real temp folder trees, saving the index and opening it again:
-//! what is indexed and what isn't, the depth-first layout, the details of
-//! each row, cancelling, and replacing a saved index.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -29,7 +25,6 @@ const PRIVATE_FILE: u32 = 0o600;
 const PRIVATE_FOLDER: u32 = 0o700;
 const MODE_BITS: u32 = 0o777;
 
-/// Crawls `home`, saves the index beside it and opens it again.
 fn indexed(home: &Path) -> (Index, TempFolder) {
     let cache = TempFolder::new();
     let path = cache.path().join("index");
@@ -41,7 +36,6 @@ fn rows(index: &Index) -> impl Iterator<Item = RowId> {
     (0..index.rows()).map(RowId)
 }
 
-/// Every indexed path except the crawled folder, relative to it.
 fn relative_paths(index: &Index) -> BTreeSet<PathBuf> {
     rows(index)
         .skip(1)
@@ -59,7 +53,6 @@ fn find(index: &Index, relative: &str) -> RowId {
         .unwrap_or_else(|| panic!("{relative} isn't indexed"))
 }
 
-/// A home folder with something for each rule.
 const HOME: &[&str] = &[
     "Documents/a.txt",
     "Documents/Taxes/2025.pdf",
@@ -97,7 +90,6 @@ const HOME: &[&str] = &[
     "Games/prefix/system.reg",
 ];
 
-/// What of [`HOME`] is indexed, with a link to Documents.
 const INDEXED: &[&str] = &[
     ".bashrc",
     ".config",
@@ -162,7 +154,6 @@ fn only_a_plain_cache_tag_marks_a_cache_folder() {
     const SIGNED: &[u8] = b"Signature: 8a477f597d28d172789f06886806bc55\n";
     let home = TempFolder::new().with(&["pipe/a", "link/a", "tag"]);
     fs::write(home.path().join("tag"), SIGNED).unwrap();
-    // A pipe would wait for a writer forever if the crawl read it.
     rustix::fs::mknodat(
         rustix::fs::CWD,
         home.path().join("pipe/CACHEDIR.TAG"),
@@ -279,7 +270,6 @@ fn a_folder_that_cant_be_read_is_indexed_empty() {
     let locked = home.path().join("locked");
     fs::set_permissions(&locked, fs::Permissions::from_mode(NO_ACCESS)).unwrap();
     if fs::read_dir(&locked).is_ok() {
-        // Running as root, which reads it anyway.
         fs::set_permissions(&locked, fs::Permissions::from_mode(PRIVATE_FOLDER)).unwrap();
         return;
     }
@@ -294,8 +284,6 @@ fn a_folder_that_cant_be_read_is_indexed_empty() {
 
 #[test]
 fn entries_whose_details_cant_be_read_are_kept_where_files_are() {
-    // A folder that can be listed but not entered: its entries' names can
-    // be read, their details can't.
     const LIST_ONLY: u32 = 0o444;
     let home = TempFolder::new().with(&["listed/a.txt", ".local/bin/tool"]);
     let listed = home.path().join("listed");
@@ -308,7 +296,6 @@ fn entries_whose_details_cant_be_read_are_kept_where_files_are() {
     for folder in [&listed, &local] {
         fs::set_permissions(folder, fs::Permissions::from_mode(PRIVATE_FOLDER)).unwrap();
     }
-    // Running as root, which reads them anyway.
     let Some((index, _cache)) = index else {
         return;
     };
@@ -319,8 +306,6 @@ fn entries_whose_details_cant_be_read_are_kept_where_files_are() {
         file.id.inode,
         fs::metadata(listed.join("a.txt")).unwrap().ino()
     );
-    // On the way to an allowed place only folders are kept, and an entry
-    // that can't be read isn't known to be one.
     let rows: Vec<_> = relative_paths(&index).into_iter().collect();
     assert_eq!(
         rows,
@@ -334,8 +319,6 @@ fn entries_whose_details_cant_be_read_are_kept_where_files_are() {
 
 #[test]
 fn another_drive_is_indexed_but_not_entered() {
-    // /dev holds mount points of other filesystems (pts, shm) on most
-    // systems; without one there is nothing to test.
     let dev = Path::new("/dev");
     let device = fs::metadata(dev).unwrap().dev();
     let Some(mount) = fs::read_dir(dev).unwrap().flatten().find(|item| {
@@ -362,9 +345,6 @@ fn the_crawl_asks_to_stop_before_every_read() {
         false
     })
     .unwrap();
-    // Once at the start, then for each of the folders home, a and b: once
-    // before reading it and once per entry; and once before reading a's
-    // CACHEDIR.TAG, which has no signature.
     assert_eq!(asked.get(), 1 + (1 + 2) + (1 + 3 + 1) + (1 + 1));
     for stop_at in 1..=asked.get() {
         let asked = Cell::new(0);
@@ -434,8 +414,6 @@ fn saves_at_the_same_time_each_publish_a_whole_index_or_say_busy() {
     assert_eq!(Index::open(&path).unwrap().rows(), 7);
 }
 
-/// Saves while other saves run: either this one publishes or another is
-/// busy, and what is published is whole.
 fn save_beside_others(built: &Built, path: &Path) {
     if let Err(error) = built.save(path) {
         assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
@@ -475,7 +453,6 @@ fn a_stale_temp_file_is_replaced() {
 fn saving_where_it_cant_write_keeps_nothing() {
     let home = TempFolder::new().with(&["one"]);
     let cache = TempFolder::new().with(&["blocker"]);
-    // A file where the index's folder should be.
     let path = cache.path().join("blocker/index");
     assert!(crawl(home.path(), || false).unwrap().save(&path).is_err());
 }

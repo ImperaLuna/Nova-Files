@@ -1,13 +1,3 @@
-//! The Properties page's Opens with on a real core: a lone file's card
-//! names its default app, and choosing another in its menu makes that the
-//! default, which a page opened again shows and the user's
-//! `mimeapps.list` keeps. A default that runs in a terminal is left
-//! out, and the card still offers the others.
-//!
-//! The core reads the MIME database and the app lists from the
-//! environment, so the test runs itself again with every XDG folder
-//! pointed into a temp folder of its own.
-
 #[path = "../../../nova-files-core/tests/common/own_folders.rs"]
 mod own_folders;
 
@@ -15,7 +5,6 @@ use own_folders::run_again_in;
 
 use super::*;
 
-/// Set in the run that talks to the core: the folder it was given.
 const ROOT_VAR: &str = "NOVA_FILES_OPENS_WITH_TEST_ROOT";
 const TEST_NAME: &str = "window_opens_with::a_files_default_app_changes_from_its_properties";
 const TERMINAL_TEST: &str =
@@ -43,8 +32,6 @@ async fn a_default_that_runs_in_a_terminal_leaves_the_others_to_choose(cx: &mut 
     run_with(&terminal, "terminal", TERMINAL_TEST);
 }
 
-/// Runs `name` again in a temp folder named for `tag`, whose apps are
-/// One, the default for the test type, from `one_entry`, and Two.
 fn run_with(one_entry: &str, tag: &str, name: &str) {
     let root = std::env::temp_dir().join(format!(
         "nova-files-opens-with-{tag}-{}",
@@ -109,7 +96,6 @@ async fn through_the_window(root: &Path, cx: &mut TestAppContext) {
     })
     .await;
 
-    // A page opened again asks the system, which keeps the new default.
     let kept = fs::read_to_string(root.join("config/mimeapps.list")).unwrap();
     assert!(kept.contains(&format!("{MIME}=two.desktop")), "{kept}");
     view.update(cx, |view, cx| view.new_tab(&place, cx));
@@ -144,7 +130,6 @@ async fn past_a_terminal_default(root: &Path, cx: &mut TestAppContext) {
     assert_eq!(default_app(&view, cx).await, "Two");
 }
 
-/// Waits until the page on screen knows its file's default app.
 async fn default_app(view: &Entity<MainWindow>, cx: &VisualTestContext) -> String {
     view.condition::<WindowEvent>(cx, |view, _| view.default_app().is_some())
         .await;

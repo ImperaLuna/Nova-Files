@@ -1,20 +1,3 @@
-//! Crawling a folder into a [`Built`] index, depth first.
-//!
-//! Each folder is read whole (its entries and each entry's details, without
-//! following links), sorted by name bytes and then walked one entry at a
-//! time from an explicit stack, so a deep tree can't overflow the thread's
-//! stack and no folder stays open while its subfolders are read. A folder
-//! is added once it is read, after `policy` had its say on the folder and
-//! on what it holds; it is closed once its last entry is added.
-//!
-//! The crawl stays on the crawled folder's filesystem: a folder something
-//! is mounted on (as `mounts` tells) is indexed but not entered. A btrfs
-//! subvolume isn't a mount, so it is entered, though its device number
-//! differs. A `CACHEDIR.TAG` counts only with the standard's signature. Entries that vanish
-//! while the crawl runs are left out; a folder that can't be read is
-//! indexed with no rows under it and [`Flags::UNREADABLE`]. `cancelled` is
-//! asked before every read from the disk.
-
 use std::ffi::OsString;
 use std::fs::{self, File, Metadata};
 use std::io;
@@ -33,16 +16,11 @@ use crate::{Details, FileId, Flags, Kind, RowId, Stamp};
 
 const NANOS_PER_SECOND: i64 = 1_000_000_000;
 
-/// Why [`crawl`] gave no index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CrawlError {
-    /// The folder to crawl couldn't be read.
     Unreadable(io::ErrorKind),
-    /// What was given to crawl isn't a folder.
     NotAFolder,
-    /// `cancelled` said so.
     Cancelled,
-    /// More entries or name bytes than an index holds.
     TooBig,
 }
 
@@ -52,16 +30,10 @@ impl From<TooBig> for CrawlError {
     }
 }
 
-/// Crawls the folder at `root`, which the rules in `policy` treat as the
-/// home folder, into an index.
-///
-/// # Errors
-/// [`CrawlError`] when `root` can't be crawled or the crawl was cancelled.
 pub fn crawl(root: &Path, cancelled: impl Fn() -> bool) -> Result<Built, CrawlError> {
     crawl_with(root, SystemMounts::default(), cancelled)
 }
 
-/// [`crawl`], with `mounts` telling which folders are mount points.
 pub fn crawl_with(
     root: &Path,
     mounts: impl MountCheck,
@@ -104,17 +76,14 @@ pub fn crawl_with(
     Ok(crawl.built)
 }
 
-/// One entry of a folder, read along with the folder.
 pub struct Child {
     pub name: OsString,
     pub inode: u64,
     pub details: io::Result<Metadata>,
 }
 
-/// A folder whose entries are being added.
 struct Frame {
     row: RowId,
-    /// The folder's device, for entries whose details can't be read.
     device: u64,
     path: PathBuf,
     zone: Zone,
@@ -123,12 +92,10 @@ struct Frame {
 
 pub enum Stop {
     Cancelled,
-    /// It vanished: deleted or moved away while the crawl ran.
     Gone,
     Failed(io::Error),
 }
 
-/// Sorts a read error into a vanished entry or a real failure.
 fn stop(error: io::Error) -> Stop {
     if error.kind() == io::ErrorKind::NotFound {
         Stop::Gone
@@ -144,7 +111,6 @@ struct Crawl<M, C> {
     cancelled: C,
 }
 
-/// Where a child goes: its folder's row, rules and device, and its path.
 struct Spot {
     parent: RowId,
     zone: Zone,
@@ -171,7 +137,6 @@ impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
         Ok(())
     }
 
-    /// Adds `child` at `spot`, if the zone's rules keep it.
     fn add(&mut self, spot: Spot, child: Child) -> Result<(), CrawlError> {
         let Spot {
             parent,
@@ -182,7 +147,6 @@ impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
         let name = child.name.as_bytes();
         let details = match child.details.map_err(stop) {
             Ok(details) => details,
-            // It vanished after the folder was read.
             Err(Stop::Gone | Stop::Cancelled) => return Ok(()),
             Err(Stop::Failed(_)) => {
                 if policy::keeps_file(&zone) {
@@ -237,8 +201,6 @@ impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
         }
     }
 
-    /// The folder's entries, or `None` when what it holds says it isn't
-    /// worth indexing.
     fn read_folder(&self, path: &Path) -> Result<Option<Vec<Child>>, Stop> {
         let children = read_children(path, &self.cancelled)?;
         let names: Vec<OsString> = children.iter().map(|child| child.name.clone()).collect();
@@ -257,9 +219,6 @@ impl<M: MountCheck, C: Fn() -> bool> Crawl<M, C> {
     }
 }
 
-/// Whether the file at `path` starts with the cache-folder signature.
-/// Only a plain file counts: a link isn't followed, and a pipe or device
-/// is never read, since reading one could wait forever.
 pub fn has_cache_signature(path: &Path) -> bool {
     let mut start = [0; policy::CACHE_TAG_SIGNATURE.len()];
     let flags = OFlags::RDONLY
@@ -278,8 +237,6 @@ pub fn has_cache_signature(path: &Path) -> bool {
         .is_ok_and(|()| policy::is_cache_signature(&start))
 }
 
-/// Reads the folder at `path`: every entry with its details, sorted by
-/// name bytes.
 pub fn read_children(path: &Path, cancelled: &impl Fn() -> bool) -> Result<Vec<Child>, Stop> {
     if cancelled() {
         return Err(Stop::Cancelled);
@@ -295,7 +252,6 @@ pub fn read_children(path: &Path, cancelled: &impl Fn() -> bool) -> Result<Vec<C
                 inode: item.ino(),
                 details: item.metadata(),
             }),
-            // An entry the folder lists but that has vanished since.
             Err(Stop::Gone | Stop::Cancelled) => {}
             Err(failed) => return Err(failed),
         }
@@ -318,7 +274,6 @@ pub fn facts(details: &Metadata, kind: Kind) -> Details {
     }
 }
 
-/// An entry whose details couldn't be read: only its id is known.
 const fn unread(id: FileId) -> Details {
     Details {
         kind: Kind::File,

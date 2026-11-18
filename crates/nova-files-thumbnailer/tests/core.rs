@@ -1,7 +1,3 @@
-//! The core and the real helper together: a client lists a folder, asks for
-//! thumbnails of the rows it shows, and gets them, made by the helper the
-//! first time and read from the shared cache after that.
-
 #![expect(
     clippy::unwrap_used,
     clippy::panic,
@@ -25,7 +21,6 @@ const NORMAL_SIZE: u32 = 128;
 const LARGE_SIZE: u32 = 256;
 const ROWS: u32 = 10;
 
-/// A folder under the system temp folder, removed when dropped.
 struct TempFolder(PathBuf);
 
 impl TempFolder {
@@ -66,8 +61,6 @@ fn client(thumbnails: &Path, helper: &Path) -> Client {
     }
 }
 
-/// Lists `folder`, asks for the first rows' thumbnails at `size` and
-/// returns the first thumbnail that arrives.
 fn first_thumbnail(client: &Client, folder: &Path, size: ThumbnailSize) -> (EntryId, Vec<u8>) {
     let id = ListingId(1);
     client
@@ -116,7 +109,6 @@ fn shown_images_get_thumbnails_then_come_from_the_cache() {
     let temp = TempFolder::new("shown");
     let folder = temp.0.join("media");
     fs::create_dir(&folder).unwrap();
-    // Sorted: clip.mp4, notes.txt, photo.png.
     fs::write(folder.join("clip.mp4"), b"").unwrap();
     fs::write(folder.join("notes.txt"), b"hello").unwrap();
     RgbImage::new(WIDTH, HEIGHT)
@@ -136,7 +128,6 @@ fn shown_images_get_thumbnails_then_come_from_the_cache() {
     let cached = fs::read_dir(thumbnails.join("normal")).unwrap().count();
     assert_eq!(cached, 1);
 
-    // A core whose helper is missing can only answer from the cache.
     let missing = temp.0.join("no-helper");
     let (entry, again) = first_thumbnail(&client(&thumbnails, &missing), &folder, normal);
     assert_eq!((entry, again), (EntryId(2), png));
@@ -193,7 +184,6 @@ fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
             })
             .unwrap();
     };
-    // Away, past the photo, then back.
     want(ROWS);
     want(0);
 
@@ -240,7 +230,6 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
             other => panic!("expected the refusal, got {other:?}"),
         }
     }
-    // Still on the first listing: away and back again.
     for first in [ROWS, 0] {
         client
             .connection
@@ -269,8 +258,6 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
     }
 }
 
-/// Lists `folder` as `id`, asks for its first rows' thumbnails and returns
-/// the entries of the first `count` that arrive, in order.
 fn thumbnailed_entries(
     client: &Client,
     folder: &Path,
@@ -319,7 +306,6 @@ fn cached_rows_answer_and_rows_that_failed_before_are_not_tried_again() {
     let broken = folder.join("broken.png");
     fs::write(&broken, b"not an image").unwrap();
     let thumbnails = temp.0.join("thumbnails");
-    // The helper makes the two thumbnails and marks the broken file failed.
     let first = thumbnailed_entries(
         &client(&thumbnails, Path::new(HELPER)),
         &folder,
@@ -328,8 +314,6 @@ fn cached_rows_answer_and_rows_that_failed_before_are_not_tried_again() {
     );
     assert_eq!(first, [EntryId(0), EntryId(1)]);
 
-    // Now a real image, but with the mtime its marker was made for, so the
-    // marker still stands.
     let mtime = fs::metadata(&broken).unwrap().modified().unwrap();
     image.save_with_format(&broken, ImageFormat::Png).unwrap();
     fs::File::options()
@@ -342,8 +326,6 @@ fn cached_rows_answer_and_rows_that_failed_before_are_not_tried_again() {
         .save_with_format(folder.join("new.png"), ImageFormat::Png)
         .unwrap();
 
-    // Sorted: a.png, b.png, broken.png, new.png. The first two come from the
-    // cache; only new.png goes to the helper.
     let again = thumbnailed_entries(
         &client(&thumbnails, Path::new(HELPER)),
         &folder,

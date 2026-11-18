@@ -1,37 +1,13 @@
-//! The index file's layout, in one place: a header, a table of fixed-size
-//! rows, then every name back to back.
-//!
-//! ```text
-//! header  HEADER_LEN bytes   magic, version, row size, row count,
-//!                            names length, crawl start
-//! rows    ROW_LEN bytes each in depth-first order: a folder, then its
-//!                            whole subtree, then its next sibling
-//! names   names length bytes the names the rows point into; row 0's name
-//!                            is the crawled folder's absolute path
-//! ```
-//!
-//! Every number is little-endian. A row stores its parent's row number,
-//! not a path, and a folder row stores where its run of descendants ends,
-//! so a folder and its contents are one slice of the table. [`Header`] and
-//! [`Row`] turn bytes into values and back; checking that the values make
-//! a tree is `reader`'s job.
-
 use crate::{FileId, Kind, RowId, Stamp};
 
-/// The first bytes of every index file.
 pub const MAGIC: [u8; MAGIC_LEN] = *b"NOVAIDX\0";
 const MAGIC_LEN: usize = 8;
-/// Bumped whenever the layout changes; an index with another version is
-/// rebuilt, never read.
 pub const VERSION: u32 = 1;
 pub const HEADER_LEN: usize = 48;
 pub const ROW_LEN: usize = 56;
-/// The parent of row 0, which has none.
 pub const NO_PARENT: u32 = u32::MAX;
-/// A time the filesystem didn't give.
 pub const NO_STAMP: i64 = i64::MIN;
 
-// Header fields: where each starts.
 const H_MAGIC: usize = 0;
 const H_VERSION: usize = 8;
 const H_ROW_LEN: usize = 12;
@@ -39,7 +15,6 @@ const H_ROWS: usize = 16;
 const H_NAMES_LEN: usize = 24;
 const H_CRAWLED: usize = 32;
 
-// Row fields: where each starts.
 const R_PARENT: usize = 0;
 const R_END: usize = 4;
 const R_NAME_AT: usize = 8;
@@ -56,7 +31,6 @@ const KIND_FOLDER: u8 = 0;
 const KIND_FILE: u8 = 1;
 const KIND_LINK: u8 = 2;
 
-/// What the header says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Header {
     pub magic: [u8; MAGIC_LEN],
@@ -68,7 +42,6 @@ pub struct Header {
 }
 
 impl Header {
-    /// A header for the current layout.
     pub const fn current(rows: u64, names_len: u64, crawled: i64) -> Self {
         Self {
             magic: MAGIC,
@@ -84,8 +57,6 @@ impl Header {
         }
     }
 
-    /// Reads a header from the start of `bytes`, or `None` when `bytes` is
-    /// shorter than one.
     pub fn read(bytes: &[u8]) -> Option<Self> {
         let bytes = bytes.get(..HEADER_LEN)?;
         Some(Self {
@@ -110,14 +81,12 @@ impl Header {
     }
 }
 
-/// One row as stored: numbers only, the name as a range of the names block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Row {
     pub parent: u32,
     pub end: u32,
     pub name_at: u32,
     pub name_len: u16,
-    /// `None` for a byte that names no [`Kind`].
     pub kind: Option<Kind>,
     pub flags: u8,
     pub id: FileId,
@@ -127,8 +96,6 @@ pub struct Row {
 }
 
 impl Row {
-    /// Reads the row at the start of `bytes`, or `None` when `bytes` is
-    /// shorter than one.
     pub fn read(bytes: &[u8]) -> Option<Self> {
         let bytes = bytes.get(..ROW_LEN)?;
         Some(Self {
@@ -164,13 +131,11 @@ impl Row {
         out
     }
 
-    /// The parent's row number, `None` for row 0.
     pub fn parent(&self) -> Option<RowId> {
         (self.parent != NO_PARENT).then_some(RowId(self.parent))
     }
 }
 
-/// A stored time as a [`Stamp`], `None` when the filesystem gave none.
 pub const fn stamp(stored: i64) -> Option<Stamp> {
     if stored == NO_STAMP {
         None
@@ -179,7 +144,6 @@ pub const fn stamp(stored: i64) -> Option<Stamp> {
     }
 }
 
-/// A [`Stamp`] as stored.
 pub const fn stored(stamp: Option<Stamp>) -> i64 {
     match stamp {
         Some(Stamp(nanos)) => nanos,

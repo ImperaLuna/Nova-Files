@@ -1,42 +1,3 @@
-//! The public D-Bus interface that launchers and shells use to search and
-//! open files.
-//!
-//! [`start`] claims the application's bus name. The first process to claim
-//! it becomes the running instance and serves, on the application's object:
-//! - the Nova Files interface (`files`, `Ping` for now),
-//! - the search interface (`search`), versioned on its own,
-//! - the standard `org.freedesktop.Application`, whose `Activate` and
-//!   `Open` ask for a new window.
-//!
-//! It also serves `org.freedesktop.FileManager1` (`file_manager`), apps'
-//! "Show in folder", at that interface's own path;
-//! [`Service::serve_file_manager_when`] asks for its bus name when Nova
-//! Files should answer, and [`RunningInstance::serve_file_manager`] has
-//! the running instance ask, for a process D-Bus started for it.
-//!
-//! [`Service::follow_desktop_look`] reads the desktop's light or dark
-//! preference and accent from the settings portal for the theme.
-//!
-//! [`Service::serve_file_picker`] then serves the portal's `FileChooser`
-//! interface at the portal path (`file_chooser`) and asks for the file
-//! picker's portal bus name, waiting in the bus's queue if another program
-//! holds it. A later process finds
-//! the application's name taken and gets a [`RunningInstance`] to hand its
-//! launch over to; it never serves the picker or asks for its name.
-//!
-//! [`Udisks`] watches the drives and volumes on the system bus for the
-//! core.
-//!
-//! Each module is one interface, so search and the picker grow in files of
-//! their own. Our own interfaces are named `io.github.ImperaLuna.NovaFiles*`
-//! and carry a version number: a change that breaks callers gets a new
-//! interface beside the old one.
-//!
-//! The core stops 3 minutes after its last connection. A call answered at
-//! once connects for the call (`Ping`); a request that outlives its call (a
-//! search still sending stages, an open picker) takes a hold (`holds`),
-//! which ends when the request does or when its caller leaves the bus.
-
 #![forbid(unsafe_code)]
 
 mod application;
@@ -84,8 +45,6 @@ pub use search::{
     ACTIVATION_TOKEN, INTERFACE as SEARCH_INTERFACE, OPEN_URI_INTERFACE, PORTAL_NAME, PORTAL_PATH,
 };
 
-/// The longest any D-Bus call made from here may take, and the longest
-/// connecting to the bus may take.
 pub const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 
 const CONNECT_THREAD: &str = "nova-files-dbus-connect";
@@ -93,14 +52,10 @@ const NAME_WATCH_THREAD: &str = "nova-files-dbus-name-watch";
 const BUS_WATCH_THREAD: &str = "nova-files-dbus-bus-watch";
 const FILE_MANAGER_THREAD: &str = "nova-files-dbus-file-manager";
 
-/// Which bus to connect to.
 #[derive(Clone)]
 pub enum Bus {
-    /// The user's session bus, as the program uses.
     Session,
-    /// The system bus, where the mount service is.
     System,
-    /// The bus at this address, such as a private one for tests.
     Address(String),
 }
 
@@ -115,50 +70,27 @@ impl Bus {
     }
 }
 
-/// What [`start`] found on the bus.
 pub enum Started {
-    /// This process owns the bus name and serves the interfaces until the
-    /// [`Service`] is dropped.
     Service(Service),
-    /// Another process owns the name.
     AlreadyRunning(RunningInstance),
 }
 
-/// This process's hold on the bus names.
 pub struct Service {
     connection: Connection,
-    /// The bus `connection` is on, for the file picker's own connection.
     bus: Bus,
     portal: bool,
 }
 
 impl Service {
-    /// Whether this process owned [`PORTAL_BUS_NAME`] when it began to
-    /// serve the file picker. Another program may hold it; this process
-    /// then waits in the bus's queue for it and becomes the file picker
-    /// once it is freed.
     pub const fn serves_portal(&self) -> bool {
         self.portal
     }
 
-    /// Serves the file picker, shown by `picker`, and asks for its bus
-    /// name, waiting in the bus's queue when another program holds it. Pick
-    /// requests hold the core `connector` reaches. The picker is optional,
-    /// so any failure leaves the app running without it;
-    /// [`Self::serves_portal`] says how it went.
     pub fn serve_file_picker(&mut self, connector: Connector, picker: impl Picker) {
         self.portal = Holds::new(connector, &self.bus)
             .is_ok_and(|holds| queue_for_portal(&self.connection, picker, holds));
     }
 
-    /// Asks for [`FILE_MANAGER_BUS_NAME`] when `should` says so, so apps'
-    /// "Show in folder" opens Nova Files, waiting in the bus's queue when
-    /// another file manager holds it and never taking it away. `should`
-    /// runs on a thread of its own; the returned channel says whether this
-    /// process owns the name then.
-    ///
-    /// # Errors
-    /// When the thread can't start.
     pub fn serve_file_manager_when(
         &self,
         should: impl FnOnce() -> bool + Send + 'static,
@@ -174,26 +106,10 @@ impl Service {
         Ok(owned)
     }
 
-    /// Tells the core `connector` reaches what the desktop asks apps to
-    /// look like, from the settings portal, and again each time that
-    /// changes. Optional: on failure the theme stays Carbonfox's.
-    ///
-    /// # Errors
-    /// When the portal's signal can't be listened to or the thread can't
-    /// start.
     pub fn follow_desktop_look(&self, connector: Connector) -> zbus::Result<()> {
         desktop_look::follow(&self.connection, connector)
     }
 
-    /// Runs `on_lost` once the connection to the bus closes, as when the
-    /// bus daemon stops. Nothing can reach this process then, and the
-    /// names it held are free for a new instance on the next bus.
-    ///
-    /// The watching thread stays blocked until then, holding a clone of the
-    /// connection.
-    ///
-    /// # Errors
-    /// When the watching thread can't start.
     pub fn on_bus_lost(&self, on_lost: impl FnOnce() + Send + 'static) -> std::io::Result<()> {
         let connection = self.connection.clone();
         thread::Builder::new()
@@ -205,12 +121,6 @@ impl Service {
             .map(drop)
     }
 
-    /// Gives the bus names up and waits for the bus to confirm, so a
-    /// process started after this returns can claim them at once, even
-    /// while this connection is still open.
-    ///
-    /// # Errors
-    /// When a call fails or takes longer than [`CALL_TIMEOUT`].
     pub fn release(&self) -> zbus::Result<()> {
         let app = self.connection.release_name(APP_ID);
         let portal = self.connection.release_name(PORTAL_BUS_NAME);
@@ -219,28 +129,18 @@ impl Service {
     }
 }
 
-/// The process that owns the bus name.
 pub struct RunningInstance {
     connection: Connection,
     path: OwnedObjectPath,
 }
 
 impl RunningInstance {
-    /// Asks the running instance for a new window.
-    ///
-    /// # Errors
-    /// When the call fails or takes longer than [`CALL_TIMEOUT`].
     pub fn activate(&self) -> zbus::Result<()> {
         let proxy = Proxy::new(&self.connection, APP_ID, &self.path, APPLICATION_INTERFACE)?;
         let platform_data: HashMap<&str, Value<'_>> = HashMap::new();
         proxy.call::<_, _, ()>("Activate", &(platform_data,))
     }
 
-    /// Asks the running instance for a new window on `folder`, which must
-    /// be absolute.
-    ///
-    /// # Errors
-    /// When the call fails or takes longer than [`CALL_TIMEOUT`].
     pub fn open(&self, folder: &Path) -> zbus::Result<()> {
         let proxy = Proxy::new(&self.connection, APP_ID, &self.path, APPLICATION_INTERFACE)?;
         let uris = vec![uri::file_uri(folder)];
@@ -248,11 +148,6 @@ impl RunningInstance {
         proxy.call::<_, _, ()>("Open", &(uris, platform_data))
     }
 
-    /// Asks the running instance to answer apps' "Show in folder", for a
-    /// process D-Bus started to answer it.
-    ///
-    /// # Errors
-    /// When the call fails or takes longer than [`CALL_TIMEOUT`].
     pub fn serve_file_manager(&self) -> zbus::Result<()> {
         let proxy = Proxy::new(&self.connection, APP_ID, &self.path, APPLICATION_INTERFACE)?;
         let parameter: Vec<Value<'_>> = Vec::new();
@@ -264,11 +159,6 @@ impl RunningInstance {
     }
 }
 
-/// The process that owns the bus name on `bus`, if one does; never starts
-/// one, and serves nothing.
-///
-/// # Errors
-/// When the bus can't be reached within [`CALL_TIMEOUT`].
 pub fn find_running(bus: &Bus) -> zbus::Result<Option<RunningInstance>> {
     let connection = connect_within_timeout(bus.clone(), Ok)?;
     let owned = DBusProxy::new(&connection)?.name_has_owner(APP_ID.try_into()?)?;
@@ -281,15 +171,6 @@ pub fn find_running(bus: &Bus) -> zbus::Result<Option<RunningInstance>> {
     }))
 }
 
-/// Claims the bus name on `bus` and, if it was free, starts serving.
-///
-/// `connector` reaches the core for D-Bus calls the core answers.
-/// `on_open` runs when another launch or app asks for a window; it runs on
-/// a D-Bus thread and must hand the request on rather than do the work.
-///
-/// # Errors
-/// When the bus can't be reached within [`CALL_TIMEOUT`] or refuses the
-/// connection.
 pub fn start(
     bus: Bus,
     connector: Connector,
@@ -298,12 +179,6 @@ pub fn start(
     start_waiting(bus, connector, on_open, Duration::ZERO)
 }
 
-/// [`start`], but while the name is taken it asks again for up to `wait`
-/// before settling for [`Started::AlreadyRunning`]. A restarted process
-/// uses it in case the bus hasn't freed its old name yet.
-///
-/// # Errors
-/// As [`start`].
 pub fn start_waiting(
     bus: Bus,
     connector: Connector,
@@ -312,8 +187,6 @@ pub fn start_waiting(
 ) -> zbus::Result<Started> {
     let path = object_path()?;
     let connection = connect(bus.clone(), path.clone(), connector, on_open)?;
-    // Watched before the first request, so a release in between still
-    // counts.
     let freed = if wait.is_zero() {
         None
     } else {
@@ -321,9 +194,6 @@ pub fn start_waiting(
     };
     let deadline = Instant::now() + wait;
     loop {
-        // Requested by hand, not with the builder's `name`, to pass
-        // DoNotQueue: a second launch must learn the name is taken, not
-        // wait in line for it.
         match connection.request_name_with_flags(APP_ID, RequestNameFlags::DoNotQueue.into()) {
             Ok(_) => {
                 return Ok(Started::Service(Service {
@@ -338,9 +208,6 @@ pub fn start_waiting(
                     .as_ref()
                     .is_some_and(|freed| freed.recv_timeout(left).is_ok());
                 if !freed_in_time {
-                    // The same connection makes the call; the objects it
-                    // also serves are never reached, since the name points
-                    // at the other process.
                     return Ok(Started::AlreadyRunning(RunningInstance {
                         connection,
                         path,
@@ -352,8 +219,6 @@ pub fn start_waiting(
     }
 }
 
-/// Serves the file picker and asks for its bus name; whether this process
-/// owns it now.
 fn queue_for_portal(connection: &Connection, picker: impl Picker, holds: Holds) -> bool {
     let served = connection.object_server().at(
         PORTAL_OBJECT_PATH,
@@ -362,12 +227,9 @@ fn queue_for_portal(connection: &Connection, picker: impl Picker, holds: Holds) 
     matches!(served, Ok(true)) && queue_for(connection, PORTAL_BUS_NAME)
 }
 
-/// Asks for `name`, waiting in the bus's queue while another program holds
-/// it; whether this process owns it now.
 fn queue_for(connection: &Connection, name: &'static str) -> bool {
-    // With no flags, the bus queues the request while the name is taken
-    // and never lets another program replace us. zbus's default flags do
-    // the opposite.
+    // With no flags the bus queues the request and never hands the name to another program.
+    // https://dbus.freedesktop.org/doc/dbus-specification.html#bus-messages-request-name
     let no_flags = BitFlags::<RequestNameFlags>::EMPTY;
     matches!(
         connection.request_name_with_flags(name, no_flags),
@@ -375,10 +237,6 @@ fn queue_for(connection: &Connection, name: &'static str) -> bool {
     )
 }
 
-/// Sends on the returned channel each time the bus name loses its owner.
-///
-/// The bus has no "until" for signals, so the watching thread stays blocked
-/// until the next change of owner; only a restarted process starts one.
 fn watch_name_freed(connection: &Connection) -> zbus::Result<mpsc::Receiver<()>> {
     let changes =
         DBusProxy::new(connection)?.receive_name_owner_changed_with_args(&[(0, APP_ID)])?;
@@ -397,7 +255,6 @@ fn watch_name_freed(connection: &Connection) -> zbus::Result<mpsc::Receiver<()>>
     Ok(freed)
 }
 
-/// Connects and serves the interfaces, giving up after [`CALL_TIMEOUT`].
 fn connect(
     bus: Bus,
     path: OwnedObjectPath,
@@ -425,12 +282,8 @@ fn connect(
     })
 }
 
-/// Connects to `bus` with what `serve` adds to the connection, giving up
-/// after [`CALL_TIMEOUT`].
-///
-/// zbus has no timeout for connecting and authenticating, so that happens
-/// on its own thread; if the bus never answers, the thread is left blocked
-/// and the caller carries on without D-Bus.
+// zbus has no timeout for connecting and authenticating.
+// https://docs.rs/zbus/latest/zbus/connection/struct.Builder.html
 pub(crate) fn connect_within_timeout(
     bus: Bus,
     serve: impl FnOnce(Builder<'static>) -> zbus::Result<Builder<'static>> + Send + 'static,
@@ -448,16 +301,12 @@ pub(crate) fn connect_within_timeout(
         .map_err(|_| zbus::Error::Failure("the D-Bus bus did not answer".to_owned()))?
 }
 
-/// The object path the application id implies, as the freedesktop
-/// application spec derives it: `.` becomes `/` and `-` becomes `_`, so
-/// `io.github.Example.My-App` becomes `/io/github/Example/My_App`.
-///
-/// # Errors
-/// When the application id doesn't make a valid object path.
 pub fn object_path() -> zbus::Result<OwnedObjectPath> {
     object_path_for(APP_ID)
 }
 
+// The object path comes from the app id as the Desktop Entry spec's D-Bus activation says.
+// https://specifications.freedesktop.org/desktop-entry-spec/latest/dbus.html
 fn object_path_for(app_id: &str) -> zbus::Result<OwnedObjectPath> {
     let path = format!("/{}", app_id.replace('.', "/").replace('-', "_"));
     Ok(ObjectPath::try_from(path)?.into())

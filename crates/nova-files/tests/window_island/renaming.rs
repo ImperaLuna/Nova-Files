@@ -1,8 +1,5 @@
-//! Rename in place and New folder, on a real core.
-
 use super::*;
 
-/// The text and selection of the rename field on row `index`.
 fn field_state(
     view: &Entity<MainWindow>,
     cx: &VisualTestContext,
@@ -24,7 +21,6 @@ async fn f2_renames_in_place_and_undo_names_it_back(cx: &mut TestAppContext) {
     click(cx, "name-1");
     cx.simulate_keystrokes("f2");
     cx.run_until_parked();
-    // The name is selected up to its extension.
     assert_eq!(field_state(&view, cx, 1), ("notes.txt".to_owned(), 0..5));
     cx.simulate_input("plans");
     cx.simulate_keystrokes("enter");
@@ -68,13 +64,11 @@ async fn escape_or_the_same_name_leaves_it_as_it_was(cx: &mut TestAppContext) {
     click(cx, "name-0");
     cx.simulate_keystrokes("f2");
     cx.run_until_parked();
-    // A folder's whole name is selected.
     assert_eq!(field_state(&view, cx, 0), ("Projects".to_owned(), 0..8));
     cx.simulate_input("Elsewhere");
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();
     assert!(!view.read_with(cx, |view, _| view.renaming()));
-    // Escape took the field away, not the selection.
     assert_eq!(
         view.read_with(cx, |view, _| view.selected_names()),
         ["Projects"]
@@ -140,11 +134,9 @@ async fn a_double_click_in_the_field_stays_in_it(cx: &mut TestAppContext) {
     click(cx, "name-0");
     cx.simulate_keystrokes("f2");
     cx.run_until_parked();
-    // Its text sits where the name was, as the other rows' names do.
     let field = cx.debug_bounds("rename").unwrap();
     let name = cx.debug_bounds("name-1").unwrap();
     assert!(field.left() < name.left());
-    // Not opening the folder under it.
     double_click(cx, "rename");
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.renaming()));
@@ -152,7 +144,6 @@ async fn a_double_click_in_the_field_stays_in_it(cx: &mut TestAppContext) {
         view.read_with(cx, |view, _| view.entry_names()),
         ["Projects", "notes.txt"]
     );
-    // Nor making a new folder while it is open.
     view.update(cx, |view, _| view.new_folder());
     assert_eq!(view.read_with(cx, |view, _| view.jobs_pending()), 0);
 }

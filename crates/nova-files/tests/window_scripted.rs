@@ -1,7 +1,3 @@
-//! The window against a scripted core: the test reads each command the
-//! window sends and answers it by hand, so the order of events is exact.
-//! Selecting is tested in `scripted_select`.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 mod scripted_drives;
@@ -31,23 +27,17 @@ const SHOWN: &str = "/shown";
 const MISSING: &str = "/shown/missing";
 const OTHER: &str = "/other";
 const ENTRIES: u32 = 3;
-/// Enough rows that the list scrolls in a test window.
 const MANY: u32 = 500;
 
 struct Core {
     messages: Receiver<CoreMessage>,
     events: Option<Box<dyn EventSink>>,
-    /// The window's own connection: the first to arrive. The sidebar's
-    /// folder tree lists on a second one (see `scripted_tree`).
     window: Option<ClientId>,
     tree: Option<(ClientId, Box<dyn EventSink>)>,
-    /// The folders the tree asked for, oldest first, until taken.
     tree_listings: Vec<(ListingId, PathBuf)>,
 }
 
 impl Core {
-    /// The window's next message, if one is waiting; the window's own
-    /// arrival is taken in passing, and the tree's messages put aside.
     fn try_recv(&mut self) -> Option<CoreMessage> {
         while let Ok(message) = self.messages.try_recv() {
             match message {
@@ -68,7 +58,6 @@ impl Core {
         None
     }
 
-    /// The next folder the window asks for, skipping other commands.
     fn next_listing(&mut self) -> Option<(ListingId, PathBuf)> {
         while let Some(message) = self.try_recv() {
             if let CoreMessage::Command {
@@ -82,8 +71,6 @@ impl Core {
         None
     }
 
-    /// The thumbnail requests the window has sent since last asked, as
-    /// `(first, count)`, skipping other commands.
     fn thumbnail_requests(&mut self) -> Vec<(u32, u32)> {
         let mut requests = Vec::new();
         while let Some(message) = self.try_recv() {
@@ -98,7 +85,6 @@ impl Core {
         requests
     }
 
-    /// Every command the window has sent since last asked.
     fn commands(&mut self) -> Vec<Command> {
         let mut commands = Vec::new();
         while let Some(message) = self.try_recv() {
@@ -122,7 +108,6 @@ impl Core {
     }
 }
 
-/// A window on [`SHOWN`] and its scripted core; nothing answered yet.
 fn window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     let (connector, messages) = nova_files_api::channel();
     let (view, cx) = cx.add_window_view(|_, cx| {
@@ -138,7 +123,6 @@ fn window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContex
     (view, cx, core)
 }
 
-/// Answers the window's next listing request with `count` files.
 fn answer_listing(core: &mut Core, count: u32) -> ListingId {
     let (id, path) = core.next_listing().unwrap();
     let entries: Arc<[Entry]> = (0..count)
@@ -157,7 +141,6 @@ fn answer_listing(core: &mut Core, count: u32) -> ListingId {
     id
 }
 
-/// One file's details: a size of `size` bytes.
 const fn sized(size: u64) -> Details {
     Details {
         size: Some(size),
@@ -165,8 +148,6 @@ const fn sized(size: u64) -> Details {
     }
 }
 
-/// A window on [`SHOWN`] whose listing has arrived with the details of
-/// its first `with_details` entries only.
 fn shown_with_details(
     cx: &mut TestAppContext,
     with_details: u32,
@@ -201,9 +182,6 @@ fn a_refused_folder_leaves_the_shown_one_alone(cx: &mut TestAppContext) {
     });
 }
 
-/// Opens [`OTHER`] then [`MISSING`] on a window showing [`SHOWN`], answers
-/// [`OTHER`] (too late: the window wants [`MISSING`] by then) and refuses
-/// [`MISSING`].
 fn drop_a_listing_then_refuse(
     view: &Entity<MainWindow>,
     cx: &mut VisualTestContext,
@@ -336,14 +314,12 @@ fn skipping_a_place_gone_redraws_the_window(cx: &mut TestAppContext) {
     core.refuse(id, &path);
     cx.run_until_parked();
 
-    // The Back button has to grey out: nothing is left behind.
     view.read_with(cx, |view, _| assert_eq!(view.back_target(), None));
     assert!(redraws.get() > 0);
 }
 
 const SCROLLED: Point<gpui::Pixels> = point(px(0.0), px(-240.0));
 
-/// A window on [`SHOWN`] with many rows, scrolled down to [`SCROLLED`].
 fn scrolled(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, MANY);
@@ -380,10 +356,8 @@ fn another_folder_starts_at_the_top(cx: &mut TestAppContext) {
     assert_eq!(offset(&view, cx), Point::default());
 }
 
-/// A scale at which a row's thumbnail is more than 128 device pixels wide.
 const DENSE_SCALE: f32 = 8.0;
 
-/// A 4 by 4 red PNG.
 const PNG: &[u8] = &[
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 6, 0,
     0, 0, 169, 241, 158, 126, 0, 0, 0, 18, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 240, 31,
@@ -417,7 +391,6 @@ fn a_thumbnail_for_a_shown_row_is_kept(cx: &mut TestAppContext) {
 fn a_thumbnail_at_a_size_not_asked_for_is_dropped(cx: &mut TestAppContext) {
     let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
 
-    // Rows draw small thumbnails, so they ask for normal ones.
     core.send(Event::Thumbnail {
         id,
         entry: EntryId(1),
@@ -434,7 +407,6 @@ fn a_screen_dense_enough_asks_for_large_thumbnails(cx: &mut TestAppContext) {
     let (view, cx, mut core, _) = shown_with_details(cx, ENTRIES);
     core.commands();
 
-    // A row's thumbnail at this scale is wider than a normal one.
     view.update_in(cx, |view, window, cx| {
         view.set_scale_factor(DENSE_SCALE, window, cx);
     });
@@ -454,8 +426,6 @@ fn a_screen_dense_enough_asks_for_large_thumbnails(cx: &mut TestAppContext) {
 fn a_thumbnail_for_a_listing_left_behind_is_dropped(cx: &mut TestAppContext) {
     let (view, cx, mut core, id) = shown_with_details(cx, ENTRIES);
 
-    // Read again: the thumbnail for the old listing lands while the new
-    // one is already on screen.
     view.update(cx, |view, _| view.open(Path::new(SHOWN)));
     core.send(thumbnail(id, 1));
     answer_listing(&mut core, ENTRIES);
@@ -581,12 +551,10 @@ fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppC
     core.send(Event::Settings(Arc::new(hidden.clone())));
     cx.run_until_parked();
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
-    // One already on its way is ignored.
     core.send(thumbnail(id, 2));
     cx.run_until_parked();
     view.read_with(cx, |view, _| assert!(view.thumbnail(2).is_none()));
 
-    // Settings that leave thumbnails alone don't ask for rows again.
     core.commands();
     core.send(Event::Settings(Arc::new(
         hidden.with(SettingChange::Appearance(Appearance::Dark)),
@@ -617,7 +585,6 @@ fn hiding_and_showing_before_a_frame_still_asks_for_thumbnails_anew(cx: &mut Tes
     core.send(Event::Settings(Arc::new(hidden)));
     core.send(Event::Settings(Arc::default()));
     cx.run_until_parked();
-    // The core is told to forget what it sent, then asked again.
     let requests = core.thumbnail_requests();
     let forgot = requests.iter().position(|&request| request == (0, 0));
     let asked = requests.iter().rposition(|&(_, count)| count > 0);
@@ -629,15 +596,12 @@ fn hiding_and_showing_before_a_frame_still_asks_for_thumbnails_anew(cx: &mut Tes
 fn a_thumbnail_shrunk_after_hiding_is_not_kept(cx: &mut TestAppContext) {
     let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
     let hidden = Settings::default().with(SettingChange::Thumbnails(Thumbnails::Hidden));
-    // On its way when thumbnails are hidden.
     core.send(thumbnail(id, 1));
     core.send(Event::Settings(Arc::new(hidden)));
     cx.run_until_parked();
     view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
 }
 
-/// The one listing the window asked for since last asked: its id, folder
-/// and order.
 fn listing_asked(core: &mut Core) -> (ListingId, PathBuf, Order) {
     let mut asked = Vec::new();
     while let Some(message) = core.try_recv() {
@@ -668,11 +632,9 @@ fn a_new_order_reads_again_the_folder_asked_for_last(cx: &mut TestAppContext) {
     };
     let (_, path, order) = listing_asked(&mut core);
     assert_eq!((path, order), (shown.clone(), Order::default()));
-    // Still on its way: the folder asked for is asked again, ordered.
     view.update(cx, |view, _| view.sort_by(SortKey::Size));
     let (id, path, order) = listing_asked(&mut core);
     assert_eq!((&path, order), (&shown, by_size));
-    // Once it is on screen, the folder on screen is.
     core.send(Event::FolderListed(Listing {
         id,
         path,
@@ -684,7 +646,6 @@ fn a_new_order_reads_again_the_folder_asked_for_last(cx: &mut TestAppContext) {
     view.update(cx, |view, _| view.sort_by(SortKey::Name));
     let (_, path, order) = listing_asked(&mut core);
     assert_eq!((&path, order), (&shown, Order::default()));
-    // A refused folder leaves the one on screen to read again.
     view.update(cx, |view, _| view.open(Path::new(MISSING)));
     let (id, path, _) = listing_asked(&mut core);
     core.refuse(id, &path);
@@ -692,13 +653,10 @@ fn a_new_order_reads_again_the_folder_asked_for_last(cx: &mut TestAppContext) {
     view.update(cx, |view, _| view.sort_by(SortKey::Modified));
     let (_, path, order) = listing_asked(&mut core);
     assert_eq!((&path, order), (&shown, by_modified));
-    // Going elsewhere keeps the order, and none of it touched the history.
     view.update(cx, |view, _| view.open(Path::new(OTHER)));
     let (_, path, order) = listing_asked(&mut core);
     assert_eq!((path, order), (PathBuf::from(OTHER), by_modified));
     view.read_with(cx, |view, _| {
-        // The heads show the order of the listing on screen, not the one
-        // still on its way.
         assert_eq!(view.shown_order(), by_size);
         assert_eq!(view.back_target(), None);
     });

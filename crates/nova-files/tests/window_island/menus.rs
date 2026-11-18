@@ -1,14 +1,9 @@
-//! The sheet's right-click menus on a real core: what an entry, several
-//! entries, the empty space and the trash offer, that each item does what
-//! its key does, and the Menu key.
-
 use gpui::{Pixels, Point, point, px};
 use nova_files_ui::{Look, MenuAction};
 
 use super::*;
 use crate::window_sidebar::{right_click, right_click_at};
 
-/// The labels of the menu on screen, and the items a line sits above.
 fn offered(view: &Entity<MainWindow>, cx: &VisualTestContext) -> (Vec<String>, Vec<usize>) {
     view.read_with(cx, |view, _| {
         let menu = view.menu().unwrap();
@@ -21,13 +16,11 @@ fn offered(view: &Entity<MainWindow>, cx: &VisualTestContext) -> (Vec<String>, V
     })
 }
 
-/// Right-clicks the sheet's empty space, under the last of `rows` rows.
 fn right_click_space(cx: &mut VisualTestContext, rows: usize) {
     let at = below_rows(cx, rows);
     right_click_at(cx, at);
 }
 
-/// A point on the sheet's empty space, under the last of `rows` rows.
 fn below_rows(cx: &mut VisualTestContext, rows: usize) -> Point<Pixels> {
     cx.run_until_parked();
     let selector: &'static str = match rows {
@@ -39,7 +32,6 @@ fn below_rows(cx: &mut VisualTestContext, rows: usize) -> Point<Pixels> {
     point(last.center().x, last.bottom() + last.size.height * 2.0)
 }
 
-/// Clicks the item of the menu on screen labelled `label`.
 fn choose(view: &Entity<MainWindow>, cx: &mut VisualTestContext, label: &str) {
     let index = view.read_with(cx, |view, _| {
         view.menu()
@@ -62,7 +54,6 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
     let home = TempFolder::tree("menu-entry-home");
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
-    // A right-click selects the entry it is on.
     right_click(cx, "name-1");
     assert_eq!(
         view.read_with(cx, |view, _| view.selected_names()),
@@ -97,8 +88,6 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
     wait_for_note(&view, cx, "Copied notes.txt").await;
     assert!(view.read_with(cx, |view, _| view.menu().is_none()));
 
-    // The empty space: New folder and Paste, Select all, the views,
-    // hidden files.
     right_click_space(cx, 2);
     assert_eq!(
         view.read_with(cx, |view, _| view.selected_count()),
@@ -141,7 +130,6 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
     click(cx, "name-0");
     click_with(cx, "name-1", Modifiers::secondary_key());
 
-    // Inside the selection, a right-click keeps it.
     right_click(cx, "name-0");
     assert_eq!(view.read_with(cx, |view, _| view.selected_count()), 2);
     assert_eq!(
@@ -166,9 +154,7 @@ async fn the_menu_key_opens_the_menu_with_its_first_item_marked(cx: &mut TestApp
     let home = TempFolder::tree("menu-key-home");
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
-    // Nothing selected: the empty space's menu.
     cx.simulate_keystrokes("shift-f10");
-    // Paste only with files on the clipboard.
     assert_eq!(
         offered(&view, cx).0,
         [
@@ -187,14 +173,12 @@ async fn the_menu_key_opens_the_menu_with_its_first_item_marked(cx: &mut TestApp
     cx.simulate_keystrokes("escape");
     assert!(view.read_with(cx, |view, _| view.menu().is_none()));
 
-    // Projects selected: Enter on Open goes into it.
     click(cx, "name-0");
     cx.simulate_keystrokes("menu");
     assert_eq!(offered(&view, cx).0[0], "Open");
     cx.simulate_keystrokes("enter");
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
 
-    // Going elsewhere with a menu open closes it.
     right_click(cx, "name-0");
     assert!(view.read_with(cx, |view, _| view.menu().is_some()));
     cx.simulate_keystrokes("alt-up");
@@ -355,7 +339,6 @@ async fn an_empty_trash_offers_nothing(cx: &mut TestAppContext) {
     assert!(view.read_with(cx, |view, _| view.menu().is_none()));
 }
 
-/// Where the menu on screen opened.
 fn menu_at(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Point<Pixels> {
     view.read_with(cx, |view, _| view.menu().unwrap().at)
 }
@@ -370,7 +353,6 @@ async fn the_menu_key_opens_at_the_list_or_under_the_row(cx: &mut TestAppContext
     }
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
-    // Nothing selected: inside the list's top left corner.
     cx.simulate_keystrokes("shift-f10");
     let first = cx.debug_bounds("entry-0").unwrap();
     let at = menu_at(&view, cx);
@@ -380,7 +362,6 @@ async fn the_menu_key_opens_at_the_list_or_under_the_row(cx: &mut TestAppContext
     );
     cx.simulate_keystrokes("escape");
 
-    // Just under the row the keyboard is on, the list scrolled or not.
     click(cx, "name-1");
     cx.simulate_keystrokes("menu");
     let row = cx.debug_bounds("entry-1").unwrap();
@@ -389,8 +370,6 @@ async fn the_menu_key_opens_at_the_list_or_under_the_row(cx: &mut TestAppContext
         at.x > row.left() && (at.y - row.bottom()).abs() < px(0.5),
         "{at:?} {row:?}"
     );
-    // Scrolled to the end, then three rows up: under that row, not past
-    // the list's bottom.
     cx.simulate_keystrokes("escape end up up up menu");
     cx.run_until_parked();
     let row = cx.debug_bounds("entry-58").unwrap();

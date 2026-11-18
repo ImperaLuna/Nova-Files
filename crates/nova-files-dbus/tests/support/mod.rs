@@ -1,7 +1,3 @@
-//! A private dbus-daemon for tests, so they never touch the real session
-//! bus. Shared by the D-Bus tests here and the program's tests in
-//! `crates/nova-files/tests`, which include this file by path.
-
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -13,12 +9,8 @@ use std::time::Duration;
 
 use nova_files_dbus::Bus;
 
-/// How long a test waits for the bus or a call before it counts as failed.
 pub const WAIT: Duration = Duration::from_secs(10);
 
-/// A minimal bus config: a socket in the test's own folder, anyone on it
-/// may own any name. It doesn't rely on the system's session config, which
-/// the Nix build sandbox doesn't have.
 const BUS_CONFIG: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig>
@@ -33,14 +25,12 @@ const BUS_CONFIG: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bu
 </busconfig>
 "#;
 
-/// A dbus-daemon of the test's own, stopped when dropped.
 pub struct PrivateBus {
     daemon: Child,
     pub address: String,
     _folder: TempFolder,
 }
 
-/// A folder under the system temp folder, removed when dropped.
 struct TempFolder(PathBuf);
 
 impl TempFolder {
@@ -88,7 +78,6 @@ impl PrivateBus {
             if let Some(Ok(address)) = lines.next() {
                 line_sender.send(address).ok();
             }
-            // Drain the rest so the daemon never blocks on a full pipe.
             lines.for_each(drop);
         });
         let address = line

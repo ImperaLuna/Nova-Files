@@ -1,12 +1,9 @@
-//! Temp folder trees for the index tests.
-
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-/// A folder under the system temp folder, removed when dropped.
 pub struct TempFolder(PathBuf);
 
 impl TempFolder {
@@ -26,8 +23,6 @@ impl TempFolder {
         &self.0
     }
 
-    /// Makes the files at `paths` (and their folders); a path ending in
-    /// `/` is a folder. Each file holds its own path.
     pub fn with(self, paths: &[&str]) -> Self {
         for path in paths {
             let full = self.0.join(path);

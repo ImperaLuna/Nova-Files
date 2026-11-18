@@ -104,7 +104,6 @@ fn a_move_carries_everything_inside() {
 #[test]
 fn a_renamed_entry_is_searched_under_its_new_name() {
     let overlay = after(&[moved("/h/d", "/h/e")]);
-    // The row's name is out of date, so the entry joins the added ones.
     assert_eq!(place(&overlay, "/h/d"), None);
     assert_eq!(place(&overlay, "/h/d/old"), Some(PathBuf::from("/h/e/old")));
     assert_eq!(added_paths(&overlay), [Path::new("/h/e")]);
@@ -165,7 +164,6 @@ fn removals_between_moves_keep_their_place_in_order() {
     changes.push(moved("/h/f", "/h/e/f"));
     let overlay = after(&changes);
     assert_eq!(place(&overlay, "/h/gone/3/x"), None);
-    // Moved in after its folder went: there again.
     assert_eq!(
         place(&overlay, "/h/d/x"),
         Some(PathBuf::from("/h/gone/7/d/x"))

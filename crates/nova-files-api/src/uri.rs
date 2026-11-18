@@ -32,7 +32,6 @@ pub fn path_from_file_uri(uri: &str) -> Option<PathBuf> {
         Some(slash) if &rest[..slash] == LOCALHOST => &rest[slash..],
         _ => return None,
     };
-    // A query or fragment has no meaning for a local folder.
     if path.contains(['?', '#']) {
         return None;
     }
@@ -62,7 +61,6 @@ fn percent_decode(text: &[u8]) -> Option<Vec<u8>> {
         if byte == b'%' {
             let (hex, after) = after.split_at_checked(HEX_LENGTH)?;
             let hex = std::str::from_utf8(hex).ok()?;
-            // from_str_radix would also take a sign.
             if !hex.bytes().all(|digit| digit.is_ascii_hexdigit()) {
                 return None;
             }
