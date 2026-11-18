@@ -45,7 +45,9 @@ impl Bench {
             Some(home),
             None,
             None,
-            Some(Archiver::at(helper)),
+            Some(Archiver::at(helper).with_seven(nova_files_core::seven_on(
+                std::env::var_os("PATH").as_deref(),
+            ))),
         )
         .unwrap();
         let (sink, events) = mpsc::channel();
