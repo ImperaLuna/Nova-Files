@@ -73,7 +73,7 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
                 set_aside(running, making, left.as_deref());
                 running.record(Record::Moved(&item.from, target));
                 return Ok(Made {
-                    left: size(item),
+                    left: item.size(),
                     carried: item.kind == Kind::Folder,
                 });
             }
@@ -108,7 +108,7 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
     if let Some(before) = before {
         let copy = target.symlink_metadata().ok();
         if let Err(stop) = remove_source(running, making, from, &before, copy.as_ref()) {
-            running.reporter.take_back(size(item).saturating_sub(left));
+            running.reporter.take_back(item.size().saturating_sub(left));
             return Err(stop);
         }
         running.record(Record::Moved(&item.from, target));
@@ -139,7 +139,7 @@ fn copy_whole(
     if making.replacing {
         running.record_backup(backup, making.target)?;
     }
-    if size(making.item) > CHUNK {
+    if making.item.size() > CHUNK {
         running.settle();
     }
     let mut copied = 0;
@@ -255,13 +255,6 @@ fn sync_folder_of(target: &Path) -> Result<(), Stop> {
 
 fn unchanged(before: &Metadata, now: &Metadata) -> bool {
     (before.dev(), before.ino(), version(before)) == (now.dev(), now.ino(), version(now))
-}
-
-pub const fn size(item: &Item) -> u64 {
-    match item.kind {
-        Kind::File { size } => size,
-        Kind::Folder | Kind::Link | Kind::Special => 0,
-    }
 }
 
 fn put(from: &Path, to: &Path, backup: &Path, replacing: bool) -> io::Result<Option<PathBuf>> {

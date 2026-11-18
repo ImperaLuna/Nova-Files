@@ -3661,6 +3661,8 @@ dependencies = [
 name = "nova-files-disk"
 version = "0.1.0"
 dependencies = [
+ "log",
+ "nova-files-api",
  "rustix 1.1.6",
 ]
 
