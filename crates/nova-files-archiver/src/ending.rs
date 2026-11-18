@@ -18,8 +18,18 @@ pub enum Ending {
     Unsupported = 5,
     /// No file at that path.
     Gone = 6,
-    /// The user may not read it.
+    /// The user may not read the archive, or write where it unpacks.
     Denied = 7,
+    /// An entry is locked and no password was given.
+    NeedsPassword = 8,
+    /// The password given doesn't open an entry.
+    WrongPassword = 9,
+    /// The drive it unpacks to is full.
+    NoSpace = 10,
+    /// The drive it unpacks to is mounted read-only.
+    ReadOnly = 11,
+    /// Writing failed for any other reason.
+    NotWritten = 12,
 }
 
 impl Ending {
@@ -29,6 +39,16 @@ impl Ending {
             io::ErrorKind::NotFound => Self::Gone,
             io::ErrorKind::PermissionDenied => Self::Denied,
             _ => Self::Broken,
+        }
+    }
+
+    /// Why an entry couldn't be written.
+    pub fn of_write(error: &io::Error) -> Self {
+        match error.kind() {
+            io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded => Self::NoSpace,
+            io::ErrorKind::ReadOnlyFilesystem => Self::ReadOnly,
+            io::ErrorKind::PermissionDenied => Self::Denied,
+            _ => Self::NotWritten,
         }
     }
 
@@ -47,5 +67,15 @@ mod tests {
         assert_eq!(of(io::ErrorKind::NotFound), Ending::Gone);
         assert_eq!(of(io::ErrorKind::PermissionDenied), Ending::Denied);
         assert_eq!(of(io::ErrorKind::IsADirectory), Ending::Broken);
+    }
+
+    #[test]
+    fn write_errors_say_why() {
+        let of = |kind| Ending::of_write(&io::Error::from(kind));
+        assert_eq!(of(io::ErrorKind::StorageFull), Ending::NoSpace);
+        assert_eq!(of(io::ErrorKind::QuotaExceeded), Ending::NoSpace);
+        assert_eq!(of(io::ErrorKind::ReadOnlyFilesystem), Ending::ReadOnly);
+        assert_eq!(of(io::ErrorKind::PermissionDenied), Ending::Denied);
+        assert_eq!(of(io::ErrorKind::InvalidFilename), Ending::NotWritten);
     }
 }

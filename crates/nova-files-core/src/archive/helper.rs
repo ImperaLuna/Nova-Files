@@ -9,6 +9,7 @@
 //! on. How it ended is its exit code, the numbers the helper's `ending`
 //! uses.
 
+use std::ffi::OsStr;
 use std::io::{self, Read};
 use std::os::unix::process::CommandExt as _;
 use std::path::Path;
@@ -33,34 +34,49 @@ const BROKEN: i32 = 4;
 const UNSUPPORTED: i32 = 5;
 const GONE: i32 = 6;
 const DENIED: i32 = 7;
+const NEEDS_PASSWORD: i32 = 8;
+const WRONG_PASSWORD: i32 = 9;
+const NO_SPACE: i32 = 10;
+const READ_ONLY: i32 = 11;
+const NOT_WRITTEN: i32 = 12;
 
 /// What the helper wrote listing `archive`.
 pub fn list(helper: &Path, archive: &Path) -> Result<Vec<u8>, ArchiveFailure> {
     let deadline = Instant::now() + RUN_TIME;
-    let mut child = Command::new(helper)
-        .arg(LIST)
-        .arg(archive)
-        .env_clear()
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .process_group(0)
-        .spawn()
-        .map_err(|_| ArchiveFailure::NotRead)?;
+    let mut child = spawn(helper, &[LIST.as_ref(), archive.as_os_str()], Stdio::null())?;
     let output = read_output(&mut child, deadline);
-    let status = end(child, deadline);
+    let status = end(child, deadline.saturating_duration_since(Instant::now()));
     ended(status)?;
     output
 }
 
+/// Starts the helper with `args`, in a process group of its own, with an
+/// empty environment and `input` on its standard input.
+pub fn spawn(helper: &Path, args: &[&OsStr], input: Stdio) -> Result<Child, ArchiveFailure> {
+    Command::new(helper)
+        .args(args)
+        .env_clear()
+        .stdin(input)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .map_err(|_| ArchiveFailure::NotRead)
+}
+
 /// What the helper's exit `status` says of its run.
-fn ended(status: Option<ExitStatus>) -> Result<(), ArchiveFailure> {
+pub fn ended(status: Option<ExitStatus>) -> Result<(), ArchiveFailure> {
     Err(match status.and_then(|status| status.code()) {
         Some(DONE) => return Ok(()),
         Some(BROKEN) => ArchiveFailure::Broken,
         Some(UNSUPPORTED) => ArchiveFailure::Unsupported,
         Some(GONE) => ArchiveFailure::Gone,
         Some(DENIED) => ArchiveFailure::Denied,
+        Some(NEEDS_PASSWORD) => ArchiveFailure::NeedsPassword,
+        Some(WRONG_PASSWORD) => ArchiveFailure::WrongPassword,
+        Some(NO_SPACE) => ArchiveFailure::NoSpace,
+        Some(READ_ONLY) => ArchiveFailure::ReadOnly,
+        Some(NOT_WRITTEN) => ArchiveFailure::NotWritten,
         _ => ArchiveFailure::NotRead,
     })
 }
@@ -91,15 +107,14 @@ fn read_output(child: &mut Child, deadline: Instant) -> Result<Vec<u8>, ArchiveF
     }
 }
 
-/// The helper's exit status, waiting for it to exit until `deadline`.
-/// Its group is killed either way, then it is waited on.
-fn end(mut child: Child, deadline: Instant) -> Option<ExitStatus> {
+/// The helper's exit status, waiting up to `wait` for it to exit. Its
+/// group is killed either way, then it is waited on.
+pub fn end(mut child: Child, wait: Duration) -> Option<ExitStatus> {
     let pid = Pid::from_child(&child);
-    if let Ok(exited) = process::pidfd_open(pid, PidfdFlags::empty()) {
-        let left = deadline.saturating_duration_since(Instant::now());
-        if let Ok(left) = Timespec::try_from(left) {
-            poll(&mut [PollFd::new(&exited, PollFlags::IN)], Some(&left)).ok();
-        }
+    if let Ok(exited) = process::pidfd_open(pid, PidfdFlags::empty())
+        && let Ok(left) = Timespec::try_from(wait)
+    {
+        poll(&mut [PollFd::new(&exited, PollFlags::IN)], Some(&left)).ok();
     }
     process::kill_process_group(pid, Signal::KILL).ok();
     child.wait().ok()
@@ -126,6 +141,11 @@ mod tests {
         assert_eq!(ended(UNSUPPORTED), Err(ArchiveFailure::Unsupported));
         assert_eq!(ended(GONE), Err(ArchiveFailure::Gone));
         assert_eq!(ended(DENIED), Err(ArchiveFailure::Denied));
+        assert_eq!(ended(NEEDS_PASSWORD), Err(ArchiveFailure::NeedsPassword));
+        assert_eq!(ended(WRONG_PASSWORD), Err(ArchiveFailure::WrongPassword));
+        assert_eq!(ended(NO_SPACE), Err(ArchiveFailure::NoSpace));
+        assert_eq!(ended(READ_ONLY), Err(ArchiveFailure::ReadOnly));
+        assert_eq!(ended(NOT_WRITTEN), Err(ArchiveFailure::NotWritten));
         assert_eq!(ended(1), Err(ArchiveFailure::NotRead));
         assert_eq!(super::ended(None), Err(ArchiveFailure::NotRead));
     }

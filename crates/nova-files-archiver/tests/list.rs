@@ -319,16 +319,28 @@ fn an_empty_zip_lists_nothing() {
 }
 
 #[test]
+fn an_empty_tar_lists_nothing() {
+    let folder = folder("empty-tar");
+    let path = folder.join("empty.tar");
+    fs::write(&path, tar::Builder::new(Vec::new()).into_inner().unwrap()).unwrap();
+    assert_eq!(archiver().list(&path), Ok(Vec::new()));
+    fs::remove_dir_all(&folder).ok();
+}
+
+#[test]
 fn an_unknown_ask_is_a_usage_error() {
     let folder = folder("usage");
     let archive = folder.join("a.tar");
     fs::write(&archive, tar_bytes()).unwrap();
-    let status = std::process::Command::new(env!("CARGO_BIN_EXE_nova-files-archiver"))
-        .arg("show")
-        .arg(&archive)
-        .output()
-        .unwrap();
-    assert_eq!(status.status.code(), Some(1));
-    assert_eq!(status.stdout, b"");
+    for extra in [None, Some(&folder)] {
+        let status = std::process::Command::new(env!("CARGO_BIN_EXE_nova-files-archiver"))
+            .arg("show")
+            .arg(&archive)
+            .args(extra)
+            .output()
+            .unwrap();
+        assert_eq!(status.status.code(), Some(1));
+        assert_eq!(status.stdout, b"");
+    }
     fs::remove_dir_all(&folder).ok();
 }

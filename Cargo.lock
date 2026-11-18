@@ -3602,6 +3602,7 @@ dependencies = [
  "landlock",
  "lzma-rust2",
  "nova-files-core",
+ "rustix 1.1.6",
  "tar",
  "zip",
  "zstd",
