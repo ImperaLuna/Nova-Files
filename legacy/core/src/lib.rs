@@ -4,8 +4,6 @@ mod accounts;
 mod archive;
 mod details;
 mod details_queue;
-mod disk_space;
-mod drives;
 mod file_icons;
 mod folder_views;
 mod gathered;
@@ -142,7 +140,7 @@ pub fn spawn_with_archiver(
                 file_icons,
                 jobs: Arc::new(jobs),
                 measurer: measure::Measurer::default(),
-                drives: drives::Store::default(),
+                drives: nova_files_drives_core::Store::default(),
                 recent,
                 folder_views,
                 inside,

@@ -55,6 +55,7 @@ use nova_files_api::{
     Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
     Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
+use nova_files_drives_api as drives_api;
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
 use nova_files_trash_api as trash_api;
 
@@ -201,10 +202,9 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 6] = [
+    const FIRST_ASKS: [Command; 5] = [
         Command::Ping,
         Command::Places,
-        Command::Drives,
         Command::Settings,
         Command::FolderViews,
         Command::Theme,
@@ -325,6 +325,10 @@ impl MainWindow {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
         };
+        let envelope = match envelope.open::<drives_api::Event>() {
+            Ok(event) => return self.drive_event(event, cx),
+            Err(envelope) => envelope,
+        };
         match envelope.open::<trash_api::Event>() {
             Ok(trash_api::Event::Listed(items)) => self.trash_listed(items, cx),
             Err(envelope) => {
@@ -409,6 +413,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             for command in MainWindow::FIRST_ASKS {
                 connection.send(command)?;
             }
+            connection.send(drives_api::Command::Drives)?;
             connection.send(trash_api::Command::List)?;
             Ok(connection)
         })
