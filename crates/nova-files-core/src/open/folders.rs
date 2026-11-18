@@ -29,7 +29,6 @@ fn opens_folders_in(places: &Places) -> bool {
 /// # Errors
 /// [`NotDefault`] says why it isn't the default.
 pub fn make_default_for_folders() -> Result<(), NotDefault> {
-    // A sandbox's lists aren't the user's.
     if Path::new(FLATPAK_INFO).exists() {
         return Err(NotDefault::Sandboxed);
     }
@@ -38,7 +37,6 @@ pub fn make_default_for_folders() -> Result<(), NotDefault> {
 
 fn make_default_in(places: &Places) -> Result<(), NotDefault> {
     associate::set_default(FOLDER_TYPE, OWN_DESKTOP_ID, places).map_err(|error| match error {
-        // The type and the ID are valid, so the entry isn't usable.
         NotSet::Invalid => NotDefault::NotInstalled,
         NotSet::NoHome => NotDefault::NoHome,
         NotSet::Failed(error) => NotDefault::Failed(error),

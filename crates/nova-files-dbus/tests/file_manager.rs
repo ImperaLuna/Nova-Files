@@ -245,3 +245,21 @@ fn finding_the_running_instance_starts_none() {
         Ok(showing("/a", &["x"]))
     );
 }
+
+#[test]
+fn finding_the_running_instance_gives_up_on_a_bus_that_never_answers() {
+    let folder = std::env::temp_dir().join(format!("nova-files-silent-{}", std::process::id()));
+    std::fs::remove_dir_all(&folder).ok();
+    std::fs::create_dir_all(&folder).unwrap();
+    let socket = folder.join("bus");
+    let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    let _held = std::thread::spawn(move || listener.accept().map(|(stream, _)| stream));
+    let bus = nova_files_dbus::Bus::Address(format!("unix:path={}", socket.display()));
+    let (sender, found) = mpsc::channel();
+
+    std::thread::spawn(move || sender.send(nova_files_dbus::find_running(&bus).is_err()));
+
+    let gave_up = found.recv_timeout(WAIT);
+    std::fs::remove_dir_all(&folder).ok();
+    assert_eq!(gave_up, Ok(true));
+}

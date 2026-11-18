@@ -149,7 +149,6 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
     if mode == Mode::MakeDefault {
         nova_files_core::make_default_for_folders()?;
-        // A running instance read the default when it started.
         let told = nova_files_dbus::find_running(&Bus::Session)
             .and_then(|running| running.map_or(Ok(()), |running| running.serve_file_manager()));
         if let Err(error) = told {

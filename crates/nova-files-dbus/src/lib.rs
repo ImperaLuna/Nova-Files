@@ -270,7 +270,7 @@ impl RunningInstance {
 /// # Errors
 /// When the bus can't be reached within [`CALL_TIMEOUT`].
 pub fn find_running(bus: &Bus) -> zbus::Result<Option<RunningInstance>> {
-    let connection = bus.builder()?.build()?;
+    let connection = connect_within_timeout(bus.clone(), Ok)?;
     let owned = DBusProxy::new(&connection)?.name_has_owner(APP_ID.try_into()?)?;
     if !owned {
         return Ok(None);
