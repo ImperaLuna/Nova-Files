@@ -88,7 +88,11 @@ impl MainWindow {
                     } else {
                         Aim::folder(crumb.path.clone(), crumb.label.clone())
                     };
-                    let button = crumb_button(index, crumb, colors, cx);
+                    if crumb.here && self.properties_paths().is_some() {
+                        row = row.child(crumb_button(index, crumb, false, colors, cx));
+                        continue;
+                    }
+                    let button = crumb_button(index, crumb, true, colors, cx);
                     row = row.child(self.drop_target(button, at, cx));
                     if !crumb.here || (self.has_folders() && !self.trash_open()) {
                         row = row.child(self.arrow(index, crumb.path.clone(), colors, cx));
@@ -120,8 +124,14 @@ impl MainWindow {
     }
 
     /// The crumbs of the folder on screen; none before one arrives. The
-    /// trash is one crumb, Trash, whichever folder holds it.
+    /// trash is one crumb, Trash, whichever folder holds it. A Properties
+    /// page shows where what it shows is: down to a lone path, drawn with
+    /// its own icon, or to the folder that holds them all. Its last crumb
+    /// is the page itself, so a click or a drop there does nothing.
     fn crumbs(&self) -> Vec<Crumb> {
+        if let Some(paths) = self.properties_paths() {
+            return self.properties_crumbs(paths);
+        }
         let Some(folder) = self.folder() else {
             return Vec::new();
         };
@@ -135,6 +145,21 @@ impl MainWindow {
             }];
         }
         crumbs::crumbs(folder, &self.home, &self.places, place_icon)
+    }
+
+    fn properties_crumbs(&self, paths: &[PathBuf]) -> Vec<Crumb> {
+        let shown = match paths {
+            [one] => one.as_path(),
+            _ => match self.properties_folder() {
+                Some(folder) => folder,
+                None => return Vec::new(),
+            },
+        };
+        let mut crumbs = crumbs::crumbs(shown, &self.home, &self.places, place_icon);
+        if let (Some(last), Some(icon)) = (crumbs.last_mut(), self.properties_icon()) {
+            last.icon = icon;
+        }
+        crumbs
     }
 
     /// Whether `owner`'s menu is the one open.
@@ -189,11 +214,12 @@ impl MainWindow {
     }
 }
 
-/// The `index`th crumb, which goes to its folder. The folder on screen is
-/// pressed in with its icon orange.
+/// The `index`th crumb, which goes to its folder when `goes`. The folder
+/// on screen is pressed in with its icon orange.
 fn crumb_button(
     index: usize,
     crumb: &Crumb,
+    goes: bool,
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> Stateful<Div> {
@@ -210,11 +236,13 @@ fn crumb_button(
                 .text_color(colors.text)
                 .font_weight(text::STRONG_WEIGHT)
         })
-        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-            this.close_path_menu();
-            this.open(&target);
-            cx.notify();
-        }))
+        .when(goes, |button| {
+            button.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.close_path_menu();
+                this.open(&target);
+                cx.notify();
+            }))
+        })
         .when(crumb.shows_icon, |button| {
             button.child(icon(crumb.icon, size::CRUMB_ICON, tint))
         })

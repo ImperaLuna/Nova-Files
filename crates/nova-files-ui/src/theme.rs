@@ -261,7 +261,8 @@ pub mod text {
     /// A card's name on the Start page, and the large card's.
     pub const CARD_NAME: Pixels = px(13.5);
     pub const HERO_NAME: Pixels = px(16.0);
-    /// How full a drive is, large on its Start card.
+    /// How full a drive is, large on its Start card, and a Properties
+    /// page's size, large on its top card.
     pub const PERCENT: Pixels = px(26.0);
 }
 

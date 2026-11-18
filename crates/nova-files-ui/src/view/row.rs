@@ -215,8 +215,17 @@ pub const fn kind_glyph(kind: EntryKind, colors: &Colors) -> (Icon, Rgba) {
 
 /// The window's own icon for `kind`, and its tint.
 pub const fn built_in(kind: IconKind, colors: &Colors) -> (Icon, Rgba) {
-    let glyph = match kind {
-        IconKind::Folder => return (Icon::Folder, colors.folder),
+    let tint = match kind {
+        IconKind::Folder => colors.folder,
+        _ => colors.text_soft,
+    };
+    (glyph_of(kind), tint)
+}
+
+/// The window's own icon for `kind`.
+pub const fn glyph_of(kind: IconKind) -> Icon {
+    match kind {
+        IconKind::Folder => Icon::Folder,
         IconKind::File => Icon::File,
         IconKind::Text => Icon::FileText,
         IconKind::Picture => Icon::FilePicture,
@@ -224,8 +233,7 @@ pub const fn built_in(kind: IconKind, colors: &Colors) -> (Icon, Rgba) {
         IconKind::Audio => Icon::FileAudio,
         IconKind::Archive => Icon::FileArchive,
         IconKind::Program => Icon::FileProgram,
-    };
-    (glyph, colors.text_soft)
+    }
 }
 
 /// `glyph`, `side` across, in `tint`.

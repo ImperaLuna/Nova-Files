@@ -71,6 +71,7 @@ mod actions {
             BiggerIcons,
             SmallerIcons,
             OpenMenu,
+            ShowProperties,
         ]
     );
 }
@@ -180,6 +181,7 @@ pub const ACTIONS: &[ActionSpec] = &[
     BIGGER_ICONS,
     SMALLER_ICONS,
     MENU,
+    PROPERTIES,
 ];
 
 spec!(
@@ -411,6 +413,11 @@ spec!(
     /// Opens the right-click menu of the entries selected, or of the
     /// empty space when none are.
     MENU, OpenMenu, "menu.open", "Menu", ["menu", "shift-f10"]
+);
+
+spec!(
+    /// Opens the Properties of the entries selected in a new tab.
+    PROPERTIES, ShowProperties, "file.properties", "Properties", ["alt-enter"]
 );
 
 /// Binds every action's default keys, and the keys of an open menu.

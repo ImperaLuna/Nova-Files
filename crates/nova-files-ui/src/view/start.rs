@@ -12,6 +12,7 @@
 
 mod drives;
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use gpui::{
@@ -167,7 +168,7 @@ impl MainWindow {
 }
 
 /// A labelled group of cards.
-fn group(label: &'static str, cards: AnyElement, colors: &Colors) -> impl IntoElement {
+pub(super) fn group(label: &'static str, cards: AnyElement, colors: &Colors) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -211,7 +212,12 @@ fn hero_subtitle(folder: &RecentFolder, home: &Path) -> String {
 }
 
 /// A card's name in bold and the dim line under it, each cut to fit.
-fn titles(name: String, subtitle: String, name_size: Pixels, colors: &Colors) -> impl IntoElement {
+pub(super) fn titles(
+    name: String,
+    subtitle: String,
+    name_size: Pixels,
+    colors: &Colors,
+) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -290,7 +296,7 @@ fn peek(folder: &RecentFolder, colors: &Colors) -> impl IntoElement {
 }
 
 /// A small card's fan: up to three entries, the outer two leaning out.
-fn fan(entries: &[Peeked], colors: &Colors) -> impl IntoElement {
+pub(super) fn fan(entries: &[Peeked], colors: &Colors) -> impl IntoElement {
     let shown = entries.iter().take(FAN_ENTRIES);
     let count = shown.len();
     div()
@@ -333,15 +339,17 @@ fn lean(index: usize, count: usize) -> Radians {
 }
 
 /// A folder's name: its last part, or the whole path for the root.
-fn name_of(path: &Path) -> String {
-    path.file_name().map_or_else(
-        || path.to_string_lossy().into_owned(),
-        |name| name.to_string_lossy().into_owned(),
-    )
+pub(super) fn name_of(path: &Path) -> String {
+    name_os(path).to_string_lossy().into_owned()
+}
+
+/// The last part of `path`, or all of it for the root, as the disk has it.
+pub(super) fn name_os(path: &Path) -> &OsStr {
+    path.file_name().unwrap_or(path.as_os_str())
 }
 
 /// Where a folder is: its parent, with home written `~`.
-fn where_is(path: &Path, home: &Path) -> String {
+pub(super) fn where_is(path: &Path, home: &Path) -> String {
     let parent = path.parent().map_or_else(PathBuf::new, Path::to_path_buf);
     match parent.strip_prefix(home) {
         Ok(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),

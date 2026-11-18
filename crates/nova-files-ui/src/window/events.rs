@@ -55,7 +55,7 @@ impl MainWindow {
         }
         self.gathered.shown = match &arrived {
             Location::Gathered(place) => Some(*place),
-            Location::Start | Location::Folder(_) => None,
+            Location::Start | Location::Folder(_) | Location::Properties(_) => None,
         };
         self.history.arrived(&arrived);
         // In a new order the cursor's entry has moved: bring it into view.
@@ -88,7 +88,9 @@ impl MainWindow {
         }
         cx.emit(match arrived {
             Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
-            Location::Start | Location::Folder(_) => WindowEvent::Opened(listing_path),
+            Location::Start | Location::Folder(_) | Location::Properties(_) => {
+                WindowEvent::Opened(listing_path)
+            }
         });
         cx.notify();
     }
@@ -138,9 +140,13 @@ impl MainWindow {
             Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
                 self.find_failed(id, cx);
             }
-            Event::Properties { id, .. } => self.save_probed(id, false, cx),
+            Event::Properties { id, properties } => {
+                self.save_probed(id, false, cx);
+                self.properties_arrived(id, Some(properties), cx);
+            }
             Event::PropertiesUnreadable { id, reason, .. } => {
                 self.save_probed(id, reason == Unreadable::Missing, cx);
+                self.properties_arrived(id, None, cx);
             }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);

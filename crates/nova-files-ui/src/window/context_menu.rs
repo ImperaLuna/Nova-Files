@@ -1,8 +1,8 @@
 //! The right-click menus on the sheet, kept short as on the design page.
 //!
 //! On an entry: Open, Open in new tab (a folder) and Preview, Cut, Copy
-//! and Rename, then Move to Trash; with several selected only what applies to all of them (Cut,
-//! Copy, Move to Trash). A right-click on an entry that isn't selected
+//! and Rename, then Move to Trash, then Properties; with several selected
+//! only what applies to all of them (Cut, Copy, Move to Trash, Properties). A right-click on an entry that isn't selected
 //! selects it alone first; one inside the selection keeps it. In the
 //! trash an entry offers Restore; inside a trashed folder, nothing.
 //!
@@ -26,7 +26,7 @@ use super::MainWindow;
 use crate::assets::Icon;
 use crate::commands::{
     COPY, CUT, DETAILS, EMPTY_TRASH, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PASTE, PREVIEW,
-    RENAME, RESTORE, SELECT_ALL, TRASH,
+    PROPERTIES, RENAME, RESTORE, SELECT_ALL, TRASH,
 };
 use crate::menu::{Look, MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
@@ -121,6 +121,7 @@ impl MainWindow {
             .flatten()
             .collect(),
             vec![MenuItem::run(Icon::Trash, &TRASH).with_look(Look::Danger)],
+            vec![MenuItem::run(Icon::Info, &PROPERTIES)],
         ]
     }
 

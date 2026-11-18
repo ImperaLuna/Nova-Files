@@ -49,8 +49,9 @@ fn choose(view: &Entity<MainWindow>, cx: &mut VisualTestContext, label: &str) {
             .position(|item| item.label == label)
             .unwrap()
     });
-    let selector: &'static str =
-        ["menu-0", "menu-1", "menu-2", "menu-3", "menu-4", "menu-5"][index];
+    let selector: &'static str = [
+        "menu-0", "menu-1", "menu-2", "menu-3", "menu-4", "menu-5", "menu-6", "menu-7",
+    ][index];
     click(cx, selector);
 }
 
@@ -70,10 +71,18 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
     assert_eq!(
         offered(&view, cx),
         (
-            ["Open", "Preview", "Cut", "Copy", "Rename", "Move to Trash"]
-                .map(str::to_owned)
-                .to_vec(),
-            vec![2, 5]
+            [
+                "Open",
+                "Preview",
+                "Cut",
+                "Copy",
+                "Rename",
+                "Move to Trash",
+                "Properties"
+            ]
+            .map(str::to_owned)
+            .to_vec(),
+            vec![2, 5, 6]
         )
     );
     view.read_with(cx, |view, _| {
@@ -138,8 +147,10 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
     assert_eq!(
         offered(&view, cx),
         (
-            ["Cut", "Copy", "Move to Trash"].map(str::to_owned).to_vec(),
-            vec![2]
+            ["Cut", "Copy", "Move to Trash", "Properties"]
+                .map(str::to_owned)
+                .to_vec(),
+            vec![2, 3]
         )
     );
 
@@ -313,7 +324,8 @@ async fn a_folder_opens_in_a_new_tab_from_its_menu(cx: &mut TestAppContext) {
             "Cut",
             "Copy",
             "Rename",
-            "Move to Trash"
+            "Move to Trash",
+            "Properties"
         ]
     );
     choose(&view, cx, "Open in new tab");

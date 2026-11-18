@@ -54,10 +54,11 @@ pub enum Icon {
     SelectAll,
     NewFolder,
     Undo,
+    Info,
 }
 
 impl Icon {
-    const ALL: [Self; 42] = [
+    const ALL: [Self; 43] = [
         Self::Folder,
         Self::File,
         Self::FileText,
@@ -100,6 +101,7 @@ impl Icon {
         Self::SelectAll,
         Self::NewFolder,
         Self::Undo,
+        Self::Info,
     ];
 
     /// The path GPUI asks the asset source for.
@@ -147,6 +149,7 @@ impl Icon {
             Self::SelectAll => "icons/select-all.svg",
             Self::NewFolder => "icons/new-folder.svg",
             Self::Undo => "icons/undo.svg",
+            Self::Info => "icons/info.svg",
         }
     }
 
@@ -194,6 +197,7 @@ impl Icon {
             Self::SelectAll => svg::SELECT_ALL,
             Self::NewFolder => svg::NEW_FOLDER,
             Self::Undo => svg::UNDO,
+            Self::Info => svg::INFO,
         };
         source.as_bytes()
     }

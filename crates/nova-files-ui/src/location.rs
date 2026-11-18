@@ -1,4 +1,5 @@
-//! Where a window can be: the Start page, a folder, or Games or Projects.
+//! Where a window can be: the Start page, a folder, Games or Projects,
+//! or the Properties page of some files and folders.
 
 use std::path::{Path, PathBuf};
 
@@ -13,13 +14,16 @@ pub enum Location {
     /// Games or Projects: the folders gathered from the folders the user
     /// chose (see `window/gathered`).
     Gathered(Gathering),
+    /// The Properties page of these paths, in the order they were
+    /// selected.
+    Properties(Vec<PathBuf>),
 }
 
 impl Location {
     /// The folder, when this is one.
     pub fn folder(&self) -> Option<&Path> {
         match self {
-            Self::Start | Self::Gathered(_) => None,
+            Self::Start | Self::Gathered(_) | Self::Properties(_) => None,
             Self::Folder(path) => Some(path),
         }
     }
@@ -41,5 +45,6 @@ mod tests {
         assert_eq!(Location::from(path).folder(), Some(path));
         assert_eq!(Location::Start.folder(), None);
         assert_eq!(Location::Gathered(Gathering::Games).folder(), None);
+        assert_eq!(Location::Properties(vec![path.to_owned()]).folder(), None);
     }
 }

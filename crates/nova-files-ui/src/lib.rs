@@ -49,6 +49,7 @@ use std::rc::Rc;
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
 use nova_files_api::{Connector, PickRequest, WindowRequest};
 
+pub use assets::Icon;
 pub use columns::ColumnText;
 pub use commands::{ACTIONS, ActionSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note, NoteUndo};
@@ -58,7 +59,9 @@ pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
-pub use window::{CoreStatus, MainWindow, Previewed, Scope, WindowEvent, home_folder};
+pub use window::{
+    CoreStatus, MainWindow, Previewed, PropertiesPage, Scope, WindowEvent, home_folder,
+};
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
 pub use window_state::{WindowState, fetch as fetch_window_state};
 
