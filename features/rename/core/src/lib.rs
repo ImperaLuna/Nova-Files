@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::ffi::OsStr;
 use std::fs::DirBuilder;
 use std::os::unix::fs::DirBuilderExt as _;
@@ -5,10 +7,10 @@ use std::path::Path;
 
 use nova_files_api::{Failure, Outcome};
 
-use super::Ended;
-use super::failure::failure;
-use super::name::is_plain_name;
-use super::place::rename_no_replace;
+use nova_files_jobs::Ended;
+use nova_files_jobs::failure::failure;
+use nova_files_jobs::place::rename_no_replace;
+use nova_files_rename_api::is_plain_name;
 
 const FOLDER_MODE: u32 = 0o777;
 

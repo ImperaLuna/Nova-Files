@@ -7,8 +7,6 @@ mod delete;
 mod dropped;
 mod extract;
 mod make;
-mod name;
-mod one_step;
 mod transfer;
 mod undo;
 
@@ -19,6 +17,7 @@ use std::thread;
 
 use nova_files_api::{Connector, EventSink, JobId, JobTag, Operation};
 use nova_files_jobs::control::{Cancelled, Control};
+use nova_files_jobs::kinds::Kinds;
 use nova_files_jobs::mover::{Moved, Mover};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, lock};
@@ -36,13 +35,14 @@ use access::change_access;
 use delete::delete;
 use extract::{Taking, extract};
 use make::How;
+use nova_files_rename_core::{new_folder, rename};
 use nova_files_trash_core::{Trasher, delete_from_trash, empty_trash, restore, trash};
 use transfer::transfer;
 use undo::{Undo, undo_of};
 
 const DROP_THREAD: &str = "nova-files-drop";
 
-pub type Jobs = nova_files_jobs::Jobs<Files>;
+pub type Jobs = nova_files_jobs::Jobs<Kinds>;
 
 pub fn jobs(
     state: Option<&Path>,
@@ -51,12 +51,17 @@ pub fn jobs(
     archiver: Option<Archiver>,
 ) -> Jobs {
     let set_aside = Arc::new(Trasher::new(trashes.home.clone()));
-    let files = Arc::new(Files {
+    let files = Files {
         trashes,
         archiver,
         mover: Moves,
-    });
-    Jobs::new(state, files, set_aside, wake)
+    };
+    Jobs::new(
+        state,
+        Arc::new(Kinds::default().with(files)),
+        set_aside,
+        wake,
+    )
 }
 
 pub fn start_drop(
@@ -115,8 +120,8 @@ impl nova_files_jobs::JobKind for Files {
         let trashes = &self.trashes;
         let archiver = self.archiver.as_ref();
         match operation {
-            Operation::Rename { path, name } => one_step::rename(path, name),
-            Operation::NewFolder { inside, name } => one_step::new_folder(inside, name),
+            Operation::Rename { path, name } => rename(path, name),
+            Operation::NewFolder { inside, name } => new_folder(inside, name),
             Operation::Copy { sources, into } => match copied_out(sources) {
                 Some((archive, picked)) => {
                     extract(running, archiver, &archive, into, Taking::Picked(&picked))

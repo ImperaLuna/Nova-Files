@@ -3,10 +3,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use nova_files_api::{DiskSpace, Event, EventSink, MAX_DISK_SPACE_PATHS, PathSpace};
+use nova_files_drives_api::{DiskSpace, Event, MAX_DISK_SPACE_PATHS, PathSpace};
+use nova_files_messages::EventSink;
 use rustix::fs::statvfs;
 
-use crate::timed;
+use nova_files_disk::timed;
 
 const THREAD_NAME: &str = "nova-files-disk-space";
 const READ_THREAD: &str = "nova-files-statvfs";

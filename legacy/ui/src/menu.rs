@@ -4,7 +4,8 @@ use gpui::{
     App, Context, FocusHandle, KeyBinding, KeybindingKeystroke, Pixels, Point, SharedString, Window,
 };
 
-use nova_files_api::{DriveAction, DriveId, Gathering};
+use nova_files_api::Gathering;
+use nova_files_drives_api::{DriveAction, DriveId};
 
 use crate::assets::Icon;
 use crate::commands::ActionSpec;

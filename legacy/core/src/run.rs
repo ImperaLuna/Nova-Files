@@ -3,17 +3,16 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use nova_files_api::{
-    ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
-};
+use nova_files_api::{ClientId, Command, CoreMessage, Envelope, Event, EventSink, MessageType};
+use nova_files_drives_api::{Command as DrivesCommand, DriveOffer, Event as DrivesEvent};
+use nova_files_drives_core::{Store as DrivesStore, disk_space};
 use nova_files_folders_api as folders_api;
 use nova_files_folders_core::Store as FolderViewsStore;
 use nova_files_messages::{Routed, Routes};
 use nova_files_settings_api as settings_api;
+use nova_files_settings_core::Store as SettingsStore;
 use nova_files_trash_api as trash_api;
 
-use crate::disk_space;
-use crate::drives::Store as DrivesStore;
 use crate::file_icons::FileIcons;
 use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
@@ -25,7 +24,6 @@ use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
 use crate::search::Searcher;
-use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
 use crate::trash;
@@ -72,6 +70,11 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
         }
     })?;
+    routes.on(
+        |setup: &Setup, id, client: &Client, command: DrivesCommand| {
+            drives(id, client, command, setup)
+        },
+    )?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
             folders_api::Command::Views => setup.folder_views.listen(id, client.events()),
@@ -92,6 +95,7 @@ pub fn emitted_types() -> Vec<MessageType> {
         MessageType::of::<Event>(),
         MessageType::of::<settings_api::Event>(),
         MessageType::of::<trash_api::Event>(),
+        MessageType::of::<DrivesEvent>(),
         MessageType::of::<folders_api::Event>(),
     ]
 }
@@ -214,14 +218,24 @@ fn answer(
         | Command::CancelJob(_)
         | Command::AnswerConflict { .. }
         | Command::GivePassword { .. }) => operations::answer(id, client, command, setup),
-        Command::Drives => setup.drives.listen(id, client.events()),
-        Command::Drive(action) => setup.drives.act(client.events(), action),
-        Command::DiskSpace(paths) => {
-            disk_space::answer(client.events(), paths);
-            Ok(())
-        }
         command @ (Command::Measure { .. } | Command::Space { .. } | Command::StopMeasure(_)) => {
             setup.measurer.answer(id, client.events(), command);
+            Ok(())
+        }
+    }
+}
+
+fn drives(
+    id: ClientId,
+    client: &Client,
+    command: DrivesCommand,
+    setup: &Setup,
+) -> Result<(), nova_files_api::ClientGone> {
+    match command {
+        DrivesCommand::Drives => setup.drives.listen(id, client.events()),
+        DrivesCommand::Drive(action) => setup.drives.act(client.events(), action),
+        DrivesCommand::DiskSpace(paths) => {
+            disk_space::answer(client.events(), paths);
             Ok(())
         }
     }

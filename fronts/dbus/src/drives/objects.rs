@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Drive, DriveFailure, DriveId, DriveList, Volume, VolumeId};
+use nova_files_drives_api::{Drive, DriveFailure, DriveId, DriveList, Volume, VolumeId};
 use zbus::fdo::ManagedObjects;
 use zbus::names::OwnedInterfaceName;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
