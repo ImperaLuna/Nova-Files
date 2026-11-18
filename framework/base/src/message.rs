@@ -14,7 +14,6 @@ use crate::job::{
     Answer, Conflict, DropAskId, DropKind, JobId, JobTag, Operation, Outcome, Progress, Scope,
     Tally,
 };
-use crate::open_with::{NotOpened, OpenWith, OpenWithAnswer};
 use crate::preview::{Fit, Preview, PreviewId};
 use crate::properties::{Properties, PropertiesId};
 use crate::recent::{RecentFolder, RecentId};
@@ -135,18 +134,6 @@ pub enum Command {
         path: PathBuf,
         fit: Fit,
     },
-    /// Open the file at `path` in the user's default app for its type.
-    /// `activation` is the caller's activation token, so the app may take
-    /// focus. The answer is [`Event::FileOpened`] or
-    /// [`Event::FileNotOpened`], when the client should ask the desktop
-    /// portal instead.
-    OpenFile {
-        path: PathBuf,
-        activation: Option<String>,
-    },
-    /// List the apps that open some files, open them in one, or make one
-    /// the default (see [`OpenWith`]).
-    OpenWith(OpenWith),
     /// Ask for the folders' views: the answer is [`Event::FolderViews`],
     /// sent again whenever one changes.
     FolderViews,
@@ -368,12 +355,6 @@ pub enum Event {
         path: PathBuf,
         reason: Unreadable,
     },
-    /// [`Command::OpenFile`]'s app has started on `path`.
-    FileOpened { path: PathBuf },
-    /// [`Command::OpenFile`] started nothing for `path`, for `reason`.
-    FileNotOpened { path: PathBuf, reason: NotOpened },
-    /// The answer to a [`Command::OpenWith`] request.
-    OpenWith(OpenWithAnswer),
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),

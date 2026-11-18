@@ -1,0 +1,18 @@
+# nova-files-open-api
+#
+# What the open feature's two halves say to each other: opening a file in
+# its default app, and Open With's apps, launches and defaults.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-open-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

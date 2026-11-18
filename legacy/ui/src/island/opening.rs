@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use nova_files_api::NotOpened;
+use nova_files_open_api::NotOpened;
 
 use super::{FILE, FILES, LIST_GAP, PART_GAP, count, name_of};
 

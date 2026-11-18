@@ -18,7 +18,7 @@ use std::thread;
 use defaults::{App, Places};
 use exec::Fields;
 use nova_files_api::FileTypes as _;
-pub use nova_files_api::NotOpened;
+pub use nova_files_open_api::NotOpened;
 
 use crate::mime::MimeTypes;
 

@@ -7,6 +7,7 @@ use nova_files_api::{
     ClientId, Command, CoreMessage, DriveOffer, Envelope, Event, EventSink, MessageType,
 };
 use nova_files_messages::{Routed, Routes};
+use nova_files_open_api as open_api;
 use nova_files_trash_api as trash_api;
 
 use crate::disk_space;
@@ -63,6 +64,18 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
         }
     })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| {
+        match command {
+            open_api::Command::OpenFile { path, activation } => {
+                let opening = (Arc::clone(&setup.mime_types), Arc::clone(&setup.inside));
+                jobs::open_file(client, opening, path, activation);
+            }
+            open_api::Command::OpenWith(request) => {
+                setup.open_with.answer(client.events(), request);
+            }
+        }
+        Ok(())
+    })?;
     routes.on_leave(forget);
     Ok(routes)
 }
@@ -75,6 +88,7 @@ pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
         MessageType::of::<trash_api::Event>(),
+        MessageType::of::<open_api::Event>(),
     ]
 }
 
@@ -174,8 +188,6 @@ fn answer(
         | Command::Find { .. }
         | Command::Properties { .. }
         | Command::Preview { .. }
-        | Command::OpenFile { .. }
-        | Command::OpenWith(_)
         | Command::FolderUsed(_)
         | Command::RecentFolders { .. }) => {
             folders::answer(id, client, command, setup);

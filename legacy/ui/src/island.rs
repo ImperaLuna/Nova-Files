@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use gpui::{App, SharedString, Task};
 use nova_files_api::{
-    Command, Entry, EntryKind, Failure, JobId, NotOpened, Operation, Outcome, Tally,
+    Command, Entry, EntryKind, Failure, JobId, Operation, Outcome, Tally,
 };
+use nova_files_open_api::NotOpened;
 
 pub const NOTE_TIME: Duration = Duration::from_secs(6);
 

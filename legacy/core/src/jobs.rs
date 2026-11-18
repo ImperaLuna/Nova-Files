@@ -5,8 +5,10 @@ use std::thread;
 
 use nova_files_api::{
     ClientGone, Details, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId,
-    NotOpened, Order, ThumbnailSize, Unreadable,
+    Order, ThumbnailSize, Unreadable,
 };
+
+use nova_files_open_api::{self as open_api, NotOpened};
 
 use crate::archive::ArchiveFailure;
 use crate::details_queue;
@@ -250,15 +252,15 @@ pub fn open_file(
                 None => open::open_file(&path, types, activation.as_deref()),
             };
             let event = match opened {
-                Ok(()) => Event::FileOpened { path },
-                Err(reason) => Event::FileNotOpened { path, reason },
+                Ok(()) => open_api::Event::Opened { path },
+                Err(reason) => open_api::Event::NotOpened { path, reason },
             };
             events.deliver(event).ok();
         });
     if let Err(error) = spawned {
         log::warn!("can't start a thread to open a file: {error}");
         client
-            .deliver(Event::FileNotOpened {
+            .deliver(open_api::Event::NotOpened {
                 path: failed_path,
                 reason: NotOpened::Failed,
             })

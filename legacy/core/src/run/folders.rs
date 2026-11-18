@@ -48,11 +48,6 @@ pub(super) fn answer(id: ClientId, client: &Client, command: Command, setup: &Se
             };
             preview::answer(client.events(), request);
         }
-        Command::OpenFile { path, activation } => {
-            let opening = (Arc::clone(&setup.mime_types), Arc::clone(&setup.inside));
-            jobs::open_file(client, opening, path, activation);
-        }
-        Command::OpenWith(request) => setup.open_with.answer(client.events(), request),
         Command::FolderUsed(folder) => setup.recent.used(folder),
         Command::RecentFolders { id, count, skip } => {
             let count = usize::try_from(count).unwrap_or(usize::MAX);

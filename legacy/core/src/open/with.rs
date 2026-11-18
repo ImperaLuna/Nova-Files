@@ -3,7 +3,8 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
-use nova_files_api::{App as ListedApp, Event, EventSink, OpenWith, OpenWithAnswer, OpenWithId};
+use nova_files_api::EventSink;
+use nova_files_open_api::{App as ListedApp, Event, OpenWith, OpenWithAnswer, OpenWithId};
 
 use super::apps::{self, Listed};
 use super::associate::{self, NotSet};

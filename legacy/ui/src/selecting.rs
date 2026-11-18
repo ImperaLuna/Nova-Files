@@ -221,7 +221,7 @@ impl MainWindow {
         for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
             let path = listing.path_of(file);
             connection
-                .send(Command::OpenFile {
+                .send(nova_files_open_api::Command::OpenFile {
                     path,
                     activation: None,
                 })

@@ -56,6 +56,7 @@ use nova_files_api::{
     Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
+use nova_files_open_api as open_api;
 use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;
@@ -323,6 +324,10 @@ impl MainWindow {
     fn take(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
         let envelope = match envelope.open::<Event>() {
             Ok(event) => return self.on_event(event, cx),
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<open_api::Event>() {
+            Ok(event) => return self.open_event(event, cx),
             Err(envelope) => envelope,
         };
         match envelope.open::<trash_api::Event>() {
