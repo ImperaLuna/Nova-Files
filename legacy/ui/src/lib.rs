@@ -78,6 +78,7 @@ pub fn sent_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Command>(),
         MessageType::of::<nova_files_folders_api::Command>(),
+        MessageType::of::<nova_files_settings_api::Command>(),
         MessageType::of::<nova_files_trash_api::Command>(),
     ]
 }
@@ -86,6 +87,7 @@ pub fn taken_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
         MessageType::of::<nova_files_folders_api::Event>(),
+        MessageType::of::<nova_files_settings_api::Event>(),
         MessageType::of::<nova_files_trash_api::Event>(),
     ]
 }

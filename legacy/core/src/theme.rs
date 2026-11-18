@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
 
 use nova_files_api::{
-    Appearance, ClientGone, ClientId, DesktopLook, Envelope, Event, EventSink, Mode, Palette, Theme,
+    ClientGone, ClientId, DesktopLook, Envelope, Event, EventSink, Mode, Palette, Theme,
 };
+use nova_files_settings_api::{self as settings_api, Appearance};
 
 use crate::config_watch::{self, ConfigWatch};
 use crate::hand_edited::{self, Reread, lock};
@@ -110,15 +111,16 @@ struct Follower(Weak<Mutex<Shared>>);
 
 impl EventSink for Follower {
     fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
-        let Some(event) = envelope.taken_as::<Event>() else {
+        let Some(settings_api::Event::Settings(settings)) =
+            envelope.taken_as::<settings_api::Event>()
+        else {
             return Ok(());
         };
         let shared = self.0.upgrade().ok_or(ClientGone)?;
-        if let Event::Settings(settings) = event {
-            let mut locked = lock(&shared);
-            locked.appearance = settings.appearance;
-            locked.update();
-        }
+        let mut locked = lock(&shared);
+        locked.appearance = settings.appearance;
+        locked.update();
+        drop(locked);
         Ok(())
     }
 }

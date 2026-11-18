@@ -53,9 +53,10 @@ use gpui::{
 };
 use nova_files_api::{
     Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, Gathering,
-    HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
+    HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId,
 };
 use nova_files_folders_api::{self as folders_api, FolderView};
+use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, RulesBook, WindowParts};
 use nova_files_trash_api as trash_api;
 
@@ -202,12 +203,7 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 4] = [
-        Command::Ping,
-        Command::Places,
-        Command::Drives,
-        Command::Settings,
-    ];
+    const FIRST_ASKS: [Command; 3] = [Command::Ping, Command::Places, Command::Drives];
 
     pub fn at(
         connector: &Connector,
@@ -328,6 +324,12 @@ impl MainWindow {
             Ok(folders_api::Event::Views(views)) => return self.folder_views_arrived(&views, cx),
             Err(envelope) => envelope,
         };
+        let envelope = match envelope.open::<settings_api::Event>() {
+            Ok(settings_api::Event::Settings(settings)) => {
+                return self.settings_arrived(settings, cx);
+            }
+            Err(envelope) => envelope,
+        };
         match envelope.open::<trash_api::Event>() {
             Ok(trash_api::Event::Listed(items)) => self.trash_listed(items, cx),
             Err(envelope) => {
@@ -414,6 +416,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             }
             connection.send(folders_api::Command::Views)?;
             connection.send(Command::Theme)?;
+            connection.send(settings_api::Command::Watch)?;
             connection.send(trash_api::Command::List)?;
             Ok(connection)
         })

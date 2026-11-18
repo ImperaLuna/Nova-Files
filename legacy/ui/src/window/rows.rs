@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use gpui::{App, Context, RenderImage, Window};
 use nova_files_api::{
-    Command, Details, EntryId, EntryKind, FileIcon, ListingId, ThemeIcon, ThumbnailSize, Thumbnails,
+    Command, Details, EntryId, EntryKind, FileIcon, ListingId, ThemeIcon, ThumbnailSize,
 };
+use nova_files_settings_api::Thumbnails;
 
 use super::MainWindow;
 use crate::columns::{self, ColumnText};
