@@ -9,9 +9,9 @@
 //! drop under the pointer in `aiming`, opening rows held over in
 //! `hover_open`), renaming and
 //! New folder in `renaming`, the jobs they start in `jobs`, the tabs in
-//! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`, the files an app asked to show
-//! selected in `showing`, and the sheet's right-click
-//! menus in `context_menu`. Drawing
+//! `tabs` (reordered in `tab_order`), showing hidden files in `hidden`,
+//! the files an app asked to show selected in `showing`, and the sheet's
+//! right-click menus in `context_menu`. Drawing
 //! lives in `view`; the actions a key or button sends are handled in
 //! `view` too, each by one method on the window (see `commands`).
 //!

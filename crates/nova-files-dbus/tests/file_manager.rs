@@ -164,6 +164,21 @@ fn nothing_opens_unless_every_uri_is_a_local_file() {
 }
 
 #[test]
+fn as_many_uris_as_the_limit_still_show() {
+    let bus = PrivateBus::start();
+    let running = running(&bus);
+    assert!(serve(&running.service));
+
+    let most = vec![uri::file_uri(Path::new("/a/x")); FILE_MANAGER_MAX_URIS];
+    call(&client(&bus), "ShowItems", &most).unwrap();
+
+    assert_eq!(
+        running.windows.recv_timeout(WAIT),
+        Ok(showing("/a", &["x"]))
+    );
+}
+
+#[test]
 fn another_file_manager_keeps_the_name_until_it_lets_go() {
     let bus = PrivateBus::start();
     let other = client(&bus);

@@ -1,9 +1,9 @@
 //! A window opened to show some files, as an app's "Show in folder" asks:
 //! the names wait for the first listing, and if it is of the folder they
 //! were asked for, it selects those there and brings the first of them into
-//! view. Names that aren't there (hidden, or gone) select nothing. Any
-//! other first listing (a folder that fell back to home, or one the user
-//! went to first) uses them up without selecting anything.
+//! view. Names that aren't in the listing select nothing. Any other first
+//! listing, such as the home folder after a fallback, uses them up without
+//! selecting anything.
 
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};

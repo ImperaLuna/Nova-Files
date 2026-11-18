@@ -154,8 +154,8 @@ impl Service {
     /// Asks for [`FILE_MANAGER_BUS_NAME`] when `should` says so, so apps'
     /// "Show in folder" opens Nova Files, waiting in the bus's queue when
     /// another file manager holds it and never taking it away. `should`
-    /// runs on a thread of its own, since it may read files; the returned
-    /// channel says whether this process owns the name then.
+    /// runs on a thread of its own; the returned channel says whether this
+    /// process owns the name then.
     ///
     /// # Errors
     /// When the thread can't start.
@@ -212,9 +212,6 @@ impl Service {
     /// # Errors
     /// When a call fails or takes longer than [`CALL_TIMEOUT`].
     pub fn release(&self) -> zbus::Result<()> {
-        // Each, even when one fails, and the application name first: it
-        // matters most to a restart. Releasing a name this process never
-        // asked for is fine.
         let app = self.connection.release_name(APP_ID);
         let portal = self.connection.release_name(PORTAL_BUS_NAME);
         let file_manager = self.connection.release_name(FILE_MANAGER_BUS_NAME);
