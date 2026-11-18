@@ -27,6 +27,7 @@ mod control;
 mod copy_file;
 mod delete;
 mod dropped;
+mod extract;
 mod failure;
 mod folders;
 mod job;
@@ -68,11 +69,13 @@ pub use dropped::answer as answer_drop_would;
 #[cfg(test)]
 pub use test_folder::TestFolder;
 
+use crate::archive::Archiver;
 use crate::jobs::Client;
 use crate::trash::Trashes;
 use access::change_access;
 use control::{Cancelled, Control};
 use delete::delete;
+use extract::extract;
 use job::Job;
 use left::Left;
 use make::How;
@@ -114,14 +117,22 @@ pub struct Jobs {
     wake: Connector,
     /// The jobs that can be undone.
     history: Arc<History>,
+    /// Runs the archive helper; `None` when it isn't installed.
+    archiver: Option<Archiver>,
 }
 
 impl Jobs {
-    /// Jobs whose journals go under the state folder `state` and that
-    /// use the trashes `trashes`. Jobs a crash cut
+    /// Jobs whose journals go under the state folder `state`, that use
+    /// the trashes `trashes`, and that unpack archives with `archiver`.
+    /// Jobs a crash cut
     /// short are found there, cleaned up, and wait as interrupted; on a
     /// thread of their own, as the disk may be slow.
-    pub fn new(state: Option<&Path>, trashes: Trashes, wake: Connector) -> Self {
+    pub fn new(
+        state: Option<&Path>,
+        trashes: Trashes,
+        wake: Connector,
+        archiver: Option<Archiver>,
+    ) -> Self {
         let journals = state.map(|state| state.join(journal::FOLDER));
         let jobs = Self {
             next: AtomicU64::new(first_id()),
@@ -132,6 +143,7 @@ impl Jobs {
             interrupted: Interrupted::default(),
             wake,
             history: Arc::default(),
+            archiver,
         };
         if let Some(folder) = jobs.journals.clone() {
             jobs.recover(folder);
@@ -309,23 +321,26 @@ impl Jobs {
             _ => None,
         };
         let not_spawned = taken.clone();
-        let (registry, audience, wake, trashes, history) = (
+        let (registry, audience, wake, history) = (
             Arc::clone(&self.running),
             self.audience.clone(),
             self.wake.clone(),
-            self.trashes.clone(),
             Arc::clone(&self.history),
         );
+        let tools = Tools {
+            trashes: self.trashes.clone(),
+            archiver: self.archiver.clone(),
+        };
         let spawned = thread::Builder::new()
             .name(JOB_THREAD.to_owned())
             .spawn(move || {
                 let undo = taken.as_ref().map(|taken| taken.undo.clone());
                 let ended = match resumed(&mut running, resume) {
-                    None => run(&mut running, &operation, &trashes, undo),
-                    Some(Ok(rest)) => run(&mut running, &rest, &trashes, undo),
+                    None => run(&mut running, &operation, &tools, undo),
+                    Some(Ok(rest)) => run(&mut running, &rest, &tools, undo),
                     Some(Err(Cancelled)) => (Outcome::Cancelled, Vec::new()),
                 };
-                let (tally, undoable) = after(&mut running, &operation, &ended, &trashes);
+                let (tally, undoable) = after(&mut running, &operation, &ended, &tools.trashes);
                 running.finish();
                 // Before clients hear the job ended, so an undo asked for
                 // then finds it.
@@ -457,6 +472,22 @@ impl Jobs {
         drop(running);
     }
 
+    /// Answers `conflict`, a password conflict job `job` holds at, with
+    /// `password`. Clients hear it answered with a retry; never the
+    /// password.
+    pub fn give_password(&self, job: JobId, conflict: &Conflict, password: String) {
+        let running = lock(&self.running);
+        if let Some(shared) = running.get(&job) {
+            shared.control.give_password(conflict, password, || {
+                self.audience.tell(&Event::ConflictAnswered {
+                    job,
+                    answer: Answer::Retry,
+                });
+            });
+        }
+        drop(running);
+    }
+
     /// Stops job `job` before its next change to the disk.
     pub fn cancel(&self, job: JobId) {
         if let Some(shared) = lock(&self.running).get(&job) {
@@ -476,13 +507,15 @@ fn first_id() -> u64 {
         })
 }
 
+/// What jobs work with besides the disk.
+struct Tools {
+    trashes: Trashes,
+    archiver: Option<Archiver>,
+}
+
 /// Runs `operation`; an undo runs `undo`, the one it took.
-fn run(
-    running: &mut Running,
-    operation: &Operation,
-    trashes: &Trashes,
-    undo: Option<Undo>,
-) -> Ended {
+fn run(running: &mut Running, operation: &Operation, tools: &Tools, undo: Option<Undo>) -> Ended {
+    let trashes = &tools.trashes;
     match operation {
         Operation::Rename { path, name } => one_step::rename(path, name),
         Operation::NewFolder { inside, name } => one_step::new_folder(inside, name),
@@ -495,6 +528,9 @@ fn run(
         Operation::DeleteFromTrash { items } => delete_from_trash(running, items, trashes),
         Operation::EmptyTrash => empty_trash(running, trashes),
         Operation::Undo { .. } => undo::run(running, undo, trashes),
+        Operation::Extract { archive, into, to } => {
+            extract(running, tools.archiver.as_ref(), archive, into, *to)
+        }
     }
 }
 
@@ -578,7 +614,7 @@ fn still_to_do(operation: &Operation, control: &Control) -> Result<Operation, Ca
 /// The path a job that couldn't start failed at.
 fn first_path(operation: &Operation) -> PathBuf {
     match operation {
-        Operation::Rename { path, .. } => path.clone(),
+        Operation::Rename { path, .. } | Operation::Extract { archive: path, .. } => path.clone(),
         Operation::NewFolder { inside, name } => inside.join(name),
         Operation::Copy { sources, into } | Operation::Move { sources, into } => {
             sources.first().unwrap_or(into).clone()

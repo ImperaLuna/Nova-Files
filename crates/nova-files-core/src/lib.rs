@@ -94,20 +94,16 @@ pub fn spawn() -> io::Result<RunningCore> {
 /// # Errors
 /// When the OS refuses to start the core's thread.
 pub fn spawn_with_idle_exit(idle_exit: Duration) -> io::Result<RunningCore> {
-    spawn_with(
+    spawn_with_archiver(
         idle_exit,
         Home::from_env(),
         Thumbnails::from_env(),
         IndexPlace::from_env(),
+        Archiver::from_env(),
     )
 }
 
-/// Starts the core with the given folders instead of what the environment
-/// names, so tests never touch the real ones.
-///
-/// Places come from `home`, thumbnails go to `thumbnails` and the index of
-/// `home` to `index`. Without `thumbnails` the core makes none; without
-/// `home` or `index` it can't search.
+/// Starts the core as [`spawn_with_archiver`] does, extracting no archive.
 ///
 /// # Errors
 /// When the OS refuses to start the core's thread.
@@ -117,6 +113,26 @@ pub fn spawn_with(
     thumbnails: Option<Thumbnails>,
     index: Option<IndexPlace>,
 ) -> io::Result<RunningCore> {
+    spawn_with_archiver(idle_exit, home, thumbnails, index, None)
+}
+
+/// Starts the core with the given folders instead of what the environment
+/// names, so tests never touch the real ones.
+///
+/// Places come from `home`, thumbnails go to `thumbnails` and the index of
+/// `home` to `index`; archives are read with `archiver`. Without
+/// `thumbnails` the core makes none; without `home` or `index` it can't
+/// search; without `archiver` it extracts no archive.
+///
+/// # Errors
+/// When the OS refuses to start the core's thread.
+pub fn spawn_with_archiver(
+    idle_exit: Duration,
+    home: Option<Home>,
+    thumbnails: Option<Thumbnails>,
+    index: Option<IndexPlace>,
+    archiver: Option<Archiver>,
+) -> io::Result<RunningCore> {
     let (connector, receiver) = nova_files_api::channel();
     let searcher = Searcher::new(index, home.as_ref().map(|home| home.folder.clone()));
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
@@ -124,6 +140,7 @@ pub fn spawn_with(
         home.as_ref().map(|home| home.state.as_path()),
         trash::Trashes::of(home.as_ref()),
         connector.clone(),
+        archiver,
     );
     let thread = thread::Builder::new()
         .name(THREAD_NAME.to_owned())

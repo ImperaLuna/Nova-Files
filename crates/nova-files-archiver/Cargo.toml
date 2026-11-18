@@ -40,5 +40,6 @@ zip = { version = "9", default-features = false, features = ["aes-crypto", "bzip
 zstd = { version = "0.14", default-features = false }
 
 [dev-dependencies]
-# The tests run the helper the way the core does.
+# The tests run the helper the way the core does, and jobs through a core.
+nova-files-api.workspace = true
 nova-files-core.workspace = true

@@ -71,8 +71,8 @@ pub use folder::{
 pub use folder_view::{FolderView, FolderViews, IconSize, MAX_FOLDER_VIEWS, ViewMode};
 pub use gathered::{Gathered, GatheredChange, GatheredFolder, Gathering, Holds};
 pub use job::{
-    Answer, Conflict, ConflictKind, DropAskId, DropKind, Failure, JobId, JobTag, Operation,
-    Outcome, Progress, Scope, Tally,
+    Answer, Conflict, ConflictKind, DropAskId, DropKind, ExtractTo, Failure, JobId, JobTag,
+    Operation, Outcome, Progress, Scope, Tally,
 };
 pub use message::{ClientId, Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
 pub use open_with::{App, NotOpened, OpenWith, OpenWithAnswer, OpenWithId};
