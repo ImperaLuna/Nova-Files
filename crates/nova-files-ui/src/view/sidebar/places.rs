@@ -1,10 +1,11 @@
 //! The Places section: the Start page first, then the standard folders
-//! and the pinned ones, as `places` lists them, then the trash with how
-//! many items it holds. Each listed folder's row carries the debug
-//! selector `place-<n>`, counted from 0 in the order shown; the first and
-//! last rows carry `place-start` and `place-trash`. A picker shows only
-//! the folders: it has no Start page, and its trash isn't one to pick
-//! from. In a main window, the + (`pin`) on
+//! and the pinned ones, as `places` lists them, then Projects and Games,
+//! then the trash with how many items it holds. Each listed folder's row
+//! carries the debug selector `place-<n>`, counted from 0 in the order
+//! shown; the others carry `place-start`, `place-projects`,
+//! `place-games` and `place-trash`. A picker shows only
+//! the folders: it has no Start page, Games and Projects aren't
+//! folders, and its trash isn't one to pick from. In a main window, the + (`pin`) on
 //! the head, or at the end of the row in a narrow window, picks a folder
 //! to pin, and right-click on a pinned folder opens
 //! its menu (see `window/pin`). Files dropped on a folder's row go into
@@ -19,6 +20,8 @@ use gpui::{
 
 use super::{Row, new_tab_on_middle_click, on_middle_click, row, section_button, section_head};
 use crate::assets::Icon;
+use nova_files_api::Gathering;
+
 use crate::location::Location;
 use crate::places::{self, START_LABEL, TRASH_LABEL};
 use crate::theme::{Colors, size};
@@ -72,6 +75,10 @@ impl MainWindow {
                 })
             });
         let start = main.then(|| self.start_row(narrow, &colors, cx));
+        let gathered = Gathering::ALL
+            .into_iter()
+            .filter(|_| main)
+            .map(|place| self.gathered_row(place, narrow, &colors, cx));
         let trash = main.then(|| self.trash_row(narrow, &colors, cx));
         let pin = main.then(|| {
             section_button("pin", Icon::Plus, &colors)
@@ -82,6 +89,7 @@ impl MainWindow {
             .gap(size::PLACE_GAP)
             .children(start)
             .children(rows)
+            .children(gathered)
             .children(trash);
         if narrow {
             // No head to carry the +: it ends the row, so pinning stays
@@ -119,6 +127,39 @@ impl MainWindow {
         .map(|row| {
             on_middle_click(row, true, cx, |this, cx| {
                 this.new_tab(&Location::Start, cx);
+            })
+        })
+    }
+
+    /// The row of `place`, Projects or Games, before the trash's.
+    fn gathered_row(
+        &self,
+        place: Gathering,
+        narrow: bool,
+        colors: &Colors,
+        cx: &Context<Self>,
+    ) -> Stateful<Div> {
+        let (name, glyph) = places::gathering_look(place);
+        let selector = format!("place-{}", name.to_lowercase());
+        row(
+            Row {
+                id: selector.clone().into(),
+                selector,
+                glyph,
+                name: name.into(),
+                number: None,
+                here: self.gathered_here() == Some(place),
+                pressed: false,
+            },
+            narrow,
+            colors,
+        )
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            this.open_gathered(place, cx);
+        }))
+        .map(|row| {
+            on_middle_click(row, true, cx, move |this, cx| {
+                this.new_tab(&Location::Gathered(place), cx);
             })
         })
     }

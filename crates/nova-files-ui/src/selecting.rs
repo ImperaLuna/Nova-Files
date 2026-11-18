@@ -13,8 +13,8 @@
 //! Letters typed in a main window jump to a name (see `jump`), except
 //! while a rename's field takes them.
 //!
-//! When a listing arrives, a fresh read of the same folder keeps the
-//! selection by name; arriving in the folder that holds the one just left
+//! When a listing arrives, a fresh read of the same folder (or of Games
+//! or Projects) keeps the selection by name; arriving in the folder that holds the one just left
 //! (Up, Back, or any other way) selects the folder left, so the keyboard
 //! carries on from there. Anything else starts with nothing selected, and
 //! so does every list a search shows and the folder after it, unless a
@@ -279,21 +279,22 @@ impl MainWindow {
     }
 
     /// The selection the listing `next` starts with, given the one on
-    /// screen before it: see the module's notes.
-    pub(crate) fn selection_for(&self, next: &Listing) -> Option<Selection> {
+    /// screen before it, which shows the same place when `same_place`:
+    /// see the module's notes.
+    pub(crate) fn selection_for(&self, next: &Listing, same_place: bool) -> Option<Selection> {
         let shown = self.listing.as_ref()?;
-        if shown.folders.is_some() {
-            let reveal = self.search.reveal.as_deref()?;
-            return (reveal.parent() == Some(next.path.as_path()))
-                .then(|| Selection::named(next.id, &next.entries, reveal.file_name()?))
-                .flatten();
-        }
-        if shown.path == next.path {
+        if same_place {
             return self
                 .selection
                 .as_ref()
                 .filter(|selection| selection.listing == shown.id)?
                 .carried(&shown.entries, next.id, &next.entries);
+        }
+        if shown.folders.is_some() {
+            let reveal = self.search.reveal.as_deref()?;
+            return (reveal.parent() == Some(next.path.as_path()))
+                .then(|| Selection::named(next.id, &next.entries, reveal.file_name()?))
+                .flatten();
         }
         let left = shown.path.file_name()?;
         (shown.path.parent() == Some(next.path.as_path()))

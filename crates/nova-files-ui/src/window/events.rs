@@ -6,7 +6,7 @@
 //! screen read again when the core moved on from it (see `window`).
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::{Context, ScrollStrategy, UniformListScrollHandle};
@@ -31,30 +31,43 @@ pub(super) enum Place {
 }
 
 impl MainWindow {
-    /// Shows `listing`, the folder the window last asked for.
+    /// Shows `listing`, the place the window last asked for: a folder, or
+    /// Games or Projects.
     fn listing_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
         self.asked = None;
         self.search_left(cx);
-        let path = listing.path.clone();
+        let arrived = match self.requested {
+            Some(Location::Gathered(gathered)) => Location::Gathered(gathered),
+            _ => Location::from(listing.path.as_path()),
+        };
         // Read again in place: keep the scroll position. Files a search
-        // found are never the same folder.
-        let same_folder = !self.showing_found() && self.folder() == Some(path.as_path());
+        // found are never the same place.
+        let same_folder =
+            !self.showing_found() && self.place_on_screen_now().as_ref() == Some(&arrived);
         if !same_folder {
-            // A menu belongs to the folder it opened in.
+            // A menu belongs to the place it opened in.
             self.menu = None;
-            if !std::mem::take(&mut self.falling_back) {
-                self.used(&path);
+            let fell_back = std::mem::take(&mut self.falling_back);
+            if let (Location::Folder(folder), false) = (&arrived, fell_back) {
+                self.used(folder);
             }
         }
-        self.history.arrived(&Location::from(path.as_path()));
+        self.gathered.shown = match &arrived {
+            Location::Gathered(place) => Some(*place),
+            Location::Start | Location::Folder(_) => None,
+        };
+        self.history.arrived(&arrived);
         // In a new order the cursor's entry has moved: bring it into view.
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
         // What a rename or a new folder made is brought into view.
         let wanted = self.wanted_selection(&listing);
+        let listing_path = listing.path.clone();
         let made = wanted.is_some();
-        self.selection = wanted.or_else(|| self.selection_for(&listing));
-        self.tree_follows(&listing, !same_folder);
+        self.selection = wanted.or_else(|| self.selection_for(&listing, same_folder));
+        if arrived.folder().is_some() {
+            self.tree_follows(&listing, !same_folder);
+        }
         self.ask_disk_space();
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
@@ -70,8 +83,20 @@ impl MainWindow {
         {
             self.scroll.scroll_to_item(cursor, ScrollStrategy::Nearest);
         }
-        cx.emit(WindowEvent::Opened(path));
+        cx.emit(match arrived {
+            Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
+            Location::Start | Location::Folder(_) => WindowEvent::Opened(listing_path),
+        });
         cx.notify();
+    }
+
+    /// The place whose listing is on screen: the folder, or Games or
+    /// Projects; a search under way counts as its folder.
+    pub(super) fn place_on_screen_now(&self) -> Option<Location> {
+        self.listing.as_ref()?;
+        self.gathered_shown()
+            .map(Location::Gathered)
+            .or_else(|| self.folder().map(Location::from))
     }
 
     /// Puts `listing` on screen in place of the one before, whose details
@@ -174,9 +199,9 @@ impl MainWindow {
             | Event::OpenWith(_)
             | Event::SizeMeasured { .. }
             | Event::SpaceMeasured { .. }
-            | Event::SpaceUnreadable { .. }
-            | Event::Gathered(_)
-            | Event::GatheredChanged(_) => {}
+            | Event::SpaceUnreadable { .. } => {}
+            Event::Gathered(gathered) => self.gathered_arrived(gathered, cx),
+            Event::GatheredChanged(place) => self.gathered_changed(place),
             Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
             Event::Trash(items) => self.trash_listed(items, cx),
             Event::Places(places) => self.places_arrived(places, cx),
@@ -224,7 +249,11 @@ impl MainWindow {
             return;
         }
         self.asked = None;
-        self.history.refused(&Location::from(path.as_path()));
+        let refused = self
+            .requested
+            .clone()
+            .unwrap_or_else(|| Location::from(path.as_path()));
+        self.history.refused(&refused);
         match &self.listing {
             // A window that has been nowhere yet tries the next
             // fallback; one on Start stays there.
@@ -235,9 +264,8 @@ impl MainWindow {
                     self.falling_back = self.request(&fallback);
                 }
             }
-            Some(listing) if self.core_moved && listing.path != path => {
-                let shown = listing.path.clone();
-                self.read_again(&shown, cx);
+            Some(_) if self.core_moved && self.place_on_screen_now() != Some(refused) => {
+                self.read_again(cx);
             }
             Some(_) => {}
         }
@@ -295,18 +323,18 @@ impl MainWindow {
         self.core_moved = true;
         // A find still on its way moves the core's row queues on too.
         if self.asked.is_none() && self.search.asked.is_none() {
-            let shown = listing.path.clone();
-            self.read_again(&shown, cx);
+            self.read_again(cx);
         }
     }
 
     /// Asks again for what is on screen, so the core serves its rows: the
-    /// search's files while it shows them, otherwise `shown`, the folder.
-    fn read_again(&mut self, shown: &Path, cx: &Context<Self>) {
+    /// search's files while it shows them, otherwise the folder or
+    /// gathered place.
+    fn read_again(&mut self, cx: &Context<Self>) {
         if self.searching() && self.showing_found() {
             self.find(cx);
-        } else {
-            self.request(shown);
+        } else if let Some(place) = self.place_on_screen_now() {
+            self.request_place(&place);
         }
     }
 

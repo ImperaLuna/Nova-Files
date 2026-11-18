@@ -33,7 +33,7 @@ use gpui::{
     div, prelude::FluentBuilder as _, transparent_black, uniform_list,
 };
 
-use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId, Order, SortKey};
+use nova_files_api::{Entry, EntryId, EntryKind, Gathering, Listing, ListingId, Order, SortKey};
 
 use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, icon};
@@ -41,7 +41,7 @@ use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, ic
 use crate::assets::Icon;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
-use crate::window::{Aim, DraggedRow, MainWindow};
+use crate::window::{Aim, DraggedRow, LIBRARY_LABEL, MainWindow};
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
@@ -334,16 +334,18 @@ fn entry_row(
 
 impl MainWindow {
     /// Where files dropped on the list but not on a folder go: the
-    /// folder on screen; nowhere on a search's files or in the trash.
+    /// folder on screen; nowhere on a search's files, in the trash, or in
+    /// Games or Projects.
     pub fn list_drop_folder(&self) -> Option<&Path> {
-        if self.searching() || self.trash_open() {
+        if self.searching() || self.trash_open() || self.gathered_shown().is_some() {
             return None;
         }
         Some(&self.listing.as_ref()?.path)
     }
 
     /// The cell between Name and Modified: where the `index`th entry was
-    /// in the trash, or a search's file's folder; none in a folder.
+    /// in the trash, a game's library, or the folder of a search's file
+    /// or a project; none in a folder.
     fn folder_cell(
         &self,
         listing: &Listing,
@@ -356,6 +358,11 @@ impl MainWindow {
             let colors = Colors::of(cx);
             return Some(detail(was_in.to_string(), &colors).into_any_element());
         }
+        if self.gathered_shown() == Some(Gathering::Games) {
+            let library = self.library_of(&listing.path_of(entry)).unwrap_or_default();
+            let colors = Colors::of(cx);
+            return Some(detail(library, &colors).into_any_element());
+        }
         listing
             .folders
             .is_some()
@@ -366,13 +373,14 @@ impl MainWindow {
     /// one orders the list by it (see `navigate`); the one in use is
     /// bright and carries an arrow for its direction. A search's files
     /// stay best first: none is in use and a click does nothing, and they
-    /// add the Folder head.
+    /// add the Folder head, as Projects does; Games adds Library.
     fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let order = (!self.searching()).then(|| self.shown_order());
-        let folder = if self.trash_open() {
-            Some(was_in_head())
-        } else {
-            self.showing_found().then(folder_head)
+        let folder = match self.gathered_shown() {
+            _ if self.trash_open() => Some(was_in_head()),
+            Some(Gathering::Games) => Some(library_head()),
+            Some(Gathering::Projects) => Some(folder_head()),
+            None => self.showing_found().then(folder_head),
         };
         column_heads(order, folder, colors, cx)
     }
@@ -383,6 +391,14 @@ fn folder_head() -> AnyElement {
     div()
         .debug_selector(|| FOLDER_HEADER_SELECTOR.to_owned())
         .child(FOLDER_LABEL)
+        .into_any_element()
+}
+
+/// Games' Library head, which orders nothing.
+fn library_head() -> AnyElement {
+    div()
+        .debug_selector(|| "head-library".to_owned())
+        .child(LIBRARY_LABEL)
         .into_any_element()
 }
 

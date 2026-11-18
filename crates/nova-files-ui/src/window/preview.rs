@@ -274,7 +274,7 @@ impl MainWindow {
         let on_screen = self.listing.as_ref().filter(|shown| shown.id == listing)?;
         let index = usize::try_from(entry.0).ok()?;
         let entry = on_screen.entries.get(index)?;
-        Some(on_screen.path.join(&entry.name))
+        Some(on_screen.path_of(entry))
     }
 
     /// The core answered request `id`: `preview`, or `None` when it

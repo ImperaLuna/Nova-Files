@@ -94,6 +94,9 @@ impl MainWindow {
         }
         let one = self.selected_count() == 1;
         let lone = |item: MenuItem| one.then_some(item);
+        // Renaming works in the folder on screen, which Games and Projects
+        // have none of.
+        let rename = lone(MenuItem::run(Icon::Rename, &RENAME)).filter(|_| self.folder().is_some());
         let new_tab = self.lone_folder().map(|folder| {
             MenuItem::new(
                 Icon::Plus,
@@ -113,7 +116,7 @@ impl MainWindow {
             [
                 Some(MenuItem::run(Icon::Cut, &CUT)),
                 Some(MenuItem::run(Icon::Copy, &COPY)),
-                lone(MenuItem::run(Icon::Rename, &RENAME)),
+                rename,
             ]
             .into_iter()
             .flatten()
@@ -149,7 +152,7 @@ impl MainWindow {
                 select_all.into_iter().collect(),
             ];
         }
-        if self.showing_found() {
+        if self.showing_found() || self.gathered_shown().is_some() {
             return vec![select_all.into_iter().collect()];
         }
         let paste = Self::clipboard_has_files(cx).then(|| MenuItem::run(Icon::Paste, &PASTE));
