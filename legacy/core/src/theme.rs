@@ -8,10 +8,10 @@ use nova_files_api::{
     ClientGone, ClientId, DesktopLook, Envelope, Event, EventSink, Mode, Palette, Theme,
 };
 use nova_files_settings_api::{self as settings_api, Appearance};
+use nova_files_settings_core::Store as SettingsStore;
 
 use crate::config_watch::{self, ConfigWatch};
 use crate::hand_edited::{self, Reread, lock};
-use crate::settings::Store as SettingsStore;
 use file::ThemeFile;
 
 const FILE: &str = "theme.toml";
