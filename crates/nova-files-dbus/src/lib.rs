@@ -8,6 +8,12 @@
 //! - the standard `org.freedesktop.Application`, whose `Activate` and
 //!   `Open` ask for a new window.
 //!
+//! It also serves `org.freedesktop.FileManager1` (`file_manager`), apps'
+//! "Show in folder", at that interface's own path;
+//! [`Service::serve_file_manager_when`] asks for its bus name when Nova
+//! Files should answer, and [`RunningInstance::serve_file_manager`] has
+//! the running instance ask, for a process D-Bus started for it.
+//!
 //! [`Service::follow_desktop_look`] reads the desktop's light or dark
 //! preference and accent from the settings portal for the theme.
 //!
@@ -37,26 +43,27 @@ mod application;
 mod desktop_look;
 mod drives;
 mod file_chooser;
+mod file_manager;
 mod files;
 mod holds;
 mod portal_options;
 mod search;
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use enumflags2::BitFlags;
-use nova_files_api::{Connector, uri};
+use nova_files_api::{Connector, WindowRequest, uri};
 use zbus::blocking::connection::Builder;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, Proxy};
 use zbus::fdo::{RequestNameFlags, RequestNameReply};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
 
-pub use application::INTERFACE as APPLICATION_INTERFACE;
+pub use application::{INTERFACE as APPLICATION_INTERFACE, SERVE_FILE_MANAGER};
 pub use desktop_look::{
     ACCENT_COLOR, COLOR_SCHEME, GNOME_ICON_THEME, GNOME_INTERFACE, INTERFACE as SETTINGS_INTERFACE,
     KDE_ICON_THEME, KDE_ICONS, NAMESPACE as APPEARANCE_NAMESPACE,
@@ -65,6 +72,10 @@ pub use drives::{ACTION_TIMEOUT, UDISKS, UDISKS_PATH, Udisks};
 pub use file_chooser::{
     BUS_NAME as PORTAL_BUS_NAME, INTERFACE as FILE_CHOOSER_INTERFACE,
     OBJECT_PATH as PORTAL_OBJECT_PATH, Picker,
+};
+pub use file_manager::{
+    BUS_NAME as FILE_MANAGER_BUS_NAME, INTERFACE as FILE_MANAGER_INTERFACE,
+    MAX_URIS as FILE_MANAGER_MAX_URIS, OBJECT_PATH as FILE_MANAGER_OBJECT_PATH,
 };
 pub use files::INTERFACE as FILES_INTERFACE;
 pub use holds::{Hold, HoldError, Holds};
@@ -80,6 +91,7 @@ pub const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_THREAD: &str = "nova-files-dbus-connect";
 const NAME_WATCH_THREAD: &str = "nova-files-dbus-name-watch";
 const BUS_WATCH_THREAD: &str = "nova-files-dbus-bus-watch";
+const FILE_MANAGER_THREAD: &str = "nova-files-dbus-file-manager";
 
 /// Which bus to connect to.
 #[derive(Clone)]
@@ -139,6 +151,29 @@ impl Service {
             .is_ok_and(|holds| queue_for_portal(&self.connection, picker, holds));
     }
 
+    /// Asks for [`FILE_MANAGER_BUS_NAME`] when `should` says so, so apps'
+    /// "Show in folder" opens Nova Files, waiting in the bus's queue when
+    /// another file manager holds it and never taking it away. `should`
+    /// runs on a thread of its own; the returned channel says whether this
+    /// process owns the name then.
+    ///
+    /// # Errors
+    /// When the thread can't start.
+    pub fn serve_file_manager_when(
+        &self,
+        should: impl FnOnce() -> bool + Send + 'static,
+    ) -> std::io::Result<mpsc::Receiver<bool>> {
+        let connection = self.connection.clone();
+        let (sender, owned) = mpsc::channel();
+        thread::Builder::new()
+            .name(FILE_MANAGER_THREAD.to_owned())
+            .spawn(move || {
+                let owns = should() && queue_for(&connection, FILE_MANAGER_BUS_NAME);
+                sender.send(owns).ok();
+            })?;
+        Ok(owned)
+    }
+
     /// Tells the core `connector` reaches what the desktop asks apps to
     /// look like, from the settings portal, and again each time that
     /// changes. Optional: on failure the theme stays Carbonfox's.
@@ -177,11 +212,10 @@ impl Service {
     /// # Errors
     /// When a call fails or takes longer than [`CALL_TIMEOUT`].
     pub fn release(&self) -> zbus::Result<()> {
-        // Both, even when the first fails: the application name matters
-        // most to a restart.
+        let app = self.connection.release_name(APP_ID);
         let portal = self.connection.release_name(PORTAL_BUS_NAME);
-        self.connection.release_name(APP_ID)?;
-        portal.map(drop)
+        let file_manager = self.connection.release_name(FILE_MANAGER_BUS_NAME);
+        app.and(portal).and(file_manager).map(drop)
     }
 }
 
@@ -213,14 +247,28 @@ impl RunningInstance {
         let platform_data: HashMap<&str, Value<'_>> = HashMap::new();
         proxy.call::<_, _, ()>("Open", &(uris, platform_data))
     }
+
+    /// Asks the running instance to answer apps' "Show in folder", for a
+    /// process D-Bus started to answer it.
+    ///
+    /// # Errors
+    /// When the call fails or takes longer than [`CALL_TIMEOUT`].
+    pub fn serve_file_manager(&self) -> zbus::Result<()> {
+        let proxy = Proxy::new(&self.connection, APP_ID, &self.path, APPLICATION_INTERFACE)?;
+        let parameter: Vec<Value<'_>> = Vec::new();
+        let platform_data: HashMap<&str, Value<'_>> = HashMap::new();
+        proxy.call::<_, _, ()>(
+            "ActivateAction",
+            &(SERVE_FILE_MANAGER, parameter, platform_data),
+        )
+    }
 }
 
 /// Claims the bus name on `bus` and, if it was free, starts serving.
 ///
 /// `connector` reaches the core for D-Bus calls the core answers.
-/// `on_open` runs when another launch asks for a window, with the folder to
-/// open it on (`None` for the home folder); it runs on a D-Bus thread and
-/// must hand the request on rather than do the work.
+/// `on_open` runs when another launch or app asks for a window; it runs on
+/// a D-Bus thread and must hand the request on rather than do the work.
 ///
 /// # Errors
 /// When the bus can't be reached within [`CALL_TIMEOUT`] or refuses the
@@ -228,7 +276,7 @@ impl RunningInstance {
 pub fn start(
     bus: Bus,
     connector: Connector,
-    on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
+    on_open: impl Fn(WindowRequest) + Send + Sync + 'static,
 ) -> zbus::Result<Started> {
     start_waiting(bus, connector, on_open, Duration::ZERO)
 }
@@ -242,7 +290,7 @@ pub fn start(
 pub fn start_waiting(
     bus: Bus,
     connector: Connector,
-    on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
+    on_open: impl Fn(WindowRequest) + Send + Sync + 'static,
     wait: Duration,
 ) -> zbus::Result<Started> {
     let path = object_path()?;
@@ -294,15 +342,18 @@ fn queue_for_portal(connection: &Connection, picker: impl Picker, holds: Holds) 
         PORTAL_OBJECT_PATH,
         file_chooser::FileChooser::new(picker, holds),
     );
-    if !matches!(served, Ok(true)) {
-        return false;
-    }
+    matches!(served, Ok(true)) && queue_for(connection, PORTAL_BUS_NAME)
+}
+
+/// Asks for `name`, waiting in the bus's queue while another program holds
+/// it; whether this process owns it now.
+fn queue_for(connection: &Connection, name: &'static str) -> bool {
     // With no flags, the bus queues the request while the name is taken
     // and never lets another program replace us. zbus's default flags do
     // the opposite.
     let no_flags = BitFlags::<RequestNameFlags>::EMPTY;
     matches!(
-        connection.request_name_with_flags(PORTAL_BUS_NAME, no_flags),
+        connection.request_name_with_flags(name, no_flags),
         Ok(RequestNameReply::PrimaryOwner)
     )
 }
@@ -334,21 +385,26 @@ fn connect(
     bus: Bus,
     path: OwnedObjectPath,
     connector: Connector,
-    on_open: impl Fn(Option<PathBuf>) + Send + Sync + 'static,
+    on_open: impl Fn(WindowRequest) + Send + Sync + 'static,
 ) -> zbus::Result<Connection> {
     let holds = Holds::new(connector.clone(), &bus)?;
     let on_open = Arc::new(on_open);
     let search_open = Arc::clone(&on_open);
-    let searches = search::Searches::new(connector.clone(), holds, move |folder| {
-        search_open(folder);
+    let searches = search::Searches::new(connector.clone(), holds, move |request| {
+        search_open(request);
+    });
+    let manager_open = Arc::clone(&on_open);
+    let file_manager = file_manager::FileManager::new(connector.clone(), move |request| {
+        manager_open(request);
     });
     let application =
-        application::Application::new(connector.clone(), move |folder| on_open(folder));
+        application::Application::new(connector.clone(), move |request| on_open(request));
     connect_within_timeout(bus, move |builder| {
         builder
             .serve_at(path.clone(), files::Files::new(connector))?
             .serve_at(path.clone(), searches)?
-            .serve_at(path, application)
+            .serve_at(path, application)?
+            .serve_at(FILE_MANAGER_OBJECT_PATH, file_manager)
     })
 }
 

@@ -42,11 +42,11 @@ mod window_state;
 
 use std::cell::Cell;
 use std::io::{self, Write as _};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::Rc;
 
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
-use nova_files_api::{Connector, PickRequest};
+use nova_files_api::{Connector, PickRequest, WindowRequest};
 
 pub use columns::ColumnText;
 pub use commands::{ACTIONS, ActionSpec, bind_keys as bind_window_keys};
@@ -73,8 +73,8 @@ pub enum Ended {
 /// What the first window of a run opens on.
 #[derive(Debug)]
 pub enum Opening {
-    /// A main window on this folder, or on the Start page.
-    Folder(Option<PathBuf>),
+    /// A main window as asked: on a folder, or on the Start page.
+    Folder(WindowRequest),
     /// A picker window for another app's request.
     Pick(Box<PickRequest>),
 }
@@ -109,8 +109,8 @@ pub fn run(
                 loop {
                     let request = requests.next().await;
                     let keep_going = cx.update(|cx| match request {
-                        Some(Request::OpenWindow(folder)) => {
-                            open_window(&connector, Opening::Folder(folder), &recover_gpu, cx);
+                        Some(Request::OpenWindow(request)) => {
+                            open_window(&connector, Opening::Folder(request), &recover_gpu, cx);
                             true
                         }
                         Some(Request::Pick(request)) => {
@@ -162,7 +162,7 @@ pub(crate) fn open_picker(connector: &Connector, request: Box<PickRequest>, cx: 
 fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu, cx: &mut App) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
     let (folder, pick) = match opening {
-        Opening::Folder(folder) => (folder, None),
+        Opening::Folder(request) => (request.folder, None),
         Opening::Pick(mut request) => (request.folder.take(), Some(request)),
     };
     let recovers = pick.is_none();
