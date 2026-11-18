@@ -15,10 +15,29 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use gpui::Context;
+use gpui::{Context, Pixels, ScrollDelta, ScrollStrategy, px};
 use nova_files_api::{Command, FolderView, FolderViews, PlaceKind, ViewMode};
 
 use super::MainWindow;
+use crate::grid::{self, Grid};
+use crate::theme::size;
+
+/// How far Ctrl+scroll goes for each step of the icons' size: one turn
+/// of a wheel, or that far on a touchpad.
+const ZOOM_STEP: Pixels = px(40.0);
+
+/// What the view's layout keeps between frames.
+#[derive(Debug, Default)]
+pub struct Sizing {
+    /// How wide the list was when it last drew, which Icons shares out
+    /// among its cells (see `grid`).
+    pub(super) list_width: Pixels,
+    /// Ctrl+scroll not yet taken as a step of the icons' size.
+    zoom_scroll: Pixels,
+    /// The side, in device pixels, the thumbnails held were shrunk to;
+    /// none at first.
+    pub(super) thumbnails_side: u32,
+}
 
 /// The places whose folders are mostly pictures, so they start in Icons.
 const PICTURE_PLACES: [PlaceKind; 2] = [PlaceKind::Pictures, PlaceKind::Videos];
@@ -31,6 +50,42 @@ impl MainWindow {
         }
         self.folder()
             .map_or_else(FolderView::default, |folder| self.view_of(folder))
+    }
+
+    /// Whether the entries on screen show as Icons.
+    pub fn showing_icons(&self) -> bool {
+        self.folder_view().mode == ViewMode::Icons
+    }
+
+    /// How the entries on screen are laid out, across the list's width
+    /// when it last drew.
+    pub fn grid(&self) -> Grid {
+        let width = self.sizing.list_width;
+        match self.folder_view() {
+            FolderView {
+                mode: ViewMode::Icons,
+                icons,
+            } => Grid::icons(icons, width),
+            _ => Grid::details(width),
+        }
+    }
+
+    /// The side of an entry's icon in the view on screen, which its
+    /// thumbnail fills.
+    pub(super) fn icon_slot(&self) -> Pixels {
+        match self.folder_view() {
+            FolderView {
+                mode: ViewMode::Icons,
+                icons,
+            } => grid::icon_side(icons),
+            _ => size::THUMBNAIL,
+        }
+    }
+
+    /// Scrolls the list just far enough to show entry `index`.
+    pub(crate) fn scroll_to_entry(&self, index: usize) {
+        let line = self.grid().line_of(index);
+        self.scroll.scroll_to_item(line, ScrollStrategy::Nearest);
     }
 
     /// The view `folder` was given, or the one it starts with.
@@ -71,6 +126,23 @@ impl MainWindow {
             view.icons.smaller()
         };
         self.change_view(FolderView { icons, ..view }, cx);
+    }
+
+    /// Ctrl+scroll over the entries by `delta`: while Icons shows, the
+    /// icons grow as it goes up and shrink as it goes down, a step for
+    /// each [`ZOOM_STEP`]. Whether it was taken, so the list doesn't
+    /// scroll too.
+    pub(crate) fn zoom_scrolled(&mut self, delta: ScrollDelta, cx: &mut Context<Self>) -> bool {
+        if !self.showing_icons() {
+            return false;
+        }
+        self.sizing.zoom_scroll += delta.pixel_delta(ZOOM_STEP).y;
+        while self.sizing.zoom_scroll.abs() >= ZOOM_STEP {
+            let bigger = self.sizing.zoom_scroll > Pixels::ZERO;
+            self.sizing.zoom_scroll -= if bigger { ZOOM_STEP } else { -ZOOM_STEP };
+            self.zoom_icons(bigger, cx);
+        }
+        true
     }
 
     /// Gives the folder on screen `view`, here at once and in the core

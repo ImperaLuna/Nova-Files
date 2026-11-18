@@ -12,9 +12,10 @@
 //! with the button up (released outside the window) ends it, and so does a
 //! new folder.
 //!
-//! The list's rows are all one height, so a row is found from a position
-//! by sharing the list's content height out among its rows, whatever is
-//! drawn.
+//! The list's lines are all one height, so a line is found from a
+//! position by sharing the list's content height out among its lines,
+//! whatever is drawn. In Icons a box selects the cells it touches: those
+//! in the lines it spans and the columns it spans (see `grid`).
 
 use gpui::{
     Bounds, ClickEvent, Context, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
@@ -109,15 +110,30 @@ impl MainWindow {
         let Some(listing) = self.listing_id() else {
             return;
         };
-        let rows = rows_touched(from.y, to.y, self.rows_height(), self.entries_len());
+        let grid = self.grid();
+        let len = self.entries_len();
+        let lines = rows_touched(from.y, to.y, self.rows_height(), grid.lines(len));
+        let columns = (grid.column_at(from.x), grid.column_at(to.x));
+        let (left, right) = (columns.0.min(columns.1), columns.0.max(columns.1));
+        let entry = |line: u32, column: usize| {
+            let at = usize::try_from(line)
+                .unwrap_or(usize::MAX)
+                .saturating_mul(grid.per_line)
+                .saturating_add(column)
+                .min(len.saturating_sub(1));
+            EntryId(u32::try_from(at).unwrap_or(u32::MAX))
+        };
+        let inside = move |id: EntryId| {
+            usize::try_from(id.0).is_ok_and(|at| (left..=right).contains(&grid.column_of(at)))
+        };
         self.reselect(
-            |_, picks| match rows {
+            |_, picks| match lines {
                 Some((anchor, cursor)) => Some(Selection::banded(
                     before.as_ref(),
                     listing,
-                    (EntryId(anchor), EntryId(cursor)),
+                    (entry(anchor, columns.0), entry(cursor, columns.1)),
                     add,
-                    picks,
+                    |id| picks(id) && inside(id),
                 )),
                 None => before.filter(|before| add && before.listing == listing),
             },
@@ -158,12 +174,17 @@ impl MainWindow {
         ))
     }
 
-    /// The row of the listing under `position` in the window, if any.
-    fn row_at(&self, position: Point<Pixels>) -> Option<u32> {
-        let y = self.in_content(position).y;
-        rows_touched(y, y, self.rows_height(), self.entries_len())
-            .map(|(row, _)| row)
-            .filter(|_| self.list_bounds().contains(&position))
+    /// The entry of the listing under `position` in the window, if any.
+    fn row_at(&self, position: Point<Pixels>) -> Option<usize> {
+        let at = self.in_content(position);
+        let grid = self.grid();
+        let len = self.entries_len();
+        let line = rows_touched(at.y, at.y, self.rows_height(), grid.lines(len))?.0;
+        let entry = usize::try_from(line)
+            .ok()?
+            .checked_mul(grid.per_line)?
+            .checked_add(grid.column_at(at.x))?;
+        (entry < len && self.list_bounds().contains(&position)).then_some(entry)
     }
 
     /// `position` in the window as a point in the list's content.

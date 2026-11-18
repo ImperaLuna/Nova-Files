@@ -291,6 +291,8 @@ pub mod size {
     /// A file or folder icon in a row, and a thumbnail in its place.
     pub const ROW_ICON: Pixels = px(22.0);
     pub const THUMBNAIL: Pixels = px(22.0);
+    /// The icons of Icons at each of its sizes, smallest first.
+    pub const ICON_SIDES: [Pixels; 5] = [px(48.0), px(64.0), px(96.0), px(128.0), px(192.0)];
     /// The Modified and Size columns; Name takes the rest.
     pub const MODIFIED_WIDTH: Pixels = px(150.0);
     pub const SIZE_WIDTH: Pixels = px(92.0);

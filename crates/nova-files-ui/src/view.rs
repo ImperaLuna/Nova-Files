@@ -29,6 +29,7 @@
 
 mod bar;
 mod drop;
+mod icons;
 mod island;
 mod menu;
 mod path;
@@ -54,8 +55,8 @@ use nova_files_api::ViewMode;
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
     CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext,
-    PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown, SelectPageUp,
-    SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
+    PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown,
+    SelectPageUp, SelectRight, SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{
@@ -314,6 +315,16 @@ impl MainWindow {
         .on_action(cx.listener(|this, _: &SelectLast, _, cx| {
             this.move_cursor(Move::Last, true, cx);
         }))
+        .on_action(cx.listener(|this, _: &SelectLeft, _, cx| {
+            if this.showing_icons() {
+                this.move_cursor(Move::Left, true, cx);
+            }
+        }))
+        .on_action(cx.listener(|this, _: &SelectRight, _, cx| {
+            if this.showing_icons() {
+                this.move_cursor(Move::Right, true, cx);
+            }
+        }))
         .on_action(cx.listener(|this, _: &SelectAll, _, cx| this.select_all(cx)))
         .on_action(cx.listener(|this, _: &ToggleSelected, _, cx| this.toggle_cursor(cx)))
         .on_action(cx.listener(|this, _: &ClearSelection, window, cx| {
@@ -339,10 +350,10 @@ impl MainWindow {
             }
         }))
         .on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
-            this.step_preview(Move::Up, cx);
+            this.step_sideways(Move::Left, cx);
         }))
         .on_action(cx.listener(|this, _: &PreviewNext, _, cx| {
-            this.step_preview(Move::Down, cx);
+            this.step_sideways(Move::Right, cx);
         }))
     }
 }

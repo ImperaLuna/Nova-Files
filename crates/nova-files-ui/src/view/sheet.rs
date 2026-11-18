@@ -28,9 +28,10 @@
 use std::path::Path;
 
 use gpui::{
-    AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _,
-    div, prelude::FluentBuilder as _, transparent_black, uniform_list,
+    AnyElement, ClickEvent, Context, DispatchPhase, Div, InteractiveElement as _, IntoElement,
+    MouseButton, MouseDownEvent, ParentElement as _, ScrollWheelEvent, Stateful,
+    StatefulInteractiveElement as _, Styled as _, canvas, div, prelude::FluentBuilder as _,
+    transparent_black, uniform_list,
 };
 
 use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId, Order, SortKey};
@@ -69,7 +70,9 @@ impl MainWindow {
                     sheet.px_0().child(self.start_page(cx))
                 } else {
                     sheet
-                        .child(self.column_heads(&colors, cx))
+                        .when(!self.showing_icons(), |sheet| {
+                            sheet.child(self.column_heads(&colors, cx))
+                        })
                         .child(self.entries_area(cx))
                         .child(self.island(cx))
                 }
@@ -104,6 +107,7 @@ impl MainWindow {
                 |area, at| self.takes_drops(area, at, cx),
             )
             .child(self.entries(cx))
+            .child(ctrl_scroll(cx))
             .children(self.empty_trash(&colors))
             .children(self.no_matches(&colors))
             .children(self.match_count(&colors))
@@ -122,7 +126,11 @@ impl MainWindow {
             }))
     }
 
-    fn entries(&self, cx: &Context<Self>) -> impl IntoElement {
+    fn entries(&self, cx: &Context<Self>) -> AnyElement {
+        let grid = self.grid();
+        if self.showing_icons() {
+            return self.icons(grid, cx).into_any_element();
+        }
         let count = self
             .listing
             .as_ref()
@@ -130,8 +138,8 @@ impl MainWindow {
         uniform_list(
             "entries",
             count,
-            cx.processor(|this, range: std::ops::Range<usize>, window, cx| {
-                this.rows_drawn(range.clone(), window, cx);
+            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
+                this.rows_drawn((range.clone(), grid), window, cx);
                 let Some(listing) = &this.listing else {
                     return Vec::new();
                 };
@@ -198,6 +206,7 @@ impl MainWindow {
         .track_scroll(&self.scroll)
         .size_full()
         .pb(size::ISLAND_CLEARANCE)
+        .into_any_element()
     }
 }
 
@@ -259,6 +268,33 @@ impl MainWindow {
     }
 }
 
+/// Takes Ctrl+scroll over the entries before the list scrolls, for the
+/// icons' size (see `window::views`). It draws nothing.
+fn ctrl_scroll(cx: &Context<MainWindow>) -> impl IntoElement {
+    let view = cx.entity().downgrade();
+    canvas(
+        |_, _, _| {},
+        move |bounds, (), window, _| {
+            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, _, cx| {
+                if phase != DispatchPhase::Capture
+                    || !event.modifiers.secondary()
+                    || !bounds.contains(&event.position)
+                {
+                    return;
+                }
+                let taken = view
+                    .update(cx, |this, cx| this.zoom_scrolled(event.delta, cx))
+                    .unwrap_or(false);
+                if taken {
+                    cx.stop_propagation();
+                }
+            });
+        },
+    )
+    .absolute()
+    .inset_0()
+}
+
 /// The sheet's rounded corner where the sidebar and bar meet. The sheet
 /// itself is the window's fill (see `view`), so only this corner paints
 /// the window's color behind a rounded patch of the sheet's.
@@ -274,7 +310,10 @@ fn sheet_corner(colors: &Colors) -> impl IntoElement {
 
 /// The rename field over an entry's name, its text where the name was.
 /// A press in it stays in it: it neither clicks the row nor starts a box.
-fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> impl IntoElement {
+pub(super) fn rename_box(
+    field: gpui::Entity<crate::text::TextField>,
+    colors: &Colors,
+) -> impl IntoElement {
     div()
         .debug_selector(|| "rename".to_owned())
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
