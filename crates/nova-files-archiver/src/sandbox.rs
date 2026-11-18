@@ -26,6 +26,8 @@ const PATH_ONLY: OFlags = OFlags::PATH.union(OFlags::CLOEXEC);
 /// Where a program's libraries and loader live, on the systems the
 /// helper runs on.
 const SYSTEM: [&str; 4] = ["/nix/store", "/usr", "/lib", "/lib64"];
+/// Where 7-Zip reads the random numbers a locked archive starts from.
+const RANDOM: &str = "/dev/urandom";
 
 /// Rights the sandbox leaves open beneath one file or folder.
 pub struct Grant {
@@ -74,6 +76,15 @@ pub fn reading(fd: OwnedFd, folder: bool) -> Grant {
     Grant { fd, rights }
 }
 
+/// List the names in the folder `fd` is, and in those inside it, without
+/// reading any file.
+pub fn naming(fd: OwnedFd) -> Grant {
+    Grant {
+        fd,
+        rights: AccessFs::ReadDir.into(),
+    }
+}
+
 /// Make files in the folder `fd` is, and write them.
 pub fn making_in(fd: OwnedFd) -> Grant {
     let rights = [AccessFs::MakeReg, AccessFs::WriteFile]
@@ -83,7 +94,7 @@ pub fn making_in(fd: OwnedFd) -> Grant {
 }
 
 /// Run `program`: read and run what is in its folder and the system's
-/// library folders that exist.
+/// library folders that exist, and read the kernel's random numbers.
 pub fn running(program: &Path) -> Vec<Grant> {
     let folder = program
         .canonicalize()
@@ -97,6 +108,11 @@ pub fn running(program: &Path) -> Vec<Grant> {
         .chain(SYSTEM.iter().map(Into::into))
         .filter_map(|folder| rustix::fs::open(&folder, PATH_ONLY, Mode::empty()).ok())
         .map(|fd| Grant { fd, rights })
+        .chain(
+            rustix::fs::open(RANDOM, PATH_ONLY, Mode::empty())
+                .ok()
+                .map(|fd| reading(fd, false)),
+        )
         .collect()
 }
 

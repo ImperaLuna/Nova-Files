@@ -389,3 +389,87 @@ fn a_listing_no_one_reads_is_a_usage_error() {
     assert_eq!(status.code(), Some(1));
     fs::remove_dir_all(&folder).ok();
 }
+
+#[test]
+fn a_name_with_wildcards_picks_only_itself() {
+    let folder = sources("wildcards");
+    for name in ["a?.txt", "ab.txt"] {
+        fs::write(folder.join(name), name).unwrap();
+    }
+    let archive = folder.join("wild.7z");
+    let recipe = Recipe {
+        packing: Packing::SevenZip,
+        level: 1,
+        password: None,
+    };
+    let mut entries = 0;
+    archiver()
+        .compress(
+            &[folder.join("a?.txt")],
+            &archive,
+            &recipe,
+            go(&mut entries),
+        )
+        .unwrap();
+    let names: Vec<_> = kinds(&archive, None)
+        .into_iter()
+        .map(|kind| kind.0)
+        .collect();
+    assert_eq!(names, ["a?.txt"]);
+    fs::remove_dir_all(&folder).ok();
+}
+
+#[test]
+fn seven_zip_may_read_the_kernels_random_numbers() {
+    let folder = sources("random");
+    let program = folder.join("7zz");
+    fs::write(&program, "#!/bin/sh\nhead -c 1 /dev/urandom || exit 2\n").unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    let archive = folder.join("any.7z");
+    fs::write(&archive, b"7z\xbc\xaf\x27\x1c").unwrap();
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_nova-files-archiver"))
+        .arg("--seven")
+        .arg(&program)
+        .arg("list")
+        .arg(&archive)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(status.status.code(), Some(0));
+    fs::remove_dir_all(&folder).ok();
+}
+
+#[test]
+fn a_picked_name_with_wildcards_is_taken_as_it_is() {
+    let folder = sources("picked-wild");
+    for name in ["report?.txt", "report1.txt"] {
+        fs::write(folder.join(name), name).unwrap();
+    }
+    let archive = folder.join("reports.7z");
+    let recipe = Recipe {
+        packing: Packing::SevenZip,
+        level: 1,
+        password: None,
+    };
+    let mut entries = 0;
+    let sources = [folder.join("report?.txt"), folder.join("report1.txt")];
+    archiver()
+        .compress(&sources, &archive, &recipe, go(&mut entries))
+        .unwrap();
+    let into = folder.join("into");
+    archiver()
+        .extract_picked(
+            (&archive, &[PathBuf::from("report?.txt")]),
+            &into,
+            None,
+            go(&mut entries),
+        )
+        .unwrap();
+    let mut landed: Vec<_> = fs::read_dir(&into)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    landed.sort();
+    assert_eq!(landed, ["report?.txt"]);
+    fs::remove_dir_all(&folder).ok();
+}
