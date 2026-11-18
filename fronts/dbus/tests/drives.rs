@@ -11,10 +11,10 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::{
+use nova_files_dbus::Udisks;
+use nova_files_drives_api::{
     Command, Drive, DriveId, DriveList, DriveService as _, Event, Volume, VolumeId,
 };
-use nova_files_dbus::Udisks;
 
 mod support;
 mod udisks;

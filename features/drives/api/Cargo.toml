@@ -1,0 +1,20 @@
+# nova-files-drives-api
+#
+# What clients and the core say about drives and volumes, and the types
+# they share. Plain std types, no I/O.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-drives-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

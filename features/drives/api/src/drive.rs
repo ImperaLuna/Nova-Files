@@ -132,7 +132,7 @@ pub trait DriveService: Send + Sync + 'static {
     fn act(&self, action: &DriveAction) -> Result<Option<PathBuf>, DriveFailure>;
 }
 
-/// Hands the core its [`DriveService`] through [`crate::Connector::offer`].
+/// Hands the core its [`DriveService`] through `Connector::offer`.
 ///
 /// The core uses only the first one it gets; offer it before any client
 /// connects, so the first [`crate::Command::Drives`] finds it.

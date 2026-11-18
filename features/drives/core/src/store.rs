@@ -2,9 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::thread;
 
-use nova_files_api::{
-    ClientGone, ClientId, DriveAction, DriveFailure, DriveList, DriveService, Event, EventSink,
-};
+use nova_files_drives_api::{DriveAction, DriveFailure, DriveList, DriveService, Event};
+use nova_files_messages::{ClientGone, ClientId, EventSink};
 
 const ACTION_THREAD: &str = "nova-files-drive-action";
 
@@ -126,7 +125,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::mpsc::{self, Receiver, Sender};
 
-    use nova_files_api::{Drive, DriveId, Volume, VolumeId};
+    use nova_files_drives_api::{Drive, DriveId, Volume, VolumeId};
 
     use super::*;
 
