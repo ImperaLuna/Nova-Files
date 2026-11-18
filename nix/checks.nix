@@ -71,8 +71,12 @@ in
     // {
       cargoArtifacts = ciArtifacts;
       cargoNextestExtraArgs = "--workspace --no-tests=warn";
-      # The D-Bus tests start a private dbus-daemon.
-      nativeCheckInputs = [ pkgs.dbus ];
+      # The D-Bus tests start a private dbus-daemon; the archive tests open
+      # 7z archives through 7-Zip.
+      nativeCheckInputs = [
+        pkgs.dbus
+        pkgs._7zz
+      ];
     }
   );
 
