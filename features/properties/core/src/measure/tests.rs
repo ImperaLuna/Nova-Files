@@ -2,7 +2,7 @@ use std::fs;
 use std::sync::mpsc::{self, Receiver};
 
 use super::*;
-use crate::ops::test_folder::TestFolder;
+use nova_files_jobs::test_folder::TestFolder;
 
 const MANY: usize = 2000;
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
@@ -122,13 +122,18 @@ fn a_scan_tells_its_client_only_while_it_runs() {
         events: sink,
     };
 
-    scan.tell(|| Event::Pong).unwrap();
+    let told = || Event::SizeMeasured {
+        id: MeasureId(5),
+        size: Size::default(),
+        state: ScanState::Counting,
+    };
+    scan.tell(told).unwrap();
     let while_running: Vec<Event> = events.try_iter().collect();
     measurer.forget(client);
-    scan.tell(|| Event::Pong).unwrap();
+    scan.tell(told).unwrap();
     let once_stopped: Vec<Event> = events.try_iter().collect();
 
-    assert_eq!(while_running, vec![Event::Pong]);
+    assert_eq!(while_running, vec![told()]);
     assert_eq!(once_stopped, Vec::new());
     assert!(!scan.shared.running());
 }

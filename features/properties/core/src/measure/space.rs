@@ -1,11 +1,12 @@
 use std::path::Path;
 
-use nova_files_api::{Entry, Event, MeasureId, ScanState, Share, Unreadable};
+use nova_files_api::{Entry, Unreadable};
+use nova_files_properties_api::{Event, MeasureId, ScanState, Share};
 
 use super::Scan;
 use super::tally::Tally;
 use super::walk::{Root, device_of};
-use crate::list::{self, Stopped};
+use nova_files_entries_core::list::{self, Stopped};
 
 pub fn run(scan: &Scan, id: MeasureId, folder: &Path) {
     let unreadable = |reason| {
@@ -78,7 +79,8 @@ mod tests {
     use std::sync::Arc;
     use std::sync::mpsc;
 
-    use nova_files_api::{ClientId, EntryId, EntryKind, Size};
+    use nova_files_api::{ClientId, EntryId, EntryKind};
+    use nova_files_properties_api::Size;
 
     use super::*;
     use crate::measure::{CUT, Measurer, Purpose, RUNNING, Shared};

@@ -118,14 +118,6 @@ impl MainWindow {
             Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
                 self.find_failed(id, cx);
             }
-            Event::Properties { id, properties } => {
-                self.save_probed(id, false, cx);
-                self.properties_arrived(id, Some(properties), cx);
-            }
-            Event::PropertiesUnreadable { id, reason, .. } => {
-                self.save_probed(id, reason == Unreadable::Missing, cx);
-                self.properties_arrived(id, None, cx);
-            }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);
             }
@@ -150,7 +142,6 @@ impl MainWindow {
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
-            Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
             Event::OpenWith(answer) => self.open_with_answered(answer, cx),
             Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
@@ -171,9 +162,7 @@ impl MainWindow {
             | Event::FileOpened { .. }
             | Event::WindowState(_)
             | Event::JobRunning { .. }
-            | Event::JobInterrupted { .. }
-            | Event::SpaceMeasured { .. }
-            | Event::SpaceUnreadable { .. } => {}
+            | Event::JobInterrupted { .. } => {}
             Event::Gathered(gathered) => self.gathered_arrived(gathered, cx),
             Event::GatheredChanged(place) => self.gathered_changed(place),
             Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),

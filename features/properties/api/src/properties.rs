@@ -10,7 +10,7 @@ use std::time::SystemTime;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PropertiesId(pub u64);
 
-/// What a path is. Unlike a listing's [`EntryKind`](crate::EntryKind), a
+/// What a path is. Unlike a listing's [`EntryKind`](nova_files_api::EntryKind), a
 /// link is a link: its properties are its own, not its target's.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathKind {

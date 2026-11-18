@@ -26,7 +26,7 @@
 
 use std::ffi::OsString;
 
-use crate::folder::EntryKind;
+use nova_files_api::EntryKind;
 
 /// Names one scan. The client picks it; the core echoes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

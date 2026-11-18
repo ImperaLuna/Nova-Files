@@ -7,8 +7,7 @@
 //! [`Theme`] gets it again whenever it changes. The core reads the other end of the channel
 //! as [`CoreMessage`]s. File
 //! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
-//! quick look shows of a file or folder. A [`Size`] is what a scan of files
-//! and folders counted.
+//! quick look shows of a file or folder.
 //! [`Gathered`] folders make up the Games and Projects places. A
 //! [`FolderView`] is how a folder is shown. A [`FileIcon`] is how an
 //! entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
@@ -27,9 +26,7 @@ mod job;
 mod message;
 mod open_with;
 mod preview;
-mod properties;
 mod search;
-mod size;
 mod theme;
 mod thumbnail_size;
 pub mod uri;
@@ -58,9 +55,7 @@ pub use preview::{
     Fit, MAX_FIT_SIDE, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Picture, Preview, PreviewContent,
     PreviewId,
 };
-pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use search::{Hit, Matched, SearchFailed, SearchId};
-pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 pub use thumbnail_size::ThumbnailSize;
 pub use window::WindowRequest;

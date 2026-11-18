@@ -13,9 +13,7 @@ use crate::job::{
 };
 use crate::open_with::{NotOpened, OpenWith, OpenWithAnswer};
 use crate::preview::{Fit, Preview, PreviewId};
-use crate::properties::{Properties, PropertiesId};
 use crate::search::{Hit, SearchFailed, SearchId};
-use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::theme::{DesktopLook, Theme};
 use crate::thumbnail_size::ThumbnailSize;
 
@@ -107,10 +105,6 @@ pub enum Command {
         query: String,
         within: Option<PathBuf>,
     },
-    /// Read the properties of what is at `path`, without following a link.
-    /// The answer is [`Event::Properties`] or [`Event::PropertiesUnreadable`]
-    /// with the same `id`.
-    Properties { id: PropertiesId, path: PathBuf },
     /// Look into what is at `path`, following a link, for a quick look; a
     /// picture comes scaled down to `fit`. The answer is
     /// [`Event::Previewed`] or [`Event::PreviewUnreadable`] with the same
@@ -225,24 +219,6 @@ pub enum Command {
         conflict: Conflict,
         password: String,
     },
-    /// Measure how much space everything under `paths` (absolute paths)
-    /// takes, together: what two paths share counts once. The answer is
-    /// [`Event::SizeMeasured`] with the same `id`, a few times a second
-    /// while the scan runs, then once more when it ends. A client has one
-    /// scan at a time: a newer `Measure` from it stops this one, which then
-    /// says nothing more.
-    Measure { id: MeasureId, paths: Vec<PathBuf> },
-    /// Measure what each entry of `folder` (an absolute path) takes. The
-    /// answer is [`Event::SpaceMeasured`] with the same `id`, a few times a
-    /// second while the scan runs, then once more when it ends; or
-    /// [`Event::SpaceUnreadable`]. A client has one space scan at a time,
-    /// beside its one `Measure`: a newer `Space` from it stops this one,
-    /// which then says nothing more.
-    Space { id: MeasureId, folder: PathBuf },
-    /// Stop the client's scan `id`, a `Measure` or a `Space`, if it still
-    /// runs (both, when the client gave them the same id). It says nothing
-    /// more.
-    StopMeasure(MeasureId),
 }
 
 /// Something the core tells one client.
@@ -296,17 +272,6 @@ pub enum Event {
     SearchFailed { id: SearchId, reason: SearchFailed },
     /// [`Command::Find`] `id` couldn't run.
     FindFailed { id: ListingId, reason: SearchFailed },
-    /// The properties of [`Command::Properties`] `id`'s path.
-    Properties {
-        id: PropertiesId,
-        properties: Arc<Properties>,
-    },
-    /// [`Command::Properties`] `id`'s path couldn't be looked at.
-    PropertiesUnreadable {
-        id: PropertiesId,
-        path: PathBuf,
-        reason: Unreadable,
-    },
     /// What [`Command::Preview`] `id` shows.
     Previewed {
         id: PreviewId,
@@ -392,20 +357,4 @@ pub enum Event {
     Undoable { job: JobId, operation: Operation },
     /// Job `job` can no longer be undone: it was, or it is too old.
     UndoGone(JobId),
-    /// What [`Command::Measure`] `id` counted so far, and whether it ended.
-    SizeMeasured {
-        id: MeasureId,
-        size: Size,
-        state: ScanState,
-    },
-    /// What the entries of [`Command::Space`] `id`'s folder take so far:
-    /// the first answer names every entry, later ones only those whose
-    /// totals changed since. `state` says whether it ended.
-    SpaceMeasured {
-        id: MeasureId,
-        shares: Vec<Share>,
-        state: ScanState,
-    },
-    /// [`Command::Space`] `id`'s folder couldn't be listed.
-    SpaceUnreadable { id: MeasureId, reason: Unreadable },
 }

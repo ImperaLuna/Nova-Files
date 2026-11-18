@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 
-mod accounts;
 mod file_icons;
 mod folder_views;
 mod gathered;
@@ -8,12 +7,10 @@ mod icon_theme;
 mod index;
 mod inside;
 mod jobs;
-mod measure;
 mod mime;
 mod open;
 mod ops;
 mod preview;
-mod properties;
 mod run;
 mod search;
 mod theme;
@@ -30,7 +27,7 @@ use std::time::Duration;
 
 use nova_files_api::Connector;
 use nova_files_disk::{
-    capped, change_writer, config_watch, hand_edited, mount_root, private_file, saver, timed,
+    capped, change_writer, config_watch, hand_edited, private_file, saver, timed,
 };
 use nova_files_entries_core::{list, memory, order};
 
@@ -131,7 +128,7 @@ pub fn spawn_with_archiver(
                 mime_types,
                 file_icons,
                 jobs: Arc::new(jobs),
-                measurer: measure::Measurer::default(),
+                measurer: nova_files_properties_core::Measurer::default(),
                 drives: nova_files_drives_core::Store::default(),
                 recent,
                 folder_views,

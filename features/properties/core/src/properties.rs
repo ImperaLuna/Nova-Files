@@ -7,9 +7,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-use nova_files_api::{
-    Account, Event, EventSink, MODE_BITS, PathKind, Properties, PropertiesId, Unreadable,
-};
+use nova_files_api::{MODE_BITS, Unreadable};
+use nova_files_messages::EventSink;
+use nova_files_properties_api::{Account, Event, PathKind, Properties, PropertiesId};
 use rustix::fs::{
     AtFlags, CWD, FileType, Mode, OFlags, StatVfsMountFlags, Statx, StatxFlags, StatxTimestamp,
     fstatvfs, openat, readlinkat, statx,
@@ -17,7 +17,7 @@ use rustix::fs::{
 use rustix::process::geteuid;
 
 use crate::accounts::{group_name, own_groups, user_name};
-use crate::list;
+use nova_files_entries_core::list;
 
 const THREAD_NAME: &str = "nova-files-properties";
 

@@ -59,6 +59,7 @@ use nova_files_api::{
 };
 use nova_files_drives_api as drives_api;
 use nova_files_places_api::{self as places_api, Bookmark, Place};
+use nova_files_properties_api as properties_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
@@ -335,6 +336,10 @@ impl MainWindow {
         let envelope = match envelope.open::<places_api::Event>() {
             Ok(places_api::Event::Places(places)) => return self.places_arrived(places, cx),
             Ok(places_api::Event::Bookmarks(pinned)) => return self.pinned_arrived(pinned, cx),
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<properties_api::Event>() {
+            Ok(event) => return self.properties_event(event, cx),
             Err(envelope) => envelope,
         };
         let envelope = match envelope.open::<settings_api::Event>() {

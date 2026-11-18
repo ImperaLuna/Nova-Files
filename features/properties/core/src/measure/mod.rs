@@ -9,9 +9,9 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use nova_files_api::{
-    ClientGone, ClientId, Command, Event, EventSink, MeasureId, ScanState, Size, Unreadable,
-};
+use nova_files_api::{ClientGone, ClientId, Unreadable};
+use nova_files_messages::EventSink;
+use nova_files_properties_api::{Event, MeasureId, ScanState, Size};
 
 use tally::Tally;
 use walk::{Root, walk};
@@ -93,15 +93,6 @@ pub struct Measurer {
 }
 
 impl Measurer {
-    pub fn answer(&self, client: ClientId, events: &Arc<dyn EventSink>, command: Command) {
-        match command {
-            Command::Measure { id, paths } => self.measure(client, events, id, paths),
-            Command::Space { id, folder } => self.space(client, events, id, folder),
-            Command::StopMeasure(id) => self.stop(client, id),
-            _ => {}
-        }
-    }
-
     pub fn measure(
         &self,
         client: ClientId,
@@ -198,10 +189,6 @@ impl Measurer {
         });
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "drives (FIL-35) call it before unmounting")
-    )]
     pub fn stop_under(&self, folder: &Path) -> bool {
         let under: Vec<Arc<Shared>> = lock(&self.scans)
             .values()

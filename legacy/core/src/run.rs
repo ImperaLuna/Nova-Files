@@ -10,6 +10,8 @@ use nova_files_drives_core::{Store as DrivesStore, disk_space};
 use nova_files_messages::{Routed, Routes};
 use nova_files_places_api as places_api;
 use nova_files_places_core::Store as PlacesStore;
+use nova_files_properties_api as properties_api;
+use nova_files_properties_core::Measurer;
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
 use nova_files_start_api as start_api;
@@ -21,7 +23,6 @@ use crate::folder_views::Store as FolderViewsStore;
 use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
 use crate::jobs::Client;
-use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
@@ -73,6 +74,22 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         Ok(())
     })?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
+        let events = client.events();
+        match command {
+            properties_api::Command::Properties { id: asked, path } => {
+                nova_files_properties_core::answer(events, asked, path);
+            }
+            properties_api::Command::Measure { id: scan, paths } => {
+                setup.measurer.measure(id, events, scan, paths);
+            }
+            properties_api::Command::Space { id: scan, folder } => {
+                setup.measurer.space(id, events, scan, folder);
+            }
+            properties_api::Command::StopMeasure(scan) => setup.measurer.stop(id, scan),
+        }
+        Ok(())
+    })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
             settings_api::Command::Watch => setup.settings.listen(id, client.events()),
             settings_api::Command::Change(change) => setup.settings.change(change),
@@ -107,6 +124,7 @@ pub fn emitted_types() -> Vec<MessageType> {
         MessageType::of::<Event>(),
         MessageType::of::<DrivesEvent>(),
         MessageType::of::<places_api::Event>(),
+        MessageType::of::<properties_api::Event>(),
         MessageType::of::<settings_api::Event>(),
         MessageType::of::<start_api::Event>(),
         MessageType::of::<trash_api::Event>(),
@@ -205,7 +223,6 @@ fn answer(
         | Command::Rows { .. }
         | Command::Search { .. }
         | Command::Find { .. }
-        | Command::Properties { .. }
         | Command::Preview { .. }
         | Command::OpenFile { .. }
         | Command::OpenWith(_)) => {
@@ -229,10 +246,6 @@ fn answer(
         | Command::CancelJob(_)
         | Command::AnswerConflict { .. }
         | Command::GivePassword { .. }) => operations::answer(id, client, command, setup),
-        command @ (Command::Measure { .. } | Command::Space { .. } | Command::StopMeasure(_)) => {
-            setup.measurer.answer(id, client.events(), command);
-            Ok(())
-        }
     }
 }
 

@@ -3587,6 +3587,7 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-picker-api",
  "nova-files-places-api",
+ "nova-files-properties-api",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-start-api",
@@ -3656,6 +3657,8 @@ dependencies = [
  "nova-files-picker-api",
  "nova-files-places-api",
  "nova-files-places-core",
+ "nova-files-properties-api",
+ "nova-files-properties-core",
  "nova-files-rename-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
@@ -3669,7 +3672,6 @@ dependencies = [
  "serde",
  "serde_json",
  "toml_edit 0.25.18+spec-1.1.0",
- "uzers",
 ]
 
 [[package]]
@@ -3773,6 +3775,28 @@ dependencies = [
  "nova-files-disk",
  "nova-files-messages",
  "nova-files-places-api",
+]
+
+[[package]]
+name = "nova-files-properties-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-properties-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-entries-core",
+ "nova-files-jobs",
+ "nova-files-messages",
+ "nova-files-properties-api",
+ "rustix 1.1.6",
+ "uzers",
 ]
 
 [[package]]
@@ -3902,6 +3926,7 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-picker-api",
  "nova-files-places-api",
+ "nova-files-properties-api",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-start-api",

@@ -12,11 +12,11 @@ use rustix::fs::{
 };
 use rustix::io::Errno;
 
-use super::Ended;
-use super::failure::failure;
-use super::running::Running;
-use super::stop::Stop;
-use crate::mount_root::{Device, is_mount_root};
+use nova_files_disk::mount_root::{Device, is_mount_root};
+use nova_files_jobs::Ended;
+use nova_files_jobs::failure::failure;
+use nova_files_jobs::running::Running;
+use nova_files_jobs::stop::Stop;
 
 const AT_PATH: OFlags = OFlags::PATH.union(OFlags::NOFOLLOW).union(OFlags::CLOEXEC);
 

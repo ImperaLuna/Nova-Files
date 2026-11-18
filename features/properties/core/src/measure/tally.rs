@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use nova_files_api::Size;
+use nova_files_properties_api::Size;
 
 pub struct Tally {
     slots: Box<[Slot]>,

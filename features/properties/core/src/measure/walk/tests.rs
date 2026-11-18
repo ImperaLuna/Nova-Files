@@ -5,10 +5,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use nova_files_api::Size;
+use nova_files_properties_api::Size;
 
 use super::*;
-use crate::ops::test_folder::TestFolder;
+use nova_files_jobs::test_folder::TestFolder;
 
 const NO_ACCESS: u32 = 0o000;
 const OWNER_ALL: u32 = 0o700;

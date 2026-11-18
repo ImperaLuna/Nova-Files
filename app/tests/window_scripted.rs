@@ -83,13 +83,17 @@ impl Core {
     }
 
     fn commands(&mut self) -> Vec<Command> {
-        let mut commands = Vec::new();
+        self.sent()
+    }
+
+    fn sent<M: Message>(&mut self) -> Vec<M> {
+        let mut sent = Vec::new();
         while let Some(message) = self.try_recv() {
-            if let Some(command) = message.into_command::<Command>() {
-                commands.push(command);
+            if let Some(command) = message.into_command::<M>() {
+                sent.push(command);
             }
         }
-        commands
+        sent
     }
 
     fn send(&self, event: impl Message) {

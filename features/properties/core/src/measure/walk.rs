@@ -9,8 +9,8 @@ use rustix::fs::{AtFlags, CWD, Dir, FileType, Mode, OFlags, Statx, StatxFlags, o
 use rustix::io::{Errno, fcntl_dupfd_cloexec};
 
 use super::tally::Tally;
-pub use crate::mount_root::Device;
-use crate::mount_root::is_mount_root;
+pub use nova_files_disk::mount_root::Device;
+use nova_files_disk::mount_root::is_mount_root;
 
 pub const THREADS: usize = 4;
 
