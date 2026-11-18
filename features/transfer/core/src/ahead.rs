@@ -1,8 +1,8 @@
 use nova_files_api::ConflictKind;
 
-use super::clash::clash;
-use super::control::Control;
-use super::plan::Item;
+use nova_files_jobs::clash::clash;
+use nova_files_jobs::control::Control;
+use nova_files_jobs::plan::Item;
 
 pub struct Ahead<'a> {
     items: &'a [Item],
@@ -67,8 +67,8 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use crate::ops::plan::{Entry, Kind};
-    use crate::ops::test_folder::TestFolder;
+    use nova_files_jobs::plan::{Entry, Kind};
+    use nova_files_jobs::test_folder::TestFolder;
 
     fn item(from: &Path, to: &Path, kind: Kind) -> Item {
         Item {
