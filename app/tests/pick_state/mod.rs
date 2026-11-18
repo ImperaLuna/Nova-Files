@@ -83,7 +83,7 @@ fn the_next_picker_gets_the_state_the_core_kept() {
         nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home.clone()), None, None)
             .unwrap();
     assert_eq!(fetch_window_state(&core.connector), WindowState::default());
-    let (sink, _events) = mpsc::channel();
+    let (sink, _events) = mpsc::channel::<nova_files_api::Event>();
     let client = core.connector.connect(sink).unwrap();
     client
         .send(nova_files_api::Command::SaveWindowState(saved.to_bytes()))

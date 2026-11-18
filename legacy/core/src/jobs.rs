@@ -302,7 +302,7 @@ mod tests {
 
     #[test]
     fn a_replaced_listing_answers_nothing() {
-        let (sender, events) = mpsc::channel();
+        let (sender, events) = mpsc::channel::<Event>();
         let client = Client::new(Arc::new(sender), None, &FileIcons::plain());
         let older = client.start_listing(ListingId(1));
         let newer = client.start_listing(ListingId(2));

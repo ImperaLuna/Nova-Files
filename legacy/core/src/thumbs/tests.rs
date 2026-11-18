@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 use std::time::Duration;
 
-use nova_files_api::{ClientGone, Entry};
+use nova_files_api::{ClientGone, Entry, Envelope};
 
 use super::*;
 
@@ -78,7 +78,7 @@ fn a_batch_holds_only_wanted_files_not_done_yet() {
 struct Gone(#[expect(dead_code, reason = "only dropped")] mpsc::Sender<()>);
 
 impl EventSink for Gone {
-    fn deliver(&self, _event: Event) -> Result<(), ClientGone> {
+    fn deliver_envelope(&self, _envelope: Envelope) -> Result<(), ClientGone> {
         Err(ClientGone)
     }
 }

@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn tells_progress_at_most_every_so_often_and_keeps_the_latest() {
         let audience = Audience::default();
-        let (sink, heard) = mpsc::channel();
+        let (sink, heard) = mpsc::channel::<Event>();
         audience.join(ClientId(1), Arc::new(sink));
         let shared = Arc::new(Job::new(Operation::Copy {
             sources: Vec::new(),

@@ -7,7 +7,7 @@ use std::fs;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
-use nova_files_api::{Color, DesktopLook, Palette, SettingChange, Settings};
+use nova_files_api::{Color, DesktopLook, Envelope, Palette, SettingChange, Settings};
 
 use super::*;
 
@@ -24,7 +24,8 @@ fn temp(name: &str) -> PathBuf {
 struct Inbox(Mutex<Sender<Event>>);
 
 impl EventSink for Inbox {
-    fn deliver(&self, event: Event) -> Result<(), ClientGone> {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        let event = envelope.open::<Event>().map_err(|_| ClientGone)?;
         lock(&self.0).send(event).map_err(|_| ClientGone)
     }
 }
@@ -179,7 +180,7 @@ fn a_client_that_left_hears_nothing_and_a_gone_store_stops_following() {
     let settings = Settings::default().with(SettingChange::Appearance(Appearance::Light));
     assert!(
         follower
-            .deliver(Event::Settings(Arc::new(settings)))
+            .deliver_envelope(Envelope::new(Event::Settings(Arc::new(settings))))
             .is_err()
     );
     fs::remove_dir_all(config).ok();

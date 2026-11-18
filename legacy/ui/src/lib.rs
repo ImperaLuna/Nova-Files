@@ -39,7 +39,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
-use nova_files_api::{Connector, PickRequest, WindowRequest};
+use nova_files_api::{Command, Connector, Event, MessageType, PickRequest, WindowRequest};
 
 pub use assets::Icon;
 pub use columns::ColumnText;
@@ -72,6 +72,14 @@ pub enum Opening {
 }
 
 pub type RecoverGpu = Rc<dyn Fn(Option<&Path>)>;
+
+pub fn sent_types() -> Vec<MessageType> {
+    vec![MessageType::of::<Command>()]
+}
+
+pub fn taken_types() -> Vec<MessageType> {
+    vec![MessageType::of::<Event>()]
+}
 
 pub fn run(
     connector: &Connector,

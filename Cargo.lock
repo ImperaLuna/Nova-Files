@@ -3591,6 +3591,9 @@ dependencies = [
 [[package]]
 name = "nova-files-api"
 version = "0.1.0"
+dependencies = [
+ "nova-files-messages",
+]
 
 [[package]]
 name = "nova-files-archiver"
@@ -3617,6 +3620,7 @@ dependencies = [
  "log",
  "nova-files-api",
  "nova-files-index",
+ "nova-files-messages",
  "rustix 1.1.6",
  "serde",
  "serde_json",
@@ -3643,6 +3647,10 @@ dependencies = [
  "memmap2",
  "rustix 1.1.6",
 ]
+
+[[package]]
+name = "nova-files-messages"
+version = "0.1.0"
 
 [[package]]
 name = "nova-files-thumbnailer"

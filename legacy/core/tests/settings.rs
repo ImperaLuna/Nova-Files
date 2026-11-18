@@ -113,7 +113,7 @@ fn a_change_reaches_every_listening_client_and_is_saved_once() {
     let core = home.core();
     let (first, first_events, _) = listen(&core);
     let (_second, second_events, _) = listen(&core);
-    let (sink, quiet) = mpsc::channel();
+    let (sink, quiet) = mpsc::channel::<Event>();
     let _quiet = core.connector.connect(sink).unwrap();
 
     first

@@ -76,7 +76,7 @@ fn run_again_in_folders_of_its_own() {
 
 fn open_through_the_core(root: &Path) {
     let core = nova_files_core::spawn_with_idle_exit(IDLE_EXIT).unwrap();
-    let (events, received) = mpsc::channel();
+    let (events, received) = mpsc::channel::<Event>();
     let connection = core.connector.connect(events).unwrap();
     let open = |path: PathBuf| {
         connection

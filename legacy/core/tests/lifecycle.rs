@@ -37,7 +37,7 @@ fn stays_up_while_a_client_is_connected() {
 #[test]
 fn stops_when_idle_after_the_last_client_leaves() {
     let core = nova_files_core::spawn_with_idle_exit(IDLE_EXIT).unwrap();
-    let (events, _received) = mpsc::channel();
+    let (events, _received) = mpsc::channel::<Event>();
     let connection = core.connector.connect(events).unwrap();
 
     drop(connection);
@@ -46,7 +46,7 @@ fn stops_when_idle_after_the_last_client_leaves() {
     thread::spawn(move || stopped.send(core_thread.join().is_ok()));
     assert_eq!(joined.recv_timeout(ANSWER_TIMEOUT), Ok(true));
 
-    let (events, _received) = mpsc::channel();
+    let (events, _received) = mpsc::channel::<Event>();
     assert!(core.connector.connect(events).is_err());
 }
 

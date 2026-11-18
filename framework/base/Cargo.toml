@@ -4,7 +4,7 @@
 # types, no I/O.
 #
 # Allowed outside crates: none
-# Allowed workspace crates: none
+# Allowed workspace crates: nova-files-messages
 
 [package]
 name = "nova-files-api"
@@ -18,3 +18,4 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+nova-files-messages.workspace = true

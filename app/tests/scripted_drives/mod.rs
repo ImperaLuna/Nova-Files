@@ -41,11 +41,7 @@ fn with_drives(
 fn drive_actions(core: &mut Core) -> Vec<DriveAction> {
     let mut actions = Vec::new();
     while let Some(message) = core.try_recv() {
-        if let CoreMessage::Command {
-            command: Command::Drive(action),
-            ..
-        } = message
-        {
+        if let Some(Command::Drive(action)) = message.into_command::<Command>() {
             actions.push(action);
         }
     }

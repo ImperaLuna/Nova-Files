@@ -9,8 +9,8 @@ use std::time::Duration;
 use futures::channel::oneshot;
 
 use nova_files_api::{
-    ClientGone, Command, Connector, Event, EventSink, Hit, Matched, SearchFailed, SearchId,
-    WindowRequest,
+    ClientGone, Command, Connector, Envelope, Event, EventSink, Hit, Matched, SearchFailed,
+    SearchId, WindowRequest,
 };
 use rustix::fs::{Mode, OFlags};
 use zbus::fdo;
@@ -226,7 +226,8 @@ struct Stages {
 }
 
 impl EventSink for Stages {
-    fn deliver(&self, event: Event) -> Result<(), ClientGone> {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        let event = envelope.open::<Event>().map_err(|_| ClientGone)?;
         let (caller, path, id) = (Some(self.caller.as_str()), self.path.as_str(), self.id);
         let sent = match event {
             Event::Found { hits, done, .. } => {

@@ -489,7 +489,3 @@ pub enum Event {
     /// [`Command::Space`] `id`'s folder couldn't be listed.
     SpaceUnreadable { id: MeasureId, reason: Unreadable },
 }
-
-/// Names one connected client, so the core can answer the right one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ClientId(pub u64);

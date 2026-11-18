@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 
-use nova_files_api::Event;
+use nova_files_api::{DriveOffer, Event};
 use nova_files_dbus::{Bus, UDISKS, UDISKS_PATH, Udisks};
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder;
@@ -584,7 +584,9 @@ impl StandIn {
 
 pub fn core_client(bus: Bus) -> (nova_files_api::Connection, Receiver<Event>) {
     let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, None, None, None).unwrap();
-    core.connector.offer_drives(Udisks::new(bus)).unwrap();
+    core.connector
+        .offer(DriveOffer(Arc::new(Udisks::new(bus))))
+        .unwrap();
     let (events, received) = mpsc::channel();
     (core.connector.connect(events).unwrap(), received)
 }

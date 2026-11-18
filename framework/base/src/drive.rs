@@ -13,7 +13,9 @@
 //! never waits on it.
 
 use std::ffi::OsString;
+use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Names one volume: something that holds files and can be mounted, such
 /// as a partition or a whole USB stick. The service picks it; it stays the
@@ -128,4 +130,16 @@ pub trait DriveService: Send + Sync + 'static {
     /// # Errors
     /// Why the action didn't happen.
     fn act(&self, action: &DriveAction) -> Result<Option<PathBuf>, DriveFailure>;
+}
+
+/// Hands the core its [`DriveService`] through [`crate::Connector::offer`].
+///
+/// The core uses only the first one it gets; offer it before any client
+/// connects, so the first [`crate::Command::Drives`] finds it.
+pub struct DriveOffer(pub Arc<dyn DriveService>);
+
+impl fmt::Debug for DriveOffer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("DriveOffer")
+    }
 }
