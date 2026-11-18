@@ -438,3 +438,38 @@ fn seven_zip_may_read_the_kernels_random_numbers() {
     assert_eq!(status.status.code(), Some(0));
     fs::remove_dir_all(&folder).ok();
 }
+
+#[test]
+fn a_picked_name_with_wildcards_is_taken_as_it_is() {
+    let folder = sources("picked-wild");
+    for name in ["report?.txt", "report1.txt"] {
+        fs::write(folder.join(name), name).unwrap();
+    }
+    let archive = folder.join("reports.7z");
+    let recipe = Recipe {
+        packing: Packing::SevenZip,
+        level: 1,
+        password: None,
+    };
+    let mut entries = 0;
+    let sources = [folder.join("report?.txt"), folder.join("report1.txt")];
+    archiver()
+        .compress(&sources, &archive, &recipe, go(&mut entries))
+        .unwrap();
+    let into = folder.join("into");
+    archiver()
+        .extract_picked(
+            (&archive, &[PathBuf::from("report?.txt")]),
+            &into,
+            None,
+            go(&mut entries),
+        )
+        .unwrap();
+    let mut landed: Vec<_> = fs::read_dir(&into)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    landed.sort();
+    assert_eq!(landed, ["report?.txt"]);
+    fs::remove_dir_all(&folder).ok();
+}
