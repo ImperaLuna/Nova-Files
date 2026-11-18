@@ -138,7 +138,7 @@ pub fn spawn_with_archiver(
     let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
     let inside = Arc::new(inside::Inside::new(
         archiver.clone(),
-        inside::opened_folder(),
+        inside::opened_folder(std::env::var_os("XDG_RUNTIME_DIR")),
     ));
     let jobs = ops::Jobs::new(
         home.as_ref().map(|home| home.state.as_path()),

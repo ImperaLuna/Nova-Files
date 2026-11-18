@@ -9,7 +9,6 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, DirBuilder};
-use std::io;
 use std::os::unix::fs::DirBuilderExt as _;
 use std::path::{Component, Path, PathBuf};
 use std::process;
@@ -24,8 +23,8 @@ use crate::private_file::FOLDER_MODE;
 
 /// How many archives' contents the core keeps.
 const KEPT: usize = 4;
-const RUNTIME_DIR: &str = "XDG_RUNTIME_DIR";
 const OPENED: &str = "nova-files/opened";
+const TRIES: u32 = 64;
 
 /// A path inside an archive: the archive, and the path in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -178,10 +177,10 @@ pub fn arrange(
         .unzip()
 }
 
-/// Where files opened from inside archives go: under the user's runtime
-/// folder, or the temporary folder without one.
-pub fn opened_folder() -> PathBuf {
-    env::var_os(RUNTIME_DIR)
+/// Where files opened from inside archives go: under `runtime`, the
+/// user's runtime folder, or the temporary folder without one.
+pub fn opened_folder(runtime: Option<OsString>) -> PathBuf {
+    runtime
         .map_or_else(env::temp_dir, PathBuf::from)
         .join(OPENED)
 }
@@ -189,7 +188,7 @@ pub fn opened_folder() -> PathBuf {
 /// `seconds` since 1970 as a time; `None` past what a time holds.
 fn time(seconds: i64) -> Option<SystemTime> {
     let since = Duration::from_secs(seconds.unsigned_abs());
-    if seconds < 0 {
+    if seconds.is_negative() {
         UNIX_EPOCH.checked_sub(since)
     } else {
         UNIX_EPOCH.checked_add(since)
@@ -251,7 +250,7 @@ impl Inside {
     /// entry.
     pub fn take_out(&self, within: &Within) -> Result<PathBuf, ArchiveFailure> {
         let archiver = self.archiver.as_ref().ok_or(ArchiveFailure::NotRead)?;
-        let folder = self.new_folder().map_err(|_| ArchiveFailure::NotWritten)?;
+        let folder = self.new_folder().ok_or(ArchiveFailure::NotWritten)?;
         let picked = std::slice::from_ref(&within.inner);
         archiver.extract_picked((&within.archive, picked), &folder, None, |_| Flow::Go)?;
         let copy = folder.join(&within.inner);
@@ -261,19 +260,19 @@ impl Inside {
         Ok(copy)
     }
 
-    fn new_folder(&self) -> io::Result<PathBuf> {
+    /// A new, empty folder in `opened`, trying at most [`TRIES`] names.
+    fn new_folder(&self) -> Option<PathBuf> {
         DirBuilder::new()
             .recursive(true)
             .mode(FOLDER_MODE)
-            .create(&self.opened)?;
-        loop {
-            let taken = self.taken.fetch_add(1, AtomicOrdering::Relaxed);
-            let folder = self.opened.join(format!("{}-{taken}", process::id()));
-            match DirBuilder::new().mode(FOLDER_MODE).create(&folder) {
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-                made => return made.map(|()| folder),
-            }
-        }
+            .create(&self.opened)
+            .ok()?;
+        (0..TRIES)
+            .map(|_| {
+                let taken = self.taken.fetch_add(1, AtomicOrdering::Relaxed);
+                self.opened.join(format!("{}-{taken}", process::id()))
+            })
+            .find(|folder| DirBuilder::new().mode(FOLDER_MODE).create(folder).is_ok())
     }
 
     /// What `archive` holds, kept or listed now.
@@ -483,5 +482,47 @@ mod tests {
             Unreadable::NotAFolder
         );
         assert_eq!(unreadable(ArchiveFailure::Broken), Unreadable::Failed);
+    }
+
+    #[test]
+    fn hidden_entries_show_only_when_asked() {
+        let tree = Tree::of(&[
+            entry(".hidden", ArchiveKind::File, 1),
+            entry("shown", ArchiveKind::File, 1),
+        ]);
+        let listed = || tree.folder(Path::new("")).unwrap();
+        let order = Order::default();
+        let left = arrange(listed(), order, HiddenFiles::Left);
+        assert_eq!(names(&left), [("shown".to_owned(), EntryKind::File)]);
+        assert_eq!(left.0[0].id, EntryId(0));
+        let shown = arrange(listed(), order, HiddenFiles::Shown);
+        assert_eq!(shown.0.len(), 2);
+    }
+
+    #[test]
+    fn opened_files_go_under_the_runtime_folder() {
+        assert_eq!(
+            opened_folder(Some("/run/user/7".into())),
+            Path::new("/run/user/7/nova-files/opened")
+        );
+        assert_eq!(opened_folder(None), env::temp_dir().join(OPENED));
+    }
+
+    #[test]
+    fn each_file_opened_gets_a_new_folder() {
+        let root = env::temp_dir().join(format!("nova-files-opened-{}", process::id()));
+        fs::remove_dir_all(&root).ok();
+        let inside = Inside::new(None, root.join("opened"));
+        fs::create_dir_all(root.join(format!("opened/{}-0", process::id()))).unwrap();
+        assert_eq!(
+            inside.new_folder(),
+            Some(root.join(format!("opened/{}-1", process::id())))
+        );
+        fs::write(root.join("file"), b"").unwrap();
+        assert_eq!(
+            Inside::new(None, root.join("file/opened")).new_folder(),
+            None
+        );
+        fs::remove_dir_all(&root).ok();
     }
 }
