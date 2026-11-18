@@ -39,7 +39,7 @@ impl HoverOpens {
     fn on_screen(&self, here: Option<&Path>, searching: bool) -> bool {
         match self {
             Self::Place(Location::Folder(folder)) => here == Some(folder.as_path()) && !searching,
-            Self::Tab(_) | Self::Place(Location::Start) => false,
+            Self::Tab(_) | Self::Place(Location::Start | Location::Gathered(_)) => false,
         }
     }
 }
@@ -113,6 +113,7 @@ impl MainWindow {
                 self.open(&folder);
                 cx.notify();
             }
+            HoverOpens::Place(Location::Gathered(place)) => self.open_gathered(place, cx),
         }
     }
 }

@@ -2,7 +2,8 @@
 //! the Start page) on the right, and an Up button. This file holds the
 //! window's state and opening it; the work is split by area: going places
 //! in `navigate`, pinning folders in `pin`, the folder tree's own line to
-//! the core in `tree`, the drives in `drives`, the Start page in `start`,
+//! the core in `tree`, the drives in `drives`, the Start page in `start`, Games and Projects
+//! in `gathered`,
 //! the core's events in `events`, the rows on screen in `rows`, the
 //! quick look in `preview`, acting on the files selected in `acting` and
 //! `clipboard`, dragging and dropping files in `dragging` (naming the
@@ -55,6 +56,7 @@ mod dragging;
 mod drives;
 mod events;
 mod gallery;
+mod gathered;
 mod hidden;
 mod hover_open;
 mod jobs;
@@ -74,6 +76,7 @@ mod views;
 
 pub use aiming::Aim;
 pub use dragging::DraggedRow;
+pub use gathered::LIBRARY_LABEL;
 pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
@@ -92,7 +95,7 @@ use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    Bookmark, ClientGone, Command, Connection, Connector, Event, EventSink, FolderView,
+    Bookmark, ClientGone, Command, Connection, Connector, Event, EventSink, FolderView, Gathering,
     HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId, Settings,
 };
 
@@ -138,6 +141,8 @@ pub enum WindowEvent {
     Status(CoreStatus),
     /// A folder's listing is now on screen.
     Opened(PathBuf),
+    /// What Games or Projects gathers is now on screen.
+    GatheredShown(Gathering),
     /// The Start page is now on screen.
     StartShown,
     /// The folder asked for couldn't be read; the window stayed put.
@@ -186,8 +191,8 @@ pub struct MainWindow {
     pub(crate) pressed_name: bool,
     /// The listing asked for most recently; only its answer counts.
     pub(crate) asked: Option<ListingId>,
-    /// The folder asked for most recently.
-    requested: Option<PathBuf>,
+    /// The place asked for most recently: a folder, or Games or Projects.
+    requested: Option<Location>,
     /// The order the window asks for listings in (see `navigate`).
     order: Order,
     /// The order of the listing asked for most recently.
@@ -195,7 +200,8 @@ pub struct MainWindow {
     /// The order of the listing on screen, which the column heads show.
     shown_order: Order,
     /// Whether the core sent a listing since the one on screen, which the
-    /// window dropped: the core now serves rows of that one, not this.
+    /// window dropped: the core now serves rows of that one, not this,
+    /// until the window asks for the one on screen again.
     core_moved: bool,
     next_listing: u64,
     /// Where to go, in order, while the window has no folder and the one
@@ -215,6 +221,9 @@ pub struct MainWindow {
     tree_line: TreeLine,
     /// The folders the user pinned, in their order.
     pinned: Arc<[Bookmark]>,
+    /// Games and Projects, and what the window knows of them (see
+    /// `gathered`).
+    gathered: gathered::GatheredState,
     /// Where the window has been, for Back and Forward.
     pub(crate) history: History,
     /// The recent folders the Start page shows, newest first, as the core
@@ -322,15 +331,7 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) -> Self {
         let (sink, events) = mpsc::unbounded();
-        let connection = connector
-            .connect(ChannelSink(sink))
-            .and_then(|connection| {
-                for command in Self::FIRST_ASKS {
-                    connection.send(command)?;
-                }
-                Ok(connection)
-            })
-            .ok();
+        let connection = connect(connector, ChannelSink(sink));
         let status = if connection.is_some() {
             CoreStatus::Connecting
         } else {
@@ -372,6 +373,7 @@ impl MainWindow {
             pending_views: HashMap::new(),
             tree_line: TreeLine::connect(connector, cx),
             pinned: Arc::from([]),
+            gathered: gathered::GatheredState::default(),
             history: History::default(),
             recent: Vec::new(),
             recent_asked: RecentId(0),
@@ -400,6 +402,7 @@ impl MainWindow {
         match location {
             Location::Start => window.open_start(cx),
             Location::Folder(folder) => window.open(folder),
+            Location::Gathered(place) => window.open_gathered(*place, cx),
         }
         window
     }
@@ -436,12 +439,17 @@ impl MainWindow {
         self.location() == Some(&Location::Start)
     }
 
-    /// The folder on screen, if one has arrived yet, none on Start; while
-    /// a search is under way, the folder it started in.
+    /// The folder on screen, if one has arrived yet, none on Start or in
+    /// Games or Projects; while a search is under way, the folder it
+    /// started in, none when it started in Games or Projects.
     pub fn folder(&self) -> Option<&Path> {
-        self.search
-            .from()
-            .or_else(|| self.listing.as_ref().map(|listing| listing.path.as_path()))
+        if let Some(from) = self.search.from() {
+            return from.folder();
+        }
+        if self.gathered_shown().is_some() {
+            return None;
+        }
+        self.listing.as_ref().map(|listing| listing.path.as_path())
     }
 
     /// Whether a folder asked for hasn't answered yet.
@@ -487,6 +495,20 @@ impl Focusable for MainWindow {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus.clone()
     }
+}
+
+/// Connects to the core with `sink` for its events, and asks for what
+/// every window shows; `None` when the core isn't running.
+fn connect(connector: &Connector, sink: ChannelSink) -> Option<Connection> {
+    connector
+        .connect(sink)
+        .and_then(|connection| {
+            for command in MainWindow::FIRST_ASKS {
+                connection.send(command)?;
+            }
+            Ok(connection)
+        })
+        .ok()
 }
 
 /// The root folder, where a window lands when nothing else can be read.
