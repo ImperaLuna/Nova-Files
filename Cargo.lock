@@ -3635,6 +3635,8 @@ dependencies = [
  "nova-files-jobs",
  "nova-files-messages",
  "nova-files-picker-api",
+ "nova-files-rename-api",
+ "nova-files-rename-core",
  "nova-files-trash-api",
  "nova-files-trash-core",
  "rustix 1.1.6",
@@ -3695,6 +3697,19 @@ name = "nova-files-picker-api"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-rename-api"
+version = "0.1.0"
+
+[[package]]
+name = "nova-files-rename-core"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+ "nova-files-jobs",
+ "nova-files-rename-api",
 ]
 
 [[package]]

@@ -8,9 +8,10 @@ use super::Ended;
 use super::extract::{ask_password, steer};
 use super::journal::PART_PREFIX;
 use super::keep_both::take_free_name;
-use super::name::is_plain_name;
 use super::running::Running;
 use super::stop::Stop;
+use nova_files_rename_api::is_plain_name;
+
 use crate::archive::{ArchiveFailure, Archiver, Recipe};
 
 pub struct Asked<'a> {

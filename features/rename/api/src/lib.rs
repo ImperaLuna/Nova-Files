@@ -1,9 +1,15 @@
+//! Names a rename or a new entry may take.
+
+#![forbid(unsafe_code)]
+
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 
 const NUL: u8 = b'\0';
 const SEPARATOR: u8 = b'/';
 
+/// Whether `name` names one entry inside a folder: not empty, not `.` or
+/// `..`, and without a `/` or a NUL byte.
 pub fn is_plain_name(name: &OsStr) -> bool {
     let bytes = name.as_bytes();
     !matches!(bytes, b"" | b"." | b"..") && !bytes.contains(&SEPARATOR) && !bytes.contains(&NUL)

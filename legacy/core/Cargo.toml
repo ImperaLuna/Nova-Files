@@ -20,6 +20,8 @@
 # - nova-files-index
 # - nova-files-jobs
 # - nova-files-messages
+# - nova-files-rename-api
+# - nova-files-rename-core
 # - nova-files-trash-api
 # - nova-files-trash-core
 
@@ -59,6 +61,8 @@ nova-files-disk.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true
 nova-files-messages.workspace = true
+nova-files-rename-api.workspace = true
+nova-files-rename-core.workspace = true
 nova-files-trash-api.workspace = true
 nova-files-trash-core.workspace = true
 
