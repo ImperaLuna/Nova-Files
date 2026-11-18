@@ -279,7 +279,6 @@ impl Selection {
 
     /// The entries of `listing` named exactly as one of `names`, with the
     /// cursor on the first the listing shows; `None` when none is there.
-    /// One pass over the entries, however many names.
     pub fn named_all(
         listing: ListingId,
         entries: &[Entry],
