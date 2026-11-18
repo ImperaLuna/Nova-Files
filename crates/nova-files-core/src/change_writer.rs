@@ -44,7 +44,6 @@ impl<T: Send + 'static> ChangeWriter<T> {
         let change = match queue.as_ref() {
             Some(running) => match running.send(change) {
                 Ok(()) => return,
-                // The thread stopped: the change goes to a new one.
                 Err(mpsc::SendError(change)) => change,
             },
             None => change,

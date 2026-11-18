@@ -220,7 +220,6 @@ pub fn add(
     let mut entry = InlineTable::new();
     entry.insert(PATH, path.into());
     match folder.holds {
-        // Many is what a missing `holds` means.
         Holds::Many => {}
         Holds::One => {
             entry.insert(HOLDS, ONE.into());
@@ -236,8 +235,7 @@ pub fn add(
             array.insert(index, entry);
         }
         Some(Item::ArrayOfTables(tables)) => insert_table(tables, index, entry.into_table()),
-        // `kept_positions` refused anything else.
-        Some(_) => {}
+        Some(_) => return Edit::Refused(format!("{} isn't a list", key(place))),
         None => {
             let mut tables = ArrayOfTables::new();
             tables.push(entry.into_table());

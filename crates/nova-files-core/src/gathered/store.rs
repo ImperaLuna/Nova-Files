@@ -9,9 +9,8 @@
 //! it and tells every client that asked so far.
 //!
 //! Every read of the disk and every save holds one lock, `disk`, from the
-//! read until what it found is kept, so a slow read never lands after a
-//! newer one. Clients are told under the folders' own lock, in the order
-//! they changed. A file that can't be read, or isn't TOML while the user
+//! read until what it found is kept. Clients are told under the folders'
+//! own lock, in the order they changed. A file that can't be read, or isn't TOML while the user
 //! fixes it, keeps the folders last read: a passing error never empties a
 //! place, and a change is never saved over it.
 //!
@@ -169,7 +168,6 @@ impl Shared {
     }
 
     fn reload_holding_disk(&self) {
-        // `None` keeps the folders as they are: the file can't be read.
         let read = self
             .home
             .as_ref()
@@ -198,8 +196,6 @@ impl Shared {
         let Some(home) = &self.home else {
             return;
         };
-        // Guessed before the disk is held, since a folder on a hung mount
-        // may take a while, and only for a folder not gathered yet.
         let change = self.guessed(change);
         let _disk = lock(&self.disk);
         write_usual(home);
@@ -222,8 +218,6 @@ impl Shared {
                 Edit::Refused(why) => log::warn!("{} not changed: {why}", target.display()),
             }
         }
-        // The watch sees the save too, later; reading now tells the
-        // clients without waiting for it.
         self.reload_holding_disk();
     }
 
