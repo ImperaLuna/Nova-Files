@@ -23,7 +23,7 @@ use std::sync::{Mutex, PoisonError, mpsc};
 use std::thread;
 use std::time::Duration;
 
-use nova_files_api::{Fit, Picture};
+use nova_files_api::{Fit, Picture, ThumbnailSize};
 use rustix::process::{self, Pid, Signal};
 
 /// How long each file of a batch may take; the helper gives a system
@@ -51,10 +51,11 @@ pub struct Job {
     pub name: String,
 }
 
-/// Runs the helper on `jobs` until it exits or runs out of time.
-pub fn run(helper: &Path, thumbnails: &Path, jobs: &[Job]) {
+/// Runs the helper on `jobs`, making thumbnails at `size`, until it exits
+/// or runs out of time.
+pub fn run(helper: &Path, thumbnails: &Path, size: ThumbnailSize, jobs: &[Job]) {
     let mut command = command(helper);
-    command.arg(thumbnails);
+    command.arg(thumbnails).arg(size.folder());
     for job in jobs {
         command
             .arg(&job.source)

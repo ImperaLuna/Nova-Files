@@ -14,7 +14,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use image::{ImageFormat, RgbImage};
-use nova_files_api::{Command, Connection, EntryId, Event, ListingId, Order};
+use nova_files_api::{Command, Connection, EntryId, Event, ListingId, Order, ThumbnailSize};
 use nova_files_core::{IDLE_EXIT, RunningCore, Thumbnails};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
@@ -22,6 +22,7 @@ const WAIT: Duration = Duration::from_secs(5);
 const WIDTH: u32 = 400;
 const HEIGHT: u32 = 200;
 const NORMAL_SIZE: u32 = 128;
+const LARGE_SIZE: u32 = 256;
 const ROWS: u32 = 10;
 
 /// A folder under the system temp folder, removed when dropped.
@@ -65,9 +66,9 @@ fn client(thumbnails: &Path, helper: &Path) -> Client {
     }
 }
 
-/// Lists `folder`, asks for the first rows' thumbnails and returns the
-/// first thumbnail that arrives.
-fn first_thumbnail(client: &Client, folder: &Path) -> (EntryId, Vec<u8>) {
+/// Lists `folder`, asks for the first rows' thumbnails at `size` and
+/// returns the first thumbnail that arrives.
+fn first_thumbnail(client: &Client, folder: &Path, size: ThumbnailSize) -> (EntryId, Vec<u8>) {
     let id = ListingId(1);
     client
         .connection
@@ -90,6 +91,7 @@ fn first_thumbnail(client: &Client, folder: &Path) -> (EntryId, Vec<u8>) {
             id,
             first: EntryId(0),
             count: ROWS,
+            size,
         })
         .unwrap();
     loop {
@@ -97,8 +99,12 @@ fn first_thumbnail(client: &Client, folder: &Path) -> (EntryId, Vec<u8>) {
             Event::Thumbnail {
                 id: got,
                 entry,
+                size: made,
                 png,
-            } if got == id => return (entry, png.to_vec()),
+            } if got == id => {
+                assert_eq!(made, size);
+                return (entry, png.to_vec());
+            }
             Event::DetailsRead { .. } => {}
             other => panic!("expected a thumbnail, got {other:?}"),
         }
@@ -118,7 +124,8 @@ fn shown_images_get_thumbnails_then_come_from_the_cache() {
         .unwrap();
     let thumbnails = temp.0.join("thumbnails");
 
-    let (entry, png) = first_thumbnail(&client(&thumbnails, Path::new(HELPER)), &folder);
+    let normal = ThumbnailSize::Normal;
+    let (entry, png) = first_thumbnail(&client(&thumbnails, Path::new(HELPER)), &folder, normal);
 
     assert_eq!(entry, EntryId(2));
     let image = image::load_from_memory(&png).unwrap();
@@ -131,8 +138,37 @@ fn shown_images_get_thumbnails_then_come_from_the_cache() {
 
     // A core whose helper is missing can only answer from the cache.
     let missing = temp.0.join("no-helper");
-    let (entry, again) = first_thumbnail(&client(&thumbnails, &missing), &folder);
+    let (entry, again) = first_thumbnail(&client(&thumbnails, &missing), &folder, normal);
     assert_eq!((entry, again), (EntryId(2), png));
+}
+
+#[test]
+fn large_rows_get_large_thumbnails_of_their_own() {
+    let temp = TempFolder::new("large");
+    let folder = temp.0.join("media");
+    fs::create_dir(&folder).unwrap();
+    RgbImage::new(WIDTH * 2, HEIGHT * 2)
+        .save_with_format(folder.join("photo.png"), ImageFormat::Png)
+        .unwrap();
+    let thumbnails = temp.0.join("thumbnails");
+    let client = client(&thumbnails, Path::new(HELPER));
+
+    let (_, normal) = first_thumbnail(&client, &folder, ThumbnailSize::Normal);
+    let (entry, large) = first_thumbnail(&client, &folder, ThumbnailSize::Large);
+
+    assert_eq!(entry, EntryId(0));
+    let side = |png: &[u8]| {
+        let image = image::load_from_memory(png).unwrap();
+        (image.width(), image.height())
+    };
+    assert_eq!(side(&normal), (NORMAL_SIZE, NORMAL_SIZE / 2));
+    assert_eq!(side(&large), (LARGE_SIZE, LARGE_SIZE / 2));
+    for size in ThumbnailSize::ALL {
+        let cached = fs::read_dir(thumbnails.join(size.folder()))
+            .unwrap()
+            .count();
+        assert_eq!(cached, 1, "{size:?}");
+    }
 }
 
 #[test]
@@ -144,7 +180,7 @@ fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
         .save_with_format(folder.join("photo.png"), ImageFormat::Png)
         .unwrap();
     let client = client(&temp.0.join("thumbnails"), Path::new(HELPER));
-    let (entry, png) = first_thumbnail(&client, &folder);
+    let (entry, png) = first_thumbnail(&client, &folder, ThumbnailSize::Normal);
 
     let want = |first| {
         client
@@ -153,6 +189,7 @@ fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
                 id: ListingId(1),
                 first: EntryId(first),
                 count: ROWS,
+                size: ThumbnailSize::Normal,
             })
             .unwrap();
     };
@@ -185,7 +222,7 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
         .save_with_format(folder.join("photo.png"), ImageFormat::Png)
         .unwrap();
     let client = client(&temp.0.join("thumbnails"), Path::new(HELPER));
-    let (entry, png) = first_thumbnail(&client, &folder);
+    let (entry, png) = first_thumbnail(&client, &folder, ThumbnailSize::Normal);
 
     let missing = ListingId(2);
     client
@@ -211,6 +248,7 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
                 id: ListingId(1),
                 first: EntryId(first),
                 count: ROWS,
+                size: ThumbnailSize::Normal,
             })
             .unwrap();
     }
@@ -256,6 +294,7 @@ fn thumbnailed_entries(
                     id,
                     first: EntryId(0),
                     count: ROWS,
+                    size: ThumbnailSize::Normal,
                 })
                 .unwrap(),
             Event::Thumbnail { id: got, entry, .. } if got == id => entries.push(entry),

@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use nova_files_api::{
     Command, Connection, EntryId, EntryKind, Event, Hit, Listing, ListingId, MAX_HITS, Matched,
-    Order, SearchFailed, SearchId,
+    Order, SearchFailed, SearchId, ThumbnailSize,
 };
 use nova_files_core::{Home, IDLE_EXIT, IndexPlace, RunningCore};
 
@@ -339,6 +339,7 @@ fn rows_of_found_files_get_their_details() {
         id: listing.id,
         first: EntryId(0),
         count: 1,
+        size: ThumbnailSize::Normal,
     };
     client.connection.send(rows).unwrap();
     let Event::DetailsRead { id, details, .. } = client.answer() else {

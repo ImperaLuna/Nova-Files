@@ -20,6 +20,7 @@ use crate::search::{Hit, SearchFailed, SearchId};
 use crate::settings::{SettingChange, Settings};
 use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::theme::{DesktopLook, Theme};
+use crate::thumbnail_size::ThumbnailSize;
 use crate::trash::Trashed;
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -62,14 +63,16 @@ pub enum Command {
     /// The entries of listing `id` the client shows or is about to show:
     /// `count` entries from `first`. The core reads the details of those it
     /// hasn't read yet, answering with [`Event::DetailsRead`], and makes
-    /// their thumbnails, answering each with [`Event::Thumbnail`]. Each
-    /// request replaces the one before, so entries scrolled away are
-    /// dropped. Entries never asked for never have their details read. At
-    /// most [`MAX_ROWS`] entries count.
+    /// their thumbnails at `size`, answering each with [`Event::Thumbnail`].
+    /// Each request replaces the one before, so entries scrolled away are
+    /// dropped; a new `size` sends every thumbnail again. Entries never
+    /// asked for never have their details read. At most [`MAX_ROWS`]
+    /// entries count.
     Rows {
         id: ListingId,
         first: EntryId,
         count: u32,
+        size: ThumbnailSize,
     },
     /// Find files under home whose names match `query`, one word or
     /// several separated by spaces. The answer is an [`Event::Found`] for
@@ -274,10 +277,11 @@ pub enum Event {
         icons: Arc<[FileIcon]>,
     },
     /// A thumbnail for entry `entry` of listing `id`, as PNG bytes that fit
-    /// in 128 by 128 pixels.
+    /// in a square `size` across.
     Thumbnail {
         id: ListingId,
         entry: EntryId,
+        size: ThumbnailSize,
         png: Arc<[u8]>,
     },
     /// The standard folders that exist, in places-list order.
