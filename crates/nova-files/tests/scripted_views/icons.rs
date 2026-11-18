@@ -61,6 +61,7 @@ fn sizes_asked(core: &mut Core) -> Vec<ThumbnailSize> {
 
 fn ctrl_scroll(cx: &mut VisualTestContext, lines: f32) {
     let position = cell(cx, 0).center();
+    cx.simulate_mouse_move(position, None, Modifiers::none());
     cx.simulate_event(ScrollWheelEvent {
         position,
         delta: ScrollDelta::Lines(point(0.0, lines)),
@@ -238,4 +239,14 @@ fn a_click_after_the_last_cell_on_its_line_selects_nothing(cx: &mut TestAppConte
     cx.simulate_mouse_up(after, MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
     assert_eq!(selected(&view, cx), Vec::<String>::new());
+}
+
+#[gpui::test]
+fn the_cursor_stays_in_view_when_the_view_changes(cx: &mut TestAppContext) {
+    let (view, cx, _) = icons(cx);
+    cx.simulate_keystrokes("end");
+    assert_eq!(cursor(&view, cx), Some(usize::try_from(CELLS - 1).unwrap()));
+    cx.simulate_keystrokes("ctrl-1");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("entry-60").is_some());
 }

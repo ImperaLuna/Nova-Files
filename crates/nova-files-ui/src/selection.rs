@@ -67,7 +67,8 @@ pub enum Move {
 
 impl Move {
     /// The entry a move from `from` lands on, in a list of `len` entries
-    /// laid out `per_line` to a line, with `page` entries on screen. With
+    /// laid out `per_line` to a line, with `page` entries on screen (a
+    /// page moves by the whole lines in it). With
     /// no entry yet, a move down or right starts at the first entry and a
     /// move up or left at the last. A move up from the first line stays;
     /// one down from the line before a short last line goes to its end.
@@ -78,8 +79,9 @@ impl Move {
         (page, per_line): (usize, usize),
     ) -> Option<usize> {
         let last = len.checked_sub(1)?;
-        let page = page.max(1);
         let per_line = per_line.max(1);
+        // Whole lines, so a page keeps to its column.
+        let page = (page / per_line).max(1) * per_line;
         Some(match (self, from) {
             (Self::First, _) | (Self::Down | Self::Right | Self::PageDown, None) => 0,
             (Self::Last, _) | (Self::Up | Self::Left | Self::PageUp, None) => last,
@@ -434,6 +436,11 @@ mod tests {
         assert_eq!(to(Move::Right, 3), Some(4));
         assert_eq!(to(Move::Right, 10), Some(10));
         assert_eq!(Move::Right.to(None, 11, (8, 4)), Some(0));
+        // A page is whole lines: 7 on screen is one line of 4.
+        assert_eq!(Move::PageUp.to(Some(10), 11, (7, 4)), Some(6));
+        assert_eq!(Move::PageDown.to(Some(1), 11, (7, 4)), Some(5));
+        // Fewer than a line on screen still moves a line.
+        assert_eq!(Move::PageDown.to(Some(1), 11, (2, 4)), Some(5));
         assert_eq!(Move::Left.to(None, 11, (8, 4)), Some(10));
         // No entries to a line still moves.
         assert_eq!(Move::Down.to(Some(0), 3, (8, 0)), Some(1));

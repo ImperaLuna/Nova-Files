@@ -156,6 +156,10 @@ impl MainWindow {
         };
         self.folder_views.insert(folder.clone(), view);
         self.pending_views.insert(folder.clone(), view);
+        // Another layout puts the cursor elsewhere.
+        if let Some(cursor) = self.cursor() {
+            self.scroll_to_entry(cursor);
+        }
         if let Some(connection) = &self.connection {
             // A core that stopped can't keep it; the window says so
             // already (see `CoreStatus`).

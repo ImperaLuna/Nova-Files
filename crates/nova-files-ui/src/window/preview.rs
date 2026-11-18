@@ -133,10 +133,6 @@ impl MainWindow {
         }
     }
 
-    /// An arrow key while the quick look is open: the cursor moves as in
-    /// the list, the selection follows, and the quick look with it (see
-    /// [`Self::preview_follow_cursor`]). Whether the quick look was open to
-    /// take it.
     /// Left or right: the quick look shows the entry before or after;
     /// without one, Icons moves the cursor there.
     pub(crate) fn step_sideways(&mut self, step: Move, cx: &mut Context<Self>) {
@@ -145,6 +141,10 @@ impl MainWindow {
         }
     }
 
+    /// An arrow key while the quick look is open: the cursor moves as in
+    /// the list, the selection follows, and the quick look with it (see
+    /// [`Self::preview_follow_cursor`]). Whether the quick look was open to
+    /// take it.
     pub(crate) fn step_preview(&mut self, step: Move, cx: &mut Context<Self>) -> bool {
         let Some(open) = &self.quick_looks.open else {
             return false;

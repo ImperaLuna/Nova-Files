@@ -20,7 +20,7 @@ use nova_files_api::{EntryKind, Listing};
 
 use super::row::{cursor_ring, detail, drags, entry_icon_sized};
 use super::sheet::rename_box;
-use crate::grid::{CELL_PAD, Grid, NAME_GAP, NAME_LINE, NAME_LINES, NAME_OVERRUN};
+use crate::grid::{Grid, NAME_LINES};
 use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::{Aim, DraggedRow, MainWindow};
 
@@ -152,13 +152,11 @@ impl MainWindow {
                 .child(detail(size_text, &Colors::of(cx)));
         }
         div().w_full().child(
-            // GPUI lets a line cut short overrun its width by about the
-            // ellipsis, so the box leaves that much either side.
             handle
                 .w_full()
-                .px(NAME_OVERRUN)
+                .px(size::ICON_NAME_OVERRUN)
                 .text_center()
-                .line_height(NAME_LINE)
+                .line_height(size::ICON_NAME_LINE)
                 .line_clamp(NAME_LINES)
                 .text_ellipsis()
                 .child(name),
@@ -193,11 +191,11 @@ fn cell(
         .items_center()
         .when(grid.beside, |cell| cell.gap(size::NAME_GAP))
         .when(!grid.beside, |cell| {
-            cell.flex_col().justify_start().gap(NAME_GAP)
+            cell.flex_col().justify_start().gap(size::ICON_NAME_GAP)
         })
         .w(grid.cell.width)
         .h(grid.cell.height)
-        .p(CELL_PAD - size::DROP_EDGE)
+        .p(size::ICON_CELL_PAD - size::DROP_EDGE)
         .border(size::DROP_EDGE)
         .border_color(transparent_black())
         .rounded(radius::ROW)

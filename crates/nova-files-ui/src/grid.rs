@@ -9,24 +9,15 @@
 
 use std::ops::Range;
 
-use gpui::{Pixels, Size, px, size};
+use gpui::{Pixels, Size, size};
 use nova_files_api::IconSize;
 
 use crate::theme::size as sizes;
+use crate::theme::size::{
+    ICON_CELL_BESIDE as NARROWEST_BESIDE, ICON_CELL_PAD as CELL_PAD,
+    ICON_CELL_UNDER as NARROWEST_UNDER, ICON_NAME_GAP as NAME_GAP, ICON_NAME_LINE as NAME_LINE,
+};
 
-/// The narrowest cell with its name under the icon, so short icons still
-/// leave room for a name.
-const NARROWEST_UNDER: Pixels = px(104.0);
-/// The narrowest cell with its name beside the icon.
-const NARROWEST_BESIDE: Pixels = px(240.0);
-/// Space around a cell's icon and name.
-pub const CELL_PAD: Pixels = px(8.0);
-/// Space between the icon and the name under it.
-pub const NAME_GAP: Pixels = px(6.0);
-/// One line of a name under its icon.
-pub const NAME_LINE: Pixels = px(17.0);
-/// Room either side of a name under its icon for a line cut short.
-pub const NAME_OVERRUN: Pixels = px(6.0);
 /// The lines a name under its icon may take before it is cut short.
 pub const NAME_LINES: usize = 2;
 
@@ -80,10 +71,10 @@ impl Grid {
         }
     }
 
-    /// Whether a list drawn as `drawn` puts other entries on its lines
-    /// than this grid would, so it has to be drawn again.
-    pub const fn relaid(&self, drawn: &Self) -> bool {
-        self.per_line != drawn.per_line
+    /// Whether a list drawn as `drawn` was laid out otherwise than this
+    /// grid would lay it out, so it has to be drawn again.
+    pub fn relaid(&self, drawn: &Self) -> bool {
+        self != drawn
     }
 
     /// The lines `len` entries take.
@@ -137,6 +128,8 @@ const fn name_lines() -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use gpui::px;
+
     use super::*;
 
     #[test]
@@ -172,7 +165,9 @@ mod tests {
     #[test]
     fn a_grid_is_relaid_when_its_lines_hold_another_number() {
         let wide = Grid::icons(IconSize::Medium, px(600.0));
-        assert!(!wide.relaid(&Grid::icons(IconSize::Medium, px(610.0))));
+        assert!(!wide.relaid(&Grid::icons(IconSize::Medium, px(600.0))));
+        // The same number to a line, each a little wider.
+        assert!(wide.relaid(&Grid::icons(IconSize::Medium, px(610.0))));
         assert!(wide.relaid(&Grid::icons(IconSize::Medium, px(300.0))));
     }
 

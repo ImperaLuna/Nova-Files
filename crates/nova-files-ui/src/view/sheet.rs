@@ -28,8 +28,8 @@
 use std::path::Path;
 
 use gpui::{
-    AnyElement, ClickEvent, Context, DispatchPhase, Div, InteractiveElement as _, IntoElement,
-    MouseButton, MouseDownEvent, ParentElement as _, ScrollWheelEvent, Stateful,
+    AnyElement, ClickEvent, Context, DispatchPhase, Div, HitboxBehavior, InteractiveElement as _,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, ScrollWheelEvent, Stateful,
     StatefulInteractiveElement as _, Styled as _, canvas, div, prelude::FluentBuilder as _,
     transparent_black, uniform_list,
 };
@@ -273,12 +273,13 @@ impl MainWindow {
 fn ctrl_scroll(cx: &Context<MainWindow>) -> impl IntoElement {
     let view = cx.entity().downgrade();
     canvas(
-        |_, _, _| {},
-        move |bounds, (), window, _| {
-            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, _, cx| {
+        |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+        move |_, hitbox, window, _| {
+            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                // Not under a menu or anything else over the entries.
                 if phase != DispatchPhase::Capture
                     || !event.modifiers.secondary()
-                    || !bounds.contains(&event.position)
+                    || !hitbox.is_hovered(window)
                 {
                     return;
                 }

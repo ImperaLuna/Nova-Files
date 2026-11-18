@@ -171,8 +171,8 @@ impl MainWindow {
     /// lines drawn, so the request waits until the frame is done.
     ///
     /// The list is laid out across its width when it last drew, which is
-    /// known only once it is drawing; if that width now fits another
-    /// number of entries to a line, the window draws again.
+    /// known only once it is drawing; if that width now lays it out
+    /// otherwise, the window draws again, the cursor kept in view.
     pub(crate) fn rows_drawn(
         &mut self,
         (lines, drawn): (Range<usize>, Grid),
@@ -182,6 +182,10 @@ impl MainWindow {
         self.sizing.list_width = self.scroll.0.borrow().base_handle.bounds().size.width;
         let grid = self.grid();
         if grid.relaid(&drawn) {
+            // The cursor was scrolled to as the list was laid out before.
+            if let Some(cursor) = self.cursor() {
+                self.scroll_to_entry(cursor);
+            }
             cx.notify();
         }
         let len = self
