@@ -4,7 +4,6 @@
 # never draws anything.
 #
 # Allowed outside crates:
-# - chrono
 # - log
 # - rustix
 # - serde
@@ -15,7 +14,9 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
+# - nova-files-archives-core
 # - nova-files-clipboard-api
+# - nova-files-delete-core
 # - nova-files-disk
 # - nova-files-drives-api
 # - nova-files-drives-core
@@ -25,11 +26,11 @@
 # - nova-files-look-api
 # - nova-files-look-core
 # - nova-files-messages
-# - nova-files-rename-api
 # - nova-files-rename-core
 # - nova-files-settings-api
 # - nova-files-settings-core
 # - nova-files-thumbnailer-launch
+# - nova-files-transfer-core
 # - nova-files-trash-api
 # - nova-files-trash-core
 
@@ -45,8 +46,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-# The trash spec's DeletionDate is local time: the system time zone.
-chrono = "0.4.45"
 # Kills the thumbnail helper's process group when a batch runs out of time,
 # reads the monotonic clock for the frame trace, renames without replacing
 # for file operations, and watches the config folder (inotify, woken
@@ -65,6 +64,8 @@ toml_edit = { version = "0.25.18", default-features = false, features = ["displa
 # /etc/passwd). The standard library and rustix have no such lookup.
 uzers = { version = "0.12.2", default-features = false }
 nova-files-api.workspace = true
+nova-files-archives-core.workspace = true
+nova-files-delete-core.workspace = true
 nova-files-disk.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-drives-core.workspace = true
@@ -74,11 +75,11 @@ nova-files-jobs.workspace = true
 nova-files-look-api.workspace = true
 nova-files-look-core.workspace = true
 nova-files-messages.workspace = true
-nova-files-rename-api.workspace = true
 nova-files-rename-core.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-settings-core.workspace = true
 nova-files-thumbnailer-launch.workspace = true
+nova-files-transfer-core.workspace = true
 nova-files-trash-api.workspace = true
 nova-files-trash-core.workspace = true
 

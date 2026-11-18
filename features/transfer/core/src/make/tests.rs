@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use rustix::fs::{CWD, FileType, Mode, mknodat};
 
 use super::*;
-use crate::ops::folders::Folders;
-use crate::ops::journal::Journal;
-use crate::ops::plan::Entry;
-use crate::ops::test_folder::TestFolder;
+use nova_files_jobs::folders::Folders;
+use nova_files_jobs::journal::Journal;
+use nova_files_jobs::plan::Entry;
+use nova_files_jobs::test_folder::TestFolder;
 
 const OTHER_DRIVE: &str = "/dev/shm";
 

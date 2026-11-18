@@ -11,9 +11,9 @@ use nova_files_disk::ports::Icons;
 pub use nova_files_entries::ListingJob;
 use nova_files_entries::RowWatch;
 
-use crate::archive::ArchiveFailure;
 use crate::inside::{self, Inside, Within};
 use crate::thumbs::{Queue, Thumbnails};
+use nova_files_archives_core::ArchiveFailure;
 use nova_files_look_core::FileIcons;
 
 use crate::list::{self, Stopped};
