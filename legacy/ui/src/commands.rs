@@ -1,6 +1,8 @@
-use gpui::{Action, App, KeyBinding};
+use gpui::App;
+pub use nova_files_shell::CommandSpec;
+use nova_files_shell::command_spec as spec;
 
-pub const KEY_CONTEXT: &str = "MainWindow";
+pub use nova_files_shell::WINDOW_KEYS as KEY_CONTEXT;
 
 #[expect(
     clippy::derive_partial_eq_without_eq,
@@ -63,52 +65,8 @@ mod actions {
 
 pub use actions::*;
 
-pub struct ActionSpec {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub keys: &'static [&'static str],
-    bind: fn(&str, Option<&str>) -> KeyBinding,
-    make: fn() -> Box<dyn Action>,
-}
 
-impl ActionSpec {
-    pub fn action(&self) -> Box<dyn Action> {
-        (self.make)()
-    }
-
-    pub fn binding(&self, keys: &str) -> KeyBinding {
-        (self.bind)(keys, Some(KEY_CONTEXT))
-    }
-}
-
-impl PartialEq for ActionSpec {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl Eq for ActionSpec {}
-
-impl std::fmt::Debug for ActionSpec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.id)
-    }
-}
-
-macro_rules! spec {
-    ($(#[$doc:meta])* $name:ident, $action:ident, $id:literal, $label:literal, [$($keys:literal),*]) => {
-        $(#[$doc])*
-        pub const $name: ActionSpec = ActionSpec {
-            id: $id,
-            label: $label,
-            keys: &[$($keys),*],
-            bind: |keys, context| KeyBinding::new(keys, $action, context),
-            make: || Box::new($action),
-        };
-    };
-}
-
-pub const ACTIONS: &[ActionSpec] = &[
+pub const ACTIONS: &[CommandSpec] = &[
     UP,
     BACK,
     FORWARD,

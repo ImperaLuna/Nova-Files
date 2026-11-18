@@ -3684,6 +3684,7 @@ name = "nova-files-shell"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "nova-files-api",
  "nova-files-messages",
 ]
 

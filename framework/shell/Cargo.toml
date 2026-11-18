@@ -5,7 +5,7 @@
 # one feature publishes for the others. It never touches the disk.
 #
 # Allowed outside crates: gpui
-# Allowed workspace crates: nova-files-messages
+# Allowed workspace crates: nova-files-api, nova-files-messages
 
 [package]
 name = "nova-files-shell"
@@ -18,10 +18,7 @@ publish.workspace = true
 [lints]
 workspace = true
 
-[lib]
-test = false
-doctest = false
-
 [dependencies]
 gpui.workspace = true
+nova-files-api.workspace = true
 nova-files-messages.workspace = true

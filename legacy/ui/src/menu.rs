@@ -7,7 +7,7 @@ use gpui::{
 use nova_files_api::{DriveAction, DriveId, Gathering};
 
 use crate::assets::Icon;
-use crate::commands::ActionSpec;
+use crate::commands::CommandSpec;
 use crate::drives::ShownDrive;
 use crate::window::{AccessLevel, MainWindow, Who};
 
@@ -59,7 +59,7 @@ pub enum MenuAction {
     OpenInNewTab(PathBuf),
     SetDefaultApp { mime: String, app: String },
     SetAccess(Who, AccessLevel),
-    Run(&'static ActionSpec),
+    Run(&'static CommandSpec),
     Ungather(Gathering, PathBuf),
     AddGathered(Gathering),
 }
@@ -81,7 +81,7 @@ impl MenuItem {
         }
     }
 
-    pub fn run(icon: Icon, spec: &'static ActionSpec) -> Self {
+    pub fn run(icon: Icon, spec: &'static CommandSpec) -> Self {
         Self::new(icon, spec.label, MenuAction::Run(spec))
     }
 
@@ -257,7 +257,7 @@ mod tests {
     use super::*;
     use crate::commands::{COPY, NEW_FOLDER, RENAME, TRASH};
 
-    fn label(spec: &ActionSpec) -> Option<String> {
+    fn label(spec: &CommandSpec) -> Option<String> {
         key_label(&spec.binding(spec.keys[0])).map(String::from)
     }
 

@@ -2,7 +2,6 @@
 // https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 #![forbid(unsafe_code)]
 
-mod assets;
 mod band;
 mod columns;
 mod commands;
@@ -25,7 +24,6 @@ mod selecting;
 mod selection;
 mod shown_thumbnails;
 mod text;
-mod theme;
 mod theme_icons;
 mod thumbnail;
 mod tree;
@@ -41,9 +39,10 @@ use std::rc::Rc;
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
 use nova_files_api::{Command, Connector, Event, MessageType, PickRequest, WindowRequest};
 
+use nova_files_shell::{assets, theme};
 pub use assets::Icon;
 pub use columns::ColumnText;
-pub use commands::{ACTIONS, ActionSpec, bind_keys as bind_window_keys};
+pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note, NoteUndo};
 pub use location::Location;
 pub use menu::{Look, Menu, MenuAction, MenuItem};
