@@ -7,7 +7,8 @@ use std::fs;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
-use nova_files_api::{Color, DesktopLook, Envelope, Palette, SettingChange, Settings};
+use nova_files_api::{Color, DesktopLook, Envelope, Palette};
+use nova_files_settings_api::{SettingChange, Settings};
 
 use super::*;
 
@@ -104,7 +105,7 @@ fn the_appearance_setting_picks_dark_or_light() {
     assert_eq!(light.palette, expected);
 
     settings.change(SettingChange::Thumbnails(
-        nova_files_api::Thumbnails::Hidden,
+        nova_files_settings_api::Thumbnails::Hidden,
     ));
     settings.change(SettingChange::Appearance(Appearance::System));
     assert_eq!(next(&received).mode, Mode::Dark);
@@ -180,7 +181,9 @@ fn a_client_that_left_hears_nothing_and_a_gone_store_stops_following() {
     let settings = Settings::default().with(SettingChange::Appearance(Appearance::Light));
     assert!(
         follower
-            .deliver_envelope(Envelope::new(Event::Settings(Arc::new(settings))))
+            .deliver_envelope(Envelope::new(settings_api::Event::Settings(Arc::new(
+                settings
+            ))))
             .is_err()
     );
     fs::remove_dir_all(config).ok();
