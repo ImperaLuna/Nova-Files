@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _, relative,
 };
-use nova_files_api::DiskSpace;
+use nova_files_drives_api::DiskSpace;
 
 use super::titles;
 use crate::assets::Icon;

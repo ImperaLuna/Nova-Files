@@ -17,6 +17,8 @@
 # - nova-files-api
 # - nova-files-clipboard-api
 # - nova-files-disk
+# - nova-files-drives-api
+# - nova-files-drives-core
 # - nova-files-entries
 # - nova-files-index
 # - nova-files-jobs
@@ -62,6 +64,8 @@ toml_edit = { version = "0.25.18", default-features = false, features = ["displa
 uzers = { version = "0.12.2", default-features = false }
 nova-files-api.workspace = true
 nova-files-disk.workspace = true
+nova-files-drives-api.workspace = true
+nova-files-drives-core.workspace = true
 nova-files-entries.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true

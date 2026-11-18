@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, Pixels, Point};
-use nova_files_api::{
+use nova_files_drives_api::{
     Command, DiskSpace, DriveAction, DriveFailure, DriveId, DriveList, Event, VolumeId,
 };
 
@@ -60,7 +60,6 @@ impl MainWindow {
                 }
             }
             Event::DriveDone { action, result } => self.drive_done(&action, result),
-            _ => return,
         }
         cx.notify();
     }

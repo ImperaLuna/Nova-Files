@@ -14,8 +14,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use nova_files_api::{Connector, DriveOffer, WindowRequest};
+use nova_files_api::{Connector, WindowRequest};
 use nova_files_dbus::{Bus, Service, Started};
+use nova_files_drives_api::DriveOffer;
 use nova_files_ui::{Ended, Opening, RecoverGpu, Request, RequestSender, Requests};
 
 use crate::mode::Mode;
