@@ -10,12 +10,13 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::{Connector, PickId, PickRequest};
+use nova_files_api::Connector;
 use nova_files_dbus::{
     APP_ID, APPLICATION_INTERFACE, FILE_CHOOSER_INTERFACE, FILES_INTERFACE, HoldError, Holds,
     PORTAL_BUS_NAME, PORTAL_OBJECT_PATH, Picker, RunningInstance, SEARCH_INTERFACE, Service,
     Started,
 };
+use nova_files_picker_api::{PickId, PickRequest};
 use zbus::blocking::{Connection, Proxy};
 
 mod support;

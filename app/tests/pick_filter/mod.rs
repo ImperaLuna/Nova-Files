@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use nova_files_api::{FileFilter, FilterRule};
+use nova_files_picker_api::{FileFilter, FilterRule};
 
 use super::*;
 

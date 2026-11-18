@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use nova_files_api::{FileFilter, FilterRule, IconKind};
+use nova_files_api::IconKind;
+use nova_files_picker_api::{FileFilter, FilterRule};
 
 use super::*;
 
