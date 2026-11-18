@@ -412,10 +412,10 @@ impl MainWindow {
 
     /// The folder on screen, if one has arrived yet, none on Start or in
     /// Games or Projects; while a search is under way, the folder it
-    /// started in.
+    /// started in, none when it started in Games or Projects.
     pub fn folder(&self) -> Option<&Path> {
         if let Some(from) = self.search.from() {
-            return Some(from);
+            return from.folder();
         }
         if self.gathered_shown().is_some() {
             return None;

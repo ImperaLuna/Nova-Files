@@ -101,10 +101,9 @@ impl Search {
         }
     }
 
-    /// The folder the search started in, while one is under way; none
-    /// when it started in Games or Projects.
-    pub(crate) fn from(&self) -> Option<&Path> {
-        self.from.as_ref().and_then(Location::folder)
+    /// The place the search started in, while one is under way.
+    pub(crate) const fn from(&self) -> Option<&Location> {
+        self.from.as_ref()
     }
 
     /// The window asked for a folder, which replaces any find on its way.

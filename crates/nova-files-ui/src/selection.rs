@@ -15,6 +15,7 @@
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::hash::Hash;
 
 use gpui::Modifiers;
 use nova_files_api::{Entry, EntryId, ListingId};
@@ -232,16 +233,26 @@ impl Selection {
     /// listing `listing` of the same folder: the same names stay selected,
     /// and a cursor whose entry is gone goes to the nearest row left.
     pub fn carried(&self, before: &[Entry], listing: ListingId, after: &[Entry]) -> Option<Self> {
+        let key_before = |id: EntryId| entry_at(before, id).map(name_of);
+        self.carried_by(listing, key_before, after, name_of)
+    }
+
+    /// [`Self::carried`], with the entry `id` of the listing before the
+    /// same as an entry of `after` when `key_before` gives what
+    /// `key_after` does.
+    pub fn carried_by<'a, K: Eq + Hash>(
+        &self,
+        listing: ListingId,
+        key_before: impl Fn(EntryId) -> Option<K>,
+        after: &'a [Entry],
+        key_after: impl Fn(&'a Entry) -> K,
+    ) -> Option<Self> {
         let last = u32::try_from(after.len().checked_sub(1)?).ok()?;
-        // One pass over the new listing, so carrying a large selection
-        // stays linear.
-        let by_name: HashMap<&OsStr, EntryId> = after
+        let by_key: HashMap<K, EntryId> = after
             .iter()
-            .map(|entry| (entry.name.as_os_str(), entry.id))
+            .map(|entry| (key_after(entry), entry.id))
             .collect();
-        let carry = |id: EntryId| {
-            entry_at(before, id).and_then(|entry| by_name.get(entry.name.as_os_str()).copied())
-        };
+        let carry = |id: EntryId| key_before(id).and_then(|key| by_key.get(&key).copied());
         let mut ids: Vec<EntryId> = self.ids.iter().filter_map(|&id| carry(id)).collect();
         ids.sort_unstable();
         let cursor = carry(self.cursor).unwrap_or_else(|| EntryId(self.cursor.0.min(last)));
@@ -284,6 +295,10 @@ pub fn entry_at(entries: &[Entry], id: EntryId) -> Option<&Entry> {
 }
 
 /// The id of the entry named exactly `name` in `entries`.
+fn name_of(entry: &Entry) -> &OsStr {
+    entry.name.as_os_str()
+}
+
 fn find(entries: &[Entry], name: &OsStr) -> Option<EntryId> {
     entries
         .iter()

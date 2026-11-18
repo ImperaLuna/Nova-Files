@@ -126,6 +126,7 @@ async fn a_search_from_projects_comes_back_to_it(cx: &mut TestAppContext) {
     .await;
     view.read_with(cx, |view, _| {
         assert_eq!(view.gathered_shown(), None, "a search's files show");
+        assert_eq!(view.folder(), None, "no folder to paste into");
         assert_eq!(
             view.location(),
             Some(&Location::Gathered(Gathering::Projects))
@@ -251,4 +252,32 @@ async fn a_place_that_changes_while_going_elsewhere_keeps_the_way(cx: &mut TestA
     });
 
     wait_for_folder(&view, cx, tree.path()).await;
+}
+
+#[gpui::test]
+async fn a_fresh_read_keeps_the_folder_selected_not_its_namesake(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("gathered-namesakes");
+    let (mine, work) = (tree.path().join("Mine"), tree.path().join("Work"));
+    fs::create_dir_all(mine.join("app")).unwrap();
+    fs::create_dir_all(work.join("app")).unwrap();
+    write_gathered(
+        tree.path(),
+        &format!(
+            "[[projects]]\npath = \"{}\"\n\n[[projects]]\npath = \"{}\"\n",
+            mine.display(),
+            work.display()
+        ),
+    );
+    let (view, cx) = open_on(cx, tree.path()).await;
+    click(cx, "place-projects");
+    wait_for_place(&view, cx, Gathering::Projects, &["app", "app"]).await;
+    click(cx, "name-0");
+    let picked = view.read_with(cx, |view, _| view.selected_paths());
+    assert_eq!(picked.len(), 1);
+
+    fs::create_dir(mine.join("beta")).unwrap();
+
+    wait_for_place(&view, cx, Gathering::Projects, &["app", "app", "beta"]).await;
+    view.read_with(cx, |view, _| assert_eq!(view.selected_paths(), picked));
 }

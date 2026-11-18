@@ -13,8 +13,9 @@
 //! Letters typed in a main window jump to a name (see `jump`), except
 //! while a rename's field takes them.
 //!
-//! When a listing arrives, a fresh read of the same folder (or of Games
-//! or Projects) keeps the selection by name; arriving in the folder that holds the one just left
+//! When a listing arrives, a fresh read of the same folder keeps the
+//! selection by name, and of Games or Projects by path; arriving in the
+//! folder that holds the one just left
 //! (Up, Back, or any other way) selects the folder left, so the keyboard
 //! carries on from there. Anything else starts with nothing selected, and
 //! so does every list a search shows and the folder after it, unless a
@@ -284,11 +285,19 @@ impl MainWindow {
     pub(crate) fn selection_for(&self, next: &Listing, same_place: bool) -> Option<Selection> {
         let shown = self.listing.as_ref()?;
         if same_place {
-            return self
+            let selection = self
                 .selection
                 .as_ref()
-                .filter(|selection| selection.listing == shown.id)?
-                .carried(&shown.entries, next.id, &next.entries);
+                .filter(|selection| selection.listing == shown.id)?;
+            return if shown.folders.is_some() {
+                let key_before =
+                    |id| entry_at(&shown.entries, id).map(|entry| shown.path_of(entry));
+                selection.carried_by(next.id, key_before, &next.entries, |entry| {
+                    next.path_of(entry)
+                })
+            } else {
+                selection.carried(&shown.entries, next.id, &next.entries)
+            };
         }
         if shown.folders.is_some() {
             let reveal = self.search.reveal.as_deref()?;
