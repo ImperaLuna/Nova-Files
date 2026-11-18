@@ -419,7 +419,10 @@ fn seven_zip_may_read_the_kernels_random_numbers() {
     let shell = shell_on_path();
     fs::write(
         &program,
-        format!("#!{}\nread -r line < /dev/urandom || exit 2\n", shell.display()),
+        format!(
+            "#!{}\nread -r line < /dev/urandom || exit 2\n",
+            shell.display()
+        ),
     )
     .unwrap();
     fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
