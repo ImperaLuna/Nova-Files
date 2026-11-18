@@ -7,6 +7,7 @@ use nova_files_api::{ClientId, Command, CoreMessage, Envelope, Event, EventSink,
 use nova_files_drives_api::{Command as DrivesCommand, DriveOffer, Event as DrivesEvent};
 use nova_files_drives_core::{Store as DrivesStore, disk_space};
 use nova_files_messages::{Routed, Routes};
+use nova_files_settings_api as settings_api;
 use nova_files_trash_api as trash_api;
 
 use crate::file_icons::FileIcons;
@@ -56,6 +57,13 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
     routes.on(|setup: &Setup, id, client: &Client, command: Command| {
         answer(id, client, command, setup)
     })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
+            settings_api::Command::Watch => setup.settings.listen(id, client.events()),
+            settings_api::Command::Change(change) => setup.settings.change(change),
+        }
+        Ok(())
+    })?;
     routes.on(|setup: &Setup, _, client: &Client, command| match command {
         trash_api::Command::List => {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
@@ -77,6 +85,7 @@ pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
 pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
+        MessageType::of::<settings_api::Event>(),
         MessageType::of::<trash_api::Event>(),
         MessageType::of::<DrivesEvent>(),
     ]
@@ -189,8 +198,6 @@ fn answer(
         | Command::SaveWindowState(_)
         | Command::FolderViews
         | Command::SetFolderView { .. }
-        | Command::Settings
-        | Command::ChangeSetting(_)
         | Command::Theme
         | Command::DesktopLook(_)
         | Command::DesktopIconThemes(_)) => look::answer(id, client, command, setup),

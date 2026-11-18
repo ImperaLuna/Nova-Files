@@ -1,7 +1,7 @@
 use std::fs;
 use std::sync::mpsc::Receiver;
 
-use nova_files_api::{Appearance, Thumbnails};
+use nova_files_settings_api::{Appearance, Thumbnails};
 
 use super::*;
 
