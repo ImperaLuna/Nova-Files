@@ -93,6 +93,7 @@ impl MainWindow {
             .map(|connection| connection.send(command(id, order)));
         let sent = matches!(sent, Some(Ok(())));
         if sent {
+            self.stop_measuring();
             self.search.folder_asked();
             // Going anywhere closes a path bar menu, and its connection
             // with it, so the core stops reading that menu's folder.

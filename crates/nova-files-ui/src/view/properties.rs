@@ -21,10 +21,10 @@ use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
 };
-use nova_files_api::{EntryKind, IconKind, PathKind, Peeked, Properties};
+use nova_files_api::{EntryKind, IconKind, PathKind, Peeked, Properties, Size};
 
 use super::row::{built_in, glyph_of, icon};
-use super::start::{fan, name_of, name_os, titles, where_is};
+use super::start::{FAN_ENTRIES, bar, fan, name_of, name_os, titles, where_is};
 use crate::assets::Icon;
 use crate::columns;
 use crate::island::{self, ITEM, ITEMS};
@@ -41,6 +41,12 @@ const SPECIAL_LABEL: &str = "Special file";
 const FILE_LABEL: &str = "File";
 /// Between what an item is and where it is.
 const SEPARATOR: &str = " · ";
+const FILE_WORD: &str = "file";
+const FILES_WORD: &str = "files";
+const FOLDER_WORD: &str = "folder";
+const FOLDERS_WORD: &str = "folders";
+/// Digits between two commas in a large count.
+const GROUP: usize = 3;
 
 impl MainWindow {
     /// The Properties page `page`, filling the sheet.
@@ -76,23 +82,17 @@ impl MainWindow {
 
     /// The first group: the top card, and the dates of a lone item.
     fn about(&self, read: &[Arc<Properties>], colors: &Colors) -> AnyElement {
-        let (name, line) = self.titles_of(read);
-        let top = match read {
-            [one] => top_card(
-                icon(lone_glyph(one), start::HERO_ICON, lone_tint(one, colors)).into_any_element(),
-                name,
-                line,
-                lone_size(one),
-                colors,
-            ),
-            many => top_card(
-                fan(&peeked(many), colors).into_any_element(),
-                name,
-                line,
-                several_size(many),
-                colors,
-            ),
+        let head = match read {
+            [one] => {
+                icon(lone_glyph(one), start::HERO_ICON, lone_tint(one, colors)).into_any_element()
+            }
+            many => div()
+                .flex_none()
+                .w(fan_width())
+                .child(fan(&peeked(many), colors))
+                .into_any_element(),
         };
+        let top = top_card(head, self.top_of(read), colors);
         let dates = match read {
             [one] => date_cards(one, colors),
             _ => None,
@@ -106,22 +106,48 @@ impl MainWindow {
             .into_any_element()
     }
 
+    /// What the top card of the page on screen says, once it has its
+    /// answers.
+    pub fn properties_top(&self) -> Option<TopFacts> {
+        let read = self.properties_page()?.read();
+        (!read.is_empty()).then(|| self.top_of(&read))
+    }
+
     /// The top card's name and the dim line under it, once the page on
     /// screen has its answers.
     pub fn properties_titles(&self) -> Option<(String, String)> {
-        let read = self.properties_page()?.read();
-        (!read.is_empty()).then(|| self.titles_of(&read))
+        self.properties_top().map(|top| (top.name, top.line))
     }
 
-    /// The name and line of `read`: a lone item's name, with what it is
-    /// and where; or how many items there are, of what, and where.
-    fn titles_of(&self, read: &[Arc<Properties>]) -> (String, String) {
+    /// What the top card says of `read`: a lone folder's name, where and
+    /// what it holds, its size and its share of the drive; a lone file's
+    /// name, what it is and where, and its size; or how many items there
+    /// are, of what, where, and their size.
+    fn top_of(&self, read: &[Arc<Properties>]) -> TopFacts {
+        let measured = self.measured().map(|measure| measure.shown());
+        let amount = measured.map(|size| columns::size(size.bytes));
         match read {
-            [one] => (name_of(&one.path), lone_line(one, &self.home)),
-            many => (
-                island::count(many.len(), ITEM, ITEMS),
-                self.several_line(many),
-            ),
+            [one] if one.kind == PathKind::Folder => TopFacts {
+                name: name_of(&one.path),
+                line: folder_line(&where_is(&one.path, &self.home), measured),
+                amount,
+                has_bar: true,
+                share: measured.and_then(|size| self.share_of_drive(&one.path, size)),
+            },
+            [one] => TopFacts {
+                name: name_of(&one.path),
+                line: lone_line(one, &self.home),
+                amount: Some(columns::size(one.bytes)),
+                has_bar: false,
+                share: None,
+            },
+            many => TopFacts {
+                name: island::count(many.len(), ITEM, ITEMS),
+                line: self.several_line(many),
+                amount,
+                has_bar: false,
+                share: None,
+            },
         }
     }
 
@@ -141,6 +167,13 @@ impl MainWindow {
         }
     }
 
+    /// How much of its drive `size`, measured under `path`, takes, from 0
+    /// to 1, once the drive's size is known.
+    fn share_of_drive(&self, path: &Path, size: Size) -> Option<f32> {
+        let space = self.drive_space_of(path)?;
+        share(size.on_disk, space.total)
+    }
+
     /// The icon of the lone path a Properties page shows, once read: its
     /// kind's, or `None` for a folder, whose own icon stays.
     pub fn properties_icon(&self) -> Option<Icon> {
@@ -151,33 +184,37 @@ impl MainWindow {
     }
 }
 
-/// The top card: `head` (an icon or a fan), the name over one dim line,
-/// and the size large on the right when there is one.
-fn top_card(
-    head: AnyElement,
-    name: String,
-    line: String,
-    amount: Option<String>,
-    colors: &Colors,
-) -> AnyElement {
-    div()
-        .debug_selector(|| "properties-top".to_owned())
+/// What the top card of a Properties page says.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopFacts {
+    pub name: String,
+    /// The dim line under the name.
+    pub line: String,
+    /// The size, large on the right, once known.
+    pub amount: Option<String>,
+    /// Whether it has a bar: a folder's, for its share of the drive.
+    pub has_bar: bool,
+    /// The bar's share, from 0 to 1, once known.
+    pub share: Option<f32>,
+}
+
+/// The top card, in the drive card's layout: `head` (an icon or a fan)
+/// and what `top` says.
+fn top_card(head: AnyElement, top: TopFacts, colors: &Colors) -> AnyElement {
+    let row = div()
         .flex()
         .items_center()
         .gap(start::HERO_HEAD_GAP)
         .min_w_0()
-        .p(start::HERO_PAD)
-        .rounded(radius::CARD)
-        .bg(colors.raised)
         .child(head)
         .child(
             div()
                 .flex_1()
                 .min_w_0()
-                .child(titles(name, line, text::HERO_NAME, colors)),
+                .child(titles(top.name, top.line, text::HERO_NAME, colors)),
         )
-        .when_some(amount, |card, amount| {
-            card.child(
+        .when_some(top.amount, |head, amount| {
+            head.child(
                 div()
                     .flex_none()
                     .text_size(text::PERCENT)
@@ -185,8 +222,69 @@ fn top_card(
                     .text_color(colors.text)
                     .child(amount),
             )
+        });
+    div()
+        .debug_selector(|| "properties-top".to_owned())
+        .flex()
+        .flex_col()
+        .gap(start::HERO_GAP)
+        .min_w_0()
+        .p(start::HERO_PAD)
+        .rounded(radius::CARD)
+        .bg(colors.raised)
+        .child(row)
+        .when(top.has_bar, |card| {
+            card.child(bar(top.share, colors.folder, colors))
         })
         .into_any_element()
+}
+
+/// A folder's dim line: where it is, then what it holds once measured:
+/// "~/Projects · 18,240 files, 1,312 folders". The count of folders
+/// leaves out the folder itself.
+fn folder_line(place: &str, measured: Option<Size>) -> String {
+    let Some(size) = measured else {
+        return place.to_owned();
+    };
+    let held = format!(
+        "{}, {}",
+        counted(size.files, FILE_WORD, FILES_WORD),
+        counted(size.folders.saturating_sub(1), FOLDER_WORD, FOLDERS_WORD),
+    );
+    if place.is_empty() {
+        held
+    } else {
+        format!("{place}{SEPARATOR}{held}")
+    }
+}
+
+/// "1 file", "18,240 files".
+fn counted(number: u64, one: &str, many: &str) -> String {
+    let word = if number == 1 { one } else { many };
+    format!("{} {word}", grouped(number))
+}
+
+/// `number` with a comma between each three digits: "18,240".
+fn grouped(number: u64) -> String {
+    let digits = number.to_string();
+    let mut out = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(GROUP) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}
+
+/// How much of `total` `part` is, from 0 to 1; `None` for an empty total.
+fn share(part: u64, total: u64) -> Option<f32> {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a bar's share needs no more than f32 holds"
+    )]
+    let ratio = (total > 0).then(|| (part as f32 / total as f32).min(1.0));
+    ratio
 }
 
 /// The date cards of `one`, side by side: Modified, Created, Opened,
@@ -284,18 +382,12 @@ fn file_kind(name: &OsStr) -> String {
     )
 }
 
-/// A lone item's size: a file's or a link's own; a folder's comes from
-/// measuring what it holds.
-fn lone_size(one: &Properties) -> Option<String> {
-    (one.kind != PathKind::Folder).then(|| columns::size(one.bytes))
-}
-
-/// What several items take, when none is a folder, whose size comes
-/// from measuring what it holds.
-fn several_size(read: &[Arc<Properties>]) -> Option<String> {
-    read.iter()
-        .all(|one| one.kind != PathKind::Folder)
-        .then(|| columns::size(read.iter().map(|one| one.bytes).sum()))
+/// How wide a full fan is: its icons, each after the first tucked under
+/// the one before.
+fn fan_width() -> gpui::Pixels {
+    #[expect(clippy::cast_precision_loss, reason = "a fan holds three icons")]
+    let entries = FAN_ENTRIES as f32;
+    start::FAN_ICON * entries - start::FAN_OVERLAP * (entries - 1.0)
 }
 
 /// Several items as a fan shows them: a folder or a file each.
@@ -321,6 +413,14 @@ mod tests {
     use nova_files_api::Account;
 
     use super::*;
+
+    #[test]
+    fn a_full_fan_is_its_icons_less_each_tuck() {
+        let icon = start::FAN_ICON;
+        let shown = icon + (icon - start::FAN_OVERLAP) + (icon - start::FAN_OVERLAP);
+        assert_eq!(FAN_ENTRIES, 3);
+        assert!((fan_width() - shown).abs() < gpui::px(f32::EPSILON));
+    }
 
     #[test]
     fn a_lone_item_is_tinted_as_its_rows_are() {
@@ -356,12 +456,10 @@ mod tests {
         let home = Path::new("/home/me");
         let png = read("/home/me/Downloads/wall.png", PathKind::File, 6_100_000);
         assert_eq!(lone_line(&png, home), "PNG image · ~/Downloads");
-        assert_eq!(lone_size(&png).as_deref(), Some("6.1 MB"));
         let bare = read("/etc/hostname", PathKind::File, 9);
         assert_eq!(lone_line(&bare, home), "File · /etc");
         let folder = read("/home/me/Projects", PathKind::Folder, 4096);
         assert_eq!(lone_line(&folder, home), "~");
-        assert_eq!(lone_size(&folder), None);
         let link = PathKind::Link {
             target: PathBuf::from("x"),
         };
@@ -406,20 +504,46 @@ mod tests {
     }
 
     #[test]
-    fn several_files_add_up_but_a_folder_waits_for_measuring() {
-        let files = [
-            Arc::new(read("/a", PathKind::File, 1_500)),
-            Arc::new(read("/b", PathKind::File, 500)),
-        ];
-        assert_eq!(several_size(&files).as_deref(), Some("2.0 KB"));
-        let with_folder = [
+    fn a_fan_shows_each_item_as_a_folder_or_a_file() {
+        let read = [
             Arc::new(read("/a", PathKind::File, 1_500)),
             Arc::new(read("/c", PathKind::Folder, 4096)),
         ];
-        assert_eq!(several_size(&with_folder), None);
-        let fanned = peeked(&with_folder);
+        let fanned = peeked(&read);
         assert_eq!(fanned[0].kind, EntryKind::File);
         assert_eq!(fanned[1].kind, EntryKind::Folder);
         assert_eq!(fanned[1].name, "c");
+    }
+
+    #[test]
+    fn a_folder_says_what_it_holds_once_measured_leaving_itself_out() {
+        let size = |files, folders| Size {
+            files,
+            folders,
+            ..Size::default()
+        };
+        assert_eq!(folder_line("~/Projects", None), "~/Projects");
+        assert_eq!(
+            folder_line("~/Projects", Some(size(18_240, 1_313))),
+            "~/Projects · 18,240 files, 1,312 folders"
+        );
+        assert_eq!(folder_line("", Some(size(1, 2))), "1 file, 1 folder");
+        assert_eq!(folder_line("~", Some(size(0, 1))), "~ · 0 files, 0 folders");
+    }
+
+    #[test]
+    fn large_counts_get_a_comma_every_three_digits() {
+        assert_eq!(grouped(0), "0");
+        assert_eq!(grouped(999), "999");
+        assert_eq!(grouped(1_000), "1,000");
+        assert_eq!(grouped(1_234_567), "1,234,567");
+    }
+
+    #[test]
+    fn a_share_of_the_drive_runs_from_nothing_to_all_of_it() {
+        assert_eq!(share(0, 100), Some(0.0));
+        assert_eq!(share(25, 100), Some(0.25));
+        assert_eq!(share(300, 100), Some(1.0));
+        assert_eq!(share(1, 0), None);
     }
 }

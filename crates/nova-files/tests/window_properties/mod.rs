@@ -6,7 +6,7 @@
 use std::os::unix::fs::MetadataExt as _;
 use std::sync::Arc;
 
-use nova_files_api::{PathKind, Properties};
+use nova_files_api::{PathKind, Properties, ScanState, Size};
 use nova_files_ui::Icon;
 
 use super::*;
@@ -79,6 +79,10 @@ async fn the_menu_opens_a_files_properties_in_a_new_tab(cx: &mut TestAppContext)
         assert_eq!(name, "notes.txt");
         assert_eq!(line, "TXT file · ~");
         assert_eq!(view.properties_icon(), Some(Icon::File));
+        let top = view.properties_top().unwrap();
+        assert_eq!(top.amount.as_deref(), Some("12 B"));
+        assert!(!top.has_bar);
+        assert_eq!(top.share, None);
     });
     // The path bar goes one crumb past the folder, to the file.
     let folder_index: usize = folder_crumb["crumb-".len()..].parse().unwrap();
@@ -113,10 +117,9 @@ async fn a_lone_folder_keeps_its_own_icon(cx: &mut TestAppContext) {
     view.update(cx, MainWindow::show_properties);
     read_page(&view, cx).await;
     view.read_with(cx, |view, _| {
-        assert_eq!(
-            view.properties_titles(),
-            Some(("Projects".to_owned(), "~".to_owned()))
-        );
+        let (name, line) = view.properties_titles().unwrap();
+        assert_eq!(name, "Projects");
+        assert!(line.starts_with('~'), "{line}");
         assert_eq!(view.properties_icon(), None);
     });
 }
@@ -276,4 +279,104 @@ async fn the_trash_has_no_properties(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("alt-enter");
     cx.run_until_parked();
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 2);
+}
+
+/// Waits until the Properties page on screen has measured all it holds.
+async fn measured(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Size {
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.measured()
+            .is_some_and(|measure| measure.state == ScanState::Done)
+    })
+    .await;
+    view.read_with(cx, |view, _| view.measured().unwrap().size)
+}
+
+#[gpui::test]
+async fn a_folder_is_measured_while_its_page_is_on_screen(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("properties-measure");
+    let nova = tree.path().join("Projects").join("nova");
+    fs::write(nova.join("a.rs"), "x".repeat(1_000)).unwrap();
+    fs::write(nova.join("b.rs"), "x".repeat(234)).unwrap();
+    let (view, cx) = properties_window(cx, tree.path()).await;
+    click(cx, "name-0");
+    view.update(cx, MainWindow::show_properties);
+    let size = measured(&view, cx).await;
+    assert_eq!(size.bytes, 1_234);
+    assert_eq!(size.files, 2);
+    // The folder itself and nova inside it.
+    assert_eq!(size.folders, 2);
+    let top = view.read_with(cx, |view, _| view.properties_top().unwrap());
+    assert!(top.amount.is_some());
+    assert!(top.has_bar);
+    // A share of the drive that holds it: some, not all.
+    let share = top.share.unwrap();
+    assert!(share > 0.0 && share < 1.0, "{share}");
+
+    // Shown again, it is counted again, showing the size before until
+    // that count ends.
+    view.update(cx, |view, cx| view.switch_tab(0, cx));
+    assert_eq!(view.read_with(cx, |view, _| view.measured()), None);
+    fs::write(nova.join("c.rs"), "x").unwrap();
+    view.update(cx, |view, cx| view.switch_tab(1, cx));
+    let shown = view.read_with(cx, |view, _| view.measured().unwrap().shown());
+    assert_eq!(shown.bytes, 1_234);
+    assert_eq!(measured(&view, cx).await.bytes, 1_235);
+    let shown = view.read_with(cx, |view, _| view.measured().unwrap().shown());
+    assert_eq!(shown.bytes, 1_235);
+}
+
+#[gpui::test]
+async fn several_entries_add_up_files_and_folders_alike(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("properties-measure-several");
+    fs::write(tree.path().join("notes.txt"), "x".repeat(10)).unwrap();
+    fs::write(tree.path().join("Projects/nova/a"), "x".repeat(5)).unwrap();
+    let (view, cx) = properties_window(cx, tree.path()).await;
+    cx.simulate_keystrokes("ctrl-a");
+    view.update(cx, MainWindow::show_properties);
+    let size = measured(&view, cx).await;
+    assert_eq!(size.bytes, 15);
+    assert_eq!(size.files, 2);
+    let top = view.read_with(cx, |view, _| view.properties_top().unwrap());
+    assert_eq!(top.amount.as_deref(), Some("15 B"));
+    assert!(!top.has_bar);
+}
+
+#[gpui::test]
+async fn an_answer_for_another_page_stays_off_this_one(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("properties-other-page");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = properties_window(cx, tree.path()).await;
+    click(cx, "name-1");
+    // Two pages asked one after the other, the first one's answer still out.
+    view.update(cx, MainWindow::show_properties);
+    let place = Location::Properties(vec![projects.clone()]);
+    view.update(cx, |view, cx| view.new_tab(&place, cx));
+    let read = read_page(&view, cx).await;
+    assert_eq!(read.len(), 1);
+    assert_eq!(read[0].path, projects);
+}
+
+#[gpui::test]
+async fn leaving_the_page_stops_its_measuring(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("properties-measure-stop");
+    let (view, cx) = properties_window(cx, tree.path()).await;
+    click(cx, "name-0");
+    view.update(cx, MainWindow::show_properties);
+    // Left before any answer: the scan is stopped and nothing is kept.
+    view.update(cx, |view, cx| view.switch_tab(0, cx));
+    cx.run_until_parked();
+    view.update(cx, |view, cx| view.switch_tab(1, cx));
+    assert_eq!(
+        view.read_with(cx, |view, _| view.measured().map(|measure| measure.state)),
+        Some(ScanState::Counting)
+    );
+    measured(&view, cx).await;
+
+    click(cx, "up");
+    wait_for_folder(&view, cx, tree.path()).await;
+    assert_eq!(view.read_with(cx, |view, _| view.measured()), None);
 }

@@ -348,6 +348,7 @@ impl MainWindow {
     /// what only the screen needs. The window is left as a fresh one.
     fn leave_tab(&mut self, cx: &mut Context<Self>) -> Tab {
         self.forget_rows();
+        self.stop_measuring();
         // A drive mounting opens in the tab that asked, or nowhere.
         self.forget_drive_to_open();
         self.close_preview(None, cx);
@@ -414,6 +415,7 @@ impl MainWindow {
             self.arrive_at_start(cx);
         } else if self.properties_paths().is_some() {
             self.ask_properties();
+            self.measure();
         }
         cx.notify();
     }

@@ -45,6 +45,7 @@ mod sidebar;
 mod start;
 
 pub use crate::places::place_icon;
+pub use properties::TopFacts;
 pub use row::{RowIcon, entry_kind};
 
 use gpui::{

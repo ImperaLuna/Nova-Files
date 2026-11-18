@@ -59,6 +59,7 @@ pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
+pub use view::TopFacts;
 pub use window::{
     CoreStatus, MainWindow, Previewed, PropertiesPage, Scope, WindowEvent, home_folder,
 };
