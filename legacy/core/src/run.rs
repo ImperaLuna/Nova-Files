@@ -10,6 +10,7 @@ use nova_files_folders_api as folders_api;
 use nova_files_folders_core::Store as FolderViewsStore;
 use nova_files_messages::{Routed, Routes};
 use nova_files_settings_api as settings_api;
+use nova_files_settings_core::Store as SettingsStore;
 use nova_files_trash_api as trash_api;
 
 use crate::disk_space;
@@ -25,7 +26,6 @@ use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
 use crate::search::Searcher;
-use crate::settings::Store as SettingsStore;
 use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
 use crate::trash;

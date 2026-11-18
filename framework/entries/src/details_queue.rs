@@ -8,7 +8,7 @@ use nova_files_api::{
 };
 
 use crate::details;
-use crate::file_icons::FileIcons;
+use nova_files_disk::ports::Icons;
 
 const BATCH: usize = 256;
 const WORKER_THREAD: &str = "nova-files-details";
@@ -56,7 +56,7 @@ struct Run {
 }
 
 impl Queue {
-    pub fn start(events: Arc<dyn EventSink>, icons: Arc<FileIcons>) -> Option<Self> {
+    pub fn start(events: Arc<dyn EventSink>, icons: Arc<dyn Icons>) -> Option<Self> {
         let shared = Arc::new(Shared {
             state: Mutex::new(State::default()),
             wake: Condvar::new(),
@@ -64,7 +64,7 @@ impl Queue {
         let worker = Arc::clone(&shared);
         thread::Builder::new()
             .name(WORKER_THREAD.to_owned())
-            .spawn(move || work(&worker, events.as_ref(), &icons))
+            .spawn(move || work(&worker, events.as_ref(), icons.as_ref()))
             .ok()?;
         Some(Self { shared })
     }
@@ -177,7 +177,7 @@ impl Shared {
     }
 }
 
-fn work(shared: &Shared, events: &dyn EventSink, icons: &FileIcons) {
+fn work(shared: &Shared, events: &dyn EventSink, icons: &dyn Icons) {
     while let Some(run) = shared.next_run() {
         let read = if let Some(known) = &run.known {
             Some(known.get(run.entries.clone()).unwrap_or_default().to_vec())
