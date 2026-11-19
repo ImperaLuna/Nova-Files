@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 
 use gpui::{ClickEvent, Context, SharedString, UniformListScrollHandle, Window};
 use nova_files_api::{EntryId, Listing, ListingId, Order};
-use nova_files_gathered_api::Gathering;
 
 use super::MainWindow;
 use super::search::Search;
@@ -14,7 +13,7 @@ use nova_files_shell::{PageRef, TabId};
 use crate::assets::Icon;
 use crate::jump::TypeJump;
 use crate::location::Location;
-use crate::places::{self, START_LABEL};
+use crate::places::START_LABEL;
 use crate::selection::Selection;
 use nova_files_places_ui as places_ui;
 use nova_files_shell::History;
@@ -32,7 +31,6 @@ pub struct Tab {
     scroll: UniformListScrollHandle,
     search: Search,
     counted: SharedString,
-    gathered: Option<Gathering>,
     listed: Option<PageRef>,
     on_its_way: Option<Location>,
 }
@@ -109,10 +107,6 @@ impl MainWindow {
                 self.open(folder);
                 self.tabs.start_if_refused = self.asked;
             }
-            Location::Gathered(gathered) => {
-                self.open_gathered(*gathered, cx);
-                self.tabs.start_if_refused = self.asked;
-            }
             Location::Page(page) => self.open_page(page.clone(), cx),
         }
         cx.notify();
@@ -165,10 +159,6 @@ impl MainWindow {
     ) -> (SharedString, Icon) {
         match place {
             Some(Location::Start) => (START_LABEL.into(), Icon::Start),
-            Some(Location::Gathered(gathered)) => {
-                let (label, icon) = places::gathering_look(*gathered);
-                (label.into(), icon)
-            }
             Some(Location::Page(page)) => (page.title(), page.icon()),
             Some(Location::Folder(folder)) => self.host.rules.named(folder).map_or_else(
                 || self.folder_look(folder, shown),
@@ -295,7 +285,6 @@ impl MainWindow {
             scroll: mem::replace(&mut self.scroll, UniformListScrollHandle::new()),
             search: mem::replace(&mut self.search, Search::new(cx)),
             counted: mem::take(&mut self.counted),
-            gathered: self.gathered.shown.take(),
             listed: self.listed_page.take(),
             on_its_way,
         }
@@ -314,15 +303,12 @@ impl MainWindow {
         self.scroll = tab.scroll;
         self.search = tab.search;
         self.counted = tab.counted;
-        self.gathered.shown = tab.gathered;
         self.listed_page = tab.listed;
         self.core_moved = true;
         if let Some(place) = tab.on_its_way {
             self.request_place(&place);
         } else if self.searching() {
             self.find(cx);
-        } else if let Some(place) = self.gathered_shown() {
-            self.request_gathered(place);
         } else if let Some(page) = self.listed_page.clone() {
             self.request_listed(page);
         } else if let Some(listing) = self.listing.clone() {

@@ -26,7 +26,6 @@ impl MainWindow {
         self.requested = None;
         self.forget_rows(cx);
         self.listing = None;
-        self.gathered.shown = None;
         self.listed_page = None;
         self.details = HashMap::new();
         self.selection = None;
