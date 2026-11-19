@@ -93,6 +93,7 @@ trait OpenPart {
     fn used(&self, folder: &Path, cx: &mut App);
     fn rows_drawn(&self, id: ListingId, rows: &Range<usize>, cx: &mut App);
     fn rescaled(&self, scale_factor: f32, cx: &mut App);
+    fn thumbnail_side(&self, side: u32, cx: &mut App);
     fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App);
 }
 
@@ -464,6 +465,17 @@ impl<P: Part> OpenPart for Opened<P> {
         self.entity.update(cx, |part, cx| {
             for rescaled in &self.slots.rescaled {
                 rescaled(part, scale_factor, cx);
+            }
+        });
+    }
+
+    fn thumbnail_side(&self, side: u32, cx: &mut App) {
+        if self.slots.thumbnail_sides.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for changed in &self.slots.thumbnail_sides {
+                changed(part, side, cx);
             }
         });
     }
