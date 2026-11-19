@@ -26,8 +26,8 @@ fn program(address: &str, args: &[&str]) -> Command {
     command
         .args(args)
         .env("DBUS_SESSION_BUS_ADDRESS", address)
-        .env_remove(nova_files_core::STARTUP_TRACE_VARIABLE)
-        .env_remove(nova_files_core::FRAME_TRACE_VARIABLE)
+        .env_remove(nova_files::STARTUP_TRACE_VARIABLE)
+        .env_remove(nova_files::FRAME_TRACE_VARIABLE)
         .env_remove("DISPLAY")
         .env_remove("WAYLAND_DISPLAY")
         .stdin(Stdio::null())
@@ -258,7 +258,7 @@ fn unknown_flag_is_refused_with_the_usage() {
 
 fn traced_start(trace: &std::path::Path) -> Output {
     let mut command = program("unix:path=/nonexistent/nova-files-bus", &["--frobnicate"]);
-    command.env(nova_files_core::STARTUP_TRACE_VARIABLE, trace);
+    command.env(nova_files::STARTUP_TRACE_VARIABLE, trace);
     finish(command)
 }
 
@@ -291,7 +291,7 @@ fn a_trace_that_cant_be_written_is_reported_and_the_start_goes_on() {
 fn a_frame_trace_that_cant_be_written_is_reported_and_the_start_goes_on() {
     let mut command = program("unix:path=/nonexistent/nova-files-bus", &["--frobnicate"]);
     command.env(
-        nova_files_core::FRAME_TRACE_VARIABLE,
+        nova_files::FRAME_TRACE_VARIABLE,
         "/nonexistent/folder/frames",
     );
     let output = finish(command);

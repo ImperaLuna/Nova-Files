@@ -93,6 +93,7 @@ impl MainWindow {
             );
         }
         match self.location() {
+            Some(Location::Page(page)) if let Some(crumbs) = self.parts.crumbs(page, cx) => crumbs,
             Some(Location::Page(page)) if page.get::<GatheredPage>().is_some() => {
                 vec![Crumb {
                     opens: Some(shell::Location::Page(page.clone())),

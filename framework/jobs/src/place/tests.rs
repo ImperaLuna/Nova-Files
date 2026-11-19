@@ -185,7 +185,10 @@ fn a_file_saved_anew_after_the_link_is_never_removed() {
 
     let error = unlink_or_take_back(At::path(&from), &to).unwrap_err();
 
-    assert_eq!(error.raw_os_error(), Some(Errno::AGAIN.raw_os_error()));
+    assert_eq!(
+        crate::failure::failure(&error),
+        nova_files_api::Failure::SourceChanged
+    );
     assert_eq!(fs::read_to_string(&from).unwrap(), "new");
     assert!(!to.exists(), "the link is taken back");
 }

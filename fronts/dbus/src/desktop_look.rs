@@ -25,6 +25,7 @@ const CHANGED: &str = "SettingChanged";
 const READ_ONE: &str = "ReadOne";
 const READ: &str = "Read";
 const UNKNOWN_METHOD: &str = "org.freedesktop.DBus.Error.UnknownMethod";
+const NOT_FOUND: &str = "org.freedesktop.portal.Error.NotFound";
 const THREAD: &str = "nova-files-dbus-desktop-look";
 
 const PREFERS_DARK: u32 = 1;
@@ -65,6 +66,10 @@ struct Told {
 }
 
 impl Told {
+    fn now(&self) -> (DesktopLook, IconThemes) {
+        (self.look, self.icons.clone())
+    }
+
     fn update(
         &mut self,
         now: (DesktopLook, IconThemes),
@@ -93,7 +98,7 @@ async fn watch(
     loop {
         let now = if started {
             started = false;
-            read_all(portal).await
+            read_all(portal, &told).await
         } else {
             match heard.next().await {
                 None => return,
@@ -107,7 +112,7 @@ async fn watch(
                     else {
                         continue;
                     };
-                    changed(&told, &namespace, &key, &value)
+                    changed(told.now(), &namespace, &key, &value)
                 }
             }
         };
@@ -118,17 +123,33 @@ async fn watch(
 }
 
 fn changed(
-    told: &Told,
+    (look, mut icons): (DesktopLook, IconThemes),
     namespace: &str,
     key: &str,
     value: &OwnedValue,
 ) -> (DesktopLook, IconThemes) {
-    let mut icons = told.icons.clone();
     if namespace == NAMESPACE {
-        return (with(told.look, key, value), icons);
+        return (with(look, key, value), icons);
     }
     icons.set(namespace, key, value);
-    (told.look, icons)
+    (look, icons)
+}
+
+fn heard(
+    (look, mut icons): (DesktopLook, IconThemes),
+    namespace: &str,
+    key: &str,
+    setting: Setting,
+) -> (DesktopLook, IconThemes) {
+    match setting {
+        Setting::Value(value) => changed((look, icons), namespace, key, &value),
+        Setting::Unset if namespace == NAMESPACE => (without(look, key), icons),
+        Setting::Unset => {
+            icons.clear(namespace, key);
+            (look, icons)
+        }
+        Setting::Failed => (look, icons),
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -142,45 +163,66 @@ impl IconThemes {
         self.gnome.iter().chain(&self.kde).cloned().collect()
     }
 
+    fn slot(&mut self, namespace: &str, key: &str) -> Option<&mut Option<String>> {
+        match (namespace, key) {
+            (GNOME_INTERFACE, GNOME_ICON_THEME) => Some(&mut self.gnome),
+            (KDE_ICONS, KDE_ICON_THEME) => Some(&mut self.kde),
+            _ => None,
+        }
+    }
+
     fn set(&mut self, namespace: &str, key: &str, value: &OwnedValue) {
-        let slot = match (namespace, key) {
-            (GNOME_INTERFACE, GNOME_ICON_THEME) => &mut self.gnome,
-            (KDE_ICONS, KDE_ICON_THEME) => &mut self.kde,
-            _ => return,
-        };
-        *slot = <&Str<'_>>::try_from(peel(value))
-            .ok()
-            .map(|name| name.as_str().trim().to_owned())
-            .filter(|name| !name.is_empty());
+        if let Some(slot) = self.slot(namespace, key) {
+            *slot = <&Str<'_>>::try_from(peel(value))
+                .ok()
+                .map(|name| name.as_str().trim().to_owned())
+                .filter(|name| !name.is_empty());
+        }
+    }
+
+    fn clear(&mut self, namespace: &str, key: &str) {
+        if let Some(slot) = self.slot(namespace, key) {
+            *slot = None;
+        }
     }
 }
 
-async fn read_all(portal: &Proxy<'_>) -> (DesktopLook, IconThemes) {
-    let mut look = DesktopLook::default();
-    for key in [COLOR_SCHEME, ACCENT_COLOR] {
-        if let Some(value) = read(portal, NAMESPACE, key).await {
-            look = with(look, key, &value);
-        }
-    }
-    let mut icons = IconThemes::default();
-    for (namespace, key) in [
-        (GNOME_INTERFACE, GNOME_ICON_THEME),
-        (KDE_ICONS, KDE_ICON_THEME),
-    ] {
-        if let Some(value) = read(portal, namespace, key).await {
-            icons.set(namespace, key, &value);
-        }
-    }
-    (look, icons)
+const KEYS: [(&str, &str); 4] = [
+    (NAMESPACE, COLOR_SCHEME),
+    (NAMESPACE, ACCENT_COLOR),
+    (GNOME_INTERFACE, GNOME_ICON_THEME),
+    (KDE_ICONS, KDE_ICON_THEME),
+];
+
+enum Setting {
+    Value(OwnedValue),
+    Unset,
+    Failed,
 }
 
-async fn read(portal: &Proxy<'_>, namespace: &str, key: &str) -> Option<OwnedValue> {
-    match portal.call(READ_ONE, &(namespace, key)).await {
-        Ok(value) => Some(value),
+async fn read_all(portal: &Proxy<'_>, told: &Told) -> (DesktopLook, IconThemes) {
+    let mut now = told.now();
+    for (namespace, key) in KEYS {
+        now = heard(now, namespace, key, read(portal, namespace, key).await);
+    }
+    now
+}
+
+async fn read(portal: &Proxy<'_>, namespace: &str, key: &str) -> Setting {
+    let answer = match portal.call(READ_ONE, &(namespace, key)).await {
         Err(zbus::Error::MethodError(name, _, _)) if name.as_str() == UNKNOWN_METHOD => {
-            portal.call(READ, &(namespace, key)).await.ok()
+            portal.call(READ, &(namespace, key)).await
         }
-        Err(_) => None,
+        answer => answer,
+    };
+    setting(answer)
+}
+
+fn setting(answer: zbus::Result<OwnedValue>) -> Setting {
+    match answer {
+        Ok(value) => Setting::Value(value),
+        Err(zbus::Error::MethodError(name, _, _)) if name.as_str() == NOT_FOUND => Setting::Unset,
+        Err(_) => Setting::Failed,
     }
 }
 
@@ -189,6 +231,15 @@ fn with(mut look: DesktopLook, key: &str, value: &OwnedValue) -> DesktopLook {
     match key {
         COLOR_SCHEME => look.mode = mode(value),
         ACCENT_COLOR => look.accent = accent(value),
+        _ => {}
+    }
+    look
+}
+
+fn without(mut look: DesktopLook, key: &str) -> DesktopLook {
+    match key {
+        COLOR_SCHEME => look.mode = None,
+        ACCENT_COLOR => look.accent = None,
         _ => {}
     }
     look
@@ -294,6 +345,47 @@ mod tests {
         icons.set(GNOME_INTERFACE, "font-name", &name("Inter"));
         icons.set("org.example", GNOME_ICON_THEME, &name("x"));
         assert_eq!(icons, IconThemes::default());
+    }
+
+    #[test]
+    fn a_portal_that_fails_to_answer_keeps_the_look_told_and_a_missing_key_clears_it() {
+        let told = (
+            DesktopLook {
+                mode: Some(Mode::Dark),
+                accent: Some(Color(1)),
+            },
+            IconThemes {
+                gnome: Some("Papirus".to_owned()),
+                kde: Some("breeze".to_owned()),
+            },
+        );
+        let failed = || {
+            setting(Err(zbus::Error::InputOutput(
+                std::io::Error::other("timed out").into(),
+            )))
+        };
+        let unset = || {
+            let name = zbus::names::OwnedErrorName::try_from(NOT_FOUND).unwrap();
+            setting(Err(zbus::Error::MethodError(
+                name,
+                None,
+                Message::method_call("/", "Read")
+                    .unwrap()
+                    .build(&())
+                    .unwrap(),
+            )))
+        };
+        let after = |setting: fn() -> Setting| {
+            KEYS.iter().fold(told.clone(), |now, &(namespace, key)| {
+                heard(now, namespace, key, setting())
+            })
+        };
+
+        assert_eq!(after(failed), told);
+        assert_eq!(
+            after(unset),
+            (DesktopLook::default(), IconThemes::default())
+        );
     }
 
     #[test]

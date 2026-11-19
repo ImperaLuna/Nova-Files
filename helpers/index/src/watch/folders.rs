@@ -439,7 +439,7 @@ impl Folders {
                 self.by_wd.insert(wd, Watched { path, zone });
                 None
             }
-            Err(Errno::NOENT | Errno::NOTDIR) => None,
+            Err(Errno::NOENT | Errno::NOTDIR | Errno::ACCESS | Errno::NOSPC) => None,
             Err(_) => Some(Change::Rescan { folder: path }),
         }
     }

@@ -83,7 +83,7 @@ impl MainWindow {
             )
             .when_some(
                 self.list_drop_folder()
-                    .map(|folder| Aim::folder(folder.to_path_buf(), self.folder_name(folder))),
+                    .map(|folder| Aim::folder(folder.to_path_buf(), self.folder_name(folder, cx))),
                 |area, at| self.takes_drops(area, at, cx),
             )
             .children(entries)
