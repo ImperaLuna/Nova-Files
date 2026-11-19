@@ -2,6 +2,7 @@
 
 pub mod audience;
 pub mod clash;
+mod commands;
 pub mod control;
 pub mod failure;
 pub mod folders;

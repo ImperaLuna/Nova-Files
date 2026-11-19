@@ -1,12 +1,13 @@
 use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use nova_files_api::{EventSink, Operation};
+use nova_files_api::{EventSink, JobTag, Operation};
 use nova_files_disk::timed;
+use nova_files_jobs::{JobKind, Jobs, lock};
 use nova_files_transfer_api::{DropAskId, DropKind, Event};
 
 const PROBE_WAIT: Duration = Duration::from_secs(2);
@@ -15,10 +16,41 @@ const PROBE_THREAD: &str = "nova-files-drop-probe";
 
 const ASK_THREAD: &str = "nova-files-drop-ask";
 
+const DROP_THREAD: &str = "nova-files-drop";
+
 pub fn dropped(sources: Vec<PathBuf>, into: PathBuf) -> Operation {
     match kind(&sources, &into) {
         DropKind::Move => Operation::Move { sources, into },
         DropKind::Copy => Operation::Copy { sources, into },
+    }
+}
+
+pub fn start<K: JobKind<Op = Operation>>(
+    jobs: &Arc<Jobs<K>>,
+    events: &Arc<dyn EventSink>,
+    tag: JobTag,
+    sources: Vec<PathBuf>,
+    into: PathBuf,
+) {
+    let thread_jobs = Arc::clone(jobs);
+    let asked = Arc::new(Mutex::new(Some((sources, into))));
+    let taken = Arc::clone(&asked);
+    let thread_events = Arc::clone(events);
+    let spawned = thread::Builder::new()
+        .name(DROP_THREAD.to_owned())
+        .spawn(move || {
+            let asked = lock(&taken).take();
+            if let Some((sources, into)) = asked {
+                let operation = dropped(sources, into);
+                thread_jobs
+                    .start(thread_events.as_ref(), tag, operation)
+                    .ok();
+            }
+        });
+    let unasked = spawned.is_err().then(|| lock(&asked).take()).flatten();
+    if let Some((sources, into)) = unasked {
+        let copy = Operation::Copy { sources, into };
+        jobs.start(events.as_ref(), tag, copy).ok();
     }
 }
 
