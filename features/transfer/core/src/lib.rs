@@ -9,7 +9,7 @@ mod make;
 mod transfer;
 mod undo;
 
-pub use dropped::{answer as answer_drop_would, dropped};
+pub use dropped::{answer as answer_drop_would, dropped, start as start_drop};
 pub use kind::Transfers;
 pub use make::How;
 pub use transfer::{transfer, transfer_to};

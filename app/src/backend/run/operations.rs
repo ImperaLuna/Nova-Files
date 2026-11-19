@@ -5,9 +5,7 @@ use nova_files_api::{ClientGone, ClientId, Command};
 use super::Setup;
 use crate::backend::jobs::Client;
 use nova_files_transfer_api as transfer_api;
-use nova_files_transfer_core::answer_drop_would;
-
-use crate::backend::ops;
+use nova_files_transfer_core::{answer_drop_would, start_drop};
 
 pub(super) fn answer(
     id: ClientId,
@@ -45,7 +43,7 @@ pub(super) fn drop(id: ClientId, client: &Client, command: transfer_api::Command
     match command {
         transfer_api::Command::Drop { tag, sources, into } => {
             setup.jobs.audience().join(id, Arc::clone(client.events()));
-            ops::start_drop(&setup.jobs, client.events(), tag, sources, into);
+            start_drop(&setup.jobs, client.events(), tag, sources, into);
         }
         transfer_api::Command::DropWould { id, sources, into } => {
             answer_drop_would(client.events(), id, sources, into);
