@@ -499,6 +499,36 @@ fn a_refusal_before_any_results_reads_the_folder_again(cx: &mut TestAppContext) 
 }
 
 #[gpui::test]
+fn quick_look_on_a_result_asks_for_the_file_where_it_is(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+
+    cx.simulate_keystrokes("down space");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, previewing));
+
+    let looked: Vec<PathBuf> = core
+        .sent::<nova_files_preview_api::Command>()
+        .into_iter()
+        .map(|nova_files_preview_api::Command::Preview { path, .. }| path)
+        .collect();
+    assert_eq!(looked, [PathBuf::from("/docs/report.pdf")]);
+}
+
+#[gpui::test]
+fn going_to_start_mid_search_closes_the_quick_look(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+    cx.simulate_keystrokes("down space");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, previewing));
+
+    view.update(cx, |view, cx| view.open_start(cx));
+    cx.run_until_parked();
+    assert!(!view.read_with(cx, previewing));
+}
+
+#[gpui::test]
 fn a_space_typed_into_the_box_stays_in_it(cx: &mut TestAppContext) {
     let (view, cx, _core) = searching(cx);
     cx.simulate_input("a");
