@@ -26,7 +26,7 @@ use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
     CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext,
     PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown,
-    SelectPageUp, SelectRight, SelectUp, ToggleHidden, ToggleSelected,
+    SelectPageUp, SelectRight, SelectUp, ToggleSelected,
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, ShowProperties, TrashSelected};
@@ -88,7 +88,6 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
-            .on_action(cx.listener(|this, _: &ToggleHidden, _, _| this.toggle_hidden()))
             .map(|root| Self::view_keys(root, cx))
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
             .map(|root| Self::typed_keys(root, main, cx))
@@ -114,7 +113,7 @@ impl MainWindow {
             .text_size(text::BODY)
             .font_weight(text::BODY_WEIGHT)
             .child(self.body(narrow, &colors, cx))
-            .children(self.picking(cx))
+            .children(self.parts.footers())
             .children(self.menu_overlay(window, cx))
     }
 }

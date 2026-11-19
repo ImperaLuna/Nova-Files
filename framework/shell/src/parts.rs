@@ -18,7 +18,7 @@ use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{Location, PageRef};
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
-use crate::part::{Card, DropOver, Part, Slots};
+use crate::part::{Card, Click, ClickAnswer, DropOver, Part, Slots};
 use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
@@ -43,6 +43,7 @@ impl ShownColumn {
 }
 
 trait OpenPart {
+    fn peek(&self, envelope: &Envelope, cx: &mut App);
     fn deliver(&self, envelope: &Envelope, cx: &mut App) -> bool;
     fn bind(&self, root: Div) -> Div;
     fn applies(&self, spec: &CommandSpec, scene: &Scene, cx: &App) -> Option<bool>;
@@ -52,6 +53,15 @@ trait OpenPart {
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
     fn start_cards(&self) -> Vec<(u8, AnyView)>;
     fn bars(&self) -> Vec<AnyView>;
+    fn footers(&self) -> Vec<AnyView>;
+    fn clicked(
+        &self,
+        listing: ListingId,
+        entry: &Entry,
+        click: Click,
+        cx: &mut App,
+    ) -> Option<ClickAnswer>;
+    fn resized(&self, size: Size<Pixels>, cx: &mut App);
     fn overlays(&self) -> Vec<AnyView>;
     fn path_chips(&self) -> Vec<AnyView>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
@@ -111,12 +121,31 @@ struct Opened<P: Part> {
     pages: Vec<(TypeId, AnyView)>,
     cards: Vec<(u8, AnyView)>,
     bars: Vec<AnyView>,
+    footers: Vec<AnyView>,
     overlays: Vec<AnyView>,
     path_chips: Vec<AnyView>,
     list_views: Vec<AnyView>,
 }
 
 impl<P: Part> OpenPart for Opened<P> {
+    fn peek(&self, envelope: &Envelope, cx: &mut App) {
+        let kind = envelope.kind();
+        let peeks: Vec<_> = self
+            .slots
+            .peeks
+            .iter()
+            .filter(|(peeked, _)| *peeked == kind)
+            .collect();
+        if peeks.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for (_, see) in peeks {
+                see(part, envelope, cx);
+            }
+        });
+    }
+
     fn deliver(&self, envelope: &Envelope, cx: &mut App) -> bool {
         let Some(slot) = self.slots.events.get(&envelope.kind()) else {
             return false;
@@ -194,6 +223,39 @@ impl<P: Part> OpenPart for Opened<P> {
 
     fn bars(&self) -> Vec<AnyView> {
         self.bars.clone()
+    }
+
+    fn footers(&self) -> Vec<AnyView> {
+        self.footers.clone()
+    }
+
+    fn clicked(
+        &self,
+        listing: ListingId,
+        entry: &Entry,
+        click: Click,
+        cx: &mut App,
+    ) -> Option<ClickAnswer> {
+        if self.slots.clicks.is_empty() {
+            return None;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .clicks
+                .iter()
+                .find_map(|clicked| clicked(part, listing, entry, click, cx))
+        })
+    }
+
+    fn resized(&self, size: Size<Pixels>, cx: &mut App) {
+        if self.slots.resized.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for resized in &self.slots.resized {
+                resized(part, size, cx);
+            }
+        });
     }
 
     fn overlays(&self) -> Vec<AnyView> {
@@ -606,6 +668,7 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         .zip(card_views(&entity, host, &drawn, false, cx))
         .collect();
     let bars = card_views(&entity, host, &slots.bars, false, cx);
+    let footers = card_views(&entity, host, &slots.footers, false, cx);
     let overlays = card_views(&entity, host, &slots.overlays, false, cx);
     let path_chips = card_views(&entity, host, &slots.path_chips, false, cx);
     let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
@@ -617,6 +680,7 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         pages,
         cards,
         bars,
+        footers,
         overlays,
         path_chips,
         list_views,
