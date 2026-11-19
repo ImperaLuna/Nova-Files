@@ -1,7 +1,7 @@
 use nova_files_api::HiddenFiles;
 
 use super::MainWindow;
-use crate::location::Location;
+use nova_files_shell::Location;
 
 impl MainWindow {
     pub(super) fn hidden_arrived(&mut self, hidden: HiddenFiles) {

@@ -9,7 +9,7 @@ use nova_files_shell::{Entries, Laid, LaidOver, OverWant};
 
 use super::MainWindow;
 use super::events::Place;
-use crate::location::Location;
+use nova_files_shell::Location;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FocusTo {
@@ -87,7 +87,7 @@ impl MainWindow {
         };
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
-        let ask = (laid.ask)(id, &from.shell());
+        let ask = (laid.ask)(id, &from);
         let sent = self
             .connection
             .as_ref()

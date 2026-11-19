@@ -5,9 +5,9 @@ use nova_files_api::EntryKind;
 use nova_files_shell::path_bar::{self, BarInput, Crumb, Spot};
 use nova_files_shell::{ChipRank, MenuAt, TextField, arrange};
 
-use crate::location::Location;
 use crate::theme::Colors;
 use crate::window::{Aim, MainWindow};
+use nova_files_shell::Location;
 
 impl MainWindow {
     pub(super) fn path_bar(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {

@@ -130,6 +130,10 @@ impl PageRef {
     pub fn kind(&self) -> TypeId {
         self.0.as_any().type_id()
     }
+
+    pub fn is_start(&self) -> bool {
+        self.get::<StartPage>().is_some()
+    }
 }
 
 impl PartialEq for PageRef {
@@ -177,6 +181,16 @@ impl Location {
             Self::Page(page) => page.get(),
         }
     }
+
+    pub fn is_start(&self) -> bool {
+        self.page::<StartPage>().is_some()
+    }
+}
+
+impl From<&Path> for Location {
+    fn from(path: &Path) -> Self {
+        Self::Folder(path.to_owned())
+    }
 }
 
 #[cfg(test)]
@@ -217,5 +231,15 @@ mod tests {
         assert_eq!(here.folder(), None);
         assert_eq!(PageRef::new(Games).title(), "Games");
         assert_eq!(PageRef::new(Games).kind(), TypeId::of::<Games>());
+    }
+
+    #[test]
+    fn only_the_start_page_is_start_and_only_a_folder_has_one() {
+        let path = Path::new("/home/me");
+        assert!(Location::start().is_start());
+        assert!(!Location::Page(PageRef::new(Games)).is_start());
+        assert!(!Location::from(path).is_start());
+        assert_eq!(Location::from(path).folder(), Some(path));
+        assert_eq!(Location::start().folder(), None);
     }
 }

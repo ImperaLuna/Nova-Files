@@ -13,10 +13,10 @@ use nova_files_shell::{PageRef, TabId};
 
 use crate::assets::Icon;
 use crate::jump::TypeJump;
-use crate::location::Location;
 use crate::places::START_LABEL;
 use crate::selection::Selection;
 use nova_files_shell::History;
+use nova_files_shell::Location;
 
 pub const OPEN_IN_NEW_TAB_LABEL: &str = "Open in new tab";
 
@@ -102,7 +102,7 @@ impl MainWindow {
         self.tabs.next_id += 1;
         self.tabs.current = self.tabs.list.len() - 1;
         match place {
-            Location::Start => self.open_start(cx),
+            Location::Page(page) if page.is_start() => self.open_start(cx),
             Location::Folder(folder) => {
                 self.open(folder);
                 self.tabs.start_if_refused = self.asked;
@@ -156,7 +156,7 @@ impl MainWindow {
 
     fn tab_look(&self, place: Option<&Location>, cx: &App) -> (SharedString, Icon) {
         match place {
-            Some(Location::Start) => (START_LABEL.into(), Icon::Start),
+            Some(Location::Page(page)) if page.is_start() => (START_LABEL.into(), Icon::Start),
             Some(Location::Page(page)) => (page.title(), page.icon()),
             Some(Location::Folder(folder)) => self.host.rules.named(folder).map_or_else(
                 || self.folder_look(folder, cx),
