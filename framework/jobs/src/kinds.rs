@@ -203,18 +203,6 @@ mod tests {
             (Outcome::Cancelled, Vec::new())
         }
 
-        fn rest(&self, operation: &Operation, _: &Control) -> Result<Operation, Cancelled> {
-            Ok(operation.clone())
-        }
-
-        fn undo(&self, _: &mut Running, _: &Operation, _: &Ended) -> Option<()> {
-            None
-        }
-
-        fn undoes(&self, _: &Operation) -> Option<JobId> {
-            None
-        }
-
         fn first_path(&self, _: &Operation) -> PathBuf {
             PathBuf::from("/deleted")
         }
