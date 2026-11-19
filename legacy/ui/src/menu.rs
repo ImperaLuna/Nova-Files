@@ -4,8 +4,6 @@ use gpui::{
     App, Context, FocusHandle, KeyBinding, KeybindingKeystroke, Pixels, Point, SharedString, Window,
 };
 
-use nova_files_gathered_api::Gathering;
-
 use crate::assets::Icon;
 use crate::commands::CommandSpec;
 use crate::window::MainWindow;
@@ -47,8 +45,6 @@ pub use nova_files_shell::Look;
 pub enum MenuAction {
     OpenInNewTab(PathBuf),
     Run(&'static CommandSpec),
-    Ungather(Gathering, PathBuf),
-    AddGathered(Gathering),
     Part(PartRun),
 }
 
@@ -71,7 +67,9 @@ impl Eq for PartRun {}
 
 impl From<nova_files_shell::RowItem> for MenuItem {
     fn from(item: nova_files_shell::RowItem) -> Self {
-        Self::new(item.icon, item.label, MenuAction::Part(PartRun(item.run))).with_look(item.look)
+        Self::new(item.icon, item.label, MenuAction::Part(PartRun(item.run)))
+            .with_look(item.look)
+            .with_detail(item.detail)
     }
 }
 
@@ -205,8 +203,6 @@ impl MainWindow {
         match item.action {
             MenuAction::OpenInNewTab(folder) => self.open_in_new_tab(folder, cx),
             MenuAction::Run(spec) => window.dispatch_action(spec.action(), cx),
-            MenuAction::Ungather(place, path) => self.ungather(place, path, cx),
-            MenuAction::AddGathered(place) => self.pick_folder_to_gather(place, cx),
             MenuAction::Part(PartRun(run)) => cx.defer(move |cx| run(cx)),
         }
         cx.notify();

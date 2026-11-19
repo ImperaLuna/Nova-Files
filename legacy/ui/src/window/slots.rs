@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription, Window};
 use nova_files_api::{Command, HiddenFiles, ListingId};
+use nova_files_gathered_ui::GatheredPage;
 use nova_files_picker_api::PickId;
 use nova_files_shell::path_bar::PathBarEvent;
 use nova_files_shell::{
@@ -16,7 +17,7 @@ use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 use super::search::FocusTo;
 use super::{MainWindow, Went};
 use crate::island::Confirm;
-use crate::location::{Builtin, Location};
+use crate::location::Location;
 use crate::selection::Selection;
 
 impl MainWindow {
@@ -104,20 +105,20 @@ impl MainWindow {
         self.parts.part::<P>()
     }
 
-    pub fn scene(&self) -> Scene {
+    pub fn scene(&self, cx: &App) -> Scene {
         Scene {
             location: self.shell_location(),
             rules: self.folder_rules(),
             selected: self.selected_len(),
             picker: self.host.opening.is_some(),
             searching: self.searching(),
-            gathered: self.gathered_here().is_some(),
-            showing: self.showing(),
+            gathered: self.on_gathered(),
+            showing: self.showing(cx),
         }
     }
 
-    fn showing(&self) -> Showing {
-        if self.showing_gallery() {
+    fn showing(&self, cx: &App) -> Showing {
+        if self.showing_gallery(cx) {
             Showing::Gallery
         } else {
             Showing::List
@@ -236,9 +237,9 @@ impl MainWindow {
             picker: self.host.opening.is_some(),
             asked: self.asked,
             searching: self.searching(),
-            gathered: self.gathered_here().is_some(),
+            gathered: self.on_gathered(),
             cursor: self.cursor(),
-            showing: self.showing(),
+            showing: self.showing(cx),
         };
         let page = match &shown.location {
             Some(shell::Location::Page(page)) => Some(page.clone()),
@@ -314,7 +315,6 @@ impl MainWindow {
                 self.open(folder);
                 cx.notify();
             }
-            Location::Gathered(gathering) => self.open_gathered(*gathering, cx),
             Location::Page(page) => self.open_page(page.clone(), cx),
         }
     }
@@ -399,11 +399,21 @@ impl MainWindow {
     }
 
     fn reload(&mut self) {
-        if let Some(folder) = self.folder().map(Path::to_path_buf)
-            && !self.waiting()
-        {
-            self.request(&folder);
+        if self.waiting() {
+            if let Some(Location::Page(page)) = self.requested.clone() {
+                self.request_listed(page);
+            }
+            return;
         }
+        if let Some(folder) = self.folder().map(Path::to_path_buf) {
+            self.request(&folder);
+        } else if let Some(page) = self.listed_page.clone() {
+            self.request_listed(page);
+        }
+    }
+
+    fn on_gathered(&self) -> bool {
+        matches!(self.location(), Some(Location::Page(page)) if page.get::<GatheredPage>().is_some())
     }
 
     fn tab_id(&self) -> TabId {
@@ -419,9 +429,6 @@ pub fn from_shell(place: shell::Location) -> Location {
     match place {
         shell::Location::Folder(folder) => Location::Folder(folder),
         shell::Location::Page(page) if page.get::<shell::StartPage>().is_some() => Location::Start,
-        shell::Location::Page(page) => match page.get::<Builtin>() {
-            Some(Builtin::Gathered(gathering)) => Location::Gathered(*gathering),
-            None => Location::Page(page),
-        },
+        shell::Location::Page(page) => Location::Page(page),
     }
 }

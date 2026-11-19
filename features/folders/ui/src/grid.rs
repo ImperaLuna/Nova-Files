@@ -3,8 +3,8 @@ use std::ops::Range;
 use gpui::{Pixels, Size, size};
 use nova_files_folders_api::IconSize;
 
-use crate::theme::size as sizes;
-use crate::theme::size::{
+use nova_files_shell::theme::size as sizes;
+use nova_files_shell::theme::size::{
     ICON_CELL_BESIDE as NARROWEST_BESIDE, ICON_CELL_PAD as CELL_PAD,
     ICON_CELL_UNDER as NARROWEST_UNDER, ICON_NAME_GAP as NAME_GAP, ICON_NAME_LINE as NAME_LINE,
 };

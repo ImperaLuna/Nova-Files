@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
-    Pixels, SharedString, Size, Subscription,
+    Pixels, SharedString, Size, Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
@@ -21,7 +21,7 @@ use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::{Card, Click, ClickAnswer, DropOver, Part, Slots};
 use crate::per_tab::TabId;
 use crate::scene::Scene;
-use crate::slot_view::{Draw, SlotView};
+use crate::slot_view::{Draw, Fit, SlotView};
 use crate::text::TextField;
 
 mod window;
@@ -63,6 +63,7 @@ trait OpenPart {
     ) -> Option<ClickAnswer>;
     fn resized(&self, size: Size<Pixels>, cx: &mut App);
     fn overlays(&self) -> Vec<AnyView>;
+    fn layers(&self) -> Vec<AnyView>;
     fn path_chips(&self) -> Vec<AnyView>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
@@ -77,7 +78,13 @@ trait OpenPart {
     fn busy(&self, cx: &App) -> bool;
     fn lists(&self, page: &PageRef) -> bool;
     fn list_page(&self, page: &PageRef, id: ListingId, order: Order) -> Option<Envelope>;
-    fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement>;
+    fn stage(
+        &self,
+        scene: &Scene,
+        room: Size<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement>;
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App);
     fn takes_drops(&self, page: &PageRef) -> bool;
     fn drop_on(
@@ -123,6 +130,7 @@ struct Opened<P: Part> {
     bars: Vec<AnyView>,
     footers: Vec<AnyView>,
     overlays: Vec<AnyView>,
+    layers: Vec<AnyView>,
     path_chips: Vec<AnyView>,
     list_views: Vec<AnyView>,
 }
@@ -262,6 +270,10 @@ impl<P: Part> OpenPart for Opened<P> {
         self.overlays.clone()
     }
 
+    fn layers(&self) -> Vec<AnyView> {
+        self.layers.clone()
+    }
+
     fn path_chips(&self) -> Vec<AnyView> {
         self.path_chips.clone()
     }
@@ -377,12 +389,19 @@ impl<P: Part> OpenPart for Opened<P> {
             .find_map(|(_, list)| list(page, id, order))
     }
 
-    fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement> {
-        let part = self.entity.read(cx);
-        self.slots
-            .stages
-            .iter()
-            .find_map(|stage| stage(part, scene, room, cx))
+    fn stage(
+        &self,
+        scene: &Scene,
+        room: Size<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .stages
+                .iter()
+                .find_map(|stage| stage(part, scene, room, window, cx))
+        })
     }
 
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
@@ -659,20 +678,21 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
                 };
                 part.update(cx, |part, cx| render(part, &page, window, cx))
             });
-            (*kind, slot_view(&entity, draw, true, cx))
+            (*kind, slot_view(&entity, draw, Fit::Fill, cx))
         })
         .collect();
     let ranks = slots.start_cards.iter().map(|(rank, _)| *rank);
     let drawn: Vec<Card<P>> = slots.start_cards.iter().map(|(_, card)| *card).collect();
     let cards = ranks
-        .zip(card_views(&entity, host, &drawn, false, cx))
+        .zip(card_views(&entity, host, &drawn, Fit::Content, cx))
         .collect();
-    let bars = card_views(&entity, host, &slots.bars, false, cx);
-    let footers = card_views(&entity, host, &slots.footers, false, cx);
-    let overlays = card_views(&entity, host, &slots.overlays, false, cx);
-    let path_chips = card_views(&entity, host, &slots.path_chips, false, cx);
+    let bars = card_views(&entity, host, &slots.bars, Fit::Content, cx);
+    let footers = card_views(&entity, host, &slots.footers, Fit::Content, cx);
+    let overlays = card_views(&entity, host, &slots.overlays, Fit::Content, cx);
+    let layers = card_views(&entity, host, &slots.layers, Fit::Cover, cx);
+    let path_chips = card_views(&entity, host, &slots.path_chips, Fit::Content, cx);
     let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
-    let list_views = card_views(&entity, host, &views, true, cx);
+    let list_views = card_views(&entity, host, &views, Fit::Fill, cx);
     Box::new(Opened {
         entity,
         host: host.clone(),
@@ -682,6 +702,7 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         bars,
         footers,
         overlays,
+        layers,
         path_chips,
         list_views,
     })
@@ -691,7 +712,7 @@ fn card_views<P: Part>(
     entity: &Entity<P>,
     host: &Host,
     cards: &[Card<P>],
-    fills: bool,
+    fit: Fit,
     cx: &mut App,
 ) -> Vec<AnyView> {
     cards
@@ -702,16 +723,16 @@ fn card_views<P: Part>(
                 let scene = host.scene(cx);
                 part.update(cx, |part, cx| card(part, &scene, window, cx))
             });
-            slot_view(entity, draw, fills, cx)
+            slot_view(entity, draw, fit, cx)
         })
         .collect()
 }
 
-fn slot_view<P: Part>(part: &Entity<P>, draw: Draw, fills: bool, cx: &mut App) -> AnyView {
+fn slot_view<P: Part>(part: &Entity<P>, draw: Draw, fit: Fit, cx: &mut App) -> AnyView {
     let part = part.clone();
     cx.new(|cx| {
         cx.observe(&part, |_, _, cx| cx.notify()).detach();
-        SlotView::new(draw, fills)
+        SlotView::new(draw, fit)
     })
     .into()
 }

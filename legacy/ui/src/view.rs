@@ -43,8 +43,8 @@ impl Render for MainWindow {
         let viewport = window.viewport_size();
         self.keep_gallery(window, cx);
         let room = nova_files_preview_ui::room(viewport.width, viewport.height);
-        let fits = if self.showing_gallery() && !self.previewing(cx) {
-            self.stage_room()
+        let fits = if self.showing_gallery(cx) && !self.previewing(cx) {
+            self.stage_room(cx)
         } else {
             room
         };
@@ -59,6 +59,7 @@ impl Render for MainWindow {
             .map(|root| Self::preview_keys(root, cx))
             .relative()
             .children(layer)
+            .children(self.parts.layers())
     }
 }
 
@@ -112,7 +113,7 @@ impl MainWindow {
             .font_family(text::FAMILY)
             .text_size(text::BODY)
             .font_weight(text::BODY_WEIGHT)
-            .child(self.body(narrow, &colors, cx))
+            .child(self.body(narrow, &colors, window, cx))
             .children(self.parts.footers())
             .children(self.menu_overlay(window, cx))
     }
@@ -164,7 +165,15 @@ impl MainWindow {
         }))
     }
 
-    fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {
+    fn body(
+        &self,
+        narrow: bool,
+        colors: &Colors,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let entries =
+            (!self.is_on_start() && self.page_shown().is_none()).then(|| self.entries(window, cx));
         div()
             .flex()
             .flex_1()
@@ -195,7 +204,7 @@ impl MainWindow {
                             .bg(colors.window)
                             .child(self.top_bar(colors, cx)),
                     )
-                    .child(self.sheet(cx)),
+                    .child(self.sheet(entries, cx)),
             )
     }
 }
@@ -262,12 +271,12 @@ impl MainWindow {
             this.move_cursor(Move::Last, true, cx);
         }))
         .on_action(cx.listener(|this, _: &SelectLeft, _, cx| {
-            if this.showing_icons() {
+            if this.showing_icons(cx) {
                 this.move_cursor(Move::Left, true, cx);
             }
         }))
         .on_action(cx.listener(|this, _: &SelectRight, _, cx| {
-            if this.showing_icons() {
+            if this.showing_icons(cx) {
                 this.move_cursor(Move::Right, true, cx);
             }
         }))
@@ -280,12 +289,12 @@ impl MainWindow {
 
     fn preview_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
-            if this.showing_icons() {
+            if this.showing_icons(cx) {
                 this.move_cursor(Move::Left, false, cx);
             }
         }))
         .on_action(cx.listener(|this, _: &PreviewNext, _, cx| {
-            if this.showing_icons() {
+            if this.showing_icons(cx) {
                 this.move_cursor(Move::Right, false, cx);
             }
         }))

@@ -1,17 +1,23 @@
 use gpui::{
-    App, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    SharedString, Styled as _, canvas, div,
+    AnyElement, App, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, SharedString, Styled as _, Window, canvas, div,
 };
 
 use super::sheet::rename_box;
-use crate::grid::Grid;
 use crate::theme::{Colors, size, text};
 use crate::window::MainWindow;
 use nova_files_api::Entry;
+use nova_files_folders_ui::Grid;
 
 impl MainWindow {
-    pub(super) fn gallery(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
+    pub(super) fn gallery(
+        &self,
+        grid: Grid,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let colors = Colors::of(cx);
+        let stage = self.stage(&colors, window, cx);
         let bounds = self.gallery_bounds().clone();
         let view = cx.entity().downgrade();
         div()
@@ -32,7 +38,7 @@ impl MainWindow {
                 .absolute()
                 .inset_0(),
             )
-            .child(self.stage(&colors, cx))
+            .child(stage)
             .child(self.strip(grid, cx))
     }
 
@@ -42,10 +48,11 @@ impl MainWindow {
         self.listing.as_ref()?.entries.get(index)
     }
 
-    fn stage(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
-        let room = self.stage_room();
+    fn stage(&self, colors: &Colors, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let room = self.stage_room(cx);
         let scale_factor = self.scale_factor;
-        let part_stage = self.parts.stage(&self.scene(), room, cx);
+        let scene = self.scene(cx);
+        let part_stage = self.parts.stage(&scene, room, window, cx);
         let shown = part_stage.is_none().then(|| self.on_stage(cx)).flatten();
         let preview = self.preview();
         let preview = preview.as_ref().map(|preview| preview.read(cx));
@@ -116,12 +123,13 @@ impl MainWindow {
                     )
                     .into_any_element()
             }))
+            .into_any_element()
     }
 
     fn strip(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         let cells = self.listing.as_ref().map(|listing| {
-            self.strip_entries(listing.entries.len())
+            self.strip_entries(listing.entries.len(), cx)
                 .map(|index| self.icon_cell(listing, index, grid, cx))
                 .collect::<Vec<_>>()
         });

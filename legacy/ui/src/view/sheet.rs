@@ -3,13 +3,11 @@ use std::path::Path;
 use gpui::{
     AnyElement, ClickEvent, Context, Div, HitboxBehavior, InteractiveElement as _, IntoElement,
     MouseButton, MouseDownEvent, ParentElement as _, ScrollWheelEvent, Stateful,
-    StatefulInteractiveElement as _, Styled as _, canvas, div, prelude::FluentBuilder as _,
+    StatefulInteractiveElement as _, Styled as _, Window, canvas, div, prelude::FluentBuilder as _,
     transparent_black, uniform_list,
 };
 
 use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
-
-use nova_files_gathered_api::Gathering;
 
 use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon};
@@ -17,10 +15,10 @@ use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, fo
 use nova_files_shell::{PageRef, ShownColumn};
 
 use crate::assets::Icon;
-use crate::grid::Grid;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
-use crate::window::{Aim, DraggedRow, LIBRARY_LABEL, MainWindow};
+use crate::window::{Aim, DraggedRow, MainWindow};
+use nova_files_folders_ui::Grid;
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
@@ -30,7 +28,11 @@ const MODIFIED_HEADER_SELECTOR: &str = "modified-header";
 const FOLDER_HEADER_SELECTOR: &str = "folder-header";
 
 impl MainWindow {
-    pub(super) fn sheet(&self, cx: &Context<Self>) -> impl IntoElement {
+    pub(super) fn sheet(
+        &self,
+        entries: Option<AnyElement>,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
         let colors = Colors::of(cx);
         div()
             .flex()
@@ -50,16 +52,16 @@ impl MainWindow {
                         .child(self.island(cx))
                 } else {
                     sheet
-                        .when(self.showing_details(), |sheet| {
+                        .when(self.showing_details(cx), |sheet| {
                             sheet.child(self.column_heads(&colors, cx))
                         })
-                        .child(self.entries_area(cx))
+                        .child(self.entries_area(entries, cx))
                         .child(self.island(cx))
                 }
             })
     }
 
-    fn entries_area(&self, cx: &Context<Self>) -> impl IntoElement {
+    fn entries_area(&self, entries: Option<AnyElement>, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         div()
             .relative()
@@ -68,9 +70,9 @@ impl MainWindow {
             .overflow_hidden()
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, event: &MouseDownEvent, _, _| {
+                cx.listener(|this, event: &MouseDownEvent, _, cx| {
                     let on_name = std::mem::take(&mut this.pressed_name);
-                    this.band_pressed(event, on_name);
+                    this.band_pressed(event, on_name, cx);
                 }),
             )
             .on_mouse_down(
@@ -84,7 +86,7 @@ impl MainWindow {
                     .map(|folder| Aim::folder(folder.to_path_buf(), self.folder_name(folder))),
                 |area, at| self.takes_drops(area, at, cx),
             )
-            .child(self.entries(cx))
+            .children(entries)
             .children(self.parts.overlays())
             .child(ctrl_scroll(cx))
             .children(self.empty_note(&colors, cx))
@@ -105,16 +107,16 @@ impl MainWindow {
             }))
     }
 
-    fn entries(&self, cx: &Context<Self>) -> AnyElement {
-        if let Some(view) = self.parts.list_view(&self.scene(), cx) {
+    pub(super) fn entries(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        if let Some(view) = self.parts.list_view(&self.scene(cx), cx) {
             return view.into_any_element();
         }
-        let grid = self.grid();
-        if self.showing_icons() {
+        let grid = self.grid(cx);
+        if self.showing_icons(cx) {
             return self.icons(grid, cx).into_any_element();
         }
-        if self.showing_gallery() {
-            return self.gallery(grid, cx).into_any_element();
+        if self.showing_gallery(cx) {
+            return self.gallery(grid, window, cx).into_any_element();
         }
         self.details(grid, cx)
     }
@@ -135,7 +137,7 @@ impl MainWindow {
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
                 let query = this.searching().then(|| this.query(cx));
-                let part_column = this.parts.column(&this.scene(), cx);
+                let part_column = this.parts.column(&this.scene(cx), cx);
                 let selected = |index: usize| {
                     listing
                         .entries
@@ -248,7 +250,7 @@ impl MainWindow {
         if !empty {
             return None;
         }
-        let (glyph, note) = self.parts.empty_note(&self.scene(), cx)?;
+        let (glyph, note) = self.parts.empty_note(&self.scene(cx), cx)?;
         Some(
             div()
                 .debug_selector(|| "empty-note".to_owned())
@@ -356,11 +358,7 @@ fn entry_row(
 
 impl MainWindow {
     pub fn list_drop_folder(&self) -> Option<&Path> {
-        if self.searching()
-            || self.folder_rules().trashed
-            || self.gathered_shown().is_some()
-            || self.listed_page().is_some()
-        {
+        if self.searching() || self.folder_rules().trashed || self.listed_page().is_some() {
             return None;
         }
         Some(&self.listing.as_ref()?.path)
@@ -377,11 +375,6 @@ impl MainWindow {
             let text = column.cell(entry, cx).unwrap_or_default();
             return Some(detail(text.to_string(), &Colors::of(cx)).into_any_element());
         }
-        if self.gathered_shown() == Some(Gathering::Games) {
-            let library = self.library_of(&listing.path_of(entry)).unwrap_or_default();
-            let colors = Colors::of(cx);
-            return Some(detail(library, &colors).into_any_element());
-        }
         listing
             .folders
             .is_some()
@@ -391,22 +384,17 @@ impl MainWindow {
     fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let sorted = self.listed_page().is_none_or(PageRef::sorted);
         let order = (!self.searching() && sorted).then(|| self.shown_order());
-        let part = self.parts.column(&self.scene(), cx).map(|column| {
+        let part = self.parts.column(&self.scene(cx), cx).map(|column| {
             let selector = column.selector;
             div()
                 .debug_selector(move || selector.to_owned())
                 .child(column.head)
                 .into_any_element()
         });
-        let folder = match self.gathered_shown() {
-            _ if part.is_some() => part,
-            Some(Gathering::Games) => Some(library_head()),
-            Some(Gathering::Projects) => Some(folder_head()),
-            None => {
-                let listed = self.listed_page().is_some_and(PageRef::folder_column);
-                (self.showing_found() || listed).then(folder_head)
-            }
-        };
+        let folder = part.or_else(|| {
+            let listed = self.listed_page().is_some_and(PageRef::folder_column);
+            (self.showing_found() || listed).then(folder_head)
+        });
         column_heads(order, folder, colors, cx)
     }
 }
@@ -415,13 +403,6 @@ fn folder_head() -> AnyElement {
     div()
         .debug_selector(|| FOLDER_HEADER_SELECTOR.to_owned())
         .child(FOLDER_LABEL)
-        .into_any_element()
-}
-
-fn library_head() -> AnyElement {
-    div()
-        .debug_selector(|| "head-library".to_owned())
-        .child(LIBRARY_LABEL)
         .into_any_element()
 }
 

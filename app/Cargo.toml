@@ -25,8 +25,10 @@
 # - nova-files-entries-core
 # - nova-files-folders-api
 # - nova-files-folders-core
+# - nova-files-folders-ui
 # - nova-files-gathered-api
 # - nova-files-gathered-core
+# - nova-files-gathered-ui
 # - nova-files-index
 # - nova-files-jobs
 # - nova-files-look-api
@@ -105,8 +107,10 @@ nova-files-drives-ui.workspace = true
 nova-files-entries-core.workspace = true
 nova-files-folders-api.workspace = true
 nova-files-folders-core.workspace = true
+nova-files-folders-ui.workspace = true
 nova-files-gathered-api.workspace = true
 nova-files-gathered-core.workspace = true
+nova-files-gathered-ui.workspace = true
 nova-files-jobs.workspace = true
 nova-files-look-api.workspace = true
 nova-files-look-core.workspace = true

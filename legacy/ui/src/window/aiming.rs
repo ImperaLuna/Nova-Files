@@ -3,12 +3,10 @@ use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 
 use gpui::SharedString;
-use nova_files_gathered_api::Gathering;
 
 use super::MainWindow;
 use super::dragging::Drag;
 use crate::dropping::DropAt;
-use crate::places;
 use nova_files_shell::PageRef;
 
 #[derive(Debug, Clone)]
@@ -27,13 +25,6 @@ impl Aim {
         Self {
             at: DropAt::Folder(path),
             name: name.into(),
-        }
-    }
-
-    pub fn gathered(place: Gathering) -> Self {
-        Self {
-            at: DropAt::Gathered(place),
-            name: places::gathering_look(place).0.into(),
         }
     }
 

@@ -55,7 +55,7 @@ impl MainWindow {
         self.publish(cx);
         self.host().entries.update(cx, Entries::selection_made);
         if let Some(cursor) = self.cursor() {
-            self.scroll_to_entry(cursor);
+            self.scroll_to_entry(cursor, cx);
         }
         cx.notify();
     }
@@ -134,7 +134,7 @@ impl MainWindow {
         };
         let len = self.entry_count();
         let page = self.rows_on_screen();
-        let per_line = self.grid().per_line;
+        let per_line = self.grid(cx).per_line;
         let Some(to) = step
             .to(from, len, (page, per_line))
             .and_then(|to| u32::try_from(to).ok())
@@ -174,7 +174,7 @@ impl MainWindow {
             .update(cx, |entries, _| entries.set_jumped(Some(now)));
         let typed = jump::Jump { prefix, past };
         let Some(listing) = &self.listing else {
-            let taken = self.parts.typed(&typed, &self.scene(), cx);
+            let taken = self.parts.typed(&typed, &self.scene(cx), cx);
             if !taken {
                 self.jump = jump::TypeJump::default();
                 self.host()

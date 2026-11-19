@@ -5,14 +5,13 @@ use gpui::{
 
 use super::{Row, on_middle_click, row, section_head};
 use crate::assets::Icon;
-use nova_files_gathered_api::Gathering;
 
 use nova_files_shell::{SidebarAt, SidebarRow};
 
 use crate::location::Location;
-use crate::places::{self, START_LABEL};
+use crate::places::START_LABEL;
 use crate::theme::{Colors, size};
-use crate::window::{Aim, HoverOpens, MainWindow};
+use crate::window::{HoverOpens, MainWindow};
 
 const LABEL: &str = "Places";
 
@@ -23,14 +22,7 @@ impl MainWindow {
         let start = main
             .then(|| (SidebarRow::START, self.start_row(narrow, &colors, cx)))
             .into_iter();
-        let gathered = Gathering::ALL.into_iter().filter(|_| main).map(|place| {
-            (
-                SidebarRow::GATHERED,
-                self.gathered_row(place, narrow, &colors, cx),
-            )
-        });
         let mut ranked: Vec<(u8, Stateful<Div>)> = start
-            .chain(gathered)
             .chain(self.part_rows(SidebarAt::Places, narrow, &colors, cx))
             .collect();
         ranked.sort_by_key(|(rank, _)| *rank);
@@ -71,39 +63,5 @@ impl MainWindow {
                 this.new_tab(&Location::Start, cx);
             })
         })
-    }
-
-    fn gathered_row(
-        &self,
-        place: Gathering,
-        narrow: bool,
-        colors: &Colors,
-        cx: &Context<Self>,
-    ) -> Stateful<Div> {
-        let (name, glyph) = places::gathering_look(place);
-        let selector = format!("place-{}", name.to_lowercase());
-        row(
-            Row {
-                id: selector.clone().into(),
-                selector,
-                glyph,
-                name: name.into(),
-                number: None,
-                here: self.gathered_here() == Some(place),
-                pressed: false,
-                lead: None,
-            },
-            narrow,
-            colors,
-        )
-        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-            this.open_gathered(place, cx);
-        }))
-        .map(|row| {
-            on_middle_click(row, true, cx, move |this, cx| {
-                this.new_tab(&Location::Gathered(place), cx);
-            })
-        })
-        .map(|row| self.drop_target(row, Aim::gathered(place), cx))
     }
 }

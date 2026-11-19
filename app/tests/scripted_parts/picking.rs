@@ -177,7 +177,7 @@ fn a_part_gets_what_its_window_was_opened_with(cx: &mut TestAppContext) {
     });
     let opened_with = chooser(&view, cx).read_with(cx, |chooser, _| chooser.opened_with);
     assert_eq!(opened_with, Some(OPENING));
-    assert!(view.read_with(cx, |view, _| view.scene().picker));
+    assert!(view.read_with(cx, |view, cx| view.scene(cx).picker));
 }
 
 #[gpui::test]
@@ -185,7 +185,7 @@ fn a_window_opened_plainly_is_no_picker(cx: &mut TestAppContext) {
     let (view, cx, _core) = chosen(cx, false);
     let opened_with = chooser(&view, cx).read_with(cx, |chooser, _| chooser.opened_with);
     assert_eq!(opened_with, None);
-    assert!(!view.read_with(cx, |view, _| view.scene().picker));
+    assert!(!view.read_with(cx, |view, cx| view.scene(cx).picker));
 }
 
 #[gpui::test]

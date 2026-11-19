@@ -303,7 +303,7 @@ fn a_part_sidebar_row_opens_its_page_and_the_tab_takes_its_title(cx: &mut TestAp
     assert!(cx.debug_bounds("shelf-page").is_some());
     let page = view.read_with(cx, |view, _| view.page_shown().cloned());
     assert_eq!(page, Some(PageRef::new(Shelved)));
-    let scene = view.read_with(cx, |view, _| view.scene());
+    let scene = view.read_with(cx, MainWindow::scene);
     assert_eq!(scene.on_page::<Shelved>(), Some(&Shelved));
 }
 

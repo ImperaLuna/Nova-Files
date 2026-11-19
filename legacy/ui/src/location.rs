@@ -1,46 +1,28 @@
 use std::path::{Path, PathBuf};
 
-use gpui::SharedString;
-use nova_files_gathered_api::Gathering;
-use nova_files_shell::{self as shell, PageKind, PageRef};
+use nova_files_shell::{self as shell, PageRef};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {
     Start,
     Folder(PathBuf),
-    Gathered(Gathering),
     Page(PageRef),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Builtin {
-    Gathered(Gathering),
-}
-
-impl PageKind for Builtin {
-    fn title(&self) -> SharedString {
-        SharedString::new_static(match self {
-            Self::Gathered(_) => "Gathered",
-        })
-    }
 }
 
 impl Location {
     pub fn folder(&self) -> Option<&Path> {
         match self {
-            Self::Start | Self::Gathered(_) | Self::Page(_) => None,
+            Self::Start | Self::Page(_) => None,
             Self::Folder(path) => Some(path),
         }
     }
 
     pub fn shell(&self) -> shell::Location {
-        let builtin = match self {
-            Self::Folder(path) => return shell::Location::Folder(path.clone()),
-            Self::Page(page) => return shell::Location::Page(page.clone()),
-            Self::Start => return shell::Location::start(),
-            Self::Gathered(place) => Builtin::Gathered(*place),
-        };
-        shell::Location::Page(PageRef::new(builtin))
+        match self {
+            Self::Folder(path) => shell::Location::Folder(path.clone()),
+            Self::Page(page) => shell::Location::Page(page.clone()),
+            Self::Start => shell::Location::start(),
+        }
     }
 }
 
@@ -59,6 +41,5 @@ mod tests {
         let path = Path::new("/home/me");
         assert_eq!(Location::from(path).folder(), Some(path));
         assert_eq!(Location::Start.folder(), None);
-        assert_eq!(Location::Gathered(Gathering::Games).folder(), None);
     }
 }

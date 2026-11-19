@@ -8,7 +8,7 @@ use nova_files_settings_api::{self as settings_api, SettingChange, Thumbnails};
 use nova_files_shell::actions::ToggleHidden;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
-    Host, Look, MenuAt, MenuGroup, MenuItem, Part, Placed, Published, Scene, Slots,
+    Host, Location, Look, MenuAt, MenuGroup, MenuItem, Part, Placed, Published, Scene, Slots,
     ThumbnailsShown, command_spec,
 };
 
@@ -59,7 +59,8 @@ impl SettingsPart {
         reason = "a menu slot is a method; the setting lives in a global"
     )]
     fn hidden_item(&self, scene: &Scene, cx: &App) -> Vec<MenuItem> {
-        if scene.rules.replaces_menu {
+        let in_folder = scene.location.as_ref().and_then(Location::folder).is_some();
+        if scene.rules.replaces_menu || !in_folder {
             return Vec::new();
         }
         let item = if Published::<HiddenFiles>::get(cx) == Some(&HiddenFiles::Shown) {

@@ -47,7 +47,7 @@ impl MainWindow {
             return;
         }
         let (at, groups) = if self.selected_count() > 0 {
-            (self.under_cursor(), self.entry_menu(cx))
+            (self.under_cursor(cx), self.entry_menu(cx))
         } else {
             (self.list_corner(), self.space_menu(cx))
         };
@@ -60,7 +60,7 @@ impl MainWindow {
 
     fn arranged(&self, at: MenuAt, window: Vec<Placed>, cx: &App) -> Vec<Vec<MenuItem>> {
         let mut placed = window;
-        placed.extend(self.parts.menu(at, &self.scene(), cx));
+        placed.extend(self.parts.menu(at, &self.scene(cx), cx));
         arrange(placed)
             .into_iter()
             .map(|items| items.into_iter().map(MenuItem::from).collect())
@@ -119,8 +119,8 @@ impl MainWindow {
         }
     }
 
-    fn view_items(&self) -> Vec<ShellItem> {
-        let showing = self.folder_view().mode;
+    fn view_items(&self, cx: &App) -> Vec<ShellItem> {
+        let showing = self.folder_view(cx).mode;
         [
             (ViewMode::Details, Icon::List, &DETAILS),
             (ViewMode::Icons, Icon::Tiles, &ICONS),
@@ -152,11 +152,8 @@ impl MainWindow {
             let after_parts = Placed::new(MenuGroup::Part, Placed::LAST, select.items);
             return self.arranged(MenuAt::Sheet, vec![after_parts], cx);
         }
-        if let Some(place) = self.gathered_shown() {
-            return vec![
-                vec![super::gathering::add_item(place)],
-                select.items.into_iter().map(MenuItem::from).collect(),
-            ];
+        if self.listed_page().is_some() {
+            return self.arranged(MenuAt::Sheet, vec![select], cx);
         }
         if self.showing_found() {
             return vec![select.items.into_iter().map(MenuItem::from).collect()];
@@ -165,14 +162,14 @@ impl MainWindow {
             MenuAt::Sheet,
             vec![
                 select,
-                Placed::new(MenuGroup::View, Placed::FIRST, self.view_items()),
+                Placed::new(MenuGroup::View, Placed::FIRST, self.view_items(cx)),
             ],
             cx,
         )
     }
 
-    fn under_cursor(&self) -> Point<Pixels> {
-        let grid = self.grid();
+    fn under_cursor(&self, cx: &App) -> Point<Pixels> {
+        let grid = self.grid(cx);
         let state = self.scroll.0.borrow();
         let list = state.base_handle.bounds();
         let scrolled = state.base_handle.offset().y;

@@ -3596,8 +3596,10 @@ dependencies = [
  "nova-files-entries-core",
  "nova-files-folders-api",
  "nova-files-folders-core",
+ "nova-files-folders-ui",
  "nova-files-gathered-api",
  "nova-files-gathered-core",
+ "nova-files-gathered-ui",
  "nova-files-jobs",
  "nova-files-look-api",
  "nova-files-look-core",
@@ -3791,6 +3793,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-folders-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-folders-api",
+ "nova-files-places-api",
+ "nova-files-shell",
+]
+
+[[package]]
 name = "nova-files-gathered-api"
 version = "0.1.0"
 dependencies = [
@@ -3808,6 +3820,16 @@ dependencies = [
  "nova-files-gathered-api",
  "nova-files-messages",
  "toml_edit 0.25.18+spec-1.1.0",
+]
+
+[[package]]
+name = "nova-files-gathered-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-gathered-api",
+ "nova-files-shell",
 ]
 
 [[package]]
@@ -4239,7 +4261,9 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-drives-ui",
  "nova-files-folders-api",
+ "nova-files-folders-ui",
  "nova-files-gathered-api",
+ "nova-files-gathered-ui",
  "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-picker-ui",
