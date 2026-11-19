@@ -34,11 +34,11 @@ use nova_files_thumbnails_core::Thumbnails;
 use nova_files_transfer_api as transfer_api;
 use nova_files_trash_api as trash_api;
 
-use crate::inside::Inside;
 use crate::jobs::Client;
 use crate::ops::Jobs;
 use crate::trash;
 use crate::window_state::Store as WindowStateStore;
+use nova_files_archives_core::inside::Inside;
 
 mod folders;
 mod look;

@@ -16,8 +16,8 @@ use nova_files_properties_core::change_access;
 #[cfg(test)]
 pub use nova_files_jobs::test_folder::TestFolder;
 
-use crate::inside;
 use crate::trash::Trashes;
+use nova_files_archives_core::inside;
 use nova_files_archives_core::{Archiver, Archives, Taking, extract};
 use nova_files_delete_core::{Deletes, delete_paths};
 use nova_files_rename_core::Renames;

@@ -3,6 +3,7 @@
 mod compress;
 mod extract;
 mod helper;
+pub mod inside;
 mod kind;
 mod unpack;
 mod wire;

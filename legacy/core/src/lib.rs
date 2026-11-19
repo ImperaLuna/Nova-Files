@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 
-mod inside;
 mod jobs;
 mod ops;
 mod run;
@@ -15,6 +14,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::{ClientId, Connector};
+use nova_files_archives_core::inside;
 use nova_files_disk::{private_file, saver};
 use nova_files_entries_core::{list, memory, order};
 
