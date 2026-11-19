@@ -222,8 +222,6 @@ pub fn bind_keys(cx: &mut App) {
 mod tests {
     use std::collections::HashSet;
 
-    use nova_files_clipboard_ui::{COPY, CUT};
-
     use super::*;
 
     #[test]
@@ -268,8 +266,8 @@ mod tests {
     fn each_row_sends_its_own_action() {
         let names: HashSet<_> = ACTIONS.iter().map(|spec| spec.action().name()).collect();
         assert_eq!(names.len(), ACTIONS.len());
-        assert_eq!(COPY, COPY);
-        assert_ne!(COPY, CUT);
-        assert_eq!(format!("{COPY:?}"), "file.copy");
+        assert_eq!(UP, UP);
+        assert_ne!(UP, BACK);
+        assert_eq!(format!("{UP:?}"), "go.up");
     }
 }

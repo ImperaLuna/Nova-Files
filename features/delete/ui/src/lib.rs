@@ -2,6 +2,7 @@
 
 use gpui::{App, Context, Window};
 use nova_files_api::Operation;
+use nova_files_shell::actions::TrashSelected;
 use nova_files_shell::{Host, Location, Part, Scene, Slots, command_spec};
 
 mod actions {
@@ -71,6 +72,19 @@ impl DeletePart {
         });
     }
 
+    fn trash_in_the_trash(
+        &mut self,
+        _: &TrashSelected,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let trashed = self.host.scene(cx).rules.trashed;
+        if trashed {
+            self.ask_delete(&DeleteSelected, window, cx);
+        }
+        trashed
+    }
+
     fn delete_if_still(&self, operation: Operation, cx: &mut Context<Self>) {
         let scene = self.host.scene(cx);
         if self.deleting(&scene, cx).as_ref() == Some(&operation) {
@@ -100,5 +114,6 @@ impl Part for DeletePart {
 
     fn slots(slots: &mut Slots<Self>) {
         slots.command(&DELETE, anywhere, Self::ask_delete);
+        slots.before(Self::trash_in_the_trash);
     }
 }

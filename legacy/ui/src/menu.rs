@@ -263,9 +263,7 @@ fn key_name(key: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::TRASH;
-    use nova_files_clipboard_ui::COPY;
-    use nova_files_rename_ui::{NEW_FOLDER, RENAME};
+    use crate::commands::{PREVIOUS_TAB, PROPERTIES, SELECT_ALL, TRASH};
 
     fn label(spec: &CommandSpec) -> Option<String> {
         key_label(&spec.binding(spec.keys[0])).map(String::from)
@@ -273,10 +271,10 @@ mod tests {
 
     #[test]
     fn keys_read_as_printed_on_the_keyboard() {
-        assert_eq!(label(&COPY).as_deref(), Some("Ctrl C"));
-        assert_eq!(label(&NEW_FOLDER).as_deref(), Some("Ctrl Shift N"));
+        assert_eq!(label(&SELECT_ALL).as_deref(), Some("Ctrl A"));
+        assert_eq!(label(&PREVIOUS_TAB).as_deref(), Some("Ctrl Shift Tab"));
         assert_eq!(label(&TRASH).as_deref(), Some("Del"));
-        assert_eq!(label(&RENAME).as_deref(), Some("F2"));
+        assert_eq!(label(&PROPERTIES).as_deref(), Some("Alt Enter"));
         assert_eq!(key_name("space"), "Space");
         assert_eq!(key_name("escape"), "Esc");
         assert_eq!(key_name("pageup"), "PgUp");
@@ -294,9 +292,9 @@ mod tests {
 
     #[test]
     fn a_run_item_is_named_by_its_action() {
-        let item = MenuItem::run(Icon::Copy, &COPY);
-        assert_eq!(item.label, "Copy");
-        assert_eq!(item.action, MenuAction::Run(&COPY));
+        let item = MenuItem::run(Icon::Copy, &SELECT_ALL);
+        assert_eq!(item.label, "Select all");
+        assert_eq!(item.action, MenuAction::Run(&SELECT_ALL));
         assert_eq!(item.look, Look::Plain);
         assert_eq!(item.with_look(Look::Danger).look, Look::Danger);
     }

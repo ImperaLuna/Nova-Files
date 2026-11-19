@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 
 mod shown;
-mod shrink;
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -16,8 +15,8 @@ use nova_files_shell::widgets::icon_slot;
 use nova_files_shell::{Host, Part, Published, Slots, ThumbnailsShown};
 use nova_files_thumbnails_api::Event;
 
+use nova_files_shell::shrink::shrink;
 use shown::ShownThumbnails;
-pub use shrink::shrink;
 
 struct Shrunk {
     id: ListingId,
