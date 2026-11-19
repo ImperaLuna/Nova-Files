@@ -1,17 +1,28 @@
 use std::cell::RefCell;
+use std::fmt;
 use std::rc::Rc;
 
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use nova_files_api::WindowRequest;
-use nova_files_picker_api::{PickId, PickRequest};
+use nova_files_shell::{Asked, CloseWhen};
 
-#[derive(Debug)]
 pub enum Request {
     OpenWindow(WindowRequest),
-    Pick(Box<PickRequest>),
-    ClosePick(PickId),
+    Open(Asked),
+    Close(CloseWhen),
     Quit,
+}
+
+impl fmt::Debug for Request {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OpenWindow(request) => f.debug_tuple("OpenWindow").field(request).finish(),
+            Self::Open(_) => f.write_str("Open"),
+            Self::Close(_) => f.write_str("Close"),
+            Self::Quit => f.write_str("Quit"),
+        }
+    }
 }
 
 pub fn channel() -> (RequestSender, Requests) {

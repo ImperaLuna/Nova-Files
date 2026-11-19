@@ -4,6 +4,7 @@
 # from its title and button to the file types it offers.
 #
 # Allowed outside crates:
+# - futures
 # - gpui
 #
 # Allowed workspace crates:
@@ -24,6 +25,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# Carries the answer of a folder pick back to the window's thread.
+futures = { version = "0.3", default-features = false, features = ["std"] }
 gpui.workspace = true
 nova-files-api.workspace = true
 nova-files-picker-api.workspace = true

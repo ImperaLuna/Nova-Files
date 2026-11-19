@@ -4,6 +4,7 @@ use nova_files::MimeTypes;
 use nova_files_api::FileTypes;
 use nova_files_dbus::Picker;
 use nova_files_picker_api::{FilterRule, PickId, PickRequest};
+use nova_files_picker_ui::{PickWindow, closes};
 use nova_files_ui::{Request, RequestSender};
 
 pub struct UiPicker {
@@ -37,11 +38,12 @@ impl Picker for UiPicker {
             let types = self.types.get_or_init(|| Arc::new((self.load)()));
             request.types = Some(Arc::clone(types));
         }
-        self.requests.send(Request::Pick(Box::new(request)));
+        let ask = Box::new(PickWindow(Box::new(request)));
+        self.requests.send(Request::Open(ask));
     }
 
     fn close(&self, id: PickId) {
-        self.requests.send(Request::ClosePick(id));
+        self.requests.send(Request::Close(closes(id)));
     }
 }
 
@@ -50,9 +52,34 @@ mod tests {
     use nova_files::MimeTypes;
     use nova_files_dbus::Picker as _;
     use nova_files_picker_api::{FileFilter, FilterRule, PickId, PickKind, PickReply, PickRequest};
+    use nova_files_picker_ui::PickOpening;
+    use nova_files_shell::Opening;
     use nova_files_ui::Request;
 
     use super::UiPicker;
+
+    fn picked(request: Option<Request>) -> Option<Opening> {
+        match request {
+            Some(Request::Open(ask)) => Some(ask.opening()),
+            _ => None,
+        }
+    }
+
+    fn pick_id(opening: &Opening) -> Option<PickId> {
+        opening.get::<PickOpening>().map(|pick| pick.id)
+    }
+
+    fn has_types(opening: &Opening) -> bool {
+        opening
+            .get::<PickOpening>()
+            .and_then(|pick| {
+                pick.request
+                    .borrow()
+                    .as_ref()
+                    .map(|request| request.types.is_some())
+            })
+            .unwrap_or_default()
+    }
 
     #[test]
     fn picks_and_closes_reach_the_ui() {
@@ -76,11 +103,12 @@ mod tests {
         picker.close(PickId(4));
         drop(picker);
 
-        assert!(matches!(received.wait(), Some(Request::Pick(request)) if request.id == PickId(4)));
-        assert!(matches!(
-            received.wait(),
-            Some(Request::ClosePick(PickId(4)))
-        ));
+        let opening = picked(received.wait()).unwrap();
+        assert_eq!(pick_id(&opening), Some(PickId(4)));
+        let Some(Request::Close(when)) = received.wait() else {
+            panic!("expected a close");
+        };
+        assert!(when(&opening));
     }
 
     fn open_with(rules: Vec<FilterRule>) -> PickRequest {
@@ -113,7 +141,7 @@ mod tests {
         picker.pick(open_with(vec![FilterRule::MimeType("image/*".to_owned())]));
         drop(picker);
 
-        assert!(matches!(received.wait(), Some(Request::Pick(request)) if request.types.is_none()));
-        assert!(matches!(received.wait(), Some(Request::Pick(request)) if request.types.is_some()));
+        assert!(!has_types(&picked(received.wait()).unwrap()));
+        assert!(has_types(&picked(received.wait()).unwrap()));
     }
 }

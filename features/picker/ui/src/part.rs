@@ -373,6 +373,9 @@ impl Part for PickerPart {
         slots.peek(Self::peeked);
         slots.resized(Self::resized);
         slots.closing(Self::closing);
+        slots.started(Self::started);
+        slots.dismissed(Self::cancel);
+        slots.folder_picks(Self::pick_folder);
         slots.footer(Self::footer);
     }
 }

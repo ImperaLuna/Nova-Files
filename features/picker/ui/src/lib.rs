@@ -6,9 +6,11 @@ pub mod filter;
 mod part;
 mod save;
 mod size;
+mod window;
 
 pub use part::{Conflict, PickerPart};
 pub use size::PickerState;
+pub use window::{PickOpening, PickWindow, closes};
 
 use std::ffi::OsStr;
 use std::path::{Component, Path};
