@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use common::Bench;
+use nova_files::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
 use nova_files_api::{Command, ConflictKind, Event, ExtractTo, Operation, Outcome, Packing, Tally};
-use nova_files_core::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
 
 const MANY: u32 = 500;
 const MOST_WAITS: u32 = 100;
@@ -25,7 +25,7 @@ fn helper() -> Archiver {
 }
 
 fn archiver() -> Archiver {
-    let seven = nova_files_core::seven_on(std::env::var_os("PATH").as_deref())
+    let seven = nova_files::seven_on(std::env::var_os("PATH").as_deref())
         .expect("these tests need 7-Zip (7zz or 7z) on PATH");
     helper().with_seven(Some(seven))
 }
@@ -361,7 +361,7 @@ fn a_listing_no_one_reads_is_a_usage_error() {
     archiver()
         .compress(&[many], &archive, &recipe, go(&mut entries))
         .unwrap();
-    let seven = nova_files_core::seven_on(std::env::var_os("PATH").as_deref()).unwrap();
+    let seven = nova_files::seven_on(std::env::var_os("PATH").as_deref()).unwrap();
     let full = fs::OpenOptions::new()
         .write(true)
         .open("/dev/full")

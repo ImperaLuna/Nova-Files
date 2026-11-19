@@ -10,8 +10,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use image::{ImageFormat, Rgb, RgbImage};
+use nova_files::{IDLE_EXIT, RunningCore, Thumbnails};
 use nova_files_api::{Connection, Fit, Picture};
-use nova_files_core::{IDLE_EXIT, RunningCore, Thumbnails};
 use nova_files_preview_api::{Command, Event, Preview, PreviewContent, PreviewId};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
@@ -50,7 +50,7 @@ impl Client {
             folder: temp.join("thumbnails"),
             helper: PathBuf::from(HELPER),
         };
-        let core = nova_files_core::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
+        let core = nova_files::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
         let (sink, events) = mpsc::channel();
         let connection = core.connector.connect(sink).unwrap();
         Self {

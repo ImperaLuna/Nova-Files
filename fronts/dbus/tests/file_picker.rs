@@ -130,7 +130,7 @@ fn uris(answer: &Answer) -> Vec<String> {
 
 #[test]
 fn the_apps_window_comes_with_the_request() {
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let setup = setup(&core.connector);
     for (method, parent, expected) in [
         (
@@ -155,7 +155,7 @@ fn the_apps_window_comes_with_the_request() {
 
 #[test]
 fn open_file_answers_the_picked_files() {
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let setup = setup(&core.connector);
     let pdf = ("PDF".to_owned(), vec![(0_u32, "*.pdf".to_owned())]);
     let pending = call(
@@ -199,7 +199,7 @@ fn open_file_answers_the_picked_files() {
 
 #[test]
 fn save_file_answers_the_path_to_save_at() {
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let setup = setup(&core.connector);
     let pending = call(
         &setup.bus,
@@ -227,7 +227,7 @@ fn save_file_answers_the_path_to_save_at() {
 
 #[test]
 fn a_picker_closed_unanswered_answers_cancelled() {
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let setup = setup(&core.connector);
     let pending = call(&setup.bus, "OpenFile", "Open", Vec::new());
 
@@ -240,7 +240,7 @@ fn a_picker_closed_unanswered_answers_cancelled() {
 
 #[test]
 fn close_on_the_request_closes_the_picker() {
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let setup = setup(&core.connector);
     let pending = call(&setup.bus, "OpenFile", "Open", Vec::new());
     let request = setup.requests.recv_timeout(WAIT).unwrap();
@@ -262,7 +262,7 @@ fn close_on_the_request_closes_the_picker() {
 
 #[test]
 fn a_pick_holds_the_core_until_it_is_answered() {
-    let core = nova_files_core::spawn_with_idle_exit(IDLE).unwrap();
+    let core = nova_files::spawn_with_idle_exit(IDLE).unwrap();
     let (events, _received) = mpsc::channel::<nova_files_api::Event>();
     let window = core.connector.connect(events).unwrap();
     let setup = setup(&core.connector);

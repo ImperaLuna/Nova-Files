@@ -112,7 +112,7 @@ async fn a_mime_type_admits_its_kinds_and_files_it_cant_judge(cx: &mut TestAppCo
         "text/x-notes text/plain\n",
     )
     .unwrap();
-    let types = Arc::new(nova_files_core::MimeTypes::load(&[data]));
+    let types = Arc::new(nova_files::MimeTypes::load(&[data]));
     let (view, cx, _answers) = picker_with(cx, &tree, tree.path(), FILES, |request| {
         request.filters = vec![filter(
             "Plain text",
