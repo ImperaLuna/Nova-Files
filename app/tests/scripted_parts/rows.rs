@@ -15,6 +15,8 @@ const BOOKS: &str = "/shelf/books";
 thread_local! {
     static EJECTED: Cell<usize> = const { Cell::new(0) };
     static ADDED: Cell<usize> = const { Cell::new(0) };
+    static MOUNTED: Cell<usize> = const { Cell::new(0) };
+    static MOUNTED_IN_TAB: Cell<usize> = const { Cell::new(0) };
 }
 
 struct Rower {
@@ -86,6 +88,17 @@ impl Part for Rower {
                 .button(RowItem::new(Icon::Eject, "Eject", |_| {
                     EJECTED.set(EJECTED.get() + 1);
                 })),
+                SidebarRow::acting(
+                    "drive-off",
+                    Icon::Drive,
+                    "Off",
+                    RowItem::new(Icon::Drive, "Mount", |_| {
+                        MOUNTED.set(MOUNTED.get() + 1);
+                    }),
+                )
+                .on_new_tab(RowItem::new(Icon::Drive, "Mount in a tab", |_| {
+                    MOUNTED_IN_TAB.set(MOUNTED_IN_TAB.get() + 1);
+                })),
             ]
         });
         slots.sidebar(SidebarAt::Tree, |rower, _, _| {
@@ -119,6 +132,8 @@ fn rowed(cx: &mut TestAppContext) -> &mut VisualTestContext {
 fn rowed_window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext) {
     EJECTED.set(0);
     ADDED.set(0);
+    MOUNTED.set(0);
+    MOUNTED_IN_TAB.set(0);
     let mut parts = Parts::default();
     parts.add::<Rower>();
     cx.update(|cx| cx.set_global(parts));
@@ -207,4 +222,20 @@ fn the_picker_shows_part_rows_without_their_menu_or_head_buttons(cx: &mut TestAp
     cx.simulate_mouse_down(first, MouseButton::Right, Modifiers::none());
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+}
+
+#[gpui::test]
+fn a_part_row_with_its_own_actions_runs_them_instead_of_opening(cx: &mut TestAppContext) {
+    let (view, cx) = rowed_window(cx);
+    let before = view.read_with(cx, |view, _| view.tab_count());
+
+    click(cx, "drive-off");
+    assert_eq!(MOUNTED.get(), 1);
+
+    let off = cx.debug_bounds("drive-off").unwrap().center();
+    cx.simulate_mouse_down(off, MouseButton::Middle, Modifiers::none());
+    cx.simulate_mouse_up(off, MouseButton::Middle, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(MOUNTED_IN_TAB.get(), 1);
+    assert_eq!(view.read_with(cx, |view, _| view.tab_count()), before);
 }
