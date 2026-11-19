@@ -9,7 +9,7 @@ use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
     PageRef, Part, Scene, Shown, TabId,
 };
-use nova_files_shell::{Published, ThumbnailsShown};
+use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::search::FocusTo;
 use super::{MainWindow, Went};
@@ -42,6 +42,7 @@ impl MainWindow {
             cx.on_release(|this, cx| this.parts.closing(cx)),
             cx.observe_global::<Published<HiddenFiles>>(Self::hidden_published),
             cx.observe_global::<Published<ThumbnailsShown>>(Self::thumbnails_published),
+            cx.observe_global::<Published<KnownFolders>>(Self::known_published),
         ]);
         watching
     }

@@ -43,7 +43,7 @@ pub use part::{
 };
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};
-pub use published::{Published, ThumbnailsShown};
+pub use published::{KnownFolder, KnownFolders, Published, ThumbnailsShown};
 pub use rules::{FolderName, FolderRules, RulesBook, Views};
 pub use scene::Scene;
 pub use text::{TextField, TextFieldEvent};

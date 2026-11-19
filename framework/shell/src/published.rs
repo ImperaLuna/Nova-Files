@@ -1,4 +1,9 @@
-use gpui::{App, Global};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use gpui::{App, Global, SharedString};
+
+use crate::assets::Icon;
 
 pub struct Published<T>(pub T);
 
@@ -19,4 +24,51 @@ pub enum ThumbnailsShown {
     #[default]
     Shown,
     Hidden,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnownFolder {
+    pub path: PathBuf,
+    pub name: SharedString,
+    pub icon: Icon,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KnownFolders(Arc<[KnownFolder]>);
+
+impl KnownFolders {
+    pub fn new(folders: impl IntoIterator<Item = KnownFolder>) -> Self {
+        Self(folders.into_iter().collect())
+    }
+
+    pub fn at(&self, path: &Path) -> Option<&KnownFolder> {
+        self.0.iter().find(|known| known.path == path)
+    }
+
+    pub fn icon_at(&self, path: &Path) -> Icon {
+        self.at(path).map_or(Icon::Folder, |known| known.icon)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_known_folder_gives_its_icon_and_others_show_a_plain_folder() {
+        let known = KnownFolders::new([KnownFolder {
+            path: "/home/me/Music".into(),
+            name: "Music".into(),
+            icon: Icon::Music,
+        }]);
+
+        assert_eq!(known.icon_at(Path::new("/home/me/Music")), Icon::Music);
+        assert_eq!(known.icon_at(Path::new("/home/me/Work")), Icon::Folder);
+        assert_eq!(
+            known
+                .at(Path::new("/home/me/Music"))
+                .map(|known| &known.name),
+            Some(&SharedString::from("Music"))
+        );
+    }
 }

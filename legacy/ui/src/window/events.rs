@@ -7,13 +7,14 @@ use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
 use nova_files_places_api::Bookmark;
 use nova_files_settings_api::{Settings, Thumbnails};
-use nova_files_shell::{Published, ThumbnailsShown};
+use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
+use crate::places;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Place {
@@ -170,7 +171,9 @@ impl MainWindow {
         places: Vec<nova_files_places_api::Place>,
         cx: &mut Context<Self>,
     ) {
+        let known = places::known(&places);
         self.places = places;
+        Published::set(known, cx);
         self.sidebar_changed(cx);
     }
 
@@ -258,6 +261,13 @@ impl MainWindow {
         if let Some(hidden) = Published::<HiddenFiles>::get(cx).copied() {
             self.hidden_arrived(hidden);
             cx.emit(WindowEvent::Settings);
+            cx.notify();
+        }
+    }
+
+    pub(super) fn known_published(&mut self, cx: &mut Context<Self>) {
+        if let Some(known) = Published::<KnownFolders>::get(cx) {
+            self.known = known.clone();
             cx.notify();
         }
     }

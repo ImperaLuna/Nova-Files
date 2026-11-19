@@ -9,7 +9,6 @@ use nova_files_gathered_api::Gathering;
 
 use super::bar::capsule;
 use super::drop::inside_edge;
-use super::place_icon;
 use super::row::icon;
 use nova_files_shell::{Look, MenuAt, arrange};
 
@@ -125,7 +124,7 @@ impl MainWindow {
                 here: true,
             }];
         }
-        crumbs::crumbs(folder, &self.home, &self.places, place_icon)
+        crumbs::crumbs(folder, &self.home, self.known_folders())
     }
 
     fn properties_crumbs(&self, paths: &[PathBuf]) -> Vec<Crumb> {
@@ -136,7 +135,7 @@ impl MainWindow {
                 None => return Vec::new(),
             },
         };
-        let mut crumbs = crumbs::crumbs(shown, &self.home, &self.places, place_icon);
+        let mut crumbs = crumbs::crumbs(shown, &self.home, self.known_folders());
         if let (Some(last), Some(icon)) = (crumbs.last_mut(), self.properties_icon()) {
             last.icon = icon;
         }

@@ -6,11 +6,10 @@ use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::{Context, Pixels, Point, SharedString, Task};
 use nova_files_api::{Command, Connection, Connector, EntryKind, Event, Listing, ListingId, Order};
-use nova_files_places_api::Place;
+use nova_files_shell::KnownFolders;
 
 use crate::assets::Icon;
-use crate::crumbs::{Crumb, folder_icon};
-use crate::view::place_icon;
+use crate::crumbs::Crumb;
 use crate::window::{ChannelSink, MainWindow};
 
 const MENU_LISTING: ListingId = ListingId(0);
@@ -148,7 +147,7 @@ impl MainWindow {
     fn menu_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
             Event::FolderListed(listing) => {
-                let items = menu_items(&listing, self.folder(), &self.places);
+                let items = menu_items(&listing, self.folder(), self.known_folders());
                 match &mut self.path_bar.menu {
                     Some(menu) if !items.is_empty() => menu.items = items,
                     _ => self.close_path_menu(),
@@ -200,7 +199,7 @@ impl MainWindow {
     }
 }
 
-fn menu_items(listing: &Listing, on_screen: Option<&Path>, places: &[Place]) -> Vec<MenuItem> {
+fn menu_items(listing: &Listing, on_screen: Option<&Path>, known: &KnownFolders) -> Vec<MenuItem> {
     listing
         .entries
         .iter()
@@ -208,7 +207,7 @@ fn menu_items(listing: &Listing, on_screen: Option<&Path>, places: &[Place]) -> 
         .map(|entry| {
             let path = listing.path.join(&entry.name);
             MenuItem {
-                icon: folder_icon(&path, places, place_icon),
+                icon: known.icon_at(&path),
                 label: entry.name.to_string_lossy().into_owned().into(),
                 on: on_screen.is_some_and(|folder| folder.starts_with(&path)),
                 path,

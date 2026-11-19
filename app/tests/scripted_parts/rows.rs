@@ -3,7 +3,8 @@ use std::cell::Cell;
 use gpui::{Context, Modifiers, MouseButton, WeakEntity};
 use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
 use nova_files_shell::{
-    Host, Location, Look, Part, Parts, RowItem, SidebarAt, SidebarRow, Slots, assets::Icon,
+    Host, KnownFolder, KnownFolders, Location, Look, Part, Parts, Published, RowItem, SidebarAt,
+    SidebarRow, Slots, assets::Icon,
 };
 
 use super::super::*;
@@ -238,4 +239,18 @@ fn a_part_row_with_its_own_actions_runs_them_instead_of_opening(cx: &mut TestApp
     cx.run_until_parked();
     assert_eq!(MOUNTED_IN_TAB.get(), 1);
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), before);
+}
+
+#[gpui::test]
+fn the_window_draws_folders_with_the_icons_a_part_publishes(cx: &mut TestAppContext) {
+    let (view, cx) = rowed_window(cx);
+    let known = KnownFolders::new([KnownFolder {
+        path: BOOKS.into(),
+        name: "Books".into(),
+        icon: Icon::Documents,
+    }]);
+    cx.update(|_, cx| Published::set(known, cx));
+    cx.run_until_parked();
+    let icon = view.read_with(cx, |view, _| view.known_folders().icon_at(Path::new(BOOKS)));
+    assert_eq!(icon, Icon::Documents);
 }
