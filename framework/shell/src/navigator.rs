@@ -18,6 +18,7 @@ pub enum NavAsk {
     Reveal(PathBuf),
     PickFolder(FolderPick),
     FocusList,
+    FocusResults,
     PopUp(PopUp),
 }
 
@@ -136,6 +137,11 @@ impl Navigator {
 
     pub fn focus_list(&mut self, cx: &mut Context<Self>) {
         self.asks.push(NavAsk::FocusList);
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn focus_results(&mut self, cx: &mut Context<Self>) {
+        self.asks.push(NavAsk::FocusResults);
         cx.emit(NavEvent::Asked);
     }
 

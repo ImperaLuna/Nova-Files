@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _, Modifiers,
-    Pixels, SharedString, Size, Window,
+    Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _,
+    KeyDownEvent, Modifiers, Pixels, SharedString, Size, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
@@ -55,6 +55,7 @@ pub struct DropOver<'a> {
 }
 pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<Vec<RowItem>>;
 pub type Typed<P> = fn(&mut P, &Jump, &Scene, &mut Context<P>) -> bool;
+pub type KeyDown<P> = fn(&mut P, &KeyDownEvent, &Scene, &mut Context<P>) -> bool;
 pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
 pub type Selectable<P> = fn(&P, &Entry, &App) -> bool;
@@ -88,6 +89,13 @@ pub struct CardRank;
 impl CardRank {
     pub const RECENT: u8 = 10;
     pub const DRIVES: u8 = 20;
+    pub const LAST: u8 = u8::MAX;
+}
+
+pub struct ChipRank;
+
+impl ChipRank {
+    pub const FIRST: u8 = 0;
     pub const LAST: u8 = u8::MAX;
 }
 
@@ -136,11 +144,12 @@ pub struct Slots<P> {
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) footers: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
-    pub(crate) path_chips: Vec<Card<P>>,
+    pub(crate) path_chips: Vec<(u8, Card<P>)>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
     pub(crate) row_icons: Vec<RowIcon<P>>,
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
+    pub(crate) key_downs: Vec<KeyDown<P>>,
     pub(crate) closing: Vec<Closing<P>>,
     pub(crate) clicks: Vec<Clicks<P>>,
     pub(crate) resized: Vec<Resized<P>>,
@@ -190,6 +199,7 @@ impl<P> Default for Slots<P> {
             row_icons: Vec::new(),
             opens: Vec::new(),
             typed: Vec::new(),
+            key_downs: Vec::new(),
             closing: Vec::new(),
             clicks: Vec::new(),
             resized: Vec::new(),
@@ -368,7 +378,11 @@ impl<P: Part> Slots<P> {
     }
 
     pub fn path_chip(&mut self, chip: Card<P>) {
-        self.path_chips.push(chip);
+        self.path_chip_at(ChipRank::LAST, chip);
+    }
+
+    pub fn path_chip_at(&mut self, rank: u8, chip: Card<P>) {
+        self.path_chips.push((rank, chip));
     }
 
     pub fn list_view(&mut self, applies: Applies<P>, draw: Card<P>) {
@@ -385,6 +399,10 @@ impl<P: Part> Slots<P> {
 
     pub fn typed(&mut self, typed: Typed<P>) {
         self.typed.push(typed);
+    }
+
+    pub fn key_down(&mut self, key_down: KeyDown<P>) {
+        self.key_downs.push(key_down);
     }
 
     pub fn closing(&mut self, closing: Closing<P>) {

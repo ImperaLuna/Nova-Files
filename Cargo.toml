@@ -60,6 +60,7 @@ nova-files-rename-core = { path = "features/rename/core" }
 nova-files-rename-ui = { path = "features/rename/ui" }
 nova-files-search-api = { path = "features/search/api" }
 nova-files-search-core = { path = "features/search/core" }
+nova-files-search-ui = { path = "features/search/ui" }
 nova-files-settings-api = { path = "features/settings/api" }
 nova-files-settings-core = { path = "features/settings/core" }
 nova-files-settings-ui = { path = "features/settings/ui" }

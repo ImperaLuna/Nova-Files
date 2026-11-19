@@ -8,7 +8,7 @@ use nova_files_api::{EntryId, Listing, ListingId, Order};
 use nova_files_gathered_api::Gathering;
 
 use super::MainWindow;
-use super::search::Search;
+use super::search::Over;
 use nova_files_shell::{PageRef, TabId};
 
 use crate::assets::Icon;
@@ -30,7 +30,7 @@ pub struct Tab {
     order: Order,
     shown_order: Order,
     scroll: UniformListScrollHandle,
-    search: Search,
+    search: Over,
     counted: SharedString,
     gathered: Option<Gathering>,
     listed: Option<PageRef>,
@@ -293,7 +293,7 @@ impl MainWindow {
             order: mem::take(&mut self.order),
             shown_order: mem::take(&mut self.shown_order),
             scroll: mem::replace(&mut self.scroll, UniformListScrollHandle::new()),
-            search: mem::replace(&mut self.search, Search::new(cx)),
+            search: mem::take(&mut self.search),
             counted: mem::take(&mut self.counted),
             gathered: self.gathered.shown.take(),
             listed: self.listed_page.take(),
@@ -320,7 +320,7 @@ impl MainWindow {
         if let Some(place) = tab.on_its_way {
             self.request_place(&place);
         } else if self.searching() {
-            self.find(cx);
+            self.find();
         } else if let Some(place) = self.gathered_shown() {
             self.request_gathered(place);
         } else if let Some(page) = self.listed_page.clone() {

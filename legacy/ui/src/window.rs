@@ -29,7 +29,7 @@ pub use gathered::LIBRARY_LABEL;
 pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
-pub use search::{FocusTo, Scope, short_folder};
+pub use search::{FocusTo, short_folder};
 pub use slots::from_shell;
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
 
@@ -51,7 +51,6 @@ use nova_files_api::{
 use nova_files_drives_api as drives_api;
 use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_places_api::{self as places_api, Bookmark, Place};
-use nova_files_search_api as search_api;
 use nova_files_shell::Lines;
 use nova_files_shell::path_bar::PathBar;
 use nova_files_shell::{
@@ -139,7 +138,7 @@ pub struct MainWindow {
     known: KnownFolders,
     pub(crate) drives: nova_files_drives_api::KnownDrives,
     pub(crate) menu: Option<Menu>,
-    pub(crate) search: search::Search,
+    pub(crate) search: search::Over,
     pub(crate) focus: FocusHandle,
     pub(crate) island: Island,
     jobs: Jobs,
@@ -254,7 +253,7 @@ impl MainWindow {
             known: KnownFolders::default(),
             drives: nova_files_drives_api::KnownDrives::default(),
             menu: None,
-            search: search::Search::new(cx),
+            search: search::Over::default(),
             focus: host.list.clone(),
             island: Island::default(),
             jobs: Jobs::default(),
@@ -303,13 +302,6 @@ impl MainWindow {
         };
         let envelope = match envelope.open::<gathered_api::Event>() {
             Ok(event) => return self.gathered_event(event, cx),
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<search_api::Event>() {
-            Ok(search_api::Event::FindFailed { id, .. }) if self.search.asked == Some(id) => {
-                return self.find_failed(id, cx);
-            }
-            Ok(_) => return,
             Err(envelope) => envelope,
         };
         self.hand_to_parts(envelope, cx);

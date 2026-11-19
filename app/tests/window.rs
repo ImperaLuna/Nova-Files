@@ -40,6 +40,12 @@ use nova_files_ui::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent}
 
 use common::{TempFolder, Watchdog, click_with, double_click};
 
+fn search_query(view: &MainWindow, cx: &App) -> String {
+    view.search_part()
+        .map(|part| part.read(cx).query(cx))
+        .unwrap_or_default()
+}
+
 fn previewing(view: &MainWindow, cx: &App) -> bool {
     view.part::<PreviewPart>()
         .is_some_and(|part| part.read(cx).previewing())

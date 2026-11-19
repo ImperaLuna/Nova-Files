@@ -88,8 +88,6 @@ impl MainWindow {
             .children(self.parts.overlays())
             .child(ctrl_scroll(cx))
             .children(self.empty_note(&colors, cx))
-            .children(self.no_matches(&colors))
-            .children(self.match_count(&colors))
             .children(self.band_box().map(|band| {
                 div()
                     .debug_selector(|| "band".to_owned())
@@ -134,7 +132,7 @@ impl MainWindow {
                 };
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
-                let query = this.searching().then(|| this.query(cx));
+                let query = this.search.marks().map(str::to_owned);
                 let part_column = this.parts.column(&this.scene(cx), cx);
                 let selected = |index: usize| {
                     listing

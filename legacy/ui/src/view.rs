@@ -24,15 +24,15 @@ use nova_files_folders_api::ViewMode;
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
-    CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext,
-    PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown,
-    SelectPageUp, SelectRight, SelectUp, ToggleSelected,
+    CursorUp, GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext, PreviewPrevious,
+    SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown, SelectPageUp,
+    SelectRight, SelectUp, ToggleSelected,
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, ShowProperties, TrashSelected};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
-use crate::window::{FocusTo, MainWindow};
+use crate::window::MainWindow;
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -90,7 +90,7 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .map(|root| Self::view_keys(root, cx))
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
-            .map(|root| Self::typed_keys(root, main, cx))
+            .map(|root| Self::typed_keys(root, cx))
             .map(|root| Self::selection_keys(root, cx))
             .map(|root| Self::file_keys(root, cx))
             .map(|root| self.parts.bind(root))
@@ -201,17 +201,13 @@ impl MainWindow {
 }
 
 impl MainWindow {
-    fn typed_keys(root: Div, main: bool, cx: &Context<Self>) -> Div {
-        root.when(main, |root| {
-            root.on_action(cx.listener(|this, _: &FocusSearch, _, cx| {
-                this.focus_later(FocusTo::Box, cx);
-            }))
-        })
-        .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+    fn typed_keys(root: Div, cx: &Context<Self>) -> Div {
+        root.on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
             if !this.focus.is_focused(window) {
                 return;
             }
-            if this.search_key(event, cx) || this.jump_typed(event, cx) {
+            let scene = this.scene(cx);
+            if this.parts.key_down(event, &scene, cx) || this.jump_typed(event, cx) {
                 cx.stop_propagation();
             }
         }))

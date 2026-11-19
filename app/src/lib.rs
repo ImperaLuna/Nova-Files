@@ -11,6 +11,7 @@ use nova_files_places_ui::{PlacesPart, TreePart};
 use nova_files_preview_ui::PreviewPart;
 use nova_files_properties_ui::PropertiesPart;
 use nova_files_rename_ui::RenamePart;
+use nova_files_search_ui::SearchPart;
 use nova_files_settings_ui::SettingsPart;
 use nova_files_shell::Parts;
 use nova_files_start_ui::StartPart;
@@ -33,6 +34,7 @@ pub fn parts() -> Parts {
     parts.add::<PreviewPart>();
     parts.add::<PropertiesPart>();
     parts.add::<RenamePart>();
+    parts.add::<SearchPart>();
     parts.add::<SettingsPart>();
     parts.add::<StartPart>();
     parts.add::<ThumbnailsPart>();

@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
-    Pixels, SharedString, Size, Subscription,
+    KeyDownEvent, Pixels, SharedString, Size, Subscription,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
@@ -63,11 +63,12 @@ trait OpenPart {
     ) -> Option<ClickAnswer>;
     fn resized(&self, size: Size<Pixels>, cx: &mut App);
     fn overlays(&self) -> Vec<AnyView>;
-    fn path_chips(&self) -> Vec<AnyView>;
+    fn path_chips(&self) -> Vec<(u8, AnyView)>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
     fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
+    fn key_down(&self, event: &KeyDownEvent, scene: &Scene, cx: &mut App) -> bool;
     fn closing(&self, cx: &mut App);
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
     fn watch(&self, event: &Event, cx: &mut App);
@@ -123,7 +124,7 @@ struct Opened<P: Part> {
     bars: Vec<AnyView>,
     footers: Vec<AnyView>,
     overlays: Vec<AnyView>,
-    path_chips: Vec<AnyView>,
+    path_chips: Vec<(u8, AnyView)>,
     list_views: Vec<AnyView>,
 }
 
@@ -262,7 +263,7 @@ impl<P: Part> OpenPart for Opened<P> {
         self.overlays.clone()
     }
 
-    fn path_chips(&self) -> Vec<AnyView> {
+    fn path_chips(&self) -> Vec<(u8, AnyView)> {
         self.path_chips.clone()
     }
 
@@ -316,6 +317,18 @@ impl<P: Part> OpenPart for Opened<P> {
                 .typed
                 .iter()
                 .any(|typed| typed(part, jump, scene, cx))
+        })
+    }
+
+    fn key_down(&self, event: &KeyDownEvent, scene: &Scene, cx: &mut App) -> bool {
+        if self.slots.key_downs.is_empty() {
+            return false;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .key_downs
+                .iter()
+                .any(|key_down| key_down(part, event, scene, cx))
         })
     }
 
@@ -670,7 +683,11 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
     let bars = card_views(&entity, host, &slots.bars, false, cx);
     let footers = card_views(&entity, host, &slots.footers, false, cx);
     let overlays = card_views(&entity, host, &slots.overlays, false, cx);
-    let path_chips = card_views(&entity, host, &slots.path_chips, false, cx);
+    let chip_ranks = slots.path_chips.iter().map(|(rank, _)| *rank);
+    let chips: Vec<Card<P>> = slots.path_chips.iter().map(|(_, chip)| *chip).collect();
+    let path_chips = chip_ranks
+        .zip(card_views(&entity, host, &chips, false, cx))
+        .collect();
     let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
     let list_views = card_views(&entity, host, &views, true, cx);
     Box::new(Opened {

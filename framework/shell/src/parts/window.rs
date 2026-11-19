@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, Pixels, SharedString, Size, Subscription,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, SharedString, Size,
+    Subscription,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 use nova_files_messages::Envelope;
@@ -216,11 +217,14 @@ impl WindowParts {
             .collect()
     }
 
-    pub fn path_chips(&self) -> Vec<AnyView> {
-        self.opened
+    pub fn path_chips(&self) -> Vec<(u8, AnyView)> {
+        let mut chips: Vec<(u8, AnyView)> = self
+            .opened
             .iter()
             .flat_map(|part| part.path_chips())
-            .collect()
+            .collect();
+        chips.sort_by_key(|(rank, _)| *rank);
+        chips
     }
 
     pub fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
@@ -243,6 +247,12 @@ impl WindowParts {
 
     pub fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool {
         self.opened.iter().any(|part| part.typed(jump, scene, cx))
+    }
+
+    pub fn key_down(&self, event: &KeyDownEvent, scene: &Scene, cx: &mut App) -> bool {
+        self.opened
+            .iter()
+            .any(|part| part.key_down(event, scene, cx))
     }
 
     pub fn closing(&self, cx: &mut App) {

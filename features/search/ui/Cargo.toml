@@ -1,0 +1,34 @@
+# nova-files-search-ui
+#
+# Search's window half: the search box of each tab, its scope, and the
+# names it finds laid over the folder the search started from.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-messages
+# - nova-files-search-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-search-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-messages.workspace = true
+nova-files-search-api.workspace = true
+nova-files-shell.workspace = true

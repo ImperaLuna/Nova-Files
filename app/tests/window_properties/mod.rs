@@ -249,7 +249,7 @@ async fn a_search_ends_when_the_page_shows_again(cx: &mut TestAppContext) {
     view.read_with(cx, |view, cx| {
         assert!(props(view, cx).page().is_some());
         assert!(!view.searching());
-        assert_eq!(view.query(cx), "");
+        assert_eq!(search_query(view, cx), "");
     });
 }
 

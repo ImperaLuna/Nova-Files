@@ -8,7 +8,7 @@ use nova_files_api::EntryKind;
 use nova_files_gathered_api::Gathering;
 use nova_files_properties_ui::{PropertiesPage, PropertiesPart};
 use nova_files_shell::path_bar::{self, BarInput, Crumb, Spot};
-use nova_files_shell::{self as shell, MenuAt, PageRef, TextField, arrange};
+use nova_files_shell::{self as shell, ChipRank, MenuAt, PageRef, TextField, arrange};
 
 use super::drop::inside_edge;
 use crate::location::{Builtin, Location};
@@ -65,7 +65,14 @@ impl MainWindow {
     }
 
     fn path_chips(&self, colors: &Colors, cx: &Context<Self>) -> Vec<AnyElement> {
-        let mut chips: Vec<AnyElement> = self.scope_chip(colors, cx).into_iter().collect();
+        let part_chips = self.parts.path_chips();
+        let (first, rest): (Vec<_>, Vec<_>) = part_chips
+            .into_iter()
+            .partition(|(rank, _)| *rank == ChipRank::FIRST);
+        let mut chips: Vec<AnyElement> = first
+            .into_iter()
+            .map(|(_, chip)| chip.into_any_element())
+            .collect();
         if let Some(place) = self.gathered_here() {
             let chip = self.gathered_chip(place, colors, cx);
             chips.push(
@@ -74,12 +81,7 @@ impl MainWindow {
             );
             return chips;
         }
-        chips.extend(
-            self.parts
-                .path_chips()
-                .into_iter()
-                .map(IntoElement::into_any_element),
-        );
+        chips.extend(rest.into_iter().map(|(_, chip)| chip.into_any_element()));
         let items = self.parts.menu(MenuAt::PathBarEnd, &self.scene(cx), cx);
         chips.extend(
             arrange(items)

@@ -94,7 +94,7 @@ fn typing_finds_everywhere_and_the_window_stays_in_its_folder(cx: &mut TestAppCo
     assert_eq!(names(&view, cx), ["report.pdf", "reports"]);
     view.read_with(cx, |view, cx| {
         assert!(view.searching());
-        assert_eq!(view.query(cx), "rep");
+        assert_eq!(search_query(view, cx), "rep");
         assert_eq!(view.folder(), Some(Path::new(SHOWN)));
         assert_eq!(view.list_drop_folder(), None);
     });
@@ -136,7 +136,7 @@ fn escape_clears_the_box_and_reads_the_folder_again(cx: &mut TestAppContext) {
     assert_eq!(path, Path::new(SHOWN));
     view.read_with(cx, |view, cx| {
         assert!(!view.searching());
-        assert_eq!(view.query(cx), "");
+        assert_eq!(search_query(view, cx), "");
     });
 }
 
@@ -172,7 +172,7 @@ fn a_found_folder_opens_where_it_is_and_ends_the_search(cx: &mut TestAppContext)
     cx.run_until_parked();
     view.read_with(cx, |view, cx| {
         assert!(!view.searching());
-        assert_eq!(view.query(cx), "");
+        assert_eq!(search_query(view, cx), "");
     });
 }
 
@@ -235,7 +235,7 @@ fn ctrl_f_puts_the_caret_back_in_the_box(cx: &mut TestAppContext) {
     cx.run_until_parked();
     cx.simulate_input("x");
     cx.run_until_parked();
-    view.read_with(cx, |view, cx| assert_eq!(view.query(cx), "x"));
+    view.read_with(cx, |view, cx| assert_eq!(search_query(view, cx), "x"));
 }
 
 #[gpui::test]
@@ -277,7 +277,7 @@ fn a_folder_that_cant_be_read_leaves_the_search_as_it_was(cx: &mut TestAppContex
     assert_eq!(names(&view, cx), ["report.pdf", "reports"]);
     view.read_with(cx, |view, cx| {
         assert!(view.searching());
-        assert_eq!(view.query(cx), "rep");
+        assert_eq!(search_query(view, cx), "rep");
         assert_eq!(view.folder(), Some(Path::new(SHOWN)));
     });
 }
@@ -351,7 +351,7 @@ fn a_folder_cell_goes_there_with_the_file_selected(cx: &mut TestAppContext) {
         assert_eq!(view.folder(), Some(Path::new("/docs")));
         assert_eq!(view.selected_names(), ["report.pdf"]);
         assert!(!view.searching());
-        assert_eq!(view.query(cx), "");
+        assert_eq!(search_query(view, cx), "");
     });
 }
 
@@ -368,8 +368,8 @@ fn the_chip_switches_to_the_folder_searched_from_and_back(cx: &mut TestAppContex
         (query.as_str(), within),
         ("rep", Some(PathBuf::from(SHOWN)))
     );
-    view.read_with(cx, |view, _| {
-        assert_eq!(view.scope(), nova_files_ui::Scope::HereOnly);
+    view.read_with(cx, |view, cx| {
+        assert_eq!(scope(view, cx), nova_files_search_ui::Scope::HereOnly);
     });
 
     let chip = cx.debug_bounds("scope").unwrap();
@@ -458,7 +458,7 @@ fn slash_with_a_modifier_leaves_the_box_alone(cx: &mut TestAppContext) {
     }
     cx.simulate_input("x");
     cx.run_until_parked();
-    view.read_with(cx, |view, cx| assert_eq!(view.query(cx), "rep"));
+    view.read_with(cx, |view, cx| assert_eq!(search_query(view, cx), "rep"));
 }
 
 #[gpui::test]
@@ -506,7 +506,7 @@ fn a_space_typed_into_the_box_stays_in_it(cx: &mut TestAppContext) {
     cx.simulate_input("b");
     cx.run_until_parked();
     view.read_with(cx, |view, cx| {
-        assert_eq!(view.query(cx), "a b");
+        assert_eq!(search_query(view, cx), "a b");
         assert!(!previewing(view, cx));
     });
 }

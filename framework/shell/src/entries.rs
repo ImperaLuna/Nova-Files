@@ -9,7 +9,16 @@ use nova_files_api::{Entry, EntryId, Listing, ListingId};
 use crate::cursor::Move;
 use crate::jump::PAUSE;
 use crate::location::Location;
+use crate::over::{LaidOver, OverLeft, OverWant};
 use crate::scene::Showing;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Laid {
+    #[default]
+    Off,
+    Over,
+    Failed,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Shown {
@@ -18,7 +27,7 @@ pub struct Shown {
     pub selected: Vec<EntryId>,
     pub picker: bool,
     pub asked: Option<ListingId>,
-    pub searching: bool,
+    pub laid: Laid,
     pub gathered: bool,
     pub cursor: Option<usize>,
     pub showing: Showing,
@@ -42,10 +51,13 @@ pub struct Entries {
     jumped: Option<Instant>,
     moves: Option<(Option<usize>, Move)>,
     opens: Option<EntryId>,
+    over: Option<OverWant>,
 }
 
 impl EventEmitter<EntriesAsked> for Entries {}
 impl EventEmitter<SelectionMade> for Entries {}
+
+impl EventEmitter<OverLeft> for Entries {}
 
 impl Entries {
     pub const fn location(&self) -> Option<&Location> {
@@ -60,8 +72,30 @@ impl Entries {
         self.shown.picker
     }
 
-    pub const fn searching(&self) -> bool {
-        self.shown.searching
+    pub fn searching(&self) -> bool {
+        self.shown.laid != Laid::Off
+    }
+
+    pub fn over_failed(&self) -> bool {
+        self.shown.laid == Laid::Failed
+    }
+
+    pub fn lay_over(&mut self, over: LaidOver, cx: &mut Context<Self>) {
+        self.over = Some(OverWant::Lay(over));
+        cx.emit(EntriesAsked);
+    }
+
+    pub fn take_back(&mut self, cx: &mut Context<Self>) {
+        self.over = Some(OverWant::TakeBack);
+        cx.emit(EntriesAsked);
+    }
+
+    pub const fn take_over_want(&mut self) -> Option<OverWant> {
+        self.over.take()
+    }
+
+    pub fn over_left(&mut self, cx: &mut Context<Self>) {
+        cx.emit(OverLeft);
     }
 
     pub const fn gathered(&self) -> bool {

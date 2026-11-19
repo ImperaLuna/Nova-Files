@@ -176,7 +176,18 @@ impl MainWindow {
             )
         });
         if let Some(id) = failed {
-            self.listing_failed(id, cx);
+            if self.search.asked == Some(id) {
+                self.find_failed(id, cx);
+            } else {
+                self.listing_failed(id, cx);
+            }
+        }
+        let over = self
+            .host
+            .entries
+            .update(cx, |entries, _| entries.take_over_want());
+        if let Some(want) = over {
+            self.over_wanted(want, cx);
         }
         let (moved, opened) = self
             .host
@@ -235,7 +246,7 @@ impl MainWindow {
             selected,
             picker: self.host.opening.is_some(),
             asked: self.asked,
-            searching: self.searching(),
+            laid: self.laid(),
             gathered: self.gathered_here().is_some(),
             cursor: self.cursor(),
             showing: self.showing(cx),
@@ -287,6 +298,7 @@ impl MainWindow {
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),
                 NavAsk::FocusList => self.focus_later(FocusTo::List, cx),
+                NavAsk::FocusResults => self.focus_later(FocusTo::Results, cx),
                 NavAsk::PopUp(pop_up) => self.open_part_menu(pop_up.at, pop_up.groups, cx),
                 NavAsk::PickFolder(pick) => {
                     self.pick_folder(&pick.title, &pick.accept, cx, move |_, path, cx| {
