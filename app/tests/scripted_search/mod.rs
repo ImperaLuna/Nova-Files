@@ -553,3 +553,45 @@ fn search_results_show_as_details_whatever_their_folder_shows(cx: &mut TestAppCo
         .any(|command| matches!(command, ViewsCommand::SetView { .. }));
     assert!(!kept);
 }
+
+fn started(core: &mut Core) -> Vec<Operation> {
+    core.commands()
+        .into_iter()
+        .filter_map(|command| match command {
+            Command::StartJob { operation, .. } => Some(operation),
+            _ => None,
+        })
+        .collect()
+}
+
+#[gpui::test]
+fn renaming_a_result_renames_it_where_it_is(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+
+    cx.simulate_keystrokes("down f2");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, MainWindow::renaming));
+    cx.simulate_input("plan");
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+
+    assert_eq!(
+        started(&mut core),
+        [Operation::Rename {
+            path: PathBuf::from("/docs/report.pdf"),
+            name: "plan.pdf".into(),
+        }]
+    );
+}
+
+#[gpui::test]
+fn new_folder_and_paste_wait_while_results_show(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+
+    cx.simulate_keystrokes("down ctrl-shift-n ctrl-c ctrl-v");
+    cx.run_until_parked();
+
+    assert_eq!(started(&mut core), []);
+}
