@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -14,7 +13,7 @@ use nova_files_gathered_core::Store as GatheredStore;
 use nova_files_look_api as look_api;
 use nova_files_look_core::FileIcons;
 use nova_files_look_core::theme::Store as ThemeStore;
-use nova_files_messages::{Routed, Routes};
+use nova_files_messages::{Routes, Served, serve};
 use nova_files_open_api::{self as open_api, TakeOut};
 use nova_files_open_core::{LazyMimes, MimeTypes, OpenWithWorker};
 use nova_files_places_api as places_api;
@@ -246,76 +245,28 @@ pub fn emitted_types() -> Vec<MessageType> {
 }
 
 pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup) {
-    let routes = match routes() {
-        Ok(routes) => routes,
-        Err(twice) => {
-            log::error!("two routes for {}", twice.name());
-            return;
-        }
-    };
-    let mut clients: HashMap<ClientId, Client> = HashMap::new();
-    let mut stopping = false;
-    loop {
-        let idle = clients.is_empty() && !setup.jobs.busy();
-        if stopping && idle {
-            return;
-        }
-        let message = if idle {
-            match receiver.recv_timeout(idle_exit) {
-                Ok(message) => message,
-                Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => return,
-            }
-        } else {
-            match receiver.recv() {
-                Ok(message) => message,
-                Err(_) => return,
-            }
-        };
-        if matches!(message, CoreMessage::Stop) {
-            stopping = true;
-        }
-        handle(&mut clients, message, &routes, setup);
+    match routes() {
+        Ok(routes) => serve(receiver, idle_exit, &routes, setup),
+        Err(twice) => log::error!("two routes for {}", twice.name()),
     }
 }
 
-fn handle(
-    clients: &mut HashMap<ClientId, Client>,
-    message: CoreMessage,
-    routes: &Routes<Setup, Client>,
-    setup: &Setup,
-) {
-    match message {
-        CoreMessage::Connected { client, events } => {
-            let events: Arc<dyn EventSink> = Arc::from(events);
-            let started = Client::new(events, setup.thumbnails.as_ref(), &setup.file_icons);
-            clients.insert(client, started);
-        }
-        CoreMessage::Disconnected { client } => {
-            clients.remove(&client);
-            routes.leave(setup, client);
-        }
-        CoreMessage::Activity | CoreMessage::Stop => {}
-        CoreMessage::Offer(offer) => take_offer(offer, setup),
-        CoreMessage::Command { client, command } => {
-            let Some(target) = clients.get(&client) else {
-                return;
-            };
-            match routes.route(setup, client, target, command) {
-                Ok(Routed::Handled) => {}
-                Ok(Routed::Unrouted(kind)) => log::error!("no route for {}", kind.name()),
-                Err(_) => {
-                    clients.remove(&client);
-                    routes.leave(setup, client);
-                }
-            }
-        }
-    }
-}
+impl Served for Setup {
+    type Client = Client;
 
-fn take_offer(offer: Envelope, setup: &Setup) {
-    match offer.open::<DriveOffer>() {
-        Ok(DriveOffer(service)) => setup.drives.offer(service),
-        Err(other) => log::error!("no use for an offer of {}", other.kind().name()),
+    fn client(&self, events: Arc<dyn EventSink>) -> Client {
+        Client::new(events, self.thumbnails.as_ref(), &self.file_icons)
+    }
+
+    fn busy(&self) -> bool {
+        self.jobs.busy()
+    }
+
+    fn offered(&self, offer: Envelope) {
+        match offer.open::<DriveOffer>() {
+            Ok(DriveOffer(service)) => self.drives.offer(service),
+            Err(other) => log::error!("no use for an offer of {}", other.kind().name()),
+        }
     }
 }
 

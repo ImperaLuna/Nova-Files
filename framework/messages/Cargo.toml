@@ -1,7 +1,8 @@
 # nova-files-messages
 #
 # How the core and its clients talk: one connection per client, carrying
-# each feature's own message types, and the core's routes by type.
+# each feature's own message types, the core's routes by type, and the
+# loop that serves them until the core is idle or stopped.
 #
 # Allowed outside crates:
 # - log
