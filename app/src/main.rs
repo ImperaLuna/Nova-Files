@@ -30,7 +30,7 @@ const EVERY_DRIVER_VARIABLE: &str = "NOVA_FILES_EVERY_VULKAN_DRIVER";
 static FILTER_SET: AtomicBool = AtomicBool::new(false);
 
 fn main() -> ExitCode {
-    for error in nova_files_core::start_traces() {
+    for error in nova_files::start_traces() {
         report(&format!("{error}"));
     }
     skip_absent_vulkan_drivers();
@@ -66,10 +66,10 @@ fn skip_absent_vulkan_drivers() {
     if every_driver_asked() {
         return;
     }
-    if let Some(filter) = nova_files_core::absent_vendor_drivers() {
+    if let Some(filter) = nova_files::absent_vendor_drivers() {
         // SAFETY: called first thing in `main`, before the core, D-Bus or
         // GPUI start a thread, so nothing can read the environment meanwhile.
-        unsafe { std::env::set_var(nova_files_core::FILTER_VARIABLE, filter) };
+        unsafe { std::env::set_var(nova_files::FILTER_VARIABLE, filter) };
         FILTER_SET.store(true, Ordering::SeqCst);
     }
 }
@@ -81,7 +81,7 @@ fn restart_with_every_driver(folder: Option<&Path>) -> Option<Command> {
     let mut command = Command::new(std::env::current_exe().ok()?);
     command
         .args(folder)
-        .env_remove(nova_files_core::FILTER_VARIABLE)
+        .env_remove(nova_files::FILTER_VARIABLE)
         .env(EVERY_DRIVER_VARIABLE, "1");
     Some(command)
 }
@@ -235,7 +235,7 @@ mod tests {
             [OsStr::new("/srv/photos")]
         );
         let envs: Vec<_> = command.get_envs().collect();
-        assert!(envs.contains(&(OsStr::new(nova_files_core::FILTER_VARIABLE), None)));
+        assert!(envs.contains(&(OsStr::new(nova_files::FILTER_VARIABLE), None)));
         assert!(envs.contains(&(OsStr::new(EVERY_DRIVER_VARIABLE), Some(OsStr::new("1")))));
         let command = restart_with_every_driver(None).unwrap();
         assert_eq!(command.get_args().count(), 0);
