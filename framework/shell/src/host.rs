@@ -86,6 +86,8 @@ impl Host {
             rules,
             selected: entries.selected_count(),
             picker: entries.picker(),
+            searching: entries.searching(),
+            gathered: entries.gathered(),
         }
     }
 }

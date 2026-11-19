@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use gpui::SharedString;
 use nova_files_gathered_api::Gathering;
 use nova_files_places_api::{Bookmark, Place, PlaceKind};
+use nova_files_shell::{KnownFolder, KnownFolders};
 
 use crate::assets::Icon;
 
@@ -84,11 +85,12 @@ const fn standard_icon(kind: PlaceKind) -> Option<Icon> {
     }
 }
 
-pub fn standard_icon_at(places: &[Place], path: &Path) -> Option<Icon> {
-    places
-        .iter()
-        .find(|place| place.path == path)
-        .map(|place| place_icon(place.kind))
+pub fn known(places: &[Place]) -> KnownFolders {
+    KnownFolders::new(places.iter().map(|place| KnownFolder {
+        path: place.path.clone(),
+        name: standard_name(place),
+        icon: place_icon(place.kind),
+    }))
 }
 
 fn standard_name(place: &Place) -> SharedString {
@@ -192,20 +194,14 @@ mod tests {
     }
 
     #[test]
-    fn the_tree_draws_every_standard_folder_with_its_icon() {
-        let places = [
+    fn every_standard_folder_is_known_with_its_icon() {
+        let known = known(&[
             place(PlaceKind::Music, "/home/me/Music"),
             place(PlaceKind::Videos, "/home/me/Videos"),
-        ];
-        assert_eq!(
-            standard_icon_at(&places, Path::new("/home/me/Music")),
-            Some(Icon::Music)
-        );
-        assert_eq!(
-            standard_icon_at(&places, Path::new("/home/me/Videos")),
-            Some(Icon::Videos)
-        );
-        assert_eq!(standard_icon_at(&places, Path::new("/home/me/Work")), None);
+        ]);
+        assert_eq!(known.icon_at(Path::new("/home/me/Music")), Icon::Music);
+        assert_eq!(known.icon_at(Path::new("/home/me/Videos")), Icon::Videos);
+        assert_eq!(known.icon_at(Path::new("/home/me/Work")), Icon::Folder);
     }
 
     #[test]

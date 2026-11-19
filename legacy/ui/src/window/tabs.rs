@@ -192,11 +192,7 @@ impl MainWindow {
             .iter()
             .find(|shown| shown.path == *folder)
             .map_or_else(
-                || {
-                    let icon =
-                        places::standard_icon_at(&self.places, folder).unwrap_or(Icon::Folder);
-                    (places::folder_name(folder), icon)
-                },
+                || (places::folder_name(folder), self.known.icon_at(folder)),
                 |shown| (shown.name.clone(), shown.icon),
             )
     }

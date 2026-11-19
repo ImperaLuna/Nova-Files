@@ -1,0 +1,90 @@
+use std::cell::Cell;
+use std::ffi::OsStr;
+use std::rc::Rc;
+
+use gpui::{AppContext as _, Context, Entity};
+use nova_files_api::Entry;
+use nova_files_shell::{Host, Part, Parts, Slots, TextField, Undo};
+
+use super::super::*;
+
+const NAMED: &str = "1";
+
+thread_local! {
+    static UNDONE: Cell<usize> = const { Cell::new(0) };
+}
+
+struct Namer {
+    field: Option<Entity<TextField>>,
+}
+
+impl Part for Namer {
+    fn open(_: &Host, _: &mut Context<Self>) -> Self {
+        Self { field: None }
+    }
+
+    fn slots(slots: &mut Slots<Self>) {
+        slots.name_field(|namer, entry: &Entry, _| {
+            (entry.name == NAMED).then(|| namer.field.clone()).flatten()
+        });
+        slots.busy(|namer, _| namer.field.is_some());
+    }
+}
+
+fn named(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext) {
+    UNDONE.set(0);
+    let mut parts = Parts::default();
+    parts.add::<Namer>();
+    cx.update(|cx| cx.set_global(parts));
+    let (view, cx, mut core) = window_with_parts(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    (view, cx)
+}
+
+fn namer(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Entity<Namer> {
+    view.read_with(cx, |view, _| view.part::<Namer>()).unwrap()
+}
+
+fn open_field(view: &Entity<MainWindow>, cx: &mut VisualTestContext) {
+    let namer = namer(view, cx);
+    namer.update(cx, |namer, cx| {
+        namer.field = Some(cx.new(TextField::new));
+        cx.notify();
+    });
+    view.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+fn a_part_name_field_draws_in_its_row_inside_the_rename_box(cx: &mut TestAppContext) {
+    let (view, cx) = named(cx);
+    assert!(cx.debug_bounds("rename").is_none());
+    open_field(&view, cx);
+    assert!(cx.debug_bounds("rename").is_some());
+    assert!(cx.debug_bounds("name-1").is_none());
+    assert!(cx.debug_bounds("name-0").is_some());
+}
+
+#[gpui::test]
+fn the_entries_say_which_rows_are_drawn(cx: &mut TestAppContext) {
+    let (view, cx) = named(cx);
+    let entries = view.read_with(cx, |view, _| view.host().entries.clone());
+    entries.read_with(cx, |entries, _| {
+        assert!(entries.drawn(OsStr::new(NAMED)));
+        assert!(!entries.drawn(OsStr::new("gone")));
+    });
+}
+
+#[gpui::test]
+fn a_busy_part_holds_undo(cx: &mut TestAppContext) {
+    let (view, cx) = named(cx);
+    open_field(&view, cx);
+    let island = view.read_with(cx, |view, _| view.host().island.clone());
+    let undo = Undo::Run(Rc::new(|_| UNDONE.set(UNDONE.get() + 1)));
+    island.update(cx, |island, cx| island.note("Named", Some(undo), cx));
+    cx.run_until_parked();
+    cx.simulate_keystrokes("ctrl-z");
+    cx.run_until_parked();
+    assert_eq!(UNDONE.get(), 0);
+}

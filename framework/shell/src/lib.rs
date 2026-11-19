@@ -37,13 +37,13 @@ pub use menu::{
 pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked};
 pub use opening::Opening;
 pub use part::{
-    Applies, Card, Cell, Closing, Column, Columns, Dims, DropAim, DropOver, DropSlot, DropTake,
-    EmptyNote, Focus, HeadButton, Items, Listed, NameCell, Opens, Part, Refused, RowMenu, Rows,
-    Selectable, Several, Slots, Typed, Watch,
+    Applies, Busy, Card, Cell, Closing, Column, Columns, Dims, DropAim, DropOver, DropSlot,
+    DropTake, EmptyNote, Focus, HeadButton, Items, Listed, NameCell, NameField, Opens, Part,
+    Refused, RowIcon, RowMenu, Rows, Selectable, Several, Slots, Typed, Watch,
 };
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};
-pub use published::Published;
+pub use published::{KnownFolder, KnownFolders, Published, ThumbnailsShown};
 pub use rules::{FolderName, FolderRules, RulesBook, Views};
 pub use scene::Scene;
 pub use text::{TextField, TextFieldEvent};

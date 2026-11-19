@@ -63,7 +63,9 @@ use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_properties_api as properties_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::Lines;
-use nova_files_shell::{FolderRules, Host, Link, Opening, Parts, WindowParts};
+use nova_files_shell::{
+    FolderRules, Host, KnownFolders, Link, Opening, Parts, ThumbnailsShown, WindowParts,
+};
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_transfer_api as transfer_api;
 
@@ -157,6 +159,8 @@ pub struct MainWindow {
     pub(crate) home: PathBuf,
     settings: Settings,
     hidden_files: Option<HiddenFiles>,
+    thumbnails_shown: ThumbnailsShown,
+    known: KnownFolders,
     pub(crate) drives: Drives,
     pub(crate) menu: Option<Menu>,
     pub(crate) search: search::Search,
@@ -279,6 +283,8 @@ impl MainWindow {
             pick: None,
             settings: Settings::default(),
             hidden_files: None,
+            thumbnails_shown: ThumbnailsShown::Shown,
+            known: KnownFolders::default(),
             drives: Drives::default(),
             menu: None,
             search: search::Search::new(cx),
@@ -423,6 +429,10 @@ impl MainWindow {
 
     pub fn places(&self) -> &[Place] {
         &self.places
+    }
+
+    pub const fn known_folders(&self) -> &KnownFolders {
+        &self.known
     }
 
     pub fn pinned(&self) -> &[Bookmark] {

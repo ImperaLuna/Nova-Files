@@ -49,7 +49,7 @@ impl MainWindow {
     }
 
     pub(crate) fn undo(&mut self, cx: &mut Context<Self>) {
-        if self.renaming() {
+        if self.renaming() || self.parts.busy(cx) {
             return;
         }
         let undo = self

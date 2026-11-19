@@ -170,7 +170,7 @@ impl MainWindow {
         if self.showing_found() {
             return vec![select.items.into_iter().map(MenuItem::from).collect()];
         }
-        let hidden = if self.settings.hidden_files == HiddenFiles::Shown {
+        let hidden = if self.hidden_files == Some(HiddenFiles::Shown) {
             ShellItem::run(Icon::Check, &HIDDEN).with_look(ShellLook::On)
         } else {
             ShellItem::run(Icon::Eye, &HIDDEN)

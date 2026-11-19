@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, Modifiers, MouseButton,
-    ParentElement as _, SharedString, Window, div, point, px,
+    ParentElement as _, SharedString, Styled as _, Window, div, point, px,
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_shell::{
@@ -106,16 +106,23 @@ impl Part for Tagger {
             |_, scene, _| scene.in_folder(Path::new(OTHER)),
             |_, _, _, _| Some(shown("tagger-list")),
         );
-        slots.row_icon(|_, entry, _| (entry.name == OWN).then(|| shown("tagger-icon")));
+        slots.row_icon(|_, entry, side, _| {
+            (entry.name == OWN).then(|| {
+                div()
+                    .debug_selector(|| "tagger-icon".to_owned())
+                    .size(side)
+                    .into_any_element()
+            })
+        });
         slots.opens(opens);
         slots.closing(|_, _| CLOSED.set(CLOSED.get() + 1));
         slots.page::<Basket>(basket);
         slots.drops::<Basket>(|_, _, paths, _| DROPPED.set(DROPPED.get() + paths.len()));
         slots.row_menu(|_, row, _| {
             if row == "place-file-room" {
-                vec![RowItem::new(Icon::Info, "Sweep", |_| {
+                vec![vec![RowItem::new(Icon::Info, "Sweep", |_| {
                     SWEPT.set(SWEPT.get() + 1);
-                })]
+                })]]
             } else {
                 Vec::new()
             }
@@ -229,7 +236,8 @@ fn a_part_fills_the_bar_the_overlay_and_a_row_icon(cx: &mut TestAppContext) {
     let (_view, cx, _core) = tagged(cx);
     assert!(cx.debug_bounds("tagger-bar").is_some());
     assert!(cx.debug_bounds("tagger-overlay").is_some());
-    assert!(cx.debug_bounds("tagger-icon").is_some());
+    let icon = cx.debug_bounds("tagger-icon").unwrap();
+    assert_eq!(icon.size.width, nova_files_shell::theme::size::ROW_ICON);
     assert!(cx.debug_bounds("tagger-list").is_none());
 }
 

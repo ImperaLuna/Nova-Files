@@ -82,7 +82,7 @@ impl MainWindow {
                             .w_full()
                             .child(part_name.map_or_else(
                                 || {
-                                    self.rename_field(index).map_or_else(
+                                    self.name_field((index, entry), cx).map_or_else(
                                         || {
                                             div()
                                                 .debug_selector(|| "stage-name".to_owned())
@@ -94,7 +94,7 @@ impl MainWindow {
                                                 .into_any_element()
                                         },
                                         |field| {
-                                            rename_box(field.clone(), colors)
+                                            rename_box(field, colors)
                                                 .flex_none()
                                                 .w_full()
                                                 .ml_0()

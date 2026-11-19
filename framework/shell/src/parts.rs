@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
-    SharedString, Subscription,
+    Pixels, SharedString, Subscription,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId};
 
@@ -20,6 +20,7 @@ use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::{Card, DropOver, Part, Slots};
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
+use crate::text::TextField;
 
 type ShownCell = Box<dyn Fn(&Entry, &App) -> Option<SharedString>>;
 
@@ -47,7 +48,7 @@ trait OpenPart {
     fn bars(&self) -> Vec<AnyView>;
     fn overlays(&self) -> Vec<AnyView>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
-    fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
+    fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
     fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
     fn closing(&self, cx: &mut App);
@@ -55,6 +56,8 @@ trait OpenPart {
     fn watch(&self, event: &Event, cx: &mut App);
     fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)>;
     fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
+    fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>>;
+    fn busy(&self, cx: &App) -> bool;
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App);
     fn takes_drops(&self, page: &PageRef) -> bool;
     fn drop_on(
@@ -63,7 +66,7 @@ trait OpenPart {
         paths: Vec<PathBuf>,
         cx: &mut App,
     ) -> Result<(), Vec<PathBuf>>;
-    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem>;
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>>;
     fn section_buttons(
         &self,
         at: SidebarAt,
@@ -180,12 +183,12 @@ impl<P: Part> OpenPart for Opened<P> {
             .map(|(_, view)| view.clone())
     }
 
-    fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
+    fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
         let part = self.entity.read(cx);
         self.slots
             .row_icons
             .iter()
-            .find_map(|icon| icon(part, entry, cx))
+            .find_map(|icon| icon(part, entry, side, cx))
     }
 
     fn closing(&self, cx: &mut App) {
@@ -254,6 +257,19 @@ impl<P: Part> OpenPart for Opened<P> {
             .find_map(|cell| cell(part, entry, cx))
     }
 
+    fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>> {
+        let part = self.entity.read(cx);
+        self.slots
+            .name_fields
+            .iter()
+            .find_map(|field| field(part, entry, cx))
+    }
+
+    fn busy(&self, cx: &App) -> bool {
+        let part = self.entity.read(cx);
+        self.slots.busy.iter().any(|busy| busy(part, cx))
+    }
+
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
         if self.slots.listed.is_empty() {
             return;
@@ -292,7 +308,7 @@ impl<P: Part> OpenPart for Opened<P> {
         Ok(())
     }
 
-    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>> {
         let part = self.entity.read(cx);
         self.slots
             .row_menus
@@ -609,16 +625,27 @@ impl WindowParts {
             .find_map(|part| part.name_cell(entry, cx))
     }
 
+    pub fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>> {
+        self.opened
+            .iter()
+            .find_map(|part| part.name_field(entry, cx))
+    }
+
+    pub fn busy(&self, cx: &App) -> bool {
+        self.opened.iter().any(|part| part.busy(cx))
+    }
+
     pub fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
         for part in &self.opened {
             part.listed(listing, reordered, cx);
         }
     }
 
-    pub fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+    pub fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>> {
         self.opened
             .iter()
             .flat_map(|part| part.row_menu(row, cx))
+            .filter(|group| !group.is_empty())
             .collect()
     }
 
@@ -674,8 +701,10 @@ impl WindowParts {
             .find_map(|part| part.list_view(scene, cx))
     }
 
-    pub fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
-        self.opened.iter().find_map(|part| part.row_icon(entry, cx))
+    pub fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
+        self.opened
+            .iter()
+            .find_map(|part| part.row_icon(entry, side, cx))
     }
 
     pub fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool {

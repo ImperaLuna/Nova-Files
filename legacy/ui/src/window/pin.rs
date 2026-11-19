@@ -78,14 +78,14 @@ impl MainWindow {
     }
 
     pub(crate) fn open_row_menu(&mut self, row: &str, at: Point<Pixels>, cx: &mut Context<Self>) {
-        let items: Vec<MenuItem> = self
+        let groups: Vec<Vec<MenuItem>> = self
             .parts
             .row_menu(row, cx)
             .into_iter()
-            .map(MenuItem::from)
+            .map(|group| group.into_iter().map(MenuItem::from).collect())
             .collect();
-        if !items.is_empty() {
-            self.open_menu(at, items, cx);
+        if !groups.is_empty() {
+            self.open_menu_groups(at, groups, false, cx);
         }
     }
 
