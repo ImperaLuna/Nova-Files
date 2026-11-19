@@ -9,7 +9,6 @@
 # - serde
 # - serde_json
 # - toml
-# - toml_edit
 #
 # Allowed workspace crates:
 # - nova-files-api
@@ -65,7 +64,6 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 # Reads the settings file and edits it in place, keeping the user's
 # comments; already in the lock through zbus's macros.
-toml_edit = { version = "0.25.18", default-features = false, features = ["display", "parse"] }
 nova-files-api.workspace = true
 nova-files-archives-core.workspace = true
 nova-files-delete-core.workspace = true

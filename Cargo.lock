@@ -3678,7 +3678,6 @@ dependencies = [
  "rustix 1.1.6",
  "serde",
  "serde_json",
- "toml_edit 0.25.18+spec-1.1.0",
 ]
 
 [[package]]
@@ -3836,7 +3835,6 @@ dependencies = [
 name = "nova-files-properties-core"
 version = "0.1.0"
 dependencies = [
- "log",
  "nova-files-api",
  "nova-files-disk",
  "nova-files-entries-core",

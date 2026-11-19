@@ -5,7 +5,6 @@
 # may do what with files (the change-access job).
 #
 # Allowed outside crates:
-# - log
 # - rustix
 # - uzers
 #
@@ -29,7 +28,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-log = { version = "0.4.35", features = ["std"] }
 # Reads a path's properties and walks folders by handle, without following
 # links; changes permissions and groups.
 rustix = { version = "1.1.6", default-features = false, features = ["fs", "process", "std"] }
