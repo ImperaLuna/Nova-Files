@@ -185,7 +185,7 @@ impl MainWindow {
                             .when(this.cursor() == Some(index), |row| {
                                 row.relative().child(cursor_ring(&colors))
                             })
-                            .when(this.pick_dims(index), |row| row.opacity(opacity::DIMMED))
+                            .when(this.dims(index, cx), |row| row.opacity(opacity::DIMMED))
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
                                 this.row_clicked((listing_id, id), event, window, cx);

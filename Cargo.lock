@@ -3865,6 +3865,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-picker-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-picker-api",
+]
+
+[[package]]
 name = "nova-files-places-api"
 version = "0.1.0"
 
@@ -4105,6 +4114,7 @@ dependencies = [
  "nova-files-gathered-api",
  "nova-files-open-api",
  "nova-files-picker-api",
+ "nova-files-picker-ui",
  "nova-files-places-api",
  "nova-files-preview-api",
  "nova-files-properties-api",

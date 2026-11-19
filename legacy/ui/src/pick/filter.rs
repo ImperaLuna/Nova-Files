@@ -3,58 +3,18 @@ use gpui::{
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, anchored,
     deferred, div, prelude::FluentBuilder as _,
 };
-use nova_files_api::{Entry, EntryKind};
-use nova_files_picker_api::{FilterRule, PickRequest};
+use nova_files_api::Entry;
+pub use nova_files_picker_ui::filter::{first, is_chosen, label, offers_all};
 
 use super::{Mode, Picker};
 use crate::theme::{Colors, radius, size};
 use crate::window::MainWindow;
 
-const ALL_FILES_LABEL: &str = "All files";
-const EVERY_NAME: &str = "*";
 const MENU_PRIORITY: usize = 1;
-
-pub fn first(request: &PickRequest) -> Option<usize> {
-    let count = request.filters.len();
-    request
-        .filter
-        .filter(|&filter| filter < count)
-        .or_else(|| (count > 0).then_some(0))
-}
-
-pub fn offers_all(request: &PickRequest) -> bool {
-    request.filters.iter().any(|filter| {
-        filter
-            .rules
-            .iter()
-            .any(|rule| matches!(rule, FilterRule::Glob(glob) if glob == EVERY_NAME))
-    })
-}
-
-pub fn label(request: &PickRequest, filter: Option<usize>) -> SharedString {
-    filter
-        .and_then(|filter| request.filters.get(filter))
-        .map_or_else(
-            || ALL_FILES_LABEL.into(),
-            |filter| filter.name.clone().into(),
-        )
-}
-
-pub fn is_chosen(chosen: Option<usize>, filter: Option<usize>) -> bool {
-    chosen == filter
-}
 
 impl Picker {
     pub fn dims(&self, entry: &Entry) -> bool {
-        if entry.kind != EntryKind::File {
-            return false;
-        }
-        if self.mode == Mode::Folders {
-            return true;
-        }
-        self.filter
-            .and_then(|filter| self.request.filters.get(filter))
-            .is_some_and(|filter| !filter.admits(&entry.name, self.request.types.as_deref()))
+        nova_files_picker_ui::filter::dims(&self.request, self.mode, self.filter, entry)
     }
 }
 

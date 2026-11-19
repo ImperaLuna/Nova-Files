@@ -65,7 +65,7 @@ impl MainWindow {
         {
             self.scroll_to_entry(cursor);
         }
-        self.tell_parts_listed(cx);
+        self.tell_parts_listed(reordered, cx);
         cx.emit(match arrived {
             Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
             Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
@@ -217,6 +217,7 @@ impl MainWindow {
         }
         self.ask_for_recent();
         self.pick_folder_refused(id, &path);
+        self.parts.refused(id, &path, cx);
         self.typed_path_refused(id, cx);
         cx.emit(WindowEvent::Refused(path));
         cx.notify();

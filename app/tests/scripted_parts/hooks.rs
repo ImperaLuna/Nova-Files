@@ -45,7 +45,7 @@ struct Tagger {
 }
 
 impl Tagger {
-    fn listed(&mut self, listing: &Listing, cx: &mut Context<Self>) {
+    fn listed(&mut self, listing: &Listing, _: bool, cx: &mut Context<Self>) {
         if listing.path == Path::new(SHOWN) {
             self.host
                 .entries

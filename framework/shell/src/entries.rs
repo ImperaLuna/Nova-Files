@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use gpui::{Context, EventEmitter};
-use nova_files_api::{Entry, EntryId, Listing};
+use nova_files_api::{Entry, EntryId, Listing, ListingId};
 
 use crate::location::Location;
 
@@ -12,6 +12,7 @@ pub struct Shown {
     pub listing: Option<Listing>,
     pub selected: Vec<EntryId>,
     pub picker: bool,
+    pub asked: Option<ListingId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +37,10 @@ impl Entries {
 
     pub const fn picker(&self) -> bool {
         self.shown.picker
+    }
+
+    pub const fn asked(&self) -> Option<ListingId> {
+        self.shown.asked
     }
 
     pub const fn selected_count(&self) -> usize {

@@ -22,6 +22,7 @@
 # - nova-files-gathered-api
 # - nova-files-open-api
 # - nova-files-picker-api
+# - nova-files-picker-ui
 # - nova-files-places-api
 # - nova-files-preview-api
 # - nova-files-properties-api
@@ -53,6 +54,7 @@ nova-files-folders-api.workspace = true
 nova-files-gathered-api.workspace = true
 nova-files-open-api.workspace = true
 nova-files-picker-api.workspace = true
+nova-files-picker-ui.workspace = true
 nova-files-places-api.workspace = true
 nova-files-preview-api.workspace = true
 nova-files-properties-api.workspace = true
