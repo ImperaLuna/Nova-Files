@@ -32,8 +32,8 @@ pub use menu::{
 };
 pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked};
 pub use part::{
-    Applies, Card, Cell, Closing, Column, Columns, DropAim, DropSlot, DropTake, EmptyNote, Items,
-    Listed, NameCell, Opens, Part, RowMenu, Rows, Slots, Watch,
+    Applies, Card, Cell, Closing, Column, Columns, DropAim, DropSlot, DropTake, EmptyNote,
+    HeadButton, Items, Listed, NameCell, Opens, Part, RowMenu, Rows, Slots, Watch,
 };
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};

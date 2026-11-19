@@ -38,6 +38,7 @@ pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
 pub type DropAim<P> = fn(&P, &Location, &[PathBuf], Modifiers, &App) -> Option<SharedString>;
 pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<RowItem>;
+pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
 
 pub struct Column<P> {
@@ -73,6 +74,7 @@ pub struct Slots<P> {
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
     pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
     pub(crate) row_menus: Vec<RowMenu<P>>,
+    pub(crate) head_buttons: Vec<(SidebarAt, &'static str, HeadButton<P>)>,
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
@@ -99,6 +101,7 @@ impl<P> Default for Slots<P> {
             drops: Vec::new(),
             drop_targets: Vec::new(),
             row_menus: Vec::new(),
+            head_buttons: Vec::new(),
             bars: Vec::new(),
             overlays: Vec::new(),
             list_views: Vec::new(),
@@ -199,6 +202,10 @@ impl<P: Part> Slots<P> {
 
     pub fn row_menu(&mut self, items: RowMenu<P>) {
         self.row_menus.push(items);
+    }
+
+    pub fn section_button(&mut self, at: SidebarAt, id: &'static str, button: HeadButton<P>) {
+        self.head_buttons.push((at, id, button));
     }
 
     pub fn drop_target(&mut self, aim: DropAim<P>, take: DropTake<P>) {

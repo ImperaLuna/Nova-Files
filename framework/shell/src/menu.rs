@@ -175,6 +175,7 @@ pub struct SidebarRow {
     pub depth: u8,
     pub expander: Option<Expander>,
     pub button: Option<RowItem>,
+    pub rank: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -200,7 +201,20 @@ impl SidebarRow {
             depth: 0,
             expander: None,
             button: None,
+            rank: Self::LAST,
         }
+    }
+
+    pub const FIRST: u8 = 0;
+    pub const START: u8 = 10;
+    pub const OWN: u8 = 20;
+    pub const GATHERED: u8 = 30;
+    pub const LAST: u8 = u8::MAX;
+
+    #[must_use]
+    pub const fn rank(mut self, rank: u8) -> Self {
+        self.rank = rank;
+        self
     }
 
     #[must_use]

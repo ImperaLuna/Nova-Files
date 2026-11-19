@@ -67,7 +67,11 @@ impl MainWindow {
     }
 }
 
-fn section_head(label: &'static str, button: Option<AnyElement>, colors: &Colors) -> Div {
+fn section_head(
+    label: &'static str,
+    buttons: impl IntoIterator<Item = AnyElement>,
+    colors: &Colors,
+) -> Div {
     div()
         .flex()
         .flex_none()
@@ -81,7 +85,7 @@ fn section_head(label: &'static str, button: Option<AnyElement>, colors: &Colors
         .font_weight(text::LABEL_WEIGHT)
         .text_color(colors.text_dim)
         .child(label)
-        .children(button)
+        .child(div().flex().items_center().children(buttons))
 }
 
 fn section_button(selector: &'static str, glyph: Icon, colors: &Colors) -> Stateful<Div> {

@@ -8,7 +8,7 @@ use super::{Row, new_tab_on_middle_click, on_middle_click, row, section_button, 
 use crate::assets::Icon;
 use nova_files_gathered_api::Gathering;
 
-use nova_files_shell::SidebarAt;
+use nova_files_shell::{SidebarAt, SidebarRow};
 
 use crate::location::Location;
 use crate::places::{self, START_LABEL};
@@ -62,34 +62,40 @@ impl MainWindow {
                     )
                 })
             });
-        let start = main.then(|| self.start_row(narrow, &colors, cx));
-        let gathered = Gathering::ALL
-            .into_iter()
-            .filter(|_| main)
-            .map(|place| self.gathered_row(place, narrow, &colors, cx));
-        let from_parts = self.part_rows(SidebarAt::Places, narrow, &colors, cx);
+        let start = main
+            .then(|| (SidebarRow::START, self.start_row(narrow, &colors, cx)))
+            .into_iter();
+        let gathered = Gathering::ALL.into_iter().filter(|_| main).map(|place| {
+            (
+                SidebarRow::GATHERED,
+                self.gathered_row(place, narrow, &colors, cx),
+            )
+        });
+        let mut ranked: Vec<(u8, Stateful<Div>)> = start
+            .chain(rows.map(|row| (SidebarRow::OWN, row)))
+            .chain(gathered)
+            .chain(self.part_rows(SidebarAt::Places, narrow, &colors, cx))
+            .collect();
+        ranked.sort_by_key(|(rank, _)| *rank);
         let pin = main.then(|| {
             section_button("pin", Icon::Plus, &colors)
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder_to_pin(cx)))
+                .into_any_element()
         });
+        let buttons = pin
+            .into_iter()
+            .chain(self.part_buttons(SidebarAt::Places, &colors, cx));
         let list = div()
             .flex()
             .gap(size::PLACE_GAP)
-            .children(start)
-            .children(rows)
-            .children(gathered)
-            .children(from_parts);
+            .children(ranked.into_iter().map(|(_, row)| row));
         if narrow {
-            return list.items_center().children(pin);
+            return list.items_center().children(buttons);
         }
         div()
             .flex()
             .flex_col()
-            .child(section_head(
-                LABEL,
-                pin.map(IntoElement::into_any_element),
-                &colors,
-            ))
+            .child(section_head(LABEL, buttons, &colors))
             .child(list.flex_col())
     }
 

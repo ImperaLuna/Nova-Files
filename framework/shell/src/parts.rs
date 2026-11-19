@@ -62,6 +62,12 @@ trait OpenPart {
         cx: &mut App,
     ) -> Result<(), Vec<PathBuf>>;
     fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem>;
+    fn section_buttons(
+        &self,
+        at: SidebarAt,
+        scene: &Scene,
+        cx: &App,
+    ) -> Vec<(&'static str, RowItem)>;
     fn drop_label(
         &self,
         at: &Location,
@@ -285,6 +291,21 @@ impl<P: Part> OpenPart for Opened<P> {
             .row_menus
             .iter()
             .flat_map(|items| items(part, row, cx))
+            .collect()
+    }
+
+    fn section_buttons(
+        &self,
+        at: SidebarAt,
+        scene: &Scene,
+        cx: &App,
+    ) -> Vec<(&'static str, RowItem)> {
+        let part = self.entity.read(cx);
+        self.slots
+            .head_buttons
+            .iter()
+            .filter(|(place, _, _)| *place == at)
+            .filter_map(|(_, id, button)| button(part, scene, cx).map(|item| (*id, item)))
             .collect()
     }
 
@@ -569,6 +590,18 @@ impl WindowParts {
         self.opened
             .iter()
             .flat_map(|part| part.row_menu(row, cx))
+            .collect()
+    }
+
+    pub fn section_buttons(
+        &self,
+        at: SidebarAt,
+        scene: &Scene,
+        cx: &App,
+    ) -> Vec<(&'static str, RowItem)> {
+        self.opened
+            .iter()
+            .flat_map(|part| part.section_buttons(at, scene, cx))
             .collect()
     }
 

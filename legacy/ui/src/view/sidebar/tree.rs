@@ -30,12 +30,16 @@ impl MainWindow {
             .chain(
                 self.part_rows(SidebarAt::Tree, false, &colors, cx)
                     .into_iter()
-                    .map(IntoElement::into_any_element),
+                    .map(|(_, row)| row.into_any_element()),
             );
         div()
             .flex()
             .flex_col()
-            .child(section_head(LABEL, None, &colors))
+            .child(section_head(
+                LABEL,
+                self.part_buttons(SidebarAt::Tree, &colors, cx),
+                &colors,
+            ))
             .child(div().flex().flex_col().gap(size::PLACE_GAP).children(rows))
     }
 

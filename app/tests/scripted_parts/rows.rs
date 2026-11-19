@@ -13,6 +13,7 @@ const BOOKS: &str = "/shelf/books";
 
 thread_local! {
     static EJECTED: Cell<usize> = const { Cell::new(0) };
+    static ADDED: Cell<usize> = const { Cell::new(0) };
 }
 
 struct Rower {
@@ -42,6 +43,28 @@ impl Part for Rower {
     }
 
     fn slots(slots: &mut Slots<Self>) {
+        slots.sidebar(SidebarAt::Places, |_, _, _| {
+            vec![
+                SidebarRow::new(
+                    "place-first",
+                    Icon::Folder,
+                    "First",
+                    Location::Folder(SHELF.into()),
+                )
+                .rank(SidebarRow::FIRST),
+                SidebarRow::new(
+                    "place-end",
+                    Icon::Folder,
+                    "End",
+                    Location::Folder(BOOKS.into()),
+                ),
+            ]
+        });
+        slots.section_button(SidebarAt::Places, "rows-add", |_, _, _| {
+            Some(RowItem::new(Icon::Plus, "Add", |_| {
+                ADDED.set(ADDED.get() + 1);
+            }))
+        });
         slots.sidebar(SidebarAt::Drives, |_, _, _| {
             vec![
                 SidebarRow::new(
@@ -81,6 +104,7 @@ impl Part for Rower {
 
 fn rowed(cx: &mut TestAppContext) -> &mut VisualTestContext {
     EJECTED.set(0);
+    ADDED.set(0);
     let mut parts = Parts::default();
     parts.add::<Rower>();
     cx.update(|cx| cx.set_global(parts));
@@ -112,4 +136,21 @@ fn a_part_tree_row_opens_and_shows_its_children_indented(cx: &mut TestAppContext
 
     click(cx, "tree-shelf-expander");
     assert!(cx.debug_bounds("tree-books").is_none());
+}
+
+#[gpui::test]
+fn part_rows_take_their_place_by_rank_among_the_window_rows(cx: &mut TestAppContext) {
+    let cx = rowed(cx);
+    let top = |cx: &mut VisualTestContext, selector| cx.debug_bounds(selector).unwrap().top();
+    assert!(top(cx, "place-first") < top(cx, "place-start"));
+    assert!(top(cx, "place-end") > top(cx, "place-projects"));
+    assert!(top(cx, "place-end") > top(cx, "place-games"));
+}
+
+#[gpui::test]
+fn a_part_button_on_a_section_head_runs(cx: &mut TestAppContext) {
+    let cx = rowed(cx);
+    assert!(cx.debug_bounds("pin").is_some());
+    click(cx, "rows-add");
+    assert_eq!(ADDED.get(), 1);
 }

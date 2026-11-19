@@ -8,7 +8,7 @@ use gpui::{
 };
 use nova_files_shell::{Expander, RowItem, SidebarAt, SidebarRow};
 
-use super::{Row, icon, on_middle_click, row};
+use super::{Row, icon, on_middle_click, row, section_button};
 use crate::assets::Icon;
 use crate::theme::{Colors, radius, size};
 use crate::window::{HoverOpens, MainWindow, from_shell};
@@ -20,14 +20,34 @@ impl MainWindow {
         narrow: bool,
         colors: &Colors,
         cx: &Context<Self>,
-    ) -> Vec<Stateful<Div>> {
+    ) -> Vec<(u8, Stateful<Div>)> {
         if self.pick.is_some() {
             return Vec::new();
         }
         self.parts
             .sidebar(at, &self.scene(), cx)
             .into_iter()
-            .map(|place| self.part_row(place, narrow, colors, cx))
+            .map(|place| (place.rank, self.part_row(place, narrow, colors, cx)))
+            .collect()
+    }
+
+    pub(super) fn part_buttons(
+        &self,
+        at: SidebarAt,
+        colors: &Colors,
+        cx: &Context<Self>,
+    ) -> Vec<AnyElement> {
+        if self.pick.is_some() {
+            return Vec::new();
+        }
+        self.parts
+            .section_buttons(at, &self.scene(), cx)
+            .into_iter()
+            .map(|(id, button)| {
+                section_button(id, button.icon, colors)
+                    .on_click(run_on_click(button, cx))
+                    .into_any_element()
+            })
             .collect()
     }
 
