@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use gpui::{App, SharedString, Task};
 use nova_files_api::{Entry, EntryKind, Failure, JobId, Operation, Outcome, Tally};
-use nova_files_open_api::NotOpened;
 use nova_files_shell::{OnUndo, Undo};
 
 pub const NOTE_TIME: Duration = Duration::from_secs(6);
@@ -17,7 +16,6 @@ pub struct Island {
     pub confirm: Option<Confirm>,
     pub for_all: Option<(JobId, u64)>,
     pub jobs_open: bool,
-    pub not_opened: Vec<(PathBuf, NotOpened)>,
     pub(crate) note_timer: Option<Task<()>>,
     pub(crate) note_owner: Option<nova_files_shell::NoteId>,
 }
@@ -271,7 +269,6 @@ const fn failure(reason: Failure) -> &'static str {
 }
 
 pub mod asking;
-pub mod opening;
 pub mod progress;
 pub mod several;
 

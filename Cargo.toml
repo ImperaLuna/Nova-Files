@@ -42,6 +42,7 @@ nova-files-look-ui = { path = "features/look/ui" }
 nova-files-messages = { path = "framework/messages" }
 nova-files-open-api = { path = "features/open/api" }
 nova-files-open-core = { path = "features/open/core" }
+nova-files-open-ui = { path = "features/open/ui" }
 nova-files-picker-api = { path = "features/picker/api" }
 nova-files-picker-ui = { path = "features/picker/ui" }
 nova-files-places-api = { path = "features/places/api" }
@@ -64,6 +65,7 @@ nova-files-start-core = { path = "features/start/core" }
 nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
 nova-files-thumbnails-api = { path = "features/thumbnails/api" }
 nova-files-thumbnails-core = { path = "features/thumbnails/core" }
+nova-files-thumbnails-ui = { path = "features/thumbnails/ui" }
 nova-files-transfer-api = { path = "features/transfer/api" }
 nova-files-transfer-core = { path = "features/transfer/core" }
 nova-files-transfer-ui = { path = "features/transfer/ui" }

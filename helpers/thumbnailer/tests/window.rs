@@ -12,10 +12,12 @@ use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
 
-use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
+use gpui::{App, Entity, Modifiers, TestAppContext, VisualTestContext};
 use image::{ImageFormat, RgbImage};
 use nova_files_core::{IDLE_EXIT, Thumbnails};
 use nova_files_preview_api::PreviewContent;
+use nova_files_shell::Parts;
+use nova_files_thumbnails_ui::ThumbnailsPart;
 use nova_files_ui::{MainWindow, WindowEvent};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
@@ -75,6 +77,11 @@ async fn window_on_media<'a>(
         helper: PathBuf::from(HELPER),
     };
     cx.executor().allow_parking();
+    cx.update(|cx| {
+        let mut parts = Parts::default();
+        parts.add::<ThumbnailsPart>();
+        cx.set_global(parts);
+    });
     let core = nova_files_core::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
     let (start, home) = (folder.clone(), temp.0.clone());
     let (view, cx) =
@@ -86,15 +93,20 @@ async fn window_on_media<'a>(
     (temp, view, cx, core)
 }
 
+fn has_thumbnail(view: &MainWindow, index: usize, cx: &App) -> bool {
+    view.part::<ThumbnailsPart>()
+        .is_some_and(|part| part.read(cx).thumbnail(index).is_some())
+}
+
 #[gpui::test]
 async fn an_image_row_gets_its_thumbnail(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let (_temp, view, cx, _core) = window_on_media(cx, "thumbnail").await;
 
-    view.condition::<WindowEvent>(cx, |view, _| view.thumbnail(1).is_some())
+    view.condition::<WindowEvent>(cx, |view, cx| has_thumbnail(view, 1, cx))
         .await;
 
-    view.read_with(cx, |view, _| assert!(view.thumbnail(0).is_none()));
+    view.read_with(cx, |view, cx| assert!(!has_thumbnail(view, 0, cx)));
 }
 
 #[gpui::test]

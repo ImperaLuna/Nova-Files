@@ -8,6 +8,7 @@ use gpui::{
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_open_api as open_api;
+use nova_files_open_ui::OpenPart;
 use nova_files_shell::path_bar::PageCrumbs;
 use nova_files_shell::{
     DropOver, Host, Location, NavEvent, NoteGone, PageKind, PageRef, Part, Parts, RowItem,
@@ -182,6 +183,7 @@ fn tagged(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContex
     SWEPT.set(0);
     let mut parts = Parts::default();
     parts.add::<Tagger>();
+    parts.add::<OpenPart>();
     cx.update(|cx| {
         cx.set_global(parts);
         nova_files_ui::bind_window_keys(cx);

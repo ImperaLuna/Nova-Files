@@ -1,0 +1,32 @@
+# nova-files-open-ui
+#
+# Opening's window half: opens the files picked in the window in their
+# apps, and says on the island which ones didn't open and why.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-open-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-open-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-open-api.workspace = true
+nova-files-shell.workspace = true

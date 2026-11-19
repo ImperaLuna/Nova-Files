@@ -2,27 +2,18 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use gpui::{App, Context, RenderImage, Window};
-use nova_files_api::{
-    Command, Details, EntryId, EntryKind, FileIcon, ListingId, ThemeIcon, ThumbnailSize,
-};
-use nova_files_shell::ThumbnailsShown;
+use nova_files_api::{Command, Details, EntryId, EntryKind, FileIcon, ThemeIcon, ThumbnailSize};
 
 use super::MainWindow;
 use crate::columns::{self, ColumnText};
 use crate::grid::Grid;
+use crate::theme_icons;
 use crate::view::{RowIcon, entry_kind};
-use crate::{theme_icons, thumbnail};
+use nova_files_thumbnails_ui::device_side;
 
 pub struct RowRead {
     pub details: Details,
     pub icon: FileIcon,
-}
-
-struct Shrunk {
-    id: ListingId,
-    index: usize,
-    side: u32,
-    image: RenderImage,
 }
 
 impl MainWindow {
@@ -41,10 +32,6 @@ impl MainWindow {
         })
     }
 
-    pub fn thumbnail(&self, index: usize) -> Option<&Arc<RenderImage>> {
-        self.thumbnails.get(index)
-    }
-
     pub fn theme_icon(&self, index: usize) -> Option<&Arc<RenderImage>> {
         match &self.details.get(&index)?.icon {
             FileIcon::Theme { icon, .. } => self.theme_icons.get(&icon.path),
@@ -53,9 +40,6 @@ impl MainWindow {
     }
 
     pub fn row_icon(&self, index: usize, kind: EntryKind) -> RowIcon<'_> {
-        if let Some(image) = self.thumbnail(index) {
-            return RowIcon::Thumbnail(image);
-        }
         if let Some(image) = self.theme_icon(index) {
             return RowIcon::Theme(image);
         }
@@ -171,12 +155,12 @@ impl MainWindow {
         self.host
             .entries
             .update(cx, |entries, _| entries.set_drawn(range));
-        cx.defer_in(window, |this, window, cx| {
-            this.show_rows(this.rows_drawn.clone(), window, cx);
+        cx.defer_in(window, |this, _, cx| {
+            this.show_rows(this.rows_drawn.clone(), cx);
         });
     }
 
-    fn show_rows(&mut self, visible: Range<usize>, window: &mut Window, cx: &mut App) {
+    fn show_rows(&mut self, visible: Range<usize>, cx: &mut App) {
         let Some(listing) = &self.listing else { return };
         let screen = visible.len();
         let wanted = visible.start.saturating_sub(screen)
@@ -200,7 +184,6 @@ impl MainWindow {
         if let Some(connection) = &self.connection {
             connection.send(command).ok();
         }
-        release(self.thumbnails.keep_rows(&wanted), Some(window), cx);
         self.parts.rows_drawn(listing.id, &wanted, cx);
         self.rows_wanted = wanted;
     }
@@ -236,7 +219,6 @@ impl MainWindow {
             .entries
             .update(cx, |entries, _| entries.set_thumbnail_side(side));
         self.parts.thumbnail_side(side, cx);
-        release(self.thumbnails.take_all(), Some(window), cx);
         self.forget_rows();
     }
 
@@ -257,7 +239,7 @@ impl MainWindow {
     }
 
     fn icon_side(&self) -> u32 {
-        thumbnail::device_side(self.icon_slot(), self.scale_factor)
+        device_side(self.icon_slot(), self.scale_factor)
     }
 
     pub(super) fn thumbnail_size(&self) -> ThumbnailSize {
@@ -265,53 +247,7 @@ impl MainWindow {
     }
 
     fn thumbnail_side(&self) -> u32 {
-        thumbnail::device_side(self.icon_slot(), self.scale_factor)
-    }
-
-    pub(super) fn thumbnail_arrived(
-        &self,
-        (id, entry, size): (ListingId, EntryId, ThumbnailSize),
-        png: Arc<[u8]>,
-        cx: &Context<Self>,
-    ) {
-        if let Ok(index) = usize::try_from(entry.0)
-            && size == self.thumbnail_size()
-            && self.rows_wanted.contains(&index)
-            && self.thumbnails_shown == ThumbnailsShown::Shown
-        {
-            self.shrink_thumbnail(id, index, png, cx);
-        }
-    }
-
-    fn shrink_thumbnail(&self, id: ListingId, index: usize, png: Arc<[u8]>, cx: &Context<Self>) {
-        let side = self.thumbnail_side();
-        let shrinking = cx
-            .background_executor()
-            .spawn(async move { thumbnail::shrink(&png, side) });
-        cx.spawn(async move |this, cx| {
-            let Some(image) = shrinking.await else { return };
-            let made = Shrunk {
-                id,
-                index,
-                side,
-                image,
-            };
-            this.update(cx, |this, cx| this.thumbnail_ready(made, cx))
-                .ok();
-        })
-        .detach();
-    }
-
-    fn thumbnail_ready(&mut self, made: Shrunk, cx: &mut Context<Self>) {
-        if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
-            && self.rows_wanted.contains(&made.index)
-            && made.side == self.thumbnail_side()
-            && self.thumbnails_shown == ThumbnailsShown::Shown
-        {
-            let replaced = self.thumbnails.insert(made.index, Arc::new(made.image));
-            release(replaced, None, cx);
-            cx.notify();
-        }
+        device_side(self.icon_slot(), self.scale_factor)
     }
 }
 

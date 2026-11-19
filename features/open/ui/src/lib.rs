@@ -1,12 +1,79 @@
-use std::path::PathBuf;
+#![forbid(unsafe_code)]
 
-use nova_files_open_api::NotOpened;
+use std::path::{Path, PathBuf};
 
-use super::{FILE, FILES, LIST_GAP, PART_GAP, count, name_of};
+use gpui::{Context, Subscription};
+use nova_files_api::Entry;
+use nova_files_open_api::{Command, Event, NotOpened};
+use nova_files_shell::{Host, NoteGone, NoteId, Part, Slots};
 
 const MOST_NAMES: usize = 3;
+const FILE: &str = "file";
+const FILES: &str = "files";
+const LIST_GAP: &str = ", ";
+const PART_GAP: &str = " · ";
+const ROOT: &str = "/";
 
-pub fn note(failed: &[(PathBuf, NotOpened)]) -> Option<String> {
+pub struct OpenPart {
+    host: Host,
+    failed: Vec<(PathBuf, NotOpened)>,
+    shown: Option<NoteId>,
+    _gone: Subscription,
+}
+
+impl OpenPart {
+    fn open_file(&mut self, _: &Entry, path: &Path, _: &mut Context<Self>) -> bool {
+        self.host
+            .link
+            .send(Command::OpenFile {
+                path: path.to_owned(),
+                activation: None,
+            })
+            .ok();
+        true
+    }
+
+    fn opened(&mut self, event: Event, cx: &mut Context<Self>) {
+        let Event::NotOpened { path, reason } = event else {
+            return;
+        };
+        self.failed.retain(|(was, _)| *was != path);
+        self.failed.push((path, reason));
+        if let Some(label) = note(&self.failed) {
+            let id = self
+                .host
+                .island
+                .update(cx, |island, cx| island.note(label, None, cx));
+            self.shown = Some(id);
+        }
+    }
+
+    fn note_gone(&mut self, id: NoteId) {
+        if self.shown == Some(id) {
+            self.shown = None;
+            self.failed.clear();
+        }
+    }
+}
+
+impl Part for OpenPart {
+    fn open(host: &Host, cx: &mut Context<Self>) -> Self {
+        Self {
+            host: host.clone(),
+            failed: Vec::new(),
+            shown: None,
+            _gone: cx.subscribe(&host.island, |part, _, NoteGone(id), _| part.note_gone(*id)),
+        }
+    }
+
+    fn slots(slots: &mut Slots<Self>) {
+        slots.on_event(Self::opened);
+        slots.opens(Self::open_file);
+        slots.sends::<Command>();
+    }
+}
+
+fn note(failed: &[(PathBuf, NotOpened)]) -> Option<String> {
     let mut reasons: Vec<(NotOpened, Vec<&PathBuf>)> = Vec::new();
     for (path, reason) in failed {
         match reasons.iter_mut().find(|(seen, _)| seen == reason) {
@@ -18,7 +85,7 @@ pub fn note(failed: &[(PathBuf, NotOpened)]) -> Option<String> {
         .into_iter()
         .map(|(reason, paths)| {
             let names = if paths.len() > MOST_NAMES {
-                count(paths.len(), FILE, FILES)
+                count(paths.len())
             } else {
                 let names: Vec<_> = paths.iter().map(|path| name_of(path)).collect();
                 names.join(LIST_GAP)
@@ -27,6 +94,21 @@ pub fn note(failed: &[(PathBuf, NotOpened)]) -> Option<String> {
         })
         .collect();
     (!parts.is_empty()).then(|| format!("Can't open {}", parts.join(PART_GAP)))
+}
+
+fn count(number: usize) -> String {
+    if number == 1 {
+        format!("1 {FILE}")
+    } else {
+        format!("{number} {FILES}")
+    }
+}
+
+fn name_of(path: &Path) -> String {
+    path.file_name().map_or_else(
+        || ROOT.to_owned(),
+        |name| name.to_string_lossy().into_owned(),
+    )
 }
 
 const fn why(reason: NotOpened, several: bool) -> &'static str {
