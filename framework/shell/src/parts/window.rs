@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -7,7 +8,7 @@ use gpui::{
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 use nova_files_messages::Envelope;
 
-use super::{OpenPart, Opened, ShownColumn};
+use super::{OpenPart, Opened, ShownColumn, Turn};
 use crate::assets::Icon;
 use crate::command::CommandSpec;
 use crate::jump::Jump;
@@ -15,6 +16,7 @@ use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::DropOver;
 use crate::part::Part;
+use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::text::TextField;
 
@@ -73,10 +75,13 @@ impl WindowParts {
     }
 
     pub fn start_cards(&self) -> Vec<AnyView> {
-        self.opened
+        let mut cards: Vec<(u8, AnyView)> = self
+            .opened
             .iter()
             .flat_map(|part| part.start_cards())
-            .collect()
+            .collect();
+        cards.sort_by_key(|(rank, _)| *rank);
+        cards.into_iter().map(|(_, card)| card).collect()
     }
 
     pub fn watch(&self, event: &Event, cx: &mut App) {
@@ -246,6 +251,36 @@ impl WindowParts {
     pub fn refused(&self, id: ListingId, path: &Path, cx: &mut App) {
         for part in &self.opened {
             part.refused(id, path, cx);
+        }
+    }
+
+    pub fn used(&self, folder: &Path, cx: &mut App) {
+        for part in &self.opened {
+            part.used(folder, cx);
+        }
+    }
+
+    pub fn rows_drawn(&self, id: ListingId, rows: &Range<usize>, cx: &mut App) {
+        for part in &self.opened {
+            part.rows_drawn(id, rows, cx);
+        }
+    }
+
+    pub fn rescaled(&self, scale_factor: f32, cx: &mut App) {
+        for part in &self.opened {
+            part.rescaled(scale_factor, cx);
+        }
+    }
+
+    pub fn thumbnail_side(&self, side: u32, cx: &mut App) {
+        for part in &self.opened {
+            part.thumbnail_side(side, cx);
+        }
+    }
+
+    pub fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App) {
+        for part in &self.opened {
+            part.page_turned(page, tab, turn, cx);
         }
     }
 }

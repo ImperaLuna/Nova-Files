@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -17,6 +18,7 @@ use crate::host::Host;
 use crate::jump::Jump;
 use crate::location::{Location, PageKind, PageRef};
 use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
+use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::text::TextField;
 
@@ -59,7 +61,20 @@ pub type Selectable<P> = fn(&P, &Entry, &App) -> bool;
 pub type Several<P> = fn(&P, &App) -> bool;
 pub type Dims<P> = fn(&P, &Entry, &App) -> bool;
 pub type Focus<P> = fn(&P, &App) -> Option<FocusHandle>;
+pub type RowsDrawn<P> = fn(&mut P, ListingId, Range<usize>, &mut Context<P>);
+pub type Rescaled<P> = fn(&mut P, f32, &mut Context<P>);
+pub type ThumbnailSide<P> = fn(&mut P, u32, &mut Context<P>);
+pub type Used<P> = fn(&mut P, &Path, &mut Context<P>);
+pub type PageTurn<P> = Rc<dyn Fn(&mut P, &PageRef, TabId, &mut Context<P>)>;
 pub type Refused<P> = fn(&mut P, ListingId, &Path, &mut Context<P>);
+
+pub struct CardRank;
+
+impl CardRank {
+    pub const RECENT: u8 = 10;
+    pub const DRIVES: u8 = 20;
+    pub const LAST: u8 = u8::MAX;
+}
 
 pub struct Column<P> {
     pub head: SharedString,
@@ -87,7 +102,7 @@ pub struct Slots<P> {
     pub(crate) listing_pages: Vec<(TypeId, ListSlot)>,
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
-    pub(crate) start_cards: Vec<Card<P>>,
+    pub(crate) start_cards: Vec<(u8, Card<P>)>,
     pub(crate) watches: Vec<Watch<P>>,
     pub(crate) empty_notes: Vec<EmptyNote<P>>,
     pub(crate) sends: Vec<MessageType>,
@@ -112,6 +127,12 @@ pub struct Slots<P> {
     pub(crate) dims: Vec<Dims<P>>,
     pub(crate) focus: Vec<Focus<P>>,
     pub(crate) refused: Vec<Refused<P>>,
+    pub(crate) used: Vec<Used<P>>,
+    pub(crate) rows_drawn: Vec<RowsDrawn<P>>,
+    pub(crate) rescaled: Vec<Rescaled<P>>,
+    pub(crate) thumbnail_sides: Vec<ThumbnailSide<P>>,
+    pub(crate) pages_shown: Vec<PageTurn<P>>,
+    pub(crate) pages_left: Vec<PageTurn<P>>,
 }
 
 impl<P> Default for Slots<P> {
@@ -149,6 +170,12 @@ impl<P> Default for Slots<P> {
             dims: Vec::new(),
             focus: Vec::new(),
             refused: Vec::new(),
+            used: Vec::new(),
+            rows_drawn: Vec::new(),
+            rescaled: Vec::new(),
+            thumbnail_sides: Vec::new(),
+            pages_shown: Vec::new(),
+            pages_left: Vec::new(),
         }
     }
 }
@@ -219,7 +246,11 @@ impl<P: Part> Slots<P> {
     }
 
     pub fn start_card(&mut self, card: Card<P>) {
-        self.start_cards.push(card);
+        self.start_card_at(CardRank::LAST, card);
+    }
+
+    pub fn start_card_at(&mut self, rank: u8, card: Card<P>) {
+        self.start_cards.push((rank, card));
     }
 
     pub fn watch(&mut self, watch: Watch<P>) {
@@ -319,6 +350,30 @@ impl<P: Part> Slots<P> {
         self.refused.push(refused);
     }
 
+    pub fn used(&mut self, used: Used<P>) {
+        self.used.push(used);
+    }
+
+    pub fn rows_drawn(&mut self, drawn: RowsDrawn<P>) {
+        self.rows_drawn.push(drawn);
+    }
+
+    pub fn rescaled(&mut self, rescaled: Rescaled<P>) {
+        self.rescaled.push(rescaled);
+    }
+
+    pub fn thumbnail_side(&mut self, changed: ThumbnailSide<P>) {
+        self.thumbnail_sides.push(changed);
+    }
+
+    pub fn page_shown<K: PageKind>(&mut self, shown: fn(&mut P, &K, TabId, &mut Context<P>)) {
+        self.pages_shown.push(page_turn(shown));
+    }
+
+    pub fn page_left<K: PageKind>(&mut self, left: fn(&mut P, &K, TabId, &mut Context<P>)) {
+        self.pages_left.push(page_turn(left));
+    }
+
     pub fn sends<M: Message>(&mut self) {
         self.sends.push(MessageType::of::<M>());
     }
@@ -334,4 +389,12 @@ impl<P: Part> Slots<P> {
     pub fn specs(&self) -> Vec<&'static CommandSpec> {
         self.commands.iter().map(|command| command.spec).collect()
     }
+}
+
+fn page_turn<P: 'static, K: PageKind>(turn: fn(&mut P, &K, TabId, &mut Context<P>)) -> PageTurn<P> {
+    Rc::new(move |part, page, tab, cx| {
+        if let Some(page) = page.get::<K>() {
+            turn(part, page, tab, cx);
+        }
+    })
 }
