@@ -27,8 +27,10 @@ use crate::scene::Scene;
 use crate::slot_view::{Draw, Fit};
 use crate::text::TextField;
 use cards::{card_views, slot_view};
+use declared::{each_once, sends, slots_of, specs, takes};
 
 mod cards;
+mod declared;
 mod window;
 
 pub use window::WindowParts;
@@ -730,12 +732,6 @@ impl Parts {
     }
 }
 
-fn slots_of<P: Part>() -> Slots<P> {
-    let mut slots = Slots::default();
-    P::slots(&mut slots);
-    slots
-}
-
 fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
     let entity = cx.new(|cx| P::open(host, cx));
     let slots = slots_of::<P>();
@@ -783,26 +779,4 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         path_chips,
         list_views,
     })
-}
-
-fn takes<P: Part>() -> Vec<MessageType> {
-    slots_of::<P>().takes()
-}
-
-fn sends<P: Part>() -> Vec<MessageType> {
-    slots_of::<P>().sent()
-}
-
-fn specs<P: Part>() -> Vec<&'static CommandSpec> {
-    slots_of::<P>().specs()
-}
-
-fn each_once(types: impl Iterator<Item = MessageType>) -> Vec<MessageType> {
-    let mut once = Vec::new();
-    for kind in types {
-        if !once.contains(&kind) {
-            once.push(kind);
-        }
-    }
-    once
 }
