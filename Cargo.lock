@@ -3587,6 +3587,7 @@ dependencies = [
  "nova-files-dbus",
  "nova-files-delete-ui",
  "nova-files-drives-api",
+ "nova-files-drives-ui",
  "nova-files-gathered-api",
  "nova-files-look-api",
  "nova-files-look-ui",
@@ -3749,6 +3750,16 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-messages",
  "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-drives-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-drives-api",
+ "nova-files-shell",
 ]
 
 [[package]]
@@ -4042,6 +4053,7 @@ dependencies = [
  "nova-files-clipboard-ui",
  "nova-files-delete-ui",
  "nova-files-drives-api",
+ "nova-files-drives-ui",
  "nova-files-gathered-api",
  "nova-files-picker-api",
  "nova-files-picker-ui",

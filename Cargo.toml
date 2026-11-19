@@ -28,6 +28,7 @@ nova-files-delete-ui = { path = "features/delete/ui" }
 nova-files-disk = { path = "framework/disk" }
 nova-files-drives-api = { path = "features/drives/api" }
 nova-files-drives-core = { path = "features/drives/core" }
+nova-files-drives-ui = { path = "features/drives/ui" }
 nova-files-entries-core = { path = "framework/entries/core" }
 nova-files-gathered-api = { path = "features/gathered/api" }
 nova-files-gathered-core = { path = "features/gathered/core" }

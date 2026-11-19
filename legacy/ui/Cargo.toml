@@ -19,6 +19,7 @@
 # - nova-files-clipboard-ui
 # - nova-files-delete-ui
 # - nova-files-drives-api
+# - nova-files-drives-ui
 # - nova-files-gathered-api
 # - nova-files-picker-api
 # - nova-files-picker-ui
@@ -47,6 +48,7 @@ chrono = "0.4.45"
 nova-files-api.workspace = true
 nova-files-delete-ui.workspace = true
 nova-files-drives-api.workspace = true
+nova-files-drives-ui.workspace = true
 nova-files-gathered-api.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-picker-ui.workspace = true

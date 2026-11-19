@@ -7,10 +7,10 @@ use nova_files_drives_api::DiskSpace;
 use super::titles;
 use crate::assets::Icon;
 use crate::columns;
-use crate::drives::{NEARLY_FULL, ShownDrive};
 use crate::theme::{Colors, radius, size, start, text};
 use crate::view::row::icon;
 use crate::window::MainWindow;
+use nova_files_drives_ui::{NEARLY_FULL, ShownDrive};
 
 const PER_ROW: usize = 3;
 const WHOLE: f32 = 100.0;
@@ -75,8 +75,8 @@ impl MainWindow {
             .bg(colors.raised)
             .cursor_pointer()
             .hover(|card| card.bg(colors.lifted))
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
-                this.open_drive(clicked.clone());
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.open_drive(clicked.clone(), cx);
             }))
             .child(
                 div()

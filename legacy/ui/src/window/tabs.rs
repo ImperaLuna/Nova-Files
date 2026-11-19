@@ -13,7 +13,6 @@ use super::search::Search;
 use nova_files_shell::TabId;
 
 use crate::assets::Icon;
-use crate::drives::ShownDrive;
 use crate::history::History;
 use crate::island;
 use crate::jump::TypeJump;
@@ -150,15 +149,6 @@ impl MainWindow {
         }
     }
 
-    pub(crate) fn open_drive_in_new_tab(&mut self, drive: ShownDrive, cx: &mut Context<Self>) {
-        if let Some(folder) = drive.folder.clone() {
-            self.open_in_new_tab(folder, cx);
-        } else {
-            self.new_tab(&Location::Start, cx);
-            self.open_drive(drive);
-        }
-    }
-
     pub fn tab_names(&self) -> Vec<SharedString> {
         self.tab_looks().into_iter().map(|(name, _)| name).collect()
     }
@@ -286,7 +276,7 @@ impl MainWindow {
     fn leave_tab(&mut self, cx: &mut Context<Self>) -> Tab {
         self.forget_rows();
         self.stop_measuring();
-        self.forget_drive_to_open();
+        self.went_elsewhere();
         self.close_preview(None, cx);
         self.close_menu(cx);
         self.close_path_menu();

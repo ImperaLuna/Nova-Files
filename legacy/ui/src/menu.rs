@@ -4,12 +4,10 @@ use gpui::{
     App, Context, FocusHandle, KeyBinding, KeybindingKeystroke, Pixels, Point, SharedString, Window,
 };
 
-use nova_files_drives_api::{DriveAction, DriveId};
 use nova_files_gathered_api::Gathering;
 
 use crate::assets::Icon;
 use crate::commands::CommandSpec;
-use crate::drives::ShownDrive;
 use crate::window::{AccessLevel, MainWindow, Who};
 
 pub const KEY_CONTEXT: &str = "Menu";
@@ -47,9 +45,6 @@ pub use nova_files_shell::Look;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuAction {
-    OpenDrive(ShownDrive),
-    OpenDriveInNewTab(ShownDrive),
-    Eject(DriveId),
     OpenInNewTab(PathBuf),
     SetDefaultApp { mime: String, app: String },
     SetAccess(Who, AccessLevel),
@@ -219,10 +214,7 @@ impl MainWindow {
         };
         window.focus(&self.keys_home(cx), cx);
         match item.action {
-            MenuAction::OpenDrive(drive) => self.open_drive(drive),
-            MenuAction::OpenDriveInNewTab(drive) => self.open_drive_in_new_tab(drive, cx),
             MenuAction::OpenInNewTab(folder) => self.open_in_new_tab(folder, cx),
-            MenuAction::Eject(drive) => self.act_on_drive(DriveAction::Eject(drive)),
             MenuAction::SetDefaultApp { mime, app } => self.set_default_app(mime, app),
             MenuAction::SetAccess(who, level) => self.set_access(who, level),
             MenuAction::Run(spec) => window.dispatch_action(spec.action(), cx),

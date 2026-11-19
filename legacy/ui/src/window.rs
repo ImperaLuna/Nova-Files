@@ -69,7 +69,6 @@ use nova_files_shell::{
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_transfer_api as transfer_api;
 
-use self::drives::Drives;
 use self::preview::QuickLooks;
 use self::rows::RowRead;
 use self::tree::TreeLine;
@@ -161,7 +160,7 @@ pub struct MainWindow {
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
     known: KnownFolders,
-    pub(crate) drives: Drives,
+    pub(crate) drives: nova_files_drives_ui::KnownDrives,
     pub(crate) menu: Option<Menu>,
     pub(crate) search: search::Search,
     pub(crate) focus: FocusHandle,
@@ -285,7 +284,7 @@ impl MainWindow {
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             known: KnownFolders::default(),
-            drives: Drives::default(),
+            drives: nova_files_drives_ui::KnownDrives::default(),
             menu: None,
             search: search::Search::new(cx),
             focus: cx.focus_handle(),
@@ -341,10 +340,6 @@ impl MainWindow {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<drives_api::Event>() {
-            Ok(event) => return self.drive_event(event, cx),
-            Err(envelope) => envelope,
-        };
         let envelope = match envelope.open::<gathered_api::Event>() {
             Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
@@ -371,9 +366,24 @@ impl MainWindow {
             }
             Err(envelope) => envelope,
         };
+        self.hand_to_parts(envelope, cx);
+    }
+
+    fn hand_to_parts(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
+        if self.tell_left(cx) {
+            let this = cx.entity().downgrade();
+            cx.defer(move |cx| {
+                this.update(cx, |this, cx| this.take(envelope, cx)).ok();
+            });
+            return;
+        }
+        let drives = envelope.get::<drives_api::Event>().is_some();
         let places = envelope.get::<places_api::Event>().is_some();
         if let Err(envelope) = self.parts.deliver(envelope, cx) {
             log::error!("no part takes {envelope:?}");
+        }
+        if drives {
+            self.drives_changed(cx);
         }
         if places {
             self.places_changed(cx);
@@ -458,7 +468,6 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             for command in MainWindow::FIRST_ASKS {
                 connection.send(command)?;
             }
-            connection.send(drives_api::Command::Drives)?;
             connection.send(settings_api::Command::Watch)?;
             Ok(connection)
         })

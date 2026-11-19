@@ -55,7 +55,6 @@ impl MainWindow {
         if arrived.folder().is_some() {
             self.tree_follows(&listing, !same_folder);
         }
-        self.ask_disk_space();
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);
