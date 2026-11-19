@@ -1,30 +1,26 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use nova_files_api::{
-    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, NotOpened,
-    Order, ThumbnailSize, Unreadable,
+    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, Order,
+    ThumbnailSize, Unreadable,
 };
 use nova_files_disk::ports::Icons;
 pub use nova_files_entries_core::ListingJob;
 use nova_files_entries_core::RowWatch;
 
 use crate::inside::{self, Inside, Within};
-use crate::thumbs::{Queue, Thumbnails};
-use nova_files_archives_core::ArchiveFailure;
 use nova_files_look_core::FileIcons;
 
 use crate::list::{self, Stopped};
 use crate::memory;
-use crate::mime::MimeTypes;
-use crate::open;
 use crate::order;
-use crate::preview;
+use nova_files_preview_core as preview;
+use nova_files_thumbnails_core::{Queue, Thumbnails};
 
 const LIST_THREAD: &str = "nova-files-list";
-const OPEN_THREAD: &str = "nova-files-open";
 
 const NO_LISTING: u64 = u64::MAX;
 
@@ -90,16 +86,6 @@ impl Drop for Client {
     fn drop(&mut self) {
         self.current_search.store(NO_LISTING, Ordering::SeqCst);
         self.current_preview.cancel();
-    }
-}
-
-impl RowWatch for Queue {
-    fn show(&self, listing: &Listing, current: &dyn Fn() -> bool) {
-        Self::show(self, listing, current);
-    }
-
-    fn want(&self, id: ListingId, first: EntryId, count: u32, size: Option<ThumbnailSize>) {
-        Self::want(self, id, first, count, size);
     }
 }
 
@@ -182,45 +168,4 @@ fn list_inside(
         }
         Err(reason) => job.answer(Event::FolderUnreadable { id, path, reason }),
     }
-}
-
-pub fn open_file(
-    client: &Client,
-    (types, inside): (Arc<OnceLock<MimeTypes>>, Arc<Inside>),
-    path: PathBuf,
-    activation: Option<String>,
-) {
-    let events = Arc::clone(client.events());
-    let failed_path = path.clone();
-    let spawned = thread::Builder::new()
-        .name(OPEN_THREAD.to_owned())
-        .spawn(move || {
-            let types = types.get_or_init(MimeTypes::from_env);
-            let opened = match opened_copy(&path, &inside) {
-                Some(Ok(copy)) => open::open_file(&copy, types, activation.as_deref()),
-                Some(Err(_)) => Err(NotOpened::Failed),
-                None => open::open_file(&path, types, activation.as_deref()),
-            };
-            let event = match opened {
-                Ok(()) => Event::FileOpened { path },
-                Err(reason) => Event::FileNotOpened { path, reason },
-            };
-            events.deliver(event).ok();
-        });
-    if let Err(error) = spawned {
-        log::warn!("can't start a thread to open a file: {error}");
-        client
-            .deliver(Event::FileNotOpened {
-                path: failed_path,
-                reason: NotOpened::Failed,
-            })
-            .ok();
-    }
-}
-
-fn opened_copy(path: &Path, inside: &Inside) -> Option<Result<PathBuf, ArchiveFailure>> {
-    if path.symlink_metadata().is_ok() {
-        return None;
-    }
-    inside::within(path).map(|within| inside.take_out(&within))
 }

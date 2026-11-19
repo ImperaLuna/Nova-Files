@@ -1,4 +1,5 @@
 use nova_files_api::Operation;
+use nova_files_search_api::{Command as SearchCommand, Event as SearchEvent, SearchFailed};
 
 use super::*;
 
@@ -6,7 +7,8 @@ fn next_find(core: &mut Core) -> Option<(ListingId, String, Option<PathBuf>)> {
     while let Ok(message) = core.messages.try_recv() {
         if let CoreMessage::Connected { events, .. } = message {
             core.events = Some(events);
-        } else if let Some(Command::Find { id, query, within }) = message.into_command::<Command>()
+        } else if let Some(SearchCommand::Find { id, query, within }) =
+            message.into_command::<SearchCommand>()
         {
             return Some((id, query, within));
         }
@@ -186,11 +188,11 @@ fn down_moves_into_the_results_and_enter_opens_a_file_where_it_is(cx: &mut TestA
     cx.run_until_parked();
 
     let opened: Vec<PathBuf> = core
-        .commands()
+        .sent::<nova_files_open_api::Command>()
         .into_iter()
         .filter_map(|command| match command {
-            Command::OpenFile { path, .. } => Some(path),
-            _ => None,
+            nova_files_open_api::Command::OpenFile { path, .. } => Some(path),
+            nova_files_open_api::Command::OpenWith(_) => None,
         })
         .collect();
     assert_eq!(opened, [PathBuf::from("/docs/report.pdf")]);
@@ -242,9 +244,9 @@ fn nothing_found_shows_no_matches(cx: &mut TestAppContext) {
     cx.simulate_input("zzz");
     cx.run_until_parked();
     let (id, ..) = std::iter::from_fn(|| next_find(&mut core)).last().unwrap();
-    core.send(Event::FindFailed {
+    core.send(SearchEvent::FindFailed {
         id,
-        reason: nova_files_api::SearchFailed::IndexFailed,
+        reason: SearchFailed::IndexFailed,
     });
     cx.run_until_parked();
 
@@ -404,9 +406,9 @@ fn clicking_a_result_takes_the_keys_from_the_box(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     let opened = core
-        .commands()
+        .sent::<nova_files_open_api::Command>()
         .into_iter()
-        .any(|command| matches!(command, Command::OpenFile { path, .. } if path == Path::new("/docs/report.pdf")));
+        .any(|command| matches!(command, nova_files_open_api::Command::OpenFile { path, .. } if path == Path::new("/docs/report.pdf")));
     assert!(opened);
 }
 
@@ -469,9 +471,9 @@ fn an_older_find_that_fails_late_is_dropped(cx: &mut TestAppContext) {
     cx.run_until_parked();
     next_find(&mut core).unwrap();
 
-    core.send(Event::FindFailed {
+    core.send(SearchEvent::FindFailed {
         id: older,
-        reason: nova_files_api::SearchFailed::IndexFailed,
+        reason: SearchFailed::IndexFailed,
     });
     cx.run_until_parked();
 
@@ -524,14 +526,16 @@ fn hidden_files_shown_mid_search_leave_the_search_alone(cx: &mut TestAppContext)
 
 #[gpui::test]
 fn search_results_show_as_details_whatever_their_folder_shows(cx: &mut TestAppContext) {
-    use nova_files_api::{FolderView, IconSize, ViewMode};
+    use nova_files_folders_api::{
+        Command as ViewsCommand, Event as ViewsEvent, FolderView, IconSize, ViewMode,
+    };
 
     let (view, cx, mut core) = searching(cx);
     let icons = FolderView {
         mode: ViewMode::Icons,
         icons: IconSize::Medium,
     };
-    core.send(Event::FolderViews(Arc::from([(
+    core.send(ViewsEvent::Views(Arc::from([(
         PathBuf::from(SHOWN),
         icons,
     )])));
@@ -541,11 +545,11 @@ fn search_results_show_as_details_whatever_their_folder_shows(cx: &mut TestAppCo
         FolderView::default()
     );
 
-    core.commands();
+    core.sent::<ViewsCommand>();
     cx.simulate_keystrokes("down ctrl-2");
     let kept = core
-        .commands()
+        .sent::<ViewsCommand>()
         .into_iter()
-        .any(|command| matches!(command, Command::SetFolderView { .. }));
+        .any(|command| matches!(command, ViewsCommand::SetView { .. }));
     assert!(!kept);
 }

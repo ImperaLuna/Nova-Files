@@ -3,7 +3,7 @@ use std::thread;
 use std::time::Duration;
 
 use futures::channel::oneshot;
-use nova_files_api::{Command, Connector, Event};
+use nova_files_api::{Command, Connector, Event, Message};
 use zbus::fdo;
 
 pub const INTERFACE: &str = "io.github.ImperaLuna.NovaFiles1";
@@ -22,7 +22,7 @@ impl Files {
     }
 }
 
-pub async fn ask_core(connector: &Connector, command: Command) -> fdo::Result<Event> {
+pub async fn ask_core<C: Message, E: Message>(connector: &Connector, command: C) -> fdo::Result<E> {
     let connector = connector.clone();
     let (answer_sender, answer) = oneshot::channel();
     // zbus answers every call on one executor, so a blocking wait there holds up every other call.
@@ -38,7 +38,7 @@ pub async fn ask_core(connector: &Connector, command: Command) -> fdo::Result<Ev
         .map_err(|_| fdo::Error::Failed("the core stopped".to_owned()))?
 }
 
-fn wait_for_core(connector: &Connector, command: Command) -> fdo::Result<Event> {
+fn wait_for_core<C: Message, E: Message>(connector: &Connector, command: C) -> fdo::Result<E> {
     let core_gone = |_| fdo::Error::Failed("the core has stopped".to_owned());
     let (events, answers) = mpsc::channel();
     let connection = connector.connect(events).map_err(core_gone)?;
@@ -54,7 +54,7 @@ fn wait_for_core(connector: &Connector, command: Command) -> fdo::Result<Event> 
 #[zbus::interface(name = "io.github.ImperaLuna.NovaFiles1")]
 impl Files {
     async fn ping(&self) -> fdo::Result<()> {
-        match ask_core(&self.connector, Command::Ping).await? {
+        match ask_core::<_, Event>(&self.connector, Command::Ping).await? {
             Event::Pong => Ok(()),
             _ => Err(fdo::Error::Failed(
                 "the core gave an unexpected answer".to_owned(),

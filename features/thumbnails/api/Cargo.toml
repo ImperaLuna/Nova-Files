@@ -1,0 +1,23 @@
+# nova-files-thumbnails-api
+#
+# What the thumbnails feature's two halves say to each other: a listing
+# file's thumbnail.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
+
+[package]
+name = "nova-files-thumbnails-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

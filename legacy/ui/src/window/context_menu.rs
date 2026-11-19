@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use gpui::{App, Context, Modifiers, Pixels, Point, point};
-use nova_files_api::{EntryId, HiddenFiles, ListingId, ViewMode};
+use nova_files_api::{EntryId, HiddenFiles, ListingId};
+use nova_files_folders_api::ViewMode;
 use nova_files_shell::{
     Look as ShellLook, MenuAt, MenuGroup, MenuItem as ShellItem, Placed, arrange,
 };

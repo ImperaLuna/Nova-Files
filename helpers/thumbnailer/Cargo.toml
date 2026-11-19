@@ -30,4 +30,6 @@ landlock = "0.4"
 gpui = { workspace = true, features = ["test-support"] }
 nova-files-api.workspace = true
 nova-files-core.workspace = true
+nova-files-preview-api.workspace = true
+nova-files-thumbnails-api.workspace = true
 nova-files-ui.workspace = true

@@ -1,0 +1,27 @@
+# nova-files-folders-core
+#
+# The folders feature's core half: keeps how each folder is shown, saves it
+# to disk and tells every listening client when it changes.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-folders-api
+
+[package]
+name = "nova-files-folders-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+nova-files-folders-api.workspace = true

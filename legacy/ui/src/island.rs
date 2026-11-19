@@ -5,7 +5,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{App, SharedString, Task};
-use nova_files_api::{Entry, EntryKind, Failure, JobId, NotOpened, Operation, Outcome, Tally};
+use nova_files_api::{Entry, EntryKind, Failure, JobId, Operation, Outcome, Tally};
+use nova_files_open_api::NotOpened;
 use nova_files_shell::{OnUndo, Undo};
 
 pub const NOTE_TIME: Duration = Duration::from_secs(6);

@@ -7,6 +7,7 @@ use gpui::{
     ParentElement as _, SharedString, Styled as _, Window, div, point, px,
 };
 use nova_files_api::{Entry, Listing};
+use nova_files_open_api as open_api;
 use nova_files_shell::{
     DropOver, Host, Location, NavEvent, NoteGone, PageKind, PageRef, Part, Parts, RowItem,
     SidebarAt, SidebarRow, Slots, Undo, assets::Icon,
@@ -259,11 +260,11 @@ fn a_part_opens_its_own_entries_and_the_rest_open_as_before(cx: &mut TestAppCont
     cx.simulate_keystrokes("home shift-down enter");
     cx.run_until_parked();
     let opened: Vec<PathBuf> = core
-        .commands()
+        .sent::<open_api::Command>()
         .into_iter()
         .filter_map(|command| match command {
-            Command::OpenFile { path, .. } => Some(path),
-            _ => None,
+            open_api::Command::OpenFile { path, .. } => Some(path),
+            open_api::Command::OpenWith(_) => None,
         })
         .collect();
     assert_eq!(OPENED.get(), 1);

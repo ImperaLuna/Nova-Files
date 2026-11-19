@@ -14,8 +14,8 @@ use std::time::Duration;
 
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 use image::{ImageFormat, RgbImage};
-use nova_files_api::PreviewContent;
 use nova_files_core::{IDLE_EXIT, Thumbnails};
+use nova_files_preview_api::PreviewContent;
 use nova_files_ui::{MainWindow, WindowEvent};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
