@@ -14,6 +14,7 @@ pub enum NavAsk {
     Reload,
     Reveal(PathBuf),
     PickFolder(FolderPick),
+    FocusList,
 }
 
 pub type OnPicked = Rc<dyn Fn(PathBuf, &mut App)>;
@@ -98,6 +99,11 @@ impl Navigator {
             accept: accept.into(),
             picked: Rc::new(picked),
         }));
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn focus_list(&mut self, cx: &mut Context<Self>) {
+        self.asks.push(NavAsk::FocusList);
         cx.emit(NavEvent::Asked);
     }
 

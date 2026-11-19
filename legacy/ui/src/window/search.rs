@@ -23,6 +23,7 @@ pub enum Scope {
 pub enum FocusTo {
     Box,
     Results,
+    List,
 }
 
 pub struct Search {
