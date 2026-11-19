@@ -134,6 +134,7 @@ pub struct RowItem {
     pub icon: Icon,
     pub label: SharedString,
     pub look: Look,
+    pub detail: Option<SharedString>,
     pub run: OnRun,
 }
 
@@ -147,6 +148,7 @@ impl RowItem {
             icon,
             label: label.into(),
             look: Look::Plain,
+            detail: None,
             run: Rc::new(run),
         }
     }
@@ -156,6 +158,12 @@ impl RowItem {
         self.look = look;
         self
     }
+
+    #[must_use]
+    pub fn with_detail(mut self, detail: impl Into<SharedString>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
 }
 
 impl PartialEq for RowItem {
@@ -163,6 +171,7 @@ impl PartialEq for RowItem {
         self.icon == other.icon
             && self.label == other.label
             && self.look == other.look
+            && self.detail == other.detail
             && Rc::ptr_eq(&self.run, &other.run)
     }
 }
@@ -310,6 +319,22 @@ mod tests {
     use actions::Pick;
 
     crate::command_spec!(PICK, Pick, "test.pick", "Pick", []);
+
+    #[test]
+    fn a_row_item_carries_its_detail_line() {
+        let run: OnRun = Rc::new(|_| {});
+        let plain = RowItem {
+            run: Rc::clone(&run),
+            ..RowItem::new(Icon::Check, "Games", |_| {})
+        };
+        let detailed = RowItem {
+            run,
+            ..RowItem::new(Icon::Check, "Games", |_| {}).with_detail("Projects inside")
+        };
+        assert_eq!(plain.detail, None);
+        assert_eq!(detailed.detail, Some(SharedString::from("Projects inside")));
+        assert_ne!(plain, detailed);
+    }
 
     fn item(label: &'static str) -> MenuItem {
         MenuItem::run(Icon::Open, &PICK).with_label(label)

@@ -20,12 +20,16 @@
 # - nova-files-picker-api
 # - nova-files-picker-ui
 # - nova-files-places-ui
+# - nova-files-properties-ui
+# - nova-files-rename-ui
 # - nova-files-settings-ui
 # - nova-files-shell
+# - nova-files-start-ui
 # - nova-files-thumbnails-ui
 # - nova-files-transfer-ui
 # - nova-files-trash-ui
 # - nova-files-ui
+# - nova-files-undo-ui
 
 [package]
 name = "nova-files"
@@ -53,12 +57,16 @@ nova-files-open-ui.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-picker-ui.workspace = true
 nova-files-places-ui.workspace = true
+nova-files-properties-ui.workspace = true
+nova-files-rename-ui.workspace = true
 nova-files-settings-ui.workspace = true
 nova-files-shell.workspace = true
+nova-files-start-ui.workspace = true
 nova-files-thumbnails-ui.workspace = true
 nova-files-transfer-ui.workspace = true
 nova-files-trash-ui.workspace = true
 nova-files-ui.workspace = true
+nova-files-undo-ui.workspace = true
 
 [dev-dependencies]
 nova-files-folders-api.workspace = true

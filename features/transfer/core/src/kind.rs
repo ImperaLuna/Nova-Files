@@ -4,21 +4,26 @@ use nova_files_api::{Failure, Operation, Outcome};
 use nova_files_jobs::control::{Cancelled, Control};
 use nova_files_jobs::rest::still_there;
 use nova_files_jobs::running::Running;
+use nova_files_jobs::undo::landed;
 use nova_files_jobs::{Ended, JobKind};
 
+use crate::undo::{self, Undo, undo_of};
 use crate::{How, transfer};
 
 pub struct Transfers;
 
 impl JobKind for Transfers {
     type Op = Operation;
-    type Undo = ();
+    type Undo = Undo;
 
     fn claims(&self, operation: &Operation) -> bool {
         matches!(operation, Operation::Copy { .. } | Operation::Move { .. })
     }
 
-    fn run(&self, running: &mut Running, operation: &Operation, _: Option<&()>) -> Ended {
+    fn run(&self, running: &mut Running, operation: &Operation, undo: Option<&Undo>) -> Ended {
+        if let Some(undo) = undo {
+            return undo::run(running, undo);
+        }
         match operation {
             Operation::Copy { sources, into } => transfer(running, sources, into, How::Copy),
             Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
@@ -40,6 +45,10 @@ impl JobKind for Transfers {
             },
             other => other.clone(),
         })
+    }
+
+    fn undo(&self, running: &mut Running, operation: &Operation, _: &Ended) -> Option<Undo> {
+        undo_of(operation, landed(running))
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {

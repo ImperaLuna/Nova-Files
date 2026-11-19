@@ -29,9 +29,6 @@ pub const ACTIONS: &[CommandSpec] = &[
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
     TRASH,
-    RENAME,
-    NEW_FOLDER,
-    UNDO,
     PREVIEW,
     PREVIEW_PREVIOUS,
     PREVIEW_NEXT,
@@ -156,15 +153,6 @@ spec!(
     "Move to Trash",
     ["delete"]
 );
-spec!(RENAME, RenameSelected, "file.rename", "Rename", ["f2"]);
-spec!(
-    NEW_FOLDER,
-    NewFolder,
-    "file.new-folder",
-    "New folder",
-    ["ctrl-shift-n"]
-);
-spec!(UNDO, Undo, "edit.undo", "Undo", ["ctrl-z"]);
 spec!(
     PREVIEW,
     TogglePreview,

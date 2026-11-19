@@ -37,12 +37,12 @@ impl MainWindow {
             .child(self.strip(grid, cx))
     }
 
-    fn on_stage(&self) -> Option<(&QuickLook, &Listing, &Entry, usize)> {
+    fn on_stage(&self) -> Option<(&QuickLook, &Listing, &Entry)> {
         let open = self.quick_look()?;
         let listing = self.listing.as_ref()?;
         let index = usize::try_from(open.entry.0).ok()?;
         let entry = listing.entries.get(index)?;
-        Some((open, listing, entry, index))
+        Some((open, listing, entry))
     }
 
     fn stage(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
@@ -61,7 +61,7 @@ impl MainWindow {
             .gap(size::STAGE_PAD)
             .p(size::STAGE_PAD)
             .children(part_stage)
-            .children(shown.map(|(open, listing, entry, index)| {
+            .children(shown.map(|(open, listing, entry)| {
                 let current = open.current().and_then(|shown| shown.preview.as_deref());
                 let name = SharedString::from(entry.name.to_string_lossy().into_owned());
                 let about = current.map(meta).unwrap_or_default();
@@ -88,7 +88,7 @@ impl MainWindow {
                             .w_full()
                             .child(part_name.map_or_else(
                                 || {
-                                    self.name_field((index, entry), cx).map_or_else(
+                                    self.parts.name_field(entry, cx).map_or_else(
                                         || {
                                             div()
                                                 .debug_selector(|| "stage-name".to_owned())

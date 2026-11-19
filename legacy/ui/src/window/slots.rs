@@ -15,7 +15,7 @@ use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::search::FocusTo;
 use super::{MainWindow, Went};
-use crate::island::{Confirm, NoteUndo};
+use crate::island::Confirm;
 use crate::location::{Builtin, Location};
 use crate::selection::Selection;
 
@@ -315,7 +315,6 @@ impl MainWindow {
                 cx.notify();
             }
             Location::Gathered(gathering) => self.open_gathered(*gathering, cx),
-            Location::Properties(paths) => self.new_tab(&Location::Properties(paths.clone()), cx),
             Location::Page(page) => self.open_page(page.clone(), cx),
         }
     }
@@ -328,7 +327,7 @@ impl MainWindow {
                     self.start_job(operation);
                 }
                 IslandAsk::Note { id, label, undo } => {
-                    self.show_note(label, undo.map(NoteUndo::from), cx);
+                    self.show_note(label, undo, cx);
                     self.island.note_owner = Some(id);
                 }
                 IslandAsk::Ask {
@@ -349,13 +348,9 @@ impl MainWindow {
     }
 
     fn publish_undo(&self, cx: &mut Context<Self>) {
-        let noted = self.island.note.as_ref().and_then(|note| match &note.undo {
-            Some(NoteUndo::Job(job)) => Some(shell::Undo::Job(*job)),
-            Some(NoteUndo::Run(run)) => Some(shell::Undo::Run(run.clone())),
-            Some(NoteUndo::Send(_)) | None => None,
-        });
+        let noted = self.island.note.as_ref().and_then(|note| note.undo.clone());
         let undo = noted.or_else(|| self.jobs.last_undoable().map(shell::Undo::Job));
-        let busy = self.renaming() || self.parts.busy(cx);
+        let busy = self.renaming(cx);
         self.host
             .island
             .update(cx, |island, _| island.set_undoable(undo, busy));
@@ -384,7 +379,6 @@ impl MainWindow {
 
     pub(super) fn arrive_at_page(&mut self, page: PageRef, cx: &mut Context<Self>) {
         self.let_go_of_folder(cx);
-        self.stop_measuring();
         self.history.arrived(&Location::Page(page));
         cx.notify();
     }
@@ -427,7 +421,6 @@ pub fn from_shell(place: shell::Location) -> Location {
         shell::Location::Page(page) if page.get::<shell::StartPage>().is_some() => Location::Start,
         shell::Location::Page(page) => match page.get::<Builtin>() {
             Some(Builtin::Gathered(gathering)) => Location::Gathered(*gathering),
-            Some(Builtin::Properties(paths)) => Location::Properties(paths.clone()),
             None => Location::Page(page),
         },
     }

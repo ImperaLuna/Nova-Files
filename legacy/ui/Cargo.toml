@@ -28,10 +28,11 @@
 # - nova-files-places-ui
 # - nova-files-preview-api
 # - nova-files-properties-api
+# - nova-files-properties-ui
+# - nova-files-rename-ui
 # - nova-files-search-api
 # - nova-files-settings-api
 # - nova-files-shell
-# - nova-files-start-api
 # - nova-files-thumbnails-ui
 
 [package]
@@ -60,10 +61,10 @@ nova-files-places-api.workspace = true
 nova-files-places-ui.workspace = true
 nova-files-preview-api.workspace = true
 nova-files-properties-api.workspace = true
+nova-files-properties-ui.workspace = true
 nova-files-search-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
-nova-files-start-api.workspace = true
 nova-files-thumbnails-ui.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }
@@ -81,3 +82,4 @@ usvg = { version = "0.45.1", default-features = false }
 
 [dev-dependencies]
 nova-files-clipboard-ui.workspace = true
+nova-files-rename-ui.workspace = true

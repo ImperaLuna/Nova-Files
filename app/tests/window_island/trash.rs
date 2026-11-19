@@ -189,7 +189,7 @@ async fn in_the_trash_files_only_go_back(cx: &mut TestAppContext) {
     assert_eq!(view.read_with(cx, |view, _| view.jobs_pending()), 0);
     cx.simulate_keystrokes("f2");
     cx.run_until_parked();
-    assert!(!view.read_with(cx, |view, _| view.renaming()));
+    assert!(!view.read_with(cx, MainWindow::renaming));
     assert_eq!(
         view.read_with(cx, |view, _| view.entry_names()),
         ["notes.txt"]

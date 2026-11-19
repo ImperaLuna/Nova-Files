@@ -184,6 +184,7 @@ fn tagged(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContex
     let mut parts = Parts::default();
     parts.add::<Tagger>();
     parts.add::<OpenPart>();
+    parts.add::<nova_files_undo_ui::UndoPart>();
     cx.update(|cx| {
         cx.set_global(parts);
         nova_files_ui::bind_window_keys(cx);
