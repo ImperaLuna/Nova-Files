@@ -18,8 +18,8 @@ pub use properties::TopFacts;
 pub use row::{RowIcon, entry_kind};
 
 use gpui::{
-    App, Context, Div, FocusHandle, Focusable as _, InteractiveElement as _, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection,
+    App, Context, Div, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection,
     ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
     prelude::FluentBuilder as _,
 };
@@ -116,7 +116,7 @@ impl MainWindow {
             .text_size(text::BODY)
             .font_weight(text::BODY_WEIGHT)
             .child(self.body(narrow, &colors, cx))
-            .children(self.pick.as_ref().map(|pick| Self::pick_bar(pick, cx)))
+            .children(self.picking(cx))
             .children(self.menu_overlay(window, cx))
     }
 }
@@ -226,10 +226,7 @@ impl MainWindow {
     }
 
     pub fn keys_home(&self, cx: &App) -> FocusHandle {
-        self.pick.as_ref().map_or_else(
-            || self.parts.focus(cx).unwrap_or_else(|| self.focus.clone()),
-            |pick| pick.name.read(cx).focus_handle(cx),
-        )
+        self.parts.focus(cx).unwrap_or_else(|| self.focus.clone())
     }
 
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {

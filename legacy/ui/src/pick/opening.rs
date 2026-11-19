@@ -1,8 +1,7 @@
-use gpui::{Context, ForeignParent, Pixels, Size, Subscription, Window};
+use gpui::{Context, ForeignParent, Window};
 use nova_files_api::Command;
 use nova_files_picker_api::ParentWindow;
 
-use super::Picker;
 use crate::window::MainWindow;
 use crate::window_state::WindowState;
 
@@ -13,34 +12,30 @@ pub fn foreign_parent(parent: &ParentWindow) -> ForeignParent {
     }
 }
 
-pub(super) fn watch_size(
-    window: &mut Window,
-    cx: &Context<MainWindow>,
-) -> (Size<Pixels>, Subscription) {
-    let bounds = cx.observe_window_bounds(window, |this, window, _| {
-        if let Some(pick) = &mut this.pick {
-            pick.size = window.window_bounds().get_bounds().size;
-        }
-    });
-    (window.window_bounds().get_bounds().size, bounds)
-}
-
 impl MainWindow {
-    pub(super) fn take_pick(&mut self) -> Option<Picker> {
-        let pick = self.pick.take()?;
-        let state = WindowState::default().with_picker(pick.size);
+    pub(super) fn watch_pick_size(&mut self, window: &mut Window, cx: &Context<Self>) {
+        self.pick_size = Some(window.window_bounds().get_bounds().size);
+        self.pick_bounds = Some(cx.observe_window_bounds(window, |this, window, _| {
+            this.pick_size = Some(window.window_bounds().get_bounds().size);
+        }));
+    }
+
+    pub(crate) fn save_pick_size(&mut self) {
+        let Some(size) = self.pick_size.take() else {
+            return;
+        };
+        let state = WindowState::default().with_picker(size);
         if let Some(connection) = &self.connection {
             connection
                 .send(Command::SaveWindowState(state.to_bytes()))
                 .ok();
         }
-        Some(pick)
     }
 }
 
 impl Drop for MainWindow {
     fn drop(&mut self) {
-        drop(self.take_pick());
+        self.save_pick_size();
     }
 }
 

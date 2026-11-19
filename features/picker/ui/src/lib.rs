@@ -1,6 +1,12 @@
 #![forbid(unsafe_code)]
 
+mod accept;
+mod bar;
 pub mod filter;
+mod part;
+mod save;
+
+pub use part::{Clicked, Conflict, PickerPart};
 
 use std::ffi::OsStr;
 use std::path::{Component, Path};

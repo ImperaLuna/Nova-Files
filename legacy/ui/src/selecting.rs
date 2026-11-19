@@ -33,7 +33,6 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         let before = self.selection.take();
-        let wanted = self.pick.as_ref().map(crate::pick::Picker::wanted);
         let entries = self
             .listing
             .as_ref()
@@ -42,11 +41,9 @@ impl MainWindow {
         let parts = &self.parts;
         let picks = |id: EntryId| {
             let entry = entry_at(entries, id);
-            wanted.is_none_or(|wanted| entry.is_some_and(|entry| entry.kind == wanted))
-                && entry.is_none_or(|entry| parts.selectable(entry, cx))
+            entry.is_none_or(|entry| parts.selectable(entry, cx))
         };
-        let several =
-            self.pick.as_ref().is_none_or(crate::pick::Picker::several) && self.parts.several(cx);
+        let several = self.parts.several(cx);
         self.selection = change(before, &picks).map(|selection| {
             if several {
                 selection

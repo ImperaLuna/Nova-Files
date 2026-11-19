@@ -29,7 +29,12 @@ impl MainWindow {
         );
         watching.extend([
             cx.observe_self(Self::publish),
-            cx.observe(&self.host.nav, |_, _, cx| cx.notify()),
+            cx.observe(&self.host.nav, |this, _, cx| {
+                if this.closing(cx) {
+                    this.save_pick_size();
+                }
+                cx.notify();
+            }),
             cx.subscribe(&self.host.nav, |this, _, event: &NavEvent, cx| {
                 if *event == NavEvent::Asked {
                     this.take_nav_asks(cx);
@@ -102,11 +107,10 @@ impl MainWindow {
     }
 
     pub fn dims(&self, index: usize, cx: &App) -> bool {
-        let entry = self
-            .listing
+        self.listing
             .as_ref()
-            .and_then(|listing| listing.entries.get(index));
-        self.pick_dims(index) || entry.is_some_and(|entry| self.parts.dims(entry, cx))
+            .and_then(|listing| listing.entries.get(index))
+            .is_some_and(|entry| self.parts.dims(entry, cx))
     }
 
     pub(super) fn tell_parts_listed(&mut self, reordered: bool, cx: &mut Context<Self>) {
@@ -183,7 +187,7 @@ impl MainWindow {
         });
     }
 
-    fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
         let asks = self.host.nav.update(cx, |nav, _| nav.take_asks());
         let went = std::mem::take(&mut self.went);
         for ask in asks {

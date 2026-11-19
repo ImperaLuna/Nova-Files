@@ -9,6 +9,8 @@
 # Allowed workspace crates:
 # - nova-files-api
 # - nova-files-picker-api
+# - nova-files-properties-api
+# - nova-files-shell
 
 [package]
 name = "nova-files-picker-ui"
@@ -25,3 +27,5 @@ workspace = true
 gpui.workspace = true
 nova-files-api.workspace = true
 nova-files-picker-api.workspace = true
+nova-files-properties-api.workspace = true
+nova-files-shell.workspace = true

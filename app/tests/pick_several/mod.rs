@@ -150,7 +150,7 @@ async fn edited_names_are_read_as_typed(cx: &mut TestAppContext) {
     cx.simulate_input("x");
     cx.simulate_keystrokes("enter");
     assert!(answers.try_recv().is_err());
-    assert!(view.read_with(cx, |view, _| view.pick_id().is_some()));
+    assert!(view.read_with(cx, |view, cx| view.pick_id(cx).is_some()));
 }
 
 #[gpui::test]
