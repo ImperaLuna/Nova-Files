@@ -20,6 +20,7 @@ publish = false
 nova-files-api = { path = "framework/base" }
 nova-files-archives-core = { path = "features/archives/core" }
 nova-files-clipboard-api = { path = "features/clipboard/api" }
+nova-files-clipboard-ui = { path = "features/clipboard/ui" }
 nova-files-core = { path = "legacy/core" }
 nova-files-dbus = { path = "fronts/dbus" }
 nova-files-delete-core = { path = "features/delete/core" }

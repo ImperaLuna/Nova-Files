@@ -1,0 +1,32 @@
+# nova-files-clipboard-ui
+#
+# The clipboard's window half: Copy, Cut and Paste on the selection, in the
+# menus, the island and on their keys, through the system clipboard.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-clipboard-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-clipboard-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-clipboard-api.workspace = true
+nova-files-shell.workspace = true

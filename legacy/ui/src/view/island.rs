@@ -10,7 +10,7 @@ use nova_files_shell::{Look, MenuAt, MenuGroup, MenuItem, Placed, arrange};
 
 use super::row::icon;
 use crate::assets::Icon;
-use crate::commands::{COPY, CUT, ClearSelection, RENAME, TRASH, Undo};
+use crate::commands::{ClearSelection, RENAME, TRASH, Undo};
 use crate::island::progress::Running;
 use crate::island::{self, Confirm, Note, asking};
 use crate::theme::{Colors, radius, size, text};
@@ -128,14 +128,6 @@ fn file_buttons(count: usize) -> Vec<Placed> {
     };
     let rename = (count == 1).then(|| button(Icon::Rename, &RENAME, "island-rename"));
     vec![
-        Placed::new(
-            MenuGroup::Edit,
-            Placed::FIRST,
-            vec![
-                button(Icon::Copy, &COPY, "island-copy"),
-                button(Icon::Cut, &CUT, "island-cut"),
-            ],
-        ),
         Placed::new(
             MenuGroup::Edit,
             Placed::SECOND,

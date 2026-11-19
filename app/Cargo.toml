@@ -8,6 +8,7 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
+# - nova-files-clipboard-ui
 # - nova-files-core
 # - nova-files-dbus
 # - nova-files-delete-ui
@@ -34,6 +35,7 @@ workspace = true
 # malloc_trim, to give freed memory back after a listing (memory.rs).
 libc = "0.2.189"
 nova-files-api.workspace = true
+nova-files-clipboard-ui.workspace = true
 nova-files-core.workspace = true
 nova-files-dbus.workspace = true
 nova-files-delete-ui.workspace = true

@@ -3582,6 +3582,7 @@ dependencies = [
  "gpui",
  "libc",
  "nova-files-api",
+ "nova-files-clipboard-ui",
  "nova-files-core",
  "nova-files-dbus",
  "nova-files-delete-ui",
@@ -3641,6 +3642,16 @@ name = "nova-files-clipboard-api"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-clipboard-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-clipboard-api",
+ "nova-files-shell",
 ]
 
 [[package]]
@@ -4017,7 +4028,7 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
- "nova-files-clipboard-api",
+ "nova-files-clipboard-ui",
  "nova-files-delete-ui",
  "nova-files-drives-api",
  "nova-files-gathered-api",

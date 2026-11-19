@@ -157,11 +157,6 @@ pub fn quiet_count(folders: usize, files: usize) -> String {
     parts.join(LIST_GAP)
 }
 
-pub fn clipboard_note(cut: bool, paths: &[PathBuf]) -> String {
-    let verb = if cut { "Cut" } else { "Copied" };
-    format!("{verb} {}", what(paths))
-}
-
 pub fn finished_note(
     operation: &Operation,
     outcome: &Outcome,

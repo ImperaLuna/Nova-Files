@@ -35,8 +35,8 @@ use crate::commands::{
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{
-    CloseTab, CopySelected, CutSelected, NewFolder, NewTab, NextTab, Paste, PreviousTab,
-    RenameSelected, ShowProperties, TrashSelected, Undo,
+    CloseTab, NewFolder, NewTab, NextTab, PreviousTab, RenameSelected, ShowProperties,
+    TrashSelected, Undo,
 };
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
@@ -156,21 +156,18 @@ impl MainWindow {
     }
 
     fn file_keys(root: Div, cx: &Context<Self>) -> Div {
-        root.on_action(cx.listener(|this, _: &CopySelected, _, cx| this.copy_selected(false, cx)))
-            .on_action(cx.listener(|this, _: &CutSelected, _, cx| this.copy_selected(true, cx)))
-            .on_action(cx.listener(|this, _: &Paste, _, cx| this.paste(cx)))
-            .on_action(cx.listener(|this, _: &TrashSelected, window, cx| {
-                if this.folder_rules().trashed {
-                    window.dispatch_action(Box::new(DeleteSelected), cx);
-                } else {
-                    this.trash_selected(cx);
-                }
-            }))
-            .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
-            .on_action(cx.listener(|this, _: &RenameSelected, window, cx| {
-                this.start_rename(window, cx);
-            }))
-            .on_action(cx.listener(|this, _: &NewFolder, _, _| this.new_folder()))
+        root.on_action(cx.listener(|this, _: &TrashSelected, window, cx| {
+            if this.folder_rules().trashed {
+                window.dispatch_action(Box::new(DeleteSelected), cx);
+            } else {
+                this.trash_selected(cx);
+            }
+        }))
+        .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
+        .on_action(cx.listener(|this, _: &RenameSelected, window, cx| {
+            this.start_rename(window, cx);
+        }))
+        .on_action(cx.listener(|this, _: &NewFolder, _, _| this.new_folder()))
     }
 
     fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {

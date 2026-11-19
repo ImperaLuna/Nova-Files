@@ -33,9 +33,6 @@ mod actions {
             SelectAll,
             ToggleSelected,
             ClearSelection,
-            CopySelected,
-            CutSelected,
-            Paste,
             TrashSelected,
             RenameSelected,
             NewFolder,
@@ -84,9 +81,6 @@ pub const ACTIONS: &[CommandSpec] = &[
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
-    COPY,
-    CUT,
-    PASTE,
     TRASH,
     RENAME,
     NEW_FOLDER,
@@ -209,9 +203,6 @@ spec!(
     ["escape"]
 );
 
-spec!(COPY, CopySelected, "file.copy", "Copy", ["ctrl-c"]);
-spec!(CUT, CutSelected, "file.cut", "Cut", ["ctrl-x"]);
-spec!(PASTE, Paste, "file.paste", "Paste", ["ctrl-v"]);
 spec!(
     TRASH,
     TrashSelected,
@@ -303,6 +294,8 @@ pub fn bind_keys(cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+
+    use nova_files_clipboard_ui::{COPY, CUT};
 
     use super::*;
 

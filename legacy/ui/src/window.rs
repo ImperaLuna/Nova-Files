@@ -1,7 +1,6 @@
 mod access;
 mod acting;
 mod aiming;
-mod clipboard;
 mod confirm;
 mod context_menu;
 mod dragging;

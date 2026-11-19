@@ -194,7 +194,7 @@ mod tests {
 
     use super::*;
     use crate::assets::Icon;
-    use crate::commands::COPY;
+    use nova_files_clipboard_ui::COPY;
 
     #[test]
     fn an_item_shows_the_keys_of_its_action() {
