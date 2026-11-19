@@ -7,6 +7,7 @@ use super::*;
 
 mod drawn;
 mod hooks;
+mod kept;
 mod listing;
 mod naming;
 mod picking;

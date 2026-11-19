@@ -8,6 +8,7 @@ use nova_files_messages::{Connection, CoreGone, Message};
 
 use crate::entries::Entries;
 use crate::island::Island;
+use crate::kept::Kept;
 use crate::line::Lines;
 use crate::location::Location;
 use crate::navigator::Navigator;
@@ -48,6 +49,7 @@ pub struct Host {
     pub entries: Entity<Entries>,
     pub nav: Entity<Navigator>,
     pub island: Entity<Island>,
+    pub kept: Entity<Kept>,
     pub opening: Opening,
     pub lines: Lines,
 }
@@ -68,6 +70,7 @@ impl Host {
             entries: cx.new(|_| Entries::default()),
             nav: cx.new(|_| Navigator::default()),
             island: cx.new(|_| Island::default()),
+            kept: cx.new(|_| Kept::default()),
             opening,
             lines: Lines::default(),
         }

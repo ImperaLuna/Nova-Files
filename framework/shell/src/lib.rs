@@ -7,6 +7,7 @@ pub mod format;
 mod host;
 mod island;
 pub mod jump;
+mod kept;
 pub mod kind;
 mod line;
 mod location;
@@ -29,6 +30,7 @@ pub use command::{CommandSpec, WINDOW_KEYS};
 pub use entries::{Entries, EntriesAsked, Shown};
 pub use host::{AskIds, Host, Link};
 pub use island::{Island, IslandAsk, IslandAsked, NoteGone, NoteId, OnUndo, OnYes, Undo};
+pub use kept::Kept;
 pub use line::{Line, Lines};
 pub use location::{Location, PageKind, PageRef, StartPage};
 pub use menu::{

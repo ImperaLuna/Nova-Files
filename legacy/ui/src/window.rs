@@ -221,7 +221,7 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 1] = [Command::Ping];
+    const FIRST_ASKS: [Command; 2] = [Command::Ping, Command::WindowState];
 
     pub fn at(
         connector: &Connector,

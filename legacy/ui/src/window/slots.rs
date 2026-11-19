@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription};
-use nova_files_api::{HiddenFiles, ListingId};
+use nova_files_api::{Command, HiddenFiles, ListingId};
 use nova_files_picker_api::PickId;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
@@ -41,12 +41,20 @@ impl MainWindow {
             cx.subscribe(&self.host.entries, |this, _, _: &EntriesAsked, cx| {
                 this.take_entries_asks(cx);
             }),
-            cx.on_release(|this, cx| this.parts.closing(cx)),
+            cx.on_release(Self::close_parts),
             cx.observe_global::<Published<HiddenFiles>>(Self::hidden_published),
             cx.observe_global::<Published<ThumbnailsShown>>(Self::thumbnails_published),
             cx.observe_global::<Published<KnownFolders>>(Self::known_published),
         ]);
         watching
+    }
+
+    fn close_parts(&mut self, cx: &mut App) {
+        self.parts.closing(cx);
+        let changed = self.host.kept.update(cx, |kept, _| kept.take_changed());
+        if let (Some(bytes), Some(connection)) = (changed, &self.connection) {
+            connection.send(Command::SaveWindowState(bytes)).ok();
+        }
     }
 
     pub const fn host(&self) -> &Host {
