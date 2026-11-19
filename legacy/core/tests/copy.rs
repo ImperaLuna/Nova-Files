@@ -34,6 +34,8 @@ const MANY: usize = 400;
 const FILE_BYTES: usize = 16 * 1024;
 const FOLDER_MODE: u32 = 0o750;
 const HOLD: Duration = Duration::from_millis(300);
+const JOURNAL_WAIT: Duration = Duration::from_millis(50);
+const JOURNAL_WAITS: u32 = 200;
 
 fn small_tree(bench: &Bench) -> PathBuf {
     let source = bench.at("src");
@@ -74,6 +76,21 @@ fn next_besides_progress(client: &Client) -> Event {
             other => return other,
         }
     }
+}
+
+fn journal_begun(client: &Client, path: &Path) {
+    let begun = "nova-files-job 1\ncopy\ninto ";
+    for _ in 0..JOURNAL_WAITS {
+        if fs::read_to_string(path).is_ok_and(|written| written.starts_with(begun)) {
+            return;
+        }
+        assert_eq!(
+            client.events.recv_timeout(JOURNAL_WAIT).err(),
+            Some(RecvTimeoutError::Timeout),
+            "nothing is heard while paused"
+        );
+    }
+    panic!("the paused job never began its journal");
 }
 
 fn settle(client: &Client) {
@@ -167,8 +184,7 @@ fn a_paused_copy_holds_until_resumed() {
         Some(RecvTimeoutError::Timeout)
     );
     assert_eq!(tree(&into), held, "nothing changes while paused");
-    let written = fs::read_to_string(journal(&bench, job)).unwrap();
-    assert!(written.starts_with("nova-files-job 1\ncopy\ninto "));
+    journal_begun(&client, &journal(&bench, job));
 
     client.send(Command::ResumeJob(job));
     assert_eq!(next_besides_progress(&client), Event::JobResumed(job));
