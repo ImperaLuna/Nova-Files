@@ -7,8 +7,8 @@ use nova_files_shell::MenuAt;
 use super::MainWindow;
 use crate::assets::Icon;
 use crate::commands::{
-    COPY, CUT, DETAILS, EMPTY_TRASH, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PASTE, PREVIEW,
-    PROPERTIES, RENAME, RESTORE, SELECT_ALL, TRASH,
+    COPY, CUT, DETAILS, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PASTE, PREVIEW, PROPERTIES,
+    RENAME, SELECT_ALL, TRASH,
 };
 use crate::menu::{Look, MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
@@ -67,9 +67,6 @@ impl MainWindow {
     }
 
     fn entry_menu(&self, cx: &App) -> Vec<Vec<MenuItem>> {
-        if self.trash_open() {
-            return vec![vec![MenuItem::run(Icon::Undo, &RESTORE)]];
-        }
         let from_parts = self.part_menu(MenuAt::Entry, cx);
         if self.folder_rules().replaces_menu {
             return from_parts;
@@ -141,22 +138,11 @@ impl MainWindow {
             .is_some_and(|listing| !listing.entries.is_empty());
         let select_all = any.then(|| MenuItem::run(Icon::SelectAll, &SELECT_ALL));
         let from_parts = self.part_menu(MenuAt::Sheet, cx);
-        if self.folder_rules().replaces_menu && !from_parts.is_empty() {
+        if self.folder_rules().replaces_menu {
             return from_parts
                 .into_iter()
                 .chain([select_all.into_iter().collect()])
                 .collect();
-        }
-        if self.folder_rules().replaces_menu {
-            let full = self.trash_open() && self.trash_count().is_some_and(|count| count > 0);
-            let empty_trash = full.then(|| MenuItem::run(Icon::Trash, &EMPTY_TRASH));
-            return vec![
-                empty_trash
-                    .map(|item| item.with_look(Look::Danger))
-                    .into_iter()
-                    .collect(),
-                select_all.into_iter().collect(),
-            ];
         }
         if let Some(place) = self.gathered_shown() {
             return vec![

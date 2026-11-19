@@ -42,6 +42,7 @@ nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
 nova-files-transfer-core = { path = "features/transfer/core" }
 nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }
+nova-files-trash-ui = { path = "features/trash/ui" }
 nova-files-ui = { path = "legacy/ui" }
 
 # GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds fixes

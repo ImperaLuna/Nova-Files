@@ -31,6 +31,7 @@ impl Part for Claimer {
                     read_only: true,
                     views: Views::DetailsOnly,
                     replaces_menu: false,
+                    trashed: false,
                 },
             );
         });
@@ -41,7 +42,7 @@ fn with_parts(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestCo
     let mut parts = Parts::default();
     parts.add::<Claimer>();
     cx.update(|cx| cx.set_global(parts));
-    let (view, cx, mut core) = window(cx);
+    let (view, cx, mut core) = window_with_parts(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
     (view, cx, core)

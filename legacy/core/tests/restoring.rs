@@ -31,7 +31,9 @@ fn listed(bench: &Bench) -> Vec<Trashed> {
     let (sink, events) = mpsc::channel();
     let connection = bench.core.connector.connect(sink).unwrap();
     connection.send(trash_api::Command::List).unwrap();
-    let trash_api::Event::Listed(mut listed) = events.recv_timeout(ANSWER_TIMEOUT).unwrap();
+    let trash_api::Event::Listed {
+        items: mut listed, ..
+    } = events.recv_timeout(ANSWER_TIMEOUT).unwrap();
     listed.sort_by(|a, b| a.item.cmp(&b.item));
     listed
 }

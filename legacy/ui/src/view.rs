@@ -34,8 +34,8 @@ use crate::commands::{
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{
-    CloseTab, CopySelected, CutSelected, DeleteSelected, EmptyTrash, NewFolder, NewTab, NextTab,
-    Paste, PreviousTab, RenameSelected, RestoreSelected, ShowProperties, TrashSelected, Undo,
+    CloseTab, CopySelected, CutSelected, DeleteSelected, NewFolder, NewTab, NextTab, Paste,
+    PreviousTab, RenameSelected, ShowProperties, TrashSelected, Undo,
 };
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
@@ -160,8 +160,6 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &Paste, _, cx| this.paste(cx)))
             .on_action(cx.listener(|this, _: &TrashSelected, _, cx| this.trash_selected(cx)))
             .on_action(cx.listener(|this, _: &DeleteSelected, _, cx| this.delete_selected(cx)))
-            .on_action(cx.listener(|this, _: &RestoreSelected, _, _| this.restore_selected()))
-            .on_action(cx.listener(|this, _: &EmptyTrash, _, cx| this.ask_empty_trash(cx)))
             .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
             .on_action(cx.listener(|this, _: &RenameSelected, window, cx| {
                 this.start_rename(window, cx);

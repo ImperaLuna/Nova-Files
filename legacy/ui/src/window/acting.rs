@@ -42,7 +42,7 @@ impl MainWindow {
     }
 
     pub fn trash_selected(&mut self, cx: &mut Context<Self>) {
-        if self.in_trash() {
+        if self.folder_rules().trashed {
             self.delete_selected(cx);
             return;
         }
@@ -66,8 +66,11 @@ impl MainWindow {
     }
 
     pub(super) fn deleting_selected(&self) -> Option<Operation> {
-        if self.in_trash() {
-            let items = self.selected_trashed();
+        if self.folder_rules().trashed {
+            let named = self
+                .folder()
+                .and_then(|folder| self.host.rules.named(folder));
+            let items = named.map(|_| self.selected_paths()).unwrap_or_default();
             return (!items.is_empty()).then_some(Operation::DeleteFromTrash { items });
         }
         deleting(self.selected_paths(), self.pick.is_some())

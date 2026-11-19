@@ -21,11 +21,15 @@ pub fn list(trashes: Trashes, events: &Arc<dyn EventSink>) -> Result<(), ClientG
     let spawned = thread::Builder::new()
         .name(LIST_THREAD.to_owned())
         .spawn(move || {
-            let listed = trashes.all().iter().flat_map(trashes::list).collect();
-            thread_events.deliver(Event::Listed(listed)).ok();
+            let items = trashes.all().iter().flat_map(trashes::list).collect();
+            let folder = trashes.files();
+            thread_events.deliver(Event::Listed { folder, items }).ok();
         });
     if spawned.is_err() {
-        return events.deliver(Event::Listed(Vec::new()));
+        return events.deliver(Event::Listed {
+            folder: None,
+            items: Vec::new(),
+        });
     }
     Ok(())
 }
