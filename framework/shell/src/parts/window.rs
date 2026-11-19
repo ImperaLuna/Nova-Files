@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, SharedString, Size,
-    Subscription,
+    Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 use nova_files_messages::Envelope;
@@ -129,10 +129,16 @@ impl WindowParts {
             .find_map(|part| part.list_page(page, id, order))
     }
 
-    pub fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement> {
+    pub fn stage(
+        &self,
+        scene: &Scene,
+        room: Size<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
         self.opened
             .iter()
-            .find_map(|part| part.stage(scene, room, cx))
+            .find_map(|part| part.stage(scene, room, window, cx))
     }
 
     pub fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
@@ -215,6 +221,10 @@ impl WindowParts {
             .iter()
             .flat_map(|part| part.overlays())
             .collect()
+    }
+
+    pub fn layers(&self) -> Vec<AnyView> {
+        self.opened.iter().flat_map(|part| part.layers()).collect()
     }
 
     pub fn path_chips(&self) -> Vec<(u8, AnyView)> {

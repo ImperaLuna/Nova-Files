@@ -3,7 +3,7 @@ use std::path::Path;
 use gpui::{
     AnyElement, ClickEvent, Context, Div, HitboxBehavior, InteractiveElement as _, IntoElement,
     MouseButton, MouseDownEvent, ParentElement as _, ScrollWheelEvent, Stateful,
-    StatefulInteractiveElement as _, Styled as _, canvas, div, prelude::FluentBuilder as _,
+    StatefulInteractiveElement as _, Styled as _, Window, canvas, div, prelude::FluentBuilder as _,
     transparent_black, uniform_list,
 };
 
@@ -28,7 +28,11 @@ const MODIFIED_HEADER_SELECTOR: &str = "modified-header";
 const FOLDER_HEADER_SELECTOR: &str = "folder-header";
 
 impl MainWindow {
-    pub(super) fn sheet(&self, cx: &Context<Self>) -> impl IntoElement {
+    pub(super) fn sheet(
+        &self,
+        entries: Option<AnyElement>,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
         let colors = Colors::of(cx);
         div()
             .flex()
@@ -51,13 +55,13 @@ impl MainWindow {
                         .when(self.showing_details(cx), |sheet| {
                             sheet.child(self.column_heads(&colors, cx))
                         })
-                        .child(self.entries_area(cx))
+                        .child(self.entries_area(entries, cx))
                         .child(self.island(cx))
                 }
             })
     }
 
-    fn entries_area(&self, cx: &Context<Self>) -> impl IntoElement {
+    fn entries_area(&self, entries: Option<AnyElement>, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         div()
             .relative()
@@ -82,7 +86,7 @@ impl MainWindow {
                     .map(|folder| Aim::folder(folder.to_path_buf(), self.folder_name(folder))),
                 |area, at| self.takes_drops(area, at, cx),
             )
-            .child(self.entries(cx))
+            .children(entries)
             .children(self.parts.overlays())
             .child(ctrl_scroll(cx))
             .children(self.empty_note(&colors, cx))
@@ -101,7 +105,7 @@ impl MainWindow {
             }))
     }
 
-    fn entries(&self, cx: &Context<Self>) -> AnyElement {
+    pub(super) fn entries(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         if let Some(view) = self.parts.list_view(&self.scene(cx), cx) {
             return view.into_any_element();
         }
@@ -110,7 +114,7 @@ impl MainWindow {
             return self.icons(grid, cx).into_any_element();
         }
         if self.showing_gallery(cx) {
-            return self.gallery(grid, cx).into_any_element();
+            return self.gallery(grid, window, cx).into_any_element();
         }
         self.details(grid, cx)
     }
