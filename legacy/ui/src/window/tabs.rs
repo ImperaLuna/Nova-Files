@@ -20,6 +20,7 @@ use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::places::{self, START_LABEL};
 use crate::selection::Selection;
+use nova_files_places_ui as places_ui;
 
 pub const OPEN_IN_NEW_TAB_LABEL: &str = "Open in new tab";
 
@@ -163,14 +164,18 @@ impl MainWindow {
     }
 
     pub(crate) fn tab_looks(&self) -> Vec<(SharedString, Icon)> {
-        let shown = places::shown(self.places(), self.pinned());
+        let shown = places_ui::shown(self.places(), self.pinned());
         self.tab_places()
             .iter()
             .map(|place| self.tab_look(place.as_ref(), &shown))
             .collect()
     }
 
-    fn tab_look(&self, place: Option<&Location>, shown: &[places::Shown]) -> (SharedString, Icon) {
+    fn tab_look(
+        &self,
+        place: Option<&Location>,
+        shown: &[places_ui::Shown],
+    ) -> (SharedString, Icon) {
         match place {
             Some(Location::Start) => (START_LABEL.into(), Icon::Start),
             Some(Location::Gathered(gathered)) => {
@@ -187,22 +192,22 @@ impl MainWindow {
         }
     }
 
-    fn folder_look(&self, folder: &Path, shown: &[places::Shown]) -> (SharedString, Icon) {
+    fn folder_look(&self, folder: &Path, shown: &[places_ui::Shown]) -> (SharedString, Icon) {
         shown
             .iter()
             .find(|shown| shown.path == *folder)
             .map_or_else(
                 || {
                     let icon =
-                        places::standard_icon_at(&self.places, folder).unwrap_or(Icon::Folder);
-                    (places::folder_name(folder), icon)
+                        places_ui::standard_icon_at(&self.places, folder).unwrap_or(Icon::Folder);
+                    (places_ui::folder_name(folder), icon)
                 },
                 |shown| (shown.name.clone(), shown.icon),
             )
     }
 
     pub(crate) fn folder_name(&self, folder: &Path) -> SharedString {
-        let shown = places::shown(self.places(), self.pinned());
+        let shown = places_ui::shown(self.places(), self.pinned());
         self.tab_look(Some(&Location::Folder(folder.to_path_buf())), &shown)
             .0
     }

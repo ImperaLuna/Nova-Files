@@ -11,10 +11,10 @@ use nova_files_shell::SidebarAt;
 use super::{icon, inside_edge, new_tab_on_middle_click, section_head};
 use crate::assets::Icon;
 use crate::location::Location;
-use crate::places;
 use crate::theme::{Colors, radius, size, text};
 use crate::tree::{Toggle, TreeRow};
 use crate::window::{Aim, HoverOpens, MainWindow};
+use nova_files_places_ui as places;
 
 const LABEL: &str = "This computer";
 

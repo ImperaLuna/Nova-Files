@@ -39,6 +39,7 @@ nova-files-picker-api = { path = "features/picker/api" }
 nova-files-picker-ui = { path = "features/picker/ui" }
 nova-files-places-api = { path = "features/places/api" }
 nova-files-places-core = { path = "features/places/core" }
+nova-files-places-ui = { path = "features/places/ui" }
 nova-files-properties-api = { path = "features/properties/api" }
 nova-files-properties-core = { path = "features/properties/core" }
 nova-files-rename-api = { path = "features/rename/api" }

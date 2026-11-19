@@ -205,8 +205,8 @@ mod tests {
             Some("Ctrl C")
         );
         assert_eq!(item_keys(&copy, |_| None), None);
-        let unpin = MenuItem::new(Icon::Trash, "Remove", MenuAction::Unpin(PathBuf::new()));
-        assert_eq!(item_keys(&unpin, bound), None);
+        let open = MenuItem::new(Icon::Plus, "Open", MenuAction::OpenInNewTab(PathBuf::new()));
+        assert_eq!(item_keys(&open, bound), None);
     }
 
     #[test]

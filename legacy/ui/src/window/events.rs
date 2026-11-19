@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{Event, Listing, ListingId, Unreadable};
-use nova_files_places_api::Bookmark;
+use nova_files_places_ui::Known;
 use nova_files_settings_api::{Settings, Thumbnails};
+use nova_files_shell::Published;
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -164,17 +165,11 @@ impl MainWindow {
         }
     }
 
-    pub(super) fn places_arrived(
-        &mut self,
-        places: Vec<nova_files_places_api::Place>,
-        cx: &mut Context<Self>,
-    ) {
-        self.places = places;
-        self.sidebar_changed(cx);
-    }
-
-    pub(super) fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
-        self.pinned = pinned;
+    pub(super) fn places_changed(&mut self, cx: &mut Context<Self>) {
+        if let Some(known) = Published::<Known>::get(cx) {
+            self.places.clone_from(&known.places);
+            self.pinned = Arc::clone(&known.pinned);
+        }
         self.sidebar_changed(cx);
     }
 

@@ -334,11 +334,6 @@ impl MainWindow {
             Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<places_api::Event>() {
-            Ok(places_api::Event::Places(places)) => return self.places_arrived(places, cx),
-            Ok(places_api::Event::Bookmarks(pinned)) => return self.pinned_arrived(pinned, cx),
-            Err(envelope) => envelope,
-        };
         let envelope = match envelope.open::<properties_api::Event>() {
             Ok(event) => return self.properties_event(event, cx),
             Err(envelope) => envelope,
@@ -361,8 +356,12 @@ impl MainWindow {
             }
             Err(envelope) => envelope,
         };
+        let places = envelope.get::<places_api::Event>().is_some();
         if let Err(envelope) = self.parts.deliver(envelope, cx) {
             log::error!("no part takes {envelope:?}");
+        }
+        if places {
+            self.places_changed(cx);
         }
     }
 
@@ -441,7 +440,6 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
                 connection.send(command)?;
             }
             connection.send(drives_api::Command::Drives)?;
-            connection.send(places_api::Command::Places)?;
             connection.send(settings_api::Command::Watch)?;
             Ok(connection)
         })

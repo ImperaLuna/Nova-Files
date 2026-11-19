@@ -3590,6 +3590,7 @@ dependencies = [
  "nova-files-look-ui",
  "nova-files-picker-api",
  "nova-files-places-api",
+ "nova-files-places-ui",
  "nova-files-properties-api",
  "nova-files-settings-api",
  "nova-files-shell",
@@ -3845,6 +3846,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-places-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-places-api",
+ "nova-files-shell",
+]
+
+[[package]]
 name = "nova-files-properties-api"
 version = "0.1.0"
 dependencies = [
@@ -4014,6 +4024,7 @@ dependencies = [
  "nova-files-picker-api",
  "nova-files-picker-ui",
  "nova-files-places-api",
+ "nova-files-places-ui",
  "nova-files-properties-api",
  "nova-files-settings-api",
  "nova-files-shell",

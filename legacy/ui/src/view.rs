@@ -14,7 +14,7 @@ mod sheet;
 mod sidebar;
 mod start;
 
-pub use crate::places::place_icon;
+pub use nova_files_places_ui::place_icon;
 pub use properties::TopFacts;
 pub use row::{RowIcon, entry_kind};
 

@@ -47,7 +47,6 @@ pub use nova_files_shell::Look;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuAction {
-    Unpin(PathBuf),
     OpenDrive(ShownDrive),
     OpenDriveInNewTab(ShownDrive),
     Eject(DriveId),
@@ -220,7 +219,6 @@ impl MainWindow {
         };
         window.focus(&self.keys_home(cx), cx);
         match item.action {
-            MenuAction::Unpin(path) => self.unpin(path),
             MenuAction::OpenDrive(drive) => self.open_drive(drive),
             MenuAction::OpenDriveInNewTab(drive) => self.open_drive_in_new_tab(drive, cx),
             MenuAction::OpenInNewTab(folder) => self.open_in_new_tab(folder, cx),
