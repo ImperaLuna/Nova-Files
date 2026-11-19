@@ -28,6 +28,7 @@
 # - nova-files-places-ui
 # - nova-files-preview-api
 # - nova-files-properties-api
+# - nova-files-rename-ui
 # - nova-files-search-api
 # - nova-files-settings-api
 # - nova-files-shell
@@ -81,3 +82,4 @@ usvg = { version = "0.45.1", default-features = false }
 
 [dev-dependencies]
 nova-files-clipboard-ui.workspace = true
+nova-files-rename-ui.workspace = true

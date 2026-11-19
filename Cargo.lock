@@ -3600,6 +3600,7 @@ dependencies = [
  "nova-files-places-ui",
  "nova-files-preview-api",
  "nova-files-properties-api",
+ "nova-files-rename-ui",
  "nova-files-search-api",
  "nova-files-settings-api",
  "nova-files-settings-ui",
@@ -3611,6 +3612,7 @@ dependencies = [
  "nova-files-trash-api",
  "nova-files-trash-ui",
  "nova-files-ui",
+ "nova-files-undo-ui",
  "zbus",
 ]
 
@@ -4001,6 +4003,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-rename-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-shell",
+]
+
+[[package]]
 name = "nova-files-search-api"
 version = "0.1.0"
 dependencies = [
@@ -4214,12 +4225,22 @@ dependencies = [
  "nova-files-places-ui",
  "nova-files-preview-api",
  "nova-files-properties-api",
+ "nova-files-rename-ui",
  "nova-files-search-api",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-start-api",
  "nova-files-thumbnails-ui",
  "usvg",
+]
+
+[[package]]
+name = "nova-files-undo-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-shell",
 ]
 
 [[package]]

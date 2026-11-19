@@ -1,7 +1,7 @@
 # nova-files-archives-core
 #
 # Makes and unpacks archives through the nova-files-archiver helper, and
-# reads what an archive holds.
+# reads what an archive holds, and takes what it made back to the Trash.
 #
 # Allowed outside crates:
 # - chrono
