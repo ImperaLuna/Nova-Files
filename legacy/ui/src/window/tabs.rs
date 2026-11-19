@@ -10,7 +10,7 @@ use nova_files_gathered_api::Gathering;
 use super::MainWindow;
 use super::rows::release;
 use super::search::Search;
-use nova_files_shell::TabId;
+use nova_files_shell::{PageRef, TabId};
 
 use crate::assets::Icon;
 use crate::history::History;
@@ -35,6 +35,7 @@ pub struct Tab {
     search: Search,
     counted: SharedString,
     gathered: Option<Gathering>,
+    listed: Option<PageRef>,
     on_its_way: Option<Location>,
     properties: Option<super::properties::Page>,
 }
@@ -302,6 +303,7 @@ impl MainWindow {
             search: mem::replace(&mut self.search, Search::new(cx)),
             counted: mem::take(&mut self.counted),
             gathered: self.gathered.shown.take(),
+            listed: self.listed_page.take(),
             on_its_way,
             properties: self.properties.take(),
         }
@@ -322,6 +324,7 @@ impl MainWindow {
         self.counted = tab.counted;
         self.properties = tab.properties;
         self.gathered.shown = tab.gathered;
+        self.listed_page = tab.listed;
         self.core_moved = true;
         if let Some(place) = tab.on_its_way {
             self.request_place(&place);
@@ -329,6 +332,8 @@ impl MainWindow {
             self.find(cx);
         } else if let Some(place) = self.gathered_shown() {
             self.request_gathered(place);
+        } else if let Some(page) = self.listed_page.clone() {
+            self.request_listed(page);
         } else if let Some(listing) = self.listing.clone() {
             self.tree_follows(&listing, true);
             self.request(&listing.path);

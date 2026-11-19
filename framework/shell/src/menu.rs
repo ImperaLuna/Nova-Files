@@ -158,6 +158,17 @@ impl RowItem {
     }
 }
 
+impl PartialEq for RowItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.icon == other.icon
+            && self.label == other.label
+            && self.look == other.look
+            && Rc::ptr_eq(&self.run, &other.run)
+    }
+}
+
+impl Eq for RowItem {}
+
 impl fmt::Debug for RowItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.label)

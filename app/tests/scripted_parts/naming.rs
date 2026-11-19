@@ -2,7 +2,10 @@ use std::cell::Cell;
 use std::ffi::OsStr;
 use std::rc::Rc;
 
-use gpui::{AppContext as _, Context, Entity};
+use gpui::{
+    AppContext as _, Context, Entity, InteractiveElement as _, IntoElement as _, Styled as _, div,
+    px,
+};
 use nova_files_api::Entry;
 use nova_files_shell::{Host, Part, Parts, Slots, TextField, Undo};
 
@@ -28,6 +31,15 @@ impl Part for Namer {
             (entry.name == NAMED).then(|| namer.field.clone()).flatten()
         });
         slots.busy(|namer, _| namer.field.is_some());
+        slots.stage(|_, scene, room, _| {
+            (scene.selected == 1).then(|| {
+                div()
+                    .debug_selector(|| "namer-stage".to_owned())
+                    .w(room.width / 2.0)
+                    .h(px(10.0))
+                    .into_any_element()
+            })
+        });
     }
 }
 
@@ -87,4 +99,18 @@ fn a_busy_part_holds_undo(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-z");
     cx.run_until_parked();
     assert_eq!(UNDONE.get(), 0);
+}
+
+#[gpui::test]
+fn a_part_draws_the_gallery_stage_in_the_room_it_is_given(cx: &mut TestAppContext) {
+    cx.update(nova_files_ui::bind_window_keys);
+    let (_view, cx) = named(cx);
+    cx.simulate_keystrokes("ctrl-3");
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("stage-name").is_none());
+    let drawn = cx.debug_bounds("namer-stage").unwrap();
+    let stage = cx.debug_bounds("stage").unwrap();
+    assert!(drawn.size.width > px(0.0));
+    assert!(drawn.size.width < stage.size.width);
 }

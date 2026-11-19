@@ -148,10 +148,14 @@ impl Connection {
     }
 
     pub fn send<M: Message>(&self, command: M) -> Result<(), CoreGone> {
+        self.send_envelope(Envelope::new(command))
+    }
+
+    pub fn send_envelope(&self, command: Envelope) -> Result<(), CoreGone> {
         self.sender
             .send(CoreMessage::Command {
                 client: self.client,
-                command: Envelope::new(command),
+                command,
             })
             .map_err(|_| CoreGone)
     }

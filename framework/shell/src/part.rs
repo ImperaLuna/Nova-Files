@@ -5,9 +5,9 @@ use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _, Modifiers,
-    Pixels, SharedString, Window,
+    Pixels, SharedString, Size, Window,
 };
-use nova_files_api::{Entry, Event, Listing, ListingId};
+use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
@@ -35,6 +35,7 @@ pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
 pub type NameField<P> = fn(&P, &Entry, &App) -> Option<Entity<TextField>>;
+pub type Stage<P> = fn(&P, &Scene, Size<Pixels>, &App) -> Option<AnyElement>;
 pub type Busy<P> = fn(&P, &App) -> bool;
 pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
@@ -68,6 +69,7 @@ pub struct Column<P> {
 
 type EventSlot<P> = Box<dyn Fn(&mut P, &Envelope, &mut Context<P>)>;
 type Bind<P> = Box<dyn Fn(Div, &Entity<P>, &Host) -> Div>;
+pub type ListSlot = Rc<dyn Fn(&PageRef, ListingId, Order) -> Option<Envelope>>;
 pub type PageSlot<P> =
     Rc<dyn Fn(&mut P, &PageRef, &mut Window, &mut Context<P>) -> Option<AnyElement>>;
 
@@ -82,6 +84,7 @@ pub struct Slots<P> {
     pub(crate) commands: Vec<CommandSlot<P>>,
     pub(crate) menus: Vec<(MenuAt, MenuGroup, u8, Items<P>)>,
     pub(crate) pages: Vec<(TypeId, PageSlot<P>)>,
+    pub(crate) listing_pages: Vec<(TypeId, ListSlot)>,
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
     pub(crate) start_cards: Vec<Card<P>>,
@@ -91,6 +94,7 @@ pub struct Slots<P> {
     pub(crate) name_cells: Vec<NameCell<P>>,
     pub(crate) name_fields: Vec<NameField<P>>,
     pub(crate) busy: Vec<Busy<P>>,
+    pub(crate) stages: Vec<Stage<P>>,
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
     pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
@@ -117,6 +121,7 @@ impl<P> Default for Slots<P> {
             commands: Vec::new(),
             menus: Vec::new(),
             pages: Vec::new(),
+            listing_pages: Vec::new(),
             columns: Vec::new(),
             sidebar: Vec::new(),
             start_cards: Vec::new(),
@@ -126,6 +131,7 @@ impl<P> Default for Slots<P> {
             name_cells: Vec::new(),
             name_fields: Vec::new(),
             busy: Vec::new(),
+            stages: Vec::new(),
             listed: Vec::new(),
             drops: Vec::new(),
             drop_targets: Vec::new(),
@@ -198,6 +204,12 @@ impl<P: Part> Slots<P> {
         self.pages.push((TypeId::of::<K>(), slot));
     }
 
+    pub fn listing_page<K: PageKind>(&mut self, list: fn(&K, ListingId, Order) -> Envelope) {
+        let slot: ListSlot =
+            Rc::new(move |page, id, order| page.get::<K>().map(|page| list(page, id, order)));
+        self.listing_pages.push((TypeId::of::<K>(), slot));
+    }
+
     pub fn column(&mut self, column: Columns<P>) {
         self.columns.push(column);
     }
@@ -228,6 +240,10 @@ impl<P: Part> Slots<P> {
 
     pub fn busy(&mut self, busy: Busy<P>) {
         self.busy.push(busy);
+    }
+
+    pub fn stage(&mut self, stage: Stage<P>) {
+        self.stages.push(stage);
     }
 
     pub fn listed(&mut self, listed: Listed<P>) {

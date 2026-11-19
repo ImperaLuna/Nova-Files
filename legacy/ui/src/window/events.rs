@@ -24,8 +24,9 @@ impl MainWindow {
     fn listing_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
         self.asked = None;
         self.search_left(cx);
-        let arrived = match self.requested {
-            Some(Location::Gathered(gathered)) => Location::Gathered(gathered),
+        let arrived = match &self.requested {
+            Some(Location::Gathered(gathered)) => Location::Gathered(*gathered),
+            Some(Location::Page(page)) => Location::Page(page.clone()),
             _ => Location::from(listing.path.as_path()),
         };
         let same_folder =
@@ -37,6 +38,13 @@ impl MainWindow {
                 self.used(folder);
             }
         }
+        self.listed_page = match &arrived {
+            Location::Page(page) => Some(page.clone()),
+            Location::Start
+            | Location::Folder(_)
+            | Location::Properties(_)
+            | Location::Gathered(_) => None,
+        };
         self.gathered.shown = match &arrived {
             Location::Gathered(place) => Some(*place),
             Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
@@ -78,6 +86,7 @@ impl MainWindow {
         self.listing.as_ref()?;
         self.gathered_shown()
             .map(Location::Gathered)
+            .or_else(|| self.listed_page.clone().map(Location::Page))
             .or_else(|| self.folder().map(Location::from))
     }
 

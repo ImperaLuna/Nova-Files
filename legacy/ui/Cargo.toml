@@ -4,7 +4,6 @@
 # never touches the disk.
 #
 # Allowed outside crates:
-# - chrono
 # - futures
 # - gpui
 # - gpui-component
@@ -49,7 +48,6 @@ workspace = true
 
 [dependencies]
 # Local time for the Modified column; GPUI already builds it.
-chrono = "0.4.45"
 nova-files-api.workspace = true
 nova-files-delete-ui.workspace = true
 nova-files-drives-api.workspace = true
