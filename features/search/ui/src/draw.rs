@@ -6,7 +6,7 @@ use nova_files_shell::Scene;
 use nova_files_shell::actions::CursorDown;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::theme::{Colors, radius, size, text};
-use nova_files_shell::widgets::icon;
+use nova_files_shell::widgets::{capsule, icon};
 
 use crate::{Scope, SearchPart};
 
@@ -18,13 +18,20 @@ const CANT_SEARCH: &str = "Can't search";
 const SEARCH_LABEL: &str = "Search";
 
 impl SearchPart {
-    pub fn search_box(
-        &self,
-        capsule: Div,
-        colors: &Colors,
-        entity: &Entity<Self>,
-        cx: &App,
-    ) -> Div {
+    pub(crate) fn bar(&self, cx: &Context<Self>) -> AnyElement {
+        let colors = Colors::of(cx);
+        let capsule = capsule(&colors)
+            .debug_selector(|| "search".to_owned())
+            .flex_shrink()
+            .w(size::SEARCH_WIDTH)
+            .px(size::SEARCH_PAD)
+            .gap(size::SEARCH_GAP);
+        let entity = cx.entity();
+        self.search_box(capsule, &colors, &entity, cx)
+            .into_any_element()
+    }
+
+    fn search_box(&self, capsule: Div, colors: &Colors, entity: &Entity<Self>, cx: &App) -> Div {
         if self.host.entries.read(cx).picker() {
             return capsule
                 .text_color(colors.text_dim)

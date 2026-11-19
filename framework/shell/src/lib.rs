@@ -54,8 +54,8 @@ pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked, PopUp};
 pub use opening::Opening;
 pub use over::{LaidOver, OverAsk, OverLeft, OverWant};
 pub use part::{
-    Applies, Busy, Card, CardRank, Cell, ChipRank, Click, ClickAnswer, Clicks, Closing, Column,
-    Columns, Dims, DropAim, DropOver, DropSlot, DropTake, EmptyNote, Focus, FolderLayout,
+    Applies, BarRank, Busy, Card, CardRank, Cell, ChipRank, Click, ClickAnswer, Clicks, Closing,
+    Column, Columns, Dims, DropAim, DropOver, DropSlot, DropTake, EmptyNote, Focus, FolderLayout,
     HeadButton, Items, KeyDown, Listed, NameCell, NameField, Opens, Part, Refused, Rescaled,
     Resized, RowIcon, RowMenu, Rows, RowsDrawn, Selectable, Several, Slots, Stage, Staged, Staging,
     ThumbnailSide, Typed, Used, Watch, Wheel,

@@ -104,6 +104,13 @@ impl CardRank {
     pub const LAST: u8 = u8::MAX;
 }
 
+pub struct BarRank;
+
+impl BarRank {
+    pub const FIRST: u8 = 0;
+    pub const LAST: u8 = u8::MAX;
+}
+
 pub struct ChipRank;
 
 impl ChipRank {
@@ -160,7 +167,7 @@ pub struct Slots<P> {
     pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
     pub(crate) row_menus: Vec<RowMenu<P>>,
     pub(crate) head_buttons: Vec<(SidebarAt, &'static str, HeadButton<P>)>,
-    pub(crate) bars: Vec<Card<P>>,
+    pub(crate) bars: Vec<(u8, bool, Card<P>)>,
     pub(crate) footers: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
     pub(crate) layers: Vec<Card<P>>,
@@ -411,7 +418,11 @@ impl<P: Part> Slots<P> {
     }
 
     pub fn bar(&mut self, bar: Card<P>) {
-        self.bars.push(bar);
+        self.bars.push((BarRank::LAST, false, bar));
+    }
+
+    pub fn shrinking_bar_at(&mut self, rank: u8, bar: Card<P>) {
+        self.bars.push((rank, true, bar));
     }
 
     pub fn footer(&mut self, footer: Card<P>) {

@@ -109,7 +109,14 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
     let cards = ranks
         .zip(card_views(&entity, host, &drawn, Fit::Content, cx))
         .collect();
-    let bars = card_views(&entity, host, &slots.bars, Fit::Content, cx);
+    let bars = slots
+        .bars
+        .iter()
+        .map(|&(rank, shrinks, bar)| {
+            let fit = if shrinks { Fit::Shrink } else { Fit::Content };
+            (rank, card_views(&entity, host, &[bar], fit, cx).remove(0))
+        })
+        .collect();
     let footers = card_views(&entity, host, &slots.footers, Fit::Content, cx);
     let overlays = card_views(&entity, host, &slots.overlays, Fit::Content, cx);
     let layers = card_views(&entity, host, &slots.layers, Fit::Cover, cx);

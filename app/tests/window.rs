@@ -59,7 +59,7 @@ fn pinned(view: &MainWindow, cx: &App) -> Vec<Bookmark> {
 }
 
 fn search_query(view: &MainWindow, cx: &App) -> String {
-    view.search_part()
+    view.part::<nova_files_search_ui::SearchPart>()
         .map(|part| part.read(cx).query(cx))
         .unwrap_or_default()
 }

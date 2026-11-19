@@ -219,7 +219,10 @@ impl WindowParts {
     }
 
     pub fn bars(&self) -> Vec<AnyView> {
-        self.opened.iter().flat_map(|part| part.bars()).collect()
+        let mut bars: Vec<(u8, AnyView)> =
+            self.opened.iter().flat_map(|part| part.bars()).collect();
+        bars.sort_by_key(|(rank, _)| *rank);
+        bars.into_iter().map(|(_, bar)| bar).collect()
     }
 
     pub fn footers(&self) -> Vec<AnyView> {

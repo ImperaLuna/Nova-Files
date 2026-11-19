@@ -57,7 +57,7 @@ trait OpenPart {
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
     fn start_cards(&self) -> Vec<(u8, AnyView)>;
-    fn bars(&self) -> Vec<AnyView>;
+    fn bars(&self) -> Vec<(u8, AnyView)>;
     fn footers(&self) -> Vec<AnyView>;
     fn clicked(
         &self,
@@ -141,7 +141,7 @@ struct Opened<P: Part> {
     slots: Slots<P>,
     pages: Vec<(TypeId, AnyView)>,
     cards: Vec<(u8, AnyView)>,
-    bars: Vec<AnyView>,
+    bars: Vec<(u8, AnyView)>,
     footers: Vec<AnyView>,
     overlays: Vec<AnyView>,
     layers: Vec<AnyView>,
@@ -267,7 +267,7 @@ impl<P: Part> OpenPart for Opened<P> {
         self.cards.clone()
     }
 
-    fn bars(&self) -> Vec<AnyView> {
+    fn bars(&self) -> Vec<(u8, AnyView)> {
         self.bars.clone()
     }
 

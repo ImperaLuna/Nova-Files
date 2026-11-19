@@ -1,4 +1,4 @@
-use gpui::{Context, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div};
+use gpui::{Context, IntoElement, ParentElement as _, Styled as _, div};
 
 use crate::assets::Icon;
 use crate::commands::{GoBack, GoForward, GoUp};
@@ -41,15 +41,6 @@ impl MainWindow {
                     .child(up),
             )
             .child(self.path_bar(colors, cx))
-            .children(self.search_part().map(|search| {
-                let capsule = capsule(colors)
-                    .debug_selector(|| "search".to_owned())
-                    .flex_shrink()
-                    .w(size::SEARCH_WIDTH)
-                    .px(size::SEARCH_PAD)
-                    .gap(size::SEARCH_GAP);
-                search.read(cx).search_box(capsule, colors, &search, cx)
-            }))
             .children(self.parts.bars())
     }
 }

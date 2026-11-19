@@ -1,9 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{Context, Entity, FocusHandle};
+use gpui::{Context, FocusHandle};
 use nova_files_api::{Listing, ListingId};
-use nova_files_search_ui::SearchPart;
 use nova_files_shell::typed::HOME;
 use nova_files_shell::{Entries, Laid, LaidOver, OverWant};
 
@@ -57,10 +56,6 @@ impl MainWindow {
             (true, false) => Laid::Over,
             (true, true) => Laid::Failed,
         }
-    }
-
-    pub fn search_part(&self) -> Option<Entity<SearchPart>> {
-        self.part::<SearchPart>()
     }
 
     pub(super) fn over_wanted(&mut self, want: OverWant, cx: &mut Context<Self>) {

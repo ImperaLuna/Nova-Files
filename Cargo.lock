@@ -4274,7 +4274,6 @@ dependencies = [
  "nova-files-picker-api",
  "nova-files-picker-ui",
  "nova-files-rename-ui",
- "nova-files-search-ui",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-thumbnails-ui",
