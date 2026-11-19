@@ -11,6 +11,7 @@ mod kept;
 mod listing;
 mod naming;
 mod picking;
+mod preview;
 mod rows;
 mod shelf;
 mod turns;

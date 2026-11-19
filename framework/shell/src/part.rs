@@ -97,6 +97,7 @@ pub struct CommandSlot<P> {
 pub struct Slots<P> {
     pub(crate) events: HashMap<MessageType, EventSlot<P>>,
     pub(crate) commands: Vec<CommandSlot<P>>,
+    pub(crate) befores: Vec<Bind<P>>,
     pub(crate) menus: Vec<(MenuAt, MenuGroup, u8, Items<P>)>,
     pub(crate) pages: Vec<(TypeId, PageSlot<P>)>,
     pub(crate) listing_pages: Vec<(TypeId, ListSlot)>,
@@ -140,6 +141,7 @@ impl<P> Default for Slots<P> {
         Self {
             events: HashMap::new(),
             commands: Vec::new(),
+            befores: Vec::new(),
             menus: Vec::new(),
             pages: Vec::new(),
             listing_pages: Vec::new(),
@@ -211,6 +213,20 @@ impl<P: Part> Slots<P> {
                 })
             }),
         });
+    }
+
+    pub fn before<A: Action>(
+        &mut self,
+        take: fn(&mut P, &A, &mut Window, &mut Context<P>) -> bool,
+    ) {
+        self.befores.push(Box::new(move |root, entity, _| {
+            let entity = entity.clone();
+            root.capture_action(move |action: &A, window, cx| {
+                if entity.update(cx, |part, cx| take(part, action, window, cx)) {
+                    cx.stop_propagation();
+                }
+            })
+        }));
     }
 
     pub fn menu(&mut self, at: MenuAt, items: Items<P>) {

@@ -295,7 +295,7 @@ impl MainWindow {
             drives: Drives::default(),
             menu: None,
             search: search::Search::new(cx),
-            focus: cx.focus_handle(),
+            focus: host.list.clone(),
             island: Island::default(),
             jobs: Jobs::default(),
             counted: SharedString::default(),

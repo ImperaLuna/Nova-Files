@@ -1,11 +1,15 @@
 use std::ffi::{OsStr, OsString};
 use std::ops::Range;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use gpui::{Context, EventEmitter};
 use nova_files_api::{Entry, EntryId, Listing, ListingId};
 
+use crate::cursor::Move;
+use crate::jump::PAUSE;
 use crate::location::Location;
+use crate::scene::Showing;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Shown {
@@ -16,6 +20,8 @@ pub struct Shown {
     pub asked: Option<ListingId>,
     pub searching: bool,
     pub gathered: bool,
+    pub cursor: Option<usize>,
+    pub showing: Showing,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +36,9 @@ pub struct Entries {
     failed: Option<ListingId>,
     scale_factor: f32,
     thumbnail_side: u32,
+    jumped: Option<Instant>,
+    moves: Option<(Option<usize>, Move)>,
+    opens: Option<EntryId>,
 }
 
 impl EventEmitter<EntriesAsked> for Entries {}
@@ -53,6 +62,41 @@ impl Entries {
 
     pub const fn gathered(&self) -> bool {
         self.shown.gathered
+    }
+
+    pub const fn cursor(&self) -> Option<usize> {
+        self.shown.cursor
+    }
+
+    pub const fn showing(&self) -> Showing {
+        self.shown.showing
+    }
+
+    pub fn jumping(&self, now: Instant) -> bool {
+        self.jumped
+            .is_some_and(|jumped| now.saturating_duration_since(jumped) < PAUSE)
+    }
+
+    pub const fn set_jumped(&mut self, jumped: Option<Instant>) {
+        self.jumped = jumped;
+    }
+
+    pub fn move_cursor(&mut self, from: Option<usize>, step: Move, cx: &mut Context<Self>) {
+        self.moves = Some((from, step));
+        cx.emit(EntriesAsked);
+    }
+
+    pub const fn take_move(&mut self) -> Option<(Option<usize>, Move)> {
+        self.moves.take()
+    }
+
+    pub fn open(&mut self, id: EntryId, cx: &mut Context<Self>) {
+        self.opens = Some(id);
+        cx.emit(EntriesAsked);
+    }
+
+    pub const fn take_open(&mut self) -> Option<EntryId> {
+        self.opens.take()
     }
 
     pub const fn asked(&self) -> Option<ListingId> {

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use gpui::{App, AppContext as _, Entity};
+use gpui::{App, AppContext as _, Entity, FocusHandle};
 use nova_files_messages::{Connection, CoreGone, Message};
 
 use crate::entries::Entries;
@@ -50,6 +50,7 @@ pub struct Host {
     pub nav: Entity<Navigator>,
     pub island: Entity<Island>,
     pub kept: Entity<Kept>,
+    pub list: FocusHandle,
     pub opening: Opening,
     pub lines: Lines,
 }
@@ -71,6 +72,7 @@ impl Host {
             nav: cx.new(|_| Navigator::default()),
             island: cx.new(|_| Island::default()),
             kept: cx.new(|_| Kept::default()),
+            list: cx.focus_handle(),
             opening,
             lines: Lines::default(),
         }
@@ -91,6 +93,7 @@ impl Host {
             picker: entries.picker(),
             searching: entries.searching(),
             gathered: entries.gathered(),
+            showing: entries.showing(),
         }
     }
 }
