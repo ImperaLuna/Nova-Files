@@ -4,11 +4,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription};
-use nova_files_api::{HiddenFiles, ListingId};
+use nova_files_api::{Command, HiddenFiles, ListingId};
 use nova_files_picker_api::PickId;
+use nova_files_shell::path_bar::PathBarEvent;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
-    Opening, PageRef, Part, Scene, Shown, TabId,
+    Opening, PageRef, Part, Scene, Showing, Shown, TabId, Turn,
 };
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
@@ -30,6 +31,10 @@ impl MainWindow {
         watching.extend([
             cx.observe_self(Self::publish),
             cx.observe(&self.host.nav, |_, _, cx| cx.notify()),
+            cx.observe(&self.path_bar, |_, _, cx| cx.notify()),
+            cx.subscribe(&self.path_bar, |this, _, event: &PathBarEvent, cx| {
+                this.path_bar_said(event, cx);
+            }),
             cx.subscribe(&self.host.nav, |this, _, event: &NavEvent, cx| {
                 if *event == NavEvent::Asked {
                     this.take_nav_asks(cx);
@@ -41,12 +46,32 @@ impl MainWindow {
             cx.subscribe(&self.host.entries, |this, _, _: &EntriesAsked, cx| {
                 this.take_entries_asks(cx);
             }),
-            cx.on_release(|this, cx| this.parts.closing(cx)),
+            cx.on_release(Self::close_parts),
             cx.observe_global::<Published<HiddenFiles>>(Self::hidden_published),
             cx.observe_global::<Published<ThumbnailsShown>>(Self::thumbnails_published),
             cx.observe_global::<Published<KnownFolders>>(Self::known_published),
         ]);
         watching
+    }
+
+    fn close_parts(&mut self, cx: &mut App) {
+        self.parts.closing(cx);
+        let changed = self.host.kept.update(cx, |kept, _| kept.take_changed());
+        if let (Some(bytes), Some(connection)) = (changed, &self.connection) {
+            connection.send(Command::SaveWindowState(bytes)).ok();
+        }
+    }
+
+    fn path_bar_said(&mut self, event: &PathBarEvent, cx: &mut Context<Self>) {
+        match event {
+            PathBarEvent::Typed(target) => {
+                let before = self.asked;
+                self.open(target);
+                let asked = self.asked.filter(|_| self.asked != before);
+                self.path_bar.update(cx, |bar, cx| bar.going(asked, cx));
+            }
+            PathBarEvent::Left => self.focus_later(FocusTo::List, cx),
+        }
     }
 
     pub const fn host(&self) -> &Host {
@@ -69,6 +94,15 @@ impl MainWindow {
             picker: self.host.opening.is_some(),
             searching: self.searching(),
             gathered: self.gathered_here().is_some(),
+            showing: self.showing(),
+        }
+    }
+
+    fn showing(&self) -> Showing {
+        if self.showing_gallery() {
+            Showing::Gallery
+        } else {
+            Showing::List
         }
     }
 
@@ -117,9 +151,26 @@ impl MainWindow {
     }
 
     fn take_entries_asks(&mut self, cx: &mut Context<Self>) {
-        let (now, later) = self.host.entries.update(cx, |entries, _| {
-            (entries.take_select(), entries.take_select_later())
+        let (now, later, failed) = self.host.entries.update(cx, |entries, _| {
+            (
+                entries.take_select(),
+                entries.take_select_later(),
+                entries.take_failed(),
+            )
         });
+        if let Some(id) = failed {
+            self.listing_failed(id, cx);
+        }
+        let (moved, opened) = self
+            .host
+            .entries
+            .update(cx, |entries, _| (entries.take_move(), entries.take_open()));
+        if let Some((from, step)) = moved {
+            self.move_cursor_from(from, step, cx);
+        }
+        if let Some(id) = opened {
+            self.open_entries(&[id], cx);
+        }
         if let Some((folder, names)) = later {
             self.select_when_listed(folder, names, cx);
         }
@@ -169,11 +220,18 @@ impl MainWindow {
             asked: self.asked,
             searching: self.searching(),
             gathered: self.gathered_here().is_some(),
+            cursor: self.cursor(),
+            showing: self.showing(),
+        };
+        let page = match &shown.location {
+            Some(shell::Location::Page(page)) => Some(page.clone()),
+            _ => None,
         };
         self.host
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
+        self.turn_pages(page.map(|page| (tab, page)), cx);
         self.host.nav.update(cx, |nav, cx| nav.show(tab, tabs, cx));
         self.tell_left(cx);
     }
@@ -186,12 +244,27 @@ impl MainWindow {
         left
     }
 
+    fn turn_pages(&mut self, now: Option<(TabId, PageRef)>, cx: &mut Context<Self>) {
+        if now == self.shown_page {
+            return;
+        }
+        if let Some((tab, page)) = self.shown_page.take() {
+            self.parts.page_turned(&page, tab, Turn::Left, cx);
+        }
+        if let Some((tab, page)) = &now {
+            self.parts.page_turned(page, *tab, Turn::Shown, cx);
+        }
+        self.shown_page = now;
+    }
+
     fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
         let asks = self.host.nav.update(cx, |nav, _| nav.take_asks());
         let went = std::mem::take(&mut self.went);
         for ask in asks {
             match ask {
                 NavAsk::Go(place) => self.go_to_shell(place, cx),
+                NavAsk::Replace(place) => self.replace_with(&from_shell(place), cx),
+                NavAsk::Focus(handle) => self.focus_later(FocusTo::Handle(handle), cx),
                 NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),

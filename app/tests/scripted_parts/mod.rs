@@ -5,12 +5,16 @@ use nova_files_ui::CoreStatus;
 
 use super::*;
 
+mod drawn;
 mod hooks;
+mod kept;
 mod listing;
 mod naming;
 mod picking;
+mod preview;
 mod rows;
 mod shelf;
+mod turns;
 
 #[derive(Debug, Clone)]
 struct Claim(PathBuf);

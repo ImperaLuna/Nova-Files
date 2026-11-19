@@ -144,11 +144,17 @@ impl MainWindow {
             return false;
         }
         let (prefix, past) = self.jump.typed(typed, now);
+        self.host()
+            .entries
+            .update(cx, |entries, _| entries.set_jumped(Some(now)));
         let typed = jump::Jump { prefix, past };
         let Some(listing) = &self.listing else {
             let taken = self.parts.typed(&typed, &self.scene(), cx);
             if !taken {
                 self.jump = jump::TypeJump::default();
+                self.host()
+                    .entries
+                    .update(cx, |entries, _| entries.set_jumped(None));
             }
             return taken;
         };

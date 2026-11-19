@@ -37,8 +37,18 @@ impl MainWindow {
                 self.request_gathered(*place);
             }
             Location::Properties(paths) => self.arrive_at_properties(paths, cx),
+            Location::Page(page) if self.parts.lists(page) => {
+                self.request_listed(page.clone());
+            }
             Location::Page(page) => self.arrive_at_page(page.clone(), cx),
         }
+    }
+
+    pub(super) fn replace_with(&mut self, place: &Location, cx: &mut Context<Self>) {
+        self.went_elsewhere();
+        self.history.replace_with(place.clone());
+        self.go_to(place, cx);
+        cx.notify();
     }
 
     pub fn back_target(&self) -> Option<&Location> {
@@ -81,7 +91,7 @@ impl MainWindow {
         if sent {
             self.stop_measuring();
             self.search.folder_asked();
-            self.close_path_menu();
+            self.asks_sent += 1;
             self.asked = Some(id);
             self.asked_order = order;
             self.requested = Some(place);

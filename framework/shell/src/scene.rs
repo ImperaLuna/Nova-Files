@@ -9,6 +9,14 @@ pub struct Scene {
     pub picker: bool,
     pub searching: bool,
     pub gathered: bool,
+    pub showing: Showing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Showing {
+    #[default]
+    List,
+    Gallery,
 }
 
 impl Scene {

@@ -49,8 +49,8 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, SharedString, Subscription, Task,
-    UniformListScrollHandle,
+    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, SharedString,
+    Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
@@ -65,8 +65,10 @@ use nova_files_preview_api as preview_api;
 use nova_files_properties_api as properties_api;
 use nova_files_search_api as search_api;
 use nova_files_shell::Lines;
+use nova_files_shell::path_bar::PathBar;
 use nova_files_shell::{
-    FolderRules, Host, KnownFolders, Link, Opening, PageRef, Parts, ThumbnailsShown, WindowParts,
+    FolderRules, Host, KnownFolders, Link, Opening, PageRef, Parts, TabId, ThumbnailsShown,
+    WindowParts,
 };
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_thumbnails_api as thumbnails_api;
@@ -80,7 +82,6 @@ use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::menu::Menu;
-use crate::path_bar::PathBar;
 use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
@@ -151,13 +152,15 @@ pub struct MainWindow {
     pub(crate) history: History,
     pub(crate) recent: Vec<RecentFolder>,
     pub(crate) recent_asked: RecentId,
-    pub(crate) path_bar: PathBar,
+    pub(crate) path_bar: Entity<PathBar>,
+    pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,
     pub(crate) pick: Option<Picker>,
     pub(crate) home: PathBuf,
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
     listed_page: Option<PageRef>,
+    shown_page: Option<(TabId, PageRef)>,
     known: KnownFolders,
     pub(crate) drives: nova_files_drives_ui::KnownDrives,
     pub(crate) menu: Option<Menu>,
@@ -211,7 +214,7 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 1] = [Command::Ping];
+    const FIRST_ASKS: [Command; 2] = [Command::Ping, Command::WindowState];
 
     pub fn at(
         connector: &Connector,
@@ -274,17 +277,19 @@ impl MainWindow {
             history: History::default(),
             recent: Vec::new(),
             recent_asked: RecentId(0),
-            path_bar: PathBar::new(connector.clone()),
+            path_bar: cx.new(|_| PathBar::new(&host)),
+            asks_sent: 0,
             scroll: UniformListScrollHandle::new(),
             pick: None,
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
+            shown_page: None,
             known: KnownFolders::default(),
             drives: nova_files_drives_ui::KnownDrives::default(),
             menu: None,
             search: search::Search::new(cx),
-            focus: cx.focus_handle(),
+            focus: host.list.clone(),
             island: Island::default(),
             jobs: Jobs::default(),
             counted: SharedString::default(),

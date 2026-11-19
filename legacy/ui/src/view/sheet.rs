@@ -14,7 +14,7 @@ use nova_files_gathered_api::Gathering;
 use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon};
 
-use nova_files_shell::ShownColumn;
+use nova_files_shell::{PageRef, ShownColumn};
 
 use crate::assets::Icon;
 use crate::grid::Grid;
@@ -361,7 +361,11 @@ fn entry_row(
 
 impl MainWindow {
     pub fn list_drop_folder(&self) -> Option<&Path> {
-        if self.searching() || self.folder_rules().trashed || self.gathered_shown().is_some() {
+        if self.searching()
+            || self.folder_rules().trashed
+            || self.gathered_shown().is_some()
+            || self.listed_page().is_some()
+        {
             return None;
         }
         Some(&self.listing.as_ref()?.path)
@@ -390,7 +394,8 @@ impl MainWindow {
     }
 
     fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
-        let order = (!self.searching()).then(|| self.shown_order());
+        let sorted = self.listed_page().is_none_or(PageRef::sorted);
+        let order = (!self.searching() && sorted).then(|| self.shown_order());
         let part = self.parts.column(&self.scene(), cx).map(|column| {
             let selector = column.selector;
             div()
@@ -402,7 +407,10 @@ impl MainWindow {
             _ if part.is_some() => part,
             Some(Gathering::Games) => Some(library_head()),
             Some(Gathering::Projects) => Some(folder_head()),
-            None => self.showing_found().then(folder_head),
+            None => {
+                let listed = self.listed_page().is_some_and(PageRef::folder_column);
+                (self.showing_found() || listed).then(folder_head)
+            }
         };
         column_heads(order, folder, colors, cx)
     }
