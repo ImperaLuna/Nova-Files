@@ -5,11 +5,12 @@ use gpui::{App, AppContext as _, Global, KeyBinding};
 use nova_files_messages::MessageType;
 
 use super::cards::{card_views, slot_view};
+use super::declared::{each_once, sends, slots_of, specs, takes};
 use super::{OpenPart, Opened, WindowParts};
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::Location;
-use crate::part::{Card, Part, Slots};
+use crate::part::{Card, Part};
 use crate::slot_view::{Draw, Fit};
 
 #[derive(Clone, Copy)]
@@ -81,12 +82,6 @@ impl Parts {
     }
 }
 
-fn slots_of<P: Part>() -> Slots<P> {
-    let mut slots = Slots::default();
-    P::slots(&mut slots);
-    slots
-}
-
 fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
     let entity = cx.new(|cx| P::open(host, cx));
     let slots = slots_of::<P>();
@@ -141,26 +136,4 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         path_chips,
         list_views,
     })
-}
-
-fn takes<P: Part>() -> Vec<MessageType> {
-    slots_of::<P>().takes()
-}
-
-fn sends<P: Part>() -> Vec<MessageType> {
-    slots_of::<P>().sent()
-}
-
-fn specs<P: Part>() -> Vec<&'static CommandSpec> {
-    slots_of::<P>().specs()
-}
-
-fn each_once(types: impl Iterator<Item = MessageType>) -> Vec<MessageType> {
-    let mut once = Vec::new();
-    for kind in types {
-        if !once.contains(&kind) {
-            once.push(kind);
-        }
-    }
-    once
 }

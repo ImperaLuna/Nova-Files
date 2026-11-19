@@ -27,6 +27,7 @@ use crate::scene::Scene;
 use crate::text::TextField;
 
 mod cards;
+mod declared;
 mod registry;
 mod window;
 
