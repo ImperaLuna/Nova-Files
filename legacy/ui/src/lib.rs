@@ -12,7 +12,6 @@ mod grid;
 mod history;
 mod island;
 mod jump;
-mod kind;
 mod location;
 mod marks;
 mod menu;
@@ -23,7 +22,6 @@ mod requests;
 mod selecting;
 mod selection;
 mod shown_thumbnails;
-mod text;
 mod theme_icons;
 mod thumbnail;
 mod tree;
@@ -46,7 +44,7 @@ pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note, NoteUndo};
 pub use location::Location;
 pub use menu::{Look, Menu, MenuAction, MenuItem};
-use nova_files_shell::{Parts, assets, theme};
+use nova_files_shell::{Parts, assets, kind, text, theme};
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
@@ -82,6 +80,7 @@ pub fn sent_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_properties_api::Command>(),
         MessageType::of::<nova_files_settings_api::Command>(),
         MessageType::of::<nova_files_start_api::Command>(),
+        MessageType::of::<nova_files_transfer_api::Command>(),
     ]
 }
 
@@ -94,6 +93,7 @@ pub fn taken_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_properties_api::Event>(),
         MessageType::of::<nova_files_settings_api::Event>(),
         MessageType::of::<nova_files_start_api::Event>(),
+        MessageType::of::<nova_files_transfer_api::Event>(),
     ]
 }
 

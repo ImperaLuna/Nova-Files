@@ -148,6 +148,12 @@ impl MainWindow {
                 NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),
+                NavAsk::PickFolder(pick) => {
+                    self.pick_folder(&pick.title, &pick.accept, cx, move |_, path, cx| {
+                        let picked = pick.picked.clone();
+                        cx.defer(move |cx| picked(path, cx));
+                    });
+                }
             }
         }
     }

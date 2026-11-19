@@ -290,7 +290,8 @@ fn key_name(key: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::{COPY, NEW_FOLDER, RENAME, TRASH};
+    use crate::commands::{NEW_FOLDER, RENAME, TRASH};
+    use nova_files_clipboard_ui::COPY;
 
     fn label(spec: &CommandSpec) -> Option<String> {
         key_label(&spec.binding(spec.keys[0])).map(String::from)

@@ -4,7 +4,7 @@ use gpui::{Context, SharedString};
 use nova_files_api::{EntryId, EntryKind, Listing, NotOpened, Operation};
 
 use super::MainWindow;
-use crate::island::{self, ITEM, ITEMS, NOTE_TIME, Note, NoteUndo, opening};
+use crate::island::{NOTE_TIME, Note, NoteUndo, opening};
 use crate::selection::entry_at;
 
 impl MainWindow {
@@ -41,39 +41,11 @@ impl MainWindow {
         })
     }
 
-    pub fn trash_selected(&mut self, cx: &mut Context<Self>) {
-        if self.folder_rules().trashed {
-            self.delete_selected(cx);
-            return;
-        }
+    pub fn trash_selected(&mut self, _: &mut Context<Self>) {
         let paths = self.selected_paths();
-        if !paths.is_empty() && !self.picker() {
+        if !paths.is_empty() && !self.picker() && !self.folder_rules().trashed {
             self.start_job(Operation::Trash { paths });
         }
-    }
-
-    pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
-        let Some(operation) = self.deleting_selected() else {
-            return;
-        };
-        let many = match &operation {
-            Operation::Delete { paths } => paths.len(),
-            Operation::DeleteFromTrash { items } => items.len(),
-            _ => return,
-        };
-        let what = island::count(many, ITEM, ITEMS);
-        self.ask(format!("Delete {what} for good?"), operation, cx);
-    }
-
-    pub(super) fn deleting_selected(&self) -> Option<Operation> {
-        if self.folder_rules().trashed {
-            let named = self
-                .folder()
-                .and_then(|folder| self.host.rules.named(folder));
-            let items = named.map(|_| self.selected_paths()).unwrap_or_default();
-            return (!items.is_empty()).then_some(Operation::DeleteFromTrash { items });
-        }
-        deleting(self.selected_paths(), self.picker())
     }
 
     pub(crate) fn undo(&mut self, cx: &mut Context<Self>) {
@@ -155,27 +127,5 @@ impl MainWindow {
 
     pub const fn note(&self) -> Option<&Note> {
         self.island.note.as_ref()
-    }
-}
-
-fn deleting(paths: Vec<PathBuf>, picking: bool) -> Option<Operation> {
-    (!paths.is_empty() && !picking).then_some(Operation::Delete { paths })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn deleting_needs_a_selection_and_no_picker() {
-        let paths = vec![PathBuf::from("/home/a/notes.txt")];
-        assert_eq!(
-            deleting(paths.clone(), false),
-            Some(Operation::Delete {
-                paths: paths.clone()
-            })
-        );
-        assert_eq!(deleting(paths, true), None);
-        assert_eq!(deleting(Vec::new(), false), None);
     }
 }

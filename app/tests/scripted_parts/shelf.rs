@@ -11,6 +11,7 @@ use nova_files_shell::{
 };
 
 use super::super::*;
+use super::click;
 
 mod actions {
     #![expect(
@@ -104,14 +105,16 @@ impl Part for Shelf {
             })
         });
         slots.sidebar(SidebarAt::Places, |_, scene, _| {
-            vec![SidebarRow {
-                id: "place-shelf",
-                icon: Icon::Info,
-                name: "Shelf".into(),
-                number: Some("3".into()),
-                opens: Location::Page(PageRef::new(Shelved)),
-                here: scene.on_page::<Shelved>().is_some(),
-            }]
+            vec![
+                SidebarRow::new(
+                    "place-shelf",
+                    Icon::Info,
+                    "Shelf",
+                    Location::Page(PageRef::new(Shelved)),
+                )
+                .number(Some("3".into()))
+                .here(scene.on_page::<Shelved>().is_some()),
+            ]
         });
         slots.start_card(|_, _, _, _| {
             Some(
@@ -167,13 +170,6 @@ fn right_click_at(cx: &mut VisualTestContext, at: Point<Pixels>) {
         button: gpui::MouseButton::Right,
         click_count: 1,
     });
-    cx.run_until_parked();
-}
-
-fn click(cx: &mut VisualTestContext, selector: &'static str) {
-    cx.run_until_parked();
-    let at = cx.debug_bounds(selector).unwrap().center();
-    cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
 }
 

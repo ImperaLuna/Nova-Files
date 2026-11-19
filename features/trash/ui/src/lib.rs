@@ -293,14 +293,12 @@ impl Part for TrashPart {
                 .count
                 .filter(|count| *count > 0)
                 .map(|count| count.to_string().into());
-            vec![SidebarRow {
-                id: ROW,
-                icon: Icon::Trash,
-                name: TRASH_LABEL.into(),
-                number,
-                here: scene.in_folder(&folder),
-                opens: Location::Folder(folder),
-            }]
+            let here = scene.in_folder(&folder);
+            vec![
+                SidebarRow::new(ROW, Icon::Trash, TRASH_LABEL, Location::Folder(folder))
+                    .number(number)
+                    .here(here),
+            ]
         });
     }
 }

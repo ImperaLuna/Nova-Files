@@ -298,7 +298,10 @@ fn sheet_corner(colors: &Colors) -> impl IntoElement {
         .child(div().size_full().rounded_tl(radius::SHEET).bg(colors.sheet))
 }
 
-pub(super) fn rename_box(field: gpui::Entity<crate::text::TextField>, colors: &Colors) -> Div {
+pub(super) fn rename_box(
+    field: gpui::Entity<nova_files_shell::text::TextField>,
+    colors: &Colors,
+) -> Div {
     div()
         .debug_selector(|| "rename".to_owned())
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())

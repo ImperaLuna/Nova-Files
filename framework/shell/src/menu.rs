@@ -164,19 +164,95 @@ impl fmt::Debug for RowItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct SidebarRow {
-    pub id: &'static str,
+    pub id: SharedString,
     pub icon: Icon,
     pub name: SharedString,
     pub number: Option<SharedString>,
     pub opens: crate::Location,
     pub here: bool,
+    pub depth: u8,
+    pub expander: Option<Expander>,
+    pub button: Option<RowItem>,
+    pub rank: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct Expander {
+    pub open: bool,
+    pub toggle: RowItem,
+}
+
+impl SidebarRow {
+    pub fn new(
+        id: impl Into<SharedString>,
+        icon: Icon,
+        name: impl Into<SharedString>,
+        opens: crate::Location,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            icon,
+            name: name.into(),
+            number: None,
+            opens,
+            here: false,
+            depth: 0,
+            expander: None,
+            button: None,
+            rank: Self::LAST,
+        }
+    }
+
+    pub const FIRST: u8 = 0;
+    pub const START: u8 = 10;
+    pub const OWN: u8 = 20;
+    pub const GATHERED: u8 = 30;
+    pub const LAST: u8 = u8::MAX;
+
+    #[must_use]
+    pub const fn rank(mut self, rank: u8) -> Self {
+        self.rank = rank;
+        self
+    }
+
+    #[must_use]
+    pub fn number(mut self, number: Option<SharedString>) -> Self {
+        self.number = number;
+        self
+    }
+
+    #[must_use]
+    pub const fn here(mut self, here: bool) -> Self {
+        self.here = here;
+        self
+    }
+
+    #[must_use]
+    pub const fn depth(mut self, depth: u8) -> Self {
+        self.depth = depth;
+        self
+    }
+
+    #[must_use]
+    pub fn expander(mut self, open: bool, toggle: RowItem) -> Self {
+        self.expander = Some(Expander { open, toggle });
+        self
+    }
+
+    #[must_use]
+    pub fn button(mut self, button: RowItem) -> Self {
+        self.button = Some(button);
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SidebarAt {
     Places,
+    Drives,
+    Tree,
 }
 
 #[cfg(test)]

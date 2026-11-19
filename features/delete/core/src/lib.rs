@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod kind;
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -14,6 +16,8 @@ use nova_files_jobs::journal::{Record, word};
 use nova_files_jobs::plan::{Item, Kind, Plan, plan_delete};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::stop::Stop;
+
+pub use kind::Deletes;
 
 pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
     running.record_job(word::DELETE, None, paths);

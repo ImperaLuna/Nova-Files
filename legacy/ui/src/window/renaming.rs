@@ -8,7 +8,7 @@ use nova_files_api::{EntryKind, Listing, Operation};
 use super::MainWindow;
 use crate::pick::stem;
 use crate::selection::Selection;
-use crate::text::{TextField, TextFieldEvent};
+use nova_files_shell::text::{TextField, TextFieldEvent};
 
 const NEW_FOLDER: &str = "New folder";
 

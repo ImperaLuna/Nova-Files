@@ -90,6 +90,7 @@ impl MainWindow {
                 number: None,
                 here: on,
                 pressed: on,
+                lead: None,
             },
             narrow,
             &colors,

@@ -8,7 +8,7 @@ use super::MainWindow;
 use super::events::Place;
 use crate::location::Location;
 use crate::pick::typed::HOME;
-use crate::text::{TextField, TextFieldEvent};
+use nova_files_shell::text::{TextField, TextFieldEvent};
 
 const PLACEHOLDER: &str = "Search";
 

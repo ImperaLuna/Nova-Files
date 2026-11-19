@@ -10,10 +10,10 @@ use nova_files_properties_api::{Account, PathKind, Properties};
 
 use crate::assets::Icon;
 use crate::theme::{Colors, properties, radius, size, text};
-use crate::view::island::tick_box;
 use crate::view::row::icon;
 use crate::view::start::group;
 use crate::window::{MainWindow, Who};
+use nova_files_shell::widgets::tick_box;
 
 const LABEL: &str = "Access";
 const OWNER_LABEL: &str = "Owner";
