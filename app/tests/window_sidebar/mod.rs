@@ -192,13 +192,15 @@ fn answer_picker(cx: &mut VisualTestContext, windows: usize, folder: &Path) {
         .filter_map(|handle| handle.downcast::<MainWindow>())
         .find(|handle| {
             handle
-                .read_with(cx, |view, _| view.pick_id().is_some())
+                .read_with(cx, |view, cx| view.pick_id(cx).is_some())
                 .unwrap()
         })
         .unwrap();
     assert_eq!(cx.windows().len(), windows + 1);
     picker
-        .update(cx, |view, _, _| assert!(view.answer(folder.to_path_buf())))
+        .update(cx, |view, _, cx| {
+            assert!(view.answer(folder.to_path_buf(), cx));
+        })
         .unwrap();
 }
 

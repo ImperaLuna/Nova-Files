@@ -387,7 +387,7 @@ async fn a_picker_still_goes_into_folders(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
 
     assert!(answers.try_recv().is_err());
-    view.read_with(cx, |view, _| assert_eq!(view.pick_id(), Some(PickId(9))));
+    view.read_with(cx, |view, cx| assert_eq!(view.pick_id(cx), Some(PickId(9))));
 }
 
 #[gpui::test]
@@ -401,16 +401,16 @@ async fn a_picker_picks_nothing_from_a_listing_it_has_left(cx: &mut TestAppConte
     let notes = EntryId(1);
 
     view.update(cx, |view, _| view.open(&tree.path().join("Projects")));
-    assert!(!view.update(cx, |view, _| view.pick_entry(first, notes)));
+    assert!(!view.update(cx, |view, cx| view.pick_entry(first, notes, cx)));
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
 
     view.update(cx, |view, _| view.go_up());
     wait_for_folder(&view, cx, tree.path()).await;
-    assert!(!view.update(cx, |view, _| view.pick_entry(first, notes)));
+    assert!(!view.update(cx, |view, cx| view.pick_entry(first, notes, cx)));
 
     assert!(answers.try_recv().is_err());
     let now = view.read_with(cx, |view, _| view.listing_id()).unwrap();
-    assert!(view.update(cx, |view, _| view.pick_entry(now, notes)));
+    assert!(view.update(cx, |view, cx| view.pick_entry(now, notes, cx)));
 }
 
 #[gpui::test]
@@ -426,7 +426,7 @@ async fn a_save_picker_leaves_double_clicked_files_alone(cx: &mut TestAppContext
     double_click(cx, "entry-1");
 
     assert!(answers.try_recv().is_err());
-    view.read_with(cx, |view, _| assert_eq!(view.pick_id(), Some(PickId(9))));
+    view.read_with(cx, |view, cx| assert_eq!(view.pick_id(cx), Some(PickId(9))));
 }
 
 #[gpui::test]

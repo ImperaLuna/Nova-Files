@@ -38,15 +38,15 @@ async fn answer(
     cx: &VisualTestContext,
     answers: &Receiver<PickAnswer>,
 ) -> Option<PickAnswer> {
-    view.condition::<WindowEvent>(cx, |view, _| view.pick_id().is_none())
+    view.condition::<WindowEvent>(cx, |view, cx| view.pick_id(cx).is_none())
         .await;
     answers.try_recv().ok()
 }
 
 async fn asked(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Option<OsString> {
-    view.condition::<WindowEvent>(cx, |view, _| view.pick_conflict().is_some())
+    view.condition::<WindowEvent>(cx, |view, cx| view.pick_conflict(cx).is_some())
         .await;
-    view.read_with(cx, |view, _| view.pick_conflict().map(ToOwned::to_owned))
+    view.read_with(cx, MainWindow::pick_conflict)
 }
 
 async fn picker<'a>(
@@ -352,7 +352,7 @@ async fn typing_after_the_question_takes_it_back(cx: &mut TestAppContext) {
     asked(&view, cx).await;
     cx.simulate_keystrokes("end backspace backspace backspace");
     cx.simulate_input("md");
-    let question = view.read_with(cx, |view, _| view.pick_conflict().map(ToOwned::to_owned));
+    let question = view.read_with(cx, MainWindow::pick_conflict);
     assert_eq!(question, None);
     cx.simulate_keystrokes("enter");
     assert_eq!(
@@ -477,7 +477,7 @@ async fn escape_takes_back_the_question_before_it_cancels(cx: &mut TestAppContex
     cx.simulate_keystrokes("enter");
     asked(&view, cx).await;
     cx.simulate_keystrokes("escape");
-    let question = view.read_with(cx, |view, _| view.pick_conflict().map(ToOwned::to_owned));
+    let question = view.read_with(cx, MainWindow::pick_conflict);
     assert_eq!(question, None);
     assert!(answers.try_recv().is_err());
     assert!(!closed(cx));
