@@ -1,4 +1,5 @@
 use std::any::{Any, TypeId};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -283,6 +284,11 @@ pub struct Parts {
 
 impl Global for Parts {}
 
+#[derive(Default)]
+struct BoundKeys(HashSet<&'static str>);
+
+impl Global for BoundKeys {}
+
 impl Parts {
     pub fn add<P: Part>(&mut self) {
         self.kinds.push(Kind {
@@ -301,6 +307,17 @@ impl Parts {
         each_once(self.kinds.iter().flat_map(|kind| (kind.sends)()))
     }
 
+    fn bind_new_keys(&self, cx: &mut App) {
+        let bound = cx.default_global::<BoundKeys>();
+        let new: Vec<_> = self
+            .kinds
+            .iter()
+            .flat_map(|kind| (kind.specs)())
+            .filter(|spec| bound.0.insert(spec.id))
+            .collect();
+        cx.bind_keys(new.into_iter().flat_map(CommandSpec::bindings));
+    }
+
     pub fn bindings(&self) -> Vec<KeyBinding> {
         self.kinds
             .iter()
@@ -310,6 +327,7 @@ impl Parts {
     }
 
     pub fn open(&self, host: &Host, cx: &mut App) -> WindowParts {
+        self.bind_new_keys(cx);
         WindowParts {
             opened: self
                 .kinds
