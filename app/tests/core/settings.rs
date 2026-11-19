@@ -1,9 +1,3 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
 use std::fs;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
@@ -11,7 +5,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files::{Home, IDLE_EXIT, RunningCore};
+use crate::common::Core;
+use nova_files::{Home, IDLE_EXIT};
 use nova_files_api::{Color, Connection, DesktopLook, Mode, Theme};
 use nova_files_look_api as look_api;
 use nova_files_settings_api::{
@@ -47,7 +42,7 @@ impl TempHome {
         fs::rename(temporary, file).unwrap();
     }
 
-    fn core(&self) -> RunningCore {
+    fn core(&self) -> Core {
         let home = Home {
             folder: self.0.clone(),
             config: self.0.join("config"),
@@ -55,7 +50,7 @@ impl TempHome {
             data: self.0.join("share"),
             drive_trashes: false,
         };
-        nova_files::spawn_with(IDLE_EXIT, Some(home), None, None).unwrap()
+        Core(nova_files::spawn_with(IDLE_EXIT, Some(home), None, None).unwrap())
     }
 }
 
@@ -65,7 +60,7 @@ impl Drop for TempHome {
     }
 }
 
-fn listen(core: &RunningCore) -> (Connection, Receiver<settings_api::Event>, Settings) {
+fn listen(core: &Core) -> (Connection, Receiver<settings_api::Event>, Settings) {
     let (sink, events) = mpsc::channel();
     let connection = core.connector.connect(sink).unwrap();
     connection.send(settings_api::Command::Watch).unwrap();

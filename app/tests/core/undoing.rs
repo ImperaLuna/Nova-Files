@@ -1,12 +1,5 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-#[path = "common/answers.rs"]
-mod answers;
-mod common;
+use crate::answers;
+use crate::common;
 
 use std::fs;
 use std::path::{Path, PathBuf};

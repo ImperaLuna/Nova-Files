@@ -1,12 +1,5 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-#[expect(dead_code, reason = "the job helpers; scans need only the bench")]
-mod common;
-mod feature;
+use crate::common;
+use crate::feature;
 
 use std::collections::HashMap;
 use std::ffi::OsString;

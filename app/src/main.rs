@@ -158,6 +158,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     watch_core(core.thread, requests.clone())?;
     show_windows(mode, &requests, &core.connector, &received, service);
+    core.connector.stop().ok();
     Ok(())
 }
 

@@ -1,14 +1,6 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-#[path = "common/answers.rs"]
-mod answers;
-mod common;
-#[path = "common/files.rs"]
-mod files;
+use crate::answers;
+use crate::common;
+use crate::files;
 
 use std::fs;
 use std::os::unix::fs::symlink;

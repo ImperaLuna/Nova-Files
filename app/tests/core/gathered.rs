@@ -1,11 +1,4 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-#[expect(dead_code, reason = "this file starts no jobs")]
-mod common;
+use crate::common;
 
 use std::fs;
 use std::path::{Path, PathBuf};

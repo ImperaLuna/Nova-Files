@@ -1,14 +1,4 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-#[expect(
-    dead_code,
-    reason = "the job helpers; recent folders need only the bench"
-)]
-mod common;
+use crate::common;
 
 use std::fs;
 use std::path::PathBuf;
@@ -115,7 +105,9 @@ fn the_next_run_remembers_the_folders() {
         data: bench.at("home/.local/share"),
         drive_trashes: false,
     };
-    let again = nova_files::spawn_with(nova_files::IDLE_EXIT, Some(home), None, None).unwrap();
+    let again = common::Core(
+        nova_files::spawn_with(nova_files::IDLE_EXIT, Some(home), None, None).unwrap(),
+    );
     let client = Client::of(&again.connector);
     assert_eq!(paths(&recent(&client, 5, Vec::new())), vec![kept]);
 }

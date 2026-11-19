@@ -1,11 +1,4 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-#[expect(dead_code, reason = "the job helpers; disk space needs only the bench")]
-mod common;
+use crate::common;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};

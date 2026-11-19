@@ -1,9 +1,3 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::ffi::OsStringExt as _;
@@ -17,6 +11,8 @@ use nova_files_api::{
     Command, Connection, Details, EntryId, EntryKind, Event, Listing, ListingId, Order,
     ThumbnailSize, Unreadable,
 };
+
+use crate::common::Core;
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
 const NO_ACCESS: u32 = 0o000;
@@ -48,7 +44,7 @@ impl Drop for TempFolder {
 }
 
 struct Client {
-    _core: nova_files::RunningCore,
+    _core: Core,
     connection: Connection,
     events: Receiver<Event>,
 }
@@ -61,7 +57,7 @@ fn client_at(home: &Path) -> Client {
         data: home.join(".local/share"),
         drive_trashes: false,
     };
-    let core = nova_files::spawn_with(nova_files::IDLE_EXIT, Some(home), None, None).unwrap();
+    let core = Core(nova_files::spawn_with(nova_files::IDLE_EXIT, Some(home), None, None).unwrap());
     let (sink, events) = mpsc::channel();
     let connection = core.connector.connect(sink).unwrap();
     Client {
