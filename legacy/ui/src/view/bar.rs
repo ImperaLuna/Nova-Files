@@ -70,15 +70,7 @@ impl MainWindow {
     }
 }
 
-pub(super) fn capsule(colors: &Colors) -> Div {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .h(size::CAPSULE_HEIGHT)
-        .rounded(radius::CONTROL)
-        .bg(colors.raised)
-}
+pub(super) use nova_files_shell::widgets::capsule;
 
 pub(super) fn icon_button(
     name: &'static str,

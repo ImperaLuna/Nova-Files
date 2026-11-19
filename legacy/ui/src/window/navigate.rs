@@ -91,7 +91,7 @@ impl MainWindow {
         if sent {
             self.stop_measuring();
             self.search.folder_asked();
-            self.close_path_menu();
+            self.asks_sent += 1;
             self.asked = Some(id);
             self.asked_order = order;
             self.requested = Some(place);

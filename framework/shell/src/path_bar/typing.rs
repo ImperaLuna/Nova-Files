@@ -3,13 +3,15 @@ use std::path::{Path, PathBuf};
 use gpui::{AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
 use nova_files_api::ListingId;
 
-use crate::crumbs::under_home;
-use crate::window::MainWindow;
-use nova_files_shell::text::{TextField, TextFieldEvent};
-use nova_files_shell::typed::{self, HOME, Typed};
+use super::crumbs::under_home;
+use super::{PathBar, PathBarEvent};
+use crate::paths::HOME;
+use crate::text::{TextField, TextFieldEvent};
+use crate::typed::{self, Typed};
 
-pub struct PathField {
-    pub(crate) field: Entity<TextField>,
+pub(super) struct PathField {
+    field: Entity<TextField>,
+    from: PathBuf,
     shown: String,
     going: Option<ListingId>,
     _events: Subscription,
@@ -24,32 +26,32 @@ pub fn shown_path(folder: &Path, home: &Path) -> String {
     }
 }
 
-impl MainWindow {
-    pub fn path_field(&self) -> Option<&Entity<TextField>> {
-        self.path_bar.field.as_ref().map(|typing| &typing.field)
+impl PathBar {
+    pub fn field(&self) -> Option<&Entity<TextField>> {
+        self.field.as_ref().map(|typing| &typing.field)
     }
 
-    pub(crate) fn start_typing_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(folder) = self.folder() else { return };
-        let shown = shown_path(folder, &self.home);
-        self.close_path_menu();
+    pub fn start_typing(&mut self, folder: &Path, window: &mut Window, cx: &mut Context<Self>) {
+        let shown = shown_path(folder, &self.host.home);
+        self.menu = None;
         let field = cx.new(TextField::new);
         field.update(cx, |field, cx| {
             field.set_text(&shown, cx);
             field.select_range(0..shown.len(), cx);
         });
-        let events = cx.subscribe_in(&field, window, |this, _, event, window, cx| match event {
-            TextFieldEvent::Submitted => this.submit_typed_path(window, cx),
-            TextFieldEvent::Cancelled => this.stop_typing_path(Some(window), cx),
+        let events = cx.subscribe(&field, |this, _, event, cx| match event {
+            TextFieldEvent::Submitted => this.submit_typed(cx),
+            TextFieldEvent::Cancelled => this.stop_typing(true, cx),
             TextFieldEvent::Changed => {}
         });
         let focus = field.read(cx).focus_handle(cx);
         let blur = cx.on_blur(&focus, window, |this, _, cx| {
-            this.stop_typing_path(None, cx);
+            this.stop_typing(false, cx);
         });
         window.focus(&focus, cx);
-        self.path_bar.field = Some(PathField {
+        self.field = Some(PathField {
             field,
+            from: folder.to_path_buf(),
             shown,
             going: None,
             _events: events,
@@ -58,73 +60,70 @@ impl MainWindow {
         cx.notify();
     }
 
-    pub(crate) fn stop_typing_path(&mut self, window: Option<&mut Window>, cx: &mut Context<Self>) {
-        if self.path_bar.field.take().is_some()
-            && let Some(window) = window
-        {
-            window.focus(&self.keys_home(cx), cx);
+    pub fn stop_typing(&mut self, focus_back: bool, cx: &mut Context<Self>) {
+        if self.field.take().is_some() && focus_back {
+            cx.emit(PathBarEvent::Left);
         }
         cx.notify();
     }
 
-    fn submit_typed_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(path_field) = &self.path_bar.field else {
+    fn submit_typed(&mut self, cx: &mut Context<Self>) {
+        let Some(typing) = &self.field else {
             return;
         };
-        let text = path_field.field.read(cx).text().to_owned();
-        let target = if text == path_field.shown {
+        let text = typing.field.read(cx).text().to_owned();
+        let target = if text == typing.shown {
             None
         } else {
-            self.folder()
-                .and_then(|folder| typed_target(&text, &self.home, folder))
+            typed_target(&text, &self.host.home, &typing.from)
         };
-        let Some(target) = target else {
-            self.stop_typing_path(Some(window), cx);
-            return;
-        };
-        let before = self.asked;
-        self.open(&target);
-        let asked = self.asked.filter(|_| self.asked != before);
-        let Some(path_field) = &mut self.path_bar.field else {
-            return;
-        };
-        path_field.going = asked;
-        if asked.is_none() {
-            select_all(&path_field.field, cx);
+        match target {
+            Some(target) => cx.emit(PathBarEvent::Typed(target)),
+            None => self.stop_typing(true, cx),
         }
     }
 
-    pub(crate) fn typed_path_arrived(&mut self, same_folder: bool) {
+    pub fn going(&mut self, asked: Option<ListingId>, cx: &mut Context<Self>) {
+        let Some(typing) = &mut self.field else {
+            return;
+        };
+        typing.going = asked;
+        if asked.is_none() {
+            select_all(&typing.field, cx);
+        }
+    }
+
+    pub fn arrived(&mut self, same_folder: bool, cx: &mut Context<Self>) {
         let ends = self
-            .path_bar
             .field
             .as_ref()
-            .is_some_and(|field| field.going.is_some() || !same_folder);
+            .is_some_and(|typing| typing.going.is_some() || !same_folder);
         if ends {
-            self.path_bar.field = None;
+            self.field = None;
+            cx.notify();
         }
     }
 
-    pub(crate) fn typed_path_refused(&mut self, id: ListingId, cx: &mut Context<Self>) {
-        let Some(path_field) = &mut self.path_bar.field else {
+    pub fn refused(&mut self, id: ListingId, cx: &mut Context<Self>) {
+        let Some(typing) = &mut self.field else {
             return;
         };
-        if path_field.going != Some(id) {
+        if typing.going != Some(id) {
             return;
         }
-        path_field.going = None;
-        select_all(&path_field.field, cx);
+        typing.going = None;
+        select_all(&typing.field, cx);
     }
 }
 
-fn select_all(field: &Entity<TextField>, cx: &mut Context<MainWindow>) {
+fn select_all(field: &Entity<TextField>, cx: &mut Context<PathBar>) {
     field.update(cx, |field, cx| {
         let all = 0..field.text().len();
         field.select_range(all, cx);
     });
 }
 
-fn typed_target(text: &str, home: &Path, folder: &Path) -> Option<PathBuf> {
+pub fn typed_target(text: &str, home: &Path, folder: &Path) -> Option<PathBuf> {
     match typed::read(text, home, folder) {
         Typed::Nothing => None,
         Typed::Folder(path) | Typed::Path(path) => Some(path),

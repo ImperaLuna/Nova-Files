@@ -15,6 +15,7 @@ mod navigator;
 mod opening;
 mod part;
 mod parts;
+pub mod path_bar;
 pub mod paths;
 mod per_tab;
 mod published;
