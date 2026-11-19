@@ -21,6 +21,7 @@ use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
 use nova_files_start_api as start_api;
 use nova_files_start_core::Store as RecentStore;
+use nova_files_transfer_api as transfer_api;
 use nova_files_trash_api as trash_api;
 
 use crate::folder_views::Store as FolderViewsStore;
@@ -132,13 +133,21 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
+    file_routes(&mut routes)?;
+    routes.on_leave(forget);
+    Ok(routes)
+}
+
+fn file_routes(routes: &mut Routes<Setup, Client>) -> Result<(), MessageType> {
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        operations::drop(id, client, command, setup);
+        Ok(())
+    })?;
     routes.on(|setup: &Setup, _, client: &Client, command| match command {
         trash_api::Command::List => {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
         }
-    })?;
-    routes.on_leave(forget);
-    Ok(routes)
+    })
 }
 
 pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
@@ -154,8 +163,8 @@ pub fn emitted_types() -> Vec<MessageType> {
         MessageType::of::<places_api::Event>(),
         MessageType::of::<properties_api::Event>(),
         MessageType::of::<settings_api::Event>(),
-        MessageType::of::<settings_api::Event>(),
         MessageType::of::<start_api::Event>(),
+        MessageType::of::<transfer_api::Event>(),
         MessageType::of::<trash_api::Event>(),
     ]
 }
@@ -261,8 +270,6 @@ fn answer(
         | Command::SetFolderView { .. }) => look::answer(id, client, command, setup),
         command @ (Command::WatchJobs
         | Command::StartJob { .. }
-        | Command::DropFiles { .. }
-        | Command::DropWould { .. }
         | Command::PauseJob(_)
         | Command::ResumeJob(_)
         | Command::ForgetJob(_)

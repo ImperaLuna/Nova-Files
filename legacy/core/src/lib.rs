@@ -22,7 +22,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::{ClientId, Connector};
-use nova_files_disk::{capped, hand_edited, private_file, saver, timed};
+use nova_files_disk::{capped, hand_edited, private_file, saver};
 use nova_files_entries_core::{list, memory, order};
 
 use search::Searcher;

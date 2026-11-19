@@ -13,17 +13,18 @@ mod files;
 use std::fs::{self, File};
 use std::os::unix::fs::{MetadataExt as _, symlink};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 use std::time::{Duration, SystemTime};
 
 use nova_files_api::uri::file_uri;
 use nova_files_api::{
-    Answer, Command, ConflictKind, DropAskId, DropKind, Event, Failure, JobId, JobTag, Operation,
-    Outcome, Scope,
+    Answer, ConflictKind, Event, Failure, JobId, JobTag, Operation, Outcome, Scope,
 };
 use nova_files_clipboard_api::{FileClipboard, GNOME_COPIED_FILES, Offer};
+use nova_files_transfer_api::{self as transfer_api, DropAskId, DropKind};
 
 use answers::{answer, held};
-use common::{Bench, Client};
+use common::{ANSWER_TIMEOUT, Bench, Client};
 use files::{hidden, tree};
 
 const OTHER_DRIVE: &str = "/dev/shm";
@@ -52,11 +53,14 @@ fn answer_next(client: &Client, job: JobId, with: Answer) -> ConflictKind {
 
 fn drop_onto(client: &Client, sources: Vec<PathBuf>, into: &Path) -> (JobId, Operation) {
     let tag = JobTag(9);
-    client.send(Command::DropFiles {
-        tag,
-        sources,
-        into: into.to_owned(),
-    });
+    client
+        .connection
+        .send(transfer_api::Command::Drop {
+            tag,
+            sources,
+            into: into.to_owned(),
+        })
+        .unwrap();
     match client.next() {
         Event::JobStarted {
             tag: got,
@@ -104,15 +108,19 @@ fn a_drop_on_one_drive_moves_and_across_drives_copies() {
     fs::remove_dir_all(&other).ok();
 }
 
-fn drop_would(client: &Client, id: u64, sources: Vec<PathBuf>, into: &Path) -> DropKind {
+fn drop_would(bench: &Bench, id: u64, sources: Vec<PathBuf>, into: &Path) -> DropKind {
     let id = DropAskId(id);
-    client.send(Command::DropWould {
-        id,
-        sources,
-        into: into.to_owned(),
-    });
-    match client.next() {
-        Event::DropWould { id: got, kind } if got == id => kind,
+    let (sink, events) = mpsc::channel();
+    let connection = bench.core.connector.connect(sink).unwrap();
+    connection
+        .send(transfer_api::Command::DropWould {
+            id,
+            sources,
+            into: into.to_owned(),
+        })
+        .unwrap();
+    match events.recv_timeout(ANSWER_TIMEOUT) {
+        Ok(transfer_api::Event::DropWould { id: got, kind }) if got == id => kind,
         other => panic!("expected what the drop would do, got {other:?}"),
     }
 }
@@ -124,17 +132,16 @@ fn the_core_says_what_a_drop_would_do_and_does_nothing() {
     fs::write(&near, "near").unwrap();
     let into = bench.at("into");
     fs::create_dir(&into).unwrap();
-    let client = bench.client();
 
-    let kind = drop_would(&client, 1, vec![near.clone()], &into);
+    let kind = drop_would(&bench, 1, vec![near.clone()], &into);
     assert_eq!(kind, DropKind::Move);
     let far = PathBuf::from("/proc/self");
     assert_eq!(
-        drop_would(&client, 2, vec![near.clone(), far], &into),
+        drop_would(&bench, 2, vec![near.clone(), far], &into),
         DropKind::Copy
     );
     let gone = bench.at("gone");
-    assert_eq!(drop_would(&client, 3, vec![gone], &into), DropKind::Copy);
+    assert_eq!(drop_would(&bench, 3, vec![gone], &into), DropKind::Copy);
     assert!(near.exists(), "asking moves nothing");
     assert!(fs::read_dir(&into).unwrap().next().is_none());
 }

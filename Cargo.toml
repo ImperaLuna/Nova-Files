@@ -49,6 +49,7 @@ nova-files-shell = { path = "framework/shell" }
 nova-files-start-api = { path = "features/start/api" }
 nova-files-start-core = { path = "features/start/core" }
 nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
+nova-files-transfer-api = { path = "features/transfer/api" }
 nova-files-transfer-core = { path = "features/transfer/core" }
 nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }
