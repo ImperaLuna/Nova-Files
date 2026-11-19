@@ -32,9 +32,7 @@ use crate::commands::{
     SelectPageUp, SelectRight, SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
-use crate::commands::{
-    CloseTab, NewTab, NextTab, PreviousTab, ShowProperties, TrashSelected, Undo,
-};
+use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, ShowProperties, TrashSelected};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
 use crate::window::{FocusTo, MainWindow};
@@ -162,7 +160,6 @@ impl MainWindow {
                 this.trash_selected(cx);
             }
         }))
-        .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
     }
 
     fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {

@@ -202,7 +202,7 @@ fn a_listing_counts_its_folders_and_files() {
 fn a_note_loses_only_its_own_undo() {
     let mut note = Some(Note {
         label: "Moved a to Trash".into(),
-        undo: Some(NoteUndo::Job(JobId(1))),
+        undo: Some(Undo::Job(JobId(1))),
     });
     assert!(!drop_undo(&mut note, JobId(2)));
     assert!(note.as_ref().is_some_and(|note| note.undo.is_some()));

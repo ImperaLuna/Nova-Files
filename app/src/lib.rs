@@ -13,6 +13,7 @@ use nova_files_shell::Parts;
 use nova_files_thumbnails_ui::ThumbnailsPart;
 use nova_files_transfer_ui::TransferPart;
 use nova_files_trash_ui::TrashPart;
+use nova_files_undo_ui::UndoPart;
 
 #[must_use]
 pub fn parts() -> Parts {
@@ -30,5 +31,6 @@ pub fn parts() -> Parts {
     parts.add::<TransferPart>();
     parts.add::<TrashPart>();
     parts.add::<TreePart>();
+    parts.add::<UndoPart>();
     parts
 }

@@ -29,7 +29,6 @@ pub const ACTIONS: &[CommandSpec] = &[
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
     TRASH,
-    UNDO,
     PREVIEW,
     PREVIEW_PREVIOUS,
     PREVIEW_NEXT,
@@ -155,7 +154,6 @@ spec!(
     "Move to Trash",
     ["delete"]
 );
-spec!(UNDO, Undo, "edit.undo", "Undo", ["ctrl-z"]);
 spec!(
     PREVIEW,
     TogglePreview,
