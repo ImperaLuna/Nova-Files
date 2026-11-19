@@ -194,15 +194,15 @@ mod tests {
 
     use super::*;
     use crate::assets::Icon;
-    use nova_files_clipboard_ui::COPY;
+    use crate::commands::SELECT_ALL;
 
     #[test]
     fn an_item_shows_the_keys_of_its_action() {
-        let copy = MenuItem::run(Icon::Copy, &COPY);
-        let bound = |_: &dyn Action| Some(COPY.binding(COPY.keys[0]));
+        let copy = MenuItem::run(Icon::Copy, &SELECT_ALL);
+        let bound = |_: &dyn Action| Some(SELECT_ALL.binding(SELECT_ALL.keys[0]));
         assert_eq!(
             item_keys(&copy, bound).map(String::from).as_deref(),
-            Some("Ctrl C")
+            Some("Ctrl A")
         );
         assert_eq!(item_keys(&copy, |_| None), None);
         let open = MenuItem::new(Icon::Plus, "Open", MenuAction::OpenInNewTab(PathBuf::new()));

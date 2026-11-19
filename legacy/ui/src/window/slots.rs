@@ -15,8 +15,8 @@ use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 use super::search::FocusTo;
 use super::{MainWindow, Went};
 use crate::island::Confirm;
-use crate::location::Location;
 use crate::selection::Selection;
+use nova_files_shell::Location;
 
 impl MainWindow {
     pub(super) fn watch_slots(&self, cx: &mut Context<Self>) -> Vec<Subscription> {
@@ -130,11 +130,11 @@ impl MainWindow {
             .map_or(0, |selection| selection.ids().len())
     }
 
-    fn shell_location(&self) -> Option<shell::Location> {
+    fn shell_location(&self) -> Option<Location> {
         if let Some(folder) = self.folder() {
-            return Some(shell::Location::Folder(folder.to_path_buf()));
+            return Some(Location::Folder(folder.to_path_buf()));
         }
-        self.location().map(Location::shell)
+        self.location().cloned()
     }
 
     pub fn open_as(&mut self, opening: Opening, window: &mut Window, cx: &mut Context<Self>) {
@@ -263,7 +263,7 @@ impl MainWindow {
             showing: self.showing(cx),
         };
         let page = match &shown.location {
-            Some(shell::Location::Page(page)) => Some(page.clone()),
+            Some(Location::Page(page)) => Some(page.clone()),
             _ => None,
         };
         self.host
@@ -302,10 +302,10 @@ impl MainWindow {
         let went = std::mem::take(&mut self.went);
         for ask in asks {
             match ask {
-                NavAsk::Go(place) => self.go_to_shell(place, cx),
-                NavAsk::Replace(place) => self.replace_with(&from_shell(place), cx),
+                NavAsk::Go(place) => self.go_to_place(&place, cx),
+                NavAsk::Replace(place) => self.replace_with(&place, cx),
                 NavAsk::Focus(handle) => self.focus_later(FocusTo::Handle(handle), cx),
-                NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
+                NavAsk::NewTab(place) => self.new_tab(&place, cx),
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),
                 NavAsk::FocusList => self.focus_later(FocusTo::List, cx),
@@ -319,17 +319,9 @@ impl MainWindow {
         self.went = went;
     }
 
-    pub(crate) fn go_to_shell(&mut self, place: shell::Location, cx: &mut Context<Self>) {
-        self.go_to_place(&from_shell(place), cx);
-    }
-
-    pub(crate) fn new_tab_at_shell(&mut self, place: shell::Location, cx: &mut Context<Self>) {
-        self.new_tab(&from_shell(place), cx);
-    }
-
-    fn go_to_place(&mut self, place: &Location, cx: &mut Context<Self>) {
+    pub(crate) fn go_to_place(&mut self, place: &Location, cx: &mut Context<Self>) {
         match place {
-            Location::Start => self.open_start(cx),
+            Location::Page(page) if page.is_start() => self.open_start(cx),
             Location::Folder(folder) => {
                 self.open(folder);
                 cx.notify();
@@ -437,13 +429,5 @@ impl MainWindow {
 
     fn tab_ids(&self) -> Vec<TabId> {
         self.tabs.ids.clone()
-    }
-}
-
-pub fn from_shell(place: shell::Location) -> Location {
-    match place {
-        shell::Location::Folder(folder) => Location::Folder(folder),
-        shell::Location::Page(page) if page.get::<shell::StartPage>().is_some() => Location::Start,
-        shell::Location::Page(page) => Location::Page(page),
     }
 }

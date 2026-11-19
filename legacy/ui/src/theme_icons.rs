@@ -5,7 +5,7 @@ use std::sync::Arc;
 use gpui::{RenderImage, SvgRenderer};
 use nova_files_api::{IconFormat, ThemeIcon};
 
-use nova_files_thumbnails_ui::shrink;
+use nova_files_shell::shrink::shrink;
 
 // GPUI's renderer draws at twice the scale it is asked for.
 // https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui

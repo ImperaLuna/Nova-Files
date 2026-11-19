@@ -6,10 +6,10 @@ use gpui::{
 
 use super::{Row, inside_edge, on_middle_click, row, section_button, section_head};
 use crate::assets::Icon;
-use crate::location::Location;
 use crate::theme::{Colors, radius, size};
 use crate::view::row::icon;
 use crate::window::{DraggedTab, HoverOpens, MainWindow, TabChip, TabSide};
+use nova_files_shell::Location;
 
 const LABEL: &str = "Open";
 
@@ -32,7 +32,7 @@ impl MainWindow {
                         .map(|row| Self::opens_on_hover(row, HoverOpens::Tab(index), cx))
                 });
         let new_tab = section_button("new-tab", Icon::Plus, &colors).on_click(
-            cx.listener(|this, _: &ClickEvent, _, cx| this.new_tab(&Location::Start, cx)),
+            cx.listener(|this, _: &ClickEvent, _, cx| this.new_tab(&Location::start(), cx)),
         );
         let list = div().flex().gap(size::PLACE_GAP).children(rows);
         if narrow {

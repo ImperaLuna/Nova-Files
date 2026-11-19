@@ -26,7 +26,6 @@ pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
 pub use search::{FocusTo, Scope, short_folder};
-pub use slots::from_shell;
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
 
 use std::collections::HashMap;
@@ -56,12 +55,12 @@ use self::rows::RowRead;
 use crate::band::Band;
 use crate::island::Island;
 use crate::jump::TypeJump;
-use crate::location::Location;
 use crate::menu::Menu;
 use crate::selection::Selection;
 use crate::theme_icons::ThemeIcons;
 use jobs::Jobs;
 use nova_files_shell::History;
+use nova_files_shell::Location;
 use tabs::Tabs;
 
 const DEFAULT_SCALE_FACTOR: f32 = 2.0;
@@ -258,7 +257,7 @@ impl MainWindow {
 
     fn go_first(&mut self, location: &Location, cx: &mut Context<Self>) {
         match location {
-            Location::Start => self.open_start(cx),
+            Location::Page(page) if page.is_start() => self.open_start(cx),
             Location::Folder(folder) => self.open(folder),
             Location::Page(page) => self.open_page(page.clone(), cx),
         }
@@ -321,7 +320,7 @@ impl MainWindow {
     }
 
     pub fn is_on_start(&self) -> bool {
-        self.location() == Some(&Location::Start)
+        self.location().is_some_and(Location::is_start)
     }
 
     pub fn folder(&self) -> Option<&Path> {

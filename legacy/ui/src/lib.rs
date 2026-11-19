@@ -8,7 +8,6 @@ mod commands;
 mod dropping;
 mod island;
 
-mod location;
 mod marks;
 mod menu;
 mod places;
@@ -32,8 +31,8 @@ pub use assets::Icon;
 pub use columns::ColumnText;
 pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note};
-pub use location::Location;
 pub use menu::{Look, Menu, MenuAction, MenuItem};
+pub use nova_files_shell::Location;
 use nova_files_shell::{Asked, CloseWhen, Opener, Parts, assets, jump, text, theme};
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
@@ -66,7 +65,6 @@ pub type RecoverGpu = Rc<dyn Fn(Option<&Path>)>;
 pub fn sent_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Command>(),
-        MessageType::of::<nova_files_open_api::Command>(),
         MessageType::of::<nova_files_search_api::Command>(),
     ]
 }
@@ -74,7 +72,6 @@ pub fn sent_types() -> Vec<MessageType> {
 pub fn taken_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
-        MessageType::of::<nova_files_open_api::Event>(),
         MessageType::of::<nova_files_search_api::Event>(),
     ]
 }
@@ -192,7 +189,7 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
     let location = match folder {
         Some(folder) => Location::Folder(folder),
         None if ask.is_some() => Location::Folder(home_folder()),
-        None => Location::Start,
+        None => Location::start(),
     };
     let recover_folder = location.folder().map(Path::to_path_buf);
     let opened = cx.open_window(options, move |window, cx| {

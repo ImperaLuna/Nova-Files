@@ -4,7 +4,7 @@ use std::time::Duration;
 use gpui::{Bounds, Context, Point, Task, Window};
 
 use super::MainWindow;
-use crate::location::Location;
+use nova_files_shell::Location;
 
 pub const HOVER_OPEN_AFTER: Duration = Duration::from_millis(700);
 
@@ -18,7 +18,7 @@ impl HoverOpens {
     fn on_screen(&self, here: Option<&Path>, searching: bool) -> bool {
         match self {
             Self::Place(Location::Folder(folder)) => here == Some(folder.as_path()) && !searching,
-            Self::Tab(_) | Self::Place(Location::Start | Location::Page(_)) => false,
+            Self::Tab(_) | Self::Place(Location::Page(_)) => false,
         }
     }
 }
@@ -72,7 +72,7 @@ impl MainWindow {
         }
         match opens {
             HoverOpens::Tab(index) => self.switch_tab(index, cx),
-            HoverOpens::Place(Location::Start) => self.open_start(cx),
+            HoverOpens::Place(Location::Page(page)) if page.is_start() => self.open_start(cx),
             HoverOpens::Place(Location::Folder(folder)) => {
                 self.open(&folder);
                 cx.notify();
@@ -95,6 +95,6 @@ mod tests {
         assert!(!folder.on_screen(Some(Path::new("/home")), false));
         assert!(!folder.on_screen(None, false));
         assert!(!HoverOpens::Tab(0).on_screen(Some(here), false));
-        assert!(!HoverOpens::Place(Location::Start).on_screen(None, false));
+        assert!(!HoverOpens::Place(Location::start()).on_screen(None, false));
     }
 }

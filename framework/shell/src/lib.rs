@@ -26,6 +26,7 @@ mod per_tab;
 mod published;
 mod rules;
 mod scene;
+pub mod shrink;
 mod slot_view;
 pub mod text;
 pub mod theme;
