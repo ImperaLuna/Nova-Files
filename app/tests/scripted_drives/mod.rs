@@ -85,8 +85,8 @@ fn the_space_the_core_tells_is_kept_by_folder(cx: &mut TestAppContext) {
 fn a_volume_clicked_is_mounted_then_opened(cx: &mut TestAppContext) {
     let (view, cx, mut core) = with_drives(cx, vec![volume("stick", None), volume("card", None)]);
     let stick = view.read_with(cx, |view, _| view.shown_drives()[1].clone());
-    view.update(cx, |view, _| view.open_drive(stick.clone()));
-    view.update(cx, |view, _| view.open_drive(stick));
+    view.update(cx, |view, cx| view.open_drive(stick.clone(), cx));
+    view.update(cx, |view, cx| view.open_drive(stick, cx));
     let stick_id = VolumeId("stick".to_owned());
     assert_eq!(
         drive_actions(&mut core),
@@ -145,7 +145,7 @@ fn a_volume_still_mounted_keeps_the_window_in_it(cx: &mut TestAppContext) {
 fn going_elsewhere_while_a_volume_mounts_keeps_the_window_there(cx: &mut TestAppContext) {
     let (view, cx, mut core) = with_drives(cx, vec![volume("stick", None)]);
     let stick = view.read_with(cx, |view, _| view.shown_drives()[1].clone());
-    view.update(cx, |view, _| view.open_drive(stick));
+    view.update(cx, |view, cx| view.open_drive(stick, cx));
     view.update(cx, |view, _| view.open(Path::new(OTHER)));
     assert_eq!(
         core.next_listing().map(|(_, path)| path),

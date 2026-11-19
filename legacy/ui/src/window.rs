@@ -74,7 +74,6 @@ use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_thumbnails_api as thumbnails_api;
 use nova_files_transfer_api as transfer_api;
 
-use self::drives::Drives;
 use self::preview::QuickLooks;
 use self::rows::RowRead;
 use self::tree::TreeLine;
@@ -166,7 +165,7 @@ pub struct MainWindow {
     thumbnails_shown: ThumbnailsShown,
     listed_page: Option<PageRef>,
     known: KnownFolders,
-    pub(crate) drives: Drives,
+    pub(crate) drives: nova_files_drives_ui::KnownDrives,
     pub(crate) menu: Option<Menu>,
     pub(crate) search: search::Search,
     pub(crate) focus: FocusHandle,
@@ -291,7 +290,7 @@ impl MainWindow {
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
             known: KnownFolders::default(),
-            drives: Drives::default(),
+            drives: nova_files_drives_ui::KnownDrives::default(),
             menu: None,
             search: search::Search::new(cx),
             focus: cx.focus_handle(),
@@ -347,10 +346,6 @@ impl MainWindow {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<drives_api::Event>() {
-            Ok(event) => return self.drive_event(event, cx),
-            Err(envelope) => envelope,
-        };
         let envelope = match envelope.open::<folders_api::Event>() {
             Ok(folders_api::Event::Views(views)) => return self.folder_views_arrived(&views, cx),
             Err(envelope) => envelope,
@@ -361,11 +356,6 @@ impl MainWindow {
         };
         let envelope = match envelope.open::<open_api::Event>() {
             Ok(event) => return self.open_event(event, cx),
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<places_api::Event>() {
-            Ok(places_api::Event::Places(places)) => return self.places_arrived(places, cx),
-            Ok(places_api::Event::Bookmarks(pinned)) => return self.pinned_arrived(pinned, cx),
             Err(envelope) => envelope,
         };
         let envelope = match envelope.open::<preview_api::Event>() {
@@ -409,8 +399,27 @@ impl MainWindow {
             }
             Err(envelope) => envelope,
         };
+        self.hand_to_parts(envelope, cx);
+    }
+
+    fn hand_to_parts(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
+        if self.tell_left(cx) {
+            let this = cx.entity().downgrade();
+            cx.defer(move |cx| {
+                this.update(cx, |this, cx| this.take(envelope, cx)).ok();
+            });
+            return;
+        }
+        let drives = envelope.get::<drives_api::Event>().is_some();
+        let places = envelope.get::<places_api::Event>().is_some();
         if let Err(envelope) = self.parts.deliver(envelope, cx) {
             log::error!("no part takes {envelope:?}");
+        }
+        if drives {
+            self.drives_changed(cx);
+        }
+        if places {
+            self.places_changed(cx);
         }
     }
 
@@ -488,9 +497,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             for command in MainWindow::FIRST_ASKS {
                 connection.send(command)?;
             }
-            connection.send(drives_api::Command::Drives)?;
             connection.send(folders_api::Command::Views)?;
-            connection.send(places_api::Command::Places)?;
             Ok(connection)
         })
         .ok()

@@ -1,0 +1,33 @@
+# nova-files-drives-ui
+#
+# The drives' window half: the Drives rows in the sidebar with their free
+# space, opening and mounting a drive, Eject, and leaving a drive that
+# went away.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-drives-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-drives-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-drives-api.workspace = true
+nova-files-shell.workspace = true

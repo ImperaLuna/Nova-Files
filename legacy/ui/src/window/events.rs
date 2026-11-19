@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
-use nova_files_places_api::Bookmark;
+use nova_files_places_ui::Known;
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::rows::release;
@@ -13,7 +13,6 @@ use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
-use crate::places;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Place {
@@ -63,7 +62,6 @@ impl MainWindow {
         if arrived.folder().is_some() {
             self.tree_follows(&listing, !same_folder);
         }
-        self.ask_disk_space();
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);
@@ -157,19 +155,11 @@ impl MainWindow {
         }
     }
 
-    pub(super) fn places_arrived(
-        &mut self,
-        places: Vec<nova_files_places_api::Place>,
-        cx: &mut Context<Self>,
-    ) {
-        let known = places::known(&places);
-        self.places = places;
-        Published::set(known, cx);
-        self.sidebar_changed(cx);
-    }
-
-    pub(super) fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
-        self.pinned = pinned;
+    pub(super) fn places_changed(&mut self, cx: &mut Context<Self>) {
+        if let Some(known) = Published::<Known>::get(cx) {
+            self.places.clone_from(&known.places);
+            self.pinned = Arc::clone(&known.pinned);
+        }
         self.sidebar_changed(cx);
     }
 

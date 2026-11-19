@@ -191,13 +191,16 @@ impl MainWindow {
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
+        self.host.nav.update(cx, |nav, cx| nav.show(tab, tabs, cx));
+        self.tell_left(cx);
+    }
+
+    pub(super) fn tell_left(&mut self, cx: &mut Context<Self>) -> bool {
         let left = std::mem::take(&mut self.went) == Went::Elsewhere;
-        self.host.nav.update(cx, |nav, cx| {
-            nav.show(tab, tabs, cx);
-            if left {
-                cx.emit(NavEvent::Left);
-            }
-        });
+        if left {
+            self.host.nav.update(cx, |_, cx| cx.emit(NavEvent::Left));
+        }
+        left
     }
 
     fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
@@ -273,7 +276,7 @@ impl MainWindow {
     pub fn open_page(&mut self, page: PageRef, cx: &mut Context<Self>) {
         self.history.leave();
         if self.parts.lists(&page) {
-            self.forget_drive_to_open();
+            self.went_elsewhere();
             self.request_listed(page);
             cx.notify();
         } else {

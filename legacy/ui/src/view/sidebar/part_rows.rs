@@ -86,6 +86,7 @@ impl MainWindow {
                 name: place.name,
                 number: place
                     .number
+                    .filter(|_| wide)
                     .map(|number| (number, number_tint(place.number_look, colors))),
                 here: place.here,
                 pressed: false,
@@ -98,28 +99,10 @@ impl MainWindow {
             row.pl(size::TREE_INDENT * f32::from(place.depth))
         })
         .children(tail)
-        .on_click(
-            cx.listener(move |this, _: &ClickEvent, _, cx| match &clicked {
-                Clicked {
-                    open: Some(open), ..
-                } => run_later(open, cx),
-                Clicked {
-                    opens: Some(opens), ..
-                } => this.go_to_shell(opens.clone(), cx),
-                Clicked { .. } => {}
-            }),
-        )
-        .map(|row| {
-            on_middle_click(row, main, cx, move |this, cx| match &middle {
-                Clicked {
-                    open: Some(open), ..
-                } => run_later(open, cx),
-                Clicked {
-                    opens: Some(opens), ..
-                } => this.new_tab_at_shell(opens.clone(), cx),
-                Clicked { .. } => {}
-            })
-        })
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            clicked.follow(this, false, cx);
+        }))
+        .map(|row| on_middle_click(row, main, cx, move |this, cx| middle.follow(this, true, cx)))
         .when_some(shown, |row, shown| {
             Self::opens_on_hover(row, HoverOpens::Place(shown), cx)
         })
@@ -185,6 +168,17 @@ fn small_button(selector: String, side: Pixels, colors: &Colors) -> Stateful<Div
 struct Clicked {
     opens: Option<nova_files_shell::Location>,
     open: Option<RowItem>,
+}
+
+impl Clicked {
+    fn follow(&self, window: &mut MainWindow, new_tab: bool, cx: &mut Context<MainWindow>) {
+        match (&self.open, &self.opens) {
+            (Some(open), _) => run_later(open, cx),
+            (None, Some(opens)) if new_tab => window.new_tab_at_shell(opens.clone(), cx),
+            (None, Some(opens)) => window.go_to_shell(opens.clone(), cx),
+            (None, None) => {}
+        }
+    }
 }
 
 fn run_later(item: &RowItem, cx: &mut Context<MainWindow>) {
