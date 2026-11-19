@@ -8,8 +8,8 @@ use gpui::{
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_shell::{
-    Host, Location, PageKind, PageRef, Part, Parts, RowItem, SidebarAt, SidebarRow, Slots, Undo,
-    assets::Icon,
+    Host, Location, NoteGone, PageKind, PageRef, Part, Parts, RowItem, SidebarAt, SidebarRow,
+    Slots, Undo, assets::Icon,
 };
 
 use super::super::*;
@@ -317,4 +317,25 @@ fn a_part_row_menu_runs_the_chosen_item(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     assert_eq!(SWEPT.get(), 1);
+}
+
+#[gpui::test]
+fn a_part_hears_when_its_note_leaves_the_island(cx: &mut TestAppContext) {
+    let (view, cx, _core) = tagged(cx);
+    let island = view.read_with(cx, |view, _| view.host().island.clone());
+    let gone = Rc::new(Cell::new(None));
+    let heard = Rc::clone(&gone);
+    let _hearing = cx.update(|_, cx| {
+        cx.subscribe(&island, move |_, NoteGone(id): &NoteGone, _| {
+            heard.set(Some(*id));
+        })
+    });
+    let mine = island.update(cx, |island, cx| island.note("Tagged", None, cx));
+    cx.run_until_parked();
+    assert_eq!(gone.get(), None);
+
+    view.update(cx, |view, cx| view.show_note("Something else", None, cx));
+    cx.run_until_parked();
+
+    assert_eq!(gone.get(), Some(mine));
 }

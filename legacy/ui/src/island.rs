@@ -20,6 +20,7 @@ pub struct Island {
     pub jobs_open: bool,
     pub not_opened: Vec<(PathBuf, NotOpened)>,
     pub(crate) note_timer: Option<Task<()>>,
+    pub(crate) note_owner: Option<nova_files_shell::NoteId>,
 }
 
 impl Island {

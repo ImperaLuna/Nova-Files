@@ -160,8 +160,9 @@ impl MainWindow {
                 IslandAsk::StartJob(operation) => {
                     self.start_job(operation);
                 }
-                IslandAsk::Note { label, undo } => {
+                IslandAsk::Note { id, label, undo } => {
                     self.show_note(label, undo.map(NoteUndo::from), cx);
+                    self.island.note_owner = Some(id);
                 }
                 IslandAsk::Ask {
                     question,
