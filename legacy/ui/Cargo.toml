@@ -33,7 +33,6 @@
 # - nova-files-shell
 # - nova-files-start-api
 # - nova-files-thumbnails-api
-# - nova-files-transfer-api
 
 [package]
 name = "nova-files-ui"
@@ -66,7 +65,6 @@ nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 nova-files-start-api.workspace = true
 nova-files-thumbnails-api.workspace = true
-nova-files-transfer-api.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }
 # Async channels, so events from other threads wake the window's tasks.

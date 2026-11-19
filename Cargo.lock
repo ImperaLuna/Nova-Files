@@ -3604,6 +3604,7 @@ dependencies = [
  "nova-files-shell",
  "nova-files-start-api",
  "nova-files-thumbnails-api",
+ "nova-files-transfer-ui",
  "nova-files-trash-api",
  "nova-files-trash-ui",
  "nova-files-ui",
@@ -4120,6 +4121,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-transfer-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-shell",
+ "nova-files-transfer-api",
+]
+
+[[package]]
 name = "nova-files-trash-api"
 version = "0.1.0"
 dependencies = [
@@ -4179,7 +4190,6 @@ dependencies = [
  "nova-files-shell",
  "nova-files-start-api",
  "nova-files-thumbnails-api",
- "nova-files-transfer-api",
  "usvg",
 ]
 

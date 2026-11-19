@@ -7,7 +7,6 @@ use nova_files_api::{
     Answer, Command, Conflict, ConflictKind, Event, JobId, JobTag, Message, Operation, Outcome,
     Scope, Tally,
 };
-use nova_files_transfer_api as transfer_api;
 
 use super::MainWindow;
 use crate::island::progress::Running;
@@ -119,10 +118,6 @@ impl Jobs {
 impl MainWindow {
     pub(crate) fn start_job(&mut self, operation: Operation) -> bool {
         self.ask_job(|tag| Command::StartJob { tag, operation })
-    }
-
-    pub(crate) fn start_drop(&mut self, sources: Vec<PathBuf>, into: PathBuf) -> bool {
-        self.ask_job(|tag| transfer_api::Command::Drop { tag, sources, into })
     }
 
     fn ask_job<M: Message>(&mut self, command: impl FnOnce(JobTag) -> M) -> bool {

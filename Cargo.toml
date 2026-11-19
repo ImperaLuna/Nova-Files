@@ -66,6 +66,7 @@ nova-files-thumbnails-api = { path = "features/thumbnails/api" }
 nova-files-thumbnails-core = { path = "features/thumbnails/core" }
 nova-files-transfer-api = { path = "features/transfer/api" }
 nova-files-transfer-core = { path = "features/transfer/core" }
+nova-files-transfer-ui = { path = "features/transfer/ui" }
 nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }
 nova-files-trash-ui = { path = "features/trash/ui" }

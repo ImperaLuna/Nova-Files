@@ -73,7 +73,6 @@ use nova_files_shell::{
 };
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_thumbnails_api as thumbnails_api;
-use nova_files_transfer_api as transfer_api;
 
 use self::preview::QuickLooks;
 use self::rows::RowRead;
@@ -394,12 +393,6 @@ impl MainWindow {
                 size,
                 png,
             }) => return self.thumbnail_arrived((id, entry, size), png, cx),
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<transfer_api::Event>() {
-            Ok(transfer_api::Event::DropWould { id, kind }) => {
-                return self.drop_would_arrived(id, kind, cx);
-            }
             Err(envelope) => envelope,
         };
         self.hand_to_parts(envelope, cx);
