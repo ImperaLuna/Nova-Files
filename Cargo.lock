@@ -4143,6 +4143,7 @@ dependencies = [
  "nova-files-thumbnails-api",
  "nova-files-thumbnails-ui",
  "nova-files-ui",
+ "rustix 1.1.6",
 ]
 
 [[package]]
