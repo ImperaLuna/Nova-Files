@@ -4,10 +4,10 @@ use gpui::{
 };
 
 use super::sheet::rename_box;
-use crate::grid::Grid;
 use crate::theme::{Colors, size, text};
 use crate::window::MainWindow;
 use nova_files_api::Entry;
+use nova_files_folders_ui::Grid;
 
 impl MainWindow {
     pub(super) fn gallery(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
@@ -43,9 +43,9 @@ impl MainWindow {
     }
 
     fn stage(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
-        let room = self.stage_room();
+        let room = self.stage_room(cx);
         let scale_factor = self.scale_factor;
-        let part_stage = self.parts.stage(&self.scene(), room, cx);
+        let part_stage = self.parts.stage(&self.scene(cx), room, cx);
         let shown = part_stage.is_none().then(|| self.on_stage(cx)).flatten();
         let preview = self.preview();
         let preview = preview.as_ref().map(|preview| preview.read(cx));
@@ -121,7 +121,7 @@ impl MainWindow {
     fn strip(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         let cells = self.listing.as_ref().map(|listing| {
-            self.strip_entries(listing.entries.len())
+            self.strip_entries(listing.entries.len(), cx)
                 .map(|index| self.icon_cell(listing, index, grid, cx))
                 .collect::<Vec<_>>()
         });

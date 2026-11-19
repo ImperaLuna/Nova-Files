@@ -32,6 +32,7 @@ nova-files-drives-ui = { path = "features/drives/ui" }
 nova-files-entries-core = { path = "framework/entries/core" }
 nova-files-folders-api = { path = "features/folders/api" }
 nova-files-folders-core = { path = "features/folders/core" }
+nova-files-folders-ui = { path = "features/folders/ui" }
 nova-files-gathered-api = { path = "features/gathered/api" }
 nova-files-gathered-core = { path = "features/gathered/core" }
 nova-files-index = { path = "helpers/index" }

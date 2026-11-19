@@ -1,6 +1,7 @@
 use gpui::{
-    Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
+    Action, App, ClickEvent, Context, Div, InteractiveElement as _, IntoElement,
+    ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
+    prelude::FluentBuilder as _,
 };
 
 use super::row::icon;
@@ -65,7 +66,7 @@ impl MainWindow {
                     .debug_selector(|| "views".to_owned())
                     .px(size::CAPSULE_PAD)
                     .gap(size::CAPSULE_BUTTON_GAP)
-                    .children(self.view_switch(colors)),
+                    .children(self.view_switch(colors, cx)),
             )
     }
 }
@@ -74,8 +75,8 @@ use nova_files_shell::widgets::square;
 pub(super) use nova_files_shell::widgets::{capsule, icon_button};
 
 impl MainWindow {
-    fn view_switch(&self, colors: &Colors) -> Vec<gpui::Stateful<Div>> {
-        let showing = self.folder_view().mode;
+    fn view_switch(&self, colors: &Colors, cx: &App) -> Vec<gpui::Stateful<Div>> {
+        let showing = self.folder_view(cx).mode;
         [
             (
                 "view-list",

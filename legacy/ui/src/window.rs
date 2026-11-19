@@ -49,7 +49,6 @@ use nova_files_api::{
     ListingId, Order,
 };
 use nova_files_drives_api as drives_api;
-use nova_files_folders_api::{self as folders_api, FolderView};
 use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_properties_api as properties_api;
@@ -126,8 +125,6 @@ pub struct MainWindow {
     fallbacks: Vec<PathBuf>,
     pub(crate) falling_back: bool,
     pub(crate) places: Vec<Place>,
-    folder_views: HashMap<PathBuf, FolderView>,
-    pending_views: HashMap<PathBuf, FolderView>,
     pinned: Arc<[Bookmark]>,
     gathered: gathered::GatheredState,
     pub(crate) history: History<Location>,
@@ -245,8 +242,6 @@ impl MainWindow {
             falling_back: false,
             home,
             places: Vec::new(),
-            folder_views: HashMap::new(),
-            pending_views: HashMap::new(),
             pinned: Arc::from([]),
             gathered: gathered::GatheredState::default(),
             history: History::default(),
@@ -306,10 +301,6 @@ impl MainWindow {
     fn take(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
         let envelope = match envelope.open::<Event>() {
             Ok(event) => return self.on_event(event, cx),
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<folders_api::Event>() {
-            Ok(folders_api::Event::Views(views)) => return self.folder_views_arrived(&views, cx),
             Err(envelope) => envelope,
         };
         let envelope = match envelope.open::<gathered_api::Event>() {
@@ -424,7 +415,6 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             for command in MainWindow::FIRST_ASKS {
                 connection.send(command)?;
             }
-            connection.send(folders_api::Command::Views)?;
             Ok(connection)
         })
         .ok()

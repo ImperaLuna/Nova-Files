@@ -91,7 +91,7 @@ impl MainWindow {
         self.parts.part::<P>()
     }
 
-    pub fn scene(&self) -> Scene {
+    pub fn scene(&self, cx: &App) -> Scene {
         Scene {
             location: self.shell_location(),
             rules: self.folder_rules(),
@@ -99,12 +99,12 @@ impl MainWindow {
             picker: self.host.opening.is_some(),
             searching: self.searching(),
             gathered: self.gathered_here().is_some(),
-            showing: self.showing(),
+            showing: self.showing(cx),
         }
     }
 
-    fn showing(&self) -> Showing {
-        if self.showing_gallery() {
+    fn showing(&self, cx: &App) -> Showing {
+        if self.showing_gallery(cx) {
             Showing::Gallery
         } else {
             Showing::List
@@ -225,7 +225,7 @@ impl MainWindow {
             searching: self.searching(),
             gathered: self.gathered_here().is_some(),
             cursor: self.cursor(),
-            showing: self.showing(),
+            showing: self.showing(cx),
         };
         let page = match &shown.location {
             Some(shell::Location::Page(page)) => Some(page.clone()),

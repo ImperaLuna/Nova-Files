@@ -270,7 +270,7 @@ impl MainWindow {
     }
 
     fn leave_tab(&mut self, cx: &mut Context<Self>) -> Tab {
-        self.forget_rows();
+        self.forget_rows(cx);
         self.went_elsewhere();
         self.close_menu(cx);
         self.path_bar.update(cx, |bar, cx| {

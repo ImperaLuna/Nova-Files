@@ -68,6 +68,7 @@ fn with_parts(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestCo
     WITNESSED.set(0);
     let mut parts = Parts::default();
     parts.add::<Claimer>();
+    parts.add::<nova_files_folders_ui::FoldersPart>();
     parts.add::<Witness>();
     cx.update(|cx| cx.set_global(parts));
     let (view, cx, mut core) = window_with_parts(cx);
@@ -107,7 +108,7 @@ fn a_part_takes_its_own_events_and_its_rules_reach_the_window(cx: &mut TestAppCo
     );
     assert_eq!(rules(&view, cx).views, Views::DetailsOnly);
     assert_eq!(
-        view.read_with(cx, |view, _| view.folder_view()),
+        view.read_with(cx, MainWindow::folder_view),
         nova_files_folders_api::FolderView::default()
     );
 }
