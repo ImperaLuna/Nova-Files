@@ -203,7 +203,8 @@ fn what_is_in_the_trash_already_asks_and_skip_leaves_it() {
         scope: Scope::ThisOne,
     });
 
-    assert_eq!(conflict.kind, ConflictKind::NoTrash);
+    assert_eq!(conflict.kind, ConflictKind::InTrash);
+    assert!(!conflict.kind.accepts(Answer::Retry));
     assert_eq!(conflict.source, in_trash);
     let (outcome, _) = loop {
         match client.next() {

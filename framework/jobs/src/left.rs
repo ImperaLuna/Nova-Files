@@ -136,10 +136,21 @@ fn clean(lines: &[Line]) -> Done {
         done.planned = Some(planned);
     }
     let trashing = lines.first().is_some_and(|line| line.word == word::TRASH);
-    let last_info = lines.iter().rposition(|line| line.word == word::TRASH_INFO);
+    let putting_back = lines
+        .iter()
+        .position(|line| line.word == word::PUT_BACK)
+        .unwrap_or(lines.len());
+    let trash_lines = &lines[..putting_back];
+    let last_info = trash_lines
+        .iter()
+        .rposition(|line| line.word == word::TRASH_INFO);
     let settled = |at: usize| {
         trashing
-            && (Some(at) != last_info || lines[at..].iter().any(|line| line.word == word::TRASHED))
+            && at < putting_back
+            && (Some(at) != last_info
+                || trash_lines[at..]
+                    .iter()
+                    .any(|line| line.word == word::TRASHED))
     };
     for (at, line) in lines.iter().enumerate() {
         match (line.word.as_str(), line.paths.as_slice()) {

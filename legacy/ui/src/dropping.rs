@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::Operation;
-use nova_files_gathered_api::Gathering;
 use nova_files_shell::PageRef;
 
 pub const MOVE_TO: &str = "Move to";
@@ -12,21 +11,13 @@ pub const ADD_TO: &str = "Add to";
 pub enum DropAt {
     Folder(PathBuf),
     Trash,
-    Gathered(Gathering),
     Page(PageRef),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Dropped {
     Job(Operation),
-    Gather {
-        place: Gathering,
-        folders: Vec<PathBuf>,
-    },
-    Page {
-        page: PageRef,
-        paths: Vec<PathBuf>,
-    },
+    Page { page: PageRef, paths: Vec<PathBuf> },
 }
 
 #[derive(Debug, Default)]
@@ -55,7 +46,7 @@ pub fn shell_place(at: &DropAt) -> Option<nova_files_shell::Location> {
     match at {
         DropAt::Folder(folder) => Some(nova_files_shell::Location::Folder(folder.clone())),
         DropAt::Page(page) => Some(nova_files_shell::Location::Page(page.clone())),
-        DropAt::Trash | DropAt::Gathered(_) => None,
+        DropAt::Trash => None,
     }
 }
 
@@ -64,7 +55,7 @@ pub fn allowed(at: &DropAt, sources: &Sources, trashed: impl Fn(&Path) -> bool) 
         return false;
     }
     match at {
-        DropAt::Trash | DropAt::Gathered(_) | DropAt::Page(_) => true,
+        DropAt::Trash | DropAt::Page(_) => true,
         DropAt::Folder(into) => {
             !trashed(into)
                 && !sources.folders.contains(into)
@@ -76,10 +67,6 @@ pub fn allowed(at: &DropAt, sources: &Sources, trashed: impl Fn(&Path) -> bool) 
 pub fn dropped(at: DropAt, sources: Vec<PathBuf>) -> Option<Dropped> {
     Some(match at {
         DropAt::Trash => Dropped::Job(Operation::Trash { paths: sources }),
-        DropAt::Gathered(place) => Dropped::Gather {
-            place,
-            folders: sources,
-        },
         DropAt::Page(page) => Dropped::Page {
             page,
             paths: sources,
@@ -90,7 +77,7 @@ pub fn dropped(at: DropAt, sources: Vec<PathBuf>) -> Option<Dropped> {
 
 pub fn label(at: &DropAt, name: &str) -> Option<String> {
     match at {
-        DropAt::Gathered(_) | DropAt::Page(_) => Some(format!("{ADD_TO} {name}")),
+        DropAt::Page(_) => Some(format!("{ADD_TO} {name}")),
         DropAt::Trash => Some(format!("{MOVE_TO} {name}")),
         DropAt::Folder(_) => None,
     }
@@ -98,6 +85,9 @@ pub fn label(at: &DropAt, name: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use nova_files_gathered_api::Gathering;
+    use nova_files_gathered_ui::GatheredPage;
+
     use super::*;
 
     const TRASH: &str = "/home/u/.local/share/Trash/files";
@@ -153,15 +143,16 @@ mod tests {
 
     #[test]
     fn folders_dropped_on_a_place_are_added_whatever_the_keys() {
-        let at = DropAt::Gathered(Gathering::Games);
+        let page = PageRef::new(GatheredPage::new(Gathering::Games));
+        let at = DropAt::Page(page.clone());
         let trash = |folder: &Path| folder.starts_with(TRASH);
         assert!(allowed(&at, &paths(&["/mnt/lib"]), trash));
         assert!(!allowed(&at, &paths(&[&format!("{TRASH}/old")]), trash));
         assert_eq!(
             dropped(at.clone(), vec![PathBuf::from("/mnt/lib")]),
-            Some(Dropped::Gather {
-                place: Gathering::Games,
-                folders: vec![PathBuf::from("/mnt/lib")],
+            Some(Dropped::Page {
+                page,
+                paths: vec![PathBuf::from("/mnt/lib")],
             })
         );
         assert_eq!(label(&at, "Games").as_deref(), Some("Add to Games"));

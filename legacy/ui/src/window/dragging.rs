@@ -181,7 +181,6 @@ impl MainWindow {
             Some(Dropped::Job(operation)) => {
                 self.start_job(operation);
             }
-            Some(Dropped::Gather { place, folders }) => self.gather(place, folders, cx),
             Some(Dropped::Page { page, paths }) => self.parts.drop_on(&page, paths, cx),
         }
     }

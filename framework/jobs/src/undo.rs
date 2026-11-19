@@ -23,6 +23,10 @@ pub fn trash_again(running: &mut Running, made: Vec<(PathBuf, Identity)>) -> End
     }
 }
 
+pub fn spent(ended: &Ended) -> bool {
+    ended.0 == Outcome::Done || *ended == gone()
+}
+
 pub const fn gone() -> Ended {
     let outcome = Outcome::Failed {
         path: PathBuf::new(),

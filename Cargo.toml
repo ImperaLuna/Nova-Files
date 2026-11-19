@@ -35,6 +35,7 @@ nova-files-folders-core = { path = "features/folders/core" }
 nova-files-folders-ui = { path = "features/folders/ui" }
 nova-files-gathered-api = { path = "features/gathered/api" }
 nova-files-gathered-core = { path = "features/gathered/core" }
+nova-files-gathered-ui = { path = "features/gathered/ui" }
 nova-files-index = { path = "helpers/index" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-look-api = { path = "features/look/api" }

@@ -21,7 +21,7 @@ use crate::left::{self, Left};
 use crate::progress::Reporter;
 use crate::running::Running;
 use crate::set_aside::SetAside;
-use crate::{Registry, journal, lock};
+use crate::{Registry, journal, lock, undo};
 
 const JOB_THREAD: &str = "nova-files-job";
 const RECOVER_THREAD: &str = "nova-files-recover";
@@ -230,15 +230,7 @@ impl<K: JobKind<Op = Operation>> Jobs<K> {
                         &audience,
                     );
                 }
-                let spent = matches!(
-                    ended.0,
-                    Outcome::Done
-                        | Outcome::Failed {
-                            reason: Failure::NotFound,
-                            ..
-                        }
-                );
-                if let Some(taken) = taken.filter(|_| !spent) {
+                if let Some(taken) = taken.filter(|_| !undo::spent(&ended)) {
                     history.add(taken, &audience);
                 }
                 finish(&registry, &audience, job, ended, tally);
@@ -394,18 +386,4 @@ fn finish(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ids_start_from_the_time_so_no_run_repeats_another() {
-        let before = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_micros();
-
-        let first = u128::from(first_id());
-
-        assert!(first >= before, "{first} is before {before}");
-    }
-}
+mod tests;

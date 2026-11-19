@@ -1,8 +1,24 @@
 use gpui::point;
 use nova_files_gathered_api::Gathering;
+use nova_files_gathered_ui::{GatheredPage, GatheredPart};
+use nova_files_shell::PageRef;
 
 use super::*;
 use crate::window_sidebar::right_click_at;
+
+fn gathered_shown(view: &MainWindow) -> Option<Gathering> {
+    view.listed_page()
+        .and_then(PageRef::get::<GatheredPage>)
+        .map(|page| page.place)
+}
+
+fn gathered_at(place: Gathering) -> Location {
+    Location::Page(PageRef::new(GatheredPage::new(place)))
+}
+
+fn gathered<'a>(view: &MainWindow, cx: &'a App) -> &'a GatheredPart {
+    view.part::<GatheredPart>().unwrap().read(cx)
+}
 
 async fn wait_for_place(
     view: &Entity<MainWindow>,
@@ -11,7 +27,7 @@ async fn wait_for_place(
     names: &'static [&'static str],
 ) {
     view.condition::<WindowEvent>(cx, move |view, _| {
-        view.gathered_shown() == Some(place) && view.entry_names() == names
+        gathered_shown(view) == Some(place) && view.entry_names() == names
     })
     .await;
 }
@@ -27,10 +43,7 @@ async fn projects_lists_the_folders_it_gathers_and_follows_them(cx: &mut TestApp
     wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
     view.read_with(cx, |view, _| {
         assert_eq!(view.folder(), None, "no folder to make files in");
-        assert_eq!(
-            view.location(),
-            Some(&Location::Gathered(Gathering::Projects))
-        );
+        assert_eq!(view.location(), Some(&gathered_at(Gathering::Projects)));
     });
     cx.run_until_parked();
     assert!(cx.debug_bounds("folder-header").is_some());
@@ -65,8 +78,8 @@ async fn games_names_each_library(cx: &mut TestAppContext) {
     click(cx, "place-games");
 
     wait_for_place(&view, cx, Gathering::Games, &["Celeste"]).await;
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.library_of_row(0).as_deref() == Some("Steam")
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        gathered(view, cx).library_of_row(0, cx).as_deref() == Some("Steam")
     })
     .await;
     cx.run_until_parked();
@@ -81,7 +94,7 @@ async fn a_tab_on_projects_keeps_it(cx: &mut TestAppContext) {
     let (view, cx) = open_on(cx, tree.path()).await;
 
     view.update_in(cx, |view, _, cx| {
-        view.new_tab(&Location::Gathered(Gathering::Projects), cx);
+        view.new_tab(&gathered_at(Gathering::Projects), cx);
     });
     wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
     view.update_in(cx, |view, _, cx| view.switch_tab(0, cx));
@@ -114,12 +127,9 @@ async fn a_search_from_projects_comes_back_to_it(cx: &mut TestAppContext) {
     })
     .await;
     view.read_with(cx, |view, _| {
-        assert_eq!(view.gathered_shown(), None, "a search's files show");
+        assert_eq!(gathered_shown(view), None, "a search's files show");
         assert_eq!(view.folder(), None, "no folder to paste into");
-        assert_eq!(
-            view.location(),
-            Some(&Location::Gathered(Gathering::Projects))
-        );
+        assert_eq!(view.location(), Some(&gathered_at(Gathering::Projects)));
     });
 
     cx.simulate_keystrokes("escape");
@@ -159,8 +169,9 @@ async fn each_game_shows_the_library_that_brought_it(cx: &mut TestAppContext) {
     click(cx, "place-games");
 
     wait_for_place(&view, cx, Gathering::Games, &["Celeste", "Hades", "Solo"]).await;
-    view.read_with(cx, |view, _| {
-        let libraries: Vec<_> = (0..3).map(|row| view.library_of_row(row)).collect();
+    view.read_with(cx, |view, cx| {
+        let part = gathered(view, cx);
+        let libraries: Vec<_> = (0..3).map(|row| part.library_of_row(row, cx)).collect();
         assert_eq!(
             libraries,
             [
@@ -235,9 +246,10 @@ async fn a_place_that_changes_while_going_elsewhere_keeps_the_way(cx: &mut TestA
     click(cx, "place-projects");
     wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
 
-    view.update(cx, |view, _| {
+    view.update(cx, |view, cx| {
         view.open(tree.path());
-        view.gathered_changed(Gathering::Projects);
+        let part = view.part::<GatheredPart>().unwrap();
+        part.update(cx, |part, cx| part.changed(Gathering::Projects, cx));
     });
 
     wait_for_folder(&view, cx, tree.path()).await;
@@ -279,8 +291,8 @@ async fn the_chip_lists_its_folders_and_undo_puts_one_back(cx: &mut TestAppConte
     let (view, cx) = open_on(cx, tree.path()).await;
     click(cx, "place-projects");
     wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.gathered_count(Gathering::Projects) == "1 folder"
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        gathered(view, cx).count(Gathering::Projects) == "1 folder"
     })
     .await;
 
@@ -355,8 +367,8 @@ async fn a_file_dropped_on_games_is_not_added(cx: &mut TestAppContext) {
 
     click(cx, "place-games");
     wait_for_place(&view, cx, Gathering::Games, &[]).await;
-    view.read_with(cx, |view, _| {
-        assert_eq!(view.gathered_count(Gathering::Games), "0 folders");
+    view.read_with(cx, |view, cx| {
+        assert_eq!(gathered(view, cx).count(Gathering::Games), "0 folders");
         assert!(view.note().is_none());
     });
 }
