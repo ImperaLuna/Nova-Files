@@ -90,6 +90,7 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
         None
     };
     let mut left = 0;
+    let mut old = None;
     match item.kind {
         Kind::Folder => {
             DirBuilder::new()
@@ -101,20 +102,21 @@ pub fn make(running: &mut Running, making: &Making<'_>) -> Result<Made, Stop> {
             }
         }
         Kind::File { size } => {
-            let copied = copy_whole(running, making, from, &part, &backup)?;
+            let (copied, replaced) = copy_whole(running, making, from, &part, &backup)?;
             left = size.saturating_sub(copied);
+            old = replaced;
         }
-        Kind::Link => link(running, making, from, &part, &backup)?,
+        Kind::Link => old = link(running, making, from, &part, &backup)?,
         Kind::Special => return Err(Stop::because(&item.from, Failure::Unsupported)),
     }
     if let Some(before) = before {
-        let copy = target.symlink_metadata().ok();
-        if let Err(stop) = remove_source(running, making, from, &before, copy.as_ref()) {
+        if let Err(stop) = finish_move(running, making, from, &before, old.as_deref()) {
             running.reporter.take_back(item.size().saturating_sub(left));
             return Err(stop);
         }
         running.record(Record::Moved(&item.from, target));
     } else {
+        set_aside(running, making, old.as_deref());
         running.record(Record::Made(target, &item.from));
     }
     Ok(Made {
@@ -136,7 +138,7 @@ fn copy_whole(
     from: At<'_>,
     part: &Path,
     backup: &Path,
-) -> Result<u64, Stop> {
+) -> Result<(u64, Option<PathBuf>), Stop> {
     running.record(Record::Part(part));
     if making.replacing {
         running.record_backup(backup, making.target)?;
@@ -169,8 +171,7 @@ fn copy_whole(
         running.reporter.take_back(copied);
         return Err(stop);
     }
-    set_aside(running, making, left.as_deref());
-    Ok(copied)
+    Ok((copied, left))
 }
 
 fn link(
@@ -179,7 +180,7 @@ fn link(
     from: At<'_>,
     part: &Path,
     backup: &Path,
-) -> Result<(), Stop> {
+) -> Result<Option<PathBuf>, Stop> {
     let target = making.target;
     let points_to = readlinkat(from.folder, from.name, Vec::new())
         .map(|points_to| PathBuf::from(OsString::from_vec(points_to.into_bytes())))
@@ -190,16 +191,13 @@ fn link(
     }
     let made = if making.replacing { part } else { target };
     symlink(points_to, made).map_err(|error| Stop::at(target, &error))?;
-    if making.replacing {
-        match put(part, target, backup, making.replacing) {
-            Ok(left) => set_aside(running, making, left.as_deref()),
-            Err(error) => {
-                fs::remove_file(part).ok();
-                return Err(Stop::at(target, &error));
-            }
-        }
+    if !making.replacing {
+        return Ok(None);
     }
-    Ok(())
+    put(part, target, backup, making.replacing).map_err(|error| {
+        fs::remove_file(part).ok();
+        Stop::at(target, &error)
+    })
 }
 
 fn removable(from: At<'_>, path: &Path) -> Result<Metadata, Stop> {
@@ -212,6 +210,38 @@ fn removable(from: At<'_>, path: &Path) -> Result<Metadata, Stop> {
     )
     .map_err(|errno| Stop::at(path, &errno.into()))?;
     Ok(metadata)
+}
+
+fn finish_move(
+    running: &mut Running,
+    making: &Making<'_>,
+    from: At<'_>,
+    before: &Metadata,
+    old: Option<&Path>,
+) -> Result<(), Stop> {
+    let target = making.target;
+    let copy = target.symlink_metadata().ok();
+    let removed = remove_source(running, making, from, before, copy.as_ref());
+    let Some(old) = old.filter(|_| removed.is_err()) else {
+        set_aside(running, making, old);
+        return removed;
+    };
+    let ours = target
+        .symlink_metadata()
+        .is_ok_and(|now| copy.as_ref().is_some_and(|copy| same_entry(copy, &now)));
+    if !ours {
+        set_aside(running, making, Some(old));
+        return removed;
+    }
+    if let Err(error) = fs::rename(old, target) {
+        log::warn!(
+            "the replaced {} can't go back from {}: {error}",
+            target.display(),
+            old.display()
+        );
+        set_aside(running, making, Some(old));
+    }
+    removed
 }
 
 fn remove_source(

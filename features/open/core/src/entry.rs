@@ -1,8 +1,8 @@
 use std::ffi::OsStr;
-use std::fs::File;
-use std::io::Read as _;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
+
+use nova_files_disk::capped;
 
 const GROUP: &str = "[Desktop Entry]";
 const GROUP_START: char = '[';
@@ -23,12 +23,7 @@ pub struct Entry {
 }
 
 pub fn read(path: &Path, search_path: Option<&OsStr>) -> Option<Entry> {
-    let mut text = String::new();
-    File::open(path)
-        .ok()?
-        .take(MAX_ENTRY_BYTES)
-        .read_to_string(&mut text)
-        .ok()?;
+    let text = capped::text(path, MAX_ENTRY_BYTES)?;
     let entry = parse(&text)?;
     entry
         .try_exec

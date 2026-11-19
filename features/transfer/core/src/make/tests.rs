@@ -189,6 +189,32 @@ fn a_source_that_cant_go_takes_its_copy_along_unless_the_copy_replaced_a_file() 
 }
 
 #[test]
+fn a_source_that_cant_go_puts_the_file_its_copy_replaced_back() {
+    let folder = TestFolder::new("make-put-back");
+    let mut running = Running::for_test();
+    running.shared.control.cancel();
+    let source = folder.file("a", "moved");
+    let target = folder.file("b", "moved");
+    let old = folder.file(".backup-b", "old");
+    let before = source.symlink_metadata().unwrap();
+    let item = Item {
+        from: source.clone(),
+        to: target.clone(),
+        kind: Kind::File { size: 5 },
+        entry: Entry::default(),
+    };
+    let making = replacing(&item, How::Move);
+    let at = Folders::default().source(&source).unwrap();
+
+    let finished = finish_move(&mut running, &making, at.at(), &before, Some(&old));
+
+    assert!(matches!(finished, Err(Stop::Cancelled)));
+    assert_eq!(fs::read_to_string(&source).unwrap(), "moved");
+    assert_eq!(fs::read_to_string(&target).unwrap(), "old");
+    assert!(!old.exists());
+}
+
+#[test]
 fn a_target_saved_over_since_the_copy_stays() {
     let folder = TestFolder::new("make-target-saved");
     let running = Running::for_test();

@@ -18,6 +18,7 @@ use crate::host::Host;
 use crate::jump::Jump;
 use crate::location::{Location, PageKind, PageRef};
 use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
+use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::text::TextField;
@@ -102,6 +103,8 @@ type EventSlot<P> = Box<dyn Fn(&mut P, &Envelope, &mut Context<P>)>;
 type PeekSlot<P> = (MessageType, EventSlot<P>);
 type Bind<P> = Box<dyn Fn(Div, &Entity<P>, &Host) -> Div>;
 pub type ListSlot = Rc<dyn Fn(&PageRef, ListingId, Order) -> Option<Envelope>>;
+pub type CrumbSlot<P> = Rc<dyn Fn(&P, &PageRef, &App) -> Option<Vec<Crumb>>>;
+pub type FolderLook<P> = fn(&P, &Path, &App) -> Option<(SharedString, Icon)>;
 pub type PageSlot<P> =
     Rc<dyn Fn(&mut P, &PageRef, &mut Window, &mut Context<P>) -> Option<AnyElement>>;
 
@@ -119,6 +122,8 @@ pub struct Slots<P> {
     pub(crate) menus: Vec<(MenuAt, MenuGroup, u8, Items<P>)>,
     pub(crate) pages: Vec<(TypeId, PageSlot<P>)>,
     pub(crate) listing_pages: Vec<(TypeId, ListSlot)>,
+    pub(crate) crumbs: Vec<CrumbSlot<P>>,
+    pub(crate) folder_looks: Vec<FolderLook<P>>,
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
     pub(crate) start_cards: Vec<(u8, Card<P>)>,
@@ -169,6 +174,8 @@ impl<P> Default for Slots<P> {
             menus: Vec::new(),
             pages: Vec::new(),
             listing_pages: Vec::new(),
+            crumbs: Vec::new(),
+            folder_looks: Vec::new(),
             columns: Vec::new(),
             sidebar: Vec::new(),
             start_cards: Vec::new(),
@@ -291,6 +298,16 @@ impl<P: Part> Slots<P> {
         let slot: ListSlot =
             Rc::new(move |page, id, order| page.get::<K>().map(|page| list(page, id, order)));
         self.listing_pages.push((TypeId::of::<K>(), slot));
+    }
+
+    pub fn crumbs<K: PageKind>(&mut self, crumbs: fn(&P, &K, &App) -> Vec<Crumb>) {
+        let slot: CrumbSlot<P> =
+            Rc::new(move |part, page, cx| page.get::<K>().map(|page| crumbs(part, page, cx)));
+        self.crumbs.push(slot);
+    }
+
+    pub fn folder_look(&mut self, look: FolderLook<P>) {
+        self.folder_looks.push(look);
     }
 
     pub fn column(&mut self, column: Columns<P>) {

@@ -44,8 +44,8 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     assert!(cx.debug_bounds("place-trash-here").is_some());
     assert!(cx.debug_bounds("place-trash-number").is_some());
     open_trash(&view, cx, true).await;
-    view.read_with(cx, |view, _| {
-        assert_eq!(view.tab_names(), ["Trash", "Trash"]);
+    view.read_with(cx, |view, cx| {
+        assert_eq!(view.tab_names(cx), ["Trash", "Trash"]);
     });
     click(cx, "tab-0");
     cx.run_until_parked();

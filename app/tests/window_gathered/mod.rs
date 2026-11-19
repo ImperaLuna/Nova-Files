@@ -102,8 +102,8 @@ async fn a_tab_on_projects_keeps_it(cx: &mut TestAppContext) {
     view.update_in(cx, |view, _, cx| view.switch_tab(1, cx));
 
     wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
-    view.read_with(cx, |view, _| {
-        assert_eq!(view.tab_names()[1], "Projects");
+    view.read_with(cx, |view, cx| {
+        assert_eq!(view.tab_names(cx)[1], "Projects");
     });
 }
 

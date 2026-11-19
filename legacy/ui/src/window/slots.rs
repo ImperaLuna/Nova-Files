@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription, Window};
 use nova_files_api::{Command, HiddenFiles, ListingId};
-use nova_files_gathered_ui::GatheredPage;
 use nova_files_picker_api::PickId;
 use nova_files_shell::path_bar::PathBarEvent;
 use nova_files_shell::{
@@ -112,7 +111,6 @@ impl MainWindow {
             selected: self.selected_len(),
             picker: self.host.opening.is_some(),
             searching: self.searching(),
-            gathered: self.on_gathered(),
             showing: self.showing(cx),
         }
     }
@@ -237,7 +235,6 @@ impl MainWindow {
             picker: self.host.opening.is_some(),
             asked: self.asked,
             searching: self.searching(),
-            gathered: self.on_gathered(),
             cursor: self.cursor(),
             showing: self.showing(cx),
         };
@@ -410,10 +407,6 @@ impl MainWindow {
         } else if let Some(page) = self.listed_page.clone() {
             self.request_listed(page);
         }
-    }
-
-    fn on_gathered(&self) -> bool {
-        matches!(self.location(), Some(Location::Page(page)) if page.get::<GatheredPage>().is_some())
     }
 
     fn tab_id(&self) -> TabId {
