@@ -55,8 +55,8 @@ impl MainWindow {
         self.selection = wanted.or_else(|| self.selection_for(&listing, same_folder));
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
-        self.listing_replaced(listing, place, cx);
-        if !reordered && self.picking(cx).is_some() {
+        self.listing_replaced(listing, place);
+        if !reordered && self.picker() {
             self.selection = None;
         }
         self.path_bar
@@ -84,14 +84,9 @@ impl MainWindow {
             .or_else(|| self.folder().map(Location::from))
     }
 
-    pub(super) fn listing_replaced(
-        &mut self,
-        listing: Listing,
-        place: Place,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn listing_replaced(&mut self, listing: Listing, place: Place) {
         self.counted = island::count_of(&listing.entries).into();
-        let before = self.listing.replace(listing);
+        self.listing = Some(listing);
         self.core_moved = false;
         self.details = HashMap::new();
         self.rows_wanted = 0..0;
@@ -101,7 +96,6 @@ impl MainWindow {
             self.band = None;
             self.island.confirm = None;
         }
-        self.preview_listing_arrived(before.as_ref(), cx);
     }
 
     pub(super) fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {

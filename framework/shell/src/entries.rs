@@ -27,6 +27,9 @@ pub struct Shown {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EntriesAsked;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelectionMade;
+
 #[derive(Debug, Default)]
 pub struct Entries {
     shown: Shown,
@@ -42,6 +45,7 @@ pub struct Entries {
 }
 
 impl EventEmitter<EntriesAsked> for Entries {}
+impl EventEmitter<SelectionMade> for Entries {}
 
 impl Entries {
     pub const fn location(&self) -> Option<&Location> {
@@ -107,6 +111,10 @@ impl Entries {
         self.shown.selected.len()
     }
 
+    pub fn selected_ids(&self) -> &[EntryId] {
+        &self.shown.selected
+    }
+
     pub fn selected(&self) -> Vec<&Entry> {
         let Some(listing) = &self.shown.listing else {
             return Vec::new();
@@ -160,6 +168,10 @@ impl Entries {
 
     pub const fn set_drawn(&mut self, drawn: Range<usize>) {
         self.drawn = drawn;
+    }
+
+    pub fn selection_made(&mut self, cx: &mut Context<Self>) {
+        cx.emit(SelectionMade);
     }
 
     pub fn show(&mut self, shown: Shown, cx: &mut Context<Self>) {

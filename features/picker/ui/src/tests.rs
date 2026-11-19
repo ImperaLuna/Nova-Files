@@ -141,3 +141,12 @@ fn the_box_shows_one_name_as_it_is_and_several_in_quotes() {
     );
     assert_eq!(names_text(&[]), "");
 }
+
+#[test]
+fn a_picker_opens_over_the_window_the_app_names() {
+    assert_eq!(
+        foreign_parent(&ParentWindow::Wayland("2a9c".to_owned())),
+        ForeignParent::Wayland("2a9c".to_owned())
+    );
+    assert_eq!(foreign_parent(&ParentWindow::X11(7)), ForeignParent::X11(7));
+}

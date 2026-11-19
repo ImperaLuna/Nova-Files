@@ -337,5 +337,5 @@ async fn a_space_typed_into_the_path_stays_in_it(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("space");
     cx.run_until_parked();
     assert_eq!(typed(&view, cx).0, "a ");
-    assert!(!view.read_with(cx, |view, _| view.previewing()));
+    assert!(!view.read_with(cx, previewing));
 }

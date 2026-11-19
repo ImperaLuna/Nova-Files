@@ -13,7 +13,6 @@ mod hover_open;
 mod jobs;
 mod navigate;
 mod pin;
-mod preview;
 mod renaming;
 mod rows;
 mod search;
@@ -30,7 +29,6 @@ pub use gathered::LIBRARY_LABEL;
 pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
-pub use preview::{Previewed, QuickLook, Shown};
 pub use search::{FocusTo, Scope, short_folder};
 pub use slots::from_shell;
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
@@ -43,8 +41,8 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
-    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
-    SharedString, Size, Subscription, Task, UniformListScrollHandle,
+    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, SharedString,
+    Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
@@ -54,8 +52,6 @@ use nova_files_drives_api as drives_api;
 use nova_files_folders_api::{self as folders_api, FolderView};
 use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_places_api::{self as places_api, Bookmark, Place};
-use nova_files_preview_api as preview_api;
-use nova_files_properties_api as properties_api;
 use nova_files_search_api as search_api;
 use nova_files_shell::Lines;
 use nova_files_shell::path_bar::PathBar;
@@ -64,7 +60,6 @@ use nova_files_shell::{
     WindowParts,
 };
 
-use self::preview::QuickLooks;
 use self::rows::RowRead;
 use crate::band::Band;
 use crate::island::Island;
@@ -118,7 +113,6 @@ pub struct MainWindow {
     pub(crate) selection: Option<Selection>,
     pub(crate) jump: TypeJump,
     went: Went,
-    pub(crate) quick_looks: QuickLooks,
     pub(crate) band: Option<Band>,
     pub(crate) pressed_name: bool,
     pub(crate) asked: Option<ListingId>,
@@ -139,8 +133,7 @@ pub struct MainWindow {
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,
-    pub(crate) pick_size: Option<Size<Pixels>>,
-    pub(crate) pick_bounds: Option<Subscription>,
+    pub(crate) bounds_watch: Option<Subscription>,
     pub(crate) home: PathBuf,
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
@@ -236,7 +229,6 @@ impl MainWindow {
             selection: None,
             jump: TypeJump::default(),
             went: Went::Stayed,
-            quick_looks: QuickLooks::default(),
             band: None,
             pressed_name: false,
             scale_factor: DEFAULT_SCALE_FACTOR,
@@ -259,8 +251,7 @@ impl MainWindow {
             path_bar: cx.new(|_| PathBar::new(&host)),
             asks_sent: 0,
             scroll: UniformListScrollHandle::new(),
-            pick_size: None,
-            pick_bounds: None,
+            bounds_watch: None,
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
@@ -310,6 +301,7 @@ impl MainWindow {
     }
 
     fn take(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
+        self.parts.peek(&envelope, cx);
         let envelope = match envelope.open::<Event>() {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
@@ -322,18 +314,6 @@ impl MainWindow {
             Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<preview_api::Event>() {
-            Ok(preview_api::Event::Previewed { id, preview }) => {
-                return self.preview_arrived(id, Some(preview), cx);
-            }
-            Ok(preview_api::Event::Unreadable { id, .. }) => {
-                return self.preview_arrived(id, None, cx);
-            }
-            Err(envelope) => envelope,
-        };
-        if let Some(event) = envelope.get::<properties_api::Event>() {
-            self.save_probe_answered(event, cx);
-        }
         let envelope = match envelope.open::<search_api::Event>() {
             Ok(search_api::Event::FindFailed { id, .. }) if self.search.asked == Some(id) => {
                 return self.find_failed(id, cx);
@@ -348,7 +328,8 @@ impl MainWindow {
         if self.tell_left(cx) {
             let this = cx.entity().downgrade();
             cx.defer(move |cx| {
-                this.update(cx, |this, cx| this.take(envelope, cx)).ok();
+                this.update(cx, |this, cx| this.hand_to_parts(envelope, cx))
+                    .ok();
             });
             return;
         }

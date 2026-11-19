@@ -10,10 +10,10 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use nova_files_api::{Details, Entry, EntryId, EntryKind, HiddenFiles, Order, SortKey, Unreadable};
+use nova_files_disk::private_file::FOLDER_MODE;
 use nova_files_open_api::{NotOpened, TakeOut};
 
-use crate::private_file::FOLDER_MODE;
-use nova_files_archives_core::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Flow};
+use crate::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Flow};
 
 const KEPT: usize = 4;
 const OPENED: &str = "nova-files/opened";
@@ -228,7 +228,8 @@ impl Inside {
     }
 
     pub fn tree(&self, archive: &Path) -> Result<Arc<Tree>, Unreadable> {
-        let metadata = fs::metadata(archive).map_err(|error| crate::list::unreadable(&error))?;
+        let metadata = fs::metadata(archive)
+            .map_err(|error| nova_files_entries_core::list::unreadable(&error))?;
         let stamp = (metadata.len(), metadata.modified().ok());
         let kept = self.lock().find(archive, stamp);
         if let Some(tree) = kept {
