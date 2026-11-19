@@ -335,7 +335,6 @@ impl MainWindow {
         } else if let Some(page) = self.listed_page.clone() {
             self.request_listed(page);
         } else if let Some(listing) = self.listing.clone() {
-            self.tree_follows(&listing, true);
             self.request(&listing.path);
             self.tabs.start_if_refused = self.asked;
         } else if self.is_on_start() {

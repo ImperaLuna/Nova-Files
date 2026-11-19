@@ -26,7 +26,6 @@ mod slots;
 mod start;
 mod tab_order;
 mod tabs;
-mod tree;
 mod views;
 
 pub use access::{Level as AccessLevel, Who, runs, shared_level};
@@ -75,7 +74,6 @@ use nova_files_transfer_api as transfer_api;
 
 use self::preview::QuickLooks;
 use self::rows::RowRead;
-use self::tree::TreeLine;
 use crate::band::Band;
 use crate::history::History;
 use crate::island::Island;
@@ -87,7 +85,6 @@ use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
 use crate::theme_icons::ThemeIcons;
-use crate::tree::FolderTree;
 use jobs::Jobs;
 use renaming::{Renaming, Waiting};
 use tabs::Tabs;
@@ -149,8 +146,6 @@ pub struct MainWindow {
     pub(crate) places: Vec<Place>,
     folder_views: HashMap<PathBuf, FolderView>,
     pending_views: HashMap<PathBuf, FolderView>,
-    pub(crate) tree: FolderTree,
-    tree_line: TreeLine,
     pinned: Arc<[Bookmark]>,
     gathered: gathered::GatheredState,
     pub(crate) history: History,
@@ -269,13 +264,11 @@ impl MainWindow {
             core_moved: false,
             next_listing: 0,
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
-            tree: FolderTree::new(home.clone()),
             falling_back: false,
             home,
             places: Vec::new(),
             folder_views: HashMap::new(),
             pending_views: HashMap::new(),
-            tree_line: TreeLine::connect(&host.lines, cx),
             pinned: Arc::from([]),
             gathered: gathered::GatheredState::default(),
             history: History::default(),

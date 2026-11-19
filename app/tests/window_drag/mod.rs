@@ -332,8 +332,8 @@ async fn files_drop_on_a_tree_folder_and_a_crumb(cx: &mut TestAppContext) {
     cx.update(nova_files_ui::bind_window_keys);
     let (view, cx) = window_on(cx, tree.path(), tree.path());
     wait_for_folder(&view, cx, tree.path()).await;
-    click(cx, "tree-toggle-0");
-    view.condition::<WindowEvent>(cx, |view, _| view.tree_settled())
+    click(cx, "tree-0-expander");
+    view.condition::<WindowEvent>(cx, |view, cx| tree_part(view).read(cx).settled())
         .await;
 
     drag(cx, "name-1", "tree-1", Modifiers::none());

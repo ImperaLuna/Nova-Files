@@ -1,12 +1,14 @@
 # nova-files-places-ui
 #
 # The places' window half: the standard and pinned folders in the
-# sidebar, the pin button and the Unpin menu.
+# sidebar, the pin button and the Unpin menu, and the folder tree under
+# Home.
 #
 # Allowed outside crates:
 # - gpui
 #
 # Allowed workspace crates:
+# - nova-files-api
 # - nova-files-places-api
 # - nova-files-shell
 
@@ -26,5 +28,6 @@ workspace = true
 
 [dependencies]
 gpui.workspace = true
+nova-files-api.workspace = true
 nova-files-places-api.workspace = true
 nova-files-shell.workspace = true

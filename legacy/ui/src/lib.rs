@@ -23,7 +23,6 @@ mod selection;
 mod shown_thumbnails;
 mod theme_icons;
 mod thumbnail;
-mod tree;
 mod view;
 mod window;
 mod window_state;

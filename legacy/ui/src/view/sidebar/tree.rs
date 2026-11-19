@@ -1,37 +1,22 @@
-use std::path::PathBuf;
-
 use gpui::{
-    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    StatefulInteractiveElement as _, Styled as _, Transformation, div, prelude::FluentBuilder as _,
-    radians, svg,
+    Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Stateful,
+    Styled as _, div, prelude::FluentBuilder as _,
 };
 
-use nova_files_shell::SidebarAt;
+use nova_files_shell::{SidebarAt, SidebarRow};
 
-use super::{icon, inside_edge, new_tab_on_middle_click, section_head};
-use crate::assets::Icon;
-use crate::location::Location;
+use super::part_rows::expander_button;
+use super::{icon, inside_edge, section_head};
 use crate::theme::{Colors, radius, size, text};
-use crate::tree::{Toggle, TreeRow};
-use crate::window::{Aim, HoverOpens, MainWindow};
-use nova_files_places_ui as places;
+use crate::window::MainWindow;
 
 const LABEL: &str = "This computer";
 
 impl MainWindow {
     pub(super) fn tree_section(&self, cx: &Context<Self>) -> Div {
         let colors = Colors::of(cx);
-        let rows = self
-            .tree
-            .rows()
-            .into_iter()
-            .enumerate()
-            .map(|(index, row)| self.tree_row(index, row, &colors, cx).into_any_element())
-            .chain(
-                self.part_rows(SidebarAt::Tree, false, &colors, cx)
-                    .into_iter()
-                    .map(|(_, row)| row.into_any_element()),
-            );
+        let mut ranked = self.part_rows(SidebarAt::Tree, false, &colors, cx);
+        ranked.sort_by_key(|(rank, _)| *rank);
         div()
             .flex()
             .flex_col()
@@ -40,47 +25,48 @@ impl MainWindow {
                 self.part_buttons(SidebarAt::Tree, &colors, cx),
                 &colors,
             ))
-            .child(div().flex().flex_col().gap(size::PLACE_GAP).children(rows))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(size::PLACE_GAP)
+                    .children(ranked.into_iter().map(|(_, row)| row)),
+            )
     }
 
-    fn tree_row(
+    pub(super) fn tree_row(
         &self,
-        index: usize,
-        row: TreeRow,
+        place: SidebarRow,
         colors: &Colors,
         cx: &Context<Self>,
-    ) -> impl IntoElement {
-        let here = row.is_here(self.folder());
-        let root = row.is_root();
-        let TreeRow {
-            path,
-            name,
-            depth,
-            toggle,
-        } = row;
-        let (glyph, name) = if root {
-            (Icon::Home, places::HOME_LABEL.into())
+    ) -> Stateful<Div> {
+        let depth = place.depth;
+        let selector = place.id.to_string();
+        let tint = if place.here {
+            colors.here
         } else {
-            (self.known_folders().icon_at(&path), name)
+            colors.text_dim
         };
-        let (target, in_new_tab, dropped) = (path.clone(), path.clone(), path.clone());
-        let opens = HoverOpens::Place(Location::Folder(dropped.clone()));
-        let aimed = Aim::folder(dropped, name.clone());
-        let main = !self.picker();
-        let tint = if here { colors.here } else { colors.text_dim };
-        let guides = (1..=depth).map(|level| {
-            div()
-                .debug_selector(move || format!("tree-guide-{index}-{level}"))
-                .absolute()
-                .top_0()
-                .bottom_0()
-                .left(guide_left(level))
-                .w(size::LINE)
-                .bg(colors.line)
-        });
-        div()
-            .id(("tree", index))
-            .debug_selector(move || format!("tree-{index}"))
+        let guides: Vec<Div> = (1..=depth)
+            .map(|level| {
+                let guide = format!("{selector}-guide-{level}");
+                div()
+                    .debug_selector(move || guide)
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .left(guide_left(level))
+                    .w(size::LINE)
+                    .bg(colors.line)
+            })
+            .collect();
+        let toggle = place.expander.clone().map_or_else(
+            || toggle_slot().into_any_element(),
+            |expander| expander_button(&place.id, expander, colors, cx),
+        );
+        let shown = div()
+            .id(place.id.clone())
+            .debug_selector(move || selector)
             .relative()
             .flex()
             .flex_none()
@@ -94,59 +80,37 @@ impl MainWindow {
             .cursor_pointer()
             .whitespace_nowrap()
             .hover(|row| row.bg(colors.hover))
-            .when(here, |row| {
+            .when(place.here, |row| {
                 row.text_color(colors.text).font_weight(text::STRONG_WEIGHT)
             })
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, _| this.open(&target)))
-            .map(|row| new_tab_on_middle_click(row, in_new_tab, main, cx))
-            .map(|row| self.drop_target(row, aimed, cx))
-            .map(|row| Self::opens_on_hover(row, opens, cx))
             .children(guides)
-            .child(tree_toggle(index, path, toggle, colors, cx))
-            .child(icon(glyph, size::TREE_ICON, tint))
-            .child(div().flex_1().min_w_0().truncate().child(name))
+            .child(toggle)
+            .child(icon(place.icon, size::TREE_ICON, tint))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .child(place.name.clone()),
+            );
+        self.part_row_acts(shown, place, cx)
     }
 }
 
-fn tree_toggle(
-    index: usize,
-    path: PathBuf,
-    toggle: Toggle,
-    colors: &Colors,
-    cx: &Context<MainWindow>,
-) -> impl IntoElement {
-    let slot = div()
-        .id(("tree-toggle", index))
+fn toggle_slot() -> Div {
+    div()
         .flex()
         .flex_none()
         .items_center()
         .justify_center()
         .size(size::TREE_TOGGLE)
-        .rounded(radius::SMALL);
-    if toggle == Toggle::None {
-        return slot;
-    }
-    slot.debug_selector(move || format!("tree-toggle-{index}"))
-        .cursor_pointer()
-        .hover(|button| button.bg(colors.press))
-        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-            cx.stop_propagation();
-            this.toggle_tree(&path, cx);
-        }))
-        .child(
-            svg()
-                .path(Icon::Chevron.path())
-                .size(size::TREE_TOGGLE_ICON)
-                .text_color(colors.text_faint)
-                .with_transformation(Transformation::rotate(radians(toggle.angle()))),
-        )
+        .rounded(radius::SMALL)
 }
 
-fn indent(depth: usize) -> Pixels {
-    let depth = u16::try_from(depth).unwrap_or(u16::MAX);
+fn indent(depth: u8) -> Pixels {
     size::TREE_INDENT * f32::from(depth)
 }
 
-fn guide_left(level: usize) -> Pixels {
+fn guide_left(level: u8) -> Pixels {
     indent(level) - size::TREE_GUIDE_INSET - size::DROP_EDGE
 }
