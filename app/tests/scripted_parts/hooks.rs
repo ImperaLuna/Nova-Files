@@ -9,6 +9,7 @@ use gpui::{
 use nova_files_api::{Entry, Listing};
 use nova_files_open_api as open_api;
 use nova_files_open_ui::OpenPart;
+use nova_files_shell::path_bar::PageCrumbs;
 use nova_files_shell::{
     DropOver, Host, Location, NavEvent, NoteGone, PageKind, PageRef, Part, Parts, RowItem,
     SidebarAt, SidebarRow, Slots, Undo, assets::Icon,
@@ -39,6 +40,23 @@ struct Basket;
 impl PageKind for Basket {
     fn title(&self) -> SharedString {
         "Basket".into()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Stall;
+
+impl PageKind for Stall {
+    fn title(&self) -> SharedString {
+        "Stall".into()
+    }
+
+    fn crumbs(&self) -> Option<PageCrumbs> {
+        Some(PageCrumbs {
+            folder: Path::new(SHOWN).join("stall"),
+            icon: Icon::Info,
+            item: true,
+        })
     }
 }
 
@@ -99,6 +117,11 @@ impl Part for Tagger {
         });
         slots.listed(Self::listed);
         slots.bar(|_, _, _, _| Some(shown("tagger-bar")));
+        slots.path_chip(|_, scene, _, _| {
+            scene
+                .in_folder(Path::new(SHOWN))
+                .then(|| shown("tagger-chip"))
+        });
         slots.overlay(|_, scene, _, _| {
             scene
                 .in_folder(Path::new(SHOWN))
@@ -242,6 +265,41 @@ fn a_part_fills_the_bar_the_overlay_and_a_row_icon(cx: &mut TestAppContext) {
     let icon = cx.debug_bounds("tagger-icon").unwrap();
     assert_eq!(icon.size.width, nova_files_shell::theme::size::ROW_ICON);
     assert!(cx.debug_bounds("tagger-list").is_none());
+}
+
+#[gpui::test]
+fn a_part_chip_sits_in_the_path_bar_where_it_applies(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = tagged(cx);
+    let bar = cx.debug_bounds("path").unwrap();
+    let chip = cx.debug_bounds("tagger-chip").unwrap();
+    assert!(bar.contains(&chip.center()));
+    view.update(cx, |view, _| view.open(Path::new(OTHER)));
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tagger-chip").is_none());
+}
+
+#[gpui::test]
+fn a_page_names_its_crumbs_and_its_item_is_no_button(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = tagged(cx);
+    view.update(cx, |view, cx| view.open_page(PageRef::new(Stall), cx));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("arrow-0").is_some());
+    assert!(cx.debug_bounds("arrow-1").is_none());
+    super::click(cx, "crumb-1");
+    let on_page = |cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| {
+            matches!(view.location(), Some(nova_files_ui::Location::Page(_)))
+        })
+    };
+    assert!(on_page(cx));
+    super::click(cx, "crumb-0");
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    assert_eq!(
+        view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf)),
+        Some(PathBuf::from(SHOWN))
+    );
 }
 
 #[gpui::test]

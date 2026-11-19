@@ -2,11 +2,10 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use gpui::{Pixels, Size, px, size};
-use nova_files_api::{Command, Connector, Event};
+use nova_files_api::{Command, Connector, Event, WindowState as Keyed};
 
 use crate::theme;
 
-const HEADER: &str = "nova-files window-state 1";
 const PICKER: &str = "picker";
 const BY: char = 'x';
 const MIN_WIDTH: Pixels = px(400.0);
@@ -20,32 +19,18 @@ pub struct WindowState {
 
 impl WindowState {
     pub fn parse(bytes: &[u8]) -> Self {
-        let Ok(text) = str::from_utf8(bytes) else {
-            return Self::default();
-        };
-        let mut lines = text.lines();
-        if lines.next() != Some(HEADER) {
-            return Self::default();
+        let state = Keyed::parse(bytes);
+        Self {
+            picker: state.get(PICKER).and_then(parse_size),
         }
-        let mut state = Self::default();
-        for line in lines.filter(|line| !line.is_empty()) {
-            match line.split_once(' ') {
-                Some((PICKER, value)) => state.picker = parse_size(value),
-                _ => return Self::default(),
-            }
-        }
-        state
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let picker = self
-            .picker
-            .map(|(width, height)| format!("{PICKER} {width}{BY}{height}"));
-        let lines = std::iter::once(HEADER.to_owned()).chain(picker);
-        lines
-            .map(|line| line + "\n")
-            .collect::<String>()
-            .into_bytes()
+        let mut state = Keyed::default();
+        if let Some((width, height)) = self.picker {
+            state.set(PICKER, &format!("{width}{BY}{height}"));
+        }
+        state.to_bytes()
     }
 
     pub fn picker_size(&self, display: Option<Size<Pixels>>) -> Size<Pixels> {
@@ -114,7 +99,6 @@ mod tests {
             &b""[..],
             b"picker 900x600\n",
             b"nova-files window-state 2\npicker 900x600\n",
-            b"nova-files window-state 1\npicker 900x600\nmain 1200x800\n",
             b"nova-files window-state 1\npicker\n",
             b"\xff\xfe",
         ] {

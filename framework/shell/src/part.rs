@@ -97,6 +97,7 @@ pub struct CommandSlot<P> {
 pub struct Slots<P> {
     pub(crate) events: HashMap<MessageType, EventSlot<P>>,
     pub(crate) commands: Vec<CommandSlot<P>>,
+    pub(crate) befores: Vec<Bind<P>>,
     pub(crate) menus: Vec<(MenuAt, MenuGroup, u8, Items<P>)>,
     pub(crate) pages: Vec<(TypeId, PageSlot<P>)>,
     pub(crate) listing_pages: Vec<(TypeId, ListSlot)>,
@@ -117,6 +118,7 @@ pub struct Slots<P> {
     pub(crate) head_buttons: Vec<(SidebarAt, &'static str, HeadButton<P>)>,
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
+    pub(crate) path_chips: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
     pub(crate) row_icons: Vec<RowIcon<P>>,
     pub(crate) opens: Vec<Opens<P>>,
@@ -140,6 +142,7 @@ impl<P> Default for Slots<P> {
         Self {
             events: HashMap::new(),
             commands: Vec::new(),
+            befores: Vec::new(),
             menus: Vec::new(),
             pages: Vec::new(),
             listing_pages: Vec::new(),
@@ -160,6 +163,7 @@ impl<P> Default for Slots<P> {
             head_buttons: Vec::new(),
             bars: Vec::new(),
             overlays: Vec::new(),
+            path_chips: Vec::new(),
             list_views: Vec::new(),
             row_icons: Vec::new(),
             opens: Vec::new(),
@@ -211,6 +215,20 @@ impl<P: Part> Slots<P> {
                 })
             }),
         });
+    }
+
+    pub fn before<A: Action>(
+        &mut self,
+        take: fn(&mut P, &A, &mut Window, &mut Context<P>) -> bool,
+    ) {
+        self.befores.push(Box::new(move |root, entity, _| {
+            let entity = entity.clone();
+            root.capture_action(move |action: &A, window, cx| {
+                if entity.update(cx, |part, cx| take(part, action, window, cx)) {
+                    cx.stop_propagation();
+                }
+            })
+        }));
     }
 
     pub fn menu(&mut self, at: MenuAt, items: Items<P>) {
@@ -308,6 +326,10 @@ impl<P: Part> Slots<P> {
 
     pub fn overlay(&mut self, overlay: Card<P>) {
         self.overlays.push(overlay);
+    }
+
+    pub fn path_chip(&mut self, chip: Card<P>) {
+        self.path_chips.push(chip);
     }
 
     pub fn list_view(&mut self, applies: Applies<P>, draw: Card<P>) {

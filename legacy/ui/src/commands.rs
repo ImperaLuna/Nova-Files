@@ -4,60 +4,7 @@ use nova_files_shell::command_spec as spec;
 
 pub use nova_files_shell::WINDOW_KEYS as KEY_CONTEXT;
 
-#[expect(
-    clippy::derive_partial_eq_without_eq,
-    reason = "GPUI's actions! macro derives PartialEq only"
-)]
-mod actions {
-    gpui::actions!(
-        nova_files,
-        [
-            GoUp,
-            GoBack,
-            GoForward,
-            OpenSelected,
-            CursorUp,
-            CursorDown,
-            CursorPageUp,
-            CursorPageDown,
-            CursorFirst,
-            CursorLast,
-            SelectUp,
-            SelectDown,
-            SelectPageUp,
-            SelectPageDown,
-            SelectFirst,
-            SelectLast,
-            SelectLeft,
-            SelectRight,
-            SelectAll,
-            ToggleSelected,
-            ClearSelection,
-            TrashSelected,
-            RenameSelected,
-            NewFolder,
-            Undo,
-            TogglePreview,
-            PreviewPrevious,
-            PreviewNext,
-            FocusSearch,
-            NewTab,
-            CloseTab,
-            NextTab,
-            PreviousTab,
-            ToggleHidden,
-            ShowDetails,
-            ShowIcons,
-            ShowGallery,
-            BiggerIcons,
-            SmallerIcons,
-            OpenMenu,
-            ShowProperties,
-        ]
-    );
-}
-
-pub use actions::*;
+pub use nova_files_shell::actions::*;
 
 pub const ACTIONS: &[CommandSpec] = &[
     UP,
