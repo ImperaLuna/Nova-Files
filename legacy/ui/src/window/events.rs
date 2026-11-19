@@ -61,7 +61,9 @@ impl MainWindow {
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);
-        self.pick_folder_opened(reordered, cx);
+        if !reordered && self.picking(cx).is_some() {
+            self.selection = None;
+        }
         self.path_bar
             .update(cx, |bar, cx| bar.arrived(same_folder, cx));
         if (!same_folder || reordered || made)
@@ -237,7 +239,6 @@ impl MainWindow {
             }
         }
         self.ask_for_recent();
-        self.pick_folder_refused(id, &path);
         self.parts.refused(id, &path, cx);
         self.path_bar.update(cx, |bar, cx| bar.refused(id, cx));
         cx.emit(WindowEvent::Refused(path));

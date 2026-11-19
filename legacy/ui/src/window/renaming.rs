@@ -37,12 +37,16 @@ pub enum Waiting {
 
 impl MainWindow {
     pub(crate) fn start_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.renaming.is_some() || self.folder_rules().read_only || self.folder().is_none() {
+        if self.renaming.is_some()
+            || self.picker()
+            || self.folder_rules().read_only
+            || self.folder().is_none()
+        {
             return;
         }
         let Some(listing) = &self.listing else { return };
         let paths = self.selected_paths();
-        let ([path], None) = (&paths[..], &self.pick) else {
+        let [path] = &paths[..] else {
             return;
         };
         let Some(name) = path.file_name().map(OsStr::to_os_string) else {

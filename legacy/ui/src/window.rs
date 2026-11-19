@@ -49,8 +49,8 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
-    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, SharedString,
-    Subscription, Task, UniformListScrollHandle,
+    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
+    SharedString, Size, Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
@@ -80,7 +80,6 @@ use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::menu::Menu;
-use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::theme_icons::ThemeIcons;
 use jobs::Jobs;
@@ -151,7 +150,8 @@ pub struct MainWindow {
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,
-    pub(crate) pick: Option<Picker>,
+    pub(crate) pick_size: Option<Size<Pixels>>,
+    pub(crate) pick_bounds: Option<Subscription>,
     pub(crate) home: PathBuf,
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
@@ -275,7 +275,8 @@ impl MainWindow {
             path_bar: cx.new(|_| PathBar::new(&host)),
             asks_sent: 0,
             scroll: UniformListScrollHandle::new(),
-            pick: None,
+            pick_size: None,
+            pick_bounds: None,
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
