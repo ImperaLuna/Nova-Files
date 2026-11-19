@@ -48,11 +48,6 @@ impl MainWindow {
                         .px_0()
                         .children(self.parts.page(page))
                         .child(self.island(cx))
-                } else if let Some(page) = self.properties_page() {
-                    sheet
-                        .px_0()
-                        .child(self.properties_view(page, cx))
-                        .child(self.island(cx))
                 } else {
                     sheet
                         .when(self.showing_details(), |sheet| {

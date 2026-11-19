@@ -6,7 +6,6 @@ mod run;
 mod trace;
 mod trash;
 mod vulkan_drivers;
-mod window_state;
 
 use std::io;
 use std::sync::Arc;
@@ -15,7 +14,6 @@ use std::time::Duration;
 
 use nova_files_api::{ClientId, Connector};
 use nova_files_archives_core::inside;
-use nova_files_disk::{private_file, saver};
 use nova_files_entries_core::{list, memory, order};
 
 use nova_files_search_core::Searcher;
@@ -75,7 +73,8 @@ pub fn spawn_with_archiver(
 ) -> io::Result<RunningCore> {
     let (connector, receiver) = nova_files_api::channel();
     let searcher = Searcher::new(index, home.as_ref().map(|home| home.folder.clone()));
-    let window_state = window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
+    let window_state =
+        nova_files_disk::window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
     let inside = Arc::new(inside::Inside::new(
         archiver.clone(),
         inside::opened_folder(std::env::var_os("XDG_RUNTIME_DIR")),

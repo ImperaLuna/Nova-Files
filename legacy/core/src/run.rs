@@ -37,8 +37,8 @@ use nova_files_trash_api as trash_api;
 use crate::jobs::Client;
 use crate::ops::Jobs;
 use crate::trash;
-use crate::window_state::Store as WindowStateStore;
 use nova_files_archives_core::inside::Inside;
+use nova_files_disk::window_state::Store as WindowStateStore;
 
 mod folders;
 mod look;

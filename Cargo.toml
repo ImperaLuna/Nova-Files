@@ -52,6 +52,7 @@ nova-files-preview-api = { path = "features/preview/api" }
 nova-files-preview-core = { path = "features/preview/core" }
 nova-files-properties-api = { path = "features/properties/api" }
 nova-files-properties-core = { path = "features/properties/core" }
+nova-files-properties-ui = { path = "features/properties/ui" }
 nova-files-rename-api = { path = "features/rename/api" }
 nova-files-rename-core = { path = "features/rename/core" }
 nova-files-rename-ui = { path = "features/rename/ui" }
@@ -63,6 +64,7 @@ nova-files-settings-ui = { path = "features/settings/ui" }
 nova-files-shell = { path = "framework/shell" }
 nova-files-start-api = { path = "features/start/api" }
 nova-files-start-core = { path = "features/start/core" }
+nova-files-start-ui = { path = "features/start/ui" }
 nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
 nova-files-thumbnails-api = { path = "features/thumbnails/api" }
 nova-files-thumbnails-core = { path = "features/thumbnails/core" }

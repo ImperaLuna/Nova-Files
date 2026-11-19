@@ -1,4 +1,4 @@
-pub use nova_files_shell::kind::{built_in, entry_kind, glyph_of};
+pub use nova_files_shell::kind::{built_in, entry_kind};
 pub use nova_files_shell::widgets::{icon, icon_slot, kind_icon};
 use std::ops::Range;
 use std::sync::Arc;

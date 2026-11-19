@@ -302,7 +302,6 @@ impl MainWindow {
                 cx.notify();
             }
             Location::Gathered(gathering) => self.open_gathered(*gathering, cx),
-            Location::Properties(paths) => self.new_tab(&Location::Properties(paths.clone()), cx),
             Location::Page(page) => self.open_page(page.clone(), cx),
         }
     }
@@ -367,7 +366,6 @@ impl MainWindow {
 
     pub(super) fn arrive_at_page(&mut self, page: PageRef, cx: &mut Context<Self>) {
         self.let_go_of_folder(cx);
-        self.stop_measuring();
         self.history.arrived(&Location::Page(page));
         cx.notify();
     }
@@ -410,7 +408,6 @@ pub fn from_shell(place: shell::Location) -> Location {
         shell::Location::Page(page) if page.get::<shell::StartPage>().is_some() => Location::Start,
         shell::Location::Page(page) => match page.get::<Builtin>() {
             Some(Builtin::Gathered(gathering)) => Location::Gathered(*gathering),
-            Some(Builtin::Properties(paths)) => Location::Properties(paths.clone()),
             None => Location::Page(page),
         },
     }

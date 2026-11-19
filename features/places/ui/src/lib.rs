@@ -6,10 +6,9 @@ mod tree;
 
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use gpui::{App, Context};
-use nova_files_places_api::{self as places_api, Bookmark, BookmarkChange, Place};
+use nova_files_places_api::{self as places_api, BookmarkChange, Known};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
     Host, Location, Part, Published, RowItem, Scene, SidebarAt, SidebarRow, Slots,
@@ -24,12 +23,6 @@ const PICK_TITLE: &str = "Pin a folder";
 const PICK_LABEL: &str = "Pin to Places";
 const UNPIN_LABEL: &str = "Remove from Places";
 const ROW_PREFIX: &str = "place-";
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Known {
-    pub places: Vec<Place>,
-    pub pinned: Arc<[Bookmark]>,
-}
 
 pub struct PlacesPart {
     host: Host,

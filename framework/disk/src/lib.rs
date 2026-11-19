@@ -12,3 +12,4 @@ pub mod private_file;
 pub mod saver;
 pub mod stored_path;
 pub mod timed;
+pub mod window_state;
