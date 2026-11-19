@@ -6,7 +6,7 @@ use nova_files_drives_ui::DrivesPart;
 use nova_files_look_ui::LookPart;
 use nova_files_open_ui::OpenPart;
 use nova_files_picker_ui::PickerPart;
-use nova_files_places_ui::PlacesPart;
+use nova_files_places_ui::{PlacesPart, TreePart};
 use nova_files_settings_ui::SettingsPart;
 use nova_files_shell::Parts;
 use nova_files_thumbnails_ui::ThumbnailsPart;
@@ -27,5 +27,6 @@ pub fn parts() -> Parts {
     parts.add::<ThumbnailsPart>();
     parts.add::<TransferPart>();
     parts.add::<TrashPart>();
+    parts.add::<TreePart>();
     parts
 }

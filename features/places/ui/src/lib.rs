@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
+mod folder_tree;
 mod shown;
+mod tree;
 
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -13,7 +15,9 @@ use nova_files_shell::{
     Host, Location, Part, Published, RowItem, Scene, SidebarAt, SidebarRow, Slots,
 };
 
+pub use folder_tree::{Toggle, TreeRow};
 pub use shown::{HOME_LABEL, Shown, folder_name, known, shown};
+pub use tree::TreePart;
 
 const PIN_BUTTON: &str = "pin";
 const PICK_TITLE: &str = "Pin a folder";

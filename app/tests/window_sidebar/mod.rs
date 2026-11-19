@@ -8,7 +8,7 @@ use super::*;
 const NARROWEST_WIDE: Pixels = px(720.0);
 
 async fn wait_for_tree(view: &Entity<MainWindow>, cx: &VisualTestContext) {
-    view.condition::<WindowEvent>(cx, |view, _| view.tree_settled())
+    view.condition::<WindowEvent>(cx, |view, cx| tree_part(view).read(cx).settled())
         .await;
     cx.run_until_parked();
 }
@@ -239,7 +239,7 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     assert!(cx.debug_bounds("tree-0").is_some());
     assert!(cx.debug_bounds("tree-1").is_none());
 
-    click(cx, "tree-toggle-0");
+    click(cx, "tree-0-expander");
     wait_for_tree(&view, cx).await;
     assert!(cx.debug_bounds("tree-1").is_some());
     assert!(cx.debug_bounds("tree-2").is_none());
@@ -248,17 +248,17 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     wait_for_folder(&view, cx, &tree.path().join("Projects/nova")).await;
     wait_for_tree(&view, cx).await;
     assert!(cx.debug_bounds("tree-2").is_some());
-    assert!(cx.debug_bounds("tree-toggle-1").is_some());
-    assert!(cx.debug_bounds("tree-toggle-2").is_none());
+    assert!(cx.debug_bounds("tree-1-expander").is_some());
+    assert!(cx.debug_bounds("tree-2-expander").is_none());
     let from_row = |cx: &mut VisualTestContext, row: &'static str, part: &'static str| {
         cx.debug_bounds(part).unwrap().left() - cx.debug_bounds(row).unwrap().left()
     };
-    assert_eq!(from_row(cx, "tree-0", "tree-toggle-0"), px(2.0));
-    assert_eq!(from_row(cx, "tree-1", "tree-toggle-1"), px(24.0));
-    assert_eq!(from_row(cx, "tree-2", "tree-guide-2-1"), px(18.0));
-    assert_eq!(from_row(cx, "tree-2", "tree-guide-2-2"), px(40.0));
+    assert_eq!(from_row(cx, "tree-0", "tree-0-expander"), px(2.0));
+    assert_eq!(from_row(cx, "tree-1", "tree-1-expander"), px(24.0));
+    assert_eq!(from_row(cx, "tree-2", "tree-2-guide-1"), px(18.0));
+    assert_eq!(from_row(cx, "tree-2", "tree-2-guide-2"), px(40.0));
 
-    click(cx, "tree-toggle-1");
+    click(cx, "tree-1-expander");
     cx.run_until_parked();
     assert!(cx.debug_bounds("tree-2").is_none());
     view.update(cx, |view, _| view.sort_by(nova_files_api::SortKey::Name));

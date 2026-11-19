@@ -24,6 +24,7 @@ use nova_files_api::{
 };
 use nova_files_look_api as look_api;
 use nova_files_places_api::{self as places_api, Bookmark, Place, PlaceKind};
+use nova_files_places_ui::TreePart;
 use nova_files_settings_api::{
     self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
 };
@@ -700,4 +701,8 @@ fn a_finished_job_reads_again_only_the_folder_it_changed(cx: &mut TestAppContext
         core.next_listing().map(|(_, path)| path),
         Some(PathBuf::from(SHOWN))
     );
+}
+
+fn tree_part(view: &MainWindow) -> Entity<TreePart> {
+    view.part::<TreePart>().unwrap()
 }
