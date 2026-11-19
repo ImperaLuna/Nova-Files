@@ -9,6 +9,7 @@ use nova_files_places_ui::PlacesPart;
 use nova_files_settings_ui::SettingsPart;
 use nova_files_shell::Parts;
 use nova_files_thumbnails_ui::ThumbnailsPart;
+use nova_files_transfer_ui::TransferPart;
 use nova_files_trash_ui::TrashPart;
 
 #[must_use]
@@ -22,6 +23,7 @@ pub fn parts() -> Parts {
     parts.add::<PlacesPart>();
     parts.add::<SettingsPart>();
     parts.add::<ThumbnailsPart>();
+    parts.add::<TransferPart>();
     parts.add::<TrashPart>();
     parts
 }

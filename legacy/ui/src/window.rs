@@ -72,7 +72,6 @@ use nova_files_shell::{
     WindowParts,
 };
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
-use nova_files_transfer_api as transfer_api;
 
 use self::preview::QuickLooks;
 use self::rows::RowRead;
@@ -379,12 +378,6 @@ impl MainWindow {
         let envelope = match envelope.open::<start_api::Event>() {
             Ok(start_api::Event::RecentFolders { id, folders }) => {
                 return self.recent_arrived(id, folders, cx);
-            }
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<transfer_api::Event>() {
-            Ok(transfer_api::Event::DropWould { id, kind }) => {
-                return self.drop_would_arrived(id, kind, cx);
             }
             Err(envelope) => envelope,
         };
