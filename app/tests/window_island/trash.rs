@@ -13,6 +13,9 @@ async fn trash_and_open(
     open_trash(view, cx, false).await;
     wait_for_names(view, cx, listed).await;
     assert!(view.read_with(cx, trash_open));
+    let many = listed.len();
+    view.condition::<WindowEvent>(cx, move |view, cx| trash_count(view, cx) == Some(many))
+        .await;
 }
 
 #[gpui::test]
