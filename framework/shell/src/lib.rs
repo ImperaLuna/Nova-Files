@@ -6,15 +6,15 @@ mod command;
 mod cursor;
 pub mod device;
 mod entries;
-mod gallery;
 pub mod format;
+mod gallery;
 mod history;
 mod host;
 pub mod island;
 pub mod jump;
 mod kept;
-mod layout;
 pub mod kind;
+mod layout;
 mod line;
 mod location;
 mod menu;
@@ -37,13 +37,13 @@ pub mod widgets;
 
 pub use command::{CommandSpec, WINDOW_KEYS};
 pub use cursor::Move;
-pub use gallery::{GalleryBounds, stage_room, strip};
-pub use layout::{Grid, Layout, NAME_LINES};
 pub use entries::{Entries, EntriesAsked, Laid, SelectionMade, Shown};
+pub use gallery::{GalleryBounds, stage_room, strip};
 pub use history::{History, MAX_PLACES, Step};
 pub use host::{AskIds, Host, Link};
 pub use island::{Island, IslandAsk, IslandAsked, NoteGone, NoteId, OnUndo, OnYes, Undo};
 pub use kept::Kept;
+pub use layout::{Grid, Layout, NAME_LINES};
 pub use line::{Line, Lines};
 pub use location::{Location, PageKind, PageRef, StartPage};
 pub use menu::{
@@ -55,10 +55,10 @@ pub use opening::Opening;
 pub use over::{LaidOver, OverAsk, OverLeft, OverWant};
 pub use part::{
     Applies, Busy, Card, CardRank, Cell, ChipRank, Click, ClickAnswer, Clicks, Closing, Column,
-    Columns, Dims, DropAim, FolderLayout, DropOver, DropSlot, DropTake, EmptyNote, Focus, HeadButton, Items,
-    KeyDown, Listed, NameCell, NameField, Opens, Part, Refused, Rescaled, Resized, RowIcon,
-    RowMenu, Rows, RowsDrawn, Selectable, Several, Slots, Stage, Staged, Staging, ThumbnailSide,
-    Typed, Used, Watch, Wheel,
+    Columns, Dims, DropAim, DropOver, DropSlot, DropTake, EmptyNote, Focus, FolderLayout,
+    HeadButton, Items, KeyDown, Listed, NameCell, NameField, Opens, Part, Refused, Rescaled,
+    Resized, RowIcon, RowMenu, Rows, RowsDrawn, Selectable, Several, Slots, Stage, Staged, Staging,
+    ThumbnailSide, Typed, Used, Watch, Wheel,
 };
 pub use parts::{Parts, ShownColumn, Turn, WindowParts};
 pub use per_tab::{PerTab, TabId};

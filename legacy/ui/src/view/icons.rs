@@ -11,7 +11,7 @@ use super::row::{cursor_ring, detail, drags, entry_icon_sized, folder_aim};
 use super::sheet::rename_box;
 use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::{DraggedRow, MainWindow};
-use nova_files_folders_ui::{Grid, NAME_LINES};
+use nova_files_shell::{Grid, NAME_LINES};
 
 impl MainWindow {
     pub(super) fn icons(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {

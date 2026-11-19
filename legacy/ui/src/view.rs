@@ -20,7 +20,6 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 use nova_files_delete_ui::DeleteSelected;
-use nova_files_folders_api::ViewMode;
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
@@ -28,7 +27,6 @@ use crate::commands::{
     SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown, SelectPageUp,
     SelectRight, SelectUp, ToggleSelected,
 };
-use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, TrashSelected};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
@@ -73,7 +71,6 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
-            .map(|root| Self::view_keys(root, cx))
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
             .map(|root| Self::typed_keys(root, cx))
             .map(|root| Self::selection_keys(root, cx))
@@ -115,18 +112,6 @@ impl MainWindow {
             MouseButton::Left,
             cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
         )
-    }
-
-    fn view_keys(root: Div, cx: &Context<Self>) -> Div {
-        root.on_action(cx.listener(|this, _: &ShowDetails, _, cx| {
-            this.show_as(ViewMode::Details, cx);
-        }))
-        .on_action(cx.listener(|this, _: &ShowIcons, _, cx| this.show_as(ViewMode::Icons, cx)))
-        .on_action(cx.listener(|this, _: &ShowGallery, _, cx| {
-            this.show_as(ViewMode::Gallery, cx);
-        }))
-        .on_action(cx.listener(|this, _: &BiggerIcons, _, cx| this.zoom_icons(true, cx)))
-        .on_action(cx.listener(|this, _: &SmallerIcons, _, cx| this.zoom_icons(false, cx)))
     }
 
     fn tab_keys(root: Div, cx: &Context<Self>) -> Div {

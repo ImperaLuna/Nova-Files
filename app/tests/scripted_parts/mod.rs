@@ -110,7 +110,7 @@ fn a_part_takes_its_own_events_and_its_rules_reach_the_window(cx: &mut TestAppCo
     );
     assert_eq!(rules(&view, cx).views, Views::DetailsOnly);
     assert_eq!(
-        view.read_with(cx, MainWindow::folder_view),
+        view.read_with(cx, folder_view),
         nova_files_folders_api::FolderView::default()
     );
 }

@@ -64,7 +64,7 @@ fn ctrl_scroll(cx: &mut VisualTestContext, lines: f32) {
 }
 
 fn icon_size(view: &Entity<MainWindow>, cx: &VisualTestContext) -> IconSize {
-    view.read_with(cx, |view, cx| view.folder_view(cx).icons)
+    view.read_with(cx, |view, cx| folder_view(view, cx).icons)
 }
 
 fn drag_box(cx: &mut VisualTestContext, from: Point<Pixels>, to: Point<Pixels>) {
@@ -183,7 +183,7 @@ fn a_box_selects_the_cells_it_covers(cx: &mut TestAppContext) {
 #[gpui::test]
 fn the_bar_switch_shows_details_or_icons(cx: &mut TestAppContext) {
     let (view, cx, _) = icons(cx);
-    let mode = |cx: &VisualTestContext| view.read_with(cx, |view, cx| view.folder_view(cx).mode);
+    let mode = |cx: &VisualTestContext| view.read_with(cx, |view, cx| folder_view(view, cx).mode);
 
     let list = cx.debug_bounds("view-list").unwrap().center();
     cx.simulate_click(list, Modifiers::none());

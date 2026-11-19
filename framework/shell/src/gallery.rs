@@ -2,9 +2,9 @@ use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui::{Bounds, Pixels, Size, size};
 use crate::layout::Grid;
 use crate::theme::size as sizes;
+use gpui::{Bounds, Pixels, Size, size};
 
 const SIDES: usize = 2;
 

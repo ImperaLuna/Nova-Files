@@ -158,7 +158,7 @@ fn a_listed_page_can_keep_to_details_with_a_folder_column_and_no_sorting(cx: &mu
 
     cx.simulate_keystrokes("ctrl-2");
     cx.run_until_parked();
-    let view_mode = view.read_with(cx, MainWindow::folder_view);
+    let view_mode = view.read_with(cx, folder_view);
     assert_eq!(view_mode, nova_files_folders_api::FolderView::default());
     assert!(cx.debug_bounds("folder-header").is_some());
     assert!(cx.debug_bounds("arrow-name").is_none());

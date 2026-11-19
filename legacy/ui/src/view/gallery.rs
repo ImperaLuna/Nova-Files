@@ -6,7 +6,7 @@ use gpui::{
 use super::sheet::rename_box;
 use crate::theme::{Colors, size, text};
 use crate::window::MainWindow;
-use nova_files_folders_ui::Grid;
+use nova_files_shell::Grid;
 
 impl MainWindow {
     pub(super) fn gallery(

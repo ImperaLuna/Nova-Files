@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent, SharedString, Size,
-    Subscription, Window,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent,
+    SharedString, Size, Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
@@ -386,10 +386,7 @@ impl<P: Part> OpenPart for Opened<P> {
             return false;
         }
         self.entity.update(cx, |part, cx| {
-            self.slots
-                .wheels
-                .iter()
-                .any(|wheel| wheel(part, event, cx))
+            self.slots.wheels.iter().any(|wheel| wheel(part, event, cx))
         })
     }
 

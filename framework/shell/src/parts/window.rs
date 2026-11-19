@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent, SharedString, Size,
-    Subscription, Window,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent,
+    SharedString, Size, Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 use nova_files_messages::Envelope;
@@ -13,9 +13,9 @@ use super::{OpenPart, Opened, ShownColumn, Turn};
 use crate::assets::Icon;
 use crate::command::CommandSpec;
 use crate::jump::Jump;
+use crate::layout::Layout;
 use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
-use crate::layout::Layout;
 use crate::part::Part;
 use crate::part::{Click, ClickAnswer, DropOver, Staged};
 use crate::path_bar::Crumb;
@@ -83,9 +83,7 @@ impl WindowParts {
     }
 
     pub fn layout(&self, folder: &Path, cx: &App) -> Option<Layout> {
-        self.opened
-            .iter()
-            .find_map(|part| part.layout(folder, cx))
+        self.opened.iter().find_map(|part| part.layout(folder, cx))
     }
 
     pub fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn> {

@@ -1,15 +1,15 @@
 use std::ops::Range;
 
-use gpui::{Pixels, Size, size};
 use crate::theme::size as sizes;
 use crate::theme::size::{
     ICON_CELL_BESIDE as NARROWEST_BESIDE, ICON_CELL_PAD as CELL_PAD,
     ICON_CELL_UNDER as NARROWEST_UNDER, ICON_NAME_GAP as NAME_GAP, ICON_NAME_LINE as NAME_LINE,
 };
+use gpui::{Pixels, Size, size};
 
 pub const NAME_LINES: usize = 2;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Layout {
     #[default]
     Details,

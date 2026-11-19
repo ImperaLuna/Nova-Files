@@ -1,15 +1,14 @@
 use std::ops::Range;
 
 use gpui::{App, Context, Pixels, Size, Window};
-use nova_files_folders_api::ViewMode;
-use nova_files_folders_ui::{GalleryBounds, stage_room, strip};
+use nova_files_shell::{GalleryBounds, Layout, stage_room, strip};
 
 use super::MainWindow;
 use crate::selection::Move;
 
 impl MainWindow {
     pub fn showing_gallery(&self, cx: &App) -> bool {
-        !self.picker() && self.folder_view(cx).mode == ViewMode::Gallery
+        matches!(self.layout(cx), Layout::Gallery { .. })
     }
 
     pub(crate) const fn gallery_bounds(&self) -> &GalleryBounds {
