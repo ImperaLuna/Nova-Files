@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
-    Pixels, SharedString, Subscription,
+    Pixels, SharedString, Size, Subscription,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId};
 
@@ -58,6 +58,7 @@ trait OpenPart {
     fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
     fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>>;
     fn busy(&self, cx: &App) -> bool;
+    fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement>;
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App);
     fn takes_drops(&self, page: &PageRef) -> bool;
     fn drop_on(
@@ -268,6 +269,14 @@ impl<P: Part> OpenPart for Opened<P> {
     fn busy(&self, cx: &App) -> bool {
         let part = self.entity.read(cx);
         self.slots.busy.iter().any(|busy| busy(part, cx))
+    }
+
+    fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement> {
+        let part = self.entity.read(cx);
+        self.slots
+            .stages
+            .iter()
+            .find_map(|stage| stage(part, scene, room, cx))
     }
 
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
@@ -633,6 +642,12 @@ impl WindowParts {
 
     pub fn busy(&self, cx: &App) -> bool {
         self.opened.iter().any(|part| part.busy(cx))
+    }
+
+    pub fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement> {
+        self.opened
+            .iter()
+            .find_map(|part| part.stage(scene, room, cx))
     }
 
     pub fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {

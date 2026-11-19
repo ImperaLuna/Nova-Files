@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _, Modifiers,
-    Pixels, SharedString, Window,
+    Pixels, SharedString, Size, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId};
 
@@ -35,6 +35,7 @@ pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
 pub type NameField<P> = fn(&P, &Entry, &App) -> Option<Entity<TextField>>;
+pub type Stage<P> = fn(&P, &Scene, Size<Pixels>, &App) -> Option<AnyElement>;
 pub type Busy<P> = fn(&P, &App) -> bool;
 pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
@@ -91,6 +92,7 @@ pub struct Slots<P> {
     pub(crate) name_cells: Vec<NameCell<P>>,
     pub(crate) name_fields: Vec<NameField<P>>,
     pub(crate) busy: Vec<Busy<P>>,
+    pub(crate) stages: Vec<Stage<P>>,
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
     pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
@@ -126,6 +128,7 @@ impl<P> Default for Slots<P> {
             name_cells: Vec::new(),
             name_fields: Vec::new(),
             busy: Vec::new(),
+            stages: Vec::new(),
             listed: Vec::new(),
             drops: Vec::new(),
             drop_targets: Vec::new(),
@@ -228,6 +231,10 @@ impl<P: Part> Slots<P> {
 
     pub fn busy(&mut self, busy: Busy<P>) {
         self.busy.push(busy);
+    }
+
+    pub fn stage(&mut self, stage: Stage<P>) {
+        self.stages.push(stage);
     }
 
     pub fn listed(&mut self, listed: Listed<P>) {

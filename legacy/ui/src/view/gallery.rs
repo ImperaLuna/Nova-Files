@@ -7,7 +7,8 @@ use super::preview::{meta, stage_art};
 use super::sheet::rename_box;
 use crate::grid::Grid;
 use crate::theme::{Colors, size, text};
-use crate::window::MainWindow;
+use crate::window::{MainWindow, QuickLook};
+use nova_files_api::{Entry, Listing};
 
 impl MainWindow {
     pub(super) fn gallery(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
@@ -36,15 +37,19 @@ impl MainWindow {
             .child(self.strip(grid, cx))
     }
 
+    fn on_stage(&self) -> Option<(&QuickLook, &Listing, &Entry, usize)> {
+        let open = self.quick_look()?;
+        let listing = self.listing.as_ref()?;
+        let index = usize::try_from(open.entry.0).ok()?;
+        let entry = listing.entries.get(index)?;
+        Some((open, listing, entry, index))
+    }
+
     fn stage(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let room = self.stage_room();
         let scale_factor = self.scale_factor;
-        let shown = self.quick_look().and_then(|open| {
-            let listing = self.listing.as_ref()?;
-            let index = usize::try_from(open.entry.0).ok()?;
-            let entry = listing.entries.get(index)?;
-            Some((open, listing, entry, index))
-        });
+        let part_stage = self.parts.stage(&self.scene(), room, cx);
+        let shown = part_stage.is_none().then(|| self.on_stage()).flatten();
         div()
             .debug_selector(|| "stage".to_owned())
             .flex()
@@ -55,6 +60,7 @@ impl MainWindow {
             .justify_center()
             .gap(size::STAGE_PAD)
             .p(size::STAGE_PAD)
+            .children(part_stage)
             .children(shown.map(|(open, listing, entry, index)| {
                 let current = open.current().and_then(|shown| shown.preview.as_deref());
                 let name = SharedString::from(entry.name.to_string_lossy().into_owned());
