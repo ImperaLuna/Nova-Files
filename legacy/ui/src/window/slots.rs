@@ -6,6 +6,7 @@ use std::sync::Arc;
 use gpui::{App, Context, Entity, Subscription};
 use nova_files_api::{Command, HiddenFiles, ListingId};
 use nova_files_picker_api::PickId;
+use nova_files_shell::path_bar::PathBarEvent;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
     Opening, PageRef, Part, Scene, Showing, Shown, TabId, Turn,
@@ -30,6 +31,10 @@ impl MainWindow {
         watching.extend([
             cx.observe_self(Self::publish),
             cx.observe(&self.host.nav, |_, _, cx| cx.notify()),
+            cx.observe(&self.path_bar, |_, _, cx| cx.notify()),
+            cx.subscribe(&self.path_bar, |this, _, event: &PathBarEvent, cx| {
+                this.path_bar_said(event, cx);
+            }),
             cx.subscribe(&self.host.nav, |this, _, event: &NavEvent, cx| {
                 if *event == NavEvent::Asked {
                     this.take_nav_asks(cx);
@@ -54,6 +59,18 @@ impl MainWindow {
         let changed = self.host.kept.update(cx, |kept, _| kept.take_changed());
         if let (Some(bytes), Some(connection)) = (changed, &self.connection) {
             connection.send(Command::SaveWindowState(bytes)).ok();
+        }
+    }
+
+    fn path_bar_said(&mut self, event: &PathBarEvent, cx: &mut Context<Self>) {
+        match event {
+            PathBarEvent::Typed(target) => {
+                let before = self.asked;
+                self.open(target);
+                let asked = self.asked.filter(|_| self.asked != before);
+                self.path_bar.update(cx, |bar, cx| bar.going(asked, cx));
+            }
+            PathBarEvent::Left => self.focus_later(FocusTo::List, cx),
         }
     }
 

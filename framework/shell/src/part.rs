@@ -118,6 +118,7 @@ pub struct Slots<P> {
     pub(crate) head_buttons: Vec<(SidebarAt, &'static str, HeadButton<P>)>,
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
+    pub(crate) path_chips: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
     pub(crate) row_icons: Vec<RowIcon<P>>,
     pub(crate) opens: Vec<Opens<P>>,
@@ -162,6 +163,7 @@ impl<P> Default for Slots<P> {
             head_buttons: Vec::new(),
             bars: Vec::new(),
             overlays: Vec::new(),
+            path_chips: Vec::new(),
             list_views: Vec::new(),
             row_icons: Vec::new(),
             opens: Vec::new(),
@@ -324,6 +326,10 @@ impl<P: Part> Slots<P> {
 
     pub fn overlay(&mut self, overlay: Card<P>) {
         self.overlays.push(overlay);
+    }
+
+    pub fn path_chip(&mut self, chip: Card<P>) {
+        self.path_chips.push(chip);
     }
 
     pub fn list_view(&mut self, applies: Applies<P>, draw: Card<P>) {

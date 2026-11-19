@@ -39,17 +39,17 @@ async fn each_crumb_goes_to_its_folder(cx: &mut TestAppContext) {
 }
 
 async fn menu_names(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.path_menu_names()
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        view.path_menu_names(cx)
             .is_some_and(|names| !names.is_empty())
     })
     .await;
     cx.run_until_parked();
-    view.read_with(cx, |view, _| view.path_menu_names().unwrap())
+    view.read_with(cx, |view, cx| view.path_menu_names(cx).unwrap())
 }
 
 async fn menu_closed(view: &Entity<MainWindow>, cx: &mut VisualTestContext) {
-    view.condition::<WindowEvent>(cx, |view, _| view.path_menu_names().is_none())
+    view.condition::<WindowEvent>(cx, |view, cx| view.path_menu_names(cx).is_none())
         .await;
     cx.run_until_parked();
     assert!(!drawn(cx, "path-menu"));
@@ -205,7 +205,7 @@ async fn typing_window<'a>(
 }
 
 fn path_field(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Option<Entity<TextField>> {
-    view.read_with(cx, |view, _| view.path_field().cloned())
+    view.read_with(cx, MainWindow::path_field)
 }
 
 fn typed(view: &Entity<MainWindow>, cx: &VisualTestContext) -> (String, std::ops::Range<usize>) {
@@ -302,7 +302,7 @@ async fn typing_the_folder_on_screen_reads_it_again_and_puts_the_crumbs_back(
     click(cx, "path-fill");
     cx.simulate_input(".");
     cx.simulate_keystrokes("enter");
-    view.condition::<WindowEvent>(cx, |view, _| view.path_field().is_none())
+    view.condition::<WindowEvent>(cx, |view, cx| view.path_field(cx).is_none())
         .await;
 }
 
