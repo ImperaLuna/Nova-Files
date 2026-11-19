@@ -35,7 +35,7 @@ impl MainWindow {
             self.menu = None;
             let fell_back = mem::take(&mut self.falling_back);
             if let (Location::Folder(folder), false) = (&arrived, fell_back) {
-                self.used(folder);
+                self.used(folder, cx);
             }
         }
         self.listed_page = match &arrived {
@@ -169,6 +169,25 @@ impl MainWindow {
         }
         cx.emit(WindowEvent::Places);
         cx.notify();
+    }
+
+    pub(super) fn listing_failed(&mut self, id: ListingId, cx: &mut Context<Self>) {
+        if self.asked != Some(id) {
+            return;
+        }
+        let path = self
+            .requested
+            .as_ref()
+            .and_then(Location::folder)
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let empty = Listing {
+            id,
+            path,
+            entries: Arc::from([]),
+            folders: None,
+        };
+        self.listing_arrived(empty, cx);
     }
 
     fn missing_named(&self, id: ListingId, path: &Path) -> Option<Listing> {

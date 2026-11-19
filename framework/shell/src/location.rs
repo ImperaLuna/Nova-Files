@@ -7,6 +7,7 @@ use gpui::SharedString;
 
 use crate::assets::Icon;
 use crate::path_bar::PageCrumbs;
+use crate::rules::Views;
 
 pub trait PageKind: fmt::Debug + Clone + Eq + Send + Sync + 'static {
     fn title(&self) -> SharedString;
@@ -18,6 +19,18 @@ pub trait PageKind: fmt::Debug + Clone + Eq + Send + Sync + 'static {
     fn crumbs(&self) -> Option<PageCrumbs> {
         None
     }
+
+    fn views(&self) -> Views {
+        Views::Any
+    }
+
+    fn folder_column(&self) -> bool {
+        false
+    }
+
+    fn sorted(&self) -> bool {
+        true
+    }
 }
 
 trait AnyPage: fmt::Debug + Send + Sync {
@@ -26,6 +39,9 @@ trait AnyPage: fmt::Debug + Send + Sync {
     fn title(&self) -> SharedString;
     fn icon(&self) -> Icon;
     fn crumbs(&self) -> Option<PageCrumbs>;
+    fn views(&self) -> Views;
+    fn folder_column(&self) -> bool;
+    fn sorted(&self) -> bool;
 }
 
 impl<K: PageKind> AnyPage for K {
@@ -47,6 +63,18 @@ impl<K: PageKind> AnyPage for K {
 
     fn crumbs(&self) -> Option<PageCrumbs> {
         PageKind::crumbs(self)
+    }
+
+    fn views(&self) -> Views {
+        PageKind::views(self)
+    }
+
+    fn folder_column(&self) -> bool {
+        PageKind::folder_column(self)
+    }
+
+    fn sorted(&self) -> bool {
+        PageKind::sorted(self)
     }
 }
 
@@ -72,6 +100,18 @@ impl PageRef {
 
     pub fn crumbs(&self) -> Option<PageCrumbs> {
         self.0.crumbs()
+    }
+
+    pub fn views(&self) -> Views {
+        self.0.views()
+    }
+
+    pub fn folder_column(&self) -> bool {
+        self.0.folder_column()
+    }
+
+    pub fn sorted(&self) -> bool {
+        self.0.sorted()
     }
 
     pub fn kind(&self) -> TypeId {

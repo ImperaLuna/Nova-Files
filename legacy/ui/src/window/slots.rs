@@ -9,7 +9,7 @@ use nova_files_picker_api::PickId;
 use nova_files_shell::path_bar::PathBarEvent;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
-    Opening, PageRef, Part, Scene, Shown, TabId,
+    Opening, PageRef, Part, Scene, Shown, TabId, Turn,
 };
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
@@ -134,9 +134,16 @@ impl MainWindow {
     }
 
     fn take_entries_asks(&mut self, cx: &mut Context<Self>) {
-        let (now, later) = self.host.entries.update(cx, |entries, _| {
-            (entries.take_select(), entries.take_select_later())
+        let (now, later, failed) = self.host.entries.update(cx, |entries, _| {
+            (
+                entries.take_select(),
+                entries.take_select_later(),
+                entries.take_failed(),
+            )
         });
+        if let Some(id) = failed {
+            self.listing_failed(id, cx);
+        }
         if let Some((folder, names)) = later {
             self.select_when_listed(folder, names, cx);
         }
@@ -187,10 +194,15 @@ impl MainWindow {
             searching: self.searching(),
             gathered: self.gathered_here().is_some(),
         };
+        let page = match &shown.location {
+            Some(shell::Location::Page(page)) => Some(page.clone()),
+            _ => None,
+        };
         self.host
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
+        self.turn_pages(page.map(|page| (tab, page)), cx);
         self.host.nav.update(cx, |nav, cx| nav.show(tab, tabs, cx));
         self.tell_left(cx);
     }
@@ -203,12 +215,27 @@ impl MainWindow {
         left
     }
 
+    fn turn_pages(&mut self, now: Option<(TabId, PageRef)>, cx: &mut Context<Self>) {
+        if now == self.shown_page {
+            return;
+        }
+        if let Some((tab, page)) = self.shown_page.take() {
+            self.parts.page_turned(&page, tab, Turn::Left, cx);
+        }
+        if let Some((tab, page)) = &now {
+            self.parts.page_turned(page, *tab, Turn::Shown, cx);
+        }
+        self.shown_page = now;
+    }
+
     fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
         let asks = self.host.nav.update(cx, |nav, _| nav.take_asks());
         let went = std::mem::take(&mut self.went);
         for ask in asks {
             match ask {
                 NavAsk::Go(place) => self.go_to_shell(place, cx),
+                NavAsk::Replace(place) => self.replace_with(&from_shell(place), cx),
+                NavAsk::Focus(handle) => self.focus_later(FocusTo::Handle(handle), cx),
                 NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),
