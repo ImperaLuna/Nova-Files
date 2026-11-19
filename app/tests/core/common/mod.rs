@@ -1,4 +1,5 @@
 use std::fs;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
@@ -7,9 +8,25 @@ use nova_files_api::{Command, Connection, Event, JobId, JobTag, Operation, Outco
 
 pub const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 
+pub struct Core(pub nova_files::RunningCore);
+
+impl Deref for Core {
+    type Target = nova_files::RunningCore;
+
+    fn deref(&self) -> &nova_files::RunningCore {
+        &self.0
+    }
+}
+
+impl Drop for Core {
+    fn drop(&mut self) {
+        self.0.connector.stop().ok();
+    }
+}
+
 pub struct Bench {
     pub root: PathBuf,
-    pub core: nova_files::RunningCore,
+    pub core: Core,
 }
 
 impl Bench {
@@ -30,7 +47,7 @@ impl Bench {
             data: root.join("home/.local/share"),
             drive_trashes: false,
         };
-        let core = nova_files::spawn_with(idle_exit, Some(home), None, None).unwrap();
+        let core = Core(nova_files::spawn_with(idle_exit, Some(home), None, None).unwrap());
         Self { root, core }
     }
 

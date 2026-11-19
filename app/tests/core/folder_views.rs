@@ -1,11 +1,10 @@
-#![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
-
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-use nova_files::{Home, IDLE_EXIT, RunningCore};
+use crate::common::Core;
+use nova_files::{Home, IDLE_EXIT};
 use nova_files_folders_api::{Command, Event, FolderView, FolderViews, IconSize, ViewMode};
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
@@ -28,7 +27,7 @@ impl TempHome {
         Self(path)
     }
 
-    fn core(&self) -> RunningCore {
+    fn core(&self) -> Core {
         let home = Home {
             folder: self.0.clone(),
             config: self.0.join("config"),
@@ -36,7 +35,7 @@ impl TempHome {
             data: self.0.join("share"),
             drive_trashes: false,
         };
-        nova_files::spawn_with(IDLE_EXIT, Some(home), None, None).unwrap()
+        Core(nova_files::spawn_with(IDLE_EXIT, Some(home), None, None).unwrap())
     }
 }
 

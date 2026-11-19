@@ -1,21 +1,15 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-#[path = "common/own_folders.rs"]
-mod own_folders;
+use crate::own_folders;
 
 use nova_files_api::{
     Command, EntryId, Event, FileIcon, IconKind, ListingId, Order, ThumbnailSize,
 };
 
+use crate::common::Core;
 use own_folders::run_again_in;
 
 const ROOT_VAR: &str = "NOVA_FILES_ICON_THEME_TEST_ROOT";
@@ -50,7 +44,7 @@ fn run_again_in_folders_of_its_own() {
 }
 
 fn icons_through_the_core(root: &Path) {
-    let core = nova_files::spawn_with_idle_exit(IDLE_EXIT).unwrap();
+    let core = Core(nova_files::spawn_with_idle_exit(IDLE_EXIT).unwrap());
     let (sink, events) = mpsc::channel();
     let connection = core.connector.connect(sink).unwrap();
     let icon_of_the_file = |id: u64| {

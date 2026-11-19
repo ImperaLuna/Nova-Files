@@ -1,16 +1,11 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
 use std::fs;
 use std::os::unix::fs::{PermissionsExt as _, symlink};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files::{Home, IDLE_EXIT, RunningCore};
+use crate::common::Core;
+use nova_files::{Home, IDLE_EXIT};
 use nova_files_api::Connection;
 use nova_files_places_api::{Bookmark, BookmarkChange, Command, Event, Place, PlaceKind};
 
@@ -47,7 +42,7 @@ impl TempHome {
         fs::rename(temporary, file).unwrap();
     }
 
-    fn core(&self) -> RunningCore {
+    fn core(&self) -> Core {
         let home = Home {
             folder: self.0.clone(),
             config: self.at(".config"),
@@ -55,7 +50,7 @@ impl TempHome {
             data: self.at(".local/share"),
             drive_trashes: false,
         };
-        nova_files::spawn_with(IDLE_EXIT, Some(home), None, None).unwrap()
+        Core(nova_files::spawn_with(IDLE_EXIT, Some(home), None, None).unwrap())
     }
 }
 
@@ -71,7 +66,7 @@ struct Client {
 }
 
 impl Client {
-    fn of(core: &RunningCore) -> Self {
+    fn of(core: &Core) -> Self {
         let (sink, events) = mpsc::channel();
         let connection = core.connector.connect(sink).unwrap();
         Self { connection, events }

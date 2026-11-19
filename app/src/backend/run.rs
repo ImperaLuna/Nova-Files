@@ -254,8 +254,13 @@ pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup)
         }
     };
     let mut clients: HashMap<ClientId, Client> = HashMap::new();
+    let mut stopping = false;
     loop {
-        let message = if clients.is_empty() && !setup.jobs.busy() {
+        let idle = clients.is_empty() && !setup.jobs.busy();
+        if stopping && idle {
+            return;
+        }
+        let message = if idle {
             match receiver.recv_timeout(idle_exit) {
                 Ok(message) => message,
                 Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => return,
@@ -266,6 +271,9 @@ pub fn run(receiver: &Receiver<CoreMessage>, idle_exit: Duration, setup: &Setup)
                 Err(_) => return,
             }
         };
+        if matches!(message, CoreMessage::Stop) {
+            stopping = true;
+        }
         handle(&mut clients, message, &routes, setup);
     }
 }
@@ -286,7 +294,7 @@ fn handle(
             clients.remove(&client);
             routes.leave(setup, client);
         }
-        CoreMessage::Activity => {}
+        CoreMessage::Activity | CoreMessage::Stop => {}
         CoreMessage::Offer(offer) => take_offer(offer, setup),
         CoreMessage::Command { client, command } => {
             let Some(target) = clients.get(&client) else {

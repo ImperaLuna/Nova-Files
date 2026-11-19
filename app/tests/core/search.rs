@@ -1,9 +1,3 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
 use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::PathBuf;
@@ -11,7 +5,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
-use nova_files::{Home, IDLE_EXIT, IndexPlace, RunningCore};
+use nova_files::{Home, IDLE_EXIT, IndexPlace};
 use nova_files_api::{
     ClientGone, Command, Connection, EntryId, EntryKind, Envelope, Event, EventSink, Listing,
     ListingId, Order, ThumbnailSize,
@@ -19,6 +13,8 @@ use nova_files_api::{
 use nova_files_search_api::{
     Command as SearchCommand, Event as SearchEvent, Hit, MAX_HITS, Matched, SearchFailed, SearchId,
 };
+
+use crate::common::Core;
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 const CHANGE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -70,7 +66,7 @@ impl Scratch {
             data: self.0.join("share"),
             drive_trashes: false,
         };
-        let core = nova_files::spawn_with(IDLE_EXIT, Some(home), None, place).unwrap();
+        let core = Core(nova_files::spawn_with(IDLE_EXIT, Some(home), None, place).unwrap());
         let (sink, events) = mpsc::channel();
         let connection = core.connector.connect(Both(sink)).unwrap();
         Client {
@@ -110,7 +106,7 @@ impl Drop for Scratch {
 }
 
 struct Client {
-    _core: RunningCore,
+    _core: Core,
     connection: Connection,
     events: Receiver<Heard>,
     home: PathBuf,

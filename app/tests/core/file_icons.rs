@@ -1,9 +1,3 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::sync::Arc;

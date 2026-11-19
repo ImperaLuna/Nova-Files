@@ -1,10 +1,4 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-mod common;
+use crate::common;
 
 use std::fs;
 use std::os::unix::fs::MetadataExt as _;

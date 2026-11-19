@@ -1,9 +1,3 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
 use std::fs;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
@@ -11,12 +5,12 @@ use std::process::Command as Process;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-#[path = "common/own_folders.rs"]
-mod own_folders;
+use crate::own_folders;
 
 use nova_files_api::Connection;
 use nova_files_open_api::{Command, Event, OpenWith, OpenWithAnswer, OpenWithId};
 
+use crate::common::Core;
 use own_folders::run_again_in;
 
 const ROOT_VAR: &str = "NOVA_FILES_OPEN_WITH_TEST_ROOT";
@@ -155,7 +149,7 @@ fn through_the_core(root: &Path) {
         let app = root.join("app");
         fs::write(&path, text.replace("APP", app.to_str().unwrap())).unwrap();
     }
-    let core = nova_files::spawn_with_idle_exit(IDLE_EXIT).unwrap();
+    let core = Core(nova_files::spawn_with_idle_exit(IDLE_EXIT).unwrap());
     let (sink, events) = mpsc::channel();
     let client = Client {
         connection: core.connector.connect(sink).unwrap(),

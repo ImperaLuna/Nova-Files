@@ -1,12 +1,5 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-mod common;
-#[path = "common/files.rs"]
-mod files;
+use crate::common;
+use crate::files;
 
 use std::ffi::OsStr;
 use std::fs;

@@ -1,10 +1,4 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-mod common;
+use crate::common;
 
 use std::ffi::OsStr;
 use std::fs;

@@ -1,11 +1,4 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "test setup should fail loudly"
-)]
-
-#[expect(dead_code, reason = "the job helpers; previews need only the bench")]
-mod common;
+use crate::common;
 
 use std::fs;
 use std::os::unix::fs::symlink;

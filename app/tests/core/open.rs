@@ -1,5 +1,3 @@
-#![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
-
 use std::fs;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
@@ -7,11 +5,11 @@ use std::process::Command as Process;
 use std::sync::mpsc;
 use std::time::Duration;
 
-#[path = "common/own_folders.rs"]
-mod own_folders;
+use crate::own_folders;
 
 use nova_files_open_api::{Command, Event, NotOpened};
 
+use crate::common::Core;
 use own_folders::run_again_in;
 
 const ROOT_VAR: &str = "NOVA_FILES_OPEN_TEST_ROOT";
@@ -75,7 +73,7 @@ fn run_again_in_folders_of_its_own() {
 }
 
 fn open_through_the_core(root: &Path) {
-    let core = nova_files::spawn_with_idle_exit(IDLE_EXIT).unwrap();
+    let core = Core(nova_files::spawn_with_idle_exit(IDLE_EXIT).unwrap());
     let (events, received) = mpsc::channel::<Event>();
     let connection = core.connector.connect(events).unwrap();
     let open = |path: PathBuf| {

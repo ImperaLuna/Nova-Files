@@ -54,6 +54,7 @@ pub enum CoreMessage {
     },
     Activity,
     Offer(Envelope),
+    Stop,
 }
 
 impl CoreMessage {
@@ -89,6 +90,7 @@ impl std::fmt::Debug for CoreMessage {
                 .field("client", client)
                 .finish(),
             Self::Activity => f.write_str("Activity"),
+            Self::Stop => f.write_str("Stop"),
             Self::Offer(offer) => f.debug_tuple("Offer").field(&offer.kind().name()).finish(),
         }
     }
@@ -110,6 +112,10 @@ pub struct Connector {
 }
 
 impl Connector {
+    pub fn stop(&self) -> Result<(), CoreGone> {
+        self.sender.send(CoreMessage::Stop).map_err(|_| CoreGone)
+    }
+
     pub fn activity(&self) -> Result<(), CoreGone> {
         self.sender
             .send(CoreMessage::Activity)
