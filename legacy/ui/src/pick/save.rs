@@ -7,9 +7,10 @@ use gpui::{Context, Window};
 use nova_files_api::ListingId;
 use nova_files_properties_api::{Command, PropertiesId};
 
-use super::{Conflict, typed};
+use super::Conflict;
 use crate::selection::Selection;
 use crate::window::MainWindow;
+use nova_files_shell::typed;
 
 pub struct Recheck {
     folder: PathBuf,

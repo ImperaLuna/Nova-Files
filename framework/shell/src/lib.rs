@@ -23,6 +23,7 @@ mod scene;
 mod slot_view;
 pub mod text;
 pub mod theme;
+pub mod typed;
 pub mod widgets;
 
 pub use command::{CommandSpec, WINDOW_KEYS};

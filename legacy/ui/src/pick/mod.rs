@@ -4,10 +4,8 @@ mod filter;
 mod opening;
 mod save;
 mod select;
-pub mod typed;
 
 pub use nova_files_picker_ui::{Mode, accept_label, titlebar};
-pub use typed::{HOME, stem};
 
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write as _};
@@ -27,6 +25,7 @@ use crate::selecting::DOUBLE_CLICK;
 use crate::selection::Click;
 use crate::window::MainWindow;
 use nova_files_shell::text::{TextField, TextFieldEvent};
+use nova_files_shell::typed::stem;
 
 pub struct Picker {
     request: Box<PickRequest>,
