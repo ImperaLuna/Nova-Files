@@ -7,7 +7,6 @@ mod columns;
 mod commands;
 mod dropping;
 mod grid;
-mod history;
 mod island;
 
 mod location;

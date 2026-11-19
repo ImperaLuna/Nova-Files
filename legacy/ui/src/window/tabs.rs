@@ -12,20 +12,20 @@ use super::search::Search;
 use nova_files_shell::{PageRef, TabId};
 
 use crate::assets::Icon;
-use crate::history::History;
 use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::places::{self, START_LABEL};
 use crate::selection::Selection;
 use nova_files_places_ui as places_ui;
+use nova_files_shell::History;
 
 pub const OPEN_IN_NEW_TAB_LABEL: &str = "Open in new tab";
 
 const LAST: usize = 1;
 
 pub struct Tab {
-    history: History,
+    history: History<Location>,
     listing: Option<Listing>,
     selection: Option<Selection>,
     order: Order,

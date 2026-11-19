@@ -1,4 +1,3 @@
-use crate::location::Location;
 use std::collections::VecDeque;
 
 pub const MAX_PLACES: usize = 100;
@@ -10,40 +9,51 @@ pub enum Step {
     Replace,
 }
 
-#[derive(Debug, Default)]
-pub struct History {
-    back: VecDeque<Location>,
-    here: Option<Location>,
-    forward: Vec<Location>,
-    going: Option<(Step, Location)>,
+#[derive(Debug)]
+pub struct History<L> {
+    back: VecDeque<L>,
+    here: Option<L>,
+    forward: Vec<L>,
+    going: Option<(Step, L)>,
 }
 
-impl History {
-    pub fn back_target(&self) -> Option<&Location> {
+impl<L> Default for History<L> {
+    fn default() -> Self {
+        Self {
+            back: VecDeque::new(),
+            here: None,
+            forward: Vec::new(),
+            going: None,
+        }
+    }
+}
+
+impl<L: Clone + PartialEq> History<L> {
+    pub fn back_target(&self) -> Option<&L> {
         self.back.back()
     }
 
-    pub fn forward_target(&self) -> Option<&Location> {
+    pub fn forward_target(&self) -> Option<&L> {
         self.forward.last()
     }
 
-    pub const fn here(&self) -> Option<&Location> {
+    pub const fn here(&self) -> Option<&L> {
         self.here.as_ref()
     }
 
-    pub fn back(&mut self) -> Option<Location> {
+    pub fn back(&mut self) -> Option<L> {
         self.start(Step::Back)
     }
 
-    pub fn forward(&mut self) -> Option<Location> {
+    pub fn forward(&mut self) -> Option<L> {
         self.start(Step::Forward)
     }
 
-    pub fn replace_with(&mut self, place: Location) {
+    pub fn replace_with(&mut self, place: L) {
         self.going = Some((Step::Replace, place));
     }
 
-    fn start(&mut self, step: Step) -> Option<Location> {
+    fn start(&mut self, step: Step) -> Option<L> {
         let target = match step {
             Step::Back => self.back_target(),
             Step::Forward => self.forward_target(),
@@ -58,7 +68,7 @@ impl History {
         self.going = None;
     }
 
-    pub fn arrived(&mut self, place: &Location) {
+    pub fn arrived(&mut self, place: &L) {
         if self.here.as_ref() == Some(place) {
             self.going = None;
             return;
@@ -92,7 +102,7 @@ impl History {
         }
     }
 
-    pub fn refused(&mut self, place: &Location) {
+    pub fn refused(&mut self, place: &L) {
         match self.going.take() {
             Some((Step::Back, target)) if target == *place => {
                 self.back.pop_back();
@@ -110,7 +120,7 @@ impl History {
         }
     }
 
-    fn push_back(&mut self, place: Location) {
+    fn push_back(&mut self, place: L) {
         if self.back.len() == MAX_PLACES {
             self.back.pop_front();
         }
@@ -120,15 +130,15 @@ impl History {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::PathBuf;
 
     use super::*;
 
-    fn at(path: &str) -> Location {
-        Location::from(Path::new(path))
+    fn at(path: &str) -> PathBuf {
+        PathBuf::from(path)
     }
 
-    fn walked(places: &[&str]) -> History {
+    fn walked(places: &[&str]) -> History<PathBuf> {
         let mut history = History::default();
         for place in places {
             history.arrived(&at(place));
@@ -247,11 +257,7 @@ mod tests {
     #[test]
     fn a_replaced_place_takes_no_step_back() {
         let mut history = History::default();
-        let (first, second, third) = (
-            Location::Folder("/a".into()),
-            Location::Folder("/b".into()),
-            Location::Folder("/c".into()),
-        );
+        let (first, second, third) = (at("/a"), at("/b"), at("/c"));
         history.arrived(&first);
         history.arrived(&second);
         history.replace_with(third.clone());

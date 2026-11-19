@@ -75,7 +75,6 @@ use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use self::preview::QuickLooks;
 use self::rows::RowRead;
 use crate::band::Band;
-use crate::history::History;
 use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::location::Location;
@@ -84,6 +83,7 @@ use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::theme_icons::ThemeIcons;
 use jobs::Jobs;
+use nova_files_shell::History;
 use renaming::{Renaming, Waiting};
 use tabs::Tabs;
 
@@ -145,7 +145,7 @@ pub struct MainWindow {
     pending_views: HashMap<PathBuf, FolderView>,
     pinned: Arc<[Bookmark]>,
     gathered: gathered::GatheredState,
-    pub(crate) history: History,
+    pub(crate) history: History<Location>,
     pub(crate) recent: Vec<RecentFolder>,
     pub(crate) recent_asked: RecentId,
     pub(crate) path_bar: Entity<PathBar>,
