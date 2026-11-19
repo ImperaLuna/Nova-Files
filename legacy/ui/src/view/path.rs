@@ -80,7 +80,7 @@ impl MainWindow {
                 .into_iter()
                 .map(IntoElement::into_any_element),
         );
-        let items = self.parts.menu(MenuAt::PathBarEnd, &self.scene(), cx);
+        let items = self.parts.menu(MenuAt::PathBarEnd, &self.scene(cx), cx);
         chips.extend(
             arrange(items)
                 .into_iter()

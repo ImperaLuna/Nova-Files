@@ -23,7 +23,7 @@ impl MainWindow {
     ) -> Vec<(u8, Stateful<Div>)> {
         let tree = at == SidebarAt::Tree && !narrow;
         self.parts
-            .sidebar(at, &self.scene(), cx)
+            .sidebar(at, &self.scene(cx), cx)
             .into_iter()
             .map(|place| {
                 let rank = place.rank;
@@ -47,7 +47,7 @@ impl MainWindow {
             return Vec::new();
         }
         self.parts
-            .section_buttons(at, &self.scene(), cx)
+            .section_buttons(at, &self.scene(cx), cx)
             .into_iter()
             .map(|(id, button)| {
                 section_button(id, button.icon, colors)

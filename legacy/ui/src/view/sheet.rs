@@ -17,10 +17,10 @@ use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, fo
 use nova_files_shell::{PageRef, ShownColumn};
 
 use crate::assets::Icon;
-use crate::grid::Grid;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::{Aim, DraggedRow, LIBRARY_LABEL, MainWindow};
+use nova_files_folders_ui::Grid;
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
@@ -54,7 +54,7 @@ impl MainWindow {
                         .child(self.island(cx))
                 } else {
                     sheet
-                        .when(self.showing_details(), |sheet| {
+                        .when(self.showing_details(cx), |sheet| {
                             sheet.child(self.column_heads(&colors, cx))
                         })
                         .child(self.entries_area(entries, cx))
@@ -72,9 +72,9 @@ impl MainWindow {
             .overflow_hidden()
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, event: &MouseDownEvent, _, _| {
+                cx.listener(|this, event: &MouseDownEvent, _, cx| {
                     let on_name = std::mem::take(&mut this.pressed_name);
-                    this.band_pressed(event, on_name);
+                    this.band_pressed(event, on_name, cx);
                 }),
             )
             .on_mouse_down(
@@ -110,14 +110,14 @@ impl MainWindow {
     }
 
     pub(super) fn entries(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        if let Some(view) = self.parts.list_view(&self.scene(), cx) {
+        if let Some(view) = self.parts.list_view(&self.scene(cx), cx) {
             return view.into_any_element();
         }
-        let grid = self.grid();
-        if self.showing_icons() {
+        let grid = self.grid(cx);
+        if self.showing_icons(cx) {
             return self.icons(grid, cx).into_any_element();
         }
-        if self.showing_gallery() {
+        if self.showing_gallery(cx) {
             return self.gallery(grid, window, cx).into_any_element();
         }
         self.details(grid, cx)
@@ -139,7 +139,7 @@ impl MainWindow {
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
                 let query = this.searching().then(|| this.query(cx));
-                let part_column = this.parts.column(&this.scene(), cx);
+                let part_column = this.parts.column(&this.scene(cx), cx);
                 let selected = |index: usize| {
                     listing
                         .entries
@@ -252,7 +252,7 @@ impl MainWindow {
         if !empty {
             return None;
         }
-        let (glyph, note) = self.parts.empty_note(&self.scene(), cx)?;
+        let (glyph, note) = self.parts.empty_note(&self.scene(cx), cx)?;
         Some(
             div()
                 .debug_selector(|| "empty-note".to_owned())
@@ -395,7 +395,7 @@ impl MainWindow {
     fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let sorted = self.listed_page().is_none_or(PageRef::sorted);
         let order = (!self.searching() && sorted).then(|| self.shown_order());
-        let part = self.parts.column(&self.scene(), cx).map(|column| {
+        let part = self.parts.column(&self.scene(cx), cx).map(|column| {
             let selector = column.selector;
             div()
                 .debug_selector(move || selector.to_owned())
