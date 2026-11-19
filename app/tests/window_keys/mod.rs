@@ -7,7 +7,7 @@ async fn keyed<'a>(
     cx: &'a mut TestAppContext,
     folder: &Path,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = open_on(cx, folder).await;
     cx.run_until_parked();
     (view, cx)
@@ -118,7 +118,7 @@ async fn ctrl_h_shows_hidden_files_and_leaves_them_out_again(cx: &mut TestAppCon
     let tree = TempFolder::tree("keys-hidden");
     let projects = tree.path().join("Projects");
     fs::write(projects.join(".secret"), "").unwrap();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = window_on(cx, &projects, tree.path());
     wait_for_folder(&view, cx, &projects).await;
     cx.run_until_parked();

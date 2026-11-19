@@ -5,7 +5,7 @@ use gpui::{App, Context, Entity, Window};
 use nova_files_api::{EntryId, ListingId};
 use nova_files_picker_api::{PickId, PickRequest};
 use nova_files_picker_ui::{PickOpening, PickerPart};
-use nova_files_ui::MainWindow;
+use nova_files_window::MainWindow;
 
 #[expect(dead_code, reason = "each test binary uses only some of these")]
 pub trait Picking {

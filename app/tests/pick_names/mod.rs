@@ -149,7 +149,7 @@ async fn a_space_typed_into_the_name_stays_in_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
     fs::write(tree.path().join("a b.txt"), "").unwrap();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
     cx.simulate_keystrokes("a space");
     cx.simulate_input("b.txt");

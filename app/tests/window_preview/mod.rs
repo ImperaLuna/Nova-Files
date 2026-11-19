@@ -5,7 +5,7 @@ async fn with_text<'a>(
     tree: &TempFolder,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     fs::write(tree.path().join("a.txt"), "first line\nsecond line\n").unwrap();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = open_on(cx, tree.path()).await;
     cx.run_until_parked();
     view.read_with(cx, |view, _| {
@@ -257,7 +257,7 @@ async fn a_space_inside_a_name_being_typed_does_not_open_the_quick_look(cx: &mut
     let tree = TempFolder::tree("preview-jump");
     fs::write(tree.path().join("my music.txt"), "").unwrap();
     fs::write(tree.path().join("my notes.txt"), "").unwrap();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = open_on(cx, tree.path()).await;
 
     cx.simulate_keystrokes("m y space n");
@@ -299,7 +299,7 @@ async fn a_binary_file_shows_its_icon(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("preview-icon");
     fs::write(tree.path().join("a.bin"), [0, 1, 2, 0]).unwrap();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = open_on(cx, tree.path()).await;
 
     click(cx, "entry-1");
@@ -317,7 +317,7 @@ async fn a_big_folder_says_how_many_more_it_holds(cx: &mut TestAppContext) {
     for n in 0..12 {
         fs::write(tree.path().join("Projects").join(format!("{n}.txt")), "").unwrap();
     }
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = open_on(cx, tree.path()).await;
 
     click(cx, "entry-0");

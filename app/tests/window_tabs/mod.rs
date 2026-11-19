@@ -1,6 +1,6 @@
 use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, point, size};
 use nova_files_api::SortKey;
-use nova_files_ui::HOVER_OPEN_AFTER;
+use nova_files_window::HOVER_OPEN_AFTER;
 
 use super::*;
 
@@ -15,8 +15,8 @@ async fn tabs_on<'a>(
     folder: &Path,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     cx.update(|cx| {
-        nova_files_ui::bind_window_keys(cx);
-        nova_files_ui::bind_text_keys(cx);
+        nova_files_window::bind_window_keys(cx);
+        nova_files_window::bind_text_keys(cx);
     });
     open_on(cx, folder).await
 }

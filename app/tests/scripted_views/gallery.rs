@@ -4,7 +4,7 @@ fn gallery(
     cx: &mut TestAppContext,
     entries: u32,
 ) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, entries);
     cx.run_until_parked();

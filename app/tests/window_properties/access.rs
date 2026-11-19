@@ -1,7 +1,7 @@
 use std::os::unix::fs::PermissionsExt as _;
 
 use nova_files_properties_ui::{AccessLevel, Who, shared_level};
-use nova_files_ui::Look;
+use nova_files_window::Look;
 
 use super::*;
 

@@ -1,5 +1,5 @@
 use gpui::{Pixels, Point, point, px};
-use nova_files_ui::{Look, MenuAction};
+use nova_files_window::{Look, MenuAction};
 
 use super::*;
 use crate::window_sidebar::{right_click, right_click_at};

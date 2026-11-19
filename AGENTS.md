@@ -37,7 +37,8 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 ## Layout
 
 - `framework/`: what every feature plugs into (base types, messages, jobs,
-  the list on screen, the window shell). It never uses a feature.
+  the list on screen, the window shell and the window). It never uses a
+  feature.
 - `features/<name>/{api,core,ui}`: one folder per feature. `api` holds its
   messages and types, `core` the work on disk, `ui` what the window shows.
   A feature uses the framework and other features' `api` crates, never
@@ -45,8 +46,6 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 - `fronts/`: other ways in (the D-Bus service); `api` crates only.
 - `helpers/`: separate programs and libraries one feature's core uses.
 - `app/`: wiring only, and the whole-window tests.
-- `legacy/`: the old window and core, emptied feature by feature. Only
-  `app` may use it; nothing new goes in.
 
 ## Engineering principles
 
@@ -180,8 +179,8 @@ turns it on; elsewhere run `git config core.hooksPath tools/git-hooks`); it
 checks the passes above and runs rustfmt and Clippy on the crates the push
 changes. A
 stacked pull request (base isn't main) changes code only: the crate
-folders (`app/`, `framework/`, `features/`, `fronts/`, `helpers/`,
-`legacy/`), `data/`, `Cargo.toml` and `Cargo.lock`, without Markdown or
+folders (`app/`, `framework/`, `features/`, `fronts/`, `helpers/`),
+`data/`, `Cargo.toml` and `Cargo.lock`, without Markdown or
 lint configs.
 Everything else goes in its own pull request off main.
 
@@ -198,7 +197,7 @@ Each rule above and what enforces it. "Review" means nothing does yet.
 | No `unwrap`, `expect`, `panic` or `todo` outside tests | Clippy restriction lints |
 | No silent error swallowing (`.ok()` on I/O) | Review |
 | No polling loops | Clippy `disallowed-methods` (`std::thread::sleep`) |
-| The window never touches the disk or starts processes | `legacy/ui/clippy.toml` bans; `just clippy-config` keeps it in step with the root |
+| The window never touches the disk or starts processes | `framework/window/clippy.toml` bans; `just clippy-config` keeps it in step with the root |
 | A crate depends only on what its `Cargo.toml` allows | `just deps`; cargo-deny for licences and sources |
 | A crate uses only what its folder allows (see Layout) | `just deps`, which names the broken rule |
 | Unsafe code only where allowed, each block with `// SAFETY:` | rustc `unsafe_code`; Clippy `undocumented_unsafe_blocks` |

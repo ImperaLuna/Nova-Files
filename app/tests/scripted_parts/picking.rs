@@ -58,7 +58,7 @@ fn set_parts(cx: &TestAppContext, one: bool) {
     parts.add::<Chooser>();
     cx.update(|cx| {
         cx.set_global(parts);
-        nova_files_ui::bind_window_keys(cx);
+        nova_files_window::bind_window_keys(cx);
     });
 }
 
@@ -171,7 +171,7 @@ fn a_part_gets_what_its_window_was_opened_with(cx: &mut TestAppContext) {
     set_parts(cx, false);
     let (connector, _messages) = nova_files_api::channel();
     let (view, cx) = cx.add_window_view(|_, cx| {
-        let location = nova_files_ui::Location::Folder(PathBuf::from(SHOWN));
+        let location = nova_files_window::Location::Folder(PathBuf::from(SHOWN));
         let opening = Opening::of(OPENING);
         MainWindow::opened_with(&connector, &location, PathBuf::from(SHOWN), opening, cx)
     });

@@ -4,7 +4,7 @@ use super::*;
 async fn arrows_put_the_file_selected_in_the_box(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
     cx.simulate_input("typed");
 
@@ -23,7 +23,7 @@ async fn arrows_put_the_file_selected_in_the_box(cx: &mut TestAppContext) {
 async fn enter_goes_into_a_folder_the_arrows_landed_on(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
 
     cx.simulate_keystrokes("down enter");
@@ -35,7 +35,7 @@ async fn enter_goes_into_a_folder_the_arrows_landed_on(cx: &mut TestAppContext) 
 async fn a_picker_for_one_file_keeps_one_selected(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, answers) = picker(cx, &tree, tree.path(), FILES).await;
 
     cx.simulate_keystrokes("down down shift-down");
@@ -53,7 +53,7 @@ async fn a_picker_for_one_file_keeps_one_selected(cx: &mut TestAppContext) {
 async fn a_picker_deletes_nothing_for_good(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, _answers) = picker(cx, &tree, tree.path(), FILES).await;
 
     click(cx, "entry-2");

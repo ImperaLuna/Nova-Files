@@ -1,5 +1,5 @@
 use gpui::{MouseButton, Pixels, Point, point, px};
-use nova_files_ui::HOVER_OPEN_AFTER;
+use nova_files_window::HOVER_OPEN_AFTER;
 
 use super::*;
 
@@ -8,7 +8,7 @@ async fn drag_window<'a>(
     folder: &Path,
     home: &TempFolder,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = window_on(cx, folder, home.path());
     wait_for_folder(&view, cx, folder).await;
     cx.run_until_parked();
@@ -329,7 +329,7 @@ async fn files_drop_on_a_tree_folder_and_a_crumb(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("drag-sidebar");
     let projects = tree.path().join("Projects");
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = window_on(cx, tree.path(), tree.path());
     wait_for_folder(&view, cx, tree.path()).await;
     click(cx, "tree-0-expander");

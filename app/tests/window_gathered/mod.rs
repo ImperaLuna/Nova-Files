@@ -111,8 +111,8 @@ async fn a_tab_on_projects_keeps_it(cx: &mut TestAppContext) {
 async fn a_search_from_projects_comes_back_to_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     cx.update(|cx| {
-        nova_files_ui::bind_window_keys(cx);
-        nova_files_ui::bind_text_keys(cx);
+        nova_files_window::bind_window_keys(cx);
+        nova_files_window::bind_text_keys(cx);
     });
     let tree = TempFolder::tree("gathered-search");
     let (view, cx) = open_on(cx, tree.path()).await;
@@ -286,7 +286,7 @@ async fn a_fresh_read_keeps_the_folder_selected_not_its_namesake(cx: &mut TestAp
 #[gpui::test]
 async fn the_chip_lists_its_folders_and_undo_puts_one_back(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let tree = TempFolder::tree("gathered-chip");
     let (view, cx) = open_on(cx, tree.path()).await;
     click(cx, "place-projects");
@@ -319,7 +319,7 @@ async fn the_chip_lists_its_folders_and_undo_puts_one_back(cx: &mut TestAppConte
 #[gpui::test]
 async fn a_folder_dropped_on_games_is_added_to_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let tree = TempFolder::tree("gathered-drop");
     let (view, cx) = open_on(cx, tree.path()).await;
     cx.run_until_parked();

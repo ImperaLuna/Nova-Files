@@ -27,7 +27,6 @@ root=$(pwd)
 layer_of() { # <crate folder relative to the root>
     case $1 in
         app) echo app ;;
-        legacy/*) echo legacy ;;
         fronts/*) echo front ;;
         helpers/*) echo helper ;;
         framework/*) echo "framework ${1#framework/}" ;;
@@ -67,15 +66,11 @@ rule_break() { # <from folder> <to folder>; prints the broken rule, if any
     read -r -a from <<<"$(layer_of "$1")"
     read -r -a to <<<"$(layer_of "$2")"
     if [[ ${from[0]} == unknown || ${to[0]} == unknown ]]; then
-        echo "rule C1: every crate sits in app/, framework/, features/<name>/{api,core,ui}, fronts/, helpers/ or legacy/."
-        return
-    fi
-    if [[ ${to[0]} == legacy && ${from[0]} != app && ${from[0]} != legacy ]]; then
-        echo "rule L1: only app may use legacy/. Move what you need out of legacy/ first."
+        echo "rule C1: every crate sits in app/, framework/, features/<name>/{api,core,ui}, fronts/ or helpers/."
         return
     fi
     case ${from[0]} in
-        app | legacy) return ;;
+        app) return ;;
         framework)
             if [[ ${to[0]} != framework && ${to[0]} != helper ]]; then
                 echo "rule W1: the framework never uses a feature or a front. Add a slot or a port instead."
@@ -151,7 +146,6 @@ expect_rule features/places/core features/places/ui F2
 expect_rule features/places/core framework/shell F2
 expect_rule features/places/ui framework/shell ""
 expect_rule framework/shell features/places/api W1
-expect_rule helpers/index legacy/ui L1
 
 metadata=$(cargo metadata --no-deps --offline --format-version 1)
 workspace_names=$(jq -r '.packages[].name' <<<"$metadata")
@@ -202,10 +196,6 @@ while IFS=$'\t' read -r name manifest deps; do
 done < <(jq -r '.packages[] | [.name, .manifest_path,
     ([.dependencies[] | select(.kind != "dev") | .name] | unique | join(" "))] | @tsv' <<<"$metadata")
 
-if [[ -d legacy ]]; then
-    left=$(find legacy -name '*.rs' -print0 | xargs -0 cat | wc -l)
-    echo "Lines left in legacy/: $left"
-fi
 readonly BASE_GOAL=1500
 base=$(find framework/base -name '*.rs' -print0 | xargs -0 cat | wc -l)
 echo "Lines in framework/base: $base (goal: $BASE_GOAL)"

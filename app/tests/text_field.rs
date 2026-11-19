@@ -5,7 +5,7 @@ use gpui::{
     ClipboardItem, Entity, EntityInputHandler as _, Focusable as _, Modifiers, MouseButton,
     MouseDownEvent, MouseUpEvent, TestAppContext, VisualTestContext, point, px,
 };
-use nova_files_ui::{TextField, TextFieldEvent};
+use nova_files_window::{TextField, TextFieldEvent};
 
 fn field(
     cx: &mut TestAppContext,
@@ -14,7 +14,7 @@ fn field(
     &mut VisualTestContext,
     Rc<RefCell<Vec<TextFieldEvent>>>,
 ) {
-    cx.update(nova_files_ui::bind_text_keys);
+    cx.update(nova_files_window::bind_text_keys);
     let (field, cx) = cx.add_window_view(|_, cx| TextField::new(cx));
     let events = Rc::new(RefCell::new(Vec::new()));
     let sink = Rc::clone(&events);

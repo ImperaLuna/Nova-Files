@@ -17,7 +17,7 @@ use std::time::Duration;
 use nova_files_api::{Connector, WindowRequest};
 use nova_files_dbus::{Bus, Service, Started};
 use nova_files_drives_api::DriveOffer;
-use nova_files_ui::{Ended, Opening, RecoverGpu, Request, RequestSender, Requests};
+use nova_files_window::{Ended, Opening, RecoverGpu, Request, RequestSender, Requests};
 
 use crate::mode::Mode;
 use crate::picker::UiPicker;
@@ -109,7 +109,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         .offer(DriveOffer(Arc::new(nova_files_dbus::Udisks::new(
             Bus::System,
         ))))?;
-    let (requests, received) = nova_files_ui::channel();
+    let (requests, received) = nova_files_window::channel();
 
     let on_open = {
         let requests = requests.clone();
@@ -195,7 +195,7 @@ fn show_windows(
             Some(Request::Close(_)) => continue,
             Some(Request::Quit) | None => break,
         };
-        if nova_files_ui::run(connector, received, first, &restart, nova_files::parts())
+        if nova_files_window::run(connector, received, first, &restart, nova_files::parts())
             == Ended::Quit
         {
             break;

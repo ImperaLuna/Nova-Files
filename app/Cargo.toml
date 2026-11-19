@@ -70,7 +70,7 @@
 # - nova-files-trash-api
 # - nova-files-trash-core
 # - nova-files-trash-ui
-# - nova-files-ui
+# - nova-files-window
 # - nova-files-undo-ui
 
 [package]
@@ -152,7 +152,7 @@ nova-files-transfer-ui.workspace = true
 nova-files-trash-api.workspace = true
 nova-files-trash-core.workspace = true
 nova-files-trash-ui.workspace = true
-nova-files-ui.workspace = true
+nova-files-window.workspace = true
 nova-files-undo-ui.workspace = true
 [dev-dependencies]
 nova-files-clipboard-api.workspace = true

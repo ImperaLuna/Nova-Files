@@ -214,7 +214,7 @@ async fn a_new_folder_ends_the_box(cx: &mut TestAppContext) {
     for name in ["a.txt", "b.txt", "c.txt"] {
         fs::write(projects.join(name), "").unwrap();
     }
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = open_on(cx, &projects).await;
     cx.run_until_parked();
 

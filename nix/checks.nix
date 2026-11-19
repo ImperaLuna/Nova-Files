@@ -23,7 +23,6 @@ let
       ../framework
       ../fronts
       ../helpers
-      ../legacy
       (lib.fileset.maybeMissing ../features)
       ../tools
       ../flake.nix

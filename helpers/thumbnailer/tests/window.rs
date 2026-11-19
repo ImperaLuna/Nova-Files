@@ -19,7 +19,7 @@ use nova_files_preview_api::PreviewContent;
 use nova_files_preview_ui::{PreviewPart, Previewed};
 use nova_files_shell::Parts;
 use nova_files_thumbnails_ui::ThumbnailsPart;
-use nova_files_ui::{MainWindow, WindowEvent};
+use nova_files_window::{MainWindow, WindowEvent};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
 const SIDE: u32 = 300;
@@ -123,7 +123,7 @@ async fn an_image_row_gets_its_thumbnail(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn the_quick_look_shows_the_picture_itself(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (_temp, view, cx, _core) = window_on_media(cx, "preview").await;
 
     let row = cx.debug_bounds("entry-1").unwrap();
@@ -151,7 +151,7 @@ async fn the_quick_look_shows_the_picture_itself(cx: &mut TestAppContext) {
 #[gpui::test]
 async fn a_smaller_window_gets_a_smaller_picture(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (_temp, view, cx, _core) = window_on_media(cx, "preview-resize").await;
     let side = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
         view.read_with(cx, |view, cx| {

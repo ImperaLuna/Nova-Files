@@ -6,7 +6,7 @@ async fn listed<'a>(
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     fs::write(tree.path().join("a.txt"), "").unwrap();
     fs::write(tree.path().join("b.txt"), "").unwrap();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = open_on(cx, tree.path()).await;
     cx.run_until_parked();
     view.read_with(cx, |view, _| {
@@ -114,7 +114,7 @@ async fn a_window_opened_to_show_files_has_them_selected(cx: &mut TestAppContext
     let tree = TempFolder::tree("select");
     fs::write(tree.path().join("a.txt"), "").unwrap();
     fs::write(tree.path().join("b.txt"), "").unwrap();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let names = ["notes.txt", "gone.txt", "a.txt"].map(Into::into).to_vec();
     let (view, cx) = window_showing(cx, tree.path(), tree.path(), names);
     wait_for_folder(&view, cx, tree.path()).await;

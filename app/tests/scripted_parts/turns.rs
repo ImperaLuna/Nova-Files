@@ -80,7 +80,7 @@ fn a_part_hears_its_page_left_and_shown_again_across_tabs(cx: &mut TestAppContex
     take_heard();
 
     view.update(cx, |view, cx| {
-        view.new_tab(&nova_files_ui::Location::start(), cx);
+        view.new_tab(&nova_files_window::Location::start(), cx);
     });
     cx.run_until_parked();
     assert_eq!(take_heard(), ["left 0", "tab 1"]);

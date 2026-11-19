@@ -2,7 +2,7 @@ use std::os::unix::fs::MetadataExt as _;
 use std::sync::Arc;
 
 use nova_files_properties_api::{PathKind, Properties, ScanState, Size};
-use nova_files_ui::Icon;
+use nova_files_window::Icon;
 
 mod access;
 
@@ -14,8 +14,8 @@ async fn properties_window<'a>(
     folder: &Path,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     cx.update(|cx| {
-        nova_files_ui::bind_window_keys(cx);
-        nova_files_ui::bind_text_keys(cx);
+        nova_files_window::bind_window_keys(cx);
+        nova_files_window::bind_text_keys(cx);
     });
     open_on(cx, folder).await
 }

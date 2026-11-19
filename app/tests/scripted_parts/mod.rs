@@ -1,7 +1,7 @@
 use gpui::Context;
 use nova_files_api::MessageType;
 use nova_files_shell::{FolderRules, Host, Navigator, Part, Parts, Slots, Views};
-use nova_files_ui::CoreStatus;
+use nova_files_window::CoreStatus;
 
 use super::*;
 

@@ -118,7 +118,7 @@ fn a_busy_part_holds_undo(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_part_draws_the_gallery_stage_in_the_room_it_is_given(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (_view, cx) = named(cx);
     cx.simulate_keystrokes("ctrl-3");
     cx.update(|window, _| window.refresh());
@@ -132,7 +132,7 @@ fn a_part_draws_the_gallery_stage_in_the_room_it_is_given(cx: &mut TestAppContex
 
 #[gpui::test]
 fn a_part_layer_covers_the_whole_window_once_its_stage_knows_the_room(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = named(cx);
     assert!(cx.debug_bounds("namer-layer").is_none());
     cx.simulate_keystrokes("ctrl-3");

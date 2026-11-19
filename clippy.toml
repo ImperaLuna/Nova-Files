@@ -1,5 +1,5 @@
 # Clippy settings for every crate. Clippy reads only the nearest clippy.toml
-# and never merges, so legacy/ui/clippy.toml repeats every line
+# and never merges, so framework/window/clippy.toml repeats every line
 # here; tools/check-clippy-config.sh fails when the two drift apart.
 
 # Tests may unwrap, panic and print.

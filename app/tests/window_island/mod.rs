@@ -12,8 +12,8 @@ async fn island_window<'a>(
     home: &TempFolder,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     cx.update(|cx| {
-        nova_files_ui::bind_text_keys(cx);
-        nova_files_ui::bind_window_keys(cx);
+        nova_files_window::bind_text_keys(cx);
+        nova_files_window::bind_window_keys(cx);
     });
     let (view, cx) = window_on(cx, folder, home.path());
     wait_for_folder(&view, cx, folder).await;
@@ -161,7 +161,7 @@ async fn a_note_goes_by_itself(cx: &mut TestAppContext) {
     click(cx, "name-1");
     cx.simulate_keystrokes("delete");
     wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
-    cx.executor().advance_clock(nova_files_ui::NOTE_TIME);
+    cx.executor().advance_clock(nova_files_window::NOTE_TIME);
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.note().is_none()));
     view.condition::<WindowEvent>(cx, |view, _| view.selected_count() == 0)
@@ -375,16 +375,18 @@ async fn a_note_stays_its_full_time_after_another_goes(cx: &mut TestAppContext) 
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
     view.update(cx, |view, cx| view.show_note("first", None, cx));
-    cx.executor().advance_clock(nova_files_ui::NOTE_TIME / 2);
+    cx.executor()
+        .advance_clock(nova_files_window::NOTE_TIME / 2);
     view.update(cx, |view, cx| view.show_note("second", None, cx));
     cx.executor()
-        .advance_clock(nova_files_ui::NOTE_TIME / 2 + nova_files_ui::NOTE_TIME / 4);
+        .advance_clock(nova_files_window::NOTE_TIME / 2 + nova_files_window::NOTE_TIME / 4);
     cx.run_until_parked();
     assert_eq!(
         view.read_with(cx, |view, _| view.note().map(|note| note.label.clone())),
         Some("second".into())
     );
-    cx.executor().advance_clock(nova_files_ui::NOTE_TIME / 2);
+    cx.executor()
+        .advance_clock(nova_files_window::NOTE_TIME / 2);
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.note().is_none()));
 }

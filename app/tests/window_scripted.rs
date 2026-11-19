@@ -31,7 +31,7 @@ use nova_files_settings_api::{
 };
 use nova_files_thumbnails_api::Event as ThumbnailsEvent;
 use nova_files_thumbnails_ui::ThumbnailsPart;
-use nova_files_ui::{Colors, MainWindow};
+use nova_files_window::{Colors, MainWindow};
 
 const SHOWN: &str = "/shown";
 const MISSING: &str = "/shown/missing";

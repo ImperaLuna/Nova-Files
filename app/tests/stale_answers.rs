@@ -11,7 +11,7 @@ use std::sync::mpsc::Receiver;
 
 use gpui::TestAppContext;
 use nova_files_api::{Command, CoreMessage, Event, EventSink, Listing, ListingId, Unreadable};
-use nova_files_ui::{MainWindow, WindowEvent};
+use nova_files_window::{MainWindow, WindowEvent};
 
 fn next_listing(core: &Receiver<CoreMessage>) -> (ListingId, PathBuf) {
     loop {

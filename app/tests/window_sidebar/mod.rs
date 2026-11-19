@@ -110,7 +110,7 @@ async fn right_click_on_a_pinned_folder_takes_it_out(cx: &mut TestAppContext) {
 async fn a_menu_takes_the_keys_until_it_closes(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("sidebar-menu-keys");
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = with_projects_pinned(cx, &tree).await;
     let marked = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
         view.read_with(cx, |view, _| view.menu().map(|menu| menu.active))

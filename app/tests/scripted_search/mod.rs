@@ -45,8 +45,8 @@ const REPORTS: &[(&str, &str, EntryKind)] = &[
 
 fn searching(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     cx.update(|cx| {
-        nova_files_ui::bind_window_keys(cx);
-        nova_files_ui::bind_text_keys(cx);
+        nova_files_window::bind_window_keys(cx);
+        nova_files_window::bind_text_keys(cx);
     });
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);

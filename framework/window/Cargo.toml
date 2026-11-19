@@ -1,4 +1,4 @@
-# nova-files-ui
+# nova-files-window
 #
 # The window. It sends commands to the core and draws from its events; it
 # never touches the disk.
@@ -17,7 +17,7 @@
 # - nova-files-shell
 
 [package]
-name = "nova-files-ui"
+name = "nova-files-window"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

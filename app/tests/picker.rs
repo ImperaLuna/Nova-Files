@@ -23,7 +23,7 @@ use gpui::{
 };
 use nova_files_api::EntryId;
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
-use nova_files_ui::{MainWindow, WindowEvent};
+use nova_files_window::{MainWindow, WindowEvent};
 
 use common::picking::Picking as _;
 use common::{TempFolder, Watchdog, click_with, double_click};
@@ -74,7 +74,7 @@ async fn picker_with<'a>(
     &'a mut VisualTestContext,
     Receiver<PickAnswer>,
 ) {
-    cx.update(nova_files_ui::bind_text_keys);
+    cx.update(nova_files_window::bind_text_keys);
     cx.executor().allow_parking();
     let home = tree.path().to_owned();
     let core_home = nova_files::Home {
@@ -211,7 +211,7 @@ async fn a_typed_folder_name_goes_into_it(cx: &mut TestAppContext) {
 async fn the_window_keys_work_from_the_name_box(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let projects = tree.path().join("Projects");
     let (view, cx, _answers) = picker(cx, &tree, &projects, FILES).await;
     cx.simulate_keystrokes("alt-up");
