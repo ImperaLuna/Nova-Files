@@ -292,12 +292,22 @@ fn a_folder_that_never_goes_quiet_is_still_reported() {
 
 #[test]
 fn a_single_save_is_reported_without_the_longest_wait() {
-    let config = temp("prompt");
-    fs::create_dir_all(&config).unwrap();
-    let (_watch, reports) = watch(&config);
-    fs::write(config.join("settings.toml"), "").unwrap();
-    assert!(reports.recv_timeout(LONGEST_WAIT * 3 / 4).is_ok());
-    fs::remove_dir_all(config).ok();
+    assert_eq!(wait_after(Duration::ZERO), QUIET);
+    assert!(!held_too_long(QUIET));
+    assert!(QUIET < LONGEST_WAIT);
+}
+
+#[test]
+fn a_burst_held_for_the_longest_wait_is_reported_at_once() {
+    assert_eq!(
+        wait_after(LONGEST_WAIT.saturating_sub(QUIET / 2)),
+        QUIET / 2
+    );
+    assert_eq!(wait_after(LONGEST_WAIT * 2), Duration::ZERO);
+    assert!(held_too_long(LONGEST_WAIT));
+    assert!(!held_too_long(
+        LONGEST_WAIT.saturating_sub(Duration::from_millis(1))
+    ));
 }
 
 #[test]
