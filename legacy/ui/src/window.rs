@@ -67,7 +67,7 @@ use nova_files_properties_api as properties_api;
 use nova_files_search_api as search_api;
 use nova_files_shell::Lines;
 use nova_files_shell::{
-    FolderRules, Host, KnownFolders, Link, Opening, Parts, ThumbnailsShown, WindowParts,
+    FolderRules, Host, KnownFolders, Link, Opening, PageRef, Parts, ThumbnailsShown, WindowParts,
 };
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_thumbnails_api as thumbnails_api;
@@ -163,6 +163,7 @@ pub struct MainWindow {
     pub(crate) home: PathBuf,
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
+    listed_page: Option<PageRef>,
     known: KnownFolders,
     pub(crate) drives: Drives,
     pub(crate) menu: Option<Menu>,
@@ -286,6 +287,7 @@ impl MainWindow {
             pick: None,
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
+            listed_page: None,
             known: KnownFolders::default(),
             drives: Drives::default(),
             menu: None,
@@ -432,7 +434,7 @@ impl MainWindow {
         if let Some(from) = self.search.from() {
             return from.folder();
         }
-        if self.gathered_shown().is_some() {
+        if self.gathered_shown().is_some() || self.listed_page.is_some() {
             return None;
         }
         self.listing.as_ref().map(|listing| listing.path.as_path())

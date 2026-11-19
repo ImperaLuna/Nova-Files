@@ -1,16 +1,16 @@
-pub use nova_files_shell::widgets::icon;
+pub use nova_files_shell::kind::{built_in, entry_kind, glyph_of};
+pub use nova_files_shell::widgets::{icon, icon_slot, kind_icon};
 use std::ops::Range;
 use std::sync::Arc;
 
 use gpui::{
     AnyElement, Context, Div, HighlightStyle, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ObjectFit, ParentElement as _, Pixels, RenderImage, Rgba, SharedString,
-    Stateful, StatefulInteractiveElement as _, Styled as _, StyledImage as _, StyledText, div, img,
+    MouseDownEvent, ObjectFit, ParentElement as _, Pixels, RenderImage, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled as _, StyledImage as _, StyledText, div, img,
     prelude::FluentBuilder as _,
 };
 use nova_files_api::{Entry, EntryKind, IconKind, Listing};
 
-use crate::assets::Icon;
 use crate::theme::{Colors, radius, size, text};
 use crate::window::{Aim, DraggedRow, MainWindow};
 
@@ -142,13 +142,7 @@ pub fn entry_icon(shown: RowIcon<'_>, colors: &Colors) -> Div {
 }
 
 pub fn entry_icon_sized(shown: RowIcon<'_>, side: Pixels, colors: &Colors) -> Div {
-    let slot = div()
-        .relative()
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .size(side);
+    let slot = icon_slot(side);
     match shown {
         RowIcon::Thumbnail(image) => slot.child(
             img(Arc::clone(image))
@@ -157,42 +151,7 @@ pub fn entry_icon_sized(shown: RowIcon<'_>, side: Pixels, colors: &Colors) -> Di
                 .rounded(radius::SMALL),
         ),
         RowIcon::Theme(image) => slot.child(img(Arc::clone(image)).size(side)),
-        RowIcon::BuiltIn(kind) => {
-            let (glyph, tint) = built_in(kind, colors);
-            slot.child(icon(glyph, side, tint))
-        }
-    }
-}
-
-pub const fn entry_kind(kind: EntryKind) -> IconKind {
-    match kind {
-        EntryKind::Folder => IconKind::Folder,
-        EntryKind::File => IconKind::File,
-    }
-}
-
-pub const fn kind_glyph(kind: EntryKind, colors: &Colors) -> (Icon, Rgba) {
-    built_in(entry_kind(kind), colors)
-}
-
-pub const fn built_in(kind: IconKind, colors: &Colors) -> (Icon, Rgba) {
-    let tint = match kind {
-        IconKind::Folder => colors.folder,
-        _ => colors.text_soft,
-    };
-    (glyph_of(kind), tint)
-}
-
-pub const fn glyph_of(kind: IconKind) -> Icon {
-    match kind {
-        IconKind::Folder => Icon::Folder,
-        IconKind::File => Icon::File,
-        IconKind::Text => Icon::FileText,
-        IconKind::Picture => Icon::FilePicture,
-        IconKind::Video => Icon::FileVideo,
-        IconKind::Audio => Icon::FileAudio,
-        IconKind::Archive => Icon::FileArchive,
-        IconKind::Program => Icon::FileProgram,
+        RowIcon::BuiltIn(kind) => kind_icon(kind, side, colors),
     }
 }
 

@@ -15,6 +15,7 @@ mod navigator;
 mod opening;
 mod part;
 mod parts;
+pub mod paths;
 mod per_tab;
 mod published;
 mod rules;
@@ -35,7 +36,7 @@ pub use menu::{
     Expander, Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow,
     arrange,
 };
-pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked};
+pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked, PopUp};
 pub use opening::Opening;
 pub use part::{
     Applies, Busy, Card, Cell, Closing, Column, Columns, Dims, DropAim, DropOver, DropSlot,

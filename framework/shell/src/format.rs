@@ -1,3 +1,11 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use chrono::{DateTime, Local};
+
+pub const ITEM: &str = "item";
+pub const ITEMS: &str = "items";
+
+const DATE_FORMAT: &str = "%Y-%m-%d %H:%M";
 const SIZE_UNITS: [&str; 5] = ["KB", "MB", "GB", "TB", "PB"];
 const SIZE_STEP: f64 = 1000.0;
 const ONE_DECIMAL_BELOW: f64 = 10.0;
@@ -26,9 +34,57 @@ pub fn size(bytes: u64) -> String {
     }
 }
 
+pub fn modified(time: SystemTime) -> String {
+    let since_epoch = match time.duration_since(UNIX_EPOCH) {
+        Ok(after) => i64::try_from(after.as_secs()).ok(),
+        Err(before) => {
+            let before = before.duration();
+            let secs = before.as_secs() + u64::from(before.subsec_nanos() > 0);
+            i64::try_from(secs).ok().map(|secs| -secs)
+        }
+    };
+    since_epoch
+        .and_then(|secs| DateTime::from_timestamp(secs, 0))
+        .map(|time| time.with_timezone(&Local).format(DATE_FORMAT).to_string())
+        .unwrap_or_default()
+}
+
+pub fn count(number: usize, one: &str, many: &str) -> String {
+    if number == 1 {
+        format!("1 {one}")
+    } else {
+        format!("{number} {many}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
+
+    #[test]
+    fn times_out_of_range_show_nothing() {
+        let far = Duration::from_secs(u64::MAX / 2);
+        assert_eq!(modified(UNIX_EPOCH.checked_add(far).unwrap()), "");
+        assert_eq!(modified(UNIX_EPOCH.checked_sub(far).unwrap()), "");
+        assert_ne!(modified(UNIX_EPOCH - Duration::from_secs(1)), "");
+        assert_ne!(modified(SystemTime::now()), "");
+    }
+
+    #[test]
+    fn times_before_the_epoch_round_away_from_it() {
+        let before = |secs: f64| modified(UNIX_EPOCH - Duration::from_secs_f64(secs));
+        assert_eq!(before(60.5), before(61.0));
+        assert_ne!(before(60.5), before(60.0));
+    }
+
+    #[test]
+    fn one_thing_is_counted_in_the_singular() {
+        assert_eq!(count(1, ITEM, ITEMS), "1 item");
+        assert_eq!(count(0, ITEM, ITEMS), "0 items");
+        assert_eq!(count(3, ITEM, ITEMS), "3 items");
+    }
 
     #[test]
     fn sizes_use_decimal_units() {
