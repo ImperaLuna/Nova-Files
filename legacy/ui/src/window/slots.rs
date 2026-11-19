@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription};
-use nova_files_api::{HiddenFiles, ListingId};
+use nova_files_api::{Command, HiddenFiles, ListingId};
 use nova_files_picker_api::PickId;
 use nova_files_shell::path_bar::PathBarEvent;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
-    Opening, PageRef, Part, Scene, Shown, TabId, Turn,
+    Opening, PageRef, Part, Scene, Showing, Shown, TabId, Turn,
 };
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
@@ -46,12 +46,20 @@ impl MainWindow {
             cx.subscribe(&self.host.entries, |this, _, _: &EntriesAsked, cx| {
                 this.take_entries_asks(cx);
             }),
-            cx.on_release(|this, cx| this.parts.closing(cx)),
+            cx.on_release(Self::close_parts),
             cx.observe_global::<Published<HiddenFiles>>(Self::hidden_published),
             cx.observe_global::<Published<ThumbnailsShown>>(Self::thumbnails_published),
             cx.observe_global::<Published<KnownFolders>>(Self::known_published),
         ]);
         watching
+    }
+
+    fn close_parts(&mut self, cx: &mut App) {
+        self.parts.closing(cx);
+        let changed = self.host.kept.update(cx, |kept, _| kept.take_changed());
+        if let (Some(bytes), Some(connection)) = (changed, &self.connection) {
+            connection.send(Command::SaveWindowState(bytes)).ok();
+        }
     }
 
     fn path_bar_said(&mut self, event: &PathBarEvent, cx: &mut Context<Self>) {
@@ -86,6 +94,15 @@ impl MainWindow {
             picker: self.host.opening.is_some(),
             searching: self.searching(),
             gathered: self.gathered_here().is_some(),
+            showing: self.showing(),
+        }
+    }
+
+    fn showing(&self) -> Showing {
+        if self.showing_gallery() {
+            Showing::Gallery
+        } else {
+            Showing::List
         }
     }
 
@@ -144,6 +161,16 @@ impl MainWindow {
         if let Some(id) = failed {
             self.listing_failed(id, cx);
         }
+        let (moved, opened) = self
+            .host
+            .entries
+            .update(cx, |entries, _| (entries.take_move(), entries.take_open()));
+        if let Some((from, step)) = moved {
+            self.move_cursor_from(from, step, cx);
+        }
+        if let Some(id) = opened {
+            self.open_entries(&[id], cx);
+        }
         if let Some((folder, names)) = later {
             self.select_when_listed(folder, names, cx);
         }
@@ -193,6 +220,8 @@ impl MainWindow {
             asked: self.asked,
             searching: self.searching(),
             gathered: self.gathered_here().is_some(),
+            cursor: self.cursor(),
+            showing: self.showing(),
         };
         let page = match &shown.location {
             Some(shell::Location::Page(page)) => Some(page.clone()),

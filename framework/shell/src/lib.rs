@@ -1,12 +1,15 @@
 #![forbid(unsafe_code)]
 
+pub mod actions;
 pub mod assets;
 mod command;
+mod cursor;
 mod entries;
 pub mod format;
 mod host;
 mod island;
 pub mod jump;
+mod kept;
 pub mod kind;
 mod line;
 mod location;
@@ -28,9 +31,11 @@ pub mod typed;
 pub mod widgets;
 
 pub use command::{CommandSpec, WINDOW_KEYS};
+pub use cursor::Move;
 pub use entries::{Entries, EntriesAsked, Shown};
 pub use host::{AskIds, Host, Link};
 pub use island::{Island, IslandAsk, IslandAsked, NoteGone, NoteId, OnUndo, OnYes, Undo};
+pub use kept::Kept;
 pub use line::{Line, Lines};
 pub use location::{Location, PageKind, PageRef, StartPage};
 pub use menu::{
@@ -49,5 +54,5 @@ pub use parts::{Parts, ShownColumn, Turn, WindowParts};
 pub use per_tab::{PerTab, TabId};
 pub use published::{KnownFolder, KnownFolders, Published, ThumbnailsShown};
 pub use rules::{FolderName, FolderRules, RulesBook, Views};
-pub use scene::Scene;
+pub use scene::{Scene, Showing};
 pub use text::{TextField, TextFieldEvent};

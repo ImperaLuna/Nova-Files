@@ -126,6 +126,11 @@ impl<P: Part> OpenPart for Opened<P> {
     }
 
     fn bind(&self, root: Div) -> Div {
+        let root = self
+            .slots
+            .befores
+            .iter()
+            .fold(root, |root, before| before(root, &self.entity, &self.host));
         self.slots.commands.iter().fold(root, |root, command| {
             (command.bind)(root, &self.entity, &self.host)
         })
