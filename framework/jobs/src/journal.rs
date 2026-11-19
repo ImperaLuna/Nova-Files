@@ -40,6 +40,7 @@ pub mod word {
     pub const DELETE_FROM_TRASH: &str = "delete-from-trash";
     pub const EMPTY_TRASH: &str = "empty-trash";
     pub const UNDO: &str = "undo";
+    pub const PUT_BACK: &str = "put-back";
 
     const PAIR: usize = 2;
     const TRIPLE: usize = 3;
@@ -47,7 +48,7 @@ pub mod word {
     pub fn fields(word: &str) -> Option<usize> {
         match word {
             COPY | MOVE | DELETE | TRASH | RESTORE | DELETE_FROM_TRASH | EMPTY_TRASH | UNDO
-            | PLAN_DONE | SOURCES_DONE => Some(0),
+            | PUT_BACK | PLAN_DONE | SOURCES_DONE => Some(0),
             INTO | SOURCE | PART => Some(1),
             MADE | MOVED | BACKUP | PLANNED | TRASHED => Some(PAIR),
             TRASH_INFO => Some(TRIPLE),
