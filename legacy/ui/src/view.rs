@@ -68,7 +68,7 @@ impl MainWindow {
         self.settle_search(window, cx);
         self.settle_tab_focus(window, cx);
         let colors = Colors::of(cx);
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let narrow = window.viewport_size().width < theme::window::NARROW_WIDTH;
         if window.focused(cx).is_none() {
             window.focus(&self.keys_home(cx), cx);

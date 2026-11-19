@@ -34,7 +34,7 @@ impl MainWindow {
         colors: &Colors,
         cx: &Context<Self>,
     ) -> Vec<AnyElement> {
-        if self.pick.is_some() {
+        if self.picker() {
             return Vec::new();
         }
         self.parts
@@ -56,7 +56,7 @@ impl MainWindow {
         cx: &Context<Self>,
     ) -> Stateful<Div> {
         let (opens, new_tab) = (place.opens.clone(), place.opens.clone());
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let menu_row = place.id.clone();
         let shown = from_shell(place.opens.clone());
         let drops = self.tab_drops_at(Some(&shown), place.name.clone());

@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription};
+use nova_files_picker_api::PickId;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
-    PageRef, Part, Scene, Shown, TabId,
+    Opening, PageRef, Part, Scene, Shown, TabId,
 };
 
 use super::search::FocusTo;
@@ -76,6 +77,16 @@ impl MainWindow {
             return Some(shell::Location::Folder(folder.to_path_buf()));
         }
         self.location().map(Location::shell)
+    }
+
+    pub(crate) fn open_as_picker(&mut self, id: PickId) {
+        if !self.picker() {
+            self.host.opening = Opening::of(id);
+        }
+    }
+
+    pub const fn picker(&self) -> bool {
+        self.host.opening.is_some()
     }
 
     pub fn dims(&self, index: usize, cx: &App) -> bool {

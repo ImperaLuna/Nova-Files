@@ -26,7 +26,7 @@ impl MainWindow {
     pub(super) fn island(&self, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         let job = self.job_on_island(cx);
-        let parts = if self.pick.is_some() {
+        let parts = if self.picker() {
             None
         } else if let Some((id, conflict)) =
             job.and_then(|(id, job)| Some((id, job.asking.as_ref()?)))

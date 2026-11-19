@@ -68,7 +68,7 @@ impl MainWindow {
         cx: &Context<Self>,
     ) -> Stateful<Div> {
         let colors = &Colors::of(cx);
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let (clicked, menu, in_new_tab) = (drive.clone(), drive.clone(), drive.clone());
         let aimed = drive.name.clone();
         let number = drive

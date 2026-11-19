@@ -163,7 +163,7 @@ impl MainWindow {
     }
 
     pub(crate) fn drop_rule(&self) -> impl Fn(&DropAt, &Sources) -> bool + 'static {
-        let (picker, rules) = (self.pick.is_some(), self.host.rules.clone());
+        let (picker, rules) = (self.picker(), self.host.rules.clone());
         move |at, sources| {
             !picker && dropping::allowed(at, sources, |folder| rules.for_folder(folder).trashed)
         }
