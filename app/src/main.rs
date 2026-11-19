@@ -70,6 +70,7 @@ fn skip_absent_vulkan_drivers() {
         // SAFETY: called first thing in `main`, before the core, D-Bus or
         // GPUI start a thread, so nothing can read the environment meanwhile.
         unsafe { std::env::set_var(nova_files_core::FILTER_VARIABLE, filter) };
+        nova_files_core::launch_without(nova_files_core::FILTER_VARIABLE);
         FILTER_SET.store(true, Ordering::SeqCst);
     }
 }

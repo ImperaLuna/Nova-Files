@@ -24,7 +24,9 @@ pub use nova_files_archives_core::{
 };
 pub use nova_files_disk::home::Home;
 pub use nova_files_open_core::MimeTypes;
-pub use nova_files_open_core::{NotDefault, make_default_for_folders, opens_folders};
+pub use nova_files_open_core::{
+    NotDefault, launch_without, make_default_for_folders, opens_folders,
+};
 pub use nova_files_search_core::{IndexError, IndexPlace, Unusable};
 pub use nova_files_thumbnails_core::Thumbnails;
 pub use run::{emitted_types, routed_types};
