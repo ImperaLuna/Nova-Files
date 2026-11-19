@@ -14,19 +14,11 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
-# - nova-files-drives-api
-# - nova-files-drives-ui
 # - nova-files-folders-api
 # - nova-files-folders-ui
-# - nova-files-gathered-api
-# - nova-files-gathered-ui
 # - nova-files-picker-api
 # - nova-files-picker-ui
-# - nova-files-places-api
-# - nova-files-places-ui
 # - nova-files-preview-ui
-# - nova-files-properties-api
-# - nova-files-properties-ui
 # - nova-files-search-api
 # - nova-files-settings-api
 # - nova-files-shell
@@ -45,19 +37,11 @@ workspace = true
 [dependencies]
 # Local time for the Modified column; GPUI already builds it.
 nova-files-api.workspace = true
-nova-files-drives-api.workspace = true
-nova-files-drives-ui.workspace = true
 nova-files-folders-api.workspace = true
 nova-files-folders-ui.workspace = true
-nova-files-gathered-api.workspace = true
-nova-files-gathered-ui.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-picker-ui.workspace = true
-nova-files-places-api.workspace = true
-nova-files-places-ui.workspace = true
 nova-files-preview-ui.workspace = true
-nova-files-properties-api.workspace = true
-nova-files-properties-ui.workspace = true
 nova-files-search-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true

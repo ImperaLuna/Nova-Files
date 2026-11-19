@@ -2,10 +2,8 @@ use std::path::{Component, Path, PathBuf};
 
 use gpui::Context;
 use nova_files_api::{Command, EntryId, EntryKind, Envelope, ListingId, Message, Order, SortKey};
-use nova_files_properties_ui::PropertiesPage;
-use nova_files_shell::PageRef;
 
-use super::MainWindow;
+use super::{MainWindow, Went};
 use nova_files_shell::Location;
 
 impl MainWindow {
@@ -13,6 +11,10 @@ impl MainWindow {
         self.went_elsewhere();
         self.history.leave();
         self.request(folder);
+    }
+
+    pub(super) const fn went_elsewhere(&mut self) {
+        self.went = Went::Elsewhere;
     }
 
     pub fn go_back(&mut self, cx: &mut Context<Self>) {
@@ -136,24 +138,9 @@ impl MainWindow {
         (entry.kind == EntryKind::Folder).then(|| listing.path_of(entry))
     }
 
-    pub fn show_properties(&mut self, cx: &mut Context<Self>) {
-        if self.folder_rules().trashed {
-            return;
-        }
-        let paths = self.selected_paths();
-        if !paths.is_empty() {
-            let page = PageRef::new(PropertiesPage::new(paths));
-            self.new_tab(&Location::Page(page), cx);
-        }
-    }
-
     pub fn parent(&self) -> Option<PathBuf> {
         if let Some(Location::Page(page)) = self.location() {
-            return page.parent().or_else(|| {
-                page.get::<PropertiesPage>()
-                    .and_then(PropertiesPage::folder)
-                    .map(Path::to_path_buf)
-            });
+            return page.parent();
         }
         self.folder()?.parent().map(Path::to_path_buf)
     }

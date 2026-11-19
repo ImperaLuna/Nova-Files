@@ -56,7 +56,7 @@ async fn a_level_chosen_changes_the_disk_and_shows(cx: &mut TestAppContext) {
     fs::set_permissions(&notes, fs::Permissions::from_mode(0o600)).unwrap();
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-1");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     read_page(&view, cx).await;
     assert!(view.read_with(cx, |view, cx| props(view, cx).may_change_access()));
 
@@ -73,7 +73,7 @@ async fn a_level_chosen_changes_the_disk_and_shows(cx: &mut TestAppContext) {
 
     view.update(cx, MainWindow::close_current_tab);
     click(cx, "name-1");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     assert_eq!(read_page(&view, cx).await[0].mode, 0o440);
     assert_eq!(
         view.read_with(cx, |view, cx| {
@@ -94,7 +94,7 @@ async fn a_folder_reaches_inside_only_when_ticked(cx: &mut TestAppContext) {
     fs::set_permissions(&nova, fs::Permissions::from_mode(0o755)).unwrap();
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-0");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     read_page(&view, cx).await;
 
     pick_level(&view, cx, "access-2", AccessLevel::NoAccess);
@@ -181,7 +181,7 @@ async fn the_island_shows_on_the_page(cx: &mut TestAppContext) {
         .await;
 
     click(cx, "name-0");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     read_page(&view, cx).await;
     assert!(view.read_with(cx, |view, _| view.note().is_some()));
     assert!(cx.debug_bounds("island-undo").is_some());

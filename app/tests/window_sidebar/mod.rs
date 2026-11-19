@@ -27,7 +27,7 @@ async fn with_projects_pinned<'a>(
     .unwrap();
     let (view, cx) = window_on(cx, tree.path(), tree.path());
     wait_for_folder(&view, cx, tree.path()).await;
-    view.condition::<WindowEvent>(cx, |view, _| !view.pinned().is_empty())
+    view.condition::<WindowEvent>(cx, |view, cx| !pinned(view, cx).is_empty())
         .await;
     (view, cx)
 }
@@ -99,7 +99,7 @@ async fn right_click_on_a_pinned_folder_takes_it_out(cx: &mut TestAppContext) {
     });
     click(cx, "menu-0");
 
-    view.condition::<WindowEvent>(cx, |view, _| view.pinned().is_empty())
+    view.condition::<WindowEvent>(cx, |view, cx| pinned(view, cx).is_empty())
         .await;
     view.read_with(cx, |view, _| assert!(view.menu().is_none()));
     let saved = fs::read_to_string(tree.path().join(".config/gtk-3.0/bookmarks")).unwrap();
@@ -131,7 +131,7 @@ async fn a_menu_takes_the_keys_until_it_closes(cx: &mut TestAppContext) {
     assert_eq!(marked(&view, cx), Some(None));
 
     cx.simulate_keystrokes("down enter");
-    view.condition::<WindowEvent>(cx, |view, _| view.pinned().is_empty())
+    view.condition::<WindowEvent>(cx, |view, cx| pinned(view, cx).is_empty())
         .await;
     assert_eq!(marked(&view, cx), None);
 }
@@ -148,8 +148,8 @@ async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
     let projects = tree.path().join("Projects");
     answer_picker(cx, windows, &projects);
 
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.pinned().iter().any(|pin| pin.path == projects)
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        pinned(view, cx).iter().any(|pin| pin.path == projects)
     })
     .await;
 }
@@ -280,7 +280,7 @@ async fn the_system_drive_shows_its_free_space_and_opens(cx: &mut TestAppContext
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("sidebar-drives");
     let (view, cx) = open_on(cx, tree.path()).await;
-    view.condition::<WindowEvent>(cx, |view, _| view.disk_space(Path::new("/")).is_some())
+    view.condition::<WindowEvent>(cx, |view, cx| disk_space_known(view, Path::new("/"), cx))
         .await;
     cx.run_until_parked();
     assert!(cx.debug_bounds("drive-0-number").is_some());

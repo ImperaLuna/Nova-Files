@@ -9,7 +9,7 @@ use nova_files_shell::{
 
 use super::MainWindow;
 use crate::assets::Icon;
-use crate::commands::{DETAILS, GALLERY, ICONS, OPEN, PREVIEW, PROPERTIES, SELECT_ALL, TRASH};
+use crate::commands::{DETAILS, GALLERY, ICONS, OPEN, PREVIEW, SELECT_ALL, TRASH};
 use crate::menu::{MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
 use crate::theme::size;
@@ -89,11 +89,6 @@ impl MainWindow {
                     MenuGroup::Danger,
                     Placed::FIRST,
                     vec![ShellItem::run(Icon::Trash, &TRASH).with_look(ShellLook::Danger)],
-                ),
-                Placed::new(
-                    MenuGroup::Info,
-                    Placed::FIRST,
-                    vec![ShellItem::run(Icon::Info, &PROPERTIES)],
                 ),
             ],
             cx,
