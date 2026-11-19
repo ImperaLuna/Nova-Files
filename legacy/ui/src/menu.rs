@@ -57,6 +57,30 @@ pub enum MenuAction {
     Run(&'static CommandSpec),
     Ungather(Gathering, PathBuf),
     AddGathered(Gathering),
+    Part(PartRun),
+}
+
+#[derive(Clone)]
+pub struct PartRun(pub nova_files_shell::OnRun);
+
+impl std::fmt::Debug for PartRun {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PartRun")
+    }
+}
+
+impl PartialEq for PartRun {
+    fn eq(&self, other: &Self) -> bool {
+        std::rc::Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for PartRun {}
+
+impl From<nova_files_shell::RowItem> for MenuItem {
+    fn from(item: nova_files_shell::RowItem) -> Self {
+        Self::new(item.icon, item.label, MenuAction::Part(PartRun(item.run))).with_look(item.look)
+    }
 }
 
 impl Menu {
@@ -206,6 +230,7 @@ impl MainWindow {
             MenuAction::Run(spec) => window.dispatch_action(spec.action(), cx),
             MenuAction::Ungather(place, path) => self.ungather(place, path, cx),
             MenuAction::AddGathered(place) => self.pick_folder_to_gather(place, cx),
+            MenuAction::Part(PartRun(run)) => cx.defer(move |cx| run(cx)),
         }
         cx.notify();
     }

@@ -77,6 +77,18 @@ impl MainWindow {
         self.open_menu(at, items, cx);
     }
 
+    pub(crate) fn open_row_menu(&mut self, row: &str, at: Point<Pixels>, cx: &mut Context<Self>) {
+        let items: Vec<MenuItem> = self
+            .parts
+            .row_menu(row, cx)
+            .into_iter()
+            .map(MenuItem::from)
+            .collect();
+        if !items.is_empty() {
+            self.open_menu(at, items, cx);
+        }
+    }
+
     pub(crate) fn unpin(&self, path: PathBuf) {
         self.change_pinned(BookmarkChange::Remove { path });
     }

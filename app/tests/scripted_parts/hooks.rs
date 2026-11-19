@@ -8,7 +8,7 @@ use gpui::{
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_shell::{
-    Host, Location, PageKind, PageRef, Part, Parts, SidebarAt, SidebarRow, Slots, Undo,
+    Host, Location, PageKind, PageRef, Part, Parts, RowItem, SidebarAt, SidebarRow, Slots, Undo,
     assets::Icon,
 };
 
@@ -23,6 +23,7 @@ thread_local! {
     static CLOSED: Cell<usize> = const { Cell::new(0) };
     static UNDONE: Cell<usize> = const { Cell::new(0) };
     static FILED: Cell<usize> = const { Cell::new(0) };
+    static SWEPT: Cell<usize> = const { Cell::new(0) };
 }
 
 const FILE_ROOM: &str = "/file-room";
@@ -111,6 +112,15 @@ impl Part for Tagger {
         slots.closing(|_, _| CLOSED.set(CLOSED.get() + 1));
         slots.page::<Basket>(basket);
         slots.drops::<Basket>(|_, _, paths, _| DROPPED.set(DROPPED.get() + paths.len()));
+        slots.row_menu(|_, row, _| {
+            if row == "place-file-room" {
+                vec![RowItem::new(Icon::Info, "Sweep", |_| {
+                    SWEPT.set(SWEPT.get() + 1);
+                })]
+            } else {
+                Vec::new()
+            }
+        });
         slots.drop_target(files_here, |_, _, paths, _, _| {
             FILED.set(FILED.get() + paths.len());
         });
@@ -143,6 +153,7 @@ fn tagged(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContex
     CLOSED.set(0);
     UNDONE.set(0);
     FILED.set(0);
+    SWEPT.set(0);
     let mut parts = Parts::default();
     parts.add::<Tagger>();
     cx.update(|cx| {
@@ -289,4 +300,21 @@ fn undo_on_a_part_note_runs_the_part_undo(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-z");
     cx.run_until_parked();
     assert_eq!(UNDONE.get(), 1);
+}
+
+#[gpui::test]
+fn a_part_row_menu_runs_the_chosen_item(cx: &mut TestAppContext) {
+    let (view, cx, _core) = tagged(cx);
+    let basket = cx.debug_bounds("place-basket").unwrap().center();
+    cx.simulate_mouse_down(basket, MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+
+    let room = cx.debug_bounds("place-file-room").unwrap().center();
+    cx.simulate_mouse_down(room, MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down enter");
+    cx.run_until_parked();
+
+    assert_eq!(SWEPT.get(), 1);
 }
