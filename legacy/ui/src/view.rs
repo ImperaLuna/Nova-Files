@@ -44,6 +44,9 @@ use crate::window::{FocusTo, MainWindow};
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.closing(cx) {
+            window.remove_window();
+        }
         let scale_factor = window.scale_factor();
         let viewport = window.viewport_size();
         self.keep_gallery(window, cx);
