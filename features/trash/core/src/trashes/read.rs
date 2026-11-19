@@ -1,6 +1,6 @@
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, OpenOptions};
-use std::io::Read as _;
+use std::io::{self, Read as _};
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Component, Path, PathBuf};
@@ -15,6 +15,7 @@ use rustix::process::getuid;
 use super::INFO_SUFFIX;
 use super::folder::{OWN_PREFIX, SHARED, TrashFolder, is_own, mount_trash_at};
 use super::info::{DATE_FORMAT, DATE_KEY, HEADER, PATH_KEY};
+use super::known;
 use super::{FILES, Trashes};
 use nova_files_disk::percent::unescape;
 
@@ -25,19 +26,27 @@ pub fn trashes(home_trash: Option<&Path>, drives: bool) -> Vec<TrashFolder> {
     if !drives {
         return found;
     }
-    let uid = getuid().as_raw();
     let mut tops: Vec<_> = nova_files_index::local_mount_points().into_iter().collect();
     tops.sort();
-    for top in tops {
-        let roots = [
-            top.join(SHARED).join(uid.to_string()),
-            top.join(format!("{OWN_PREFIX}{uid}")),
-        ];
-        if let Some(trash) = roots.iter().find_map(|root| mount_trash_at(root)) {
+    let known = home_trash.map(known::read).unwrap_or_default();
+    for root in drive_roots(&tops, getuid().as_raw(), known) {
+        if let Some(trash) = mount_trash_at(&root) {
             add_new(&mut found, trash);
         }
     }
     found
+}
+
+fn drive_roots(tops: &[PathBuf], uid: u32, known: Vec<PathBuf>) -> Vec<PathBuf> {
+    tops.iter()
+        .flat_map(|top| {
+            [
+                top.join(SHARED).join(uid.to_string()),
+                top.join(format!("{OWN_PREFIX}{uid}")),
+            ]
+        })
+        .chain(known)
+        .collect()
 }
 
 fn add_new(found: &mut Vec<TrashFolder>, trash: TrashFolder) {
@@ -86,11 +95,14 @@ pub fn find(item: &Path, trashes: &Trashes) -> Option<(TrashFolder, Trashed)> {
 
 fn entry(trash: &TrashFolder, stored: &OsStr) -> Option<Trashed> {
     let item = trash.files().join(stored);
-    let there = item.symlink_metadata().ok()?;
+    let there = match item.symlink_metadata() {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return None,
+        there => there.ok(),
+    };
     let text = read_info(&info_of(trash, stored))?;
     let (field, deleted) = parse(&text)?;
     let original = original(trash, &field)?;
-    let kind = if there.is_dir() {
+    let kind = if there.is_some_and(|there| there.is_dir()) {
         EntryKind::Folder
     } else {
         EntryKind::File

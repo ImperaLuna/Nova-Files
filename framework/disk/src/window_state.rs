@@ -20,10 +20,11 @@ pub struct Store {
 impl Store {
     pub fn open(state_home: Option<&Path>) -> Self {
         let path = state_home.map(|home| home.join(FILE));
-        let bytes = path.as_deref().map(read).unwrap_or_default();
+        let read = path.as_deref().map(read);
+        let saved_to = path.filter(|_| read.as_ref().is_none_or(Option::is_some));
         Self {
-            bytes: RefCell::new(bytes.into()),
-            saver: Saver::new(path, WHAT, SAVE_THREAD),
+            bytes: RefCell::new(read.flatten().unwrap_or_default().into()),
+            saver: Saver::new(saved_to, WHAT, SAVE_THREAD),
         }
     }
 
@@ -46,10 +47,24 @@ impl Store {
     }
 }
 
-fn read(path: &Path) -> Vec<u8> {
+fn read(path: &Path) -> Option<Vec<u8>> {
     match private_file::read(path, MAX_BYTES) {
-        Read::Bytes(bytes) => bytes,
-        Read::Missing | Read::TooBig | Read::Failed(_) => Vec::new(),
+        Read::Bytes(bytes) => Some(bytes),
+        Read::Missing => Some(Vec::new()),
+        Read::TooBig => {
+            log::warn!(
+                "{} is over {MAX_BYTES} bytes; it isn't read or saved over",
+                path.display()
+            );
+            None
+        }
+        Read::Failed(error) => {
+            log::warn!(
+                "can't read {}; it isn't saved over: {error}",
+                path.display()
+            );
+            None
+        }
     }
 }
 
@@ -69,14 +84,32 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_or_oversized_file_reads_as_empty() {
+    fn a_missing_file_reads_as_empty_and_an_oversized_one_not_at_all() {
         let home = temp("read");
         let path = home.join(FILE);
-        assert_eq!(read(&path), b"");
+        assert_eq!(read(&path), Some(Vec::new()));
         private_file::replace(&path, &vec![b'x'; MAX_BYTES], private_file::FILE_MODE).unwrap();
-        assert_eq!(read(&path).len(), MAX_BYTES);
+        assert_eq!(read(&path).map(|bytes| bytes.len()), Some(MAX_BYTES));
         private_file::replace(&path, &vec![b'x'; MAX_BYTES + 1], private_file::FILE_MODE).unwrap();
-        assert_eq!(read(&path), b"");
+        assert_eq!(read(&path), None);
+        fs::remove_dir_all(home).ok();
+    }
+
+    #[test]
+    fn a_file_that_cant_be_read_is_never_saved_over() {
+        let home = temp("unread");
+        let file = home.join(FILE);
+        fs::create_dir_all(&file).unwrap();
+        let unreadable = Store::open(Some(&home));
+        fs::remove_dir(&file).unwrap();
+        private_file::replace(&file, &vec![b'x'; MAX_BYTES + 1], private_file::FILE_MODE).unwrap();
+        let too_big = Store::open(Some(&home));
+        fs::remove_file(&file).unwrap();
+        let missing = Store::open(Some(&home));
+
+        assert_eq!(unreadable.saver.path(), None);
+        assert_eq!(too_big.saver.path(), None);
+        assert_eq!(missing.saver.path(), Some(file.as_path()));
         fs::remove_dir_all(home).ok();
     }
 
@@ -100,7 +133,7 @@ mod tests {
         store.save(&picker("800x500"));
         let path = home.join(FILE);
         let wait = std::time::Instant::now();
-        while read(&path) != picker("800x500") {
+        while read(&path) != Some(picker("800x500")) {
             assert!(
                 wait.elapsed() < std::time::Duration::from_secs(10),
                 "never saved"

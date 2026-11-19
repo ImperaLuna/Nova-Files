@@ -3,9 +3,7 @@
 mod jobs;
 mod ops;
 mod run;
-mod trace;
 mod trash;
-mod vulkan_drivers;
 
 use std::io;
 use std::sync::Arc;
@@ -24,12 +22,12 @@ pub use nova_files_archives_core::{
 };
 pub use nova_files_disk::home::Home;
 pub use nova_files_open_core::MimeTypes;
-pub use nova_files_open_core::{NotDefault, make_default_for_folders, opens_folders};
+pub use nova_files_open_core::{
+    NotDefault, launch_without, make_default_for_folders, opens_folders,
+};
 pub use nova_files_search_core::{IndexError, IndexPlace, Unusable};
 pub use nova_files_thumbnails_core::Thumbnails;
 pub use run::{emitted_types, routed_types};
-pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
-pub use vulkan_drivers::{FILTER_VARIABLE, absent_vendor_drivers};
 
 pub const IDLE_EXIT: Duration = Duration::from_mins(3);
 

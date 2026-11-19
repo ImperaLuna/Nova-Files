@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use rustix::fs::{AtFlags, CWD, StatxFlags, statx};
 use rustix::process::getuid;
 
-use super::{FILES, INFO};
+use super::{FILES, INFO, known};
 use nova_files_disk::private_file::FOLDER_MODE;
 
 const STICKY: u32 = 0o1000;
@@ -58,6 +58,11 @@ pub fn folder_for(folder: &Path, home_trash: Option<&Path>) -> io::Result<TrashF
     }
     let top = topdir(folder, mount)?;
     let root = mount_trash(&top)?;
+    if let Some(home) = home_trash
+        && let Err(error) = known::remember(home, &root)
+    {
+        log::warn!("can't remember the trash {}: {error}", root.display());
+    }
     Ok(TrashFolder {
         root,
         topdir: Some(top),

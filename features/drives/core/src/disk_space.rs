@@ -1,13 +1,11 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use nova_files_drives_api::{DiskSpace, Event, MAX_DISK_SPACE_PATHS, PathSpace};
 use nova_files_messages::EventSink;
 use rustix::fs::statvfs;
-
-use nova_files_disk::timed;
 
 const THREAD_NAME: &str = "nova-files-disk-space";
 const READ_THREAD: &str = "nova-files-statvfs";
@@ -20,17 +18,7 @@ pub fn answer(events: &Arc<dyn EventSink>, mut paths: Vec<PathBuf>) {
     let spawned = thread::Builder::new()
         .name(THREAD_NAME.to_owned())
         .spawn(move || {
-            let spaces = paths
-                .into_iter()
-                .map(|path| {
-                    let asked = path.clone();
-                    PathSpace {
-                        space: timed::within(READ_WAIT, READ_THREAD, move || read(&asked))
-                            .flatten(),
-                        path,
-                    }
-                })
-                .collect();
+            let spaces = spaces(paths, READ_WAIT, read);
             sink.deliver(Event::DiskSpace(spaces)).ok();
         });
     if spawned.is_err() {
@@ -40,6 +28,36 @@ pub fn answer(events: &Arc<dyn EventSink>, mut paths: Vec<PathBuf>) {
             .collect();
         events.deliver(Event::DiskSpace(unknown)).ok();
     }
+}
+
+fn spaces(
+    paths: Vec<PathBuf>,
+    wait: Duration,
+    read: impl Fn(&Path) -> Option<DiskSpace> + Send + Sync + 'static,
+) -> Vec<PathSpace> {
+    let read = Arc::new(read);
+    let (done, answers) = mpsc::channel();
+    for (index, path) in paths.iter().enumerate() {
+        let (done, read, path) = (done.clone(), Arc::clone(&read), path.clone());
+        thread::Builder::new()
+            .name(READ_THREAD.to_owned())
+            .spawn(move || done.send((index, read(&path))).ok())
+            .ok();
+    }
+    drop(done);
+    let deadline = Instant::now() + wait;
+    let mut found: Vec<Option<DiskSpace>> = paths.iter().map(|_| None).collect();
+    while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+        let Ok((index, space)) = answers.recv_timeout(left) else {
+            break;
+        };
+        found[index] = space;
+    }
+    paths
+        .into_iter()
+        .zip(found)
+        .map(|(path, space)| PathSpace { path, space })
+        .collect()
 }
 
 fn read(path: &Path) -> Option<DiskSpace> {
@@ -57,6 +75,37 @@ fn read(path: &Path) -> Option<DiskSpace> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stuck_drives_hold_the_answer_for_one_wait_not_one_each() {
+        const WAIT: Duration = Duration::from_millis(200);
+        let (_hold, stuck) = mpsc::channel::<()>();
+        let stuck = std::sync::Mutex::new(stuck);
+        let paths = ["/stuck/a", "/stuck/b", "/stuck/c", "/"].map(PathBuf::from);
+        let started = Instant::now();
+
+        let spaces = spaces(paths.to_vec(), WAIT, move |path| {
+            if path.starts_with("/stuck") {
+                stuck.lock().ok()?.recv().ok()?;
+            }
+            Some(DiskSpace { total: 1, free: 1 })
+        });
+
+        assert!(started.elapsed() < WAIT * 2, "{:?}", started.elapsed());
+        let found: Vec<_> = spaces
+            .iter()
+            .map(|space| (space.path.as_path(), space.space))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                (Path::new("/stuck/a"), None),
+                (Path::new("/stuck/b"), None),
+                (Path::new("/stuck/c"), None),
+                (Path::new("/"), Some(DiskSpace { total: 1, free: 1 })),
+            ]
+        );
+    }
 
     #[test]
     fn a_relative_or_missing_path_has_no_space() {

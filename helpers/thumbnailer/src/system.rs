@@ -4,10 +4,13 @@ use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::Duration;
+
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use rustix::io::Errno;
+use rustix::process::{Pid, PidfdFlags, pidfd_open};
 
 const THUMBNAILERS_FOLDER: &str = "thumbnailers";
 const THUMBNAILER_EXTENSION: &str = "thumbnailer";
@@ -169,6 +172,10 @@ fn fill(arg: &str, request: &Request) -> OsString {
 }
 
 fn run(exec: &[String], request: &Request) -> io::Result<()> {
+    run_within(exec, request, RUN_TIMEOUT)
+}
+
+fn run_within(exec: &[String], request: &Request, timeout: Duration) -> io::Result<()> {
     let (program, args) = exec
         .split_first()
         .ok_or_else(|| io::Error::other("empty Exec"))?;
@@ -179,31 +186,41 @@ fn run(exec: &[String], request: &Request) -> io::Result<()> {
         .stderr(Stdio::null())
         .spawn()?;
     let mut output = child.stdout.take();
-    let (done, finished) = mpsc::channel();
     thread::Builder::new()
         .name(READER_THREAD.to_owned())
         .spawn(move || {
             if let Some(output) = &mut output {
                 io::copy(output, &mut io::sink()).ok();
             }
-            done.send(()).ok();
         })
         .ok();
-    let in_time = finished.recv_timeout(RUN_TIMEOUT).is_ok();
-    if !in_time {
+    if !exits_within(&child, timeout)? {
         child.kill().ok();
-    }
-    let status = child.wait()?;
-    if !in_time {
+        child.wait()?;
         return Err(io::ErrorKind::TimedOut.into());
     }
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("thumbnailer exited with {status}"),
-        ))
+    let status = child.wait()?;
+    let kind = match status.code() {
+        Some(0) => return Ok(()),
+        Some(_) => io::ErrorKind::InvalidData,
+        None => io::ErrorKind::Interrupted,
+    };
+    Err(io::Error::new(
+        kind,
+        format!("thumbnailer exited with {status}"),
+    ))
+}
+
+fn exits_within(child: &Child, timeout: Duration) -> io::Result<bool> {
+    let exited = pidfd_open(Pid::from_child(child), PidfdFlags::empty())?;
+    let mut watched = [PollFd::new(&exited, PollFlags::IN)];
+    let timeout = Timespec::try_from(timeout).map_err(|_| io::ErrorKind::InvalidInput)?;
+    loop {
+        match poll(&mut watched, Some(&timeout)) {
+            Ok(ready) => return Ok(ready > 0),
+            Err(Errno::INTR) => {}
+            Err(error) => return Err(error.into()),
+        }
     }
 }
 
@@ -236,6 +253,30 @@ mod tests {
         );
         assert_eq!(split_exec(r#"run "open"#), None);
         assert_eq!(split_exec("   "), None);
+    }
+
+    #[test]
+    fn a_thumbnailer_that_closes_its_output_and_keeps_running_is_stopped_in_time() {
+        let request = Request {
+            input: Path::new("/in/a.mp4"),
+            uri: "file:///in/a.mp4",
+            output: Path::new("/out/a.png"),
+            size: 128,
+        };
+        let exec = ["sh", "-c", "exec >&-; exec sleep 30"].map(str::to_owned);
+        let started = std::time::Instant::now();
+
+        let ran = run_within(&exec, &request, Duration::from_millis(200));
+
+        assert_eq!(
+            ran.map_err(|error| error.kind()),
+            Err(io::ErrorKind::TimedOut)
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            started.elapsed()
+        );
     }
 
     #[test]
