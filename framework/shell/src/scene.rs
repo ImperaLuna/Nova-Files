@@ -8,7 +8,6 @@ pub struct Scene {
     pub selected: usize,
     pub picker: bool,
     pub searching: bool,
-    pub gathered: bool,
     pub showing: Showing,
 }
 

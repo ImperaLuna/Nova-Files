@@ -19,7 +19,6 @@ pub struct Shown {
     pub picker: bool,
     pub asked: Option<ListingId>,
     pub searching: bool,
-    pub gathered: bool,
     pub cursor: Option<usize>,
     pub showing: Showing,
 }
@@ -62,10 +61,6 @@ impl Entries {
 
     pub const fn searching(&self) -> bool {
         self.shown.searching
-    }
-
-    pub const fn gathered(&self) -> bool {
-        self.shown.gathered
     }
 
     pub const fn cursor(&self) -> Option<usize> {
