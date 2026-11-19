@@ -11,8 +11,9 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::{Color, Command, Connection, DesktopLook, Event, Mode, Theme};
+use nova_files_api::{Color, Connection, DesktopLook, Mode, Theme};
 use nova_files_core::{Home, IDLE_EXIT, RunningCore};
+use nova_files_look_api as look_api;
 use nova_files_settings_api::{
     self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
 };
@@ -212,9 +213,9 @@ fn a_linked_file_is_saved_where_it_points() {
     assert_eq!(mode, SHARED_MODE);
 }
 
-fn next_theme(events: &Receiver<Event>) -> Arc<Theme> {
+fn next_theme(events: &Receiver<look_api::Event>) -> Arc<Theme> {
     match events.recv_timeout(ANSWER_TIMEOUT) {
-        Ok(Event::Theme(theme)) => theme,
+        Ok(look_api::Event::Theme(theme)) => theme,
         other => panic!("expected the theme, got {other:?}"),
     }
 }
@@ -228,7 +229,7 @@ fn the_theme_follows_its_file_and_the_appearance_setting() {
     let core = home.core();
     let (themes, theme_events) = mpsc::channel();
     let theme_client = core.connector.connect(themes).unwrap();
-    theme_client.send(Command::Theme).unwrap();
+    theme_client.send(look_api::Command::Watch).unwrap();
     assert_eq!(next_theme(&theme_events).mode, Mode::Dark);
 
     let (settings_client, _settings_events, _) = listen(&core);
@@ -248,11 +249,11 @@ fn the_desktops_look_reaches_the_theme() {
     let core = home.core();
     let (themes, theme_events) = mpsc::channel();
     let theme_client = core.connector.connect(themes).unwrap();
-    theme_client.send(Command::Theme).unwrap();
+    theme_client.send(look_api::Command::Watch).unwrap();
     assert_eq!(next_theme(&theme_events).mode, Mode::Dark);
 
     theme_client
-        .send(Command::DesktopLook(DesktopLook {
+        .send(look_api::Command::DesktopLook(DesktopLook {
             mode: Some(Mode::Light),
             accent: None,
         }))

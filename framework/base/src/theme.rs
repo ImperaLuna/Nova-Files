@@ -4,8 +4,7 @@
 //! The core picks dark or light (the appearance setting, or the desktop's
 //! preference on `System`), takes each color from the theme file, then the
 //! desktop's accent for [`PaletteKey::Primary`], then Carbonfox, and sends
-//! the result as [`crate::Event::Theme`]: when a client asks, and from
-//! then on to that client each time it changes. The desktop's preference
+//! the result to each client that asks, and again each time it changes. The desktop's preference
 //! and accent reach the core as [`DesktopLook`]. These are the base colors
 //! only, under the names Nova's theme file uses; the UI works out the
 //! shades it draws with from them.
