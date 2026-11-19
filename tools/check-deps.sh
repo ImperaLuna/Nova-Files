@@ -131,6 +131,28 @@ rule_break() { # <from folder> <to folder>; prints the broken rule, if any
     esac
 }
 
+expect_rule() { # <from folder> <to folder> <rule, or nothing for allowed>
+    local got
+    got=$(rule_break "$1" "$2")
+    got=${got%%:*}
+    got=${got#rule }
+    if [[ "$got" != "$3" ]]; then
+        echo "$0: $1 using $2 should give '${3:-allowed}', got '${got:-allowed}'." >&2
+        exit 1
+    fi
+}
+
+expect_rule features/places/core features/drives/core F4
+expect_rule features/places/ui features/drives/ui F4
+expect_rule features/places/ui features/drives/core F4
+expect_rule features/places/ui features/drives/api ""
+expect_rule features/places/ui features/places/core F3
+expect_rule features/places/core features/places/ui F2
+expect_rule features/places/core framework/shell F2
+expect_rule features/places/ui framework/shell ""
+expect_rule framework/shell features/places/api W1
+expect_rule helpers/index legacy/core L1
+
 metadata=$(cargo metadata --no-deps --offline --format-version 1)
 workspace_names=$(jq -r '.packages[].name' <<<"$metadata")
 declare -A folder_of=()

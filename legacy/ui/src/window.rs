@@ -219,7 +219,7 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 1] = [Command::Ping];
+    const FIRST_ASKS: [Command; 2] = [Command::Ping, Command::WindowState];
 
     pub fn at(
         connector: &Connector,
@@ -296,7 +296,7 @@ impl MainWindow {
             drives: nova_files_drives_ui::KnownDrives::default(),
             menu: None,
             search: search::Search::new(cx),
-            focus: cx.focus_handle(),
+            focus: host.list.clone(),
             island: Island::default(),
             jobs: Jobs::default(),
             counted: SharedString::default(),

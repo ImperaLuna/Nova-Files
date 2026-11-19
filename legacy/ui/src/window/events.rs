@@ -138,6 +138,11 @@ impl MainWindow {
                 self.details_arrived(first, &details, &icons, cx);
             }
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
+            Event::WindowState(bytes) => {
+                self.host
+                    .kept
+                    .update(cx, |kept, cx| kept.arrived(&bytes, cx));
+            }
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)
@@ -149,7 +154,6 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
-            | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. } => {}
         }
