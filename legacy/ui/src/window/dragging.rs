@@ -9,6 +9,7 @@ use gpui::{
     ParentElement as _, Render, SharedString, Styled as _, WeakEntity, Window, div,
 };
 use nova_files_api::{EntryId, ListingId};
+use nova_files_shell::DropOver;
 
 use super::MainWindow;
 use super::aiming::{Aim, Aims};
@@ -97,13 +98,16 @@ impl DragChip {
 
 impl DragChip {
     fn part_says(&self, modifiers: Modifiers, cx: &App) -> Option<SharedString> {
-        let at = dropping::shell_place(&self.drag.aims.aimed()?.at)?;
-        let sources = &self.drag.sources()?.paths;
+        let aim = self.drag.aims.aimed()?;
+        let at = dropping::shell_place(&aim.at)?;
+        let over = DropOver {
+            at: &at,
+            name: &aim.name,
+            sources: &self.drag.sources()?.paths,
+            modifiers,
+        };
         let window = self.origin.upgrade()?;
-        window
-            .read(cx)
-            .parts
-            .drop_label(&at, sources, modifiers, cx)
+        window.read(cx).parts.drop_label(&over, cx)
     }
 }
 
@@ -159,7 +163,7 @@ impl MainWindow {
     }
 
     pub(crate) fn drop_rule(&self) -> impl Fn(&DropAt, &Sources) -> bool + 'static {
-        let (picker, rules) = (self.pick.is_some(), self.host.rules.clone());
+        let (picker, rules) = (self.picker(), self.host.rules.clone());
         move |at, sources| {
             !picker && dropping::allowed(at, sources, |folder| rules.for_folder(folder).trashed)
         }
@@ -167,18 +171,25 @@ impl MainWindow {
 
     pub(crate) fn drop_files(
         &mut self,
-        at: DropAt,
+        aim: Aim,
         sources: &Sources,
         modifiers: Modifiers,
         cx: &mut Context<Self>,
     ) {
+        let Aim { at, name } = aim;
         if !self.drop_rule()(&at, sources) {
             return;
         }
-        if let Some(place) = dropping::shell_place(&at)
-            && self.parts.drop_at(&place, &sources.paths, modifiers, cx)
-        {
-            return;
+        if let Some(place) = dropping::shell_place(&at) {
+            let over = DropOver {
+                at: &place,
+                name: &name,
+                sources: &sources.paths,
+                modifiers,
+            };
+            if self.parts.drop_at(&over, cx) {
+                return;
+            }
         }
         match dropping::dropped(at, sources.paths.clone(), modifiers) {
             Dropped::Job(operation) => {

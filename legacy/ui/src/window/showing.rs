@@ -24,6 +24,10 @@ impl MainWindow {
             return None;
         }
         let names: HashSet<&OsStr> = showing.names.iter().map(OsString::as_os_str).collect();
-        Selection::named_all(listing.id, &listing.entries, &names)
+        let shown = Selection::named_all(listing.id, &listing.entries, &names);
+        if shown.is_none() {
+            self.showing = Some(showing);
+        }
+        shown
     }
 }

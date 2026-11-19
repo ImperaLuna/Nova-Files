@@ -61,13 +61,12 @@ impl MainWindow {
         let (glyph, name) = if root {
             (Icon::Home, places::HOME_LABEL.into())
         } else {
-            let glyph = places::standard_icon_at(self.places(), &path).unwrap_or(Icon::Folder);
-            (glyph, name)
+            (self.known_folders().icon_at(&path), name)
         };
         let (target, in_new_tab, dropped) = (path.clone(), path.clone(), path.clone());
         let opens = HoverOpens::Place(Location::Folder(dropped.clone()));
         let aimed = Aim::folder(dropped, name.clone());
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let tint = if here { colors.here } else { colors.text_dim };
         let guides = (1..=depth).map(|level| {
             div()

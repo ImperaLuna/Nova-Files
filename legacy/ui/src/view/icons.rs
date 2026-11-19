@@ -73,10 +73,14 @@ impl MainWindow {
             row.clone(),
             cx,
         )
-        .child(self.parts.row_icon(entry, cx).unwrap_or_else(|| {
-            entry_icon_sized(self.row_icon(index, entry.kind), grid.icon, &colors)
-                .into_any_element()
-        }));
+        .child(
+            self.parts
+                .row_icon(entry, grid.icon, cx)
+                .unwrap_or_else(|| {
+                    entry_icon_sized(self.row_icon(index, entry.kind), grid.icon, &colors)
+                        .into_any_element()
+                }),
+        );
         let label = grid.names.then(|| {
             if let Some(cell) = self.parts.name_cell(entry, cx) {
                 return div()
@@ -84,13 +88,13 @@ impl MainWindow {
                     .child(cell)
                     .into_any_element();
             }
-            self.rename_field(index).map_or_else(
+            self.name_field((index, entry), cx).map_or_else(
                 || {
                     self.cell_name((index, name), grid, row, cx)
                         .into_any_element()
                 },
                 |field| {
-                    rename_box(field.clone(), &colors)
+                    rename_box(field, &colors)
                         .when(!grid.beside, |field| field.flex_none().w_full().ml_0())
                         .into_any_element()
                 },

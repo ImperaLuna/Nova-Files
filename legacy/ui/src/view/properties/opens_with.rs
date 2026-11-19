@@ -10,8 +10,8 @@ use super::lone_glyph;
 use crate::assets::Icon;
 use crate::theme::{Colors, properties, radius, start, text};
 use crate::view::row::icon;
-use crate::view::start::group;
 use crate::window::MainWindow;
+use nova_files_shell::widgets::card_group as group;
 
 const LABEL: &str = "Opens with";
 const NO_DEFAULT: &str = "None";

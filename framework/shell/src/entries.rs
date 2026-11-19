@@ -1,4 +1,5 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::ops::Range;
 use std::path::PathBuf;
 
 use gpui::{Context, EventEmitter};
@@ -13,6 +14,8 @@ pub struct Shown {
     pub selected: Vec<EntryId>,
     pub picker: bool,
     pub asked: Option<ListingId>,
+    pub searching: bool,
+    pub gathered: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +25,8 @@ pub struct EntriesAsked;
 pub struct Entries {
     shown: Shown,
     selects: Option<Vec<OsString>>,
+    selects_later: Option<(PathBuf, Vec<OsString>)>,
+    drawn: Range<usize>,
 }
 
 impl EventEmitter<EntriesAsked> for Entries {}
@@ -37,6 +42,14 @@ impl Entries {
 
     pub const fn picker(&self) -> bool {
         self.shown.picker
+    }
+
+    pub const fn searching(&self) -> bool {
+        self.shown.searching
+    }
+
+    pub const fn gathered(&self) -> bool {
+        self.shown.gathered
     }
 
     pub const fn asked(&self) -> Option<ListingId> {
@@ -72,6 +85,20 @@ impl Entries {
             .collect()
     }
 
+    pub fn drawn(&self, name: &OsStr) -> bool {
+        self.shown.listing.as_ref().is_some_and(|listing| {
+            listing
+                .entries
+                .iter()
+                .position(|entry| entry.name == name)
+                .is_some_and(|at| self.drawn.contains(&at))
+        })
+    }
+
+    pub const fn set_drawn(&mut self, drawn: Range<usize>) {
+        self.drawn = drawn;
+    }
+
     pub fn show(&mut self, shown: Shown, cx: &mut Context<Self>) {
         if self.shown != shown {
             self.shown = shown;
@@ -86,5 +113,19 @@ impl Entries {
 
     pub const fn take_select(&mut self) -> Option<Vec<OsString>> {
         self.selects.take()
+    }
+
+    pub fn select_when_listed(
+        &mut self,
+        folder: PathBuf,
+        names: Vec<OsString>,
+        cx: &mut Context<Self>,
+    ) {
+        self.selects_later = Some((folder, names));
+        cx.emit(EntriesAsked);
+    }
+
+    pub const fn take_select_later(&mut self) -> Option<(PathBuf, Vec<OsString>)> {
+        self.selects_later.take()
     }
 }

@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
-use nova_files_api::{Event, Listing, ListingId, Unreadable};
+use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
 use nova_files_places_ui::Known;
 use nova_files_settings_api::{Settings, Thumbnails};
-use nova_files_shell::Published;
+use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -237,16 +237,44 @@ impl MainWindow {
     }
 
     pub(super) fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
-        let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
-        let hidden_files = settings.hidden_files;
+        let shown = match settings.thumbnails {
+            Thumbnails::Shown => ThumbnailsShown::Shown,
+            Thumbnails::Hidden => ThumbnailsShown::Hidden,
+        };
+        Published::set(settings.hidden_files, cx);
+        Published::set(shown, cx);
         self.settings = Arc::unwrap_or_clone(settings);
-        self.hidden_arrived(hidden_files);
-        if thumbnails_changed {
-            if self.settings.thumbnails == Thumbnails::Hidden {
-                release(self.thumbnails.take_all(), None, cx);
-            }
-            self.forget_rows();
+        cx.emit(WindowEvent::Settings);
+        cx.notify();
+    }
+
+    pub(super) fn hidden_published(&mut self, cx: &mut Context<Self>) {
+        if let Some(hidden) = Published::<HiddenFiles>::get(cx).copied() {
+            self.hidden_arrived(hidden);
+            cx.emit(WindowEvent::Settings);
+            cx.notify();
         }
+    }
+
+    pub(super) fn known_published(&mut self, cx: &mut Context<Self>) {
+        if let Some(known) = Published::<KnownFolders>::get(cx) {
+            self.known = known.clone();
+            cx.notify();
+        }
+    }
+
+    pub(super) fn thumbnails_published(&mut self, cx: &mut Context<Self>) {
+        let Some(shown) = Published::<ThumbnailsShown>::get(cx).copied() else {
+            return;
+        };
+        if shown == self.thumbnails_shown {
+            return;
+        }
+        self.thumbnails_shown = shown;
+        if shown == ThumbnailsShown::Hidden {
+            release(self.thumbnails.take_all(), None, cx);
+        }
+        self.forget_rows();
         cx.emit(WindowEvent::Settings);
         cx.notify();
     }

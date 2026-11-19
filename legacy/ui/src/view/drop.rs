@@ -51,7 +51,7 @@ impl MainWindow {
     ) -> E {
         let rule = Rc::new(self.drop_rule());
         let aims = Rc::clone(&rule);
-        let (asked, dropped, theirs) = (aim.at.clone(), aim.at.clone(), aim.at.clone());
+        let (asked, dropped, theirs) = (aim.at.clone(), aim.clone(), aim.clone());
         target
             .on_drag_move(
                 cx.listener(|this, moved: &DragMoveEvent<DraggedRow>, _, cx| {

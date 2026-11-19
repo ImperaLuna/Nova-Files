@@ -79,7 +79,24 @@ pub enum Location {
     Page(PageRef),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StartPage;
+
+impl PageKind for StartPage {
+    fn title(&self) -> SharedString {
+        SharedString::new_static("Start")
+    }
+
+    fn icon(&self) -> Icon {
+        Icon::Start
+    }
+}
+
 impl Location {
+    pub fn start() -> Self {
+        Self::Page(PageRef::new(StartPage))
+    }
+
     pub fn folder(&self) -> Option<&Path> {
         match self {
             Self::Folder(folder) => Some(folder),

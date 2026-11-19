@@ -8,6 +8,7 @@ use nova_files_messages::{Connection, CoreGone, Message};
 
 use crate::entries::Entries;
 use crate::island::Island;
+use crate::line::Lines;
 use crate::location::Location;
 use crate::navigator::Navigator;
 use crate::opening::Opening;
@@ -48,9 +49,16 @@ pub struct Host {
     pub nav: Entity<Navigator>,
     pub island: Entity<Island>,
     pub opening: Opening,
+    pub lines: Lines,
 }
 
 impl Host {
+    #[must_use]
+    pub fn with_lines(mut self, lines: Lines) -> Self {
+        self.lines = lines;
+        self
+    }
+
     pub fn new(link: Link, home: PathBuf, opening: Opening, cx: &mut App) -> Self {
         Self {
             link,
@@ -61,6 +69,7 @@ impl Host {
             nav: cx.new(|_| Navigator::default()),
             island: cx.new(|_| Island::default()),
             opening,
+            lines: Lines::default(),
         }
     }
 
@@ -77,6 +86,8 @@ impl Host {
             rules,
             selected: entries.selected_count(),
             picker: entries.picker(),
+            searching: entries.searching(),
+            gathered: entries.gathered(),
         }
     }
 }

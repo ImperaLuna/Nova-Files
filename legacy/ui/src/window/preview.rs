@@ -71,7 +71,7 @@ impl MainWindow {
             }
             return;
         }
-        if self.pick.is_some() {
+        if self.picker() {
             return;
         }
         let Some((listing, ids)) = self.selection() else {

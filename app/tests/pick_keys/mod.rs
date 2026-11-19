@@ -48,3 +48,17 @@ async fn a_picker_for_one_file_keeps_one_selected(cx: &mut TestAppContext) {
         Some(picked(tree.path().join("notes.txt")))
     );
 }
+
+#[gpui::test]
+async fn a_picker_deletes_nothing_for_good(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx, _answers) = picker(cx, &tree, tree.path(), FILES).await;
+
+    click(cx, "entry-2");
+    cx.simulate_keystrokes("shift-delete");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.confirm().is_none()));
+    assert!(tree.path().join("notes.txt").exists());
+}

@@ -19,7 +19,7 @@ const LABEL: &str = "Places";
 impl MainWindow {
     pub(super) fn places_section(&self, narrow: bool, cx: &Context<Self>) -> Div {
         let colors = Colors::of(cx);
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let start = main
             .then(|| (SidebarRow::START, self.start_row(narrow, &colors, cx)))
             .into_iter();

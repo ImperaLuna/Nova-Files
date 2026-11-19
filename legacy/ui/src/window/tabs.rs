@@ -97,7 +97,7 @@ impl MainWindow {
     }
 
     pub fn new_tab(&mut self, place: &Location, cx: &mut Context<Self>) {
-        if self.pick.is_some() {
+        if self.picker() {
             return;
         }
         let left = self.leave_tab(cx);
@@ -132,7 +132,7 @@ impl MainWindow {
         event: &ClickEvent,
         cx: &mut Context<Self>,
     ) {
-        if event.is_middle_click() && self.pick.is_none() {
+        if event.is_middle_click() && !self.picker() {
             self.open_entry_in_new_tab(entry, cx);
         }
     }
@@ -197,11 +197,7 @@ impl MainWindow {
             .iter()
             .find(|shown| shown.path == *folder)
             .map_or_else(
-                || {
-                    let icon =
-                        places_ui::standard_icon_at(&self.places, folder).unwrap_or(Icon::Folder);
-                    (places_ui::folder_name(folder), icon)
-                },
+                || (places_ui::folder_name(folder), self.known.icon_at(folder)),
                 |shown| (shown.name.clone(), shown.icon),
             )
     }

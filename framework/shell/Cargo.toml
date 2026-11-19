@@ -5,6 +5,7 @@
 # one feature publishes for the others. It never touches the disk.
 #
 # Allowed outside crates:
+# - futures
 # - gpui
 # - unicode-segmentation
 #
@@ -24,6 +25,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+futures = { version = "0.3", default-features = false, features = ["std"] }
 gpui.workspace = true
 nova-files-api.workspace = true
 nova-files-messages.workspace = true

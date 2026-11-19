@@ -2,7 +2,7 @@ use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
 
 use gpui::SharedString;
-use nova_files_places_api::{Place, PlaceKind};
+use nova_files_shell::KnownFolders;
 
 use crate::assets::Icon;
 use crate::window::ROOT_FOLDER;
@@ -41,12 +41,7 @@ pub fn under_home<'a>(folder: &'a Path, home: &Path) -> Option<&'a Path> {
     folder.strip_prefix(home).ok()
 }
 
-pub fn crumbs(
-    folder: &Path,
-    home: &Path,
-    places: &[Place],
-    place_icon: fn(PlaceKind) -> Icon,
-) -> Vec<Crumb> {
+pub fn crumbs(folder: &Path, home: &Path, known: &KnownFolders) -> Vec<Crumb> {
     let (root, mut crumbs) = if under_home(folder, home).is_some() {
         let crumb = Crumb::new(home.to_path_buf(), HOME_LABEL.into(), Icon::Home);
         (home, vec![crumb])
@@ -62,7 +57,7 @@ pub fn crumbs(
             continue;
         };
         path.push(name);
-        let icon = folder_icon(&path, places, place_icon);
+        let icon = known.icon_at(&path);
         let label = name.to_string_lossy().into_owned().into();
         crumbs.push(Crumb::new(path.clone(), label, icon));
     }
@@ -74,13 +69,6 @@ pub fn crumbs(
         here.here = true;
     }
     crumbs
-}
-
-pub fn folder_icon(path: &Path, places: &[Place], place_icon: fn(PlaceKind) -> Icon) -> Icon {
-    places
-        .iter()
-        .find(|place| place.path == path)
-        .map_or(Icon::Folder, |place| place_icon(place.kind))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,19 +93,14 @@ pub fn shown(count: usize) -> Vec<Shown> {
 
 #[cfg(test)]
 mod tests {
+    use nova_files_shell::KnownFolder;
+
     use super::*;
 
     const HOME: &str = "/home/me";
 
-    const fn place_icon(kind: PlaceKind) -> Icon {
-        match kind {
-            PlaceKind::Documents => Icon::Documents,
-            _ => Icon::Pictures,
-        }
-    }
-
     fn of(folder: &Path) -> Vec<Crumb> {
-        crumbs(folder, Path::new(HOME), &[], place_icon)
+        crumbs(folder, Path::new(HOME), &KnownFolders::default())
     }
 
     fn labels(crumbs: &[Crumb]) -> Vec<&str> {
@@ -168,7 +151,7 @@ mod tests {
 
     #[test]
     fn a_home_at_the_root_is_no_home() {
-        let found = crumbs(Path::new("/etc"), Path::new("/"), &[], place_icon);
+        let found = crumbs(Path::new("/etc"), Path::new("/"), &KnownFolders::default());
         assert_eq!(labels(&found), ["Computer", "etc"]);
         assert_eq!(under_home(Path::new("/etc"), Path::new("/")), None);
         assert_eq!(
@@ -179,18 +162,19 @@ mod tests {
 
     #[test]
     fn a_relative_home_is_never_a_root() {
-        let found = crumbs(Path::new("me/a"), Path::new("me"), &[], place_icon);
+        let found = crumbs(Path::new("me/a"), Path::new("me"), &KnownFolders::default());
         assert_eq!(labels(&found), ["Computer", "me", "a"]);
     }
 
     #[test]
-    fn a_places_folder_takes_its_icon() {
-        let places = [Place {
-            kind: PlaceKind::Documents,
+    fn a_known_folder_takes_its_icon() {
+        let known = KnownFolders::new([KnownFolder {
             path: PathBuf::from("/home/me/Dokumente"),
-        }];
+            name: "Dokumente".into(),
+            icon: Icon::Documents,
+        }]);
         let folder = Path::new("/home/me/Dokumente/a");
-        let found = crumbs(folder, Path::new(HOME), &places, place_icon);
+        let found = crumbs(folder, Path::new(HOME), &known);
         assert_eq!(found[1].icon, Icon::Documents);
         assert_eq!(found[2].icon, Icon::Folder);
     }

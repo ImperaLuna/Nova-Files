@@ -2,11 +2,11 @@ use std::f32::consts::FRAC_PI_2;
 
 use gpui::{
     AnyElement, App, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Pixels, SharedString, Stateful,
+    MouseDownEvent, ParentElement as _, Pixels, Rgba, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled as _, Transformation, Window, div,
     prelude::FluentBuilder as _, radians, svg,
 };
-use nova_files_shell::{Expander, RowItem, SidebarAt, SidebarRow};
+use nova_files_shell::{Expander, Look, RowItem, SidebarAt, SidebarRow};
 
 use super::{Row, icon, on_middle_click, row, section_button};
 use crate::assets::Icon;
@@ -34,7 +34,7 @@ impl MainWindow {
         colors: &Colors,
         cx: &Context<Self>,
     ) -> Vec<AnyElement> {
-        if self.pick.is_some() {
+        if self.picker() {
             return Vec::new();
         }
         self.parts
@@ -55,11 +55,20 @@ impl MainWindow {
         colors: &Colors,
         cx: &Context<Self>,
     ) -> Stateful<Div> {
-        let (opens, new_tab) = (place.opens.clone(), place.opens.clone());
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let menu_row = place.id.clone();
-        let shown = from_shell(place.opens.clone());
-        let drops = self.tab_drops_at(Some(&shown), place.name.clone());
+        let shown = place.opens.clone().map(from_shell);
+        let drops = shown
+            .as_ref()
+            .and_then(|shown| self.tab_drops_at(Some(shown), place.name.clone()));
+        let clicked = Clicked {
+            opens: place.opens.clone(),
+            open: place.open.clone(),
+        };
+        let middle = Clicked {
+            opens: place.opens.clone(),
+            open: place.new_tab.clone(),
+        };
         let wide = !narrow;
         let lead = place
             .expander
@@ -75,7 +84,9 @@ impl MainWindow {
                 selector: place.id.to_string(),
                 glyph: place.icon,
                 name: place.name,
-                number: place.number.map(|number| (number, colors.text_dim)),
+                number: place
+                    .number
+                    .map(|number| (number, number_tint(place.number_look, colors))),
                 here: place.here,
                 pressed: false,
                 lead,
@@ -87,15 +98,31 @@ impl MainWindow {
             row.pl(size::TREE_INDENT * f32::from(place.depth))
         })
         .children(tail)
-        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-            this.go_to_shell(opens.clone(), cx);
-        }))
+        .on_click(
+            cx.listener(move |this, _: &ClickEvent, _, cx| match &clicked {
+                Clicked {
+                    open: Some(open), ..
+                } => run_later(open, cx),
+                Clicked {
+                    opens: Some(opens), ..
+                } => this.go_to_shell(opens.clone(), cx),
+                Clicked { .. } => {}
+            }),
+        )
         .map(|row| {
-            on_middle_click(row, main, cx, move |this, cx| {
-                this.new_tab_at_shell(new_tab.clone(), cx);
+            on_middle_click(row, main, cx, move |this, cx| match &middle {
+                Clicked {
+                    open: Some(open), ..
+                } => run_later(open, cx),
+                Clicked {
+                    opens: Some(opens), ..
+                } => this.new_tab_at_shell(opens.clone(), cx),
+                Clicked { .. } => {}
             })
         })
-        .map(|row| Self::opens_on_hover(row, HoverOpens::Place(shown), cx))
+        .when_some(shown, |row, shown| {
+            Self::opens_on_hover(row, HoverOpens::Place(shown), cx)
+        })
         .when(main, |row| {
             row.on_mouse_down(
                 MouseButton::Right,
@@ -155,6 +182,16 @@ fn small_button(selector: String, side: Pixels, colors: &Colors) -> Stateful<Div
         .hover(|button| button.bg(colors.press))
 }
 
+struct Clicked {
+    opens: Option<nova_files_shell::Location>,
+    open: Option<RowItem>,
+}
+
+fn run_later(item: &RowItem, cx: &mut Context<MainWindow>) {
+    let run = item.run.clone();
+    cx.defer(move |cx| run(cx));
+}
+
 fn run_on_click(
     item: RowItem,
     cx: &Context<MainWindow>,
@@ -164,4 +201,12 @@ fn run_on_click(
         let run = item.run.clone();
         cx.defer(move |cx| run(cx));
     })
+}
+
+const fn number_tint(look: Look, colors: &Colors) -> Rgba {
+    match look {
+        Look::Plain => colors.text_dim,
+        Look::On => colors.here,
+        Look::Danger => colors.full,
+    }
 }

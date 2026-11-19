@@ -2,8 +2,8 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::PathBuf;
 
-use gpui::{AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
-use nova_files_api::{EntryKind, Listing, Operation};
+use gpui::{App, AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
+use nova_files_api::{Entry, EntryKind, Listing, Operation};
 
 use super::MainWindow;
 use crate::pick::stem;
@@ -126,13 +126,23 @@ impl MainWindow {
         (self.rename_row()? == index).then_some(field)
     }
 
+    pub fn name_field(
+        &self,
+        (index, entry): (usize, &Entry),
+        cx: &App,
+    ) -> Option<Entity<TextField>> {
+        self.rename_field(index)
+            .cloned()
+            .or_else(|| self.parts.name_field(entry, cx))
+    }
+
     pub const fn renaming(&self) -> bool {
         self.renaming.is_some()
     }
 
     pub fn new_folder(&mut self) {
         let Some(listing) = &self.listing else { return };
-        if self.pick.is_some()
+        if self.picker()
             || self.renaming.is_some()
             || self.folder_rules().read_only
             || self.folder().is_none()

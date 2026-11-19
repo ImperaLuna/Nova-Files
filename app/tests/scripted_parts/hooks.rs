@@ -4,12 +4,12 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, Modifiers, MouseButton,
-    ParentElement as _, SharedString, Window, div, point, px,
+    ParentElement as _, SharedString, Styled as _, Window, div, point, px,
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_shell::{
-    Host, Location, NoteGone, PageKind, PageRef, Part, Parts, RowItem, SidebarAt, SidebarRow,
-    Slots, Undo, assets::Icon,
+    DropOver, Host, Location, NavEvent, NoteGone, PageKind, PageRef, Part, Parts, RowItem,
+    SidebarAt, SidebarRow, Slots, Undo, assets::Icon,
 };
 
 use super::super::*;
@@ -24,6 +24,7 @@ thread_local! {
     static UNDONE: Cell<usize> = const { Cell::new(0) };
     static FILED: Cell<usize> = const { Cell::new(0) };
     static SWEPT: Cell<usize> = const { Cell::new(0) };
+    static AIMED_AT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
 }
 
 const FILE_ROOM: &str = "/file-room";
@@ -68,14 +69,12 @@ fn opens(_: &mut Tagger, entry: &Entry, _: &Path, _: &mut Context<Tagger>) -> bo
     own
 }
 
-fn files_here(
-    _: &Tagger,
-    at: &Location,
-    _: &[PathBuf],
-    _: Modifiers,
-    _: &gpui::App,
-) -> Option<SharedString> {
-    (at.folder() == Some(Path::new(FILE_ROOM))).then(|| "File away".into())
+fn files_here(_: &Tagger, over: &DropOver<'_>, _: &gpui::App) -> Option<SharedString> {
+    let here = over.at.folder() == Some(Path::new(FILE_ROOM));
+    if here {
+        AIMED_AT.set(over.name.to_owned());
+    }
+    here.then(|| format!("File into {}", over.name).into())
 }
 
 fn basket(_: &mut Tagger, _: &Basket, _: &mut Window, _: &mut Context<Tagger>) -> AnyElement {
@@ -107,16 +106,23 @@ impl Part for Tagger {
             |_, scene, _| scene.in_folder(Path::new(OTHER)),
             |_, _, _, _| Some(shown("tagger-list")),
         );
-        slots.row_icon(|_, entry, _| (entry.name == OWN).then(|| shown("tagger-icon")));
+        slots.row_icon(|_, entry, side, _| {
+            (entry.name == OWN).then(|| {
+                div()
+                    .debug_selector(|| "tagger-icon".to_owned())
+                    .size(side)
+                    .into_any_element()
+            })
+        });
         slots.opens(opens);
         slots.closing(|_, _| CLOSED.set(CLOSED.get() + 1));
         slots.page::<Basket>(basket);
         slots.drops::<Basket>(|_, _, paths, _| DROPPED.set(DROPPED.get() + paths.len()));
         slots.row_menu(|_, row, _| {
             if row == "place-file-room" {
-                vec![RowItem::new(Icon::Info, "Sweep", |_| {
+                vec![vec![RowItem::new(Icon::Info, "Sweep", |_| {
                     SWEPT.set(SWEPT.get() + 1);
-                })]
+                })]]
             } else {
                 Vec::new()
             }
@@ -216,6 +222,7 @@ fn a_part_that_aims_at_a_folder_names_and_takes_the_drop(cx: &mut TestAppContext
     let_go(cx, "place-file-room");
 
     assert!(chip);
+    assert_eq!(AIMED_AT.take(), "File room");
     assert_eq!(FILED.get(), 1);
     assert_eq!(
         core.commands(),
@@ -229,7 +236,8 @@ fn a_part_fills_the_bar_the_overlay_and_a_row_icon(cx: &mut TestAppContext) {
     let (_view, cx, _core) = tagged(cx);
     assert!(cx.debug_bounds("tagger-bar").is_some());
     assert!(cx.debug_bounds("tagger-overlay").is_some());
-    assert!(cx.debug_bounds("tagger-icon").is_some());
+    let icon = cx.debug_bounds("tagger-icon").unwrap();
+    assert_eq!(icon.size.width, nova_files_shell::theme::size::ROW_ICON);
     assert!(cx.debug_bounds("tagger-list").is_none());
 }
 
@@ -334,4 +342,30 @@ fn a_part_hears_when_its_note_leaves_the_island(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     assert_eq!(gone.get(), Some(mine));
+}
+
+#[gpui::test]
+fn a_part_hears_when_the_window_goes_elsewhere_but_not_for_its_own_asks(cx: &mut TestAppContext) {
+    let (view, cx, _core) = tagged(cx);
+    let nav = view.read_with(cx, |view, _| view.host().nav.clone());
+    let left = Rc::new(Cell::new(0));
+    let heard = Rc::clone(&left);
+    let _hearing = cx.update(|_, cx| {
+        cx.subscribe(&nav, move |_, event: &NavEvent, _| {
+            if *event == NavEvent::Left {
+                heard.set(heard.get() + 1);
+            }
+        })
+    });
+
+    nav.update(cx, |nav, cx| nav.go(Location::Folder(FILE_ROOM.into()), cx));
+    cx.run_until_parked();
+    assert_eq!(left.get(), 0);
+
+    view.update(cx, |view, cx| {
+        view.open(Path::new(SHOWN));
+        cx.notify();
+    });
+    cx.run_until_parked();
+    assert_eq!(left.get(), 1);
 }

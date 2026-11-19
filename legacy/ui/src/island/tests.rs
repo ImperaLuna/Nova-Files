@@ -35,15 +35,7 @@ fn the_selection_line_adds_the_size_only_when_there_is_one() {
 }
 
 #[test]
-fn a_lone_path_goes_by_its_name_and_the_root_by_a_slash() {
-    assert_eq!(
-        clipboard_note(false, &paths(&["notes.txt"])),
-        "Copied notes.txt"
-    );
-    assert_eq!(
-        clipboard_note(true, &paths(&["a", "b", "c"])),
-        "Cut 3 items"
-    );
+fn the_root_goes_by_a_slash() {
     assert_eq!(name_of(Path::new("/")), "/");
 }
 

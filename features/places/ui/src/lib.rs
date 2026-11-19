@@ -13,7 +13,7 @@ use nova_files_shell::{
     Host, Location, Part, Published, RowItem, Scene, SidebarAt, SidebarRow, Slots,
 };
 
-pub use shown::{HOME_LABEL, Shown, folder_name, place_icon, shown, standard_icon_at};
+pub use shown::{HOME_LABEL, Shown, folder_name, known, shown};
 
 const PIN_BUTTON: &str = "pin";
 const PICK_TITLE: &str = "Pin a folder";
@@ -40,7 +40,10 @@ impl PlacesPart {
 
     fn arrived(&mut self, event: places_api::Event, cx: &mut Context<Self>) {
         match event {
-            places_api::Event::Places(places) => self.known.places = places,
+            places_api::Event::Places(places) => {
+                Published::set(known(&places), cx);
+                self.known.places = places;
+            }
             places_api::Event::Bookmarks(pinned) => self.known.pinned = pinned,
         }
         self.shown = shown(&self.known.places, &self.known.pinned);
@@ -79,14 +82,14 @@ fn rows(part: &PlacesPart, scene: &Scene, _: &App) -> Vec<SidebarRow> {
         .collect()
 }
 
-fn row_menu(part: &PlacesPart, row: &str, _: &App) -> Vec<RowItem> {
+fn row_menu(part: &PlacesPart, row: &str, _: &App) -> Vec<Vec<RowItem>> {
     let Some(path) = part.pinned_at(row) else {
         return Vec::new();
     };
     let change = part.change();
-    vec![RowItem::new(Icon::Close, UNPIN_LABEL, move |_| {
+    vec![vec![RowItem::new(Icon::Close, UNPIN_LABEL, move |_| {
         change(BookmarkChange::Remove { path: path.clone() });
-    })]
+    })]]
 }
 
 fn pin_button(part: &PlacesPart, scene: &Scene, _: &App) -> Option<RowItem> {

@@ -1,10 +1,10 @@
 use gpui::{
-    Div, Hsla, IntoElement, ParentElement as _, Pixels, Rgba, Styled as _, div,
+    AnyElement, Div, Hsla, IntoElement, ParentElement as _, Pixels, Rgba, Styled as _, div,
     prelude::FluentBuilder as _, svg,
 };
 
 use crate::assets::Icon;
-use crate::theme::{Colors, radius, size};
+use crate::theme::{Colors, radius, size, start, text};
 
 pub fn icon(glyph: Icon, side: Pixels, tint: Rgba) -> impl IntoElement {
     svg()
@@ -32,4 +32,20 @@ pub fn tick_box(ticked: bool, colors: &Colors) -> Div {
                 tick.border_color(colors.text_faint)
             }
         })
+}
+
+pub fn card_group(label: &'static str, cards: AnyElement, colors: &Colors) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap(start::LABEL_GAP)
+        .child(
+            div()
+                .pl(start::LABEL_INSET)
+                .text_size(text::LABEL)
+                .font_weight(text::LABEL_WEIGHT)
+                .text_color(colors.text_dim)
+                .child(label),
+        )
+        .child(cards)
 }

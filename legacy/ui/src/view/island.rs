@@ -11,7 +11,7 @@ use nova_files_shell::{Look, MenuAt, MenuGroup, MenuItem, Placed, arrange};
 
 use super::row::icon;
 use crate::assets::Icon;
-use crate::commands::{COPY, CUT, ClearSelection, RENAME, TRASH, Undo};
+use crate::commands::{ClearSelection, RENAME, TRASH, Undo};
 use crate::island::progress::Running;
 use crate::island::{self, Confirm, Note, asking};
 use crate::theme::{Colors, radius, size, text};
@@ -26,7 +26,7 @@ impl MainWindow {
     pub(super) fn island(&self, cx: &Context<Self>) -> impl IntoElement {
         let colors = Colors::of(cx);
         let job = self.job_on_island(cx);
-        let parts = if self.pick.is_some() {
+        let parts = if self.picker() {
             None
         } else if let Some((id, conflict)) =
             job.and_then(|(id, job)| Some((id, job.asking.as_ref()?)))
@@ -129,14 +129,6 @@ fn file_buttons(count: usize) -> Vec<Placed> {
     };
     let rename = (count == 1).then(|| button(Icon::Rename, &RENAME, "island-rename"));
     vec![
-        Placed::new(
-            MenuGroup::Edit,
-            Placed::FIRST,
-            vec![
-                button(Icon::Copy, &COPY, "island-copy"),
-                button(Icon::Cut, &CUT, "island-cut"),
-            ],
-        ),
         Placed::new(
             MenuGroup::Edit,
             Placed::SECOND,

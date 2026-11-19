@@ -9,8 +9,8 @@ use nova_files_shell::{
 use super::MainWindow;
 use crate::assets::Icon;
 use crate::commands::{
-    COPY, CUT, DETAILS, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PASTE, PREVIEW, PROPERTIES,
-    RENAME, SELECT_ALL, TRASH,
+    DETAILS, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PREVIEW, PROPERTIES, RENAME, SELECT_ALL,
+    TRASH,
 };
 use crate::menu::{MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
@@ -57,7 +57,7 @@ impl MainWindow {
     }
 
     fn has_menus(&self) -> bool {
-        self.pick.is_none() && !self.is_on_start() && self.listing.is_some()
+        !self.picker() && !self.is_on_start() && self.listing.is_some()
     }
 
     fn arranged(&self, at: MenuAt, window: Vec<Placed>, cx: &App) -> Vec<Vec<MenuItem>> {
@@ -88,14 +88,6 @@ impl MainWindow {
                     MenuGroup::Open,
                     Placed::FIRST,
                     open.into_iter().flatten().collect(),
-                ),
-                Placed::new(
-                    MenuGroup::Edit,
-                    Placed::FIRST,
-                    vec![
-                        ShellItem::run(Icon::Cut, &CUT),
-                        ShellItem::run(Icon::Copy, &COPY),
-                    ],
                 ),
                 Placed::new(
                     MenuGroup::Edit,
@@ -178,8 +170,7 @@ impl MainWindow {
         if self.showing_found() {
             return vec![select.items.into_iter().map(MenuItem::from).collect()];
         }
-        let paste = Self::clipboard_has_files(cx).then(|| ShellItem::run(Icon::Paste, &PASTE));
-        let hidden = if self.settings.hidden_files == HiddenFiles::Shown {
+        let hidden = if self.hidden_files == Some(HiddenFiles::Shown) {
             ShellItem::run(Icon::Check, &HIDDEN).with_look(ShellLook::On)
         } else {
             ShellItem::run(Icon::Eye, &HIDDEN)
@@ -192,7 +183,6 @@ impl MainWindow {
                     Placed::FIRST,
                     vec![ShellItem::run(Icon::NewFolder, &NEW_FOLDER)],
                 ),
-                Placed::new(MenuGroup::Edit, Placed::SECOND, paste.into_iter().collect()),
                 select,
                 Placed::new(MenuGroup::View, Placed::FIRST, self.view_items()),
                 Placed::new(MenuGroup::Show, Placed::FIRST, vec![hidden]),

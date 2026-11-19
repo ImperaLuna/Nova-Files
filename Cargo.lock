@@ -3582,8 +3582,10 @@ dependencies = [
  "gpui",
  "libc",
  "nova-files-api",
+ "nova-files-clipboard-ui",
  "nova-files-core",
  "nova-files-dbus",
+ "nova-files-delete-ui",
  "nova-files-drives-api",
  "nova-files-gathered-api",
  "nova-files-look-api",
@@ -3641,6 +3643,15 @@ name = "nova-files-clipboard-api"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-clipboard-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-clipboard-api",
+ "nova-files-shell",
 ]
 
 [[package]]
@@ -3706,6 +3717,15 @@ dependencies = [
  "nova-files-api",
  "nova-files-jobs",
  "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-delete-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-shell",
 ]
 
 [[package]]
@@ -3911,6 +3931,7 @@ dependencies = [
 name = "nova-files-shell"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "gpui",
  "nova-files-api",
  "nova-files-messages",
@@ -4018,7 +4039,8 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
- "nova-files-clipboard-api",
+ "nova-files-clipboard-ui",
+ "nova-files-delete-ui",
  "nova-files-drives-api",
  "nova-files-gathered-api",
  "nova-files-picker-api",

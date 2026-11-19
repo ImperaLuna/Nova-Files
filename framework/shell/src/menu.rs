@@ -170,7 +170,10 @@ pub struct SidebarRow {
     pub icon: Icon,
     pub name: SharedString,
     pub number: Option<SharedString>,
-    pub opens: crate::Location,
+    pub number_look: Look,
+    pub opens: Option<crate::Location>,
+    pub open: Option<RowItem>,
+    pub new_tab: Option<RowItem>,
     pub here: bool,
     pub depth: u8,
     pub expander: Option<Expander>,
@@ -196,7 +199,10 @@ impl SidebarRow {
             icon,
             name: name.into(),
             number: None,
-            opens,
+            number_look: Look::Plain,
+            opens: Some(opens),
+            open: None,
+            new_tab: None,
             here: false,
             depth: 0,
             expander: None,
@@ -220,6 +226,30 @@ impl SidebarRow {
     #[must_use]
     pub fn number(mut self, number: Option<SharedString>) -> Self {
         self.number = number;
+        self
+    }
+
+    pub fn acting(
+        id: impl Into<SharedString>,
+        icon: Icon,
+        name: impl Into<SharedString>,
+        open: RowItem,
+    ) -> Self {
+        let mut row = Self::new(id, icon, name, crate::Location::start());
+        row.opens = None;
+        row.open = Some(open);
+        row
+    }
+
+    #[must_use]
+    pub fn on_new_tab(mut self, new_tab: RowItem) -> Self {
+        self.new_tab = Some(new_tab);
+        self
+    }
+
+    #[must_use]
+    pub const fn number_look(mut self, look: Look) -> Self {
+        self.number_look = look;
         self
     }
 

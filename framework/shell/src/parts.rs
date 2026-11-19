@@ -5,20 +5,22 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
-    Modifiers, SharedString, Subscription,
+    Pixels, SharedString, Subscription,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId};
 
 use crate::assets::Icon;
+use crate::jump::Jump;
 use nova_files_messages::{Envelope, MessageType};
 
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{Location, PageRef};
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
-use crate::part::{Card, Part, Slots};
+use crate::part::{Card, DropOver, Part, Slots};
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
+use crate::text::TextField;
 
 type ShownCell = Box<dyn Fn(&Entry, &App) -> Option<SharedString>>;
 
@@ -46,13 +48,16 @@ trait OpenPart {
     fn bars(&self) -> Vec<AnyView>;
     fn overlays(&self) -> Vec<AnyView>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
-    fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
+    fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
+    fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
     fn closing(&self, cx: &mut App);
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
     fn watch(&self, event: &Event, cx: &mut App);
     fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)>;
     fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
+    fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>>;
+    fn busy(&self, cx: &App) -> bool;
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App);
     fn takes_drops(&self, page: &PageRef) -> bool;
     fn drop_on(
@@ -61,27 +66,15 @@ trait OpenPart {
         paths: Vec<PathBuf>,
         cx: &mut App,
     ) -> Result<(), Vec<PathBuf>>;
-    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem>;
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>>;
     fn section_buttons(
         &self,
         at: SidebarAt,
         scene: &Scene,
         cx: &App,
     ) -> Vec<(&'static str, RowItem)>;
-    fn drop_label(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &App,
-    ) -> Option<SharedString>;
-    fn drop_at(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &mut App,
-    ) -> bool;
+    fn drop_label(&self, over: &DropOver<'_>, cx: &App) -> Option<SharedString>;
+    fn drop_at(&self, over: &DropOver<'_>, cx: &mut App) -> bool;
     fn as_any(&self) -> &dyn Any;
     fn selectable(&self, entry: &Entry, cx: &App) -> bool;
     fn several(&self, cx: &App) -> bool;
@@ -190,12 +183,12 @@ impl<P: Part> OpenPart for Opened<P> {
             .map(|(_, view)| view.clone())
     }
 
-    fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
+    fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
         let part = self.entity.read(cx);
         self.slots
             .row_icons
             .iter()
-            .find_map(|icon| icon(part, entry, cx))
+            .find_map(|icon| icon(part, entry, side, cx))
     }
 
     fn closing(&self, cx: &mut App) {
@@ -218,6 +211,18 @@ impl<P: Part> OpenPart for Opened<P> {
                 .opens
                 .iter()
                 .any(|opens| opens(part, entry, path, cx))
+        })
+    }
+
+    fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool {
+        if self.slots.typed.is_empty() {
+            return false;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .typed
+                .iter()
+                .any(|typed| typed(part, jump, scene, cx))
         })
     }
 
@@ -250,6 +255,19 @@ impl<P: Part> OpenPart for Opened<P> {
             .name_cells
             .iter()
             .find_map(|cell| cell(part, entry, cx))
+    }
+
+    fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>> {
+        let part = self.entity.read(cx);
+        self.slots
+            .name_fields
+            .iter()
+            .find_map(|field| field(part, entry, cx))
+    }
+
+    fn busy(&self, cx: &App) -> bool {
+        let part = self.entity.read(cx);
+        self.slots.busy.iter().any(|busy| busy(part, cx))
     }
 
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
@@ -290,7 +308,7 @@ impl<P: Part> OpenPart for Opened<P> {
         Ok(())
     }
 
-    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>> {
         let part = self.entity.read(cx);
         self.slots
             .row_menus
@@ -314,37 +332,25 @@ impl<P: Part> OpenPart for Opened<P> {
             .collect()
     }
 
-    fn drop_label(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &App,
-    ) -> Option<SharedString> {
+    fn drop_label(&self, over: &DropOver<'_>, cx: &App) -> Option<SharedString> {
         let part = self.entity.read(cx);
         self.slots
             .drop_targets
             .iter()
-            .find_map(|(aim, _)| aim(part, at, sources, modifiers, cx))
+            .find_map(|(aim, _)| aim(part, over, cx))
     }
 
-    fn drop_at(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &mut App,
-    ) -> bool {
+    fn drop_at(&self, over: &DropOver<'_>, cx: &mut App) -> bool {
         let part = self.entity.read(cx);
         let Some(&(_, take)) = self
             .slots
             .drop_targets
             .iter()
-            .find(|(aim, _)| aim(part, at, sources, modifiers, cx).is_some())
+            .find(|(aim, _)| aim(part, over, cx).is_some())
         else {
             return false;
         };
-        let (at, sources) = (at.clone(), sources.to_vec());
+        let (at, sources, modifiers) = (over.at.clone(), over.sources.to_vec(), over.modifiers);
         self.entity
             .update(cx, |part, cx| take(part, at, sources, modifiers, cx));
         true
@@ -619,16 +625,27 @@ impl WindowParts {
             .find_map(|part| part.name_cell(entry, cx))
     }
 
+    pub fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>> {
+        self.opened
+            .iter()
+            .find_map(|part| part.name_field(entry, cx))
+    }
+
+    pub fn busy(&self, cx: &App) -> bool {
+        self.opened.iter().any(|part| part.busy(cx))
+    }
+
     pub fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
         for part in &self.opened {
             part.listed(listing, reordered, cx);
         }
     }
 
-    pub fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+    pub fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>> {
         self.opened
             .iter()
             .flat_map(|part| part.row_menu(row, cx))
+            .filter(|group| !group.is_empty())
             .collect()
     }
 
@@ -644,28 +661,14 @@ impl WindowParts {
             .collect()
     }
 
-    pub fn drop_label(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &App,
-    ) -> Option<SharedString> {
+    pub fn drop_label(&self, over: &DropOver<'_>, cx: &App) -> Option<SharedString> {
         self.opened
             .iter()
-            .find_map(|part| part.drop_label(at, sources, modifiers, cx))
+            .find_map(|part| part.drop_label(over, cx))
     }
 
-    pub fn drop_at(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &mut App,
-    ) -> bool {
-        self.opened
-            .iter()
-            .any(|part| part.drop_at(at, sources, modifiers, cx))
+    pub fn drop_at(&self, over: &DropOver<'_>, cx: &mut App) -> bool {
+        self.opened.iter().any(|part| part.drop_at(over, cx))
     }
 
     pub fn takes_drops(&self, page: &PageRef) -> bool {
@@ -698,14 +701,20 @@ impl WindowParts {
             .find_map(|part| part.list_view(scene, cx))
     }
 
-    pub fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
-        self.opened.iter().find_map(|part| part.row_icon(entry, cx))
+    pub fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
+        self.opened
+            .iter()
+            .find_map(|part| part.row_icon(entry, side, cx))
     }
 
     pub fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool {
         self.opened
             .iter()
             .any(|part| part.open_entry(entry, path, cx))
+    }
+
+    pub fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool {
+        self.opened.iter().any(|part| part.typed(jump, scene, cx))
     }
 
     pub fn closing(&self, cx: &mut App) {

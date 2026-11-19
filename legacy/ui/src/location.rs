@@ -15,7 +15,6 @@ pub enum Location {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Builtin {
-    Start,
     Gathered(Gathering),
     Properties(Vec<PathBuf>),
 }
@@ -23,7 +22,6 @@ pub enum Builtin {
 impl PageKind for Builtin {
     fn title(&self) -> SharedString {
         SharedString::new_static(match self {
-            Self::Start => crate::places::START_LABEL,
             Self::Gathered(_) => "Gathered",
             Self::Properties(_) => "Properties",
         })
@@ -42,7 +40,7 @@ impl Location {
         let builtin = match self {
             Self::Folder(path) => return shell::Location::Folder(path.clone()),
             Self::Page(page) => return shell::Location::Page(page.clone()),
-            Self::Start => Builtin::Start,
+            Self::Start => return shell::Location::start(),
             Self::Gathered(place) => Builtin::Gathered(*place),
             Self::Properties(paths) => Builtin::Properties(paths.clone()),
         };
