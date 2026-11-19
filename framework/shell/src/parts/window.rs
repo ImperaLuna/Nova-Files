@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, SharedString, Size,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent, SharedString, Size,
     Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
@@ -15,6 +15,7 @@ use crate::command::CommandSpec;
 use crate::jump::Jump;
 use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
+use crate::layout::Layout;
 use crate::part::Part;
 use crate::part::{Click, ClickAnswer, DropOver, Staged};
 use crate::path_bar::Crumb;
@@ -79,6 +80,12 @@ impl WindowParts {
         self.opened
             .iter()
             .find_map(|part| part.folder_look(folder, cx))
+    }
+
+    pub fn layout(&self, folder: &Path, cx: &App) -> Option<Layout> {
+        self.opened
+            .iter()
+            .find_map(|part| part.layout(folder, cx))
     }
 
     pub fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn> {
@@ -286,6 +293,10 @@ impl WindowParts {
         self.opened
             .iter()
             .any(|part| part.key_down(event, scene, cx))
+    }
+
+    pub fn wheel(&self, event: &ScrollWheelEvent, cx: &mut App) -> bool {
+        self.opened.iter().any(|part| part.wheel(event, cx))
     }
 
     pub fn closing(&self, cx: &mut App) {

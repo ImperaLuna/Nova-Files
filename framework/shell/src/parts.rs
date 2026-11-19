@@ -4,13 +4,14 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, SharedString, Size,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent, SharedString, Size,
     Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
 use crate::assets::Icon;
 use crate::jump::Jump;
+use crate::layout::Layout;
 use nova_files_messages::Envelope;
 
 use crate::command::CommandSpec;
@@ -52,6 +53,7 @@ trait OpenPart {
     fn page(&self, page: &PageRef) -> Option<AnyView>;
     fn crumbs(&self, page: &PageRef, cx: &App) -> Option<Vec<Crumb>>;
     fn folder_look(&self, folder: &Path, cx: &App) -> Option<(SharedString, Icon)>;
+    fn layout(&self, folder: &Path, cx: &App) -> Option<Layout>;
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
     fn start_cards(&self) -> Vec<(u8, AnyView)>;
@@ -73,6 +75,7 @@ trait OpenPart {
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
     fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
     fn key_down(&self, event: &KeyDownEvent, scene: &Scene, cx: &mut App) -> bool;
+    fn wheel(&self, event: &ScrollWheelEvent, cx: &mut App) -> bool;
     fn closing(&self, cx: &mut App);
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
     fn watch(&self, event: &Event, cx: &mut App);
@@ -226,6 +229,14 @@ impl<P: Part> OpenPart for Opened<P> {
             .find_map(|look| look(part, folder, cx))
     }
 
+    fn layout(&self, folder: &Path, cx: &App) -> Option<Layout> {
+        let part = self.entity.read(cx);
+        self.slots
+            .layouts
+            .iter()
+            .find_map(|layout| layout(part, folder, cx))
+    }
+
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn> {
         let part = self.entity.read(cx);
         let column = self
@@ -367,6 +378,18 @@ impl<P: Part> OpenPart for Opened<P> {
                 .key_downs
                 .iter()
                 .any(|key_down| key_down(part, event, scene, cx))
+        })
+    }
+
+    fn wheel(&self, event: &ScrollWheelEvent, cx: &mut App) -> bool {
+        if self.slots.wheels.is_empty() {
+            return false;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .wheels
+                .iter()
+                .any(|wheel| wheel(part, event, cx))
         })
     }
 

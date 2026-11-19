@@ -28,6 +28,7 @@ pub struct Shown {
     pub picker: bool,
     pub asked: Option<ListingId>,
     pub laid: Laid,
+    pub details_only: bool,
     pub cursor: Option<usize>,
     pub showing: Showing,
 }
@@ -73,6 +74,10 @@ impl Entries {
 
     pub fn searching(&self) -> bool {
         self.shown.laid != Laid::Off
+    }
+
+    pub const fn details_only(&self) -> bool {
+        self.shown.details_only
     }
 
     pub fn over_failed(&self) -> bool {
