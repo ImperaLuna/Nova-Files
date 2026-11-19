@@ -50,6 +50,7 @@ pub enum IslandAsk {
         yes: &'static str,
         on_yes: OnYes,
     },
+    DismissNote,
 }
 
 impl fmt::Debug for IslandAsk {
@@ -67,6 +68,7 @@ impl fmt::Debug for IslandAsk {
                 .field("question", question)
                 .field("yes", yes)
                 .finish_non_exhaustive(),
+            Self::DismissNote => f.write_str("DismissNote"),
         }
     }
 }
@@ -78,6 +80,8 @@ pub struct IslandAsked;
 pub struct Island {
     asks: Vec<IslandAsk>,
     notes: u64,
+    undoable: Option<Undo>,
+    busy: bool,
 }
 
 impl EventEmitter<IslandAsked> for Island {}
@@ -123,6 +127,25 @@ impl Island {
     pub fn start_job(&mut self, operation: Operation, cx: &mut Context<Self>) {
         self.asks.push(IslandAsk::StartJob(operation));
         cx.emit(IslandAsked);
+    }
+
+    pub fn set_undoable(&mut self, undo: Option<Undo>, busy: bool) {
+        self.undoable = undo;
+        self.busy = busy;
+    }
+
+    pub const fn busy(&self) -> bool {
+        self.busy
+    }
+
+    pub fn take_undo(&mut self, cx: &mut Context<Self>) -> Option<Undo> {
+        if self.busy {
+            return None;
+        }
+        let undo = self.undoable.take();
+        self.asks.push(IslandAsk::DismissNote);
+        cx.emit(IslandAsked);
+        undo
     }
 
     pub fn take_asks(&mut self) -> Vec<IslandAsk> {
