@@ -3581,6 +3581,7 @@ version = "0.1.0"
 dependencies = [
  "gpui",
  "libc",
+ "log",
  "nova-files-api",
  "nova-files-clipboard-ui",
  "nova-files-core",
@@ -3616,6 +3617,9 @@ dependencies = [
  "nova-files-trash-ui",
  "nova-files-ui",
  "nova-files-undo-ui",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
  "zbus",
 ]
 
@@ -3718,8 +3722,6 @@ dependencies = [
  "nova-files-trash-api",
  "nova-files-trash-core",
  "rustix 1.1.6",
- "serde",
- "serde_json",
 ]
 
 [[package]]
