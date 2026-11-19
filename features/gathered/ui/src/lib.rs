@@ -15,9 +15,10 @@ use nova_files_gathered_api::{
 };
 use nova_files_shell::assets::Icon;
 use nova_files_shell::island::words::{name_of, short_path, what};
+use nova_files_shell::path_bar::Crumb;
 use nova_files_shell::{
-    Column, Host, Location, MenuAt, MenuGroup, MenuItem, Navigator, PageRef, Part, Placed, RowItem,
-    Scene, SidebarAt, SidebarRow, Slots, Undo, command_spec, format,
+    Column, Host, Location, MenuAt, MenuGroup, MenuItem, Navigator, PageKind, PageRef, Part,
+    Placed, RowItem, Scene, SidebarAt, SidebarRow, Slots, Undo, command_spec, format,
 };
 
 pub use page::{GAMES_LABEL, GatheredPage, PROJECTS_LABEL, look};
@@ -304,6 +305,16 @@ fn add_items(_: &GatheredPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
     vec![MenuItem::run(Icon::Plus, &ADD_FOLDER)]
 }
 
+fn crumbs(page: GatheredPage) -> Vec<Crumb> {
+    vec![Crumb {
+        opens: Some(Location::Page(PageRef::new(page))),
+        label: page.title(),
+        icon: page.icon(),
+        shows_icon: true,
+        here: true,
+    }]
+}
+
 fn rows(_: &GatheredPart, scene: &Scene, _: &App) -> Vec<SidebarRow> {
     if scene.picker {
         return Vec::new();
@@ -357,5 +368,6 @@ impl Part for GatheredPart {
         slots.drops::<GatheredPage>(|part, page, paths, cx| part.gather(page.place, paths, cx));
         slots.column(library_column);
         slots.path_chip(chip::chip);
+        slots.crumbs::<GatheredPage>(|_, page, _| crumbs(*page));
     }
 }

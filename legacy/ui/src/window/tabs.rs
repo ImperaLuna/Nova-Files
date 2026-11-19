@@ -8,6 +8,7 @@ use nova_files_api::{EntryId, Listing, ListingId, Order};
 
 use super::MainWindow;
 use super::search::Search;
+use nova_files_shell::paths::name_of;
 use nova_files_shell::{PageRef, TabId};
 
 use crate::assets::Icon;
@@ -15,7 +16,6 @@ use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::places::START_LABEL;
 use crate::selection::Selection;
-use nova_files_places_ui as places_ui;
 use nova_files_shell::History;
 
 pub const OPEN_IN_NEW_TAB_LABEL: &str = "Open in new tab";
@@ -148,46 +148,32 @@ impl MainWindow {
     }
 
     pub(crate) fn tab_looks(&self, cx: &App) -> Vec<(SharedString, Icon)> {
-        let shown = places_ui::shown(self.places(), self.pinned());
         self.tab_places()
             .iter()
-            .map(|place| self.tab_look(place.as_ref(), &shown, cx))
+            .map(|place| self.tab_look(place.as_ref(), cx))
             .collect()
     }
 
-    fn tab_look(
-        &self,
-        place: Option<&Location>,
-        shown: &[places_ui::Shown],
-        cx: &App,
-    ) -> (SharedString, Icon) {
+    fn tab_look(&self, place: Option<&Location>, cx: &App) -> (SharedString, Icon) {
         match place {
             Some(Location::Start) => (START_LABEL.into(), Icon::Start),
             Some(Location::Page(page)) => (page.title(), page.icon()),
-            Some(Location::Folder(folder)) => self
-                .host
-                .rules
-                .named(folder)
-                .map(|named| (named.label, named.icon))
-                .or_else(|| self.parts.folder_look(folder, cx))
-                .unwrap_or_else(|| self.folder_look(folder, shown)),
+            Some(Location::Folder(folder)) => self.host.rules.named(folder).map_or_else(
+                || self.folder_look(folder, cx),
+                |named| (named.label, named.icon),
+            ),
             None => (SharedString::default(), Icon::Folder),
         }
     }
 
-    fn folder_look(&self, folder: &Path, shown: &[places_ui::Shown]) -> (SharedString, Icon) {
-        shown
-            .iter()
-            .find(|shown| shown.path == *folder)
-            .map_or_else(
-                || (places_ui::folder_name(folder), self.known.icon_at(folder)),
-                |shown| (shown.name.clone(), shown.icon),
-            )
+    fn folder_look(&self, folder: &Path, cx: &App) -> (SharedString, Icon) {
+        self.parts
+            .folder_look(folder, cx)
+            .unwrap_or_else(|| (name_of(folder).into(), self.known.icon_at(folder)))
     }
 
     pub(crate) fn folder_name(&self, folder: &Path, cx: &App) -> SharedString {
-        let shown = places_ui::shown(self.places(), self.pinned());
-        self.tab_look(Some(&Location::Folder(folder.to_path_buf())), &shown, cx)
+        self.tab_look(Some(&Location::Folder(folder.to_path_buf())), cx)
             .0
     }
 

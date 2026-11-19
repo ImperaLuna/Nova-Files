@@ -3,7 +3,6 @@ mod aiming;
 mod confirm;
 mod context_menu;
 mod dragging;
-mod drives;
 mod events;
 mod gallery;
 mod hidden;
@@ -45,8 +44,6 @@ use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
     ListingId, Order,
 };
-use nova_files_drives_api as drives_api;
-use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_search_api as search_api;
 use nova_files_shell::Lines;
 use nova_files_shell::path_bar::PathBar;
@@ -82,7 +79,6 @@ pub enum WindowEvent {
     Opened(PathBuf),
     StartShown,
     Refused(PathBuf),
-    Places,
     Settings,
 }
 
@@ -118,8 +114,6 @@ pub struct MainWindow {
     next_listing: u64,
     fallbacks: Vec<PathBuf>,
     pub(crate) falling_back: bool,
-    pub(crate) places: Vec<Place>,
-    pinned: Arc<[Bookmark]>,
     pub(crate) history: History<Location>,
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
@@ -131,7 +125,6 @@ pub struct MainWindow {
     listed_page: Option<PageRef>,
     shown_page: Option<(TabId, PageRef)>,
     known: KnownFolders,
-    pub(crate) drives: nova_files_drives_api::KnownDrives,
     pub(crate) menu: Option<Menu>,
     pub(crate) search: search::Search,
     pub(crate) focus: FocusHandle,
@@ -233,8 +226,6 @@ impl MainWindow {
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
             falling_back: false,
             home,
-            places: Vec::new(),
-            pinned: Arc::from([]),
             history: History::default(),
             path_bar: cx.new(|_| PathBar::new(&host)),
             asks_sent: 0,
@@ -245,7 +236,6 @@ impl MainWindow {
             listed_page: None,
             shown_page: None,
             known: KnownFolders::default(),
-            drives: nova_files_drives_api::KnownDrives::default(),
             menu: None,
             search: search::Search::new(cx),
             focus: host.list.clone(),
@@ -312,16 +302,8 @@ impl MainWindow {
             });
             return;
         }
-        let drives = envelope.get::<drives_api::Event>().is_some();
-        let places = envelope.get::<places_api::Event>().is_some();
         if let Err(envelope) = self.parts.deliver(envelope, cx) {
             log::error!("no part takes {envelope:?}");
-        }
-        if drives {
-            self.drives_changed(cx);
-        }
-        if places {
-            self.places_changed(cx);
         }
     }
 
@@ -371,16 +353,8 @@ impl MainWindow {
         &self.scroll
     }
 
-    pub fn places(&self) -> &[Place] {
-        &self.places
-    }
-
     pub const fn known_folders(&self) -> &KnownFolders {
         &self.known
-    }
-
-    pub fn pinned(&self) -> &[Bookmark] {
-        &self.pinned
     }
 }
 
