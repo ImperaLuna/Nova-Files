@@ -100,7 +100,7 @@ impl MainWindow {
         self.reselect(|_, _| Selection::named_all(id, &entries, &names), cx);
     }
 
-    fn publish(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn publish(&mut self, cx: &mut Context<Self>) {
         let listing = self.listing.clone();
         let selected = self
             .selection()
