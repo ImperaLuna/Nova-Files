@@ -10,10 +10,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use common::Bench;
+use nova_files::{ArchiveKind, Archiver};
 use nova_files_api::{
     Answer, Command, ConflictKind, Failure, Operation, Outcome, Packing, Scope, Tally,
 };
-use nova_files_core::{ArchiveKind, Archiver};
 
 fn compress(bench: &Bench, name: &str, locked: bool) -> nova_files_api::JobId {
     bench.start(Operation::Compress {

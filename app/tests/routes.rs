@@ -2,7 +2,7 @@ use nova_files_api::{MessageType, missing_routes};
 
 #[test]
 fn every_command_a_front_sends_has_a_route_in_the_core() {
-    let routed = nova_files_core::routed_types().unwrap();
+    let routed = nova_files::routed_types().unwrap();
     let sent: Vec<MessageType> = [
         nova_files_ui::sent_types(),
         nova_files::parts().sends(),
@@ -24,7 +24,7 @@ fn every_event_the_core_sends_has_a_front_that_takes_it() {
         nova_files_dbus::taken_types(),
     ]
     .concat();
-    let emitted = nova_files_core::emitted_types();
+    let emitted = nova_files::emitted_types();
     let missing: Vec<&str> = missing_routes(&emitted, &taken)
         .iter()
         .map(MessageType::name)
