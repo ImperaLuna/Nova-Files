@@ -1,8 +1,26 @@
-use std::io;
+use std::{error, fmt, io};
 
 use nova_files_api::Failure;
 
+#[derive(Debug)]
+struct SourceChanged;
+
+impl fmt::Display for SourceChanged {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("the source changed meanwhile")
+    }
+}
+
+impl error::Error for SourceChanged {}
+
+pub fn source_changed() -> io::Error {
+    io::Error::other(SourceChanged)
+}
+
 pub fn failure(error: &io::Error) -> Failure {
+    if matches!(error.get_ref(), Some(inner) if inner.is::<SourceChanged>()) {
+        return Failure::SourceChanged;
+    }
     match error.kind() {
         io::ErrorKind::AlreadyExists | io::ErrorKind::DirectoryNotEmpty => Failure::NameTaken,
         io::ErrorKind::NotFound => Failure::NotFound,
