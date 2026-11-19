@@ -20,15 +20,14 @@ fn window_at<'a>(
     location: &Location,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext, Connector) {
     cx.executor().allow_parking();
-    let core_home = nova_files_core::Home {
+    let core_home = nova_files::Home {
         folder: home.to_owned(),
         config: home.join(".config"),
         state: home.with_extension("state"),
         data: home.join(".local/share"),
         drive_trashes: false,
     };
-    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None, None)
-        .unwrap();
+    let core = nova_files::spawn_with(nova_files::IDLE_EXIT, Some(core_home), None, None).unwrap();
     let connector = core.connector.clone();
     let home = home.to_owned();
     with_parts(cx);

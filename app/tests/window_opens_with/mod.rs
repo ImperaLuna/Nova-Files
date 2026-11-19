@@ -1,4 +1,4 @@
-#[path = "../../../legacy/core/tests/common/own_folders.rs"]
+#[path = "../core/common/own_folders.rs"]
 mod own_folders;
 
 use own_folders::run_again_in;
@@ -67,7 +67,7 @@ fn entry(name: &str) -> String {
 async fn through_the_window(root: &Path, cx: &mut TestAppContext) {
     cx.executor().allow_parking();
     let file = root.join("files/a.novatest");
-    let core = nova_files_core::spawn_with_idle_exit(Duration::from_secs(5)).unwrap();
+    let core = nova_files::spawn_with_idle_exit(Duration::from_secs(5)).unwrap();
     let place = properties_at(vec![file.clone()]);
     let home = root.to_owned();
     with_parts(cx);
@@ -108,7 +108,7 @@ async fn through_the_window(root: &Path, cx: &mut TestAppContext) {
 async fn past_a_terminal_default(root: &Path, cx: &mut TestAppContext) {
     cx.executor().allow_parking();
     let file = root.join("files/a.novatest");
-    let core = nova_files_core::spawn_with_idle_exit(Duration::from_secs(5)).unwrap();
+    let core = nova_files::spawn_with_idle_exit(Duration::from_secs(5)).unwrap();
     let place = properties_at(vec![file]);
     let home = root.to_owned();
     with_parts(cx);

@@ -1,7 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
+use nova_files::MimeTypes;
 use nova_files_api::FileTypes;
-use nova_files_core::MimeTypes;
 use nova_files_dbus::Picker;
 use nova_files_picker_api::{FilterRule, PickId, PickRequest};
 use nova_files_ui::{Request, RequestSender};
@@ -47,7 +47,7 @@ impl Picker for UiPicker {
 
 #[cfg(test)]
 mod tests {
-    use nova_files_core::MimeTypes;
+    use nova_files::MimeTypes;
     use nova_files_dbus::Picker as _;
     use nova_files_picker_api::{FileFilter, FilterRule, PickId, PickKind, PickReply, PickRequest};
     use nova_files_ui::Request;

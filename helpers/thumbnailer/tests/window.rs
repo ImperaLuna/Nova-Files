@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use gpui::{App, Entity, Modifiers, TestAppContext, VisualTestContext};
 use image::{ImageFormat, RgbImage};
-use nova_files_core::{IDLE_EXIT, Thumbnails};
+use nova_files::{IDLE_EXIT, Thumbnails};
 use nova_files_preview_api::PreviewContent;
 use nova_files_preview_ui::{PreviewPart, Previewed};
 use nova_files_shell::Parts;
@@ -62,7 +62,7 @@ async fn window_on_media<'a>(
     TempFolder,
     Entity<MainWindow>,
     &'a mut VisualTestContext,
-    nova_files_core::RunningCore,
+    nova_files::RunningCore,
 ) {
     let temp = TempFolder(
         std::env::temp_dir().join(format!("nova-files-thumbs-window-{test}-{}", process::id())),
@@ -84,7 +84,7 @@ async fn window_on_media<'a>(
         parts.add::<ThumbnailsPart>();
         cx.set_global(parts);
     });
-    let core = nova_files_core::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
+    let core = nova_files::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
     let (start, home) = (folder.clone(), temp.0.clone());
     let (view, cx) =
         cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx));

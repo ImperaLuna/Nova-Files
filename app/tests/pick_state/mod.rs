@@ -72,7 +72,7 @@ async fn closing_the_window_saves_the_size(cx: &mut TestAppContext) {
 #[test]
 fn the_next_picker_gets_the_state_the_core_kept() {
     let tree = TempFolder::tree("pick-state");
-    let home = nova_files_core::Home {
+    let home = nova_files::Home {
         folder: tree.path().to_owned(),
         config: tree.path().join(".config"),
         state: tree.path().with_extension("state"),
@@ -81,8 +81,7 @@ fn the_next_picker_gets_the_state_the_core_kept() {
     };
     let saved = PickerState::default().with_picker(size(px(800.0), px(500.0)));
     let core =
-        nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home.clone()), None, None)
-            .unwrap();
+        nova_files::spawn_with(nova_files::IDLE_EXIT, Some(home.clone()), None, None).unwrap();
     assert_eq!(fetch_window_state(&core.connector), PickerState::default());
     let (sink, _events) = mpsc::channel::<nova_files_api::Event>();
     let client = core.connector.connect(sink).unwrap();
@@ -91,7 +90,6 @@ fn the_next_picker_gets_the_state_the_core_kept() {
         .unwrap();
     assert_eq!(fetch_window_state(&core.connector), saved);
     wait_for_state(&tree, &saved);
-    let next =
-        nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home), None, None).unwrap();
+    let next = nova_files::spawn_with(nova_files::IDLE_EXIT, Some(home), None, None).unwrap();
     assert_eq!(fetch_window_state(&next.connector), saved);
 }
