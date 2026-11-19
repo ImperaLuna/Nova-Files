@@ -2,9 +2,10 @@ use std::fmt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gpui::{App, Context, EventEmitter, SharedString};
+use gpui::{App, Context, EventEmitter, Pixels, Point, SharedString};
 
 use crate::location::Location;
+use crate::menu::RowItem;
 use crate::per_tab::TabId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,6 +16,13 @@ pub enum NavAsk {
     Reveal(PathBuf),
     PickFolder(FolderPick),
     FocusList,
+    PopUp(PopUp),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PopUp {
+    pub at: Point<Pixels>,
+    pub groups: Vec<Vec<RowItem>>,
 }
 
 pub type OnPicked = Rc<dyn Fn(PathBuf, &mut App)>;
@@ -99,6 +107,16 @@ impl Navigator {
             accept: accept.into(),
             picked: Rc::new(picked),
         }));
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn menu_at(
+        &mut self,
+        at: Point<Pixels>,
+        groups: Vec<Vec<RowItem>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.asks.push(NavAsk::PopUp(PopUp { at, groups }));
         cx.emit(NavEvent::Asked);
     }
 

@@ -188,6 +188,7 @@ impl MainWindow {
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),
                 NavAsk::FocusList => self.focus_later(FocusTo::List, cx),
+                NavAsk::PopUp(pop_up) => self.open_part_menu(pop_up.at, pop_up.groups, cx),
                 NavAsk::PickFolder(pick) => {
                     self.pick_folder(&pick.title, &pick.accept, cx, move |_, path, cx| {
                         let picked = pick.picked.clone();
