@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use nova_files_index::{CrawlError, Index, OpenError, crawl};
 
-use crate::places;
+use nova_files_disk::home;
 
 const FOLDER: &str = "nova-files";
 const INDEX_FILE: &str = "index";
@@ -16,7 +16,7 @@ pub struct IndexPlace {
 
 impl IndexPlace {
     pub fn from_env() -> Option<Self> {
-        places::cache_home().map(|cache| Self {
+        home::cache_home().map(|cache| Self {
             folder: cache.join(FOLDER),
         })
     }

@@ -15,6 +15,7 @@
 # - nova-files-look-api
 # - nova-files-open-api
 # - nova-files-picker-api
+# - nova-files-search-api
 
 [package]
 name = "nova-files-dbus"
@@ -38,6 +39,7 @@ nova-files-drives-api.workspace = true
 nova-files-look-api.workspace = true
 nova-files-open-api.workspace = true
 nova-files-picker-api.workspace = true
+nova-files-search-api.workspace = true
 # Opens a file to hand to the portal as an O_PATH descriptor, which never
 # blocks (a FIFO would) and needs no read permission.
 rustix = { version = "1.1.6", default-features = false, features = ["fs", "std"] }

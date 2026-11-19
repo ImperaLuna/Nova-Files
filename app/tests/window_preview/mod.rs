@@ -45,7 +45,7 @@ async fn space_shows_the_selected_file_and_closes_it_again(cx: &mut TestAppConte
     let preview = view.read_with(cx, |view, _| view.previewed().unwrap().preview.unwrap());
     assert_eq!(
         preview.content,
-        nova_files_api::PreviewContent::Text {
+        nova_files_preview_api::PreviewContent::Text {
             text: "first line\nsecond line\n".into(),
             cut: false
         }
@@ -95,7 +95,7 @@ async fn the_arrow_keys_step_through_the_folder_and_the_selection_follows(cx: &m
     assert_eq!(selected(&view, cx), ["Projects"]);
     let preview = view.read_with(cx, |view, _| view.previewed().unwrap().preview.unwrap());
     match &preview.content {
-        nova_files_api::PreviewContent::Folder { first, count } => {
+        nova_files_preview_api::PreviewContent::Folder { first, count } => {
             assert_eq!(*count, 1);
             assert_eq!(first[0].name, "nova");
         }
@@ -226,7 +226,7 @@ async fn a_fresh_read_shows_the_file_as_it_is_now(cx: &mut TestAppContext) {
             .and_then(|shown| shown.preview)
             .is_some_and(|preview| {
                 preview.content
-                    == nova_files_api::PreviewContent::Text {
+                    == nova_files_preview_api::PreviewContent::Text {
                         text: "changed\n".into(),
                         cut: false,
                     }

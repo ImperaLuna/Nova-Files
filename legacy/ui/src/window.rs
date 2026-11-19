@@ -62,8 +62,11 @@ use nova_files_drives_api as drives_api;
 use nova_files_folders_api::{self as folders_api, FolderView};
 use nova_files_look_api as look_api;
 use nova_files_open_api as open_api;
+use nova_files_preview_api as preview_api;
+use nova_files_search_api as search_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
+use nova_files_thumbnails_api as thumbnails_api;
 
 use self::drives::Drives;
 use self::preview::QuickLooks;
@@ -334,10 +337,35 @@ impl MainWindow {
             Ok(event) => return self.open_event(event, cx),
             Err(envelope) => envelope,
         };
+        let envelope = match envelope.open::<preview_api::Event>() {
+            Ok(preview_api::Event::Previewed { id, preview }) => {
+                return self.preview_arrived(id, Some(preview), cx);
+            }
+            Ok(preview_api::Event::Unreadable { id, .. }) => {
+                return self.preview_arrived(id, None, cx);
+            }
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<search_api::Event>() {
+            Ok(search_api::Event::FindFailed { id, .. }) if self.search.asked == Some(id) => {
+                return self.find_failed(id, cx);
+            }
+            Ok(_) => return,
+            Err(envelope) => envelope,
+        };
         let envelope = match envelope.open::<settings_api::Event>() {
             Ok(settings_api::Event::Settings(settings)) => {
                 return self.settings_arrived(settings, cx);
             }
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<thumbnails_api::Event>() {
+            Ok(thumbnails_api::Event::Thumbnail {
+                id,
+                entry,
+                size,
+                png,
+            }) => return self.thumbnail_arrived((id, entry, size), png, cx),
             Err(envelope) => envelope,
         };
         if let Err(envelope) = self.parts.deliver(envelope, cx) {

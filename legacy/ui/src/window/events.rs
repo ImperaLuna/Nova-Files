@@ -112,9 +112,6 @@ impl MainWindow {
             Event::FolderListed(listing) if self.search.asked == Some(listing.id) => {
                 self.found_arrived(listing, cx);
             }
-            Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
-                self.find_failed(id, cx);
-            }
             Event::Properties { id, properties } => {
                 self.save_probed(id, false, cx);
                 self.properties_arrived(id, Some(properties), cx);
@@ -138,15 +135,7 @@ impl MainWindow {
             {
                 self.details_arrived(first, &details, &icons, cx);
             }
-            Event::Thumbnail {
-                id,
-                entry,
-                size,
-                png,
-            } => self.thumbnail_arrived((id, entry, size), png, cx),
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
-            Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
-            Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
             Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
@@ -161,9 +150,6 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
-            | Event::Found { .. }
-            | Event::SearchFailed { .. }
-            | Event::FindFailed { .. }
             | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. }

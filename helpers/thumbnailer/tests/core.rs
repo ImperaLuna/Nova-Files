@@ -6,12 +6,16 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
 use image::{ImageFormat, RgbImage};
-use nova_files_api::{Command, Connection, EntryId, Event, ListingId, Order, ThumbnailSize};
+use nova_files_api::{
+    ClientGone, Command, Connection, EntryId, Envelope, Event, EventSink, ListingId, Order,
+    ThumbnailSize,
+};
 use nova_files_core::{IDLE_EXIT, RunningCore, Thumbnails};
+use nova_files_thumbnails_api::Event as ThumbnailsEvent;
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
 const WAIT: Duration = Duration::from_secs(5);
@@ -40,10 +44,31 @@ impl Drop for TempFolder {
     }
 }
 
+#[derive(Debug)]
+enum Heard {
+    Listed(Event),
+    Thumbnail(ThumbnailsEvent),
+}
+
+struct Both(Sender<Heard>);
+
+impl EventSink for Both {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        let heard = match envelope.open::<Event>() {
+            Ok(event) => Heard::Listed(event),
+            Err(other) => match other.open::<ThumbnailsEvent>() {
+                Ok(event) => Heard::Thumbnail(event),
+                Err(_) => return Ok(()),
+            },
+        };
+        self.0.send(heard).map_err(|_| ClientGone)
+    }
+}
+
 struct Client {
     _core: RunningCore,
     connection: Connection,
-    events: Receiver<Event>,
+    events: Receiver<Heard>,
 }
 
 fn client(thumbnails: &Path, helper: &Path) -> Client {
@@ -53,7 +78,7 @@ fn client(thumbnails: &Path, helper: &Path) -> Client {
     };
     let core = nova_files_core::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
     let (sink, events) = mpsc::channel();
-    let connection = core.connector.connect(sink).unwrap();
+    let connection = core.connector.connect(Both(sink)).unwrap();
     Client {
         _core: core,
         connection,
@@ -73,8 +98,8 @@ fn first_thumbnail(client: &Client, folder: &Path, size: ThumbnailSize) -> (Entr
         .unwrap();
     loop {
         match client.events.recv_timeout(WAIT).unwrap() {
-            Event::FolderListed(listing) if listing.id == id => break,
-            Event::DetailsRead { .. } => {}
+            Heard::Listed(Event::FolderListed(listing)) if listing.id == id => break,
+            Heard::Listed(Event::DetailsRead { .. }) => {}
             other => panic!("expected the listing, got {other:?}"),
         }
     }
@@ -89,16 +114,16 @@ fn first_thumbnail(client: &Client, folder: &Path, size: ThumbnailSize) -> (Entr
         .unwrap();
     loop {
         match client.events.recv_timeout(WAIT).unwrap() {
-            Event::Thumbnail {
+            Heard::Thumbnail(ThumbnailsEvent::Thumbnail {
                 id: got,
                 entry,
                 size: made,
                 png,
-            } if got == id => {
+            }) if got == id => {
                 assert_eq!(made, size);
                 return (entry, png.to_vec());
             }
-            Event::DetailsRead { .. } => {}
+            Heard::Listed(Event::DetailsRead { .. }) => {}
             other => panic!("expected a thumbnail, got {other:?}"),
         }
     }
@@ -189,15 +214,15 @@ fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
 
     loop {
         match client.events.recv_timeout(WAIT).unwrap() {
-            Event::Thumbnail {
+            Heard::Thumbnail(ThumbnailsEvent::Thumbnail {
                 entry: got,
                 png: again,
                 ..
-            } => {
+            }) => {
                 assert_eq!((got, again.to_vec()), (entry, png));
                 break;
             }
-            Event::DetailsRead { .. } => {}
+            Heard::Listed(Event::DetailsRead { .. }) => {}
             other => panic!("expected a thumbnail, got {other:?}"),
         }
     }
@@ -225,8 +250,8 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
         .unwrap();
     loop {
         match client.events.recv_timeout(WAIT).unwrap() {
-            Event::FolderUnreadable { id, .. } if id == missing => break,
-            Event::DetailsRead { .. } | Event::Thumbnail { .. } => {}
+            Heard::Listed(Event::FolderUnreadable { id, .. }) if id == missing => break,
+            Heard::Listed(Event::DetailsRead { .. }) | Heard::Thumbnail(_) => {}
             other => panic!("expected the refusal, got {other:?}"),
         }
     }
@@ -244,15 +269,15 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
 
     loop {
         match client.events.recv_timeout(WAIT).unwrap() {
-            Event::Thumbnail {
+            Heard::Thumbnail(ThumbnailsEvent::Thumbnail {
                 entry: got,
                 png: again,
                 ..
-            } => {
+            }) => {
                 assert_eq!((got, again.to_vec()), (entry, png));
                 break;
             }
-            Event::DetailsRead { .. } => {}
+            Heard::Listed(Event::DetailsRead { .. }) => {}
             other => panic!("expected a thumbnail, got {other:?}"),
         }
     }
@@ -275,7 +300,7 @@ fn thumbnailed_entries(
     let mut entries = Vec::new();
     while entries.len() < count {
         match client.events.recv_timeout(WAIT).unwrap() {
-            Event::FolderListed(listing) if listing.id == id => client
+            Heard::Listed(Event::FolderListed(listing)) if listing.id == id => client
                 .connection
                 .send(Command::Rows {
                     id,
@@ -284,8 +309,10 @@ fn thumbnailed_entries(
                     size: ThumbnailSize::Normal,
                 })
                 .unwrap(),
-            Event::Thumbnail { id: got, entry, .. } if got == id => entries.push(entry),
-            Event::DetailsRead { .. } => {}
+            Heard::Thumbnail(ThumbnailsEvent::Thumbnail { id: got, entry, .. }) if got == id => {
+                entries.push(entry);
+            }
+            Heard::Listed(Event::DetailsRead { .. }) => {}
             other => panic!("expected the listing or a thumbnail, got {other:?}"),
         }
     }

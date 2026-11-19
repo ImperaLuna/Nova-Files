@@ -2,18 +2,14 @@
 
 mod accounts;
 mod gathered;
-mod index;
 mod inside;
 mod jobs;
 mod measure;
 mod ops;
 mod places;
-mod preview;
 mod properties;
 mod recent;
 mod run;
-mod search;
-mod thumbs;
 mod trace;
 mod trash;
 mod vulkan_drivers;
@@ -30,18 +26,18 @@ use nova_files_disk::{
 };
 use nova_files_entries_core::{list, memory, order};
 
-use search::Searcher;
+use nova_files_search_core::Searcher;
 
-pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
 pub use nova_files_archives_core::{
     ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe, seven_on,
 };
 pub use nova_files_open_core::MimeTypes;
 pub use nova_files_open_core::{NotDefault, make_default_for_folders, opens_folders};
+pub use nova_files_search_core::{IndexError, IndexPlace, Unusable};
+pub use nova_files_thumbnails_core::Thumbnails;
 pub use places::Home;
 pub use run::{emitted_types, routed_types};
-pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
 pub use vulkan_drivers::{FILTER_VARIABLE, absent_vendor_drivers};
 

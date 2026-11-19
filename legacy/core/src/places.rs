@@ -6,7 +6,7 @@ use std::io::Read as _;
 use std::path::{Component, Path, PathBuf};
 
 use nova_files_api::{Place, PlaceKind};
-pub use nova_files_disk::home::{Home, cache_home};
+pub use nova_files_disk::home::Home;
 
 const STANDARD: [(PlaceKind, &str, &str); 6] = [
     (PlaceKind::Desktop, "XDG_DESKTOP_DIR", "Desktop"),

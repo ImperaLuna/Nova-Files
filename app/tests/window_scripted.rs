@@ -26,6 +26,7 @@ use nova_files_look_api as look_api;
 use nova_files_settings_api::{
     self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
 };
+use nova_files_thumbnails_api::Event as ThumbnailsEvent;
 use nova_files_ui::{Colors, MainWindow, WindowEvent};
 
 const SHOWN: &str = "/shown";
@@ -373,8 +374,8 @@ const PNG: &[u8] = &[
     66, 96, 130,
 ];
 
-fn thumbnail(id: ListingId, entry: u32) -> Event {
-    Event::Thumbnail {
+fn thumbnail(id: ListingId, entry: u32) -> ThumbnailsEvent {
+    ThumbnailsEvent::Thumbnail {
         id,
         entry: EntryId(entry),
         size: ThumbnailSize::Normal,
@@ -399,7 +400,7 @@ fn a_thumbnail_for_a_shown_row_is_kept(cx: &mut TestAppContext) {
 fn a_thumbnail_at_a_size_not_asked_for_is_dropped(cx: &mut TestAppContext) {
     let (view, cx, core, id) = shown_with_details(cx, ENTRIES);
 
-    core.send(Event::Thumbnail {
+    core.send(ThumbnailsEvent::Thumbnail {
         id,
         entry: EntryId(1),
         size: ThumbnailSize::Large,

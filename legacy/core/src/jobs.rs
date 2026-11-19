@@ -12,13 +12,13 @@ pub use nova_files_entries_core::ListingJob;
 use nova_files_entries_core::RowWatch;
 
 use crate::inside::{self, Inside, Within};
-use crate::thumbs::{Queue, Thumbnails};
 use nova_files_look_core::FileIcons;
 
 use crate::list::{self, Stopped};
 use crate::memory;
 use crate::order;
-use crate::preview;
+use nova_files_preview_core as preview;
+use nova_files_thumbnails_core::{Queue, Thumbnails};
 
 const LIST_THREAD: &str = "nova-files-list";
 
@@ -82,16 +82,6 @@ impl Drop for Client {
     fn drop(&mut self) {
         self.current_search.store(NO_LISTING, Ordering::SeqCst);
         self.current_preview.cancel();
-    }
-}
-
-impl RowWatch for Queue {
-    fn show(&self, listing: &Listing, current: &dyn Fn() -> bool) {
-        Self::show(self, listing, current);
-    }
-
-    fn want(&self, id: ListingId, first: EntryId, count: u32, size: Option<ThumbnailSize>) {
-        Self::want(self, id, first, count, size);
     }
 }
 

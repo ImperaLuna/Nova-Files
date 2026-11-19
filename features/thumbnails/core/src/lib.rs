@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod cache;
 mod md5;
 #[cfg(test)]
@@ -13,9 +15,12 @@ use std::thread;
 use std::time::UNIX_EPOCH;
 
 use nova_files_api::{
-    EntryId, EntryKind, Event, EventSink, Listing, ListingId, MAX_ROWS, ThumbnailSize, uri,
+    EntryId, EntryKind, EventSink, Listing, ListingId, MAX_ROWS, ThumbnailSize, uri,
 };
+use nova_files_disk::home;
+use nova_files_entries_core::RowWatch;
 use nova_files_thumbnailer_launch as launch;
+use nova_files_thumbnails_api::Event;
 
 const THUMBNAILS_FOLDER: &str = "thumbnails";
 const HELPER_NAME: &str = "nova-files-thumbnailer";
@@ -30,7 +35,7 @@ pub struct Thumbnails {
 
 impl Thumbnails {
     pub fn from_env() -> Option<Self> {
-        let cache = crate::places::cache_home()?;
+        let cache = home::cache_home()?;
         let helper = env::current_exe().ok()?.parent()?.join(HELPER_NAME);
         Some(Self {
             folder: cache.join(THUMBNAILS_FOLDER),
@@ -96,6 +101,16 @@ impl Queue {
                 state.done.retain(|index| wanted.contains(index));
             }
         });
+    }
+}
+
+impl RowWatch for Queue {
+    fn show(&self, listing: &Listing, current: &dyn Fn() -> bool) {
+        Self::show(self, listing, current);
+    }
+
+    fn want(&self, id: ListingId, first: EntryId, count: u32, size: Option<ThumbnailSize>) {
+        Self::want(self, id, first, count, size);
     }
 }
 

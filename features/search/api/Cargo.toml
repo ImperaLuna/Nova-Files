@@ -1,0 +1,23 @@
+# nova-files-search-api
+#
+# What the search feature's two halves say to each other: searching the
+# home index by name, and finding names for a window's list.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
+
+[package]
+name = "nova-files-search-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

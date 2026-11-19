@@ -1,4 +1,5 @@
 use nova_files_api::Operation;
+use nova_files_search_api::{Command as SearchCommand, Event as SearchEvent, SearchFailed};
 
 use super::*;
 
@@ -6,7 +7,8 @@ fn next_find(core: &mut Core) -> Option<(ListingId, String, Option<PathBuf>)> {
     while let Ok(message) = core.messages.try_recv() {
         if let CoreMessage::Connected { events, .. } = message {
             core.events = Some(events);
-        } else if let Some(Command::Find { id, query, within }) = message.into_command::<Command>()
+        } else if let Some(SearchCommand::Find { id, query, within }) =
+            message.into_command::<SearchCommand>()
         {
             return Some((id, query, within));
         }
@@ -242,9 +244,9 @@ fn nothing_found_shows_no_matches(cx: &mut TestAppContext) {
     cx.simulate_input("zzz");
     cx.run_until_parked();
     let (id, ..) = std::iter::from_fn(|| next_find(&mut core)).last().unwrap();
-    core.send(Event::FindFailed {
+    core.send(SearchEvent::FindFailed {
         id,
-        reason: nova_files_api::SearchFailed::IndexFailed,
+        reason: SearchFailed::IndexFailed,
     });
     cx.run_until_parked();
 
@@ -469,9 +471,9 @@ fn an_older_find_that_fails_late_is_dropped(cx: &mut TestAppContext) {
     cx.run_until_parked();
     next_find(&mut core).unwrap();
 
-    core.send(Event::FindFailed {
+    core.send(SearchEvent::FindFailed {
         id: older,
-        reason: nova_files_api::SearchFailed::IndexFailed,
+        reason: SearchFailed::IndexFailed,
     });
     cx.run_until_parked();
 

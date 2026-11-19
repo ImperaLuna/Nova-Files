@@ -1,0 +1,23 @@
+# nova-files-preview-api
+#
+# What the preview feature's two halves say to each other: a quick look's
+# request, and what a file or folder shows large.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
+
+[package]
+name = "nova-files-preview-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

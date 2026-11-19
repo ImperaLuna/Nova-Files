@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{AppContext as _, Context, Entity, Subscription};
-use nova_files_api::{Command, Listing, ListingId};
+use nova_files_api::{Listing, ListingId};
+use nova_files_search_api::Command;
 
 use super::MainWindow;
 use super::events::Place;

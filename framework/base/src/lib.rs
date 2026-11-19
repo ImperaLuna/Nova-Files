@@ -5,10 +5,9 @@
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
 //! through the [`EventSink`] it handed over. A client that asks for the
 //! places gets them again whenever they change. The core reads the other
-//! end of the channel as [`CoreMessage`]s. File
-//! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
-//! quick look shows of a file or folder. A [`Size`] is what a scan of files
-//! and folders counted. A [`RecentFolder`] is one a person opened lately, for the Start page.
+//! end of the channel as [`CoreMessage`]s. File operations run as jobs (see
+//! [`Operation`]). A [`Size`] is what a scan of files and folders counted. A
+//! [`RecentFolder`] is one a person opened lately, for the Start page.
 //! [`Gathered`] folders make up the Games and Projects places. A
 //! [`FileIcon`] is how an entry's icon is drawn, and a [`ThumbnailSize`] how
 //! big its thumbnail is.
@@ -28,7 +27,6 @@ mod message;
 mod preview;
 mod properties;
 mod recent;
-mod search;
 mod size;
 mod theme;
 mod thumbnail_size;
@@ -49,18 +47,14 @@ pub use job::{
     Answer, Conflict, ConflictKind, DropAskId, DropKind, ExtractTo, Failure, JobId, JobTag,
     Operation, Outcome, Packing, Progress, Scope, Tally,
 };
-pub use message::{Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
+pub use message::{Command, Event, MAX_ROWS};
 pub use nova_files_messages::{
     ClientGone, ClientId, Connection, Connector, CoreGone, CoreMessage, Envelope, EventSink,
     Message, MessageType, Routed, Routes, channel, missing_routes,
 };
-pub use preview::{
-    Fit, MAX_FIT_SIDE, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Picture, Preview, PreviewContent,
-    PreviewId,
-};
+pub use preview::{Fit, MAX_FIT_SIDE, Picture};
 pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use recent::{MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId};
-pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 pub use thumbnail_size::ThumbnailSize;

@@ -13,9 +13,15 @@ use nova_files_look_core::FileIcons;
 use nova_files_look_core::theme::Store as ThemeStore;
 use nova_files_messages::{Routed, Routes};
 use nova_files_open_api::{self as open_api, TakeOut};
-use nova_files_open_core::{MimeTypes, OpenWithWorker};
+use nova_files_open_core::{LazyMimes, MimeTypes, OpenWithWorker};
+use nova_files_preview_api as preview_api;
+use nova_files_preview_core::Request as PreviewRequest;
+use nova_files_search_api as search_api;
+use nova_files_search_core::Searcher;
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
+use nova_files_thumbnails_api as thumbnails_api;
+use nova_files_thumbnails_core::Thumbnails;
 use nova_files_trash_api as trash_api;
 
 use crate::gathered::Store as GatheredStore;
@@ -25,8 +31,6 @@ use crate::measure::Measurer;
 use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
-use crate::search::Searcher;
-use crate::thumbs::Thumbnails;
 use crate::trash;
 use crate::window_state::Store as WindowStateStore;
 
@@ -92,6 +96,35 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| {
+        match command {
+            preview_api::Command::Preview { id, path, fit } => {
+                let request = PreviewRequest {
+                    id,
+                    path,
+                    fit,
+                    current: Arc::clone(client.current_preview()),
+                    types: Arc::new(LazyMimes(Arc::clone(&setup.mime_types))),
+                    helper: setup.thumbnails.as_ref().map(|setup| setup.helper.clone()),
+                };
+                nova_files_preview_core::answer(client.events(), request);
+            }
+        }
+        Ok(())
+    })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| {
+        match command {
+            search_api::Command::Search { id, query, limit } => {
+                let asked = (client.events(), client.current_search());
+                setup.searcher.search(asked, id, query, limit);
+            }
+            search_api::Command::Find { id, query, within } => {
+                let asked = (client.events(), client.start_listing(id));
+                setup.searcher.find(asked, id, query, within);
+            }
+        }
+        Ok(())
+    })?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
             settings_api::Command::Watch => setup.settings.listen(id, client.events()),
@@ -119,7 +152,10 @@ pub fn emitted_types() -> Vec<MessageType> {
         MessageType::of::<folders_api::Event>(),
         MessageType::of::<look_api::Event>(),
         MessageType::of::<open_api::Event>(),
+        MessageType::of::<preview_api::Event>(),
+        MessageType::of::<search_api::Event>(),
         MessageType::of::<settings_api::Event>(),
+        MessageType::of::<thumbnails_api::Event>(),
         MessageType::of::<trash_api::Event>(),
     ]
 }
@@ -216,10 +252,7 @@ fn answer(
         | Command::ChangeGathered(_)
         | Command::ListGathered { .. }
         | Command::Rows { .. }
-        | Command::Search { .. }
-        | Command::Find { .. }
         | Command::Properties { .. }
-        | Command::Preview { .. }
         | Command::FolderUsed(_)
         | Command::RecentFolders { .. }) => {
             folders::answer(id, client, command, setup);

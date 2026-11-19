@@ -80,6 +80,8 @@ pub fn sent_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_folders_api::Command>(),
         MessageType::of::<nova_files_look_api::Command>(),
         MessageType::of::<nova_files_open_api::Command>(),
+        MessageType::of::<nova_files_preview_api::Command>(),
+        MessageType::of::<nova_files_search_api::Command>(),
         MessageType::of::<nova_files_settings_api::Command>(),
     ]
 }
@@ -91,7 +93,10 @@ pub fn taken_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_folders_api::Event>(),
         MessageType::of::<nova_files_look_api::Event>(),
         MessageType::of::<nova_files_open_api::Event>(),
+        MessageType::of::<nova_files_preview_api::Event>(),
+        MessageType::of::<nova_files_search_api::Event>(),
         MessageType::of::<nova_files_settings_api::Event>(),
+        MessageType::of::<nova_files_thumbnails_api::Event>(),
     ]
 }
 
