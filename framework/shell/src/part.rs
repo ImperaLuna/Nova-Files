@@ -8,7 +8,7 @@ use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _,
     KeyDownEvent, Modifiers, Pixels, SharedString, Size, Window,
 };
-use nova_files_api::{Entry, Event, Listing, ListingId, Order};
+use nova_files_api::{Entry, EntryId, Event, Listing, ListingId, Order};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
@@ -40,6 +40,14 @@ pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
 pub type NameField<P> = fn(&P, &Entry, &App) -> Option<Entity<TextField>>;
 pub type Stage<P> =
     fn(&mut P, &Scene, Size<Pixels>, &mut Window, &mut Context<P>) -> Option<AnyElement>;
+pub type Staging<P> =
+    fn(&mut P, &Scene, Size<Pixels>, &mut Window, &mut Context<P>) -> Option<Staged>;
+
+pub struct Staged {
+    pub entry: EntryId,
+    pub art: AnyElement,
+    pub about: SharedString,
+}
 pub type Busy<P> = fn(&P, &App) -> bool;
 pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
@@ -142,6 +150,7 @@ pub struct Slots<P> {
     pub(crate) name_fields: Vec<NameField<P>>,
     pub(crate) busy: Vec<Busy<P>>,
     pub(crate) stages: Vec<Stage<P>>,
+    pub(crate) stagings: Vec<Staging<P>>,
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
     pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
@@ -195,6 +204,7 @@ impl<P> Default for Slots<P> {
             name_fields: Vec::new(),
             busy: Vec::new(),
             stages: Vec::new(),
+            stagings: Vec::new(),
             listed: Vec::new(),
             drops: Vec::new(),
             drop_targets: Vec::new(),
@@ -358,6 +368,10 @@ impl<P: Part> Slots<P> {
 
     pub fn stage(&mut self, stage: Stage<P>) {
         self.stages.push(stage);
+    }
+
+    pub fn staged(&mut self, staged: Staging<P>) {
+        self.stagings.push(staged);
     }
 
     pub fn listed(&mut self, listed: Listed<P>) {

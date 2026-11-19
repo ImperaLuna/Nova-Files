@@ -53,7 +53,8 @@ pub use part::{
     Applies, Busy, Card, CardRank, Cell, ChipRank, Click, ClickAnswer, Clicks, Closing, Column,
     Columns, Dims, DropAim, DropOver, DropSlot, DropTake, EmptyNote, Focus, HeadButton, Items,
     KeyDown, Listed, NameCell, NameField, Opens, Part, Refused, Rescaled, Resized, RowIcon,
-    RowMenu, Rows, RowsDrawn, Selectable, Several, Slots, Stage, ThumbnailSide, Typed, Used, Watch,
+    RowMenu, Rows, RowsDrawn, Selectable, Several, Slots, Stage, Staged, Staging, ThumbnailSide,
+    Typed, Used, Watch,
 };
 pub use parts::{Parts, ShownColumn, Turn, WindowParts};
 pub use per_tab::{PerTab, TabId};

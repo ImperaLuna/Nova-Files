@@ -16,7 +16,7 @@ use crate::jump::Jump;
 use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::Part;
-use crate::part::{Click, ClickAnswer, DropOver};
+use crate::part::{Click, ClickAnswer, DropOver, Staged};
 use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
@@ -150,6 +150,18 @@ impl WindowParts {
         self.opened
             .iter()
             .find_map(|part| part.stage(scene, room, window, cx))
+    }
+
+    pub fn staged(
+        &self,
+        scene: &Scene,
+        room: Size<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<Staged> {
+        self.opened
+            .iter()
+            .find_map(|part| part.staged(scene, room, window, cx))
     }
 
     pub fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {

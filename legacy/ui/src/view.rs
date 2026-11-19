@@ -39,26 +39,10 @@ impl Render for MainWindow {
         if self.closing(cx) {
             window.remove_window();
         }
-        let scale_factor = window.scale_factor();
-        let viewport = window.viewport_size();
         self.keep_gallery(window, cx);
-        let room = nova_files_preview_ui::room(viewport.width, viewport.height);
-        let fits = if self.showing_gallery(cx) && !self.previewing(cx) {
-            self.stage_room(cx)
-        } else {
-            room
-        };
-        let preview = self.preview();
-        if let Some(preview) = &preview {
-            preview.update(cx, |preview, cx| preview.set_room(fits, scale_factor, cx));
-        }
-        let layer = preview.and_then(|preview| {
-            preview.update(cx, |preview, cx| preview.layer(room, scale_factor, cx))
-        });
         self.window_root(window, cx)
             .map(|root| Self::preview_keys(root, cx))
             .relative()
-            .children(layer)
             .children(self.parts.layers())
     }
 }
