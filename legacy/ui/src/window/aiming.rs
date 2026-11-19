@@ -10,6 +10,7 @@ use super::MainWindow;
 use super::dragging::Drag;
 use crate::dropping::DropAt;
 use crate::places;
+use nova_files_shell::PageRef;
 
 #[derive(Debug, Clone)]
 pub struct Aim {
@@ -35,6 +36,13 @@ impl Aim {
         Self {
             at: DropAt::Gathered(place),
             name: places::gathering_look(place).0.into(),
+        }
+    }
+
+    pub fn page(page: PageRef) -> Self {
+        Self {
+            name: page.title(),
+            at: DropAt::Page(page),
         }
     }
 
