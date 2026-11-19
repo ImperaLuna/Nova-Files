@@ -1,0 +1,31 @@
+# nova-files-look-ui
+#
+# The look's window half: asks the core for the theme and paints every
+# window with each one that arrives.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-look-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-look-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+test = false
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-look-api.workspace = true
+nova-files-shell.workspace = true
