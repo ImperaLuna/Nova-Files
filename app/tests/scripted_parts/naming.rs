@@ -3,8 +3,8 @@ use std::ffi::OsStr;
 use std::rc::Rc;
 
 use gpui::{
-    AppContext as _, Context, Entity, InteractiveElement as _, IntoElement as _, Styled as _, div,
-    px,
+    AppContext as _, Context, Entity, InteractiveElement as _, IntoElement as _, Pixels, Size,
+    Styled as _, div, px,
 };
 use nova_files_api::Entry;
 use nova_files_shell::{Host, Part, Parts, Slots, TextField, Undo};
@@ -19,11 +19,15 @@ thread_local! {
 
 struct Namer {
     field: Option<Entity<TextField>>,
+    room: Option<Size<Pixels>>,
 }
 
 impl Part for Namer {
     fn open(_: &Host, _: &mut Context<Self>) -> Self {
-        Self { field: None }
+        Self {
+            field: None,
+            room: None,
+        }
     }
 
     fn slots(slots: &mut Slots<Self>) {
@@ -31,12 +35,22 @@ impl Part for Namer {
             (entry.name == NAMED).then(|| namer.field.clone()).flatten()
         });
         slots.busy(|namer, _| namer.field.is_some());
-        slots.stage(|_, scene, room, _| {
+        slots.stage(|namer, scene, room, _, _| {
+            namer.room = Some(room);
             (scene.selected == 1).then(|| {
                 div()
                     .debug_selector(|| "namer-stage".to_owned())
                     .w(room.width / 2.0)
                     .h(px(10.0))
+                    .into_any_element()
+            })
+        });
+        slots.layer(|namer, _, _, _| {
+            namer.room.map(|_| {
+                div()
+                    .debug_selector(|| "namer-layer".to_owned())
+                    .absolute()
+                    .inset_0()
                     .into_any_element()
             })
         });
@@ -113,6 +127,23 @@ fn a_part_draws_the_gallery_stage_in_the_room_it_is_given(cx: &mut TestAppContex
     let stage = cx.debug_bounds("stage").unwrap();
     assert!(drawn.size.width > px(0.0));
     assert!(drawn.size.width < stage.size.width);
+}
+
+#[gpui::test]
+fn a_part_layer_covers_the_whole_window_once_its_stage_knows_the_room(cx: &mut TestAppContext) {
+    cx.update(nova_files_ui::bind_window_keys);
+    let (view, cx) = named(cx);
+    assert!(cx.debug_bounds("namer-layer").is_none());
+    cx.simulate_keystrokes("ctrl-3");
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    let room = namer(&view, cx)
+        .read_with(cx, |namer, _| namer.room)
+        .unwrap();
+    assert!(room.width > px(0.0));
+    let layer = cx.debug_bounds("namer-layer").unwrap();
+    let viewport = cx.update(|window, _| window.viewport_size());
+    assert_eq!(layer.size, viewport);
 }
 
 #[gpui::test]

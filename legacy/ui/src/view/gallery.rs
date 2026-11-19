@@ -1,6 +1,6 @@
 use gpui::{
-    Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    SharedString, Styled as _, canvas, div,
+    AnyElement, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    SharedString, Styled as _, Window, canvas, div,
 };
 
 use super::preview::{meta, stage_art};
@@ -11,8 +11,14 @@ use crate::window::{MainWindow, QuickLook};
 use nova_files_api::{Entry, Listing};
 
 impl MainWindow {
-    pub(super) fn gallery(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
+    pub(super) fn gallery(
+        &self,
+        grid: Grid,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let colors = Colors::of(cx);
+        let stage = self.stage(&colors, window, cx);
         let bounds = self.gallery_bounds().clone();
         let view = cx.entity().downgrade();
         div()
@@ -33,7 +39,7 @@ impl MainWindow {
                 .absolute()
                 .inset_0(),
             )
-            .child(self.stage(&colors, cx))
+            .child(stage)
             .child(self.strip(grid, cx))
     }
 
@@ -45,10 +51,10 @@ impl MainWindow {
         Some((open, listing, entry))
     }
 
-    fn stage(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
+    fn stage(&self, colors: &Colors, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let room = self.stage_room();
         let scale_factor = self.scale_factor;
-        let part_stage = self.parts.stage(&self.scene(), room, cx);
+        let part_stage = self.parts.stage(&self.scene(), room, window, cx);
         let shown = part_stage.is_none().then(|| self.on_stage()).flatten();
         div()
             .debug_selector(|| "stage".to_owned())
@@ -119,6 +125,7 @@ impl MainWindow {
                     )
                     .into_any_element()
             }))
+            .into_any_element()
     }
 
     fn strip(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
