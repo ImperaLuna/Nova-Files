@@ -9,7 +9,7 @@ use nova_files_shell::{
     PageRef, Part, Scene, Shown, TabId,
 };
 
-use super::MainWindow;
+use super::{MainWindow, Went};
 use crate::island::{Confirm, NoteUndo};
 use crate::location::{Builtin, Location};
 use crate::selection::Selection;
@@ -126,11 +126,18 @@ impl MainWindow {
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
-        self.host.nav.update(cx, |nav, cx| nav.show(tab, tabs, cx));
+        let left = std::mem::take(&mut self.went) == Went::Elsewhere;
+        self.host.nav.update(cx, |nav, cx| {
+            nav.show(tab, tabs, cx);
+            if left {
+                cx.emit(NavEvent::Left);
+            }
+        });
     }
 
     fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
         let asks = self.host.nav.update(cx, |nav, _| nav.take_asks());
+        let went = std::mem::take(&mut self.went);
         for ask in asks {
             match ask {
                 NavAsk::Go(place) => self.go_to_shell(place, cx),
@@ -145,6 +152,7 @@ impl MainWindow {
                 }
             }
         }
+        self.went = went;
     }
 
     pub(crate) fn go_to_shell(&mut self, place: shell::Location, cx: &mut Context<Self>) {

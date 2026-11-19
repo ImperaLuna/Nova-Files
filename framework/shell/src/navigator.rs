@@ -44,6 +44,7 @@ impl Eq for FolderPick {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NavEvent {
     Asked,
+    Left,
     TabClosed(TabId),
 }
 

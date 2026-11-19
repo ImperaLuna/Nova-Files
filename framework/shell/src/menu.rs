@@ -170,6 +170,7 @@ pub struct SidebarRow {
     pub icon: Icon,
     pub name: SharedString,
     pub number: Option<SharedString>,
+    pub number_look: Look,
     pub opens: crate::Location,
     pub here: bool,
     pub depth: u8,
@@ -196,6 +197,7 @@ impl SidebarRow {
             icon,
             name: name.into(),
             number: None,
+            number_look: Look::Plain,
             opens,
             here: false,
             depth: 0,
@@ -220,6 +222,12 @@ impl SidebarRow {
     #[must_use]
     pub fn number(mut self, number: Option<SharedString>) -> Self {
         self.number = number;
+        self
+    }
+
+    #[must_use]
+    pub const fn number_look(mut self, look: Look) -> Self {
+        self.number_look = look;
         self
     }
 

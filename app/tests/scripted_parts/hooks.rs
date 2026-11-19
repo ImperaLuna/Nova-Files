@@ -8,8 +8,8 @@ use gpui::{
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_shell::{
-    DropOver, Host, Location, NoteGone, PageKind, PageRef, Part, Parts, RowItem, SidebarAt,
-    SidebarRow, Slots, Undo, assets::Icon,
+    DropOver, Host, Location, NavEvent, NoteGone, PageKind, PageRef, Part, Parts, RowItem,
+    SidebarAt, SidebarRow, Slots, Undo, assets::Icon,
 };
 
 use super::super::*;
@@ -334,4 +334,30 @@ fn a_part_hears_when_its_note_leaves_the_island(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     assert_eq!(gone.get(), Some(mine));
+}
+
+#[gpui::test]
+fn a_part_hears_when_the_window_goes_elsewhere_but_not_for_its_own_asks(cx: &mut TestAppContext) {
+    let (view, cx, _core) = tagged(cx);
+    let nav = view.read_with(cx, |view, _| view.host().nav.clone());
+    let left = Rc::new(Cell::new(0));
+    let heard = Rc::clone(&left);
+    let _hearing = cx.update(|_, cx| {
+        cx.subscribe(&nav, move |_, event: &NavEvent, _| {
+            if *event == NavEvent::Left {
+                heard.set(heard.get() + 1);
+            }
+        })
+    });
+
+    nav.update(cx, |nav, cx| nav.go(Location::Folder(FILE_ROOM.into()), cx));
+    cx.run_until_parked();
+    assert_eq!(left.get(), 0);
+
+    view.update(cx, |view, cx| {
+        view.open(Path::new(SHOWN));
+        cx.notify();
+    });
+    cx.run_until_parked();
+    assert_eq!(left.get(), 1);
 }

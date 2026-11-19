@@ -2,11 +2,11 @@ use std::f32::consts::FRAC_PI_2;
 
 use gpui::{
     AnyElement, App, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Pixels, SharedString, Stateful,
+    MouseDownEvent, ParentElement as _, Pixels, Rgba, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled as _, Transformation, Window, div,
     prelude::FluentBuilder as _, radians, svg,
 };
-use nova_files_shell::{Expander, RowItem, SidebarAt, SidebarRow};
+use nova_files_shell::{Expander, Look, RowItem, SidebarAt, SidebarRow};
 
 use super::{Row, icon, on_middle_click, row, section_button};
 use crate::assets::Icon;
@@ -75,7 +75,9 @@ impl MainWindow {
                 selector: place.id.to_string(),
                 glyph: place.icon,
                 name: place.name,
-                number: place.number.map(|number| (number, colors.text_dim)),
+                number: place
+                    .number
+                    .map(|number| (number, number_tint(place.number_look, colors))),
                 here: place.here,
                 pressed: false,
                 lead,
@@ -164,4 +166,12 @@ fn run_on_click(
         let run = item.run.clone();
         cx.defer(move |cx| run(cx));
     })
+}
+
+const fn number_tint(look: Look, colors: &Colors) -> Rgba {
+    match look {
+        Look::Plain => colors.text_dim,
+        Look::On => colors.here,
+        Look::Danger => colors.full,
+    }
 }

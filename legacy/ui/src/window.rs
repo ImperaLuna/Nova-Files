@@ -108,6 +108,13 @@ pub enum WindowEvent {
     Settings,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Went {
+    #[default]
+    Stayed,
+    Elsewhere,
+}
+
 pub struct MainWindow {
     status: CoreStatus,
     connector: Connector,
@@ -122,6 +129,7 @@ pub struct MainWindow {
     sizing: views::Sizing,
     pub(crate) selection: Option<Selection>,
     pub(crate) jump: TypeJump,
+    went: Went,
     pub(crate) quick_looks: QuickLooks,
     pub(crate) band: Option<Band>,
     pub(crate) pressed_name: bool,
@@ -242,6 +250,7 @@ impl MainWindow {
             sizing: views::Sizing::default(),
             selection: None,
             jump: TypeJump::default(),
+            went: Went::Stayed,
             quick_looks: QuickLooks::default(),
             band: None,
             pressed_name: false,
