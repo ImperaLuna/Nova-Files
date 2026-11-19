@@ -147,6 +147,7 @@ fn shelved(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestConte
     POKED.set(0);
     SEEN_SELECTED.set(0);
     let mut parts = Parts::default();
+    parts.add::<nova_files_rename_ui::RenamePart>();
     parts.add::<Shelf>();
     cx.update(|cx| {
         cx.set_global(parts);
