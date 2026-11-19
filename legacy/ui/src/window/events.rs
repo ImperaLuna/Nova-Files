@@ -39,7 +39,9 @@ impl MainWindow {
         }
         self.gathered.shown = match &arrived {
             Location::Gathered(place) => Some(*place),
-            Location::Start | Location::Folder(_) | Location::Properties(_) => None,
+            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
+                None
+            }
         };
         self.history.arrived(&arrived);
         let reordered = same_folder && self.shown_order != self.asked_order;
@@ -68,7 +70,7 @@ impl MainWindow {
         }
         cx.emit(match arrived {
             Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
-            Location::Start | Location::Folder(_) | Location::Properties(_) => {
+            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
                 WindowEvent::Opened(listing_path)
             }
         });
@@ -150,7 +152,6 @@ impl MainWindow {
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
             Event::OpenWith(answer) => self.open_with_answered(answer, cx),
-            Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)
@@ -257,7 +258,7 @@ impl MainWindow {
         cx.notify();
     }
 
-    fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
+    pub(super) fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
         let colors = Colors::new(theme);
         if Colors::of(cx) != colors {
             cx.set_global(colors);

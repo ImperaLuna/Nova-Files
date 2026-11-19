@@ -6,6 +6,7 @@ use gpui::{
 };
 
 use nova_files_api::{Answer, Conflict};
+use nova_files_shell::{Look, MenuAt};
 
 use super::row::icon;
 use crate::assets::Icon;
@@ -50,7 +51,7 @@ impl MainWindow {
         } else if let Some(note) = &self.island.note {
             Some(note_parts(note, &colors, cx))
         } else if self.selected_count() > 0 {
-            Some(self.selection_parts(&colors))
+            Some(self.selection_parts(&colors, cx))
         } else {
             None
         };
@@ -60,7 +61,7 @@ impl MainWindow {
         )
     }
 
-    fn selection_parts(&self, colors: &Colors) -> Vec<gpui::AnyElement> {
+    fn selection_parts(&self, colors: &Colors, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         let count = self.selected_count();
         let (number, rest) = island::selection_line(count, self.selected_bytes());
         let mut parts = vec![
@@ -88,6 +89,22 @@ impl MainWindow {
         } else if !self.in_trash() {
             file_buttons(count, &mut parts, colors);
         }
+        let from_parts = self.parts.menu(MenuAt::Island, &self.scene(), cx);
+        parts.extend(from_parts.into_iter().flatten().map(|item| {
+            let tint = match item.look {
+                Look::Plain => colors.text,
+                Look::On => colors.accept,
+                Look::Danger => colors.danger,
+            };
+            text_button(
+                item.selector(),
+                item.label,
+                &*item.run.action(),
+                tint,
+                colors,
+            )
+            .into_any_element()
+        }));
         parts.extend([
             divider(colors).into_any_element(),
             icon_button("island-clear", Icon::Close, &ClearSelection, colors).into_any_element(),
@@ -386,7 +403,7 @@ fn icon_button(
 
 fn text_button(
     name: &'static str,
-    words: &'static str,
+    words: impl Into<SharedString>,
     action: &dyn Action,
     tint: Rgba,
     colors: &Colors,
@@ -397,7 +414,7 @@ fn text_button(
         .px(size::TEXT_BUTTON_PAD)
         .font_weight(text::STRONG_WEIGHT)
         .text_color(tint)
-        .child(SharedString::new_static(words))
+        .child(words.into())
         .on_click(move |_: &ClickEvent, window, cx| {
             window.dispatch_action(action.boxed_clone(), cx);
         })

@@ -4,9 +4,8 @@
 //! A client (a window, the D-Bus service) gets a [`Connection`] from a
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
 //! through the [`EventSink`] it handed over. A client that asks for the
-//! [`Theme`] or the places gets them
-//! again whenever they change. The core reads the other end of the channel
-//! as [`CoreMessage`]s. File
+//! places gets them again whenever they change. The core reads the other
+//! end of the channel as [`CoreMessage`]s. File
 //! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
 //! quick look shows of a file or folder. A [`Size`] is what a scan of files
 //! and folders counted. A [`RecentFolder`] is one a person opened lately, for the Start page.

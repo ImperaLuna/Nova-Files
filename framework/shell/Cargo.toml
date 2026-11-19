@@ -8,6 +8,7 @@
 # - gpui
 #
 # Allowed workspace crates:
+# - nova-files-api
 # - nova-files-messages
 
 [package]
@@ -21,10 +22,7 @@ publish.workspace = true
 [lints]
 workspace = true
 
-[lib]
-test = false
-doctest = false
-
 [dependencies]
 gpui.workspace = true
+nova-files-api.workspace = true
 nova-files-messages.workspace = true

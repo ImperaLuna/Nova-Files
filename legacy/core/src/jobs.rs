@@ -8,13 +8,13 @@ use nova_files_api::{
     Order, ThumbnailSize, Unreadable,
 };
 use nova_files_disk::ports::Icons;
-pub use nova_files_entries::ListingJob;
-use nova_files_entries::RowWatch;
+pub use nova_files_entries_core::ListingJob;
+use nova_files_entries_core::RowWatch;
 
-use crate::file_icons::FileIcons;
 use crate::inside::{self, Inside, Within};
 use crate::thumbs::{Queue, Thumbnails};
 use nova_files_archives_core::ArchiveFailure;
+use nova_files_look_core::FileIcons;
 
 use crate::list::{self, Stopped};
 use crate::memory;
@@ -29,7 +29,7 @@ const OPEN_THREAD: &str = "nova-files-open";
 const NO_LISTING: u64 = u64::MAX;
 
 pub struct Client {
-    entries: nova_files_entries::Client,
+    entries: nova_files_entries_core::Client,
     current_search: Arc<AtomicU64>,
     current_preview: Arc<preview::Current>,
 }
@@ -45,7 +45,7 @@ impl Client {
             .map(|queue| Arc::new(queue) as Arc<dyn RowWatch>);
         let icons: Arc<dyn Icons> = Arc::<FileIcons>::clone(icons);
         Self {
-            entries: nova_files_entries::Client::new(events, rows, &icons),
+            entries: nova_files_entries_core::Client::new(events, rows, &icons),
             current_search: Arc::new(AtomicU64::new(NO_LISTING)),
             current_preview: Arc::new(preview::Current::new()),
         }

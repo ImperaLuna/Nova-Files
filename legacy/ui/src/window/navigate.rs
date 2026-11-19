@@ -37,6 +37,7 @@ impl MainWindow {
                 self.request_gathered(*place);
             }
             Location::Properties(paths) => self.arrive_at_properties(paths, cx),
+            Location::Page(page) => self.arrive_at_page(page.clone(), cx),
         }
     }
 
