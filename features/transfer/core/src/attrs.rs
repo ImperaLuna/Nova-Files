@@ -21,21 +21,32 @@ pub fn copy_xattrs(from: &File, to: &File) -> io::Result<()> {
         Err(Errno::OPNOTSUPP) => return Ok(()),
         Err(errno) => return Err(errno.into()),
     };
+    let read = |name: &[u8]| {
+        read_sized(fgetxattr_query(from, name)?, |buffer| {
+            fgetxattr(from, name, buffer).map(drop)
+        })
+    };
+    let write = |name: &[u8], value: &[u8]| fsetxattr(to, name, value, XattrFlags::empty());
+    copy_each(&names, read, write);
+    Ok(())
+}
+
+fn copy_each(
+    names: &[u8],
+    read: impl Fn(&[u8]) -> rustix::io::Result<Vec<u8>>,
+    mut write: impl FnMut(&[u8], &[u8]) -> rustix::io::Result<()>,
+) {
     for name in names
         .split(|&byte| byte == b'\0')
         .filter(|name| !name.is_empty())
     {
-        let value = read_sized(fgetxattr_query(from, name)?, |buffer| {
-            fgetxattr(from, name, buffer).map(drop)
-        })?;
-        if let Err(errno) = fsetxattr(to, name, &value, XattrFlags::empty()) {
+        if let Err(errno) = read(name).and_then(|value| write(name, &value)) {
             log::debug!(
                 "left out the attribute {} on a copy: {errno}",
                 String::from_utf8_lossy(name)
             );
         }
     }
-    Ok(())
 }
 
 fn list(file: &File) -> rustix::io::Result<Vec<u8>> {
@@ -53,4 +64,31 @@ fn read_sized(
         read(spare_capacity(&mut bytes))?;
     }
     Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_attribute_that_cant_be_read_leaves_out_only_itself() {
+        let mut written = Vec::new();
+
+        copy_each(
+            b"user.a\0user.b\0user.c\0",
+            |name| {
+                if name == b"user.b" {
+                    Err(Errno::IO)
+                } else {
+                    Ok(name.to_vec())
+                }
+            },
+            |name, _| {
+                written.push(name.to_vec());
+                Ok(())
+            },
+        );
+
+        assert_eq!(written, [b"user.a".to_vec(), b"user.c".to_vec()]);
+    }
 }

@@ -80,6 +80,34 @@ fn an_info_file_whose_entry_never_reached_the_trash_goes() {
 }
 
 #[test]
+fn every_info_file_a_put_back_cut_short_left_goes() {
+    let folder = TestFolder::new("left-put-back");
+    let trash = folder.path().join("Trash");
+    fs::create_dir_all(trash.join("info")).unwrap();
+    fs::create_dir_all(trash.join("files")).unwrap();
+    let info = |name: &str| {
+        let path = trash.join(format!("info/{name}.trashinfo"));
+        fs::write(&path, "[Trash Info]\n").unwrap();
+        path
+    };
+    let (first, last) = (info("first"), info("last"));
+    let gone = folder.file("gone", "put back");
+    let item = entry_of(&gone);
+    let trashed = trash.join("files/copy");
+
+    clean(&[
+        line(word::TRASH, &[]),
+        line(word::TRASHED, &[&folder.path().join("copy"), &trashed]),
+        line(word::PUT_BACK, &[]),
+        line(word::TRASH_INFO, &[&first, &entry_of(&first), &item]),
+        line(word::TRASH_INFO, &[&last, &entry_of(&last), &item]),
+    ]);
+
+    assert!(!first.exists());
+    assert!(!last.exists());
+}
+
+#[test]
 fn a_recorded_path_that_is_no_info_file_is_left_alone() {
     let folder = TestFolder::new("left-trash-other");
     let other = folder.file("notes.trashinfo", "the user's");

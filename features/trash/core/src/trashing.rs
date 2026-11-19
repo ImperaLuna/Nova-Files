@@ -33,6 +33,7 @@ const MAX_ATTEMPTS: u32 = 10_000;
 
 enum Refused {
     NoTrash,
+    InTrash,
     Failed(Failure),
 }
 
@@ -115,7 +116,7 @@ impl SetAsideForJob for TrashForJob {
         match send(running, at, (self.trashes.home.as_deref(), &mut self.known)) {
             Ok(Some((_, item, _))) => Aside::Kept(item),
             Ok(None) => Aside::Gone,
-            Err(Refused::NoTrash) => Aside::Nowhere,
+            Err(Refused::NoTrash | Refused::InTrash) => Aside::Nowhere,
             Err(Refused::Failed(reason)) => {
                 log::warn!(
                     "can't set {} aside in the trash: {reason:?}",
@@ -177,6 +178,7 @@ fn trash_one(
         };
         let kind = match refused {
             Refused::NoTrash => ConflictKind::NoTrash,
+            Refused::InTrash => ConflictKind::InTrash,
             Refused::Failed(reason) => conflict_for(reason, Path::new(""), path)
                 .ok_or_else(|| Stop::because(path, reason))?,
         };
@@ -223,7 +225,7 @@ fn send(
         trash
     };
     if original.starts_with(&trash.root) {
-        return Err(Refused::NoTrash);
+        return Err(Refused::InTrash);
     }
     if trash.root.starts_with(&original) {
         return Err(Refused::Failed(Failure::Unsupported));

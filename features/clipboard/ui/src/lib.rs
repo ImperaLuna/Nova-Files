@@ -77,6 +77,10 @@ const fn writable(_: &ClipboardPart, scene: &Scene, _: &App) -> bool {
     !scene.picker && !scene.rules.read_only
 }
 
+const fn pastes_here(part: &ClipboardPart, scene: &Scene, cx: &App) -> bool {
+    writable(part, scene, cx) && !scene.searching
+}
+
 fn has_files(cx: &App) -> bool {
     cx.read_from_clipboard()
         .as_ref()
@@ -96,7 +100,7 @@ fn entry_items(_: &ClipboardPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
 
 fn sheet_items(_: &ClipboardPart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
     let in_folder = scene.location.as_ref().and_then(Location::folder).is_some();
-    if scene.rules.replaces_menu || !in_folder || !has_files(cx) {
+    if scene.rules.replaces_menu || scene.searching || !in_folder || !has_files(cx) {
         return Vec::new();
     }
     vec![MenuItem::run(Icon::Paste, &PASTE)]
@@ -175,7 +179,7 @@ impl Part for ClipboardPart {
     fn slots(slots: &mut Slots<Self>) {
         slots.command(&COPY, writable, Self::copy);
         slots.command(&CUT, writable, Self::cut);
-        slots.command(&PASTE, writable, Self::paste);
+        slots.command(&PASTE, pastes_here, Self::paste);
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::FIRST, entry_items);
         slots.menu_in(MenuAt::Sheet, MenuGroup::Edit, Placed::SECOND, sheet_items);
         slots.menu_in(

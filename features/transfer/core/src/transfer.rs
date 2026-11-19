@@ -169,13 +169,7 @@ pub fn transfer_to(
         mut touched,
         ..
     } = done;
-    for (from, to, times) in folders.into_iter().rev() {
-        if let Err(cancelled) = running.shared.control.checkpoint() {
-            result = Err(cancelled.into());
-            break;
-        }
-        finish_folder(&mut sources, &from, &to, times);
-    }
+    finish_folders(&mut sources, folders);
     for folder in emptied.iter().rev() {
         if let Err(stop) = remove_if_empty(running, &mut sources, folder, &mut touched) {
             result = result.and(Err(stop));
@@ -449,20 +443,35 @@ fn look_at_source(sources: &mut Folders, path: &Path) -> io::Result<Metadata> {
     sources.source(path)?.at().look()
 }
 
+fn finish_folders(sources: &mut Folders, folders: Vec<(PathBuf, PathBuf, io::Result<Metadata>)>) {
+    for (from, to, times) in folders.into_iter().rev() {
+        finish_folder(sources, &from, &to, times);
+    }
+}
+
 fn finish_folder(sources: &mut Folders, from: &Path, to: &Path, times: io::Result<Metadata>) {
+    let target = match File::open(to) {
+        Ok(target) => target,
+        Err(error) => {
+            log::warn!("can't open {} to finish it: {error}", to.display());
+            return;
+        }
+    };
     let flags = OFlags::RDONLY
         .union(OFlags::DIRECTORY)
         .union(OFlags::CLOEXEC);
-    let opened = sources
+    let attributes = sources
         .open(from)
-        .and_then(|folder| Ok(openat(folder, ".", flags, Mode::empty())?));
-    let finished = opened.map_err(io::Error::from).and_then(|source| {
-        let source = File::from(source);
-        let target = File::open(to)?;
-        copy_xattrs(&source, &target)?;
-        copy_mode_and_times(&times?, &target)
-    });
-    if let Err(error) = finished {
+        .and_then(|folder| Ok(openat(folder, ".", flags, Mode::empty())?))
+        .map_err(io::Error::from)
+        .and_then(|source| copy_xattrs(&File::from(source), &target));
+    if let Err(error) = attributes {
+        log::warn!(
+            "can't give {} its source's attributes: {error}",
+            to.display()
+        );
+    }
+    if let Err(error) = times.and_then(|times| copy_mode_and_times(&times, &target)) {
         log::warn!(
             "can't give {} its source's mode and times: {error}",
             to.display()
