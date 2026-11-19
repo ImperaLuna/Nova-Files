@@ -674,3 +674,22 @@ fn a_folder_that_cant_be_watched_gets_a_rescan() {
     assert_eq!(folders.watch(file.clone(), Zone::Home), None);
     fs::remove_file(&file).ok();
 }
+
+#[test]
+fn a_folder_the_crawl_cant_read_either_is_left_unwatched_without_a_rescan() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let root = std::env::temp_dir().join(format!("nova-files-watch-locked-{}", std::process::id()));
+    let locked = root.join("locked");
+    fs::create_dir_all(&locked).unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    let mut folders = folders(&root);
+
+    let watched = fs::read_dir(&locked)
+        .is_err()
+        .then(|| folders.watch(locked.clone(), Zone::Home));
+
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::remove_dir_all(&root).ok();
+    assert_eq!(watched.flatten(), None);
+    assert!(!folders.by_path.contains_key(&locked));
+}

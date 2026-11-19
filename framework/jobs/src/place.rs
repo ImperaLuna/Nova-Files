@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use rustix::fs::{AtFlags, CWD, RenameFlags, linkat, renameat, renameat_with, unlinkat};
 use rustix::io::Errno;
 
+use super::failure::source_changed;
 use super::folders::At;
 
 pub fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
@@ -118,11 +119,11 @@ fn unlink_or_take_back(from: At<'_>, to: &Path) -> io::Result<()> {
         _ => false,
     };
     let unlinked = if still_linked {
-        unlinkat(from.folder, from.name, AtFlags::empty())
+        unlinkat(from.folder, from.name, AtFlags::empty()).map_err(io::Error::from)
     } else {
-        Err(Errno::AGAIN)
+        Err(source_changed())
     };
-    let Err(errno) = unlinked else {
+    let Err(error) = unlinked else {
         return Ok(());
     };
     if let Err(stuck) = unlinkat(CWD, to, AtFlags::empty()) {
@@ -132,7 +133,7 @@ fn unlink_or_take_back(from: At<'_>, to: &Path) -> io::Result<()> {
             to.display()
         );
     }
-    Err(errno.into())
+    Err(error)
 }
 
 fn check_then_rename(from: At<'_>, to: &Path) -> io::Result<()> {

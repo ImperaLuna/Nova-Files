@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 
+mod trace;
+mod vulkan_drivers;
+
 use nova_files_clipboard_ui::ClipboardPart;
 use nova_files_delete_ui::DeletePart;
 use nova_files_drives_ui::DrivesPart;
@@ -19,6 +22,9 @@ use nova_files_thumbnails_ui::ThumbnailsPart;
 use nova_files_transfer_ui::TransferPart;
 use nova_files_trash_ui::TrashPart;
 use nova_files_undo_ui::UndoPart;
+
+pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
+pub use vulkan_drivers::{FILTER_VARIABLE, absent_vendor_drivers};
 
 #[must_use]
 pub fn parts() -> Parts {
