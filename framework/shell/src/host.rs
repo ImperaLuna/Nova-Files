@@ -1,4 +1,6 @@
+use std::cell::Cell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{App, AppContext as _, Entity};
@@ -24,9 +26,21 @@ impl Link {
     }
 }
 
+#[derive(Clone, Default)]
+pub struct AskIds(Rc<Cell<u64>>);
+
+impl AskIds {
+    pub fn next(&self) -> u64 {
+        let next = self.0.get() + 1;
+        self.0.set(next);
+        next
+    }
+}
+
 #[derive(Clone)]
 pub struct Host {
     pub link: Link,
+    pub asks: AskIds,
     pub home: PathBuf,
     pub rules: RulesBook,
     pub entries: Entity<Entries>,
@@ -38,6 +52,7 @@ impl Host {
     pub fn new(link: Link, home: PathBuf, cx: &mut App) -> Self {
         Self {
             link,
+            asks: AskIds::default(),
             home,
             rules: RulesBook::default(),
             entries: cx.new(|_| Entries::default()),
@@ -60,5 +75,18 @@ impl Host {
             selected: entries.selected_count(),
             picker: entries.picker(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_holder_of_the_ask_ids_draws_from_one_count() {
+        let window = AskIds::default();
+        let part = window.clone();
+
+        assert_eq!([window.next(), part.next(), window.next()], [1, 2, 3]);
     }
 }

@@ -19,7 +19,7 @@ pub mod theme;
 
 pub use command::{CommandSpec, WINDOW_KEYS};
 pub use entries::{Entries, EntriesAsked, Shown};
-pub use host::{Host, Link};
+pub use host::{AskIds, Host, Link};
 pub use island::{Island, IslandAsk, IslandAsked, OnUndo, OnYes, Undo};
 pub use location::{Location, PageKind, PageRef};
 pub use menu::{Look, MenuAt, MenuGroup, MenuItem, Placed, SidebarAt, SidebarRow, arrange};
