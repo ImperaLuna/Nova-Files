@@ -4,19 +4,22 @@ use std::fs::OpenOptions;
 use std::io::{self, Write as _};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use nova_files_api::{Conflict, ConflictKind, Failure, Outcome};
 
+use crate::restoring::put_back;
 use crate::trashes::{
-    FILES, INFO_SUFFIX, TrashFolder, add_folder_sizes, folder_for, folder_size, info_text,
-    stored_name,
+    FILES, INFO_SUFFIX, TrashFolder, Trashes, add_folder_sizes, find, folder_for, folder_size,
+    info_text, stored_name,
 };
 use nova_files_disk::private_file::FILE_MODE;
 use nova_files_jobs::Ended;
 use nova_files_jobs::clash::conflict_for;
 use nova_files_jobs::failure::failure;
 use nova_files_jobs::journal::{PART_PREFIX, Record, word};
+use nova_files_jobs::mover::Mover;
 use nova_files_jobs::place::rename_no_replace;
 use nova_files_jobs::plan::Entry;
 use nova_files_jobs::running::Running;
@@ -75,26 +78,29 @@ pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>
 }
 
 pub struct Trasher {
-    home: Option<PathBuf>,
+    trashes: Trashes,
+    files: Arc<dyn Mover>,
 }
 
 impl Trasher {
-    pub const fn new(home: Option<PathBuf>) -> Self {
-        Self { home }
+    pub fn new(trashes: Trashes, files: Arc<dyn Mover>) -> Self {
+        Self { trashes, files }
     }
 }
 
 impl SetAside for Trasher {
     fn for_job(&self) -> Box<dyn SetAsideForJob> {
         Box::new(TrashForJob {
-            home: self.home.clone(),
+            trashes: self.trashes.clone(),
+            files: Arc::clone(&self.files),
             known: Known::new(),
         })
     }
 }
 
 struct TrashForJob {
-    home: Option<PathBuf>,
+    trashes: Trashes,
+    files: Arc<dyn Mover>,
     known: Known,
 }
 
@@ -106,7 +112,7 @@ impl SetAsideForJob for TrashForJob {
         shown: &Path,
     ) -> Aside {
         let at = (index, left, shown.file_name());
-        match send(running, at, (self.home.as_deref(), &mut self.known)) {
+        match send(running, at, (self.trashes.home.as_deref(), &mut self.known)) {
             Ok(Some((_, item, _))) => Aside::Kept(item),
             Ok(None) => Aside::Gone,
             Err(Refused::NoTrash) => Aside::Nowhere,
@@ -118,6 +124,22 @@ impl SetAsideForJob for TrashForJob {
                 Aside::Refused
             }
         }
+    }
+
+    fn trash(&mut self, running: &mut Running, paths: &[PathBuf]) -> Ended {
+        trash(running, paths, self.trashes.home.as_deref())
+    }
+
+    fn put_back(&mut self, running: &mut Running, items: &[PathBuf]) -> Option<Ended> {
+        let items: Vec<_> = items
+            .iter()
+            .filter(|item| {
+                find(item, &self.trashes)
+                    .is_some_and(|(_, found)| found.original.symlink_metadata().is_err())
+            })
+            .cloned()
+            .collect();
+        (!items.is_empty()).then(|| put_back(running, &items, &self.trashes, self.files.as_ref()))
     }
 }
 
