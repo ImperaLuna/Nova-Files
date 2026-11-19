@@ -13,9 +13,10 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use common::Bench;
 use nova_files_api::{
-    Command, ConflictKind, Details, EntryId, EntryKind, Event, ListingId, NotOpened, Operation,
-    Order, Outcome, SortKey, ThumbnailSize, Unreadable,
+    Command, ConflictKind, Details, EntryId, EntryKind, Event, ListingId, Operation, Order,
+    Outcome, SortKey, ThumbnailSize, Unreadable,
 };
+use nova_files_open_api::{self as open_api, NotOpened};
 use zip::DateTime;
 use zip::write::SimpleFileOptions;
 
@@ -155,14 +156,14 @@ fn copying_out_a_folder_takes_all_inside_it() {
 }
 
 fn opened(bench: &Bench, path: &Path) -> Result<(), NotOpened> {
-    bench.send(Command::OpenFile {
+    bench.send(open_api::Command::OpenFile {
         path: path.to_path_buf(),
         activation: None,
     });
     loop {
         match bench.next() {
-            Event::FileOpened { path: got } if got == path => return Ok(()),
-            Event::FileNotOpened { path: got, reason } if got == path => return Err(reason),
+            open_api::Event::Opened { path: got } if got == path => return Ok(()),
+            open_api::Event::NotOpened { path: got, reason } if got == path => return Err(reason),
             _ => {}
         }
     }

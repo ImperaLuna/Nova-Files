@@ -1,5 +1,5 @@
 use gpui::{Context, Pixels, Point};
-use nova_files_api::{App, Command, OpenWith, OpenWithAnswer, OpenWithId};
+use nova_files_open_api::{App, Command, OpenWith, OpenWithAnswer, OpenWithId};
 
 use super::MainWindow;
 use crate::assets::Icon;

@@ -1,7 +1,7 @@
 use gpui::{
     Bounds, Modifiers, MouseButton, Pixels, Point, ScrollDelta, ScrollWheelEvent, TouchPhase,
 };
-use nova_files_api::IconSize;
+use nova_files_folders_api::IconSize;
 
 use super::*;
 

@@ -3,7 +3,8 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use gpui::{Bounds, Context, Pixels, Size, Window, size};
-use nova_files_api::{EntryId, ViewMode};
+use nova_files_api::EntryId;
+use nova_files_folders_api::ViewMode;
 
 use super::MainWindow;
 use crate::grid::Grid;
@@ -99,7 +100,7 @@ fn strip(width: Pixels, grid: Grid, cursor: usize, len: usize) -> Range<usize> {
 #[cfg(test)]
 mod tests {
     use gpui::px;
-    use nova_files_api::IconSize;
+    use nova_files_folders_api::IconSize;
 
     use super::*;
 

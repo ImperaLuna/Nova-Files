@@ -52,3 +52,4 @@ zstd = { version = "0.14", default-features = false }
 # The tests run the helper the way the core does, and jobs through a core.
 nova-files-api.workspace = true
 nova-files-core.workspace = true
+nova-files-open-api.workspace = true

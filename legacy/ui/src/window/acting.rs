@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use gpui::{Context, SharedString};
-use nova_files_api::{EntryId, EntryKind, Listing, NotOpened, Operation};
+use nova_files_api::{EntryId, EntryKind, Listing, Operation};
+use nova_files_open_api::NotOpened;
 
 use super::MainWindow;
 use crate::island::{NOTE_TIME, Note, NoteUndo, opening};
@@ -83,6 +84,16 @@ impl MainWindow {
     ) {
         self.island.not_opened.clear();
         self.put_note(label.into(), undo, cx);
+    }
+
+    pub(crate) fn open_event(&mut self, event: nova_files_open_api::Event, cx: &mut Context<Self>) {
+        match event {
+            nova_files_open_api::Event::Opened { .. } => {}
+            nova_files_open_api::Event::NotOpened { path, reason } => {
+                self.file_not_opened(path, reason, cx);
+            }
+            nova_files_open_api::Event::OpenWith(answer) => self.open_with_answered(answer, cx),
+        }
     }
 
     pub(crate) fn file_not_opened(

@@ -10,7 +10,7 @@ use std::time::Duration;
 #[path = "common/own_folders.rs"]
 mod own_folders;
 
-use nova_files_api::{Command, Event, NotOpened};
+use nova_files_open_api::{Command, Event, NotOpened};
 
 use own_folders::run_again_in;
 
@@ -91,13 +91,13 @@ fn open_through_the_core(root: &Path) {
     let plain = root.join("plain");
     assert_eq!(
         open(plain.clone()),
-        Event::FileNotOpened {
+        Event::NotOpened {
             path: plain,
             reason: NotOpened::NoApp
         }
     );
     let file = root.join("a.novatest");
-    assert_eq!(open(file.clone()), Event::FileOpened { path: file.clone() });
+    assert_eq!(open(file.clone()), Event::Opened { path: file.clone() });
     let out = root.join("out");
     let (sender, written) = mpsc::channel();
     std::thread::spawn(move || sender.send(fs::read_to_string(out).unwrap()));

@@ -232,7 +232,7 @@ fn a_place_lists_and_says_when_its_folders_change() {
     loop {
         match client.next() {
             Heard::Gathered(gathered_api::Event::GatheredChanged(Gathering::Projects)) => break,
-            Heard::Core(Event::DetailsRead { .. } | Event::Thumbnail { .. }) => {}
+            Heard::Core(Event::DetailsRead { .. }) => {}
             other => panic!("expected Projects to change, got {other:?}"),
         }
     }
