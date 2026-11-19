@@ -6,6 +6,8 @@ use gpui::{
     radians, svg,
 };
 
+use nova_files_shell::SidebarAt;
+
 use super::{icon, inside_edge, new_tab_on_middle_click, section_head};
 use crate::assets::Icon;
 use crate::location::Location;
@@ -24,7 +26,12 @@ impl MainWindow {
             .rows()
             .into_iter()
             .enumerate()
-            .map(|(index, row)| self.tree_row(index, row, &colors, cx));
+            .map(|(index, row)| self.tree_row(index, row, &colors, cx).into_any_element())
+            .chain(
+                self.part_rows(SidebarAt::Tree, false, &colors, cx)
+                    .into_iter()
+                    .map(IntoElement::into_any_element),
+            );
         div()
             .flex()
             .flex_col()

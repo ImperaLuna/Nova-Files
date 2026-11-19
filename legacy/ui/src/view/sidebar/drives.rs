@@ -4,6 +4,8 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 
+use nova_files_shell::SidebarAt;
+
 use super::{Row, on_middle_click, row, section_head};
 use crate::assets::Icon;
 use crate::drives;
@@ -42,6 +44,7 @@ impl MainWindow {
                     number,
                     here: here == Some(index),
                     pressed: false,
+                    lead: None,
                 },
                 narrow,
                 &colors,
@@ -68,7 +71,12 @@ impl MainWindow {
                 row
             }
         });
-        let list = div().flex().gap(size::PLACE_GAP).children(rows);
+        let from_parts = self.part_rows(SidebarAt::Drives, narrow, &colors, cx);
+        let list = div()
+            .flex()
+            .gap(size::PLACE_GAP)
+            .children(rows)
+            .children(from_parts);
         if narrow {
             return list;
         }

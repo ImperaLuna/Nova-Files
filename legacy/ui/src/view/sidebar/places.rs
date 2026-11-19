@@ -8,12 +8,12 @@ use super::{Row, new_tab_on_middle_click, on_middle_click, row, section_button, 
 use crate::assets::Icon;
 use nova_files_gathered_api::Gathering;
 
-use nova_files_shell::{SidebarAt, SidebarRow};
+use nova_files_shell::SidebarAt;
 
 use crate::location::Location;
 use crate::places::{self, START_LABEL};
 use crate::theme::{Colors, size};
-use crate::window::{Aim, HoverOpens, MainWindow, from_shell};
+use crate::window::{Aim, HoverOpens, MainWindow};
 
 const LABEL: &str = "Places";
 
@@ -39,6 +39,7 @@ impl MainWindow {
                         number: None,
                         here: is_here,
                         pressed: false,
+                        lead: None,
                     },
                     narrow,
                     &colors,
@@ -66,12 +67,7 @@ impl MainWindow {
             .into_iter()
             .filter(|_| main)
             .map(|place| self.gathered_row(place, narrow, &colors, cx));
-        let from_parts = self
-            .parts
-            .sidebar(SidebarAt::Places, &self.scene(), cx)
-            .into_iter()
-            .filter(|_| main)
-            .map(|place| self.part_row(place, narrow, &colors, cx));
+        let from_parts = self.part_rows(SidebarAt::Places, narrow, &colors, cx);
         let pin = main.then(|| {
             section_button("pin", Icon::Plus, &colors)
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder_to_pin(cx)))
@@ -107,6 +103,7 @@ impl MainWindow {
                 number: None,
                 here: self.is_on_start(),
                 pressed: false,
+                lead: None,
             },
             narrow,
             colors,
@@ -138,6 +135,7 @@ impl MainWindow {
                 number: None,
                 here: self.gathered_here() == Some(place),
                 pressed: false,
+                lead: None,
             },
             narrow,
             colors,
@@ -151,50 +149,5 @@ impl MainWindow {
             })
         })
         .map(|row| self.drop_target(row, Aim::gathered(place), cx))
-    }
-
-    fn part_row(
-        &self,
-        place: SidebarRow,
-        narrow: bool,
-        colors: &Colors,
-        cx: &Context<Self>,
-    ) -> Stateful<Div> {
-        let (opens, new_tab) = (place.opens.clone(), place.opens.clone());
-        let menu_row = place.id;
-        let shown = from_shell(place.opens.clone());
-        let drops = self.tab_drops_at(Some(&shown), place.name.clone());
-        let row = row(
-            Row {
-                id: place.id.into(),
-                selector: place.id.to_owned(),
-                glyph: place.icon,
-                name: place.name,
-                number: place.number.map(|number| (number, colors.text_dim)),
-                here: place.here,
-                pressed: false,
-            },
-            narrow,
-            colors,
-        )
-        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-            this.go_to_shell(opens.clone(), cx);
-        }))
-        .map(|row| {
-            on_middle_click(row, true, cx, move |this, cx| {
-                this.new_tab_at_shell(new_tab.clone(), cx);
-            })
-        })
-        .map(|row| Self::opens_on_hover(row, HoverOpens::Place(shown), cx))
-        .on_mouse_down(
-            MouseButton::Right,
-            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                this.open_row_menu(menu_row, event.position, cx);
-            }),
-        );
-        match drops {
-            Some(at) => self.drop_target(row, at, cx),
-            None => row,
-        }
     }
 }

@@ -164,7 +164,7 @@ impl fmt::Debug for RowItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct SidebarRow {
     pub id: &'static str,
     pub icon: Icon,
@@ -172,11 +172,73 @@ pub struct SidebarRow {
     pub number: Option<SharedString>,
     pub opens: crate::Location,
     pub here: bool,
+    pub depth: u8,
+    pub expander: Option<Expander>,
+    pub button: Option<RowItem>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Expander {
+    pub open: bool,
+    pub toggle: RowItem,
+}
+
+impl SidebarRow {
+    pub fn new(
+        id: &'static str,
+        icon: Icon,
+        name: impl Into<SharedString>,
+        opens: crate::Location,
+    ) -> Self {
+        Self {
+            id,
+            icon,
+            name: name.into(),
+            number: None,
+            opens,
+            here: false,
+            depth: 0,
+            expander: None,
+            button: None,
+        }
+    }
+
+    #[must_use]
+    pub fn number(mut self, number: Option<SharedString>) -> Self {
+        self.number = number;
+        self
+    }
+
+    #[must_use]
+    pub const fn here(mut self, here: bool) -> Self {
+        self.here = here;
+        self
+    }
+
+    #[must_use]
+    pub const fn depth(mut self, depth: u8) -> Self {
+        self.depth = depth;
+        self
+    }
+
+    #[must_use]
+    pub fn expander(mut self, open: bool, toggle: RowItem) -> Self {
+        self.expander = Some(Expander { open, toggle });
+        self
+    }
+
+    #[must_use]
+    pub fn button(mut self, button: RowItem) -> Self {
+        self.button = Some(button);
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SidebarAt {
     Places,
+    Drives,
+    Tree,
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@ use nova_files_ui::CoreStatus;
 use super::*;
 
 mod hooks;
+mod rows;
 mod shelf;
 
 #[derive(Debug, Clone)]
@@ -65,6 +66,13 @@ fn with_parts(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestCo
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
     (view, cx, core)
+}
+
+fn click(cx: &mut VisualTestContext, selector: &'static str) {
+    cx.run_until_parked();
+    let at = cx.debug_bounds(selector).unwrap().center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    cx.run_until_parked();
 }
 
 fn rules(view: &Entity<MainWindow>, cx: &VisualTestContext) -> FolderRules {

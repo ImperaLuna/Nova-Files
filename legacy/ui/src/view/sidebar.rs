@@ -1,5 +1,6 @@
 mod drives;
 mod open;
+mod part_rows;
 mod places;
 mod tree;
 
@@ -106,6 +107,7 @@ pub struct Row {
     pub number: Option<(SharedString, Rgba)>,
     pub here: bool,
     pub pressed: bool,
+    pub lead: Option<AnyElement>,
 }
 
 pub(super) fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
@@ -117,6 +119,7 @@ pub(super) fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         number,
         here,
         pressed,
+        lead,
     } = row;
     let tint = if here { colors.here } else { colors.text_dim };
     let number_selector = format!("{selector}-number");
@@ -153,6 +156,7 @@ pub(super) fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         .when(here, |row| {
             row.text_color(colors.text).font_weight(text::STRONG_WEIGHT)
         })
+        .children(lead)
         .child(
             div()
                 .when(here, |glyph| glyph.debug_selector(move || here_selector))
