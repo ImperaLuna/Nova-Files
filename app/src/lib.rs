@@ -4,6 +4,7 @@ use nova_files_clipboard_ui::ClipboardPart;
 use nova_files_delete_ui::DeletePart;
 use nova_files_drives_ui::DrivesPart;
 use nova_files_folders_ui::FoldersPart;
+use nova_files_gathered_ui::GatheredPart;
 use nova_files_look_ui::LookPart;
 use nova_files_open_ui::OpenPart;
 use nova_files_picker_ui::PickerPart;
@@ -27,6 +28,7 @@ pub fn parts() -> Parts {
     parts.add::<DeletePart>();
     parts.add::<DrivesPart>();
     parts.add::<FoldersPart>();
+    parts.add::<GatheredPart>();
     parts.add::<LookPart>();
     parts.add::<OpenPart>();
     parts.add::<PickerPart>();

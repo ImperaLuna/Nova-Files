@@ -6,8 +6,6 @@ mod dragging;
 mod drives;
 mod events;
 mod gallery;
-mod gathered;
-mod gathering;
 mod hidden;
 mod hover_open;
 mod jobs;
@@ -25,7 +23,6 @@ mod views;
 
 pub use aiming::Aim;
 pub use dragging::DraggedRow;
-pub use gathered::LIBRARY_LABEL;
 pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
@@ -49,7 +46,6 @@ use nova_files_api::{
     ListingId, Order,
 };
 use nova_files_drives_api as drives_api;
-use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_shell::Lines;
 use nova_files_shell::path_bar::PathBar;
@@ -83,7 +79,6 @@ pub enum CoreStatus {
 pub enum WindowEvent {
     Status(CoreStatus),
     Opened(PathBuf),
-    GatheredShown(Gathering),
     StartShown,
     Refused(PathBuf),
     Places,
@@ -124,7 +119,6 @@ pub struct MainWindow {
     pub(crate) falling_back: bool,
     pub(crate) places: Vec<Place>,
     pinned: Arc<[Bookmark]>,
-    gathered: gathered::GatheredState,
     pub(crate) history: History<Location>,
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
@@ -240,7 +234,6 @@ impl MainWindow {
             home,
             places: Vec::new(),
             pinned: Arc::from([]),
-            gathered: gathered::GatheredState::default(),
             history: History::default(),
             path_bar: cx.new(|_| PathBar::new(&host)),
             asks_sent: 0,
@@ -277,7 +270,6 @@ impl MainWindow {
         match location {
             Location::Start => self.open_start(cx),
             Location::Folder(folder) => self.open(folder),
-            Location::Gathered(place) => self.open_gathered(*place, cx),
             Location::Page(page) => self.open_page(page.clone(), cx),
         }
     }
@@ -298,10 +290,6 @@ impl MainWindow {
         self.parts.peek(&envelope, cx);
         let envelope = match envelope.open::<Event>() {
             Ok(event) => return self.on_event(event, cx),
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<gathered_api::Event>() {
-            Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
         };
         self.hand_to_parts(envelope, cx);
@@ -351,7 +339,7 @@ impl MainWindow {
         if let Some(from) = self.search.from() {
             return from.folder();
         }
-        if self.gathered_shown().is_some() || self.listed_page.is_some() {
+        if self.listed_page.is_some() {
             return None;
         }
         self.listing.as_ref().map(|listing| listing.path.as_path())

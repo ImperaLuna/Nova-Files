@@ -1,19 +1,14 @@
 use std::path::Path;
 
-use gpui::{
-    AnyElement, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _, div,
-};
+use gpui::{AnyElement, Context, Div, IntoElement, ParentElement as _, Stateful, Styled as _, div};
 use nova_files_api::EntryKind;
-use nova_files_gathered_api::Gathering;
+use nova_files_gathered_ui::GatheredPage;
 use nova_files_properties_ui::{PropertiesPage, PropertiesPart};
 use nova_files_shell::path_bar::{self, BarInput, Crumb, Spot};
-use nova_files_shell::{self as shell, ChipRank, MenuAt, PageRef, TextField, arrange};
+use nova_files_shell::{self as shell, ChipRank, MenuAt, TextField, arrange};
 
-use super::drop::inside_edge;
-use crate::location::{Builtin, Location};
-use crate::places;
-use crate::theme::{Colors, radius, size};
+use crate::location::Location;
+use crate::theme::Colors;
 use crate::window::{Aim, MainWindow};
 
 impl MainWindow {
@@ -65,23 +60,22 @@ impl MainWindow {
     }
 
     fn path_chips(&self, colors: &Colors, cx: &Context<Self>) -> Vec<AnyElement> {
-        let part_chips = self.parts.path_chips();
-        let (first, rest): (Vec<_>, Vec<_>) = part_chips
-            .into_iter()
-            .partition(|(rank, _)| *rank == ChipRank::FIRST);
-        let mut chips: Vec<AnyElement> = first
-            .into_iter()
-            .map(|(_, chip)| chip.into_any_element())
-            .collect();
-        if let Some(place) = self.gathered_here() {
-            let chip = self.gathered_chip(place, colors, cx);
-            chips.push(
-                self.drop_target(chip, Aim::gathered(place), cx)
+        let mut chips: Vec<AnyElement> = Vec::new();
+        let drops_here = match self.location() {
+            Some(Location::Page(page)) if self.parts.takes_drops(page) => {
+                Some(Aim::page(page.clone()))
+            }
+            _ => None,
+        };
+        for (rank, chip) in self.parts.path_chips() {
+            let chip = match drops_here.clone() {
+                Some(aim) if rank != ChipRank::FIRST => self
+                    .drop_target(div().flex_none().child(chip), aim, cx)
                     .into_any_element(),
-            );
-            return chips;
+                _ => chip.into_any_element(),
+            };
+            chips.push(chip);
         }
-        chips.extend(rest.into_iter().map(|(_, chip)| chip.into_any_element()));
         let items = self.parts.menu(MenuAt::PathBarEnd, &self.scene(cx), cx);
         chips.extend(
             arrange(items)
@@ -93,9 +87,6 @@ impl MainWindow {
     }
 
     fn crumbs(&self, cx: &gpui::App) -> Vec<Crumb> {
-        if let Some(place) = self.gathered_here() {
-            return vec![gathered_crumb(place)];
-        }
         if let Some(folder) = self.folder() {
             return self.named_here().map_or_else(
                 || path_bar::crumbs(folder, &self.home, self.known_folders()),
@@ -103,6 +94,15 @@ impl MainWindow {
             );
         }
         match self.location() {
+            Some(Location::Page(page)) if page.get::<GatheredPage>().is_some() => {
+                vec![Crumb {
+                    opens: Some(shell::Location::Page(page.clone())),
+                    label: page.title(),
+                    icon: page.icon(),
+                    shows_icon: true,
+                    here: true,
+                }]
+            }
             Some(Location::Page(page)) => page.get::<PropertiesPage>().map_or_else(
                 || path_bar::page_crumbs(page, &self.home, self.known_folders()),
                 |shown| self.properties_crumbs(shown, cx),
@@ -135,46 +135,5 @@ impl MainWindow {
             .as_ref()
             .and_then(|listing| listing.entries.first())
             .is_some_and(|entry| entry.kind == EntryKind::Folder)
-    }
-
-    fn gathered_chip(
-        &self,
-        place: Gathering,
-        colors: &Colors,
-        cx: &Context<Self>,
-    ) -> Stateful<Div> {
-        div()
-            .id("gathered-folders")
-            .debug_selector(|| "gathered-folders".to_owned())
-            .flex()
-            .flex_none()
-            .items_center()
-            .h(size::CHIP_HEIGHT)
-            .px(inside_edge(size::CHIP_PAD))
-            .rounded(radius::ROW)
-            .text_color(colors.text_soft)
-            .cursor_pointer()
-            .hover(|chip| chip.bg(colors.hover).text_color(colors.text))
-            .active(|chip| chip.bg(colors.press))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                    this.open_gathered_menu(place, event.position, cx);
-                }),
-            )
-            .child(self.gathered_count(place))
-    }
-}
-
-fn gathered_crumb(place: Gathering) -> Crumb {
-    let (label, icon) = places::gathering_look(place);
-    Crumb {
-        opens: Some(shell::Location::Page(PageRef::new(Builtin::Gathered(
-            place,
-        )))),
-        label: label.into(),
-        icon,
-        shows_icon: true,
-        here: true,
     }
 }

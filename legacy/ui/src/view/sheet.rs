@@ -9,8 +9,6 @@ use gpui::{
 
 use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
 
-use nova_files_gathered_api::Gathering;
-
 use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon};
 
@@ -19,7 +17,7 @@ use nova_files_shell::{PageRef, ShownColumn};
 use crate::assets::Icon;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
-use crate::window::{Aim, DraggedRow, LIBRARY_LABEL, MainWindow};
+use crate::window::{Aim, DraggedRow, MainWindow};
 use nova_files_folders_ui::Grid;
 
 const NAME_LABEL: &str = "Name";
@@ -354,11 +352,7 @@ fn entry_row(
 
 impl MainWindow {
     pub fn list_drop_folder(&self) -> Option<&Path> {
-        if self.searching()
-            || self.folder_rules().trashed
-            || self.gathered_shown().is_some()
-            || self.listed_page().is_some()
-        {
+        if self.searching() || self.folder_rules().trashed || self.listed_page().is_some() {
             return None;
         }
         Some(&self.listing.as_ref()?.path)
@@ -374,11 +368,6 @@ impl MainWindow {
         if let Some(column) = part_column {
             let text = column.cell(entry, cx).unwrap_or_default();
             return Some(detail(text.to_string(), &Colors::of(cx)).into_any_element());
-        }
-        if self.gathered_shown() == Some(Gathering::Games) {
-            let library = self.library_of(&listing.path_of(entry)).unwrap_or_default();
-            let colors = Colors::of(cx);
-            return Some(detail(library, &colors).into_any_element());
         }
         listing
             .folders
@@ -396,15 +385,10 @@ impl MainWindow {
                 .child(column.head)
                 .into_any_element()
         });
-        let folder = match self.gathered_shown() {
-            _ if part.is_some() => part,
-            Some(Gathering::Games) => Some(library_head()),
-            Some(Gathering::Projects) => Some(folder_head()),
-            None => {
-                let listed = self.listed_page().is_some_and(PageRef::folder_column);
-                (self.showing_found() || listed).then(folder_head)
-            }
-        };
+        let folder = part.or_else(|| {
+            let listed = self.listed_page().is_some_and(PageRef::folder_column);
+            (self.showing_found() || listed).then(folder_head)
+        });
         column_heads(order, folder, colors, cx)
     }
 }
@@ -413,13 +397,6 @@ fn folder_head() -> AnyElement {
     div()
         .debug_selector(|| FOLDER_HEADER_SELECTOR.to_owned())
         .child(FOLDER_LABEL)
-        .into_any_element()
-}
-
-fn library_head() -> AnyElement {
-    div()
-        .debug_selector(|| "head-library".to_owned())
-        .child(LIBRARY_LABEL)
         .into_any_element()
 }
 

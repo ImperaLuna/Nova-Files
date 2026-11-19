@@ -127,7 +127,7 @@ impl MainWindow {
             .map(|row| {
                 on_middle_click(row, main, cx, move |this, cx| middle.follow(this, true, cx))
             })
-            .when_some(at, |row, at| {
+            .when_some(at.filter(|at| at.folder().is_some()), |row, at| {
                 Self::opens_on_hover(row, HoverOpens::Place(at), cx)
             })
             .when(main, |row| {
