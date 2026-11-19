@@ -225,9 +225,14 @@ impl MainWindow {
                 div()
                     .flex_none()
                     .when(hidden, |slot| slot.opacity(opacity::HIDDEN))
-                    .child(self.parts.row_icon(entry, cx).unwrap_or_else(|| {
-                        entry_icon(self.row_icon(index, entry.kind), colors).into_any_element()
-                    })),
+                    .child(
+                        self.parts
+                            .row_icon(entry, size::ROW_ICON, cx)
+                            .unwrap_or_else(|| {
+                                entry_icon(self.row_icon(index, entry.kind), colors)
+                                    .into_any_element()
+                            }),
+                    ),
             )
             .child(self.parts.name_cell(entry, cx).unwrap_or_else(|| {
                 self.rename_field(index).map_or_else(

@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
-    SharedString, Subscription,
+    Pixels, SharedString, Subscription,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId};
 
@@ -47,7 +47,7 @@ trait OpenPart {
     fn bars(&self) -> Vec<AnyView>;
     fn overlays(&self) -> Vec<AnyView>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
-    fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
+    fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
     fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
     fn closing(&self, cx: &mut App);
@@ -180,12 +180,12 @@ impl<P: Part> OpenPart for Opened<P> {
             .map(|(_, view)| view.clone())
     }
 
-    fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
+    fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
         let part = self.entity.read(cx);
         self.slots
             .row_icons
             .iter()
-            .find_map(|icon| icon(part, entry, cx))
+            .find_map(|icon| icon(part, entry, side, cx))
     }
 
     fn closing(&self, cx: &mut App) {
@@ -674,8 +674,10 @@ impl WindowParts {
             .find_map(|part| part.list_view(scene, cx))
     }
 
-    pub fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
-        self.opened.iter().find_map(|part| part.row_icon(entry, cx))
+    pub fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
+        self.opened
+            .iter()
+            .find_map(|part| part.row_icon(entry, side, cx))
     }
 
     pub fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool {

@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _, Modifiers,
-    SharedString, Window,
+    Pixels, SharedString, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId};
 
@@ -33,6 +33,7 @@ pub type Columns<P> = fn(&P, &Scene, &App) -> Option<Column<P>>;
 pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
+pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Closing<P> = fn(&mut P, &mut Context<P>);
 pub type Listed<P> = fn(&mut P, &Listing, bool, &mut Context<P>);
@@ -93,7 +94,7 @@ pub struct Slots<P> {
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
-    pub(crate) row_icons: Vec<NameCell<P>>,
+    pub(crate) row_icons: Vec<RowIcon<P>>,
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
     pub(crate) closing: Vec<Closing<P>>,
@@ -251,7 +252,7 @@ impl<P: Part> Slots<P> {
         self.list_views.push((applies, draw));
     }
 
-    pub fn row_icon(&mut self, icon: NameCell<P>) {
+    pub fn row_icon(&mut self, icon: RowIcon<P>) {
         self.row_icons.push(icon);
     }
 
