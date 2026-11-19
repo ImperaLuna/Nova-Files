@@ -148,7 +148,7 @@ fn a_part_draws_a_footer_under_the_list(cx: &mut TestAppContext) {
 #[gpui::test]
 fn a_part_hears_the_window_size(cx: &mut TestAppContext) {
     let (view, cx, _core) = framed(cx);
-    view.update_in(cx, |view, window, cx| view.watch_size(window, cx));
+    view.update_in(cx, MainWindow::watch_size);
     let resized = size(px(700.0), px(500.0));
     cx.simulate_resize(resized);
     cx.run_until_parked();
