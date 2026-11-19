@@ -2,8 +2,7 @@ mod drives;
 
 pub(super) use drives::bar;
 
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use gpui::{
     AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -19,9 +18,9 @@ use super::row::{RowIcon, entry_icon, icon, kind_glyph};
 use crate::assets::Icon;
 use crate::columns;
 use crate::kind::icon_kind;
-use crate::pick::typed::HOME;
 use crate::theme::{Colors, radius, size, start, text};
 use crate::window::MainWindow;
+pub(super) use nova_files_shell::paths::{name_of, name_os, where_is};
 
 const RECENT_LABEL: &str = "Jump back in";
 const DRIVES_LABEL: &str = "Drives";
@@ -296,23 +295,6 @@ fn lean(index: usize, count: usize) -> Radians {
     Radians(degrees.to_radians())
 }
 
-pub(super) fn name_of(path: &Path) -> String {
-    name_os(path).to_string_lossy().into_owned()
-}
-
-pub(super) fn name_os(path: &Path) -> &OsStr {
-    path.file_name().unwrap_or(path.as_os_str())
-}
-
-pub(super) fn where_is(path: &Path, home: &Path) -> String {
-    let parent = path.parent().map_or_else(PathBuf::new, Path::to_path_buf);
-    match parent.strip_prefix(home) {
-        Ok(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
-        Ok(rest) => format!("{HOME}/{}", rest.to_string_lossy()),
-        Err(_) => parent.to_string_lossy().into_owned(),
-    }
-}
-
 fn amount(entry: &Peeked) -> String {
     match (entry.kind, entry.amount) {
         (_, None) => String::new(),
@@ -341,7 +323,7 @@ mod tests {
 
     fn folder(entries: u64, peeked: usize) -> RecentFolder {
         RecentFolder {
-            path: PathBuf::from("/home/me/Projects/nova"),
+            path: std::path::PathBuf::from("/home/me/Projects/nova"),
             modified: None,
             entries,
             peek: vec![
@@ -353,21 +335,6 @@ mod tests {
                 peeked
             ],
         }
-    }
-
-    #[test]
-    fn where_a_folder_is_reads_home_as_a_tilde() {
-        let home = Path::new("/home/me");
-        assert_eq!(
-            where_is(Path::new("/home/me/Projects/nova"), home),
-            "~/Projects"
-        );
-        assert_eq!(where_is(Path::new("/home/me/Projects"), home), "~");
-        assert_eq!(where_is(Path::new("/mnt/games/steam"), home), "/mnt/games");
-        assert_eq!(where_is(Path::new("/home/meg/x"), home), "/home/meg");
-        assert_eq!(where_is(Path::new("/"), home), "");
-        assert_eq!(name_of(Path::new("/")), "/");
-        assert_eq!(name_of(Path::new("/home/me/Projects")), "Projects");
     }
 
     #[test]
