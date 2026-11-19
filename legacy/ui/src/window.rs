@@ -59,7 +59,6 @@ use nova_files_api::{
     Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId,
 };
 use nova_files_drives_api as drives_api;
-use nova_files_look_api as look_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
 use nova_files_transfer_api as transfer_api;
@@ -102,7 +101,6 @@ pub enum WindowEvent {
     Refused(PathBuf),
     Places,
     Settings,
-    Theme,
 }
 
 pub struct MainWindow {
@@ -321,10 +319,6 @@ impl MainWindow {
             Ok(event) => return self.drive_event(event, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<look_api::Event>() {
-            Ok(look_api::Event::Theme(theme)) => return Self::theme_arrived(&theme, cx),
-            Err(envelope) => envelope,
-        };
         let envelope = match envelope.open::<settings_api::Event>() {
             Ok(settings_api::Event::Settings(settings)) => {
                 return self.settings_arrived(settings, cx);
@@ -417,7 +411,6 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
                 connection.send(command)?;
             }
             connection.send(drives_api::Command::Drives)?;
-            connection.send(look_api::Command::Watch)?;
             connection.send(settings_api::Command::Watch)?;
             Ok(connection)
         })

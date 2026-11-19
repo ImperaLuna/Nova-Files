@@ -1,14 +1,18 @@
+use std::collections::HashSet;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
+use std::sync::Arc;
 
 use gpui::{Context, Entity, Subscription};
 use nova_files_shell::{
-    self as shell, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent, PageRef, Part,
-    Scene, Shown, TabId,
+    self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
+    PageRef, Part, Scene, Shown, TabId,
 };
 
 use super::MainWindow;
 use crate::island::{Confirm, NoteUndo};
 use crate::location::{Builtin, Location};
+use crate::selection::Selection;
 
 impl MainWindow {
     pub(super) fn watch_slots(&self, cx: &mut Context<Self>) -> Vec<Subscription> {
@@ -29,6 +33,10 @@ impl MainWindow {
             cx.subscribe(&self.host.island, |this, _, _: &IslandAsked, cx| {
                 this.take_island_asks(cx);
             }),
+            cx.subscribe(&self.host.entries, |this, _, _: &EntriesAsked, cx| {
+                this.take_entries_asks(cx);
+            }),
+            cx.on_release(|this, cx| this.parts.closing(cx)),
         ]);
         watching
     }
@@ -69,6 +77,29 @@ impl MainWindow {
         self.location().map(Location::shell)
     }
 
+    pub(super) fn tell_parts_listed(&mut self, cx: &mut Context<Self>) {
+        self.publish(cx);
+        if let Some(listing) = self.listing.clone() {
+            self.parts.listed(&listing, cx);
+        }
+    }
+
+    fn take_entries_asks(&mut self, cx: &mut Context<Self>) {
+        let Some(names) = self
+            .host
+            .entries
+            .update(cx, |entries, _| entries.take_select())
+        else {
+            return;
+        };
+        let Some(listing) = &self.listing else {
+            return;
+        };
+        let names: HashSet<&OsStr> = names.iter().map(OsString::as_os_str).collect();
+        let (id, entries) = (listing.id, Arc::clone(&listing.entries));
+        self.reselect(|_, _| Selection::named_all(id, &entries, &names), cx);
+    }
+
     fn publish(&mut self, cx: &mut Context<Self>) {
         let listing = self.listing.clone();
         let selected = self
@@ -96,6 +127,7 @@ impl MainWindow {
                 NavAsk::Go(place) => self.go_to_shell(place, cx),
                 NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
                 NavAsk::Reload => self.reload(),
+                NavAsk::Reveal(path) => self.show_in_folder(&path),
             }
         }
     }
@@ -129,7 +161,7 @@ impl MainWindow {
                     self.start_job(operation);
                 }
                 IslandAsk::Note { label, undo } => {
-                    self.show_note(label, undo.map(NoteUndo::Job), cx);
+                    self.show_note(label, undo.map(NoteUndo::from), cx);
                 }
                 IslandAsk::Ask {
                     question,
@@ -164,6 +196,14 @@ impl MainWindow {
             Location::Page(page) => Some(page),
             _ => None,
         }
+    }
+
+    fn show_in_folder(&mut self, path: &Path) {
+        let (Some(folder), Some(name)) = (path.parent(), path.file_name()) else {
+            return;
+        };
+        self.select_on_arrival(folder.to_path_buf(), vec![name.to_os_string()]);
+        self.open(folder);
     }
 
     fn reload(&mut self) {

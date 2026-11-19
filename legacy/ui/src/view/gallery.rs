@@ -32,11 +32,11 @@ impl MainWindow {
                 .absolute()
                 .inset_0(),
             )
-            .child(self.stage(&colors))
+            .child(self.stage(&colors, cx))
             .child(self.strip(grid, cx))
     }
 
-    fn stage(&self, colors: &Colors) -> impl IntoElement {
+    fn stage(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let room = self.stage_room();
         let scale_factor = self.scale_factor;
         let shown = self.quick_look().and_then(|open| {
@@ -59,6 +59,7 @@ impl MainWindow {
                 let current = open.current().and_then(|shown| shown.preview.as_deref());
                 let name = SharedString::from(entry.name.to_string_lossy().into_owned());
                 let about = current.map(meta).unwrap_or_default();
+                let part_name = self.parts.name_cell(entry, cx);
                 div()
                     .flex()
                     .flex_col()
@@ -79,24 +80,29 @@ impl MainWindow {
                             .items_center()
                             .h(size::STAGE_CAPTION)
                             .w_full()
-                            .child(self.rename_field(index).map_or_else(
+                            .child(part_name.map_or_else(
                                 || {
-                                    div()
-                                        .debug_selector(|| "stage-name".to_owned())
-                                        .max_w_full()
-                                        .truncate()
-                                        .text_color(colors.text)
-                                        .font_weight(text::STRONG_WEIGHT)
-                                        .child(name)
-                                        .into_any_element()
+                                    self.rename_field(index).map_or_else(
+                                        || {
+                                            div()
+                                                .debug_selector(|| "stage-name".to_owned())
+                                                .max_w_full()
+                                                .truncate()
+                                                .text_color(colors.text)
+                                                .font_weight(text::STRONG_WEIGHT)
+                                                .child(name)
+                                                .into_any_element()
+                                        },
+                                        |field| {
+                                            rename_box(field.clone(), colors)
+                                                .flex_none()
+                                                .w_full()
+                                                .ml_0()
+                                                .into_any_element()
+                                        },
+                                    )
                                 },
-                                |field| {
-                                    rename_box(field.clone(), colors)
-                                        .flex_none()
-                                        .w_full()
-                                        .ml_0()
-                                        .into_any_element()
-                                },
+                                |cell| div().flex_none().w_full().child(cell).into_any_element(),
                             ))
                             .child(
                                 div()

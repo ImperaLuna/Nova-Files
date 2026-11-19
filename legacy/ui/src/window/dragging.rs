@@ -40,7 +40,7 @@ impl Drag {
         let aim = self.aims.aimed()?;
         let by_drive = match &aim.at {
             DropAt::Folder(into) => self.aims.by_drive(into),
-            DropAt::Trash | DropAt::Gathered(_) => None,
+            DropAt::Trash | DropAt::Gathered(_) | DropAt::Page(_) => None,
         };
         dropping::label(&aim.at, &aim.name, by_drive, modifiers)
     }
@@ -168,10 +168,16 @@ impl MainWindow {
                 self.start_drop(sources, into);
             }
             Dropped::Gather { place, folders } => self.gather(place, folders, cx),
+            Dropped::Page { page, paths } => self.parts.drop_on(&page, paths, cx),
         }
     }
 
     pub(crate) fn tab_drops_at(&self, place: Option<&Location>, name: SharedString) -> Option<Aim> {
+        if let Some(Location::Page(page)) = place
+            && self.parts.takes_drops(page)
+        {
+            return Some(Aim::page(page.clone()));
+        }
         let folder = place?.folder()?;
         Some(match self.host.rules.named(folder) {
             Some(named) if self.host.rules.for_folder(folder).trashed => Aim::trash(named.label),
