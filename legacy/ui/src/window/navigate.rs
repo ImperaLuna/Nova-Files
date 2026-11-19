@@ -8,21 +8,21 @@ use crate::location::Location;
 
 impl MainWindow {
     pub fn open(&mut self, folder: &Path) {
-        self.forget_drive_to_open();
+        self.went_elsewhere();
         self.history.leave();
         self.request(folder);
     }
 
     pub fn go_back(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.back() {
-            self.forget_drive_to_open();
+            self.went_elsewhere();
             self.go_to(&place, cx);
         }
     }
 
     pub fn go_forward(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.forward() {
-            self.forget_drive_to_open();
+            self.went_elsewhere();
             self.go_to(&place, cx);
         }
     }

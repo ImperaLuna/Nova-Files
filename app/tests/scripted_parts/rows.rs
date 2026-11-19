@@ -2,6 +2,7 @@ use std::cell::Cell;
 
 use gpui::{App, Context, Modifiers, MouseButton, WeakEntity, point, px};
 use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
+use nova_files_places_ui::PlacesPart;
 use nova_files_shell::{
     Host, KnownFolder, KnownFolders, Location, Look, Part, Parts, Published, RowItem, SidebarAt,
     SidebarRow, Slots, assets::Icon,
@@ -144,6 +145,7 @@ fn rowed_window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTest
     MOUNTED.set(0);
     MOUNTED_IN_TAB.set(0);
     let mut parts = Parts::default();
+    parts.add::<PlacesPart>();
     parts.add::<Rower>();
     cx.update(|cx| cx.set_global(parts));
     let (view, cx, mut core) = window_with_parts(cx);
