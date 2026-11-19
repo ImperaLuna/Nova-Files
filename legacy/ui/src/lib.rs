@@ -186,7 +186,13 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
     let recover_folder = location.folder().map(Path::to_path_buf);
     let opened = cx.open_window(options, move |window, cx| {
         cx.new(|cx| {
-            let mut view = MainWindow::at(&connector, &location, home_folder(), cx);
+            let opening = pick
+                .as_ref()
+                .map_or_else(nova_files_shell::Opening::default, |request| {
+                    nova_files_shell::Opening::of(request.id)
+                });
+            let mut view =
+                MainWindow::opened_with(&connector, &location, home_folder(), opening, cx);
             if let Some(folder) = location.folder() {
                 view.select_on_arrival(folder.to_path_buf(), select);
             }

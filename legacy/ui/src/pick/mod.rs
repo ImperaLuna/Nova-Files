@@ -6,18 +6,20 @@ mod save;
 mod select;
 pub mod typed;
 
+pub use nova_files_picker_ui::{Mode, accept_label, titlebar};
 pub use typed::{HOME, stem};
 
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write as _};
-use std::path::{Component, Path, PathBuf};
+use std::path::PathBuf;
 
 use gpui::{
     AnyWindowHandle, App, AppContext as _, ClickEvent, Context, Entity, Focusable as _, Pixels,
-    Size, Subscription, TitlebarOptions, Window,
+    Size, Subscription, Window,
 };
 use nova_files_api::{Entry, EntryId, EntryKind, ListingId};
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickRequest};
+use nova_files_picker_ui::is_plain_name;
 
 use self::accept::Jump;
 pub use self::opening::foreign_parent;
@@ -25,67 +27,6 @@ use crate::selecting::DOUBLE_CLICK;
 use crate::selection::Click;
 use crate::window::MainWindow;
 use nova_files_shell::text::{TextField, TextFieldEvent};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    Files,
-    Folders,
-    Save,
-}
-
-impl Mode {
-    pub const fn of(kind: &PickKind) -> Self {
-        match kind {
-            PickKind::Open { folders: false, .. } => Self::Files,
-            PickKind::Open { folders: true, .. } => Self::Folders,
-            PickKind::Save { .. } => Self::Save,
-        }
-    }
-
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Files | Self::Folders => "Open",
-            Self::Save => "Save",
-        }
-    }
-}
-
-pub fn titlebar(request: &PickRequest) -> TitlebarOptions {
-    let title = if request.title.is_empty() {
-        Mode::of(&request.kind).label()
-    } else {
-        &request.title
-    };
-    TitlebarOptions {
-        title: Some(title.to_owned().into()),
-        ..TitlebarOptions::default()
-    }
-}
-
-pub fn accept_label(request: &PickRequest) -> String {
-    request.accept_label.as_deref().map_or_else(
-        || Mode::of(&request.kind).label().to_owned(),
-        without_mnemonic,
-    )
-}
-
-fn without_mnemonic(label: &str) -> String {
-    let mut plain = String::with_capacity(label.len());
-    let mut chars = label.chars();
-    while let Some(c) = chars.next() {
-        match (c, chars.clone().next()) {
-            (MNEMONIC, Some(MNEMONIC)) => {
-                plain.push(MNEMONIC);
-                chars.next();
-            }
-            (MNEMONIC, _) => {}
-            (c, _) => plain.push(c),
-        }
-    }
-    plain
-}
-
-const MNEMONIC: char = '_';
 
 pub struct Picker {
     request: Box<PickRequest>,
@@ -126,14 +67,6 @@ impl Picker {
             .clone()
             .filter(|placed| placed.to_string_lossy() == text)
     }
-}
-
-fn is_plain_name(name: &OsStr) -> bool {
-    let mut parts = Path::new(name).components();
-    matches!(
-        (parts.next(), parts.next()),
-        (Some(Component::Normal(part)), None) if part == name
-    )
 }
 
 impl MainWindow {
@@ -312,134 +245,5 @@ pub fn close(id: PickId, cx: &mut App) {
             )
             .ok();
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use nova_files_picker_api::PickReply;
-
-    use super::*;
-
-    fn request(title: &str, kind: PickKind) -> PickRequest {
-        PickRequest {
-            id: PickId(1),
-            kind,
-            title: title.to_owned(),
-            accept_label: None,
-            filters: Vec::new(),
-            filter: None,
-            folder: None,
-            parent: None,
-            types: None,
-            reply: PickReply::new(|_| {}),
-        }
-    }
-
-    const FILES: PickKind = PickKind::Open {
-        multiple: true,
-        folders: false,
-    };
-    const FOLDERS: PickKind = PickKind::Open {
-        multiple: false,
-        folders: true,
-    };
-
-    #[test]
-    fn a_picker_is_titled_as_its_app_asks_or_by_what_it_is_for() {
-        let title = |request| titlebar(&request).title.map(|title| title.to_string());
-        assert_eq!(
-            title(request("Upload photos", FILES)),
-            Some("Upload photos".to_owned())
-        );
-        assert_eq!(title(request("", FILES)), Some("Open".to_owned()));
-        assert_eq!(title(request("", FOLDERS)), Some("Open".to_owned()));
-        let save = PickKind::Save {
-            name: "a.txt".into(),
-        };
-        assert_eq!(title(request("", save)), Some("Save".to_owned()));
-    }
-
-    #[test]
-    fn the_button_says_what_the_app_asks_or_open_or_save() {
-        let upload = PickRequest {
-            accept_label: Some("Upload".to_owned()),
-            ..request("", FILES)
-        };
-        assert_eq!(accept_label(&upload), "Upload");
-        let mnemonic = PickRequest {
-            accept_label: Some("_Save__as".to_owned()),
-            ..request("", FILES)
-        };
-        assert_eq!(accept_label(&mnemonic), "Save_as");
-        assert_eq!(accept_label(&request("", FOLDERS)), "Open");
-        let save = PickKind::Save {
-            name: "a.txt".into(),
-        };
-        assert_eq!(accept_label(&request("", save)), "Save");
-    }
-
-    #[test]
-    fn only_a_plain_name_is_taken_as_it_came() {
-        for plain in ["notes.txt", " notes.txt", "~", "..notes"] {
-            assert!(is_plain_name(OsStr::new(plain)), "{plain:?}");
-        }
-        for path in [
-            "",
-            ".",
-            "..",
-            "../notes.txt",
-            "/etc/passwd",
-            "a/b",
-            "notes.txt/",
-        ] {
-            assert!(!is_plain_name(OsStr::new(path)), "{path:?}");
-        }
-    }
-
-    #[test]
-    fn a_picker_starts_on_the_type_the_app_asks_for_or_its_first() {
-        let with = |count: usize, chosen| PickRequest {
-            filters: (0..count)
-                .map(|at| nova_files_picker_api::FileFilter {
-                    name: at.to_string(),
-                    rules: Vec::new(),
-                })
-                .collect(),
-            filter: chosen,
-            ..request("", FILES)
-        };
-        assert_eq!(filter::first(&with(3, Some(2))), Some(2));
-        assert_eq!(filter::first(&with(3, None)), Some(0));
-        assert_eq!(filter::first(&with(3, Some(3))), Some(0));
-        assert_eq!(filter::first(&with(0, None)), None);
-        assert_eq!(filter::first(&with(0, Some(0))), None);
-    }
-
-    #[test]
-    fn the_menu_names_each_type_and_marks_the_one_chosen() {
-        let request = PickRequest {
-            filters: vec![nova_files_picker_api::FileFilter {
-                name: "Text".to_owned(),
-                rules: Vec::new(),
-            }],
-            ..request("", FILES)
-        };
-        assert_eq!(filter::label(&request, Some(0)), "Text");
-        assert_eq!(filter::label(&request, None), "All files");
-        assert_eq!(filter::label(&request, Some(1)), "All files");
-        assert!(filter::is_chosen(Some(0), Some(0)));
-        assert!(filter::is_chosen(None, None));
-        assert!(!filter::is_chosen(Some(0), None));
-    }
-
-    #[test]
-    fn the_mode_follows_what_the_app_asked() {
-        assert_eq!(Mode::of(&FILES), Mode::Files);
-        assert_eq!(Mode::of(&FOLDERS), Mode::Folders);
-        let save = PickKind::Save {
-            name: "a.txt".into(),
-        };
-        assert_eq!(Mode::of(&save), Mode::Save);
     }
 }

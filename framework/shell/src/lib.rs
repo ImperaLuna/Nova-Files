@@ -10,6 +10,7 @@ pub mod kind;
 mod location;
 mod menu;
 mod navigator;
+mod opening;
 mod part;
 mod parts;
 mod per_tab;
@@ -31,9 +32,11 @@ pub use menu::{
     arrange,
 };
 pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked};
+pub use opening::Opening;
 pub use part::{
-    Applies, Card, Cell, Closing, Column, Columns, DropAim, DropSlot, DropTake, EmptyNote,
-    HeadButton, Items, Listed, NameCell, Opens, Part, RowMenu, Rows, Slots, Watch,
+    Applies, Card, Cell, Closing, Column, Columns, Dims, DropAim, DropSlot, DropTake, EmptyNote,
+    Focus, HeadButton, Items, Listed, NameCell, Opens, Part, Refused, RowMenu, Rows, Selectable,
+    Several, Slots, Watch,
 };
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};
