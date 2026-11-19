@@ -1,6 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local};
+pub use nova_files_shell::format::size;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ColumnText {
@@ -8,34 +9,7 @@ pub struct ColumnText {
     pub size: String,
 }
 
-const SIZE_UNITS: [&str; 5] = ["KB", "MB", "GB", "TB", "PB"];
-const SIZE_STEP: f64 = 1000.0;
-const ONE_DECIMAL_BELOW: f64 = 10.0;
 const DATE_FORMAT: &str = "%Y-%m-%d %H:%M";
-
-pub fn size(bytes: u64) -> String {
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "a shown size keeps at most two significant digits"
-    )]
-    let mut value = bytes as f64;
-    if value < SIZE_STEP {
-        return format!("{bytes} B");
-    }
-    let mut unit = SIZE_UNITS[0];
-    for next in SIZE_UNITS {
-        value /= SIZE_STEP;
-        unit = next;
-        if value < SIZE_STEP {
-            break;
-        }
-    }
-    if value < ONE_DECIMAL_BELOW {
-        format!("{value:.1} {unit}")
-    } else {
-        format!("{value:.0} {unit}")
-    }
-}
 
 pub fn modified(time: SystemTime) -> String {
     let since_epoch = match time.duration_since(UNIX_EPOCH) {
@@ -57,19 +31,6 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-
-    #[test]
-    fn sizes_use_decimal_units() {
-        assert_eq!(size(0), "0 B");
-        assert_eq!(size(999), "999 B");
-        assert_eq!(size(1000), "1.0 KB");
-        assert_eq!(size(10_000), "10 KB");
-        assert_eq!(size(1_000_000), "1.0 MB");
-        assert_eq!(size(640_000), "640 KB");
-        assert_eq!(size(1_800_000), "1.8 MB");
-        assert_eq!(size(999_999_999), "1000 MB");
-        assert_eq!(size(12_000_000_000), "12 GB");
-    }
 
     #[test]
     fn times_out_of_range_show_nothing() {

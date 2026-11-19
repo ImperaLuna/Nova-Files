@@ -3,8 +3,10 @@
 pub mod assets;
 mod command;
 mod entries;
+pub mod format;
 mod host;
 mod island;
+pub mod kind;
 mod location;
 mod menu;
 mod navigator;
@@ -16,7 +18,9 @@ mod published;
 mod rules;
 mod scene;
 mod slot_view;
+pub mod text;
 pub mod theme;
+pub mod widgets;
 
 pub use command::{CommandSpec, WINDOW_KEYS};
 pub use entries::{Entries, EntriesAsked, Shown};
@@ -24,17 +28,19 @@ pub use host::{AskIds, Host, Link};
 pub use island::{Island, IslandAsk, IslandAsked, NoteGone, NoteId, OnUndo, OnYes, Undo};
 pub use location::{Location, PageKind, PageRef};
 pub use menu::{
-    Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow, arrange,
+    Expander, Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow,
+    arrange,
 };
-pub use navigator::{NavAsk, NavEvent, Navigator};
+pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked};
 pub use opening::Opening;
 pub use part::{
     Applies, Card, Cell, Closing, Column, Columns, Dims, DropAim, DropSlot, DropTake, EmptyNote,
-    Focus, Items, Listed, NameCell, Opens, Part, Refused, RowMenu, Rows, Selectable, Several,
-    Slots, Watch,
+    Focus, HeadButton, Items, Listed, NameCell, Opens, Part, Refused, RowMenu, Rows, Selectable,
+    Several, Slots, Watch,
 };
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};
 pub use published::Published;
 pub use rules::{FolderName, FolderRules, RulesBook, Views};
 pub use scene::Scene;
+pub use text::{TextField, TextFieldEvent};

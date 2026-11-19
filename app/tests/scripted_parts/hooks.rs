@@ -127,22 +127,18 @@ impl Part for Tagger {
         });
         slots.sidebar(SidebarAt::Places, |_, _, _| {
             vec![
-                SidebarRow {
-                    id: "place-basket",
-                    icon: Icon::Info,
-                    name: "Basket".into(),
-                    number: None,
-                    opens: Location::Page(PageRef::new(Basket)),
-                    here: false,
-                },
-                SidebarRow {
-                    id: "place-file-room",
-                    icon: Icon::Info,
-                    name: "File room".into(),
-                    number: None,
-                    opens: Location::Folder(FILE_ROOM.into()),
-                    here: false,
-                },
+                SidebarRow::new(
+                    "place-basket",
+                    Icon::Info,
+                    "Basket",
+                    Location::Page(PageRef::new(Basket)),
+                ),
+                SidebarRow::new(
+                    "place-file-room",
+                    Icon::Info,
+                    "File room",
+                    Location::Folder(FILE_ROOM.into()),
+                ),
             ]
         });
     }

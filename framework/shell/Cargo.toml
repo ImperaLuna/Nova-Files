@@ -6,6 +6,7 @@
 #
 # Allowed outside crates:
 # - gpui
+# - unicode-segmentation
 #
 # Allowed workspace crates:
 # - nova-files-api
@@ -26,3 +27,4 @@ workspace = true
 gpui.workspace = true
 nova-files-api.workspace = true
 nova-files-messages.workspace = true
+unicode-segmentation = "1.13.3"

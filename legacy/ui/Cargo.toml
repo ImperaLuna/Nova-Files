@@ -11,12 +11,13 @@
 # - gpui_platform
 # - image
 # - log
-# - unicode-segmentation
 # - usvg
 #
 # Allowed workspace crates:
 # - nova-files-api
-# - nova-files-clipboard-api
+# - nova-files-clipboard-ui
+# - nova-files-clipboard-ui
+# - nova-files-delete-ui
 # - nova-files-drives-api
 # - nova-files-folders-api
 # - nova-files-gathered-api
@@ -48,7 +49,7 @@ workspace = true
 # Local time for the Modified column; GPUI already builds it.
 chrono = "0.4.45"
 nova-files-api.workspace = true
-nova-files-clipboard-api.workspace = true
+nova-files-delete-ui.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-folders-api.workspace = true
 nova-files-gathered-api.workspace = true
@@ -74,7 +75,9 @@ gpui_platform.workspace = true
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 # Grapheme boundaries, so the caret steps over a whole character; GPUI
 # already builds it.
-unicode-segmentation = "1.13.3"
 # Reads a theme icon's own size, so GPUI's SVG renderer draws it straight
 # at the row's size; GPUI already builds it.
 usvg = { version = "0.45.1", default-features = false }
+
+[dev-dependencies]
+nova-files-clipboard-ui.workspace = true
