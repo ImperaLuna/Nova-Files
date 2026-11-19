@@ -1,12 +1,10 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use nova_files_api::{Command, HiddenFiles};
 use nova_files_settings_api::Thumbnails;
 
 use super::Setup;
 use crate::jobs::{self, Client};
-use crate::preview::{self, Request};
 use crate::trash;
 use nova_files_jobs::trash_info::FILES;
 
@@ -25,24 +23,6 @@ pub(super) fn answer(client: &Client, command: Command, setup: &Setup) {
             let shown = setup.settings.current().thumbnails == Thumbnails::Shown;
             client.want_rows(id, first, count, shown.then_some(size));
         }
-        Command::Search { id, query, limit } => setup.searcher.search(client, id, query, limit),
-        Command::Find { id, query, within } => setup.searcher.find(client, id, query, within),
-        Command::Preview { id, path, fit } => {
-            let request = Request {
-                id,
-                path,
-                fit,
-                current: Arc::clone(client.current_preview()),
-                types: Arc::clone(&setup.mime_types),
-                helper: setup.thumbnails.as_ref().map(|setup| setup.helper.clone()),
-            };
-            preview::answer(client.events(), request);
-        }
-        Command::OpenFile { path, activation } => {
-            let opening = (Arc::clone(&setup.mime_types), Arc::clone(&setup.inside));
-            jobs::open_file(client, opening, path, activation);
-        }
-        Command::OpenWith(request) => setup.open_with.answer(client.events(), request),
         _ => {}
     }
 }

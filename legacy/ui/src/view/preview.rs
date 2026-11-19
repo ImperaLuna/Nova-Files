@@ -6,7 +6,8 @@ use gpui::{
     MouseDownEvent, ParentElement as _, Pixels, RenderImage, SharedString,
     StatefulInteractiveElement as _, Styled as _, div, img, prelude::FluentBuilder as _, px,
 };
-use nova_files_api::{Entry, EntryKind, Preview, PreviewContent};
+use nova_files_api::{Entry, EntryKind};
+use nova_files_preview_api::{Preview, PreviewContent};
 
 use super::bar::icon_button;
 use super::row::{RowIcon, built_in, entry_icon, icon};

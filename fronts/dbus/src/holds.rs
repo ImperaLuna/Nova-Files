@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use nova_files_api::{ClientGone, Command, Connection, Connector, CoreGone, Envelope, EventSink};
+use nova_files_api::{ClientGone, Connection, Connector, CoreGone, Envelope, EventSink, Message};
 use zbus::blocking::fdo::DBusProxy;
 
 use crate::Bus;
@@ -119,7 +119,7 @@ pub struct Hold {
 }
 
 impl Hold {
-    pub fn send(&self, command: Command) -> Result<(), HoldError> {
+    pub fn send<M: Message>(&self, command: M) -> Result<(), HoldError> {
         lock(&self.held)
             .get(&self.caller)
             .and_then(|holds| holds.get(&self.id))

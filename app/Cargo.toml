@@ -51,12 +51,17 @@ nova-files-trash-ui.workspace = true
 nova-files-ui.workspace = true
 
 [dev-dependencies]
+nova-files-folders-api.workspace = true
 nova-files-gathered-api.workspace = true
 nova-files-look-api.workspace = true
+nova-files-open-api.workspace = true
 nova-files-places-api.workspace = true
+nova-files-preview-api.workspace = true
 nova-files-properties-api.workspace = true
+nova-files-search-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-start-api.workspace = true
+nova-files-thumbnails-api.workspace = true
 nova-files-trash-api.workspace = true
 gpui = { workspace = true, features = ["test-support"] }
 # To call the running program over D-Bus, as a launcher would.
