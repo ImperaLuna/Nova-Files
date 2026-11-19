@@ -3650,7 +3650,10 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "nova-files-api",
+ "nova-files-disk",
+ "nova-files-entries-core",
  "nova-files-jobs",
+ "nova-files-open-api",
  "nova-files-rename-api",
  "rustix 1.1.6",
 ]
