@@ -3598,6 +3598,7 @@ dependencies = [
  "nova-files-properties-api",
  "nova-files-search-api",
  "nova-files-settings-api",
+ "nova-files-settings-ui",
  "nova-files-shell",
  "nova-files-start-api",
  "nova-files-thumbnails-api",
@@ -3996,6 +3997,15 @@ dependencies = [
  "nova-files-messages",
  "nova-files-settings-api",
  "toml_edit 0.25.18+spec-1.1.0",
+]
+
+[[package]]
+name = "nova-files-settings-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-settings-api",
+ "nova-files-shell",
 ]
 
 [[package]]

@@ -55,6 +55,7 @@ nova-files-search-api = { path = "features/search/api" }
 nova-files-search-core = { path = "features/search/core" }
 nova-files-settings-api = { path = "features/settings/api" }
 nova-files-settings-core = { path = "features/settings/core" }
+nova-files-settings-ui = { path = "features/settings/ui" }
 nova-files-shell = { path = "framework/shell" }
 nova-files-start-api = { path = "features/start/api" }
 nova-files-start-core = { path = "features/start/core" }

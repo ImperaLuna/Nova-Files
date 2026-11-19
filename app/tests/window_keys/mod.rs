@@ -128,8 +128,8 @@ async fn ctrl_h_shows_hidden_files_and_leaves_them_out_again(cx: &mut TestAppCon
     view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["nova", ".secret"])
         .await;
     assert_eq!(
-        view.read_with(cx, |view, _| view.settings().hidden_files),
-        HiddenFiles::Shown
+        cx.update(|_, cx| Published::<Settings>::get(cx).map(|settings| settings.hidden_files)),
+        Some(HiddenFiles::Shown)
     );
 
     cx.simulate_keystrokes("ctrl-h");
