@@ -10,6 +10,7 @@ use gpui::{
 use nova_files_api::{Entry, Event, Listing};
 
 use crate::assets::Icon;
+use crate::jump::Jump;
 use nova_files_messages::{Envelope, MessageType};
 
 use crate::command::CommandSpec;
@@ -48,6 +49,7 @@ trait OpenPart {
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
+    fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
     fn closing(&self, cx: &mut App);
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
     fn watch(&self, event: &Event, cx: &mut App);
@@ -213,6 +215,18 @@ impl<P: Part> OpenPart for Opened<P> {
                 .opens
                 .iter()
                 .any(|opens| opens(part, entry, path, cx))
+        })
+    }
+
+    fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool {
+        if self.slots.typed.is_empty() {
+            return false;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .typed
+                .iter()
+                .any(|typed| typed(part, jump, scene, cx))
         })
     }
 
@@ -667,6 +681,10 @@ impl WindowParts {
         self.opened
             .iter()
             .any(|part| part.open_entry(entry, path, cx))
+    }
+
+    pub fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool {
+        self.opened.iter().any(|part| part.typed(jump, scene, cx))
     }
 
     pub fn closing(&self, cx: &mut App) {

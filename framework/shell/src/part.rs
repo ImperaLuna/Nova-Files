@@ -14,6 +14,7 @@ use nova_files_messages::{Envelope, Message, MessageType};
 
 use crate::command::CommandSpec;
 use crate::host::Host;
+use crate::jump::Jump;
 use crate::location::{Location, PageKind, PageRef};
 use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
 use crate::scene::Scene;
@@ -38,6 +39,7 @@ pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
 pub type DropAim<P> = fn(&P, &Location, &[PathBuf], Modifiers, &App) -> Option<SharedString>;
 pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<RowItem>;
+pub type Typed<P> = fn(&mut P, &Jump, &Scene, &mut Context<P>) -> bool;
 pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
 
@@ -80,6 +82,7 @@ pub struct Slots<P> {
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
     pub(crate) row_icons: Vec<NameCell<P>>,
     pub(crate) opens: Vec<Opens<P>>,
+    pub(crate) typed: Vec<Typed<P>>,
     pub(crate) closing: Vec<Closing<P>>,
 }
 
@@ -107,6 +110,7 @@ impl<P> Default for Slots<P> {
             list_views: Vec::new(),
             row_icons: Vec::new(),
             opens: Vec::new(),
+            typed: Vec::new(),
             closing: Vec::new(),
         }
     }
@@ -230,6 +234,10 @@ impl<P: Part> Slots<P> {
 
     pub fn opens(&mut self, opens: Opens<P>) {
         self.opens.push(opens);
+    }
+
+    pub fn typed(&mut self, typed: Typed<P>) {
+        self.typed.push(typed);
     }
 
     pub fn closing(&mut self, closing: Closing<P>) {

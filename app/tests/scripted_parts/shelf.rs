@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::Path;
 
 use gpui::{
@@ -30,6 +30,7 @@ const ASKED: &str = "Poke them all?";
 thread_local! {
     static POKED: Cell<usize> = const { Cell::new(0) };
     static SEEN_SELECTED: Cell<usize> = const { Cell::new(0) };
+    static JUMPED: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,6 +116,13 @@ impl Part for Shelf {
                 .number(Some("3".into()))
                 .here(scene.on_page::<Shelved>().is_some()),
             ]
+        });
+        slots.typed(|_, jump, scene, _| {
+            let shown = scene.on_page::<Shelved>().is_some();
+            if shown {
+                JUMPED.set(jump.prefix.clone());
+            }
+            shown
         });
         slots.start_card(|_, _, _, _| {
             Some(
@@ -354,4 +362,17 @@ fn parts_bind_the_keys_of_their_commands() {
     let mut parts = Parts::default();
     parts.add::<Shelf>();
     assert_eq!(parts.bindings().len(), 1);
+}
+
+#[gpui::test]
+fn typing_on_a_part_page_hands_the_part_the_letters_so_far(cx: &mut TestAppContext) {
+    let (_view, cx, _core) = shelved(cx);
+    JUMPED.set(String::new());
+    cx.simulate_keystrokes("a");
+    assert_eq!(JUMPED.take(), "");
+
+    click(cx, "place-shelf");
+    cx.simulate_keystrokes("d o");
+
+    assert_eq!(JUMPED.take(), "do");
 }

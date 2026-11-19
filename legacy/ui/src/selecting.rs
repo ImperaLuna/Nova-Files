@@ -141,12 +141,17 @@ impl MainWindow {
         if typed.chars().any(char::is_control) || (blank && !self.jump.continues(now)) {
             return false;
         }
-        let Some(listing) = &self.listing else {
-            return false;
-        };
         let (prefix, past) = self.jump.typed(typed, now);
+        let typed = jump::Jump { prefix, past };
+        let Some(listing) = &self.listing else {
+            let taken = self.parts.typed(&typed, &self.scene(), cx);
+            if !taken {
+                self.jump = jump::TypeJump::default();
+            }
+            return taken;
+        };
         let names = listing.entries.iter().map(|entry| entry.name.as_os_str());
-        let found = jump::find(names, &prefix, self.cursor(), past);
+        let found = typed.find(names, self.cursor());
         let listing = listing.id;
         if let Some(row) = found.and_then(|row| u32::try_from(row).ok()) {
             self.reselect(

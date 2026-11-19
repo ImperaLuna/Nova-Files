@@ -36,6 +36,22 @@ impl TypeJump {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Jump {
+    pub prefix: String,
+    pub past: bool,
+}
+
+impl Jump {
+    pub fn find<'a>(
+        &self,
+        names: impl ExactSizeIterator<Item = &'a OsStr> + Clone,
+        from: Option<usize>,
+    ) -> Option<usize> {
+        find(names, &self.prefix, from, self.past)
+    }
+}
+
 pub fn find<'a>(
     names: impl ExactSizeIterator<Item = &'a OsStr> + Clone,
     prefix: &str,
