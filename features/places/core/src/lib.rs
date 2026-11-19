@@ -1,0 +1,270 @@
+#![forbid(unsafe_code)]
+
+mod bookmarks;
+mod store;
+
+use std::fs;
+use std::io::Read as _;
+use std::path::{Component, Path, PathBuf};
+
+use nova_files_disk::home::Home;
+use nova_files_places_api::{Place, PlaceKind};
+
+const STANDARD: [(PlaceKind, &str, &str); 6] = [
+    (PlaceKind::Desktop, "XDG_DESKTOP_DIR", "Desktop"),
+    (PlaceKind::Documents, "XDG_DOCUMENTS_DIR", "Documents"),
+    (PlaceKind::Downloads, "XDG_DOWNLOAD_DIR", "Downloads"),
+    (PlaceKind::Music, "XDG_MUSIC_DIR", "Music"),
+    (PlaceKind::Pictures, "XDG_PICTURES_DIR", "Pictures"),
+    (PlaceKind::Videos, "XDG_VIDEOS_DIR", "Videos"),
+];
+
+const USER_DIRS_FILE: &str = "user-dirs.dirs";
+const USER_DIRS_MAX_BYTES: u64 = 64 * 1024;
+const HOME_PREFIX: &str = "$HOME/";
+const ESCAPE: char = '\\';
+
+pub use store::Store;
+
+fn places(home: Option<&Home>) -> (Vec<Place>, Vec<Place>) {
+    let Some(home) = home else {
+        return (Vec::new(), Vec::new());
+    };
+    let user_dirs = read_user_dirs(&home.config.join(USER_DIRS_FILE));
+    let wanted = places_in(&home.folder, &user_dirs);
+    let existing = wanted
+        .iter()
+        .filter(|place| fs::metadata(&place.path).is_ok_and(|found| found.is_dir()))
+        .cloned()
+        .collect();
+    (existing, wanted)
+}
+
+fn usual_name(name: &str) -> bool {
+    STANDARD.iter().any(|&(_, _, usual)| usual == name)
+}
+
+fn places_in(home: &Path, user_dirs: &str) -> Vec<Place> {
+    let home_place = Place {
+        kind: PlaceKind::Home,
+        path: home.to_owned(),
+    };
+    let standard = STANDARD.iter().filter_map(|&(kind, key, default)| {
+        let path = match user_dir(home, user_dirs, key) {
+            Setting::Unset => home.join(default),
+            Setting::Folder(path) => path,
+            Setting::Refused => return None,
+        };
+        Some(Place { kind, path })
+    });
+    std::iter::once(home_place).chain(standard).collect()
+}
+
+fn read_user_dirs(path: &Path) -> String {
+    let mut text = String::new();
+    let read = fs::File::open(path)
+        .and_then(|file| file.take(USER_DIRS_MAX_BYTES + 1).read_to_string(&mut text));
+    match read {
+        Ok(length) if u64::try_from(length).is_ok_and(|length| length <= USER_DIRS_MAX_BYTES) => {
+            text
+        }
+        _ => String::new(),
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Setting {
+    Unset,
+    Folder(PathBuf),
+    Refused,
+}
+
+fn user_dir(home: &Path, user_dirs: &str, key: &str) -> Setting {
+    let value = user_dirs.lines().rev().find_map(|line| {
+        let (name, value) = line.trim().split_once('=')?;
+        (name == key).then_some(value)
+    });
+    let Some(value) = value else {
+        return Setting::Unset;
+    };
+    let relative = value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .and_then(|value| value.strip_prefix(HOME_PREFIX))
+        .map(unescape);
+    match relative.as_deref().map(Path::new) {
+        Some(relative)
+            if !relative.as_os_str().is_empty()
+                && relative
+                    .components()
+                    .all(|part| matches!(part, Component::Normal(_))) =>
+        {
+            Setting::Folder(home.join(relative))
+        }
+        _ => Setting::Refused,
+    }
+}
+
+fn unescape(text: &str) -> String {
+    let mut plain = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(next) = chars.next() {
+        if next == ESCAPE
+            && let Some(escaped) = chars.next()
+        {
+            plain.push(escaped);
+        } else {
+            plain.push(next);
+        }
+    }
+    plain
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use super::*;
+
+    const HOME: &str = "/home/someone";
+
+    fn dir(text: &str, key: &str) -> Setting {
+        user_dir(Path::new(HOME), text, key)
+    }
+
+    #[test]
+    fn reads_a_folder_inside_home() {
+        let text = "# comment\nXDG_DOCUMENTS_DIR=\"$HOME/Dokumente\"\n";
+        assert_eq!(
+            dir(text, "XDG_DOCUMENTS_DIR"),
+            Setting::Folder(PathBuf::from("/home/someone/Dokumente"))
+        );
+    }
+
+    #[test]
+    fn decodes_escaped_characters() {
+        let text = r#"XDG_DOCUMENTS_DIR="$HOME/\$Docs \"x\" \\y""#;
+        assert_eq!(
+            dir(text, "XDG_DOCUMENTS_DIR"),
+            Setting::Folder(PathBuf::from(r#"/home/someone/$Docs "x" \y"#))
+        );
+        let lone = format!("a{ESCAPE}");
+        assert_eq!(unescape(&lone), lone);
+    }
+
+    #[test]
+    fn last_line_for_a_key_wins() {
+        let text = "XDG_DOCUMENTS_DIR=\"$HOME/Old\"\nXDG_DOCUMENTS_DIR=\"$HOME/New\"\n";
+        assert_eq!(
+            dir(text, "XDG_DOCUMENTS_DIR"),
+            Setting::Folder(PathBuf::from("/home/someone/New"))
+        );
+    }
+
+    #[test]
+    fn refuses_folders_outside_home() {
+        assert_eq!(
+            dir("XDG_DOCUMENTS_DIR=\"/etc\"", "XDG_DOCUMENTS_DIR"),
+            Setting::Refused
+        );
+        assert_eq!(
+            dir("XDG_DOCUMENTS_DIR=\"$HOME/../x\"", "XDG_DOCUMENTS_DIR"),
+            Setting::Refused
+        );
+        assert_eq!(
+            dir("XDG_DOCUMENTS_DIR=\"$HOME/\"", "XDG_DOCUMENTS_DIR"),
+            Setting::Refused
+        );
+    }
+
+    struct TempHome(PathBuf);
+
+    impl Drop for TempHome {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).ok();
+        }
+    }
+
+    #[test]
+    fn reads_user_dirs_up_to_the_size_cap() {
+        let folder =
+            TempHome(env::temp_dir().join(format!("nova-files-user-dirs-{}", std::process::id())));
+        fs::create_dir_all(&folder.0).unwrap();
+        let small = folder.0.join("small");
+        let exact = folder.0.join("exact");
+        let big = folder.0.join("big");
+        let cap = usize::try_from(USER_DIRS_MAX_BYTES).unwrap();
+        fs::write(&small, "XDG_DOCUMENTS_DIR=\"$HOME/Docs\"\n").unwrap();
+        fs::write(&exact, "a".repeat(cap)).unwrap();
+        fs::write(&big, "a".repeat(cap + 1)).unwrap();
+
+        assert_eq!(read_user_dirs(&small), "XDG_DOCUMENTS_DIR=\"$HOME/Docs\"\n");
+        assert_eq!(read_user_dirs(&exact).len(), cap);
+        assert_eq!(read_user_dirs(&big), "");
+        assert_eq!(read_user_dirs(&folder.0.join("missing")), "");
+        assert_eq!(USER_DIRS_MAX_BYTES, 65_536);
+    }
+
+    #[test]
+    fn lists_home_then_existing_folders_in_order() {
+        let home =
+            TempHome(env::temp_dir().join(format!("nova-files-places-{}", std::process::id())));
+        fs::create_dir_all(home.0.join("Bilder")).unwrap();
+        fs::create_dir_all(home.0.join("Documents")).unwrap();
+        fs::create_dir_all(home.0.join("Downloads")).unwrap();
+        let user_dirs = "XDG_PICTURES_DIR=\"$HOME/Bilder\"\nXDG_DOWNLOAD_DIR=\"$HOME/\"\n";
+
+        let home_folder = Home {
+            folder: home.0.clone(),
+            config: home.0.join(".config"),
+            state: home.0.join(".local/state"),
+            data: home.0.join(".local/share"),
+            drive_trashes: false,
+        };
+        fs::create_dir_all(&home_folder.config).unwrap();
+        fs::write(home_folder.config.join(USER_DIRS_FILE), user_dirs).unwrap();
+
+        let (existing, wanted) = places(Some(&home_folder));
+
+        let found = |places: Vec<Place>| -> Vec<(PlaceKind, PathBuf)> {
+            places
+                .into_iter()
+                .map(|place| (place.kind, place.path))
+                .collect()
+        };
+        assert_eq!(
+            found(existing),
+            [
+                (PlaceKind::Home, home.0.clone()),
+                (PlaceKind::Documents, home.0.join("Documents")),
+                (PlaceKind::Pictures, home.0.join("Bilder")),
+            ]
+        );
+        assert_eq!(
+            found(wanted),
+            [
+                (PlaceKind::Home, home.0.clone()),
+                (PlaceKind::Desktop, home.0.join("Desktop")),
+                (PlaceKind::Documents, home.0.join("Documents")),
+                (PlaceKind::Music, home.0.join("Music")),
+                (PlaceKind::Pictures, home.0.join("Bilder")),
+                (PlaceKind::Videos, home.0.join("Videos")),
+            ]
+        );
+        assert_eq!(places(None), (Vec::new(), Vec::new()));
+    }
+
+    #[test]
+    fn usual_names_are_the_standard_folders() {
+        assert!(usual_name("Music"));
+        assert!(!usual_name("Musik"));
+    }
+
+    #[test]
+    fn missing_key_is_unset() {
+        assert_eq!(
+            dir("XDG_MUSIC_DIR=\"$HOME/Music\"", "XDG_DOCUMENTS_DIR"),
+            Setting::Unset
+        );
+    }
+}

@@ -6,7 +6,7 @@ use gpui::{
     MouseDownEvent, ParentElement as _, StatefulInteractiveElement as _, Styled as _,
     Transformation, div, prelude::FluentBuilder as _, radians, svg,
 };
-use nova_files_api::{Account, PathKind, Properties};
+use nova_files_properties_api::{Account, PathKind, Properties};
 
 use crate::assets::Icon;
 use crate::theme::{Colors, properties, radius, size, text};

@@ -12,20 +12,39 @@ mod common;
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver};
 
-use nova_files_api::{Command, EntryKind, Event, PEEK_ENTRIES, RecentFolder, RecentId};
+use nova_files_api::{Connection, Connector, EntryKind};
+use nova_files_start_api::{Command, Event, PEEK_ENTRIES, RecentFolder, RecentId};
 
-use common::{Bench, Client};
+use common::{ANSWER_TIMEOUT, Bench};
+
+struct Client {
+    connection: Connection,
+    events: Receiver<Event>,
+}
+
+impl Client {
+    fn of(connector: &Connector) -> Self {
+        let (sink, events) = mpsc::channel();
+        let connection = connector.connect(sink).unwrap();
+        Self { connection, events }
+    }
+
+    fn send(&self, command: Command) {
+        self.connection.send(command).unwrap();
+    }
+}
 
 fn recent(client: &Client, count: u32, skip: Vec<PathBuf>) -> Vec<RecentFolder> {
     let id = RecentId(u64::from(count));
     client.send(Command::RecentFolders { id, count, skip });
-    match client.next() {
+    match client.events.recv_timeout(ANSWER_TIMEOUT).unwrap() {
         Event::RecentFolders {
             id: answered,
             folders,
         } if answered == id => folders,
-        other => panic!("expected the recent folders, got {other:?}"),
+        other @ Event::RecentFolders { .. } => panic!("expected the recent folders, got {other:?}"),
     }
 }
 
@@ -47,7 +66,7 @@ fn folders_come_back_newest_first_with_a_peek_inside() {
     for name in ["b.png", "c.png", "d.png", "e.png", "f.png"] {
         fs::write(photos.join(name), b"12345").unwrap();
     }
-    let client = bench.client();
+    let client = Client::of(&bench.core.connector);
     for folder in [&notes, &photos, &skipped, &bench.at("gone")] {
         client.send(Command::FolderUsed(folder.clone()));
     }
@@ -75,7 +94,7 @@ fn the_next_run_remembers_the_folders() {
     let kept = bench.at("Kept");
     fs::create_dir(&kept).unwrap();
     {
-        let client = bench.client();
+        let client = Client::of(&bench.core.connector);
         client.send(Command::FolderUsed(kept.clone()));
         assert_eq!(paths(&recent(&client, 5, Vec::new())), vec![kept.clone()]);
     }
@@ -98,10 +117,6 @@ fn the_next_run_remembers_the_folders() {
     };
     let again =
         nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(home), None, None).unwrap();
-    let (sink, events) = std::sync::mpsc::channel();
-    let client = Client {
-        connection: again.connector.connect(sink).unwrap(),
-        events,
-    };
+    let client = Client::of(&again.connector);
     assert_eq!(paths(&recent(&client, 5, Vec::new())), vec![kept]);
 }

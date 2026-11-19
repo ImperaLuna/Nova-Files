@@ -30,7 +30,7 @@ pub struct Thumbnails {
 
 impl Thumbnails {
     pub fn from_env() -> Option<Self> {
-        let cache = crate::places::cache_home()?;
+        let cache = nova_files_disk::home::cache_home()?;
         let helper = env::current_exe().ok()?.parent()?.join(HELPER_NAME);
         Some(Self {
             folder: cache.join(THUMBNAILS_FOLDER),

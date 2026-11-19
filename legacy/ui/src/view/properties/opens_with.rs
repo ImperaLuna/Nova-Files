@@ -4,7 +4,7 @@ use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
     ParentElement as _, Styled as _, Transformation, div, radians, svg,
 };
-use nova_files_api::{PathKind, Properties};
+use nova_files_properties_api::{PathKind, Properties};
 
 use super::lone_glyph;
 use crate::assets::Icon;

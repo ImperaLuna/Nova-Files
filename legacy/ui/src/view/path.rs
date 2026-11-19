@@ -5,7 +5,7 @@ use gpui::{
     ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
     prelude::FluentBuilder as _, transparent_black,
 };
-use nova_files_api::Gathering;
+use nova_files_gathered_api::Gathering;
 
 use super::bar::capsule;
 use super::drop::inside_edge;

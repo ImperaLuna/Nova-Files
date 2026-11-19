@@ -55,12 +55,16 @@ use gpui::{
     UniformListScrollHandle,
 };
 use nova_files_api::{
-    Bookmark, ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
-    Gathering, HiddenFiles, Listing, ListingId, Order, Place, RecentFolder, RecentId,
+    ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderView,
+    HiddenFiles, Listing, ListingId, Order,
 };
 use nova_files_drives_api as drives_api;
+use nova_files_gathered_api::{self as gathered_api, Gathering};
+use nova_files_places_api::{self as places_api, Bookmark, Place};
+use nova_files_properties_api as properties_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
+use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 
 use self::drives::Drives;
 use self::preview::QuickLooks;
@@ -196,7 +200,7 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 3] = [Command::Ping, Command::Places, Command::FolderViews];
+    const FIRST_ASKS: [Command; 2] = [Command::Ping, Command::FolderViews];
 
     pub fn at(
         connector: &Connector,
@@ -315,9 +319,28 @@ impl MainWindow {
             Ok(event) => return self.drive_event(event, cx),
             Err(envelope) => envelope,
         };
+        let envelope = match envelope.open::<gathered_api::Event>() {
+            Ok(event) => return self.gathered_event(event, cx),
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<places_api::Event>() {
+            Ok(places_api::Event::Places(places)) => return self.places_arrived(places, cx),
+            Ok(places_api::Event::Bookmarks(pinned)) => return self.pinned_arrived(pinned, cx),
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<properties_api::Event>() {
+            Ok(event) => return self.properties_event(event, cx),
+            Err(envelope) => envelope,
+        };
         let envelope = match envelope.open::<settings_api::Event>() {
             Ok(settings_api::Event::Settings(settings)) => {
                 return self.settings_arrived(settings, cx);
+            }
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<start_api::Event>() {
+            Ok(start_api::Event::RecentFolders { id, folders }) => {
+                return self.recent_arrived(id, folders, cx);
             }
             Err(envelope) => envelope,
         };
@@ -401,6 +424,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
                 connection.send(command)?;
             }
             connection.send(drives_api::Command::Drives)?;
+            connection.send(places_api::Command::Places)?;
             connection.send(settings_api::Command::Watch)?;
             Ok(connection)
         })

@@ -65,6 +65,10 @@ impl Client {
         self.entries.deliver(event)
     }
 
+    pub const fn entries(&self) -> &nova_files_entries_core::Client {
+        &self.entries
+    }
+
     pub const fn events(&self) -> &Arc<dyn EventSink> {
         self.entries.events()
     }
