@@ -358,10 +358,9 @@ impl MainWindow {
             Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<open_api::Event>() {
-            Ok(event) => return self.open_event(event, cx),
-            Err(envelope) => envelope,
-        };
+        if let Some(open_api::Event::OpenWith(answer)) = envelope.get::<open_api::Event>() {
+            return self.open_with_answered(answer.clone(), cx);
+        }
         let envelope = match envelope.open::<places_api::Event>() {
             Ok(places_api::Event::Places(places)) => return self.places_arrived(places, cx),
             Ok(places_api::Event::Bookmarks(pinned)) => return self.pinned_arrived(pinned, cx),

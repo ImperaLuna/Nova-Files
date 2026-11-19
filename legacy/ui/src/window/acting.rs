@@ -2,10 +2,9 @@ use std::path::PathBuf;
 
 use gpui::{Context, SharedString};
 use nova_files_api::{EntryId, EntryKind, Listing, Operation};
-use nova_files_open_api::NotOpened;
 
 use super::MainWindow;
-use crate::island::{NOTE_TIME, Note, NoteUndo, opening};
+use crate::island::{NOTE_TIME, Note, NoteUndo};
 use crate::selection::entry_at;
 
 impl MainWindow {
@@ -82,32 +81,7 @@ impl MainWindow {
         undo: Option<NoteUndo>,
         cx: &mut Context<Self>,
     ) {
-        self.island.not_opened.clear();
         self.put_note(label.into(), undo, cx);
-    }
-
-    pub(crate) fn open_event(&mut self, event: nova_files_open_api::Event, cx: &mut Context<Self>) {
-        match event {
-            nova_files_open_api::Event::Opened { .. } => {}
-            nova_files_open_api::Event::NotOpened { path, reason } => {
-                self.file_not_opened(path, reason, cx);
-            }
-            nova_files_open_api::Event::OpenWith(answer) => self.open_with_answered(answer, cx),
-        }
-    }
-
-    pub(crate) fn file_not_opened(
-        &mut self,
-        path: PathBuf,
-        reason: NotOpened,
-        cx: &mut Context<Self>,
-    ) {
-        let failed = &mut self.island.not_opened;
-        failed.retain(|(was, _)| *was != path);
-        failed.push((path, reason));
-        if let Some(label) = opening::note(failed) {
-            self.put_note(label.into(), None, cx);
-        }
     }
 
     fn put_note(&mut self, label: SharedString, undo: Option<NoteUndo>, cx: &mut Context<Self>) {
@@ -124,7 +98,6 @@ impl MainWindow {
         self.tell_note_gone(cx);
         self.island.note = None;
         self.island.note_timer = None;
-        self.island.not_opened.clear();
         cx.notify();
     }
 
