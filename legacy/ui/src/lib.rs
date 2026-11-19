@@ -46,7 +46,7 @@ pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note, NoteUndo};
 pub use location::Location;
 pub use menu::{Look, Menu, MenuAction, MenuItem};
-use nova_files_shell::{assets, theme};
+use nova_files_shell::{Parts, assets, theme};
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
@@ -80,7 +80,6 @@ pub fn sent_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_look_api::Command>(),
         MessageType::of::<nova_files_settings_api::Command>(),
         MessageType::of::<nova_files_transfer_api::Command>(),
-        MessageType::of::<nova_files_trash_api::Command>(),
     ]
 }
 
@@ -91,7 +90,6 @@ pub fn taken_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_look_api::Event>(),
         MessageType::of::<nova_files_settings_api::Event>(),
         MessageType::of::<nova_files_transfer_api::Event>(),
-        MessageType::of::<nova_files_trash_api::Event>(),
     ]
 }
 
@@ -100,6 +98,7 @@ pub fn run(
     requests: &Requests,
     first: Opening,
     recover_gpu: &RecoverGpu,
+    parts: Parts,
 ) -> Ended {
     let ended = Rc::new(Cell::new(Ended::WindowsClosed));
     let connector = connector.clone();
@@ -109,6 +108,7 @@ pub fn run(
     gpui_platform::application()
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
+            cx.set_global(parts);
             text::bind_keys(cx);
             commands::bind_keys(cx);
             open_window(&connector, first, &recover_gpu, cx);

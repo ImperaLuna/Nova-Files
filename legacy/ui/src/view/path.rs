@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use gpui::{
-    Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _,
-    Styled as _, div, prelude::FluentBuilder as _, transparent_black,
+    ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
+    prelude::FluentBuilder as _, transparent_black,
 };
 use nova_files_api::Gathering;
 
@@ -14,15 +14,14 @@ use super::row::icon;
 use nova_files_shell::{Look, MenuAt};
 
 use crate::assets::Icon;
-use crate::commands::EmptyTrash;
 use crate::crumbs::{self, Crumb, Shown};
+use crate::location::Location;
 use crate::path_bar::{MenuItem, MenuOwner};
-use crate::places::{self, TRASH_LABEL};
+use crate::places;
 use crate::theme::{Colors, radius, size, text};
 use crate::window::{Aim, MainWindow};
 
 const FOLDED_LABEL: &str = "…";
-const EMPTY_TRASH_LABEL: &str = "Empty Trash";
 
 impl MainWindow {
     pub(super) fn path_bar(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
@@ -63,18 +62,17 @@ impl MainWindow {
             match shown {
                 Shown::Crumb(index) => {
                     let crumb = &crumbs[index];
-                    let at = if self.trash_open() {
-                        Aim::trash()
-                    } else {
-                        Aim::folder(crumb.path.clone(), crumb.label.clone())
-                    };
+                    let place = Location::Folder(crumb.path.clone());
+                    let at = self
+                        .tab_drops_at(Some(&place), crumb.label.clone())
+                        .unwrap_or_else(|| Aim::folder(crumb.path.clone(), crumb.label.clone()));
                     if crumb.here && self.properties_paths().is_some() {
                         row = row.child(crumb_button(index, crumb, false, colors, cx));
                         continue;
                     }
                     let button = crumb_button(index, crumb, true, colors, cx);
                     row = row.child(self.drop_target(button, at, cx));
-                    if !crumb.here || (self.has_folders() && !self.trash_open()) {
+                    if !crumb.here || (self.has_folders() && self.named_here().is_none()) {
                         row = row.child(self.arrow(index, crumb.path.clone(), colors, cx));
                     }
                 }
@@ -96,11 +94,9 @@ impl MainWindow {
             .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
                 this.start_typing_path(window, cx);
             }));
-        let empties = self.trash_open() && self.trash_count().is_some_and(|count| count > 0);
         bar.child(row)
             .child(fill)
             .children(self.scope_chip(colors, cx))
-            .when(empties, |bar| bar.child(empty_trash_chip(colors)))
             .children(self.part_chips(colors, cx))
     }
 
@@ -120,11 +116,11 @@ impl MainWindow {
         let Some(folder) = self.folder() else {
             return Vec::new();
         };
-        if self.trash_open() {
+        if let Some(named) = self.named_here() {
             return vec![Crumb {
                 path: folder.to_path_buf(),
-                label: SharedString::new_static(TRASH_LABEL),
-                icon: Icon::Trash,
+                label: named.label,
+                icon: named.icon,
                 shows_icon: true,
                 here: true,
             }];
@@ -328,24 +324,4 @@ fn chip(selector: &'static str, colors: &Colors) -> Stateful<Div> {
         .cursor_pointer()
         .hover(|chip| chip.bg(colors.hover).text_color(colors.text))
         .active(|chip| chip.bg(colors.press))
-}
-
-fn empty_trash_chip(colors: &Colors) -> impl IntoElement {
-    div()
-        .id("empty-trash")
-        .debug_selector(|| "empty-trash".to_owned())
-        .flex()
-        .flex_none()
-        .items_center()
-        .h(size::CHIP_HEIGHT)
-        .px(size::CHIP_PAD)
-        .rounded(radius::ROW)
-        .text_color(colors.text_soft)
-        .cursor_pointer()
-        .hover(|chip| chip.bg(colors.hover).text_color(colors.text))
-        .active(|chip| chip.bg(colors.press))
-        .child(EMPTY_TRASH_LABEL)
-        .on_click(|_: &ClickEvent, window, cx| {
-            window.dispatch_action(EmptyTrash.boxed_clone(), cx);
-        })
 }

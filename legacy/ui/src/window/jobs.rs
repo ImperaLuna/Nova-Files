@@ -204,7 +204,6 @@ impl MainWindow {
         {
             self.waiting = super::renaming::Waiting::Nothing;
         }
-        self.trash_maybe_changed(&operation, tally.replaced > 0);
         let transfer = is_transfer(&operation);
         let others = self.transfers_running();
         let batching = others || !self.jobs.batch.is_empty();

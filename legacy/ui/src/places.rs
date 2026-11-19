@@ -7,7 +7,6 @@ use crate::assets::Icon;
 
 pub const HOME_LABEL: &str = "Home";
 pub const START_LABEL: &str = "Start";
-pub const TRASH_LABEL: &str = "Trash";
 pub const PROJECTS_LABEL: &str = "Projects";
 pub const GAMES_LABEL: &str = "Games";
 

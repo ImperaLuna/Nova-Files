@@ -92,8 +92,8 @@ impl Core {
         commands
     }
 
-    fn send(&self, event: impl Message) {
-        self.events.as_ref().unwrap().deliver(event).unwrap();
+    fn send<M: Message>(&self, message: M) {
+        self.events.as_ref().unwrap().deliver(message).unwrap();
     }
 
     fn refuse(&self, id: ListingId, path: &Path) {
@@ -106,6 +106,13 @@ impl Core {
 }
 
 fn window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
+    cx.update(|cx| cx.set_global(nova_files::parts()));
+    window_with_parts(cx)
+}
+
+fn window_with_parts(
+    cx: &mut TestAppContext,
+) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     let (connector, messages) = nova_files_api::channel();
     let (view, cx) = cx.add_window_view(|_, cx| {
         MainWindow::with_home(&connector, Path::new(SHOWN), PathBuf::from(SHOWN), cx)

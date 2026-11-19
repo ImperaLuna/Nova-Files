@@ -86,6 +86,7 @@ async fn picker_with<'a>(
     let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None, None)
         .unwrap();
     let start = folder.to_owned();
+    cx.update(|cx| cx.set_global(nova_files::parts()));
     let (view, cx) =
         cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx));
     wait_for_folder(&view, cx, folder).await;

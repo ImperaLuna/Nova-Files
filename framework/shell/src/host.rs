@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::{App, AppContext as _, Entity};
@@ -26,6 +27,7 @@ impl Link {
 #[derive(Clone)]
 pub struct Host {
     pub link: Link,
+    pub home: PathBuf,
     pub rules: RulesBook,
     pub entries: Entity<Entries>,
     pub nav: Entity<Navigator>,
@@ -33,9 +35,10 @@ pub struct Host {
 }
 
 impl Host {
-    pub fn new(link: Link, cx: &mut App) -> Self {
+    pub fn new(link: Link, home: PathBuf, cx: &mut App) -> Self {
         Self {
             link,
+            home,
             rules: RulesBook::default(),
             entries: cx.new(|_| Entries::default()),
             nav: cx.new(|_| Navigator::default()),

@@ -17,7 +17,7 @@ use crate::history::History;
 use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
-use crate::places::{self, START_LABEL, TRASH_LABEL};
+use crate::places::{self, START_LABEL};
 use crate::selection::Selection;
 
 pub const OPEN_IN_NEW_TAB_LABEL: &str = "Open in new tab";
@@ -148,10 +148,6 @@ impl MainWindow {
         }
     }
 
-    pub fn open_trash_in_new_tab(&mut self, cx: &mut Context<Self>) {
-        self.open_in_new_tab(self.trash.folder.clone(), cx);
-    }
-
     pub(crate) fn open_drive_in_new_tab(&mut self, drive: ShownDrive, cx: &mut Context<Self>) {
         if let Some(folder) = drive.folder.clone() {
             self.open_in_new_tab(folder, cx);
@@ -182,22 +178,26 @@ impl MainWindow {
             }
             Some(Location::Properties(paths)) => (island::what(paths).into(), Icon::Info),
             Some(Location::Page(page)) => (page.title(), page.icon()),
-            Some(Location::Folder(folder)) if *folder == self.trash.folder => {
-                (TRASH_LABEL.into(), Icon::Trash)
-            }
-            Some(Location::Folder(folder)) => shown
-                .iter()
-                .find(|shown| shown.path == *folder)
-                .map_or_else(
-                    || {
-                        let icon =
-                            places::standard_icon_at(&self.places, folder).unwrap_or(Icon::Folder);
-                        (places::folder_name(folder), icon)
-                    },
-                    |shown| (shown.name.clone(), shown.icon),
-                ),
+            Some(Location::Folder(folder)) => self.host.rules.named(folder).map_or_else(
+                || self.folder_look(folder, shown),
+                |named| (named.label, named.icon),
+            ),
             None => (SharedString::default(), Icon::Folder),
         }
+    }
+
+    fn folder_look(&self, folder: &Path, shown: &[places::Shown]) -> (SharedString, Icon) {
+        shown
+            .iter()
+            .find(|shown| shown.path == *folder)
+            .map_or_else(
+                || {
+                    let icon =
+                        places::standard_icon_at(&self.places, folder).unwrap_or(Icon::Folder);
+                    (places::folder_name(folder), icon)
+                },
+                |shown| (shown.name.clone(), shown.icon),
+            )
     }
 
     pub(crate) fn folder_name(&self, folder: &Path) -> SharedString {
