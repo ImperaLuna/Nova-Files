@@ -1,7 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use gpui::Context;
-use nova_files_api::{Command, EntryId, EntryKind, ListingId, Message, Order, SortKey};
+use nova_files_api::{Command, EntryId, EntryKind, Envelope, ListingId, Message, Order, SortKey};
 
 use super::MainWindow;
 use crate::location::Location;
@@ -60,14 +60,23 @@ impl MainWindow {
         place: Location,
         command: impl FnOnce(ListingId, Order) -> M,
     ) -> bool {
-        self.falling_back = false;
         let id = ListingId(self.next_listing);
+        let command = Envelope::new(command(id, self.order));
+        self.send_listing(place, id, Some(command))
+    }
+
+    pub(super) fn send_listing(
+        &mut self,
+        place: Location,
+        id: ListingId,
+        command: Option<Envelope>,
+    ) -> bool {
+        self.falling_back = false;
         self.next_listing += 1;
         let order = self.order;
-        let sent = self
-            .connection
-            .as_ref()
-            .map(|connection| connection.send(command(id, order)));
+        let sent = command
+            .zip(self.connection.as_ref())
+            .map(|(command, connection)| connection.send_envelope(command));
         let sent = matches!(sent, Some(Ok(())));
         if sent {
             self.stop_measuring();

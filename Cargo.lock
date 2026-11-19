@@ -4012,6 +4012,7 @@ dependencies = [
 name = "nova-files-shell"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "futures",
  "gpui",
  "nova-files-api",
@@ -4133,7 +4134,6 @@ dependencies = [
 name = "nova-files-ui"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "futures",
  "gpui",
  "gpui_platform",

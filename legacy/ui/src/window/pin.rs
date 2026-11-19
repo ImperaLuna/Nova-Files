@@ -5,6 +5,7 @@ use futures::channel::oneshot;
 use gpui::{Context, Pixels, Point};
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_places_api::{BookmarkChange, Command};
+use nova_files_shell::RowItem;
 
 use super::MainWindow;
 use crate::assets::Icon;
@@ -78,15 +79,21 @@ impl MainWindow {
     }
 
     pub(crate) fn open_row_menu(&mut self, row: &str, at: Point<Pixels>, cx: &mut Context<Self>) {
-        let groups: Vec<Vec<MenuItem>> = self
-            .parts
-            .row_menu(row, cx)
+        let groups = self.parts.row_menu(row, cx);
+        self.open_part_menu(at, groups, cx);
+    }
+
+    pub(crate) fn open_part_menu(
+        &mut self,
+        at: Point<Pixels>,
+        groups: Vec<Vec<RowItem>>,
+        cx: &mut Context<Self>,
+    ) {
+        let groups: Vec<Vec<MenuItem>> = groups
             .into_iter()
             .map(|group| group.into_iter().map(MenuItem::from).collect())
             .collect();
-        if !groups.is_empty() {
-            self.open_menu_groups(at, groups, false, cx);
-        }
+        self.open_menu_groups(at, groups, false, cx);
     }
 
     pub(crate) fn unpin(&self, path: PathBuf) {

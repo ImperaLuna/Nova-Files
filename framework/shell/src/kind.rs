@@ -4,7 +4,8 @@ use std::path::Path;
 use gpui::Rgba;
 use nova_files_api::{EntryKind, IconKind};
 
-use crate::theme::Tags;
+use crate::assets::Icon;
+use crate::theme::{Colors, Tags};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
@@ -83,6 +84,38 @@ pub fn icon_kind(name: &OsStr, kind: EntryKind) -> IconKind {
         FileKind::Media if is_audio(name) => IconKind::Audio,
         FileKind::Media => IconKind::Video,
         FileKind::Other => IconKind::File,
+    }
+}
+
+pub const fn entry_kind(kind: EntryKind) -> IconKind {
+    match kind {
+        EntryKind::Folder => IconKind::Folder,
+        EntryKind::File => IconKind::File,
+    }
+}
+
+pub const fn kind_glyph(kind: EntryKind, colors: &Colors) -> (Icon, Rgba) {
+    built_in(entry_kind(kind), colors)
+}
+
+pub const fn built_in(kind: IconKind, colors: &Colors) -> (Icon, Rgba) {
+    let tint = match kind {
+        IconKind::Folder => colors.folder,
+        _ => colors.text_soft,
+    };
+    (glyph_of(kind), tint)
+}
+
+pub const fn glyph_of(kind: IconKind) -> Icon {
+    match kind {
+        IconKind::Folder => Icon::Folder,
+        IconKind::File => Icon::File,
+        IconKind::Text => Icon::FileText,
+        IconKind::Picture => Icon::FilePicture,
+        IconKind::Video => Icon::FileVideo,
+        IconKind::Audio => Icon::FileAudio,
+        IconKind::Archive => Icon::FileArchive,
+        IconKind::Program => Icon::FileProgram,
     }
 }
 
