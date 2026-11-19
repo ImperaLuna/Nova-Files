@@ -116,7 +116,12 @@ fn list(id: OpenWithId, paths: &[PathBuf], types: &MimeTypes, places: &Places) -
     let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
     let shared = apps::shared_types(&paths, types);
     let ancestry: Vec<&str> = shared.ancestry.iter().map(String::as_str).collect();
-    let apps = apps::apps(&ancestry, shared.same, places)
+    let listed = if ancestry.is_empty() {
+        apps::apps_for_each(&apps::ancestries(&paths, types), places)
+    } else {
+        apps::apps(&ancestry, shared.same, places)
+    };
+    let apps = listed
         .into_iter()
         .map(|Listed { app, default }| ListedApp {
             id: app.id,
@@ -167,6 +172,40 @@ fn reason(error: &NotSet) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn files_of_types_with_no_parent_in_common_list_the_apps_that_open_each() {
+        let tree = crate::tree::Tree::new("with-mixed");
+        tree.write(
+            "share/mime/globs2",
+            "50:image/png:*.png\n50:image/jpeg:*.jpg\n",
+        )
+        .write(
+            "share/applications/mimeinfo.cache",
+            "[MIME Cache]\nimage/png=viewer.desktop;png-only.desktop\nimage/jpeg=viewer.desktop\n",
+        );
+        for id in ["viewer.desktop", "png-only.desktop"] {
+            tree.write(
+                &format!("share/applications/{id}"),
+                "[Desktop Entry]\nType=Application\nName=app\nExec=app %F\n",
+            );
+        }
+        for name in ["a.png", "b.jpg"] {
+            tree.write(name, "");
+        }
+        let types = MimeTypes::load(&[tree.0.join("share")]);
+        let paths = [tree.0.join("a.png"), tree.0.join("b.jpg")];
+
+        let OpenWithAnswer::Apps { apps, mime, .. } =
+            list(OpenWithId(1), &paths, &types, &tree.places())
+        else {
+            panic!("expected apps");
+        };
+
+        let ids: Vec<&str> = apps.iter().map(|app| app.id.as_str()).collect();
+        assert_eq!(ids, ["viewer.desktop"]);
+        assert_eq!(mime, None);
+    }
 
     #[test]
     fn a_default_not_set_says_why() {

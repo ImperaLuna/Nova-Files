@@ -6,6 +6,7 @@
 # Allowed outside crates:
 # - image
 # - landlock
+# - rustix
 # Allowed workspace crates: none
 
 [package]
@@ -24,6 +25,8 @@ workspace = true
 # thumbnailers. GPUI already builds image with more formats.
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 landlock = "0.4"
+# Waits on the system thumbnailer itself, with a deadline (pidfd).
+rustix = { version = "1.1.6", default-features = false, features = ["event", "process", "std"] }
 
 [dev-dependencies]
 # The tests run the helper the way the core does, and a window on top.
