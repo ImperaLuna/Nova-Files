@@ -1,0 +1,31 @@
+# nova-files-settings-ui
+#
+# The settings' window half: asks the core to watch the settings and
+# publishes each change for the window and its parts to read.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-settings-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-settings-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+test = false
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-settings-api.workspace = true
+nova-files-shell.workspace = true
