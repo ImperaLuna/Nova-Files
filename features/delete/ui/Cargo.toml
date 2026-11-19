@@ -1,0 +1,30 @@
+# nova-files-delete-ui
+#
+# Delete's window half: Delete for good on the selection, asked first.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-delete-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+test = false
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-shell.workspace = true

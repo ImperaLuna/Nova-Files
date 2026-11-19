@@ -25,6 +25,7 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 use nova_files_api::ViewMode;
+use nova_files_delete_ui::DeleteSelected;
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
@@ -34,8 +35,8 @@ use crate::commands::{
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{
-    CloseTab, CopySelected, CutSelected, DeleteSelected, NewFolder, NewTab, NextTab, Paste,
-    PreviousTab, RenameSelected, ShowProperties, TrashSelected, Undo,
+    CloseTab, CopySelected, CutSelected, NewFolder, NewTab, NextTab, Paste, PreviousTab,
+    RenameSelected, ShowProperties, TrashSelected, Undo,
 };
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
@@ -158,8 +159,13 @@ impl MainWindow {
         root.on_action(cx.listener(|this, _: &CopySelected, _, cx| this.copy_selected(false, cx)))
             .on_action(cx.listener(|this, _: &CutSelected, _, cx| this.copy_selected(true, cx)))
             .on_action(cx.listener(|this, _: &Paste, _, cx| this.paste(cx)))
-            .on_action(cx.listener(|this, _: &TrashSelected, _, cx| this.trash_selected(cx)))
-            .on_action(cx.listener(|this, _: &DeleteSelected, _, cx| this.delete_selected(cx)))
+            .on_action(cx.listener(|this, _: &TrashSelected, window, cx| {
+                if this.folder_rules().trashed {
+                    window.dispatch_action(Box::new(DeleteSelected), cx);
+                } else {
+                    this.trash_selected(cx);
+                }
+            }))
             .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
             .on_action(cx.listener(|this, _: &RenameSelected, window, cx| {
                 this.start_rename(window, cx);

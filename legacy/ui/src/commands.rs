@@ -37,7 +37,6 @@ mod actions {
             CutSelected,
             Paste,
             TrashSelected,
-            DeleteSelected,
             RenameSelected,
             NewFolder,
             Undo,
@@ -89,7 +88,6 @@ pub const ACTIONS: &[CommandSpec] = &[
     CUT,
     PASTE,
     TRASH,
-    DELETE,
     RENAME,
     NEW_FOLDER,
     UNDO,
@@ -220,13 +218,6 @@ spec!(
     "file.trash",
     "Move to Trash",
     ["delete"]
-);
-spec!(
-    DELETE,
-    DeleteSelected,
-    "file.delete",
-    "Delete for good",
-    ["shift-delete"]
 );
 spec!(RENAME, RenameSelected, "file.rename", "Rename", ["f2"]);
 spec!(
