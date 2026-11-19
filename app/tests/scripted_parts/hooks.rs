@@ -9,8 +9,8 @@ use gpui::{
 use nova_files_api::{Entry, Listing};
 use nova_files_open_api as open_api;
 use nova_files_shell::{
-    Host, Location, PageKind, PageRef, Part, Parts, SidebarAt, SidebarRow, Slots, Undo,
-    assets::Icon,
+    Host, Location, NoteGone, PageKind, PageRef, Part, Parts, RowItem, SidebarAt, SidebarRow,
+    Slots, Undo, assets::Icon,
 };
 
 use super::super::*;
@@ -23,7 +23,11 @@ thread_local! {
     static OPENED: Cell<usize> = const { Cell::new(0) };
     static CLOSED: Cell<usize> = const { Cell::new(0) };
     static UNDONE: Cell<usize> = const { Cell::new(0) };
+    static FILED: Cell<usize> = const { Cell::new(0) };
+    static SWEPT: Cell<usize> = const { Cell::new(0) };
 }
+
+const FILE_ROOM: &str = "/file-room";
 
 const OWN: &str = "0";
 
@@ -65,6 +69,16 @@ fn opens(_: &mut Tagger, entry: &Entry, _: &Path, _: &mut Context<Tagger>) -> bo
     own
 }
 
+fn files_here(
+    _: &Tagger,
+    at: &Location,
+    _: &[PathBuf],
+    _: Modifiers,
+    _: &gpui::App,
+) -> Option<SharedString> {
+    (at.folder() == Some(Path::new(FILE_ROOM))).then(|| "File away".into())
+}
+
 fn basket(_: &mut Tagger, _: &Basket, _: &mut Window, _: &mut Context<Tagger>) -> AnyElement {
     div().child(DROPPED.get().to_string()).into_any_element()
 }
@@ -99,15 +113,37 @@ impl Part for Tagger {
         slots.closing(|_, _| CLOSED.set(CLOSED.get() + 1));
         slots.page::<Basket>(basket);
         slots.drops::<Basket>(|_, _, paths, _| DROPPED.set(DROPPED.get() + paths.len()));
+        slots.row_menu(|_, row, _| {
+            if row == "place-file-room" {
+                vec![RowItem::new(Icon::Info, "Sweep", |_| {
+                    SWEPT.set(SWEPT.get() + 1);
+                })]
+            } else {
+                Vec::new()
+            }
+        });
+        slots.drop_target(files_here, |_, _, paths, _, _| {
+            FILED.set(FILED.get() + paths.len());
+        });
         slots.sidebar(SidebarAt::Places, |_, _, _| {
-            vec![SidebarRow {
-                id: "place-basket",
-                icon: Icon::Info,
-                name: "Basket".into(),
-                number: None,
-                opens: Location::Page(PageRef::new(Basket)),
-                here: false,
-            }]
+            vec![
+                SidebarRow {
+                    id: "place-basket",
+                    icon: Icon::Info,
+                    name: "Basket".into(),
+                    number: None,
+                    opens: Location::Page(PageRef::new(Basket)),
+                    here: false,
+                },
+                SidebarRow {
+                    id: "place-file-room",
+                    icon: Icon::Info,
+                    name: "File room".into(),
+                    number: None,
+                    opens: Location::Folder(FILE_ROOM.into()),
+                    here: false,
+                },
+            ]
         });
     }
 }
@@ -117,6 +153,8 @@ fn tagged(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContex
     OPENED.set(0);
     CLOSED.set(0);
     UNDONE.set(0);
+    FILED.set(0);
+    SWEPT.set(0);
     let mut parts = Parts::default();
     parts.add::<Tagger>();
     cx.update(|cx| {
@@ -146,11 +184,9 @@ fn a_part_selects_entries_once_their_listing_arrives(cx: &mut TestAppContext) {
     );
 }
 
-#[gpui::test]
-fn rows_dropped_on_a_part_page_row_go_to_the_part(cx: &mut TestAppContext) {
-    let (_view, cx, _core) = tagged(cx);
+fn drag_onto(cx: &mut VisualTestContext, target: &'static str) {
     let from = cx.debug_bounds("name-0").unwrap().center();
-    let to = cx.debug_bounds("place-basket").unwrap().center();
+    let to = cx.debug_bounds(target).unwrap().center();
     cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_move(
         from + point(px(20.0), px(0.0)),
@@ -160,9 +196,37 @@ fn rows_dropped_on_a_part_page_row_go_to_the_part(cx: &mut TestAppContext) {
     cx.run_until_parked();
     cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
     cx.run_until_parked();
+}
+
+fn let_go(cx: &mut VisualTestContext, target: &'static str) {
+    let to = cx.debug_bounds(target).unwrap().center();
     cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
+}
+
+#[gpui::test]
+fn rows_dropped_on_a_part_page_row_go_to_the_part(cx: &mut TestAppContext) {
+    let (_view, cx, _core) = tagged(cx);
+    drag_onto(cx, "place-basket");
+    let_go(cx, "place-basket");
     assert_eq!(DROPPED.get(), 1);
+}
+
+#[gpui::test]
+fn a_part_that_aims_at_a_folder_names_and_takes_the_drop(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = tagged(cx);
+    core.commands();
+    drag_onto(cx, "place-file-room");
+    let chip = cx.debug_bounds("drag-chip").is_some();
+    let_go(cx, "place-file-room");
+
+    assert!(chip);
+    assert_eq!(FILED.get(), 1);
+    assert_eq!(
+        core.commands(),
+        Vec::new(),
+        "the window starts no job of its own"
+    );
 }
 
 #[gpui::test]
@@ -237,4 +301,42 @@ fn undo_on_a_part_note_runs_the_part_undo(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-z");
     cx.run_until_parked();
     assert_eq!(UNDONE.get(), 1);
+}
+
+#[gpui::test]
+fn a_part_row_menu_runs_the_chosen_item(cx: &mut TestAppContext) {
+    let (view, cx, _core) = tagged(cx);
+    let basket = cx.debug_bounds("place-basket").unwrap().center();
+    cx.simulate_mouse_down(basket, MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+
+    let room = cx.debug_bounds("place-file-room").unwrap().center();
+    cx.simulate_mouse_down(room, MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down enter");
+    cx.run_until_parked();
+
+    assert_eq!(SWEPT.get(), 1);
+}
+
+#[gpui::test]
+fn a_part_hears_when_its_note_leaves_the_island(cx: &mut TestAppContext) {
+    let (view, cx, _core) = tagged(cx);
+    let island = view.read_with(cx, |view, _| view.host().island.clone());
+    let gone = Rc::new(Cell::new(None));
+    let heard = Rc::clone(&gone);
+    let _hearing = cx.update(|_, cx| {
+        cx.subscribe(&island, move |_, NoteGone(id): &NoteGone, _| {
+            heard.set(Some(*id));
+        })
+    });
+    let mine = island.update(cx, |island, cx| island.note("Tagged", None, cx));
+    cx.run_until_parked();
+    assert_eq!(gone.get(), None);
+
+    view.update(cx, |view, cx| view.show_note("Something else", None, cx));
+    cx.run_until_parked();
+
+    assert_eq!(gone.get(), Some(mine));
 }

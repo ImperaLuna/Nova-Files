@@ -139,6 +139,7 @@ impl MainWindow {
     }
 
     fn put_note(&mut self, label: SharedString, undo: Option<NoteUndo>, cx: &mut Context<Self>) {
+        self.tell_note_gone(cx);
         self.island.note = Some(Note { label, undo });
         self.island.note_timer = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(NOTE_TIME).await;
@@ -148,10 +149,19 @@ impl MainWindow {
     }
 
     pub(crate) fn dismiss_note(&mut self, cx: &mut Context<Self>) {
+        self.tell_note_gone(cx);
         self.island.note = None;
         self.island.note_timer = None;
         self.island.not_opened.clear();
         cx.notify();
+    }
+
+    fn tell_note_gone(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.island.note_owner.take() {
+            self.host
+                .island
+                .update(cx, |island, cx| island.gone(id, cx));
+        }
     }
 
     pub const fn note(&self) -> Option<&Note> {

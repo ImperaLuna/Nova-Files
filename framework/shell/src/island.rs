@@ -32,9 +32,16 @@ impl PartialEq for Undo {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoteId(u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoteGone(pub NoteId);
+
 pub enum IslandAsk {
     StartJob(Operation),
     Note {
+        id: NoteId,
         label: SharedString,
         undo: Option<Undo>,
     },
@@ -49,8 +56,9 @@ impl fmt::Debug for IslandAsk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::StartJob(operation) => f.debug_tuple("StartJob").field(operation).finish(),
-            Self::Note { label, undo } => f
+            Self::Note { id, label, undo } => f
                 .debug_struct("Note")
+                .field("id", id)
                 .field("label", label)
                 .field("undo", undo)
                 .finish(),
@@ -69,9 +77,11 @@ pub struct IslandAsked;
 #[derive(Debug, Default)]
 pub struct Island {
     asks: Vec<IslandAsk>,
+    notes: u64,
 }
 
 impl EventEmitter<IslandAsked> for Island {}
+impl EventEmitter<NoteGone> for Island {}
 
 impl Island {
     pub fn note(
@@ -79,12 +89,20 @@ impl Island {
         label: impl Into<SharedString>,
         undo: Option<Undo>,
         cx: &mut Context<Self>,
-    ) {
+    ) -> NoteId {
+        self.notes += 1;
+        let id = NoteId(self.notes);
         self.asks.push(IslandAsk::Note {
+            id,
             label: label.into(),
             undo,
         });
         cx.emit(IslandAsked);
+        id
+    }
+
+    pub fn gone(&mut self, id: NoteId, cx: &mut Context<Self>) {
+        cx.emit(NoteGone(id));
     }
 
     pub fn ask(

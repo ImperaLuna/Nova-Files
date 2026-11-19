@@ -52,6 +52,7 @@ impl MainWindow {
                 selection.at_most_one()
             }
         });
+        self.publish(cx);
         self.pick_selection_changed(cx);
         self.preview_follow_cursor(cx);
         if let Some(cursor) = self.cursor() {

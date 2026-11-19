@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, SharedString, Window,
+    Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, Modifiers,
+    SharedString, Window,
 };
 use nova_files_api::{Entry, Event, Listing};
 
@@ -13,8 +14,8 @@ use nova_files_messages::{Envelope, Message, MessageType};
 
 use crate::command::CommandSpec;
 use crate::host::Host;
-use crate::location::{PageKind, PageRef};
-use crate::menu::{MenuAt, MenuItem, SidebarAt, SidebarRow};
+use crate::location::{Location, PageKind, PageRef};
+use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
 use crate::scene::Scene;
 
 pub trait Part: Sized + 'static {
@@ -35,6 +36,9 @@ pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Closing<P> = fn(&mut P, &mut Context<P>);
 pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
+pub type DropAim<P> = fn(&P, &Location, &[PathBuf], Modifiers, &App) -> Option<SharedString>;
+pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<RowItem>;
+pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
 
 pub struct Column<P> {
     pub head: SharedString,
@@ -42,7 +46,7 @@ pub struct Column<P> {
     pub cell: Cell<P>,
 }
 
-type EventSlot<P> = Box<dyn Fn(&mut P, Envelope, &mut Context<P>)>;
+type EventSlot<P> = Box<dyn Fn(&mut P, &Envelope, &mut Context<P>)>;
 type Bind<P> = Box<dyn Fn(Div, &Entity<P>, &Host) -> Div>;
 pub type PageSlot<P> =
     Rc<dyn Fn(&mut P, &PageRef, &mut Window, &mut Context<P>) -> Option<AnyElement>>;
@@ -56,7 +60,7 @@ pub struct CommandSlot<P> {
 pub struct Slots<P> {
     pub(crate) events: HashMap<MessageType, EventSlot<P>>,
     pub(crate) commands: Vec<CommandSlot<P>>,
-    pub(crate) menus: Vec<(MenuAt, Items<P>)>,
+    pub(crate) menus: Vec<(MenuAt, MenuGroup, u8, Items<P>)>,
     pub(crate) pages: Vec<(TypeId, PageSlot<P>)>,
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
@@ -67,6 +71,8 @@ pub struct Slots<P> {
     pub(crate) name_cells: Vec<NameCell<P>>,
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
+    pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
+    pub(crate) row_menus: Vec<RowMenu<P>>,
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
@@ -91,6 +97,8 @@ impl<P> Default for Slots<P> {
             name_cells: Vec::new(),
             listed: Vec::new(),
             drops: Vec::new(),
+            drop_targets: Vec::new(),
+            row_menus: Vec::new(),
             bars: Vec::new(),
             overlays: Vec::new(),
             list_views: Vec::new(),
@@ -102,12 +110,12 @@ impl<P> Default for Slots<P> {
 }
 
 impl<P: Part> Slots<P> {
-    pub fn on_event<E: Message>(&mut self, take: fn(&mut P, E, &mut Context<P>)) {
+    pub fn on_event<E: Message + Clone>(&mut self, take: fn(&mut P, E, &mut Context<P>)) {
         self.events.insert(
             MessageType::of::<E>(),
             Box::new(move |part, envelope, cx| {
-                if let Some(event) = envelope.taken_as::<E>() {
-                    take(part, event, cx);
+                if let Some(event) = envelope.get::<E>() {
+                    take(part, event.clone(), cx);
                 }
             }),
         );
@@ -135,7 +143,11 @@ impl<P: Part> Slots<P> {
     }
 
     pub fn menu(&mut self, at: MenuAt, items: Items<P>) {
-        self.menus.push((at, items));
+        self.menu_in(at, MenuGroup::Part, 0, items);
+    }
+
+    pub fn menu_in(&mut self, at: MenuAt, group: MenuGroup, rank: u8, items: Items<P>) {
+        self.menus.push((at, group, rank, items));
     }
 
     pub fn page<K: PageKind>(
@@ -183,6 +195,14 @@ impl<P: Part> Slots<P> {
             }
         });
         self.drops.push((TypeId::of::<K>(), slot));
+    }
+
+    pub fn row_menu(&mut self, items: RowMenu<P>) {
+        self.row_menus.push(items);
+    }
+
+    pub fn drop_target(&mut self, aim: DropAim<P>, take: DropTake<P>) {
+        self.drop_targets.push((aim, take));
     }
 
     pub fn bar(&mut self, bar: Card<P>) {

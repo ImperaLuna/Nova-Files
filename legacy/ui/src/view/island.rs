@@ -6,13 +6,11 @@ use gpui::{
 };
 
 use nova_files_api::{Answer, Conflict};
-use nova_files_shell::{Look, MenuAt};
+use nova_files_shell::{Look, MenuAt, MenuGroup, MenuItem, Placed, arrange};
 
 use super::row::icon;
 use crate::assets::Icon;
-use crate::commands::{
-    ClearSelection, CopySelected, CutSelected, RenameSelected, TrashSelected, Undo,
-};
+use crate::commands::{COPY, CUT, ClearSelection, RENAME, TRASH, Undo};
 use crate::island::progress::Running;
 use crate::island::{self, Confirm, Note, asking};
 use crate::theme::{Colors, radius, size, text};
@@ -74,24 +72,24 @@ impl MainWindow {
                 .child(rest)
                 .into_any_element(),
         ];
-        if !self.folder_rules().trashed {
-            file_buttons(count, &mut parts, colors);
-        }
-        let from_parts = self.parts.menu(MenuAt::Island, &self.scene(), cx);
-        parts.extend(from_parts.into_iter().flatten().map(|item| {
+        let mut placed = if self.folder_rules().trashed {
+            Vec::new()
+        } else {
+            file_buttons(count)
+        };
+        placed.extend(self.parts.menu(MenuAt::Island, &self.scene(), cx));
+        parts.extend(arrange(placed).into_iter().flatten().map(|item| {
+            let action = item.run.action();
+            if item.icon_only {
+                return icon_button(item.selector(), item.icon, &*action, colors)
+                    .into_any_element();
+            }
             let tint = match item.look {
                 Look::Plain => colors.text,
                 Look::On => colors.accept,
                 Look::Danger => colors.danger,
             };
-            text_button(
-                item.selector(),
-                item.label,
-                &*item.run.action(),
-                tint,
-                colors,
-            )
-            .into_any_element()
+            text_button(item.selector(), item.label, &*action, tint, colors).into_any_element()
         }));
         parts.extend([
             divider(colors).into_any_element(),
@@ -122,17 +120,33 @@ impl MainWindow {
     }
 }
 
-fn file_buttons(count: usize, parts: &mut Vec<gpui::AnyElement>, colors: &Colors) {
-    parts.extend([
-        icon_button("island-copy", Icon::Copy, &CopySelected, colors).into_any_element(),
-        icon_button("island-cut", Icon::Cut, &CutSelected, colors).into_any_element(),
-    ]);
-    if count == 1 {
-        parts.push(
-            icon_button("island-rename", Icon::Rename, &RenameSelected, colors).into_any_element(),
-        );
-    }
-    parts.push(icon_button("island-trash", Icon::Trash, &TrashSelected, colors).into_any_element());
+fn file_buttons(count: usize) -> Vec<Placed> {
+    let button = |icon, spec, selector| {
+        MenuItem::run(icon, spec)
+            .with_selector(selector)
+            .icon_only()
+    };
+    let rename = (count == 1).then(|| button(Icon::Rename, &RENAME, "island-rename"));
+    vec![
+        Placed::new(
+            MenuGroup::Edit,
+            Placed::FIRST,
+            vec![
+                button(Icon::Copy, &COPY, "island-copy"),
+                button(Icon::Cut, &CUT, "island-cut"),
+            ],
+        ),
+        Placed::new(
+            MenuGroup::Edit,
+            Placed::SECOND,
+            rename.into_iter().collect(),
+        ),
+        Placed::new(
+            MenuGroup::Danger,
+            Placed::FIRST,
+            vec![button(Icon::Trash, &TRASH, "island-trash")],
+        ),
+    ]
 }
 
 fn ask_parts(

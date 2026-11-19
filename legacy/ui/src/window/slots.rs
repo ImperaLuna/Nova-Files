@@ -100,7 +100,7 @@ impl MainWindow {
         self.reselect(|_, _| Selection::named_all(id, &entries, &names), cx);
     }
 
-    fn publish(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn publish(&mut self, cx: &mut Context<Self>) {
         let listing = self.listing.clone();
         let selected = self
             .selection()
@@ -160,8 +160,9 @@ impl MainWindow {
                 IslandAsk::StartJob(operation) => {
                     self.start_job(operation);
                 }
-                IslandAsk::Note { label, undo } => {
+                IslandAsk::Note { id, label, undo } => {
                     self.show_note(label, undo.map(NoteUndo::from), cx);
+                    self.island.note_owner = Some(id);
                 }
                 IslandAsk::Ask {
                     question,

@@ -19,14 +19,16 @@ pub mod theme;
 
 pub use command::{CommandSpec, WINDOW_KEYS};
 pub use entries::{Entries, EntriesAsked, Shown};
-pub use host::{Host, Link};
-pub use island::{Island, IslandAsk, IslandAsked, OnUndo, OnYes, Undo};
+pub use host::{AskIds, Host, Link};
+pub use island::{Island, IslandAsk, IslandAsked, NoteGone, NoteId, OnUndo, OnYes, Undo};
 pub use location::{Location, PageKind, PageRef};
-pub use menu::{Look, MenuAt, MenuItem, SidebarAt, SidebarRow};
+pub use menu::{
+    Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow, arrange,
+};
 pub use navigator::{NavAsk, NavEvent, Navigator};
 pub use part::{
-    Applies, Card, Cell, Closing, Column, Columns, DropSlot, EmptyNote, Items, Listed, NameCell,
-    Opens, Part, Rows, Slots, Watch,
+    Applies, Card, Cell, Closing, Column, Columns, DropAim, DropSlot, DropTake, EmptyNote, Items,
+    Listed, NameCell, Opens, Part, RowMenu, Rows, Slots, Watch,
 };
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};
