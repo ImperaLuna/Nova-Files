@@ -16,7 +16,6 @@ mod measuring;
 mod navigate;
 mod opens_with;
 mod pin;
-mod preview;
 mod properties;
 mod renaming;
 mod rows;
@@ -36,7 +35,6 @@ pub use gathered::LIBRARY_LABEL;
 pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
-pub use preview::{Previewed, QuickLook, Shown};
 pub use properties::Page as PropertiesPage;
 pub use search::{FocusTo, Scope, short_folder};
 pub use slots::from_shell;
@@ -62,7 +60,6 @@ use nova_files_folders_api::{self as folders_api, FolderView};
 use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_open_api as open_api;
 use nova_files_places_api::{self as places_api, Bookmark, Place};
-use nova_files_preview_api as preview_api;
 use nova_files_properties_api as properties_api;
 use nova_files_search_api as search_api;
 use nova_files_shell::Lines;
@@ -73,7 +70,6 @@ use nova_files_shell::{
 };
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 
-use self::preview::QuickLooks;
 use self::rows::RowRead;
 use self::tree::TreeLine;
 use crate::band::Band;
@@ -131,7 +127,6 @@ pub struct MainWindow {
     pub(crate) selection: Option<Selection>,
     pub(crate) jump: TypeJump,
     went: Went,
-    pub(crate) quick_looks: QuickLooks,
     pub(crate) band: Option<Band>,
     pub(crate) pressed_name: bool,
     pub(crate) asked: Option<ListingId>,
@@ -255,7 +250,6 @@ impl MainWindow {
             selection: None,
             jump: TypeJump::default(),
             went: Went::Stayed,
-            quick_looks: QuickLooks::default(),
             band: None,
             pressed_name: false,
             scale_factor: DEFAULT_SCALE_FACTOR,
@@ -355,15 +349,6 @@ impl MainWindow {
         if let Some(open_api::Event::OpenWith(answer)) = envelope.get::<open_api::Event>() {
             return self.open_with_answered(answer.clone(), cx);
         }
-        let envelope = match envelope.open::<preview_api::Event>() {
-            Ok(preview_api::Event::Previewed { id, preview }) => {
-                return self.preview_arrived(id, Some(preview), cx);
-            }
-            Ok(preview_api::Event::Unreadable { id, .. }) => {
-                return self.preview_arrived(id, None, cx);
-            }
-            Err(envelope) => envelope,
-        };
         let envelope = match envelope.open::<properties_api::Event>() {
             Ok(event) => return self.properties_event(event, cx),
             Err(envelope) => envelope,

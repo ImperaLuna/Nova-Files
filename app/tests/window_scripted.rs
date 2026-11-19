@@ -18,12 +18,13 @@ use std::sync::mpsc::Receiver;
 
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
-    ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink,
+    ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink, Fit,
     HiddenFiles, Listing, ListingId, Message, Mode, Order, Palette, SortKey, Theme, ThumbnailSize,
     Unreadable,
 };
 use nova_files_look_api as look_api;
 use nova_files_places_api::{self as places_api, Bookmark, Place, PlaceKind};
+use nova_files_preview_ui::{PreviewPart, Previewed};
 use nova_files_settings_api::{
     self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
 };
@@ -375,6 +376,19 @@ const PNG: &[u8] = &[
     25, 51, 144, 46, 0, 0, 60, 64, 31, 225, 224, 129, 119, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174,
     66, 96, 130,
 ];
+
+fn previewing(view: &MainWindow, cx: &gpui::App) -> bool {
+    view.part::<PreviewPart>()
+        .is_some_and(|part| part.read(cx).previewing())
+}
+
+fn previewed(view: &MainWindow, cx: &gpui::App) -> Option<Previewed> {
+    view.part::<PreviewPart>()?.read(cx).previewed(cx)
+}
+
+fn preview_fit(view: &MainWindow, cx: &gpui::App) -> Option<Fit> {
+    view.part::<PreviewPart>()?.read(cx).preview_fit()
+}
 
 fn has_thumbnail(view: &MainWindow, index: usize, cx: &gpui::App) -> bool {
     view.part::<ThumbnailsPart>()

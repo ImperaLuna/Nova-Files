@@ -5,7 +5,6 @@ mod icons;
 mod island;
 mod menu;
 mod path;
-mod preview;
 mod properties;
 mod row;
 mod search;
@@ -29,7 +28,7 @@ use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
     CursorUp, FocusSearch, GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext,
     PreviewPrevious, SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown,
-    SelectPageUp, SelectRight, SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
+    SelectPageUp, SelectRight, SelectUp, ToggleHidden, ToggleSelected,
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{
@@ -48,17 +47,23 @@ impl Render for MainWindow {
         let scale_factor = window.scale_factor();
         let viewport = window.viewport_size();
         self.keep_gallery(window, cx);
-        let room = preview::room(viewport.width, viewport.height);
-        let fits = if self.showing_gallery() && !self.previewing() {
+        let room = nova_files_preview_ui::room(viewport.width, viewport.height);
+        let fits = if self.showing_gallery() && !self.previewing(cx) {
             self.stage_room()
         } else {
             room
         };
-        self.set_preview_room(fits, scale_factor, cx);
+        let preview = self.preview();
+        if let Some(preview) = &preview {
+            preview.update(cx, |preview, cx| preview.set_room(fits, scale_factor, cx));
+        }
+        let layer = preview.and_then(|preview| {
+            preview.update(cx, |preview, cx| preview.layer(room, scale_factor, cx))
+        });
         self.window_root(window, cx)
             .map(|root| Self::preview_keys(root, cx))
             .relative()
-            .children(self.preview_layer(room, scale_factor, cx))
+            .children(layer)
     }
 }
 
@@ -232,20 +237,14 @@ impl MainWindow {
     }
 
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
-        root.on_action(cx.listener(|this, _: &OpenSelected, window, cx| {
-            if !this.open_previewed(window, cx) {
-                this.open_selected(cx);
-            }
+        root.on_action(cx.listener(|this, _: &OpenSelected, _, cx| {
+            this.open_selected(cx);
         }))
         .on_action(cx.listener(|this, _: &CursorUp, _, cx| {
-            if !this.step_preview(Move::Up, cx) {
-                this.move_cursor(Move::Up, false, cx);
-            }
+            this.move_cursor(Move::Up, false, cx);
         }))
         .on_action(cx.listener(|this, _: &CursorDown, _, cx| {
-            if !this.step_preview(Move::Down, cx) {
-                this.move_cursor(Move::Down, false, cx);
-            }
+            this.move_cursor(Move::Down, false, cx);
         }))
         .on_action(cx.listener(|this, _: &CursorPageUp, _, cx| {
             this.move_cursor(Move::PageUp, false, cx);
@@ -289,28 +288,21 @@ impl MainWindow {
         }))
         .on_action(cx.listener(|this, _: &SelectAll, _, cx| this.select_all(cx)))
         .on_action(cx.listener(|this, _: &ToggleSelected, _, cx| this.toggle_cursor(cx)))
-        .on_action(cx.listener(|this, _: &ClearSelection, window, cx| {
-            if this.previewing() {
-                this.dismiss_preview(window, cx);
-            } else {
-                this.clear_selection(cx);
-            }
+        .on_action(cx.listener(|this, _: &ClearSelection, _, cx| {
+            this.clear_selection(cx);
         }))
     }
 
     fn preview_keys(root: Div, cx: &Context<Self>) -> Div {
-        root.on_action(cx.listener(|this, _: &TogglePreview, window, cx| {
-            if !this.focus.is_focused(window) || this.jumping(cx) {
-                cx.propagate();
-            } else {
-                this.toggle_preview(window, cx);
+        root.on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
+            if this.showing_icons() {
+                this.move_cursor(Move::Left, false, cx);
             }
         }))
-        .on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
-            this.step_sideways(Move::Left, cx);
-        }))
         .on_action(cx.listener(|this, _: &PreviewNext, _, cx| {
-            this.step_sideways(Move::Right, cx);
+            if this.showing_icons() {
+                this.move_cursor(Move::Right, false, cx);
+            }
         }))
     }
 }

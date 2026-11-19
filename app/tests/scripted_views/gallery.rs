@@ -15,11 +15,11 @@ fn gallery(
 }
 
 fn on_stage(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Option<String> {
-    view.read_with(cx, |view, _| view.previewed().map(|shown| shown.name))
+    view.read_with(cx, |view, cx| previewed(view, cx).map(|shown| shown.name))
 }
 
 fn lifted(view: &Entity<MainWindow>, cx: &VisualTestContext) -> bool {
-    view.read_with(cx, |view, _| view.previewing())
+    view.read_with(cx, previewing)
 }
 
 #[gpui::test]
@@ -93,7 +93,7 @@ fn the_strip_draws_only_what_fits(cx: &mut TestAppContext) {
 #[gpui::test]
 fn the_stage_asks_for_less_room_than_the_lifted_look(cx: &mut TestAppContext) {
     let (view, cx, _) = gallery(cx, 10);
-    let fit = |cx: &mut VisualTestContext| view.read_with(cx, |view, _| view.preview_fit());
+    let fit = |cx: &mut VisualTestContext| view.read_with(cx, preview_fit);
     let docked = fit(cx).unwrap();
     cx.simulate_keystrokes("space");
     cx.run_until_parked();

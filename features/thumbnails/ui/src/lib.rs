@@ -17,7 +17,7 @@ use nova_files_shell::{Host, Part, Published, Slots, ThumbnailsShown};
 use nova_files_thumbnails_api::Event;
 
 use shown::ShownThumbnails;
-pub use shrink::{device_side, shrink};
+pub use shrink::shrink;
 
 struct Shrunk {
     id: ListingId,

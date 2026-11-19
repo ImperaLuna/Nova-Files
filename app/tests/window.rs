@@ -28,14 +28,28 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use gpui::{App, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext, px};
-use nova_files_api::{Color, EntryId};
+use nova_files_api::{Color, EntryId, Fit};
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
+use nova_files_preview_ui::{PreviewPart, Previewed};
 use nova_files_settings_api::{Settings, Thumbnails};
 use nova_files_shell::Published;
 use nova_files_trash_ui::TrashPart;
 use nova_files_ui::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent};
 
 use common::{TempFolder, Watchdog, click_with, double_click};
+
+fn previewing(view: &MainWindow, cx: &App) -> bool {
+    view.part::<PreviewPart>()
+        .is_some_and(|part| part.read(cx).previewing())
+}
+
+fn previewed(view: &MainWindow, cx: &App) -> Option<Previewed> {
+    view.part::<PreviewPart>()?.read(cx).previewed(cx)
+}
+
+fn preview_fit(view: &MainWindow, cx: &App) -> Option<Fit> {
+    view.part::<PreviewPart>()?.read(cx).preview_fit()
+}
 
 async fn open_on<'a>(
     cx: &'a mut TestAppContext,

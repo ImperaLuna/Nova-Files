@@ -1,14 +1,13 @@
 use gpui::{
-    Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    App, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
     SharedString, Styled as _, canvas, div,
 };
 
-use super::preview::{meta, stage_art};
 use super::sheet::rename_box;
 use crate::grid::Grid;
 use crate::theme::{Colors, size, text};
-use crate::window::{MainWindow, QuickLook};
-use nova_files_api::{Entry, Listing};
+use crate::window::MainWindow;
+use nova_files_api::Entry;
 
 impl MainWindow {
     pub(super) fn gallery(&self, grid: Grid, cx: &Context<Self>) -> impl IntoElement {
@@ -37,19 +36,20 @@ impl MainWindow {
             .child(self.strip(grid, cx))
     }
 
-    fn on_stage(&self) -> Option<(&QuickLook, &Listing, &Entry, usize)> {
-        let open = self.quick_look()?;
-        let listing = self.listing.as_ref()?;
-        let index = usize::try_from(open.entry.0).ok()?;
-        let entry = listing.entries.get(index)?;
-        Some((open, listing, entry, index))
+    fn on_stage(&self, cx: &App) -> Option<(&Entry, usize)> {
+        let staged = self.preview()?.read(cx).staged()?;
+        let index = usize::try_from(staged.0).ok()?;
+        let entry = self.listing.as_ref()?.entries.get(index)?;
+        Some((entry, index))
     }
 
     fn stage(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let room = self.stage_room();
         let scale_factor = self.scale_factor;
         let part_stage = self.parts.stage(&self.scene(), room, cx);
-        let shown = part_stage.is_none().then(|| self.on_stage()).flatten();
+        let shown = part_stage.is_none().then(|| self.on_stage(cx)).flatten();
+        let preview = self.preview();
+        let preview = preview.as_ref().map(|preview| preview.read(cx));
         div()
             .debug_selector(|| "stage".to_owned())
             .flex()
@@ -61,10 +61,14 @@ impl MainWindow {
             .gap(size::STAGE_PAD)
             .p(size::STAGE_PAD)
             .children(part_stage)
-            .children(shown.map(|(open, listing, entry, index)| {
-                let current = open.current().and_then(|shown| shown.preview.as_deref());
+            .children(shown.map(|(entry, index)| {
                 let name = SharedString::from(entry.name.to_string_lossy().into_owned());
-                let about = current.map(meta).unwrap_or_default();
+                let about = preview
+                    .and_then(nova_files_preview_ui::PreviewPart::about)
+                    .unwrap_or_default();
+                let art = self.listing.as_ref().and_then(|listing| {
+                    preview?.stage_art((listing, entry), (room, scale_factor), colors)
+                });
                 let part_name = self.parts.name_cell(entry, cx);
                 div()
                     .flex()
@@ -72,13 +76,7 @@ impl MainWindow {
                     .items_center()
                     .gap(size::STAGE_PAD)
                     .min_w_0()
-                    .child(stage_art(
-                        open,
-                        listing,
-                        entry,
-                        (room, scale_factor),
-                        colors,
-                    ))
+                    .children(art)
                     .child(
                         div()
                             .flex()

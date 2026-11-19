@@ -277,7 +277,6 @@ impl MainWindow {
         self.forget_rows();
         self.stop_measuring();
         self.went_elsewhere();
-        self.close_preview(None, cx);
         self.close_menu(cx);
         self.path_bar.update(cx, |bar, cx| {
             bar.close_menu(cx);

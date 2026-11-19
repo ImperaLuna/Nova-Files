@@ -46,8 +46,8 @@ pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
 pub use view::TopFacts;
 pub use window::{
-    AccessLevel, CoreStatus, MainWindow, Previewed, PropertiesPage, Scope, Who, WindowEvent,
-    home_folder, shared_level,
+    AccessLevel, CoreStatus, MainWindow, PropertiesPage, Scope, Who, WindowEvent, home_folder,
+    shared_level,
 };
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
 pub use window_state::{WindowState, fetch as fetch_window_state};
@@ -72,7 +72,6 @@ pub fn sent_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_folders_api::Command>(),
         MessageType::of::<nova_files_gathered_api::Command>(),
         MessageType::of::<nova_files_open_api::Command>(),
-        MessageType::of::<nova_files_preview_api::Command>(),
         MessageType::of::<nova_files_properties_api::Command>(),
         MessageType::of::<nova_files_search_api::Command>(),
         MessageType::of::<nova_files_settings_api::Command>(),
@@ -86,7 +85,6 @@ pub fn taken_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_folders_api::Event>(),
         MessageType::of::<nova_files_gathered_api::Event>(),
         MessageType::of::<nova_files_open_api::Event>(),
-        MessageType::of::<nova_files_preview_api::Event>(),
         MessageType::of::<nova_files_properties_api::Event>(),
         MessageType::of::<nova_files_search_api::Event>(),
         MessageType::of::<nova_files_start_api::Event>(),

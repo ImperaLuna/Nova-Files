@@ -120,7 +120,7 @@ impl MainWindow {
         self.selection = None;
         self.gathered.shown = None;
         self.listed_page = None;
-        self.listing_replaced(listing, Place::Top, cx);
+        self.listing_replaced(listing, Place::Top);
         cx.notify();
     }
 
