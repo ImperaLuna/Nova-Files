@@ -1,6 +1,6 @@
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, OpenOptions};
-use std::io::Read as _;
+use std::io::{self, Read as _};
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Component, Path, PathBuf};
@@ -86,11 +86,14 @@ pub fn find(item: &Path, trashes: &Trashes) -> Option<(TrashFolder, Trashed)> {
 
 fn entry(trash: &TrashFolder, stored: &OsStr) -> Option<Trashed> {
     let item = trash.files().join(stored);
-    let there = item.symlink_metadata().ok()?;
+    let there = match item.symlink_metadata() {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return None,
+        there => there.ok(),
+    };
     let text = read_info(&info_of(trash, stored))?;
     let (field, deleted) = parse(&text)?;
     let original = original(trash, &field)?;
-    let kind = if there.is_dir() {
+    let kind = if there.is_some_and(|there| there.is_dir()) {
         EntryKind::Folder
     } else {
         EntryKind::File
