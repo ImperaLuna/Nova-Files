@@ -25,11 +25,11 @@ const QUIET: Duration = Duration::from_millis(200);
 struct Running {
     service: Service,
     windows: Receiver<WindowRequest>,
-    _core: nova_files_core::RunningCore,
+    _core: nova_files::RunningCore,
 }
 
 fn running(bus: &PrivateBus) -> Running {
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let (sender, windows) = mpsc::channel();
     let started = nova_files_dbus::start(bus.bus(), core.connector.clone(), move |request| {
         sender.send(request).ok();
@@ -197,7 +197,7 @@ fn when_it_shouldnt_answer_apps_reach_no_one() {
 fn a_second_start_has_the_running_instance_answer() {
     let bus = PrivateBus::start();
     let running = running(&bus);
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let Started::AlreadyRunning(second) =
         nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
     else {

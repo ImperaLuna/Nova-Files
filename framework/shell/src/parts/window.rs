@@ -17,6 +17,7 @@ use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::Part;
 use crate::part::{Click, ClickAnswer, DropOver};
+use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::text::TextField;
@@ -68,6 +69,16 @@ impl WindowParts {
 
     pub fn page(&self, page: &PageRef) -> Option<AnyView> {
         self.opened.iter().find_map(|part| part.page(page))
+    }
+
+    pub fn crumbs(&self, page: &PageRef, cx: &App) -> Option<Vec<Crumb>> {
+        self.opened.iter().find_map(|part| part.crumbs(page, cx))
+    }
+
+    pub fn folder_look(&self, folder: &Path, cx: &App) -> Option<(SharedString, Icon)> {
+        self.opened
+            .iter()
+            .find_map(|part| part.folder_look(folder, cx))
     }
 
     pub fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn> {

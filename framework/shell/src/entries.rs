@@ -28,7 +28,6 @@ pub struct Shown {
     pub picker: bool,
     pub asked: Option<ListingId>,
     pub laid: Laid,
-    pub gathered: bool,
     pub cursor: Option<usize>,
     pub showing: Showing,
 }
@@ -96,10 +95,6 @@ impl Entries {
 
     pub fn over_left(&mut self, cx: &mut Context<Self>) {
         cx.emit(OverLeft);
-    }
-
-    pub const fn gathered(&self) -> bool {
-        self.shown.gathered
     }
 
     pub const fn cursor(&self) -> Option<usize> {

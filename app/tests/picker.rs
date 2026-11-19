@@ -76,15 +76,14 @@ async fn picker_with<'a>(
     cx.update(nova_files_ui::bind_text_keys);
     cx.executor().allow_parking();
     let home = tree.path().to_owned();
-    let core_home = nova_files_core::Home {
+    let core_home = nova_files::Home {
         folder: home.clone(),
         config: home.join(".config"),
         state: home.with_extension("state"),
         data: home.join(".local/share"),
         drive_trashes: false,
     };
-    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None, None)
-        .unwrap();
+    let core = nova_files::spawn_with(nova_files::IDLE_EXIT, Some(core_home), None, None).unwrap();
     let start = folder.to_owned();
     cx.update(|cx| cx.set_global(nova_files::parts()));
     let (view, cx) =

@@ -32,7 +32,6 @@
 # - nova-files-properties-api
 # - nova-files-properties-ui
 # - nova-files-rename-ui
-# - nova-files-search-api
 # - nova-files-search-ui
 # - nova-files-settings-api
 # - nova-files-shell
@@ -67,7 +66,6 @@ nova-files-places-ui.workspace = true
 nova-files-preview-ui.workspace = true
 nova-files-properties-api.workspace = true
 nova-files-properties-ui.workspace = true
-nova-files-search-api.workspace = true
 nova-files-search-ui.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true

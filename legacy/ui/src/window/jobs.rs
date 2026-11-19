@@ -216,7 +216,7 @@ impl MainWindow {
     }
 
     fn read_again_if_changed(&mut self, changed: &[PathBuf]) -> bool {
-        if self.waiting() {
+        if self.waiting() || self.searching() {
             return false;
         }
         let Some(folder) = self.folder().map(super::tidy) else {

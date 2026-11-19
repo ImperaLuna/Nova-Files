@@ -149,10 +149,11 @@ impl MainWindow {
 
     pub fn parent(&self) -> Option<PathBuf> {
         if let Some(Location::Page(page)) = self.location() {
-            return page
-                .get::<PropertiesPage>()
-                .and_then(PropertiesPage::folder)
-                .map(Path::to_path_buf);
+            return page.parent().or_else(|| {
+                page.get::<PropertiesPage>()
+                    .and_then(PropertiesPage::folder)
+                    .map(Path::to_path_buf)
+            });
         }
         self.folder()?.parent().map(Path::to_path_buf)
     }

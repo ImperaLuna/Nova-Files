@@ -59,10 +59,10 @@ async fn the_menu_opens_a_files_properties_in_a_new_tab(cx: &mut TestAppContext)
     assert_eq!(one.bytes, disk.len());
     assert_eq!(one.mode, disk.mode() & 0o7777);
     assert_eq!(one.modified, disk.modified().ok());
-    view.read_with(cx, |view, _| {
+    view.read_with(cx, |view, cx| {
         assert_eq!(view.tab_count(), 2);
         assert_eq!(view.current_tab(), 1);
-        assert_eq!(view.tab_names()[1], "notes.txt");
+        assert_eq!(view.tab_names(cx)[1], "notes.txt");
         assert_eq!(view.folder(), None);
         assert_eq!(view.parent().as_deref(), Some(tree.path()));
     });
@@ -131,7 +131,7 @@ async fn alt_enter_shows_several_entries_on_one_page(cx: &mut TestAppContext) {
     let kinds: Vec<PathKind> = read.iter().map(|one| one.kind.clone()).collect();
     assert_eq!(kinds, [PathKind::Folder, PathKind::File, PathKind::File]);
     view.read_with(cx, |view, cx| {
-        assert_eq!(view.tab_names()[1], "3 items");
+        assert_eq!(view.tab_names(cx)[1], "3 items");
         let (name, line) = props(view, cx).titles(cx).unwrap();
         assert_eq!(name, "3 items");
         assert_eq!(line, "1 folder, 2 files · ~");

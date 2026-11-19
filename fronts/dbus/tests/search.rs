@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
+use nova_files::{Home, IDLE_EXIT, IndexPlace, RunningCore};
 use nova_files_api::WindowRequest;
-use nova_files_core::{Home, IDLE_EXIT, IndexPlace, RunningCore};
 use nova_files_dbus::{
     ACTIVATION_TOKEN, APP_ID, PORTAL_NAME, PORTAL_PATH, SEARCH_INTERFACE, Started,
 };
@@ -70,7 +70,7 @@ impl Scratch {
         let place = indexed.then(|| IndexPlace {
             folder: self.0.join("cache"),
         });
-        nova_files_core::spawn_with(idle_exit, Some(home), None, place).unwrap()
+        nova_files::spawn_with(idle_exit, Some(home), None, place).unwrap()
     }
 }
 

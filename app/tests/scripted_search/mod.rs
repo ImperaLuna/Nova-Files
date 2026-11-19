@@ -523,7 +523,7 @@ fn going_to_start_mid_search_closes_the_quick_look(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(view.read_with(cx, previewing));
 
-    view.update(cx, |view, cx| view.open_start(cx));
+    view.update(cx, MainWindow::open_start);
     cx.run_until_parked();
     assert!(!view.read_with(cx, previewing));
 }
@@ -552,6 +552,48 @@ fn hidden_files_shown_mid_search_leave_the_search_alone(cx: &mut TestAppContext)
     }
     assert!(core.next_listing().is_none());
     assert_eq!(names(&view, cx), ["report.pdf", "reports"]);
+}
+
+#[gpui::test]
+fn a_job_changing_the_folder_searched_from_leaves_the_search_alone(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    found_reports(cx, &mut core, "rep");
+
+    core.send(Event::JobFinished {
+        job: nova_files_api::JobId(9),
+        outcome: nova_files_api::Outcome::Done,
+        changed: vec![PathBuf::from(SHOWN)],
+        tally: nova_files_api::Tally::default(),
+    });
+    cx.run_until_parked();
+
+    assert!(core.next_listing().is_none());
+    assert_eq!(names(&view, cx), ["report.pdf", "reports"]);
+    view.read_with(cx, |view, cx| {
+        assert!(view.searching());
+        assert_eq!(search_query(view, cx), "rep");
+    });
+}
+
+#[gpui::test]
+fn going_to_start_ends_a_search_and_drops_its_late_answer(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = searching(cx);
+    cx.simulate_input("rep");
+    cx.run_until_parked();
+    let (id, ..) = std::iter::from_fn(|| next_find(&mut core)).last().unwrap();
+
+    view.update(cx, MainWindow::open_start);
+    cx.run_until_parked();
+    answer_found(&core, id, REPORTS);
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, cx| {
+        assert!(view.is_on_start());
+        assert!(!view.searching());
+        assert_eq!(search_query(view, cx), "");
+        assert_eq!(view.folder(), None);
+        assert_eq!(view.entry_names(), Vec::<String>::new());
+    });
 }
 
 #[gpui::test]

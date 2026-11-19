@@ -131,7 +131,7 @@ fn second_service_start_exits_at_once() {
 fn second_launch_hands_its_window_to_the_first() {
     let bus = PrivateBus::start();
     let (activations, activated) = mpsc::channel();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let first = nova_files_dbus::start(bus.bus(), core.connector, move |request| {
         activations.send(request.folder).ok();
     })
@@ -146,7 +146,7 @@ fn second_launch_hands_its_window_to_the_first() {
 fn second_launch_with_a_folder_hands_it_to_the_first() {
     let bus = PrivateBus::start();
     let (opened, received) = mpsc::channel();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let _first = nova_files_dbus::start(bus.bus(), core.connector, move |request| {
         opened.send(request.folder).ok();
     })
@@ -165,7 +165,7 @@ fn second_launch_with_a_folder_hands_it_to_the_first() {
 fn second_service_start_asks_for_no_window() {
     let bus = PrivateBus::start();
     let (activations, activated) = mpsc::channel();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let _first = nova_files_dbus::start(bus.bus(), core.connector, move |request| {
         activations.send(request.folder).ok();
     })
@@ -182,7 +182,7 @@ fn second_service_start_asks_for_no_window() {
 #[test]
 fn a_restart_takes_the_name_its_old_process_gives_up() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let Started::Service(old) = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
     else {
         panic!("the old process owns the name");
@@ -476,7 +476,7 @@ fn started_for_show_in_folder_it_answers_without_being_the_default() {
 fn started_for_show_in_folder_while_running_has_the_first_answer() {
     let bus = PrivateBus::start();
     let folders = Folders::new("activated-running", false);
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let Started::Service(first) =
         nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
     else {

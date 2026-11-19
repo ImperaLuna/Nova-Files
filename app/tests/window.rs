@@ -84,15 +84,14 @@ fn window_showing<'a>(
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     cx.executor().allow_parking();
     with_parts(cx);
-    let core_home = nova_files_core::Home {
+    let core_home = nova_files::Home {
         folder: home.to_owned(),
         config: home.join(".config"),
         state: home.with_extension("state"),
         data: home.join(".local/share"),
         drive_trashes: false,
     };
-    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, Some(core_home), None, None)
-        .unwrap();
+    let core = nova_files::spawn_with(nova_files::IDLE_EXIT, Some(core_home), None, None).unwrap();
     let (start, home) = (folder.to_owned(), home.to_owned());
     cx.add_window_view(|_, cx| {
         let mut view = MainWindow::with_home(&core.connector, &start, home, cx);
@@ -164,7 +163,7 @@ async fn window_connects_to_the_core(cx: &mut TestAppContext) {
 #[gpui::test]
 fn window_without_a_core_still_opens(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let core = nova_files_core::spawn_with_idle_exit(Duration::ZERO).unwrap();
+    let core = nova_files::spawn_with_idle_exit(Duration::ZERO).unwrap();
     core.thread.join().unwrap();
 
     let window = cx.add_window(|_, cx| MainWindow::new(&core.connector, Path::new("/"), cx));

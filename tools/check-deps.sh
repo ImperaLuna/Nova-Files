@@ -151,7 +151,7 @@ expect_rule features/places/core features/places/ui F2
 expect_rule features/places/core framework/shell F2
 expect_rule features/places/ui framework/shell ""
 expect_rule framework/shell features/places/api W1
-expect_rule helpers/index legacy/core L1
+expect_rule helpers/index legacy/ui L1
 
 metadata=$(cargo metadata --no-deps --offline --format-version 1)
 workspace_names=$(jq -r '.packages[].name' <<<"$metadata")

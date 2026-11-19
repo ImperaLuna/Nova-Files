@@ -19,6 +19,7 @@ use crate::host::Host;
 use crate::location::{Location, PageRef};
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::{Card, Click, ClickAnswer, DropOver, Part, Slots};
+use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::slot_view::{Draw, Fit, SlotView};
@@ -49,6 +50,8 @@ trait OpenPart {
     fn applies(&self, spec: &CommandSpec, scene: &Scene, cx: &App) -> Option<bool>;
     fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed>;
     fn page(&self, page: &PageRef) -> Option<AnyView>;
+    fn crumbs(&self, page: &PageRef, cx: &App) -> Option<Vec<Crumb>>;
+    fn folder_look(&self, folder: &Path, cx: &App) -> Option<(SharedString, Icon)>;
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
     fn start_cards(&self) -> Vec<(u8, AnyView)>;
@@ -198,6 +201,22 @@ impl<P: Part> OpenPart for Opened<P> {
             .iter()
             .find(|(kind, _)| *kind == page.kind())
             .map(|(_, view)| view.clone())
+    }
+
+    fn crumbs(&self, page: &PageRef, cx: &App) -> Option<Vec<Crumb>> {
+        let part = self.entity.read(cx);
+        self.slots
+            .crumbs
+            .iter()
+            .find_map(|crumbs| crumbs(part, page, cx))
+    }
+
+    fn folder_look(&self, folder: &Path, cx: &App) -> Option<(SharedString, Icon)> {
+        let part = self.entity.read(cx);
+        self.slots
+            .folder_looks
+            .iter()
+            .find_map(|look| look(part, folder, cx))
     }
 
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn> {
