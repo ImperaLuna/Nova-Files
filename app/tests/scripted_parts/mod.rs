@@ -5,6 +5,7 @@ use nova_files_ui::CoreStatus;
 
 use super::*;
 
+mod hooks;
 mod shelf;
 
 #[derive(Debug)]

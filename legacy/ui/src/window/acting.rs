@@ -92,6 +92,7 @@ impl MainWindow {
             Some(NoteUndo::Job(job)) => {
                 self.start_job(Operation::Undo { job });
             }
+            Some(NoteUndo::Run(run)) => cx.defer(move |cx| run(cx)),
             Some(NoteUndo::Send(commands)) => {
                 if let Some(connection) = &self.connection {
                     for command in commands {

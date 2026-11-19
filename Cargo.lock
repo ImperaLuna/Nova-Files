@@ -3587,6 +3587,7 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-folders-api",
  "nova-files-look-api",
+ "nova-files-look-ui",
  "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-preview-api",
@@ -3795,6 +3796,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-look-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-look-api",
+ "nova-files-shell",
+]
+
+[[package]]
 name = "nova-files-messages"
 version = "0.1.0"
 dependencies = [
@@ -3997,7 +4007,6 @@ dependencies = [
  "nova-files-clipboard-api",
  "nova-files-drives-api",
  "nova-files-folders-api",
- "nova-files-look-api",
  "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-preview-api",

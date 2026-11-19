@@ -1,11 +1,12 @@
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, SharedString, Window,
 };
-use nova_files_api::{Entry, Event};
+use nova_files_api::{Entry, Event, Listing};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
@@ -29,6 +30,11 @@ pub type Cell<P> = fn(&P, &Entry, &App) -> Option<SharedString>;
 pub type Columns<P> = fn(&P, &Scene, &App) -> Option<Column<P>>;
 pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
+pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
+pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
+pub type Closing<P> = fn(&mut P, &mut Context<P>);
+pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
+pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
 
 pub struct Column<P> {
     pub head: SharedString,
@@ -58,6 +64,15 @@ pub struct Slots<P> {
     pub(crate) watches: Vec<Watch<P>>,
     pub(crate) empty_notes: Vec<EmptyNote<P>>,
     pub(crate) sends: Vec<MessageType>,
+    pub(crate) name_cells: Vec<NameCell<P>>,
+    pub(crate) listed: Vec<Listed<P>>,
+    pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
+    pub(crate) bars: Vec<Card<P>>,
+    pub(crate) overlays: Vec<Card<P>>,
+    pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
+    pub(crate) row_icons: Vec<NameCell<P>>,
+    pub(crate) opens: Vec<Opens<P>>,
+    pub(crate) closing: Vec<Closing<P>>,
 }
 
 impl<P> Default for Slots<P> {
@@ -73,6 +88,15 @@ impl<P> Default for Slots<P> {
             watches: Vec::new(),
             empty_notes: Vec::new(),
             sends: Vec::new(),
+            name_cells: Vec::new(),
+            listed: Vec::new(),
+            drops: Vec::new(),
+            bars: Vec::new(),
+            overlays: Vec::new(),
+            list_views: Vec::new(),
+            row_icons: Vec::new(),
+            opens: Vec::new(),
+            closing: Vec::new(),
         }
     }
 }
@@ -142,6 +166,47 @@ impl<P: Part> Slots<P> {
 
     pub fn empty_note(&mut self, note: EmptyNote<P>) {
         self.empty_notes.push(note);
+    }
+
+    pub fn name_cell(&mut self, cell: NameCell<P>) {
+        self.name_cells.push(cell);
+    }
+
+    pub fn listed(&mut self, listed: Listed<P>) {
+        self.listed.push(listed);
+    }
+
+    pub fn drops<K: PageKind>(&mut self, take: fn(&mut P, &K, Vec<PathBuf>, &mut Context<P>)) {
+        let slot: DropSlot<P> = Rc::new(move |part, page, paths, cx| {
+            if let Some(page) = page.get::<K>() {
+                take(part, page, paths, cx);
+            }
+        });
+        self.drops.push((TypeId::of::<K>(), slot));
+    }
+
+    pub fn bar(&mut self, bar: Card<P>) {
+        self.bars.push(bar);
+    }
+
+    pub fn overlay(&mut self, overlay: Card<P>) {
+        self.overlays.push(overlay);
+    }
+
+    pub fn list_view(&mut self, applies: Applies<P>, draw: Card<P>) {
+        self.list_views.push((applies, draw));
+    }
+
+    pub fn row_icon(&mut self, icon: NameCell<P>) {
+        self.row_icons.push(icon);
+    }
+
+    pub fn opens(&mut self, opens: Opens<P>) {
+        self.opens.push(opens);
+    }
+
+    pub fn closing(&mut self, closing: Closing<P>) {
+        self.closing.push(closing);
     }
 
     pub fn sends<M: Message>(&mut self) {

@@ -230,7 +230,7 @@ impl MainWindow {
     fn selection_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &OpenSelected, window, cx| {
             if !this.open_previewed(window, cx) {
-                this.open_selected();
+                this.open_selected(cx);
             }
         }))
         .on_action(cx.listener(|this, _: &CursorUp, _, cx| {

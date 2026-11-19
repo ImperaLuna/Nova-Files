@@ -67,7 +67,7 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         if event.click_count() >= DOUBLE_CLICK {
-            self.open_entries(&[id]);
+            self.open_entries(&[id], cx);
             return;
         }
         let click = Click::of(event.modifiers(), true);
@@ -193,16 +193,16 @@ impl MainWindow {
         self.reselect(|_, _| None, cx);
     }
 
-    pub(crate) fn open_selected(&mut self) {
+    pub(crate) fn open_selected(&mut self, cx: &mut Context<Self>) {
         let ids = self
             .selection()
             .filter(|(listing, _)| self.listing_id() == Some(*listing))
             .map(|(_, ids)| ids)
             .unwrap_or_default();
-        self.open_entries(&ids);
+        self.open_entries(&ids, cx);
     }
 
-    pub(crate) fn open_entries(&mut self, ids: &[EntryId]) {
+    pub(crate) fn open_entries(&mut self, ids: &[EntryId], cx: &mut Context<Self>) {
         let Some(listing) = &self.listing else { return };
         let entries: Vec<_> = ids
             .iter()
@@ -220,6 +220,9 @@ impl MainWindow {
         };
         for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
             let path = listing.path_of(file);
+            if self.parts.open_entry(file, &path, cx) {
+                continue;
+            }
             connection
                 .send(nova_files_open_api::Command::OpenFile {
                     path,

@@ -147,7 +147,7 @@ impl MainWindow {
             return false;
         };
         self.close_preview(Some(window), cx);
-        self.open_entries(&[entry]);
+        self.open_entries(&[entry], cx);
         true
     }
 

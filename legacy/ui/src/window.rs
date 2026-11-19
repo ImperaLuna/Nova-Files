@@ -60,7 +60,6 @@ use nova_files_api::{
 };
 use nova_files_drives_api as drives_api;
 use nova_files_folders_api::{self as folders_api, FolderView};
-use nova_files_look_api as look_api;
 use nova_files_open_api as open_api;
 use nova_files_preview_api as preview_api;
 use nova_files_search_api as search_api;
@@ -106,7 +105,6 @@ pub enum WindowEvent {
     Refused(PathBuf),
     Places,
     Settings,
-    Theme,
 }
 
 pub struct MainWindow {
@@ -329,10 +327,6 @@ impl MainWindow {
             Ok(folders_api::Event::Views(views)) => return self.folder_views_arrived(&views, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<look_api::Event>() {
-            Ok(look_api::Event::Theme(theme)) => return Self::theme_arrived(&theme, cx),
-            Err(envelope) => envelope,
-        };
         let envelope = match envelope.open::<open_api::Event>() {
             Ok(event) => return self.open_event(event, cx),
             Err(envelope) => envelope,
@@ -449,7 +443,6 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             }
             connection.send(drives_api::Command::Drives)?;
             connection.send(folders_api::Command::Views)?;
-            connection.send(look_api::Command::Watch)?;
             connection.send(settings_api::Command::Watch)?;
             Ok(connection)
         })
