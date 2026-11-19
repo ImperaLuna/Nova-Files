@@ -4,14 +4,21 @@ use gpui::{
 
 pub type Draw = Box<dyn Fn(&mut Window, &mut App) -> Option<AnyElement>>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fit {
+    Content,
+    Fill,
+    Cover,
+}
+
 pub struct SlotView {
     draw: Draw,
-    fills: bool,
+    fit: Fit,
 }
 
 impl SlotView {
-    pub fn new(draw: Draw, fills: bool) -> Self {
-        Self { draw, fills }
+    pub fn new(draw: Draw, fit: Fit) -> Self {
+        Self { draw, fit }
     }
 }
 
@@ -19,10 +26,10 @@ impl Render for SlotView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let drawn = (self.draw)(window, cx);
         let slot = div().children(drawn);
-        if self.fills {
-            slot.flex().flex_col().flex_1().min_h_0()
-        } else {
-            slot
+        match self.fit {
+            Fit::Content => slot,
+            Fit::Fill => slot.flex().flex_col().flex_1().min_h_0(),
+            Fit::Cover => slot.absolute().inset_0(),
         }
     }
 }

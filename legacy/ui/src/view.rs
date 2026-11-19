@@ -59,6 +59,7 @@ impl Render for MainWindow {
             .map(|root| Self::preview_keys(root, cx))
             .relative()
             .children(layer)
+            .children(self.parts.layers())
     }
 }
 
@@ -112,7 +113,7 @@ impl MainWindow {
             .font_family(text::FAMILY)
             .text_size(text::BODY)
             .font_weight(text::BODY_WEIGHT)
-            .child(self.body(narrow, &colors, cx))
+            .child(self.body(narrow, &colors, window, cx))
             .children(self.parts.footers())
             .children(self.menu_overlay(window, cx))
     }
@@ -164,7 +165,15 @@ impl MainWindow {
         }))
     }
 
-    fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {
+    fn body(
+        &self,
+        narrow: bool,
+        colors: &Colors,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let entries =
+            (!self.is_on_start() && self.page_shown().is_none()).then(|| self.entries(window, cx));
         div()
             .flex()
             .flex_1()
@@ -195,7 +204,7 @@ impl MainWindow {
                             .bg(colors.window)
                             .child(self.top_bar(colors, cx)),
                     )
-                    .child(self.sheet(cx)),
+                    .child(self.sheet(entries, cx)),
             )
     }
 }

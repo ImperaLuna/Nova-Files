@@ -37,7 +37,8 @@ pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
 pub type NameField<P> = fn(&P, &Entry, &App) -> Option<Entity<TextField>>;
-pub type Stage<P> = fn(&P, &Scene, Size<Pixels>, &App) -> Option<AnyElement>;
+pub type Stage<P> =
+    fn(&mut P, &Scene, Size<Pixels>, &mut Window, &mut Context<P>) -> Option<AnyElement>;
 pub type Busy<P> = fn(&P, &App) -> bool;
 pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
@@ -136,6 +137,7 @@ pub struct Slots<P> {
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) footers: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
+    pub(crate) layers: Vec<Card<P>>,
     pub(crate) path_chips: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
     pub(crate) row_icons: Vec<RowIcon<P>>,
@@ -185,6 +187,7 @@ impl<P> Default for Slots<P> {
             bars: Vec::new(),
             footers: Vec::new(),
             overlays: Vec::new(),
+            layers: Vec::new(),
             path_chips: Vec::new(),
             list_views: Vec::new(),
             row_icons: Vec::new(),
@@ -365,6 +368,10 @@ impl<P: Part> Slots<P> {
 
     pub fn overlay(&mut self, overlay: Card<P>) {
         self.overlays.push(overlay);
+    }
+
+    pub fn layer(&mut self, layer: Card<P>) {
+        self.layers.push(layer);
     }
 
     pub fn path_chip(&mut self, chip: Card<P>) {
