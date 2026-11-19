@@ -562,7 +562,7 @@ fn going_to_start_ends_a_search_and_drops_its_late_answer(cx: &mut TestAppContex
         assert!(!view.searching());
         assert_eq!(view.query(cx), "");
         assert_eq!(view.folder(), None);
-        assert!(view.entry_names().is_empty());
+        assert_eq!(view.entry_names(), Vec::<String>::new());
     });
 }
 
