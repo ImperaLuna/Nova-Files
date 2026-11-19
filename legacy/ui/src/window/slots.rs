@@ -29,6 +29,7 @@ impl MainWindow {
         );
         watching.extend([
             cx.observe_self(Self::publish),
+            cx.observe(&self.host.nav, |_, _, cx| cx.notify()),
             cx.subscribe(&self.host.nav, |this, _, event: &NavEvent, cx| {
                 if *event == NavEvent::Asked {
                     this.take_nav_asks(cx);
@@ -94,6 +95,10 @@ impl MainWindow {
 
     pub const fn picker(&self) -> bool {
         self.host.opening.is_some()
+    }
+
+    pub(crate) fn closing(&self, cx: &App) -> bool {
+        self.host.nav.read(cx).closing()
     }
 
     pub fn dims(&self, index: usize, cx: &App) -> bool {
