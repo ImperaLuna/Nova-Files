@@ -5,9 +5,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{App, SharedString, Task};
-use nova_files_api::{
-    Command, Entry, EntryKind, Failure, JobId, NotOpened, Operation, Outcome, Tally,
-};
+use nova_files_api::{Entry, EntryKind, Failure, JobId, NotOpened, Operation, Outcome, Tally};
 use nova_files_shell::{OnUndo, Undo};
 
 pub const NOTE_TIME: Duration = Duration::from_secs(6);
@@ -43,7 +41,7 @@ pub struct Confirm {
 #[derive(Clone)]
 pub enum NoteUndo {
     Job(JobId),
-    Send(Vec<Command>),
+    Send(Vec<nova_files_gathered_api::Command>),
     Run(OnUndo),
 }
 

@@ -1,4 +1,3 @@
-mod access;
 mod undo;
 
 use std::path::{Path, PathBuf};
@@ -7,20 +6,20 @@ use std::thread;
 
 use nova_files_api::{Connector, EventSink, JobId, JobTag, Operation};
 use nova_files_jobs::control::{Cancelled, Control};
+use nova_files_jobs::journal;
 use nova_files_jobs::kinds::Kinds;
 use nova_files_jobs::mover::{Moved, Mover};
 use nova_files_jobs::rest::still_there;
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, lock};
-use nova_files_jobs::{failure, journal};
 use nova_files_jobs::{running, stop};
+use nova_files_properties_core::change_access;
 
 #[cfg(test)]
-pub use nova_files_jobs::test_folder::{self, TestFolder};
+pub use nova_files_jobs::test_folder::TestFolder;
 
 use crate::inside;
 use crate::trash::Trashes;
-use access::change_access;
 use nova_files_archives_core::{Archiver, Archives, Taking, extract};
 use nova_files_delete_core::{Deletes, delete_paths};
 use nova_files_rename_core::Renames;

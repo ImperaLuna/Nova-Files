@@ -2,7 +2,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use gpui::Modifiers;
-use nova_files_api::{Gathering, Operation};
+use nova_files_api::Operation;
+use nova_files_gathered_api::Gathering;
 use nova_files_shell::PageRef;
 use nova_files_transfer_api::DropKind;
 

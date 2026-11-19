@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::{Context, Pixels, Point, SharedString, Task};
-use nova_files_api::{
-    Command, Connection, Connector, EntryKind, Event, Listing, ListingId, Order, Place,
-};
+use nova_files_api::{Command, Connection, Connector, EntryKind, Event, Listing, ListingId, Order};
+use nova_files_places_api::Place;
 
 use crate::assets::Icon;
 use crate::crumbs::{Crumb, folder_icon};

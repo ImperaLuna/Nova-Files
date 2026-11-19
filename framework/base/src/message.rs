@@ -3,18 +3,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::bookmark::{Bookmark, BookmarkChange};
 use crate::file_icon::FileIcon;
-use crate::folder::{Details, EntryId, Listing, ListingId, Order, Place, Unreadable};
+use crate::folder::{Details, EntryId, Listing, ListingId, Order, Unreadable};
 use crate::folder_view::{FolderView, FolderViews};
-use crate::gathered::{Gathered, GatheredChange, Gathering};
 use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope, Tally};
 use crate::open_with::{NotOpened, OpenWith, OpenWithAnswer};
 use crate::preview::{Fit, Preview, PreviewId};
-use crate::properties::{Properties, PropertiesId};
-use crate::recent::{RecentFolder, RecentId};
 use crate::search::{Hit, SearchFailed, SearchId};
-use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::thumbnail_size::ThumbnailSize;
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -43,35 +38,6 @@ pub enum Command {
     ListFolder {
         id: ListingId,
         path: PathBuf,
-        order: Order,
-    },
-    /// Ask for the places list: the answer is [`Event::Places`] and
-    /// [`Event::Bookmarks`], and from then on the client gets each again
-    /// whenever it changes (a folder made or removed, the bookmarks file
-    /// edited). Clients that never ask never get them.
-    Places,
-    /// Pin, unpin, rename or move a pinned folder and save it. Every client
-    /// that asked for the places, this one included, then gets
-    /// [`Event::Bookmarks`]; nothing is sent when nothing changed.
-    ChangeBookmark(BookmarkChange),
-    /// Ask for the folders Games and Projects gather from: the answer is
-    /// [`Event::Gathered`], and from then on the client gets it again
-    /// whenever they change (from any client, or `gathered.toml` edited).
-    Gathered,
-    /// Add or remove a gathered folder and save it. Every client that
-    /// asked, this one included, then gets [`Event::Gathered`]; nothing is
-    /// sent when nothing changed.
-    ChangeGathered(GatheredChange),
-    /// List what `place` gathers in `order`: the folders inside each of
-    /// its folders that holds many, and each one-project folder itself,
-    /// folders only, as the hidden-files setting says. The answer is
-    /// [`Event::FolderListed`] with `id`, each entry in its own folder
-    /// (see [`Listing::folders`]) and an empty [`Listing::path`]. It is
-    /// the client's listing like a [`Command::ListFolder`]: either one
-    /// asked for later cancels it, and [`Command::Rows`] serves its rows.
-    ListGathered {
-        id: ListingId,
-        place: Gathering,
         order: Order,
     },
     /// The entries of listing `id` the client shows or is about to show:
@@ -114,10 +80,6 @@ pub enum Command {
         query: String,
         within: Option<PathBuf>,
     },
-    /// Read the properties of what is at `path`, without following a link.
-    /// The answer is [`Event::Properties`] or [`Event::PropertiesUnreadable`]
-    /// with the same `id`.
-    Properties { id: PropertiesId, path: PathBuf },
     /// Look into what is at `path`, following a link, for a quick look; a
     /// picture comes scaled down to `fit`. The answer is
     /// [`Event::Previewed`] or [`Event::PreviewUnreadable`] with the same
@@ -153,18 +115,6 @@ pub enum Command {
     /// core never reads them; the UI owns what they say. Bytes over the
     /// core's cap (64 KiB) are dropped.
     SaveWindowState(Vec<u8>),
-    /// A person opened `folder` (an absolute path); it goes first among the
-    /// recent folders. Nothing answers.
-    FolderUsed(PathBuf),
-    /// Ask for the newest `count` recent folders that can still be read,
-    /// leaving out those in `skip` (the ones a client already shows
-    /// elsewhere). The answer is [`Event::RecentFolders`] with the same
-    /// `id`.
-    RecentFolders {
-        id: RecentId,
-        count: u32,
-        skip: Vec<PathBuf>,
-    },
     /// Hear about every job from now on: first an [`Event::JobRunning`]
     /// for each job already running or paused and an
     /// [`Event::JobInterrupted`] for each a crash cut short, then each
@@ -213,24 +163,6 @@ pub enum Command {
         conflict: Conflict,
         password: String,
     },
-    /// Measure how much space everything under `paths` (absolute paths)
-    /// takes, together: what two paths share counts once. The answer is
-    /// [`Event::SizeMeasured`] with the same `id`, a few times a second
-    /// while the scan runs, then once more when it ends. A client has one
-    /// scan at a time: a newer `Measure` from it stops this one, which then
-    /// says nothing more.
-    Measure { id: MeasureId, paths: Vec<PathBuf> },
-    /// Measure what each entry of `folder` (an absolute path) takes. The
-    /// answer is [`Event::SpaceMeasured`] with the same `id`, a few times a
-    /// second while the scan runs, then once more when it ends; or
-    /// [`Event::SpaceUnreadable`]. A client has one space scan at a time,
-    /// beside its one `Measure`: a newer `Space` from it stops this one,
-    /// which then says nothing more.
-    Space { id: MeasureId, folder: PathBuf },
-    /// Stop the client's scan `id`, a `Measure` or a `Space`, if it still
-    /// runs (both, when the client gave them the same id). It says nothing
-    /// more.
-    StopMeasure(MeasureId),
 }
 
 /// Something the core tells one client.
@@ -264,18 +196,6 @@ pub enum Event {
         size: ThumbnailSize,
         png: Arc<[u8]>,
     },
-    /// The standard folders that exist, in places-list order.
-    Places(Vec<Place>),
-    /// The pinned folders, in the user's order.
-    Bookmarks(Arc<[Bookmark]>),
-    /// The folders Games and Projects gather from (see
-    /// [`Command::Gathered`]).
-    Gathered(Arc<Gathered>),
-    /// What is inside `place`'s folders changed (a folder made, removed or
-    /// renamed in one, or one of them appeared or went away): a client
-    /// showing it lists it again. Sent to the clients that asked with
-    /// [`Command::Gathered`].
-    GatheredChanged(Gathering),
     /// One stage of [`Command::Search`] `id`: names as typed come first,
     /// then letters in order and typos. `done` marks the last stage. A path
     /// shows at most once per search.
@@ -288,17 +208,6 @@ pub enum Event {
     SearchFailed { id: SearchId, reason: SearchFailed },
     /// [`Command::Find`] `id` couldn't run.
     FindFailed { id: ListingId, reason: SearchFailed },
-    /// The properties of [`Command::Properties`] `id`'s path.
-    Properties {
-        id: PropertiesId,
-        properties: Arc<Properties>,
-    },
-    /// [`Command::Properties`] `id`'s path couldn't be looked at.
-    PropertiesUnreadable {
-        id: PropertiesId,
-        path: PathBuf,
-        reason: Unreadable,
-    },
     /// What [`Command::Preview`] `id` shows.
     Previewed {
         id: PreviewId,
@@ -322,12 +231,6 @@ pub enum Event {
     /// Every folder given a view, newest first, answering
     /// [`Command::FolderViews`] and after each change.
     FolderViews(FolderViews),
-    /// The recent folders, answering [`Command::RecentFolders`] `id`,
-    /// newest first.
-    RecentFolders {
-        id: RecentId,
-        folders: Vec<RecentFolder>,
-    },
     /// [`Command::StartJob`] (or a drop) `tag` runs as job `job`, doing
     /// `operation`. Only the client that asked hears it, and
     /// before anything else about the job.
@@ -383,20 +286,4 @@ pub enum Event {
     Undoable { job: JobId, operation: Operation },
     /// Job `job` can no longer be undone: it was, or it is too old.
     UndoGone(JobId),
-    /// What [`Command::Measure`] `id` counted so far, and whether it ended.
-    SizeMeasured {
-        id: MeasureId,
-        size: Size,
-        state: ScanState,
-    },
-    /// What the entries of [`Command::Space`] `id`'s folder take so far:
-    /// the first answer names every entry, later ones only those whose
-    /// totals changed since. `state` says whether it ended.
-    SpaceMeasured {
-        id: MeasureId,
-        shares: Vec<Share>,
-        state: ScanState,
-    },
-    /// [`Command::Space`] `id`'s folder couldn't be listed.
-    SpaceUnreadable { id: MeasureId, reason: Unreadable },
 }

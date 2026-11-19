@@ -27,6 +27,8 @@ nova-files-disk = { path = "framework/disk" }
 nova-files-drives-api = { path = "features/drives/api" }
 nova-files-drives-core = { path = "features/drives/core" }
 nova-files-entries-core = { path = "framework/entries/core" }
+nova-files-gathered-api = { path = "features/gathered/api" }
+nova-files-gathered-core = { path = "features/gathered/core" }
 nova-files-index = { path = "helpers/index" }
 nova-files-jobs = { path = "framework/jobs" }
 nova-files-look-api = { path = "features/look/api" }
@@ -34,11 +36,17 @@ nova-files-look-core = { path = "features/look/core" }
 nova-files-look-ui = { path = "features/look/ui" }
 nova-files-messages = { path = "framework/messages" }
 nova-files-picker-api = { path = "features/picker/api" }
+nova-files-places-api = { path = "features/places/api" }
+nova-files-places-core = { path = "features/places/core" }
+nova-files-properties-api = { path = "features/properties/api" }
+nova-files-properties-core = { path = "features/properties/core" }
 nova-files-rename-api = { path = "features/rename/api" }
 nova-files-rename-core = { path = "features/rename/core" }
 nova-files-settings-api = { path = "features/settings/api" }
 nova-files-settings-core = { path = "features/settings/core" }
 nova-files-shell = { path = "framework/shell" }
+nova-files-start-api = { path = "features/start/api" }
+nova-files-start-core = { path = "features/start/core" }
 nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
 nova-files-transfer-api = { path = "features/transfer/api" }
 nova-files-transfer-core = { path = "features/transfer/core" }

@@ -2,7 +2,7 @@ use std::mem;
 use std::path::PathBuf;
 
 use gpui::{Context, Pixels, Point, SharedString};
-use nova_files_api::{Command, GatheredChange, GatheredFolder, Gathering, Holds};
+use nova_files_gathered_api::{Command, GatheredChange, GatheredFolder, Gathering, Holds};
 
 use super::MainWindow;
 use super::gathered::Adding;

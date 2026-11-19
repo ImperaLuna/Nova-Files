@@ -16,11 +16,15 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
-# - nova-files-drives-api
 # - nova-files-clipboard-api
+# - nova-files-drives-api
+# - nova-files-gathered-api
 # - nova-files-picker-api
+# - nova-files-places-api
+# - nova-files-properties-api
 # - nova-files-settings-api
 # - nova-files-shell
+# - nova-files-start-api
 # - nova-files-transfer-api
 
 [package]
@@ -38,11 +42,15 @@ workspace = true
 # Local time for the Modified column; GPUI already builds it.
 chrono = "0.4.45"
 nova-files-api.workspace = true
-nova-files-drives-api.workspace = true
 nova-files-clipboard-api.workspace = true
+nova-files-drives-api.workspace = true
+nova-files-gathered-api.workspace = true
 nova-files-picker-api.workspace = true
+nova-files-places-api.workspace = true
+nova-files-properties-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
+nova-files-start-api.workspace = true
 nova-files-transfer-api.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }

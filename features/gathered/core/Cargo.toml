@@ -1,0 +1,38 @@
+# nova-files-gathered-core
+#
+# The gathered feature's core half: keeps the folders Games and Projects
+# gather from in gathered.toml, tells every client that asked when they or
+# what is inside them change, and lists a place as one folder.
+#
+# Allowed outside crates:
+# - log
+# - toml_edit
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-entries-core
+# - nova-files-gathered-api
+# - nova-files-messages
+
+[package]
+name = "nova-files-gathered-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+log = { version = "0.4.35", features = ["std"] }
+# Reads gathered.toml and edits it in place, keeping the user's comments;
+# already in the lock through zbus's macros.
+toml_edit = { version = "0.25.18", default-features = false, features = ["display", "parse"] }
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+nova-files-entries-core.workspace = true
+nova-files-gathered-api.workspace = true
+nova-files-messages.workspace = true
