@@ -8,8 +8,8 @@ use gpui::{
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_shell::{
-    Host, Location, NoteGone, PageKind, PageRef, Part, Parts, RowItem, SidebarAt, SidebarRow,
-    Slots, Undo, assets::Icon,
+    DropOver, Host, Location, NoteGone, PageKind, PageRef, Part, Parts, RowItem, SidebarAt,
+    SidebarRow, Slots, Undo, assets::Icon,
 };
 
 use super::super::*;
@@ -24,6 +24,7 @@ thread_local! {
     static UNDONE: Cell<usize> = const { Cell::new(0) };
     static FILED: Cell<usize> = const { Cell::new(0) };
     static SWEPT: Cell<usize> = const { Cell::new(0) };
+    static AIMED_AT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
 }
 
 const FILE_ROOM: &str = "/file-room";
@@ -68,14 +69,12 @@ fn opens(_: &mut Tagger, entry: &Entry, _: &Path, _: &mut Context<Tagger>) -> bo
     own
 }
 
-fn files_here(
-    _: &Tagger,
-    at: &Location,
-    _: &[PathBuf],
-    _: Modifiers,
-    _: &gpui::App,
-) -> Option<SharedString> {
-    (at.folder() == Some(Path::new(FILE_ROOM))).then(|| "File away".into())
+fn files_here(_: &Tagger, over: &DropOver<'_>, _: &gpui::App) -> Option<SharedString> {
+    let here = over.at.folder() == Some(Path::new(FILE_ROOM));
+    if here {
+        AIMED_AT.set(over.name.to_owned());
+    }
+    here.then(|| format!("File into {}", over.name).into())
 }
 
 fn basket(_: &mut Tagger, _: &Basket, _: &mut Window, _: &mut Context<Tagger>) -> AnyElement {
@@ -216,6 +215,7 @@ fn a_part_that_aims_at_a_folder_names_and_takes_the_drop(cx: &mut TestAppContext
     let_go(cx, "place-file-room");
 
     assert!(chip);
+    assert_eq!(AIMED_AT.take(), "File room");
     assert_eq!(FILED.get(), 1);
     assert_eq!(
         core.commands(),

@@ -29,7 +29,7 @@ pub use entries::{Entries, EntriesAsked, Shown};
 pub use host::{AskIds, Host, Link};
 pub use island::{Island, IslandAsk, IslandAsked, NoteGone, NoteId, OnUndo, OnYes, Undo};
 pub use line::{Line, Lines};
-pub use location::{Location, PageKind, PageRef};
+pub use location::{Location, PageKind, PageRef, StartPage};
 pub use menu::{
     Expander, Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow,
     arrange,
@@ -37,9 +37,9 @@ pub use menu::{
 pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked};
 pub use opening::Opening;
 pub use part::{
-    Applies, Card, Cell, Closing, Column, Columns, Dims, DropAim, DropSlot, DropTake, EmptyNote,
-    Focus, HeadButton, Items, Listed, NameCell, Opens, Part, Refused, RowMenu, Rows, Selectable,
-    Several, Slots, Typed, Watch,
+    Applies, Card, Cell, Closing, Column, Columns, Dims, DropAim, DropOver, DropSlot, DropTake,
+    EmptyNote, Focus, HeadButton, Items, Listed, NameCell, Opens, Part, Refused, RowMenu, Rows,
+    Selectable, Several, Slots, Typed, Watch,
 };
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};

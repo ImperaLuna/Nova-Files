@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
-    Modifiers, SharedString, Subscription,
+    SharedString, Subscription,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId};
 
@@ -17,7 +17,7 @@ use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{Location, PageRef};
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
-use crate::part::{Card, Part, Slots};
+use crate::part::{Card, DropOver, Part, Slots};
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
 
@@ -70,20 +70,8 @@ trait OpenPart {
         scene: &Scene,
         cx: &App,
     ) -> Vec<(&'static str, RowItem)>;
-    fn drop_label(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &App,
-    ) -> Option<SharedString>;
-    fn drop_at(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &mut App,
-    ) -> bool;
+    fn drop_label(&self, over: &DropOver<'_>, cx: &App) -> Option<SharedString>;
+    fn drop_at(&self, over: &DropOver<'_>, cx: &mut App) -> bool;
     fn as_any(&self) -> &dyn Any;
     fn selectable(&self, entry: &Entry, cx: &App) -> bool;
     fn several(&self, cx: &App) -> bool;
@@ -328,37 +316,25 @@ impl<P: Part> OpenPart for Opened<P> {
             .collect()
     }
 
-    fn drop_label(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &App,
-    ) -> Option<SharedString> {
+    fn drop_label(&self, over: &DropOver<'_>, cx: &App) -> Option<SharedString> {
         let part = self.entity.read(cx);
         self.slots
             .drop_targets
             .iter()
-            .find_map(|(aim, _)| aim(part, at, sources, modifiers, cx))
+            .find_map(|(aim, _)| aim(part, over, cx))
     }
 
-    fn drop_at(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &mut App,
-    ) -> bool {
+    fn drop_at(&self, over: &DropOver<'_>, cx: &mut App) -> bool {
         let part = self.entity.read(cx);
         let Some(&(_, take)) = self
             .slots
             .drop_targets
             .iter()
-            .find(|(aim, _)| aim(part, at, sources, modifiers, cx).is_some())
+            .find(|(aim, _)| aim(part, over, cx).is_some())
         else {
             return false;
         };
-        let (at, sources) = (at.clone(), sources.to_vec());
+        let (at, sources, modifiers) = (over.at.clone(), over.sources.to_vec(), over.modifiers);
         self.entity
             .update(cx, |part, cx| take(part, at, sources, modifiers, cx));
         true
@@ -658,28 +634,14 @@ impl WindowParts {
             .collect()
     }
 
-    pub fn drop_label(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &App,
-    ) -> Option<SharedString> {
+    pub fn drop_label(&self, over: &DropOver<'_>, cx: &App) -> Option<SharedString> {
         self.opened
             .iter()
-            .find_map(|part| part.drop_label(at, sources, modifiers, cx))
+            .find_map(|part| part.drop_label(over, cx))
     }
 
-    pub fn drop_at(
-        &self,
-        at: &Location,
-        sources: &[PathBuf],
-        modifiers: Modifiers,
-        cx: &mut App,
-    ) -> bool {
-        self.opened
-            .iter()
-            .any(|part| part.drop_at(at, sources, modifiers, cx))
+    pub fn drop_at(&self, over: &DropOver<'_>, cx: &mut App) -> bool {
+        self.opened.iter().any(|part| part.drop_at(over, cx))
     }
 
     pub fn takes_drops(&self, page: &PageRef) -> bool {

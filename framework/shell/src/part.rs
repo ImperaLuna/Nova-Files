@@ -37,7 +37,15 @@ pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Closing<P> = fn(&mut P, &mut Context<P>);
 pub type Listed<P> = fn(&mut P, &Listing, bool, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
-pub type DropAim<P> = fn(&P, &Location, &[PathBuf], Modifiers, &App) -> Option<SharedString>;
+pub type DropAim<P> = fn(&P, &DropOver<'_>, &App) -> Option<SharedString>;
+
+#[derive(Debug, Clone, Copy)]
+pub struct DropOver<'a> {
+    pub at: &'a Location,
+    pub name: &'a str,
+    pub sources: &'a [PathBuf],
+    pub modifiers: Modifiers,
+}
 pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<RowItem>;
 pub type Typed<P> = fn(&mut P, &Jump, &Scene, &mut Context<P>) -> bool;
 pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;

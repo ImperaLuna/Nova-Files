@@ -242,8 +242,8 @@ impl MainWindow {
 pub fn from_shell(place: shell::Location) -> Location {
     match place {
         shell::Location::Folder(folder) => Location::Folder(folder),
+        shell::Location::Page(page) if page.get::<shell::StartPage>().is_some() => Location::Start,
         shell::Location::Page(page) => match page.get::<Builtin>() {
-            Some(Builtin::Start) => Location::Start,
             Some(Builtin::Gathered(gathering)) => Location::Gathered(*gathering),
             Some(Builtin::Properties(paths)) => Location::Properties(paths.clone()),
             None => Location::Page(page),
