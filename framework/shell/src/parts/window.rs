@@ -73,10 +73,13 @@ impl WindowParts {
     }
 
     pub fn start_cards(&self) -> Vec<AnyView> {
-        self.opened
+        let mut cards: Vec<(u8, AnyView)> = self
+            .opened
             .iter()
             .flat_map(|part| part.start_cards())
-            .collect()
+            .collect();
+        cards.sort_by_key(|(rank, _)| *rank);
+        cards.into_iter().map(|(_, card)| card).collect()
     }
 
     pub fn watch(&self, event: &Event, cx: &mut App) {

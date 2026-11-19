@@ -61,6 +61,14 @@ pub type Dims<P> = fn(&P, &Entry, &App) -> bool;
 pub type Focus<P> = fn(&P, &App) -> Option<FocusHandle>;
 pub type Refused<P> = fn(&mut P, ListingId, &Path, &mut Context<P>);
 
+pub struct CardRank;
+
+impl CardRank {
+    pub const RECENT: u8 = 10;
+    pub const DRIVES: u8 = 20;
+    pub const LAST: u8 = u8::MAX;
+}
+
 pub struct Column<P> {
     pub head: SharedString,
     pub selector: &'static str,
@@ -87,7 +95,7 @@ pub struct Slots<P> {
     pub(crate) listing_pages: Vec<(TypeId, ListSlot)>,
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
-    pub(crate) start_cards: Vec<Card<P>>,
+    pub(crate) start_cards: Vec<(u8, Card<P>)>,
     pub(crate) watches: Vec<Watch<P>>,
     pub(crate) empty_notes: Vec<EmptyNote<P>>,
     pub(crate) sends: Vec<MessageType>,
@@ -219,7 +227,11 @@ impl<P: Part> Slots<P> {
     }
 
     pub fn start_card(&mut self, card: Card<P>) {
-        self.start_cards.push(card);
+        self.start_card_at(CardRank::LAST, card);
+    }
+
+    pub fn start_card_at(&mut self, rank: u8, card: Card<P>) {
+        self.start_cards.push((rank, card));
     }
 
     pub fn watch(&mut self, watch: Watch<P>) {

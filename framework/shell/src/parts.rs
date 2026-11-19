@@ -48,7 +48,7 @@ trait OpenPart {
     fn page(&self, page: &PageRef) -> Option<AnyView>;
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
-    fn start_cards(&self) -> Vec<AnyView>;
+    fn start_cards(&self) -> Vec<(u8, AnyView)>;
     fn bars(&self) -> Vec<AnyView>;
     fn overlays(&self) -> Vec<AnyView>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
@@ -95,7 +95,7 @@ struct Opened<P: Part> {
     host: Host,
     slots: Slots<P>,
     pages: Vec<(TypeId, AnyView)>,
-    cards: Vec<AnyView>,
+    cards: Vec<(u8, AnyView)>,
     bars: Vec<AnyView>,
     overlays: Vec<AnyView>,
     list_views: Vec<AnyView>,
@@ -168,7 +168,7 @@ impl<P: Part> OpenPart for Opened<P> {
             .collect()
     }
 
-    fn start_cards(&self) -> Vec<AnyView> {
+    fn start_cards(&self) -> Vec<(u8, AnyView)> {
         self.cards.clone()
     }
 
@@ -517,7 +517,11 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
             (*kind, slot_view(&entity, draw, true, cx))
         })
         .collect();
-    let cards = card_views(&entity, host, &slots.start_cards, false, cx);
+    let ranks = slots.start_cards.iter().map(|(rank, _)| *rank);
+    let drawn: Vec<Card<P>> = slots.start_cards.iter().map(|(_, card)| *card).collect();
+    let cards = ranks
+        .zip(card_views(&entity, host, &drawn, false, cx))
+        .collect();
     let bars = card_views(&entity, host, &slots.bars, false, cx);
     let overlays = card_views(&entity, host, &slots.overlays, false, cx);
     let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
