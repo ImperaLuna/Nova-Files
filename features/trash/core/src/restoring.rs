@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use nova_files_api::{Failure, Outcome};
 use nova_files_jobs::Ended;
+use nova_files_jobs::failure::failure;
 use nova_files_jobs::journal::{Record, word};
 use nova_files_jobs::left::remove_lone_info;
 use nova_files_jobs::mover::Mover;
@@ -87,7 +88,7 @@ pub fn delete_from_trash(
 
 pub fn empty_trash(running: &mut Running, trashes: &Trashes, files: &dyn Mover) -> Ended {
     running.record_job(word::EMPTY_TRASH, None, &[]);
-    let leaving: Vec<_> = trashes
+    let listed: Vec<_> = trashes
         .all()
         .into_iter()
         .flat_map(|trash| {
@@ -95,8 +96,19 @@ pub fn empty_trash(running: &mut Running, trashes: &Trashes, files: &dyn Mover) 
                 .into_iter()
                 .map(move |listed| (trash.clone(), listed))
         })
-        .filter_map(|(trash, listed)| leave(running, trash, listed).ok().flatten())
         .collect();
+    let mut leaving = Vec::new();
+    for (trash, listed) in listed {
+        let read = running.retry_or_skip(&listed.item, || match found(&trash, &listed) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            read => read.map(Some).map_err(|error| failure(&error)),
+        });
+        match read {
+            Ok(Some(Some(read))) => leaving.extend(left(running, trash, listed, read)),
+            Ok(_) => {}
+            Err(stop) => return (stop.outcome(), Vec::new()),
+        }
+    }
     delete_leaving(running, &leaving, files)
 }
 
@@ -135,27 +147,43 @@ fn leaving(running: &Running, items: &[PathBuf], trashes: &Trashes) -> Result<Ve
     Ok(leaving)
 }
 
-fn leave(running: &Running, trash: TrashFolder, listed: Trashed) -> io::Result<Option<Leaving>> {
+struct Found {
+    info: PathBuf,
+    info_entry: Entry,
+    item_entry: Entry,
+}
+
+fn found(trash: &TrashFolder, listed: &Trashed) -> io::Result<Found> {
     let item_entry = Entry::of(&listed.item.symlink_metadata()?);
-    if running
-        .before
-        .leaving
-        .get(&listed.item)
-        .is_some_and(|before| !before.is(&item_entry))
-    {
-        return Ok(None);
-    }
     let name = listed.item.file_name().unwrap_or_default();
-    let info = trash::info_of(&trash, name);
+    let info = trash::info_of(trash, name);
     let info_entry = Entry::of(&info.symlink_metadata()?);
-    Ok(Some(Leaving {
-        item: listed.item,
+    Ok(Found {
         info,
         info_entry,
         item_entry,
+    })
+}
+
+fn leave(running: &Running, trash: TrashFolder, listed: Trashed) -> io::Result<Option<Leaving>> {
+    let found = found(&trash, &listed)?;
+    Ok(left(running, trash, listed, found))
+}
+
+fn left(running: &Running, trash: TrashFolder, listed: Trashed, found: Found) -> Option<Leaving> {
+    let changed = running
+        .before
+        .leaving
+        .get(&listed.item)
+        .is_some_and(|before| !before.is(&found.item_entry));
+    (!changed).then_some(Leaving {
+        item: listed.item,
+        info: found.info,
+        info_entry: found.info_entry,
+        item_entry: found.item_entry,
         original: listed.original,
         trash,
-    }))
+    })
 }
 
 fn note_infos(running: &mut Running, leaving: &[Leaving]) {
