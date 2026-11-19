@@ -9,6 +9,7 @@ mod drawn;
 mod framing;
 mod hooks;
 mod kept;
+mod laying;
 mod listing;
 mod naming;
 mod picking;

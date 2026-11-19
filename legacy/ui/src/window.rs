@@ -25,7 +25,7 @@ pub use dragging::DraggedRow;
 pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
-pub use search::{FocusTo, Scope, short_folder};
+pub use search::{FocusTo, short_folder};
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
 
 use std::collections::HashMap;
@@ -43,7 +43,6 @@ use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
     ListingId, Order,
 };
-use nova_files_search_api as search_api;
 use nova_files_shell::Lines;
 use nova_files_shell::path_bar::PathBar;
 use nova_files_shell::{
@@ -124,7 +123,7 @@ pub struct MainWindow {
     shown_page: Option<(TabId, PageRef)>,
     known: KnownFolders,
     pub(crate) menu: Option<Menu>,
-    pub(crate) search: search::Search,
+    pub(crate) search: search::Over,
     pub(crate) focus: FocusHandle,
     pub(crate) island: Island,
     jobs: Jobs,
@@ -235,7 +234,7 @@ impl MainWindow {
             shown_page: None,
             known: KnownFolders::default(),
             menu: None,
-            search: search::Search::new(cx),
+            search: search::Over::default(),
             focus: host.list.clone(),
             island: Island::default(),
             jobs: Jobs::default(),
@@ -279,13 +278,6 @@ impl MainWindow {
         self.parts.peek(&envelope, cx);
         let envelope = match envelope.open::<Event>() {
             Ok(event) => return self.on_event(event, cx),
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<search_api::Event>() {
-            Ok(search_api::Event::FindFailed { id, .. }) if self.search.asked == Some(id) => {
-                return self.find_failed(id, cx);
-            }
-            Ok(_) => return,
             Err(envelope) => envelope,
         };
         self.hand_to_parts(envelope, cx);

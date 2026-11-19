@@ -3,7 +3,7 @@ use std::path::Path;
 use gpui::{AnyElement, Context, Div, IntoElement, ParentElement as _, Stateful, Styled as _, div};
 use nova_files_api::EntryKind;
 use nova_files_shell::path_bar::{self, BarInput, Crumb, Spot};
-use nova_files_shell::{MenuAt, TextField, arrange};
+use nova_files_shell::{ChipRank, MenuAt, TextField, arrange};
 
 use crate::theme::Colors;
 use crate::window::{Aim, MainWindow};
@@ -58,21 +58,22 @@ impl MainWindow {
     }
 
     fn path_chips(&self, colors: &Colors, cx: &Context<Self>) -> Vec<AnyElement> {
-        let mut chips: Vec<AnyElement> = self.scope_chip(colors, cx).into_iter().collect();
+        let mut chips: Vec<AnyElement> = Vec::new();
         let drops_here = match self.location() {
             Some(Location::Page(page)) if self.parts.takes_drops(page) => {
                 Some(Aim::page(page.clone()))
             }
             _ => None,
         };
-        chips.extend(self.parts.path_chips().into_iter().map(|chip| {
-            match drops_here.clone() {
-                Some(aim) => self
+        for (rank, chip) in self.parts.path_chips() {
+            let chip = match drops_here.clone() {
+                Some(aim) if rank != ChipRank::FIRST => self
                     .drop_target(div().flex_none().child(chip), aim, cx)
                     .into_any_element(),
-                None => chip.into_any_element(),
-            }
-        }));
+                _ => chip.into_any_element(),
+            };
+            chips.push(chip);
+        }
         let items = self.parts.menu(MenuAt::PathBarEnd, &self.scene(cx), cx);
         chips.extend(
             arrange(items)

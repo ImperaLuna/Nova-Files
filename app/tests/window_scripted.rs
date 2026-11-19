@@ -378,6 +378,18 @@ const PNG: &[u8] = &[
     66, 96, 130,
 ];
 
+fn search_query(view: &MainWindow, cx: &gpui::App) -> String {
+    view.search_part()
+        .map(|part| part.read(cx).query(cx))
+        .unwrap_or_default()
+}
+
+fn scope(view: &MainWindow, cx: &gpui::App) -> nova_files_search_ui::Scope {
+    view.search_part()
+        .map(|part| part.read(cx).scope(cx))
+        .unwrap_or_default()
+}
+
 fn previewing(view: &MainWindow, cx: &gpui::App) -> bool {
     view.part::<PreviewPart>()
         .is_some_and(|part| part.read(cx).previewing())

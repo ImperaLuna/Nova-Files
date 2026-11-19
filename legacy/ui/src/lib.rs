@@ -37,7 +37,7 @@ use nova_files_shell::{Asked, CloseWhen, Opener, Parts, assets, jump, text, them
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
-pub use window::{CoreStatus, MainWindow, Scope, WindowEvent, home_folder};
+pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,17 +63,11 @@ impl fmt::Debug for Opening {
 pub type RecoverGpu = Rc<dyn Fn(Option<&Path>)>;
 
 pub fn sent_types() -> Vec<MessageType> {
-    vec![
-        MessageType::of::<Command>(),
-        MessageType::of::<nova_files_search_api::Command>(),
-    ]
+    vec![MessageType::of::<Command>()]
 }
 
 pub fn taken_types() -> Vec<MessageType> {
-    vec![
-        MessageType::of::<Event>(),
-        MessageType::of::<nova_files_search_api::Event>(),
-    ]
+    vec![MessageType::of::<Event>()]
 }
 
 pub fn run(

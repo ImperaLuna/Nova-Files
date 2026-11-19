@@ -3623,6 +3623,7 @@ dependencies = [
  "nova-files-rename-ui",
  "nova-files-search-api",
  "nova-files-search-core",
+ "nova-files-search-ui",
  "nova-files-settings-api",
  "nova-files-settings-core",
  "nova-files-settings-ui",
@@ -4061,6 +4062,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-search-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-messages",
+ "nova-files-search-api",
+ "nova-files-shell",
+]
+
+[[package]]
 name = "nova-files-settings-api"
 version = "0.1.0"
 dependencies = [
@@ -4261,7 +4273,7 @@ dependencies = [
  "nova-files-folders-api",
  "nova-files-folders-ui",
  "nova-files-preview-ui",
- "nova-files-search-api",
+ "nova-files-search-ui",
  "nova-files-shell",
  "usvg",
 ]

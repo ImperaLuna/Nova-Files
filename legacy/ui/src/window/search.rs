@@ -1,75 +1,48 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{AppContext as _, Context, Entity, FocusHandle, Subscription};
+use gpui::{Context, Entity, FocusHandle};
 use nova_files_api::{Listing, ListingId};
-use nova_files_search_api::Command;
+use nova_files_search_ui::SearchPart;
+use nova_files_shell::typed::HOME;
+use nova_files_shell::{Entries, Laid, LaidOver, OverWant};
 
 use super::MainWindow;
 use super::events::Place;
 use nova_files_shell::Location;
-use nova_files_shell::text::{TextField, TextFieldEvent};
-use nova_files_shell::typed::HOME;
-
-const PLACEHOLDER: &str = "Search";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Scope {
-    #[default]
-    Everywhere,
-    HereOnly,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FocusTo {
-    Box,
     Results,
     List,
     Handle(FocusHandle),
 }
 
-pub struct Search {
-    pub(crate) field: Entity<TextField>,
-    pub(crate) scope: Scope,
+#[derive(Debug, Default)]
+pub struct Over {
     from: Option<Location>,
     pub(crate) asked: Option<ListingId>,
     pub(crate) failed: bool,
     pub(crate) focus_to: Option<FocusTo>,
     pub(crate) reveal: Option<PathBuf>,
+    laid: Option<LaidOver>,
     pub(crate) from_has_folders: bool,
-    _changes: Subscription,
 }
 
-impl Search {
-    pub(super) fn new(cx: &mut Context<MainWindow>) -> Self {
-        let field = cx.new(|cx| TextField::new(cx).with_placeholder(PLACEHOLDER));
-        let changes = cx.subscribe(&field, |this, _, event, cx| match event {
-            TextFieldEvent::Changed => this.query_changed(cx),
-            TextFieldEvent::Submitted => this.focus_later(FocusTo::Results, cx),
-            TextFieldEvent::Cancelled => {
-                this.end_search(cx);
-                this.focus_later(FocusTo::Results, cx);
-            }
-        });
-        Self {
-            field,
-            scope: Scope::default(),
-            from: None,
-            asked: None,
-            failed: false,
-            focus_to: None,
-            reveal: None,
-            from_has_folders: false,
-            _changes: changes,
-        }
-    }
-
+impl Over {
     pub(crate) const fn from(&self) -> Option<&Location> {
         self.from.as_ref()
     }
 
     pub(super) const fn folder_asked(&mut self) {
         self.asked = None;
+    }
+
+    pub(crate) fn marks(&self) -> Option<&str> {
+        self.from
+            .as_ref()
+            .and(self.laid.as_ref())
+            .map(|laid| laid.marks.as_str())
     }
 }
 
@@ -78,20 +51,30 @@ impl MainWindow {
         self.search.from.is_some()
     }
 
-    pub fn query(&self, cx: &gpui::App) -> String {
-        self.search.field.read(cx).text().to_owned()
-    }
-
-    fn query_changed(&mut self, cx: &mut Context<Self>) {
-        if self.query(cx).trim().is_empty() {
-            self.end_search(cx);
-        } else {
-            self.find(cx);
+    pub(super) const fn laid(&self) -> Laid {
+        match (self.searching(), self.search.failed) {
+            (false, _) => Laid::Off,
+            (true, false) => Laid::Over,
+            (true, true) => Laid::Failed,
         }
-        cx.notify();
     }
 
-    pub(crate) fn find(&mut self, cx: &Context<Self>) {
+    pub fn search_part(&self) -> Option<Entity<SearchPart>> {
+        self.part::<SearchPart>()
+    }
+
+    pub(super) fn over_wanted(&mut self, want: OverWant, cx: &mut Context<Self>) {
+        match want {
+            OverWant::Lay(laid) => {
+                self.search.laid = Some(laid);
+                self.find();
+                cx.notify();
+            }
+            OverWant::TakeBack => self.end_search(cx),
+        }
+    }
+
+    pub(crate) fn find(&mut self) {
         let on_its_way = self.asked.and_then(|_| self.requested.clone());
         let Some(from) = on_its_way
             .or_else(|| self.search.from.clone())
@@ -99,16 +82,16 @@ impl MainWindow {
         else {
             return;
         };
+        let Some(laid) = &self.search.laid else {
+            return;
+        };
         let id = ListingId(self.next_listing);
         self.next_listing += 1;
-        let query = self.query(cx).trim().to_owned();
-        let within = (self.search.scope == Scope::HereOnly)
-            .then(|| from.folder().map(Path::to_path_buf))
-            .flatten();
+        let ask = (laid.ask)(id, &from);
         let sent = self
             .connection
             .as_ref()
-            .map(|connection| connection.send(Command::Find { id, query, within }));
+            .map(|connection| connection.send_envelope(ask));
         if matches!(sent, Some(Ok(()))) {
             if !self.searching() {
                 self.search.from_has_folders = self.asked.is_none() && self.has_folders();
@@ -145,16 +128,11 @@ impl MainWindow {
     pub(super) fn search_left(&mut self, cx: &mut Context<Self>) {
         self.search.asked = None;
         if self.search.from.take().is_some() {
-            self.search
-                .field
-                .update(cx, |field, cx| field.set_text("", cx));
+            self.host.entries.update(cx, Entries::over_left);
         }
     }
 
-    pub(crate) fn end_search(&mut self, cx: &mut Context<Self>) {
-        self.search
-            .field
-            .update(cx, |field, cx| field.set_text("", cx));
+    fn end_search(&mut self, cx: &mut Context<Self>) {
         self.search.asked = None;
         let Some(from) = self.search.from.take() else {
             return;
@@ -180,21 +158,6 @@ impl MainWindow {
         };
         self.search.reveal = Some(path);
         self.open(&folder);
-    }
-
-    pub fn set_scope(&mut self, scope: Scope, cx: &mut Context<Self>) {
-        if self.search.scope == scope {
-            return;
-        }
-        self.search.scope = scope;
-        if self.searching() {
-            self.find(cx);
-        }
-        cx.notify();
-    }
-
-    pub const fn scope(&self) -> Scope {
-        self.search.scope
     }
 
     pub(crate) fn focus_later(&mut self, to: FocusTo, cx: &mut Context<Self>) {

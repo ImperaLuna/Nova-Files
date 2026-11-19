@@ -7,7 +7,7 @@ use gpui::{App, ClickEvent, Context, SharedString, UniformListScrollHandle, Wind
 use nova_files_api::{EntryId, Listing, ListingId, Order};
 
 use super::MainWindow;
-use super::search::Search;
+use super::search::Over;
 use nova_files_shell::paths::name_of;
 use nova_files_shell::{PageRef, TabId};
 
@@ -29,7 +29,7 @@ pub struct Tab {
     order: Order,
     shown_order: Order,
     scroll: UniformListScrollHandle,
-    search: Search,
+    search: Over,
     counted: SharedString,
     listed: Option<PageRef>,
     on_its_way: Option<Location>,
@@ -276,7 +276,7 @@ impl MainWindow {
             order: mem::take(&mut self.order),
             shown_order: mem::take(&mut self.shown_order),
             scroll: mem::replace(&mut self.scroll, UniformListScrollHandle::new()),
-            search: mem::replace(&mut self.search, Search::new(cx)),
+            search: mem::take(&mut self.search),
             counted: mem::take(&mut self.counted),
             listed: self.listed_page.take(),
             on_its_way,
@@ -301,7 +301,7 @@ impl MainWindow {
         if let Some(place) = tab.on_its_way {
             self.request_place(&place);
         } else if self.searching() {
-            self.find(cx);
+            self.find();
         } else if let Some(page) = self.listed_page.clone() {
             self.request_listed(page);
         } else if let Some(listing) = self.listing.clone() {

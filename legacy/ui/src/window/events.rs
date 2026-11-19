@@ -112,7 +112,7 @@ impl MainWindow {
             {
                 self.details_arrived(first, &details, &icons, cx);
             }
-            Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
+            Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::WindowState(bytes) => {
                 self.host
                     .kept
@@ -196,7 +196,7 @@ impl MainWindow {
             }
             Some(_) => {
                 if mem::take(&mut self.core_moved) && self.place_on_screen_now() != Some(refused) {
-                    self.read_again(cx);
+                    self.read_again();
                 }
             }
         }
@@ -234,20 +234,20 @@ impl MainWindow {
         cx.notify();
     }
 
-    fn dropped_listing(&mut self, id: ListingId, cx: &Context<Self>) {
+    fn dropped_listing(&mut self, id: ListingId) {
         let Some(listing) = &self.listing else { return };
         if id <= listing.id {
             return;
         }
         self.core_moved = true;
         if self.asked.is_none() && self.search.asked.is_none() {
-            self.read_again(cx);
+            self.read_again();
         }
     }
 
-    fn read_again(&mut self, cx: &Context<Self>) {
+    fn read_again(&mut self) {
         if self.searching() && self.showing_found() {
-            self.find(cx);
+            self.find();
         } else if let Some(place) = self.place_on_screen_now() {
             self.request_place(&place);
         }

@@ -143,14 +143,14 @@ async fn a_search_stays_with_its_tab(cx: &mut TestAppContext) {
     cx.run_until_parked();
     view.read_with(cx, |view, cx| {
         assert!(!view.searching());
-        assert_eq!(view.query(cx), "");
+        assert_eq!(search_query(view, cx), "");
     });
 
     cx.simulate_keystrokes("ctrl-tab");
     cx.run_until_parked();
     view.read_with(cx, |view, cx| {
         assert!(view.searching());
-        assert_eq!(view.query(cx), "notes");
+        assert_eq!(search_query(view, cx), "notes");
         assert_eq!(view.folder(), Some(tree.path()));
     });
 }
