@@ -30,7 +30,12 @@ impl MainWindow {
         );
         watching.extend([
             cx.observe_self(Self::publish),
-            cx.observe(&self.host.nav, |_, _, cx| cx.notify()),
+            cx.observe(&self.host.nav, |this, _, cx| {
+                if this.closing(cx) {
+                    this.save_pick_size();
+                }
+                cx.notify();
+            }),
             cx.observe(&self.path_bar, |_, _, cx| cx.notify()),
             cx.subscribe(&self.path_bar, |this, _, event: &PathBarEvent, cx| {
                 this.path_bar_said(event, cx);
@@ -136,11 +141,10 @@ impl MainWindow {
     }
 
     pub fn dims(&self, index: usize, cx: &App) -> bool {
-        let entry = self
-            .listing
+        self.listing
             .as_ref()
-            .and_then(|listing| listing.entries.get(index));
-        self.pick_dims(index) || entry.is_some_and(|entry| self.parts.dims(entry, cx))
+            .and_then(|listing| listing.entries.get(index))
+            .is_some_and(|entry| self.parts.dims(entry, cx))
     }
 
     pub(super) fn tell_parts_listed(&mut self, reordered: bool, cx: &mut Context<Self>) {
@@ -230,6 +234,7 @@ impl MainWindow {
         self.host
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
+        self.publish_undo(cx);
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
         self.turn_pages(page.map(|page| (tab, page)), cx);
         self.host.nav.update(cx, |nav, cx| nav.show(tab, tabs, cx));
@@ -257,7 +262,7 @@ impl MainWindow {
         self.shown_page = now;
     }
 
-    fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
         let asks = self.host.nav.update(cx, |nav, _| nav.take_asks());
         let went = std::mem::take(&mut self.went);
         for ask in asks {
@@ -325,8 +330,22 @@ impl MainWindow {
                     });
                     cx.notify();
                 }
+                IslandAsk::DismissNote => self.dismiss_note(cx),
             }
         }
+    }
+
+    fn publish_undo(&self, cx: &mut Context<Self>) {
+        let noted = self.island.note.as_ref().and_then(|note| match &note.undo {
+            Some(NoteUndo::Job(job)) => Some(shell::Undo::Job(*job)),
+            Some(NoteUndo::Run(run)) => Some(shell::Undo::Run(run.clone())),
+            Some(NoteUndo::Send(_)) | None => None,
+        });
+        let undo = noted.or_else(|| self.jobs.last_undoable().map(shell::Undo::Job));
+        let busy = self.renaming() || self.parts.busy(cx);
+        self.host
+            .island
+            .update(cx, |island, _| island.set_undoable(undo, busy));
     }
 
     pub fn open_page(&mut self, page: PageRef, cx: &mut Context<Self>) {

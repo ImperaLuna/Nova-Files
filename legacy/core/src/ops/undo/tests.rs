@@ -1,6 +1,6 @@
 use super::*;
 use crate::ops::TestFolder;
-use nova_files_api::JobId;
+use nova_files_api::{Failure, JobId};
 
 fn done() -> Outcome {
     Outcome::Done

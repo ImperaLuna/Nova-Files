@@ -8,7 +8,7 @@ use nova_files_folders_api::ViewMode;
 
 use crate::assets::Icon;
 use crate::commands::{GoBack, GoForward, GoUp, ShowDetails, ShowIcons};
-use crate::theme::{Colors, radius, size};
+use crate::theme::{Colors, size};
 use crate::window::MainWindow;
 
 impl MainWindow {
@@ -70,31 +70,8 @@ impl MainWindow {
     }
 }
 
-pub(super) use nova_files_shell::widgets::capsule;
-
-pub(super) fn icon_button(
-    name: &'static str,
-    glyph: Icon,
-    action: Option<&dyn Action>,
-    colors: &Colors,
-) -> impl IntoElement {
-    let tone = if action.is_some() {
-        colors.text_soft
-    } else {
-        colors.text_faint
-    };
-    square(name)
-        .child(icon(glyph, size::BUTTON_ICON, tone))
-        .when_some(action.map(Action::boxed_clone), |button, action| {
-            button
-                .cursor_pointer()
-                .hover(|button| button.bg(colors.hover))
-                .active(|button| button.bg(colors.press))
-                .on_click(move |_: &ClickEvent, window, cx| {
-                    window.dispatch_action(action.boxed_clone(), cx);
-                })
-        })
-}
+use nova_files_shell::widgets::square;
+pub(super) use nova_files_shell::widgets::{capsule, icon_button};
 
 impl MainWindow {
     fn view_switch(&self, colors: &Colors) -> Vec<gpui::Stateful<Div>> {
@@ -135,16 +112,4 @@ fn switch_button(
     square(name)
         .when(on, |button| button.bg(colors.press))
         .child(icon(glyph, size::BUTTON_ICON, tone))
-}
-
-fn square(name: &'static str) -> gpui::Stateful<Div> {
-    div()
-        .id(name)
-        .debug_selector(|| name.to_owned())
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .size(size::ICON_BUTTON)
-        .rounded(radius::ROW)
 }

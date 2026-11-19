@@ -16,8 +16,8 @@ fn glob(pattern: &str) -> FilterRule {
 }
 
 fn dimmed(view: &Entity<MainWindow>, cx: &VisualTestContext, rows: usize) -> Vec<usize> {
-    view.read_with(cx, |view, _| {
-        (0..rows).filter(|&row| view.pick_dims(row)).collect()
+    view.read_with(cx, |view, cx| {
+        (0..rows).filter(|&row| view.dims(row, cx)).collect()
     })
 }
 
@@ -46,7 +46,7 @@ async fn the_first_type_dims_the_files_it_leaves_out(cx: &mut TestAppContext) {
     let tree = picker_tree();
     fs::write(tree.path().join("report.pdf"), "").unwrap();
     let (view, cx, answers) = picker_with(cx, &tree, tree.path(), FILES, text_and_pdfs).await;
-    assert_eq!(view.read_with(cx, |view, _| view.pick_filter()), Some(0));
+    assert_eq!(view.read_with(cx, MainWindow::pick_filter), Some(0));
     assert_eq!(dimmed(&view, cx, 4), [3]);
 
     click(cx, "entry-3");
@@ -72,7 +72,7 @@ async fn the_menu_chooses_another_type_or_all_files(cx: &mut TestAppContext) {
 
     click(cx, "pick-filter");
     click(cx, "pick-filter-all");
-    assert_eq!(view.read_with(cx, |view, _| view.pick_filter()), None);
+    assert_eq!(view.read_with(cx, MainWindow::pick_filter), None);
     assert_eq!(dimmed(&view, cx, 4), [0_usize; 0]);
     double_click(cx, "entry-2");
     assert_eq!(
@@ -91,7 +91,7 @@ async fn a_click_elsewhere_closes_the_menu(cx: &mut TestAppContext) {
 
     click(cx, "entry-1");
     assert!(!shown(cx, "pick-filter-all"));
-    assert_eq!(view.read_with(cx, |view, _| view.pick_filter()), Some(0));
+    assert_eq!(view.read_with(cx, MainWindow::pick_filter), Some(0));
 }
 
 #[gpui::test]

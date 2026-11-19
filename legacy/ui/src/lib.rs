@@ -19,7 +19,6 @@ mod requests;
 mod selecting;
 mod selection;
 mod theme_icons;
-mod tree;
 mod view;
 mod window;
 mod window_state;

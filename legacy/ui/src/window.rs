@@ -25,7 +25,6 @@ mod slots;
 mod start;
 mod tab_order;
 mod tabs;
-mod tree;
 mod views;
 
 pub use access::{Level as AccessLevel, Who, runs, shared_level};
@@ -48,8 +47,8 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
-    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, SharedString,
-    Subscription, Task, UniformListScrollHandle,
+    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
+    SharedString, Size, Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
@@ -71,17 +70,14 @@ use nova_files_shell::{
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 
 use self::rows::RowRead;
-use self::tree::TreeLine;
 use crate::band::Band;
 use crate::history::History;
 use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::menu::Menu;
-use crate::pick::Picker;
 use crate::selection::Selection;
 use crate::theme_icons::ThemeIcons;
-use crate::tree::FolderTree;
 use jobs::Jobs;
 use renaming::{Renaming, Waiting};
 use tabs::Tabs;
@@ -141,8 +137,6 @@ pub struct MainWindow {
     pub(crate) places: Vec<Place>,
     folder_views: HashMap<PathBuf, FolderView>,
     pending_views: HashMap<PathBuf, FolderView>,
-    pub(crate) tree: FolderTree,
-    tree_line: TreeLine,
     pinned: Arc<[Bookmark]>,
     gathered: gathered::GatheredState,
     pub(crate) history: History,
@@ -151,7 +145,8 @@ pub struct MainWindow {
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,
-    pub(crate) pick: Option<Picker>,
+    pub(crate) pick_size: Option<Size<Pixels>>,
+    pub(crate) pick_bounds: Option<Subscription>,
     pub(crate) home: PathBuf,
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
@@ -261,13 +256,11 @@ impl MainWindow {
             core_moved: false,
             next_listing: 0,
             fallbacks: vec![PathBuf::from(ROOT_FOLDER), home.clone()],
-            tree: FolderTree::new(home.clone()),
             falling_back: false,
             home,
             places: Vec::new(),
             folder_views: HashMap::new(),
             pending_views: HashMap::new(),
-            tree_line: TreeLine::connect(&host.lines, cx),
             pinned: Arc::from([]),
             gathered: gathered::GatheredState::default(),
             history: History::default(),
@@ -276,7 +269,8 @@ impl MainWindow {
             path_bar: cx.new(|_| PathBar::new(&host)),
             asks_sent: 0,
             scroll: UniformListScrollHandle::new(),
-            pick: None,
+            pick_size: None,
+            pick_bounds: None,
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,

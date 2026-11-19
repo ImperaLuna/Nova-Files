@@ -35,7 +35,9 @@ fn tree_opened(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestC
         folders: None,
     }));
     cx.run_until_parked();
-    view.update(cx, |view, cx| view.toggle_tree(Path::new(SHOWN), cx));
+    view.update(cx, |view, cx| {
+        tree_part(view).update(cx, |tree, cx| tree.toggle(Path::new(SHOWN), cx));
+    });
     cx.run_until_parked();
     (view, cx, core)
 }
@@ -51,7 +53,9 @@ fn the_tree_takes_only_the_listing_it_asked_for(cx: &mut TestAppContext) {
     let (id, path) = core.tree_listing();
     assert_eq!(path, Path::new(SHOWN));
     assert!(shows(cx, "tree-2"), "a and b under the root");
-    let settled = |cx: &mut VisualTestContext| view.read_with(cx, |view, _| view.tree_settled());
+    let settled = |cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, cx| tree_part(view).read(cx).settled())
+    };
     assert!(!settled(cx), "the tree waits on its listing");
 
     core.send_to_tree(Event::FolderListed(Listing {
@@ -86,7 +90,9 @@ fn a_folder_the_tree_couldnt_read_loses_its_arrow(cx: &mut TestAppContext) {
     }));
     cx.run_until_parked();
     let a = Path::new(SHOWN).join("a");
-    view.update(cx, |view, cx| view.toggle_tree(&a, cx));
+    view.update(cx, |view, cx| {
+        tree_part(view).update(cx, |tree, cx| tree.toggle(&a, cx));
+    });
     let (id, path) = core.tree_listing();
     assert_eq!(path, a);
     assert_ne!(id, root_id, "each ask has an id of its own");
@@ -97,7 +103,7 @@ fn a_folder_the_tree_couldnt_read_loses_its_arrow(cx: &mut TestAppContext) {
         reason: Unreadable::Missing,
     });
     assert!(
-        shows(cx, "tree-toggle-1"),
+        shows(cx, "tree-1-expander"),
         "a refusal of another ask is dropped"
     );
 
@@ -106,5 +112,5 @@ fn a_folder_the_tree_couldnt_read_loses_its_arrow(cx: &mut TestAppContext) {
         path,
         reason: Unreadable::Missing,
     });
-    assert!(!shows(cx, "tree-toggle-1"));
+    assert!(!shows(cx, "tree-1-expander"));
 }

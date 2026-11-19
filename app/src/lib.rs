@@ -5,7 +5,8 @@ use nova_files_delete_ui::DeletePart;
 use nova_files_drives_ui::DrivesPart;
 use nova_files_look_ui::LookPart;
 use nova_files_open_ui::OpenPart;
-use nova_files_places_ui::PlacesPart;
+use nova_files_picker_ui::PickerPart;
+use nova_files_places_ui::{PlacesPart, TreePart};
 use nova_files_preview_ui::PreviewPart;
 use nova_files_settings_ui::SettingsPart;
 use nova_files_shell::Parts;
@@ -21,11 +22,13 @@ pub fn parts() -> Parts {
     parts.add::<DrivesPart>();
     parts.add::<LookPart>();
     parts.add::<OpenPart>();
+    parts.add::<PickerPart>();
     parts.add::<PlacesPart>();
     parts.add::<PreviewPart>();
     parts.add::<SettingsPart>();
     parts.add::<ThumbnailsPart>();
     parts.add::<TransferPart>();
     parts.add::<TrashPart>();
+    parts.add::<TreePart>();
     parts
 }

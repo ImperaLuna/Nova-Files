@@ -13,7 +13,7 @@ use nova_files_shell::assets::Icon;
 use nova_files_shell::format;
 use nova_files_shell::kind::{FileKind, built_in, icon_kind};
 use nova_files_shell::theme::{Colors, preview, radius, size, text};
-use nova_files_shell::widgets::{icon, kind_icon};
+use nova_files_shell::widgets::{icon, icon_button, kind_icon};
 
 use crate::PreviewPart;
 use crate::looks::{QuickLook, Shown};
@@ -61,7 +61,7 @@ pub fn layer(
             MouseButton::Left,
             cx.listener(|this, _: &MouseDownEvent, _, cx| this.dismiss(cx)),
         )
-        .child(kept_open(nav_button(
+        .child(kept_open(icon_button(
             "preview-previous",
             Icon::Back,
             previous.then_some(&PreviewPrevious as &dyn Action),
@@ -77,7 +77,7 @@ pub fn layer(
                 .child(kept_open(art).debug_selector(|| "preview-art".to_owned()))
                 .child(caption(entry, current, &colors, cx)),
         )
-        .child(kept_open(nav_button(
+        .child(kept_open(icon_button(
             "preview-next",
             Icon::Forward,
             next.then_some(&PreviewNext as &dyn Action),
@@ -105,38 +105,6 @@ pub fn stage_art(
             )
         },
     )
-}
-
-fn nav_button(
-    name: &'static str,
-    glyph: Icon,
-    action: Option<&dyn Action>,
-    colors: &Colors,
-) -> impl IntoElement {
-    let tone = if action.is_some() {
-        colors.text_soft
-    } else {
-        colors.text_faint
-    };
-    div()
-        .id(name)
-        .debug_selector(|| name.to_owned())
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .size(size::ICON_BUTTON)
-        .rounded(radius::ROW)
-        .child(icon(glyph, size::BUTTON_ICON, tone))
-        .when_some(action.map(Action::boxed_clone), |button, action| {
-            button
-                .cursor_pointer()
-                .hover(|button| button.bg(colors.hover))
-                .active(|button| button.bg(colors.press))
-                .on_click(move |_: &ClickEvent, window, cx| {
-                    window.dispatch_action(action.boxed_clone(), cx);
-                })
-        })
 }
 
 fn shown_entry<'a>(shown: &Shown, listing: &'a Listing, entry: &'a Entry) -> &'a Entry {
