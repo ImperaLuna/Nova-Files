@@ -6,9 +6,9 @@ use gpui::{App, AppContext as _, Context, Entity, Focusable as _, Subscription, 
 use nova_files_api::{Entry, EntryKind, Listing, Operation};
 
 use super::MainWindow;
-use crate::pick::stem;
 use crate::selection::Selection;
 use nova_files_shell::text::{TextField, TextFieldEvent};
+use nova_files_shell::typed::stem;
 
 const NEW_FOLDER: &str = "New folder";
 
