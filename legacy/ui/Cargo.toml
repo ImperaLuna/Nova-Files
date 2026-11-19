@@ -14,20 +14,14 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
-# - nova-files-clipboard-ui
-# - nova-files-clipboard-ui
-# - nova-files-delete-ui
 # - nova-files-folders-api
 # - nova-files-folders-ui
-# - nova-files-open-api
 # - nova-files-picker-api
 # - nova-files-picker-ui
 # - nova-files-preview-ui
-# - nova-files-rename-ui
 # - nova-files-search-ui
 # - nova-files-settings-api
 # - nova-files-shell
-# - nova-files-thumbnails-ui
 
 [package]
 name = "nova-files-ui"
@@ -43,17 +37,14 @@ workspace = true
 [dependencies]
 # Local time for the Modified column; GPUI already builds it.
 nova-files-api.workspace = true
-nova-files-delete-ui.workspace = true
 nova-files-folders-api.workspace = true
 nova-files-folders-ui.workspace = true
-nova-files-open-api.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-picker-ui.workspace = true
 nova-files-preview-ui.workspace = true
 nova-files-search-ui.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
-nova-files-thumbnails-ui.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }
 # Async channels, so events from other threads wake the window's tasks.
@@ -69,5 +60,3 @@ usvg = { version = "0.45.1", default-features = false }
 [dev-dependencies]
 # Makes the theme icon tests' pictures; GPUI already builds it.
 image = { version = "0.25.10", default-features = false, features = ["png"] }
-nova-files-clipboard-ui.workspace = true
-nova-files-rename-ui.workspace = true

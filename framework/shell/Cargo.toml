@@ -8,6 +8,7 @@
 # - chrono
 # - futures
 # - gpui
+# - image
 # - unicode-segmentation
 #
 # Allowed workspace crates:
@@ -29,6 +30,7 @@ workspace = true
 chrono = "0.4.45"
 futures = { version = "0.3", default-features = false, features = ["std"] }
 gpui.workspace = true
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 nova-files-api.workspace = true
 nova-files-messages.workspace = true
 unicode-segmentation = "1.13.3"
