@@ -35,7 +35,7 @@ impl MainWindow {
             self.menu = None;
             let fell_back = mem::take(&mut self.falling_back);
             if let (Location::Folder(folder), false) = (&arrived, fell_back) {
-                self.used(folder);
+                self.used(folder, cx);
             }
         }
         self.listed_page = match &arrived {
@@ -66,7 +66,8 @@ impl MainWindow {
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);
         self.pick_folder_opened(reordered, cx);
-        self.typed_path_arrived(same_folder);
+        self.path_bar
+            .update(cx, |bar, cx| bar.arrived(same_folder, cx));
         if (!same_folder || reordered || made)
             && let Some(cursor) = self.cursor()
         {
@@ -170,6 +171,25 @@ impl MainWindow {
         cx.notify();
     }
 
+    pub(super) fn listing_failed(&mut self, id: ListingId, cx: &mut Context<Self>) {
+        if self.asked != Some(id) {
+            return;
+        }
+        let path = self
+            .requested
+            .as_ref()
+            .and_then(Location::folder)
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let empty = Listing {
+            id,
+            path,
+            entries: Arc::from([]),
+            folders: None,
+        };
+        self.listing_arrived(empty, cx);
+    }
+
     fn missing_named(&self, id: ListingId, path: &Path) -> Option<Listing> {
         let named = self.host.rules.named(path)?;
         named.empty_when_missing.then(|| Listing {
@@ -220,7 +240,7 @@ impl MainWindow {
         self.ask_for_recent();
         self.pick_folder_refused(id, &path);
         self.parts.refused(id, &path, cx);
-        self.typed_path_refused(id, cx);
+        self.path_bar.update(cx, |bar, cx| bar.refused(id, cx));
         cx.emit(WindowEvent::Refused(path));
         cx.notify();
     }

@@ -2,35 +2,48 @@ use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
 
 use gpui::SharedString;
-use nova_files_shell::KnownFolders;
 
 use crate::assets::Icon;
-use crate::window::ROOT_FOLDER;
+use crate::location::{Location, PageRef};
+use crate::published::KnownFolders;
+use crate::rules::FolderName;
 
 pub const MOST_SHOWN: usize = 5;
 pub const KEPT_AT_END: usize = 3;
 
+const ROOT_FOLDER: &str = "/";
 const HOME_LABEL: &str = "Home";
 const COMPUTER_LABEL: &str = "Computer";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Crumb {
-    pub path: PathBuf,
+    pub opens: Option<Location>,
     pub label: SharedString,
     pub icon: Icon,
     pub shows_icon: bool,
     pub here: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PageCrumbs {
+    pub folder: PathBuf,
+    pub icon: Icon,
+    pub item: bool,
+}
+
 impl Crumb {
     const fn new(path: PathBuf, label: SharedString, icon: Icon) -> Self {
         Self {
-            path,
+            opens: Some(Location::Folder(path)),
             label,
             icon,
             shows_icon: false,
             here: false,
         }
+    }
+
+    pub fn folder(&self) -> Option<&Path> {
+        self.opens.as_ref().and_then(Location::folder)
     }
 }
 
@@ -71,6 +84,30 @@ pub fn crumbs(folder: &Path, home: &Path, known: &KnownFolders) -> Vec<Crumb> {
     crumbs
 }
 
+pub fn named(folder: &Path, named: FolderName) -> Vec<Crumb> {
+    vec![Crumb {
+        opens: Some(Location::Folder(folder.to_path_buf())),
+        label: named.label,
+        icon: named.icon,
+        shows_icon: true,
+        here: true,
+    }]
+}
+
+pub fn page_crumbs(page: &PageRef, home: &Path, known: &KnownFolders) -> Vec<Crumb> {
+    let Some(shown) = page.crumbs() else {
+        return Vec::new();
+    };
+    let mut crumbs = crumbs(&shown.folder, home, known);
+    if let Some(last) = crumbs.last_mut() {
+        last.icon = shown.icon;
+        if shown.item {
+            last.opens = None;
+        }
+    }
+    crumbs
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shown {
     Crumb(usize),
@@ -93,9 +130,8 @@ pub fn shown(count: usize) -> Vec<Shown> {
 
 #[cfg(test)]
 mod tests {
-    use nova_files_shell::KnownFolder;
-
     use super::*;
+    use crate::published::KnownFolder;
 
     const HOME: &str = "/home/me";
 
@@ -112,8 +148,8 @@ mod tests {
         let found = of(Path::new("/home/me/Projects/nova"));
         assert_eq!(labels(&found), ["Home", "Projects", "nova"]);
         assert_eq!(found[0].icon, Icon::Home);
-        assert_eq!(found[0].path, PathBuf::from(HOME));
-        assert_eq!(found[2].path, PathBuf::from("/home/me/Projects/nova"));
+        assert_eq!(found[0].folder(), Some(Path::new(HOME)));
+        assert_eq!(found[2].folder(), Some(Path::new("/home/me/Projects/nova")));
         assert_eq!(found[2].icon, Icon::Folder);
     }
 
@@ -137,9 +173,9 @@ mod tests {
     fn a_folder_elsewhere_starts_at_computer() {
         let found = of(Path::new("/etc/nixos"));
         assert_eq!(labels(&found), ["Computer", "etc", "nixos"]);
-        assert_eq!(found[0].path, PathBuf::from("/"));
+        assert_eq!(found[0].folder(), Some(Path::new("/")));
         assert_eq!(found[0].icon, Icon::Drive);
-        assert_eq!(found[1].path, PathBuf::from("/etc"));
+        assert_eq!(found[1].folder(), Some(Path::new("/etc")));
         assert_eq!(labels(&of(Path::new("/"))), ["Computer"]);
     }
 
@@ -186,7 +222,7 @@ mod tests {
         let folder = Path::new("/tmp").join(OsStr::from_bytes(b"caf\xe9"));
         let found = of(&folder);
         assert_eq!(labels(&found), ["Computer", "tmp", "caf\u{FFFD}"]);
-        assert_eq!(found[2].path, folder);
+        assert_eq!(found[2].folder(), Some(folder.as_path()));
     }
 
     #[test]
