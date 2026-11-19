@@ -165,3 +165,23 @@ fn views_set_are_there_after_a_restart() {
     let kept = folders(&Store::open(Some(&state.0)));
     assert_eq!(kept, [("/a".to_owned(), GALLERY)]);
 }
+
+#[test]
+fn a_file_that_cant_be_read_is_never_saved_over() {
+    let state =
+        std::env::temp_dir().join(format!("nova-files-views-unread-{}", std::process::id()));
+    std::fs::remove_dir_all(&state).ok();
+    let file = state.join(FILE);
+    std::fs::create_dir_all(&file).unwrap();
+    let unreadable = Store::open(Some(&state));
+    std::fs::remove_dir(&file).unwrap();
+    std::fs::write(&file, vec![b'x'; MAX_BYTES + 1]).unwrap();
+    let too_big = Store::open(Some(&state));
+    std::fs::remove_file(&file).unwrap();
+    let missing = Store::open(Some(&state));
+
+    assert_eq!(unreadable.saver.path(), None);
+    assert_eq!(too_big.saver.path(), None);
+    assert_eq!(missing.saver.path(), Some(file.as_path()));
+    std::fs::remove_dir_all(state).ok();
+}

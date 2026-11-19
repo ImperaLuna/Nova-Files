@@ -3,7 +3,8 @@
 # The folders feature's core half: keeps how each folder is shown, saves it
 # to disk and tells every listening client when it changes.
 #
-# Allowed outside crates: none
+# Allowed outside crates:
+# - log
 #
 # Allowed workspace crates:
 # - nova-files-api
@@ -22,6 +23,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+log = { version = "0.4.35", features = ["std"] }
 nova-files-api.workspace = true
 nova-files-disk.workspace = true
 nova-files-folders-api.workspace = true
