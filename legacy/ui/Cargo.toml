@@ -20,6 +20,7 @@
 # - nova-files-drives-api
 # - nova-files-drives-ui
 # - nova-files-folders-api
+# - nova-files-folders-ui
 # - nova-files-gathered-api
 # - nova-files-gathered-ui
 # - nova-files-open-api
@@ -54,6 +55,7 @@ nova-files-delete-ui.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-drives-ui.workspace = true
 nova-files-folders-api.workspace = true
+nova-files-folders-ui.workspace = true
 nova-files-gathered-api.workspace = true
 nova-files-gathered-ui.workspace = true
 nova-files-open-api.workspace = true

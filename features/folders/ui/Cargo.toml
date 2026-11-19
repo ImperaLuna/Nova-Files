@@ -1,0 +1,32 @@
+# nova-files-folders-ui
+#
+# Folders' window half: the view each folder is shown with, kept in step with
+# the core, and the geometry of the Icons grid and the Gallery strip.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-folders-api
+# - nova-files-places-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-folders-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-folders-api.workspace = true
+nova-files-places-api.workspace = true
+nova-files-shell.workspace = true

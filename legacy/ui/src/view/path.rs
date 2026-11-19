@@ -75,7 +75,7 @@ impl MainWindow {
                 None => chip.into_any_element(),
             }
         }));
-        let items = self.parts.menu(MenuAt::PathBarEnd, &self.scene(), cx);
+        let items = self.parts.menu(MenuAt::PathBarEnd, &self.scene(cx), cx);
         chips.extend(
             arrange(items)
                 .into_iter()

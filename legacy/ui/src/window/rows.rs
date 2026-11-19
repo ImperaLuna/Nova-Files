@@ -6,9 +6,9 @@ use nova_files_api::{Command, Details, EntryId, EntryKind, FileIcon, ThemeIcon, 
 
 use super::MainWindow;
 use crate::columns::{self, ColumnText};
-use crate::grid::Grid;
 use crate::theme_icons;
 use crate::view::{RowIcon, entry_kind};
+use nova_files_folders_ui::Grid;
 use nova_files_shell::device::device_side;
 
 pub struct RowRead {
@@ -86,7 +86,7 @@ impl MainWindow {
         icons: impl Iterator<Item = &'a FileIcon>,
         cx: &mut Context<Self>,
     ) {
-        let side = self.icon_side();
+        let side = self.icon_side(cx);
         if let Some(gone) = self.theme_icons.resize(side) {
             release(gone, None, cx);
         }
@@ -131,10 +131,10 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         self.sizing.list_width = self.scroll.0.borrow().base_handle.bounds().size.width;
-        let grid = self.grid();
+        let grid = self.grid(cx);
         if grid.relaid(&drawn) {
             if let Some(cursor) = self.cursor() {
-                self.scroll_to_entry(cursor);
+                self.scroll_to_entry(cursor, cx);
             }
             cx.notify();
         }
@@ -179,7 +179,7 @@ impl MainWindow {
             id: listing.id,
             first: EntryId(first),
             count,
-            size: self.thumbnail_size(),
+            size: self.thumbnail_size(cx),
         };
         if let Some(connection) = &self.connection {
             connection.send(command).ok();
@@ -201,7 +201,7 @@ impl MainWindow {
             self.parts.rescaled(scale_factor, cx);
         }
         self.scale_factor = scale_factor;
-        if let Some(gone) = self.theme_icons.resize(self.icon_side()) {
+        if let Some(gone) = self.theme_icons.resize(self.icon_side(cx)) {
             release(gone, Some(window), cx);
             let icons: Vec<FileIcon> = self
                 .details
@@ -210,7 +210,7 @@ impl MainWindow {
                 .collect();
             self.make_theme_icons(icons.iter(), cx);
         }
-        let side = self.thumbnail_side();
+        let side = self.thumbnail_side(cx);
         if side == self.sizing.thumbnails_side {
             return;
         }
@@ -219,10 +219,10 @@ impl MainWindow {
             .entries
             .update(cx, |entries, _| entries.set_thumbnail_side(side));
         self.parts.thumbnail_side(side, cx);
-        self.forget_rows();
+        self.forget_rows(cx);
     }
 
-    pub(super) fn forget_rows(&mut self) {
+    pub(super) fn forget_rows(&mut self, cx: &App) {
         if let Some(listing) = &self.listing
             && !self.rows_wanted.is_empty()
             && let Some(connection) = &self.connection
@@ -231,23 +231,23 @@ impl MainWindow {
                 id: listing.id,
                 first: EntryId(0),
                 count: 0,
-                size: self.thumbnail_size(),
+                size: self.thumbnail_size(cx),
             };
             connection.send(forget).ok();
         }
         self.rows_wanted = 0..0;
     }
 
-    fn icon_side(&self) -> u32 {
-        device_side(self.icon_slot(), self.scale_factor)
+    fn icon_side(&self, cx: &App) -> u32 {
+        device_side(self.icon_slot(cx), self.scale_factor)
     }
 
-    pub(super) fn thumbnail_size(&self) -> ThumbnailSize {
-        ThumbnailSize::to_fill(self.thumbnail_side())
+    pub(super) fn thumbnail_size(&self, cx: &App) -> ThumbnailSize {
+        ThumbnailSize::to_fill(self.thumbnail_side(cx))
     }
 
-    fn thumbnail_side(&self) -> u32 {
-        device_side(self.icon_slot(), self.scale_factor)
+    fn thumbnail_side(&self, cx: &App) -> u32 {
+        device_side(self.icon_slot(cx), self.scale_factor)
     }
 }
 

@@ -27,7 +27,7 @@ fn views_set(core: &mut Core) -> Vec<(PathBuf, FolderView)> {
 }
 
 fn showing(view: &Entity<MainWindow>, cx: &VisualTestContext) -> FolderView {
-    view.read_with(cx, |view, _| view.folder_view())
+    view.read_with(cx, MainWindow::folder_view)
 }
 
 const fn icons(size: IconSize) -> FolderView {

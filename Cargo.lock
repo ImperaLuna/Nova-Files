@@ -3589,6 +3589,7 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-drives-ui",
  "nova-files-folders-api",
+ "nova-files-folders-ui",
  "nova-files-gathered-api",
  "nova-files-gathered-ui",
  "nova-files-look-api",
@@ -3811,6 +3812,16 @@ dependencies = [
  "nova-files-api",
  "nova-files-disk",
  "nova-files-folders-api",
+]
+
+[[package]]
+name = "nova-files-folders-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-folders-api",
+ "nova-files-places-api",
+ "nova-files-shell",
 ]
 
 [[package]]
@@ -4271,6 +4282,7 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-drives-ui",
  "nova-files-folders-api",
+ "nova-files-folders-ui",
  "nova-files-gathered-api",
  "nova-files-gathered-ui",
  "nova-files-open-api",

@@ -59,7 +59,7 @@ impl MainWindow {
         if (!same_folder || reordered || made)
             && let Some(cursor) = self.cursor()
         {
-            self.scroll_to_entry(cursor);
+            self.scroll_to_entry(cursor, cx);
         }
         self.tell_parts_listed(reordered, cx);
         cx.emit(WindowEvent::Opened(listing_path));
@@ -239,7 +239,7 @@ impl MainWindow {
             return;
         }
         self.thumbnails_shown = shown;
-        self.forget_rows();
+        self.forget_rows(cx);
         cx.emit(WindowEvent::Settings);
         cx.notify();
     }
