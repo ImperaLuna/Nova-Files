@@ -15,6 +15,7 @@ mod preview;
 mod rows;
 mod shelf;
 mod turns;
+mod undoing;
 
 #[derive(Debug, Clone)]
 struct Claim(PathBuf);

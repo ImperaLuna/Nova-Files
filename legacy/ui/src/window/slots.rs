@@ -234,6 +234,7 @@ impl MainWindow {
         self.host
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
+        self.publish_undo(cx);
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
         self.turn_pages(page.map(|page| (tab, page)), cx);
         self.host.nav.update(cx, |nav, cx| nav.show(tab, tabs, cx));
@@ -329,8 +330,22 @@ impl MainWindow {
                     });
                     cx.notify();
                 }
+                IslandAsk::DismissNote => self.dismiss_note(cx),
             }
         }
+    }
+
+    fn publish_undo(&self, cx: &mut Context<Self>) {
+        let noted = self.island.note.as_ref().and_then(|note| match &note.undo {
+            Some(NoteUndo::Job(job)) => Some(shell::Undo::Job(*job)),
+            Some(NoteUndo::Run(run)) => Some(shell::Undo::Run(run.clone())),
+            Some(NoteUndo::Send(_)) | None => None,
+        });
+        let undo = noted.or_else(|| self.jobs.last_undoable().map(shell::Undo::Job));
+        let busy = self.renaming() || self.parts.busy(cx);
+        self.host
+            .island
+            .update(cx, |island, _| island.set_undoable(undo, busy));
     }
 
     pub fn open_page(&mut self, page: PageRef, cx: &mut Context<Self>) {
