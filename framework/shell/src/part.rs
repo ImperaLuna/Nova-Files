@@ -47,7 +47,7 @@ pub struct DropOver<'a> {
     pub sources: &'a [PathBuf],
     pub modifiers: Modifiers,
 }
-pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<RowItem>;
+pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<Vec<RowItem>>;
 pub type Typed<P> = fn(&mut P, &Jump, &Scene, &mut Context<P>) -> bool;
 pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);

@@ -120,9 +120,9 @@ impl Part for Tagger {
         slots.drops::<Basket>(|_, _, paths, _| DROPPED.set(DROPPED.get() + paths.len()));
         slots.row_menu(|_, row, _| {
             if row == "place-file-room" {
-                vec![RowItem::new(Icon::Info, "Sweep", |_| {
+                vec![vec![RowItem::new(Icon::Info, "Sweep", |_| {
                     SWEPT.set(SWEPT.get() + 1);
-                })]
+                })]]
             } else {
                 Vec::new()
             }

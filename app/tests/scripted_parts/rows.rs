@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use gpui::{Context, Modifiers, MouseButton, WeakEntity};
+use gpui::{App, Context, Modifiers, MouseButton, WeakEntity};
 use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
 use nova_files_shell::{
     Host, KnownFolder, KnownFolders, Location, Look, Part, Parts, Published, RowItem, SidebarAt,
@@ -38,6 +38,20 @@ impl Rower {
     }
 }
 
+fn row_menu(_: &Rower, row: &str, _: &App) -> Vec<Vec<RowItem>> {
+    if row != "place-first" {
+        return Vec::new();
+    }
+    vec![
+        vec![
+            RowItem::new(Icon::Info, "Look", |_| {}),
+            RowItem::new(Icon::Info, "Look closer", |_| {}),
+        ],
+        Vec::new(),
+        vec![RowItem::new(Icon::Info, "Forget", |_| {})],
+    ]
+}
+
 impl Part for Rower {
     fn open(_: &Host, cx: &mut Context<Self>) -> Self {
         Self {
@@ -64,13 +78,7 @@ impl Part for Rower {
                 ),
             ]
         });
-        slots.row_menu(|_, row, _| {
-            if row == "place-first" {
-                vec![RowItem::new(Icon::Info, "Look", |_| {})]
-            } else {
-                Vec::new()
-            }
-        });
+        slots.row_menu(row_menu);
         slots.section_button(SidebarAt::Places, "rows-add", |_, _, _| {
             Some(RowItem::new(Icon::Plus, "Add", |_| {
                 ADDED.set(ADDED.get() + 1);
@@ -184,7 +192,8 @@ fn a_part_row_menu_opens_in_the_main_window(cx: &mut TestAppContext) {
     let first = cx.debug_bounds("place-first").unwrap().center();
     cx.simulate_mouse_down(first, MouseButton::Right, Modifiers::none());
     cx.run_until_parked();
-    assert!(view.read_with(cx, |view, _| view.menu().is_some()));
+    let lines = view.read_with(cx, |view, _| view.menu().map(|menu| menu.lines.clone()));
+    assert_eq!(lines, Some(vec![2]));
 }
 
 #[gpui::test]

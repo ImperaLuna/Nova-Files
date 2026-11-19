@@ -63,7 +63,7 @@ trait OpenPart {
         paths: Vec<PathBuf>,
         cx: &mut App,
     ) -> Result<(), Vec<PathBuf>>;
-    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem>;
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>>;
     fn section_buttons(
         &self,
         at: SidebarAt,
@@ -292,7 +292,7 @@ impl<P: Part> OpenPart for Opened<P> {
         Ok(())
     }
 
-    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>> {
         let part = self.entity.read(cx);
         self.slots
             .row_menus
@@ -615,10 +615,11 @@ impl WindowParts {
         }
     }
 
-    pub fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+    pub fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>> {
         self.opened
             .iter()
             .flat_map(|part| part.row_menu(row, cx))
+            .filter(|group| !group.is_empty())
             .collect()
     }
 
