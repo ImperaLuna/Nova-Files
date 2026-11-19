@@ -16,10 +16,23 @@ use nova_files_open_api::{self as open_api, OpenWith, OpenWithAnswer, OpenWithId
 use nova_files_properties_api::{
     Command, Event, MeasureId, Properties, PropertiesId, ScanState, Size,
 };
+use nova_files_shell::actions::ShowProperties;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::format::{self, ITEM, ITEMS};
+use nova_files_shell::path_bar::{self, Crumb};
 use nova_files_shell::paths::name_of;
-use nova_files_shell::{Host, Location, Look, NavEvent, PageKind, Part, RowItem, Slots, TabId};
+use nova_files_shell::{
+    Host, KnownFolders, Location, Look, MenuAt, MenuGroup, MenuItem, NavEvent, PageKind, PageRef,
+    Part, Placed, Published, RowItem, Scene, Slots, TabId, command_spec,
+};
+
+command_spec!(
+    PROPERTIES,
+    ShowProperties,
+    "file.properties",
+    "Properties",
+    ["alt-enter"]
+);
 
 pub use access::{Level as AccessLevel, Who, runs, shared_level};
 pub use page::{Measure, Page};
@@ -58,6 +71,10 @@ impl PageKind for PropertiesPage {
 
     fn icon(&self) -> Icon {
         Icon::Info
+    }
+
+    fn parent(&self) -> Option<PathBuf> {
+        self.folder().map(Path::to_path_buf)
     }
 }
 
@@ -399,6 +416,55 @@ fn stop_measuring(host: &Host, page: &mut Page) {
     host.link.send(Command::StopMeasure(measure.id)).ok();
 }
 
+impl PropertiesPart {
+    pub fn show_selected(&mut self, cx: &mut Context<Self>) {
+        let paths = self.host.entries.read(cx).selected_paths();
+        if paths.is_empty() {
+            return;
+        }
+        let page = Location::Page(PageRef::new(PropertiesPage::new(paths)));
+        self.host
+            .nav
+            .update(cx, |nav, cx| nav.open_in_new_tab(page, cx));
+    }
+
+    fn show(&mut self, _: &ShowProperties, _: &mut Window, cx: &mut Context<Self>) {
+        self.show_selected(cx);
+    }
+}
+
+fn crumbs(part: &PropertiesPart, page: &PropertiesPage, cx: &App) -> Vec<Crumb> {
+    let shown = match page.paths() {
+        [one] => one.as_path(),
+        _ => match page.folder() {
+            Some(folder) => folder,
+            None => return Vec::new(),
+        },
+    };
+    let known = Published::<KnownFolders>::get(cx)
+        .cloned()
+        .unwrap_or_default();
+    let mut crumbs = path_bar::crumbs(shown, &part.host.home, &known);
+    if let Some(last) = crumbs.last_mut() {
+        if let Some(icon) = part.icon() {
+            last.icon = icon;
+        }
+        last.opens = None;
+    }
+    crumbs
+}
+
+const fn shows(_: &PropertiesPart, scene: &Scene, _: &App) -> bool {
+    !scene.rules.trashed
+}
+
+fn info_items(_: &PropertiesPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
+    if scene.rules.replaces_menu {
+        return Vec::new();
+    }
+    vec![MenuItem::run(Icon::Info, &PROPERTIES)]
+}
+
 impl Part for PropertiesPart {
     fn open(host: &Host, cx: &mut Context<Self>) -> Self {
         let tabs = cx.subscribe(&host.nav, |part: &mut Self, _, event: &NavEvent, _| {
@@ -422,6 +488,9 @@ impl Part for PropertiesPart {
         slots.sends::<Command>();
         slots.sends::<open_api::Command>();
         slots.watch(Self::watch);
+        slots.command(&PROPERTIES, shows, Self::show);
+        slots.menu_in(MenuAt::Entry, MenuGroup::Info, Placed::FIRST, info_items);
+        slots.crumbs::<PropertiesPage>(crumbs);
         slots.page_shown::<PropertiesPage>(Self::shown_turn);
         slots.page_left::<PropertiesPage>(Self::left_turn);
         slots.page::<PropertiesPage>(draw);

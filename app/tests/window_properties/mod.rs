@@ -106,7 +106,7 @@ async fn a_lone_folder_keeps_its_own_icon(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("properties-folder");
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-0");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     read_page(&view, cx).await;
     view.read_with(cx, |view, cx| {
         let (name, line) = props(view, cx).titles(cx).unwrap();
@@ -149,7 +149,7 @@ async fn a_page_shown_again_reads_again_and_goes_to_start_once_all_is_gone(
     let notes = tree.path().join("notes.txt");
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-1");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     view.read_with(cx, |view, cx| {
         assert!(!props(view, cx).page().unwrap().complete());
         assert_eq!(props(view, cx).titles(cx), None);
@@ -201,7 +201,7 @@ async fn one_of_two_coming_back_keeps_the_page(cx: &mut TestAppContext) {
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-0");
     click_with(cx, "name-1", Modifiers::secondary_key());
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     read_page(&view, cx).await;
 
     let shown_again = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
@@ -234,7 +234,7 @@ async fn a_search_ends_when_the_page_shows_again(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("properties-search");
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-1");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     read_page(&view, cx).await;
     click(cx, "up");
     wait_for_folder(&view, cx, tree.path()).await;
@@ -292,7 +292,7 @@ async fn a_folder_is_measured_while_its_page_is_on_screen(cx: &mut TestAppContex
     fs::write(nova.join("b.rs"), "x".repeat(234)).unwrap();
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-0");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     let size = measured(&view, cx).await;
     assert_eq!(size.bytes, 1_234);
     assert_eq!(size.files, 2);
@@ -325,7 +325,7 @@ async fn several_entries_add_up_files_and_folders_alike(cx: &mut TestAppContext)
     fs::write(tree.path().join("Projects/nova/a"), "x".repeat(5)).unwrap();
     let (view, cx) = properties_window(cx, tree.path()).await;
     cx.simulate_keystrokes("ctrl-a");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     let size = measured(&view, cx).await;
     assert_eq!(size.bytes, 15);
     assert_eq!(size.files, 2);
@@ -341,7 +341,7 @@ async fn an_answer_for_another_page_stays_off_this_one(cx: &mut TestAppContext) 
     let projects = tree.path().join("Projects");
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-1");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     let place = properties_at(vec![projects.clone()]);
     view.update(cx, |view, cx| view.new_tab(&place, cx));
     let read = read_page(&view, cx).await;
@@ -355,7 +355,7 @@ async fn leaving_the_page_stops_its_measuring(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("properties-measure-stop");
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-0");
-    view.update(cx, MainWindow::show_properties);
+    show_properties(&view, cx);
     view.update(cx, |view, cx| view.switch_tab(0, cx));
     cx.run_until_parked();
     view.update(cx, |view, cx| view.switch_tab(1, cx));

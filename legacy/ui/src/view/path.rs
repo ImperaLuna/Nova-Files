@@ -2,10 +2,8 @@ use std::path::Path;
 
 use gpui::{AnyElement, Context, Div, IntoElement, ParentElement as _, Stateful, Styled as _, div};
 use nova_files_api::EntryKind;
-use nova_files_gathered_ui::GatheredPage;
-use nova_files_properties_ui::{PropertiesPage, PropertiesPart};
 use nova_files_shell::path_bar::{self, BarInput, Crumb, Spot};
-use nova_files_shell::{self as shell, MenuAt, TextField, arrange};
+use nova_files_shell::{MenuAt, TextField, arrange};
 
 use crate::location::Location;
 use crate::theme::Colors;
@@ -93,41 +91,12 @@ impl MainWindow {
             );
         }
         match self.location() {
-            Some(Location::Page(page)) if let Some(crumbs) = self.parts.crumbs(page, cx) => crumbs,
-            Some(Location::Page(page)) if page.get::<GatheredPage>().is_some() => {
-                vec![Crumb {
-                    opens: Some(shell::Location::Page(page.clone())),
-                    label: page.title(),
-                    icon: page.icon(),
-                    shows_icon: true,
-                    here: true,
-                }]
-            }
-            Some(Location::Page(page)) => page.get::<PropertiesPage>().map_or_else(
-                || path_bar::page_crumbs(page, &self.home, self.known_folders()),
-                |shown| self.properties_crumbs(shown, cx),
-            ),
+            Some(Location::Page(page)) => self
+                .parts
+                .crumbs(page, cx)
+                .unwrap_or_else(|| path_bar::page_crumbs(page, &self.home, self.known_folders())),
             _ => Vec::new(),
         }
-    }
-
-    fn properties_crumbs(&self, page: &PropertiesPage, cx: &gpui::App) -> Vec<Crumb> {
-        let shown = match page.paths() {
-            [one] => one.as_path(),
-            _ => match page.folder() {
-                Some(folder) => folder,
-                None => return Vec::new(),
-            },
-        };
-        let mut crumbs = path_bar::crumbs(shown, &self.home, self.known_folders());
-        if let Some(last) = crumbs.last_mut() {
-            let part = self.part::<PropertiesPart>();
-            if let Some(icon) = part.and_then(|part| part.read(cx).icon()) {
-                last.icon = icon;
-            }
-            last.opens = None;
-        }
-        crumbs
     }
 
     pub(crate) fn has_folders(&self) -> bool {

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use nova_files_api::{ClientId, Connector};
 use nova_files_archives_core::inside;
-use nova_files_entries_core::{list, memory, order};
+use nova_files_entries_core::memory;
 
 use nova_files_search_core::Searcher;
 use nova_files_trash_core::Trashes;
