@@ -3,14 +3,12 @@
 mod cards;
 mod shown;
 
-use std::collections::HashMap;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use gpui::{AnyElement, App, Context, Subscription, WeakEntity, Window};
 use nova_files_drives_api::{
-    Command, DiskSpace, DriveAction, DriveFailure, DriveList, Event, VolumeId,
+    Command, DiskSpace, DriveAction, DriveFailure, DriveList, Event, KnownDrives, VolumeId,
 };
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
@@ -24,12 +22,6 @@ const ROW_PREFIX: &str = "drive-";
 const OPEN_LABEL: &str = "Open";
 const NEW_TAB_LABEL: &str = "Open in new tab";
 const EJECT_LABEL: &str = "Eject";
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct KnownDrives {
-    pub list: Arc<DriveList>,
-    pub space: HashMap<PathBuf, DiskSpace>,
-}
 
 pub struct DrivesPart {
     host: Host,

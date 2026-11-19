@@ -52,6 +52,7 @@ nova-files-preview-api = { path = "features/preview/api" }
 nova-files-preview-core = { path = "features/preview/core" }
 nova-files-properties-api = { path = "features/properties/api" }
 nova-files-properties-core = { path = "features/properties/core" }
+nova-files-properties-ui = { path = "features/properties/ui" }
 nova-files-rename-api = { path = "features/rename/api" }
 nova-files-rename-core = { path = "features/rename/core" }
 nova-files-rename-ui = { path = "features/rename/ui" }

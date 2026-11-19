@@ -2,7 +2,8 @@ use std::path::Path;
 
 use gpui::Context;
 use nova_files_drives_api::DiskSpace;
-use nova_files_drives_ui::{self as drives, DrivesPart, KnownDrives, ShownDrive};
+use nova_files_drives_api::KnownDrives;
+use nova_files_drives_ui::{self as drives, DrivesPart, ShownDrive};
 use nova_files_shell::Published;
 
 use super::{MainWindow, Went};

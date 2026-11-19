@@ -1,4 +1,6 @@
 use nova_files_properties_api::Command as PropertiesCommand;
+use nova_files_properties_ui::PropertiesPage;
+use nova_files_shell::PageRef;
 use nova_files_ui::Location;
 
 use super::*;
@@ -10,7 +12,9 @@ fn leaving_a_properties_page_stops_its_scan(cx: &mut TestAppContext) {
     cx.run_until_parked();
     core.commands();
 
-    let place = Location::Properties(vec![PathBuf::from(SHOWN).join("0")]);
+    let place = Location::Page(PageRef::new(PropertiesPage::new(vec![
+        PathBuf::from(SHOWN).join("0"),
+    ])));
     view.update(cx, |view, cx| view.new_tab(&place, cx));
     cx.run_until_parked();
     let id = core

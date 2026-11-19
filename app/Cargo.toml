@@ -20,6 +20,7 @@
 # - nova-files-picker-api
 # - nova-files-picker-ui
 # - nova-files-places-ui
+# - nova-files-properties-ui
 # - nova-files-rename-ui
 # - nova-files-settings-ui
 # - nova-files-shell
@@ -55,6 +56,7 @@ nova-files-open-ui.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-picker-ui.workspace = true
 nova-files-places-ui.workspace = true
+nova-files-properties-ui.workspace = true
 nova-files-rename-ui.workspace = true
 nova-files-settings-ui.workspace = true
 nova-files-shell.workspace = true

@@ -13,7 +13,6 @@ use nova_files_shell::{PageRef, TabId};
 
 use crate::assets::Icon;
 use crate::history::History;
-use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::places::{self, START_LABEL};
@@ -36,7 +35,6 @@ pub struct Tab {
     gathered: Option<Gathering>,
     listed: Option<PageRef>,
     on_its_way: Option<Location>,
-    properties: Option<super::properties::Page>,
 }
 
 impl Tab {
@@ -115,7 +113,6 @@ impl MainWindow {
                 self.open_gathered(*gathered, cx);
                 self.tabs.start_if_refused = self.asked;
             }
-            Location::Properties(paths) => self.arrive_at_properties(paths, cx),
             Location::Page(page) => self.open_page(page.clone(), cx),
         }
         cx.notify();
@@ -172,7 +169,6 @@ impl MainWindow {
                 let (label, icon) = places::gathering_look(*gathered);
                 (label.into(), icon)
             }
-            Some(Location::Properties(paths)) => (island::what(paths).into(), Icon::Info),
             Some(Location::Page(page)) => (page.title(), page.icon()),
             Some(Location::Folder(folder)) => self.host.rules.named(folder).map_or_else(
                 || self.folder_look(folder, shown),
@@ -275,7 +271,6 @@ impl MainWindow {
 
     fn leave_tab(&mut self, cx: &mut Context<Self>) -> Tab {
         self.forget_rows();
-        self.stop_measuring();
         self.went_elsewhere();
         self.close_preview(None, cx);
         self.close_menu(cx);
@@ -304,7 +299,6 @@ impl MainWindow {
             gathered: self.gathered.shown.take(),
             listed: self.listed_page.take(),
             on_its_way,
-            properties: self.properties.take(),
         }
     }
 
@@ -321,7 +315,6 @@ impl MainWindow {
         self.scroll = tab.scroll;
         self.search = tab.search;
         self.counted = tab.counted;
-        self.properties = tab.properties;
         self.gathered.shown = tab.gathered;
         self.listed_page = tab.listed;
         self.core_moved = true;
@@ -338,10 +331,6 @@ impl MainWindow {
             self.tabs.start_if_refused = self.asked;
         } else if self.is_on_start() {
             self.arrive_at_start(cx);
-        } else if self.properties_paths().is_some() {
-            self.ask_properties();
-            self.measure();
-            self.ask_apps();
         }
         cx.notify();
     }

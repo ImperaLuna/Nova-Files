@@ -15,7 +15,6 @@ impl MainWindow {
 
     pub(super) fn arrive_at_start(&mut self, cx: &mut Context<Self>) {
         self.let_go_of_folder(cx);
-        self.stop_measuring();
         self.history.arrived(&Location::Start);
         cx.emit(WindowEvent::StartShown);
         cx.notify();

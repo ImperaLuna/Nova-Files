@@ -5,8 +5,6 @@ use gpui::{
 
 use crate::theme::{Colors, radius, start};
 use crate::window::MainWindow;
-pub(super) use nova_files_shell::paths::{name_of, name_os, where_is};
-pub(super) use nova_files_shell::widgets::{FAN_ENTRIES, fan, space_bar as bar, titles};
 
 impl MainWindow {
     pub(super) fn start_page(&self, cx: &Context<Self>) -> impl IntoElement {

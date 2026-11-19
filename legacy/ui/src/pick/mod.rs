@@ -7,10 +7,10 @@ use std::io::{self, Write as _};
 use std::path::PathBuf;
 
 use gpui::{App, ClickEvent, Context, Entity, Window};
-use nova_files_api::{EntryId, ListingId};
+use nova_files_api::{EntryId, ListingId, Unreadable};
 use nova_files_picker_api::{PickId, PickRequest};
 use nova_files_picker_ui::{Clicked, PickerPart};
-use nova_files_properties_api::PropertiesId;
+use nova_files_properties_api::{Event, PropertiesId};
 
 pub use self::opening::foreign_parent;
 use crate::selecting::DOUBLE_CLICK;
@@ -143,7 +143,19 @@ impl MainWindow {
         }
     }
 
-    pub(crate) fn save_probed(&self, id: PropertiesId, missing: bool, cx: &mut Context<Self>) {
+    pub(crate) fn save_probe_answered(&self, event: &Event, cx: &mut Context<Self>) {
+        match event {
+            Event::Properties { id, .. } => self.save_probed(*id, false, cx),
+            Event::PropertiesUnreadable { id, reason, .. } => {
+                self.save_probed(*id, *reason == Unreadable::Missing, cx);
+            }
+            Event::SizeMeasured { .. }
+            | Event::SpaceMeasured { .. }
+            | Event::SpaceUnreadable { .. } => {}
+        }
+    }
+
+    fn save_probed(&self, id: PropertiesId, missing: bool, cx: &mut Context<Self>) {
         if let Some(part) = self.picking(cx) {
             part.update(cx, |part, cx| part.probed(id, missing, cx));
         }

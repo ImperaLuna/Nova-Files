@@ -39,16 +39,11 @@ impl MainWindow {
         }
         self.listed_page = match &arrived {
             Location::Page(page) => Some(page.clone()),
-            Location::Start
-            | Location::Folder(_)
-            | Location::Properties(_)
-            | Location::Gathered(_) => None,
+            Location::Start | Location::Folder(_) | Location::Gathered(_) => None,
         };
         self.gathered.shown = match &arrived {
             Location::Gathered(place) => Some(*place),
-            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
-                None
-            }
+            Location::Start | Location::Folder(_) | Location::Page(_) => None,
         };
         self.history.arrived(&arrived);
         let reordered = same_folder && self.shown_order != self.asked_order;
@@ -74,7 +69,7 @@ impl MainWindow {
         self.tell_parts_listed(reordered, cx);
         cx.emit(match arrived {
             Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
-            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
+            Location::Start | Location::Folder(_) | Location::Page(_) => {
                 WindowEvent::Opened(listing_path)
             }
         });
