@@ -3775,7 +3775,6 @@ version = "0.1.0"
 name = "nova-files-drives-core"
 version = "0.1.0"
 dependencies = [
- "nova-files-disk",
  "nova-files-drives-api",
  "nova-files-messages",
  "rustix 1.1.6",
