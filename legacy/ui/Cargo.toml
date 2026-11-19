@@ -28,6 +28,7 @@
 # - nova-files-places-ui
 # - nova-files-preview-ui
 # - nova-files-properties-api
+# - nova-files-rename-ui
 # - nova-files-search-api
 # - nova-files-settings-api
 # - nova-files-shell
@@ -81,3 +82,4 @@ usvg = { version = "0.45.1", default-features = false }
 # Makes the theme icon tests' pictures; GPUI already builds it.
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 nova-files-clipboard-ui.workspace = true
+nova-files-rename-ui.workspace = true

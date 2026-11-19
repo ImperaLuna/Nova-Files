@@ -55,6 +55,7 @@ nova-files-properties-api = { path = "features/properties/api" }
 nova-files-properties-core = { path = "features/properties/core" }
 nova-files-rename-api = { path = "features/rename/api" }
 nova-files-rename-core = { path = "features/rename/core" }
+nova-files-rename-ui = { path = "features/rename/ui" }
 nova-files-search-api = { path = "features/search/api" }
 nova-files-search-core = { path = "features/search/core" }
 nova-files-settings-api = { path = "features/settings/api" }
@@ -74,6 +75,7 @@ nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }
 nova-files-trash-ui = { path = "features/trash/ui" }
 nova-files-ui = { path = "legacy/ui" }
+nova-files-undo-ui = { path = "features/undo/ui" }
 
 # GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds fixes
 # on top of a Zed stable release (FIL-42, FIL-44, FIL-65, FIL-68, FIL-71, FIL-70,

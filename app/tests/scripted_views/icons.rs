@@ -258,7 +258,7 @@ fn a_rename_under_an_icon_takes_the_cells_width(cx: &mut TestAppContext) {
     let (view, cx, _) = icons(cx);
     cx.simulate_keystrokes("right f2");
     cx.run_until_parked();
-    assert!(view.read_with(cx, |view, _| view.renaming()));
+    assert!(view.read_with(cx, MainWindow::renaming));
     let field = cx.debug_bounds("rename").unwrap();
     let under = cell(cx, 0);
     assert!(

@@ -282,7 +282,6 @@ impl MainWindow {
             bar.close_menu(cx);
             bar.stop_typing(false, cx);
         });
-        self.renaming = None;
         self.details = HashMap::new();
         self.jump = TypeJump::default();
         self.band = None;

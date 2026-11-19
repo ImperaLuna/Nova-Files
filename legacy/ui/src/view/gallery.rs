@@ -36,11 +36,10 @@ impl MainWindow {
             .child(self.strip(grid, cx))
     }
 
-    fn on_stage(&self, cx: &App) -> Option<(&Entry, usize)> {
+    fn on_stage(&self, cx: &App) -> Option<&Entry> {
         let staged = self.preview()?.read(cx).staged()?;
         let index = usize::try_from(staged.0).ok()?;
-        let entry = self.listing.as_ref()?.entries.get(index)?;
-        Some((entry, index))
+        self.listing.as_ref()?.entries.get(index)
     }
 
     fn stage(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
@@ -61,7 +60,7 @@ impl MainWindow {
             .gap(size::STAGE_PAD)
             .p(size::STAGE_PAD)
             .children(part_stage)
-            .children(shown.map(|(entry, index)| {
+            .children(shown.map(|entry| {
                 let name = SharedString::from(entry.name.to_string_lossy().into_owned());
                 let about = preview
                     .and_then(nova_files_preview_ui::PreviewPart::about)
@@ -86,7 +85,7 @@ impl MainWindow {
                             .w_full()
                             .child(part_name.map_or_else(
                                 || {
-                                    self.name_field((index, entry), cx).map_or_else(
+                                    self.parts.name_field(entry, cx).map_or_else(
                                         || {
                                             div()
                                                 .debug_selector(|| "stage-name".to_owned())

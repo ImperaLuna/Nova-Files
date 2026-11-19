@@ -106,7 +106,7 @@ fn a_rename_shows_under_the_stage(cx: &mut TestAppContext) {
     let (view, cx, _) = gallery(cx, 10);
     cx.simulate_keystrokes("f2");
     cx.run_until_parked();
-    assert!(view.read_with(cx, |view, _| view.renaming()));
+    assert!(view.read_with(cx, MainWindow::renaming));
     let field = cx.debug_bounds("rename").unwrap();
     assert!(field.size.width > px(100.0), "{field:?}");
     assert_eq!(cx.debug_bounds("stage-name"), None);

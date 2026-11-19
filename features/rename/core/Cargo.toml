@@ -1,6 +1,7 @@
 # nova-files-rename-core
 #
-# Renames an entry and makes a new folder, each in one step.
+# Renames an entry and makes a new folder, each in one step, and takes
+# either back.
 #
 # Allowed outside crates: none
 # Allowed workspace crates:
@@ -23,3 +24,6 @@ workspace = true
 nova-files-api.workspace = true
 nova-files-jobs.workspace = true
 nova-files-rename-api.workspace = true
+
+[dev-dependencies]
+nova-files-jobs = { workspace = true, features = ["test-support"] }

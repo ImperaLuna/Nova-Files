@@ -1,14 +1,16 @@
 use std::mem;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use gpui::{Context, Pixels, Point, SharedString};
 use nova_files_gathered_api::{Command, GatheredChange, GatheredFolder, Gathering, Holds};
+use nova_files_shell::Undo;
 
 use super::MainWindow;
 use super::gathered::Adding;
 use crate::assets::Icon;
 use crate::dropping::ADD_TO;
-use crate::island::{self, NoteUndo};
+use crate::island;
 use crate::menu::{MenuAction, MenuItem};
 use crate::places;
 
@@ -88,8 +90,8 @@ impl MainWindow {
             name: folder.name.clone(),
         };
         if self.change_gathered(GatheredChange::Remove { place, path }) {
-            let undo = NoteUndo::Send(vec![Command::ChangeGathered(back)]);
-            self.show_note(label, Some(undo), cx);
+            let undo = self.sending_back(vec![Command::ChangeGathered(back)]);
+            self.show_note(label, undo, cx);
         }
     }
 
@@ -156,7 +158,17 @@ impl MainWindow {
                 })
             })
             .collect();
-        self.show_note(label, Some(NoteUndo::Send(undo)), cx);
+        let undo = self.sending_back(undo);
+        self.show_note(label, undo, cx);
+    }
+
+    fn sending_back(&self, commands: Vec<Command>) -> Option<Undo> {
+        let connection = self.connection.clone()?;
+        Some(Undo::Run(Rc::new(move |_| {
+            for command in &commands {
+                connection.send(command.clone()).ok();
+            }
+        })))
     }
 
     fn change_gathered(&self, change: GatheredChange) -> bool {

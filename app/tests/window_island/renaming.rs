@@ -6,7 +6,8 @@ fn field_state(
     index: usize,
 ) -> (String, std::ops::Range<usize>) {
     view.read_with(cx, |view, cx| {
-        let field = view.rename_field(index).unwrap().read(cx);
+        let field = view.rename_field(index, cx).unwrap();
+        let field = field.read(cx);
         (field.text().to_owned(), field.selection())
     })
 }
@@ -26,7 +27,7 @@ async fn f2_renames_in_place_and_undo_names_it_back(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("enter");
     wait_for_names(&view, cx, &["Projects", "plans.txt"]).await;
     assert!(tree.path().join("plans.txt").exists());
-    assert!(!view.read_with(cx, |view, _| view.renaming()));
+    assert!(!view.read_with(cx, MainWindow::renaming));
     assert_eq!(
         view.read_with(cx, |view, _| view.selected_names()),
         ["plans.txt"]
@@ -51,7 +52,7 @@ async fn shift_delete_in_the_field_cuts_text_not_files(cx: &mut TestAppContext) 
     cx.run_until_parked();
     assert_eq!(field_state(&view, cx, 1), (".txt".to_owned(), 0..0));
     assert!(view.read_with(cx, |view, _| view.confirm().is_none()));
-    assert!(view.read_with(cx, |view, _| view.renaming()));
+    assert!(view.read_with(cx, MainWindow::renaming));
 }
 
 #[gpui::test]
@@ -68,7 +69,7 @@ async fn escape_or_the_same_name_leaves_it_as_it_was(cx: &mut TestAppContext) {
     cx.simulate_input("Elsewhere");
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();
-    assert!(!view.read_with(cx, |view, _| view.renaming()));
+    assert!(!view.read_with(cx, MainWindow::renaming));
     assert_eq!(
         view.read_with(cx, |view, _| view.selected_names()),
         ["Projects"]
@@ -78,7 +79,7 @@ async fn escape_or_the_same_name_leaves_it_as_it_was(cx: &mut TestAppContext) {
     cx.run_until_parked();
     cx.simulate_keystrokes("enter");
     cx.run_until_parked();
-    assert!(!view.read_with(cx, |view, _| view.renaming()));
+    assert!(!view.read_with(cx, MainWindow::renaming));
     assert!(view.read_with(cx, |view, _| view.note().is_none()));
     assert!(tree.path().join("Projects").is_dir());
 }
@@ -95,7 +96,7 @@ async fn rename_needs_one_entry_selected(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("island-rename").is_none());
     cx.simulate_keystrokes("f2");
     cx.run_until_parked();
-    assert!(!view.read_with(cx, |view, _| view.renaming()));
+    assert!(!view.read_with(cx, MainWindow::renaming));
 }
 
 #[gpui::test]
@@ -139,12 +140,13 @@ async fn a_double_click_in_the_field_stays_in_it(cx: &mut TestAppContext) {
     assert!(field.left() < name.left());
     double_click(cx, "rename");
     cx.run_until_parked();
-    assert!(view.read_with(cx, |view, _| view.renaming()));
+    assert!(view.read_with(cx, MainWindow::renaming));
     assert_eq!(
         view.read_with(cx, |view, _| view.entry_names()),
         ["Projects", "notes.txt"]
     );
-    view.update(cx, |view, _| view.new_folder());
+    cx.dispatch_action(nova_files_rename_ui::NewFolder);
+    cx.run_until_parked();
     assert_eq!(view.read_with(cx, |view, _| view.jobs_pending()), 0);
 }
 

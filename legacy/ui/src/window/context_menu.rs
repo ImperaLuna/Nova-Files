@@ -10,8 +10,7 @@ use nova_files_shell::{
 use super::MainWindow;
 use crate::assets::Icon;
 use crate::commands::{
-    DETAILS, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PREVIEW, PROPERTIES, RENAME, SELECT_ALL,
-    TRASH,
+    DETAILS, GALLERY, HIDDEN, ICONS, OPEN, PREVIEW, PROPERTIES, SELECT_ALL, TRASH,
 };
 use crate::menu::{MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
@@ -76,8 +75,6 @@ impl MainWindow {
         }
         let one = self.selected_count() == 1;
         let lone = |item: ShellItem| one.then_some(item);
-        let rename =
-            lone(ShellItem::run(Icon::Rename, &RENAME)).filter(|_| self.folder().is_some());
         let open = [
             lone(ShellItem::run(Icon::Open, &OPEN)),
             lone(ShellItem::run(Icon::Eye, &PREVIEW)),
@@ -89,11 +86,6 @@ impl MainWindow {
                     MenuGroup::Open,
                     Placed::FIRST,
                     open.into_iter().flatten().collect(),
-                ),
-                Placed::new(
-                    MenuGroup::Edit,
-                    Placed::SECOND,
-                    rename.into_iter().collect(),
                 ),
                 Placed::new(
                     MenuGroup::Danger,
@@ -179,11 +171,6 @@ impl MainWindow {
         self.arranged(
             MenuAt::Sheet,
             vec![
-                Placed::new(
-                    MenuGroup::Edit,
-                    Placed::FIRST,
-                    vec![ShellItem::run(Icon::NewFolder, &NEW_FOLDER)],
-                ),
                 select,
                 Placed::new(MenuGroup::View, Placed::FIRST, self.view_items()),
                 Placed::new(MenuGroup::Show, Placed::FIRST, vec![hidden]),

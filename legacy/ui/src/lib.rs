@@ -35,7 +35,7 @@ use nova_files_picker_api::PickRequest;
 pub use assets::Icon;
 pub use columns::ColumnText;
 pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
-pub use island::{NOTE_TIME, Note, NoteUndo};
+pub use island::{NOTE_TIME, Note};
 pub use location::Location;
 pub use menu::{Look, Menu, MenuAction, MenuItem};
 use nova_files_shell::{Parts, assets, jump, kind, text, theme};

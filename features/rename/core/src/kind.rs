@@ -4,13 +4,14 @@ use nova_files_api::{Failure, Operation, Outcome};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, JobKind};
 
+use crate::undo::{self, Undo, undo_of};
 use crate::{new_folder, rename};
 
 pub struct Renames;
 
 impl JobKind for Renames {
     type Op = Operation;
-    type Undo = ();
+    type Undo = Undo;
 
     fn claims(&self, operation: &Operation) -> bool {
         matches!(
@@ -19,7 +20,10 @@ impl JobKind for Renames {
         )
     }
 
-    fn run(&self, _: &mut Running, operation: &Operation, _: Option<&()>) -> Ended {
+    fn run(&self, running: &mut Running, operation: &Operation, undo: Option<&Undo>) -> Ended {
+        if let Some(undo) = undo {
+            return undo::run(running, undo);
+        }
         match operation {
             Operation::Rename { path, name } => rename(path, name),
             Operation::NewFolder { inside, name } => new_folder(inside, name),
@@ -31,6 +35,10 @@ impl JobKind for Renames {
                 Vec::new(),
             ),
         }
+    }
+
+    fn undo(&self, _: &mut Running, operation: &Operation, ended: &Ended) -> Option<Undo> {
+        undo_of(operation, &ended.0)
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
