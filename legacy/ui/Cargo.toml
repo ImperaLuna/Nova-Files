@@ -19,6 +19,7 @@
 # - nova-files-drives-api
 # - nova-files-clipboard-api
 # - nova-files-picker-api
+# - nova-files-picker-ui
 # - nova-files-settings-api
 # - nova-files-shell
 
@@ -40,6 +41,7 @@ nova-files-api.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-clipboard-api.workspace = true
 nova-files-picker-api.workspace = true
+nova-files-picker-ui.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 # Logs an event no part takes.

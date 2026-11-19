@@ -3790,6 +3790,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-picker-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-picker-api",
+]
+
+[[package]]
 name = "nova-files-rename-api"
 version = "0.1.0"
 
@@ -3906,6 +3915,7 @@ dependencies = [
  "nova-files-clipboard-api",
  "nova-files-drives-api",
  "nova-files-picker-api",
+ "nova-files-picker-ui",
  "nova-files-settings-api",
  "nova-files-shell",
  "unicode-segmentation",

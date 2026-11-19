@@ -34,6 +34,7 @@ nova-files-look-core = { path = "features/look/core" }
 nova-files-look-ui = { path = "features/look/ui" }
 nova-files-messages = { path = "framework/messages" }
 nova-files-picker-api = { path = "features/picker/api" }
+nova-files-picker-ui = { path = "features/picker/ui" }
 nova-files-rename-api = { path = "features/rename/api" }
 nova-files-rename-core = { path = "features/rename/core" }
 nova-files-settings-api = { path = "features/settings/api" }
