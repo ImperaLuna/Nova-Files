@@ -141,7 +141,7 @@ fn a_failed_listing_shows_the_page_empty(cx: &mut TestAppContext) {
 
     view.read_with(cx, |view, _| {
         assert_eq!(view.listed_page(), Some(&PageRef::new(Pile)));
-        assert!(view.entry_names().is_empty());
+        assert_eq!(view.entry_names(), Vec::<String>::new());
         assert!(!view.waiting());
     });
 }
