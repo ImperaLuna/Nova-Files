@@ -1,14 +1,11 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use gpui::Modifiers;
 use nova_files_api::Operation;
 use nova_files_gathered_api::Gathering;
 use nova_files_shell::PageRef;
-use nova_files_transfer_api::DropKind;
 
 pub const MOVE_TO: &str = "Move to";
-pub const COPY_TO: &str = "Copy to";
 pub const ADD_TO: &str = "Add to";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,10 +22,6 @@ pub enum Dropped {
     Gather {
         place: Gathering,
         folders: Vec<PathBuf>,
-    },
-    ByDrive {
-        sources: Vec<PathBuf>,
-        into: PathBuf,
     },
     Page {
         page: PageRef,
@@ -80,50 +73,27 @@ pub fn allowed(at: &DropAt, sources: &Sources, trashed: impl Fn(&Path) -> bool) 
     }
 }
 
-pub fn dropped(at: DropAt, sources: Vec<PathBuf>, modifiers: Modifiers) -> Dropped {
-    let into = match at {
-        DropAt::Trash => return Dropped::Job(Operation::Trash { paths: sources }),
-        DropAt::Gathered(place) => {
-            return Dropped::Gather {
-                place,
-                folders: sources,
-            };
-        }
-        DropAt::Page(page) => {
-            return Dropped::Page {
-                page,
-                paths: sources,
-            };
-        }
-        DropAt::Folder(into) => into,
-    };
-    if modifiers.control {
-        Dropped::Job(Operation::Copy { sources, into })
-    } else if modifiers.shift {
-        Dropped::Job(Operation::Move { sources, into })
-    } else {
-        Dropped::ByDrive { sources, into }
-    }
+pub fn dropped(at: DropAt, sources: Vec<PathBuf>) -> Option<Dropped> {
+    Some(match at {
+        DropAt::Trash => Dropped::Job(Operation::Trash { paths: sources }),
+        DropAt::Gathered(place) => Dropped::Gather {
+            place,
+            folders: sources,
+        },
+        DropAt::Page(page) => Dropped::Page {
+            page,
+            paths: sources,
+        },
+        DropAt::Folder(_) => return None,
+    })
 }
 
-pub fn label(
-    at: &DropAt,
-    name: &str,
-    by_drive: Option<DropKind>,
-    modifiers: Modifiers,
-) -> Option<String> {
-    let kind = match at {
-        DropAt::Gathered(_) | DropAt::Page(_) => return Some(format!("{ADD_TO} {name}")),
-        DropAt::Trash => DropKind::Move,
-        DropAt::Folder(_) if modifiers.control => DropKind::Copy,
-        DropAt::Folder(_) if modifiers.shift => DropKind::Move,
-        DropAt::Folder(_) => by_drive?,
-    };
-    let verb = match kind {
-        DropKind::Move => MOVE_TO,
-        DropKind::Copy => COPY_TO,
-    };
-    Some(format!("{verb} {name}"))
+pub fn label(at: &DropAt, name: &str) -> Option<String> {
+    match at {
+        DropAt::Gathered(_) | DropAt::Page(_) => Some(format!("{ADD_TO} {name}")),
+        DropAt::Trash => Some(format!("{MOVE_TO} {name}")),
+        DropAt::Folder(_) => None,
+    }
 }
 
 #[cfg(test)]
@@ -167,86 +137,16 @@ mod tests {
     }
 
     #[test]
-    fn keys_held_pick_copy_or_move_and_otherwise_the_drive_does() {
-        let (sources, into) = (vec![PathBuf::from("/a/x")], PathBuf::from("/b"));
-        let at = || DropAt::Folder(into.clone());
-        let ctrl = Modifiers {
-            control: true,
-            ..Modifiers::default()
-        };
-        let shift = Modifiers {
-            shift: true,
-            ..Modifiers::default()
-        };
+    fn the_window_drops_only_on_the_trash_places_and_pages() {
+        let sources = vec![PathBuf::from("/a/x")];
+        assert_eq!(dropped(folder("/b"), sources.clone()), None);
+        assert_eq!(label(&folder("/b"), "Backup"), None);
         assert_eq!(
-            dropped(at(), sources.clone(), ctrl),
-            Dropped::Job(Operation::Copy {
-                sources: sources.clone(),
-                into: into.clone()
-            })
-        );
-        let both = Modifiers {
-            shift: true,
-            ..ctrl
-        };
-        assert!(matches!(
-            dropped(at(), sources.clone(), both),
-            Dropped::Job(Operation::Copy { .. })
-        ));
-        assert_eq!(
-            dropped(at(), sources.clone(), shift),
-            Dropped::Job(Operation::Move {
-                sources: sources.clone(),
-                into: into.clone()
-            })
+            dropped(DropAt::Trash, sources.clone()),
+            Some(Dropped::Job(Operation::Trash { paths: sources }))
         );
         assert_eq!(
-            dropped(at(), sources.clone(), Modifiers::default()),
-            Dropped::ByDrive {
-                sources: sources.clone(),
-                into
-            }
-        );
-        assert_eq!(
-            dropped(DropAt::Trash, sources.clone(), shift),
-            Dropped::Job(Operation::Trash { paths: sources })
-        );
-    }
-
-    #[test]
-    fn the_chip_names_the_drop_as_the_keys_or_the_drive_pick_it() {
-        let at = folder("/b");
-        let none = Modifiers::default();
-        let ctrl = Modifiers {
-            control: true,
-            ..none
-        };
-        let shift = Modifiers {
-            shift: true,
-            ..none
-        };
-        let says = |by_drive, modifiers| label(&at, "Backup", by_drive, modifiers);
-        assert_eq!(
-            says(Some(DropKind::Move), none).as_deref(),
-            Some("Move to Backup")
-        );
-        assert_eq!(
-            says(Some(DropKind::Copy), none).as_deref(),
-            Some("Copy to Backup")
-        );
-        assert_eq!(says(None, none), None);
-        assert_eq!(
-            says(Some(DropKind::Move), ctrl).as_deref(),
-            Some("Copy to Backup")
-        );
-        assert_eq!(says(None, shift).as_deref(), Some("Move to Backup"));
-        let both = Modifiers {
-            shift: true,
-            ..ctrl
-        };
-        assert_eq!(says(None, both).as_deref(), Some("Copy to Backup"));
-        assert_eq!(
-            label(&DropAt::Trash, "Trash", None, ctrl).as_deref(),
+            label(&DropAt::Trash, "Trash").as_deref(),
             Some("Move to Trash")
         );
     }
@@ -258,19 +158,12 @@ mod tests {
         assert!(allowed(&at, &paths(&["/mnt/lib"]), trash));
         assert!(!allowed(&at, &paths(&[&format!("{TRASH}/old")]), trash));
         assert_eq!(
-            dropped(
-                at.clone(),
-                vec![PathBuf::from("/mnt/lib")],
-                Modifiers::control()
-            ),
-            Dropped::Gather {
+            dropped(at.clone(), vec![PathBuf::from("/mnt/lib")]),
+            Some(Dropped::Gather {
                 place: Gathering::Games,
                 folders: vec![PathBuf::from("/mnt/lib")],
-            }
+            })
         );
-        assert_eq!(
-            label(&at, "Games", None, Modifiers::shift()).as_deref(),
-            Some("Add to Games")
-        );
+        assert_eq!(label(&at, "Games").as_deref(), Some("Add to Games"));
     }
 }

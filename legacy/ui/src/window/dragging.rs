@@ -9,7 +9,7 @@ use gpui::{
     ParentElement as _, Render, SharedString, Styled as _, WeakEntity, Window, div,
 };
 use nova_files_api::{EntryId, ListingId};
-use nova_files_shell::DropOver;
+use nova_files_shell::{DropOver, WindowParts};
 
 use super::MainWindow;
 use super::aiming::{Aim, Aims};
@@ -37,13 +37,25 @@ impl Drag {
         self.sources.get()
     }
 
-    pub fn says(&self, modifiers: Modifiers) -> Option<String> {
+    pub fn says(
+        &self,
+        modifiers: Modifiers,
+        parts: &WindowParts,
+        cx: &App,
+    ) -> Option<SharedString> {
         let aim = self.aims.aimed()?;
-        let by_drive = match &aim.at {
-            DropAt::Folder(into) => self.aims.by_drive(into),
-            DropAt::Trash | DropAt::Gathered(_) | DropAt::Page(_) => None,
-        };
-        dropping::label(&aim.at, &aim.name, by_drive, modifiers)
+        if let Some(at) = dropping::shell_place(&aim.at) {
+            let over = DropOver {
+                at: &at,
+                name: &aim.name,
+                sources: &self.sources()?.paths,
+                modifiers,
+            };
+            if let Some(said) = parts.drop_label(&over, cx) {
+                return Some(said);
+            }
+        }
+        dropping::label(&aim.at, &aim.name).map(SharedString::from)
     }
 
     pub fn aim(&self, aim: Aim) {
@@ -76,38 +88,11 @@ pub struct DragChip {
 }
 
 impl DragChip {
-    fn label(&self, modifiers: Modifiers, cx: &mut Context<Self>) -> SharedString {
-        if let Some(said) = self.part_says(modifiers, cx) {
-            return said;
-        }
-        if let Some(DropAt::Folder(into)) = self.drag.aims.aimed().map(|aim| aim.at)
-            && self.drag.aims.first_ask(&into)
-        {
-            let (origin, drag) = (self.origin.clone(), Rc::clone(&self.drag));
-            cx.defer(move |cx| {
-                origin
-                    .update(cx, |window, _| window.ask_drop_kind(&drag, into))
-                    .ok();
-            });
-        }
-        self.drag
-            .says(modifiers)
-            .map_or_else(|| self.what.clone(), SharedString::from)
-    }
-}
-
-impl DragChip {
-    fn part_says(&self, modifiers: Modifiers, cx: &App) -> Option<SharedString> {
-        let aim = self.drag.aims.aimed()?;
-        let at = dropping::shell_place(&aim.at)?;
-        let over = DropOver {
-            at: &at,
-            name: &aim.name,
-            sources: &self.drag.sources()?.paths,
-            modifiers,
-        };
-        let window = self.origin.upgrade()?;
-        window.read(cx).parts.drop_label(&over, cx)
+    fn label(&self, modifiers: Modifiers, cx: &App) -> SharedString {
+        self.origin
+            .upgrade()
+            .and_then(|window| self.drag.says(modifiers, &window.read(cx).parts, cx))
+            .unwrap_or_else(|| self.what.clone())
     }
 }
 
@@ -191,15 +176,13 @@ impl MainWindow {
                 return;
             }
         }
-        match dropping::dropped(at, sources.paths.clone(), modifiers) {
-            Dropped::Job(operation) => {
+        match dropping::dropped(at, sources.paths.clone()) {
+            None => {}
+            Some(Dropped::Job(operation)) => {
                 self.start_job(operation);
             }
-            Dropped::ByDrive { sources, into } => {
-                self.start_drop(sources, into);
-            }
-            Dropped::Gather { place, folders } => self.gather(place, folders, cx),
-            Dropped::Page { page, paths } => self.parts.drop_on(&page, paths, cx),
+            Some(Dropped::Gather { place, folders }) => self.gather(place, folders, cx),
+            Some(Dropped::Page { page, paths }) => self.parts.drop_on(&page, paths, cx),
         }
     }
 

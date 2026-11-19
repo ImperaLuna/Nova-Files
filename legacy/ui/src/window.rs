@@ -65,7 +65,6 @@ use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::Lines;
 use nova_files_shell::{FolderRules, Host, Link, Opening, Parts, WindowParts};
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
-use nova_files_transfer_api as transfer_api;
 
 use self::drives::Drives;
 use self::preview::QuickLooks;
@@ -361,12 +360,6 @@ impl MainWindow {
         let envelope = match envelope.open::<start_api::Event>() {
             Ok(start_api::Event::RecentFolders { id, folders }) => {
                 return self.recent_arrived(id, folders, cx);
-            }
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<transfer_api::Event>() {
-            Ok(transfer_api::Event::DropWould { id, kind }) => {
-                return self.drop_would_arrived(id, kind, cx);
             }
             Err(envelope) => envelope,
         };
