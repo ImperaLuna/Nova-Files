@@ -22,6 +22,7 @@ pub struct EntriesAsked;
 pub struct Entries {
     shown: Shown,
     selects: Option<Vec<OsString>>,
+    selects_later: Option<(PathBuf, Vec<OsString>)>,
 }
 
 impl EventEmitter<EntriesAsked> for Entries {}
@@ -86,5 +87,19 @@ impl Entries {
 
     pub const fn take_select(&mut self) -> Option<Vec<OsString>> {
         self.selects.take()
+    }
+
+    pub fn select_when_listed(
+        &mut self,
+        folder: PathBuf,
+        names: Vec<OsString>,
+        cx: &mut Context<Self>,
+    ) {
+        self.selects_later = Some((folder, names));
+        cx.emit(EntriesAsked);
+    }
+
+    pub const fn take_select_later(&mut self) -> Option<(PathBuf, Vec<OsString>)> {
+        self.selects_later.take()
     }
 }

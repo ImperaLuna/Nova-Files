@@ -3,7 +3,7 @@ use std::cell::Cell;
 use gpui::{Context, Modifiers, MouseButton, WeakEntity};
 use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
 use nova_files_shell::{
-    Host, Location, Part, Parts, RowItem, SidebarAt, SidebarRow, Slots, assets::Icon,
+    Host, Location, Look, Part, Parts, RowItem, SidebarAt, SidebarRow, Slots, assets::Icon,
 };
 
 use super::super::*;
@@ -81,6 +81,8 @@ impl Part for Rower {
                     "Cloud",
                     Location::Folder(SHELF.into()),
                 )
+                .number(Some("1 GB free".into()))
+                .number_look(Look::Danger)
                 .button(RowItem::new(Icon::Eject, "Eject", |_| {
                     EJECTED.set(EJECTED.get() + 1);
                 })),
@@ -130,6 +132,7 @@ fn rowed_window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTest
 fn a_part_row_button_runs_without_opening_the_row(cx: &mut TestAppContext) {
     let cx = rowed(cx);
     assert!(cx.debug_bounds("drive-cloud").is_some());
+    assert!(cx.debug_bounds("drive-cloud-number").is_some());
     click(cx, "drive-cloud-button");
     assert_eq!(EJECTED.get(), 1);
 }

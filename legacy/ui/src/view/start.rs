@@ -13,6 +13,8 @@ use gpui::{
 use nova_files_api::EntryKind;
 use nova_files_start_api::{Peeked, RecentFolder};
 
+use nova_files_shell::widgets::card_group as group;
+
 use super::row::{RowIcon, entry_icon, icon, kind_glyph};
 use crate::assets::Icon;
 use crate::columns;
@@ -148,22 +150,6 @@ impl MainWindow {
                 }
             }))
     }
-}
-
-pub(super) fn group(label: &'static str, cards: AnyElement, colors: &Colors) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap(start::LABEL_GAP)
-        .child(
-            div()
-                .pl(start::LABEL_INSET)
-                .text_size(text::LABEL)
-                .font_weight(text::LABEL_WEIGHT)
-                .text_color(colors.text_dim)
-                .child(label),
-        )
-        .child(cards)
 }
 
 fn hero_head(folder: &RecentFolder, home: &Path, colors: &Colors) -> impl IntoElement {

@@ -6,7 +6,9 @@ mod entries;
 pub mod format;
 mod host;
 mod island;
+pub mod jump;
 pub mod kind;
+mod line;
 mod location;
 mod menu;
 mod navigator;
@@ -26,7 +28,8 @@ pub use command::{CommandSpec, WINDOW_KEYS};
 pub use entries::{Entries, EntriesAsked, Shown};
 pub use host::{AskIds, Host, Link};
 pub use island::{Island, IslandAsk, IslandAsked, NoteGone, NoteId, OnUndo, OnYes, Undo};
-pub use location::{Location, PageKind, PageRef};
+pub use line::{Line, Lines};
+pub use location::{Location, PageKind, PageRef, StartPage};
 pub use menu::{
     Expander, Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow,
     arrange,
@@ -34,9 +37,9 @@ pub use menu::{
 pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked};
 pub use opening::Opening;
 pub use part::{
-    Applies, Card, Cell, Closing, Column, Columns, Dims, DropAim, DropSlot, DropTake, EmptyNote,
-    Focus, HeadButton, Items, Listed, NameCell, Opens, Part, Refused, RowMenu, Rows, Selectable,
-    Several, Slots, Watch,
+    Applies, Card, Cell, Closing, Column, Columns, Dims, DropAim, DropOver, DropSlot, DropTake,
+    EmptyNote, Focus, HeadButton, Items, Listed, NameCell, Opens, Part, Refused, RowMenu, Rows,
+    Selectable, Several, Slots, Typed, Watch,
 };
 pub use parts::{Parts, ShownColumn, WindowParts};
 pub use per_tab::{PerTab, TabId};

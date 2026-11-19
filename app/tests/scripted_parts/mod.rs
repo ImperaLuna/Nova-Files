@@ -1,6 +1,6 @@
 use gpui::Context;
 use nova_files_api::MessageType;
-use nova_files_shell::{FolderRules, Host, Part, Parts, Slots, Views};
+use nova_files_shell::{FolderRules, Host, Navigator, Part, Parts, Slots, Views};
 use nova_files_ui::CoreStatus;
 
 use super::*;
@@ -129,4 +129,31 @@ fn parts_list_the_event_types_they_take() {
     parts.add::<Claimer>();
     parts.add::<Witness>();
     assert_eq!(parts.takes(), [MessageType::of::<Claim>()]);
+}
+
+#[gpui::test]
+fn a_part_selects_a_name_once_a_later_listing_holds_it(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = with_parts(cx);
+    let (entries, nav) = view.read_with(cx, |view, _| {
+        (view.host().entries.clone(), view.host().nav.clone())
+    });
+    let new = ENTRIES.to_string();
+    entries.update(cx, |entries, cx| {
+        entries.select_when_listed(SHOWN.into(), vec![new.clone().into()], cx);
+    });
+    cx.run_until_parked();
+    assert_ne!(
+        view.read_with(cx, |view, _| view.selected_paths()),
+        [Path::new(SHOWN).join(&new)]
+    );
+
+    nav.update(cx, Navigator::reload);
+    cx.run_until_parked();
+    answer_listing(&mut core, ENTRIES + 1);
+    cx.run_until_parked();
+
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_paths()),
+        [Path::new(SHOWN).join(&new)]
+    );
 }

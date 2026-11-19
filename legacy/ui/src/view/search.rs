@@ -186,6 +186,7 @@ impl MainWindow {
                     self.move_cursor(crate::selection::Move::Down, false, cx);
                 }
             }
+            Some(FocusTo::List) => window.focus(&self.keys_home(cx), cx),
             None => {}
         }
     }

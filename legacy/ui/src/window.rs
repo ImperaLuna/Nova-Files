@@ -62,6 +62,7 @@ use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_properties_api as properties_api;
 use nova_files_settings_api::{self as settings_api, Settings};
+use nova_files_shell::Lines;
 use nova_files_shell::{FolderRules, Host, Link, Opening, Parts, WindowParts};
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_transfer_api as transfer_api;
@@ -106,6 +107,13 @@ pub enum WindowEvent {
     Settings,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Went {
+    #[default]
+    Stayed,
+    Elsewhere,
+}
+
 pub struct MainWindow {
     status: CoreStatus,
     connector: Connector,
@@ -120,6 +128,7 @@ pub struct MainWindow {
     sizing: views::Sizing,
     pub(crate) selection: Option<Selection>,
     pub(crate) jump: TypeJump,
+    went: Went,
     pub(crate) quick_looks: QuickLooks,
     pub(crate) band: Option<Band>,
     pub(crate) pressed_name: bool,
@@ -226,7 +235,7 @@ impl MainWindow {
             CoreStatus::Gone
         };
         let events = Self::listen(events, cx);
-        let (host, parts) = open_parts(connection.clone(), &home, opening, cx);
+        let (host, parts) = open_parts(connector, connection.clone(), &home, opening, cx);
         let mut window = Self {
             connector: connector.clone(),
             status,
@@ -240,6 +249,7 @@ impl MainWindow {
             sizing: views::Sizing::default(),
             selection: None,
             jump: TypeJump::default(),
+            went: Went::Stayed,
             quick_looks: QuickLooks::default(),
             band: None,
             pressed_name: false,
@@ -258,7 +268,7 @@ impl MainWindow {
             places: Vec::new(),
             folder_views: HashMap::new(),
             pending_views: HashMap::new(),
-            tree_line: TreeLine::connect(connector, cx),
+            tree_line: TreeLine::connect(&host.lines, cx),
             pinned: Arc::from([]),
             gathered: gathered::GatheredState::default(),
             history: History::default(),
@@ -448,12 +458,14 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
 }
 
 fn open_parts(
+    connector: &Connector,
     connection: Option<Arc<Connection>>,
     home: &Path,
     opening: Opening,
     cx: &mut App,
 ) -> (Host, WindowParts) {
-    let host = Host::new(Link::new(connection), home.to_path_buf(), opening, cx);
+    let host = Host::new(Link::new(connection), home.to_path_buf(), opening, cx)
+        .with_lines(Lines::new(Some(connector.clone())));
     let parts = cx
         .try_global::<Parts>()
         .cloned()

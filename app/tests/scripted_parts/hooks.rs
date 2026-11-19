@@ -8,8 +8,8 @@ use gpui::{
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_shell::{
-    Host, Location, NoteGone, PageKind, PageRef, Part, Parts, RowItem, SidebarAt, SidebarRow,
-    Slots, Undo, assets::Icon,
+    DropOver, Host, Location, NavEvent, NoteGone, PageKind, PageRef, Part, Parts, RowItem,
+    SidebarAt, SidebarRow, Slots, Undo, assets::Icon,
 };
 
 use super::super::*;
@@ -24,6 +24,7 @@ thread_local! {
     static UNDONE: Cell<usize> = const { Cell::new(0) };
     static FILED: Cell<usize> = const { Cell::new(0) };
     static SWEPT: Cell<usize> = const { Cell::new(0) };
+    static AIMED_AT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
 }
 
 const FILE_ROOM: &str = "/file-room";
@@ -68,14 +69,12 @@ fn opens(_: &mut Tagger, entry: &Entry, _: &Path, _: &mut Context<Tagger>) -> bo
     own
 }
 
-fn files_here(
-    _: &Tagger,
-    at: &Location,
-    _: &[PathBuf],
-    _: Modifiers,
-    _: &gpui::App,
-) -> Option<SharedString> {
-    (at.folder() == Some(Path::new(FILE_ROOM))).then(|| "File away".into())
+fn files_here(_: &Tagger, over: &DropOver<'_>, _: &gpui::App) -> Option<SharedString> {
+    let here = over.at.folder() == Some(Path::new(FILE_ROOM));
+    if here {
+        AIMED_AT.set(over.name.to_owned());
+    }
+    here.then(|| format!("File into {}", over.name).into())
 }
 
 fn basket(_: &mut Tagger, _: &Basket, _: &mut Window, _: &mut Context<Tagger>) -> AnyElement {
@@ -216,6 +215,7 @@ fn a_part_that_aims_at_a_folder_names_and_takes_the_drop(cx: &mut TestAppContext
     let_go(cx, "place-file-room");
 
     assert!(chip);
+    assert_eq!(AIMED_AT.take(), "File room");
     assert_eq!(FILED.get(), 1);
     assert_eq!(
         core.commands(),
@@ -334,4 +334,30 @@ fn a_part_hears_when_its_note_leaves_the_island(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     assert_eq!(gone.get(), Some(mine));
+}
+
+#[gpui::test]
+fn a_part_hears_when_the_window_goes_elsewhere_but_not_for_its_own_asks(cx: &mut TestAppContext) {
+    let (view, cx, _core) = tagged(cx);
+    let nav = view.read_with(cx, |view, _| view.host().nav.clone());
+    let left = Rc::new(Cell::new(0));
+    let heard = Rc::clone(&left);
+    let _hearing = cx.update(|_, cx| {
+        cx.subscribe(&nav, move |_, event: &NavEvent, _| {
+            if *event == NavEvent::Left {
+                heard.set(heard.get() + 1);
+            }
+        })
+    });
+
+    nav.update(cx, |nav, cx| nav.go(Location::Folder(FILE_ROOM.into()), cx));
+    cx.run_until_parked();
+    assert_eq!(left.get(), 0);
+
+    view.update(cx, |view, cx| {
+        view.open(Path::new(SHOWN));
+        cx.notify();
+    });
+    cx.run_until_parked();
+    assert_eq!(left.get(), 1);
 }

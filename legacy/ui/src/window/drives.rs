@@ -9,6 +9,7 @@ use nova_files_drives_api::{
 };
 
 use super::MainWindow;
+use super::Went;
 use crate::assets::Icon;
 use crate::drives::{self, ShownDrive};
 use crate::menu::{MenuAction, MenuItem};
@@ -119,6 +120,7 @@ impl MainWindow {
 
     pub(super) fn forget_drive_to_open(&mut self) {
         self.drives.opening = None;
+        self.went = Went::Elsewhere;
     }
 
     pub fn open_drive(&mut self, drive: ShownDrive) {

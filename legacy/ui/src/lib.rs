@@ -11,7 +11,7 @@ mod dropping;
 mod grid;
 mod history;
 mod island;
-mod jump;
+
 mod location;
 mod marks;
 mod menu;
@@ -44,7 +44,7 @@ pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note, NoteUndo};
 pub use location::Location;
 pub use menu::{Look, Menu, MenuAction, MenuItem};
-use nova_files_shell::{Parts, assets, kind, text, theme};
+use nova_files_shell::{Parts, assets, jump, kind, text, theme};
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};

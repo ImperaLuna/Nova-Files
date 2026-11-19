@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription};
@@ -9,7 +9,8 @@ use nova_files_shell::{
     PageRef, Part, Scene, Shown, TabId,
 };
 
-use super::MainWindow;
+use super::search::FocusTo;
+use super::{MainWindow, Went};
 use crate::island::{Confirm, NoteUndo};
 use crate::location::{Builtin, Location};
 use crate::selection::Selection;
@@ -93,11 +94,13 @@ impl MainWindow {
     }
 
     fn take_entries_asks(&mut self, cx: &mut Context<Self>) {
-        let Some(names) = self
-            .host
-            .entries
-            .update(cx, |entries, _| entries.take_select())
-        else {
+        let (now, later) = self.host.entries.update(cx, |entries, _| {
+            (entries.take_select(), entries.take_select_later())
+        });
+        if let Some((folder, names)) = later {
+            self.select_when_listed(folder, names, cx);
+        }
+        let Some(names) = now else {
             return;
         };
         let Some(listing) = &self.listing else {
@@ -106,6 +109,26 @@ impl MainWindow {
         let names: HashSet<&OsStr> = names.iter().map(OsString::as_os_str).collect();
         let (id, entries) = (listing.id, Arc::clone(&listing.entries));
         self.reselect(|_, _| Selection::named_all(id, &entries, &names), cx);
+    }
+
+    fn select_when_listed(
+        &mut self,
+        folder: PathBuf,
+        names: Vec<OsString>,
+        cx: &mut Context<Self>,
+    ) {
+        let listed = self
+            .listing
+            .as_ref()
+            .filter(|listing| listing.path == folder);
+        if let Some(listing) = listed {
+            let wanted: HashSet<&OsStr> = names.iter().map(OsString::as_os_str).collect();
+            if let Some(selection) = Selection::named_all(listing.id, &listing.entries, &wanted) {
+                self.reselect(|_, _| Some(selection), cx);
+                return;
+            }
+        }
+        self.select_on_arrival(folder, names);
     }
 
     pub(crate) fn publish(&mut self, cx: &mut Context<Self>) {
@@ -126,17 +149,25 @@ impl MainWindow {
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
-        self.host.nav.update(cx, |nav, cx| nav.show(tab, tabs, cx));
+        let left = std::mem::take(&mut self.went) == Went::Elsewhere;
+        self.host.nav.update(cx, |nav, cx| {
+            nav.show(tab, tabs, cx);
+            if left {
+                cx.emit(NavEvent::Left);
+            }
+        });
     }
 
     fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
         let asks = self.host.nav.update(cx, |nav, _| nav.take_asks());
+        let went = std::mem::take(&mut self.went);
         for ask in asks {
             match ask {
                 NavAsk::Go(place) => self.go_to_shell(place, cx),
                 NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),
+                NavAsk::FocusList => self.focus_later(FocusTo::List, cx),
                 NavAsk::PickFolder(pick) => {
                     self.pick_folder(&pick.title, &pick.accept, cx, move |_, path, cx| {
                         let picked = pick.picked.clone();
@@ -145,6 +176,7 @@ impl MainWindow {
                 }
             }
         }
+        self.went = went;
     }
 
     pub(crate) fn go_to_shell(&mut self, place: shell::Location, cx: &mut Context<Self>) {
@@ -242,8 +274,8 @@ impl MainWindow {
 pub fn from_shell(place: shell::Location) -> Location {
     match place {
         shell::Location::Folder(folder) => Location::Folder(folder),
+        shell::Location::Page(page) if page.get::<shell::StartPage>().is_some() => Location::Start,
         shell::Location::Page(page) => match page.get::<Builtin>() {
-            Some(Builtin::Start) => Location::Start,
             Some(Builtin::Gathered(gathering)) => Location::Gathered(*gathering),
             Some(Builtin::Properties(paths)) => Location::Properties(paths.clone()),
             None => Location::Page(page),

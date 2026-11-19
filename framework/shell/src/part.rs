@@ -14,6 +14,7 @@ use nova_files_messages::{Envelope, Message, MessageType};
 
 use crate::command::CommandSpec;
 use crate::host::Host;
+use crate::jump::Jump;
 use crate::location::{Location, PageKind, PageRef};
 use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
 use crate::scene::Scene;
@@ -36,8 +37,17 @@ pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Closing<P> = fn(&mut P, &mut Context<P>);
 pub type Listed<P> = fn(&mut P, &Listing, bool, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
-pub type DropAim<P> = fn(&P, &Location, &[PathBuf], Modifiers, &App) -> Option<SharedString>;
+pub type DropAim<P> = fn(&P, &DropOver<'_>, &App) -> Option<SharedString>;
+
+#[derive(Debug, Clone, Copy)]
+pub struct DropOver<'a> {
+    pub at: &'a Location,
+    pub name: &'a str,
+    pub sources: &'a [PathBuf],
+    pub modifiers: Modifiers,
+}
 pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<RowItem>;
+pub type Typed<P> = fn(&mut P, &Jump, &Scene, &mut Context<P>) -> bool;
 pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
 pub type Selectable<P> = fn(&P, &Entry, &App) -> bool;
@@ -85,6 +95,7 @@ pub struct Slots<P> {
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
     pub(crate) row_icons: Vec<NameCell<P>>,
     pub(crate) opens: Vec<Opens<P>>,
+    pub(crate) typed: Vec<Typed<P>>,
     pub(crate) closing: Vec<Closing<P>>,
     pub(crate) selectable: Vec<Selectable<P>>,
     pub(crate) several: Vec<Several<P>>,
@@ -117,6 +128,7 @@ impl<P> Default for Slots<P> {
             list_views: Vec::new(),
             row_icons: Vec::new(),
             opens: Vec::new(),
+            typed: Vec::new(),
             closing: Vec::new(),
             selectable: Vec::new(),
             several: Vec::new(),
@@ -245,6 +257,10 @@ impl<P: Part> Slots<P> {
 
     pub fn opens(&mut self, opens: Opens<P>) {
         self.opens.push(opens);
+    }
+
+    pub fn typed(&mut self, typed: Typed<P>) {
+        self.typed.push(typed);
     }
 
     pub fn closing(&mut self, closing: Closing<P>) {
