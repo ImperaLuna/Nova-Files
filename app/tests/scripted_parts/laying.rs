@@ -186,7 +186,7 @@ fn a_failed_ask_shows_nothing_over_the_folder_and_says_it_failed(cx: &mut TestAp
     cx.run_until_parked();
     view.read_with(cx, |view, _| {
         assert!(view.searching());
-        assert!(view.entry_names().is_empty());
+        assert_eq!(view.entry_names(), Vec::<String>::new());
     });
     assert!(cx.debug_bounds("laid-failed").is_some());
 }

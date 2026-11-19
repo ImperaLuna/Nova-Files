@@ -246,7 +246,7 @@ fn a_long_list_of_jobs_scrolls_instead_of_growing_past_the_window(cx: &mut TestA
 }
 
 #[gpui::test]
-fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext) {
+fn files_whose_app_fails_say_so_and_the_rest_go_to_the_desktop(cx: &mut TestAppContext) {
     cx.update(nova_files_ui::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
@@ -271,7 +271,20 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
         reason: NotOpened::NoApp,
     });
     cx.run_until_parked();
-    assert_eq!(note(cx).as_deref(), Some("Can't open 0: no app opens it"));
+    assert_eq!(note(cx), None);
+    assert_eq!(
+        cx.opened_url(),
+        Some(nova_files_api::uri::file_uri(&opened[0]))
+    );
+    core.send(open_api::Event::NotOpened {
+        path: opened[1].clone(),
+        reason: NotOpened::Sandboxed,
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        cx.opened_url(),
+        Some(nova_files_api::uri::file_uri(&opened[1]))
+    );
     core.send(open_api::Event::NotOpened {
         path: opened[1].clone(),
         reason: NotOpened::Failed,
@@ -279,7 +292,7 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
     cx.run_until_parked();
     assert_eq!(
         note(cx).as_deref(),
-        Some("Can't open 0: no app opens it · 1: its app didn't start")
+        Some("Can't open 1: its app didn't start")
     );
     core.send(open_api::Event::NotOpened {
         path: opened[0].clone(),

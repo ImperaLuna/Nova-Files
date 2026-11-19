@@ -1,26 +1,14 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::thread;
 
-use nova_files_api::{
-    ClientGone, Entry, EntryId, Event, EventSink, HiddenFiles, Listing, ListingId, Order,
-    ThumbnailSize, Unreadable,
-};
+use nova_files_api::{ClientGone, EntryId, Event, EventSink, ListingId, ThumbnailSize};
 use nova_files_disk::ports::Icons;
 pub use nova_files_entries_core::ListingJob;
 use nova_files_entries_core::RowWatch;
 
-use nova_files_archives_core::inside::{self, Inside, Within};
 use nova_files_look_core::FileIcons;
-
-use crate::backend::list::{self, Stopped};
-use crate::backend::memory;
-use crate::backend::order;
 use nova_files_preview_core as preview;
 use nova_files_thumbnails_core::{Queue, Thumbnails};
-
-const LIST_THREAD: &str = "nova-files-list";
 
 const NO_LISTING: u64 = u64::MAX;
 
@@ -86,86 +74,5 @@ impl Drop for Client {
     fn drop(&mut self) {
         self.current_search.store(NO_LISTING, Ordering::SeqCst);
         self.current_preview.cancel();
-    }
-}
-
-pub fn list_folder(
-    client: &Client,
-    (id, path): (ListingId, PathBuf),
-    order: Order,
-    hidden: HiddenFiles,
-    inside: &Arc<Inside>,
-) {
-    let job = client.start_listing(id);
-    let job_path = path.clone();
-    let inside = Arc::clone(inside);
-    let spawned = thread::Builder::new()
-        .name(LIST_THREAD.to_owned())
-        .spawn(move || {
-            let cancelled = || job.cancelled();
-            let listed = list::read_folder(&job_path, cancelled).map(|entries| {
-                let entries = list::keep_shown(entries, hidden);
-                order::arrange(&job_path, entries, order, cancelled)
-            });
-            let entries: Arc<[Entry]> = match listed {
-                Ok(Some(entries)) => entries.into(),
-                Err(Stopped::Unreadable(reason)) => {
-                    match (reason, inside::within(&job_path)) {
-                        (Unreadable::NotAFolder | Unreadable::Missing, Some(within)) => {
-                            let asked = (order, hidden);
-                            list_inside(&job, (id, job_path), &within, asked, &inside);
-                        }
-                        _ => job.answer(Event::FolderUnreadable {
-                            id,
-                            path: job_path,
-                            reason,
-                        }),
-                    }
-                    return;
-                }
-                Ok(None) | Err(Stopped::Cancelled) => return,
-            };
-            job.send(Listing {
-                id,
-                path: job_path,
-                entries: Arc::clone(&entries),
-                folders: None,
-            });
-            drop(entries);
-            memory::give_back();
-        });
-    if spawned.is_err() {
-        client
-            .deliver(Event::FolderUnreadable {
-                id,
-                path,
-                reason: Unreadable::Failed,
-            })
-            .ok();
-    }
-}
-
-fn list_inside(
-    job: &ListingJob,
-    (id, path): (ListingId, PathBuf),
-    within: &Within,
-    (order, hidden): (Order, HiddenFiles),
-    inside: &Inside,
-) {
-    let listed = inside
-        .tree(&within.archive)
-        .and_then(|tree| tree.folder(&within.inner));
-    match listed {
-        Ok(listed) => {
-            let (entries, details) = inside::arrange(listed, order, hidden);
-            let listing = Listing {
-                id,
-                path,
-                entries: entries.into(),
-                folders: None,
-            };
-            job.send_known(listing, Some(details.into()));
-        }
-        Err(reason) => job.answer(Event::FolderUnreadable { id, path, reason }),
     }
 }

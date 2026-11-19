@@ -11,6 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use nova_files_api::{Details, Entry, EntryId, EntryKind, HiddenFiles, Order, SortKey, Unreadable};
 use nova_files_disk::private_file::FOLDER_MODE;
+use nova_files_entries_core::{Inner, InnerFolders};
 use nova_files_open_api::{NotOpened, TakeOut};
 
 use crate::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Flow};
@@ -244,6 +245,16 @@ impl Inside {
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Kept> {
         self.kept.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl InnerFolders for Inside {
+    fn list(&self, path: &Path, order: Order, hidden: HiddenFiles) -> Option<Inner> {
+        let within = within(path)?;
+        let listed = self
+            .tree(&within.archive)
+            .and_then(|tree| tree.folder(&within.inner));
+        Some(listed.map(|listed| arrange(listed, order, hidden)))
     }
 }
 

@@ -164,6 +164,9 @@ async fn a_note_goes_by_itself(cx: &mut TestAppContext) {
     cx.executor().advance_clock(nova_files_ui::NOTE_TIME);
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.note().is_none()));
+    view.condition::<WindowEvent>(cx, |view, _| view.selected_count() == 0)
+        .await;
+    cx.run_until_parked();
     assert!(cx.debug_bounds("count").is_some());
 }
 
