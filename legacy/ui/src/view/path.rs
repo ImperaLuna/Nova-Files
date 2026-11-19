@@ -5,11 +5,11 @@ use nova_files_api::EntryKind;
 use nova_files_gathered_ui::GatheredPage;
 use nova_files_properties_ui::{PropertiesPage, PropertiesPart};
 use nova_files_shell::path_bar::{self, BarInput, Crumb, Spot};
-use nova_files_shell::{self as shell, MenuAt, TextField, arrange};
+use nova_files_shell::{MenuAt, TextField, arrange};
 
-use crate::location::Location;
 use crate::theme::Colors;
 use crate::window::{Aim, MainWindow};
+use nova_files_shell::Location;
 
 impl MainWindow {
     pub(super) fn path_bar(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
@@ -96,7 +96,7 @@ impl MainWindow {
             Some(Location::Page(page)) if let Some(crumbs) = self.parts.crumbs(page, cx) => crumbs,
             Some(Location::Page(page)) if page.get::<GatheredPage>().is_some() => {
                 vec![Crumb {
-                    opens: Some(shell::Location::Page(page.clone())),
+                    opens: Some(Location::Page(page.clone())),
                     label: page.title(),
                     icon: page.icon(),
                     shows_icon: true,

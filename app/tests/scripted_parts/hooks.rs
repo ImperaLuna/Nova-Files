@@ -290,7 +290,7 @@ fn a_page_names_its_crumbs_and_its_item_is_no_button(cx: &mut TestAppContext) {
     super::click(cx, "crumb-1");
     let on_page = |cx: &mut VisualTestContext| {
         view.read_with(cx, |view, _| {
-            matches!(view.location(), Some(nova_files_ui::Location::Page(_)))
+            matches!(view.location(), Some(Location::Page(_)))
         })
     };
     assert!(on_page(cx));

@@ -15,9 +15,9 @@ use super::MainWindow;
 use super::aiming::{Aim, Aims};
 use crate::dropping::{self, DropAt, Dropped, Sources};
 use crate::island;
-use crate::location::Location;
 use crate::selection::{Selection, entry_at};
 use crate::theme::{Colors, radius, size, text};
+use nova_files_shell::Location;
 
 #[derive(Debug, Clone)]
 pub struct DraggedRow {

@@ -109,12 +109,12 @@ async fn a_folder_still_on_its_way_is_asked_for_again(cx: &mut TestAppContext) {
 
     view.update(cx, |view, cx| {
         view.open(&projects);
-        view.new_tab(&Location::Start, cx);
+        view.new_tab(&Location::start(), cx);
         assert_eq!(
             view.tab_places(),
             [
                 Some(Location::Folder(projects.clone())),
-                Some(Location::Start)
+                Some(Location::start())
             ]
         );
     });
@@ -167,7 +167,7 @@ async fn the_last_tab_stays_open(cx: &mut TestAppContext) {
 
     view.update(cx, |view, cx| {
         view.open_in_new_tab(projects.clone(), cx);
-        view.new_tab(&Location::Start, cx);
+        view.new_tab(&Location::start(), cx);
     });
     cx.run_until_parked();
     cx.simulate_keystrokes("ctrl-shift-tab");
@@ -313,7 +313,7 @@ async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut Te
     let projects = tree.path().join("Projects");
     view.update(cx, |view, cx| {
         view.open_in_new_tab(projects.clone(), cx);
-        view.new_tab(&Location::Start, cx);
+        view.new_tab(&Location::start(), cx);
         view.switch_tab(0, cx);
     });
     settled(&view, cx).await;
@@ -380,7 +380,7 @@ async fn reorder_tabs_by_halves(cx: &mut TestAppContext, test: &str, width: Pixe
     cx.simulate_resize(size(width, px(600.0)));
     view.update(cx, |view, cx| {
         view.open_in_new_tab(tree.path().join("Projects"), cx);
-        view.new_tab(&Location::Start, cx);
+        view.new_tab(&Location::start(), cx);
     });
     settled(&view, cx).await;
     let names = |view: &Entity<MainWindow>, cx: &VisualTestContext| {

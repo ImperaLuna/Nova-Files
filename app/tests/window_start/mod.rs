@@ -11,7 +11,7 @@ fn start_window<'a>(
     cx: &'a mut TestAppContext,
     home: &Path,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext, Connector) {
-    window_at(cx, home, &Location::Start)
+    window_at(cx, home, &Location::start())
 }
 
 fn window_at<'a>(
@@ -69,7 +69,7 @@ async fn back_and_forward_cross_the_start_page(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, &projects).await;
     view.read_with(cx, |view, _| {
         assert!(!view.is_on_start());
-        assert_eq!(view.back_target(), Some(&Location::Start));
+        assert_eq!(view.back_target(), Some(&Location::start()));
     });
 
     view.update(cx, MainWindow::go_back);

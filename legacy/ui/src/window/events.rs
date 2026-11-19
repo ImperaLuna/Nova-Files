@@ -11,7 +11,7 @@ use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::island;
 use crate::jump::TypeJump;
-use crate::location::Location;
+use nova_files_shell::Location;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Place {
@@ -37,8 +37,8 @@ impl MainWindow {
             }
         }
         self.listed_page = match &arrived {
-            Location::Page(page) => Some(page.clone()),
-            Location::Start | Location::Folder(_) => None,
+            Location::Page(page) if !page.is_start() => Some(page.clone()),
+            Location::Page(_) | Location::Folder(_) => None,
         };
         self.history.arrived(&arrived);
         let reordered = same_folder && self.shown_order != self.asked_order;

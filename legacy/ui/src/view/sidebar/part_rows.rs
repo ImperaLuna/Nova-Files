@@ -11,7 +11,7 @@ use nova_files_shell::{Expander, Look, RowItem, SidebarAt, SidebarRow};
 use super::{Row, icon, on_middle_click, row, section_button};
 use crate::assets::Icon;
 use crate::theme::{Colors, radius, size};
-use crate::window::{HoverOpens, MainWindow, from_shell};
+use crate::window::{HoverOpens, MainWindow};
 
 impl MainWindow {
     pub(super) fn part_rows(
@@ -108,7 +108,7 @@ impl MainWindow {
     ) -> Stateful<Div> {
         let main = !self.picker();
         let menu_row = place.id.clone();
-        let at = place.opens.clone().map(from_shell);
+        let at = place.opens.clone();
         let drops = at
             .as_ref()
             .and_then(|at| self.tab_drops_at(Some(at), place.name.clone()));
@@ -198,8 +198,8 @@ impl Clicked {
     fn follow(&self, window: &mut MainWindow, new_tab: bool, cx: &mut Context<MainWindow>) {
         match (&self.open, &self.opens) {
             (Some(open), _) => run_later(open, cx),
-            (None, Some(opens)) if new_tab => window.new_tab_at_shell(opens.clone(), cx),
-            (None, Some(opens)) => window.go_to_shell(opens.clone(), cx),
+            (None, Some(opens)) if new_tab => window.new_tab(opens, cx),
+            (None, Some(opens)) => window.go_to_place(opens, cx),
             (None, None) => {}
         }
     }
