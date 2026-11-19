@@ -21,9 +21,6 @@ impl MainWindow {
         colors: &Colors,
         cx: &Context<Self>,
     ) -> Vec<(u8, Stateful<Div>)> {
-        if self.pick.is_some() {
-            return Vec::new();
-        }
         self.parts
             .sidebar(at, &self.scene(), cx)
             .into_iter()
@@ -59,22 +56,23 @@ impl MainWindow {
         cx: &Context<Self>,
     ) -> Stateful<Div> {
         let (opens, new_tab) = (place.opens.clone(), place.opens.clone());
-        let menu_row = place.id;
+        let main = self.pick.is_none();
+        let menu_row = place.id.clone();
         let shown = from_shell(place.opens.clone());
         let drops = self.tab_drops_at(Some(&shown), place.name.clone());
         let wide = !narrow;
         let lead = place
             .expander
             .filter(|_| wide)
-            .map(|expander| expander_button(place.id, expander, colors, cx));
+            .map(|expander| expander_button(&place.id, expander, colors, cx));
         let tail = place
             .button
             .filter(|_| wide)
-            .map(|button| row_button(place.id, button, colors, cx));
+            .map(|button| row_button(&place.id, button, colors, cx));
         let row = row(
             Row {
-                id: place.id.into(),
-                selector: place.id.to_owned(),
+                id: place.id.clone().into(),
+                selector: place.id.to_string(),
                 glyph: place.icon,
                 name: place.name,
                 number: place.number.map(|number| (number, colors.text_dim)),
@@ -93,17 +91,19 @@ impl MainWindow {
             this.go_to_shell(opens.clone(), cx);
         }))
         .map(|row| {
-            on_middle_click(row, true, cx, move |this, cx| {
+            on_middle_click(row, main, cx, move |this, cx| {
                 this.new_tab_at_shell(new_tab.clone(), cx);
             })
         })
         .map(|row| Self::opens_on_hover(row, HoverOpens::Place(shown), cx))
-        .on_mouse_down(
-            MouseButton::Right,
-            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                this.open_row_menu(menu_row, event.position, cx);
-            }),
-        );
+        .when(main, |row| {
+            row.on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    this.open_row_menu(&menu_row, event.position, cx);
+                }),
+            )
+        });
         match drops {
             Some(at) => self.drop_target(row, at, cx),
             None => row,
@@ -112,7 +112,7 @@ impl MainWindow {
 }
 
 fn expander_button(
-    id: &'static str,
+    id: &str,
     expander: Expander,
     colors: &Colors,
     cx: &Context<MainWindow>,
@@ -130,12 +130,7 @@ fn expander_button(
         .into_any_element()
 }
 
-fn row_button(
-    id: &'static str,
-    button: RowItem,
-    colors: &Colors,
-    cx: &Context<MainWindow>,
-) -> AnyElement {
+fn row_button(id: &str, button: RowItem, colors: &Colors, cx: &Context<MainWindow>) -> AnyElement {
     small_button(format!("{id}-button"), size::SECTION_BUTTON, colors)
         .child(icon(
             button.icon,

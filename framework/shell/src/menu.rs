@@ -166,7 +166,7 @@ impl fmt::Debug for RowItem {
 
 #[derive(Debug, Clone)]
 pub struct SidebarRow {
-    pub id: &'static str,
+    pub id: SharedString,
     pub icon: Icon,
     pub name: SharedString,
     pub number: Option<SharedString>,
@@ -186,13 +186,13 @@ pub struct Expander {
 
 impl SidebarRow {
     pub fn new(
-        id: &'static str,
+        id: impl Into<SharedString>,
         icon: Icon,
         name: impl Into<SharedString>,
         opens: crate::Location,
     ) -> Self {
         Self {
-            id,
+            id: id.into(),
             icon,
             name: name.into(),
             number: None,

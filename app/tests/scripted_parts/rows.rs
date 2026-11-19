@@ -1,6 +1,7 @@
 use std::cell::Cell;
 
-use gpui::{Context, WeakEntity};
+use gpui::{Context, Modifiers, MouseButton, WeakEntity};
+use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
 use nova_files_shell::{
     Host, Location, Part, Parts, RowItem, SidebarAt, SidebarRow, Slots, assets::Icon,
 };
@@ -60,6 +61,13 @@ impl Part for Rower {
                 ),
             ]
         });
+        slots.row_menu(|_, row, _| {
+            if row == "place-first" {
+                vec![RowItem::new(Icon::Info, "Look", |_| {})]
+            } else {
+                Vec::new()
+            }
+        });
         slots.section_button(SidebarAt::Places, "rows-add", |_, _, _| {
             Some(RowItem::new(Icon::Plus, "Add", |_| {
                 ADDED.set(ADDED.get() + 1);
@@ -103,15 +111,19 @@ impl Part for Rower {
 }
 
 fn rowed(cx: &mut TestAppContext) -> &mut VisualTestContext {
+    rowed_window(cx).1
+}
+
+fn rowed_window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext) {
     EJECTED.set(0);
     ADDED.set(0);
     let mut parts = Parts::default();
     parts.add::<Rower>();
     cx.update(|cx| cx.set_global(parts));
-    let (_view, cx, mut core) = window_with_parts(cx);
+    let (view, cx, mut core) = window_with_parts(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
-    cx
+    (view, cx)
 }
 
 #[gpui::test]
@@ -148,9 +160,48 @@ fn part_rows_take_their_place_by_rank_among_the_window_rows(cx: &mut TestAppCont
 }
 
 #[gpui::test]
+fn a_part_row_menu_opens_in_the_main_window(cx: &mut TestAppContext) {
+    let (view, cx) = rowed_window(cx);
+    let first = cx.debug_bounds("place-first").unwrap().center();
+    cx.simulate_mouse_down(first, MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_some()));
+}
+
+#[gpui::test]
 fn a_part_button_on_a_section_head_runs(cx: &mut TestAppContext) {
     let cx = rowed(cx);
     assert!(cx.debug_bounds("pin").is_some());
     click(cx, "rows-add");
     assert_eq!(ADDED.get(), 1);
+}
+
+#[gpui::test]
+fn the_picker_shows_part_rows_without_their_menu_or_head_buttons(cx: &mut TestAppContext) {
+    let (view, cx) = rowed_window(cx);
+    let request = Box::new(PickRequest {
+        id: PickId(7),
+        kind: PickKind::Open {
+            multiple: false,
+            folders: true,
+        },
+        title: String::new(),
+        accept_label: None,
+        filters: Vec::new(),
+        filter: None,
+        folder: None,
+        parent: None,
+        types: None,
+        reply: PickReply::new(|_| {}),
+    });
+    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
+    cx.run_until_parked();
+
+    assert!(cx.debug_bounds("place-first").is_some());
+    assert!(cx.debug_bounds("drive-cloud").is_some());
+    assert!(cx.debug_bounds("rows-add").is_none());
+    let first = cx.debug_bounds("place-first").unwrap().center();
+    cx.simulate_mouse_down(first, MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
 }
