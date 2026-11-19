@@ -36,6 +36,7 @@
 # - nova-files-start-api
 # - nova-files-start-core
 # - nova-files-thumbnailer-launch
+# - nova-files-transfer-api
 # - nova-files-transfer-core
 # - nova-files-trash-api
 # - nova-files-trash-core
@@ -88,6 +89,7 @@ nova-files-settings-core.workspace = true
 nova-files-start-api.workspace = true
 nova-files-start-core.workspace = true
 nova-files-thumbnailer-launch.workspace = true
+nova-files-transfer-api.workspace = true
 nova-files-transfer-core.workspace = true
 nova-files-trash-api.workspace = true
 nova-files-trash-core.workspace = true
