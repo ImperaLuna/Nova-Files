@@ -3,6 +3,7 @@ use std::cell::Cell;
 use gpui::{App, Context, Modifiers, MouseButton, WeakEntity, point, px};
 use nova_files_gathered_ui::GatheredPart;
 use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
+use nova_files_picker_ui::PickOpening;
 use nova_files_places_ui::PlacesPart;
 use nova_files_shell::{
     Host, KnownFolder, KnownFolders, Location, Look, Part, Parts, Published, RowItem, SidebarAt,
@@ -226,7 +227,9 @@ fn the_picker_shows_part_rows_without_their_menu_or_head_buttons(cx: &mut TestAp
         types: None,
         reply: PickReply::new(|_| {}),
     });
-    view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
+    view.update_in(cx, |view, window, cx| {
+        view.open_as(PickOpening::of(request), window, cx);
+    });
     cx.run_until_parked();
 
     assert!(cx.debug_bounds("place-first").is_some());

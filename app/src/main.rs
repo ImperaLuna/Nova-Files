@@ -190,8 +190,8 @@ fn show_windows(
     loop {
         let first = match received.wait() {
             Some(Request::OpenWindow(request)) => Opening::Folder(request),
-            Some(Request::Pick(request)) => Opening::Pick(request),
-            Some(Request::ClosePick(_)) => continue,
+            Some(Request::Open(ask)) => Opening::Part(ask),
+            Some(Request::Close(_)) => continue,
             Some(Request::Quit) | None => break,
         };
         if nova_files_ui::run(connector, received, first, &restart, nova_files::parts())

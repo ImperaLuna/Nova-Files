@@ -10,7 +10,6 @@ mod island;
 
 mod marks;
 mod menu;
-mod pick;
 mod places;
 mod requests;
 mod selecting;
@@ -18,16 +17,15 @@ mod selection;
 mod theme_icons;
 mod view;
 mod window;
-mod window_state;
 
 use std::cell::Cell;
+use std::fmt;
 use std::io::{self, Write as _};
 use std::path::Path;
 use std::rc::Rc;
 
 use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
 use nova_files_api::{Command, Connector, Event, MessageType, WindowRequest};
-use nova_files_picker_api::PickRequest;
 
 pub use assets::Icon;
 pub use columns::ColumnText;
@@ -35,14 +33,12 @@ pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note};
 pub use menu::{Look, Menu, MenuAction, MenuItem};
 pub use nova_files_shell::Location;
-use nova_files_shell::{Parts, assets, jump, text, theme};
-pub use pick::close as close_picker;
+use nova_files_shell::{Asked, CloseWhen, Opener, Parts, assets, jump, text, theme};
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
 pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
-pub use window_state::fetch as fetch_window_state;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ended {
@@ -50,19 +46,24 @@ pub enum Ended {
     Quit,
 }
 
-#[derive(Debug)]
 pub enum Opening {
     Folder(WindowRequest),
-    Pick(Box<PickRequest>),
+    Part(Asked),
+}
+
+impl fmt::Debug for Opening {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Folder(request) => f.debug_tuple("Folder").field(request).finish(),
+            Self::Part(_) => f.write_str("Part"),
+        }
+    }
 }
 
 pub type RecoverGpu = Rc<dyn Fn(Option<&Path>)>;
 
 pub fn sent_types() -> Vec<MessageType> {
-    vec![
-        MessageType::of::<Command>(),
-        MessageType::of::<nova_files_settings_api::Command>(),
-    ]
+    vec![MessageType::of::<Command>()]
 }
 
 pub fn taken_types() -> Vec<MessageType> {
@@ -96,12 +97,12 @@ pub fn run(
                             open_window(&connector, Opening::Folder(request), &recover_gpu, cx);
                             true
                         }
-                        Some(Request::Pick(request)) => {
-                            open_window(&connector, Opening::Pick(request), &recover_gpu, cx);
+                        Some(Request::Open(ask)) => {
+                            open_window(&connector, Opening::Part(ask), &recover_gpu, cx);
                             true
                         }
-                        Some(Request::ClosePick(id)) => {
-                            pick::close(id, cx);
+                        Some(Request::Close(when)) => {
+                            close_where(&when, cx);
                             true
                         }
                         Some(Request::Quit) | None => {
@@ -126,52 +127,78 @@ struct RequestLoop {
 
 impl Global for RequestLoop {}
 
-pub(crate) fn open_picker(connector: &Connector, request: Box<PickRequest>, cx: &mut App) {
-    let recover_gpu: RecoverGpu = Rc::new(|_: Option<&Path>| {});
-    open_window(connector, Opening::Pick(request), &recover_gpu, cx);
+pub(crate) fn keep_opener(connector: &Connector, cx: &mut App) {
+    if cx.has_global::<Opener>() {
+        return;
+    }
+    let connector = connector.clone();
+    cx.set_global(Opener(Rc::new(move |ask, cx| {
+        let recover_gpu: RecoverGpu = Rc::new(|_: Option<&Path>| {});
+        open_window(&connector, Opening::Part(ask), &recover_gpu, cx);
+    })));
+}
+
+pub fn close_where(when: &CloseWhen, cx: &mut App) {
+    for handle in cx.windows() {
+        let Some(handle) = handle.downcast::<MainWindow>() else {
+            continue;
+        };
+        let closed = handle.update(cx, |view, window, cx| {
+            if view.opened_as(when) {
+                view.dismiss(cx);
+                window.remove_window();
+            }
+        });
+        if let Err(error) = closed {
+            writeln!(
+                io::stderr(),
+                "nova-files: could not close a window: {error:#}"
+            )
+            .ok();
+        }
+    }
 }
 
 fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu, cx: &mut App) {
     let bounds = Bounds::centered(None, size(theme::window::WIDTH, theme::window::HEIGHT), cx);
-    let (folder, select, pick) = match opening {
+    let (folder, select, ask) = match opening {
         Opening::Folder(request) => (request.folder, request.select, None),
-        Opening::Pick(mut request) => (request.folder.take(), Vec::new(), Some(request)),
+        Opening::Part(mut ask) => (ask.folder(), Vec::new(), Some(ask)),
     };
-    let recovers = pick.is_none();
+    let recovers = ask.is_none();
     let mut options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         app_id: Some(nova_files_api::APP_ID.to_owned()),
         ..WindowOptions::default()
     };
-    if let Some(request) = &pick {
-        let state = window_state::fetch(connector);
-        let display = cx.primary_display().map(|display| display.bounds().size);
-        let picker_bounds = Bounds::centered(None, state.picker_size(display), cx);
-        options.window_bounds = Some(WindowBounds::Windowed(picker_bounds));
-        options.titlebar = Some(pick::titlebar(request));
-        options.foreign_parent = request.parent.as_ref().map(pick::foreign_parent);
+    if let Some(ask) = &ask {
+        let look = ask.look(connector, cx);
+        if let Some(size) = look.size {
+            options.window_bounds = Some(WindowBounds::Windowed(Bounds::centered(None, size, cx)));
+        }
+        options.titlebar = look.titlebar;
+        options.foreign_parent = look.foreign_parent;
     }
     let connector = connector.clone();
     let location = match folder {
         Some(folder) => Location::Folder(folder),
-        None if pick.is_some() => Location::Folder(home_folder()),
+        None if ask.is_some() => Location::Folder(home_folder()),
         None => Location::start(),
     };
     let recover_folder = location.folder().map(Path::to_path_buf);
     let opened = cx.open_window(options, move |window, cx| {
         cx.new(|cx| {
-            let opening = pick
-                .as_ref()
-                .map_or_else(nova_files_shell::Opening::default, |request| {
-                    nova_files_shell::Opening::of(request.id)
-                });
+            let opening = ask.map_or_else(
+                nova_files_shell::Opening::default,
+                nova_files_shell::WindowAsk::opening,
+            );
             let mut view =
-                MainWindow::opened_with(&connector, &location, home_folder(), opening, cx);
+                MainWindow::opened_with(&connector, &location, home_folder(), opening.clone(), cx);
             if let Some(folder) = location.folder() {
                 view.select_on_arrival(folder.to_path_buf(), select);
             }
-            if let Some(request) = pick {
-                view.set_pick(request, window, cx);
+            if opening.is_some() {
+                view.open_as(opening, window, cx);
             }
             view
         })

@@ -18,13 +18,19 @@ use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{Location, PageRef};
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
+use crate::navigator::FolderPick;
+use crate::opening::Opening;
 use crate::part::{Card, Click, ClickAnswer, DropOver, Part, Slots};
 use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
-use crate::slot_view::{Draw, Fit, SlotView};
+use crate::slot_view::{Draw, Fit};
 use crate::text::TextField;
+use cards::{card_views, slot_view};
+use declared::{each_once, sends, slots_of, specs, takes};
 
+mod cards;
+mod declared;
 mod window;
 
 pub use window::WindowParts;
@@ -65,6 +71,9 @@ trait OpenPart {
         cx: &mut App,
     ) -> Option<ClickAnswer>;
     fn resized(&self, size: Size<Pixels>, cx: &mut App);
+    fn started(&self, opening: &Opening, window: &mut Window, cx: &mut App);
+    fn dismissed(&self, cx: &mut App);
+    fn pick_folder(&self, pick: &FolderPick, folder: Option<&Path>, cx: &mut App) -> bool;
     fn overlays(&self) -> Vec<AnyView>;
     fn layers(&self) -> Vec<AnyView>;
     fn path_chips(&self) -> Vec<(u8, AnyView)>;
@@ -284,6 +293,40 @@ impl<P: Part> OpenPart for Opened<P> {
                 resized(part, size, cx);
             }
         });
+    }
+
+    fn started(&self, opening: &Opening, window: &mut Window, cx: &mut App) {
+        if self.slots.started.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for started in &self.slots.started {
+                started(part, opening, window, cx);
+            }
+        });
+    }
+
+    fn dismissed(&self, cx: &mut App) {
+        if self.slots.dismissed.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for dismissed in &self.slots.dismissed {
+                dismissed(part, cx);
+            }
+        });
+    }
+
+    fn pick_folder(&self, pick: &FolderPick, folder: Option<&Path>, cx: &mut App) -> bool {
+        if self.slots.folder_picks.is_empty() {
+            return false;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .folder_picks
+                .iter()
+                .any(|picks| picks(part, pick.clone(), folder.map(Path::to_path_buf), cx))
+        })
     }
 
     fn overlays(&self) -> Vec<AnyView> {
@@ -689,12 +732,6 @@ impl Parts {
     }
 }
 
-fn slots_of<P: Part>() -> Slots<P> {
-    let mut slots = Slots::default();
-    P::slots(&mut slots);
-    slots
-}
-
 fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
     let entity = cx.new(|cx| P::open(host, cx));
     let slots = slots_of::<P>();
@@ -742,55 +779,4 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         path_chips,
         list_views,
     })
-}
-
-fn card_views<P: Part>(
-    entity: &Entity<P>,
-    host: &Host,
-    cards: &[Card<P>],
-    fit: Fit,
-    cx: &mut App,
-) -> Vec<AnyView> {
-    cards
-        .iter()
-        .map(|&card| {
-            let (part, host) = (entity.clone(), host.clone());
-            let draw: Draw = Box::new(move |window, cx| {
-                let scene = host.scene(cx);
-                part.update(cx, |part, cx| card(part, &scene, window, cx))
-            });
-            slot_view(entity, draw, fit, cx)
-        })
-        .collect()
-}
-
-fn slot_view<P: Part>(part: &Entity<P>, draw: Draw, fit: Fit, cx: &mut App) -> AnyView {
-    let part = part.clone();
-    cx.new(|cx| {
-        cx.observe(&part, |_, _, cx| cx.notify()).detach();
-        SlotView::new(draw, fit)
-    })
-    .into()
-}
-
-fn takes<P: Part>() -> Vec<MessageType> {
-    slots_of::<P>().takes()
-}
-
-fn sends<P: Part>() -> Vec<MessageType> {
-    slots_of::<P>().sent()
-}
-
-fn specs<P: Part>() -> Vec<&'static CommandSpec> {
-    slots_of::<P>().specs()
-}
-
-fn each_once(types: impl Iterator<Item = MessageType>) -> Vec<MessageType> {
-    let mut once = Vec::new();
-    for kind in types {
-        if !once.contains(&kind) {
-            once.push(kind);
-        }
-    }
-    once
 }

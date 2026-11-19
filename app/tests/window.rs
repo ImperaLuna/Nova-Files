@@ -40,6 +40,7 @@ use nova_files_shell::Published;
 use nova_files_trash_ui::TrashPart;
 use nova_files_ui::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent};
 
+use common::picking::Picking as _;
 use common::{TempFolder, Watchdog, click_with, double_click};
 
 fn disk_space_known(view: &MainWindow, folder: &Path, cx: &App) -> bool {
@@ -475,12 +476,12 @@ async fn closing_a_picker_answers_cancelled(cx: &mut TestAppContext) {
     view.update_in(cx, |view, window, cx| view.set_pick(request, window, cx));
 
     let app: &mut TestAppContext = cx;
-    app.update(|cx| nova_files_ui::close_picker(PickId(8), cx));
+    app.update(|cx| nova_files_ui::close_where(&nova_files_picker_ui::closes(PickId(8)), cx));
     cx.run_until_parked();
     assert!(answers.try_recv().is_err());
 
     let app: &mut TestAppContext = cx;
-    app.update(|cx| nova_files_ui::close_picker(PickId(9), cx));
+    app.update(|cx| nova_files_ui::close_where(&nova_files_picker_ui::closes(PickId(9)), cx));
     assert_eq!(app.update(|cx| cx.windows().len()), 0);
     assert_eq!(answers.try_recv(), Ok(PickAnswer::Cancelled));
     drop(view);

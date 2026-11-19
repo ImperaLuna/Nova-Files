@@ -16,11 +16,8 @@
 # - nova-files-api
 # - nova-files-folders-api
 # - nova-files-folders-ui
-# - nova-files-picker-api
-# - nova-files-picker-ui
 # - nova-files-preview-ui
 # - nova-files-search-ui
-# - nova-files-settings-api
 # - nova-files-shell
 
 [package]
@@ -39,11 +36,8 @@ workspace = true
 nova-files-api.workspace = true
 nova-files-folders-api.workspace = true
 nova-files-folders-ui.workspace = true
-nova-files-picker-api.workspace = true
-nova-files-picker-ui.workspace = true
 nova-files-preview-ui.workspace = true
 nova-files-search-ui.workspace = true
-nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }
