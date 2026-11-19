@@ -1,8 +1,9 @@
 use gpui::{
     AnyElement, ClickEvent, Context, Corner, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
     anchored, deferred, div, prelude::FluentBuilder as _,
 };
+use nova_files_shell::Scene;
 use nova_files_shell::theme::{Colors, radius, size, text};
 
 use crate::filter::{is_chosen, label, offers_all};
@@ -14,12 +15,15 @@ const REPLACE_LABEL: &str = "Replace";
 const KEEP_BOTH_LABEL: &str = "Keep both";
 const MENU_PRIORITY: usize = 1;
 
-impl Render for PickerPart {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let Some(pick) = &self.pick else {
-            return div().into_any_element();
-        };
-        bar(pick, cx).into_any_element()
+impl PickerPart {
+    pub(crate) fn footer(
+        &mut self,
+        _: &Scene,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let pick = self.pick.as_ref()?;
+        Some(bar(pick, cx).into_any_element())
     }
 }
 

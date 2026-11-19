@@ -9,7 +9,7 @@ mod answers;
 mod common;
 
 use std::fs;
-use std::os::unix::fs::MetadataExt as _;
+use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
 use std::sync::mpsc;
@@ -22,6 +22,9 @@ use nova_files_trash_api::{self as trash_api, Trashed};
 
 use answers::{answer, held};
 use common::{ANSWER_TIMEOUT, Bench, Client};
+
+const UNSEARCHABLE: u32 = 0o600;
+const SEARCHABLE: u32 = 0o700;
 
 fn home_trash(root: &Path) -> PathBuf {
     root.join("home/.local/share/Trash")
@@ -276,6 +279,31 @@ fn emptying_the_trash_deletes_all_it_lists() {
     assert!(stray.exists(), "only what the trash lists goes");
     let (_, again, changed) = client.run(Operation::EmptyTrash);
     assert_eq!((again, changed), (Outcome::Done, vec![]));
+}
+
+#[test]
+fn emptying_the_trash_asks_about_an_entry_it_cant_read() {
+    let bench = Bench::new("restore-empty-locked");
+    fs::write(bench.at("a"), "a").unwrap();
+    let client = bench.client();
+    let items = trashed(&bench, &client, &[bench.at("a")]);
+    let files = items[0].parent().unwrap();
+    fs::set_permissions(files, fs::Permissions::from_mode(UNSEARCHABLE)).unwrap();
+    if items[0].symlink_metadata().is_ok() {
+        return;
+    }
+
+    let job = client.start(Operation::EmptyTrash);
+    let conflict = held(&client, job);
+    fs::set_permissions(files, fs::Permissions::from_mode(SEARCHABLE)).unwrap();
+
+    assert_eq!(
+        (conflict.kind, &conflict.source),
+        (ConflictKind::PermissionDenied, &items[0])
+    );
+    answer(&client, job, &conflict, Answer::Retry, Scope::ThisOne);
+    assert_eq!(client.ended(job).0, Outcome::Done);
+    assert!(!items[0].exists());
 }
 
 fn crashed_restore(name: &str, moved: bool) -> Bench {

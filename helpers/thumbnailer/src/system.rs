@@ -200,14 +200,15 @@ fn run_within(exec: &[String], request: &Request, timeout: Duration) -> io::Resu
         return Err(io::ErrorKind::TimedOut.into());
     }
     let status = child.wait()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("thumbnailer exited with {status}"),
-        ))
-    }
+    let kind = match status.code() {
+        Some(0) => return Ok(()),
+        Some(_) => io::ErrorKind::InvalidData,
+        None => io::ErrorKind::Interrupted,
+    };
+    Err(io::Error::new(
+        kind,
+        format!("thumbnailer exited with {status}"),
+    ))
 }
 
 fn exits_within(child: &Child, timeout: Duration) -> io::Result<bool> {

@@ -44,7 +44,7 @@ pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
 pub use window::{CoreStatus, MainWindow, Scope, WindowEvent, home_folder};
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
-pub use window_state::{WindowState, fetch as fetch_window_state};
+pub use window_state::fetch as fetch_window_state;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ended {

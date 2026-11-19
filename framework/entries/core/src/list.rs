@@ -34,8 +34,10 @@ pub fn read_folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<Vec<Entr
             found.sort_by_cached_key(sort_key);
             return Ok(numbered(found));
         };
-        match item.and_then(|item| Ok((item.file_name(), kind_of(&item)?))) {
-            Ok(entry) => found.push(entry),
+        match item {
+            Ok(item) => {
+                found.extend(kind_or_gone(kind_of(&item)).map(|kind| (item.file_name(), kind)));
+            }
             Err(error) => vanished(error)?,
         }
     }
@@ -60,6 +62,14 @@ fn vanished(error: io::Error) -> Result<(), Stopped> {
         Ok(())
     } else {
         Err(error.into())
+    }
+}
+
+fn kind_or_gone(kind: io::Result<EntryKind>) -> Option<EntryKind> {
+    match kind {
+        Ok(kind) => Some(kind),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(_) => Some(EntryKind::File),
     }
 }
 
@@ -128,6 +138,16 @@ mod tests {
         assert_eq!(
             vanished(io::Error::other("disk failed")),
             Err(Stopped::Unreadable(Unreadable::Failed))
+        );
+    }
+
+    #[test]
+    fn an_entry_whose_kind_cant_be_read_stays_listed_as_a_file() {
+        assert_eq!(kind_or_gone(Ok(EntryKind::Folder)), Some(EntryKind::Folder));
+        assert_eq!(kind_or_gone(Err(io::ErrorKind::NotFound.into())), None);
+        assert_eq!(
+            kind_or_gone(Err(io::Error::other("disk failed"))),
+            Some(EntryKind::File)
         );
     }
 

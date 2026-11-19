@@ -6,6 +6,7 @@ use nova_files_ui::CoreStatus;
 use super::*;
 
 mod drawn;
+mod framing;
 mod hooks;
 mod kept;
 mod listing;

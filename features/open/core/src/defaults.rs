@@ -2,9 +2,9 @@
 // https://specifications.freedesktop.org/mime-apps-spec/latest/
 use std::collections::HashSet;
 use std::ffi::OsString;
-use std::fs::File;
-use std::io::Read as _;
 use std::path::{Path, PathBuf};
+
+use nova_files_disk::capped;
 
 use super::entry::{self, Entry};
 
@@ -188,13 +188,7 @@ fn find_entry(apps: &Path, id: &str) -> Option<PathBuf> {
 }
 
 fn read_capped(path: &Path) -> Option<String> {
-    let mut text = String::new();
-    File::open(path)
-        .ok()?
-        .take(MAX_LIST_BYTES)
-        .read_to_string(&mut text)
-        .ok()?;
-    Some(text)
+    capped::text(path, MAX_LIST_BYTES)
 }
 
 #[cfg(test)]
@@ -272,6 +266,27 @@ mod tests {
                 "[Added Associations]\nimage/png=c.desktop\n[Default Applications]\nimage/png=missing.desktop; b.desktop;\n",
             )
             .write("etc/mimeapps.list", "[Default Applications]\nimage/png=c.desktop\n");
+        assert_eq!(
+            tree.default_for(&["image/png"]).as_deref(),
+            Some("share/applications/b.desktop")
+        );
+    }
+
+    #[test]
+    fn a_byte_that_is_not_utf8_hides_neither_the_app_nor_the_list() {
+        let tree = Tree::new("defaults-not-utf8");
+        tree.write("share/applications/b.desktop", "");
+        std::fs::write(
+            tree.0.join("share/applications/b.desktop"),
+            b"[Desktop Entry]\nType=Application\nComment=Gr\xfcn\nExec=app %f\n",
+        )
+        .unwrap();
+        tree.write("config/mimeapps.list", "");
+        std::fs::write(
+            tree.0.join("config/mimeapps.list"),
+            b"# Gr\xfcn\n[Default Applications]\nimage/png=b.desktop\n",
+        )
+        .unwrap();
         assert_eq!(
             tree.default_for(&["image/png"]).as_deref(),
             Some("share/applications/b.desktop")
