@@ -595,3 +595,20 @@ fn new_folder_and_paste_wait_while_results_show(cx: &mut TestAppContext) {
 
     assert_eq!(started(&mut core), []);
 }
+
+#[gpui::test]
+fn the_folder_arrow_keeps_to_the_folder_while_results_show(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = searching(cx);
+    assert!(cx.debug_bounds("crumb-0").is_some());
+    assert!(cx.debug_bounds("arrow-0").is_none());
+    cx.simulate_input("rep");
+    cx.run_until_parked();
+    let mut last = None;
+    while let Some((id, ..)) = next_find(&mut core) {
+        last = Some(id);
+    }
+    let folder_first = [REPORTS[1], REPORTS[0]];
+    answer_found(&core, last.unwrap(), &folder_first);
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("arrow-0").is_none());
+}

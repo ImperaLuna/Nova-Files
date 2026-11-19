@@ -36,6 +36,7 @@ pub struct Search {
     pub(crate) failed: bool,
     pub(crate) focus_to: Option<FocusTo>,
     pub(crate) reveal: Option<PathBuf>,
+    pub(crate) from_has_folders: bool,
     _changes: Subscription,
 }
 
@@ -58,6 +59,7 @@ impl Search {
             failed: false,
             focus_to: None,
             reveal: None,
+            from_has_folders: false,
             _changes: changes,
         }
     }
@@ -108,6 +110,9 @@ impl MainWindow {
             .as_ref()
             .map(|connection| connection.send(Command::Find { id, query, within }));
         if matches!(sent, Some(Ok(()))) {
+            if !self.searching() {
+                self.search.from_has_folders = self.asked.is_none() && self.has_folders();
+            }
             self.asked = None;
             self.search.asked = Some(id);
             self.search.from = Some(from);
