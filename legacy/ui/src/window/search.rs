@@ -8,8 +8,8 @@ use nova_files_search_api::Command;
 use super::MainWindow;
 use super::events::Place;
 use crate::location::Location;
-use crate::pick::typed::HOME;
 use nova_files_shell::text::{TextField, TextFieldEvent};
+use nova_files_shell::typed::HOME;
 
 const PLACEHOLDER: &str = "Search";
 
