@@ -131,6 +131,9 @@ impl MainWindow {
     }
 
     pub(crate) fn has_folders(&self) -> bool {
+        if self.searching() {
+            return self.search.from_has_folders;
+        }
         self.listing
             .as_ref()
             .and_then(|listing| listing.entries.first())

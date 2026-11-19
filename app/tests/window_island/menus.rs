@@ -247,6 +247,8 @@ async fn the_trash_offers_restore_and_empty_trash(cx: &mut TestAppContext) {
     wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
     open_trash(&view, cx, false).await;
     wait_for_names(&view, cx, &["notes.txt"]).await;
+    view.condition::<WindowEvent>(cx, |view, cx| trash_count(view, cx) == Some(1))
+        .await;
 
     right_click_space(cx, 1);
     assert_eq!(
