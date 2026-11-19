@@ -45,6 +45,12 @@ const REAPER_THREAD: &str = "nova-files-opened-app";
 const OPEN_THREAD: &str = "nova-files-open";
 const ANY_FILE: &str = "/";
 
+static LAUNCHED_WITHOUT: OnceLock<&'static str> = OnceLock::new();
+
+pub fn launch_without(variable: &'static str) {
+    LAUNCHED_WITHOUT.set(variable).ok();
+}
+
 pub fn open(
     events: &Arc<dyn EventSink>,
     (types, archives): (Arc<OnceLock<MimeTypes>>, Arc<dyn TakeOut>),
@@ -181,6 +187,9 @@ fn prepare(
         .process_group(0)
         .env_remove(ACTIVATION_TOKEN_VAR)
         .env_remove(STARTUP_ID_VAR);
+    if let Some(variable) = LAUNCHED_WITHOUT.get() {
+        command.env_remove(variable);
+    }
     if let Some(dir) = working_dir {
         command.current_dir(dir);
     }
@@ -316,6 +325,17 @@ mod tests {
         assert_eq!(envs.get(OsStr::new(ACTIVATION_TOKEN_VAR)), Some(&None));
         assert_eq!(envs.get(OsStr::new(STARTUP_ID_VAR)), Some(&None));
         assert_eq!(command.get_current_dir(), None);
+    }
+
+    #[test]
+    fn a_launch_leaves_out_the_variable_set_for_this_process_only() {
+        const SET_HERE: &str = "NOVA_FILES_TEST_SET_HERE";
+        launch_without(SET_HERE);
+
+        let command = prepare(OsStr::new("app"), &[], None, None);
+
+        let envs: HashMap<_, _> = command.get_envs().collect();
+        assert_eq!(envs.get(OsStr::new(SET_HERE)), Some(&None));
     }
 
     #[test]

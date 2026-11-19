@@ -299,7 +299,7 @@ fn a_marker_in_home_itself_removes_nothing() {
 }
 
 #[test]
-fn a_folder_that_cant_be_read_is_added_with_a_rescan() {
+fn a_folder_that_cant_be_read_is_added_without_a_rescan() {
     use std::os::unix::fs::DirBuilderExt as _;
     const NO_ACCESS: u32 = 0o000;
     let mut watched = Watched::new(&[]);
@@ -312,10 +312,12 @@ fn a_folder_that_cant_be_read_is_added_with_a_rescan() {
         return;
     }
     watched.until(added(&locked));
-    let rescan = Change::Rescan {
-        folder: locked.clone(),
-    };
-    watched.until(|change| *change == rescan);
+    let after = watched.settle();
+    let rescans: Vec<&Change> = after
+        .iter()
+        .filter(|change| matches!(change, Change::Rescan { .. }))
+        .collect();
+    assert_eq!(rescans, Vec::<&Change>::new());
 }
 
 #[test]
