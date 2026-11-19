@@ -19,6 +19,8 @@ use crate::jump::Jump;
 use crate::layout::Layout;
 use crate::location::{Location, PageKind, PageRef};
 use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
+use crate::navigator::FolderPick;
+use crate::opening::Opening;
 use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
@@ -82,6 +84,8 @@ pub type PageTurn<P> = Rc<dyn Fn(&mut P, &PageRef, TabId, &mut Context<P>)>;
 pub type Refused<P> = fn(&mut P, ListingId, &Path, &mut Context<P>);
 pub type Clicks<P> = fn(&mut P, ListingId, &Entry, Click, &mut Context<P>) -> Option<ClickAnswer>;
 pub type Resized<P> = fn(&mut P, Size<Pixels>, &mut Context<P>);
+pub type Started<P> = fn(&mut P, &Opening, &mut Window, &mut Context<P>);
+pub type FolderPicks<P> = fn(&mut P, FolderPick, Option<PathBuf>, &mut Context<P>) -> bool;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Click {
@@ -181,6 +185,9 @@ pub struct Slots<P> {
     pub(crate) closing: Vec<Closing<P>>,
     pub(crate) clicks: Vec<Clicks<P>>,
     pub(crate) resized: Vec<Resized<P>>,
+    pub(crate) started: Vec<Started<P>>,
+    pub(crate) dismissed: Vec<Closing<P>>,
+    pub(crate) folder_picks: Vec<FolderPicks<P>>,
     pub(crate) selectable: Vec<Selectable<P>>,
     pub(crate) several: Vec<Several<P>>,
     pub(crate) dims: Vec<Dims<P>>,
@@ -237,6 +244,9 @@ impl<P> Default for Slots<P> {
             closing: Vec::new(),
             clicks: Vec::new(),
             resized: Vec::new(),
+            started: Vec::new(),
+            dismissed: Vec::new(),
+            folder_picks: Vec::new(),
             selectable: Vec::new(),
             several: Vec::new(),
             dims: Vec::new(),
@@ -479,6 +489,18 @@ impl<P: Part> Slots<P> {
 
     pub fn resized(&mut self, resized: Resized<P>) {
         self.resized.push(resized);
+    }
+
+    pub fn started(&mut self, started: Started<P>) {
+        self.started.push(started);
+    }
+
+    pub fn dismissed(&mut self, dismissed: Closing<P>) {
+        self.dismissed.push(dismissed);
+    }
+
+    pub fn folder_picks(&mut self, picks: FolderPicks<P>) {
+        self.folder_picks.push(picks);
     }
 
     pub fn selectable(&mut self, selectable: Selectable<P>) {

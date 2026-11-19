@@ -16,6 +16,8 @@ use crate::jump::Jump;
 use crate::layout::Layout;
 use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
+use crate::navigator::FolderPick;
+use crate::opening::Opening;
 use crate::part::Part;
 use crate::part::{Click, ClickAnswer, DropOver, Staged};
 use crate::path_bar::Crumb;
@@ -245,6 +247,24 @@ impl WindowParts {
         for part in &self.opened {
             part.resized(size, cx);
         }
+    }
+
+    pub fn started(&self, opening: &Opening, window: &mut Window, cx: &mut App) {
+        for part in &self.opened {
+            part.started(opening, window, cx);
+        }
+    }
+
+    pub fn dismissed(&self, cx: &mut App) {
+        for part in &self.opened {
+            part.dismissed(cx);
+        }
+    }
+
+    pub fn pick_folder(&self, pick: &FolderPick, folder: Option<&Path>, cx: &mut App) -> bool {
+        self.opened
+            .iter()
+            .any(|part| part.pick_folder(pick, folder, cx))
     }
 
     pub fn overlays(&self) -> Vec<AnyView> {

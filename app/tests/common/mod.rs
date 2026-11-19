@@ -7,6 +7,8 @@ use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
 
+pub mod picking;
+
 use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, VisualTestContext};
 
 pub struct TempFolder(PathBuf);

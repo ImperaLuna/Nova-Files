@@ -25,6 +25,7 @@ use nova_files_api::EntryId;
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_ui::{MainWindow, WindowEvent};
 
+use common::picking::Picking as _;
 use common::{TempFolder, Watchdog, click_with, double_click};
 
 fn picker_tree() -> TempFolder {

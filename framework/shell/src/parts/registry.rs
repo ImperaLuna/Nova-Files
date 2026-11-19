@@ -1,15 +1,16 @@
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use gpui::{AnyView, App, AppContext as _, Entity, Global, KeyBinding};
+use gpui::{App, AppContext as _, Global, KeyBinding};
 use nova_files_messages::MessageType;
 
+use super::cards::{card_views, slot_view};
 use super::{OpenPart, Opened, WindowParts};
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::Location;
 use crate::part::{Card, Part, Slots};
-use crate::slot_view::{Draw, Fit, SlotView};
+use crate::slot_view::{Draw, Fit};
 
 #[derive(Clone, Copy)]
 struct Kind {
@@ -140,35 +141,6 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         path_chips,
         list_views,
     })
-}
-
-fn card_views<P: Part>(
-    entity: &Entity<P>,
-    host: &Host,
-    cards: &[Card<P>],
-    fit: Fit,
-    cx: &mut App,
-) -> Vec<AnyView> {
-    cards
-        .iter()
-        .map(|&card| {
-            let (part, host) = (entity.clone(), host.clone());
-            let draw: Draw = Box::new(move |window, cx| {
-                let scene = host.scene(cx);
-                part.update(cx, |part, cx| card(part, &scene, window, cx))
-            });
-            slot_view(entity, draw, fit, cx)
-        })
-        .collect()
-}
-
-fn slot_view<P: Part>(part: &Entity<P>, draw: Draw, fit: Fit, cx: &mut App) -> AnyView {
-    let part = part.clone();
-    cx.new(|cx| {
-        cx.observe(&part, |_, _, cx| cx.notify()).detach();
-        SlotView::new(draw, fit)
-    })
-    .into()
 }
 
 fn takes<P: Part>() -> Vec<MessageType> {

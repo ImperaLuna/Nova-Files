@@ -89,7 +89,6 @@ enum Went {
 
 pub struct MainWindow {
     status: CoreStatus,
-    connector: Connector,
     pub(crate) connection: Option<Arc<Connection>>,
     pub(crate) listing: Option<Listing>,
     details: HashMap<usize, RowRead>,
@@ -189,6 +188,7 @@ impl MainWindow {
         opening: Opening,
         cx: &mut Context<Self>,
     ) -> Self {
+        crate::keep_opener(connector, cx);
         let (sink, events) = mpsc::unbounded();
         let connection = connect(connector, ChannelSink(sink)).map(Arc::new);
         let status = if connection.is_some() {
@@ -199,7 +199,6 @@ impl MainWindow {
         let events = Self::listen(events, cx);
         let (host, parts) = open_parts(connector, connection.clone(), &home, opening, cx);
         let mut window = Self {
-            connector: connector.clone(),
             status,
             connection,
             listing: None,

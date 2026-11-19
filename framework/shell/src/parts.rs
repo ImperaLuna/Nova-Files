@@ -18,12 +18,15 @@ use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
+use crate::navigator::FolderPick;
+use crate::opening::Opening;
 use crate::part::{Click, ClickAnswer, DropOver, Part, Slots, Staged};
 use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::text::TextField;
 
+mod cards;
 mod registry;
 mod window;
 
@@ -67,6 +70,9 @@ trait OpenPart {
         cx: &mut App,
     ) -> Option<ClickAnswer>;
     fn resized(&self, size: Size<Pixels>, cx: &mut App);
+    fn started(&self, opening: &Opening, window: &mut Window, cx: &mut App);
+    fn dismissed(&self, cx: &mut App);
+    fn pick_folder(&self, pick: &FolderPick, folder: Option<&Path>, cx: &mut App) -> bool;
     fn overlays(&self) -> Vec<AnyView>;
     fn layers(&self) -> Vec<AnyView>;
     fn path_chips(&self) -> Vec<(u8, AnyView)>;
@@ -302,6 +308,40 @@ impl<P: Part> OpenPart for Opened<P> {
                 resized(part, size, cx);
             }
         });
+    }
+
+    fn started(&self, opening: &Opening, window: &mut Window, cx: &mut App) {
+        if self.slots.started.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for started in &self.slots.started {
+                started(part, opening, window, cx);
+            }
+        });
+    }
+
+    fn dismissed(&self, cx: &mut App) {
+        if self.slots.dismissed.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for dismissed in &self.slots.dismissed {
+                dismissed(part, cx);
+            }
+        });
+    }
+
+    fn pick_folder(&self, pick: &FolderPick, folder: Option<&Path>, cx: &mut App) -> bool {
+        if self.slots.folder_picks.is_empty() {
+            return false;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .folder_picks
+                .iter()
+                .any(|picks| picks(part, pick.clone(), folder.map(Path::to_path_buf), cx))
+        })
     }
 
     fn overlays(&self) -> Vec<AnyView> {

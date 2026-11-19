@@ -35,6 +35,7 @@ pub mod text;
 pub mod theme;
 pub mod typed;
 pub mod widgets;
+mod windows;
 
 pub use command::{CommandSpec, WINDOW_KEYS};
 pub use cursor::Move;
@@ -57,9 +58,9 @@ pub use over::{LaidOver, OverAsk, OverLeft, OverWant};
 pub use part::{
     Applies, BarRank, Busy, Card, CardRank, Cell, ChipRank, Click, ClickAnswer, Clicks, Closing,
     Column, Columns, Dims, DropAim, DropOver, DropSlot, DropTake, EmptyNote, Focus, FolderLayout,
-    HeadButton, Items, KeyDown, Listed, NameCell, NameField, Opens, Part, Refused, Rescaled,
-    Resized, RowIcon, RowMenu, Rows, RowsDrawn, Selectable, Several, Slots, Stage, Staged, Staging,
-    ThumbnailSide, Typed, Used, Watch, Wheel,
+    FolderPicks, HeadButton, Items, KeyDown, Listed, NameCell, NameField, Opens, Part, Refused,
+    Rescaled, Resized, RowIcon, RowMenu, Rows, RowsDrawn, Selectable, Several, Slots, Stage,
+    Staged, Staging, Started, ThumbnailSide, Typed, Used, Watch, Wheel,
 };
 pub use parts::{Parts, ShownColumn, Turn, WindowParts};
 pub use per_tab::{PerTab, TabId};
@@ -67,3 +68,4 @@ pub use published::{KnownFolder, KnownFolders, Published, ThumbnailsShown};
 pub use rules::{FolderName, FolderRules, RulesBook, Views};
 pub use scene::{Scene, Showing};
 pub use text::{TextField, TextFieldEvent};
+pub use windows::{Asked, CloseWhen, Opener, WindowAsk, WindowLook, open_window};

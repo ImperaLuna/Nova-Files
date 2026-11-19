@@ -5,11 +5,10 @@ use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription, Window};
 use nova_files_api::{Command, HiddenFiles, ListingId};
-use nova_files_picker_api::PickId;
 use nova_files_shell::path_bar::PathBarEvent;
 use nova_files_shell::{
-    self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
-    Opening, PageRef, Part, Scene, Showing, Shown, TabId, Turn,
+    self as shell, CloseWhen, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk,
+    NavEvent, Opening, PageRef, Part, Scene, Showing, Shown, TabId, Turn,
 };
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
@@ -138,10 +137,35 @@ impl MainWindow {
         self.location().cloned()
     }
 
-    pub(crate) fn open_as_picker(&mut self, id: PickId) {
+    pub fn open_as(&mut self, opening: Opening, window: &mut Window, cx: &mut Context<Self>) {
+        self.parts.started(&opening, window, cx);
         if !self.picker() {
-            self.host.opening = Opening::of(id);
+            self.host.opening = opening;
         }
+        self.watch_size(window, cx);
+    }
+
+    pub fn settle<R>(
+        &mut self,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, &mut Context<Self>) -> R,
+    ) -> R {
+        self.publish(cx);
+        let done = then(self, cx);
+        self.take_nav_asks(cx);
+        done
+    }
+
+    pub fn listing_id(&self) -> Option<ListingId> {
+        self.listing.as_ref().map(|listing| listing.id)
+    }
+
+    pub fn opened_as(&self, when: &CloseWhen) -> bool {
+        when(&self.host.opening)
+    }
+
+    pub fn dismiss(&self, cx: &mut App) {
+        self.parts.dismissed(cx);
     }
 
     pub const fn picker(&self) -> bool {
@@ -307,10 +331,8 @@ impl MainWindow {
                 NavAsk::FocusResults => self.focus_later(FocusTo::Results, cx),
                 NavAsk::PopUp(pop_up) => self.open_part_menu(pop_up.at, pop_up.groups, cx),
                 NavAsk::PickFolder(pick) => {
-                    self.pick_folder(&pick.title, &pick.accept, cx, move |_, path, cx| {
-                        let picked = pick.picked.clone();
-                        cx.defer(move |cx| picked(path, cx));
-                    });
+                    let folder = self.folder().map(Path::to_path_buf);
+                    self.parts.pick_folder(&pick, folder.as_deref(), cx);
                 }
             }
         }
