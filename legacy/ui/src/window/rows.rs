@@ -5,7 +5,7 @@ use gpui::{App, Context, RenderImage, Window};
 use nova_files_api::{
     Command, Details, EntryId, EntryKind, FileIcon, ListingId, ThemeIcon, ThumbnailSize,
 };
-use nova_files_settings_api::Thumbnails;
+use nova_files_shell::ThumbnailsShown;
 
 use super::MainWindow;
 use crate::columns::{self, ColumnText};
@@ -263,7 +263,7 @@ impl MainWindow {
         if let Ok(index) = usize::try_from(entry.0)
             && size == self.thumbnail_size()
             && self.rows_wanted.contains(&index)
-            && self.settings.thumbnails == Thumbnails::Shown
+            && self.thumbnails_shown == ThumbnailsShown::Shown
         {
             self.shrink_thumbnail(id, index, png, cx);
         }
@@ -292,7 +292,7 @@ impl MainWindow {
         if self.listing.as_ref().map(|listing| listing.id) == Some(made.id)
             && self.rows_wanted.contains(&made.index)
             && made.side == self.thumbnail_side()
-            && self.settings.thumbnails == Thumbnails::Shown
+            && self.thumbnails_shown == ThumbnailsShown::Shown
         {
             let replaced = self.thumbnails.insert(made.index, Arc::new(made.image));
             release(replaced, None, cx);

@@ -7,6 +7,8 @@ pub struct Scene {
     pub rules: FolderRules,
     pub selected: usize,
     pub picker: bool,
+    pub searching: bool,
+    pub gathered: bool,
 }
 
 impl Scene {

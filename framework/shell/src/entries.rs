@@ -13,6 +13,8 @@ pub struct Shown {
     pub selected: Vec<EntryId>,
     pub picker: bool,
     pub asked: Option<ListingId>,
+    pub searching: bool,
+    pub gathered: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +40,14 @@ impl Entries {
 
     pub const fn picker(&self) -> bool {
         self.shown.picker
+    }
+
+    pub const fn searching(&self) -> bool {
+        self.shown.searching
+    }
+
+    pub const fn gathered(&self) -> bool {
+        self.shown.gathered
     }
 
     pub const fn asked(&self) -> Option<ListingId> {

@@ -4,10 +4,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription};
+use nova_files_api::HiddenFiles;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
     PageRef, Part, Scene, Shown, TabId,
 };
+use nova_files_shell::{Published, ThumbnailsShown};
 
 use super::search::FocusTo;
 use super::{MainWindow, Went};
@@ -38,6 +40,8 @@ impl MainWindow {
                 this.take_entries_asks(cx);
             }),
             cx.on_release(|this, cx| this.parts.closing(cx)),
+            cx.observe_global::<Published<HiddenFiles>>(Self::hidden_published),
+            cx.observe_global::<Published<ThumbnailsShown>>(Self::thumbnails_published),
         ]);
         watching
     }
@@ -60,6 +64,8 @@ impl MainWindow {
             rules: self.folder_rules(),
             selected: self.selected_len(),
             picker: self.host.opening.is_some(),
+            searching: self.searching(),
+            gathered: self.gathered_here().is_some(),
         }
     }
 
@@ -144,6 +150,8 @@ impl MainWindow {
             selected,
             picker: self.host.opening.is_some(),
             asked: self.asked,
+            searching: self.searching(),
+            gathered: self.gathered_here().is_some(),
         };
         self.host
             .entries

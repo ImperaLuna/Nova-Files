@@ -13,3 +13,10 @@ impl<T: 'static> Published<T> {
         cx.try_global::<Self>().map(|published| &published.0)
     }
 }
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ThumbnailsShown {
+    #[default]
+    Shown,
+    Hidden,
+}
