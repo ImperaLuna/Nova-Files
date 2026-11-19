@@ -70,8 +70,8 @@ pub enum Command {
     },
     /// The entries of listing `id` the client shows or is about to show:
     /// `count` entries from `first`. The core reads the details of those it
-    /// hasn't read yet, answering with [`Event::DetailsRead`], and makes
-    /// their thumbnails at `size`, answering each with [`Event::Thumbnail`].
+    /// hasn't read yet, answering with [`Event::DetailsRead`], and the
+    /// thumbnails feature makes their thumbnails at `size`.
     /// Each request replaces the one before, so entries scrolled away are
     /// dropped; a new `size` sends every thumbnail again. Entries never
     /// asked for never have their details read. At most [`MAX_ROWS`]
@@ -244,14 +244,6 @@ pub enum Event {
         first: EntryId,
         details: Arc<[Details]>,
         icons: Arc<[FileIcon]>,
-    },
-    /// A thumbnail for entry `entry` of listing `id`, as PNG bytes that fit
-    /// in a square `size` across.
-    Thumbnail {
-        id: ListingId,
-        entry: EntryId,
-        size: ThumbnailSize,
-        png: Arc<[u8]>,
     },
     /// The standard folders that exist, in places-list order.
     Places(Vec<Place>),

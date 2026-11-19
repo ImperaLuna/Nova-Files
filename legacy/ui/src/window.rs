@@ -62,6 +62,7 @@ use nova_files_preview_api as preview_api;
 use nova_files_search_api as search_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
+use nova_files_thumbnails_api as thumbnails_api;
 use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;
@@ -357,6 +358,15 @@ impl MainWindow {
             Ok(settings_api::Event::Settings(settings)) => {
                 return self.settings_arrived(settings, cx);
             }
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<thumbnails_api::Event>() {
+            Ok(thumbnails_api::Event::Thumbnail {
+                id,
+                entry,
+                size,
+                png,
+            }) => return self.thumbnail_arrived((id, entry, size), png, cx),
             Err(envelope) => envelope,
         };
         match envelope.open::<trash_api::Event>() {

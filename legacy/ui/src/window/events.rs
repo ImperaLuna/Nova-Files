@@ -137,12 +137,6 @@ impl MainWindow {
             {
                 self.details_arrived(first, &details, &icons, cx);
             }
-            Event::Thumbnail {
-                id,
-                entry,
-                size,
-                png,
-            } => self.thumbnail_arrived((id, entry, size), png, cx),
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),

@@ -186,7 +186,7 @@ fn a_place_lists_and_says_when_its_folders_change() {
     loop {
         match client.next() {
             Event::GatheredChanged(Gathering::Projects) => break,
-            Event::DetailsRead { .. } | Event::Thumbnail { .. } => {}
+            Event::DetailsRead { .. } => {}
             other => panic!("expected Projects to change, got {other:?}"),
         }
     }

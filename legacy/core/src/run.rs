@@ -13,6 +13,8 @@ use nova_files_search_api as search_api;
 use nova_files_search_core::Searcher;
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
+use nova_files_thumbnails_api as thumbnails_api;
+use nova_files_thumbnails_core::Thumbnails;
 use nova_files_trash_api as trash_api;
 
 use crate::file_icons::FileIcons;
@@ -28,7 +30,6 @@ use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
 use crate::theme::Store as ThemeStore;
-use crate::thumbs::Thumbnails;
 use crate::trash;
 use crate::window_state::Store as WindowStateStore;
 
@@ -121,6 +122,7 @@ pub fn emitted_types() -> Vec<MessageType> {
         MessageType::of::<preview_api::Event>(),
         MessageType::of::<search_api::Event>(),
         MessageType::of::<settings_api::Event>(),
+        MessageType::of::<thumbnails_api::Event>(),
         MessageType::of::<trash_api::Event>(),
         MessageType::of::<DrivesEvent>(),
     ]

@@ -41,6 +41,7 @@ nova-files-preview-api.workspace = true
 nova-files-search-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
+nova-files-thumbnails-api.workspace = true
 nova-files-trash-api.workspace = true
 gpui = { workspace = true, features = ["test-support"] }
 # To call the running program over D-Bus, as a launcher would.

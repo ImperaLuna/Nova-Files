@@ -30,7 +30,8 @@
 # - nova-files-search-core
 # - nova-files-settings-api
 # - nova-files-settings-core
-# - nova-files-thumbnailer-launch
+# - nova-files-thumbnails-api
+# - nova-files-thumbnails-core
 # - nova-files-transfer-core
 # - nova-files-trash-api
 # - nova-files-trash-core
@@ -80,7 +81,8 @@ nova-files-search-api.workspace = true
 nova-files-search-core.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-settings-core.workspace = true
-nova-files-thumbnailer-launch.workspace = true
+nova-files-thumbnails-api.workspace = true
+nova-files-thumbnails-core.workspace = true
 nova-files-transfer-core.workspace = true
 nova-files-trash-api.workspace = true
 nova-files-trash-core.workspace = true

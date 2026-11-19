@@ -3590,6 +3590,7 @@ dependencies = [
  "nova-files-search-api",
  "nova-files-settings-api",
  "nova-files-shell",
+ "nova-files-thumbnails-api",
  "nova-files-trash-api",
  "nova-files-ui",
  "zbus",
@@ -3660,7 +3661,8 @@ dependencies = [
  "nova-files-search-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
- "nova-files-thumbnailer-launch",
+ "nova-files-thumbnails-api",
+ "nova-files-thumbnails-core",
  "nova-files-transfer-core",
  "nova-files-trash-api",
  "nova-files-trash-core",
@@ -3848,6 +3850,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-preview-api",
+ "nova-files-thumbnails-api",
  "nova-files-ui",
 ]
 
@@ -3857,6 +3860,24 @@ version = "0.1.0"
 dependencies = [
  "nova-files-api",
  "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-thumbnails-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-thumbnails-core"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-entries-core",
+ "nova-files-thumbnailer-launch",
+ "nova-files-thumbnails-api",
 ]
 
 [[package]]
@@ -3909,6 +3930,7 @@ dependencies = [
  "nova-files-search-api",
  "nova-files-settings-api",
  "nova-files-shell",
+ "nova-files-thumbnails-api",
  "nova-files-trash-api",
  "unicode-segmentation",
  "usvg",
