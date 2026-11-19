@@ -35,11 +35,12 @@ pub struct Store {
 impl Store {
     pub fn open(state_home: Option<&Path>) -> Self {
         let path = state_home.map(|home| home.join(FILE));
-        let views = path.as_deref().map(read).unwrap_or_default();
+        let read = path.as_deref().map(read);
+        let saved_to = path.filter(|_| read.as_ref().is_none_or(Option::is_some));
         Self {
-            views: RefCell::new(views.into()),
+            views: RefCell::new(read.flatten().unwrap_or_default().into()),
             listeners: RefCell::new(BTreeMap::new()),
-            saver: Saver::new(path, WHAT, SAVE_THREAD),
+            saver: Saver::new(saved_to, WHAT, SAVE_THREAD),
         }
     }
 
@@ -145,10 +146,24 @@ fn parse(bytes: &[u8]) -> Vec<(PathBuf, FolderView)> {
     }
 }
 
-fn read(path: &Path) -> Vec<(PathBuf, FolderView)> {
+fn read(path: &Path) -> Option<Vec<(PathBuf, FolderView)>> {
     match private_file::read(path, MAX_BYTES) {
-        Read::Bytes(bytes) => parse(&bytes),
-        Read::Missing | Read::TooBig | Read::Failed(_) => Vec::new(),
+        Read::Bytes(bytes) => Some(parse(&bytes)),
+        Read::Missing => Some(Vec::new()),
+        Read::TooBig => {
+            log::warn!(
+                "{} is over {MAX_BYTES} bytes; it isn't read or saved over",
+                path.display()
+            );
+            None
+        }
+        Read::Failed(error) => {
+            log::warn!(
+                "can't read {}; it isn't saved over: {error}",
+                path.display()
+            );
+            None
+        }
     }
 }
 

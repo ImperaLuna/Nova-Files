@@ -347,6 +347,34 @@ fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
     assert_eq!(left, ["h.png"], "the thumbnailer's own output is removed");
 }
 
+#[test]
+fn a_thumbnailer_killed_by_a_signal_leaves_no_failure_marker() {
+    let folder = TempFolder::new("system-killed");
+    let thumbnails = folder.0.join("thumbnails");
+    let data = folder.0.join("data");
+    fs::create_dir_all(data.join("mime")).unwrap();
+    fs::create_dir_all(data.join("thumbnailers")).unwrap();
+    fs::write(data.join("mime/globs2"), "50:video/mp4:*.mp4\n").unwrap();
+    let script = folder.0.join("killed.sh");
+    fs::write(&script, "#!/bin/sh\nkill -KILL $$\n").unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(
+        data.join("thumbnailers/killed.thumbnailer"),
+        format!(
+            "[Thumbnailer Entry]\nExec={} %i %o\nMimeType=video/mp4;\n",
+            script.display()
+        ),
+    )
+    .unwrap();
+    let mp4 = folder.0.join("clip.mp4");
+    fs::write(&mp4, b"").unwrap();
+
+    let answers = run_with_data(&thumbnails, &[(&mp4, "m.png")], &data);
+
+    assert_eq!(answers, ["failed"]);
+    assert!(!thumbnails.join("fail/nova-files/m.png").exists());
+}
+
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     haystack
         .windows(needle.len())

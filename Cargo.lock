@@ -3809,6 +3809,7 @@ version = "0.1.0"
 name = "nova-files-folders-core"
 version = "0.1.0"
 dependencies = [
+ "log",
  "nova-files-api",
  "nova-files-disk",
  "nova-files-folders-api",
