@@ -9,9 +9,9 @@ use nova_files_api::{
 };
 
 use super::MainWindow;
+use crate::island;
 use crate::island::progress::Running;
 use crate::island::several::Batch;
-use crate::island::{self, NoteUndo};
 
 pub const SHOW_AFTER: Duration = Duration::from_millis(400);
 pub const READ_AGAIN_EVERY: Duration = Duration::from_millis(500);
@@ -188,17 +188,6 @@ impl MainWindow {
             return;
         };
         cx.notify();
-        if matches!(operation, Operation::ChangeAccess { .. }) {
-            self.access_changed();
-        }
-        if *outcome != Outcome::Done
-            && matches!(
-                operation,
-                Operation::Rename { .. } | Operation::NewFolder { .. }
-            )
-        {
-            self.waiting = super::renaming::Waiting::Nothing;
-        }
         let transfer = is_transfer(&operation);
         let others = self.transfers_running();
         let batching = others || !self.jobs.batch.is_empty();
@@ -214,7 +203,7 @@ impl MainWindow {
             .jobs
             .undoable
             .contains(&job)
-            .then_some(NoteUndo::Job(job));
+            .then_some(nova_files_shell::Undo::Job(job));
         let own = island::finished_note(&operation, outcome, self.folder(), tally);
         let together = (transfer && !others && !self.jobs.batch.is_empty())
             .then(|| self.jobs.batch.note())

@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod kind;
+mod undo;
 
 use std::ffi::OsStr;
 use std::fs::DirBuilder;

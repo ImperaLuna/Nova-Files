@@ -1,10 +1,8 @@
-use std::fmt;
-use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{App, SharedString, Task};
 use nova_files_api::JobId;
-use nova_files_shell::{OnUndo, Undo};
+use nova_files_shell::Undo;
 
 pub const NOTE_TIME: Duration = Duration::from_secs(6);
 
@@ -27,7 +25,7 @@ impl Island {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Note {
     pub label: SharedString,
-    pub undo: Option<NoteUndo>,
+    pub undo: Option<Undo>,
 }
 
 pub struct Confirm {
@@ -36,46 +34,9 @@ pub struct Confirm {
     pub on_yes: Box<dyn FnOnce(&mut App)>,
 }
 
-#[derive(Clone)]
-pub enum NoteUndo {
-    Job(JobId),
-    Send(Vec<nova_files_gathered_api::Command>),
-    Run(OnUndo),
-}
-
-impl From<Undo> for NoteUndo {
-    fn from(undo: Undo) -> Self {
-        match undo {
-            Undo::Job(job) => Self::Job(job),
-            Undo::Run(run) => Self::Run(run),
-        }
-    }
-}
-
-impl fmt::Debug for NoteUndo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Job(job) => f.debug_tuple("Job").field(job).finish(),
-            Self::Send(commands) => f.debug_tuple("Send").field(commands).finish(),
-            Self::Run(_) => f.debug_tuple("Run").finish_non_exhaustive(),
-        }
-    }
-}
-
-impl PartialEq for NoteUndo {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Job(one), Self::Job(other)) => one == other,
-            (Self::Send(one), Self::Send(other)) => one == other,
-            (Self::Run(one), Self::Run(other)) => Rc::ptr_eq(one, other),
-            _ => false,
-        }
-    }
-}
-
 pub fn drop_undo(note: &mut Option<Note>, job: JobId) -> bool {
     match note {
-        Some(note) if note.undo == Some(NoteUndo::Job(job)) => {
+        Some(note) if note.undo == Some(Undo::Job(job)) => {
             note.undo = None;
             true
         }

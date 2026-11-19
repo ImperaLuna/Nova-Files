@@ -6,14 +6,12 @@ mod island;
 mod menu;
 mod path;
 mod preview;
-mod properties;
 mod row;
 mod search;
 mod sheet;
 mod sidebar;
 mod start;
 
-pub use properties::TopFacts;
 pub use row::{RowIcon, entry_kind};
 
 use gpui::{
@@ -32,10 +30,7 @@ use crate::commands::{
     SelectPageUp, SelectRight, SelectUp, ToggleHidden, TogglePreview, ToggleSelected,
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
-use crate::commands::{
-    CloseTab, NewFolder, NewTab, NextTab, PreviousTab, RenameSelected, ShowProperties,
-    TrashSelected, Undo,
-};
+use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, ShowProperties, TrashSelected};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
 use crate::window::{FocusTo, MainWindow};
@@ -65,7 +60,6 @@ impl Render for MainWindow {
 impl MainWindow {
     fn window_root(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
         self.set_scale_factor(window.scale_factor(), window, cx);
-        self.start_wanted_rename(window, cx);
         self.settle_search(window, cx);
         self.settle_tab_focus(window, cx);
         let colors = Colors::of(cx);
@@ -164,11 +158,6 @@ impl MainWindow {
                 this.trash_selected(cx);
             }
         }))
-        .on_action(cx.listener(|this, _: &Undo, _, cx| this.undo(cx)))
-        .on_action(cx.listener(|this, _: &RenameSelected, window, cx| {
-            this.start_rename(window, cx);
-        }))
-        .on_action(cx.listener(|this, _: &NewFolder, _, _| this.new_folder()))
     }
 
     fn body(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Div {

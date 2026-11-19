@@ -21,13 +21,14 @@ async fn properties_window<'a>(
 }
 
 async fn read_page(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<Arc<Properties>> {
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.properties_page()
-            .is_some_and(nova_files_ui::PropertiesPage::complete)
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        props(view, cx)
+            .page()
+            .is_some_and(nova_files_properties_ui::Page::complete)
     })
     .await;
     cx.run_until_parked();
-    view.read_with(cx, |view, _| view.properties_page().unwrap().read())
+    view.read_with(cx, |view, cx| props(view, cx).page().unwrap().read())
 }
 
 #[gpui::test]
@@ -68,12 +69,12 @@ async fn the_menu_opens_a_files_properties_in_a_new_tab(cx: &mut TestAppContext)
     cx.run_until_parked();
     assert!(cx.debug_bounds("properties-top").is_some());
     assert!(cx.debug_bounds("properties-date-0").is_some());
-    view.read_with(cx, |view, _| {
-        let (name, line) = view.properties_titles().unwrap();
+    view.read_with(cx, |view, cx| {
+        let (name, line) = props(view, cx).titles(cx).unwrap();
         assert_eq!(name, "notes.txt");
         assert_eq!(line, "TXT file · ~");
-        assert_eq!(view.properties_icon(), Some(Icon::File));
-        let top = view.properties_top().unwrap();
+        assert_eq!(props(view, cx).icon(), Some(Icon::File));
+        let top = props(view, cx).top(cx).unwrap();
         assert_eq!(top.amount.as_deref(), Some("12 B"));
         assert!(!top.has_bar);
         assert_eq!(top.share, None);
@@ -86,7 +87,7 @@ async fn the_menu_opens_a_files_properties_in_a_new_tab(cx: &mut TestAppContext)
     cx.run_until_parked();
     assert_eq!(
         view.read_with(cx, |view, _| view.location().cloned()),
-        Some(Location::Properties(vec![notes.clone()]))
+        Some(properties_at(vec![notes.clone()]))
     );
 
     click(cx, "up");
@@ -95,7 +96,7 @@ async fn the_menu_opens_a_files_properties_in_a_new_tab(cx: &mut TestAppContext)
     cx.run_until_parked();
     assert_eq!(
         view.read_with(cx, |view, _| view.location().cloned()),
-        Some(Location::Properties(vec![notes]))
+        Some(properties_at(vec![notes]))
     );
 }
 
@@ -107,11 +108,11 @@ async fn a_lone_folder_keeps_its_own_icon(cx: &mut TestAppContext) {
     click(cx, "name-0");
     view.update(cx, MainWindow::show_properties);
     read_page(&view, cx).await;
-    view.read_with(cx, |view, _| {
-        let (name, line) = view.properties_titles().unwrap();
+    view.read_with(cx, |view, cx| {
+        let (name, line) = props(view, cx).titles(cx).unwrap();
         assert_eq!(name, "Projects");
         assert!(line.starts_with('~'), "{line}");
-        assert_eq!(view.properties_icon(), None);
+        assert_eq!(props(view, cx).icon(), None);
     });
 }
 
@@ -129,12 +130,12 @@ async fn alt_enter_shows_several_entries_on_one_page(cx: &mut TestAppContext) {
     let read = read_page(&view, cx).await;
     let kinds: Vec<PathKind> = read.iter().map(|one| one.kind.clone()).collect();
     assert_eq!(kinds, [PathKind::Folder, PathKind::File, PathKind::File]);
-    view.read_with(cx, |view, _| {
+    view.read_with(cx, |view, cx| {
         assert_eq!(view.tab_names()[1], "3 items");
-        let (name, line) = view.properties_titles().unwrap();
+        let (name, line) = props(view, cx).titles(cx).unwrap();
         assert_eq!(name, "3 items");
         assert_eq!(line, "1 folder, 2 files · ~");
-        assert_eq!(view.properties_icon(), None);
+        assert_eq!(props(view, cx).icon(), None);
         assert_eq!(view.parent().as_deref(), Some(tree.path()));
     });
 }
@@ -149,17 +150,18 @@ async fn a_page_shown_again_reads_again_and_goes_to_start_once_all_is_gone(
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-1");
     view.update(cx, MainWindow::show_properties);
-    view.read_with(cx, |view, _| {
-        assert!(!view.properties_page().unwrap().complete());
-        assert_eq!(view.properties_titles(), None);
+    view.read_with(cx, |view, cx| {
+        assert!(!props(view, cx).page().unwrap().complete());
+        assert_eq!(props(view, cx).titles(cx), None);
     });
     assert_eq!(read_page(&view, cx).await[0].bytes, 0);
 
     view.update(cx, |view, cx| view.switch_tab(0, cx));
     fs::write(&notes, "more").unwrap();
     view.update(cx, |view, cx| view.switch_tab(1, cx));
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.properties_page()
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        props(view, cx)
+            .page()
             .is_some_and(|page| page.read().first().is_some_and(|one| one.bytes == 4))
     })
     .await;
@@ -172,8 +174,9 @@ async fn a_page_shown_again_reads_again_and_goes_to_start_once_all_is_gone(
 
     fs::write(&notes, "back").unwrap();
     view.update(cx, MainWindow::go_back);
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.properties_page()
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        props(view, cx)
+            .page()
             .is_some_and(|page| page.read().first().is_some_and(|one| one.bytes == 4))
     })
     .await;
@@ -207,20 +210,22 @@ async fn one_of_two_coming_back_keeps_the_page(cx: &mut TestAppContext) {
     };
     fs::remove_file(&notes).unwrap();
     shown_again(&view, cx);
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.properties_page()
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        props(view, cx)
+            .page()
             .is_some_and(|page| page.read().len() == 1)
     })
     .await;
     fs::write(&notes, "").unwrap();
     shown_again(&view, cx);
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.properties_page()
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        props(view, cx)
+            .page()
             .is_some_and(|page| page.read().len() == 2)
     })
     .await;
     cx.run_until_parked();
-    assert!(view.read_with(cx, |view, _| view.properties_page().is_some()));
+    assert!(view.read_with(cx, |view, cx| props(view, cx).page().is_some()));
 }
 
 #[gpui::test]
@@ -242,7 +247,7 @@ async fn a_search_ends_when_the_page_shows_again(cx: &mut TestAppContext) {
     view.update(cx, MainWindow::go_back);
     cx.run_until_parked();
     view.read_with(cx, |view, cx| {
-        assert!(view.properties_page().is_some());
+        assert!(props(view, cx).page().is_some());
         assert!(!view.searching());
         assert_eq!(view.query(cx), "");
     });
@@ -269,12 +274,13 @@ async fn the_trash_has_no_properties(cx: &mut TestAppContext) {
 }
 
 async fn measured(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Size {
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.measured()
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        props(view, cx)
+            .measured()
             .is_some_and(|measure| measure.state == ScanState::Done)
     })
     .await;
-    view.read_with(cx, |view, _| view.measured().unwrap().size)
+    view.read_with(cx, |view, cx| props(view, cx).measured().unwrap().size)
 }
 
 #[gpui::test]
@@ -291,20 +297,23 @@ async fn a_folder_is_measured_while_its_page_is_on_screen(cx: &mut TestAppContex
     assert_eq!(size.bytes, 1_234);
     assert_eq!(size.files, 2);
     assert_eq!(size.folders, 2);
-    let top = view.read_with(cx, |view, _| view.properties_top().unwrap());
+    let top = view.read_with(cx, |view, cx| props(view, cx).top(cx).unwrap());
     assert!(top.amount.is_some());
     assert!(top.has_bar);
     let share = top.share.unwrap();
     assert!(share > 0.0 && share < 1.0, "{share}");
 
     view.update(cx, |view, cx| view.switch_tab(0, cx));
-    assert_eq!(view.read_with(cx, |view, _| view.measured()), None);
+    assert_eq!(
+        view.read_with(cx, |view, cx| props(view, cx).measured()),
+        None
+    );
     fs::write(nova.join("c.rs"), "x").unwrap();
     view.update(cx, |view, cx| view.switch_tab(1, cx));
-    let shown = view.read_with(cx, |view, _| view.measured().unwrap().shown());
+    let shown = view.read_with(cx, |view, cx| props(view, cx).measured().unwrap().shown());
     assert_eq!(shown.bytes, 1_234);
     assert_eq!(measured(&view, cx).await.bytes, 1_235);
-    let shown = view.read_with(cx, |view, _| view.measured().unwrap().shown());
+    let shown = view.read_with(cx, |view, cx| props(view, cx).measured().unwrap().shown());
     assert_eq!(shown.bytes, 1_235);
 }
 
@@ -320,7 +329,7 @@ async fn several_entries_add_up_files_and_folders_alike(cx: &mut TestAppContext)
     let size = measured(&view, cx).await;
     assert_eq!(size.bytes, 15);
     assert_eq!(size.files, 2);
-    let top = view.read_with(cx, |view, _| view.properties_top().unwrap());
+    let top = view.read_with(cx, |view, cx| props(view, cx).top(cx).unwrap());
     assert_eq!(top.amount.as_deref(), Some("15 B"));
     assert!(!top.has_bar);
 }
@@ -333,7 +342,7 @@ async fn an_answer_for_another_page_stays_off_this_one(cx: &mut TestAppContext) 
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-1");
     view.update(cx, MainWindow::show_properties);
-    let place = Location::Properties(vec![projects.clone()]);
+    let place = properties_at(vec![projects.clone()]);
     view.update(cx, |view, cx| view.new_tab(&place, cx));
     let read = read_page(&view, cx).await;
     assert_eq!(read.len(), 1);
@@ -351,12 +360,17 @@ async fn leaving_the_page_stops_its_measuring(cx: &mut TestAppContext) {
     cx.run_until_parked();
     view.update(cx, |view, cx| view.switch_tab(1, cx));
     assert_eq!(
-        view.read_with(cx, |view, _| view.measured().map(|measure| measure.state)),
+        view.read_with(cx, |view, cx| props(view, cx)
+            .measured()
+            .map(|measure| measure.state)),
         Some(ScanState::Counting)
     );
     measured(&view, cx).await;
 
     click(cx, "up");
     wait_for_folder(&view, cx, tree.path()).await;
-    assert_eq!(view.read_with(cx, |view, _| view.measured()), None);
+    assert_eq!(
+        view.read_with(cx, |view, cx| props(view, cx).measured()),
+        None
+    );
 }

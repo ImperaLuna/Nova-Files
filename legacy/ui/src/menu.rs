@@ -8,7 +8,7 @@ use nova_files_gathered_api::Gathering;
 
 use crate::assets::Icon;
 use crate::commands::CommandSpec;
-use crate::window::{AccessLevel, MainWindow, Who};
+use crate::window::MainWindow;
 
 pub const KEY_CONTEXT: &str = "Menu";
 
@@ -46,8 +46,6 @@ pub use nova_files_shell::Look;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuAction {
     OpenInNewTab(PathBuf),
-    SetDefaultApp { mime: String, app: String },
-    SetAccess(Who, AccessLevel),
     Run(&'static CommandSpec),
     Ungather(Gathering, PathBuf),
     AddGathered(Gathering),
@@ -127,15 +125,6 @@ impl From<nova_files_shell::MenuItem> for MenuItem {
 }
 
 impl MainWindow {
-    pub(crate) fn open_menu(
-        &mut self,
-        at: Point<Pixels>,
-        items: Vec<MenuItem>,
-        cx: &mut Context<Self>,
-    ) {
-        self.open_menu_groups(at, vec![items], false, cx);
-    }
-
     pub(crate) fn open_menu_groups(
         &mut self,
         at: Point<Pixels>,
@@ -215,8 +204,6 @@ impl MainWindow {
         window.focus(&self.keys_home(cx), cx);
         match item.action {
             MenuAction::OpenInNewTab(folder) => self.open_in_new_tab(folder, cx),
-            MenuAction::SetDefaultApp { mime, app } => self.set_default_app(mime, app),
-            MenuAction::SetAccess(who, level) => self.set_access(who, level),
             MenuAction::Run(spec) => window.dispatch_action(spec.action(), cx),
             MenuAction::Ungather(place, path) => self.ungather(place, path, cx),
             MenuAction::AddGathered(place) => self.pick_folder_to_gather(place, cx),
@@ -280,8 +267,9 @@ fn key_name(key: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::{NEW_FOLDER, RENAME, TRASH};
+    use crate::commands::TRASH;
     use nova_files_clipboard_ui::COPY;
+    use nova_files_rename_ui::{NEW_FOLDER, RENAME};
 
     fn label(spec: &CommandSpec) -> Option<String> {
         key_label(&spec.binding(spec.keys[0])).map(String::from)

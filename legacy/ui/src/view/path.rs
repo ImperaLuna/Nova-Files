@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use gpui::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
@@ -6,6 +6,7 @@ use gpui::{
 };
 use nova_files_api::EntryKind;
 use nova_files_gathered_api::Gathering;
+use nova_files_properties_ui::{PropertiesPage, PropertiesPart};
 use nova_files_shell::path_bar::{self, BarInput, Crumb, Spot};
 use nova_files_shell::{self as shell, MenuAt, PageRef, TextField, arrange};
 
@@ -20,7 +21,7 @@ impl MainWindow {
         let input = BarInput {
             on_screen: self.folder().map(Path::to_path_buf),
             asks: self.asks_sent,
-            crumbs: self.crumbs(),
+            crumbs: self.crumbs(cx),
             arrow_here: self.has_folders() && self.named_here().is_none(),
             chips: self.path_chips(colors, cx),
         };
@@ -89,12 +90,9 @@ impl MainWindow {
         chips
     }
 
-    fn crumbs(&self) -> Vec<Crumb> {
+    fn crumbs(&self, cx: &gpui::App) -> Vec<Crumb> {
         if let Some(place) = self.gathered_here() {
             return vec![gathered_crumb(place)];
-        }
-        if let Some(paths) = self.properties_paths() {
-            return self.properties_crumbs(paths);
         }
         if let Some(folder) = self.folder() {
             return self.named_here().map_or_else(
@@ -103,24 +101,26 @@ impl MainWindow {
             );
         }
         match self.location() {
-            Some(Location::Page(page)) => {
-                path_bar::page_crumbs(page, &self.home, self.known_folders())
-            }
+            Some(Location::Page(page)) => page.get::<PropertiesPage>().map_or_else(
+                || path_bar::page_crumbs(page, &self.home, self.known_folders()),
+                |shown| self.properties_crumbs(shown, cx),
+            ),
             _ => Vec::new(),
         }
     }
 
-    fn properties_crumbs(&self, paths: &[PathBuf]) -> Vec<Crumb> {
-        let shown = match paths {
+    fn properties_crumbs(&self, page: &PropertiesPage, cx: &gpui::App) -> Vec<Crumb> {
+        let shown = match page.paths() {
             [one] => one.as_path(),
-            _ => match self.properties_folder() {
+            _ => match page.folder() {
                 Some(folder) => folder,
                 None => return Vec::new(),
             },
         };
         let mut crumbs = path_bar::crumbs(shown, &self.home, self.known_folders());
         if let Some(last) = crumbs.last_mut() {
-            if let Some(icon) = self.properties_icon() {
+            let part = self.part::<PropertiesPart>();
+            if let Some(icon) = part.and_then(|part| part.read(cx).icon()) {
                 last.icon = icon;
             }
             last.opens = None;

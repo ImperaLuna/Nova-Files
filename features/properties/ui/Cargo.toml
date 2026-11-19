@@ -1,0 +1,39 @@
+# nova-files-properties-ui
+#
+# The Properties page's window half: the page itself, asking for an item's
+# facts and measuring its size, the drive share bar, Opens with and the
+# Access card with its menus.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-drives-api
+# - nova-files-open-api
+# - nova-files-properties-api
+# - nova-files-shell
+# - nova-files-start-api
+
+[package]
+name = "nova-files-properties-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-drives-api.workspace = true
+nova-files-open-api.workspace = true
+nova-files-properties-api.workspace = true
+nova-files-shell.workspace = true
+nova-files-start-api.workspace = true

@@ -34,7 +34,7 @@ use nova_files_picker_api::PickRequest;
 pub use assets::Icon;
 pub use columns::ColumnText;
 pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
-pub use island::{NOTE_TIME, Note, NoteUndo};
+pub use island::{NOTE_TIME, Note};
 pub use location::Location;
 pub use menu::{Look, Menu, MenuAction, MenuItem};
 use nova_files_shell::{Parts, assets, jump, kind, text, theme};
@@ -42,11 +42,7 @@ pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
-pub use view::TopFacts;
-pub use window::{
-    AccessLevel, CoreStatus, MainWindow, Previewed, PropertiesPage, Scope, Who, WindowEvent,
-    home_folder, shared_level,
-};
+pub use window::{CoreStatus, MainWindow, Previewed, Scope, WindowEvent, home_folder};
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
 pub use window_state::{WindowState, fetch as fetch_window_state};
 
@@ -74,7 +70,6 @@ pub fn sent_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_properties_api::Command>(),
         MessageType::of::<nova_files_search_api::Command>(),
         MessageType::of::<nova_files_settings_api::Command>(),
-        MessageType::of::<nova_files_start_api::Command>(),
     ]
 }
 
@@ -87,7 +82,6 @@ pub fn taken_types() -> Vec<MessageType> {
         MessageType::of::<nova_files_preview_api::Event>(),
         MessageType::of::<nova_files_properties_api::Event>(),
         MessageType::of::<nova_files_search_api::Event>(),
-        MessageType::of::<nova_files_start_api::Event>(),
     ]
 }
 

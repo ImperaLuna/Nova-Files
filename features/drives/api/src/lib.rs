@@ -6,7 +6,8 @@
 mod disk_space;
 mod drive;
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub use disk_space::{DiskSpace, MAX_DISK_SPACE_PATHS, PathSpace};
@@ -48,4 +49,29 @@ pub enum Event {
     /// How full the drives are, answering [`Command::DiskSpace`]: one
     /// entry per path asked, in the same order.
     DiskSpace(Vec<PathSpace>),
+}
+
+/// What a window knows of the drives: the list as last told, and how full
+/// each shown drive's folder is.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KnownDrives {
+    pub list: Arc<DriveList>,
+    pub space: HashMap<PathBuf, DiskSpace>,
+}
+
+impl KnownDrives {
+    /// How full the drive holding `path` is: the volume mounted deepest
+    /// above it, else the system drive at `/`.
+    pub fn space_holding(&self, path: &Path) -> Option<DiskSpace> {
+        let root = Path::new("/");
+        let folder = self
+            .list
+            .volumes
+            .iter()
+            .filter_map(|volume| volume.mount_point.as_deref())
+            .chain([root])
+            .filter(|folder| path.starts_with(folder))
+            .max_by_key(|folder| folder.components().count())?;
+        self.space.get(folder).copied()
+    }
 }

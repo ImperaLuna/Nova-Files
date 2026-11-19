@@ -2,9 +2,10 @@ use std::path::PathBuf;
 
 use gpui::{Context, SharedString};
 use nova_files_api::{EntryId, EntryKind, Listing, Operation};
+use nova_files_shell::Undo;
 
 use super::MainWindow;
-use crate::island::{NOTE_TIME, Note, NoteUndo};
+use crate::island::{NOTE_TIME, Note};
 use crate::selection::entry_at;
 
 impl MainWindow {
@@ -48,43 +49,16 @@ impl MainWindow {
         }
     }
 
-    pub(crate) fn undo(&mut self, cx: &mut Context<Self>) {
-        if self.renaming() || self.parts.busy(cx) {
-            return;
-        }
-        let undo = self
-            .island
-            .note
-            .as_ref()
-            .and_then(|note| note.undo.clone())
-            .or_else(|| self.jobs.last_undoable().map(NoteUndo::Job));
-        self.dismiss_note(cx);
-        match undo {
-            Some(NoteUndo::Job(job)) => {
-                self.start_job(Operation::Undo { job });
-            }
-            Some(NoteUndo::Run(run)) => cx.defer(move |cx| run(cx)),
-            Some(NoteUndo::Send(commands)) => {
-                if let Some(connection) = &self.connection {
-                    for command in commands {
-                        connection.send(command).ok();
-                    }
-                }
-            }
-            None => {}
-        }
-    }
-
     pub fn show_note(
         &mut self,
         label: impl Into<SharedString>,
-        undo: Option<NoteUndo>,
+        undo: Option<Undo>,
         cx: &mut Context<Self>,
     ) {
         self.put_note(label.into(), undo, cx);
     }
 
-    fn put_note(&mut self, label: SharedString, undo: Option<NoteUndo>, cx: &mut Context<Self>) {
+    fn put_note(&mut self, label: SharedString, undo: Option<Undo>, cx: &mut Context<Self>) {
         self.tell_note_gone(cx);
         self.island.note = Some(Note { label, undo });
         self.island.note_timer = Some(cx.spawn(async move |this, cx| {

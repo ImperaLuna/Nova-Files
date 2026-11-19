@@ -7,21 +7,22 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use gpui::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
 };
 use nova_files_api::{EntryKind, IconKind};
+use nova_files_drives_api::KnownDrives;
 use nova_files_properties_api::{PathKind, Properties, Size};
+use nova_files_shell::Published;
+use nova_files_shell::assets::Icon;
+use nova_files_shell::format::{self, ITEM, ITEMS};
+use nova_files_shell::kind::{built_in, glyph_of, icon_kind};
+use nova_files_shell::paths::{HOME, name_of, name_os, where_is};
+use nova_files_shell::theme::{Colors, radius, size, start, text};
+use nova_files_shell::widgets::{FAN_ENTRIES, fan, icon, space_bar as bar, titles};
 use nova_files_start_api::Peeked;
 
-use super::row::{built_in, glyph_of, icon};
-use super::start::{FAN_ENTRIES, bar, fan, name_of, name_os, titles, where_is};
-use crate::assets::Icon;
-use crate::columns;
-use crate::island::{self, ITEM, ITEMS};
-use crate::kind::icon_kind;
-use crate::theme::{Colors, radius, size, start, text};
-use crate::window::{MainWindow, PropertiesPage};
+use crate::PropertiesPart;
 
 const MODIFIED_LABEL: &str = "Modified";
 const CREATED_LABEL: &str = "Created";
@@ -35,99 +36,96 @@ const FILES_WORD: &str = "files";
 const FOLDER_WORD: &str = "folder";
 const FOLDERS_WORD: &str = "folders";
 const GROUP: usize = 3;
+const LIST_GAP: &str = ", ";
 
-impl MainWindow {
-    pub(super) fn properties_view(
-        &self,
-        page: &PropertiesPage,
-        cx: &Context<Self>,
-    ) -> impl IntoElement {
-        let colors = Colors::of(cx);
-        let read = page.read();
-        div()
-            .id("properties")
-            .debug_selector(|| "properties".to_owned())
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
-            .rounded_tl(radius::SHEET)
-            .child(
-                div()
-                    .mx_auto()
-                    .w_full()
-                    .max_w(start::MAX_WIDTH)
-                    .pt(start::PAD_TOP)
-                    .px(start::PAD_SIDE)
-                    .flex()
-                    .flex_col()
-                    .gap(start::GROUP_GAP)
-                    .when(!read.is_empty(), |column| {
-                        column.child(self.about(&read, &colors))
-                    })
-                    .children(match &read[..] {
-                        [one] => self.opens_with(one, cx),
-                        _ => None,
-                    })
-                    .when(!read.is_empty(), |column| {
-                        column.child(self.access(&read, cx))
-                    }),
-            )
+pub fn page(part: &PropertiesPart, cx: &Context<PropertiesPart>) -> AnyElement {
+    let colors = Colors::of(cx);
+    let read = part.page().map(crate::Page::read).unwrap_or_default();
+    div()
+        .id("properties")
+        .debug_selector(|| "properties".to_owned())
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .rounded_tl(radius::SHEET)
+        .child(
+            div()
+                .mx_auto()
+                .w_full()
+                .max_w(start::MAX_WIDTH)
+                .pt(start::PAD_TOP)
+                .px(start::PAD_SIDE)
+                .flex()
+                .flex_col()
+                .gap(start::GROUP_GAP)
+                .when(!read.is_empty(), |column| {
+                    column.child(about(part, &read, &colors, cx))
+                })
+                .children(match &read[..] {
+                    [one] => opens_with::card(part, one, cx),
+                    _ => None,
+                })
+                .when(!read.is_empty(), |column| {
+                    column.child(access::card(part, &read, cx))
+                }),
+        )
+        .into_any_element()
+}
+
+fn about(part: &PropertiesPart, read: &[Arc<Properties>], colors: &Colors, cx: &App) -> AnyElement {
+    let head = match read {
+        [one] => icon(lone_glyph(one), start::HERO_ICON, lone_tint(one, colors)).into_any_element(),
+        many => div()
+            .flex_none()
+            .w(fan_width())
+            .child(fan(peeked(many).iter().map(|peeked| peeked.kind), colors))
+            .into_any_element(),
+    };
+    let top = top_card(head, part.top_of(read, cx), colors);
+    let dates = match read {
+        [one] => date_cards(one, colors),
+        _ => None,
+    };
+    div()
+        .flex()
+        .flex_col()
+        .gap(size::GAP)
+        .child(top)
+        .children(dates)
+        .into_any_element()
+}
+
+impl PropertiesPart {
+    pub fn top(&self, cx: &App) -> Option<TopFacts> {
+        let read = self.page()?.read();
+        (!read.is_empty()).then(|| self.top_of(&read, cx))
     }
 
-    fn about(&self, read: &[Arc<Properties>], colors: &Colors) -> AnyElement {
-        let head = match read {
-            [one] => {
-                icon(lone_glyph(one), start::HERO_ICON, lone_tint(one, colors)).into_any_element()
-            }
-            many => div()
-                .flex_none()
-                .w(fan_width())
-                .child(fan(peeked(many).iter().map(|peeked| peeked.kind), colors))
-                .into_any_element(),
-        };
-        let top = top_card(head, self.top_of(read), colors);
-        let dates = match read {
-            [one] => date_cards(one, colors),
-            _ => None,
-        };
-        div()
-            .flex()
-            .flex_col()
-            .gap(size::GAP)
-            .child(top)
-            .children(dates)
-            .into_any_element()
+    pub fn titles(&self, cx: &App) -> Option<(String, String)> {
+        self.top(cx).map(|top| (top.name, top.line))
     }
 
-    pub fn properties_top(&self) -> Option<TopFacts> {
-        let read = self.properties_page()?.read();
-        (!read.is_empty()).then(|| self.top_of(&read))
-    }
-
-    pub fn properties_titles(&self) -> Option<(String, String)> {
-        self.properties_top().map(|top| (top.name, top.line))
-    }
-
-    fn top_of(&self, read: &[Arc<Properties>]) -> TopFacts {
+    fn top_of(&self, read: &[Arc<Properties>], cx: &App) -> TopFacts {
+        let home = &self.host.home;
         let measured = self.measured().map(|measure| measure.shown());
-        let amount = measured.map(|size| columns::size(size.bytes));
+        let amount = measured.map(|size| format::size(size.bytes));
         match read {
             [one] if one.kind == PathKind::Folder => TopFacts {
                 name: name_of(&one.path),
-                line: folder_line(&where_is(&one.path, &self.home), measured),
+                line: folder_line(&where_is(&one.path, home), measured),
                 amount,
                 has_bar: true,
-                share: measured.and_then(|size| self.share_of_drive(&one.path, size)),
+                share: measured.and_then(|size| share_of_drive(&one.path, size, cx)),
             },
             [one] => TopFacts {
                 name: name_of(&one.path),
-                line: lone_line(one, &self.home),
-                amount: Some(columns::size(one.bytes)),
+                line: lone_line(one, home),
+                amount: Some(format::size(one.bytes)),
                 has_bar: false,
                 share: None,
             },
             many => TopFacts {
-                name: island::count(many.len(), ITEM, ITEMS),
+                name: format::count(many.len(), ITEM, ITEMS),
                 line: self.several_line(many),
                 amount,
                 has_bar: false,
@@ -141,26 +139,42 @@ impl MainWindow {
             .iter()
             .filter(|one| one.kind == PathKind::Folder)
             .count();
-        let count = island::quiet_count(folders, read.len() - folders);
-        match self.properties_folder() {
-            Some(folder) => format!(
-                "{count}{SEPARATOR}{}",
-                island::short_path(folder, &self.home)
-            ),
+        let count = quiet_count(folders, read.len() - folders);
+        match self.shown_page().and_then(crate::PropertiesPage::folder) {
+            Some(folder) => format!("{count}{SEPARATOR}{}", short_path(folder, &self.host.home)),
             None => count,
         }
     }
 
-    fn share_of_drive(&self, path: &Path, size: Size) -> Option<f32> {
-        let space = self.drive_space_of(path)?;
-        share(size.on_disk, space.total)
-    }
-
-    pub fn properties_icon(&self) -> Option<Icon> {
-        match &self.properties_page()?.read()[..] {
+    pub fn icon(&self) -> Option<Icon> {
+        match &self.page()?.read()[..] {
             [one] if one.kind != PathKind::Folder => Some(lone_glyph(one)),
             _ => None,
         }
+    }
+}
+
+fn share_of_drive(path: &Path, size: Size, cx: &App) -> Option<f32> {
+    let space = Published::<KnownDrives>::get(cx)?.space_holding(path)?;
+    share(size.on_disk, space.total)
+}
+
+fn quiet_count(folders: usize, files: usize) -> String {
+    let mut parts = Vec::new();
+    if folders > 0 {
+        parts.push(format::count(folders, FOLDER_WORD, FOLDERS_WORD));
+    }
+    if files > 0 {
+        parts.push(format::count(files, FILE_WORD, FILES_WORD));
+    }
+    parts.join(LIST_GAP)
+}
+
+fn short_path(path: &Path, home: &Path) -> String {
+    match path.strip_prefix(home) {
+        Ok(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
+        Ok(rest) => format!("{HOME}/{}", rest.to_string_lossy()),
+        Err(_) => path.to_string_lossy().into_owned(),
     }
 }
 
@@ -291,7 +305,7 @@ fn dates(one: &Properties) -> Vec<(String, &'static str)> {
 }
 
 fn shown_date(time: Option<SystemTime>) -> Option<String> {
-    time.map(columns::modified).filter(|date| !date.is_empty())
+    time.map(format::modified).filter(|date| !date.is_empty())
 }
 
 fn lone_kind(one: &Properties) -> IconKind {
@@ -302,7 +316,7 @@ fn lone_kind(one: &Properties) -> IconKind {
     }
 }
 
-fn lone_glyph(one: &Properties) -> Icon {
+pub fn lone_glyph(one: &Properties) -> Icon {
     glyph_of(lone_kind(one))
 }
 
@@ -448,7 +462,7 @@ mod tests {
         let time = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         one.accessed = Some(time);
         one.modified = Some(time);
-        let shown = columns::modified(time);
+        let shown = format::modified(time);
         assert_eq!(
             dates(&one),
             [(shown.clone(), MODIFIED_LABEL), (shown, OPENED_LABEL)]

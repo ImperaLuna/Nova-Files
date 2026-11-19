@@ -2,6 +2,8 @@ use std::path::{Component, Path, PathBuf};
 
 use gpui::Context;
 use nova_files_api::{Command, EntryId, EntryKind, Envelope, ListingId, Message, Order, SortKey};
+use nova_files_properties_ui::PropertiesPage;
+use nova_files_shell::PageRef;
 
 use super::MainWindow;
 use crate::location::Location;
@@ -36,7 +38,6 @@ impl MainWindow {
             Location::Gathered(place) => {
                 self.request_gathered(*place);
             }
-            Location::Properties(paths) => self.arrive_at_properties(paths, cx),
             Location::Page(page) if self.parts.lists(page) => {
                 self.request_listed(page.clone());
             }
@@ -89,7 +90,6 @@ impl MainWindow {
             .map(|(command, connection)| connection.send_envelope(command));
         let sent = matches!(sent, Some(Ok(())));
         if sent {
-            self.stop_measuring();
             self.search.folder_asked();
             self.asks_sent += 1;
             self.asked = Some(id);
@@ -131,9 +131,23 @@ impl MainWindow {
         (entry.kind == EntryKind::Folder).then(|| listing.path_of(entry))
     }
 
+    pub fn show_properties(&mut self, cx: &mut Context<Self>) {
+        if self.folder_rules().trashed {
+            return;
+        }
+        let paths = self.selected_paths();
+        if !paths.is_empty() {
+            let page = PageRef::new(PropertiesPage::new(paths));
+            self.new_tab(&Location::Page(page), cx);
+        }
+    }
+
     pub fn parent(&self) -> Option<PathBuf> {
-        if self.properties_paths().is_some() {
-            return self.properties_folder().map(Path::to_path_buf);
+        if let Some(Location::Page(page)) = self.location() {
+            return page
+                .get::<PropertiesPage>()
+                .and_then(PropertiesPage::folder)
+                .map(Path::to_path_buf);
         }
         self.folder()?.parent().map(Path::to_path_buf)
     }
