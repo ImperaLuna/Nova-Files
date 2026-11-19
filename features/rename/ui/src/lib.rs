@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use gpui::{
     AnyWindowHandle, App, AppContext as _, Context, Entity, Focusable as _, Subscription, Window,
@@ -44,6 +44,12 @@ struct Renaming {
     _blur: Subscription,
 }
 
+impl Renaming {
+    fn path(&self) -> PathBuf {
+        self.folder.join(&self.name)
+    }
+}
+
 struct Made {
     folder: PathBuf,
     name: OsString,
@@ -51,7 +57,7 @@ struct Made {
 }
 
 impl RenamePart {
-    fn folder(&self, scene: &Scene) -> Option<PathBuf> {
+    fn in_folder(&self, scene: &Scene) -> Option<PathBuf> {
         if self.renaming.is_some() || scene.picker || scene.rules.read_only {
             return None;
         }
@@ -62,18 +68,44 @@ impl RenamePart {
             .map(PathBuf::from)
     }
 
+    fn folder(&self, scene: &Scene) -> Option<PathBuf> {
+        self.in_folder(scene).filter(|_| !scene.searching)
+    }
+
+    fn path_of(&self, entry: &Entry, cx: &App) -> Option<PathBuf> {
+        Some(self.host.entries.read(cx).listing()?.path_of(entry))
+    }
+
+    fn shows(&self, renaming: &Renaming, cx: &App) -> bool {
+        let entries = self.host.entries.read(cx);
+        let listed = entries.listing().is_some_and(|listing| {
+            listing
+                .entries
+                .iter()
+                .any(|entry| listing.path_of(entry) == renaming.path())
+        });
+        listed && entries.drawn(&renaming.name)
+    }
+
     fn rename_selected(&mut self, _: &RenameSelected, window: &mut Window, cx: &mut Context<Self>) {
         self.start(window, cx);
     }
 
     fn start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let scene = self.host.scene(cx);
-        let Some(folder) = self.folder(&scene) else {
+        if self.in_folder(&scene).is_none() {
             return;
-        };
-        let (name, is_folder) = match self.host.entries.read(cx).selected()[..] {
-            [entry] => (entry.name.clone(), entry.kind == EntryKind::Folder),
+        }
+        let (path, name, is_folder) = match self.host.entries.read(cx).selected()[..] {
+            [entry] => (
+                self.path_of(entry, cx),
+                entry.name.clone(),
+                entry.kind == EntryKind::Folder,
+            ),
             _ => return,
+        };
+        let Some(folder) = path.as_deref().and_then(Path::parent).map(PathBuf::from) else {
+            return;
         };
         let text = name.to_string_lossy().into_owned();
         let field = cx.new(TextField::new);
@@ -95,10 +127,10 @@ impl RenamePart {
         });
         let focus = field.read(cx).focus_handle(cx);
         let blur = cx.on_blur(&focus, window, |this, _, cx| {
-            let drawn = this.renaming.as_ref().is_some_and(|renaming| {
-                this.host.scene(cx).in_folder(&renaming.folder)
-                    && this.host.entries.read(cx).drawn(&renaming.name)
-            });
+            let drawn = this
+                .renaming
+                .as_ref()
+                .is_some_and(|renaming| this.shows(renaming, cx));
             this.finish(drawn, cx);
         });
         window.focus(&focus, cx);
@@ -125,10 +157,12 @@ impl RenamePart {
         if !keep || typed.is_empty() || name == renaming.name {
             return;
         }
-        let path = renaming.folder.join(&renaming.name);
-        self.host.entries.update(cx, |entries, cx| {
-            entries.select_when_listed(renaming.folder, vec![name.clone()], cx);
-        });
+        let path = renaming.path();
+        if !self.host.scene(cx).searching {
+            self.host.entries.update(cx, |entries, cx| {
+                entries.select_when_listed(renaming.folder, vec![name.clone()], cx);
+            });
+        }
         self.host.island.update(cx, |island, cx| {
             island.start_job(Operation::Rename { path, name }, cx);
         });
@@ -188,8 +222,7 @@ impl RenamePart {
 
 fn field_of(part: &RenamePart, entry: &Entry, cx: &App) -> Option<Entity<TextField>> {
     let renaming = part.renaming.as_ref()?;
-    (entry.name == renaming.name && part.host.scene(cx).in_folder(&renaming.folder))
-        .then(|| renaming.field.clone())
+    (part.path_of(entry, cx)? == renaming.path()).then(|| renaming.field.clone())
 }
 
 const fn renaming(part: &RenamePart, _: &App) -> bool {
@@ -202,7 +235,7 @@ const fn anywhere(_: &RenamePart, _: &Scene, _: &App) -> bool {
 
 fn rename_item(part: &RenamePart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
     let lone = part.host.entries.read(cx).selected().len() == 1;
-    if scene.rules.replaces_menu || !lone || part.folder(scene).is_none() {
+    if scene.rules.replaces_menu || !lone || part.in_folder(scene).is_none() {
         return Vec::new();
     }
     vec![MenuItem::run(Icon::Rename, &RENAME)]
