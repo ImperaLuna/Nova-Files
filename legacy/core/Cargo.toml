@@ -9,8 +9,6 @@
 # - serde
 # - serde_json
 # - toml
-# - toml_edit
-# - uzers
 #
 # Allowed workspace crates:
 # - nova-files-api
@@ -21,14 +19,22 @@
 # - nova-files-drives-api
 # - nova-files-drives-core
 # - nova-files-entries-core
+# - nova-files-gathered-api
+# - nova-files-gathered-core
 # - nova-files-index
 # - nova-files-jobs
 # - nova-files-look-api
 # - nova-files-look-core
 # - nova-files-messages
+# - nova-files-places-api
+# - nova-files-places-core
+# - nova-files-properties-api
+# - nova-files-properties-core
 # - nova-files-rename-core
 # - nova-files-settings-api
 # - nova-files-settings-core
+# - nova-files-start-api
+# - nova-files-start-core
 # - nova-files-thumbnailer-launch
 # - nova-files-transfer-core
 # - nova-files-trash-api
@@ -58,11 +64,6 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 # Reads the settings file and edits it in place, keeping the user's
 # comments; already in the lock through zbus's macros.
-toml_edit = { version = "0.25.18", default-features = false, features = ["display", "parse"] }
-# Names the owner and group of a file, and the groups the user is in, the
-# way the system does (NSS: LDAP, systemd-homed and the like as well as
-# /etc/passwd). The standard library and rustix have no such lookup.
-uzers = { version = "0.12.2", default-features = false }
 nova-files-api.workspace = true
 nova-files-archives-core.workspace = true
 nova-files-delete-core.workspace = true
@@ -70,14 +71,22 @@ nova-files-disk.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-drives-core.workspace = true
 nova-files-entries-core.workspace = true
+nova-files-gathered-api.workspace = true
+nova-files-gathered-core.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true
 nova-files-look-api.workspace = true
 nova-files-look-core.workspace = true
 nova-files-messages.workspace = true
+nova-files-places-api.workspace = true
+nova-files-places-core.workspace = true
+nova-files-properties-api.workspace = true
+nova-files-properties-core.workspace = true
 nova-files-rename-core.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-settings-core.workspace = true
+nova-files-start-api.workspace = true
+nova-files-start-core.workspace = true
 nova-files-thumbnailer-launch.workspace = true
 nova-files-transfer-core.workspace = true
 nova-files-trash-api.workspace = true
@@ -87,5 +96,3 @@ nova-files-trash-core.workspace = true
 nova-files-clipboard-api.workspace = true
 nova-files-jobs = { workspace = true, features = ["test-support"] }
 nova-files-picker-api.workspace = true
-# Gives a test's own thread other groups (accounts tests).
-rustix = { version = "1.1.6", default-features = false, features = ["thread"] }

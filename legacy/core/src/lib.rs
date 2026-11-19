@@ -1,19 +1,13 @@
 #![forbid(unsafe_code)]
 
-mod accounts;
 mod folder_views;
-mod gathered;
 mod index;
 mod inside;
 mod jobs;
-mod measure;
 mod mime;
 mod open;
 mod ops;
-mod places;
 mod preview;
-mod properties;
-mod recent;
 mod run;
 mod search;
 mod thumbs;
@@ -28,9 +22,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::{ClientId, Connector};
-use nova_files_disk::{
-    capped, change_writer, config_watch, hand_edited, mount_root, private_file, saver, timed,
-};
+use nova_files_disk::{capped, hand_edited, private_file, saver, timed};
 use nova_files_entries_core::{list, memory, order};
 
 use search::Searcher;
@@ -41,8 +33,8 @@ pub use mime::MimeTypes;
 pub use nova_files_archives_core::{
     ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe, seven_on,
 };
+pub use nova_files_disk::home::Home;
 pub use open::{NotDefault, make_default_for_folders, opens_folders};
-pub use places::Home;
 pub use run::{emitted_types, routed_types};
 pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
@@ -108,10 +100,10 @@ pub fn spawn_with_archiver(
             let settings = nova_files_settings_core::Store::open(config);
             let theme = nova_files_look_core::theme::Store::open(config);
             settings.listen(SETTINGS_LISTENER, &theme.follower());
-            let places = places::Store::open(home.clone());
-            let gathered = gathered::Store::open(home.clone());
+            let places = nova_files_places_core::Store::open(home.clone());
+            let gathered = nova_files_gathered_core::Store::open(home.clone());
             let state_home = home.as_ref().map(|home| home.state.as_path());
-            let recent = recent::Store::open(state_home);
+            let recent = nova_files_start_core::Store::open(state_home);
             let folder_views = folder_views::Store::open(state_home);
             let mime_types = Arc::default();
             let file_icons = Arc::new(nova_files_look_core::FileIcons::from_env(
@@ -131,7 +123,7 @@ pub fn spawn_with_archiver(
                 mime_types,
                 file_icons,
                 jobs: Arc::new(jobs),
-                measurer: measure::Measurer::default(),
+                measurer: nova_files_properties_core::Measurer::default(),
                 drives: nova_files_drives_core::Store::default(),
                 recent,
                 folder_views,

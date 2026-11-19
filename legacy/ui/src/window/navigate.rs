@@ -1,7 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use gpui::Context;
-use nova_files_api::{Command, EntryId, EntryKind, ListingId, Order, SortKey};
+use nova_files_api::{Command, EntryId, EntryKind, ListingId, Message, Order, SortKey};
 
 use super::MainWindow;
 use crate::location::Location;
@@ -55,10 +55,10 @@ impl MainWindow {
         self.ask_listing(place, |id, order| Command::ListFolder { id, path, order })
     }
 
-    pub(super) fn ask_listing(
+    pub(super) fn ask_listing<M: Message>(
         &mut self,
         place: Location,
-        command: impl FnOnce(ListingId, Order) -> Command,
+        command: impl FnOnce(ListingId, Order) -> M,
     ) -> bool {
         self.falling_back = false;
         let id = ListingId(self.next_listing);

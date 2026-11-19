@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::Context;
-use nova_files_api::{Command, Gathered, Gathering, Holds};
+use nova_files_gathered_api::{Command, Event, Gathered, Gathering, Holds};
 
 use super::MainWindow;
 use super::search::short_folder;
@@ -12,6 +12,13 @@ use crate::location::Location;
 pub const LIBRARY_LABEL: &str = "Library";
 
 impl MainWindow {
+    pub(super) fn gathered_event(&mut self, event: Event, cx: &mut Context<Self>) {
+        match event {
+            Event::Gathered(gathered) => self.gathered_arrived(gathered, cx),
+            Event::GatheredChanged(place) => self.gathered_changed(place),
+        }
+    }
+
     pub fn open_gathered(&mut self, place: Gathering, cx: &mut Context<Self>) {
         self.forget_drive_to_open();
         self.history.leave();
@@ -124,7 +131,7 @@ pub(super) struct Adding {
 
 #[cfg(test)]
 mod tests {
-    use nova_files_api::Gathering;
+    use nova_files_gathered_api::Gathering;
 
     use crate::assets::Icon;
     use crate::places::{GAMES_LABEL, PROJECTS_LABEL, gathering_look};

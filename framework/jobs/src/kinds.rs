@@ -5,6 +5,7 @@ use std::sync::Arc;
 use nova_files_api::{Failure, JobId, Operation, Outcome};
 
 use crate::control::{Cancelled, Control};
+use crate::put_back::{self, Replaced};
 use crate::runner::{Ended, JobKind};
 use crate::running::Running;
 
@@ -14,6 +15,7 @@ pub type AnyUndo = Arc<dyn Any + Send + Sync>;
 pub struct KindUndo {
     kind: usize,
     undo: AnyUndo,
+    put_back: Replaced,
 }
 
 trait Erased: Send + Sync {
@@ -93,7 +95,8 @@ impl JobKind for Kinds {
         if let Some(undo) = undo
             && let Some(kind) = self.kinds.get(undo.kind)
         {
-            return kind.run(running, operation, Some(&undo.undo));
+            let ended = kind.run(running, operation, Some(&undo.undo));
+            return put_back::after(running, ended, &undo.put_back);
         }
         match self.claiming(operation) {
             Some((_, kind)) => kind.run(running, operation, None),
@@ -122,7 +125,11 @@ impl JobKind for Kinds {
     ) -> Option<KindUndo> {
         let (at, kind) = self.claiming(operation)?;
         let undo = kind.undo(running, operation, ended)?;
-        Some(KindUndo { kind: at, undo })
+        Some(KindUndo {
+            kind: at,
+            undo,
+            put_back: put_back::kept(running),
+        })
     }
 
     fn undoes(&self, operation: &Operation) -> Option<JobId> {
@@ -194,18 +201,6 @@ mod tests {
 
         fn run(&self, _: &mut Running, _: &Operation, _: Option<&()>) -> Ended {
             (Outcome::Cancelled, Vec::new())
-        }
-
-        fn rest(&self, operation: &Operation, _: &Control) -> Result<Operation, Cancelled> {
-            Ok(operation.clone())
-        }
-
-        fn undo(&self, _: &mut Running, _: &Operation, _: &Ended) -> Option<()> {
-            None
-        }
-
-        fn undoes(&self, _: &Operation) -> Option<JobId> {
-            None
         }
 
         fn first_path(&self, _: &Operation) -> PathBuf {

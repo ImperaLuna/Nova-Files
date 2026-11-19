@@ -7,7 +7,9 @@ use gpui::{
     transparent_black, uniform_list,
 };
 
-use nova_files_api::{Entry, EntryId, Gathering, Listing, ListingId, Order, SortKey};
+use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
+
+use nova_files_gathered_api::Gathering;
 
 use super::drop::inside_edge;
 use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon};
