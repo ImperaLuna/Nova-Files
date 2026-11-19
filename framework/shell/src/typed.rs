@@ -3,7 +3,7 @@ use std::ops::Range;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
-pub use nova_files_shell::paths::HOME;
+pub use crate::paths::HOME;
 const SEPARATOR: char = '/';
 const DOT: char = '.';
 const DOUBLE_EXTENSIONS: [&str; 1] = [".tar"];

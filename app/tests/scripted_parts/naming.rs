@@ -114,3 +114,15 @@ fn a_part_draws_the_gallery_stage_in_the_room_it_is_given(cx: &mut TestAppContex
     assert!(drawn.size.width > px(0.0));
     assert!(drawn.size.width < stage.size.width);
 }
+
+#[gpui::test]
+fn a_part_focuses_its_own_field(cx: &mut TestAppContext) {
+    let (view, cx) = named(cx);
+    open_field(&view, cx);
+    let field = namer(&view, cx).read_with(cx, |namer, _| namer.field.clone().unwrap());
+    let handle = field.read_with(cx, gpui::Focusable::focus_handle);
+    let nav = view.read_with(cx, |view, _| view.host().nav.clone());
+    nav.update(cx, |nav, cx| nav.focus(handle.clone(), cx));
+    cx.run_until_parked();
+    assert!(cx.update(|window, _| handle.is_focused(window)));
+}

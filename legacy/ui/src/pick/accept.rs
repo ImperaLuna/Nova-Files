@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use gpui::{Context, Window};
 use nova_files_api::{EntryId, EntryKind, ListingId};
 
-use super::{Mode, typed};
+use super::Mode;
 use crate::window::{MainWindow, tidy};
+use nova_files_shell::typed;
 
 pub(super) struct Jump {
     fallback: bool,

@@ -6,8 +6,8 @@ use gpui::{
     Point, SharedString, Window, div, point,
 };
 use nova_files_shell::{
-    Column, Host, Location, MenuAt, MenuGroup, MenuItem, PageKind, PageRef, Part, Parts, Placed,
-    Scene, SidebarAt, SidebarRow, Slots, assets::Icon, command_spec,
+    CardRank, Column, Host, Location, MenuAt, MenuGroup, MenuItem, PageKind, PageRef, Part, Parts,
+    Placed, Scene, SidebarAt, SidebarRow, Slots, assets::Icon, command_spec,
 };
 
 use super::super::*;
@@ -129,6 +129,14 @@ impl Part for Shelf {
                 div()
                     .debug_selector(|| "shelf-card".to_owned())
                     .child("card")
+                    .into_any_element(),
+            )
+        });
+        slots.start_card_at(CardRank::RECENT, |_, _, _, _| {
+            Some(
+                div()
+                    .debug_selector(|| "shelf-first".to_owned())
+                    .child("first")
                     .into_any_element(),
             )
         });
@@ -333,7 +341,9 @@ fn a_part_start_card_shows_on_start(cx: &mut TestAppContext) {
     view.update(cx, MainWindow::open_start);
     cx.run_until_parked();
 
-    assert!(cx.debug_bounds("shelf-card").is_some());
+    let card = cx.debug_bounds("shelf-card").unwrap();
+    let first = cx.debug_bounds("shelf-first").unwrap();
+    assert!(first.top() < card.top());
 }
 
 #[gpui::test]

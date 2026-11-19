@@ -8,7 +8,7 @@ use nova_files_api::{HiddenFiles, ListingId};
 use nova_files_picker_api::PickId;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
-    Opening, PageRef, Part, Scene, Shown, TabId,
+    Opening, PageRef, Part, Scene, Shown, TabId, Turn,
 };
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
@@ -117,9 +117,16 @@ impl MainWindow {
     }
 
     fn take_entries_asks(&mut self, cx: &mut Context<Self>) {
-        let (now, later) = self.host.entries.update(cx, |entries, _| {
-            (entries.take_select(), entries.take_select_later())
+        let (now, later, failed) = self.host.entries.update(cx, |entries, _| {
+            (
+                entries.take_select(),
+                entries.take_select_later(),
+                entries.take_failed(),
+            )
         });
+        if let Some(id) = failed {
+            self.listing_failed(id, cx);
+        }
         if let Some((folder, names)) = later {
             self.select_when_listed(folder, names, cx);
         }
@@ -170,17 +177,38 @@ impl MainWindow {
             searching: self.searching(),
             gathered: self.gathered_here().is_some(),
         };
+        let page = match &shown.location {
+            Some(shell::Location::Page(page)) => Some(page.clone()),
+            _ => None,
+        };
         self.host
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
+        self.turn_pages(page.map(|page| (tab, page)), cx);
+        self.host.nav.update(cx, |nav, cx| nav.show(tab, tabs, cx));
+        self.tell_left(cx);
+    }
+
+    pub(super) fn tell_left(&mut self, cx: &mut Context<Self>) -> bool {
         let left = std::mem::take(&mut self.went) == Went::Elsewhere;
-        self.host.nav.update(cx, |nav, cx| {
-            nav.show(tab, tabs, cx);
-            if left {
-                cx.emit(NavEvent::Left);
-            }
-        });
+        if left {
+            self.host.nav.update(cx, |_, cx| cx.emit(NavEvent::Left));
+        }
+        left
+    }
+
+    fn turn_pages(&mut self, now: Option<(TabId, PageRef)>, cx: &mut Context<Self>) {
+        if now == self.shown_page {
+            return;
+        }
+        if let Some((tab, page)) = self.shown_page.take() {
+            self.parts.page_turned(&page, tab, Turn::Left, cx);
+        }
+        if let Some((tab, page)) = &now {
+            self.parts.page_turned(page, *tab, Turn::Shown, cx);
+        }
+        self.shown_page = now;
     }
 
     fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
@@ -189,6 +217,8 @@ impl MainWindow {
         for ask in asks {
             match ask {
                 NavAsk::Go(place) => self.go_to_shell(place, cx),
+                NavAsk::Replace(place) => self.replace_with(&from_shell(place), cx),
+                NavAsk::Focus(handle) => self.focus_later(FocusTo::Handle(handle), cx),
                 NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),
@@ -256,7 +286,7 @@ impl MainWindow {
     pub fn open_page(&mut self, page: PageRef, cx: &mut Context<Self>) {
         self.history.leave();
         if self.parts.lists(&page) {
-            self.forget_drive_to_open();
+            self.went_elsewhere();
             self.request_listed(page);
             cx.notify();
         } else {

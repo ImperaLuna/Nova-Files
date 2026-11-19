@@ -20,7 +20,7 @@ impl MainWindow {
     }
 
     pub fn open_gathered(&mut self, place: Gathering, cx: &mut Context<Self>) {
-        self.forget_drive_to_open();
+        self.went_elsewhere();
         self.history.leave();
         self.request_gathered(place);
         cx.notify();
