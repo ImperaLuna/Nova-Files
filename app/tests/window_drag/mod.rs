@@ -167,7 +167,7 @@ async fn a_tab_held_over_shows_and_the_drag_goes_on_into_it(cx: &mut TestAppCont
     let projects = tree.path().join("Projects");
     view.update(cx, |view, cx| {
         view.open_in_new_tab(projects.clone(), cx);
-        view.new_tab(&Location::Start, cx);
+        view.new_tab(&Location::start(), cx);
         view.switch_tab(0, cx);
     });
     wait_for_folder(&view, cx, tree.path()).await;
@@ -199,7 +199,7 @@ async fn start_and_places_held_over_open_in_the_tab_on_screen(cx: &mut TestAppCo
     let tree = TempFolder::tree("drag-hover-place");
     let home = TempFolder::tree("drag-hover-place-home");
     let (view, cx) = drag_window(cx, tree.path(), &home).await;
-    view.update(cx, |view, cx| view.new_tab(&Location::Start, cx));
+    view.update(cx, |view, cx| view.new_tab(&Location::start(), cx));
     view.update(cx, |view, cx| view.switch_tab(0, cx));
     wait_for_folder(&view, cx, tree.path()).await;
 
@@ -383,7 +383,7 @@ async fn files_dropped_on_a_tab_go_into_its_folder_or_the_trash(cx: &mut TestApp
     let projects = tree.path().join("Projects");
     view.update(cx, |view, cx| {
         view.open_in_new_tab(projects.clone(), cx);
-        view.new_tab(&Location::Start, cx);
+        view.new_tab(&Location::start(), cx);
     });
     open_trash(&view, cx, true).await;
     view.update(cx, |view, cx| view.switch_tab(0, cx));

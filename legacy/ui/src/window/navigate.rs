@@ -4,7 +4,7 @@ use gpui::Context;
 use nova_files_api::{Command, EntryId, EntryKind, Envelope, ListingId, Message, Order, SortKey};
 
 use super::{MainWindow, Went};
-use crate::location::Location;
+use nova_files_shell::Location;
 
 impl MainWindow {
     pub fn open(&mut self, folder: &Path) {
@@ -33,7 +33,7 @@ impl MainWindow {
 
     fn go_to(&mut self, place: &Location, cx: &mut Context<Self>) {
         match place {
-            Location::Start => self.arrive_at_start(cx),
+            Location::Page(page) if page.is_start() => self.arrive_at_start(cx),
             Location::Folder(folder) => {
                 self.request(folder);
             }
@@ -46,7 +46,7 @@ impl MainWindow {
 
     pub(super) fn request_place(&mut self, place: &Location) -> bool {
         match place {
-            Location::Start => false,
+            Location::Page(page) if page.is_start() => false,
             Location::Page(page) => self.request_listed(page.clone()),
             Location::Folder(folder) => self.request(folder),
         }

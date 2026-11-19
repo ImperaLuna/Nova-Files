@@ -8,10 +8,10 @@ use crate::assets::Icon;
 
 use nova_files_shell::{SidebarAt, SidebarRow};
 
-use crate::location::Location;
 use crate::places::START_LABEL;
 use crate::theme::{Colors, size};
 use crate::window::{HoverOpens, MainWindow};
+use nova_files_shell::Location;
 
 const LABEL: &str = "Places";
 
@@ -57,10 +57,10 @@ impl MainWindow {
             colors,
         )
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_start(cx)))
-        .map(|row| Self::opens_on_hover(row, HoverOpens::Place(Location::Start), cx))
+        .map(|row| Self::opens_on_hover(row, HoverOpens::Place(Location::start()), cx))
         .map(|row| {
             on_middle_click(row, true, cx, |this, cx| {
-                this.new_tab(&Location::Start, cx);
+                this.new_tab(&Location::start(), cx);
             })
         })
     }

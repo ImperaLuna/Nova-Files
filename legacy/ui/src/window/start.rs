@@ -5,7 +5,7 @@ use gpui::{App, Context, SharedString, UniformListScrollHandle};
 
 use super::{MainWindow, WindowEvent};
 use crate::jump::TypeJump;
-use crate::location::Location;
+use nova_files_shell::Location;
 
 impl MainWindow {
     pub fn open_start(&mut self, cx: &mut Context<Self>) {
@@ -15,7 +15,7 @@ impl MainWindow {
 
     pub(super) fn arrive_at_start(&mut self, cx: &mut Context<Self>) {
         self.let_go_of_folder(cx);
-        self.history.arrived(&Location::Start);
+        self.history.arrived(&Location::start());
         cx.emit(WindowEvent::StartShown);
         cx.notify();
     }

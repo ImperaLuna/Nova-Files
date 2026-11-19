@@ -146,7 +146,7 @@ impl MainWindow {
 
     fn tab_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &NewTab, _, cx| {
-            this.new_tab(&crate::location::Location::Start, cx);
+            this.new_tab(&nova_files_shell::Location::start(), cx);
         }))
         .on_action(cx.listener(|this, _: &CloseTab, _, cx| this.close_current_tab(cx)))
         .on_action(cx.listener(|this, _: &NextTab, _, cx| this.next_tab(cx)))

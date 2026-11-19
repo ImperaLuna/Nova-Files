@@ -8,7 +8,6 @@ mod commands;
 mod dropping;
 mod island;
 
-mod location;
 mod marks;
 mod menu;
 mod pick;
@@ -34,8 +33,8 @@ pub use assets::Icon;
 pub use columns::ColumnText;
 pub use commands::{ACTIONS, CommandSpec, bind_keys as bind_window_keys};
 pub use island::{NOTE_TIME, Note};
-pub use location::Location;
 pub use menu::{Look, Menu, MenuAction, MenuItem};
+pub use nova_files_shell::Location;
 use nova_files_shell::{Parts, assets, jump, text, theme};
 pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
@@ -160,7 +159,7 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
     let location = match folder {
         Some(folder) => Location::Folder(folder),
         None if pick.is_some() => Location::Folder(home_folder()),
-        None => Location::Start,
+        None => Location::start(),
     };
     let recover_folder = location.folder().map(Path::to_path_buf);
     let opened = cx.open_window(options, move |window, cx| {
