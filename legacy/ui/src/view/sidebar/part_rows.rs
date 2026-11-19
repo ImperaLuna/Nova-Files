@@ -34,7 +34,7 @@ impl MainWindow {
         colors: &Colors,
         cx: &Context<Self>,
     ) -> Vec<AnyElement> {
-        if self.pick.is_some() {
+        if self.picker() {
             return Vec::new();
         }
         self.parts
@@ -55,7 +55,7 @@ impl MainWindow {
         colors: &Colors,
         cx: &Context<Self>,
     ) -> Stateful<Div> {
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let menu_row = place.id.clone();
         let shown = place.opens.clone().map(from_shell);
         let drops = shown

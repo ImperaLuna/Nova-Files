@@ -142,7 +142,7 @@ impl MainWindow {
 
     pub fn new_folder(&mut self) {
         let Some(listing) = &self.listing else { return };
-        if self.pick.is_some()
+        if self.picker()
             || self.renaming.is_some()
             || self.folder_rules().read_only
             || self.folder().is_none()

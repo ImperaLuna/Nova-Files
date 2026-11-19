@@ -96,7 +96,7 @@ impl MainWindow {
     }
 
     pub fn new_tab(&mut self, place: &Location, cx: &mut Context<Self>) {
-        if self.pick.is_some() {
+        if self.picker() {
             return;
         }
         let left = self.leave_tab(cx);
@@ -131,7 +131,7 @@ impl MainWindow {
         event: &ClickEvent,
         cx: &mut Context<Self>,
     ) {
-        if event.is_middle_click() && self.pick.is_none() {
+        if event.is_middle_click() && !self.picker() {
             self.open_entry_in_new_tab(entry, cx);
         }
     }

@@ -22,7 +22,7 @@ const SEARCH_KEY: &str = "/";
 
 impl MainWindow {
     pub(super) fn search_box(&self, capsule: Div, colors: &Colors, cx: &Context<Self>) -> Div {
-        if self.pick.is_some() {
+        if self.picker() {
             return capsule
                 .text_color(colors.text_dim)
                 .child(icon(Icon::Search, size::BUTTON_ICON, colors.text_dim))
@@ -163,7 +163,7 @@ impl MainWindow {
         let held = event.keystroke.modifiers;
         let plain = !(held.control || held.alt || held.platform || held.function);
         let slash = event.keystroke.key_char.as_deref() == Some(SEARCH_KEY);
-        if self.pick.is_none() && plain && slash {
+        if !self.picker() && plain && slash {
             self.focus_later(FocusTo::Box, cx);
             return true;
         }

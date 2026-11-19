@@ -27,7 +27,7 @@ impl GalleryBounds {
 
 impl MainWindow {
     pub fn showing_gallery(&self) -> bool {
-        self.pick.is_none() && self.folder_view().mode == ViewMode::Gallery
+        !self.picker() && self.folder_view().mode == ViewMode::Gallery
     }
 
     pub(crate) const fn gallery_bounds(&self) -> &GalleryBounds {
