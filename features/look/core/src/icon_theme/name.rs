@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::ini;
-use crate::capped;
+use nova_files_disk::capped;
 
 const SOURCES: [(&str, &str, &str); 3] = [
     ("gtk-3.0/settings.ini", "Settings", "gtk-icon-theme-name"),

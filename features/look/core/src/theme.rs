@@ -4,19 +4,17 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
 
-use nova_files_api::{
-    ClientGone, ClientId, DesktopLook, Envelope, Event, EventSink, Mode, Palette, Theme,
-};
-use nova_files_settings_api::{self as settings_api, Appearance};
-use nova_files_settings_core::Store as SettingsStore;
-
-use crate::config_watch::{self, ConfigWatch};
-use crate::hand_edited::{self, Reread, lock};
 use file::ThemeFile;
+use nova_files_api::{
+    ClientGone, ClientId, DesktopLook, Envelope, EventSink, Mode, Palette, Theme,
+};
+use nova_files_disk::config_watch::{self, ConfigWatch};
+use nova_files_disk::hand_edited::{self, Reread, lock};
+use nova_files_look_api::Event;
+use nova_files_settings_api::{self as settings_api, Appearance};
 
 const FILE: &str = "theme.toml";
 const MAX_BYTES: usize = 64 * 1024;
-const SETTINGS_LISTENER: ClientId = ClientId(u64::MAX);
 
 pub struct Store {
     shared: Arc<Mutex<Shared>>,
@@ -68,9 +66,8 @@ impl Store {
         }
     }
 
-    pub fn follow(&self, settings: &SettingsStore) {
-        let follower: Arc<dyn EventSink> = Arc::new(Follower(Arc::downgrade(&self.shared)));
-        settings.listen(SETTINGS_LISTENER, &follower);
+    pub fn follower(&self) -> Arc<dyn EventSink> {
+        Arc::new(Follower(Arc::downgrade(&self.shared)))
     }
 
     pub fn follow_desktop(&self, look: DesktopLook) {
