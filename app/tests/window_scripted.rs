@@ -378,14 +378,20 @@ const PNG: &[u8] = &[
     66, 96, 130,
 ];
 
+fn folder_view(view: &MainWindow, cx: &gpui::App) -> nova_files_folders_api::FolderView {
+    view.part::<nova_files_folders_ui::FoldersPart>()
+        .map(|part| part.read(cx).shown(cx))
+        .unwrap_or_default()
+}
+
 fn search_query(view: &MainWindow, cx: &gpui::App) -> String {
-    view.search_part()
+    view.part::<nova_files_search_ui::SearchPart>()
         .map(|part| part.read(cx).query(cx))
         .unwrap_or_default()
 }
 
 fn scope(view: &MainWindow, cx: &gpui::App) -> nova_files_search_ui::Scope {
-    view.search_part()
+    view.part::<nova_files_search_ui::SearchPart>()
         .map(|part| part.read(cx).scope(cx))
         .unwrap_or_default()
 }

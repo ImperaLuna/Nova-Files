@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, SharedString, Size,
-    Subscription, Window,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent,
+    SharedString, Size, Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 use nova_files_messages::Envelope;
@@ -13,12 +13,13 @@ use super::{OpenPart, Opened, ShownColumn, Turn};
 use crate::assets::Icon;
 use crate::command::CommandSpec;
 use crate::jump::Jump;
+use crate::layout::Layout;
 use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::navigator::FolderPick;
 use crate::opening::Opening;
 use crate::part::Part;
-use crate::part::{Click, ClickAnswer, DropOver};
+use crate::part::{Click, ClickAnswer, DropOver, Staged};
 use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
@@ -81,6 +82,10 @@ impl WindowParts {
         self.opened
             .iter()
             .find_map(|part| part.folder_look(folder, cx))
+    }
+
+    pub fn layout(&self, folder: &Path, cx: &App) -> Option<Layout> {
+        self.opened.iter().find_map(|part| part.layout(folder, cx))
     }
 
     pub fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn> {
@@ -154,6 +159,18 @@ impl WindowParts {
             .find_map(|part| part.stage(scene, room, window, cx))
     }
 
+    pub fn staged(
+        &self,
+        scene: &Scene,
+        room: Size<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<Staged> {
+        self.opened
+            .iter()
+            .find_map(|part| part.staged(scene, room, window, cx))
+    }
+
     pub fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
         for part in &self.opened {
             part.listed(listing, reordered, cx);
@@ -204,7 +221,10 @@ impl WindowParts {
     }
 
     pub fn bars(&self) -> Vec<AnyView> {
-        self.opened.iter().flat_map(|part| part.bars()).collect()
+        let mut bars: Vec<(u8, AnyView)> =
+            self.opened.iter().flat_map(|part| part.bars()).collect();
+        bars.sort_by_key(|(rank, _)| *rank);
+        bars.into_iter().map(|(_, bar)| bar).collect()
     }
 
     pub fn footers(&self) -> Vec<AnyView> {
@@ -294,6 +314,10 @@ impl WindowParts {
         self.opened
             .iter()
             .any(|part| part.key_down(event, scene, cx))
+    }
+
+    pub fn wheel(&self, event: &ScrollWheelEvent, cx: &mut App) -> bool {
+        self.opened.iter().any(|part| part.wheel(event, cx))
     }
 
     pub fn closing(&self, cx: &mut App) {

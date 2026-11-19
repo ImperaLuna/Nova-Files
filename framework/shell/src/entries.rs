@@ -28,6 +28,7 @@ pub struct Shown {
     pub picker: bool,
     pub asked: Option<ListingId>,
     pub laid: Laid,
+    pub details_only: bool,
     pub cursor: Option<usize>,
     pub showing: Showing,
 }
@@ -50,6 +51,7 @@ pub struct Entries {
     jumped: Option<Instant>,
     moves: Option<(Option<usize>, Move)>,
     opens: Option<EntryId>,
+    reveals: bool,
     over: Option<OverWant>,
 }
 
@@ -73,6 +75,10 @@ impl Entries {
 
     pub fn searching(&self) -> bool {
         self.shown.laid != Laid::Off
+    }
+
+    pub const fn details_only(&self) -> bool {
+        self.shown.details_only
     }
 
     pub fn over_failed(&self) -> bool {
@@ -130,6 +136,15 @@ impl Entries {
 
     pub const fn take_open(&mut self) -> Option<EntryId> {
         self.opens.take()
+    }
+
+    pub fn reveal_cursor(&mut self, cx: &mut Context<Self>) {
+        self.reveals = true;
+        cx.emit(EntriesAsked);
+    }
+
+    pub const fn take_reveal(&mut self) -> bool {
+        std::mem::replace(&mut self.reveals, false)
     }
 
     pub const fn asked(&self) -> Option<ListingId> {

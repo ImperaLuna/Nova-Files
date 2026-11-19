@@ -15,9 +15,9 @@ use nova_files_shell::actions::{
 };
 use nova_files_shell::device::device_side;
 use nova_files_shell::theme::Colors;
-use nova_files_shell::{Entries, Host, Move, NavEvent, Part, Showing, Slots};
+use nova_files_shell::{Entries, Host, Move, NavEvent, Part, Scene, Showing, Slots, Staged};
 
-pub use draw::{meta, room};
+use draw::{meta, room};
 pub use looks::Previewed;
 use looks::{DEFAULT_FIT, QuickLook, QuickLooks, Shown, moved, render_image, without_pixels};
 
@@ -50,36 +50,48 @@ impl PreviewPart {
         })
     }
 
-    pub fn staged(&self) -> Option<EntryId> {
-        self.looks.open.as_ref().map(|open| open.entry)
-    }
-
-    pub fn about(&self) -> Option<String> {
-        self.looks
-            .open
-            .as_ref()?
-            .current()?
-            .preview
-            .as_deref()
-            .map(meta)
-    }
-
-    pub fn stage_art(
-        &self,
-        (listing, entry): (&Listing, &Entry),
-        room: (Size<Pixels>, f32),
-        colors: &Colors,
-    ) -> Option<AnyElement> {
-        let open = self.looks.open.as_ref()?;
-        Some(draw::stage_art(open, listing, entry, room, colors))
-    }
-
-    pub fn layer(
-        &self,
+    fn stage(
+        &mut self,
+        _: &Scene,
         room: Size<Pixels>,
-        scale_factor: f32,
-        cx: &Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Staged> {
+        let scale_factor = window.scale_factor();
+        if !self.previewing() {
+            self.set_room(room, scale_factor, cx);
+        }
+        let cursor = self.host.entries.read(cx).cursor();
+        if let Some(cursor) = cursor {
+            self.dock(cursor, cx);
+        }
+        let open = self.looks.open.as_ref()?;
+        let listing = self.host.entries.read(cx).listing()?;
+        let entry = entry_at(listing, open.entry)?;
+        let about = open
+            .current()
+            .and_then(|shown| shown.preview.as_deref())
+            .map(meta)
+            .unwrap_or_default();
+        Some(Staged {
+            entry: open.entry,
+            art: draw::stage_art(open, listing, entry, (room, scale_factor), &Colors::of(cx)),
+            about: about.into(),
+        })
+    }
+
+    fn layer(
+        &mut self,
+        scene: &Scene,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        let viewport = window.viewport_size();
+        let room = room(viewport.width, viewport.height);
+        let scale_factor = window.scale_factor();
+        if scene.showing != Showing::Gallery || self.previewing() {
+            self.set_room(room, scale_factor, cx);
+        }
         let open = self.looks.open.as_ref().filter(|_| self.previewing())?;
         let listing = self
             .host
@@ -96,7 +108,7 @@ impl PreviewPart {
         ))
     }
 
-    pub fn dock(&mut self, cursor: usize, cx: &mut Context<Self>) {
+    fn dock(&mut self, cursor: usize, cx: &mut Context<Self>) {
         if self.looks.open.is_some() {
             return;
         }
@@ -116,13 +128,13 @@ impl PreviewPart {
         self.looks.docked = true;
     }
 
-    pub fn undock(&mut self, cx: &mut Context<Self>) {
+    fn undock(&mut self, cx: &mut Context<Self>) {
         if self.looks.docked {
             self.close(cx);
         }
     }
 
-    pub fn set_room(&mut self, room: Size<Pixels>, scale_factor: f32, cx: &mut Context<Self>) {
+    fn set_room(&mut self, room: Size<Pixels>, scale_factor: f32, cx: &mut Context<Self>) {
         let device = |side: Pixels| device_side(side, scale_factor);
         let fit = Some(Fit {
             width: device(room.width),
@@ -229,6 +241,9 @@ impl PreviewPart {
     }
 
     fn entries_changed(&mut self, cx: &mut Context<Self>) {
+        if self.host.entries.read(cx).showing() != Showing::Gallery {
+            self.undock(cx);
+        }
         let entries = self.host.entries.read(cx);
         let cursor = entries.cursor();
         let listing = entries.listing();
@@ -447,5 +462,7 @@ impl Part for PreviewPart {
         slots.before(Self::down);
         slots.before(Self::enter);
         slots.before(Self::escape);
+        slots.staged(Self::stage);
+        slots.layer(Self::layer);
     }
 }

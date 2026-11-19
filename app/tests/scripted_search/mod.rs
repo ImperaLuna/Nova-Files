@@ -612,10 +612,7 @@ fn search_results_show_as_details_whatever_their_folder_shows(cx: &mut TestAppCo
         icons,
     )])));
     found_reports(cx, &mut core, "rep");
-    assert_eq!(
-        view.read_with(cx, MainWindow::folder_view),
-        FolderView::default()
-    );
+    assert_eq!(view.read_with(cx, folder_view), FolderView::default());
 
     core.sent::<ViewsCommand>();
     cx.simulate_keystrokes("down ctrl-2");

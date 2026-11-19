@@ -4270,10 +4270,6 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
- "nova-files-folders-api",
- "nova-files-folders-ui",
- "nova-files-preview-ui",
- "nova-files-search-ui",
  "nova-files-shell",
  "usvg",
 ]

@@ -19,7 +19,6 @@ use gpui::{
     ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
     prelude::FluentBuilder as _,
 };
-use nova_files_folders_api::ViewMode;
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
@@ -27,7 +26,6 @@ use crate::commands::{
     SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown, SelectPageUp,
     SelectRight, SelectUp, ToggleSelected,
 };
-use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
 use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, TrashSelected};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
@@ -38,26 +36,10 @@ impl Render for MainWindow {
         if self.closing(cx) {
             window.remove_window();
         }
-        let scale_factor = window.scale_factor();
-        let viewport = window.viewport_size();
         self.keep_gallery(window, cx);
-        let room = nova_files_preview_ui::room(viewport.width, viewport.height);
-        let fits = if self.showing_gallery(cx) && !self.previewing(cx) {
-            self.stage_room(cx)
-        } else {
-            room
-        };
-        let preview = self.preview();
-        if let Some(preview) = &preview {
-            preview.update(cx, |preview, cx| preview.set_room(fits, scale_factor, cx));
-        }
-        let layer = preview.and_then(|preview| {
-            preview.update(cx, |preview, cx| preview.layer(room, scale_factor, cx))
-        });
         self.window_root(window, cx)
             .map(|root| Self::preview_keys(root, cx))
             .relative()
-            .children(layer)
             .children(self.parts.layers())
     }
 }
@@ -88,7 +70,6 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
-            .map(|root| Self::view_keys(root, cx))
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
             .map(|root| Self::typed_keys(root, cx))
             .map(|root| Self::selection_keys(root, cx))
@@ -130,18 +111,6 @@ impl MainWindow {
             MouseButton::Left,
             cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
         )
-    }
-
-    fn view_keys(root: Div, cx: &Context<Self>) -> Div {
-        root.on_action(cx.listener(|this, _: &ShowDetails, _, cx| {
-            this.show_as(ViewMode::Details, cx);
-        }))
-        .on_action(cx.listener(|this, _: &ShowIcons, _, cx| this.show_as(ViewMode::Icons, cx)))
-        .on_action(cx.listener(|this, _: &ShowGallery, _, cx| {
-            this.show_as(ViewMode::Gallery, cx);
-        }))
-        .on_action(cx.listener(|this, _: &BiggerIcons, _, cx| this.zoom_icons(true, cx)))
-        .on_action(cx.listener(|this, _: &SmallerIcons, _, cx| this.zoom_icons(false, cx)))
     }
 
     fn tab_keys(root: Div, cx: &Context<Self>) -> Div {

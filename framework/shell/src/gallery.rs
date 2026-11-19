@@ -2,10 +2,9 @@ use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
 
+use crate::layout::Grid;
+use crate::theme::size as sizes;
 use gpui::{Bounds, Pixels, Size, size};
-use nova_files_shell::theme::size as sizes;
-
-use crate::grid::Grid;
 
 const SIDES: usize = 2;
 
@@ -46,7 +45,6 @@ pub fn strip(width: Pixels, grid: Grid, cursor: usize, len: usize) -> Range<usiz
 #[cfg(test)]
 mod tests {
     use gpui::px;
-    use nova_files_folders_api::IconSize;
 
     use super::*;
 
@@ -73,7 +71,7 @@ mod tests {
 
     #[test]
     fn the_strip_keeps_the_cursor_in_the_middle_until_an_end() {
-        let grid = Grid::strip(IconSize::Small);
+        let grid = Grid::strip(px(64.0));
         let width = grid.cell.width * 5.0;
         assert_eq!(strip(width, grid, 0, 20), 0..5);
         assert_eq!(strip(width, grid, 2, 20), 0..5);

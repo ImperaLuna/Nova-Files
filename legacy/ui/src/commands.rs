@@ -37,11 +37,6 @@ pub const ACTIONS: &[CommandSpec] = &[
     CLOSE_TAB,
     NEXT_TAB,
     PREVIOUS_TAB,
-    DETAILS,
-    ICONS,
-    GALLERY,
-    BIGGER_ICONS,
-    SMALLER_ICONS,
     MENU,
 ];
 
@@ -178,24 +173,6 @@ spec!(
     "tab.previous",
     "Previous tab",
     ["ctrl-shift-tab"]
-);
-
-spec!(DETAILS, ShowDetails, "view.details", "Details", ["ctrl-1"]);
-spec!(ICONS, ShowIcons, "view.icons", "Icons", ["ctrl-2"]);
-spec!(GALLERY, ShowGallery, "view.gallery", "Gallery", ["ctrl-3"]);
-spec!(
-    BIGGER_ICONS,
-    BiggerIcons,
-    "view.bigger",
-    "Bigger icons",
-    ["ctrl-=", "ctrl-+"]
-);
-spec!(
-    SMALLER_ICONS,
-    SmallerIcons,
-    "view.smaller",
-    "Smaller icons",
-    ["ctrl--"]
 );
 
 spec!(MENU, OpenMenu, "menu.open", "Menu", ["menu", "shift-f10"]);

@@ -2,14 +2,13 @@ use std::path::PathBuf;
 
 use gpui::{App, Context, Modifiers, Pixels, Point, point};
 use nova_files_api::{EntryId, ListingId};
-use nova_files_folders_api::ViewMode;
 use nova_files_shell::{
     Look as ShellLook, MenuAt, MenuGroup, MenuItem as ShellItem, Placed, arrange,
 };
 
 use super::MainWindow;
 use crate::assets::Icon;
-use crate::commands::{DETAILS, GALLERY, ICONS, OPEN, PREVIEW, SELECT_ALL, TRASH};
+use crate::commands::{OPEN, PREVIEW, SELECT_ALL, TRASH};
 use crate::menu::{MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
 use crate::theme::size;
@@ -114,24 +113,6 @@ impl MainWindow {
         }
     }
 
-    fn view_items(&self, cx: &App) -> Vec<ShellItem> {
-        let showing = self.folder_view(cx).mode;
-        [
-            (ViewMode::Details, Icon::List, &DETAILS),
-            (ViewMode::Icons, Icon::Tiles, &ICONS),
-            (ViewMode::Gallery, Icon::Pictures, &GALLERY),
-        ]
-        .into_iter()
-        .map(|(mode, icon, spec)| {
-            if mode == showing {
-                ShellItem::run(Icon::Check, spec).with_look(ShellLook::On)
-            } else {
-                ShellItem::run(icon, spec)
-            }
-        })
-        .collect()
-    }
-
     fn space_menu(&self, cx: &Context<Self>) -> Vec<Vec<MenuItem>> {
         let any = self
             .listing
@@ -153,14 +134,7 @@ impl MainWindow {
         if self.showing_found() {
             return vec![select.items.into_iter().map(MenuItem::from).collect()];
         }
-        self.arranged(
-            MenuAt::Sheet,
-            vec![
-                select,
-                Placed::new(MenuGroup::View, Placed::FIRST, self.view_items(cx)),
-            ],
-            cx,
-        )
+        self.arranged(MenuAt::Sheet, vec![select], cx)
     }
 
     fn under_cursor(&self, cx: &App) -> Point<Pixels> {

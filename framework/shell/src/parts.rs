@@ -1,38 +1,37 @@
 use std::any::{Any, TypeId};
-use std::collections::HashSet;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
-    KeyDownEvent, Pixels, SharedString, Size, Subscription, Window,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent,
+    SharedString, Size, Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
 use crate::assets::Icon;
 use crate::jump::Jump;
-use nova_files_messages::{Envelope, MessageType};
+use crate::layout::Layout;
+use nova_files_messages::Envelope;
 
 use crate::command::CommandSpec;
 use crate::host::Host;
-use crate::location::{Location, PageRef};
+use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::navigator::FolderPick;
 use crate::opening::Opening;
-use crate::part::{Card, Click, ClickAnswer, DropOver, Part, Slots};
+use crate::part::{Click, ClickAnswer, DropOver, Part, Slots, Staged};
 use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
-use crate::slot_view::{Draw, Fit};
 use crate::text::TextField;
-use cards::{card_views, slot_view};
-use declared::{each_once, sends, slots_of, specs, takes};
 
 mod cards;
 mod declared;
+mod registry;
 mod window;
 
+pub use registry::Parts;
 pub use window::WindowParts;
 
 type ShownCell = Box<dyn Fn(&Entry, &App) -> Option<SharedString>>;
@@ -58,10 +57,11 @@ trait OpenPart {
     fn page(&self, page: &PageRef) -> Option<AnyView>;
     fn crumbs(&self, page: &PageRef, cx: &App) -> Option<Vec<Crumb>>;
     fn folder_look(&self, folder: &Path, cx: &App) -> Option<(SharedString, Icon)>;
+    fn layout(&self, folder: &Path, cx: &App) -> Option<Layout>;
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
     fn start_cards(&self) -> Vec<(u8, AnyView)>;
-    fn bars(&self) -> Vec<AnyView>;
+    fn bars(&self) -> Vec<(u8, AnyView)>;
     fn footers(&self) -> Vec<AnyView>;
     fn clicked(
         &self,
@@ -82,6 +82,7 @@ trait OpenPart {
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
     fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
     fn key_down(&self, event: &KeyDownEvent, scene: &Scene, cx: &mut App) -> bool;
+    fn wheel(&self, event: &ScrollWheelEvent, cx: &mut App) -> bool;
     fn closing(&self, cx: &mut App);
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
     fn watch(&self, event: &Event, cx: &mut App);
@@ -98,6 +99,13 @@ trait OpenPart {
         window: &mut Window,
         cx: &mut App,
     ) -> Option<AnyElement>;
+    fn staged(
+        &self,
+        scene: &Scene,
+        room: Size<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<Staged>;
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App);
     fn takes_drops(&self, page: &PageRef) -> bool;
     fn drop_on(
@@ -140,7 +148,7 @@ struct Opened<P: Part> {
     slots: Slots<P>,
     pages: Vec<(TypeId, AnyView)>,
     cards: Vec<(u8, AnyView)>,
-    bars: Vec<AnyView>,
+    bars: Vec<(u8, AnyView)>,
     footers: Vec<AnyView>,
     overlays: Vec<AnyView>,
     layers: Vec<AnyView>,
@@ -228,6 +236,14 @@ impl<P: Part> OpenPart for Opened<P> {
             .find_map(|look| look(part, folder, cx))
     }
 
+    fn layout(&self, folder: &Path, cx: &App) -> Option<Layout> {
+        let part = self.entity.read(cx);
+        self.slots
+            .layouts
+            .iter()
+            .find_map(|layout| layout(part, folder, cx))
+    }
+
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn> {
         let part = self.entity.read(cx);
         let column = self
@@ -258,7 +274,7 @@ impl<P: Part> OpenPart for Opened<P> {
         self.cards.clone()
     }
 
-    fn bars(&self) -> Vec<AnyView> {
+    fn bars(&self) -> Vec<(u8, AnyView)> {
         self.bars.clone()
     }
 
@@ -406,6 +422,15 @@ impl<P: Part> OpenPart for Opened<P> {
         })
     }
 
+    fn wheel(&self, event: &ScrollWheelEvent, cx: &mut App) -> bool {
+        if self.slots.wheels.is_empty() {
+            return false;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots.wheels.iter().any(|wheel| wheel(part, event, cx))
+        })
+    }
+
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription {
         cx.observe(&self.entity, move |_, cx| changed(cx))
     }
@@ -476,6 +501,24 @@ impl<P: Part> OpenPart for Opened<P> {
                 .stages
                 .iter()
                 .find_map(|stage| stage(part, scene, room, window, cx))
+        })
+    }
+
+    fn staged(
+        &self,
+        scene: &Scene,
+        room: Size<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<Staged> {
+        if self.slots.stagings.is_empty() {
+            return None;
+        }
+        self.entity.update(cx, |part, cx| {
+            self.slots
+                .stagings
+                .iter()
+                .find_map(|staged| staged(part, scene, room, window, cx))
         })
     }
 
@@ -661,122 +704,4 @@ impl<P: Part> OpenPart for Opened<P> {
             }
         });
     }
-}
-
-#[derive(Clone, Copy)]
-struct Kind {
-    open: fn(&Host, &mut App) -> Box<dyn OpenPart>,
-    takes: fn() -> Vec<MessageType>,
-    sends: fn() -> Vec<MessageType>,
-    specs: fn() -> Vec<&'static CommandSpec>,
-}
-
-#[derive(Clone, Default)]
-pub struct Parts {
-    kinds: Vec<Kind>,
-}
-
-impl Global for Parts {}
-
-#[derive(Default)]
-struct BoundKeys(HashSet<&'static str>);
-
-impl Global for BoundKeys {}
-
-impl Parts {
-    pub fn add<P: Part>(&mut self) {
-        self.kinds.push(Kind {
-            open: open::<P>,
-            takes: takes::<P>,
-            sends: sends::<P>,
-            specs: specs::<P>,
-        });
-    }
-
-    pub fn takes(&self) -> Vec<MessageType> {
-        each_once(self.kinds.iter().flat_map(|kind| (kind.takes)()))
-    }
-
-    pub fn sends(&self) -> Vec<MessageType> {
-        each_once(self.kinds.iter().flat_map(|kind| (kind.sends)()))
-    }
-
-    fn bind_new_keys(&self, cx: &mut App) {
-        let bound = cx.default_global::<BoundKeys>();
-        let new: Vec<_> = self
-            .kinds
-            .iter()
-            .flat_map(|kind| (kind.specs)())
-            .filter(|spec| bound.0.insert(spec.id))
-            .collect();
-        cx.bind_keys(new.into_iter().flat_map(CommandSpec::bindings));
-    }
-
-    pub fn bindings(&self) -> Vec<KeyBinding> {
-        self.kinds
-            .iter()
-            .flat_map(|kind| (kind.specs)())
-            .flat_map(CommandSpec::bindings)
-            .collect()
-    }
-
-    pub fn open(&self, host: &Host, cx: &mut App) -> WindowParts {
-        self.bind_new_keys(cx);
-        WindowParts {
-            opened: self
-                .kinds
-                .iter()
-                .map(|kind| (kind.open)(host, cx))
-                .collect(),
-        }
-    }
-}
-
-fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
-    let entity = cx.new(|cx| P::open(host, cx));
-    let slots = slots_of::<P>();
-    let pages = slots
-        .pages
-        .iter()
-        .map(|(kind, render)| {
-            let (part, host, render) = (entity.clone(), host.clone(), Rc::clone(render));
-            let draw: Draw = Box::new(move |window, cx| {
-                let page = match host.entries.read(cx).location() {
-                    Some(Location::Page(page)) => page.clone(),
-                    _ => return None,
-                };
-                part.update(cx, |part, cx| render(part, &page, window, cx))
-            });
-            (*kind, slot_view(&entity, draw, Fit::Fill, cx))
-        })
-        .collect();
-    let ranks = slots.start_cards.iter().map(|(rank, _)| *rank);
-    let drawn: Vec<Card<P>> = slots.start_cards.iter().map(|(_, card)| *card).collect();
-    let cards = ranks
-        .zip(card_views(&entity, host, &drawn, Fit::Content, cx))
-        .collect();
-    let bars = card_views(&entity, host, &slots.bars, Fit::Content, cx);
-    let footers = card_views(&entity, host, &slots.footers, Fit::Content, cx);
-    let overlays = card_views(&entity, host, &slots.overlays, Fit::Content, cx);
-    let layers = card_views(&entity, host, &slots.layers, Fit::Cover, cx);
-    let chip_ranks = slots.path_chips.iter().map(|(rank, _)| *rank);
-    let chips: Vec<Card<P>> = slots.path_chips.iter().map(|(_, chip)| *chip).collect();
-    let path_chips = chip_ranks
-        .zip(card_views(&entity, host, &chips, Fit::Content, cx))
-        .collect();
-    let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
-    let list_views = card_views(&entity, host, &views, Fit::Fill, cx);
-    Box::new(Opened {
-        entity,
-        host: host.clone(),
-        slots,
-        pages,
-        cards,
-        bars,
-        footers,
-        overlays,
-        layers,
-        path_chips,
-        list_views,
-    })
 }

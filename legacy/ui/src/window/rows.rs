@@ -8,7 +8,7 @@ use super::MainWindow;
 use crate::columns::{self, ColumnText};
 use crate::theme_icons;
 use crate::view::{RowIcon, entry_kind};
-use nova_files_folders_ui::Grid;
+use nova_files_shell::Grid;
 use nova_files_shell::device::device_side;
 
 pub struct RowRead {

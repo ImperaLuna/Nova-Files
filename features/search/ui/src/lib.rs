@@ -14,8 +14,8 @@ use nova_files_search_api::{Command, Event};
 use nova_files_shell::actions::FocusSearch;
 use nova_files_shell::text::{TextField, TextFieldEvent};
 use nova_files_shell::{
-    ChipRank, Entries, Host, LaidOver, Location, NavEvent, Navigator, OverLeft, Part, PerTab,
-    Scene, Slots, TabId,
+    BarRank, ChipRank, Entries, Host, LaidOver, Location, NavEvent, Navigator, OverLeft, Part,
+    PerTab, Scene, Slots, TabId,
 };
 
 const PLACEHOLDER: &str = "Search";
@@ -220,6 +220,7 @@ impl Part for SearchPart {
         slots.sends::<Command>();
         slots.before(Self::focus_search);
         slots.key_down(Self::key_down);
+        slots.shrinking_bar_at(BarRank::FIRST, |part, _, _, cx| Some(part.bar(cx)));
         slots.path_chip_at(ChipRank::FIRST, Self::scope_chip);
         slots.overlay(Self::no_matches);
         slots.overlay(Self::match_count);

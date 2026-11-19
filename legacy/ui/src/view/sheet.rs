@@ -18,7 +18,7 @@ use crate::assets::Icon;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::{Aim, DraggedRow, MainWindow};
-use nova_files_folders_ui::Grid;
+use nova_files_shell::Grid;
 
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
@@ -276,7 +276,7 @@ fn ctrl_scroll(cx: &Context<MainWindow>) -> impl IntoElement {
                     return;
                 }
                 let taken = view
-                    .update(cx, |this, cx| this.zoom_scrolled(event.delta, cx))
+                    .update(cx, |this, cx| this.parts.wheel(event, cx))
                     .unwrap_or(false);
                 if taken {
                     cx.stop_propagation();

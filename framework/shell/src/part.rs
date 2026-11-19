@@ -6,9 +6,9 @@ use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _,
-    KeyDownEvent, Modifiers, Pixels, SharedString, Size, Window,
+    KeyDownEvent, Modifiers, Pixels, ScrollWheelEvent, SharedString, Size, Window,
 };
-use nova_files_api::{Entry, Event, Listing, ListingId, Order};
+use nova_files_api::{Entry, EntryId, Event, Listing, ListingId, Order};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
@@ -16,6 +16,7 @@ use nova_files_messages::{Envelope, Message, MessageType};
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::jump::Jump;
+use crate::layout::Layout;
 use crate::location::{Location, PageKind, PageRef};
 use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
 use crate::navigator::FolderPick;
@@ -42,6 +43,14 @@ pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
 pub type NameField<P> = fn(&P, &Entry, &App) -> Option<Entity<TextField>>;
 pub type Stage<P> =
     fn(&mut P, &Scene, Size<Pixels>, &mut Window, &mut Context<P>) -> Option<AnyElement>;
+pub type Staging<P> =
+    fn(&mut P, &Scene, Size<Pixels>, &mut Window, &mut Context<P>) -> Option<Staged>;
+
+pub struct Staged {
+    pub entry: EntryId,
+    pub art: AnyElement,
+    pub about: SharedString,
+}
 pub type Busy<P> = fn(&P, &App) -> bool;
 pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
@@ -60,6 +69,7 @@ pub struct DropOver<'a> {
 pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<Vec<RowItem>>;
 pub type Typed<P> = fn(&mut P, &Jump, &Scene, &mut Context<P>) -> bool;
 pub type KeyDown<P> = fn(&mut P, &KeyDownEvent, &Scene, &mut Context<P>) -> bool;
+pub type Wheel<P> = fn(&mut P, &ScrollWheelEvent, &mut Context<P>) -> bool;
 pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
 pub type Selectable<P> = fn(&P, &Entry, &App) -> bool;
@@ -98,6 +108,13 @@ impl CardRank {
     pub const LAST: u8 = u8::MAX;
 }
 
+pub struct BarRank;
+
+impl BarRank {
+    pub const FIRST: u8 = 0;
+    pub const LAST: u8 = u8::MAX;
+}
+
 pub struct ChipRank;
 
 impl ChipRank {
@@ -117,6 +134,7 @@ type Bind<P> = Box<dyn Fn(Div, &Entity<P>, &Host) -> Div>;
 pub type ListSlot = Rc<dyn Fn(&PageRef, ListingId, Order) -> Option<Envelope>>;
 pub type CrumbSlot<P> = Rc<dyn Fn(&P, &PageRef, &App) -> Option<Vec<Crumb>>>;
 pub type FolderLook<P> = fn(&P, &Path, &App) -> Option<(SharedString, Icon)>;
+pub type FolderLayout<P> = fn(&P, &Path, &App) -> Option<Layout>;
 pub type PageSlot<P> =
     Rc<dyn Fn(&mut P, &PageRef, &mut Window, &mut Context<P>) -> Option<AnyElement>>;
 
@@ -136,6 +154,7 @@ pub struct Slots<P> {
     pub(crate) listing_pages: Vec<(TypeId, ListSlot)>,
     pub(crate) crumbs: Vec<CrumbSlot<P>>,
     pub(crate) folder_looks: Vec<FolderLook<P>>,
+    pub(crate) layouts: Vec<FolderLayout<P>>,
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
     pub(crate) start_cards: Vec<(u8, Card<P>)>,
@@ -146,12 +165,13 @@ pub struct Slots<P> {
     pub(crate) name_fields: Vec<NameField<P>>,
     pub(crate) busy: Vec<Busy<P>>,
     pub(crate) stages: Vec<Stage<P>>,
+    pub(crate) stagings: Vec<Staging<P>>,
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
     pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
     pub(crate) row_menus: Vec<RowMenu<P>>,
     pub(crate) head_buttons: Vec<(SidebarAt, &'static str, HeadButton<P>)>,
-    pub(crate) bars: Vec<Card<P>>,
+    pub(crate) bars: Vec<(u8, bool, Card<P>)>,
     pub(crate) footers: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
     pub(crate) layers: Vec<Card<P>>,
@@ -161,6 +181,7 @@ pub struct Slots<P> {
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
     pub(crate) key_downs: Vec<KeyDown<P>>,
+    pub(crate) wheels: Vec<Wheel<P>>,
     pub(crate) closing: Vec<Closing<P>>,
     pub(crate) clicks: Vec<Clicks<P>>,
     pub(crate) resized: Vec<Resized<P>>,
@@ -192,6 +213,7 @@ impl<P> Default for Slots<P> {
             listing_pages: Vec::new(),
             crumbs: Vec::new(),
             folder_looks: Vec::new(),
+            layouts: Vec::new(),
             columns: Vec::new(),
             sidebar: Vec::new(),
             start_cards: Vec::new(),
@@ -202,6 +224,7 @@ impl<P> Default for Slots<P> {
             name_fields: Vec::new(),
             busy: Vec::new(),
             stages: Vec::new(),
+            stagings: Vec::new(),
             listed: Vec::new(),
             drops: Vec::new(),
             drop_targets: Vec::new(),
@@ -217,6 +240,7 @@ impl<P> Default for Slots<P> {
             opens: Vec::new(),
             typed: Vec::new(),
             key_downs: Vec::new(),
+            wheels: Vec::new(),
             closing: Vec::new(),
             clicks: Vec::new(),
             resized: Vec::new(),
@@ -330,6 +354,10 @@ impl<P: Part> Slots<P> {
         self.folder_looks.push(look);
     }
 
+    pub fn layout(&mut self, layout: FolderLayout<P>) {
+        self.layouts.push(layout);
+    }
+
     pub fn column(&mut self, column: Columns<P>) {
         self.columns.push(column);
     }
@@ -370,6 +398,10 @@ impl<P: Part> Slots<P> {
         self.stages.push(stage);
     }
 
+    pub fn staged(&mut self, staged: Staging<P>) {
+        self.stagings.push(staged);
+    }
+
     pub fn listed(&mut self, listed: Listed<P>) {
         self.listed.push(listed);
     }
@@ -396,7 +428,11 @@ impl<P: Part> Slots<P> {
     }
 
     pub fn bar(&mut self, bar: Card<P>) {
-        self.bars.push(bar);
+        self.bars.push((BarRank::LAST, false, bar));
+    }
+
+    pub fn shrinking_bar_at(&mut self, rank: u8, bar: Card<P>) {
+        self.bars.push((rank, true, bar));
     }
 
     pub fn footer(&mut self, footer: Card<P>) {
@@ -437,6 +473,10 @@ impl<P: Part> Slots<P> {
 
     pub fn key_down(&mut self, key_down: KeyDown<P>) {
         self.key_downs.push(key_down);
+    }
+
+    pub fn wheel(&mut self, wheel: Wheel<P>) {
+        self.wheels.push(wheel);
     }
 
     pub fn closing(&mut self, closing: Closing<P>) {

@@ -212,10 +212,17 @@ impl MainWindow {
         if let Some(want) = over {
             self.over_wanted(want, cx);
         }
-        let (moved, opened) = self
-            .host
-            .entries
-            .update(cx, |entries, _| (entries.take_move(), entries.take_open()));
+        let (moved, opened, reveal) = self.host.entries.update(cx, |entries, _| {
+            (
+                entries.take_move(),
+                entries.take_open(),
+                entries.take_reveal(),
+            )
+        });
+        if reveal && let Some(cursor) = self.cursor() {
+            self.scroll_to_entry(cursor, cx);
+            cx.notify();
+        }
         if let Some((from, step)) = moved {
             self.move_cursor_from(from, step, cx);
         }
@@ -270,6 +277,7 @@ impl MainWindow {
             picker: self.host.opening.is_some(),
             asked: self.asked,
             laid: self.laid(),
+            details_only: self.details_only(),
             cursor: self.cursor(),
             showing: self.showing(cx),
         };

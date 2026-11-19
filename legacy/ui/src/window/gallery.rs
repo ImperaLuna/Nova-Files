@@ -1,25 +1,14 @@
 use std::ops::Range;
 
-use gpui::{App, Context, Entity, Pixels, Size, Window};
-use nova_files_folders_api::ViewMode;
-use nova_files_folders_ui::{GalleryBounds, stage_room, strip};
-use nova_files_preview_ui::PreviewPart;
+use gpui::{App, Context, Pixels, Size, Window};
+use nova_files_shell::{GalleryBounds, Layout, stage_room, strip};
 
 use super::MainWindow;
 use crate::selection::Move;
 
 impl MainWindow {
-    pub(crate) fn preview(&self) -> Option<Entity<PreviewPart>> {
-        self.part::<PreviewPart>()
-    }
-
-    pub(crate) fn previewing(&self, cx: &App) -> bool {
-        self.preview()
-            .is_some_and(|preview| preview.read(cx).previewing())
-    }
-
     pub fn showing_gallery(&self, cx: &App) -> bool {
-        !self.picker() && self.folder_view(cx).mode == ViewMode::Gallery
+        matches!(self.layout(cx), Layout::Gallery { .. })
     }
 
     pub(crate) const fn gallery_bounds(&self) -> &GalleryBounds {
@@ -41,11 +30,7 @@ impl MainWindow {
     }
 
     pub(crate) fn keep_gallery(&mut self, window: &Window, cx: &mut Context<Self>) {
-        let preview = self.preview();
         if !self.showing_gallery(cx) {
-            if let Some(preview) = preview {
-                preview.update(cx, PreviewPart::undock);
-            }
             return;
         }
         let Some(listing) = self.listing.as_ref() else {
@@ -57,9 +42,6 @@ impl MainWindow {
         }
         if self.cursor().is_none() {
             self.move_cursor(Move::First, false, cx);
-        }
-        if let (Some(preview), Some(cursor)) = (preview, self.cursor()) {
-            preview.update(cx, |preview, cx| preview.dock(cursor, cx));
         }
         self.entries_drawn(self.strip_entries(len, cx), window, cx);
     }

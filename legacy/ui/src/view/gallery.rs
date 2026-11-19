@@ -1,13 +1,12 @@
 use gpui::{
-    AnyElement, App, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, SharedString, Styled as _, Window, canvas, div,
+    AnyElement, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    SharedString, Styled as _, Window, canvas, div,
 };
 
 use super::sheet::rename_box;
 use crate::theme::{Colors, size, text};
 use crate::window::MainWindow;
-use nova_files_api::Entry;
-use nova_files_folders_ui::Grid;
+use nova_files_shell::Grid;
 
 impl MainWindow {
     pub(super) fn gallery(
@@ -42,20 +41,16 @@ impl MainWindow {
             .child(self.strip(grid, cx))
     }
 
-    fn on_stage(&self, cx: &App) -> Option<&Entry> {
-        let staged = self.preview()?.read(cx).staged()?;
-        let index = usize::try_from(staged.0).ok()?;
-        self.listing.as_ref()?.entries.get(index)
-    }
-
     fn stage(&self, colors: &Colors, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let room = self.stage_room(cx);
-        let scale_factor = self.scale_factor;
         let scene = self.scene(cx);
+        let staged = self.parts.staged(&scene, room, window, cx);
         let part_stage = self.parts.stage(&scene, room, window, cx);
-        let shown = part_stage.is_none().then(|| self.on_stage(cx)).flatten();
-        let preview = self.preview();
-        let preview = preview.as_ref().map(|preview| preview.read(cx));
+        let shown = staged.filter(|_| part_stage.is_none()).and_then(|staged| {
+            let index = usize::try_from(staged.entry.0).ok()?;
+            let entry = self.listing.as_ref()?.entries.get(index)?;
+            Some((staged, entry))
+        });
         div()
             .debug_selector(|| "stage".to_owned())
             .flex()
@@ -67,14 +62,8 @@ impl MainWindow {
             .gap(size::STAGE_PAD)
             .p(size::STAGE_PAD)
             .children(part_stage)
-            .children(shown.map(|entry| {
+            .children(shown.map(|(staged, entry)| {
                 let name = SharedString::from(entry.name.to_string_lossy().into_owned());
-                let about = preview
-                    .and_then(nova_files_preview_ui::PreviewPart::about)
-                    .unwrap_or_default();
-                let art = self.listing.as_ref().and_then(|listing| {
-                    preview?.stage_art((listing, entry), (room, scale_factor), colors)
-                });
                 let part_name = self.parts.name_cell(entry, cx);
                 div()
                     .flex()
@@ -82,7 +71,7 @@ impl MainWindow {
                     .items_center()
                     .gap(size::STAGE_PAD)
                     .min_w_0()
-                    .children(art)
+                    .child(staged.art)
                     .child(
                         div()
                             .flex()
@@ -118,7 +107,7 @@ impl MainWindow {
                                 div()
                                     .text_size(text::DETAIL)
                                     .text_color(colors.text_soft)
-                                    .child(about),
+                                    .child(staged.about),
                             ),
                     )
                     .into_any_element()
