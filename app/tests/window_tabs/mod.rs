@@ -253,10 +253,10 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
 
     middle_click(cx, "entry-0");
     wait_for_folder(&view, cx, &projects).await;
-    view.read_with(cx, |view, _| {
+    view.read_with(cx, |view, cx| {
         assert_eq!(view.tab_count(), 3);
         assert_eq!(view.current_tab(), 2);
-        assert_eq!(view.tab_names()[1..], ["Start", "Projects"]);
+        assert_eq!(view.tab_names(cx)[1..], ["Start", "Projects"]);
     });
     click(cx, "tab-0");
     wait_for_folder(&view, cx, tree.path()).await;
@@ -318,7 +318,7 @@ async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut Te
     });
     settled(&view, cx).await;
     let names = |view: &Entity<MainWindow>, cx: &VisualTestContext| {
-        view.read_with(cx, |view, _| view.tab_names())
+        view.read_with(cx, MainWindow::tab_names)
     };
     let before = names(&view, cx);
     let here = before[0].clone();
@@ -384,7 +384,7 @@ async fn reorder_tabs_by_halves(cx: &mut TestAppContext, test: &str, width: Pixe
     });
     settled(&view, cx).await;
     let names = |view: &Entity<MainWindow>, cx: &VisualTestContext| {
-        view.read_with(cx, |view, _| view.tab_names())
+        view.read_with(cx, MainWindow::tab_names)
     };
     let [a, b, c] = <[_; 3]>::try_from(names(&view, cx)).unwrap();
     view.update(cx, |view, cx| {

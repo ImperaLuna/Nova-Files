@@ -31,6 +31,10 @@ pub trait PageKind: fmt::Debug + Clone + Eq + Send + Sync + 'static {
     fn sorted(&self) -> bool {
         true
     }
+
+    fn parent(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 trait AnyPage: fmt::Debug + Send + Sync {
@@ -42,6 +46,7 @@ trait AnyPage: fmt::Debug + Send + Sync {
     fn views(&self) -> Views;
     fn folder_column(&self) -> bool;
     fn sorted(&self) -> bool;
+    fn parent(&self) -> Option<PathBuf>;
 }
 
 impl<K: PageKind> AnyPage for K {
@@ -75,6 +80,10 @@ impl<K: PageKind> AnyPage for K {
 
     fn sorted(&self) -> bool {
         PageKind::sorted(self)
+    }
+
+    fn parent(&self) -> Option<PathBuf> {
+        PageKind::parent(self)
     }
 }
 
@@ -112,6 +121,10 @@ impl PageRef {
 
     pub fn sorted(&self) -> bool {
         self.0.sorted()
+    }
+
+    pub fn parent(&self) -> Option<PathBuf> {
+        self.0.parent()
     }
 
     pub fn kind(&self) -> TypeId {
