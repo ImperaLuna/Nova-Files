@@ -312,7 +312,7 @@ fn run(watched: &mut Watched, stop: &OwnedFd, on_change: &impl Fn(&Changed)) -> 
     let mut burst = Changed::Files(BTreeSet::new());
     let mut first_event: Option<Instant> = None;
     loop {
-        let wait = first_event.map(|first| QUIET.min(LONGEST_WAIT.saturating_sub(first.elapsed())));
+        let wait = first_event.map(|first| wait_after(first.elapsed()));
         let timeout = wait.map(|wait| Timespec {
             tv_sec: i64::try_from(wait.as_secs()).unwrap_or(i64::MAX),
             tv_nsec: i64::from(wait.subsec_nanos()),
@@ -329,7 +329,7 @@ fn run(watched: &mut Watched, stop: &OwnedFd, on_change: &impl Fn(&Changed)) -> 
         if fds[1].revents().contains(PollFlags::IN) {
             return Ok(());
         }
-        let held_too_long = first_event.is_some_and(|first| first.elapsed() >= LONGEST_WAIT);
+        let held_too_long = first_event.is_some_and(|first| held_too_long(first.elapsed()));
         let events = read_events(&watched.inotify, &mut buffer)?;
         burst.add(watched.handle(&events)?);
         if !burst.is_empty() {
@@ -341,6 +341,14 @@ fn run(watched: &mut Watched, stop: &OwnedFd, on_change: &impl Fn(&Changed)) -> 
             first_event = None;
         }
     }
+}
+
+fn wait_after(since_first: Duration) -> Duration {
+    QUIET.min(LONGEST_WAIT.saturating_sub(since_first))
+}
+
+fn held_too_long(since_first: Duration) -> bool {
+    since_first >= LONGEST_WAIT
 }
 
 fn read_events(fd: &OwnedFd, buffer: &mut [MaybeUninit<u8>]) -> io::Result<Vec<Event>> {

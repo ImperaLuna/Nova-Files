@@ -19,9 +19,9 @@ pub fn shrink(png: &[u8], side: u32) -> Option<RenderImage> {
 mod tests {
     use std::io::Cursor;
 
+    use crate::device::device_side;
     use gpui::px;
     use image::{Rgba, RgbaImage};
-    use nova_files_shell::device::device_side;
 
     use super::*;
 
