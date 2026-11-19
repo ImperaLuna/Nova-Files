@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod cards;
 mod shown;
 
 use std::collections::HashMap;
@@ -7,13 +8,14 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{App, Context, Subscription, WeakEntity};
+use gpui::{AnyElement, App, Context, Subscription, WeakEntity, Window};
 use nova_files_drives_api::{
     Command, DiskSpace, DriveAction, DriveFailure, DriveList, Event, VolumeId,
 };
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
-    Host, Location, Look, NavEvent, Part, Published, RowItem, Scene, SidebarAt, SidebarRow, Slots,
+    CardRank, Host, Location, Look, NavEvent, Part, Published, RowItem, Scene, SidebarAt,
+    SidebarRow, Slots,
 };
 
 pub use shown::{NEARLY_FULL, ShownDrive, free, here, shown};
@@ -290,5 +292,15 @@ impl Part for DrivesPart {
         slots.listed(Self::listed);
         slots.sidebar(SidebarAt::Drives, rows);
         slots.row_menu(row_menu);
+        slots.start_card_at(CardRank::DRIVES, drive_cards);
     }
+}
+
+fn drive_cards(
+    part: &mut DrivesPart,
+    _: &Scene,
+    _: &mut Window,
+    cx: &mut Context<DrivesPart>,
+) -> Option<AnyElement> {
+    cards::drive_cards(part, cx)
 }

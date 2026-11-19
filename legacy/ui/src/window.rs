@@ -70,7 +70,6 @@ use nova_files_shell::{
     FolderRules, Host, KnownFolders, Link, Opening, PageRef, Parts, TabId, ThumbnailsShown,
     WindowParts,
 };
-use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 
 use self::preview::QuickLooks;
 use self::rows::RowRead;
@@ -144,8 +143,6 @@ pub struct MainWindow {
     pinned: Arc<[Bookmark]>,
     gathered: gathered::GatheredState,
     pub(crate) history: History,
-    pub(crate) recent: Vec<RecentFolder>,
-    pub(crate) recent_asked: RecentId,
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,
@@ -267,8 +264,6 @@ impl MainWindow {
             pinned: Arc::from([]),
             gathered: gathered::GatheredState::default(),
             history: History::default(),
-            recent: Vec::new(),
-            recent_asked: RecentId(0),
             path_bar: cx.new(|_| PathBar::new(&host)),
             asks_sent: 0,
             scroll: UniformListScrollHandle::new(),
@@ -362,12 +357,6 @@ impl MainWindow {
                 return self.find_failed(id, cx);
             }
             Ok(_) => return,
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<start_api::Event>() {
-            Ok(start_api::Event::RecentFolders { id, folders }) => {
-                return self.recent_arrived(id, folders, cx);
-            }
             Err(envelope) => envelope,
         };
         self.hand_to_parts(envelope, cx);

@@ -23,6 +23,7 @@
 # - nova-files-rename-ui
 # - nova-files-settings-ui
 # - nova-files-shell
+# - nova-files-start-ui
 # - nova-files-thumbnails-ui
 # - nova-files-transfer-ui
 # - nova-files-trash-ui
@@ -57,6 +58,7 @@ nova-files-places-ui.workspace = true
 nova-files-rename-ui.workspace = true
 nova-files-settings-ui.workspace = true
 nova-files-shell.workspace = true
+nova-files-start-ui.workspace = true
 nova-files-thumbnails-ui.workspace = true
 nova-files-transfer-ui.workspace = true
 nova-files-trash-ui.workspace = true

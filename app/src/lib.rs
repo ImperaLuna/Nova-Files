@@ -10,6 +10,7 @@ use nova_files_places_ui::{PlacesPart, TreePart};
 use nova_files_rename_ui::RenamePart;
 use nova_files_settings_ui::SettingsPart;
 use nova_files_shell::Parts;
+use nova_files_start_ui::StartPart;
 use nova_files_thumbnails_ui::ThumbnailsPart;
 use nova_files_transfer_ui::TransferPart;
 use nova_files_trash_ui::TrashPart;
@@ -26,6 +27,7 @@ pub fn parts() -> Parts {
     parts.add::<PlacesPart>();
     parts.add::<RenamePart>();
     parts.add::<SettingsPart>();
+    parts.add::<StartPart>();
     parts.add::<ThumbnailsPart>();
     parts.add::<TransferPart>();
     parts.add::<TrashPart>();

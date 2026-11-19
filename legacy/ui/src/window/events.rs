@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
-use nova_files_places_ui::Known;
+use nova_files_places_api::Known;
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -161,13 +161,6 @@ impl MainWindow {
             self.places.clone_from(&known.places);
             self.pinned = Arc::clone(&known.pinned);
         }
-        self.sidebar_changed(cx);
-    }
-
-    fn sidebar_changed(&mut self, cx: &mut Context<Self>) {
-        if self.is_on_start() {
-            self.ask_for_recent();
-        }
         cx.emit(WindowEvent::Places);
         cx.notify();
     }
@@ -238,7 +231,6 @@ impl MainWindow {
                 }
             }
         }
-        self.ask_for_recent();
         self.parts.refused(id, &path, cx);
         self.path_bar.update(cx, |bar, cx| bar.refused(id, cx));
         cx.emit(WindowEvent::Refused(path));
