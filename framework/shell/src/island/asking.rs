@@ -1,6 +1,6 @@
 use nova_files_api::{Answer, Conflict, ConflictKind, Failure};
 
-use super::{failure, name_of};
+use super::words::{failure, name_of};
 
 const ORDER: [Answer; 5] = [
     Answer::Skip,

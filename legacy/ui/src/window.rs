@@ -67,7 +67,6 @@ use nova_files_shell::{
 use self::preview::QuickLooks;
 use self::rows::RowRead;
 use crate::band::Band;
-use crate::history::History;
 use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::location::Location;
@@ -75,6 +74,7 @@ use crate::menu::Menu;
 use crate::selection::Selection;
 use crate::theme_icons::ThemeIcons;
 use jobs::Jobs;
+use nova_files_shell::History;
 use tabs::Tabs;
 
 const DEFAULT_SCALE_FACTOR: f32 = 2.0;
@@ -135,7 +135,7 @@ pub struct MainWindow {
     pending_views: HashMap<PathBuf, FolderView>,
     pinned: Arc<[Bookmark]>,
     gathered: gathered::GatheredState,
-    pub(crate) history: History,
+    pub(crate) history: History<Location>,
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,

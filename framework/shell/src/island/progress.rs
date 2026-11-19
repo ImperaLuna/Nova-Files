@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use nova_files_api::{Conflict, Operation, Progress};
 
-use super::{ITEM, ITEMS, PART_GAP, count, name_of};
+use super::words::{ITEM, ITEMS, PART_GAP, count, name_of};
 
 pub const STEADY_AFTER: Duration = Duration::from_secs(1);
 
