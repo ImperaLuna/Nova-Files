@@ -37,7 +37,7 @@ impl MainWindow {
             self.menu = None;
             let fell_back = mem::take(&mut self.falling_back);
             if let (Location::Folder(folder), false) = (&arrived, fell_back) {
-                self.used(folder);
+                self.used(folder, cx);
             }
         }
         self.listed_page = match &arrived {

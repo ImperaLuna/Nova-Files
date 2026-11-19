@@ -68,7 +68,8 @@ use nova_files_search_api as search_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::Lines;
 use nova_files_shell::{
-    FolderRules, Host, KnownFolders, Link, Opening, PageRef, Parts, ThumbnailsShown, WindowParts,
+    FolderRules, Host, KnownFolders, Link, Opening, PageRef, Parts, TabId, ThumbnailsShown,
+    WindowParts,
 };
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_thumbnails_api as thumbnails_api;
@@ -166,6 +167,7 @@ pub struct MainWindow {
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
     listed_page: Option<PageRef>,
+    shown_page: Option<(TabId, PageRef)>,
     known: KnownFolders,
     pub(crate) drives: Drives,
     pub(crate) menu: Option<Menu>,
@@ -291,6 +293,7 @@ impl MainWindow {
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
+            shown_page: None,
             known: KnownFolders::default(),
             drives: Drives::default(),
             menu: None,

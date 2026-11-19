@@ -42,7 +42,7 @@ pub use part::{
     DropSlot, DropTake, EmptyNote, Focus, HeadButton, Items, Listed, NameCell, NameField, Opens,
     Part, Refused, RowIcon, RowMenu, Rows, Selectable, Several, Slots, Stage, Typed, Watch,
 };
-pub use parts::{Parts, ShownColumn, WindowParts};
+pub use parts::{Parts, ShownColumn, Turn, WindowParts};
 pub use per_tab::{PerTab, TabId};
 pub use published::{KnownFolder, KnownFolders, Published, ThumbnailsShown};
 pub use rules::{FolderName, FolderRules, RulesBook, Views};

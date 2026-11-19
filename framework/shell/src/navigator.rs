@@ -54,6 +54,7 @@ impl Eq for FolderPick {}
 pub enum NavEvent {
     Asked,
     Left,
+    TabShown(TabId),
     TabClosed(TabId),
 }
 
@@ -146,8 +147,12 @@ impl Navigator {
         for closed in self.tabs.iter().filter(|old| !tabs.contains(old)) {
             cx.emit(NavEvent::TabClosed(*closed));
         }
+        let switched = self.tab != Some(tab);
         self.tab = Some(tab);
         self.tabs = tabs;
+        if switched {
+            cx.emit(NavEvent::TabShown(tab));
+        }
         cx.notify();
     }
 }

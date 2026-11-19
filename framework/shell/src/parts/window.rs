@@ -7,7 +7,7 @@ use gpui::{
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 use nova_files_messages::Envelope;
 
-use super::{OpenPart, Opened, ShownColumn};
+use super::{OpenPart, Opened, ShownColumn, Turn};
 use crate::assets::Icon;
 use crate::command::CommandSpec;
 use crate::jump::Jump;
@@ -15,6 +15,7 @@ use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::DropOver;
 use crate::part::Part;
+use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::text::TextField;
 
@@ -249,6 +250,18 @@ impl WindowParts {
     pub fn refused(&self, id: ListingId, path: &Path, cx: &mut App) {
         for part in &self.opened {
             part.refused(id, path, cx);
+        }
+    }
+
+    pub fn used(&self, folder: &Path, cx: &mut App) {
+        for part in &self.opened {
+            part.used(folder, cx);
+        }
+    }
+
+    pub fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App) {
+        for part in &self.opened {
+            part.page_turned(page, tab, turn, cx);
         }
     }
 }

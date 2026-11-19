@@ -18,6 +18,7 @@ use crate::host::Host;
 use crate::location::{Location, PageRef};
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::{Card, DropOver, Part, Slots};
+use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
 use crate::text::TextField;
@@ -88,6 +89,14 @@ trait OpenPart {
     fn dims(&self, entry: &Entry, cx: &App) -> bool;
     fn focus(&self, cx: &App) -> Option<FocusHandle>;
     fn refused(&self, id: ListingId, path: &Path, cx: &mut App);
+    fn used(&self, folder: &Path, cx: &mut App);
+    fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Turn {
+    Shown,
+    Left,
 }
 
 struct Opened<P: Part> {
@@ -419,6 +428,32 @@ impl<P: Part> OpenPart for Opened<P> {
         self.entity.update(cx, |part, cx| {
             for refused in &self.slots.refused {
                 refused(part, id, path, cx);
+            }
+        });
+    }
+
+    fn used(&self, folder: &Path, cx: &mut App) {
+        if self.slots.used.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for used in &self.slots.used {
+                used(part, folder, cx);
+            }
+        });
+    }
+
+    fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App) {
+        let turns = match turn {
+            Turn::Shown => &self.slots.pages_shown,
+            Turn::Left => &self.slots.pages_left,
+        };
+        if turns.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for turned in turns {
+                turned(part, page, tab, cx);
             }
         });
     }

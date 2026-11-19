@@ -8,7 +8,7 @@ use nova_files_api::{HiddenFiles, ListingId};
 use nova_files_picker_api::PickId;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
-    Opening, PageRef, Part, Scene, Shown, TabId,
+    Opening, PageRef, Part, Scene, Shown, TabId, Turn,
 };
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
@@ -170,10 +170,15 @@ impl MainWindow {
             searching: self.searching(),
             gathered: self.gathered_here().is_some(),
         };
+        let page = match &shown.location {
+            Some(shell::Location::Page(page)) => Some(page.clone()),
+            _ => None,
+        };
         self.host
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
+        self.turn_pages(page.map(|page| (tab, page)), cx);
         let left = std::mem::take(&mut self.went) == Went::Elsewhere;
         self.host.nav.update(cx, |nav, cx| {
             nav.show(tab, tabs, cx);
@@ -181,6 +186,19 @@ impl MainWindow {
                 cx.emit(NavEvent::Left);
             }
         });
+    }
+
+    fn turn_pages(&mut self, now: Option<(TabId, PageRef)>, cx: &mut Context<Self>) {
+        if now == self.shown_page {
+            return;
+        }
+        if let Some((tab, page)) = self.shown_page.take() {
+            self.parts.page_turned(&page, tab, Turn::Left, cx);
+        }
+        if let Some((tab, page)) = &now {
+            self.parts.page_turned(page, *tab, Turn::Shown, cx);
+        }
+        self.shown_page = now;
     }
 
     fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
