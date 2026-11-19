@@ -34,7 +34,7 @@ fn main() -> ExitCode {
         report(&format!("{error}"));
     }
     skip_absent_vulkan_drivers();
-    nova_files_core::set_give_back(memory::give_back);
+    nova_files::set_give_back(memory::give_back);
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
@@ -70,7 +70,7 @@ fn skip_absent_vulkan_drivers() {
         // SAFETY: called first thing in `main`, before the core, D-Bus or
         // GPUI start a thread, so nothing can read the environment meanwhile.
         unsafe { std::env::set_var(nova_files::FILTER_VARIABLE, filter) };
-        nova_files_core::launch_without(nova_files::FILTER_VARIABLE);
+        nova_files::launch_without(nova_files::FILTER_VARIABLE);
         FILTER_SET.store(true, Ordering::SeqCst);
     }
 }
@@ -90,11 +90,11 @@ fn restart_with_every_driver(folder: Option<&Path>) -> Option<Command> {
 fn run() -> Result<(), Box<dyn Error>> {
     let mode = Mode::from_args(std::env::args_os().skip(1))?.resolve(std::env::current_dir)?;
     if let Mode::Index(folder) = &mode {
-        let place = nova_files_core::IndexPlace::from_env().ok_or(NO_CACHE_FOLDER)?;
+        let place = nova_files::IndexPlace::from_env().ok_or(NO_CACHE_FOLDER)?;
         return Ok(place.build(folder)?);
     }
     if mode == Mode::MakeDefault {
-        nova_files_core::make_default_for_folders()?;
+        nova_files::make_default_for_folders()?;
         let told = nova_files_dbus::find_running(&Bus::Session)
             .and_then(|running| running.map_or(Ok(()), |running| running.serve_file_manager()));
         if let Err(error) = told {
@@ -104,7 +104,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
         return Ok(());
     }
-    let core = nova_files_core::spawn()?;
+    let core = nova_files::spawn()?;
     core.connector
         .offer(DriveOffer(Arc::new(nova_files_dbus::Udisks::new(
             Bus::System,
@@ -121,7 +121,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         Ok(Started::Service(mut service)) => {
             service.serve_file_picker(core.connector.clone(), UiPicker::new(requests.clone()));
             let asked = mode == Mode::FileManager;
-            let should = move || asked || nova_files_core::opens_folders();
+            let should = move || asked || nova_files::opens_folders();
             if let Err(error) = service.serve_file_manager_when(should) {
                 report(&format!("can't answer apps' \"Show in folder\": {error}"));
             }

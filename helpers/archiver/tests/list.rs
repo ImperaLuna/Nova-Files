@@ -4,7 +4,7 @@ use std::fs::{self, File};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use nova_files_core::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver};
+use nova_files::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver};
 use zip::write::SimpleFileOptions;
 
 fn archiver() -> Archiver {

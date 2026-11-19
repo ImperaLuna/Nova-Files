@@ -6,7 +6,7 @@ use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use nova_files_core::{ArchiveFailure, Archiver, Extracting, Flow};
+use nova_files::{ArchiveFailure, Archiver, Extracting, Flow};
 use zip::write::{FullFileOptions, SimpleFileOptions};
 
 const DAY: i64 = 86_400;

@@ -28,7 +28,7 @@ const QUIET: Duration = Duration::from_millis(200);
 #[test]
 fn first_start_answers_ping_through_the_core() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let started = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
     assert!(matches!(started, Started::Service(_)));
 
@@ -38,7 +38,7 @@ fn first_start_answers_ping_through_the_core() {
 #[test]
 fn ping_fails_once_the_core_has_stopped() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn_with_idle_exit(Duration::ZERO).unwrap();
+    let core = nova_files::spawn_with_idle_exit(Duration::ZERO).unwrap();
     core.thread.join().unwrap();
     let started = nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap();
     assert!(matches!(started, Started::Service(_)));
@@ -49,7 +49,7 @@ fn ping_fails_once_the_core_has_stopped() {
 #[test]
 fn activate_fails_once_the_core_has_stopped() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn_with_idle_exit(Duration::ZERO).unwrap();
+    let core = nova_files::spawn_with_idle_exit(Duration::ZERO).unwrap();
     core.thread.join().unwrap();
     let (_first, requests) = serve(&bus, &core.connector);
 
@@ -97,7 +97,7 @@ fn ping(bus: &PrivateBus) -> zbus::Result<()> {
 #[test]
 fn second_start_hands_its_window_to_the_first() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let (first, requests) = serve(&bus, &core.connector);
     assert!(matches!(first, Started::Service(_)));
 
@@ -109,7 +109,7 @@ fn second_start_hands_its_window_to_the_first() {
 #[test]
 fn second_start_hands_its_folder_to_the_first() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let (_first, requests) = serve(&bus, &core.connector);
     let folder = PathBuf::from("/tmp/a folder");
 
@@ -121,7 +121,7 @@ fn second_start_hands_its_folder_to_the_first() {
 #[test]
 fn open_refuses_uris_that_are_not_local_files() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let (_first, requests) = serve(&bus, &core.connector);
     let client = client(&bus);
     let application = Proxy::new(
@@ -146,7 +146,7 @@ fn open_refuses_uris_that_are_not_local_files() {
 #[test]
 fn name_is_free_again_after_the_service_drops() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let first = nova_files_dbus::start(bus.bus(), core.connector.clone(), |_| {}).unwrap();
     drop(first);
 
@@ -157,7 +157,7 @@ fn name_is_free_again_after_the_service_drops() {
 #[test]
 fn a_released_name_is_free_at_once() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let Started::Service(first) =
         nova_files_dbus::start(bus.bus(), core.connector.clone(), |_| {}).unwrap()
     else {
@@ -173,7 +173,7 @@ fn a_released_name_is_free_at_once() {
 #[test]
 fn a_waiting_start_takes_the_name_once_it_is_freed() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let Started::Service(first) =
         nova_files_dbus::start(bus.bus(), core.connector.clone(), |_| {}).unwrap()
     else {
@@ -193,7 +193,7 @@ fn a_waiting_start_takes_the_name_once_it_is_freed() {
 #[test]
 fn a_waiting_start_gives_up_after_its_wait() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let _first = nova_files_dbus::start(bus.bus(), core.connector.clone(), |_| {}).unwrap();
 
     let again = nova_files_dbus::start_waiting(bus.bus(), core.connector, |_| {}, QUIET).unwrap();
@@ -203,7 +203,7 @@ fn a_waiting_start_gives_up_after_its_wait() {
 #[test]
 fn the_running_instance_serves_search_and_the_file_picker() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let service = picker_service(&bus, &core.connector);
     assert!(service.serves_portal());
 
@@ -223,7 +223,7 @@ fn the_running_instance_serves_search_and_the_file_picker() {
 #[test]
 fn a_release_frees_the_portal_name_too() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let first = picker_service(&bus, &core.connector);
     first.release().unwrap();
 
@@ -237,7 +237,7 @@ fn the_app_waits_for_the_portal_name_while_another_program_holds_it() {
     let bus = PrivateBus::start();
     let other = client(&bus);
     other.request_name(PORTAL_BUS_NAME).unwrap();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let service = picker_service(&bus, &core.connector);
     assert!(!service.serves_portal());
     let watcher = client(&bus);
@@ -266,7 +266,7 @@ fn a_release_leaves_another_programs_portal_name_alone() {
     let bus = PrivateBus::start();
     let other = client(&bus);
     other.request_name(PORTAL_BUS_NAME).unwrap();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let service = picker_service(&bus, &core.connector);
 
     service.release().unwrap();
@@ -301,7 +301,7 @@ impl Picker for NoPicker {
 #[test]
 fn a_plain_start_serves_no_file_picker() {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn().unwrap();
+    let core = nova_files::spawn().unwrap();
     let Started::Service(service) =
         nova_files_dbus::start(bus.bus(), core.connector, |_| {}).unwrap()
     else {
@@ -333,7 +333,7 @@ struct Setup {
 
 fn setup() -> Setup {
     let bus = PrivateBus::start();
-    let core = nova_files_core::spawn_with_idle_exit(IDLE).unwrap();
+    let core = nova_files::spawn_with_idle_exit(IDLE).unwrap();
     let holds = Holds::new(core.connector, &bus.bus()).unwrap();
     let (ended, core_ended) = mpsc::channel();
     let thread = core.thread;
