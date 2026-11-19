@@ -6,8 +6,8 @@ use gpui::{
     Point, SharedString, Window, div, point,
 };
 use nova_files_shell::{
-    Column, Host, Location, MenuAt, MenuItem, PageKind, PageRef, Part, Parts, Scene, SidebarAt,
-    SidebarRow, Slots, assets::Icon, command_spec,
+    Column, Host, Location, MenuAt, MenuGroup, MenuItem, PageKind, PageRef, Part, Parts, Placed,
+    Scene, SidebarAt, SidebarRow, Slots, assets::Icon, command_spec,
 };
 
 use super::super::*;
@@ -66,6 +66,15 @@ fn poke_items(_: &Shelf, _: &Scene, _: &gpui::App) -> Vec<MenuItem> {
     vec![MenuItem::run(Icon::Info, &POKE).with_selector("poke")]
 }
 
+fn nudge_items(_: &Shelf, _: &Scene, _: &gpui::App) -> Vec<MenuItem> {
+    vec![
+        MenuItem::run(Icon::Info, &POKE)
+            .with_label("Nudge")
+            .with_selector("island-nudge")
+            .icon_only(),
+    ]
+}
+
 fn page(_: &mut Shelf, _: &Shelved, _: &mut Window, _: &mut Context<Shelf>) -> AnyElement {
     div()
         .debug_selector(|| "shelf-page".to_owned())
@@ -84,6 +93,8 @@ impl Part for Shelf {
         slots.menu(MenuAt::Sheet, poke_items);
         slots.menu(MenuAt::Island, poke_items);
         slots.menu(MenuAt::PathBarEnd, poke_items);
+        slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::SECOND, nudge_items);
+        slots.menu_in(MenuAt::Island, MenuGroup::Edit, Placed::SECOND, nudge_items);
         slots.page::<Shelved>(page);
         slots.column(|_, scene, _| {
             scene.in_folder(Path::new(SHOWN)).then_some(Column {
@@ -227,6 +238,23 @@ fn part_items_join_the_sheet_and_entry_menus_where_they_apply(cx: &mut TestAppCo
     let entry = cx.debug_bounds("entry-0").unwrap().center();
     right_click_at(cx, entry);
     assert!(labels(&view, cx).contains(&"Poke".to_owned()));
+}
+
+#[gpui::test]
+fn a_placed_part_item_lands_inside_the_window_group_it_names(cx: &mut TestAppContext) {
+    let (view, cx, _core) = shelved(cx);
+
+    let entry = cx.debug_bounds("entry-0").unwrap().center();
+    right_click_at(cx, entry);
+    let offered = labels(&view, cx);
+    let at = |label: &str| offered.iter().position(|offered| offered == label);
+    assert_eq!(at("Nudge"), at("Rename").map(|rename| rename + 1));
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+
+    let mut left = |selector| cx.debug_bounds(selector).unwrap().left();
+    assert!(left("island-rename") < left("island-nudge"));
+    assert!(left("island-nudge") < left("island-trash"));
 }
 
 #[gpui::test]
