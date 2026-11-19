@@ -4,6 +4,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, div, point, prelude::FluentBuilder as _, px,
     relative,
 };
+use nova_files_shell::widgets::tick_box;
 
 use nova_files_api::{Answer, Conflict};
 use nova_files_shell::{Look, MenuAt, MenuGroup, MenuItem, Placed, arrange};
@@ -212,26 +213,6 @@ fn for_all_tick(
         .child(tick_box(ticked, colors))
         .child(words)
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_for_all(cx)))
-}
-
-pub(super) fn tick_box(ticked: bool, colors: &Colors) -> Div {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .size(size::TICK_BOX)
-        .rounded(radius::TICK)
-        .border(size::TICK_LINE)
-        .map(|tick| {
-            if ticked {
-                tick.bg(colors.text_soft)
-                    .border_color(colors.text_soft)
-                    .child(icon(Icon::Check, size::TICK_ICON, colors.lifted))
-            } else {
-                tick.border_color(colors.text_faint)
-            }
-        })
 }
 
 fn job_parts(job: &Running, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gpui::AnyElement> {

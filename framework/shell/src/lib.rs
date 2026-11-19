@@ -5,6 +5,7 @@ mod command;
 mod entries;
 mod host;
 mod island;
+pub mod kind;
 mod location;
 mod menu;
 mod navigator;
@@ -17,6 +18,7 @@ mod scene;
 mod slot_view;
 pub mod text;
 pub mod theme;
+pub mod widgets;
 
 pub use command::{CommandSpec, WINDOW_KEYS};
 pub use entries::{Entries, EntriesAsked, Shown};

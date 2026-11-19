@@ -1,11 +1,12 @@
+pub use nova_files_shell::widgets::icon;
 use std::ops::Range;
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, Context, Div, HighlightStyle, Hsla, InteractiveElement as _, IntoElement,
-    MouseButton, MouseDownEvent, ObjectFit, ParentElement as _, Pixels, RenderImage, Rgba,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, StyledImage as _,
-    StyledText, div, img, prelude::FluentBuilder as _, svg,
+    AnyElement, Context, Div, HighlightStyle, InteractiveElement as _, IntoElement, MouseButton,
+    MouseDownEvent, ObjectFit, ParentElement as _, Pixels, RenderImage, Rgba, SharedString,
+    Stateful, StatefulInteractiveElement as _, Styled as _, StyledImage as _, StyledText, div, img,
+    prelude::FluentBuilder as _,
 };
 use nova_files_api::{Entry, EntryKind, IconKind, Listing};
 
@@ -193,14 +194,6 @@ pub const fn glyph_of(kind: IconKind) -> Icon {
         IconKind::Archive => Icon::FileArchive,
         IconKind::Program => Icon::FileProgram,
     }
-}
-
-pub fn icon(glyph: Icon, side: Pixels, tint: Rgba) -> impl IntoElement {
-    svg()
-        .path(glyph.path())
-        .flex_none()
-        .size(side)
-        .text_color(Hsla::from(tint))
 }
 
 #[cfg(test)]
