@@ -181,7 +181,7 @@ impl MainWindow {
         scale_factor: f32,
         cx: &mut Context<Self>,
     ) {
-        let device = |side: Pixels| crate::thumbnail::device_side(side, scale_factor);
+        let device = |side: Pixels| nova_files_thumbnails_ui::device_side(side, scale_factor);
         let fit = Some(Fit {
             width: device(room.width),
             height: device(room.height),

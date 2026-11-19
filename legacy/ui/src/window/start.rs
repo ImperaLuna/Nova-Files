@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use gpui::{App, Context, SharedString, UniformListScrollHandle};
 use nova_files_start_api::{Command, RecentFolder, RecentId};
 
-use super::rows::release;
 use super::{MainWindow, WindowEvent};
 use crate::jump::TypeJump;
 use crate::location::Location;
@@ -35,7 +34,6 @@ impl MainWindow {
         self.gathered.shown = None;
         self.listed_page = None;
         self.details = HashMap::new();
-        release(self.thumbnails.take_all(), None, cx);
         self.selection = None;
         self.scroll = UniformListScrollHandle::new();
         self.jump = TypeJump::default();
