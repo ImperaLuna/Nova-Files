@@ -8,6 +8,7 @@ mod host;
 mod island;
 pub mod jump;
 pub mod kind;
+mod line;
 mod location;
 mod menu;
 mod navigator;
@@ -27,6 +28,7 @@ pub use command::{CommandSpec, WINDOW_KEYS};
 pub use entries::{Entries, EntriesAsked, Shown};
 pub use host::{AskIds, Host, Link};
 pub use island::{Island, IslandAsk, IslandAsked, NoteGone, NoteId, OnUndo, OnYes, Undo};
+pub use line::{Line, Lines};
 pub use location::{Location, PageKind, PageRef};
 pub use menu::{
     Expander, Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow,

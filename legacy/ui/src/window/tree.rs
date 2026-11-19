@@ -1,38 +1,28 @@
 use std::path::{Path, PathBuf};
 
-use futures::StreamExt as _;
-use futures::channel::mpsc;
-use gpui::{Context, Task};
-use nova_files_api::{Command, Connection, Connector, Event, Listing, ListingId, Order};
+use gpui::Context;
+use nova_files_api::{Command, Event, Listing, ListingId, Order};
+use nova_files_shell::{Line, Lines};
 
-use super::{ChannelSink, MainWindow};
+use super::MainWindow;
 
 pub struct TreeLine {
-    connection: Option<Connection>,
+    line: Line,
     asked: Option<(ListingId, PathBuf)>,
     next_listing: u64,
-    _events: Task<()>,
 }
 
 impl TreeLine {
-    pub fn connect(connector: &Connector, cx: &Context<MainWindow>) -> Self {
-        let (sink, mut events) = mpsc::unbounded();
-        let connection = connector.connect(ChannelSink(sink)).ok();
-        let events = cx.spawn(async move |this, cx| {
-            while let Some(event) = events.next().await {
-                if this
-                    .update(cx, |this, cx| this.tree_event(event, cx))
-                    .is_err()
-                {
-                    return;
-                }
+    pub fn connect(lines: &Lines, cx: &mut Context<MainWindow>) -> Self {
+        let line = lines.open(cx, |this, envelope, cx| {
+            if let Some(event) = envelope.taken_as::<Event>() {
+                this.tree_event(event, cx);
             }
         });
         Self {
-            connection,
+            line,
             asked: None,
             next_listing: 0,
-            _events: events,
         }
     }
 }
@@ -78,15 +68,12 @@ impl MainWindow {
         if line.asked.is_some() {
             return;
         }
-        let Some(connection) = &line.connection else {
-            return;
-        };
         let Some(path) = self.tree.next_to_list() else {
             return;
         };
         let id = ListingId(line.next_listing);
         line.next_listing += 1;
-        let sent = connection.send(Command::ListFolder {
+        let sent = line.line.send(Command::ListFolder {
             id,
             path: path.clone(),
             order: Order::default(),
