@@ -4,10 +4,10 @@ use gpui::{AppContext as _, Context, Entity, Focusable as _, Subscription, Windo
 use nova_files_api::ListingId;
 
 use super::crumbs::under_home;
-use super::typed::{self, Typed};
 use super::{PathBar, PathBarEvent};
 use crate::paths::HOME;
 use crate::text::{TextField, TextFieldEvent};
+use crate::typed::{self, Typed};
 
 pub(super) struct PathField {
     field: Entity<TextField>,

@@ -1,6 +1,5 @@
 mod crumbs;
 mod draw;
-mod typed;
 mod typing;
 
 use std::path::{Path, PathBuf};
@@ -20,7 +19,6 @@ pub use crumbs::{
     under_home,
 };
 pub use draw::{BarInput, draw, menu_chip};
-pub use typed::{Typed, read};
 pub use typing::{shown_path, typed_target};
 
 use typing::PathField;
