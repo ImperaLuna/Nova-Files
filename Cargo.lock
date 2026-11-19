@@ -3904,6 +3904,7 @@ dependencies = [
  "gpui",
  "nova-files-api",
  "nova-files-messages",
+ "unicode-segmentation",
 ]
 
 [[package]]
@@ -4018,7 +4019,6 @@ dependencies = [
  "nova-files-shell",
  "nova-files-start-api",
  "nova-files-transfer-api",
- "unicode-segmentation",
  "usvg",
 ]
 

@@ -1,6 +1,8 @@
+use std::fmt;
 use std::path::PathBuf;
+use std::rc::Rc;
 
-use gpui::{Context, EventEmitter};
+use gpui::{App, Context, EventEmitter, SharedString};
 
 use crate::location::Location;
 use crate::per_tab::TabId;
@@ -11,7 +13,33 @@ pub enum NavAsk {
     NewTab(Location),
     Reload,
     Reveal(PathBuf),
+    PickFolder(FolderPick),
 }
+
+pub type OnPicked = Rc<dyn Fn(PathBuf, &mut App)>;
+
+#[derive(Clone)]
+pub struct FolderPick {
+    pub title: SharedString,
+    pub accept: SharedString,
+    pub picked: OnPicked,
+}
+
+impl fmt::Debug for FolderPick {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.title)
+    }
+}
+
+impl PartialEq for FolderPick {
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title
+            && self.accept == other.accept
+            && Rc::ptr_eq(&self.picked, &other.picked)
+    }
+}
+
+impl Eq for FolderPick {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NavEvent {
@@ -54,6 +82,21 @@ impl Navigator {
 
     pub fn reveal(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         self.asks.push(NavAsk::Reveal(path));
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn pick_folder(
+        &mut self,
+        title: impl Into<SharedString>,
+        accept: impl Into<SharedString>,
+        picked: impl Fn(PathBuf, &mut App) + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        self.asks.push(NavAsk::PickFolder(FolderPick {
+            title: title.into(),
+            accept: accept.into(),
+            picked: Rc::new(picked),
+        }));
         cx.emit(NavEvent::Asked);
     }
 
