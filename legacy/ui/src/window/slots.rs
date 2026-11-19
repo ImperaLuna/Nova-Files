@@ -3,7 +3,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{App, Context, Entity, Subscription};
+use gpui::{App, Context, Entity, Subscription, Window};
 use nova_files_api::{Command, HiddenFiles, ListingId};
 use nova_files_gathered_ui::GatheredPage;
 use nova_files_picker_api::PickId;
@@ -33,7 +33,7 @@ impl MainWindow {
             cx.observe_self(Self::publish),
             cx.observe(&self.host.nav, |this, _, cx| {
                 if this.closing(cx) {
-                    this.save_pick_size();
+                    this.close_parts(cx);
                 }
                 cx.notify();
             }),
@@ -52,7 +52,11 @@ impl MainWindow {
             cx.subscribe(&self.host.entries, |this, _, _: &EntriesAsked, cx| {
                 this.take_entries_asks(cx);
             }),
-            cx.on_release(Self::close_parts),
+            cx.on_release(|this, cx| {
+                if !this.closing(cx) {
+                    this.close_parts(cx);
+                }
+            }),
             cx.observe_global::<Published<HiddenFiles>>(Self::hidden_published),
             cx.observe_global::<Published<ThumbnailsShown>>(Self::thumbnails_published),
             cx.observe_global::<Published<KnownFolders>>(Self::known_published),
@@ -60,7 +64,16 @@ impl MainWindow {
         watching
     }
 
-    fn close_parts(&mut self, cx: &mut App) {
+    pub fn watch_size(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.parts
+            .resized(window.window_bounds().get_bounds().size, cx);
+        self.bounds_watch = Some(cx.observe_window_bounds(window, |this, window, cx| {
+            this.parts
+                .resized(window.window_bounds().get_bounds().size, cx);
+        }));
+    }
+
+    fn close_parts(&self, cx: &mut App) {
         self.parts.closing(cx);
         let changed = self.host.kept.update(cx, |kept, _| kept.take_changed());
         if let (Some(bytes), Some(connection)) = (changed, &self.connection) {

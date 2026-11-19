@@ -5,14 +5,16 @@ mod bar;
 pub mod filter;
 mod part;
 mod save;
+mod size;
 
-pub use part::{Clicked, Conflict, PickerPart};
+pub use part::{Conflict, PickerPart};
+pub use size::PickerState;
 
 use std::ffi::OsStr;
 use std::path::{Component, Path};
 
-use gpui::TitlebarOptions;
-use nova_files_picker_api::{PickKind, PickRequest};
+use gpui::{ForeignParent, TitlebarOptions};
+use nova_files_picker_api::{ParentWindow, PickKind, PickRequest};
 
 const MNEMONIC: char = '_';
 
@@ -49,6 +51,13 @@ pub fn titlebar(request: &PickRequest) -> TitlebarOptions {
     TitlebarOptions {
         title: Some(title.to_owned().into()),
         ..TitlebarOptions::default()
+    }
+}
+
+pub fn foreign_parent(parent: &ParentWindow) -> ForeignParent {
+    match parent {
+        ParentWindow::Wayland(handle) => ForeignParent::Wayland(handle.clone()),
+        ParentWindow::X11(id) => ForeignParent::X11(*id),
     }
 }
 
