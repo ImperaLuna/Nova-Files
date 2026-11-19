@@ -38,9 +38,19 @@ pub trait JobKind: Send + Sync + 'static {
     }
 
     fn run(&self, running: &mut Running, op: &Self::Op, undo: Option<&Self::Undo>) -> Ended;
-    fn rest(&self, op: &Self::Op, control: &Control) -> Result<Self::Op, Cancelled>;
-    fn undo(&self, running: &mut Running, op: &Self::Op, ended: &Ended) -> Option<Self::Undo>;
-    fn undoes(&self, op: &Self::Op) -> Option<JobId>;
+
+    fn rest(&self, op: &Self::Op, _: &Control) -> Result<Self::Op, Cancelled> {
+        Ok(op.clone())
+    }
+
+    fn undo(&self, _: &mut Running, _: &Self::Op, _: &Ended) -> Option<Self::Undo> {
+        None
+    }
+
+    fn undoes(&self, _: &Self::Op) -> Option<JobId> {
+        None
+    }
+
     fn first_path(&self, op: &Self::Op) -> PathBuf;
 }
 

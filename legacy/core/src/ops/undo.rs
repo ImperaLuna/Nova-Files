@@ -2,26 +2,20 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 use nova_files_api::{Failure, Operation, Outcome};
 
 use super::Ended;
 use super::journal::{Record, word};
-use super::plan::Entry;
 use super::running::Running;
 use super::stop::Stop;
 use crate::trash::{self, Trashes};
+use nova_files_jobs::identity::{self, Identity, same, still};
 use nova_files_jobs::mover::Mover;
+use nova_files_jobs::parents::make_folders;
 use nova_files_transfer_core::How;
 use nova_files_transfer_core::transfer_to;
-use nova_files_trash_core::{make_folders, put_back, restore, trash};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Identity {
-    entry: Entry,
-    born: Option<SystemTime>,
-}
+use nova_files_trash_core::restore;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Undo {
@@ -30,19 +24,6 @@ pub enum Undo {
     Restore(Vec<(PathBuf, Identity)>),
     Rename(PathBuf, Identity, OsString),
     RemoveFolder(PathBuf, Identity),
-    ThenPutBack(Box<Self>, Vec<(PathBuf, Identity)>),
-}
-
-pub fn putting_back(undo: Undo, replaced: &[(PathBuf, PathBuf)]) -> Undo {
-    let items: Vec<_> = replaced
-        .iter()
-        .filter_map(|(_, item)| Some((item.clone(), entry(item)?)))
-        .collect();
-    if items.is_empty() {
-        undo
-    } else {
-        Undo::ThenPutBack(Box::new(undo), items)
-    }
 }
 
 pub fn undo_of(
@@ -54,7 +35,7 @@ pub fn undo_of(
     let given = || -> Vec<(PathBuf, PathBuf, Identity)> {
         steps
             .iter()
-            .filter_map(|(from, to)| Some((to.clone(), from.clone(), entry(to)?)))
+            .filter_map(|(from, to)| Some((to.clone(), from.clone(), identity::of(to)?)))
             .collect()
     };
     let at = |moved: Vec<(PathBuf, PathBuf, Identity)>| -> Vec<(PathBuf, Identity)> {
@@ -78,12 +59,12 @@ pub fn undo_of(
         ),
         Operation::Rename { path, name } if done && path.file_name() != Some(name.as_os_str()) => {
             let renamed = path.with_file_name(name);
-            let entry = entry(&renamed)?;
+            let entry = identity::of(&renamed)?;
             Undo::Rename(renamed, entry, path.file_name()?.to_os_string())
         }
         Operation::NewFolder { inside, name } if done => {
             let made = inside.join(name);
-            let entry = entry(&made)?;
+            let entry = identity::of(&made)?;
             Undo::RemoveFolder(made, entry)
         }
         _ => return None,
@@ -91,55 +72,12 @@ pub fn undo_of(
     let empty = match &undo {
         Undo::Trash(paths) | Undo::Restore(paths) => paths.is_empty(),
         Undo::MoveBack(pairs) => pairs.is_empty(),
-        Undo::Rename(..) | Undo::RemoveFolder(..) | Undo::ThenPutBack(..) => false,
+        Undo::Rename(..) | Undo::RemoveFolder(..) => false,
     };
     (!empty).then_some(undo)
 }
 
 pub fn run(
-    running: &mut Running,
-    undo: Option<Undo>,
-    trashes: &Trashes,
-    mover: &dyn Mover,
-) -> Ended {
-    let Some(Undo::ThenPutBack(first, replaced)) = undo else {
-        return run_one(running, undo, trashes, mover);
-    };
-    let (outcome, mut changed) = run_one(running, Some(*first), trashes, mover);
-    let free = outcome == Outcome::Done || is_gone(&outcome);
-    if !free {
-        return (outcome, changed);
-    }
-    let items: Vec<_> = still(replaced)
-        .into_iter()
-        .filter(|item| {
-            trash::find(item, trashes)
-                .is_some_and(|(_, found)| found.original.symlink_metadata().is_err())
-        })
-        .collect();
-    if items.is_empty() {
-        return (outcome, changed);
-    }
-    let (put, more) = put_back(running, &items, trashes, mover);
-    changed.extend(more);
-    changed.sort();
-    changed.dedup();
-    (put, changed)
-}
-
-fn is_gone(outcome: &Outcome) -> bool {
-    matches!(outcome, Outcome::Failed { path, reason: Failure::NotFound } if path.as_os_str().is_empty())
-}
-
-fn still(paths: Vec<(PathBuf, Identity)>) -> Vec<PathBuf> {
-    paths
-        .into_iter()
-        .filter(|(path, was)| entry(path) == Some(*was))
-        .map(|(path, _)| path)
-        .collect()
-}
-
-fn run_one(
     running: &mut Running,
     undo: Option<Undo>,
     trashes: &Trashes,
@@ -155,11 +93,10 @@ fn run_one(
     let Some(undo) = undo else {
         return gone();
     };
-    let same = |path: &Path, was: Identity| entry(path) == Some(was);
     match undo {
         Undo::Trash(paths) => match still(paths) {
             paths if paths.is_empty() => gone(),
-            paths => trash(running, &paths, trashes.home.as_deref()),
+            paths => running.trash(&paths),
         },
         Undo::Restore(items) => match still(items)
             .into_iter()
@@ -192,7 +129,7 @@ fn run_one(
                 Err(stop) => (stop.outcome(), Vec::new()),
             }
         }
-        Undo::Rename(..) | Undo::RemoveFolder(..) | Undo::ThenPutBack(..) => gone(),
+        Undo::Rename(..) | Undo::RemoveFolder(..) => gone(),
     }
 }
 
@@ -227,14 +164,6 @@ fn remove_folder(path: &Path) -> Ended {
         ),
         Err(error) => (Stop::at(path, &error).outcome(), Vec::new()),
     }
-}
-
-fn entry(path: &Path) -> Option<Identity> {
-    let there = path.symlink_metadata().ok()?;
-    Some(Identity {
-        entry: Entry::of(&there),
-        born: there.created().ok(),
-    })
 }
 
 #[cfg(test)]
