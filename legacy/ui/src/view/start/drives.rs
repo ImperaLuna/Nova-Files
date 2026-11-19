@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _, relative,
+    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
 };
 use nova_files_drives_api::DiskSpace;
 
@@ -102,27 +102,9 @@ impl MainWindow {
                         )
                     }),
             )
-            .child(bar(percent.map(filled), tint, colors))
+            .child(super::bar(percent.map(filled), tint, colors))
             .into_any_element()
     }
-}
-
-pub(in crate::view) fn bar(share: Option<f32>, tint: gpui::Rgba, colors: &Colors) -> AnyElement {
-    div()
-        .h(start::BAR)
-        .rounded(radius::SMALL)
-        .bg(colors.press)
-        .overflow_hidden()
-        .when_some(share, |bar, share| {
-            bar.child(
-                div()
-                    .h_full()
-                    .w(relative(share))
-                    .rounded(radius::SMALL)
-                    .bg(tint),
-            )
-        })
-        .into_any_element()
 }
 
 const fn card_index(row: usize, column: usize) -> usize {

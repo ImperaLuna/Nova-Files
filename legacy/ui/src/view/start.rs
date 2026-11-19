@@ -1,32 +1,30 @@
 mod drives;
 
-pub(super) use drives::bar;
-
 use std::path::Path;
 
 use gpui::{
     AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, Radians, SharedString, StatefulInteractiveElement as _, Styled as _, Transformation,
-    div, linear_color_stop, linear_gradient, prelude::FluentBuilder as _, svg,
+    SharedString, StatefulInteractiveElement as _, Styled as _, div, linear_color_stop,
+    linear_gradient, prelude::FluentBuilder as _,
 };
 use nova_files_api::EntryKind;
 use nova_files_start_api::{Peeked, RecentFolder};
 
 use nova_files_shell::widgets::card_group as group;
 
-use super::row::{RowIcon, entry_icon, icon, kind_glyph};
+use super::row::{RowIcon, entry_icon, icon};
 use crate::assets::Icon;
 use crate::columns;
 use crate::kind::icon_kind;
 use crate::theme::{Colors, radius, size, start, text};
 use crate::window::MainWindow;
 pub(super) use nova_files_shell::paths::{name_of, name_os, where_is};
+pub(super) use nova_files_shell::widgets::{FAN_ENTRIES, fan, space_bar as bar, titles};
 
 const RECENT_LABEL: &str = "Jump back in";
 const DRIVES_LABEL: &str = "Drives";
 const SEPARATOR: &str = " · ";
 const SMALL_PER_ROW: usize = 2;
-pub(super) const FAN_ENTRIES: usize = 3;
 
 impl MainWindow {
     pub(super) fn start_page(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -118,7 +116,7 @@ impl MainWindow {
                     .absolute()
                     .top(start::CARD_PAD)
                     .right(start::CARD_PAD)
-                    .child(fan(&folder.peek, &colors)),
+                    .child(fan(folder.peek.iter().map(|peeked| peeked.kind), &colors)),
             )
             .child(titles(
                 name_of(&folder.path),
@@ -175,35 +173,6 @@ fn hero_subtitle(folder: &RecentFolder, home: &Path) -> String {
     }
 }
 
-pub(super) fn titles(
-    name: String,
-    subtitle: String,
-    name_size: Pixels,
-    colors: &Colors,
-) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_col()
-        .min_w_0()
-        .gap(start::SUBTITLE_GAP)
-        .child(
-            div()
-                .truncate()
-                .text_size(name_size)
-                .font_weight(text::STRONG_WEIGHT)
-                .text_color(colors.text)
-                .child(name),
-        )
-        .child(
-            div()
-                .truncate()
-                .text_size(text::LABEL)
-                .font_weight(text::DETAIL_WEIGHT)
-                .text_color(colors.text_dim)
-                .child(subtitle),
-        )
-}
-
 fn peek(folder: &RecentFolder, colors: &Colors) -> impl IntoElement {
     let rows = folder.peek.iter().map(|entry| {
         div()
@@ -254,45 +223,6 @@ fn peek(folder: &RecentFolder, colors: &Colors) -> impl IntoElement {
                     .child(more),
             )
         })
-}
-
-pub(super) fn fan(entries: &[Peeked], colors: &Colors) -> impl IntoElement {
-    let shown = entries.iter().take(FAN_ENTRIES);
-    let count = shown.len();
-    div()
-        .flex()
-        .flex_none()
-        .children(shown.enumerate().map(|(index, entry)| {
-            let (glyph, tint) = kind_glyph(entry.kind, colors);
-            svg()
-                .path(glyph.path())
-                .flex_none()
-                .size(start::FAN_ICON)
-                .ml(overlap(index))
-                .text_color(gpui::Hsla::from(tint))
-                .with_transformation(Transformation::rotate(lean(index, count)))
-        }))
-}
-
-fn overlap(index: usize) -> Pixels {
-    if index == 0 {
-        Pixels::ZERO
-    } else {
-        -start::FAN_OVERLAP
-    }
-}
-
-fn lean(index: usize, count: usize) -> Radians {
-    let degrees = if count < FAN_ENTRIES {
-        0.0
-    } else if index == 0 {
-        -start::FAN_TILT
-    } else if index + 1 == count {
-        start::FAN_TILT
-    } else {
-        0.0
-    };
-    Radians(degrees.to_radians())
 }
 
 fn amount(entry: &Peeked) -> String {
@@ -377,20 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn each_fan_entry_after_the_first_tucks_under_the_one_before() {
-        assert_eq!(overlap(0), Pixels::ZERO);
-        assert_eq!(overlap(1), -start::FAN_OVERLAP);
-        assert_eq!(overlap(2), -start::FAN_OVERLAP);
+    fn the_more_line_lines_up_with_the_peeked_names() {
         assert_eq!(start::PEEK_MORE_INSET, size::ROW_ICON + start::PEEK_GAP);
-    }
-
-    #[test]
-    fn a_full_fan_leans_its_outer_entries_out() {
-        let tilt = start::FAN_TILT.to_radians();
-        assert_eq!(lean(0, 3), Radians(-tilt));
-        assert_eq!(lean(1, 3), Radians(0.0));
-        assert_eq!(lean(2, 3), Radians(tilt));
-        assert_eq!(lean(0, 2), Radians(0.0));
-        assert_eq!(lean(1, 2), Radians(0.0));
     }
 }

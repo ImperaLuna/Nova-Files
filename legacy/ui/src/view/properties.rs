@@ -82,7 +82,7 @@ impl MainWindow {
             many => div()
                 .flex_none()
                 .w(fan_width())
-                .child(fan(&peeked(many), colors))
+                .child(fan(peeked(many).iter().map(|peeked| peeked.kind), colors))
                 .into_any_element(),
         };
         let top = top_card(head, self.top_of(read), colors);
