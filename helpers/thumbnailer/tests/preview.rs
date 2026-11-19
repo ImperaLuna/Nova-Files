@@ -186,7 +186,7 @@ fn stepping_through_pictures_answers_the_last() {
                 break;
             }
             Event::Previewed { id, .. } => assert!(id < last),
-            other => panic!("expected a preview, got {other:?}"),
+            other @ Event::Unreadable { .. } => panic!("expected a preview, got {other:?}"),
         }
     }
 }

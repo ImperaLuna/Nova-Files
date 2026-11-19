@@ -252,7 +252,7 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
         match client.events.recv_timeout(WAIT).unwrap() {
             Heard::Listed(Event::FolderUnreadable { id, .. }) if id == missing => break,
             Heard::Listed(Event::DetailsRead { .. }) | Heard::Thumbnail(_) => {}
-            other => panic!("expected the refusal, got {other:?}"),
+            Heard::Listed(other) => panic!("expected the refusal, got {other:?}"),
         }
     }
     for first in [ROWS, 0] {

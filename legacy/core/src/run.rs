@@ -80,22 +80,7 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
-    routes.on(|setup: &Setup, id, client: &Client, command| {
-        match command {
-            gathered_api::Command::Gathered => setup.gathered.listen(id, client.events()),
-            gathered_api::Command::ChangeGathered(change) => setup.gathered.change(change),
-            gathered_api::Command::ListGathered {
-                id: listing,
-                place,
-                order,
-            } => {
-                let hidden = setup.settings.current().hidden_files;
-                let folders = setup.gathered.folders_of(place);
-                nova_files_gathered_core::list(client.entries(), listing, folders, order, hidden);
-            }
-        }
-        Ok(())
-    })?;
+    routes.on(always(gathered))?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
             look_api::Command::Watch => setup.theme.listen(id, client.events()),
@@ -104,48 +89,7 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
-    routes.on(|setup: &Setup, _, client: &Client, command| {
-        match command {
-            open_api::Command::OpenFile { path, activation } => {
-                let archives: Arc<dyn TakeOut> = Arc::<Inside>::clone(&setup.inside);
-                let opening = (Arc::clone(&setup.mime_types), archives);
-                nova_files_open_core::open(client.events(), opening, path, activation);
-            }
-            open_api::Command::OpenWith(request) => {
-                setup.open_with.answer(client.events(), request);
-            }
-        }
-        Ok(())
-    })?;
-    routes.on(|setup: &Setup, _, client: &Client, command| {
-        match command {
-            preview_api::Command::Preview { id, path, fit } => {
-                let request = PreviewRequest {
-                    id,
-                    path,
-                    fit,
-                    current: Arc::clone(client.current_preview()),
-                    types: Arc::new(LazyMimes(Arc::clone(&setup.mime_types))),
-                    helper: setup.thumbnails.as_ref().map(|setup| setup.helper.clone()),
-                };
-                nova_files_preview_core::answer(client.events(), request);
-            }
-        }
-        Ok(())
-    })?;
-    routes.on(|setup: &Setup, _, client: &Client, command| {
-        match command {
-            search_api::Command::Search { id, query, limit } => {
-                let asked = (client.events(), client.current_search());
-                setup.searcher.search(asked, id, query, limit);
-            }
-            search_api::Command::Find { id, query, within } => {
-                let asked = (client.events(), client.start_listing(id));
-                setup.searcher.find(asked, id, query, within);
-            }
-        }
-        Ok(())
-    })?;
+    routes.on(always(open))?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
             places_api::Command::Places => setup.places.listen(id, client.events()),
@@ -153,22 +97,9 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
-    routes.on(|setup: &Setup, id, client: &Client, command| {
-        let events = client.events();
-        match command {
-            properties_api::Command::Properties { id: asked, path } => {
-                nova_files_properties_core::answer(events, asked, path);
-            }
-            properties_api::Command::Measure { id: scan, paths } => {
-                setup.measurer.measure(id, events, scan, paths);
-            }
-            properties_api::Command::Space { id: scan, folder } => {
-                setup.measurer.space(id, events, scan, folder);
-            }
-            properties_api::Command::StopMeasure(scan) => setup.measurer.stop(id, scan),
-        }
-        Ok(())
-    })?;
+    routes.on(always(preview))?;
+    routes.on(always(properties))?;
+    routes.on(always(search))?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
             settings_api::Command::Watch => setup.settings.listen(id, client.events()),
@@ -176,16 +107,7 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
-    routes.on(|setup: &Setup, _, client: &Client, command| {
-        match command {
-            start_api::Command::FolderUsed(folder) => setup.recent.used(folder),
-            start_api::Command::RecentFolders { id, count, skip } => {
-                let count = usize::try_from(count).unwrap_or(usize::MAX);
-                setup.recent.answer(client.events(), id, count, skip);
-            }
-        }
-        Ok(())
-    })?;
+    routes.on(always(start))?;
     routes.on(|setup: &Setup, _, client: &Client, command| match command {
         trash_api::Command::List => {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
@@ -193,6 +115,101 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
     })?;
     routes.on_leave(forget);
     Ok(routes)
+}
+
+type Route<M> = fn(&Setup, ClientId, &Client, M);
+
+fn always<M>(
+    route: Route<M>,
+) -> impl Fn(&Setup, ClientId, &Client, M) -> Result<(), nova_files_api::ClientGone> {
+    move |setup, id, client, command| {
+        route(setup, id, client, command);
+        Ok(())
+    }
+}
+
+fn gathered(setup: &Setup, id: ClientId, client: &Client, command: gathered_api::Command) {
+    match command {
+        gathered_api::Command::Gathered => setup.gathered.listen(id, client.events()),
+        gathered_api::Command::ChangeGathered(change) => setup.gathered.change(change),
+        gathered_api::Command::ListGathered {
+            id: listing,
+            place,
+            order,
+        } => {
+            let hidden = setup.settings.current().hidden_files;
+            let folders = setup.gathered.folders_of(place);
+            nova_files_gathered_core::list(client.entries(), listing, folders, order, hidden);
+        }
+    }
+}
+
+fn open(setup: &Setup, _: ClientId, client: &Client, command: open_api::Command) {
+    match command {
+        open_api::Command::OpenFile { path, activation } => {
+            let archives: Arc<dyn TakeOut> = Arc::<Inside>::clone(&setup.inside);
+            let opening = (Arc::clone(&setup.mime_types), archives);
+            nova_files_open_core::open(client.events(), opening, path, activation);
+        }
+        open_api::Command::OpenWith(request) => {
+            setup.open_with.answer(client.events(), request);
+        }
+    }
+}
+
+fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Command) {
+    match command {
+        preview_api::Command::Preview { id, path, fit } => {
+            let request = PreviewRequest {
+                id,
+                path,
+                fit,
+                current: Arc::clone(client.current_preview()),
+                types: Arc::new(LazyMimes(Arc::clone(&setup.mime_types))),
+                helper: setup.thumbnails.as_ref().map(|setup| setup.helper.clone()),
+            };
+            nova_files_preview_core::answer(client.events(), request);
+        }
+    }
+}
+
+fn properties(setup: &Setup, id: ClientId, client: &Client, command: properties_api::Command) {
+    let events = client.events();
+    match command {
+        properties_api::Command::Properties { id: asked, path } => {
+            nova_files_properties_core::answer(events, asked, path);
+        }
+        properties_api::Command::Measure { id: scan, paths } => {
+            setup.measurer.measure(id, events, scan, paths);
+        }
+        properties_api::Command::Space { id: scan, folder } => {
+            setup.measurer.space(id, events, scan, folder);
+        }
+        properties_api::Command::StopMeasure(scan) => setup.measurer.stop(id, scan),
+    }
+}
+
+fn search(setup: &Setup, _: ClientId, client: &Client, command: search_api::Command) {
+    match command {
+        search_api::Command::Search { id, query, limit } => {
+            let asked = (client.events(), client.current_search());
+            setup.searcher.search(asked, id, query, limit);
+        }
+        search_api::Command::Find { id, query, within } => {
+            let asked = (client.events(), client.start_listing(id));
+            setup.searcher.find(asked, id, query, within);
+        }
+    }
+}
+
+fn start(setup: &Setup, _: ClientId, client: &Client, command: start_api::Command) {
+    match command {
+        start_api::Command::FolderUsed(folder) => setup.recent.used(folder),
+        start_api::Command::RecentFolders { id, count, skip } => {
+            let count = usize::try_from(count).unwrap_or(usize::MAX);
+            setup.recent.answer(client.events(), id, count, skip);
+        }
+    }
 }
 
 pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
