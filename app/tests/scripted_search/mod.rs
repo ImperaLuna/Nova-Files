@@ -507,7 +507,7 @@ fn a_space_typed_into_the_box_stays_in_it(cx: &mut TestAppContext) {
     cx.run_until_parked();
     view.read_with(cx, |view, cx| {
         assert_eq!(view.query(cx), "a b");
-        assert!(!view.previewing());
+        assert!(!previewing(view, cx));
     });
 }
 

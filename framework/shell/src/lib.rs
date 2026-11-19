@@ -4,6 +4,7 @@ pub mod actions;
 pub mod assets;
 mod command;
 mod cursor;
+pub mod device;
 mod entries;
 pub mod format;
 mod history;

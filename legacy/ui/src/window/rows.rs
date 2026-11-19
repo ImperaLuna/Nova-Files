@@ -9,7 +9,7 @@ use crate::columns::{self, ColumnText};
 use crate::grid::Grid;
 use crate::theme_icons;
 use crate::view::{RowIcon, entry_kind};
-use nova_files_thumbnails_ui::device_side;
+use nova_files_shell::device::device_side;
 
 pub struct RowRead {
     pub details: Details,

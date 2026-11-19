@@ -111,6 +111,10 @@ impl Entries {
         self.shown.selected.len()
     }
 
+    pub fn selected_ids(&self) -> &[EntryId] {
+        &self.shown.selected
+    }
+
     pub fn selected(&self) -> Vec<&Entry> {
         let Some(listing) = &self.shown.listing else {
             return Vec::new();

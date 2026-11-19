@@ -1,6 +1,7 @@
 use gpui::{
-    AnyElement, Div, Hsla, IntoElement, ParentElement as _, Pixels, Radians, Rgba, Styled as _,
-    Transformation, div, prelude::FluentBuilder as _, relative, svg,
+    Action, AnyElement, ClickEvent, Div, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, Radians, Rgba, Stateful, StatefulInteractiveElement as _,
+    Styled as _, Transformation, div, prelude::FluentBuilder as _, relative, svg,
 };
 use nova_files_api::{EntryKind, IconKind};
 
@@ -14,6 +15,42 @@ pub fn icon(glyph: Icon, side: Pixels, tint: Rgba) -> impl IntoElement {
         .flex_none()
         .size(side)
         .text_color(Hsla::from(tint))
+}
+
+pub fn icon_button(
+    name: &'static str,
+    glyph: Icon,
+    action: Option<&dyn Action>,
+    colors: &Colors,
+) -> Stateful<Div> {
+    let tone = if action.is_some() {
+        colors.text_soft
+    } else {
+        colors.text_faint
+    };
+    square(name)
+        .child(icon(glyph, size::BUTTON_ICON, tone))
+        .when_some(action.map(Action::boxed_clone), |button, action| {
+            button
+                .cursor_pointer()
+                .hover(|button| button.bg(colors.hover))
+                .active(|button| button.bg(colors.press))
+                .on_click(move |_: &ClickEvent, window, cx| {
+                    window.dispatch_action(action.boxed_clone(), cx);
+                })
+        })
+}
+
+pub fn square(name: &'static str) -> Stateful<Div> {
+    div()
+        .id(name)
+        .debug_selector(|| name.to_owned())
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .size(size::ICON_BUTTON)
+        .rounded(radius::ROW)
 }
 
 pub fn icon_slot(side: Pixels) -> Div {

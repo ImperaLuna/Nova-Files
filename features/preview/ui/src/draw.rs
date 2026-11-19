@@ -2,21 +2,21 @@ use std::ffi::OsStr;
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Pixels, RenderImage, SharedString,
+    Action, AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement,
+    MouseButton, MouseDownEvent, ParentElement as _, Pixels, RenderImage, SharedString,
     StatefulInteractiveElement as _, Styled as _, div, img, prelude::FluentBuilder as _, px,
 };
-use nova_files_api::{Entry, EntryKind};
+use nova_files_api::{Entry, EntryKind, Listing};
 use nova_files_preview_api::{Preview, PreviewContent};
+use nova_files_shell::actions::{PreviewNext, PreviewPrevious};
+use nova_files_shell::assets::Icon;
+use nova_files_shell::format;
+use nova_files_shell::kind::{FileKind, built_in, icon_kind};
+use nova_files_shell::theme::{Colors, preview, radius, size, text};
+use nova_files_shell::widgets::{icon, icon_button, kind_icon};
 
-use super::bar::icon_button;
-use super::row::{RowIcon, built_in, entry_icon, icon};
-use crate::assets::Icon;
-use crate::columns;
-use crate::commands::{PreviewNext, PreviewPrevious};
-use crate::kind::{FileKind, icon_kind};
-use crate::theme::{Colors, preview, radius, size, text};
-use crate::window::{MainWindow, QuickLook, Shown};
+use crate::PreviewPart;
+use crate::looks::{QuickLook, Shown};
 
 const SEPARATOR: &str = " · ";
 const FILE_KIND: &str = "File";
@@ -36,72 +36,59 @@ pub fn room(width: Pixels, height: Pixels) -> gpui::Size<Pixels> {
     )
 }
 
-impl MainWindow {
-    pub(super) fn preview_layer(
-        &self,
-        room: gpui::Size<Pixels>,
-        scale_factor: f32,
-        cx: &Context<Self>,
-    ) -> Option<impl IntoElement> {
-        let open = self.quick_look().filter(|_| self.previewing())?;
-        let listing = self
-            .listing
-            .as_ref()
-            .filter(|listing| listing.id == open.listing)?;
-        let index = usize::try_from(open.entry.0).ok()?;
-        let entry = listing.entries.get(index)?;
-        let colors = Colors::of(cx);
-        let current = open.current().and_then(|shown| shown.preview.as_deref());
-        let art = stage_art(open, listing, entry, (room, scale_factor), &colors);
-        let (previous, next) = steps(index, listing.entries.len());
-        Some(
-            div()
-                .id("preview")
-                .debug_selector(|| "preview".to_owned())
-                .absolute()
-                .inset_0()
-                .occlude()
-                .bg(colors.scrim)
-                .flex()
-                .items_center()
-                .justify_center()
-                .gap(preview::GAP)
-                .p(preview::MARGIN)
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|this, _: &MouseDownEvent, window, cx| {
-                        this.dismiss_preview(window, cx);
-                    }),
-                )
-                .child(kept_open(icon_button(
-                    "preview-previous",
-                    Icon::Back,
-                    previous.then_some(&PreviewPrevious as &dyn gpui::Action),
-                    &colors,
-                )))
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .gap(preview::GAP)
-                        .min_w_0()
-                        .child(kept_open(art).debug_selector(|| "preview-art".to_owned()))
-                        .child(caption(entry, current, &colors, cx)),
-                )
-                .child(kept_open(icon_button(
-                    "preview-next",
-                    Icon::Forward,
-                    next.then_some(&PreviewNext as &dyn gpui::Action),
-                    &colors,
-                ))),
+pub fn layer(
+    (open, listing, entry, index): (&QuickLook, &Listing, &Entry, usize),
+    (room, scale_factor): (gpui::Size<Pixels>, f32),
+    cx: &Context<PreviewPart>,
+) -> AnyElement {
+    let colors = Colors::of(cx);
+    let current = open.current().and_then(|shown| shown.preview.as_deref());
+    let art = stage_art(open, listing, entry, (room, scale_factor), &colors);
+    let (previous, next) = steps(index, listing.entries.len());
+    div()
+        .id("preview")
+        .debug_selector(|| "preview".to_owned())
+        .absolute()
+        .inset_0()
+        .occlude()
+        .bg(colors.scrim)
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap(preview::GAP)
+        .p(preview::MARGIN)
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _: &MouseDownEvent, _, cx| this.dismiss(cx)),
         )
-    }
+        .child(kept_open(icon_button(
+            "preview-previous",
+            Icon::Back,
+            previous.then_some(&PreviewPrevious as &dyn Action),
+            &colors,
+        )))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(preview::GAP)
+                .min_w_0()
+                .child(kept_open(art).debug_selector(|| "preview-art".to_owned()))
+                .child(caption(entry, current, &colors, cx)),
+        )
+        .child(kept_open(icon_button(
+            "preview-next",
+            Icon::Forward,
+            next.then_some(&PreviewNext as &dyn Action),
+            &colors,
+        )))
+        .into_any_element()
 }
 
-pub(super) fn stage_art(
+pub fn stage_art(
     open: &QuickLook,
-    listing: &nova_files_api::Listing,
+    listing: &Listing,
     entry: &Entry,
     (room, scale_factor): (gpui::Size<Pixels>, f32),
     colors: &Colors,
@@ -120,22 +107,18 @@ pub(super) fn stage_art(
     )
 }
 
+fn shown_entry<'a>(shown: &Shown, listing: &'a Listing, entry: &'a Entry) -> &'a Entry {
+    usize::try_from(shown.entry.0)
+        .ok()
+        .and_then(|index| listing.entries.get(index))
+        .unwrap_or(entry)
+}
+
 fn kept_open(element: impl IntoElement) -> Div {
     div()
         .flex_none()
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .child(element)
-}
-
-fn shown_entry<'a>(
-    shown: &Shown,
-    listing: &'a nova_files_api::Listing,
-    entry: &'a Entry,
-) -> &'a Entry {
-    usize::try_from(shown.entry.0)
-        .ok()
-        .and_then(|index| listing.entries.get(index))
-        .unwrap_or(entry)
 }
 
 fn art(
@@ -261,8 +244,9 @@ fn folder_art(first: &[Entry], count: usize, colors: &Colors) -> AnyElement {
                 .h(preview::LIST_ROW)
                 .min_w_0()
                 .text_color(colors.text_soft)
-                .child(entry_icon(
-                    RowIcon::BuiltIn(icon_kind(&entry.name, entry.kind)),
+                .child(kind_icon(
+                    icon_kind(&entry.name, entry.kind),
+                    size::ROW_ICON,
                     colors,
                 ))
                 .child(div().min_w_0().truncate().child(SharedString::from(
@@ -318,7 +302,7 @@ fn caption(
     entry: &Entry,
     current: Option<&Preview>,
     colors: &Colors,
-    cx: &Context<MainWindow>,
+    cx: &Context<PreviewPart>,
 ) -> impl IntoElement {
     let name = SharedString::from(entry.name.to_string_lossy().into_owned());
     div()
@@ -372,8 +356,8 @@ fn caption(
                 .cursor_pointer()
                 .hover(|button| button.bg(colors.hover))
                 .active(|button| button.bg(colors.press))
-                .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                    this.open_previewed(window, cx);
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                    this.open_previewed(cx);
                 }))
                 .child(OPEN_LABEL),
         )
@@ -390,20 +374,20 @@ fn caption(
                 .cursor_pointer()
                 .hover(|button| button.bg(colors.hover))
                 .active(|button| button.bg(colors.press))
-                .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                    this.dismiss_preview(window, cx);
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                    this.dismiss(cx);
                 }))
                 .child(icon(Icon::Close, size::BUTTON_ICON, colors.text_soft)),
         )
 }
 
-pub(super) fn meta(preview: &Preview) -> String {
+pub fn meta(preview: &Preview) -> String {
     if let PreviewContent::Folder { count, .. } = &preview.content {
         let unit = if *count == 1 { ITEM } else { ITEMS };
         return format!("{FOLDER_KIND}{SEPARATOR}{count} {unit}");
     }
     let kind = preview.kind_name.as_deref().unwrap_or(FILE_KIND);
-    format!("{kind}{SEPARATOR}{}", columns::size(preview.bytes))
+    format!("{kind}{SEPARATOR}{}", format::size(preview.bytes))
 }
 
 #[cfg(test)]
