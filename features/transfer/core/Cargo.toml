@@ -1,7 +1,8 @@
 # nova-files-transfer-core
 #
 # Copies and moves files and folders: planning, copying each file, making
-# each entry, keeping both names, and copying attributes.
+# each entry, keeping both names, copying attributes, and taking a copy
+# or a move back.
 #
 # Allowed outside crates:
 # - log

@@ -6,13 +6,11 @@ use std::thread;
 
 use nova_files_api::{Connector, EventSink, JobId, JobTag, Operation};
 use nova_files_jobs::control::{Cancelled, Control};
-use nova_files_jobs::journal;
 use nova_files_jobs::kinds::Kinds;
 use nova_files_jobs::mover::{Moved, Mover};
 use nova_files_jobs::rest::still_there;
-use nova_files_jobs::running::Running;
+use nova_files_jobs::running::{self, Running};
 use nova_files_jobs::{Ended, lock};
-use nova_files_jobs::{running, stop};
 use nova_files_properties_core::change_access;
 
 #[cfg(test)]
@@ -43,26 +41,19 @@ pub fn jobs(
 
 fn kinds(trashes: Trashes, archiver: Option<Archiver>) -> Kinds {
     let files = Files {
-        trashes: trashes.clone(),
+        trashes,
         archiver: archiver.clone(),
         mover: Moves,
     };
-    let undoable = |kind| Undoable {
-        kind,
-        trashes: trashes.clone(),
-    };
     Kinds::default()
         .with(files)
-        .with(undoable(Box::new(Archives {
+        .with(Archives {
             archiver,
             files: Moves,
-        })))
-        .with(undoable(Box::new(Deletes)))
-        .with(undoable(Box::new(Renames)))
-        .with(Undoable {
-            kind: Box::new(Transfers),
-            trashes,
         })
+        .with(Deletes)
+        .with(Renames)
+        .with(Transfers)
 }
 
 pub fn start_drop(
@@ -158,8 +149,9 @@ impl nova_files_jobs::JobKind for Files {
         still_to_do(operation, control)
     }
 
-    fn undo(&self, running: &mut Running, operation: &Operation, ended: &Ended) -> Option<Undo> {
-        undo_after(running, operation, ended, &self.trashes)
+    fn undo(&self, running: &mut Running, operation: &Operation, _: &Ended) -> Option<Undo> {
+        let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
+        undo_of(operation, &steps, &self.trashes)
     }
 
     fn undoes(&self, operation: &Operation) -> Option<JobId> {
@@ -172,49 +164,6 @@ impl nova_files_jobs::JobKind for Files {
     fn first_path(&self, operation: &Operation) -> PathBuf {
         first_path(operation)
     }
-}
-
-pub struct Undoable {
-    kind: Box<dyn nova_files_jobs::JobKind<Op = Operation, Undo = ()>>,
-    trashes: Trashes,
-}
-
-impl nova_files_jobs::JobKind for Undoable {
-    type Op = Operation;
-    type Undo = Undo;
-
-    fn claims(&self, operation: &Operation) -> bool {
-        self.kind.claims(operation)
-    }
-
-    fn run(&self, running: &mut Running, operation: &Operation, undo: Option<&Undo>) -> Ended {
-        match undo {
-            Some(undo) => undo::run(running, Some(undo.clone()), &self.trashes, &Moves),
-            None => self.kind.run(running, operation, None),
-        }
-    }
-
-    fn rest(&self, operation: &Operation, control: &Control) -> Result<Operation, Cancelled> {
-        self.kind.rest(operation, control)
-    }
-
-    fn undo(&self, running: &mut Running, operation: &Operation, ended: &Ended) -> Option<Undo> {
-        undo_after(running, operation, ended, &self.trashes)
-    }
-
-    fn first_path(&self, operation: &Operation) -> PathBuf {
-        self.kind.first_path(operation)
-    }
-}
-
-fn undo_after(
-    running: &mut Running,
-    operation: &Operation,
-    ended: &Ended,
-    trashes: &Trashes,
-) -> Option<Undo> {
-    let steps: Vec<_> = std::mem::take(&mut running.steps).into_iter().collect();
-    undo_of(operation, &steps, &ended.0, trashes)
 }
 
 fn copied_out(sources: &[PathBuf]) -> Option<(PathBuf, Vec<PathBuf>)> {
