@@ -127,12 +127,12 @@ impl MainWindow {
     }
 
     pub(crate) fn jumping(&self, cx: &Context<Self>) -> bool {
-        self.pick.is_none() && self.jump.continues(cx.background_executor().now())
+        !self.picker() && self.jump.continues(cx.background_executor().now())
     }
 
     pub(crate) fn jump_typed(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
         let held = event.keystroke.modifiers;
-        if self.pick.is_some() || held.control || held.alt || held.platform || held.function {
+        if self.picker() || held.control || held.alt || held.platform || held.function {
             return false;
         }
         let Some(typed) = event.keystroke.key_char.as_deref() else {

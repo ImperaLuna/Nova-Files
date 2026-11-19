@@ -20,7 +20,7 @@ impl MainWindow {
         let here = self
             .folder()
             .and_then(|folder| drives::here(&shown, folder, &self.home));
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let rows = shown.into_iter().enumerate().map(|(index, drive)| {
             let (clicked, menu, in_new_tab) = (drive.clone(), drive.clone(), drive.clone());
             let aimed = drive.name.clone();

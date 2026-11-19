@@ -47,7 +47,7 @@ impl MainWindow {
             return;
         }
         let paths = self.selected_paths();
-        if !paths.is_empty() && self.pick.is_none() {
+        if !paths.is_empty() && !self.picker() {
             self.start_job(Operation::Trash { paths });
         }
     }
@@ -73,7 +73,7 @@ impl MainWindow {
             let items = named.map(|_| self.selected_paths()).unwrap_or_default();
             return (!items.is_empty()).then_some(Operation::DeleteFromTrash { items });
         }
-        deleting(self.selected_paths(), self.pick.is_some())
+        deleting(self.selected_paths(), self.picker())
     }
 
     pub(crate) fn undo(&mut self, cx: &mut Context<Self>) {

@@ -118,6 +118,7 @@ impl MainWindow {
         let focus = name.read(cx).focus_handle(cx);
         window.focus(&focus, cx);
         let (size, bounds) = opening::watch_size(window, cx);
+        self.open_as_picker(request.id);
         self.pick = Some(Picker {
             request,
             mode,

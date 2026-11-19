@@ -15,7 +15,7 @@ const LABEL: &str = "Open";
 
 impl MainWindow {
     pub(super) fn open_section(&self, narrow: bool, cx: &Context<Self>) -> Option<Div> {
-        if self.pick.is_some() {
+        if self.picker() {
             return None;
         }
         let colors = Colors::of(cx);

@@ -57,7 +57,7 @@ impl MainWindow {
     }
 
     fn has_menus(&self) -> bool {
-        self.pick.is_none() && !self.is_on_start() && self.listing.is_some()
+        !self.picker() && !self.is_on_start() && self.listing.is_some()
     }
 
     fn arranged(&self, at: MenuAt, window: Vec<Placed>, cx: &App) -> Vec<Vec<MenuItem>> {

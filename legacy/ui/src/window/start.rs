@@ -79,7 +79,7 @@ impl MainWindow {
     }
 
     pub(super) fn used(&self, folder: &Path) {
-        if self.pick.is_none()
+        if !self.picker()
             && let Some(connection) = &self.connection
         {
             connection.send(Command::FolderUsed(folder.to_owned())).ok();
