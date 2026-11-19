@@ -32,8 +32,7 @@
 # - nova-files-settings-api
 # - nova-files-shell
 # - nova-files-start-api
-# - nova-files-thumbnails-api
-# - nova-files-transfer-api
+# - nova-files-thumbnails-ui
 
 [package]
 name = "nova-files-ui"
@@ -65,15 +64,14 @@ nova-files-search-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 nova-files-start-api.workspace = true
-nova-files-thumbnails-api.workspace = true
-nova-files-transfer-api.workspace = true
+nova-files-thumbnails-ui.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }
 # Async channels, so events from other threads wake the window's tasks.
 futures = { version = "0.3", default-features = false, features = ["std", "executor"] }
 gpui.workspace = true
 gpui_platform.workspace = true
-# Shrinks thumbnails to the size they're drawn; GPUI already builds it.
+# Turns preview pictures into images GPUI draws; GPUI already builds it.
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 # Grapheme boundaries, so the caret steps over a whole character; GPUI
 # already builds it.

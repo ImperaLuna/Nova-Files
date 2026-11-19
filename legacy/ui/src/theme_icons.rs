@@ -5,7 +5,7 @@ use std::sync::Arc;
 use gpui::{RenderImage, SvgRenderer};
 use nova_files_api::{IconFormat, ThemeIcon};
 
-use crate::thumbnail;
+use nova_files_thumbnails_ui::shrink;
 
 // GPUI's renderer draws at twice the scale it is asked for.
 // https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
@@ -56,7 +56,7 @@ impl ThemeIcons {
 
 pub fn make(icon: &ThemeIcon, side: u32, svg: &SvgRenderer) -> Option<Arc<RenderImage>> {
     match icon.format {
-        IconFormat::Png => thumbnail::shrink(&icon.bytes, side).map(Arc::new),
+        IconFormat::Png => shrink(&icon.bytes, side).map(Arc::new),
         IconFormat::Svg => {
             let tree = usvg::Tree::from_data(&icon.bytes, &usvg::Options::default()).ok()?;
             let longest = tree.size().width().max(tree.size().height());

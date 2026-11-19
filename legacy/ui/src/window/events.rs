@@ -8,7 +8,6 @@ use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
 use nova_files_places_ui::Known;
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
-use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::island;
 use crate::jump::TypeJump;
@@ -103,7 +102,6 @@ impl MainWindow {
         let before = self.listing.replace(listing);
         self.core_moved = false;
         self.details = HashMap::new();
-        release(self.thumbnails.take_all(), None, cx);
         self.rows_wanted = 0..0;
         if place == Place::Top {
             self.scroll = UniformListScrollHandle::new();
@@ -273,9 +271,6 @@ impl MainWindow {
             return;
         }
         self.thumbnails_shown = shown;
-        if shown == ThumbnailsShown::Hidden {
-            release(self.thumbnails.take_all(), None, cx);
-        }
         self.forget_rows();
         cx.emit(WindowEvent::Settings);
         cx.notify();

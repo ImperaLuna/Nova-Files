@@ -226,20 +226,11 @@ impl MainWindow {
             self.open_entry(id);
             return;
         }
-        let Some(connection) = &self.connection else {
+        if self.connection.is_none() {
             return;
-        };
+        }
         for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
-            let path = listing.path_of(file);
-            if self.parts.open_entry(file, &path, cx) {
-                continue;
-            }
-            connection
-                .send(nova_files_open_api::Command::OpenFile {
-                    path,
-                    activation: None,
-                })
-                .ok();
+            self.parts.open_entry(file, &listing.path_of(file), cx);
         }
     }
 

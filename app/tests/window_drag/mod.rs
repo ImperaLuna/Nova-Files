@@ -89,7 +89,7 @@ async fn the_chip_names_the_drop_under_the_pointer(cx: &mut TestAppContext) {
     let home = TempFolder::tree("drag-says-home");
     let (view, cx) = drag_window(cx, tree.path(), &home).await;
     let says = |view: &Entity<MainWindow>, cx: &mut VisualTestContext, modifiers| {
-        view.read_with(cx, |view, _| view.drop_says(modifiers))
+        view.read_with(cx, |view, cx| view.drop_says(modifiers, cx))
     };
     let (start, file, folder, trash) = (
         center(cx, "name-1"),
@@ -110,8 +110,8 @@ async fn the_chip_names_the_drop_under_the_pointer(cx: &mut TestAppContext) {
     assert_eq!(says(&view, cx, Modifiers::none()), None);
 
     cx.simulate_mouse_move(folder, Some(MouseButton::Left), Modifiers::none());
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.drop_says(Modifiers::none()).as_deref() == Some("Move to Projects")
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        view.drop_says(Modifiers::none(), cx).as_deref() == Some("Move to Projects")
     })
     .await;
     assert_eq!(
@@ -262,8 +262,8 @@ async fn the_chip_names_the_folder_on_screen_over_its_list(cx: &mut TestAppConte
     wait_for_folder(&view, cx, &projects).await;
     let below = cx.debug_bounds("entry-0").unwrap().bottom_left() + point(px(40.0), px(60.0));
     cx.simulate_mouse_move(below, Some(MouseButton::Left), Modifiers::none());
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.drop_says(Modifiers::none()).as_deref() == Some("Move to Projects")
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        view.drop_says(Modifiers::none(), cx).as_deref() == Some("Move to Projects")
     })
     .await;
     cx.simulate_mouse_up(below, MouseButton::Left, Modifiers::none());
