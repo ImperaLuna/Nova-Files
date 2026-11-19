@@ -197,14 +197,15 @@ fn run(exec: &[String], request: &Request) -> io::Result<()> {
     if !in_time {
         return Err(io::ErrorKind::TimedOut.into());
     }
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("thumbnailer exited with {status}"),
-        ))
-    }
+    let kind = match status.code() {
+        Some(0) => return Ok(()),
+        Some(_) => io::ErrorKind::InvalidData,
+        None => io::ErrorKind::Interrupted,
+    };
+    Err(io::Error::new(
+        kind,
+        format!("thumbnailer exited with {status}"),
+    ))
 }
 
 #[cfg(test)]
