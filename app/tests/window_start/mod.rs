@@ -3,6 +3,7 @@ use std::sync::mpsc;
 
 use nova_files_api::Connector;
 use nova_files_start_api::{Command, Event, RecentId};
+use nova_files_start_ui::StartPart;
 
 use super::*;
 
@@ -34,6 +35,10 @@ fn window_at<'a>(
     let (view, cx) =
         cx.add_window_view(|_, cx| MainWindow::at(&core.connector, location, home, cx));
     (view, cx, connector)
+}
+
+fn start_part(view: &MainWindow) -> Entity<StartPart> {
+    view.part::<StartPart>().unwrap()
 }
 
 fn recent_folders(connector: &Connector) -> Vec<PathBuf> {
@@ -126,10 +131,12 @@ async fn a_recent_folder_card_opens_its_folder(cx: &mut TestAppContext) {
     view.update(cx, |view, _| view.open(&projects));
     wait_for_folder(&view, cx, &projects).await;
     view.update(cx, MainWindow::go_back);
-    view.condition::<WindowEvent>(cx, |view, _| !view.recent_folders().is_empty())
-        .await;
-    view.read_with(cx, |view, _| {
-        let newest = &view.recent_folders()[0];
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        !start_part(view).read(cx).recent_folders().is_empty()
+    })
+    .await;
+    view.read_with(cx, |view, cx| {
+        let newest = &start_part(view).read(cx).recent_folders()[0];
         assert_eq!(newest.path, projects);
         assert_eq!(newest.entries, 1);
     });

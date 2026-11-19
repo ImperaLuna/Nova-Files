@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
-use nova_files_places_ui::Known;
+use nova_files_places_api::Known;
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -39,16 +39,11 @@ impl MainWindow {
         }
         self.listed_page = match &arrived {
             Location::Page(page) => Some(page.clone()),
-            Location::Start
-            | Location::Folder(_)
-            | Location::Properties(_)
-            | Location::Gathered(_) => None,
+            Location::Start | Location::Folder(_) | Location::Gathered(_) => None,
         };
         self.gathered.shown = match &arrived {
             Location::Gathered(place) => Some(*place),
-            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
-                None
-            }
+            Location::Start | Location::Folder(_) | Location::Page(_) => None,
         };
         self.history.arrived(&arrived);
         let reordered = same_folder && self.shown_order != self.asked_order;
@@ -74,7 +69,7 @@ impl MainWindow {
         self.tell_parts_listed(reordered, cx);
         cx.emit(match arrived {
             Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
-            Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
+            Location::Start | Location::Folder(_) | Location::Page(_) => {
                 WindowEvent::Opened(listing_path)
             }
         });
@@ -155,13 +150,6 @@ impl MainWindow {
             self.places.clone_from(&known.places);
             self.pinned = Arc::clone(&known.pinned);
         }
-        self.sidebar_changed(cx);
-    }
-
-    fn sidebar_changed(&mut self, cx: &mut Context<Self>) {
-        if self.is_on_start() {
-            self.ask_for_recent();
-        }
         cx.emit(WindowEvent::Places);
         cx.notify();
     }
@@ -232,7 +220,6 @@ impl MainWindow {
                 }
             }
         }
-        self.ask_for_recent();
         self.parts.refused(id, &path, cx);
         self.path_bar.update(cx, |bar, cx| bar.refused(id, cx));
         cx.emit(WindowEvent::Refused(path));

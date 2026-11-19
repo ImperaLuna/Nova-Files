@@ -68,7 +68,7 @@ async fn through_the_window(root: &Path, cx: &mut TestAppContext) {
     cx.executor().allow_parking();
     let file = root.join("files/a.novatest");
     let core = nova_files_core::spawn_with_idle_exit(Duration::from_secs(5)).unwrap();
-    let place = Location::Properties(vec![file.clone()]);
+    let place = properties_at(vec![file.clone()]);
     let home = root.to_owned();
     with_parts(cx);
     let (view, cx) = cx.add_window_view(|_, cx| MainWindow::at(&core.connector, &place, home, cx));
@@ -92,8 +92,10 @@ async fn through_the_window(root: &Path, cx: &mut TestAppContext) {
     let item: &'static str = ["menu-0", "menu-1"][two];
     let bounds = cx.debug_bounds(item).unwrap();
     cx.simulate_click(bounds.center(), Modifiers::none());
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.default_app().is_some_and(|app| app.name == "Two")
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        props(view, cx)
+            .default_app()
+            .is_some_and(|app| app.name == "Two")
     })
     .await;
 
@@ -107,13 +109,15 @@ async fn past_a_terminal_default(root: &Path, cx: &mut TestAppContext) {
     cx.executor().allow_parking();
     let file = root.join("files/a.novatest");
     let core = nova_files_core::spawn_with_idle_exit(Duration::from_secs(5)).unwrap();
-    let place = Location::Properties(vec![file]);
+    let place = properties_at(vec![file]);
     let home = root.to_owned();
     with_parts(cx);
     let (view, cx) = cx.add_window_view(|_, cx| MainWindow::at(&core.connector, &place, home, cx));
-    view.condition::<WindowEvent>(cx, |view, _| !view.apps_to_open_with().is_empty())
-        .await;
-    assert!(view.read_with(cx, |view, _| view.default_app().is_none()));
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        !props(view, cx).apps_to_open_with().is_empty()
+    })
+    .await;
+    assert!(view.read_with(cx, |view, cx| props(view, cx).default_app().is_none()));
 
     cx.run_until_parked();
     let card = cx.debug_bounds("opens-with").unwrap();
@@ -133,7 +137,9 @@ async fn past_a_terminal_default(root: &Path, cx: &mut TestAppContext) {
 }
 
 async fn default_app(view: &Entity<MainWindow>, cx: &VisualTestContext) -> String {
-    view.condition::<WindowEvent>(cx, |view, _| view.default_app().is_some())
+    view.condition::<WindowEvent>(cx, |view, cx| props(view, cx).default_app().is_some())
         .await;
-    view.read_with(cx, |view, _| view.default_app().unwrap().name.clone())
+    view.read_with(cx, |view, cx| {
+        props(view, cx).default_app().unwrap().name.clone()
+    })
 }

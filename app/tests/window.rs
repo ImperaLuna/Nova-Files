@@ -32,6 +32,7 @@ use nova_files_api::{Color, EntryId, Fit};
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
 use nova_files_places_ui::TreePart;
 use nova_files_preview_ui::{PreviewPart, Previewed};
+use nova_files_properties_ui::{PropertiesPage, PropertiesPart};
 use nova_files_settings_api::{Settings, Thumbnails};
 use nova_files_shell::Published;
 use nova_files_trash_ui::TrashPart;
@@ -489,6 +490,14 @@ async fn a_hand_edit_to_the_settings_file_reaches_the_window(cx: &mut TestAppCon
             .is_some_and(|settings| settings.thumbnails == Thumbnails::Hidden)
     })
     .await;
+}
+
+fn props<'a>(view: &MainWindow, cx: &'a App) -> &'a PropertiesPart {
+    view.part::<PropertiesPart>().unwrap().read(cx)
+}
+
+fn properties_at(paths: Vec<std::path::PathBuf>) -> Location {
+    Location::Page(nova_files_shell::PageRef::new(PropertiesPage::new(paths)))
 }
 
 fn tree_part(view: &MainWindow) -> Entity<TreePart> {

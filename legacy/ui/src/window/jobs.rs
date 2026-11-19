@@ -188,9 +188,6 @@ impl MainWindow {
             return;
         };
         cx.notify();
-        if matches!(operation, Operation::ChangeAccess { .. }) {
-            self.access_changed();
-        }
         let transfer = is_transfer(&operation);
         let others = self.transfers_running();
         let batching = others || !self.jobs.batch.is_empty();

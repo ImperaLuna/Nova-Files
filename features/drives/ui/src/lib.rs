@@ -1,19 +1,19 @@
 #![forbid(unsafe_code)]
 
+mod cards;
 mod shown;
 
-use std::collections::HashMap;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use gpui::{App, Context, Subscription, WeakEntity};
+use gpui::{AnyElement, App, Context, Subscription, WeakEntity, Window};
 use nova_files_drives_api::{
-    Command, DiskSpace, DriveAction, DriveFailure, DriveList, Event, VolumeId,
+    Command, DiskSpace, DriveAction, DriveFailure, DriveList, Event, KnownDrives, VolumeId,
 };
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
-    Host, Location, Look, NavEvent, Part, Published, RowItem, Scene, SidebarAt, SidebarRow, Slots,
+    CardRank, Host, Location, Look, NavEvent, Part, Published, RowItem, Scene, SidebarAt,
+    SidebarRow, Slots,
 };
 
 pub use shown::{NEARLY_FULL, ShownDrive, free, here, shown};
@@ -22,12 +22,6 @@ const ROW_PREFIX: &str = "drive-";
 const OPEN_LABEL: &str = "Open";
 const NEW_TAB_LABEL: &str = "Open in new tab";
 const EJECT_LABEL: &str = "Eject";
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct KnownDrives {
-    pub list: Arc<DriveList>,
-    pub space: HashMap<PathBuf, DiskSpace>,
-}
 
 pub struct DrivesPart {
     host: Host,
@@ -290,5 +284,15 @@ impl Part for DrivesPart {
         slots.listed(Self::listed);
         slots.sidebar(SidebarAt::Drives, rows);
         slots.row_menu(row_menu);
+        slots.start_card_at(CardRank::DRIVES, drive_cards);
     }
+}
+
+fn drive_cards(
+    part: &mut DrivesPart,
+    _: &Scene,
+    _: &mut Window,
+    cx: &mut Context<DrivesPart>,
+) -> Option<AnyElement> {
+    cards::drive_cards(part, cx)
 }

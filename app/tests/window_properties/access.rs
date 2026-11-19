@@ -1,6 +1,7 @@
 use std::os::unix::fs::PermissionsExt as _;
 
-use nova_files_ui::{AccessLevel, Look, Who};
+use nova_files_properties_ui::{AccessLevel, Who, shared_level};
+use nova_files_ui::Look;
 
 use super::*;
 
@@ -9,8 +10,9 @@ fn mode_of(path: &Path) -> u32 {
 }
 
 async fn shows_mode(view: &Entity<MainWindow>, cx: &VisualTestContext, mode: u32) {
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.properties_page()
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        props(view, cx)
+            .page()
             .and_then(|page| page.read().first().map(|one| one.mode))
             == Some(mode)
     })
@@ -28,15 +30,15 @@ fn pick_level(
     cx.simulate_mouse_down(bounds.center(), gpui::MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
     let who = Who::ALL[chip["access-".len()..].parse::<usize>().unwrap()];
-    let index = view.read_with(cx, |view, _| {
-        let page = view.properties_page().unwrap().read();
+    let index = view.read_with(cx, |view, cx| {
+        let page = props(view, cx).page().unwrap().read();
         let items = &view.menu().unwrap().items;
         let on: Vec<&str> = items
             .iter()
             .filter(|item| item.look == Look::On)
             .map(|item| item.label.as_ref())
             .collect();
-        let now = nova_files_ui::shared_level(&page, who).unwrap();
+        let now = shared_level(&page, who).unwrap();
         assert_eq!(on, [now.label()]);
         items
             .iter()
@@ -56,7 +58,7 @@ async fn a_level_chosen_changes_the_disk_and_shows(cx: &mut TestAppContext) {
     click(cx, "name-1");
     view.update(cx, MainWindow::show_properties);
     read_page(&view, cx).await;
-    assert!(view.read_with(cx, |view, _| view.may_change_access()));
+    assert!(view.read_with(cx, |view, cx| props(view, cx).may_change_access()));
 
     pick_level(&view, cx, "access-1", AccessLevel::ReadOnly);
     shows_mode(&view, cx, 0o640).await;
@@ -74,9 +76,9 @@ async fn a_level_chosen_changes_the_disk_and_shows(cx: &mut TestAppContext) {
     view.update(cx, MainWindow::show_properties);
     assert_eq!(read_page(&view, cx).await[0].mode, 0o440);
     assert_eq!(
-        view.read_with(cx, |view, _| {
-            let page = view.properties_page().unwrap().read();
-            nova_files_ui::shared_level(&page, Who::Others)
+        view.read_with(cx, |view, cx| {
+            let page = props(view, cx).page().unwrap().read();
+            shared_level(&page, Who::Others)
         }),
         Some(AccessLevel::NoAccess)
     );
@@ -99,9 +101,9 @@ async fn a_folder_reaches_inside_only_when_ticked(cx: &mut TestAppContext) {
     shows_mode(&view, cx, 0o750).await;
     assert_eq!(mode_of(&nova), 0o755);
 
-    assert!(!view.read_with(cx, |view, _| view.reaches_inside()));
+    assert!(!view.read_with(cx, |view, cx| props(view, cx).reaches_inside()));
     click(cx, "access-inside");
-    assert!(view.read_with(cx, |view, _| view.reaches_inside()));
+    assert!(view.read_with(cx, |view, cx| props(view, cx).reaches_inside()));
     pick_level(&view, cx, "access-1", AccessLevel::NoAccess);
     shows_mode(&view, cx, 0o700).await;
     assert_eq!(mode_of(&nova), 0o705);
@@ -116,7 +118,7 @@ async fn several_files_offer_neither_tick(cx: &mut TestAppContext) {
         fs::write(file, "").unwrap();
     }
     let (view, cx) = properties_window(cx, tree.path()).await;
-    let place = Location::Properties(files.to_vec());
+    let place = properties_at(files.to_vec());
     view.update(cx, |view, cx| view.new_tab(&place, cx));
     assert_eq!(read_page(&view, cx).await.len(), 2);
     assert!(cx.debug_bounds("access-runs").is_none());
@@ -129,11 +131,14 @@ async fn what_the_user_does_not_own_offers_no_changes(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("properties-access-not-own");
     let root = Path::new("/");
     let (view, cx) = properties_window(cx, tree.path()).await;
-    let place = Location::Properties(vec![root.to_owned()]);
+    let place = properties_at(vec![root.to_owned()]);
     view.update(cx, |view, cx| view.new_tab(&place, cx));
     read_page(&view, cx).await;
     let own = fs::metadata(tree.path()).unwrap().uid() == fs::metadata(root).unwrap().uid();
-    assert_eq!(view.read_with(cx, |view, _| view.may_change_access()), own);
+    assert_eq!(
+        view.read_with(cx, |view, cx| props(view, cx).may_change_access()),
+        own
+    );
     if !own {
         click(cx, "access-0");
         assert!(view.read_with(cx, |view, _| view.menu().is_none()));
@@ -148,11 +153,11 @@ async fn a_drive_mounted_read_only_offers_no_changes(cx: &mut TestAppContext) {
     };
     let tree = TempFolder::tree("properties-access-read-only");
     let (view, cx) = properties_window(cx, tree.path()).await;
-    let place = Location::Properties(vec![read_only]);
+    let place = properties_at(vec![read_only]);
     view.update(cx, |view, cx| view.new_tab(&place, cx));
     let read = read_page(&view, cx).await;
     assert_eq!(read[0].read_only, Some(true));
-    assert!(!view.read_with(cx, |view, _| view.may_change_access()));
+    assert!(!view.read_with(cx, |view, cx| props(view, cx).may_change_access()));
 }
 
 fn read_only_mount() -> Option<std::path::PathBuf> {

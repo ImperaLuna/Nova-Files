@@ -5,14 +5,12 @@ mod icons;
 mod island;
 mod menu;
 mod path;
-mod properties;
 mod row;
 mod search;
 mod sheet;
 mod sidebar;
 mod start;
 
-pub use properties::TopFacts;
 pub use row::{RowIcon, entry_kind};
 
 use gpui::{
