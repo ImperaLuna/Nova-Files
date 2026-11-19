@@ -1,3 +1,4 @@
+use nova_files_properties_api::Command as PropertiesCommand;
 use nova_files_ui::Location;
 
 use super::*;
@@ -13,16 +14,19 @@ fn leaving_a_properties_page_stops_its_scan(cx: &mut TestAppContext) {
     view.update(cx, |view, cx| view.new_tab(&place, cx));
     cx.run_until_parked();
     let id = core
-        .commands()
+        .sent()
         .into_iter()
         .find_map(|command| match command {
-            Command::Measure { id, .. } => Some(id),
+            PropertiesCommand::Measure { id, .. } => Some(id),
             _ => None,
         })
         .unwrap();
 
     view.update(cx, |view, cx| view.switch_tab(0, cx));
     cx.run_until_parked();
-    let commands = core.commands();
-    assert!(commands.contains(&Command::StopMeasure(id)), "{commands:?}");
+    let commands: Vec<PropertiesCommand> = core.sent();
+    assert!(
+        commands.contains(&PropertiesCommand::StopMeasure(id)),
+        "{commands:?}"
+    );
 }

@@ -17,7 +17,7 @@ fn shown(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext
 }
 
 fn views_set(core: &mut Core) -> Vec<(PathBuf, FolderView)> {
-    core.commands_of::<ViewsCommand>()
+    core.sent::<ViewsCommand>()
         .into_iter()
         .filter_map(|command| match command {
             ViewsCommand::SetView { folder, view } => Some((folder, view)),
@@ -86,14 +86,14 @@ fn the_pictures_place_starts_in_icons(cx: &mut TestAppContext) {
         (PlaceKind::Pictures, ViewMode::Icons),
         (PlaceKind::Videos, ViewMode::Icons),
     ] {
-        core.send(Event::Places(vec![Place {
+        core.send(places_api::Event::Places(vec![Place {
             kind,
             path: PathBuf::from(SHOWN),
         }]));
         cx.run_until_parked();
         assert_eq!(showing(&view, cx).mode, mode, "{kind:?}");
     }
-    core.send(Event::Places(vec![Place {
+    core.send(places_api::Event::Places(vec![Place {
         kind: PlaceKind::Pictures,
         path: Path::new(SHOWN).parent().unwrap().to_path_buf(),
     }]));

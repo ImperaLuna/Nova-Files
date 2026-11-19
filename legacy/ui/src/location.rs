@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use gpui::SharedString;
-use nova_files_api::Gathering;
+use nova_files_gathered_api::Gathering;
 use nova_files_shell::{self as shell, PageKind, PageRef};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -10,7 +10,9 @@ use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
 };
-use nova_files_api::{EntryKind, IconKind, PathKind, Peeked, Properties, Size};
+use nova_files_api::{EntryKind, IconKind};
+use nova_files_properties_api::{PathKind, Properties, Size};
+use nova_files_start_api::Peeked;
 
 use super::row::{built_in, glyph_of, icon};
 use super::start::{FAN_ENTRIES, bar, fan, name_of, name_os, titles, where_is};
@@ -363,7 +365,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{Duration, UNIX_EPOCH};
 
-    use nova_files_api::Account;
+    use nova_files_properties_api::Account;
 
     use super::*;
 

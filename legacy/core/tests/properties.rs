@@ -6,12 +6,17 @@
 
 #[expect(dead_code, reason = "the job helpers; properties need only the bench")]
 mod common;
+mod feature;
 
 use std::fs;
 
-use nova_files_api::{Command, Event, PathKind, PropertiesId, Unreadable};
+use nova_files_api::Unreadable;
+use nova_files_properties_api::{Command, Event, PathKind, PropertiesId};
 
 use common::Bench;
+use feature::Feature;
+
+type Client = Feature<Event>;
 
 const FILE_BYTES: u64 = 42;
 
@@ -20,7 +25,7 @@ fn a_client_hears_a_files_properties() {
     let bench = Bench::new("properties-file");
     let path = bench.at("notes.txt");
     fs::write(&path, [0; 42]).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
     client.send(Command::Properties {
         id: PropertiesId(1),
         path: path.clone(),
@@ -39,7 +44,7 @@ fn a_client_hears_a_files_properties() {
 #[test]
 fn a_missing_path_is_said_to_be_missing() {
     let bench = Bench::new("properties-missing");
-    let client = bench.client();
+    let client = Client::of(&bench);
     client.send(Command::Properties {
         id: PropertiesId(2),
         path: bench.at("gone"),

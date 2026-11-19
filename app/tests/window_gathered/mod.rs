@@ -1,5 +1,5 @@
 use gpui::point;
-use nova_files_api::Gathering;
+use nova_files_gathered_api::Gathering;
 
 use super::*;
 use crate::window_sidebar::right_click_at;

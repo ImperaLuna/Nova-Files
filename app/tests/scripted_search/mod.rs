@@ -188,7 +188,7 @@ fn down_moves_into_the_results_and_enter_opens_a_file_where_it_is(cx: &mut TestA
     cx.run_until_parked();
 
     let opened: Vec<PathBuf> = core
-        .commands_of::<nova_files_open_api::Command>()
+        .sent::<nova_files_open_api::Command>()
         .into_iter()
         .filter_map(|command| match command {
             nova_files_open_api::Command::OpenFile { path, .. } => Some(path),
@@ -406,7 +406,7 @@ fn clicking_a_result_takes_the_keys_from_the_box(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     let opened = core
-        .commands_of::<nova_files_open_api::Command>()
+        .sent::<nova_files_open_api::Command>()
         .into_iter()
         .any(|command| matches!(command, nova_files_open_api::Command::OpenFile { path, .. } if path == Path::new("/docs/report.pdf")));
     assert!(opened);
@@ -545,10 +545,10 @@ fn search_results_show_as_details_whatever_their_folder_shows(cx: &mut TestAppCo
         FolderView::default()
     );
 
-    core.commands_of::<ViewsCommand>();
+    core.sent::<ViewsCommand>();
     cx.simulate_keystrokes("down ctrl-2");
     let kept = core
-        .commands_of::<ViewsCommand>()
+        .sent::<ViewsCommand>()
         .into_iter()
         .any(|command| matches!(command, ViewsCommand::SetView { .. }));
     assert!(!kept);

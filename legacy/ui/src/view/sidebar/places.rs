@@ -6,7 +6,7 @@ use gpui::{
 
 use super::{Row, new_tab_on_middle_click, on_middle_click, row, section_button, section_head};
 use crate::assets::Icon;
-use nova_files_api::Gathering;
+use nova_files_gathered_api::Gathering;
 
 use nova_files_shell::{SidebarAt, SidebarRow};
 

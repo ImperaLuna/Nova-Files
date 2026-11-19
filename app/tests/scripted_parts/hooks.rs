@@ -192,7 +192,7 @@ fn a_part_opens_its_own_entries_and_the_rest_open_as_before(cx: &mut TestAppCont
     cx.simulate_keystrokes("home shift-down enter");
     cx.run_until_parked();
     let opened: Vec<PathBuf> = core
-        .commands_of::<open_api::Command>()
+        .sent::<open_api::Command>()
         .into_iter()
         .filter_map(|command| match command {
             open_api::Command::OpenFile { path, .. } => Some(path),

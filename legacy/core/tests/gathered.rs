@@ -11,11 +11,53 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use common::{Bench, Client};
+use std::sync::mpsc::{self, Receiver, Sender};
+
+use common::{ANSWER_TIMEOUT, Bench};
 use nova_files_api::{
-    Command, EntryId, Event, Gathered, GatheredChange, Gathering, Holds, Listing, ListingId, Order,
-    ThumbnailSize,
+    ClientGone, Command, Connection, EntryId, Envelope, Event, EventSink, Listing, ListingId,
+    Message, Order, ThumbnailSize,
 };
+use nova_files_gathered_api::{self as gathered_api, Gathered, GatheredChange, Gathering, Holds};
+
+struct Envelopes(Sender<Envelope>);
+
+impl EventSink for Envelopes {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        self.0.send(envelope).map_err(|_| ClientGone)
+    }
+}
+
+#[derive(Debug)]
+enum Heard {
+    Gathered(gathered_api::Event),
+    Core(Event),
+}
+
+struct Client {
+    connection: Connection,
+    events: Receiver<Envelope>,
+}
+
+impl Client {
+    fn of(bench: &Bench) -> Self {
+        let (sink, events) = mpsc::channel();
+        let connection = bench.core.connector.connect(Envelopes(sink)).unwrap();
+        Self { connection, events }
+    }
+
+    fn send(&self, command: impl Message) {
+        self.connection.send(command).unwrap();
+    }
+
+    fn next(&self) -> Heard {
+        let envelope = self.events.recv_timeout(ANSWER_TIMEOUT).unwrap();
+        match envelope.open::<gathered_api::Event>() {
+            Ok(event) => Heard::Gathered(event),
+            Err(envelope) => Heard::Core(envelope.open::<Event>().unwrap()),
+        }
+    }
+}
 
 fn gathered_file(bench: &Bench) -> PathBuf {
     bench.at("home/.config/nova-files/gathered.toml")
@@ -23,7 +65,7 @@ fn gathered_file(bench: &Bench) -> PathBuf {
 
 fn next(client: &Client) -> Arc<Gathered> {
     match client.next() {
-        Event::Gathered(gathered) => gathered,
+        Heard::Gathered(gathered_api::Event::Gathered(gathered)) => gathered,
         other => panic!("expected the gathered folders, got {other:?}"),
     }
 }
@@ -42,8 +84,8 @@ fn a_first_start_gathers_projects_and_steam() {
         fs::create_dir_all(root.join("home/Projects/nova")).unwrap();
         fs::create_dir_all(root.join("home/.local/share/Steam/steamapps/common")).unwrap();
     });
-    let client = bench.client();
-    client.send(Command::Gathered);
+    let client = Client::of(&bench);
+    client.send(gathered_api::Command::Gathered);
     let gathered = next(&client);
     assert_eq!(
         paths(&gathered, Gathering::Projects),
@@ -63,14 +105,14 @@ fn a_change_reaches_every_window_and_the_file() {
     let bench = Bench::new("gathered-change");
     let skills = bench.at("home/Skills");
     fs::create_dir_all(skills.join(".git")).unwrap();
-    let window = bench.client();
-    let other = bench.client();
-    window.send(Command::Gathered);
-    other.send(Command::Gathered);
+    let window = Client::of(&bench);
+    let other = Client::of(&bench);
+    window.send(gathered_api::Command::Gathered);
+    other.send(gathered_api::Command::Gathered);
     assert_eq!(*next(&window), Gathered::default());
     assert_eq!(*next(&other), Gathered::default());
 
-    window.send(Command::ChangeGathered(GatheredChange::Add {
+    window.send(gathered_api::Command::ChangeGathered(GatheredChange::Add {
         place: Gathering::Projects,
         path: skills.clone(),
         holds: None,
@@ -83,7 +125,7 @@ fn a_change_reaches_every_window_and_the_file() {
     let text = fs::read_to_string(gathered_file(&bench)).unwrap();
     assert!(text.contains("\"~/Skills\""), "{text}");
 
-    window.send(Command::ChangeGathered(GatheredChange::Add {
+    window.send(gathered_api::Command::ChangeGathered(GatheredChange::Add {
         place: Gathering::Projects,
         path: bench.at("home/Work"),
         holds: Some(Holds::Many),
@@ -91,15 +133,17 @@ fn a_change_reaches_every_window_and_the_file() {
         name: None,
     }));
     next(&window);
-    window.send(Command::ChangeGathered(GatheredChange::Remove {
-        place: Gathering::Projects,
-        path: skills.clone(),
-    }));
+    window.send(gathered_api::Command::ChangeGathered(
+        GatheredChange::Remove {
+            place: Gathering::Projects,
+            path: skills.clone(),
+        },
+    ));
     assert_eq!(
         paths(&next(&window), Gathering::Projects),
         [bench.at("home/Work")]
     );
-    window.send(Command::ChangeGathered(GatheredChange::Add {
+    window.send(gathered_api::Command::ChangeGathered(GatheredChange::Add {
         place: Gathering::Projects,
         path: skills.clone(),
         holds: Some(Holds::One),
@@ -115,8 +159,8 @@ fn a_change_reaches_every_window_and_the_file() {
 #[test]
 fn the_file_edited_by_hand_reaches_the_windows() {
     let bench = Bench::new("gathered-by-hand");
-    let client = bench.client();
-    client.send(Command::Gathered);
+    let client = Client::of(&bench);
+    client.send(gathered_api::Command::Gathered);
     next(&client);
     let file = gathered_file(&bench);
     let temporary = file.with_extension("tmp");
@@ -129,16 +173,18 @@ fn the_file_edited_by_hand_reaches_the_windows() {
 }
 
 fn listed(client: &Client, id: u64, place: Gathering) -> Listing {
-    client.send(Command::ListGathered {
+    client.send(gathered_api::Command::ListGathered {
         id: ListingId(id),
         place,
         order: Order::default(),
     });
     loop {
         match client.next() {
-            Event::FolderListed(listing) if listing.id == ListingId(id) => return listing,
-            Event::Gathered(_) | Event::GatheredChanged(_) => {}
-            other => panic!("expected listing {id}, got {other:?}"),
+            Heard::Core(Event::FolderListed(listing)) if listing.id == ListingId(id) => {
+                return listing;
+            }
+            Heard::Gathered(_) => {}
+            other @ Heard::Core(_) => panic!("expected listing {id}, got {other:?}"),
         }
     }
 }
@@ -158,7 +204,7 @@ fn a_place_lists_and_says_when_its_folders_change() {
         fs::create_dir_all(root.join("home/Projects/bench")).unwrap();
         fs::write(root.join("home/Projects/notes.txt"), "").unwrap();
     });
-    let client = bench.client();
+    let client = Client::of(&bench);
     let listing = listed(&client, 1, Gathering::Projects);
     assert_eq!(names(&listing), ["bench", "nova"]);
     assert_eq!(
@@ -174,19 +220,19 @@ fn a_place_lists_and_says_when_its_folders_change() {
         size: ThumbnailSize::Normal,
     });
     loop {
-        if let Event::DetailsRead { id, .. } = client.next() {
+        if let Heard::Core(Event::DetailsRead { id, .. }) = client.next() {
             assert_eq!(id, ListingId(1));
             break;
         }
     }
 
-    client.send(Command::Gathered);
+    client.send(gathered_api::Command::Gathered);
     next(&client);
     fs::create_dir(bench.at("home/Projects/zed")).unwrap();
     loop {
         match client.next() {
-            Event::GatheredChanged(Gathering::Projects) => break,
-            Event::DetailsRead { .. } => {}
+            Heard::Gathered(gathered_api::Event::GatheredChanged(Gathering::Projects)) => break,
+            Heard::Core(Event::DetailsRead { .. }) => {}
             other => panic!("expected Projects to change, got {other:?}"),
         }
     }

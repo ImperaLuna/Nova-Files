@@ -18,11 +18,12 @@ use std::sync::mpsc::Receiver;
 
 use gpui::{Entity, Point, TestAppContext, VisualTestContext, point, px};
 use nova_files_api::{
-    Bookmark, ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink,
-    HiddenFiles, Listing, ListingId, Message, Mode, Order, Palette, Place, PlaceKind, SortKey,
-    Theme, ThumbnailSize, Unreadable,
+    ClientId, Command, CoreMessage, Details, Entry, EntryId, EntryKind, Event, EventSink,
+    HiddenFiles, Listing, ListingId, Message, Mode, Order, Palette, SortKey, Theme, ThumbnailSize,
+    Unreadable,
 };
 use nova_files_look_api as look_api;
+use nova_files_places_api::{self as places_api, Bookmark, Place, PlaceKind};
 use nova_files_settings_api::{
     self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
 };
@@ -84,17 +85,17 @@ impl Core {
     }
 
     fn commands(&mut self) -> Vec<Command> {
-        self.commands_of::<Command>()
+        self.sent()
     }
 
-    fn commands_of<C: Message>(&mut self) -> Vec<C> {
-        let mut commands = Vec::new();
+    fn sent<M: Message>(&mut self) -> Vec<M> {
+        let mut sent = Vec::new();
         while let Some(message) = self.try_recv() {
-            if let Some(command) = message.into_command::<C>() {
-                commands.push(command);
+            if let Some(command) = message.into_command::<M>() {
+                sent.push(command);
             }
         }
-        commands
+        sent
     }
 
     fn send<M: Message>(&self, message: M) {
@@ -512,13 +513,13 @@ fn new_places_and_pinned_folders_are_told(cx: &mut TestAppContext) {
         })
     });
 
-    core.send(Event::Places(vec![Place {
+    core.send(places_api::Event::Places(vec![Place {
         kind: PlaceKind::Home,
         path: PathBuf::from(SHOWN),
     }]));
     cx.run_until_parked();
     assert_eq!(told.get(), 1);
-    core.send(Event::Bookmarks(Arc::from([Bookmark {
+    core.send(places_api::Event::Bookmarks(Arc::from([Bookmark {
         path: PathBuf::from(OTHER),
         label: None,
     }])));

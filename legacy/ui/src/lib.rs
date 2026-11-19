@@ -78,10 +78,14 @@ pub fn sent_types() -> Vec<MessageType> {
         MessageType::of::<Command>(),
         MessageType::of::<nova_files_drives_api::Command>(),
         MessageType::of::<nova_files_folders_api::Command>(),
+        MessageType::of::<nova_files_gathered_api::Command>(),
         MessageType::of::<nova_files_open_api::Command>(),
+        MessageType::of::<nova_files_places_api::Command>(),
         MessageType::of::<nova_files_preview_api::Command>(),
+        MessageType::of::<nova_files_properties_api::Command>(),
         MessageType::of::<nova_files_search_api::Command>(),
         MessageType::of::<nova_files_settings_api::Command>(),
+        MessageType::of::<nova_files_start_api::Command>(),
     ]
 }
 
@@ -90,10 +94,14 @@ pub fn taken_types() -> Vec<MessageType> {
         MessageType::of::<Event>(),
         MessageType::of::<nova_files_drives_api::Event>(),
         MessageType::of::<nova_files_folders_api::Event>(),
+        MessageType::of::<nova_files_gathered_api::Event>(),
         MessageType::of::<nova_files_open_api::Event>(),
+        MessageType::of::<nova_files_places_api::Event>(),
         MessageType::of::<nova_files_preview_api::Event>(),
+        MessageType::of::<nova_files_properties_api::Event>(),
         MessageType::of::<nova_files_search_api::Event>(),
         MessageType::of::<nova_files_settings_api::Event>(),
+        MessageType::of::<nova_files_start_api::Event>(),
         MessageType::of::<nova_files_thumbnails_api::Event>(),
     ]
 }

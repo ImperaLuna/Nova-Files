@@ -1,6 +1,6 @@
 pub use nova_files_trash_core::{Trashes, find, trash_of};
 
-use crate::places::Home;
+use nova_files_disk::home::Home;
 
 pub fn trashes(home: Option<&Home>) -> Trashes {
     Trashes::of(

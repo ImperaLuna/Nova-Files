@@ -254,7 +254,7 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
     cx.simulate_keystrokes("down shift-down enter");
     cx.run_until_parked();
     let opened: Vec<PathBuf> = core
-        .commands_of::<open_api::Command>()
+        .sent::<open_api::Command>()
         .into_iter()
         .filter_map(|command| match command {
             open_api::Command::OpenFile { path, .. } => Some(path),
