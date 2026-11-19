@@ -71,8 +71,6 @@ use nova_files_shell::{
     WindowParts,
 };
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
-use nova_files_thumbnails_api as thumbnails_api;
-use nova_files_transfer_api as transfer_api;
 
 use self::preview::QuickLooks;
 use self::rows::RowRead;
@@ -84,7 +82,6 @@ use crate::location::Location;
 use crate::menu::Menu;
 use crate::pick::Picker;
 use crate::selection::Selection;
-use crate::shown_thumbnails::ShownThumbnails;
 use crate::theme_icons::ThemeIcons;
 use jobs::Jobs;
 use renaming::{Renaming, Waiting};
@@ -124,7 +121,6 @@ pub struct MainWindow {
     pub(crate) listing: Option<Listing>,
     details: HashMap<usize, RowRead>,
     theme_icons: ThemeIcons,
-    thumbnails: ShownThumbnails,
     pub(crate) scale_factor: f32,
     rows_wanted: Range<usize>,
     pub(crate) rows_drawn: Range<usize>,
@@ -248,7 +244,6 @@ impl MainWindow {
             listing: None,
             details: HashMap::new(),
             theme_icons: ThemeIcons::default(),
-            thumbnails: ShownThumbnails::default(),
             rows_wanted: 0..0,
             rows_drawn: 0..0,
             sizing: views::Sizing::default(),
@@ -350,10 +345,9 @@ impl MainWindow {
             Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<open_api::Event>() {
-            Ok(event) => return self.open_event(event, cx),
-            Err(envelope) => envelope,
-        };
+        if let Some(open_api::Event::OpenWith(answer)) = envelope.get::<open_api::Event>() {
+            return self.open_with_answered(answer.clone(), cx);
+        }
         let envelope = match envelope.open::<preview_api::Event>() {
             Ok(preview_api::Event::Previewed { id, preview }) => {
                 return self.preview_arrived(id, Some(preview), cx);
@@ -377,21 +371,6 @@ impl MainWindow {
         let envelope = match envelope.open::<start_api::Event>() {
             Ok(start_api::Event::RecentFolders { id, folders }) => {
                 return self.recent_arrived(id, folders, cx);
-            }
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<thumbnails_api::Event>() {
-            Ok(thumbnails_api::Event::Thumbnail {
-                id,
-                entry,
-                size,
-                png,
-            }) => return self.thumbnail_arrived((id, entry, size), png, cx),
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<transfer_api::Event>() {
-            Ok(transfer_api::Event::DropWould { id, kind }) => {
-                return self.drop_would_arrived(id, kind, cx);
             }
             Err(envelope) => envelope,
         };

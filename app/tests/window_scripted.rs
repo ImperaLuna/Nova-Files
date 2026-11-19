@@ -29,6 +29,7 @@ use nova_files_settings_api::{
     self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
 };
 use nova_files_thumbnails_api::Event as ThumbnailsEvent;
+use nova_files_thumbnails_ui::ThumbnailsPart;
 use nova_files_ui::{Colors, MainWindow, WindowEvent};
 
 const SHOWN: &str = "/shown";
@@ -376,6 +377,11 @@ const PNG: &[u8] = &[
     66, 96, 130,
 ];
 
+fn has_thumbnail(view: &MainWindow, index: usize, cx: &gpui::App) -> bool {
+    view.part::<ThumbnailsPart>()
+        .is_some_and(|part| part.read(cx).thumbnail(index).is_some())
+}
+
 fn thumbnail(id: ListingId, entry: u32) -> ThumbnailsEvent {
     ThumbnailsEvent::Thumbnail {
         id,
@@ -392,9 +398,9 @@ fn a_thumbnail_for_a_shown_row_is_kept(cx: &mut TestAppContext) {
     core.send(thumbnail(id, 1));
     cx.run_until_parked();
 
-    view.read_with(cx, |view, _| {
-        assert!(view.thumbnail(1).is_some());
-        assert!(view.thumbnail(0).is_none());
+    view.read_with(cx, |view, cx| {
+        assert!(has_thumbnail(view, 1, cx));
+        assert!(!has_thumbnail(view, 0, cx));
     });
 }
 
@@ -410,7 +416,7 @@ fn a_thumbnail_at_a_size_not_asked_for_is_dropped(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
 
-    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+    view.read_with(cx, |view, cx| assert!(!has_thumbnail(view, 1, cx)));
 }
 
 #[gpui::test]
@@ -442,7 +448,7 @@ fn a_thumbnail_for_a_listing_left_behind_is_dropped(cx: &mut TestAppContext) {
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
 
-    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+    view.read_with(cx, |view, cx| assert!(!has_thumbnail(view, 1, cx)));
 }
 
 #[gpui::test]
@@ -457,7 +463,7 @@ fn the_same_scale_keeps_the_thumbnails(cx: &mut TestAppContext) {
         view.set_scale_factor(scale, window, cx);
     });
 
-    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_some()));
+    view.read_with(cx, |view, cx| assert!(has_thumbnail(view, 1, cx)));
     assert_eq!(core.thumbnail_requests(), []);
 }
 
@@ -473,7 +479,7 @@ fn another_scale_drops_the_thumbnails_and_asks_again(cx: &mut TestAppContext) {
         view.set_scale_factor(scale * 2.0, window, cx);
     });
 
-    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+    view.read_with(cx, |view, cx| assert!(!has_thumbnail(view, 1, cx)));
     assert_eq!(core.thumbnail_requests(), [(0, 0)]);
 }
 
@@ -493,8 +499,8 @@ fn a_thumbnail_arriving_asks_for_nothing_new(cx: &mut TestAppContext) {
     core.send(thumbnail(id, row));
     cx.run_until_parked();
 
-    view.read_with(cx, |view, _| {
-        assert!(view.thumbnail(usize::try_from(row).unwrap()).is_some());
+    view.read_with(cx, |view, cx| {
+        assert!(has_thumbnail(view, usize::try_from(row).unwrap(), cx));
     });
     assert_eq!(core.thumbnail_requests(), []);
 }
@@ -560,15 +566,15 @@ fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppC
     let (view, cx, mut core, id) = shown_with_details(cx, ENTRIES);
     core.send(thumbnail(id, 1));
     cx.run_until_parked();
-    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_some()));
+    view.read_with(cx, |view, cx| assert!(has_thumbnail(view, 1, cx)));
 
     let hidden = Settings::default().with(SettingChange::Thumbnails(Thumbnails::Hidden));
     core.send(settings_api::Event::Settings(Arc::new(hidden.clone())));
     cx.run_until_parked();
-    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+    view.read_with(cx, |view, cx| assert!(!has_thumbnail(view, 1, cx)));
     core.send(thumbnail(id, 2));
     cx.run_until_parked();
-    view.read_with(cx, |view, _| assert!(view.thumbnail(2).is_none()));
+    view.read_with(cx, |view, cx| assert!(!has_thumbnail(view, 2, cx)));
 
     core.commands();
     core.send(settings_api::Event::Settings(Arc::new(
@@ -587,7 +593,7 @@ fn hidden_thumbnails_are_let_go_and_shown_ones_asked_for_again(cx: &mut TestAppC
     assert!(asks_rows(core.commands()));
     core.send(thumbnail(id, 2));
     cx.run_until_parked();
-    view.read_with(cx, |view, _| assert!(view.thumbnail(2).is_some()));
+    view.read_with(cx, |view, cx| assert!(has_thumbnail(view, 2, cx)));
 }
 
 #[gpui::test]
@@ -604,7 +610,7 @@ fn hiding_and_showing_before_a_frame_still_asks_for_thumbnails_anew(cx: &mut Tes
     let forgot = requests.iter().position(|&request| request == (0, 0));
     let asked = requests.iter().rposition(|&(_, count)| count > 0);
     assert!(forgot < asked && forgot.is_some(), "{requests:?}");
-    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+    view.read_with(cx, |view, cx| assert!(!has_thumbnail(view, 1, cx)));
 }
 
 #[gpui::test]
@@ -614,7 +620,7 @@ fn a_thumbnail_shrunk_after_hiding_is_not_kept(cx: &mut TestAppContext) {
     core.send(thumbnail(id, 1));
     core.send(settings_api::Event::Settings(Arc::new(hidden)));
     cx.run_until_parked();
-    view.read_with(cx, |view, _| assert!(view.thumbnail(1).is_none()));
+    view.read_with(cx, |view, cx| assert!(!has_thumbnail(view, 1, cx)));
 }
 
 fn listing_asked(core: &mut Core) -> (ListingId, PathBuf, Order) {

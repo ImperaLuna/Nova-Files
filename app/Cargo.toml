@@ -16,10 +16,13 @@
 # - nova-files-drives-ui
 # - nova-files-index
 # - nova-files-look-ui
+# - nova-files-open-ui
 # - nova-files-picker-api
 # - nova-files-places-ui
 # - nova-files-settings-ui
 # - nova-files-shell
+# - nova-files-thumbnails-ui
+# - nova-files-transfer-ui
 # - nova-files-trash-ui
 # - nova-files-ui
 
@@ -45,10 +48,13 @@ nova-files-delete-ui.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-drives-ui.workspace = true
 nova-files-look-ui.workspace = true
+nova-files-open-ui.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-places-ui.workspace = true
 nova-files-settings-ui.workspace = true
 nova-files-shell.workspace = true
+nova-files-thumbnails-ui.workspace = true
+nova-files-transfer-ui.workspace = true
 nova-files-trash-ui.workspace = true
 nova-files-ui.workspace = true
 

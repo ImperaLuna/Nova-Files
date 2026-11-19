@@ -8,7 +8,6 @@ use nova_files_api::{EntryId, Listing, ListingId, Order};
 use nova_files_gathered_api::Gathering;
 
 use super::MainWindow;
-use super::rows::release;
 use super::search::Search;
 use nova_files_shell::{PageRef, TabId};
 
@@ -286,7 +285,6 @@ impl MainWindow {
         });
         self.renaming = None;
         self.details = HashMap::new();
-        release(self.thumbnails.take_all(), None, cx);
         self.jump = TypeJump::default();
         self.band = None;
         self.pressed_name = false;

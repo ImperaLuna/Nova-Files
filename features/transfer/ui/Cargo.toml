@@ -1,0 +1,33 @@
+# nova-files-transfer-ui
+#
+# The transfer's window half: files dropped on a folder are copied or
+# moved there, by the keys held or else by the drive, and the drag chip
+# names which.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-shell
+# - nova-files-transfer-api
+
+[package]
+name = "nova-files-transfer-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-shell.workspace = true
+nova-files-transfer-api.workspace = true
