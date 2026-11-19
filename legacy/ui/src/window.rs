@@ -41,8 +41,8 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
-    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
-    SharedString, Size, Subscription, Task, UniformListScrollHandle,
+    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, SharedString,
+    Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
@@ -52,7 +52,6 @@ use nova_files_drives_api as drives_api;
 use nova_files_folders_api::{self as folders_api, FolderView};
 use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_places_api::{self as places_api, Bookmark, Place};
-use nova_files_properties_api as properties_api;
 use nova_files_search_api as search_api;
 use nova_files_shell::Lines;
 use nova_files_shell::path_bar::PathBar;
@@ -134,8 +133,7 @@ pub struct MainWindow {
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,
-    pub(crate) pick_size: Option<Size<Pixels>>,
-    pub(crate) pick_bounds: Option<Subscription>,
+    pub(crate) bounds_watch: Option<Subscription>,
     pub(crate) home: PathBuf,
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
@@ -253,8 +251,7 @@ impl MainWindow {
             path_bar: cx.new(|_| PathBar::new(&host)),
             asks_sent: 0,
             scroll: UniformListScrollHandle::new(),
-            pick_size: None,
-            pick_bounds: None,
+            bounds_watch: None,
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
@@ -304,6 +301,7 @@ impl MainWindow {
     }
 
     fn take(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
+        self.parts.peek(&envelope, cx);
         let envelope = match envelope.open::<Event>() {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
@@ -316,9 +314,6 @@ impl MainWindow {
             Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
         };
-        if let Some(event) = envelope.get::<properties_api::Event>() {
-            self.save_probe_answered(event, cx);
-        }
         let envelope = match envelope.open::<search_api::Event>() {
             Ok(search_api::Event::FindFailed { id, .. }) if self.search.asked == Some(id) => {
                 return self.find_failed(id, cx);
@@ -333,7 +328,8 @@ impl MainWindow {
         if self.tell_left(cx) {
             let this = cx.entity().downgrade();
             cx.defer(move |cx| {
-                this.update(cx, |this, cx| this.take(envelope, cx)).ok();
+                this.update(cx, |this, cx| this.hand_to_parts(envelope, cx))
+                    .ok();
             });
             return;
         }

@@ -14,8 +14,8 @@ use crate::command::CommandSpec;
 use crate::jump::Jump;
 use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
-use crate::part::DropOver;
 use crate::part::Part;
+use crate::part::{Click, ClickAnswer, DropOver};
 use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::text::TextField;
@@ -26,6 +26,12 @@ pub struct WindowParts {
 }
 
 impl WindowParts {
+    pub fn peek(&self, envelope: &Envelope, cx: &mut App) {
+        for part in &self.opened {
+            part.peek(envelope, cx);
+        }
+    }
+
     pub fn deliver(&self, envelope: Envelope, cx: &mut App) -> Result<(), Envelope> {
         let mut taken = false;
         for part in &self.opened {
@@ -179,6 +185,28 @@ impl WindowParts {
 
     pub fn bars(&self) -> Vec<AnyView> {
         self.opened.iter().flat_map(|part| part.bars()).collect()
+    }
+
+    pub fn footers(&self) -> Vec<AnyView> {
+        self.opened.iter().flat_map(|part| part.footers()).collect()
+    }
+
+    pub fn clicked(
+        &self,
+        listing: ListingId,
+        entry: &Entry,
+        click: Click,
+        cx: &mut App,
+    ) -> Option<ClickAnswer> {
+        self.opened
+            .iter()
+            .find_map(|part| part.clicked(listing, entry, click, cx))
+    }
+
+    pub fn resized(&self, size: Size<Pixels>, cx: &mut App) {
+        for part in &self.opened {
+            part.resized(size, cx);
+        }
     }
 
     pub fn overlays(&self) -> Vec<AnyView> {

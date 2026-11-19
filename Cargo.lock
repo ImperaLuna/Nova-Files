@@ -4083,6 +4083,7 @@ name = "nova-files-settings-ui"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "nova-files-api",
  "nova-files-settings-api",
  "nova-files-shell",
 ]
