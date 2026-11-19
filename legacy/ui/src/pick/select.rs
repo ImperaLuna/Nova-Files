@@ -2,6 +2,7 @@ use std::ffi::OsString;
 
 use gpui::Context;
 use nova_files_api::{EntryId, EntryKind, ListingId};
+use nova_files_picker_ui::names_text;
 
 use crate::selection::{Click, Selection, entry_at};
 use crate::window::MainWindow;
@@ -63,37 +64,5 @@ impl MainWindow {
             .filter_map(|&id| entry_at(entries, id))
             .map(|entry| (entry.kind, entry.id, entry.name.clone()))
             .collect()
-    }
-}
-
-pub fn names_text(names: &[String]) -> String {
-    match names {
-        [one] => one.clone(),
-        names => names
-            .iter()
-            .map(|name| format!("\"{name}\""))
-            .collect::<Vec<_>>()
-            .join(" "),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_box_shows_one_name_as_it_is_and_several_in_quotes() {
-        let names = |names: &[&str]| {
-            names
-                .iter()
-                .map(|&name| name.to_owned())
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(names_text(&names(&["a b.txt"])), "a b.txt");
-        assert_eq!(
-            names_text(&names(&["a.txt", "b.txt"])),
-            "\"a.txt\" \"b.txt\""
-        );
-        assert_eq!(names_text(&[]), "");
     }
 }
