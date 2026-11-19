@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use nova_files_api::{Failure, Outcome};
 
 use crate::identity::{self, Identity};
+use crate::journal::{Record, word};
 use crate::runner::Ended;
 use crate::running::Running;
 
@@ -22,6 +23,7 @@ pub fn after(running: &mut Running, (outcome, mut changed): Ended, replaced: &Re
     if !free || items.is_empty() {
         return (outcome, changed);
     }
+    running.record(Record::Operation(word::PUT_BACK));
     let Some((put, more)) = running.put_back(&items) else {
         return (outcome, changed);
     };
