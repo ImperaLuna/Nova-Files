@@ -19,7 +19,6 @@
 # - nova-files-clipboard-api
 # - nova-files-drives-api
 # - nova-files-gathered-api
-# - nova-files-look-api
 # - nova-files-picker-api
 # - nova-files-places-api
 # - nova-files-properties-api
@@ -45,7 +44,6 @@ nova-files-api.workspace = true
 nova-files-clipboard-api.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-gathered-api.workspace = true
-nova-files-look-api.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-places-api.workspace = true
 nova-files-properties-api.workspace = true

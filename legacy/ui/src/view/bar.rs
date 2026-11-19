@@ -59,6 +59,7 @@ impl MainWindow {
                     cx,
                 ),
             )
+            .children(self.parts.bars())
             .child(
                 capsule(colors)
                     .debug_selector(|| "views".to_owned())

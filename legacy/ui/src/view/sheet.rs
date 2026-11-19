@@ -90,6 +90,7 @@ impl MainWindow {
                 |area, at| self.takes_drops(area, at, cx),
             )
             .child(self.entries(cx))
+            .children(self.parts.overlays())
             .child(ctrl_scroll(cx))
             .children(self.empty_note(&colors, cx))
             .children(self.no_matches(&colors))
@@ -110,6 +111,9 @@ impl MainWindow {
     }
 
     fn entries(&self, cx: &Context<Self>) -> AnyElement {
+        if let Some(view) = self.parts.list_view(&self.scene(), cx) {
+            return view.into_any_element();
+        }
         let grid = self.grid();
         if self.showing_icons() {
             return self.icons(grid, cx).into_any_element();
@@ -221,15 +225,19 @@ impl MainWindow {
                 div()
                     .flex_none()
                     .when(hidden, |slot| slot.opacity(opacity::HIDDEN))
-                    .child(entry_icon(self.row_icon(index, entry.kind), colors)),
+                    .child(self.parts.row_icon(entry, cx).unwrap_or_else(|| {
+                        entry_icon(self.row_icon(index, entry.kind), colors).into_any_element()
+                    })),
             )
-            .child(self.rename_field(index).map_or_else(
-                || {
-                    entry_name(name.into(), marks, index, draggable.then_some(row), cx)
-                        .into_any_element()
-                },
-                |field| rename_box(field.clone(), colors).into_any_element(),
-            ))
+            .child(self.parts.name_cell(entry, cx).unwrap_or_else(|| {
+                self.rename_field(index).map_or_else(
+                    || {
+                        entry_name(name.into(), marks, index, draggable.then_some(row), cx)
+                            .into_any_element()
+                    },
+                    |field| rename_box(field.clone(), colors).into_any_element(),
+                )
+            }))
     }
 
     fn empty_note(&self, colors: &Colors, cx: &Context<Self>) -> Option<impl IntoElement> {

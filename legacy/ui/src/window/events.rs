@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
-use nova_files_api::{Event, Listing, ListingId, Theme, Unreadable};
+use nova_files_api::{Event, Listing, ListingId, Unreadable};
 use nova_files_places_api::Bookmark;
 use nova_files_settings_api::{Settings, Thumbnails};
 
@@ -13,7 +13,6 @@ use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
-use crate::theme::Colors;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Place {
@@ -66,6 +65,7 @@ impl MainWindow {
         {
             self.scroll_to_entry(cursor);
         }
+        self.tell_parts_listed(cx);
         cx.emit(match arrived {
             Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
             Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
@@ -254,15 +254,6 @@ impl MainWindow {
         }
         cx.emit(WindowEvent::Settings);
         cx.notify();
-    }
-
-    pub(super) fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
-        let colors = Colors::new(theme);
-        if Colors::of(cx) != colors {
-            cx.set_global(colors);
-            cx.refresh_windows();
-            cx.emit(WindowEvent::Theme);
-        }
     }
 
     fn dropped_listing(&mut self, id: ListingId, cx: &Context<Self>) {

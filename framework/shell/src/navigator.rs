@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use gpui::{Context, EventEmitter};
 
 use crate::location::Location;
@@ -8,6 +10,7 @@ pub enum NavAsk {
     Go(Location),
     NewTab(Location),
     Reload,
+    Reveal(PathBuf),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +49,11 @@ impl Navigator {
 
     pub fn reload(&mut self, cx: &mut Context<Self>) {
         self.asks.push(NavAsk::Reload);
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn reveal(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        self.asks.push(NavAsk::Reveal(path));
         cx.emit(NavEvent::Asked);
     }
 
