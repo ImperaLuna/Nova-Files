@@ -10,6 +10,7 @@ use crate::entries::Entries;
 use crate::island::Island;
 use crate::location::Location;
 use crate::navigator::Navigator;
+use crate::opening::Opening;
 use crate::rules::RulesBook;
 use crate::scene::Scene;
 
@@ -46,10 +47,11 @@ pub struct Host {
     pub entries: Entity<Entries>,
     pub nav: Entity<Navigator>,
     pub island: Entity<Island>,
+    pub opening: Opening,
 }
 
 impl Host {
-    pub fn new(link: Link, home: PathBuf, cx: &mut App) -> Self {
+    pub fn new(link: Link, home: PathBuf, opening: Opening, cx: &mut App) -> Self {
         Self {
             link,
             asks: AskIds::default(),
@@ -58,6 +60,7 @@ impl Host {
             entries: cx.new(|_| Entries::default()),
             nav: cx.new(|_| Navigator::default()),
             island: cx.new(|_| Island::default()),
+            opening,
         }
     }
 

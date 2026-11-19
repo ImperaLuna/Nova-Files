@@ -39,12 +39,14 @@ impl MainWindow {
             .as_ref()
             .map(|listing| &*listing.entries)
             .unwrap_or_default();
+        let parts = &self.parts;
         let picks = |id: EntryId| {
-            wanted.is_none_or(|wanted| {
-                entry_at(entries, id).is_some_and(|entry| entry.kind == wanted)
-            })
+            let entry = entry_at(entries, id);
+            wanted.is_none_or(|wanted| entry.is_some_and(|entry| entry.kind == wanted))
+                && entry.is_none_or(|entry| parts.selectable(entry, cx))
         };
-        let several = self.pick.as_ref().is_none_or(crate::pick::Picker::several);
+        let several =
+            self.pick.as_ref().is_none_or(crate::pick::Picker::several) && self.parts.several(cx);
         self.selection = change(before, &picks).map(|selection| {
             if several {
                 selection

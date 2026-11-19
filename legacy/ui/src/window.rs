@@ -63,7 +63,7 @@ use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_properties_api as properties_api;
 use nova_files_settings_api::{self as settings_api, Settings};
-use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
+use nova_files_shell::{FolderRules, Host, Link, Opening, Parts, WindowParts};
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 
 use self::drives::Drives;
@@ -208,6 +208,16 @@ impl MainWindow {
         home: PathBuf,
         cx: &mut Context<Self>,
     ) -> Self {
+        Self::opened_with(connector, location, home, Opening::default(), cx)
+    }
+
+    pub fn opened_with(
+        connector: &Connector,
+        location: &Location,
+        home: PathBuf,
+        opening: Opening,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let (sink, events) = mpsc::unbounded();
         let connection = connect(connector, ChannelSink(sink)).map(Arc::new);
         let status = if connection.is_some() {
@@ -216,7 +226,7 @@ impl MainWindow {
             CoreStatus::Gone
         };
         let events = Self::listen(events, cx);
-        let (host, parts) = open_parts(connection.clone(), &home, cx);
+        let (host, parts) = open_parts(connection.clone(), &home, opening, cx);
         let mut window = Self {
             connector: connector.clone(),
             status,
@@ -434,9 +444,10 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
 fn open_parts(
     connection: Option<Arc<Connection>>,
     home: &Path,
+    opening: Opening,
     cx: &mut App,
 ) -> (Host, WindowParts) {
-    let host = Host::new(Link::new(connection), home.to_path_buf(), cx);
+    let host = Host::new(Link::new(connection), home.to_path_buf(), opening, cx);
     let parts = cx
         .try_global::<Parts>()
         .cloned()

@@ -107,7 +107,7 @@ impl MainWindow {
             .when(self.cursor() == Some(index), |cell| {
                 cell.child(cursor_ring(&colors))
             })
-            .when(self.pick_dims(index), |cell| cell.opacity(opacity::DIMMED))
+            .when(self.dims(index, cx), |cell| cell.opacity(opacity::DIMMED))
             .on_click(cx.listener(move |this, event, window, cx| {
                 this.row_clicked(at, event, window, cx);
             }))
