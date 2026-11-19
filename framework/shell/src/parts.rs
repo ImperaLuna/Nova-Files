@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, SharedString,
-    Subscription,
+    AnyElement, AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, Modifiers,
+    SharedString, Subscription,
 };
 use nova_files_api::{Entry, Event, Listing};
 
@@ -61,6 +61,20 @@ trait OpenPart {
         paths: Vec<PathBuf>,
         cx: &mut App,
     ) -> Result<(), Vec<PathBuf>>;
+    fn drop_label(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &App,
+    ) -> Option<SharedString>;
+    fn drop_at(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &mut App,
+    ) -> bool;
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -262,6 +276,42 @@ impl<P: Part> OpenPart for Opened<P> {
         self.entity
             .update(cx, |part, cx| slot(part, page, paths, cx));
         Ok(())
+    }
+
+    fn drop_label(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &App,
+    ) -> Option<SharedString> {
+        let part = self.entity.read(cx);
+        self.slots
+            .drop_targets
+            .iter()
+            .find_map(|(aim, _)| aim(part, at, sources, modifiers, cx))
+    }
+
+    fn drop_at(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &mut App,
+    ) -> bool {
+        let part = self.entity.read(cx);
+        let Some(&(_, take)) = self
+            .slots
+            .drop_targets
+            .iter()
+            .find(|(aim, _)| aim(part, at, sources, modifiers, cx).is_some())
+        else {
+            return false;
+        };
+        let (at, sources) = (at.clone(), sources.to_vec());
+        self.entity
+            .update(cx, |part, cx| take(part, at, sources, modifiers, cx));
+        true
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -503,6 +553,30 @@ impl WindowParts {
         for part in &self.opened {
             part.listed(listing, cx);
         }
+    }
+
+    pub fn drop_label(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &App,
+    ) -> Option<SharedString> {
+        self.opened
+            .iter()
+            .find_map(|part| part.drop_label(at, sources, modifiers, cx))
+    }
+
+    pub fn drop_at(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &mut App,
+    ) -> bool {
+        self.opened
+            .iter()
+            .any(|part| part.drop_at(at, sources, modifiers, cx))
     }
 
     pub fn takes_drops(&self, page: &PageRef) -> bool {

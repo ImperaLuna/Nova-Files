@@ -56,6 +56,14 @@ impl Sources {
     }
 }
 
+pub fn shell_place(at: &DropAt) -> Option<nova_files_shell::Location> {
+    match at {
+        DropAt::Folder(folder) => Some(nova_files_shell::Location::Folder(folder.clone())),
+        DropAt::Page(page) => Some(nova_files_shell::Location::Page(page.clone())),
+        DropAt::Trash | DropAt::Gathered(_) => None,
+    }
+}
+
 pub fn allowed(at: &DropAt, sources: &Sources, trashed: impl Fn(&Path) -> bool) -> bool {
     if sources.paths.is_empty() || sources.folders.iter().any(|folder| trashed(folder)) {
         return false;

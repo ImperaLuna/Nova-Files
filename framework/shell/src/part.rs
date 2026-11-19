@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, SharedString, Window,
+    Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, Modifiers,
+    SharedString, Window,
 };
 use nova_files_api::{Entry, Event, Listing};
 
@@ -13,7 +14,7 @@ use nova_files_messages::{Envelope, Message, MessageType};
 
 use crate::command::CommandSpec;
 use crate::host::Host;
-use crate::location::{PageKind, PageRef};
+use crate::location::{Location, PageKind, PageRef};
 use crate::menu::{MenuAt, MenuGroup, MenuItem, SidebarAt, SidebarRow};
 use crate::scene::Scene;
 
@@ -35,6 +36,8 @@ pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Closing<P> = fn(&mut P, &mut Context<P>);
 pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
+pub type DropAim<P> = fn(&P, &Location, &[PathBuf], Modifiers, &App) -> Option<SharedString>;
+pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
 
 pub struct Column<P> {
     pub head: SharedString,
@@ -67,6 +70,7 @@ pub struct Slots<P> {
     pub(crate) name_cells: Vec<NameCell<P>>,
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
+    pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
@@ -91,6 +95,7 @@ impl<P> Default for Slots<P> {
             name_cells: Vec::new(),
             listed: Vec::new(),
             drops: Vec::new(),
+            drop_targets: Vec::new(),
             bars: Vec::new(),
             overlays: Vec::new(),
             list_views: Vec::new(),
@@ -187,6 +192,10 @@ impl<P: Part> Slots<P> {
             }
         });
         self.drops.push((TypeId::of::<K>(), slot));
+    }
+
+    pub fn drop_target(&mut self, aim: DropAim<P>, take: DropTake<P>) {
+        self.drop_targets.push((aim, take));
     }
 
     pub fn bar(&mut self, bar: Card<P>) {
