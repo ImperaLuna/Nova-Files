@@ -5,8 +5,8 @@ use nova_files_api::ListingId;
 
 use crate::crumbs::under_home;
 use crate::pick::typed::{self, HOME, Typed};
-use crate::text::{TextField, TextFieldEvent};
 use crate::window::MainWindow;
+use nova_files_shell::text::{TextField, TextFieldEvent};
 
 pub struct PathField {
     pub(crate) field: Entity<TextField>,

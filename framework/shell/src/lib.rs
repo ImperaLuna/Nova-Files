@@ -15,6 +15,7 @@ mod published;
 mod rules;
 mod scene;
 mod slot_view;
+pub mod text;
 pub mod theme;
 
 pub use command::{CommandSpec, WINDOW_KEYS};
@@ -36,3 +37,4 @@ pub use per_tab::{PerTab, TabId};
 pub use published::Published;
 pub use rules::{FolderName, FolderRules, RulesBook, Views};
 pub use scene::Scene;
+pub use text::{TextField, TextFieldEvent};

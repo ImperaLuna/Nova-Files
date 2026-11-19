@@ -11,7 +11,6 @@
 # - gpui_platform
 # - image
 # - log
-# - unicode-segmentation
 # - usvg
 #
 # Allowed workspace crates:
@@ -60,7 +59,6 @@ gpui_platform.workspace = true
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 # Grapheme boundaries, so the caret steps over a whole character; GPUI
 # already builds it.
-unicode-segmentation = "1.13.3"
 # Reads a theme icon's own size, so GPUI's SVG renderer draws it straight
 # at the row's size; GPUI already builds it.
 usvg = { version = "0.45.1", default-features = false }

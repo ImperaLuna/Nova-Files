@@ -23,8 +23,8 @@ use self::accept::Jump;
 pub use self::opening::foreign_parent;
 use crate::selecting::DOUBLE_CLICK;
 use crate::selection::Click;
-use crate::text::{TextField, TextFieldEvent};
 use crate::window::MainWindow;
+use nova_files_shell::text::{TextField, TextFieldEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
