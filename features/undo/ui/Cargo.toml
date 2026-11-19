@@ -1,0 +1,30 @@
+# nova-files-undo-ui
+#
+# Undo in the window: Ctrl+Z and the island's Undo take back the job or
+# change the shown note offers, else the last job that can be undone.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-undo-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-shell.workspace = true

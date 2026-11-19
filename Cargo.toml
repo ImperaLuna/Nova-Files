@@ -76,6 +76,7 @@ nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }
 nova-files-trash-ui = { path = "features/trash/ui" }
 nova-files-ui = { path = "legacy/ui" }
+nova-files-undo-ui = { path = "features/undo/ui" }
 
 # GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds fixes
 # on top of a Zed stable release (FIL-42, FIL-44, FIL-65, FIL-68, FIL-71, FIL-70,

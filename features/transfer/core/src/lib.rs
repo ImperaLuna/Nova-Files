@@ -7,6 +7,7 @@ mod dropped;
 mod kind;
 mod make;
 mod transfer;
+mod undo;
 
 pub use dropped::{answer as answer_drop_would, dropped};
 pub use kind::Transfers;

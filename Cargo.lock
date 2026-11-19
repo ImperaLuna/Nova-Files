@@ -3614,6 +3614,7 @@ dependencies = [
  "nova-files-trash-api",
  "nova-files-trash-ui",
  "nova-files-ui",
+ "nova-files-undo-ui",
  "zbus",
 ]
 
@@ -4257,6 +4258,15 @@ dependencies = [
  "nova-files-shell",
  "nova-files-thumbnails-ui",
  "usvg",
+]
+
+[[package]]
+name = "nova-files-undo-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-shell",
 ]
 
 [[package]]

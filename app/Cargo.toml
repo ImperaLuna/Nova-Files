@@ -29,6 +29,7 @@
 # - nova-files-transfer-ui
 # - nova-files-trash-ui
 # - nova-files-ui
+# - nova-files-undo-ui
 
 [package]
 name = "nova-files"
@@ -65,6 +66,7 @@ nova-files-thumbnails-ui.workspace = true
 nova-files-transfer-ui.workspace = true
 nova-files-trash-ui.workspace = true
 nova-files-ui.workspace = true
+nova-files-undo-ui.workspace = true
 
 [dev-dependencies]
 nova-files-folders-api.workspace = true
