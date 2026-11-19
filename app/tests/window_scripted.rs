@@ -24,14 +24,14 @@ use nova_files_api::{
 };
 use nova_files_look_api as look_api;
 use nova_files_places_api::{self as places_api, Bookmark, Place, PlaceKind};
-use nova_files_places_ui::TreePart;
+use nova_files_places_ui::{PlacesPart, TreePart};
 use nova_files_preview_ui::{PreviewPart, Previewed};
 use nova_files_settings_api::{
     self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
 };
 use nova_files_thumbnails_api::Event as ThumbnailsEvent;
 use nova_files_thumbnails_ui::ThumbnailsPart;
-use nova_files_ui::{Colors, MainWindow, WindowEvent};
+use nova_files_ui::{Colors, MainWindow};
 
 const SHOWN: &str = "/shown";
 const MISSING: &str = "/shown/missing";
@@ -536,29 +536,20 @@ fn new_places_and_pinned_folders_are_told(cx: &mut TestAppContext) {
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
-    let told = Rc::new(Cell::new(0));
-    let _watch = cx.update(|_, cx| {
-        let told = Rc::clone(&told);
-        cx.subscribe(&view, move |_, event: &WindowEvent, _| {
-            if *event == WindowEvent::Places {
-                told.set(told.get() + 1);
-            }
-        })
-    });
+    let places = view.read_with(cx, |view, _| view.part::<PlacesPart>().unwrap());
 
     core.send(places_api::Event::Places(vec![Place {
         kind: PlaceKind::Home,
         path: PathBuf::from(SHOWN),
     }]));
     cx.run_until_parked();
-    assert_eq!(told.get(), 1);
+    places.read_with(cx, |part, _| assert_eq!(part.known().places.len(), 1));
     core.send(places_api::Event::Bookmarks(Arc::from([Bookmark {
         path: PathBuf::from(OTHER),
         label: None,
     }])));
     cx.run_until_parked();
-    assert_eq!(told.get(), 2);
-    view.read_with(cx, |view, _| assert_eq!(view.pinned().len(), 1));
+    places.read_with(cx, |part, _| assert_eq!(part.known().pinned.len(), 1));
 }
 
 #[gpui::test]

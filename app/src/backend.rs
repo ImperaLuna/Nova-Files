@@ -1,7 +1,6 @@
 mod jobs;
 mod ops;
 mod run;
-mod trash;
 
 use std::io;
 use std::sync::Arc;
@@ -10,9 +9,10 @@ use std::time::Duration;
 
 use nova_files_api::{ClientId, Connector};
 use nova_files_archives_core::inside;
-use nova_files_entries_core::{list, memory, order};
+use nova_files_entries_core::memory;
 
 use nova_files_search_core::Searcher;
+use nova_files_trash_core::Trashes;
 
 pub use memory::set_give_back;
 pub use nova_files_archives_core::{
@@ -77,7 +77,7 @@ pub fn spawn_with_archiver(
     ));
     let jobs = ops::jobs(
         home.as_ref().map(|home| home.state.as_path()),
-        trash::trashes(home.as_ref()),
+        Trashes::of_home(home.as_ref()),
         connector.clone(),
         archiver,
     );

@@ -14,6 +14,8 @@ pub use sizes::{add_folder_sizes, folder_size};
 
 use std::path::{Path, PathBuf};
 
+use nova_files_disk::home::Home;
+
 pub const HOME_TRASH: &str = "Trash";
 
 #[derive(Debug, Clone, Default)]
@@ -28,6 +30,13 @@ impl Trashes {
             home: data.map(|data| data.join(HOME_TRASH)),
             drives,
         }
+    }
+
+    pub fn of_home(home: Option<&Home>) -> Self {
+        Self::of(
+            home.map(|home| home.data.as_path()),
+            home.is_some_and(|home| home.drive_trashes),
+        )
     }
 
     pub fn files(&self) -> Option<PathBuf> {

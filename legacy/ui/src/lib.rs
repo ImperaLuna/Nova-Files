@@ -63,7 +63,6 @@ pub fn sent_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Command>(),
         MessageType::of::<nova_files_open_api::Command>(),
-        MessageType::of::<nova_files_properties_api::Command>(),
         MessageType::of::<nova_files_settings_api::Command>(),
     ]
 }
@@ -72,7 +71,6 @@ pub fn taken_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
         MessageType::of::<nova_files_open_api::Event>(),
-        MessageType::of::<nova_files_properties_api::Event>(),
     ]
 }
 

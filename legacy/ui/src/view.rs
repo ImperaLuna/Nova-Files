@@ -29,7 +29,7 @@ use crate::commands::{
     SelectRight, SelectUp, ToggleSelected,
 };
 use crate::commands::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
-use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, ShowProperties, TrashSelected};
+use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, TrashSelected};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
 use crate::window::MainWindow;
@@ -136,7 +136,6 @@ impl MainWindow {
         .on_action(cx.listener(|this, _: &CloseTab, _, cx| this.close_current_tab(cx)))
         .on_action(cx.listener(|this, _: &NextTab, _, cx| this.next_tab(cx)))
         .on_action(cx.listener(|this, _: &PreviousTab, _, cx| this.previous_tab(cx)))
-        .on_action(cx.listener(|this, _: &ShowProperties, _, cx| this.show_properties(cx)))
     }
 
     fn file_keys(root: Div, cx: &Context<Self>) -> Div {

@@ -26,6 +26,7 @@ pub struct Over {
     pub(crate) focus_to: Option<FocusTo>,
     pub(crate) reveal: Option<PathBuf>,
     laid: Option<LaidOver>,
+    pub(crate) from_has_folders: bool,
 }
 
 impl Over {
@@ -92,6 +93,9 @@ impl MainWindow {
             .as_ref()
             .map(|connection| connection.send_envelope(ask));
         if matches!(sent, Some(Ok(()))) {
+            if !self.searching() {
+                self.search.from_has_folders = self.asked.is_none() && self.has_folders();
+            }
             self.asked = None;
             self.search.asked = Some(id);
             self.search.from = Some(from);

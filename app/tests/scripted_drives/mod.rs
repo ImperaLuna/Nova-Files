@@ -6,6 +6,8 @@ use nova_files_drives_api::{
     Event as DrivesEvent, Volume, VolumeId,
 };
 
+use nova_files_drives_ui::DrivesPart;
+
 use super::*;
 
 const STICK: &str = "/media/stick";
@@ -21,6 +23,10 @@ fn volume(id: &str, mount_point: Option<&str>) -> Volume {
         device: OsString::from(format!("/dev/{id}")),
         read_only: false,
     }
+}
+
+fn drives_part(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Entity<DrivesPart> {
+    view.read_with(cx, |view, _| view.part::<DrivesPart>().unwrap())
 }
 
 fn drives(volumes: Vec<Volume>) -> DrivesEvent {
@@ -54,10 +60,10 @@ fn drive_actions(core: &mut Core) -> Vec<DriveAction> {
 #[gpui::test]
 fn the_drives_the_core_lists_show_with_no_space_until_told(cx: &mut TestAppContext) {
     let (view, cx, _core) = with_drives(cx, vec![volume("stick", None)]);
-    view.read_with(cx, |view, _| {
-        let names: Vec<_> = view.shown_drives().into_iter().map(|d| d.name).collect();
+    drives_part(&view, cx).read_with(cx, |part, _| {
+        let names: Vec<_> = part.shown().into_iter().map(|d| d.name).collect();
         assert_eq!(names, ["System", "stick"]);
-        assert_eq!(view.disk_space(Path::new("/")), None);
+        assert_eq!(part.disk_space(Path::new("/")), None);
     });
 }
 
@@ -75,18 +81,19 @@ fn the_space_the_core_tells_is_kept_by_folder(cx: &mut TestAppContext) {
         },
     ]));
     cx.run_until_parked();
-    view.read_with(cx, |view, _| {
-        assert_eq!(view.disk_space(Path::new("/")), Some(space));
-        assert_eq!(view.disk_space(Path::new(STICK)), None);
+    drives_part(&view, cx).read_with(cx, |part, _| {
+        assert_eq!(part.disk_space(Path::new("/")), Some(space));
+        assert_eq!(part.disk_space(Path::new(STICK)), None);
     });
 }
 
 #[gpui::test]
 fn a_volume_clicked_is_mounted_then_opened(cx: &mut TestAppContext) {
     let (view, cx, mut core) = with_drives(cx, vec![volume("stick", None), volume("card", None)]);
-    let stick = view.read_with(cx, |view, _| view.shown_drives()[1].clone());
-    view.update(cx, |view, cx| view.open_drive(stick.clone(), cx));
-    view.update(cx, |view, cx| view.open_drive(stick, cx));
+    let part = drives_part(&view, cx);
+    let stick = part.read_with(cx, |part, _| part.shown()[1].clone());
+    part.update(cx, |part, cx| part.open_drive(stick.clone(), cx));
+    part.update(cx, |part, cx| part.open_drive(stick, cx));
     let stick_id = VolumeId("stick".to_owned());
     assert_eq!(
         drive_actions(&mut core),
@@ -144,8 +151,9 @@ fn a_volume_still_mounted_keeps_the_window_in_it(cx: &mut TestAppContext) {
 #[gpui::test]
 fn going_elsewhere_while_a_volume_mounts_keeps_the_window_there(cx: &mut TestAppContext) {
     let (view, cx, mut core) = with_drives(cx, vec![volume("stick", None)]);
-    let stick = view.read_with(cx, |view, _| view.shown_drives()[1].clone());
-    view.update(cx, |view, cx| view.open_drive(stick, cx));
+    let part = drives_part(&view, cx);
+    let stick = part.read_with(cx, |part, _| part.shown()[1].clone());
+    part.update(cx, |part, cx| part.open_drive(stick, cx));
     view.update(cx, |view, _| view.open(Path::new(OTHER)));
     assert_eq!(
         core.next_listing().map(|(_, path)| path),

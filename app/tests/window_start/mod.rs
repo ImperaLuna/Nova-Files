@@ -161,7 +161,7 @@ async fn a_drive_card_shows_how_full_it_is_and_opens_the_drive(cx: &mut TestAppC
     let tree = TempFolder::tree("start-drives");
     let (view, cx, _connector) = start_window(cx, tree.path());
     let root = Path::new("/");
-    view.condition::<WindowEvent>(cx, |view, _| view.disk_space(root).is_some())
+    view.condition::<WindowEvent>(cx, |view, cx| disk_space_known(view, root, cx))
         .await;
     cx.run_until_parked();
     let card = cx.debug_bounds("drive-card-0").unwrap();

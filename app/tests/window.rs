@@ -29,8 +29,10 @@ use std::time::Duration;
 
 use gpui::{App, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext, px};
 use nova_files_api::{Color, EntryId, Fit};
+use nova_files_drives_ui::DrivesPart;
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
-use nova_files_places_ui::TreePart;
+use nova_files_places_api::Bookmark;
+use nova_files_places_ui::{PlacesPart, TreePart};
 use nova_files_preview_ui::{PreviewPart, Previewed};
 use nova_files_properties_ui::{PropertiesPage, PropertiesPart};
 use nova_files_settings_api::{Settings, Thumbnails};
@@ -39,6 +41,22 @@ use nova_files_trash_ui::TrashPart;
 use nova_files_ui::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent};
 
 use common::{TempFolder, Watchdog, click_with, double_click};
+
+fn disk_space_known(view: &MainWindow, folder: &Path, cx: &App) -> bool {
+    view.part::<DrivesPart>()
+        .is_some_and(|part| part.read(cx).disk_space(folder).is_some())
+}
+
+fn places_known(view: &MainWindow, cx: &App) -> bool {
+    view.part::<PlacesPart>()
+        .is_some_and(|part| !part.read(cx).known().places.is_empty())
+}
+
+fn pinned(view: &MainWindow, cx: &App) -> Vec<Bookmark> {
+    view.part::<PlacesPart>()
+        .map(|part| part.read(cx).known().pinned.to_vec())
+        .unwrap_or_default()
+}
 
 fn search_query(view: &MainWindow, cx: &App) -> String {
     view.search_part()
@@ -270,8 +288,7 @@ async fn clicking_a_place_opens_it(cx: &mut TestAppContext) {
     let home = tree.path().join("Projects");
     let (view, cx) = window_on(cx, tree.path(), &home);
     wait_for_folder(&view, cx, tree.path()).await;
-    view.condition::<WindowEvent>(cx, |view, _| !view.places().is_empty())
-        .await;
+    view.condition::<WindowEvent>(cx, places_known).await;
 
     click(cx, "place-0");
 
@@ -495,6 +512,11 @@ async fn a_hand_edit_to_the_settings_file_reaches_the_window(cx: &mut TestAppCon
             .is_some_and(|settings| settings.thumbnails == Thumbnails::Hidden)
     })
     .await;
+}
+
+fn show_properties(view: &Entity<MainWindow>, cx: &mut VisualTestContext) {
+    let part = view.read_with(cx, |view, _| view.part::<PropertiesPart>().unwrap());
+    part.update(cx, PropertiesPart::show_selected);
 }
 
 fn props<'a>(view: &MainWindow, cx: &'a App) -> &'a PropertiesPart {
