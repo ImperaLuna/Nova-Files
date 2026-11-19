@@ -18,6 +18,7 @@
 # - nova-files-delete-ui
 # - nova-files-drives-api
 # - nova-files-drives-ui
+# - nova-files-folders-ui
 # - nova-files-index
 # - nova-files-look-ui
 # - nova-files-open-ui
@@ -64,6 +65,7 @@ nova-files-dbus.workspace = true
 nova-files-delete-ui.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-drives-ui.workspace = true
+nova-files-folders-ui.workspace = true
 nova-files-look-ui.workspace = true
 nova-files-open-ui.workspace = true
 nova-files-picker-api.workspace = true

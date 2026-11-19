@@ -46,6 +46,7 @@ impl Part for Namer {
 fn named(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext) {
     UNDONE.set(0);
     let mut parts = Parts::default();
+    parts.add::<nova_files_folders_ui::FoldersPart>();
     parts.add::<Namer>();
     cx.update(|cx| cx.set_global(parts));
     let (view, cx, mut core) = window_with_parts(cx);

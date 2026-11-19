@@ -1,6 +1,6 @@
 use gpui::{
-    Bounds, ClickEvent, Context, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    Point, Window, point, px,
+    App, Bounds, ClickEvent, Context, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    Pixels, Point, Window, point, px,
 };
 use nova_files_api::{EntryId, ListingId};
 
@@ -19,8 +19,8 @@ pub struct Band {
 }
 
 impl MainWindow {
-    pub(crate) fn band_pressed(&mut self, event: &MouseDownEvent, on_name: bool) {
-        let boxes = event.button == MouseButton::Left && !on_name && !self.showing_gallery();
+    pub(crate) fn band_pressed(&mut self, event: &MouseDownEvent, on_name: bool, cx: &App) {
+        let boxes = event.button == MouseButton::Left && !on_name && !self.showing_gallery(cx);
         self.band = boxes.then(|| Band {
             from: self.in_content(event.position),
             to: event.position,
@@ -65,7 +65,7 @@ impl MainWindow {
         }
         self.band = None;
         cx.notify();
-        if !dragging && !add && self.row_at(event.position).is_none() {
+        if !dragging && !add && self.row_at(event.position, cx).is_none() {
             self.clear_selection(cx);
         }
     }
@@ -77,7 +77,7 @@ impl MainWindow {
         let Some(listing) = self.listing_id() else {
             return;
         };
-        let grid = self.grid();
+        let grid = self.grid(cx);
         let len = self.entries_len();
         let lines = rows_touched(from.y, to.y, self.rows_height(), grid.lines(len));
         let columns = (grid.column_at(from.x), grid.column_at(to.x));
@@ -143,9 +143,9 @@ impl MainWindow {
         ))
     }
 
-    fn row_at(&self, position: Point<Pixels>) -> Option<usize> {
+    fn row_at(&self, position: Point<Pixels>, cx: &App) -> Option<usize> {
         let at = self.in_content(position);
-        let grid = self.grid();
+        let grid = self.grid(cx);
         let len = self.entries_len();
         let line = rows_touched(at.y, at.y, self.rows_height(), grid.lines(len))?.0;
         let entry = usize::try_from(line)

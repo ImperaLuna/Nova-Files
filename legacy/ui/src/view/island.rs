@@ -78,7 +78,7 @@ impl MainWindow {
         } else {
             file_buttons()
         };
-        placed.extend(self.parts.menu(MenuAt::Island, &self.scene(), cx));
+        placed.extend(self.parts.menu(MenuAt::Island, &self.scene(cx), cx));
         parts.extend(arrange(placed).into_iter().flatten().map(|item| {
             let action = item.run.action();
             if item.icon_only {

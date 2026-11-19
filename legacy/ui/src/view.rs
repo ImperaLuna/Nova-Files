@@ -43,8 +43,8 @@ impl Render for MainWindow {
         let viewport = window.viewport_size();
         self.keep_gallery(window, cx);
         let room = nova_files_preview_ui::room(viewport.width, viewport.height);
-        let fits = if self.showing_gallery() && !self.previewing(cx) {
-            self.stage_room()
+        let fits = if self.showing_gallery(cx) && !self.previewing(cx) {
+            self.stage_room(cx)
         } else {
             room
         };
@@ -262,12 +262,12 @@ impl MainWindow {
             this.move_cursor(Move::Last, true, cx);
         }))
         .on_action(cx.listener(|this, _: &SelectLeft, _, cx| {
-            if this.showing_icons() {
+            if this.showing_icons(cx) {
                 this.move_cursor(Move::Left, true, cx);
             }
         }))
         .on_action(cx.listener(|this, _: &SelectRight, _, cx| {
-            if this.showing_icons() {
+            if this.showing_icons(cx) {
                 this.move_cursor(Move::Right, true, cx);
             }
         }))
@@ -280,12 +280,12 @@ impl MainWindow {
 
     fn preview_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
-            if this.showing_icons() {
+            if this.showing_icons(cx) {
                 this.move_cursor(Move::Left, false, cx);
             }
         }))
         .on_action(cx.listener(|this, _: &PreviewNext, _, cx| {
-            if this.showing_icons() {
+            if this.showing_icons(cx) {
                 this.move_cursor(Move::Right, false, cx);
             }
         }))

@@ -1,29 +1,26 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use gpui::{Context, Pixels, ScrollDelta, ScrollStrategy, px};
-use nova_files_folders_api::{Command, FolderView, FolderViews, IconSize, ViewMode};
-use nova_files_places_api::PlaceKind;
+use gpui::{App, Context, Entity, ScrollDelta, ScrollStrategy};
+use nova_files_folders_api::{FolderView, IconSize, ViewMode};
+use nova_files_folders_ui::{FoldersPart, Grid};
 use nova_files_shell::Views;
 
 use super::MainWindow;
-use crate::grid::Grid;
-
-const ZOOM_STEP: Pixels = px(40.0);
 
 #[derive(Debug, Default)]
 pub struct Sizing {
-    pub(super) list_width: Pixels,
-    zoom_scroll: Pixels,
+    pub(super) list_width: gpui::Pixels,
     pub(super) thumbnails_side: u32,
-    pub(super) gallery: super::gallery::GalleryBounds,
+    pub(super) gallery: nova_files_folders_ui::GalleryBounds,
 }
 
 const STRIP_ICONS: IconSize = IconSize::Small;
 
-const PICTURE_PLACES: [PlaceKind; 2] = [PlaceKind::Pictures, PlaceKind::Videos];
-
 impl MainWindow {
+    fn folders(&self) -> Option<Entity<FoldersPart>> {
+        self.part::<FoldersPart>()
+    }
+
     fn details_only(&self) -> bool {
         self.showing_found()
             || self.folder_rules().views == Views::DetailsOnly
@@ -32,69 +29,54 @@ impl MainWindow {
                 .is_some_and(|page| page.views() == Views::DetailsOnly)
     }
 
-    pub fn folder_view(&self) -> FolderView {
+    pub fn folder_view(&self, cx: &App) -> FolderView {
         if self.details_only() {
             return FolderView::default();
         }
+        let folders = self.folders();
         self.folder()
-            .map_or_else(FolderView::default, |folder| self.view_of(folder))
+            .zip(folders.as_ref())
+            .map_or_else(FolderView::default, |(folder, folders)| {
+                folders.read(cx).view_of(folder, cx)
+            })
     }
 
-    pub fn showing_icons(&self) -> bool {
-        self.folder_view().mode == ViewMode::Icons
+    pub fn showing_icons(&self, cx: &App) -> bool {
+        self.folder_view(cx).mode == ViewMode::Icons
     }
 
-    pub fn grid(&self) -> Grid {
+    pub fn grid(&self, cx: &App) -> Grid {
         let width = self.sizing.list_width;
-        match self.folder_view() {
+        match self.folder_view(cx) {
             FolderView {
                 mode: ViewMode::Icons,
                 icons,
             } => Grid::icons(icons, width),
-            _ if self.showing_gallery() => Grid::strip(STRIP_ICONS),
+            _ if self.showing_gallery(cx) => Grid::strip(STRIP_ICONS),
             _ => Grid::details(width),
         }
     }
 
-    pub fn showing_details(&self) -> bool {
-        !self.showing_icons() && !self.showing_gallery()
+    pub fn showing_details(&self, cx: &App) -> bool {
+        !self.showing_icons(cx) && !self.showing_gallery(cx)
     }
 
-    pub(super) fn icon_slot(&self) -> Pixels {
-        self.grid().icon
+    pub(super) fn icon_slot(&self, cx: &App) -> gpui::Pixels {
+        self.grid(cx).icon
     }
 
-    pub(crate) fn scroll_to_entry(&self, index: usize) {
-        let line = self.grid().line_of(index);
+    pub(crate) fn scroll_to_entry(&self, index: usize, cx: &App) {
+        let line = self.grid(cx).line_of(index);
         self.scroll.scroll_to_item(line, ScrollStrategy::Nearest);
     }
 
-    fn view_of(&self, folder: &Path) -> FolderView {
-        if let Some(view) = self.folder_views.get(folder) {
-            return *view;
-        }
-        let pictures = self
-            .places
-            .iter()
-            .any(|place| PICTURE_PLACES.contains(&place.kind) && folder.starts_with(&place.path));
-        let mode = if pictures {
-            ViewMode::Icons
-        } else {
-            ViewMode::Details
-        };
-        FolderView {
-            mode,
-            ..FolderView::default()
-        }
-    }
-
-    pub(crate) fn show_as(&mut self, mode: ViewMode, cx: &mut Context<Self>) {
-        let view = self.folder_view();
+    pub(crate) fn show_as(&self, mode: ViewMode, cx: &mut Context<Self>) {
+        let view = self.folder_view(cx);
         self.change_view(FolderView { mode, ..view }, cx);
     }
 
-    pub(crate) fn zoom_icons(&mut self, bigger: bool, cx: &mut Context<Self>) {
-        let view = self.folder_view();
+    pub(crate) fn zoom_icons(&self, bigger: bool, cx: &mut Context<Self>) {
+        let view = self.folder_view(cx);
         if view.mode != ViewMode::Icons {
             return;
         }
@@ -106,50 +88,34 @@ impl MainWindow {
         self.change_view(FolderView { icons, ..view }, cx);
     }
 
-    pub(crate) fn zoom_scrolled(&mut self, delta: ScrollDelta, cx: &mut Context<Self>) -> bool {
-        if !self.showing_icons() {
+    pub(crate) fn zoom_scrolled(&self, delta: ScrollDelta, cx: &mut Context<Self>) -> bool {
+        if !self.showing_icons(cx) {
             return false;
         }
-        self.sizing.zoom_scroll += delta.pixel_delta(ZOOM_STEP).y;
-        let steps = (self.sizing.zoom_scroll / ZOOM_STEP).trunc();
-        if steps != 0.0 {
-            self.sizing.zoom_scroll -= ZOOM_STEP * steps;
-            let view = self.folder_view();
-            #[expect(clippy::cast_possible_truncation, reason = "a few steps of a wheel")]
-            let icons = view.icons.stepped(steps as isize);
+        let Some(folders) = self.folders() else {
+            return true;
+        };
+        let steps = folders.update(cx, |folders, _| folders.zoom_steps(delta));
+        if steps != 0 {
+            let view = self.folder_view(cx);
+            let icons = view.icons.stepped(steps);
             self.change_view(FolderView { icons, ..view }, cx);
         }
         true
     }
 
-    fn change_view(&mut self, view: FolderView, cx: &mut Context<Self>) {
-        if self.details_only() || view == self.folder_view() {
+    fn change_view(&self, view: FolderView, cx: &mut Context<Self>) {
+        if self.details_only() || view == self.folder_view(cx) {
             return;
         }
-        let Some(folder) = self.folder().map(Path::to_path_buf) else {
+        let (Some(folder), Some(folders)) = (self.folder().map(Path::to_path_buf), self.folders())
+        else {
             return;
         };
-        self.folder_views.insert(folder.clone(), view);
-        self.pending_views.insert(folder.clone(), view);
+        folders.update(cx, |folders, cx| folders.set_view(folder, view, cx));
         if let Some(cursor) = self.cursor() {
-            self.scroll_to_entry(cursor);
+            self.scroll_to_entry(cursor, cx);
         }
-        if let Some(connection) = &self.connection {
-            connection.send(Command::SetView { folder, view }).ok();
-        }
-        cx.notify();
-    }
-
-    pub(super) fn folder_views_arrived(&mut self, views: &FolderViews, cx: &mut Context<Self>) {
-        let mut known = views.iter().rev().cloned().collect::<HashMap<PathBuf, _>>();
-        self.pending_views
-            .retain(|folder, view| known.get(folder) != Some(view));
-        known.extend(
-            self.pending_views
-                .iter()
-                .map(|(folder, view)| (folder.clone(), *view)),
-        );
-        self.folder_views = known;
         cx.notify();
     }
 }
