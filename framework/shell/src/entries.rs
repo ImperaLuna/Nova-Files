@@ -29,6 +29,7 @@ pub struct Entries {
     drawn: Range<usize>,
     failed: Option<ListingId>,
     scale_factor: f32,
+    thumbnail_side: u32,
 }
 
 impl EventEmitter<EntriesAsked> for Entries {}
@@ -103,6 +104,14 @@ impl Entries {
 
     pub const fn set_scale_factor(&mut self, scale_factor: f32) {
         self.scale_factor = scale_factor;
+    }
+
+    pub const fn thumbnail_side(&self) -> u32 {
+        self.thumbnail_side
+    }
+
+    pub const fn set_thumbnail_side(&mut self, side: u32) {
+        self.thumbnail_side = side;
     }
 
     pub const fn set_drawn(&mut self, drawn: Range<usize>) {

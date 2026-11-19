@@ -10,6 +10,7 @@ use super::super::*;
 thread_local! {
     static DRAWN: RefCell<Vec<Range<usize>>> = const { RefCell::new(Vec::new()) };
     static SCALES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static SIDES: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
 }
 
 struct Watcher;
@@ -23,11 +24,12 @@ impl Part for Watcher {
         slots
             .rows_drawn(|_, _: ListingId, rows, _| DRAWN.with_borrow_mut(|drawn| drawn.push(rows)));
         slots.rescaled(|_, scale, _| SCALES.with_borrow_mut(|scales| scales.push(scale)));
+        slots.thumbnail_side(|_, side, _| SIDES.with_borrow_mut(|sides| sides.push(side)));
     }
 }
 
 #[gpui::test]
-fn a_part_hears_the_rows_drawn_and_the_scale_once(cx: &mut TestAppContext) {
+fn a_part_hears_the_rows_drawn_the_scale_and_the_thumbnail_side(cx: &mut TestAppContext) {
     let mut parts = Parts::default();
     parts.add::<Watcher>();
     cx.update(|cx| cx.set_global(parts));
@@ -44,6 +46,11 @@ fn a_part_hears_the_rows_drawn_and_the_scale_once(cx: &mut TestAppContext) {
         DRAWN.with_borrow(|drawn| drawn.last().cloned()),
         Some(0..rows)
     );
-    let read = view.read_with(cx, |view, cx| view.host().entries.read(cx).scale_factor());
+    let (read, side) = view.read_with(cx, |view, cx| {
+        let entries = view.host().entries.read(cx);
+        (entries.scale_factor(), entries.thumbnail_side())
+    });
     assert_eq!(read.to_bits(), scale.to_bits());
+    assert!(side > 0);
+    assert_eq!(SIDES.with_borrow(Clone::clone), [side]);
 }

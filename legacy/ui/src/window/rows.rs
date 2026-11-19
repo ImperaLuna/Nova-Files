@@ -232,6 +232,10 @@ impl MainWindow {
             return;
         }
         self.sizing.thumbnails_side = side;
+        self.host
+            .entries
+            .update(cx, |entries, _| entries.set_thumbnail_side(side));
+        self.parts.thumbnail_side(side, cx);
         release(self.thumbnails.take_all(), Some(window), cx);
         self.forget_rows();
     }

@@ -63,6 +63,7 @@ pub type Dims<P> = fn(&P, &Entry, &App) -> bool;
 pub type Focus<P> = fn(&P, &App) -> Option<FocusHandle>;
 pub type RowsDrawn<P> = fn(&mut P, ListingId, Range<usize>, &mut Context<P>);
 pub type Rescaled<P> = fn(&mut P, f32, &mut Context<P>);
+pub type ThumbnailSide<P> = fn(&mut P, u32, &mut Context<P>);
 pub type Used<P> = fn(&mut P, &Path, &mut Context<P>);
 pub type PageTurn<P> = Rc<dyn Fn(&mut P, &PageRef, TabId, &mut Context<P>)>;
 pub type Refused<P> = fn(&mut P, ListingId, &Path, &mut Context<P>);
@@ -129,6 +130,7 @@ pub struct Slots<P> {
     pub(crate) used: Vec<Used<P>>,
     pub(crate) rows_drawn: Vec<RowsDrawn<P>>,
     pub(crate) rescaled: Vec<Rescaled<P>>,
+    pub(crate) thumbnail_sides: Vec<ThumbnailSide<P>>,
     pub(crate) pages_shown: Vec<PageTurn<P>>,
     pub(crate) pages_left: Vec<PageTurn<P>>,
 }
@@ -171,6 +173,7 @@ impl<P> Default for Slots<P> {
             used: Vec::new(),
             rows_drawn: Vec::new(),
             rescaled: Vec::new(),
+            thumbnail_sides: Vec::new(),
             pages_shown: Vec::new(),
             pages_left: Vec::new(),
         }
@@ -357,6 +360,10 @@ impl<P: Part> Slots<P> {
 
     pub fn rescaled(&mut self, rescaled: Rescaled<P>) {
         self.rescaled.push(rescaled);
+    }
+
+    pub fn thumbnail_side(&mut self, changed: ThumbnailSide<P>) {
+        self.thumbnail_sides.push(changed);
     }
 
     pub fn page_shown<K: PageKind>(&mut self, shown: fn(&mut P, &K, TabId, &mut Context<P>)) {

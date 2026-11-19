@@ -272,6 +272,12 @@ impl WindowParts {
         }
     }
 
+    pub fn thumbnail_side(&self, side: u32, cx: &mut App) {
+        for part in &self.opened {
+            part.thumbnail_side(side, cx);
+        }
+    }
+
     pub fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App) {
         for part in &self.opened {
             part.page_turned(page, tab, turn, cx);
