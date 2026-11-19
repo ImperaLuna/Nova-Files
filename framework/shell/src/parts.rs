@@ -1,5 +1,6 @@
 use std::any::{Any, TypeId};
 use std::collections::HashSet;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -90,6 +91,8 @@ trait OpenPart {
     fn focus(&self, cx: &App) -> Option<FocusHandle>;
     fn refused(&self, id: ListingId, path: &Path, cx: &mut App);
     fn used(&self, folder: &Path, cx: &mut App);
+    fn rows_drawn(&self, id: ListingId, rows: &Range<usize>, cx: &mut App);
+    fn rescaled(&self, scale_factor: f32, cx: &mut App);
     fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App);
 }
 
@@ -439,6 +442,28 @@ impl<P: Part> OpenPart for Opened<P> {
         self.entity.update(cx, |part, cx| {
             for used in &self.slots.used {
                 used(part, folder, cx);
+            }
+        });
+    }
+
+    fn rows_drawn(&self, id: ListingId, rows: &Range<usize>, cx: &mut App) {
+        if self.slots.rows_drawn.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for drawn in &self.slots.rows_drawn {
+                drawn(part, id, rows.clone(), cx);
+            }
+        });
+    }
+
+    fn rescaled(&self, scale_factor: f32, cx: &mut App) {
+        if self.slots.rescaled.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for rescaled in &self.slots.rescaled {
+                rescaled(part, scale_factor, cx);
             }
         });
     }

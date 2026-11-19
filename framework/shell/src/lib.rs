@@ -40,7 +40,8 @@ pub use opening::Opening;
 pub use part::{
     Applies, Busy, Card, CardRank, Cell, Closing, Column, Columns, Dims, DropAim, DropOver,
     DropSlot, DropTake, EmptyNote, Focus, HeadButton, Items, Listed, NameCell, NameField, Opens,
-    Part, Refused, RowIcon, RowMenu, Rows, Selectable, Several, Slots, Stage, Typed, Watch,
+    Part, Refused, Rescaled, RowIcon, RowMenu, Rows, RowsDrawn, Selectable, Several, Slots, Stage,
+    Typed, Used, Watch,
 };
 pub use parts::{Parts, ShownColumn, Turn, WindowParts};
 pub use per_tab::{PerTab, TabId};

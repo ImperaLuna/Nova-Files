@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -256,6 +257,18 @@ impl WindowParts {
     pub fn used(&self, folder: &Path, cx: &mut App) {
         for part in &self.opened {
             part.used(folder, cx);
+        }
+    }
+
+    pub fn rows_drawn(&self, id: ListingId, rows: &Range<usize>, cx: &mut App) {
+        for part in &self.opened {
+            part.rows_drawn(id, rows, cx);
+        }
+    }
+
+    pub fn rescaled(&self, scale_factor: f32, cx: &mut App) {
+        for part in &self.opened {
+            part.rescaled(scale_factor, cx);
         }
     }
 

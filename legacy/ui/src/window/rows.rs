@@ -201,6 +201,7 @@ impl MainWindow {
             connection.send(command).ok();
         }
         release(self.thumbnails.keep_rows(&wanted), Some(window), cx);
+        self.parts.rows_drawn(listing.id, &wanted, cx);
         self.rows_wanted = wanted;
     }
 
@@ -210,6 +211,12 @@ impl MainWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.host.entries.read(cx).scale_factor().to_bits() != scale_factor.to_bits() {
+            self.host
+                .entries
+                .update(cx, |entries, _| entries.set_scale_factor(scale_factor));
+            self.parts.rescaled(scale_factor, cx);
+        }
         self.scale_factor = scale_factor;
         if let Some(gone) = self.theme_icons.resize(self.icon_side()) {
             release(gone, Some(window), cx);

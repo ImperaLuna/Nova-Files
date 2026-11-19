@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -60,6 +61,8 @@ pub type Selectable<P> = fn(&P, &Entry, &App) -> bool;
 pub type Several<P> = fn(&P, &App) -> bool;
 pub type Dims<P> = fn(&P, &Entry, &App) -> bool;
 pub type Focus<P> = fn(&P, &App) -> Option<FocusHandle>;
+pub type RowsDrawn<P> = fn(&mut P, ListingId, Range<usize>, &mut Context<P>);
+pub type Rescaled<P> = fn(&mut P, f32, &mut Context<P>);
 pub type Used<P> = fn(&mut P, &Path, &mut Context<P>);
 pub type PageTurn<P> = Rc<dyn Fn(&mut P, &PageRef, TabId, &mut Context<P>)>;
 pub type Refused<P> = fn(&mut P, ListingId, &Path, &mut Context<P>);
@@ -124,6 +127,8 @@ pub struct Slots<P> {
     pub(crate) focus: Vec<Focus<P>>,
     pub(crate) refused: Vec<Refused<P>>,
     pub(crate) used: Vec<Used<P>>,
+    pub(crate) rows_drawn: Vec<RowsDrawn<P>>,
+    pub(crate) rescaled: Vec<Rescaled<P>>,
     pub(crate) pages_shown: Vec<PageTurn<P>>,
     pub(crate) pages_left: Vec<PageTurn<P>>,
 }
@@ -164,6 +169,8 @@ impl<P> Default for Slots<P> {
             focus: Vec::new(),
             refused: Vec::new(),
             used: Vec::new(),
+            rows_drawn: Vec::new(),
+            rescaled: Vec::new(),
             pages_shown: Vec::new(),
             pages_left: Vec::new(),
         }
@@ -342,6 +349,14 @@ impl<P: Part> Slots<P> {
 
     pub fn used(&mut self, used: Used<P>) {
         self.used.push(used);
+    }
+
+    pub fn rows_drawn(&mut self, drawn: RowsDrawn<P>) {
+        self.rows_drawn.push(drawn);
+    }
+
+    pub fn rescaled(&mut self, rescaled: Rescaled<P>) {
+        self.rescaled.push(rescaled);
     }
 
     pub fn page_shown<K: PageKind>(&mut self, shown: fn(&mut P, &K, TabId, &mut Context<P>)) {
