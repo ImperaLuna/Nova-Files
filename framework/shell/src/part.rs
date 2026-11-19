@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, Modifiers,
+    Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _, Modifiers,
     SharedString, Window,
 };
-use nova_files_api::{Entry, Event, Listing};
+use nova_files_api::{Entry, Event, Listing, ListingId};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
@@ -35,13 +35,18 @@ pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Closing<P> = fn(&mut P, &mut Context<P>);
-pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
+pub type Listed<P> = fn(&mut P, &Listing, bool, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
 pub type DropAim<P> = fn(&P, &Location, &[PathBuf], Modifiers, &App) -> Option<SharedString>;
 pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<RowItem>;
 pub type Typed<P> = fn(&mut P, &Jump, &Scene, &mut Context<P>) -> bool;
 pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
+pub type Selectable<P> = fn(&P, &Entry, &App) -> bool;
+pub type Several<P> = fn(&P, &App) -> bool;
+pub type Dims<P> = fn(&P, &Entry, &App) -> bool;
+pub type Focus<P> = fn(&P, &App) -> Option<FocusHandle>;
+pub type Refused<P> = fn(&mut P, ListingId, &Path, &mut Context<P>);
 
 pub struct Column<P> {
     pub head: SharedString,
@@ -84,6 +89,11 @@ pub struct Slots<P> {
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
     pub(crate) closing: Vec<Closing<P>>,
+    pub(crate) selectable: Vec<Selectable<P>>,
+    pub(crate) several: Vec<Several<P>>,
+    pub(crate) dims: Vec<Dims<P>>,
+    pub(crate) focus: Vec<Focus<P>>,
+    pub(crate) refused: Vec<Refused<P>>,
 }
 
 impl<P> Default for Slots<P> {
@@ -112,6 +122,11 @@ impl<P> Default for Slots<P> {
             opens: Vec::new(),
             typed: Vec::new(),
             closing: Vec::new(),
+            selectable: Vec::new(),
+            several: Vec::new(),
+            dims: Vec::new(),
+            focus: Vec::new(),
+            refused: Vec::new(),
         }
     }
 }
@@ -242,6 +257,26 @@ impl<P: Part> Slots<P> {
 
     pub fn closing(&mut self, closing: Closing<P>) {
         self.closing.push(closing);
+    }
+
+    pub fn selectable(&mut self, selectable: Selectable<P>) {
+        self.selectable.push(selectable);
+    }
+
+    pub fn several(&mut self, several: Several<P>) {
+        self.several.push(several);
+    }
+
+    pub fn dims(&mut self, dims: Dims<P>) {
+        self.dims.push(dims);
+    }
+
+    pub fn focus(&mut self, focus: Focus<P>) {
+        self.focus.push(focus);
+    }
+
+    pub fn refused(&mut self, refused: Refused<P>) {
+        self.refused.push(refused);
     }
 
     pub fn sends<M: Message>(&mut self) {

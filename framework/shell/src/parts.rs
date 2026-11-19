@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, Modifiers,
-    SharedString, Subscription,
+    AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
+    Modifiers, SharedString, Subscription,
 };
-use nova_files_api::{Entry, Event, Listing};
+use nova_files_api::{Entry, Event, Listing, ListingId};
 
 use crate::assets::Icon;
 use crate::jump::Jump;
@@ -55,7 +55,7 @@ trait OpenPart {
     fn watch(&self, event: &Event, cx: &mut App);
     fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)>;
     fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
-    fn listed(&self, listing: &Listing, cx: &mut App);
+    fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App);
     fn takes_drops(&self, page: &PageRef) -> bool;
     fn drop_on(
         &self,
@@ -85,6 +85,11 @@ trait OpenPart {
         cx: &mut App,
     ) -> bool;
     fn as_any(&self) -> &dyn Any;
+    fn selectable(&self, entry: &Entry, cx: &App) -> bool;
+    fn several(&self, cx: &App) -> bool;
+    fn dims(&self, entry: &Entry, cx: &App) -> bool;
+    fn focus(&self, cx: &App) -> Option<FocusHandle>;
+    fn refused(&self, id: ListingId, path: &Path, cx: &mut App);
 }
 
 struct Opened<P: Part> {
@@ -261,13 +266,13 @@ impl<P: Part> OpenPart for Opened<P> {
             .find_map(|cell| cell(part, entry, cx))
     }
 
-    fn listed(&self, listing: &Listing, cx: &mut App) {
+    fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
         if self.slots.listed.is_empty() {
             return;
         }
         self.entity.update(cx, |part, cx| {
             for listed in &self.slots.listed {
-                listed(part, listing, cx);
+                listed(part, listing, reordered, cx);
             }
         });
     }
@@ -361,6 +366,40 @@ impl<P: Part> OpenPart for Opened<P> {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn selectable(&self, entry: &Entry, cx: &App) -> bool {
+        let part = self.entity.read(cx);
+        self.slots
+            .selectable
+            .iter()
+            .all(|selectable| selectable(part, entry, cx))
+    }
+
+    fn several(&self, cx: &App) -> bool {
+        let part = self.entity.read(cx);
+        self.slots.several.iter().all(|several| several(part, cx))
+    }
+
+    fn dims(&self, entry: &Entry, cx: &App) -> bool {
+        let part = self.entity.read(cx);
+        self.slots.dims.iter().any(|dims| dims(part, entry, cx))
+    }
+
+    fn focus(&self, cx: &App) -> Option<FocusHandle> {
+        let part = self.entity.read(cx);
+        self.slots.focus.iter().find_map(|focus| focus(part, cx))
+    }
+
+    fn refused(&self, id: ListingId, path: &Path, cx: &mut App) {
+        if self.slots.refused.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for refused in &self.slots.refused {
+                refused(part, id, path, cx);
+            }
+        });
     }
 }
 
@@ -594,9 +633,9 @@ impl WindowParts {
             .find_map(|part| part.name_cell(entry, cx))
     }
 
-    pub fn listed(&self, listing: &Listing, cx: &mut App) {
+    pub fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
         for part in &self.opened {
-            part.listed(listing, cx);
+            part.listed(listing, reordered, cx);
         }
     }
 
@@ -707,6 +746,28 @@ impl WindowParts {
             .iter()
             .map(|part| part.observe(Rc::clone(&changed), cx))
             .collect()
+    }
+
+    pub fn selectable(&self, entry: &Entry, cx: &App) -> bool {
+        self.opened.iter().all(|part| part.selectable(entry, cx))
+    }
+
+    pub fn several(&self, cx: &App) -> bool {
+        self.opened.iter().all(|part| part.several(cx))
+    }
+
+    pub fn dims(&self, entry: &Entry, cx: &App) -> bool {
+        self.opened.iter().any(|part| part.dims(entry, cx))
+    }
+
+    pub fn focus(&self, cx: &App) -> Option<FocusHandle> {
+        self.opened.iter().find_map(|part| part.focus(cx))
+    }
+
+    pub fn refused(&self, id: ListingId, path: &Path, cx: &mut App) {
+        for part in &self.opened {
+            part.refused(id, path, cx);
+        }
     }
 }
 

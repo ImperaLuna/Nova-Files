@@ -222,7 +222,7 @@ impl MainWindow {
 
     pub fn keys_home(&self, cx: &App) -> FocusHandle {
         self.pick.as_ref().map_or_else(
-            || self.focus.clone(),
+            || self.parts.focus(cx).unwrap_or_else(|| self.focus.clone()),
             |pick| pick.name.read(cx).focus_handle(cx),
         )
     }

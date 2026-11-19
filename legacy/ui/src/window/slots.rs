@@ -3,7 +3,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::sync::Arc;
 
-use gpui::{Context, Entity, Subscription};
+use gpui::{App, Context, Entity, Subscription};
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
     PageRef, Part, Scene, Shown, TabId,
@@ -58,7 +58,7 @@ impl MainWindow {
             location: self.shell_location(),
             rules: self.folder_rules(),
             selected: self.selected_len(),
-            picker: self.pick.is_some(),
+            picker: self.host.opening.is_some(),
         }
     }
 
@@ -77,10 +77,18 @@ impl MainWindow {
         self.location().map(Location::shell)
     }
 
-    pub(super) fn tell_parts_listed(&mut self, cx: &mut Context<Self>) {
+    pub fn dims(&self, index: usize, cx: &App) -> bool {
+        let entry = self
+            .listing
+            .as_ref()
+            .and_then(|listing| listing.entries.get(index));
+        self.pick_dims(index) || entry.is_some_and(|entry| self.parts.dims(entry, cx))
+    }
+
+    pub(super) fn tell_parts_listed(&mut self, reordered: bool, cx: &mut Context<Self>) {
         self.publish(cx);
         if let Some(listing) = self.listing.clone() {
-            self.parts.listed(&listing, cx);
+            self.parts.listed(&listing, reordered, cx);
         }
     }
 
@@ -111,7 +119,8 @@ impl MainWindow {
             location: self.shell_location(),
             listing,
             selected,
-            picker: self.pick.is_some(),
+            picker: self.host.opening.is_some(),
+            asked: self.asked,
         };
         self.host
             .entries
