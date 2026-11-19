@@ -161,6 +161,7 @@ impl MainWindow {
         cx: &Context<Self>,
     ) -> Stateful<Div> {
         let (opens, new_tab) = (place.opens.clone(), place.opens.clone());
+        let menu_row = place.id;
         let shown = from_shell(place.opens.clone());
         let drops = self.tab_drops_at(Some(&shown), place.name.clone());
         let row = row(
@@ -184,7 +185,13 @@ impl MainWindow {
                 this.new_tab_at_shell(new_tab.clone(), cx);
             })
         })
-        .map(|row| Self::opens_on_hover(row, HoverOpens::Place(shown), cx));
+        .map(|row| Self::opens_on_hover(row, HoverOpens::Place(shown), cx))
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                this.open_row_menu(menu_row, event.position, cx);
+            }),
+        );
         match drops {
             Some(at) => self.drop_target(row, at, cx),
             None => row,

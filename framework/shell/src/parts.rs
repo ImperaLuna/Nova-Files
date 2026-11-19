@@ -1,10 +1,11 @@
 use std::any::{Any, TypeId};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, SharedString,
-    Subscription,
+    AnyElement, AnyView, App, AppContext as _, Div, Entity, Global, KeyBinding, Modifiers,
+    SharedString, Subscription,
 };
 use nova_files_api::{Entry, Event, Listing};
 
@@ -14,7 +15,7 @@ use nova_files_messages::{Envelope, MessageType};
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{Location, PageRef};
-use crate::menu::{MenuAt, MenuItem, SidebarAt, SidebarRow};
+use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::{Card, Part, Slots};
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
@@ -34,10 +35,10 @@ impl ShownColumn {
 }
 
 trait OpenPart {
-    fn deliver(&self, envelope: Envelope, cx: &mut App) -> Result<(), Envelope>;
+    fn deliver(&self, envelope: &Envelope, cx: &mut App) -> bool;
     fn bind(&self, root: Div) -> Div;
     fn applies(&self, spec: &CommandSpec, scene: &Scene, cx: &App) -> Option<bool>;
-    fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<MenuItem>;
+    fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed>;
     fn page(&self, page: &PageRef) -> Option<AnyView>;
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
@@ -60,6 +61,21 @@ trait OpenPart {
         paths: Vec<PathBuf>,
         cx: &mut App,
     ) -> Result<(), Vec<PathBuf>>;
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem>;
+    fn drop_label(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &App,
+    ) -> Option<SharedString>;
+    fn drop_at(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &mut App,
+    ) -> bool;
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -75,12 +91,12 @@ struct Opened<P: Part> {
 }
 
 impl<P: Part> OpenPart for Opened<P> {
-    fn deliver(&self, envelope: Envelope, cx: &mut App) -> Result<(), Envelope> {
+    fn deliver(&self, envelope: &Envelope, cx: &mut App) -> bool {
         let Some(slot) = self.slots.events.get(&envelope.kind()) else {
-            return Err(envelope);
+            return false;
         };
         self.entity.update(cx, |part, cx| slot(part, envelope, cx));
-        Ok(())
+        true
     }
 
     fn bind(&self, root: Div) -> Div {
@@ -98,13 +114,13 @@ impl<P: Part> OpenPart for Opened<P> {
         Some((command.applies)(self.entity.read(cx), scene, cx))
     }
 
-    fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<MenuItem> {
+    fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed> {
         let part = self.entity.read(cx);
         self.slots
             .menus
             .iter()
-            .filter(|(place, _)| *place == at)
-            .flat_map(|(_, items)| items(part, scene, cx))
+            .filter(|(place, ..)| *place == at)
+            .map(|&(_, group, rank, items)| Placed::new(group, rank, items(part, scene, cx)))
             .collect()
     }
 
@@ -263,6 +279,51 @@ impl<P: Part> OpenPart for Opened<P> {
         Ok(())
     }
 
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+        let part = self.entity.read(cx);
+        self.slots
+            .row_menus
+            .iter()
+            .flat_map(|items| items(part, row, cx))
+            .collect()
+    }
+
+    fn drop_label(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &App,
+    ) -> Option<SharedString> {
+        let part = self.entity.read(cx);
+        self.slots
+            .drop_targets
+            .iter()
+            .find_map(|(aim, _)| aim(part, at, sources, modifiers, cx))
+    }
+
+    fn drop_at(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &mut App,
+    ) -> bool {
+        let part = self.entity.read(cx);
+        let Some(&(_, take)) = self
+            .slots
+            .drop_targets
+            .iter()
+            .find(|(aim, _)| aim(part, at, sources, modifiers, cx).is_some())
+        else {
+            return false;
+        };
+        let (at, sources) = (at.clone(), sources.to_vec());
+        self.entity
+            .update(cx, |part, cx| take(part, at, sources, modifiers, cx));
+        true
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -283,6 +344,11 @@ pub struct Parts {
 
 impl Global for Parts {}
 
+#[derive(Default)]
+struct BoundKeys(HashSet<&'static str>);
+
+impl Global for BoundKeys {}
+
 impl Parts {
     pub fn add<P: Part>(&mut self) {
         self.kinds.push(Kind {
@@ -294,11 +360,22 @@ impl Parts {
     }
 
     pub fn takes(&self) -> Vec<MessageType> {
-        self.kinds.iter().flat_map(|kind| (kind.takes)()).collect()
+        each_once(self.kinds.iter().flat_map(|kind| (kind.takes)()))
     }
 
     pub fn sends(&self) -> Vec<MessageType> {
-        self.kinds.iter().flat_map(|kind| (kind.sends)()).collect()
+        each_once(self.kinds.iter().flat_map(|kind| (kind.sends)()))
+    }
+
+    fn bind_new_keys(&self, cx: &mut App) {
+        let bound = cx.default_global::<BoundKeys>();
+        let new: Vec<_> = self
+            .kinds
+            .iter()
+            .flat_map(|kind| (kind.specs)())
+            .filter(|spec| bound.0.insert(spec.id))
+            .collect();
+        cx.bind_keys(new.into_iter().flat_map(CommandSpec::bindings));
     }
 
     pub fn bindings(&self) -> Vec<KeyBinding> {
@@ -310,6 +387,7 @@ impl Parts {
     }
 
     pub fn open(&self, host: &Host, cx: &mut App) -> WindowParts {
+        self.bind_new_keys(cx);
         WindowParts {
             opened: self
                 .kinds
@@ -408,14 +486,12 @@ pub struct WindowParts {
 }
 
 impl WindowParts {
-    pub fn deliver(&self, mut envelope: Envelope, cx: &mut App) -> Result<(), Envelope> {
+    pub fn deliver(&self, envelope: Envelope, cx: &mut App) -> Result<(), Envelope> {
+        let mut taken = false;
         for part in &self.opened {
-            match part.deliver(envelope, cx) {
-                Ok(()) => return Ok(()),
-                Err(back) => envelope = back,
-            }
+            taken |= part.deliver(&envelope, cx);
         }
-        Err(envelope)
+        if taken { Ok(()) } else { Err(envelope) }
     }
 
     pub fn bind(&self, root: Div) -> Div {
@@ -429,16 +505,17 @@ impl WindowParts {
             .unwrap_or(true)
     }
 
-    pub fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Vec<MenuItem>> {
+    pub fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed> {
         self.opened
             .iter()
-            .map(|part| {
-                part.menu(at, scene, cx)
-                    .into_iter()
-                    .filter(|item| self.applies(item.run, scene, cx))
-                    .collect::<Vec<_>>()
+            .flat_map(|part| part.menu(at, scene, cx))
+            .map(|mut placed| {
+                placed
+                    .items
+                    .retain(|item| self.applies(item.run, scene, cx));
+                placed
             })
-            .filter(|items| !items.is_empty())
+            .filter(|placed| !placed.items.is_empty())
             .collect()
     }
 
@@ -486,6 +563,37 @@ impl WindowParts {
         for part in &self.opened {
             part.listed(listing, cx);
         }
+    }
+
+    pub fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+        self.opened
+            .iter()
+            .flat_map(|part| part.row_menu(row, cx))
+            .collect()
+    }
+
+    pub fn drop_label(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &App,
+    ) -> Option<SharedString> {
+        self.opened
+            .iter()
+            .find_map(|part| part.drop_label(at, sources, modifiers, cx))
+    }
+
+    pub fn drop_at(
+        &self,
+        at: &Location,
+        sources: &[PathBuf],
+        modifiers: Modifiers,
+        cx: &mut App,
+    ) -> bool {
+        self.opened
+            .iter()
+            .any(|part| part.drop_at(at, sources, modifiers, cx))
     }
 
     pub fn takes_drops(&self, page: &PageRef) -> bool {
@@ -549,4 +657,14 @@ impl WindowParts {
             .map(|part| part.observe(Rc::clone(&changed), cx))
             .collect()
     }
+}
+
+fn each_once(types: impl Iterator<Item = MessageType>) -> Vec<MessageType> {
+    let mut once = Vec::new();
+    for kind in types {
+        if !once.contains(&kind) {
+            once.push(kind);
+        }
+    }
+    once
 }

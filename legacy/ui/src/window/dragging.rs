@@ -76,6 +76,9 @@ pub struct DragChip {
 
 impl DragChip {
     fn label(&self, modifiers: Modifiers, cx: &mut Context<Self>) -> SharedString {
+        if let Some(said) = self.part_says(modifiers, cx) {
+            return said;
+        }
         if let Some(DropAt::Folder(into)) = self.drag.aims.aimed().map(|aim| aim.at)
             && self.drag.aims.first_ask(&into)
         {
@@ -89,6 +92,18 @@ impl DragChip {
         self.drag
             .says(modifiers)
             .map_or_else(|| self.what.clone(), SharedString::from)
+    }
+}
+
+impl DragChip {
+    fn part_says(&self, modifiers: Modifiers, cx: &App) -> Option<SharedString> {
+        let at = dropping::shell_place(&self.drag.aims.aimed()?.at)?;
+        let sources = &self.drag.sources()?.paths;
+        let window = self.origin.upgrade()?;
+        window
+            .read(cx)
+            .parts
+            .drop_label(&at, sources, modifiers, cx)
     }
 }
 
@@ -158,6 +173,11 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         if !self.drop_rule()(&at, sources) {
+            return;
+        }
+        if let Some(place) = dropping::shell_place(&at)
+            && self.parts.drop_at(&place, &sources.paths, modifiers, cx)
+        {
             return;
         }
         match dropping::dropped(at, sources.paths.clone(), modifiers) {

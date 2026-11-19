@@ -163,7 +163,6 @@ pub struct MainWindow {
     hover_open: hover_open::HoverOpen,
     tab_order: tab_order::TabOrder,
     properties: Option<properties::Page>,
-    next_ask: u64,
     host: Host,
     pub(crate) parts: WindowParts,
     watching: Vec<Subscription>,
@@ -275,7 +274,6 @@ impl MainWindow {
             hover_open: hover_open::HoverOpen::default(),
             tab_order: tab_order::TabOrder::default(),
             properties: None,
-            next_ask: 0,
             host,
             parts,
             watching: Vec::new(),
@@ -286,9 +284,8 @@ impl MainWindow {
         window
     }
 
-    const fn next_ask(&mut self) -> u64 {
-        self.next_ask += 1;
-        self.next_ask
+    fn next_ask(&self) -> u64 {
+        self.host.asks.next()
     }
 
     fn go_first(&mut self, location: &Location, cx: &mut Context<Self>) {
