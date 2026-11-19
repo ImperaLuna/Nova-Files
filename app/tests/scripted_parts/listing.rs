@@ -1,7 +1,7 @@
 use gpui::{Context, SharedString};
 use nova_files_api::{Command, Envelope, ListingId, Order};
 use nova_files_shell::{Host, PageKind, PageRef, Part, Parts, Slots, Views};
-use nova_files_ui::Location;
+use nova_files_window::Location;
 
 use super::super::*;
 
@@ -149,7 +149,7 @@ fn a_failed_listing_shows_the_page_empty(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_listed_page_can_keep_to_details_with_a_folder_column_and_no_sorting(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = piled(cx);
     view.update(cx, |view, cx| view.open_page(PageRef::new(Found), cx));
     cx.run_until_parked();

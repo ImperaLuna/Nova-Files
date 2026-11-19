@@ -32,7 +32,7 @@ for sha in "$@"; do
     while IFS= read -r path; do
         case $path in
             Cargo.toml | Cargo.lock) workspace=true ;;
-            app/* | framework/* | features/* | fronts/* | helpers/* | legacy/*)
+            app/* | framework/* | features/* | fronts/* | helpers/*)
                 dir=$(dirname "$path")
                 while [[ "$dir" != . && ! -f "$root/$dir/Cargo.toml" ]]; do
                     dir=$(dirname "$dir")

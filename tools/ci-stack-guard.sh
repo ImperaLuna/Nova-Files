@@ -22,7 +22,7 @@ fi
 # Code is the crates, the workspace manifest and lock file, and data/ (the
 # app's own assets). Anything else is blocked, as is Markdown or a lint or
 # format config inside a crate.
-code='^(app/|framework/|features/|fronts/|helpers/|legacy/|data/|Cargo\.toml$|Cargo\.lock$)'
+code='^(app/|framework/|features/|fronts/|helpers/|data/|Cargo\.toml$|Cargo\.lock$)'
 not_code='(\.md$|(^|/)\.?(clippy|rustfmt|deny)\.toml$)'
 paths=$(mktemp)
 trap 'rm -f "$paths"' EXIT

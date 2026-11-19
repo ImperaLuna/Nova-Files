@@ -1,7 +1,7 @@
 use nova_files_properties_api::Command as PropertiesCommand;
 use nova_files_properties_ui::PropertiesPage;
 use nova_files_shell::PageRef;
-use nova_files_ui::Location;
+use nova_files_window::Location;
 
 use super::*;
 

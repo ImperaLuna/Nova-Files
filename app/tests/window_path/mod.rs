@@ -1,5 +1,5 @@
 use gpui::{px, size};
-use nova_files_ui::TextField;
+use nova_files_window::TextField;
 
 use super::*;
 
@@ -198,8 +198,8 @@ async fn typing_window<'a>(
     folder: &Path,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     cx.update(|cx| {
-        nova_files_ui::bind_window_keys(cx);
-        nova_files_ui::bind_text_keys(cx);
+        nova_files_window::bind_window_keys(cx);
+        nova_files_window::bind_text_keys(cx);
     });
     path_window(cx, tree, folder).await
 }

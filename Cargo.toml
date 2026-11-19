@@ -7,7 +7,7 @@
 
 [workspace]
 resolver = "3"
-members = ["app", "features/*/*", "framework/base", "framework/disk", "framework/entries/*", "framework/jobs", "framework/messages", "framework/shell", "fronts/*", "helpers/*", "legacy/*"]
+members = ["app", "features/*/*", "framework/base", "framework/disk", "framework/entries/*", "framework/jobs", "framework/messages", "framework/shell", "framework/window", "fronts/*", "helpers/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -79,7 +79,7 @@ nova-files-transfer-ui = { path = "features/transfer/ui" }
 nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }
 nova-files-trash-ui = { path = "features/trash/ui" }
-nova-files-ui = { path = "legacy/ui" }
+nova-files-window = { path = "framework/window" }
 nova-files-undo-ui = { path = "features/undo/ui" }
 
 # GPUI comes from Zed's repo through ImperaLuna/zed, a fork that adds fixes

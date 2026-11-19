@@ -3,7 +3,7 @@ use gpui::{
     Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Pixels, Render, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px, size,
 };
-use nova_files_ui::TextField;
+use nova_files_window::TextField;
 
 struct Frame {
     field: Entity<TextField>,
@@ -25,7 +25,7 @@ fn field<'a>(
     width: Pixels,
     text: &str,
 ) -> (Entity<TextField>, &'a mut VisualTestContext) {
-    cx.update(nova_files_ui::bind_text_keys);
+    cx.update(nova_files_window::bind_text_keys);
     let (frame, cx) = cx.add_window_view(|_, cx| Frame {
         field: cx.new(TextField::new),
         width,

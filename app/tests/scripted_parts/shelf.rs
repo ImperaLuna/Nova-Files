@@ -176,7 +176,7 @@ fn shelved(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestConte
     parts.add::<Shelf>();
     cx.update(|cx| {
         cx.set_global(parts);
-        nova_files_ui::bind_window_keys(cx);
+        nova_files_window::bind_window_keys(cx);
     });
     let (view, cx, mut core) = window_with_parts(cx);
     answer_listing(&mut core, ENTRIES);

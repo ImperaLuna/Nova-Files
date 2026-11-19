@@ -38,4 +38,4 @@ nova-files-preview-ui.workspace = true
 nova-files-shell.workspace = true
 nova-files-thumbnails-api.workspace = true
 nova-files-thumbnails-ui.workspace = true
-nova-files-ui.workspace = true
+nova-files-window.workspace = true

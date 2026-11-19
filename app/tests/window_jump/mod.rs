@@ -9,7 +9,7 @@ async fn named<'a>(
     for name in ["banana.txt", "blue.txt", "my notes.txt"] {
         fs::write(tree.path().join(name), "").unwrap();
     }
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx) = open_on(cx, tree.path()).await;
     cx.run_until_parked();
     view.read_with(cx, |view, _| {

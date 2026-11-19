@@ -177,7 +177,7 @@ fn the_drive_you_are_on_is_marked(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn the_keys_go_round_a_drive_menu(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     let mut stick = volume("stick", Some(STICK));

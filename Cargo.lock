@@ -3640,8 +3640,8 @@ dependencies = [
  "nova-files-trash-api",
  "nova-files-trash-core",
  "nova-files-trash-ui",
- "nova-files-ui",
  "nova-files-undo-ui",
+ "nova-files-window",
  "rustix 1.1.6",
  "serde",
  "serde_json",
@@ -4158,7 +4158,7 @@ dependencies = [
  "nova-files-shell",
  "nova-files-thumbnails-api",
  "nova-files-thumbnails-ui",
- "nova-files-ui",
+ "nova-files-window",
  "rustix 1.1.6",
 ]
 
@@ -4261,7 +4261,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "nova-files-ui"
+name = "nova-files-undo-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-shell",
+]
+
+[[package]]
+name = "nova-files-window"
 version = "0.1.0"
 dependencies = [
  "futures",
@@ -4272,15 +4281,6 @@ dependencies = [
  "nova-files-api",
  "nova-files-shell",
  "usvg",
-]
-
-[[package]]
-name = "nova-files-undo-ui"
-version = "0.1.0"
-dependencies = [
- "gpui",
- "nova-files-api",
- "nova-files-shell",
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ use nova_files_folders_api::{
 use super::*;
 
 fn shown(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();

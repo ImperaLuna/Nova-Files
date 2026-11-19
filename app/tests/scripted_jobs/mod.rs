@@ -7,7 +7,7 @@ use super::*;
 
 #[gpui::test]
 fn a_paused_job_says_so_until_it_resumes(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
@@ -113,7 +113,7 @@ fn start_copies(core: &mut Core) -> Vec<JobId> {
 
 #[gpui::test]
 fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
@@ -121,7 +121,8 @@ fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContex
     cx.run_until_parked();
     let jobs = start_copies(&mut core);
     assert_eq!(jobs.len(), 2);
-    cx.executor().advance_clock(nova_files_ui::JOB_SHOWS_AFTER);
+    cx.executor()
+        .advance_clock(nova_files_window::JOB_SHOWS_AFTER);
     cx.run_until_parked();
     assert!(
         cx.debug_bounds("island-progress").is_none(),
@@ -166,7 +167,7 @@ fn several_copies_fold_into_one_line_that_opens_into_rows(cx: &mut TestAppContex
 
 #[gpui::test]
 fn copies_all_cancelled_leave_no_note(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
@@ -191,7 +192,7 @@ fn copies_all_cancelled_leave_no_note(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_copy_shows_while_it_runs_and_one_that_replaced_reads_the_trash_again(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (_view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
@@ -203,7 +204,8 @@ fn a_copy_shows_while_it_runs_and_one_that_replaced_reads_the_trash_again(cx: &m
         let [job] = start_copies(&mut core)[..] else {
             panic!("one copy");
         };
-        cx.executor().advance_clock(nova_files_ui::JOB_SHOWS_AFTER);
+        cx.executor()
+            .advance_clock(nova_files_window::JOB_SHOWS_AFTER);
         cx.run_until_parked();
         assert!(cx.debug_bounds("island-progress").is_some());
         core.send(Event::JobFinished {
@@ -223,7 +225,7 @@ fn a_copy_shows_while_it_runs_and_one_that_replaced_reads_the_trash_again(cx: &m
 
 #[gpui::test]
 fn a_long_list_of_jobs_scrolls_instead_of_growing_past_the_window(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (_view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
@@ -233,7 +235,8 @@ fn a_long_list_of_jobs_scrolls_instead_of_growing_past_the_window(cx: &mut TestA
     }
     cx.run_until_parked();
     assert_eq!(start_copies(&mut core).len(), 12);
-    cx.executor().advance_clock(nova_files_ui::JOB_SHOWS_AFTER);
+    cx.executor()
+        .advance_clock(nova_files_window::JOB_SHOWS_AFTER);
     cx.run_until_parked();
 
     press(cx, "island-jobs-open");
@@ -247,7 +250,7 @@ fn a_long_list_of_jobs_scrolls_instead_of_growing_past_the_window(cx: &mut TestA
 
 #[gpui::test]
 fn files_whose_app_fails_say_so_and_the_rest_go_to_the_desktop(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
@@ -304,7 +307,7 @@ fn files_whose_app_fails_say_so_and_the_rest_go_to_the_desktop(cx: &mut TestAppC
         Some("Can't open 1, 0: their apps didn't start")
     );
 
-    cx.executor().advance_clock(nova_files_ui::NOTE_TIME);
+    cx.executor().advance_clock(nova_files_window::NOTE_TIME);
     cx.run_until_parked();
     assert_eq!(note(cx), None);
     core.send(open_api::Event::NotOpened {

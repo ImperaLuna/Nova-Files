@@ -8,7 +8,7 @@ use super::*;
 const CELLS: u32 = 61;
 
 fn icons(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, CELLS);
     cx.run_until_parked();
@@ -304,7 +304,7 @@ fn only_ctrl_scroll_over_the_entries_steps_the_icons(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn ctrl_scroll_does_not_scroll_the_entries(cx: &mut TestAppContext) {
-    cx.update(nova_files_ui::bind_window_keys);
+    cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, 400);
     cx.run_until_parked();

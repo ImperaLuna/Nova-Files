@@ -28,24 +28,24 @@ exclude_re = [
     # Dropping a client cancels its listing, for the same reason.
     "replace <impl Drop for Client>::drop with \\(\\)",
     # Only changes a highlight color; tests can't read colors back.
-    "legacy/ui/src/view/sidebar\\.rs:.*replace == with != in MainWindow::sidebar",
+    "framework/window/src/view/sidebar\\.rs:.*replace == with != in MainWindow::sidebar",
     # Open windows, so they need a display.
     "\\bshow_windows\\b",
-    "legacy/ui/src/lib\\.rs:.*\\brun\\b",
-    "legacy/ui/src/lib\\.rs:.*\\bopen_window\\b",
+    "framework/window/src/lib\\.rs:.*\\brun\\b",
+    "framework/window/src/lib\\.rs:.*\\bopen_window\\b",
     # Window mode without a bus goes on to open a window.
     "replace match guard mode != Mode::Service with false in run",
     # Fires when the core stops, which takes the 3-minute idle wait.
     "\\bwatch_core\\b",
     # Drops thumbnails from GPUI's image atlas (FIL-70), which no test can
     # read; the ShownThumbnails tests cover which images get dropped.
-    "legacy/ui/src/window/rows\\.rs:.*replace release with \\(\\)",
+    "framework/window/src/window/rows\\.rs:.*replace release with \\(\\)",
     # The text field's selection (FIL-36): when its two ends meet, which
     # end is the caret makes no difference, so `<=` here is the same code.
-    "legacy/ui/src/text/edit\\.rs:.*replace < with <= in TextEdit::select_range",
+    "framework/window/src/text/edit\\.rs:.*replace < with <= in TextEdit::select_range",
     # Only changes which row a picker highlights (FIL-36); the picker tests
     # check the selection itself.
-    "legacy/ui/src/view/sheet\\.rs:.*replace == with != in MainWindow::entries",
+    "framework/window/src/view/sheet\\.rs:.*replace == with != in MainWindow::entries",
     # The trash (FIL-21). A folder sync only matters across a power cut.
     "framework/jobs/src/sync\\.rs:.*replace sync_folders with \\(\\)",
     # Only picks what is logged when a leftover can't be removed.

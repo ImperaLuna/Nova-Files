@@ -1,4 +1,4 @@
-# Clippy settings for nova-files-ui: the root clippy.toml plus bans that keep
+# Clippy settings for nova-files-window: the root clippy.toml plus bans that keep
 # the window off the disk and away from child processes. Clippy reads only
 # this file for this crate, so every root line is repeated here;
 # tools/check-clippy-config.sh fails when they drift apart.

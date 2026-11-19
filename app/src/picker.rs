@@ -5,7 +5,7 @@ use nova_files_api::FileTypes;
 use nova_files_dbus::Picker;
 use nova_files_picker_api::{FilterRule, PickId, PickRequest};
 use nova_files_picker_ui::{PickWindow, closes};
-use nova_files_ui::{Request, RequestSender};
+use nova_files_window::{Request, RequestSender};
 
 pub struct UiPicker {
     requests: RequestSender,
@@ -54,7 +54,7 @@ mod tests {
     use nova_files_picker_api::{FileFilter, FilterRule, PickId, PickKind, PickReply, PickRequest};
     use nova_files_picker_ui::PickOpening;
     use nova_files_shell::Opening;
-    use nova_files_ui::Request;
+    use nova_files_window::Request;
 
     use super::UiPicker;
 
@@ -83,7 +83,7 @@ mod tests {
 
     #[test]
     fn picks_and_closes_reach_the_ui() {
-        let (sender, received) = nova_files_ui::channel();
+        let (sender, received) = nova_files_window::channel();
         let picker = UiPicker::new(sender);
 
         picker.pick(PickRequest {
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn only_a_pick_with_mime_rules_gets_the_database() {
-        let (sender, received) = nova_files_ui::channel();
+        let (sender, received) = nova_files_window::channel();
         let picker = UiPicker::with_loader(sender, || MimeTypes::load(&[]));
 
         picker.pick(open_with(vec![FilterRule::Glob("*.pdf".to_owned())]));
