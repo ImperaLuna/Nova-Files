@@ -1,7 +1,7 @@
 # One command per job. Run them inside `nix develop`.
 #
 # Recipes that take `crate` run on the whole workspace when it's left out:
-# `just test` or `just test nova-files-core`. `just check` runs before every
+# `just test` or `just test nova-files-jobs`. `just check` runs before every
 # push. CI runs the mutation tests; `just mutants` runs them locally.
 
 # List the recipes.

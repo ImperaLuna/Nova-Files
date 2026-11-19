@@ -583,7 +583,7 @@ impl StandIn {
 }
 
 pub fn core_client(bus: Bus) -> (nova_files_api::Connection, Receiver<Event>) {
-    let core = nova_files_core::spawn_with(nova_files_core::IDLE_EXIT, None, None, None).unwrap();
+    let core = nova_files::spawn_with(nova_files::IDLE_EXIT, None, None, None).unwrap();
     core.connector
         .offer(DriveOffer(Arc::new(Udisks::new(bus))))
         .unwrap();

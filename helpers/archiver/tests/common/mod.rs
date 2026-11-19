@@ -4,11 +4,11 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
+use nova_files::{Archiver, Home, IDLE_EXIT, RunningCore};
 use nova_files_api::{
     ClientGone, Command, Conflict, Connection, Envelope, Event, EventSink, JobId, JobTag, Message,
     Operation, Outcome, Tally,
 };
-use nova_files_core::{Archiver, Home, IDLE_EXIT, RunningCore};
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -45,14 +45,15 @@ impl Bench {
             drive_trashes: false,
         };
         let helper = PathBuf::from(env!("CARGO_BIN_EXE_nova-files-archiver"));
-        let core = nova_files_core::spawn_with_archiver(
+        let core = nova_files::spawn_with_archiver(
             IDLE_EXIT,
             Some(home),
             None,
             None,
-            Some(Archiver::at(helper).with_seven(nova_files_core::seven_on(
-                std::env::var_os("PATH").as_deref(),
-            ))),
+            Some(
+                Archiver::at(helper)
+                    .with_seven(nova_files::seven_on(std::env::var_os("PATH").as_deref())),
+            ),
         )
         .unwrap();
         let (sink, events) = mpsc::channel();
