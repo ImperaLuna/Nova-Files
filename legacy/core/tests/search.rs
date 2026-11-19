@@ -8,14 +8,17 @@ use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use nova_files_api::{
-    Command, Connection, EntryId, EntryKind, Event, Hit, Listing, ListingId, MAX_HITS, Matched,
-    Order, SearchFailed, SearchId, ThumbnailSize,
+    ClientGone, Command, Connection, EntryId, EntryKind, Envelope, Event, EventSink, Listing,
+    ListingId, Order, ThumbnailSize,
 };
 use nova_files_core::{Home, IDLE_EXIT, IndexPlace, RunningCore};
+use nova_files_search_api::{
+    Command as SearchCommand, Event as SearchEvent, Hit, MAX_HITS, Matched, SearchFailed, SearchId,
+};
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 const CHANGE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -69,7 +72,7 @@ impl Scratch {
         };
         let core = nova_files_core::spawn_with(IDLE_EXIT, Some(home), None, place).unwrap();
         let (sink, events) = mpsc::channel();
-        let connection = core.connector.connect(sink).unwrap();
+        let connection = core.connector.connect(Both(sink)).unwrap();
         Client {
             _core: core,
             connection,
@@ -77,6 +80,26 @@ impl Scratch {
             home: self.home(),
             next: 0,
         }
+    }
+}
+
+enum Heard {
+    Folders(Event),
+    Search(SearchEvent),
+}
+
+struct Both(Sender<Heard>);
+
+impl EventSink for Both {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        let heard = match envelope.open::<Event>() {
+            Ok(event) => Heard::Folders(event),
+            Err(other) => match other.open::<SearchEvent>() {
+                Ok(event) => Heard::Search(event),
+                Err(_) => return Ok(()),
+            },
+        };
+        self.0.send(heard).map_err(|_| ClientGone)
     }
 }
 
@@ -89,7 +112,7 @@ impl Drop for Scratch {
 struct Client {
     _core: RunningCore,
     connection: Connection,
-    events: Receiver<Event>,
+    events: Receiver<Heard>,
     home: PathBuf,
     next: u64,
 }
@@ -100,7 +123,7 @@ impl Client {
         let id = SearchId(self.next);
         let query = query.to_owned();
         self.connection
-            .send(Command::Search { id, query, limit })
+            .send(SearchCommand::Search { id, query, limit })
             .unwrap();
         id
     }
@@ -110,7 +133,7 @@ impl Client {
         let id = ListingId(self.next);
         let query = query.to_owned();
         self.connection
-            .send(Command::Find { id, query, within })
+            .send(SearchCommand::Find { id, query, within })
             .unwrap();
         id
     }
@@ -139,14 +162,24 @@ impl Client {
     }
 
     fn answer(&self) -> Event {
-        self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
+        match self.events.recv_timeout(ANSWER_TIMEOUT).unwrap() {
+            Heard::Folders(event) => event,
+            Heard::Search(event) => panic!("expected a folder event, got {event:?}"),
+        }
+    }
+
+    fn searched(&self) -> SearchEvent {
+        match self.events.recv_timeout(ANSWER_TIMEOUT).unwrap() {
+            Heard::Search(event) => event,
+            Heard::Folders(event) => panic!("expected a search event, got {event:?}"),
+        }
     }
 
     fn stages(&mut self, query: &str, limit: u32) -> Vec<Vec<(PathBuf, Matched)>> {
         let asked = self.send(query, limit);
         let mut stages = Vec::new();
         loop {
-            let Event::Found { id, hits, done } = self.answer() else {
+            let SearchEvent::Found { id, hits, done } = self.searched() else {
                 panic!("expected hits");
             };
             assert_eq!(id, asked);
@@ -262,7 +295,7 @@ fn without_a_cache_folder_search_fails() {
     let mut client = scratch.core(None);
     let id = client.send("report", LIMIT);
     let reason = SearchFailed::NoIndex;
-    assert_eq!(client.answer(), Event::SearchFailed { id, reason });
+    assert_eq!(client.searched(), SearchEvent::SearchFailed { id, reason });
 }
 
 #[test]
@@ -276,7 +309,7 @@ fn an_index_that_cant_be_saved_fails() {
     let mut client = scratch.core(Some(place));
     let id = client.send("report", LIMIT);
     let reason = SearchFailed::IndexFailed;
-    assert_eq!(client.answer(), Event::SearchFailed { id, reason });
+    assert_eq!(client.searched(), SearchEvent::SearchFailed { id, reason });
 }
 
 #[test]
@@ -361,5 +394,5 @@ fn without_a_cache_folder_find_fails() {
     let mut client = scratch.core(None);
     let id = client.find("report", None);
     let reason = SearchFailed::NoIndex;
-    assert_eq!(client.answer(), Event::FindFailed { id, reason });
+    assert_eq!(client.searched(), SearchEvent::FindFailed { id, reason });
 }

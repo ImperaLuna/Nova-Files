@@ -1,0 +1,31 @@
+# nova-files-thumbnails-core
+#
+# The thumbnails feature's core half: makes thumbnails of the rows a window
+# shows, through the shared thumbnail cache and the thumbnail helper.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-entries-core
+# - nova-files-thumbnailer-launch
+# - nova-files-thumbnails-api
+
+[package]
+name = "nova-files-thumbnails-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+nova-files-entries-core.workspace = true
+nova-files-thumbnailer-launch.workspace = true
+nova-files-thumbnails-api.workspace = true

@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{Pixels, Size, size};
-use nova_files_api::IconSize;
+use nova_files_folders_api::IconSize;
 
 use crate::theme::size as sizes;
 use crate::theme::size::{

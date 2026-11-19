@@ -1,16 +1,9 @@
 #![forbid(unsafe_code)]
 
-mod folder_views;
-mod index;
 mod inside;
 mod jobs;
-mod mime;
-mod open;
 mod ops;
-mod preview;
 mod run;
-mod search;
-mod thumbs;
 mod trace;
 mod trash;
 mod vulkan_drivers;
@@ -22,21 +15,21 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use nova_files_api::{ClientId, Connector};
-use nova_files_disk::{capped, hand_edited, private_file, saver};
+use nova_files_disk::{private_file, saver};
 use nova_files_entries_core::{list, memory, order};
 
-use search::Searcher;
+use nova_files_search_core::Searcher;
 
-pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
-pub use mime::MimeTypes;
 pub use nova_files_archives_core::{
     ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe, seven_on,
 };
 pub use nova_files_disk::home::Home;
-pub use open::{NotDefault, make_default_for_folders, opens_folders};
+pub use nova_files_open_core::MimeTypes;
+pub use nova_files_open_core::{NotDefault, make_default_for_folders, opens_folders};
+pub use nova_files_search_core::{IndexError, IndexPlace, Unusable};
+pub use nova_files_thumbnails_core::Thumbnails;
 pub use run::{emitted_types, routed_types};
-pub use thumbs::Thumbnails;
 pub use trace::{FRAME_TRACE_VARIABLE, STARTUP_TRACE_VARIABLE, TraceError, start_traces};
 pub use vulkan_drivers::{FILTER_VARIABLE, absent_vendor_drivers};
 
@@ -104,10 +97,10 @@ pub fn spawn_with_archiver(
             let gathered = nova_files_gathered_core::Store::open(home.clone());
             let state_home = home.as_ref().map(|home| home.state.as_path());
             let recent = nova_files_start_core::Store::open(state_home);
-            let folder_views = folder_views::Store::open(state_home);
+            let folder_views = nova_files_folders_core::Store::open(state_home);
             let mime_types = Arc::default();
             let file_icons = Arc::new(nova_files_look_core::FileIcons::from_env(
-                Arc::new(mime::LazyMimes(Arc::clone(&mime_types))),
+                Arc::new(nova_files_open_core::LazyMimes(Arc::clone(&mime_types))),
                 config,
             ));
             let setup = run::Setup {
@@ -119,7 +112,7 @@ pub fn spawn_with_archiver(
                 theme,
                 thumbnails,
                 searcher,
-                open_with: open::OpenWithWorker::new(Arc::clone(&mime_types)),
+                open_with: nova_files_open_core::OpenWithWorker::new(Arc::clone(&mime_types)),
                 mime_types,
                 file_icons,
                 jobs: Arc::new(jobs),

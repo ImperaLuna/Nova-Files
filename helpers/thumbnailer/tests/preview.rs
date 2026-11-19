@@ -10,10 +10,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use image::{ImageFormat, Rgb, RgbImage};
-use nova_files_api::{
-    Command, Connection, Event, Fit, Picture, Preview, PreviewContent, PreviewId,
-};
+use nova_files_api::{Connection, Fit, Picture};
 use nova_files_core::{IDLE_EXIT, RunningCore, Thumbnails};
+use nova_files_preview_api::{Command, Event, Preview, PreviewContent, PreviewId};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
 const WAIT: Duration = Duration::from_secs(10);
@@ -187,7 +186,7 @@ fn stepping_through_pictures_answers_the_last() {
                 break;
             }
             Event::Previewed { id, .. } => assert!(id < last),
-            other => panic!("expected a preview, got {other:?}"),
+            other @ Event::Unreadable { .. } => panic!("expected a preview, got {other:?}"),
         }
     }
 }

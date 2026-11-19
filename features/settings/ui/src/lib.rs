@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use gpui::Context;
-use nova_files_settings_api::{self as settings_api, Settings, Thumbnails};
+use nova_files_settings_api::{self as settings_api, Thumbnails};
 use nova_files_shell::{Host, Part, Published, Slots, ThumbnailsShown};
 
 pub struct SettingsPart;

@@ -114,9 +114,6 @@ impl MainWindow {
             Event::FolderListed(listing) if self.search.asked == Some(listing.id) => {
                 self.found_arrived(listing, cx);
             }
-            Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
-                self.find_failed(id, cx);
-            }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);
             }
@@ -132,16 +129,7 @@ impl MainWindow {
             {
                 self.details_arrived(first, &details, &icons, cx);
             }
-            Event::Thumbnail {
-                id,
-                entry,
-                size,
-                png,
-            } => self.thumbnail_arrived((id, entry, size), png, cx),
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
-            Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
-            Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
-            Event::OpenWith(answer) => self.open_with_answered(answer, cx),
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)
@@ -153,15 +141,9 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
-            | Event::Found { .. }
-            | Event::SearchFailed { .. }
-            | Event::FindFailed { .. }
-            | Event::FileOpened { .. }
             | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. } => {}
-            Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
-            Event::FolderViews(views) => self.folder_views_arrived(&views, cx),
         }
     }
 
