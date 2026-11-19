@@ -61,7 +61,6 @@ use nova_files_drives_api as drives_api;
 use nova_files_gathered_api::{self as gathered_api, Gathering};
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_properties_api as properties_api;
-use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::Lines;
 use nova_files_shell::{
     FolderRules, Host, KnownFolders, Link, Opening, Parts, ThumbnailsShown, WindowParts,
@@ -157,7 +156,6 @@ pub struct MainWindow {
     pub(crate) scroll: UniformListScrollHandle,
     pub(crate) pick: Option<Picker>,
     pub(crate) home: PathBuf,
-    settings: Settings,
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
     known: KnownFolders,
@@ -281,7 +279,6 @@ impl MainWindow {
             path_bar: PathBar::new(connector.clone()),
             scroll: UniformListScrollHandle::new(),
             pick: None,
-            settings: Settings::default(),
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             known: KnownFolders::default(),
@@ -358,12 +355,6 @@ impl MainWindow {
             Ok(event) => return self.properties_event(event, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<settings_api::Event>() {
-            Ok(settings_api::Event::Settings(settings)) => {
-                return self.settings_arrived(settings, cx);
-            }
-            Err(envelope) => envelope,
-        };
         let envelope = match envelope.open::<start_api::Event>() {
             Ok(start_api::Event::RecentFolders { id, folders }) => {
                 return self.recent_arrived(id, folders, cx);
@@ -438,10 +429,6 @@ impl MainWindow {
     pub fn pinned(&self) -> &[Bookmark] {
         &self.pinned
     }
-
-    pub const fn settings(&self) -> &Settings {
-        &self.settings
-    }
 }
 
 impl EventEmitter<WindowEvent> for MainWindow {}
@@ -461,7 +448,6 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             }
             connection.send(drives_api::Command::Drives)?;
             connection.send(places_api::Command::Places)?;
-            connection.send(settings_api::Command::Watch)?;
             Ok(connection)
         })
         .ok()
