@@ -1,20 +1,14 @@
-mod opening;
-
-pub use nova_files_picker_ui::titlebar;
+pub use nova_files_picker_ui::{foreign_parent, titlebar};
 
 use std::ffi::OsString;
 use std::io::{self, Write as _};
 use std::path::PathBuf;
 
-use gpui::{App, ClickEvent, Context, Entity, Window};
+use gpui::{App, Context, Entity, Window};
 use nova_files_api::{EntryId, ListingId};
 use nova_files_picker_api::{PickId, PickRequest};
-use nova_files_picker_ui::{Clicked, PickerPart};
-use nova_files_properties_api::PropertiesId;
+use nova_files_picker_ui::PickerPart;
 
-pub use self::opening::foreign_parent;
-use crate::selecting::DOUBLE_CLICK;
-use crate::selection::Click;
 use crate::window::MainWindow;
 
 impl MainWindow {
@@ -25,14 +19,13 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         self.open_as_picker(request.id);
-        let Some(part) = self.picker_part() else {
-            return;
-        };
-        part.update(cx, |part, cx| part.start(request, cx));
-        if let Some(focus) = part.read(cx).name_focus(cx) {
-            window.focus(&focus, cx);
+        if let Some(part) = self.picker_part() {
+            part.update(cx, |part, cx| part.start(request, cx));
+            if let Some(focus) = part.read(cx).name_focus(cx) {
+                window.focus(&focus, cx);
+            }
         }
-        self.watch_pick_size(window, cx);
+        self.watch_size(window, cx);
     }
 
     pub(crate) fn picker_part(&self) -> Option<Entity<PickerPart>> {
@@ -66,48 +59,6 @@ impl MainWindow {
         self.picker_part()?.read(cx).filter()
     }
 
-    pub fn entry_clicked(
-        &mut self,
-        (listing, id): (ListingId, EntryId),
-        event: &ClickEvent,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let double = event.click_count() >= DOUBLE_CLICK;
-        let Some(kind) = self.entry(listing, id).map(|entry| entry.kind) else {
-            return;
-        };
-        let Some(part) = self.picking(cx) else {
-            self.main_clicked((listing, id), event, cx);
-            return;
-        };
-        let several = part.read(cx).several();
-        let click = Click::of(event.modifiers(), several);
-        match part.read(cx).clicked(kind, click == Click::Only, double) {
-            Clicked::Open => self.open_entry(id),
-            Clicked::Select => self.reselect(
-                |before, picks| {
-                    Some(crate::selection::Selection::clicked(
-                        before, listing, id, click, picks,
-                    ))
-                },
-                cx,
-            ),
-            Clicked::Pick => {
-                self.pick_entry(listing, id, cx);
-            }
-            Clicked::Nothing => {}
-        }
-        cx.notify();
-    }
-
-    fn entry(&self, listing: ListingId, id: EntryId) -> Option<&nova_files_api::Entry> {
-        let shown = self.listing.as_ref().filter(|shown| shown.id == listing)?;
-        usize::try_from(id.0)
-            .ok()
-            .and_then(|index| shown.entries.get(index))
-    }
-
     pub fn pick_entry(&mut self, listing: ListingId, id: EntryId, cx: &mut Context<Self>) -> bool {
         self.publish(cx);
         let Some(part) = self.picking(cx) else {
@@ -135,18 +86,6 @@ impl MainWindow {
     pub fn answer(&mut self, path: PathBuf, cx: &mut Context<Self>) -> bool {
         self.picking(cx)
             .is_some_and(|part| part.update(cx, |part, cx| part.answer(path, cx)))
-    }
-
-    pub(crate) fn pick_selection_changed(&self, cx: &mut Context<Self>) {
-        if let Some(part) = self.picking(cx) {
-            part.update(cx, PickerPart::selection_changed);
-        }
-    }
-
-    pub(crate) fn save_probed(&self, id: PropertiesId, missing: bool, cx: &mut Context<Self>) {
-        if let Some(part) = self.picking(cx) {
-            part.update(cx, |part, cx| part.probed(id, missing, cx));
-        }
     }
 }
 

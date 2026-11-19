@@ -61,7 +61,7 @@ impl MainWindow {
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);
-        if !reordered && self.picking(cx).is_some() {
+        if !reordered && self.picker() {
             self.selection = None;
         }
         self.path_bar

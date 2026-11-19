@@ -102,7 +102,7 @@ impl PickerPart {
         }
     }
 
-    pub fn probed(&mut self, id: PropertiesId, missing: bool, cx: &mut Context<Self>) {
+    pub(crate) fn probed(&mut self, id: PropertiesId, missing: bool, cx: &mut Context<Self>) {
         let Some(recheck) = self
             .pick
             .as_mut()

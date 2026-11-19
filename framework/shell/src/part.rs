@@ -67,6 +67,21 @@ pub type ThumbnailSide<P> = fn(&mut P, u32, &mut Context<P>);
 pub type Used<P> = fn(&mut P, &Path, &mut Context<P>);
 pub type PageTurn<P> = Rc<dyn Fn(&mut P, &PageRef, TabId, &mut Context<P>)>;
 pub type Refused<P> = fn(&mut P, ListingId, &Path, &mut Context<P>);
+pub type Clicks<P> = fn(&mut P, ListingId, &Entry, Click, &mut Context<P>) -> Option<ClickAnswer>;
+pub type Resized<P> = fn(&mut P, Size<Pixels>, &mut Context<P>);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Click {
+    pub only: bool,
+    pub double: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClickAnswer {
+    Open,
+    Select,
+    Done,
+}
 
 pub struct CardRank;
 
@@ -83,6 +98,7 @@ pub struct Column<P> {
 }
 
 type EventSlot<P> = Box<dyn Fn(&mut P, &Envelope, &mut Context<P>)>;
+type PeekSlot<P> = (MessageType, EventSlot<P>);
 type Bind<P> = Box<dyn Fn(Div, &Entity<P>, &Host) -> Div>;
 pub type ListSlot = Rc<dyn Fn(&PageRef, ListingId, Order) -> Option<Envelope>>;
 pub type PageSlot<P> =
@@ -96,6 +112,7 @@ pub struct CommandSlot<P> {
 
 pub struct Slots<P> {
     pub(crate) events: HashMap<MessageType, EventSlot<P>>,
+    pub(crate) peeks: Vec<PeekSlot<P>>,
     pub(crate) commands: Vec<CommandSlot<P>>,
     pub(crate) befores: Vec<Bind<P>>,
     pub(crate) menus: Vec<(MenuAt, MenuGroup, u8, Items<P>)>,
@@ -117,6 +134,7 @@ pub struct Slots<P> {
     pub(crate) row_menus: Vec<RowMenu<P>>,
     pub(crate) head_buttons: Vec<(SidebarAt, &'static str, HeadButton<P>)>,
     pub(crate) bars: Vec<Card<P>>,
+    pub(crate) footers: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
     pub(crate) path_chips: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
@@ -124,6 +142,8 @@ pub struct Slots<P> {
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
     pub(crate) closing: Vec<Closing<P>>,
+    pub(crate) clicks: Vec<Clicks<P>>,
+    pub(crate) resized: Vec<Resized<P>>,
     pub(crate) selectable: Vec<Selectable<P>>,
     pub(crate) several: Vec<Several<P>>,
     pub(crate) dims: Vec<Dims<P>>,
@@ -141,6 +161,7 @@ impl<P> Default for Slots<P> {
     fn default() -> Self {
         Self {
             events: HashMap::new(),
+            peeks: Vec::new(),
             commands: Vec::new(),
             befores: Vec::new(),
             menus: Vec::new(),
@@ -162,6 +183,7 @@ impl<P> Default for Slots<P> {
             row_menus: Vec::new(),
             head_buttons: Vec::new(),
             bars: Vec::new(),
+            footers: Vec::new(),
             overlays: Vec::new(),
             path_chips: Vec::new(),
             list_views: Vec::new(),
@@ -169,6 +191,8 @@ impl<P> Default for Slots<P> {
             opens: Vec::new(),
             typed: Vec::new(),
             closing: Vec::new(),
+            clicks: Vec::new(),
+            resized: Vec::new(),
             selectable: Vec::new(),
             several: Vec::new(),
             dims: Vec::new(),
@@ -194,6 +218,17 @@ impl<P: Part> Slots<P> {
                 }
             }),
         );
+    }
+
+    pub fn peek<E: Message>(&mut self, see: fn(&mut P, &E, &mut Context<P>)) {
+        self.peeks.push((
+            MessageType::of::<E>(),
+            Box::new(move |part, envelope, cx| {
+                if let Some(event) = envelope.get::<E>() {
+                    see(part, event, cx);
+                }
+            }),
+        ));
     }
 
     pub fn command<A: Action>(
@@ -324,6 +359,10 @@ impl<P: Part> Slots<P> {
         self.bars.push(bar);
     }
 
+    pub fn footer(&mut self, footer: Card<P>) {
+        self.footers.push(footer);
+    }
+
     pub fn overlay(&mut self, overlay: Card<P>) {
         self.overlays.push(overlay);
     }
@@ -350,6 +389,14 @@ impl<P: Part> Slots<P> {
 
     pub fn closing(&mut self, closing: Closing<P>) {
         self.closing.push(closing);
+    }
+
+    pub fn clicked(&mut self, clicked: Clicks<P>) {
+        self.clicks.push(clicked);
+    }
+
+    pub fn resized(&mut self, resized: Resized<P>) {
+        self.resized.push(resized);
     }
 
     pub fn selectable(&mut self, selectable: Selectable<P>) {

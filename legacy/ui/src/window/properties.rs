@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::Context;
-use nova_files_api::Unreadable;
 use nova_files_properties_api::{Command, Event, Properties, PropertiesId};
 
 use super::MainWindow;
@@ -76,13 +75,9 @@ impl MainWindow {
     pub(super) fn properties_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
             Event::Properties { id, properties } => {
-                self.save_probed(id, false, cx);
                 self.properties_arrived(id, Some(properties), cx);
             }
-            Event::PropertiesUnreadable { id, reason, .. } => {
-                self.save_probed(id, reason == Unreadable::Missing, cx);
-                self.properties_arrived(id, None, cx);
-            }
+            Event::PropertiesUnreadable { id, .. } => self.properties_arrived(id, None, cx),
             Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
             Event::SpaceMeasured { .. } | Event::SpaceUnreadable { .. } => {}
         }

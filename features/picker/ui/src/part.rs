@@ -1,19 +1,24 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use gpui::{App, AppContext as _, Context, Entity, FocusHandle, Focusable as _, Subscription};
-use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId};
+use gpui::{
+    App, AppContext as _, Context, Entity, FocusHandle, Focusable as _, Pixels, Size, Subscription,
+};
+use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId, Unreadable};
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickRequest};
-use nova_files_properties_api::PropertiesId;
+use nova_files_properties_api::{Event as PropertiesEvent, PropertiesId};
 use nova_files_shell::text::{TextField, TextFieldEvent};
 use nova_files_shell::typed::stem;
-use nova_files_shell::{Host, Location, Navigator, Part, Slots};
+use nova_files_shell::{Click, ClickAnswer, Host, Location, Navigator, Part, SelectionMade, Slots};
 
+use crate::size::{PICKER, PickerState};
 use crate::{Mode, filter, is_plain_name, names_text};
 
 pub struct PickerPart {
     pub(crate) host: Host,
     pub(crate) pick: Option<Picking>,
+    size: Option<Size<Pixels>>,
+    _selections: Subscription,
 }
 
 pub struct Picking {
@@ -50,7 +55,7 @@ pub struct Recheck {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Clicked {
+enum Clicked {
     Open,
     Select,
     Pick,
@@ -156,7 +161,7 @@ impl PickerPart {
             .is_some_and(|pick| filter::dims(&pick.request, pick.mode, pick.filter, entry))
     }
 
-    pub const fn clicked(&self, kind: EntryKind, only: bool, double: bool) -> Clicked {
+    const fn clicked(&self, kind: EntryKind, only: bool, double: bool) -> Clicked {
         let Some(pick) = &self.pick else {
             return Clicked::Nothing;
         };
@@ -229,7 +234,7 @@ impl PickerPart {
             .update(cx, |nav, cx| nav.go(Location::Folder(path), cx));
     }
 
-    pub fn selection_changed(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn selection_changed(&mut self, cx: &mut Context<Self>) {
         let (listing, ids) = {
             let entries = self.host.entries.read(cx);
             let ids: Vec<EntryId> = entries.selected().iter().map(|entry| entry.id).collect();
@@ -286,6 +291,56 @@ impl PickerPart {
     fn refused(&mut self, _: ListingId, path: &Path, cx: &mut Context<Self>) {
         self.folder_refused(path, cx);
     }
+
+    fn entry_clicked(
+        &mut self,
+        listing: ListingId,
+        entry: &Entry,
+        click: Click,
+        cx: &mut Context<Self>,
+    ) -> Option<ClickAnswer> {
+        self.pick.as_ref()?;
+        Some(match self.clicked(entry.kind, click.only, click.double) {
+            Clicked::Open => ClickAnswer::Open,
+            Clicked::Select => ClickAnswer::Select,
+            Clicked::Pick => {
+                self.pick_entry(listing, entry.id, cx);
+                ClickAnswer::Done
+            }
+            Clicked::Nothing => ClickAnswer::Done,
+        })
+    }
+
+    fn peeked(&mut self, event: &PropertiesEvent, cx: &mut Context<Self>) {
+        match event {
+            PropertiesEvent::Properties { id, .. } => self.probed(*id, false, cx),
+            PropertiesEvent::PropertiesUnreadable { id, reason, .. } => {
+                self.probed(*id, *reason == Unreadable::Missing, cx);
+            }
+            PropertiesEvent::SizeMeasured { .. }
+            | PropertiesEvent::SpaceMeasured { .. }
+            | PropertiesEvent::SpaceUnreadable { .. } => {}
+        }
+    }
+
+    const fn resized(&mut self, size: Size<Pixels>, _: &mut Context<Self>) {
+        if self.pick.is_some() {
+            self.size = Some(size);
+        }
+    }
+
+    fn closing(&mut self, cx: &mut Context<Self>) {
+        let Some(value) = self
+            .size
+            .take()
+            .and_then(|size| PickerState::default().with_picker(size).value())
+        else {
+            return;
+        };
+        self.host
+            .kept
+            .update(cx, |kept, _| kept.set(PICKER, &value));
+    }
 }
 
 pub fn entry_at(entries: &[Entry], id: EntryId) -> Option<&Entry> {
@@ -295,10 +350,15 @@ pub fn entry_at(entries: &[Entry], id: EntryId) -> Option<&Entry> {
 }
 
 impl Part for PickerPart {
-    fn open(host: &Host, _: &mut Context<Self>) -> Self {
+    fn open(host: &Host, cx: &mut Context<Self>) -> Self {
+        let selections = cx.subscribe(&host.entries, |this, _, _: &SelectionMade, cx| {
+            this.selection_changed(cx);
+        });
         Self {
             host: host.clone(),
             pick: None,
+            size: None,
+            _selections: selections,
         }
     }
 
@@ -309,5 +369,10 @@ impl Part for PickerPart {
         slots.focus(Self::focus);
         slots.listed(Self::listed);
         slots.refused(Self::refused);
+        slots.clicked(Self::entry_clicked);
+        slots.peek(Self::peeked);
+        slots.resized(Self::resized);
+        slots.closing(Self::closing);
+        slots.footer(Self::footer);
     }
 }

@@ -49,8 +49,8 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
-    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
-    SharedString, Size, Subscription, Task, UniformListScrollHandle,
+    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, SharedString,
+    Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
@@ -150,8 +150,7 @@ pub struct MainWindow {
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,
-    pub(crate) pick_size: Option<Size<Pixels>>,
-    pub(crate) pick_bounds: Option<Subscription>,
+    pub(crate) bounds_watch: Option<Subscription>,
     pub(crate) home: PathBuf,
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
@@ -275,8 +274,7 @@ impl MainWindow {
             path_bar: cx.new(|_| PathBar::new(&host)),
             asks_sent: 0,
             scroll: UniformListScrollHandle::new(),
-            pick_size: None,
-            pick_bounds: None,
+            bounds_watch: None,
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
@@ -334,6 +332,7 @@ impl MainWindow {
     }
 
     fn take(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
+        self.parts.peek(&envelope, cx);
         let envelope = match envelope.open::<Event>() {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
@@ -382,7 +381,8 @@ impl MainWindow {
         if self.tell_left(cx) {
             let this = cx.entity().downgrade();
             cx.defer(move |cx| {
-                this.update(cx, |this, cx| this.take(envelope, cx)).ok();
+                this.update(cx, |this, cx| this.hand_to_parts(envelope, cx))
+                    .ok();
             });
             return;
         }

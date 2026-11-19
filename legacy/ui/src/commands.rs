@@ -40,7 +40,6 @@ pub const ACTIONS: &[CommandSpec] = &[
     CLOSE_TAB,
     NEXT_TAB,
     PREVIOUS_TAB,
-    HIDDEN,
     DETAILS,
     ICONS,
     GALLERY,
@@ -192,13 +191,6 @@ spec!(
     "tab.previous",
     "Previous tab",
     ["ctrl-shift-tab"]
-);
-spec!(
-    HIDDEN,
-    ToggleHidden,
-    "view.hidden",
-    "Show hidden files",
-    ["ctrl-h"]
 );
 
 spec!(DETAILS, ShowDetails, "view.details", "Details", ["ctrl-1"]);

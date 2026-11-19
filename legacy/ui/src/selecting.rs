@@ -1,5 +1,6 @@
-use gpui::{ClickEvent, Context, KeyDownEvent};
-use nova_files_api::{EntryId, EntryKind, Listing, ListingId};
+use gpui::{ClickEvent, Context, KeyDownEvent, Window};
+use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId};
+use nova_files_shell::{self as shell, ClickAnswer, Entries};
 
 use crate::jump;
 use crate::selection::{Click, Move, Selection, entry_at};
@@ -52,7 +53,7 @@ impl MainWindow {
             }
         });
         self.publish(cx);
-        self.pick_selection_changed(cx);
+        self.host().entries.update(cx, Entries::selection_made);
         self.preview_follow_cursor(cx);
         if let Some(cursor) = self.cursor() {
             self.scroll_to_entry(cursor);
@@ -60,7 +61,39 @@ impl MainWindow {
         cx.notify();
     }
 
-    pub(crate) fn main_clicked(
+    pub fn entry_clicked(
+        &mut self,
+        (listing, id): (ListingId, EntryId),
+        event: &ClickEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(entry) = self.entry(listing, id).cloned() else {
+            return;
+        };
+        let click = Click::of(event.modifiers(), self.parts.several(cx));
+        let asked = shell::Click {
+            only: click == Click::Only,
+            double: event.click_count() >= DOUBLE_CLICK,
+        };
+        match self.parts.clicked(listing, &entry, asked, cx) {
+            None => self.main_clicked((listing, id), event, cx),
+            Some(ClickAnswer::Open) => self.open_entry(id),
+            Some(ClickAnswer::Select) => self.reselect(
+                |before, picks| Some(Selection::clicked(before, listing, id, click, picks)),
+                cx,
+            ),
+            Some(ClickAnswer::Done) => {}
+        }
+        cx.notify();
+    }
+
+    fn entry(&self, listing: ListingId, id: EntryId) -> Option<&Entry> {
+        let shown = self.listing.as_ref().filter(|shown| shown.id == listing)?;
+        entry_at(&shown.entries, id)
+    }
+
+    fn main_clicked(
         &mut self,
         (listing, id): (ListingId, EntryId),
         event: &ClickEvent,

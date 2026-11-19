@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use gpui::{App, Context, Modifiers, Pixels, Point, point};
-use nova_files_api::{EntryId, HiddenFiles, ListingId};
+use nova_files_api::{EntryId, ListingId};
 use nova_files_folders_api::ViewMode;
 use nova_files_shell::{
     Look as ShellLook, MenuAt, MenuGroup, MenuItem as ShellItem, Placed, arrange,
@@ -10,8 +10,7 @@ use nova_files_shell::{
 use super::MainWindow;
 use crate::assets::Icon;
 use crate::commands::{
-    DETAILS, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PREVIEW, PROPERTIES, RENAME, SELECT_ALL,
-    TRASH,
+    DETAILS, GALLERY, ICONS, NEW_FOLDER, OPEN, PREVIEW, PROPERTIES, RENAME, SELECT_ALL, TRASH,
 };
 use crate::menu::{MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
@@ -171,11 +170,6 @@ impl MainWindow {
         if self.showing_found() {
             return vec![select.items.into_iter().map(MenuItem::from).collect()];
         }
-        let hidden = if self.hidden_files == Some(HiddenFiles::Shown) {
-            ShellItem::run(Icon::Check, &HIDDEN).with_look(ShellLook::On)
-        } else {
-            ShellItem::run(Icon::Eye, &HIDDEN)
-        };
         self.arranged(
             MenuAt::Sheet,
             vec![
@@ -186,7 +180,6 @@ impl MainWindow {
                 ),
                 select,
                 Placed::new(MenuGroup::View, Placed::FIRST, self.view_items()),
-                Placed::new(MenuGroup::Show, Placed::FIRST, vec![hidden]),
             ],
             cx,
         )

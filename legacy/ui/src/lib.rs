@@ -49,7 +49,7 @@ pub use window::{
     home_folder, shared_level,
 };
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
-pub use window_state::{WindowState, fetch as fetch_window_state};
+pub use window_state::fetch as fetch_window_state;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ended {
