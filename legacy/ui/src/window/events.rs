@@ -6,7 +6,6 @@ use std::sync::Arc;
 use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
 use nova_files_places_api::Bookmark;
-use nova_files_settings_api::{Settings, Thumbnails};
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::rows::release;
@@ -256,18 +255,6 @@ impl MainWindow {
         self.parts.refused(id, &path, cx);
         self.typed_path_refused(id, cx);
         cx.emit(WindowEvent::Refused(path));
-        cx.notify();
-    }
-
-    pub(super) fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
-        let shown = match settings.thumbnails {
-            Thumbnails::Shown => ThumbnailsShown::Shown,
-            Thumbnails::Hidden => ThumbnailsShown::Hidden,
-        };
-        Published::set(settings.hidden_files, cx);
-        Published::set(shown, cx);
-        self.settings = Arc::unwrap_or_clone(settings);
-        cx.emit(WindowEvent::Settings);
         cx.notify();
     }
 
