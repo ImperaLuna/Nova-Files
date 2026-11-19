@@ -187,3 +187,15 @@ fn a_window_opened_plainly_is_no_picker(cx: &mut TestAppContext) {
     assert_eq!(opened_with, None);
     assert!(!view.read_with(cx, |view, _| view.scene().picker));
 }
+
+#[gpui::test]
+fn a_part_closes_its_window(cx: &mut TestAppContext) {
+    let (view, cx, _core) = chosen(cx, false);
+    let nav = view.read_with(cx, |view, _| view.host().nav.clone());
+    let app: &mut TestAppContext = cx;
+    let windows = app.update(|cx| cx.windows().len());
+    nav.update(app, nova_files_shell::Navigator::close);
+    cx.run_until_parked();
+    let app: &mut TestAppContext = cx;
+    assert_eq!(app.update(|cx| cx.windows().len()), windows - 1);
+}

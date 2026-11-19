@@ -1,0 +1,31 @@
+# nova-files-search-core
+#
+# The search feature's core half: keeps the home index up to date, searches
+# it by name, and lists found names as a window's folder.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-entries-core
+# - nova-files-index
+# - nova-files-search-api
+
+[package]
+name = "nova-files-search-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+nova-files-entries-core.workspace = true
+nova-files-index.workspace = true
+nova-files-search-api.workspace = true

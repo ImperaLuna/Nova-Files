@@ -6,7 +6,7 @@ use crate::location::Location;
 
 impl MainWindow {
     pub(crate) fn toggle_hidden(&self) {
-        let hidden = self.settings.hidden_files.toggled();
+        let hidden = self.hidden_files.unwrap_or_default().toggled();
         if let Some(connection) = &self.connection {
             connection
                 .send(settings_api::Command::Change(SettingChange::HiddenFiles(

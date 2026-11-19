@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _, Modifiers,
-    SharedString, Window,
+    Pixels, SharedString, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId};
 
@@ -18,6 +18,7 @@ use crate::jump::Jump;
 use crate::location::{Location, PageKind, PageRef};
 use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
 use crate::scene::Scene;
+use crate::text::TextField;
 
 pub trait Part: Sized + 'static {
     fn open(host: &Host, cx: &mut Context<Self>) -> Self;
@@ -33,6 +34,9 @@ pub type Columns<P> = fn(&P, &Scene, &App) -> Option<Column<P>>;
 pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
+pub type NameField<P> = fn(&P, &Entry, &App) -> Option<Entity<TextField>>;
+pub type Busy<P> = fn(&P, &App) -> bool;
+pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Closing<P> = fn(&mut P, &mut Context<P>);
 pub type Listed<P> = fn(&mut P, &Listing, bool, &mut Context<P>);
@@ -46,7 +50,7 @@ pub struct DropOver<'a> {
     pub sources: &'a [PathBuf],
     pub modifiers: Modifiers,
 }
-pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<RowItem>;
+pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<Vec<RowItem>>;
 pub type Typed<P> = fn(&mut P, &Jump, &Scene, &mut Context<P>) -> bool;
 pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
@@ -85,6 +89,8 @@ pub struct Slots<P> {
     pub(crate) empty_notes: Vec<EmptyNote<P>>,
     pub(crate) sends: Vec<MessageType>,
     pub(crate) name_cells: Vec<NameCell<P>>,
+    pub(crate) name_fields: Vec<NameField<P>>,
+    pub(crate) busy: Vec<Busy<P>>,
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
     pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
@@ -93,7 +99,7 @@ pub struct Slots<P> {
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
-    pub(crate) row_icons: Vec<NameCell<P>>,
+    pub(crate) row_icons: Vec<RowIcon<P>>,
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
     pub(crate) closing: Vec<Closing<P>>,
@@ -118,6 +124,8 @@ impl<P> Default for Slots<P> {
             empty_notes: Vec::new(),
             sends: Vec::new(),
             name_cells: Vec::new(),
+            name_fields: Vec::new(),
+            busy: Vec::new(),
             listed: Vec::new(),
             drops: Vec::new(),
             drop_targets: Vec::new(),
@@ -214,6 +222,14 @@ impl<P: Part> Slots<P> {
         self.name_cells.push(cell);
     }
 
+    pub fn name_field(&mut self, field: NameField<P>) {
+        self.name_fields.push(field);
+    }
+
+    pub fn busy(&mut self, busy: Busy<P>) {
+        self.busy.push(busy);
+    }
+
     pub fn listed(&mut self, listed: Listed<P>) {
         self.listed.push(listed);
     }
@@ -251,7 +267,7 @@ impl<P: Part> Slots<P> {
         self.list_views.push((applies, draw));
     }
 
-    pub fn row_icon(&mut self, icon: NameCell<P>) {
+    pub fn row_icon(&mut self, icon: RowIcon<P>) {
         self.row_icons.push(icon);
     }
 

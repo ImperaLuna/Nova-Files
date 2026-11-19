@@ -3,9 +3,8 @@ use std::sync::Arc;
 
 use gpui::{Context, Pixels, RenderImage, Size, Window};
 use image::{Frame, RgbaImage};
-use nova_files_api::{
-    Command, EntryId, Fit, Listing, ListingId, Picture, Preview, PreviewContent, PreviewId,
-};
+use nova_files_api::{EntryId, Fit, Listing, ListingId, Picture};
+use nova_files_preview_api::{Command, Preview, PreviewContent, PreviewId};
 
 use super::MainWindow;
 use super::rows::release;
@@ -71,7 +70,7 @@ impl MainWindow {
             }
             return;
         }
-        if self.pick.is_some() {
+        if self.picker() {
             return;
         }
         let Some((listing, ids)) = self.selection() else {

@@ -5,7 +5,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_api::{
-    Command, Conflict, Connection, Event, JobId, JobTag, Operation, Outcome, Tally,
+    ClientGone, Command, Conflict, Connection, Envelope, Event, EventSink, JobId, JobTag, Message,
+    Operation, Outcome, Tally,
 };
 use nova_files_core::{Archiver, Home, IDLE_EXIT, RunningCore};
 
@@ -15,7 +16,15 @@ pub struct Bench {
     root: PathBuf,
     _core: RunningCore,
     connection: Connection,
-    events: Receiver<Event>,
+    events: Receiver<Envelope>,
+}
+
+struct Heard(mpsc::Sender<Envelope>);
+
+impl EventSink for Heard {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        self.0.send(envelope).map_err(|_| ClientGone)
+    }
 }
 
 impl Bench {
@@ -47,7 +56,7 @@ impl Bench {
         )
         .unwrap();
         let (sink, events) = mpsc::channel();
-        let connection = core.connector.connect(sink).unwrap();
+        let connection = core.connector.connect(Heard(sink)).unwrap();
         connection.send(Command::WatchJobs).unwrap();
         Self {
             root,
@@ -73,12 +82,17 @@ impl Bench {
         }
     }
 
-    pub fn send(&self, command: Command) {
+    pub fn send<C: Message>(&self, command: C) {
         self.connection.send(command).unwrap();
     }
 
-    pub fn next(&self) -> Event {
-        self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()
+    pub fn next<E: Message>(&self) -> E {
+        loop {
+            let envelope = self.events.recv_timeout(ANSWER_TIMEOUT).unwrap();
+            if let Ok(event) = envelope.open::<E>() {
+                return event;
+            }
+        }
     }
 
     pub fn held(&self, job: JobId) -> Conflict {

@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-use nova_files_api::{Command, Event, FolderView, FolderViews, IconSize, ViewMode};
 use nova_files_core::{Home, IDLE_EXIT, RunningCore};
+use nova_files_folders_api::{Command, Event, FolderView, FolderViews, IconSize, ViewMode};
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -64,11 +64,8 @@ impl Drop for TempHome {
 }
 
 fn next_views(events: &Receiver<Event>) -> FolderViews {
-    loop {
-        if let Event::FolderViews(views) = events.recv_timeout(ANSWER_TIMEOUT).unwrap() {
-            return views;
-        }
-    }
+    let Event::Views(views) = events.recv_timeout(ANSWER_TIMEOUT).unwrap();
+    views
 }
 
 #[test]
@@ -79,10 +76,10 @@ fn a_view_set_reaches_the_client_and_the_next_core() {
         let core = home.core();
         let (sink, events) = mpsc::channel();
         let client = core.connector.connect(sink).unwrap();
-        client.send(Command::FolderViews).unwrap();
+        client.send(Command::Views).unwrap();
         assert!(next_views(&events).is_empty());
         client
-            .send(Command::SetFolderView {
+            .send(Command::SetView {
                 folder: folder.clone(),
                 view: ICONS,
             })
@@ -93,6 +90,6 @@ fn a_view_set_reaches_the_client_and_the_next_core() {
     let next = home.core();
     let (sink, events) = mpsc::channel();
     let client = next.connector.connect(sink).unwrap();
-    client.send(Command::FolderViews).unwrap();
+    client.send(Command::Views).unwrap();
     assert_eq!(*next_views(&events), [(folder, ICONS)]);
 }

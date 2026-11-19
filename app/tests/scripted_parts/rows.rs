@@ -1,9 +1,10 @@
 use std::cell::Cell;
 
-use gpui::{Context, Modifiers, MouseButton, WeakEntity};
+use gpui::{App, Context, Modifiers, MouseButton, WeakEntity};
 use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
 use nova_files_shell::{
-    Host, Location, Look, Part, Parts, RowItem, SidebarAt, SidebarRow, Slots, assets::Icon,
+    Host, KnownFolder, KnownFolders, Location, Look, Part, Parts, Published, RowItem, SidebarAt,
+    SidebarRow, Slots, assets::Icon,
 };
 
 use super::super::*;
@@ -15,6 +16,8 @@ const BOOKS: &str = "/shelf/books";
 thread_local! {
     static EJECTED: Cell<usize> = const { Cell::new(0) };
     static ADDED: Cell<usize> = const { Cell::new(0) };
+    static MOUNTED: Cell<usize> = const { Cell::new(0) };
+    static MOUNTED_IN_TAB: Cell<usize> = const { Cell::new(0) };
 }
 
 struct Rower {
@@ -33,6 +36,20 @@ impl Rower {
             .ok();
         })
     }
+}
+
+fn row_menu(_: &Rower, row: &str, _: &App) -> Vec<Vec<RowItem>> {
+    if row != "place-first" {
+        return Vec::new();
+    }
+    vec![
+        vec![
+            RowItem::new(Icon::Info, "Look", |_| {}),
+            RowItem::new(Icon::Info, "Look closer", |_| {}),
+        ],
+        Vec::new(),
+        vec![RowItem::new(Icon::Info, "Forget", |_| {})],
+    ]
 }
 
 impl Part for Rower {
@@ -61,13 +78,7 @@ impl Part for Rower {
                 ),
             ]
         });
-        slots.row_menu(|_, row, _| {
-            if row == "place-first" {
-                vec![RowItem::new(Icon::Info, "Look", |_| {})]
-            } else {
-                Vec::new()
-            }
-        });
+        slots.row_menu(row_menu);
         slots.section_button(SidebarAt::Places, "rows-add", |_, _, _| {
             Some(RowItem::new(Icon::Plus, "Add", |_| {
                 ADDED.set(ADDED.get() + 1);
@@ -85,6 +96,17 @@ impl Part for Rower {
                 .number_look(Look::Danger)
                 .button(RowItem::new(Icon::Eject, "Eject", |_| {
                     EJECTED.set(EJECTED.get() + 1);
+                })),
+                SidebarRow::acting(
+                    "drive-off",
+                    Icon::Drive,
+                    "Off",
+                    RowItem::new(Icon::Drive, "Mount", |_| {
+                        MOUNTED.set(MOUNTED.get() + 1);
+                    }),
+                )
+                .on_new_tab(RowItem::new(Icon::Drive, "Mount in a tab", |_| {
+                    MOUNTED_IN_TAB.set(MOUNTED_IN_TAB.get() + 1);
                 })),
             ]
         });
@@ -119,6 +141,8 @@ fn rowed(cx: &mut TestAppContext) -> &mut VisualTestContext {
 fn rowed_window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext) {
     EJECTED.set(0);
     ADDED.set(0);
+    MOUNTED.set(0);
+    MOUNTED_IN_TAB.set(0);
     let mut parts = Parts::default();
     parts.add::<Rower>();
     cx.update(|cx| cx.set_global(parts));
@@ -168,7 +192,8 @@ fn a_part_row_menu_opens_in_the_main_window(cx: &mut TestAppContext) {
     let first = cx.debug_bounds("place-first").unwrap().center();
     cx.simulate_mouse_down(first, MouseButton::Right, Modifiers::none());
     cx.run_until_parked();
-    assert!(view.read_with(cx, |view, _| view.menu().is_some()));
+    let lines = view.read_with(cx, |view, _| view.menu().map(|menu| menu.lines.clone()));
+    assert_eq!(lines, Some(vec![2]));
 }
 
 #[gpui::test]
@@ -207,4 +232,34 @@ fn the_picker_shows_part_rows_without_their_menu_or_head_buttons(cx: &mut TestAp
     cx.simulate_mouse_down(first, MouseButton::Right, Modifiers::none());
     cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+}
+
+#[gpui::test]
+fn a_part_row_with_its_own_actions_runs_them_instead_of_opening(cx: &mut TestAppContext) {
+    let (view, cx) = rowed_window(cx);
+    let before = view.read_with(cx, |view, _| view.tab_count());
+
+    click(cx, "drive-off");
+    assert_eq!(MOUNTED.get(), 1);
+
+    let off = cx.debug_bounds("drive-off").unwrap().center();
+    cx.simulate_mouse_down(off, MouseButton::Middle, Modifiers::none());
+    cx.simulate_mouse_up(off, MouseButton::Middle, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(MOUNTED_IN_TAB.get(), 1);
+    assert_eq!(view.read_with(cx, |view, _| view.tab_count()), before);
+}
+
+#[gpui::test]
+fn the_window_draws_folders_with_the_icons_a_part_publishes(cx: &mut TestAppContext) {
+    let (view, cx) = rowed_window(cx);
+    let known = KnownFolders::new([KnownFolder {
+        path: BOOKS.into(),
+        name: "Books".into(),
+        icon: Icon::Documents,
+    }]);
+    cx.update(|_, cx| Published::set(known, cx));
+    cx.run_until_parked();
+    let icon = view.read_with(cx, |view, _| view.known_folders().icon_at(Path::new(BOOKS)));
+    assert_eq!(icon, Icon::Documents);
 }

@@ -14,7 +14,8 @@ use std::time::Duration;
 #[path = "common/own_folders.rs"]
 mod own_folders;
 
-use nova_files_api::{Command, Connection, Event, OpenWith, OpenWithAnswer, OpenWithId};
+use nova_files_api::Connection;
+use nova_files_open_api::{Command, Event, OpenWith, OpenWithAnswer, OpenWithId};
 
 use own_folders::run_again_in;
 

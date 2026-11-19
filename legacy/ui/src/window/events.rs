@@ -4,15 +4,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
-use nova_files_api::{Event, Listing, ListingId, Unreadable};
+use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
 use nova_files_places_api::Bookmark;
 use nova_files_settings_api::{Settings, Thumbnails};
+use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::rows::release;
 use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
+use crate::places;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Place {
@@ -113,9 +115,6 @@ impl MainWindow {
             Event::FolderListed(listing) if self.search.asked == Some(listing.id) => {
                 self.found_arrived(listing, cx);
             }
-            Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
-                self.find_failed(id, cx);
-            }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);
             }
@@ -131,16 +130,7 @@ impl MainWindow {
             {
                 self.details_arrived(first, &details, &icons, cx);
             }
-            Event::Thumbnail {
-                id,
-                entry,
-                size,
-                png,
-            } => self.thumbnail_arrived((id, entry, size), png, cx),
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
-            Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
-            Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
-            Event::OpenWith(answer) => self.open_with_answered(answer, cx),
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)
@@ -152,15 +142,9 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
-            | Event::Found { .. }
-            | Event::SearchFailed { .. }
-            | Event::FindFailed { .. }
-            | Event::FileOpened { .. }
             | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. } => {}
-            Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
-            Event::FolderViews(views) => self.folder_views_arrived(&views, cx),
         }
     }
 
@@ -169,7 +153,9 @@ impl MainWindow {
         places: Vec<nova_files_places_api::Place>,
         cx: &mut Context<Self>,
     ) {
+        let known = places::known(&places);
         self.places = places;
+        Published::set(known, cx);
         self.sidebar_changed(cx);
     }
 
@@ -242,16 +228,44 @@ impl MainWindow {
     }
 
     pub(super) fn settings_arrived(&mut self, settings: Arc<Settings>, cx: &mut Context<Self>) {
-        let thumbnails_changed = settings.thumbnails != self.settings.thumbnails;
-        let hidden_files = settings.hidden_files;
+        let shown = match settings.thumbnails {
+            Thumbnails::Shown => ThumbnailsShown::Shown,
+            Thumbnails::Hidden => ThumbnailsShown::Hidden,
+        };
+        Published::set(settings.hidden_files, cx);
+        Published::set(shown, cx);
         self.settings = Arc::unwrap_or_clone(settings);
-        self.hidden_arrived(hidden_files);
-        if thumbnails_changed {
-            if self.settings.thumbnails == Thumbnails::Hidden {
-                release(self.thumbnails.take_all(), None, cx);
-            }
-            self.forget_rows();
+        cx.emit(WindowEvent::Settings);
+        cx.notify();
+    }
+
+    pub(super) fn hidden_published(&mut self, cx: &mut Context<Self>) {
+        if let Some(hidden) = Published::<HiddenFiles>::get(cx).copied() {
+            self.hidden_arrived(hidden);
+            cx.emit(WindowEvent::Settings);
+            cx.notify();
         }
+    }
+
+    pub(super) fn known_published(&mut self, cx: &mut Context<Self>) {
+        if let Some(known) = Published::<KnownFolders>::get(cx) {
+            self.known = known.clone();
+            cx.notify();
+        }
+    }
+
+    pub(super) fn thumbnails_published(&mut self, cx: &mut Context<Self>) {
+        let Some(shown) = Published::<ThumbnailsShown>::get(cx).copied() else {
+            return;
+        };
+        if shown == self.thumbnails_shown {
+            return;
+        }
+        self.thumbnails_shown = shown;
+        if shown == ThumbnailsShown::Hidden {
+            release(self.thumbnails.take_all(), None, cx);
+        }
+        self.forget_rows();
         cx.emit(WindowEvent::Settings);
         cx.notify();
     }

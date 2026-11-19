@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use gpui::{App, Context, Modifiers, Pixels, Point, point};
-use nova_files_api::{EntryId, HiddenFiles, ListingId, ViewMode};
+use nova_files_api::{EntryId, HiddenFiles, ListingId};
+use nova_files_folders_api::ViewMode;
 use nova_files_shell::{
     Look as ShellLook, MenuAt, MenuGroup, MenuItem as ShellItem, Placed, arrange,
 };
@@ -57,7 +58,7 @@ impl MainWindow {
     }
 
     fn has_menus(&self) -> bool {
-        self.pick.is_none() && !self.is_on_start() && self.listing.is_some()
+        !self.picker() && !self.is_on_start() && self.listing.is_some()
     }
 
     fn arranged(&self, at: MenuAt, window: Vec<Placed>, cx: &App) -> Vec<Vec<MenuItem>> {
@@ -170,7 +171,7 @@ impl MainWindow {
         if self.showing_found() {
             return vec![select.items.into_iter().map(MenuItem::from).collect()];
         }
-        let hidden = if self.settings.hidden_files == HiddenFiles::Shown {
+        let hidden = if self.hidden_files == Some(HiddenFiles::Shown) {
             ShellItem::run(Icon::Check, &HIDDEN).with_look(ShellLook::On)
         } else {
             ShellItem::run(Icon::Eye, &HIDDEN)

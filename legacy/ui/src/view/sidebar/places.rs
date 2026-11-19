@@ -21,7 +21,7 @@ impl MainWindow {
     pub(super) fn places_section(&self, narrow: bool, cx: &Context<Self>) -> Div {
         let colors = Colors::of(cx);
         let here = self.folder();
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let rows = places::shown(self.places(), self.pinned())
             .into_iter()
             .enumerate()

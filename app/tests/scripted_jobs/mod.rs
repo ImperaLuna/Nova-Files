@@ -1,4 +1,5 @@
-use nova_files_api::{JobId, NotOpened, Operation, Outcome, Tally};
+use nova_files_api::{JobId, Operation, Outcome, Tally};
+use nova_files_open_api::{self as open_api, NotOpened};
 use nova_files_trash_api as trash_api;
 use nova_files_trash_ui::TrashPart;
 
@@ -253,11 +254,11 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
     cx.simulate_keystrokes("down shift-down enter");
     cx.run_until_parked();
     let opened: Vec<PathBuf> = core
-        .commands()
+        .sent::<open_api::Command>()
         .into_iter()
         .filter_map(|command| match command {
-            Command::OpenFile { path, .. } => Some(path),
-            _ => None,
+            open_api::Command::OpenFile { path, .. } => Some(path),
+            open_api::Command::OpenWith(_) => None,
         })
         .collect();
     assert_eq!(opened.len(), 2, "{opened:?}");
@@ -265,13 +266,13 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
         view.read_with(cx, |view, _| view.note().map(|note| note.label.to_string()))
     };
 
-    core.send(Event::FileNotOpened {
+    core.send(open_api::Event::NotOpened {
         path: opened[0].clone(),
         reason: NotOpened::NoApp,
     });
     cx.run_until_parked();
     assert_eq!(note(cx).as_deref(), Some("Can't open 0: no app opens it"));
-    core.send(Event::FileNotOpened {
+    core.send(open_api::Event::NotOpened {
         path: opened[1].clone(),
         reason: NotOpened::Failed,
     });
@@ -280,7 +281,7 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
         note(cx).as_deref(),
         Some("Can't open 0: no app opens it · 1: its app didn't start")
     );
-    core.send(Event::FileNotOpened {
+    core.send(open_api::Event::NotOpened {
         path: opened[0].clone(),
         reason: NotOpened::Failed,
     });
@@ -293,7 +294,7 @@ fn files_that_open_in_no_app_each_say_why_on_the_island(cx: &mut TestAppContext)
     cx.executor().advance_clock(nova_files_ui::NOTE_TIME);
     cx.run_until_parked();
     assert_eq!(note(cx), None);
-    core.send(Event::FileNotOpened {
+    core.send(open_api::Event::NotOpened {
         path: opened[1].clone(),
         reason: NotOpened::Failed,
     });

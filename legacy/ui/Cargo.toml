@@ -19,14 +19,19 @@
 # - nova-files-clipboard-ui
 # - nova-files-delete-ui
 # - nova-files-drives-api
+# - nova-files-folders-api
 # - nova-files-gathered-api
+# - nova-files-open-api
 # - nova-files-picker-api
 # - nova-files-picker-ui
 # - nova-files-places-api
+# - nova-files-preview-api
 # - nova-files-properties-api
+# - nova-files-search-api
 # - nova-files-settings-api
 # - nova-files-shell
 # - nova-files-start-api
+# - nova-files-thumbnails-api
 
 [package]
 name = "nova-files-ui"
@@ -45,14 +50,19 @@ chrono = "0.4.45"
 nova-files-api.workspace = true
 nova-files-delete-ui.workspace = true
 nova-files-drives-api.workspace = true
+nova-files-folders-api.workspace = true
 nova-files-gathered-api.workspace = true
+nova-files-open-api.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-picker-ui.workspace = true
 nova-files-places-api.workspace = true
+nova-files-preview-api.workspace = true
 nova-files-properties-api.workspace = true
+nova-files-search-api.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-shell.workspace = true
 nova-files-start-api.workspace = true
+nova-files-thumbnails-api.workspace = true
 # Logs an event no part takes.
 log = { version = "0.4.35", features = ["std"] }
 # Async channels, so events from other threads wake the window's tasks.

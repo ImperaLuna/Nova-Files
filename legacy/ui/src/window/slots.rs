@@ -4,10 +4,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription};
+use nova_files_api::HiddenFiles;
+use nova_files_picker_api::PickId;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
-    PageRef, Part, Scene, Shown, TabId,
+    Opening, PageRef, Part, Scene, Shown, TabId,
 };
+use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::search::FocusTo;
 use super::{MainWindow, Went};
@@ -26,6 +29,7 @@ impl MainWindow {
         );
         watching.extend([
             cx.observe_self(Self::publish),
+            cx.observe(&self.host.nav, |_, _, cx| cx.notify()),
             cx.subscribe(&self.host.nav, |this, _, event: &NavEvent, cx| {
                 if *event == NavEvent::Asked {
                     this.take_nav_asks(cx);
@@ -38,6 +42,9 @@ impl MainWindow {
                 this.take_entries_asks(cx);
             }),
             cx.on_release(|this, cx| this.parts.closing(cx)),
+            cx.observe_global::<Published<HiddenFiles>>(Self::hidden_published),
+            cx.observe_global::<Published<ThumbnailsShown>>(Self::thumbnails_published),
+            cx.observe_global::<Published<KnownFolders>>(Self::known_published),
         ]);
         watching
     }
@@ -60,6 +67,8 @@ impl MainWindow {
             rules: self.folder_rules(),
             selected: self.selected_len(),
             picker: self.host.opening.is_some(),
+            searching: self.searching(),
+            gathered: self.gathered_here().is_some(),
         }
     }
 
@@ -76,6 +85,20 @@ impl MainWindow {
             return Some(shell::Location::Folder(folder.to_path_buf()));
         }
         self.location().map(Location::shell)
+    }
+
+    pub(crate) fn open_as_picker(&mut self, id: PickId) {
+        if !self.picker() {
+            self.host.opening = Opening::of(id);
+        }
+    }
+
+    pub const fn picker(&self) -> bool {
+        self.host.opening.is_some()
+    }
+
+    pub(crate) fn closing(&self, cx: &App) -> bool {
+        self.host.nav.read(cx).closing()
     }
 
     pub fn dims(&self, index: usize, cx: &App) -> bool {
@@ -144,6 +167,8 @@ impl MainWindow {
             selected,
             picker: self.host.opening.is_some(),
             asked: self.asked,
+            searching: self.searching(),
+            gathered: self.gathered_here().is_some(),
         };
         self.host
             .entries

@@ -6,6 +6,7 @@ use nova_files_ui::CoreStatus;
 use super::*;
 
 mod hooks;
+mod naming;
 mod picking;
 mod rows;
 mod shelf;
@@ -101,7 +102,7 @@ fn a_part_takes_its_own_events_and_its_rules_reach_the_window(cx: &mut TestAppCo
     assert_eq!(rules(&view, cx).views, Views::DetailsOnly);
     assert_eq!(
         view.read_with(cx, |view, _| view.folder_view()),
-        nova_files_api::FolderView::default()
+        nova_files_folders_api::FolderView::default()
     );
 }
 

@@ -1,0 +1,18 @@
+# nova-files-folders-api
+#
+# What the folders feature's two halves say to each other: how each folder
+# is shown, and the commands and event that keep those views.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-folders-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

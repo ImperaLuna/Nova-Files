@@ -14,7 +14,6 @@ mod sheet;
 mod sidebar;
 mod start;
 
-pub use crate::places::place_icon;
 pub use properties::TopFacts;
 pub use row::{RowIcon, entry_kind};
 
@@ -24,8 +23,8 @@ use gpui::{
     ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
     prelude::FluentBuilder as _,
 };
-use nova_files_api::ViewMode;
 use nova_files_delete_ui::DeleteSelected;
+use nova_files_folders_api::ViewMode;
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
@@ -44,6 +43,9 @@ use crate::window::{FocusTo, MainWindow};
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.closing(cx) {
+            window.remove_window();
+        }
         let scale_factor = window.scale_factor();
         let viewport = window.viewport_size();
         self.keep_gallery(window, cx);
@@ -68,7 +70,7 @@ impl MainWindow {
         self.settle_search(window, cx);
         self.settle_tab_focus(window, cx);
         let colors = Colors::of(cx);
-        let main = self.pick.is_none();
+        let main = !self.picker();
         let narrow = window.viewport_size().width < theme::window::NARROW_WIDTH;
         if window.focused(cx).is_none() {
             window.focus(&self.keys_home(cx), cx);
