@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use super::{NAME_MAX, Typed, keep_both, read, stem};
+use super::{NAME_MAX, Typed, keep_both, read};
 
 fn typed(text: &str) -> Typed {
     read(text, Path::new("/home/me"), Path::new("/home/me/Documents"))
@@ -47,16 +47,6 @@ fn a_path_is_tried_as_a_folder_unless_it_ends_in_a_slash() {
         typed("../"),
         Typed::Folder(PathBuf::from("/home/me/Documents/.."))
     );
-}
-
-#[test]
-fn the_stem_stops_at_the_extension() {
-    assert_eq!(stem("report-q3.pdf"), 0..9);
-    assert_eq!(stem("my.report.pdf"), 0..9);
-    assert_eq!(stem("backup.tar.gz"), 0..6);
-    assert_eq!(stem("README"), 0..6);
-    assert_eq!(stem(".bashrc"), 0..7);
-    assert_eq!(stem(".tar.gz"), 0..4);
 }
 
 #[test]

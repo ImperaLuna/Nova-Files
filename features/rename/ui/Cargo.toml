@@ -1,0 +1,30 @@
+# nova-files-rename-ui
+#
+# Rename's window half: renaming an entry in place with F2, the menus and
+# the island, and New folder, which makes a folder and starts renaming it.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-rename-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-shell.workspace = true

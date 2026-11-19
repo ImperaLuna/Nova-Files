@@ -191,14 +191,6 @@ impl MainWindow {
         if matches!(operation, Operation::ChangeAccess { .. }) {
             self.access_changed();
         }
-        if *outcome != Outcome::Done
-            && matches!(
-                operation,
-                Operation::Rename { .. } | Operation::NewFolder { .. }
-            )
-        {
-            self.waiting = super::renaming::Waiting::Nothing;
-        }
         let transfer = is_transfer(&operation);
         let others = self.transfers_running();
         let batching = others || !self.jobs.batch.is_empty();

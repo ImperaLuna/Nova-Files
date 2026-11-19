@@ -88,7 +88,7 @@ impl MainWindow {
                     .child(cell)
                     .into_any_element();
             }
-            self.name_field((index, entry), cx).map_or_else(
+            self.parts.name_field(entry, cx).map_or_else(
                 || {
                     self.cell_name((index, name), grid, row, cx)
                         .into_any_element()

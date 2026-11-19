@@ -11,7 +11,7 @@ use nova_files_shell::{Look, MenuAt, MenuGroup, MenuItem, Placed, arrange};
 
 use super::row::icon;
 use crate::assets::Icon;
-use crate::commands::{ClearSelection, RENAME, TRASH, Undo};
+use crate::commands::{ClearSelection, TRASH, Undo};
 use crate::island::progress::Running;
 use crate::island::{self, Confirm, Note, asking};
 use crate::theme::{Colors, radius, size, text};
@@ -76,7 +76,7 @@ impl MainWindow {
         let mut placed = if self.folder_rules().trashed {
             Vec::new()
         } else {
-            file_buttons(count)
+            file_buttons()
         };
         placed.extend(self.parts.menu(MenuAt::Island, &self.scene(), cx));
         parts.extend(arrange(placed).into_iter().flatten().map(|item| {
@@ -121,25 +121,16 @@ impl MainWindow {
     }
 }
 
-fn file_buttons(count: usize) -> Vec<Placed> {
-    let button = |icon, spec, selector| {
-        MenuItem::run(icon, spec)
-            .with_selector(selector)
-            .icon_only()
-    };
-    let rename = (count == 1).then(|| button(Icon::Rename, &RENAME, "island-rename"));
-    vec![
-        Placed::new(
-            MenuGroup::Edit,
-            Placed::SECOND,
-            rename.into_iter().collect(),
-        ),
-        Placed::new(
-            MenuGroup::Danger,
-            Placed::FIRST,
-            vec![button(Icon::Trash, &TRASH, "island-trash")],
-        ),
-    ]
+fn file_buttons() -> Vec<Placed> {
+    vec![Placed::new(
+        MenuGroup::Danger,
+        Placed::FIRST,
+        vec![
+            MenuItem::run(Icon::Trash, &TRASH)
+                .with_selector("island-trash")
+                .icon_only(),
+        ],
+    )]
 }
 
 fn ask_parts(

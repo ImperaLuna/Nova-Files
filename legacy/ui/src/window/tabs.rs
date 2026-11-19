@@ -284,7 +284,6 @@ impl MainWindow {
             bar.close_menu(cx);
             bar.stop_typing(false, cx);
         });
-        self.renaming = None;
         self.details = HashMap::new();
         release(self.thumbnails.take_all(), None, cx);
         self.jump = TypeJump::default();
