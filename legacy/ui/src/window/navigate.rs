@@ -45,7 +45,7 @@ impl MainWindow {
     }
 
     pub(super) fn replace_with(&mut self, place: &Location, cx: &mut Context<Self>) {
-        self.forget_drive_to_open();
+        self.went_elsewhere();
         self.history.replace_with(place.clone());
         self.go_to(place, cx);
         cx.notify();
