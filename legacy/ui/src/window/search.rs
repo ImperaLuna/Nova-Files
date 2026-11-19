@@ -117,6 +117,7 @@ impl MainWindow {
         self.search.failed = false;
         self.selection = None;
         self.gathered.shown = None;
+        self.listed_page = None;
         self.listing_replaced(listing, Place::Top, cx);
         cx.notify();
     }

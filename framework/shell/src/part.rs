@@ -7,7 +7,7 @@ use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _, Modifiers,
     Pixels, SharedString, Size, Window,
 };
-use nova_files_api::{Entry, Event, Listing, ListingId};
+use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
@@ -69,6 +69,7 @@ pub struct Column<P> {
 
 type EventSlot<P> = Box<dyn Fn(&mut P, &Envelope, &mut Context<P>)>;
 type Bind<P> = Box<dyn Fn(Div, &Entity<P>, &Host) -> Div>;
+pub type ListSlot = Rc<dyn Fn(&PageRef, ListingId, Order) -> Option<Envelope>>;
 pub type PageSlot<P> =
     Rc<dyn Fn(&mut P, &PageRef, &mut Window, &mut Context<P>) -> Option<AnyElement>>;
 
@@ -83,6 +84,7 @@ pub struct Slots<P> {
     pub(crate) commands: Vec<CommandSlot<P>>,
     pub(crate) menus: Vec<(MenuAt, MenuGroup, u8, Items<P>)>,
     pub(crate) pages: Vec<(TypeId, PageSlot<P>)>,
+    pub(crate) listing_pages: Vec<(TypeId, ListSlot)>,
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
     pub(crate) start_cards: Vec<Card<P>>,
@@ -119,6 +121,7 @@ impl<P> Default for Slots<P> {
             commands: Vec::new(),
             menus: Vec::new(),
             pages: Vec::new(),
+            listing_pages: Vec::new(),
             columns: Vec::new(),
             sidebar: Vec::new(),
             start_cards: Vec::new(),
@@ -199,6 +202,12 @@ impl<P: Part> Slots<P> {
             page.get::<K>().map(|page| render(part, page, window, cx))
         });
         self.pages.push((TypeId::of::<K>(), slot));
+    }
+
+    pub fn listing_page<K: PageKind>(&mut self, list: fn(&K, ListingId, Order) -> Envelope) {
+        let slot: ListSlot =
+            Rc::new(move |page, id, order| page.get::<K>().map(|page| list(page, id, order)));
+        self.listing_pages.push((TypeId::of::<K>(), slot));
     }
 
     pub fn column(&mut self, column: Columns<P>) {

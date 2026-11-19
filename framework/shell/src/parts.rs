@@ -7,7 +7,7 @@ use gpui::{
     AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
     Pixels, SharedString, Size, Subscription,
 };
-use nova_files_api::{Entry, Event, Listing, ListingId};
+use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
 use crate::assets::Icon;
 use crate::jump::Jump;
@@ -58,6 +58,8 @@ trait OpenPart {
     fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
     fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>>;
     fn busy(&self, cx: &App) -> bool;
+    fn lists(&self, page: &PageRef) -> bool;
+    fn list_page(&self, page: &PageRef, id: ListingId, order: Order) -> Option<Envelope>;
     fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement>;
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App);
     fn takes_drops(&self, page: &PageRef) -> bool;
@@ -269,6 +271,20 @@ impl<P: Part> OpenPart for Opened<P> {
     fn busy(&self, cx: &App) -> bool {
         let part = self.entity.read(cx);
         self.slots.busy.iter().any(|busy| busy(part, cx))
+    }
+
+    fn lists(&self, page: &PageRef) -> bool {
+        self.slots
+            .listing_pages
+            .iter()
+            .any(|(kind, _)| *kind == page.kind())
+    }
+
+    fn list_page(&self, page: &PageRef, id: ListingId, order: Order) -> Option<Envelope> {
+        self.slots
+            .listing_pages
+            .iter()
+            .find_map(|(_, list)| list(page, id, order))
     }
 
     fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement> {
@@ -642,6 +658,16 @@ impl WindowParts {
 
     pub fn busy(&self, cx: &App) -> bool {
         self.opened.iter().any(|part| part.busy(cx))
+    }
+
+    pub fn lists(&self, page: &PageRef) -> bool {
+        self.opened.iter().any(|part| part.lists(page))
+    }
+
+    pub fn list_page(&self, page: &PageRef, id: ListingId, order: Order) -> Option<Envelope> {
+        self.opened
+            .iter()
+            .find_map(|part| part.list_page(page, id, order))
     }
 
     pub fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement> {
