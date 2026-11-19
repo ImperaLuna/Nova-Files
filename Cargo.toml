@@ -31,6 +31,8 @@ nova-files-gathered-api = { path = "features/gathered/api" }
 nova-files-gathered-core = { path = "features/gathered/core" }
 nova-files-index = { path = "helpers/index" }
 nova-files-jobs = { path = "framework/jobs" }
+nova-files-look-api = { path = "features/look/api" }
+nova-files-look-core = { path = "features/look/core" }
 nova-files-messages = { path = "framework/messages" }
 nova-files-picker-api = { path = "features/picker/api" }
 nova-files-places-api = { path = "features/places/api" }

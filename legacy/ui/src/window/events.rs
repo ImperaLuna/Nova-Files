@@ -143,7 +143,6 @@ impl MainWindow {
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::OpenWith(answer) => self.open_with_answered(answer, cx),
-            Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
@@ -249,7 +248,7 @@ impl MainWindow {
         cx.notify();
     }
 
-    fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
+    pub(super) fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
         let colors = Colors::new(theme);
         if Colors::of(cx) != colors {
             cx.set_global(colors);

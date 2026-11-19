@@ -3,13 +3,11 @@
 //!
 //! A client (a window, the D-Bus service) gets a [`Connection`] from a
 //! [`Connector`], sends [`Command`]s through it and receives [`Event`]s
-//! through the [`EventSink`] it handed over. A client that asks for the
-//! [`Theme`] gets it again whenever it changes. The core reads the other end of the channel
-//! as [`CoreMessage`]s. File
-//! operations run as jobs (see [`Operation`]). A [`Preview`] is what a
-//! quick look shows of a file or folder. A [`FolderView`] is how a folder
-//! is shown. A [`FileIcon`] is how an
-//! entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
+//! through the [`EventSink`] it handed over. The core reads the other end
+//! of the channel as [`CoreMessage`]s. File operations run as jobs (see
+//! [`Operation`]). A [`Preview`] is what a quick look shows of a file or
+//! folder. A [`FolderView`] is how a folder is shown. A [`FileIcon`] is how
+//! an entry's icon is drawn, and a [`ThumbnailSize`] how big its thumbnail is.
 //! A [`WindowRequest`] is a window another program asks for.
 
 #![forbid(unsafe_code)]

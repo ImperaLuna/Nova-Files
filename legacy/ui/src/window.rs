@@ -59,6 +59,7 @@ use nova_files_api::{
 };
 use nova_files_drives_api as drives_api;
 use nova_files_gathered_api::{self as gathered_api, Gathering};
+use nova_files_look_api as look_api;
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_properties_api as properties_api;
 use nova_files_settings_api::{self as settings_api, Settings};
@@ -210,7 +211,7 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 3] = [Command::Ping, Command::FolderViews, Command::Theme];
+    const FIRST_ASKS: [Command; 2] = [Command::Ping, Command::FolderViews];
 
     pub fn at(
         connector: &Connector,
@@ -338,6 +339,10 @@ impl MainWindow {
             Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
         };
+        let envelope = match envelope.open::<look_api::Event>() {
+            Ok(look_api::Event::Theme(theme)) => return Self::theme_arrived(&theme, cx),
+            Err(envelope) => envelope,
+        };
         let envelope = match envelope.open::<places_api::Event>() {
             Ok(places_api::Event::Places(places)) => return self.places_arrived(places, cx),
             Ok(places_api::Event::Bookmarks(pinned)) => return self.pinned_arrived(pinned, cx),
@@ -444,6 +449,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
                 connection.send(command)?;
             }
             connection.send(drives_api::Command::Drives)?;
+            connection.send(look_api::Command::Watch)?;
             connection.send(places_api::Command::Places)?;
             connection.send(settings_api::Command::Watch)?;
             connection.send(trash_api::Command::List)?;

@@ -9,6 +9,9 @@ use nova_files_drives_api::{Command as DrivesCommand, DriveOffer, Event as Drive
 use nova_files_drives_core::{Store as DrivesStore, disk_space};
 use nova_files_gathered_api as gathered_api;
 use nova_files_gathered_core::Store as GatheredStore;
+use nova_files_look_api as look_api;
+use nova_files_look_core::FileIcons;
+use nova_files_look_core::theme::Store as ThemeStore;
 use nova_files_messages::{Routed, Routes};
 use nova_files_places_api as places_api;
 use nova_files_places_core::Store as PlacesStore;
@@ -20,7 +23,6 @@ use nova_files_start_api as start_api;
 use nova_files_start_core::Store as RecentStore;
 use nova_files_trash_api as trash_api;
 
-use crate::file_icons::FileIcons;
 use crate::folder_views::Store as FolderViewsStore;
 use crate::inside::Inside;
 use crate::jobs::Client;
@@ -28,7 +30,6 @@ use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
 use crate::search::Searcher;
-use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
 use crate::trash;
 use crate::window_state::Store as WindowStateStore;
@@ -80,6 +81,14 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
                 let folders = setup.gathered.folders_of(place);
                 nova_files_gathered_core::list(client.entries(), listing, folders, order, hidden);
             }
+        }
+        Ok(())
+    })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
+            look_api::Command::Watch => setup.theme.listen(id, client.events()),
+            look_api::Command::DesktopLook(look) => setup.theme.follow_desktop(look),
+            look_api::Command::DesktopIconThemes(names) => setup.file_icons.follow_desktop(&names),
         }
         Ok(())
     })?;
@@ -141,8 +150,10 @@ pub fn emitted_types() -> Vec<MessageType> {
         MessageType::of::<Event>(),
         MessageType::of::<DrivesEvent>(),
         MessageType::of::<gathered_api::Event>(),
+        MessageType::of::<look_api::Event>(),
         MessageType::of::<places_api::Event>(),
         MessageType::of::<properties_api::Event>(),
+        MessageType::of::<settings_api::Event>(),
         MessageType::of::<settings_api::Event>(),
         MessageType::of::<start_api::Event>(),
         MessageType::of::<trash_api::Event>(),
@@ -247,10 +258,7 @@ fn answer(
         command @ (Command::WindowState
         | Command::SaveWindowState(_)
         | Command::FolderViews
-        | Command::SetFolderView { .. }
-        | Command::Theme
-        | Command::DesktopLook(_)
-        | Command::DesktopIconThemes(_)) => look::answer(id, client, command, setup),
+        | Command::SetFolderView { .. }) => look::answer(id, client, command, setup),
         command @ (Command::WatchJobs
         | Command::StartJob { .. }
         | Command::DropFiles { .. }

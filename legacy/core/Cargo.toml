@@ -24,6 +24,8 @@
 # - nova-files-gathered-core
 # - nova-files-index
 # - nova-files-jobs
+# - nova-files-look-api
+# - nova-files-look-core
 # - nova-files-messages
 # - nova-files-places-api
 # - nova-files-places-core
@@ -75,6 +77,8 @@ nova-files-gathered-api.workspace = true
 nova-files-gathered-core.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true
+nova-files-look-api.workspace = true
+nova-files-look-core.workspace = true
 nova-files-messages.workspace = true
 nova-files-places-api.workspace = true
 nova-files-places-core.workspace = true

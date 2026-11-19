@@ -1,8 +1,6 @@
 #![forbid(unsafe_code)]
 
-mod file_icons;
 mod folder_views;
-mod icon_theme;
 mod index;
 mod inside;
 mod jobs;
@@ -12,7 +10,6 @@ mod ops;
 mod preview;
 mod run;
 mod search;
-mod theme;
 mod thumbs;
 mod trace;
 mod trash;
@@ -24,8 +21,8 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use nova_files_api::Connector;
-use nova_files_disk::{capped, config_watch, hand_edited, private_file, saver, timed};
+use nova_files_api::{ClientId, Connector};
+use nova_files_disk::{capped, hand_edited, private_file, saver, timed};
 use nova_files_entries_core::{list, memory, order};
 
 use search::Searcher;
@@ -46,6 +43,7 @@ pub use vulkan_drivers::{FILTER_VARIABLE, absent_vendor_drivers};
 pub const IDLE_EXIT: Duration = Duration::from_mins(3);
 
 const THREAD_NAME: &str = "nova-files-core";
+const SETTINGS_LISTENER: ClientId = ClientId(u64::MAX);
 
 pub struct RunningCore {
     pub connector: Connector,
@@ -100,16 +98,16 @@ pub fn spawn_with_archiver(
         .spawn(move || {
             let config = home.as_ref().map(|home| home.config.as_path());
             let settings = nova_files_settings_core::Store::open(config);
-            let theme = theme::Store::open(config);
-            theme.follow(&settings);
+            let theme = nova_files_look_core::theme::Store::open(config);
+            settings.listen(SETTINGS_LISTENER, &theme.follower());
             let places = nova_files_places_core::Store::open(home.clone());
             let gathered = nova_files_gathered_core::Store::open(home.clone());
             let state_home = home.as_ref().map(|home| home.state.as_path());
             let recent = nova_files_start_core::Store::open(state_home);
             let folder_views = folder_views::Store::open(state_home);
             let mime_types = Arc::default();
-            let file_icons = Arc::new(file_icons::FileIcons::from_env(
-                Arc::clone(&mime_types),
+            let file_icons = Arc::new(nova_files_look_core::FileIcons::from_env(
+                Arc::new(mime::LazyMimes(Arc::clone(&mime_types))),
                 config,
             ));
             let setup = run::Setup {

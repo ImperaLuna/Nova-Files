@@ -2,7 +2,8 @@ use std::sync::mpsc;
 use std::thread;
 
 use futures::{Stream, StreamExt as _, future, stream};
-use nova_files_api::{Color, Command, Connector, CoreGone, DesktopLook, Event, Mode};
+use nova_files_api::{Color, Connector, CoreGone, DesktopLook, Event, Mode};
+use nova_files_look_api::Command;
 use zbus::blocking::Connection;
 use zbus::fdo::DBusProxy;
 use zbus::zvariant::Str;
