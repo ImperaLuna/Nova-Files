@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use gpui::SharedString;
 use nova_files_api::{Entry, EntryKind};
 
-use crate::places::folder_name;
+use nova_files_places_ui::folder_name;
 
 const HIDDEN: u8 = b'.';
 
