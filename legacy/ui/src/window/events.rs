@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
-use nova_files_places_api::Known;
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -133,15 +132,6 @@ impl MainWindow {
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. } => {}
         }
-    }
-
-    pub(super) fn places_changed(&mut self, cx: &mut Context<Self>) {
-        if let Some(known) = Published::<Known>::get(cx) {
-            self.places.clone_from(&known.places);
-            self.pinned = Arc::clone(&known.pinned);
-        }
-        cx.emit(WindowEvent::Places);
-        cx.notify();
     }
 
     pub(super) fn listing_failed(&mut self, id: ListingId, cx: &mut Context<Self>) {

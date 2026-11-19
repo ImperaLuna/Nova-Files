@@ -4,10 +4,10 @@ mod folder_tree;
 mod shown;
 mod tree;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use gpui::{App, Context};
+use gpui::{App, Context, SharedString};
 use nova_files_places_api::{self as places_api, BookmarkChange, Known};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
@@ -33,6 +33,13 @@ pub struct PlacesPart {
 impl PlacesPart {
     pub const fn known(&self) -> &Known {
         &self.known
+    }
+
+    fn folder_look(&self, folder: &Path, _: &App) -> Option<(SharedString, Icon)> {
+        self.shown
+            .iter()
+            .find(|shown| shown.path == folder)
+            .map(|shown| (shown.name.clone(), shown.icon))
     }
 
     fn arrived(&mut self, event: places_api::Event, cx: &mut Context<Self>) {
@@ -130,5 +137,6 @@ impl Part for PlacesPart {
         slots.sidebar(SidebarAt::Places, rows);
         slots.row_menu(row_menu);
         slots.section_button(SidebarAt::Places, PIN_BUTTON, pin_button);
+        slots.folder_look(Self::folder_look);
     }
 }
