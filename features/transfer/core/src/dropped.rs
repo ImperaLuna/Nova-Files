@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use nova_files_api::{DropAskId, DropKind, Event, EventSink, Operation};
-
-use crate::timed;
+use nova_files_api::{EventSink, Operation};
+use nova_files_disk::timed;
+use nova_files_transfer_api::{DropAskId, DropKind, Event};
 
 const PROBE_WAIT: Duration = Duration::from_secs(2);
 
@@ -64,7 +64,7 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::*;
-    use crate::ops::test_folder::TestFolder;
+    use nova_files_jobs::test_folder::TestFolder;
 
     const ANOTHER_DRIVE: &str = "/proc";
 

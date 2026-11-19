@@ -31,6 +31,7 @@ use nova_files_start_api as start_api;
 use nova_files_start_core::Store as RecentStore;
 use nova_files_thumbnails_api as thumbnails_api;
 use nova_files_thumbnails_core::Thumbnails;
+use nova_files_transfer_api as transfer_api;
 use nova_files_trash_api as trash_api;
 
 use crate::inside::Inside;
@@ -108,13 +109,21 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         Ok(())
     })?;
     routes.on(always(start))?;
+    file_routes(&mut routes)?;
+    routes.on_leave(forget);
+    Ok(routes)
+}
+
+fn file_routes(routes: &mut Routes<Setup, Client>) -> Result<(), MessageType> {
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        operations::drop(id, client, command, setup);
+        Ok(())
+    })?;
     routes.on(|setup: &Setup, _, client: &Client, command| match command {
         trash_api::Command::List => {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
         }
-    })?;
-    routes.on_leave(forget);
-    Ok(routes)
+    })
 }
 
 type Route<M> = fn(&Setup, ClientId, &Client, M);
@@ -231,6 +240,7 @@ pub fn emitted_types() -> Vec<MessageType> {
         MessageType::of::<settings_api::Event>(),
         MessageType::of::<start_api::Event>(),
         MessageType::of::<thumbnails_api::Event>(),
+        MessageType::of::<transfer_api::Event>(),
         MessageType::of::<trash_api::Event>(),
     ]
 }
@@ -329,8 +339,6 @@ fn answer(
         }
         command @ (Command::WatchJobs
         | Command::StartJob { .. }
-        | Command::DropFiles { .. }
-        | Command::DropWould { .. }
         | Command::PauseJob(_)
         | Command::ResumeJob(_)
         | Command::ForgetJob(_)

@@ -32,8 +32,8 @@ pub use folder::{
 };
 pub use hidden_files::HiddenFiles;
 pub use job::{
-    Answer, Conflict, ConflictKind, DropAskId, DropKind, ExtractTo, Failure, JobId, JobTag,
-    Operation, Outcome, Packing, Progress, Scope, Tally,
+    Answer, Conflict, ConflictKind, ExtractTo, Failure, JobId, JobTag, Operation, Outcome, Packing,
+    Progress, Scope, Tally,
 };
 pub use message::{Command, Event, MAX_ROWS};
 pub use nova_files_messages::{

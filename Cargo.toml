@@ -58,6 +58,7 @@ nova-files-start-core = { path = "features/start/core" }
 nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
 nova-files-thumbnails-api = { path = "features/thumbnails/api" }
 nova-files-thumbnails-core = { path = "features/thumbnails/core" }
+nova-files-transfer-api = { path = "features/transfer/api" }
 nova-files-transfer-core = { path = "features/transfer/core" }
 nova-files-trash-api = { path = "features/trash/api" }
 nova-files-trash-core = { path = "features/trash/core" }

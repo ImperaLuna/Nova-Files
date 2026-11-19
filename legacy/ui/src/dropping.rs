@@ -2,9 +2,10 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use gpui::Modifiers;
-use nova_files_api::{DropKind, Operation};
+use nova_files_api::Operation;
 use nova_files_gathered_api::Gathering;
 use nova_files_shell::PageRef;
+use nova_files_transfer_api::DropKind;
 
 pub const MOVE_TO: &str = "Move to";
 pub const COPY_TO: &str = "Copy to";

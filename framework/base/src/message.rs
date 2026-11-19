@@ -5,10 +5,7 @@ use std::sync::Arc;
 
 use crate::file_icon::FileIcon;
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Unreadable};
-use crate::job::{
-    Answer, Conflict, DropAskId, DropKind, JobId, JobTag, Operation, Outcome, Progress, Scope,
-    Tally,
-};
+use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope, Tally};
 use crate::thumbnail_size::ThumbnailSize;
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -63,23 +60,6 @@ pub enum Command {
     /// [`Command::WatchJobs`]) and hears [`Event::JobFinished`] once it
     /// ends.
     StartJob { tag: JobTag, operation: Operation },
-    /// Copy or move `sources` into the folder `into`, as dragging them
-    /// there does: moved when every one is on `into`'s drive, copied
-    /// otherwise. The core picks; [`Event::JobStarted`] says which, and
-    /// the job then runs as a [`Command::StartJob`] of it would.
-    DropFiles {
-        tag: JobTag,
-        sources: Vec<PathBuf>,
-        into: PathBuf,
-    },
-    /// Say what [`Command::DropFiles`] of `sources` into `into` would do,
-    /// without doing it: for a drag to name its drop before it lands. The
-    /// answer is [`Event::DropWould`] with the same `id`.
-    DropWould {
-        id: DropAskId,
-        sources: Vec<PathBuf>,
-        into: PathBuf,
-    },
     /// Hold job `job` before its next change to the disk. Every client
     /// hears [`Event::JobPaused`].
     PauseJob(JobId),
@@ -144,11 +124,8 @@ pub enum Event {
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),
-    /// [`Command::DropWould`] `id`'s drop would `kind` its files. Only the
-    /// client that asked hears it.
-    DropWould { id: DropAskId, kind: DropKind },
-    /// [`Command::StartJob`] or [`Command::DropFiles`] `tag` runs as job
-    /// `job`, doing `operation`. Only the client that asked hears it, and
+    /// [`Command::StartJob`] (or a drop) `tag` runs as job `job`, doing
+    /// `operation`. Only the client that asked hears it, and
     /// before anything else about the job.
     JobStarted {
         tag: JobTag,

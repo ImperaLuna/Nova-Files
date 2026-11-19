@@ -129,7 +129,6 @@ impl MainWindow {
                 self.details_arrived(first, &details, &icons, cx);
             }
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
-            Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)
