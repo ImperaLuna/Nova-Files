@@ -8,7 +8,7 @@ mod entries;
 pub mod format;
 mod history;
 mod host;
-mod island;
+pub mod island;
 pub mod jump;
 mod kept;
 pub mod kind;
