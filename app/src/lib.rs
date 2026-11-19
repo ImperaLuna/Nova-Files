@@ -5,6 +5,7 @@ use nova_files_delete_ui::DeletePart;
 use nova_files_drives_ui::DrivesPart;
 use nova_files_look_ui::LookPart;
 use nova_files_places_ui::PlacesPart;
+use nova_files_settings_ui::SettingsPart;
 use nova_files_shell::Parts;
 use nova_files_trash_ui::TrashPart;
 
@@ -16,6 +17,7 @@ pub fn parts() -> Parts {
     parts.add::<DrivesPart>();
     parts.add::<LookPart>();
     parts.add::<PlacesPart>();
+    parts.add::<SettingsPart>();
     parts.add::<TrashPart>();
     parts
 }

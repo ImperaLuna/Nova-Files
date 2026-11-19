@@ -30,7 +30,8 @@ use std::time::Duration;
 use gpui::{App, Entity, Modifiers, SharedString, TestAppContext, VisualTestContext, px};
 use nova_files_api::{Color, EntryId};
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
-use nova_files_settings_api::Thumbnails;
+use nova_files_settings_api::{Settings, Thumbnails};
+use nova_files_shell::Published;
 use nova_files_trash_ui::TrashPart;
 use nova_files_ui::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent};
 
@@ -468,8 +469,9 @@ async fn a_hand_edit_to_the_settings_file_reaches_the_window(cx: &mut TestAppCon
     let folder = tree.path().join(".config/nova-files");
     fs::create_dir_all(&folder).unwrap();
     fs::write(folder.join("settings.toml"), "thumbnails = false\n").unwrap();
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.settings().thumbnails == Thumbnails::Hidden
+    view.condition::<WindowEvent>(cx, |_, cx| {
+        Published::<Settings>::get(cx)
+            .is_some_and(|settings| settings.thumbnails == Thumbnails::Hidden)
     })
     .await;
 }
