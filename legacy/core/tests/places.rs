@@ -10,8 +10,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use nova_files_api::{Bookmark, BookmarkChange, Command, Connection, Event, Place, PlaceKind};
+use nova_files_api::Connection;
 use nova_files_core::{Home, IDLE_EXIT, RunningCore};
+use nova_files_places_api::{Bookmark, BookmarkChange, Command, Event, Place, PlaceKind};
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
 const NOTHING_MORE: Duration = Duration::from_millis(600);
@@ -90,14 +91,14 @@ impl Client {
     fn places(&self) -> Vec<Place> {
         match self.events.recv_timeout(ANSWER_TIMEOUT).unwrap() {
             Event::Places(places) => places,
-            other => panic!("expected the places, got {other:?}"),
+            other @ Event::Bookmarks(_) => panic!("expected the places, got {other:?}"),
         }
     }
 
     fn bookmarks(&self) -> Vec<Bookmark> {
         match self.events.recv_timeout(ANSWER_TIMEOUT).unwrap() {
             Event::Bookmarks(bookmarks) => bookmarks.to_vec(),
-            other => panic!("expected the pinned folders, got {other:?}"),
+            other @ Event::Places(_) => panic!("expected the pinned folders, got {other:?}"),
         }
     }
 

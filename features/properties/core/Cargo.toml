@@ -1,0 +1,48 @@
+# nova-files-properties-core
+#
+# The properties feature's core half: reads a path's properties, names its
+# owner and group, measures how much space things take, and changes who
+# may do what with files (the change-access job).
+#
+# Allowed outside crates:
+# - rustix
+# - uzers
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+# - nova-files-entries-core
+# - nova-files-jobs
+# - nova-files-messages
+# - nova-files-properties-api
+
+[package]
+name = "nova-files-properties-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Reads a path's properties and walks folders by handle, without following
+# links; changes permissions and groups.
+rustix = { version = "1.1.6", default-features = false, features = ["fs", "process", "std"] }
+# Names the owner and group of a file, and the groups the user is in, the
+# way the system does (NSS: LDAP, systemd-homed and the like as well as
+# /etc/passwd). The standard library and rustix have no such lookup.
+uzers = { version = "0.12.2", default-features = false }
+nova-files-api.workspace = true
+nova-files-disk.workspace = true
+nova-files-entries-core.workspace = true
+nova-files-jobs.workspace = true
+nova-files-messages.workspace = true
+nova-files-properties-api.workspace = true
+
+[dev-dependencies]
+nova-files-jobs = { workspace = true, features = ["test-support"] }
+# Gives a test's own thread other groups (accounts tests).
+rustix = { version = "1.1.6", default-features = false, features = ["thread"] }

@@ -4,26 +4,31 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use nova_files_api::{ClientId, Command, CoreMessage, Envelope, Event, EventSink, MessageType};
+use nova_files_disk::home::Home;
 use nova_files_drives_api::{Command as DrivesCommand, DriveOffer, Event as DrivesEvent};
 use nova_files_drives_core::{Store as DrivesStore, disk_space};
+use nova_files_gathered_api as gathered_api;
+use nova_files_gathered_core::Store as GatheredStore;
 use nova_files_look_api as look_api;
 use nova_files_look_core::FileIcons;
 use nova_files_look_core::theme::Store as ThemeStore;
 use nova_files_messages::{Routed, Routes};
+use nova_files_places_api as places_api;
+use nova_files_places_core::Store as PlacesStore;
+use nova_files_properties_api as properties_api;
+use nova_files_properties_core::Measurer;
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
+use nova_files_start_api as start_api;
+use nova_files_start_core::Store as RecentStore;
 use nova_files_trash_api as trash_api;
 
 use crate::folder_views::Store as FolderViewsStore;
-use crate::gathered::Store as GatheredStore;
 use crate::inside::Inside;
 use crate::jobs::Client;
-use crate::measure::Measurer;
 use crate::mime::MimeTypes;
 use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
-use crate::places::{Home, Store as PlacesStore};
-use crate::recent::Store as RecentStore;
 use crate::search::Searcher;
 use crate::thumbs::Thumbnails;
 use crate::trash;
@@ -65,6 +70,22 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
     )?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
+            gathered_api::Command::Gathered => setup.gathered.listen(id, client.events()),
+            gathered_api::Command::ChangeGathered(change) => setup.gathered.change(change),
+            gathered_api::Command::ListGathered {
+                id: listing,
+                place,
+                order,
+            } => {
+                let hidden = setup.settings.current().hidden_files;
+                let folders = setup.gathered.folders_of(place);
+                nova_files_gathered_core::list(client.entries(), listing, folders, order, hidden);
+            }
+        }
+        Ok(())
+    })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
             look_api::Command::Watch => setup.theme.listen(id, client.events()),
             look_api::Command::DesktopLook(look) => setup.theme.follow_desktop(look),
             look_api::Command::DesktopIconThemes(names) => setup.file_icons.follow_desktop(&names),
@@ -73,8 +94,41 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
     })?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
+            places_api::Command::Places => setup.places.listen(id, client.events()),
+            places_api::Command::ChangeBookmark(change) => setup.places.change(change),
+        }
+        Ok(())
+    })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        let events = client.events();
+        match command {
+            properties_api::Command::Properties { id: asked, path } => {
+                nova_files_properties_core::answer(events, asked, path);
+            }
+            properties_api::Command::Measure { id: scan, paths } => {
+                setup.measurer.measure(id, events, scan, paths);
+            }
+            properties_api::Command::Space { id: scan, folder } => {
+                setup.measurer.space(id, events, scan, folder);
+            }
+            properties_api::Command::StopMeasure(scan) => setup.measurer.stop(id, scan),
+        }
+        Ok(())
+    })?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
             settings_api::Command::Watch => setup.settings.listen(id, client.events()),
             settings_api::Command::Change(change) => setup.settings.change(change),
+        }
+        Ok(())
+    })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| {
+        match command {
+            start_api::Command::FolderUsed(folder) => setup.recent.used(folder),
+            start_api::Command::RecentFolders { id, count, skip } => {
+                let count = usize::try_from(count).unwrap_or(usize::MAX);
+                setup.recent.answer(client.events(), id, count, skip);
+            }
         }
         Ok(())
     })?;
@@ -95,8 +149,13 @@ pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
         MessageType::of::<DrivesEvent>(),
+        MessageType::of::<gathered_api::Event>(),
         MessageType::of::<look_api::Event>(),
+        MessageType::of::<places_api::Event>(),
+        MessageType::of::<properties_api::Event>(),
         MessageType::of::<settings_api::Event>(),
+        MessageType::of::<settings_api::Event>(),
+        MessageType::of::<start_api::Event>(),
         MessageType::of::<trash_api::Event>(),
     ]
 }
@@ -187,21 +246,13 @@ fn answer(
     match command {
         Command::Ping => client.deliver(Event::Pong),
         command @ (Command::ListFolder { .. }
-        | Command::Places
-        | Command::ChangeBookmark(_)
-        | Command::Gathered
-        | Command::ChangeGathered(_)
-        | Command::ListGathered { .. }
         | Command::Rows { .. }
         | Command::Search { .. }
         | Command::Find { .. }
-        | Command::Properties { .. }
         | Command::Preview { .. }
         | Command::OpenFile { .. }
-        | Command::OpenWith(_)
-        | Command::FolderUsed(_)
-        | Command::RecentFolders { .. }) => {
-            folders::answer(id, client, command, setup);
+        | Command::OpenWith(_)) => {
+            folders::answer(client, command, setup);
             Ok(())
         }
         command @ (Command::WindowState
@@ -218,10 +269,6 @@ fn answer(
         | Command::CancelJob(_)
         | Command::AnswerConflict { .. }
         | Command::GivePassword { .. }) => operations::answer(id, client, command, setup),
-        command @ (Command::Measure { .. } | Command::Space { .. } | Command::StopMeasure(_)) => {
-            setup.measurer.answer(id, client.events(), command);
-            Ok(())
-        }
     }
 }
 

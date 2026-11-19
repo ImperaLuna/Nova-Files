@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use gpui::{Context, Pixels, Point};
-use nova_files_api::{AccessChange, ModeChange, Operation, Properties, Reach};
+use nova_files_api::{AccessChange, ModeChange, Operation, Reach};
+use nova_files_properties_api::Properties;
 
 use super::MainWindow;
 use crate::assets::Icon;
@@ -275,10 +276,10 @@ mod tests {
     #[test]
     fn several_items_share_a_level_only_when_all_have_it() {
         let with = |mode| {
-            let nobody = nova_files_api::Account { id: 0, name: None };
+            let nobody = nova_files_properties_api::Account { id: 0, name: None };
             Arc::new(Properties {
                 path: std::path::PathBuf::from("/a"),
-                kind: nova_files_api::PathKind::File,
+                kind: nova_files_properties_api::PathKind::File,
                 bytes: 0,
                 on_disk: 0,
                 modified: None,

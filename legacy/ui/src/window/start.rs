@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use gpui::{Context, SharedString, UniformListScrollHandle};
-use nova_files_api::{Command, RecentFolder, RecentId};
+use nova_files_start_api::{Command, RecentFolder, RecentId};
 
 use super::rows::release;
 use super::{MainWindow, WindowEvent};

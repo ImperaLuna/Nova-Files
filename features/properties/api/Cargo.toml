@@ -1,0 +1,24 @@
+# nova-files-properties-api
+#
+# A file or folder's properties and how much space things take, and what
+# the properties feature's two halves say to each other: its command and
+# its event.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
+
+[package]
+name = "nova-files-properties-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

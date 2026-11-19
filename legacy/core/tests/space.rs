@@ -6,6 +6,7 @@
 
 #[expect(dead_code, reason = "the job helpers; scans need only the bench")]
 mod common;
+mod feature;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -13,9 +14,13 @@ use std::fs;
 use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 
-use nova_files_api::{Command, EntryKind, Event, MeasureId, ScanState, Size, Unreadable};
+use nova_files_api::{EntryKind, Unreadable};
+use nova_files_properties_api::{Command, Event, MeasureId, ScanState, Size};
 
-use common::{Bench, Client};
+use common::Bench;
+use feature::Feature;
+
+type Client = Feature<Event>;
 
 fn shares(client: &Client, id: MeasureId) -> HashMap<OsString, (EntryKind, Size)> {
     let mut latest = HashMap::new();
@@ -53,7 +58,7 @@ fn each_entry_gets_its_own_totals() {
     fs::write(bench.at("top/notes"), [0; 30]).unwrap();
     fs::create_dir(bench.at("top/empty")).unwrap();
     symlink(bench.at("top/photos"), bench.at("top/link")).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let id = MeasureId(1);
     space(&client, id, bench.at("top"));
@@ -82,7 +87,7 @@ fn each_entry_gets_its_own_totals() {
 fn an_empty_folder_has_no_shares() {
     let bench = Bench::new("space-empty");
     fs::create_dir(bench.at("empty")).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let id = MeasureId(2);
     space(&client, id, bench.at("empty"));
@@ -94,7 +99,7 @@ fn an_empty_folder_has_no_shares() {
 fn a_folder_that_cannot_be_listed_says_why() {
     let bench = Bench::new("space-unreadable");
     fs::write(bench.at("file"), [0; 3]).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let (missing, file, relative) = (MeasureId(3), MeasureId(4), MeasureId(5));
     space(&client, missing, bench.at("gone"));
@@ -132,7 +137,7 @@ fn a_space_scan_runs_beside_a_size_scan() {
     let bench = Bench::new("space-beside");
     fs::create_dir(bench.at("top")).unwrap();
     fs::write(bench.at("top/file"), [0; 9]).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let (size_id, space_id) = (MeasureId(6), MeasureId(7));
     client.send(Command::Measure {
@@ -164,7 +169,7 @@ fn every_entry_is_named_even_one_that_adds_nothing() {
     fs::create_dir(bench.at("top")).unwrap();
     fs::write(bench.at("top/a"), [0; 50]).unwrap();
     fs::hard_link(bench.at("top/a"), bench.at("top/b")).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let id = MeasureId(8);
     space(&client, id, bench.at("top"));
@@ -185,7 +190,7 @@ fn a_drive_mounted_on_an_entry_is_not_entered() {
     let length = 1 << 50;
     file.set_len(length).unwrap();
     let bench = Bench::new("space-mount");
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let id = MeasureId(9);
     space(&client, id, PathBuf::from("/dev"));

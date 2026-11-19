@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use gpui::{Context, Window};
 
-use nova_files_api::{Command, ListingId, PropertiesId};
+use nova_files_api::ListingId;
+use nova_files_properties_api::{Command, PropertiesId};
 
 use super::{Conflict, typed};
 use crate::selection::Selection;

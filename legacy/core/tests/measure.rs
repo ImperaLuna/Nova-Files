@@ -6,15 +6,19 @@
 
 #[expect(dead_code, reason = "the job helpers; scans need only the bench")]
 mod common;
+mod feature;
 
 use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
-use nova_files_api::{Command, Event, MeasureId, ScanState, Size};
+use nova_files_properties_api::{Command, Event, MeasureId, ScanState, Size};
 
-use common::{Bench, Client};
+use common::Bench;
+use feature::Feature;
+
+type Client = Feature<Event>;
 
 const MANY: usize = 2000;
 const QUIET: Duration = Duration::from_millis(300);
@@ -51,7 +55,7 @@ fn a_scan_adds_up_all_the_paths_it_was_given() {
     fs::create_dir_all(bench.at("a/inner")).unwrap();
     fs::write(bench.at("a/inner/one"), [0; 300]).unwrap();
     fs::write(bench.at("two"), [0; 20]).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let id = MeasureId(3);
     measure(&client, id, vec![bench.at("a"), bench.at("two")]);
@@ -66,7 +70,7 @@ fn a_scan_adds_up_all_the_paths_it_was_given() {
 #[test]
 fn a_path_that_is_not_there_counts_as_unreadable() {
     let bench = Bench::new("measure-missing");
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let id = MeasureId(1);
     measure(&client, id, vec![bench.at("gone")]);
@@ -104,7 +108,7 @@ fn big_tree(bench: &Bench) -> PathBuf {
 fn a_stopped_scan_says_nothing_more() {
     let bench = Bench::new("measure-stop");
     let big = big_tree(&bench);
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let id = MeasureId(1);
     measure(&client, id, vec![big]);
@@ -118,7 +122,7 @@ fn a_newer_scan_stops_the_one_before() {
     let bench = Bench::new("measure-newer");
     let big = big_tree(&bench);
     fs::write(bench.at("small"), [0; 7]).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let (first, second) = (MeasureId(1), MeasureId(2));
     measure(&client, first, vec![big]);
@@ -145,7 +149,7 @@ fn a_newer_scan_stops_the_one_before() {
 fn stopping_an_older_scan_leaves_the_newer_one_running() {
     let bench = Bench::new("measure-stop-old");
     fs::write(bench.at("file"), [0; 3]).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let (old, new) = (MeasureId(1), MeasureId(2));
     measure(&client, new, vec![bench.at("file")]);
@@ -159,7 +163,7 @@ fn paths_inside_each_other_count_once() {
     let bench = Bench::new("measure-overlap");
     fs::create_dir_all(bench.at("a/b")).unwrap();
     fs::write(bench.at("a/b/file"), [0; 11]).unwrap();
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let id = MeasureId(4);
     measure(
@@ -181,7 +185,7 @@ fn paths_inside_each_other_count_once() {
 #[test]
 fn a_path_that_is_not_absolute_is_not_measured() {
     let bench = Bench::new("measure-relative");
-    let client = bench.client();
+    let client = Client::of(&bench);
 
     let id = MeasureId(5);
     measure(&client, id, vec![PathBuf::from("tmp")]);
@@ -199,7 +203,7 @@ fn a_path_that_is_not_absolute_is_not_measured() {
 fn only_the_client_that_asked_hears_the_scan() {
     let bench = Bench::new("measure-one-client");
     fs::write(bench.at("file"), [0; 5]).unwrap();
-    let (asker, other) = (bench.client(), bench.client());
+    let (asker, other) = (Client::of(&bench), Client::of(&bench));
 
     let id = MeasureId(9);
     measure(&asker, id, vec![bench.at("file")]);

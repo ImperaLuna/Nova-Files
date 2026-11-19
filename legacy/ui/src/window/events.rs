@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
-use nova_files_api::{Bookmark, Event, Listing, ListingId, Unreadable};
+use nova_files_api::{Event, Listing, ListingId, Unreadable};
+use nova_files_places_api::Bookmark;
 use nova_files_settings_api::{Settings, Thumbnails};
 
 use super::rows::release;
@@ -115,14 +116,6 @@ impl MainWindow {
             Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
                 self.find_failed(id, cx);
             }
-            Event::Properties { id, properties } => {
-                self.save_probed(id, false, cx);
-                self.properties_arrived(id, Some(properties), cx);
-            }
-            Event::PropertiesUnreadable { id, reason, .. } => {
-                self.save_probed(id, reason == Unreadable::Missing, cx);
-                self.properties_arrived(id, None, cx);
-            }
             Event::FolderUnreadable { id, path, reason } if self.asked == Some(id) => {
                 self.folder_refused(id, path, reason, cx);
             }
@@ -147,8 +140,6 @@ impl MainWindow {
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
-            Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
-            Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
             Event::OpenWith(answer) => self.open_with_answered(answer, cx),
             Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
             event @ (Event::JobProgress { .. }
@@ -168,24 +159,22 @@ impl MainWindow {
             | Event::FileOpened { .. }
             | Event::WindowState(_)
             | Event::JobRunning { .. }
-            | Event::JobInterrupted { .. }
-            | Event::SpaceMeasured { .. }
-            | Event::SpaceUnreadable { .. } => {}
-            Event::Gathered(gathered) => self.gathered_arrived(gathered, cx),
-            Event::GatheredChanged(place) => self.gathered_changed(place),
+            | Event::JobInterrupted { .. } => {}
             Event::FileNotOpened { path, reason } => self.file_not_opened(path, reason, cx),
-            Event::Places(places) => self.places_arrived(places, cx),
             Event::FolderViews(views) => self.folder_views_arrived(&views, cx),
-            Event::Bookmarks(pinned) => self.pinned_arrived(pinned, cx),
         }
     }
 
-    fn places_arrived(&mut self, places: Vec<nova_files_api::Place>, cx: &mut Context<Self>) {
+    pub(super) fn places_arrived(
+        &mut self,
+        places: Vec<nova_files_places_api::Place>,
+        cx: &mut Context<Self>,
+    ) {
         self.places = places;
         self.sidebar_changed(cx);
     }
 
-    fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
+    pub(super) fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
         self.pinned = pinned;
         self.sidebar_changed(cx);
     }

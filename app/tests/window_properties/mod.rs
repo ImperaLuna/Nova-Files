@@ -1,7 +1,7 @@
 use std::os::unix::fs::MetadataExt as _;
 use std::sync::Arc;
 
-use nova_files_api::{PathKind, Properties, ScanState, Size};
+use nova_files_properties_api::{PathKind, Properties, ScanState, Size};
 use nova_files_ui::Icon;
 
 mod access;
