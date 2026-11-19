@@ -85,10 +85,19 @@ pub fn label(at: &DropAt, name: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use nova_files_gathered_api::Gathering;
-    use nova_files_gathered_ui::GatheredPage;
+    use gpui::SharedString;
+    use nova_files_shell::PageKind;
 
     use super::*;
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Shelf;
+
+    impl PageKind for Shelf {
+        fn title(&self) -> SharedString {
+            "Games".into()
+        }
+    }
 
     const TRASH: &str = "/home/u/.local/share/Trash/files";
 
@@ -143,7 +152,7 @@ mod tests {
 
     #[test]
     fn folders_dropped_on_a_place_are_added_whatever_the_keys() {
-        let page = PageRef::new(GatheredPage::new(Gathering::Games));
+        let page = PageRef::new(Shelf);
         let at = DropAt::Page(page.clone());
         let trash = |folder: &Path| folder.starts_with(TRASH);
         assert!(allowed(&at, &paths(&["/mnt/lib"]), trash));

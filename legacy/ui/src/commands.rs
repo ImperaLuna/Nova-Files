@@ -43,7 +43,6 @@ pub const ACTIONS: &[CommandSpec] = &[
     BIGGER_ICONS,
     SMALLER_ICONS,
     MENU,
-    PROPERTIES,
 ];
 
 spec!(UP, GoUp, "go.up", "Up", ["alt-up"]);
@@ -200,14 +199,6 @@ spec!(
 );
 
 spec!(MENU, OpenMenu, "menu.open", "Menu", ["menu", "shift-f10"]);
-
-spec!(
-    PROPERTIES,
-    ShowProperties,
-    "file.properties",
-    "Properties",
-    ["alt-enter"]
-);
 
 pub fn bind_keys(cx: &mut App) {
     crate::menu::bind_keys(cx);
