@@ -3,7 +3,7 @@ use std::time::Instant;
 use nova_files_api::{Operation, Tally};
 
 use super::progress::{Running, short_left, sources};
-use super::{ITEM, ITEMS, PART_GAP, count, name_of, what, with_answers};
+use super::words::{ITEM, ITEMS, PART_GAP, count, name_of, what, with_answers};
 
 pub fn line(jobs: &[&Running], now: Instant) -> (String, String) {
     let all = |kind: fn(&Operation) -> bool| jobs.iter().all(|job| kind(&job.operation));

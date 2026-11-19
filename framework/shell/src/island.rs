@@ -1,3 +1,8 @@
+pub mod asking;
+pub mod progress;
+pub mod several;
+pub mod words;
+
 use std::fmt;
 use std::rc::Rc;
 
