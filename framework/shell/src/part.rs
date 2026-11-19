@@ -5,7 +5,9 @@ use std::rc::Rc;
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, InteractiveElement as _, SharedString, Window,
 };
-use nova_files_api::Entry;
+use nova_files_api::{Entry, Event};
+
+use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
 
 use crate::command::CommandSpec;
@@ -25,6 +27,8 @@ pub type Rows<P> = fn(&P, &Scene, &App) -> Vec<SidebarRow>;
 pub type Card<P> = fn(&mut P, &Scene, &mut Window, &mut Context<P>) -> Option<AnyElement>;
 pub type Cell<P> = fn(&P, &Entry, &App) -> Option<SharedString>;
 pub type Columns<P> = fn(&P, &Scene, &App) -> Option<Column<P>>;
+pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
+pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 
 pub struct Column<P> {
     pub head: SharedString,
@@ -51,6 +55,9 @@ pub struct Slots<P> {
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
     pub(crate) start_cards: Vec<Card<P>>,
+    pub(crate) watches: Vec<Watch<P>>,
+    pub(crate) empty_notes: Vec<EmptyNote<P>>,
+    pub(crate) sends: Vec<MessageType>,
 }
 
 impl<P> Default for Slots<P> {
@@ -63,6 +70,9 @@ impl<P> Default for Slots<P> {
             columns: Vec::new(),
             sidebar: Vec::new(),
             start_cards: Vec::new(),
+            watches: Vec::new(),
+            empty_notes: Vec::new(),
+            sends: Vec::new(),
         }
     }
 }
@@ -126,8 +136,24 @@ impl<P: Part> Slots<P> {
         self.start_cards.push(card);
     }
 
+    pub fn watch(&mut self, watch: Watch<P>) {
+        self.watches.push(watch);
+    }
+
+    pub fn empty_note(&mut self, note: EmptyNote<P>) {
+        self.empty_notes.push(note);
+    }
+
+    pub fn sends<M: Message>(&mut self) {
+        self.sends.push(MessageType::of::<M>());
+    }
+
     pub fn takes(&self) -> Vec<MessageType> {
         self.events.keys().copied().collect()
+    }
+
+    pub fn sent(&self) -> Vec<MessageType> {
+        self.sends.clone()
     }
 
     pub fn specs(&self) -> Vec<&'static CommandSpec> {

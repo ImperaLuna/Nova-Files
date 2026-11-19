@@ -193,7 +193,9 @@ fn show_windows(
             Some(Request::ClosePick(_)) => continue,
             Some(Request::Quit) | None => break,
         };
-        if nova_files_ui::run(connector, received, first, &restart) == Ended::Quit {
+        if nova_files_ui::run(connector, received, first, &restart, nova_files::parts())
+            == Ended::Quit
+        {
             break;
         }
     }

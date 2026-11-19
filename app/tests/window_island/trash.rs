@@ -10,9 +10,9 @@ async fn trash_and_open(
     click(cx, selector);
     cx.simulate_keystrokes("delete");
     wait_for_note(view, cx, note).await;
-    view.update(cx, MainWindow::open_trash);
+    open_trash(view, cx, false).await;
     wait_for_names(view, cx, listed).await;
-    assert!(view.read_with(cx, |view, _| view.trash_open()));
+    assert!(view.read_with(cx, trash_open));
 }
 
 #[gpui::test]
@@ -31,17 +31,16 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     )
     .await;
     let was_in = tree.path().to_string_lossy().into_owned();
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.was_in(0)
-            .is_some_and(|folder| folder == was_in.as_str())
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        trash_was_in(view, 0, cx).is_some_and(|folder| folder == was_in.as_str())
     })
     .await;
-    assert_eq!(view.read_with(cx, |view, _| view.trash_count()), Some(1));
+    assert_eq!(view.read_with(cx, trash_count), Some(1));
     cx.run_until_parked();
     assert!(cx.debug_bounds("head-was-in").is_some());
     assert!(cx.debug_bounds("place-trash-here").is_some());
     assert!(cx.debug_bounds("place-trash-number").is_some());
-    view.update(cx, MainWindow::open_trash_in_new_tab);
+    open_trash(&view, cx, true).await;
     view.read_with(cx, |view, _| {
         assert_eq!(view.tab_names(), ["Trash", "Trash"]);
     });
@@ -60,10 +59,10 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
     wait_for_names(&view, cx, &[]).await;
     wait_for_note(&view, cx, "Restored 1 item").await;
     assert!(tree.path().join("notes.txt").is_file());
-    view.condition::<WindowEvent>(cx, |view, _| view.trash_count() == Some(0))
+    view.condition::<WindowEvent>(cx, |view, cx| trash_count(view, cx) == Some(0))
         .await;
     cx.run_until_parked();
-    assert!(cx.debug_bounds("trash-empty").is_some());
+    assert!(cx.debug_bounds("empty-note").is_some());
     assert!(cx.debug_bounds("empty-trash").is_none());
     assert!(cx.debug_bounds("place-trash-number").is_none());
 }
@@ -71,7 +70,7 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
 #[gpui::test]
 async fn empty_trash_asks_first(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree("trash-empty");
+    let tree = TempFolder::tree("empty-note");
     let home = TempFolder::tree("trash-empty-home");
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
@@ -152,11 +151,10 @@ async fn a_trash_never_used_shows_empty(cx: &mut TestAppContext) {
     let home = TempFolder::tree("trash-new-home");
     let (view, cx) = island_window(cx, tree.path(), &home).await;
 
-    view.update(cx, MainWindow::open_trash);
-    view.condition::<WindowEvent>(cx, |view, _| view.trash_open())
-        .await;
+    open_trash(&view, cx, false).await;
+    view.condition::<WindowEvent>(cx, trash_open).await;
     cx.run_until_parked();
-    assert!(cx.debug_bounds("trash-empty").is_some());
+    assert!(cx.debug_bounds("empty-note").is_some());
     assert!(cx.debug_bounds("empty-trash").is_none());
     assert_eq!(
         view.read_with(cx, |view, _| view.back_target().cloned()),
@@ -217,7 +215,7 @@ async fn undoing_elsewhere_stays_in_the_folder_on_screen(cx: &mut TestAppContext
         .await;
     cx.run_until_parked();
     assert!(notes.is_file());
-    assert!(!view.read_with(cx, |view, _| view.trash_open()));
+    assert!(!view.read_with(cx, trash_open));
     assert_eq!(view.read_with(cx, |view, _| view.entry_names()), ["nova"]);
 }
 
@@ -231,7 +229,7 @@ async fn an_empty_folder_is_not_called_an_empty_trash(cx: &mut TestAppContext) {
     view.update(cx, |view, _| view.open(&tree.path().join("Projects/nova")));
     wait_for_names(&view, cx, &[]).await;
     cx.run_until_parked();
-    assert!(cx.debug_bounds("trash-empty").is_none());
+    assert!(cx.debug_bounds("empty-note").is_none());
 }
 
 #[gpui::test]

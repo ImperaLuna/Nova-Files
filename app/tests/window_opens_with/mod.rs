@@ -70,6 +70,7 @@ async fn through_the_window(root: &Path, cx: &mut TestAppContext) {
     let core = nova_files_core::spawn_with_idle_exit(Duration::from_secs(5)).unwrap();
     let place = Location::Properties(vec![file.clone()]);
     let home = root.to_owned();
+    with_parts(cx);
     let (view, cx) = cx.add_window_view(|_, cx| MainWindow::at(&core.connector, &place, home, cx));
     assert_eq!(default_app(&view, cx).await, "One");
 
@@ -108,6 +109,7 @@ async fn past_a_terminal_default(root: &Path, cx: &mut TestAppContext) {
     let core = nova_files_core::spawn_with_idle_exit(Duration::from_secs(5)).unwrap();
     let place = Location::Properties(vec![file]);
     let home = root.to_owned();
+    with_parts(cx);
     let (view, cx) = cx.add_window_view(|_, cx| MainWindow::at(&core.connector, &place, home, cx));
     view.condition::<WindowEvent>(cx, |view, _| !view.apps_to_open_with().is_empty())
         .await;

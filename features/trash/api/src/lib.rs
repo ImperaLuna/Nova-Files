@@ -20,5 +20,8 @@ pub enum Command {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
-    Listed(Vec<Trashed>),
+    Listed {
+        folder: Option<PathBuf>,
+        items: Vec<Trashed>,
+    },
 }

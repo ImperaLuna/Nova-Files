@@ -1,7 +1,7 @@
 // GPUI fixes a drag's value when the row is drawn, before any drag starts.
 // https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
 use std::cell::OnceCell;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui::{
@@ -144,8 +144,10 @@ impl MainWindow {
     }
 
     pub(crate) fn drop_rule(&self) -> impl Fn(&DropAt, &Sources) -> bool + 'static {
-        let (picker, trash) = (self.pick.is_some(), self.trash_folder().to_path_buf());
-        move |at, sources| !picker && dropping::allowed(at, sources, &trash)
+        let (picker, rules) = (self.pick.is_some(), self.host.rules.clone());
+        move |at, sources| {
+            !picker && dropping::allowed(at, sources, |folder| rules.for_folder(folder).trashed)
+        }
     }
 
     pub(crate) fn drop_files(
@@ -169,16 +171,11 @@ impl MainWindow {
         }
     }
 
-    pub(crate) fn trash_folder(&self) -> &Path {
-        &self.trash.folder
-    }
-
     pub(crate) fn tab_drops_at(&self, place: Option<&Location>, name: SharedString) -> Option<Aim> {
         let folder = place?.folder()?;
-        Some(if folder == self.trash_folder() {
-            Aim::trash()
-        } else {
-            Aim::folder(folder.to_path_buf(), name)
+        Some(match self.host.rules.named(folder) {
+            Some(named) if self.host.rules.for_folder(folder).trashed => Aim::trash(named.label),
+            _ => Aim::folder(folder.to_path_buf(), name),
         })
     }
 }

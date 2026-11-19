@@ -3592,6 +3592,7 @@ dependencies = [
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",
+ "nova-files-trash-ui",
  "nova-files-ui",
  "zbus",
 ]
@@ -3908,6 +3909,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-trash-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-shell",
+ "nova-files-trash-api",
+]
+
+[[package]]
 name = "nova-files-ui"
 version = "0.1.0"
 dependencies = [
@@ -3926,7 +3937,6 @@ dependencies = [
  "nova-files-picker-api",
  "nova-files-settings-api",
  "nova-files-shell",
- "nova-files-trash-api",
  "unicode-segmentation",
  "usvg",
 ]

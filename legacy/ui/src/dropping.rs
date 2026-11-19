@@ -50,19 +50,14 @@ impl Sources {
     }
 }
 
-pub fn allowed(at: &DropAt, sources: &Sources, trash: &Path) -> bool {
-    if sources.paths.is_empty()
-        || sources
-            .folders
-            .iter()
-            .any(|folder| folder.starts_with(trash))
-    {
+pub fn allowed(at: &DropAt, sources: &Sources, trashed: impl Fn(&Path) -> bool) -> bool {
+    if sources.paths.is_empty() || sources.folders.iter().any(|folder| trashed(folder)) {
         return false;
     }
     match at {
         DropAt::Trash | DropAt::Gathered(_) => true,
         DropAt::Folder(into) => {
-            !into.starts_with(trash)
+            !trashed(into)
                 && !sources.folders.contains(into)
                 && !into.ancestors().any(|folder| sources.each.contains(folder))
         }
@@ -125,7 +120,7 @@ mod tests {
 
     #[test]
     fn files_drop_into_any_other_folder() {
-        let trash = Path::new(TRASH);
+        let trash = |folder: &Path| folder.starts_with(TRASH);
         assert!(allowed(&folder("/b"), &paths(&["/a/x", "/a/y"]), trash));
         assert!(allowed(&folder("/a/x2"), &paths(&["/a/x"]), trash));
         assert!(allowed(&DropAt::Trash, &paths(&["/a/x"]), trash));
@@ -133,7 +128,7 @@ mod tests {
 
     #[test]
     fn a_drop_that_changes_nothing_isnt_offered() {
-        let trash = Path::new(TRASH);
+        let trash = |folder: &Path| folder.starts_with(TRASH);
         assert!(!allowed(&folder("/b"), &Sources::default(), trash));
         assert!(!allowed(&folder("/a"), &paths(&["/b/y", "/a/x"]), trash));
         assert!(!allowed(&folder("/a/x"), &paths(&["/a/x"]), trash));
@@ -142,7 +137,7 @@ mod tests {
 
     #[test]
     fn nothing_goes_in_or_out_of_the_trash_by_dragging() {
-        let trash = Path::new(TRASH);
+        let trash = |folder: &Path| folder.starts_with(TRASH);
         let trashed = paths(&[&format!("{TRASH}/x")]);
         assert!(!allowed(&folder("/b"), &trashed, trash));
         assert!(!allowed(&DropAt::Trash, &trashed, trash));
@@ -237,7 +232,7 @@ mod tests {
     #[test]
     fn folders_dropped_on_a_place_are_added_whatever_the_keys() {
         let at = DropAt::Gathered(Gathering::Games);
-        let trash = Path::new(TRASH);
+        let trash = |folder: &Path| folder.starts_with(TRASH);
         assert!(allowed(&at, &paths(&["/mnt/lib"]), trash));
         assert!(!allowed(&at, &paths(&[&format!("{TRASH}/old")]), trash));
         assert_eq!(

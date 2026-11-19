@@ -213,14 +213,15 @@ async fn start_and_places_held_over_open_in_the_tab_on_screen(cx: &mut TestAppCo
 
     drag_over(cx, "place-trash");
     hold(cx, HOVER_OPEN_AFTER);
-    assert!(view.read_with(cx, |view, _| view.current_tab() == 1 && view.trash_open()));
+    assert!(view.read_with(cx, |view, cx| view.current_tab() == 1
+        && trash_open(view, cx)));
     assert!(cx.debug_bounds("drag-chip").is_some());
     let end = center(cx, "place-trash");
     cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
     wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
 
     hold(cx, HOVER_OPEN_AFTER);
-    assert!(view.read_with(cx, |view, _| view.trash_open()));
+    assert!(view.read_with(cx, trash_open));
 }
 
 #[gpui::test]
@@ -235,7 +236,7 @@ async fn a_row_left_for_outside_the_window_opens_nothing(cx: &mut TestAppContext
     let outside = point(px(-40.0), center(cx, "place-trash").y);
     cx.simulate_mouse_move(outside, Some(MouseButton::Left), Modifiers::none());
     hold(cx, HOVER_OPEN_AFTER);
-    assert!(view.read_with(cx, |view, _| !view.trash_open()));
+    assert!(view.read_with(cx, |view, cx| !trash_open(view, cx)));
     cx.simulate_mouse_up(outside, MouseButton::Left, Modifiers::none());
 }
 
@@ -304,14 +305,14 @@ async fn files_dropped_on_the_trash_go_to_it(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("drag-trash");
     let home = TempFolder::tree("drag-trash-home");
     let (view, cx) = drag_window(cx, tree.path(), &home).await;
-    view.condition::<WindowEvent>(cx, |view, _| view.trash_count() == Some(0))
+    view.condition::<WindowEvent>(cx, |view, cx| trash_count(view, cx) == Some(0))
         .await;
     cx.run_until_parked();
     assert!(cx.debug_bounds("place-trash-number").is_none());
 
     drag(cx, "name-1", "place-trash", Modifiers::shift());
     wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
-    view.condition::<WindowEvent>(cx, |view, _| view.trash_count() == Some(1))
+    view.condition::<WindowEvent>(cx, |view, cx| trash_count(view, cx) == Some(1))
         .await;
     cx.run_until_parked();
     assert!(cx.debug_bounds("place-trash-number").is_some());
@@ -356,7 +357,7 @@ async fn names_in_the_trash_do_not_drag(cx: &mut TestAppContext) {
     click(cx, "name-1");
     cx.simulate_keystrokes("delete");
     wait_for_note(&view, cx, "Moved notes.txt to Trash").await;
-    view.update(cx, MainWindow::open_trash);
+    open_trash(&view, cx, false).await;
     view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["notes.txt"])
         .await;
     assert!(view.read_with(cx, |view, _| view.list_drop_folder().is_none()));
@@ -383,9 +384,9 @@ async fn files_dropped_on_a_tab_go_into_its_folder_or_the_trash(cx: &mut TestApp
     view.update(cx, |view, cx| {
         view.open_in_new_tab(projects.clone(), cx);
         view.new_tab(&Location::Start, cx);
-        view.open_trash_in_new_tab(cx);
-        view.switch_tab(0, cx);
     });
+    open_trash(&view, cx, true).await;
+    view.update(cx, |view, cx| view.switch_tab(0, cx));
     wait_for_folder(&view, cx, tree.path()).await;
 
     drag(cx, "name-1", "tab-2", Modifiers::none());

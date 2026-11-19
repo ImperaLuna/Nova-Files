@@ -11,41 +11,11 @@ use nova_files_api::Gathering;
 use nova_files_shell::{SidebarAt, SidebarRow};
 
 use crate::location::Location;
-use crate::places::{self, START_LABEL, TRASH_LABEL};
+use crate::places::{self, START_LABEL};
 use crate::theme::{Colors, size};
-use crate::window::{Aim, HoverOpens, MainWindow};
+use crate::window::{Aim, HoverOpens, MainWindow, from_shell};
 
 const LABEL: &str = "Places";
-
-fn part_row(
-    place: SidebarRow,
-    narrow: bool,
-    colors: &Colors,
-    cx: &Context<MainWindow>,
-) -> Stateful<Div> {
-    let (opens, new_tab) = (place.opens.clone(), place.opens.clone());
-    row(
-        Row {
-            id: place.id.into(),
-            selector: place.id.to_owned(),
-            glyph: place.icon,
-            name: place.name,
-            number: place.number.map(|number| (number, colors.text_dim)),
-            here: place.here,
-            pressed: false,
-        },
-        narrow,
-        colors,
-    )
-    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-        this.go_to_shell(opens.clone(), cx);
-    }))
-    .map(|row| {
-        on_middle_click(row, true, cx, move |this, cx| {
-            this.new_tab_at_shell(new_tab.clone(), cx);
-        })
-    })
-}
 
 impl MainWindow {
     pub(super) fn places_section(&self, narrow: bool, cx: &Context<Self>) -> Div {
@@ -96,13 +66,12 @@ impl MainWindow {
             .into_iter()
             .filter(|_| main)
             .map(|place| self.gathered_row(place, narrow, &colors, cx));
-        let trash = main.then(|| self.trash_row(narrow, &colors, cx));
         let from_parts = self
             .parts
             .sidebar(SidebarAt::Places, &self.scene(), cx)
             .into_iter()
             .filter(|_| main)
-            .map(|place| part_row(place, narrow, &colors, cx));
+            .map(|place| self.part_row(place, narrow, &colors, cx));
         let pin = main.then(|| {
             section_button("pin", Icon::Plus, &colors)
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder_to_pin(cx)))
@@ -113,7 +82,6 @@ impl MainWindow {
             .children(start)
             .children(rows)
             .children(gathered)
-            .children(trash)
             .children(from_parts);
         if narrow {
             return list.items_center().children(pin);
@@ -185,30 +153,41 @@ impl MainWindow {
         .map(|row| self.drop_target(row, Aim::gathered(place), cx))
     }
 
-    fn trash_row(&self, narrow: bool, colors: &Colors, cx: &Context<Self>) -> Stateful<Div> {
-        let count = self
-            .trash_count()
-            .filter(|count| *count > 0)
-            .map(|count| (count.to_string().into(), colors.text_dim));
-        row(
+    fn part_row(
+        &self,
+        place: SidebarRow,
+        narrow: bool,
+        colors: &Colors,
+        cx: &Context<Self>,
+    ) -> Stateful<Div> {
+        let (opens, new_tab) = (place.opens.clone(), place.opens.clone());
+        let shown = from_shell(place.opens.clone());
+        let drops = self.tab_drops_at(Some(&shown), place.name.clone());
+        let row = row(
             Row {
-                id: "place-trash".into(),
-                selector: "place-trash".to_owned(),
-                glyph: Icon::Trash,
-                name: TRASH_LABEL.into(),
-                number: count,
-                here: self.trash_open(),
+                id: place.id.into(),
+                selector: place.id.to_owned(),
+                glyph: place.icon,
+                name: place.name,
+                number: place.number.map(|number| (number, colors.text_dim)),
+                here: place.here,
                 pressed: false,
             },
             narrow,
             colors,
         )
-        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.open_trash(cx)))
-        .map(|row| on_middle_click(row, true, cx, Self::open_trash_in_new_tab))
-        .map(|row| self.drop_target(row, Aim::trash(), cx))
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            this.go_to_shell(opens.clone(), cx);
+        }))
         .map(|row| {
-            let opens = HoverOpens::Place(Location::Folder(self.trash_folder().to_path_buf()));
-            Self::opens_on_hover(row, opens, cx)
+            on_middle_click(row, true, cx, move |this, cx| {
+                this.new_tab_at_shell(new_tab.clone(), cx);
+            })
         })
+        .map(|row| Self::opens_on_hover(row, HoverOpens::Place(shown), cx));
+        match drops {
+            Some(at) => self.drop_target(row, at, cx),
+            None => row,
+        }
     }
 }
