@@ -51,6 +51,7 @@ nova-files-places-core = { path = "features/places/core" }
 nova-files-places-ui = { path = "features/places/ui" }
 nova-files-preview-api = { path = "features/preview/api" }
 nova-files-preview-core = { path = "features/preview/core" }
+nova-files-preview-ui = { path = "features/preview/ui" }
 nova-files-properties-api = { path = "features/properties/api" }
 nova-files-properties-core = { path = "features/properties/core" }
 nova-files-properties-ui = { path = "features/properties/ui" }

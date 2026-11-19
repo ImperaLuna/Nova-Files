@@ -197,7 +197,7 @@ fn the_bar_switch_shows_details_or_icons(cx: &mut TestAppContext) {
 fn left_and_right_step_the_quick_look_once(cx: &mut TestAppContext) {
     let (view, cx, _) = icons(cx);
     cx.simulate_keystrokes("right space");
-    assert!(view.read_with(cx, |view, _| view.previewing()));
+    assert!(view.read_with(cx, previewing));
     cx.simulate_keystrokes("right");
     assert_eq!(cursor(&view, cx), Some(1));
     cx.simulate_keystrokes("left");

@@ -119,7 +119,7 @@ impl MainWindow {
         self.search.failed = false;
         self.selection = None;
         self.listed_page = None;
-        self.listing_replaced(listing, Place::Top, cx);
+        self.listing_replaced(listing, Place::Top);
         cx.notify();
     }
 

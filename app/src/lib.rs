@@ -8,6 +8,7 @@ use nova_files_look_ui::LookPart;
 use nova_files_open_ui::OpenPart;
 use nova_files_picker_ui::PickerPart;
 use nova_files_places_ui::{PlacesPart, TreePart};
+use nova_files_preview_ui::PreviewPart;
 use nova_files_properties_ui::PropertiesPart;
 use nova_files_rename_ui::RenamePart;
 use nova_files_settings_ui::SettingsPart;
@@ -29,6 +30,7 @@ pub fn parts() -> Parts {
     parts.add::<OpenPart>();
     parts.add::<PickerPart>();
     parts.add::<PlacesPart>();
+    parts.add::<PreviewPart>();
     parts.add::<PropertiesPart>();
     parts.add::<RenamePart>();
     parts.add::<SettingsPart>();
