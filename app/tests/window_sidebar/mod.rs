@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, size};
 
 use super::*;
@@ -142,8 +145,47 @@ async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
     let windows = cx.windows().len();
 
     click(cx, "pin");
+    let projects = tree.path().join("Projects");
+    answer_picker(cx, windows, &projects);
+
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.pinned().iter().any(|pin| pin.path == projects)
+    })
+    .await;
+}
+
+#[gpui::test]
+async fn a_part_asks_for_a_folder_and_gets_the_one_picked(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-part-pick");
+    let (view, cx) = window_on(cx, tree.path(), tree.path());
+    wait_for_folder(&view, cx, tree.path()).await;
+    let windows = cx.windows().len();
+    let got = Rc::new(RefCell::new(None));
+    let store = Rc::clone(&got);
+    let nav = view.read_with(cx, |view, _| view.host().nav.clone());
+
+    cx.update(|_, cx| {
+        nav.update(cx, |nav, cx| {
+            nav.pick_folder(
+                "Add a folder",
+                "Add",
+                move |path, _| {
+                    store.replace(Some(path));
+                },
+                cx,
+            );
+        });
+    });
+    let projects = tree.path().join("Projects");
+    answer_picker(cx, windows, &projects);
     cx.run_until_parked();
 
+    assert_eq!(got.borrow().as_deref(), Some(projects.as_path()));
+}
+
+fn answer_picker(cx: &mut VisualTestContext, windows: usize, folder: &Path) {
+    cx.run_until_parked();
     let picker = cx
         .windows()
         .into_iter()
@@ -155,15 +197,9 @@ async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
         })
         .unwrap();
     assert_eq!(cx.windows().len(), windows + 1);
-    let projects = tree.path().join("Projects");
     picker
-        .update(cx, |view, _, _| assert!(view.answer(projects.clone())))
+        .update(cx, |view, _, _| assert!(view.answer(folder.to_path_buf())))
         .unwrap();
-
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.pinned().iter().any(|pin| pin.path == projects)
-    })
-    .await;
 }
 
 pub fn right_click(cx: &mut VisualTestContext, selector: &'static str) {

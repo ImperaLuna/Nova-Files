@@ -27,7 +27,7 @@ pub use menu::{
     Expander, Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow,
     arrange,
 };
-pub use navigator::{NavAsk, NavEvent, Navigator};
+pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked};
 pub use part::{
     Applies, Card, Cell, Closing, Column, Columns, DropAim, DropSlot, DropTake, EmptyNote, Items,
     Listed, NameCell, Opens, Part, RowMenu, Rows, Slots, Watch,
