@@ -141,7 +141,6 @@ impl MainWindow {
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::PreviewUnreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::OpenWith(answer) => self.open_with_answered(answer, cx),
-            Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)

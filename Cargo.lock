@@ -3673,6 +3673,7 @@ dependencies = [
  "nova-files-start-api",
  "nova-files-start-core",
  "nova-files-thumbnailer-launch",
+ "nova-files-transfer-api",
  "nova-files-transfer-core",
  "nova-files-trash-api",
  "nova-files-trash-core",
@@ -3947,12 +3948,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-transfer-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
 name = "nova-files-transfer-core"
 version = "0.1.0"
 dependencies = [
  "log",
  "nova-files-api",
+ "nova-files-disk",
  "nova-files-jobs",
+ "nova-files-transfer-api",
  "rustix 1.1.6",
 ]
 
@@ -4009,6 +4019,7 @@ dependencies = [
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-start-api",
+ "nova-files-transfer-api",
  "usvg",
 ]
 

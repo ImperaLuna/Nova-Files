@@ -3,6 +3,7 @@
 mod compress;
 mod extract;
 mod helper;
+mod kind;
 mod unpack;
 mod wire;
 
@@ -15,6 +16,7 @@ use nova_files_api::Packing;
 
 pub use compress::{Asked, compress};
 pub use extract::{Taking, extract};
+pub use kind::Archives;
 pub use unpack::{Extracting, Flow};
 pub use wire::{ArchiveEntry, ArchiveKind};
 
