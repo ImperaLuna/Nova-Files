@@ -75,11 +75,7 @@ impl EventSink for Heard {
 }
 
 fn next(heard: &Receiver<Envelope>) -> Event {
-    heard
-        .recv_timeout(WAIT)
-        .unwrap()
-        .open::<Event>()
-        .unwrap()
+    heard.recv_timeout(WAIT).unwrap().open::<Event>().unwrap()
 }
 
 fn until_finished(heard: &Receiver<Envelope>, job: JobId) -> Vec<Event> {
