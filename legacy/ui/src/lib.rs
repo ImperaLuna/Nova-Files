@@ -40,7 +40,7 @@ pub use pick::close as close_picker;
 pub use requests::{Request, RequestSender, Requests, channel};
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
-pub use window::{CoreStatus, MainWindow, Scope, WindowEvent, home_folder};
+pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};
 pub use window::{HOVER_OPEN_AFTER, JOB_SHOWS_AFTER};
 pub use window_state::fetch as fetch_window_state;
 
@@ -61,16 +61,12 @@ pub type RecoverGpu = Rc<dyn Fn(Option<&Path>)>;
 pub fn sent_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Command>(),
-        MessageType::of::<nova_files_search_api::Command>(),
         MessageType::of::<nova_files_settings_api::Command>(),
     ]
 }
 
 pub fn taken_types() -> Vec<MessageType> {
-    vec![
-        MessageType::of::<Event>(),
-        MessageType::of::<nova_files_search_api::Event>(),
-    ]
+    vec![MessageType::of::<Event>()]
 }
 
 pub fn run(

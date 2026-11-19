@@ -58,6 +58,12 @@ fn pinned(view: &MainWindow, cx: &App) -> Vec<Bookmark> {
         .unwrap_or_default()
 }
 
+fn search_query(view: &MainWindow, cx: &App) -> String {
+    view.search_part()
+        .map(|part| part.read(cx).query(cx))
+        .unwrap_or_default()
+}
+
 fn previewing(view: &MainWindow, cx: &App) -> bool {
     view.part::<PreviewPart>()
         .is_some_and(|part| part.read(cx).previewing())

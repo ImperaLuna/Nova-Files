@@ -48,18 +48,15 @@ impl MainWindow {
                     .child(up),
             )
             .child(self.path_bar(colors, cx))
-            .child(
-                self.search_box(
-                    capsule(colors)
-                        .debug_selector(|| "search".to_owned())
-                        .flex_shrink()
-                        .w(size::SEARCH_WIDTH)
-                        .px(size::SEARCH_PAD)
-                        .gap(size::SEARCH_GAP),
-                    colors,
-                    cx,
-                ),
-            )
+            .children(self.search_part().map(|search| {
+                let capsule = capsule(colors)
+                    .debug_selector(|| "search".to_owned())
+                    .flex_shrink()
+                    .w(size::SEARCH_WIDTH)
+                    .px(size::SEARCH_PAD)
+                    .gap(size::SEARCH_GAP);
+                search.read(cx).search_box(capsule, colors, &search, cx)
+            }))
             .children(self.parts.bars())
             .child(
                 capsule(colors)

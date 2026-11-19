@@ -53,6 +53,7 @@
 # - nova-files-rename-ui
 # - nova-files-search-api
 # - nova-files-search-core
+# - nova-files-search-ui
 # - nova-files-settings-api
 # - nova-files-settings-core
 # - nova-files-settings-ui
@@ -134,6 +135,7 @@ nova-files-rename-core.workspace = true
 nova-files-rename-ui.workspace = true
 nova-files-search-api.workspace = true
 nova-files-search-core.workspace = true
+nova-files-search-ui.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-settings-core.workspace = true
 nova-files-settings-ui.workspace = true

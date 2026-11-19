@@ -29,6 +29,10 @@ impl<T> PerTab<T> {
         self.tabs.insert(tab, value);
     }
 
+    pub fn or_insert_with(&mut self, tab: TabId, make: impl FnOnce() -> T) -> &mut T {
+        self.tabs.entry(tab).or_insert_with(make)
+    }
+
     pub fn closed(&mut self, tab: TabId) -> Option<T> {
         self.tabs.remove(&tab)
     }
