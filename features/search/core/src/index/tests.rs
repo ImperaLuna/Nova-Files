@@ -92,7 +92,7 @@ fn the_files_sit_in_the_place() {
 fn the_place_is_in_the_cache_folder() {
     assert_eq!(
         IndexPlace::from_env().map(|place| place.folder),
-        places::cache_home().map(|cache| cache.join(FOLDER))
+        home::cache_home().map(|cache| cache.join(FOLDER))
     );
     assert!(IndexPlace::from_env().is_some());
 }

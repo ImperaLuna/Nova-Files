@@ -1,16 +1,20 @@
+#![forbid(unsafe_code)]
+
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 
-use nova_files_api::{Event, Hit, ListingId, MAX_FOUND, MAX_HITS, Matched, SearchFailed, SearchId};
+use nova_files_api::{EventSink, ListingId};
+use nova_files_entries_core::ListingJob;
 use nova_files_index::{Change, ChangeLog, Index, LogReader, MatchKind, Overlay, STAGES, Watcher};
+use nova_files_search_api::{Event, Hit, MAX_FOUND, MAX_HITS, Matched, SearchFailed, SearchId};
 
-use crate::index::IndexPlace;
-use crate::jobs::Client;
+pub use index::{IndexError, IndexPlace, Unusable};
 
 mod found;
+mod index;
 
 const INDEX_THREAD: &str = "nova-files-index";
 const SEARCH_THREAD: &str = "nova-files-search";
@@ -72,14 +76,20 @@ impl Searcher {
         }
     }
 
-    pub fn search(&self, client: &Client, id: SearchId, query: String, limit: u32) {
-        client.current_search().store(id.0, Ordering::SeqCst);
-        let current = Arc::clone(client.current_search());
-        let events = Arc::clone(client.events());
+    pub fn search(
+        &self,
+        (events, current): (&Arc<dyn EventSink>, &Arc<AtomicU64>),
+        id: SearchId,
+        query: String,
+        limit: u32,
+    ) {
+        current.store(id.0, Ordering::SeqCst);
+        let current = Arc::clone(current);
+        let sink = Arc::clone(events);
         let cancelled = move || current.load(Ordering::SeqCst) != id.0;
         if self.shared.place.is_none() {
             let reason = SearchFailed::NoIndex;
-            client.deliver(Event::SearchFailed { id, reason }).ok();
+            events.deliver(Event::SearchFailed { id, reason }).ok();
             return;
         }
         let searcher = self.clone();
@@ -89,7 +99,7 @@ impl Searcher {
             .spawn(move || {
                 searcher.start_build(false);
                 let wanted = || !cancelled();
-                let answer = |event| wanted() && events.deliver(event).is_ok();
+                let answer = |event| wanted() && sink.deliver(event).is_ok();
                 if !searcher.run(&Query::everywhere(&query, limit), wanted, |hits, done| {
                     answer(Event::Found { id, hits, done })
                 }) {
@@ -101,18 +111,26 @@ impl Searcher {
             });
         if spawned.is_err() {
             let reason = SearchFailed::IndexFailed;
-            client.deliver(Event::SearchFailed { id, reason }).ok();
+            events.deliver(Event::SearchFailed { id, reason }).ok();
         }
     }
 
-    pub fn find(&self, client: &Client, id: ListingId, query: String, within: Option<PathBuf>) {
-        let job = client.start_listing(id);
+    pub fn find(
+        &self,
+        (client, job): (&Arc<dyn EventSink>, ListingJob),
+        id: ListingId,
+        query: String,
+        within: Option<PathBuf>,
+    ) {
         let Some((_, root)) = &self.shared.place else {
-            let reason = SearchFailed::NoIndex;
-            job.answer(Event::FindFailed { id, reason });
+            if !job.cancelled() {
+                let reason = SearchFailed::NoIndex;
+                client.deliver(Event::FindFailed { id, reason }).ok();
+            }
             return;
         };
         let searcher = self.clone();
+        let sink = Arc::clone(client);
         let folder = within.clone().unwrap_or_else(|| root.clone());
         let limit = usize::try_from(MAX_FOUND).unwrap_or_default();
         let spawned = thread::Builder::new()
@@ -131,8 +149,10 @@ impl Searcher {
                     true
                 });
                 if !ran {
-                    let reason = SearchFailed::IndexFailed;
-                    job.answer(Event::FindFailed { id, reason });
+                    if !job.cancelled() {
+                        let reason = SearchFailed::IndexFailed;
+                        sink.deliver(Event::FindFailed { id, reason }).ok();
+                    }
                 } else if let Some(listing) = found::listing(id, folder, hits, || job.cancelled()) {
                     job.send(listing);
                 }

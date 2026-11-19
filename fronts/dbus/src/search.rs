@@ -8,9 +8,9 @@ use std::time::Duration;
 
 use futures::channel::oneshot;
 
-use nova_files_api::{
-    ClientGone, Command, Connector, Envelope, Event, EventSink, Hit, Matched, SearchFailed,
-    SearchId, WindowRequest,
+use nova_files_api::{ClientGone, Command, Connector, Envelope, Event, EventSink, WindowRequest};
+use nova_files_search_api::{
+    Command as SearchCommand, Event as SearchEvent, Hit, Matched, SearchFailed, SearchId,
 };
 use rustix::fs::{Mode, OFlags};
 use zbus::fdo;
@@ -152,7 +152,7 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
             running: Arc::clone(&self.running),
         };
         let search = self.holds.take_with(caller, stages).await.map_err(failed)?;
-        let command = Command::Search {
+        let command = SearchCommand::Search {
             id: SearchId(id),
             query,
             limit,
@@ -227,19 +227,19 @@ struct Stages {
 
 impl EventSink for Stages {
     fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
-        let Some(event) = envelope.taken_as::<Event>() else {
+        let Some(event) = envelope.taken_as::<SearchEvent>() else {
             return Ok(());
         };
         let (caller, path, id) = (Some(self.caller.as_str()), self.path.as_str(), self.id);
         let sent = match event {
-            Event::Found { hits, done, .. } => {
+            SearchEvent::Found { hits, done, .. } => {
                 let hits: Vec<(String, String)> = hits.iter().filter_map(wire).collect();
                 self.running.send_if_current(&self.caller, id, done, || {
                     self.bus
                         .emit_signal(caller, path, INTERFACE, FOUND, &(id, hits, done))
                 })
             }
-            Event::SearchFailed { reason, .. } => {
+            SearchEvent::SearchFailed { reason, .. } => {
                 self.running.send_if_current(&self.caller, id, true, || {
                     self.bus.emit_signal(
                         caller,
@@ -250,7 +250,7 @@ impl EventSink for Stages {
                     )
                 })
             }
-            _ => Some(Ok(())),
+            SearchEvent::FindFailed { .. } => Some(Ok(())),
         };
         match sent {
             Some(Ok(())) => Ok(()),

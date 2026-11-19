@@ -114,9 +114,6 @@ impl MainWindow {
             Event::FolderListed(listing) if self.search.asked == Some(listing.id) => {
                 self.found_arrived(listing, cx);
             }
-            Event::FindFailed { id, .. } if self.search.asked == Some(id) => {
-                self.find_failed(id, cx);
-            }
             Event::Properties { id, properties } => {
                 self.save_probed(id, false, cx);
                 self.properties_arrived(id, Some(properties), cx);
@@ -163,9 +160,6 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
-            | Event::Found { .. }
-            | Event::SearchFailed { .. }
-            | Event::FindFailed { .. }
             | Event::FileOpened { .. }
             | Event::WindowState(_)
             | Event::JobRunning { .. }

@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use nova_files_api::{Entry, EntryId, EntryKind, Hit, Listing, ListingId};
+use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId};
+use nova_files_search_api::Hit;
 
 pub fn listing(
     id: ListingId,
@@ -46,7 +47,7 @@ pub fn listing(
 mod tests {
     use std::os::unix::fs::symlink;
 
-    use nova_files_api::Matched;
+    use nova_files_search_api::Matched;
 
     use super::*;
 

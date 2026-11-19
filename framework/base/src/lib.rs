@@ -30,7 +30,6 @@ mod open_with;
 mod preview;
 mod properties;
 mod recent;
-mod search;
 mod size;
 mod theme;
 mod thumbnail_size;
@@ -52,7 +51,7 @@ pub use job::{
     Answer, Conflict, ConflictKind, DropAskId, DropKind, ExtractTo, Failure, JobId, JobTag,
     Operation, Outcome, Packing, Progress, Scope, Tally,
 };
-pub use message::{Command, Event, MAX_FOUND, MAX_HITS, MAX_ROWS};
+pub use message::{Command, Event, MAX_ROWS};
 pub use nova_files_messages::{
     ClientGone, ClientId, Connection, Connector, CoreGone, CoreMessage, Envelope, EventSink,
     Message, MessageType, Routed, Routes, channel, missing_routes,
@@ -61,7 +60,6 @@ pub use open_with::{App, NotOpened, OpenWith, OpenWithAnswer, OpenWithId};
 pub use preview::{Fit, MAX_FIT_SIDE, Picture};
 pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use recent::{MAX_RECENT_FOLDERS, PEEK_ENTRIES, Peeked, RecentFolder, RecentId};
-pub use search::{Hit, Matched, SearchFailed, SearchId};
 pub use size::{MeasureId, ScanState, Share, Size};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 pub use thumbnail_size::ThumbnailSize;

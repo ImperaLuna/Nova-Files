@@ -58,12 +58,6 @@ impl FileIcons {
         }
     }
 
-    #[cfg(test)]
-    pub fn plain() -> Arc<Self> {
-        let types = Arc::new(OnceLock::from(MimeTypes::default()));
-        Arc::new(Self::new(types, None, Vec::new()))
-    }
-
     pub fn follow_desktop(&self, named: &[String]) {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         let installed = |name: &String| state.themes.installed(name);

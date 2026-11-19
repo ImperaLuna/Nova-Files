@@ -5,7 +5,6 @@ mod file_icons;
 mod folder_views;
 mod gathered;
 mod icon_theme;
-mod index;
 mod inside;
 mod jobs;
 mod lazy_types;
@@ -17,7 +16,6 @@ mod places;
 mod properties;
 mod recent;
 mod run;
-mod search;
 mod theme;
 mod thumbs;
 mod trace;
@@ -36,14 +34,14 @@ use nova_files_disk::{
 };
 use nova_files_entries_core::{list, memory, order};
 
-use search::Searcher;
+use nova_files_search_core::Searcher;
 
-pub use index::{IndexError, IndexPlace, Unusable};
 pub use memory::set_give_back;
 pub use mime::MimeTypes;
 pub use nova_files_archives_core::{
     ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe, seven_on,
 };
+pub use nova_files_search_core::{IndexError, IndexPlace, Unusable};
 pub use open::{NotDefault, make_default_for_folders, opens_folders};
 pub use places::Home;
 pub use run::{emitted_types, routed_types};

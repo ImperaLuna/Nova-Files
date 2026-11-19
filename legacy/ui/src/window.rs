@@ -59,6 +59,7 @@ use nova_files_api::{
 };
 use nova_files_drives_api as drives_api;
 use nova_files_preview_api as preview_api;
+use nova_files_search_api as search_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
 use nova_files_trash_api as trash_api;
@@ -343,6 +344,13 @@ impl MainWindow {
             Ok(preview_api::Event::Unreadable { id, .. }) => {
                 return self.preview_arrived(id, None, cx);
             }
+            Err(envelope) => envelope,
+        };
+        let envelope = match envelope.open::<search_api::Event>() {
+            Ok(search_api::Event::FindFailed { id, .. }) if self.search.asked == Some(id) => {
+                return self.find_failed(id, cx);
+            }
+            Ok(_) => return,
             Err(envelope) => envelope,
         };
         let envelope = match envelope.open::<settings_api::Event>() {

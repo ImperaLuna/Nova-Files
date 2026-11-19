@@ -9,6 +9,8 @@ use nova_files_drives_core::{Store as DrivesStore, disk_space};
 use nova_files_messages::{Routed, Routes};
 use nova_files_preview_api as preview_api;
 use nova_files_preview_core::Request as PreviewRequest;
+use nova_files_search_api as search_api;
+use nova_files_search_core::Searcher;
 use nova_files_settings_api as settings_api;
 use nova_files_settings_core::Store as SettingsStore;
 use nova_files_trash_api as trash_api;
@@ -25,7 +27,6 @@ use crate::open::OpenWithWorker;
 use crate::ops::Jobs;
 use crate::places::{Home, Store as PlacesStore};
 use crate::recent::Store as RecentStore;
-use crate::search::Searcher;
 use crate::theme::Store as ThemeStore;
 use crate::thumbs::Thumbnails;
 use crate::trash;
@@ -93,6 +94,19 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| {
+        match command {
+            search_api::Command::Search { id, query, limit } => {
+                let asked = (client.events(), client.current_search());
+                setup.searcher.search(asked, id, query, limit);
+            }
+            search_api::Command::Find { id, query, within } => {
+                let asked = (client.events(), client.start_listing(id));
+                setup.searcher.find(asked, id, query, within);
+            }
+        }
+        Ok(())
+    })?;
     routes.on_leave(forget);
     Ok(routes)
 }
@@ -105,6 +119,7 @@ pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
         MessageType::of::<preview_api::Event>(),
+        MessageType::of::<search_api::Event>(),
         MessageType::of::<settings_api::Event>(),
         MessageType::of::<trash_api::Event>(),
         MessageType::of::<DrivesEvent>(),
@@ -203,8 +218,6 @@ fn answer(
         | Command::ChangeGathered(_)
         | Command::ListGathered { .. }
         | Command::Rows { .. }
-        | Command::Search { .. }
-        | Command::Find { .. }
         | Command::Properties { .. }
         | Command::OpenFile { .. }
         | Command::OpenWith(_)

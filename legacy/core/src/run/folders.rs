@@ -34,8 +34,6 @@ pub(super) fn answer(id: ClientId, client: &Client, command: Command, setup: &Se
             let shown = setup.settings.current().thumbnails == Thumbnails::Shown;
             client.want_rows(id, first, count, shown.then_some(size));
         }
-        Command::Search { id, query, limit } => setup.searcher.search(client, id, query, limit),
-        Command::Find { id, query, within } => setup.searcher.find(client, id, query, within),
         Command::Properties { id, path } => properties::answer(client.events(), id, path),
         Command::OpenFile { path, activation } => {
             let opening = (Arc::clone(&setup.mime_types), Arc::clone(&setup.inside));

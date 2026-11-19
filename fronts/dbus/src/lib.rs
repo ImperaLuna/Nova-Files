@@ -160,11 +160,17 @@ impl RunningInstance {
 }
 
 pub fn sent_types() -> Vec<MessageType> {
-    vec![MessageType::of::<Command>()]
+    vec![
+        MessageType::of::<Command>(),
+        MessageType::of::<nova_files_search_api::Command>(),
+    ]
 }
 
 pub fn taken_types() -> Vec<MessageType> {
-    vec![MessageType::of::<Event>()]
+    vec![
+        MessageType::of::<Event>(),
+        MessageType::of::<nova_files_search_api::Event>(),
+    ]
 }
 
 pub fn find_running(bus: &Bus) -> zbus::Result<Option<RunningInstance>> {

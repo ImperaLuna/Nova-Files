@@ -15,7 +15,6 @@ use crate::job::{
 use crate::open_with::{NotOpened, OpenWith, OpenWithAnswer};
 use crate::properties::{Properties, PropertiesId};
 use crate::recent::{RecentFolder, RecentId};
-use crate::search::{Hit, SearchFailed, SearchId};
 use crate::size::{MeasureId, ScanState, Share, Size};
 use crate::theme::{DesktopLook, Theme};
 use crate::thumbnail_size::ThumbnailSize;
@@ -23,14 +22,6 @@ use crate::thumbnail_size::ThumbnailSize;
 /// The most entries one [`Command::Rows`] may name: several screens of
 /// rows. The core leaves out any past it.
 pub const MAX_ROWS: u32 = 512;
-
-/// The most hits one search stage may hold: more than a launcher shows.
-/// The core keeps the best ones.
-pub const MAX_HITS: u32 = 200;
-
-/// The most entries each stage of a [`Command::Find`] adds: more than a
-/// window's list scrolls through when looking for one name.
-pub const MAX_FOUND: u32 = 1000;
 
 /// A request from a client to the core.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,32 +81,6 @@ pub enum Command {
         first: EntryId,
         count: u32,
         size: ThumbnailSize,
-    },
-    /// Find files under home whose names match `query`, one word or
-    /// several separated by spaces. The answer is an [`Event::Found`] for
-    /// each stage, best first, at most `limit` hits each (and at most
-    /// [`MAX_HITS`]), or [`Event::SearchFailed`]. The first search builds
-    /// or opens the home index, so it may take a while; later ones take
-    /// milliseconds. A newer `Search` from the same client cancels this
-    /// one, which then may stop answering.
-    Search {
-        id: SearchId,
-        query: String,
-        limit: u32,
-    },
-    /// Find files whose names match `query`, as [`Command::Search`] does,
-    /// for a window to show as its list. The answer is
-    /// [`Event::FolderListed`] with `id` and every stage's hits, best
-    /// first, each entry in its own folder (see [`Listing::folders`]), at
-    /// most [`MAX_FOUND`] a stage; or [`Event::FindFailed`]. `within` keeps
-    /// only what is inside that folder, at any depth; without it the whole
-    /// index counts. It is the client's listing like a
-    /// [`Command::ListFolder`]: either one asked for later cancels it, and
-    /// [`Command::Rows`] serves its rows.
-    Find {
-        id: ListingId,
-        query: String,
-        within: Option<PathBuf>,
     },
     /// Read the properties of what is at `path`, without following a link.
     /// The answer is [`Event::Properties`] or [`Event::PropertiesUnreadable`]
@@ -300,18 +265,6 @@ pub enum Event {
     /// showing it lists it again. Sent to the clients that asked with
     /// [`Command::Gathered`].
     GatheredChanged(Gathering),
-    /// One stage of [`Command::Search`] `id`: names as typed come first,
-    /// then letters in order and typos. `done` marks the last stage. A path
-    /// shows at most once per search.
-    Found {
-        id: SearchId,
-        hits: Vec<Hit>,
-        done: bool,
-    },
-    /// [`Command::Search`] `id` couldn't run.
-    SearchFailed { id: SearchId, reason: SearchFailed },
-    /// [`Command::Find`] `id` couldn't run.
-    FindFailed { id: ListingId, reason: SearchFailed },
     /// The properties of [`Command::Properties`] `id`'s path.
     Properties {
         id: PropertiesId,

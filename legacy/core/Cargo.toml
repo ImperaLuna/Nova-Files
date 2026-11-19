@@ -1,7 +1,7 @@
 # nova-files-core
 #
-# The core. Index, search, folder listing, watching, jobs and settings. It
-# never draws anything.
+# The core. Folder listing, watching, jobs and settings. It never draws
+# anything.
 #
 # Allowed outside crates:
 # - log
@@ -21,12 +21,13 @@
 # - nova-files-drives-api
 # - nova-files-drives-core
 # - nova-files-entries-core
-# - nova-files-index
 # - nova-files-jobs
 # - nova-files-messages
 # - nova-files-preview-api
 # - nova-files-preview-core
 # - nova-files-rename-core
+# - nova-files-search-api
+# - nova-files-search-core
 # - nova-files-settings-api
 # - nova-files-settings-core
 # - nova-files-thumbnailer-launch
@@ -70,12 +71,13 @@ nova-files-disk.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-drives-core.workspace = true
 nova-files-entries-core.workspace = true
-nova-files-index.workspace = true
 nova-files-jobs.workspace = true
 nova-files-messages.workspace = true
 nova-files-preview-api.workspace = true
 nova-files-preview-core.workspace = true
 nova-files-rename-core.workspace = true
+nova-files-search-api.workspace = true
+nova-files-search-core.workspace = true
 nova-files-settings-api.workspace = true
 nova-files-settings-core.workspace = true
 nova-files-thumbnailer-launch.workspace = true

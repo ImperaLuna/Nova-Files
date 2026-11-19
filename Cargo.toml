@@ -35,6 +35,8 @@ nova-files-preview-api = { path = "features/preview/api" }
 nova-files-preview-core = { path = "features/preview/core" }
 nova-files-rename-api = { path = "features/rename/api" }
 nova-files-rename-core = { path = "features/rename/core" }
+nova-files-search-api = { path = "features/search/api" }
+nova-files-search-core = { path = "features/search/core" }
 nova-files-settings-api = { path = "features/settings/api" }
 nova-files-settings-core = { path = "features/settings/core" }
 nova-files-shell = { path = "framework/shell" }

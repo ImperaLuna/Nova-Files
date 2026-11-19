@@ -78,6 +78,7 @@ pub fn sent_types() -> Vec<MessageType> {
         MessageType::of::<Command>(),
         MessageType::of::<nova_files_drives_api::Command>(),
         MessageType::of::<nova_files_preview_api::Command>(),
+        MessageType::of::<nova_files_search_api::Command>(),
         MessageType::of::<nova_files_settings_api::Command>(),
         MessageType::of::<nova_files_trash_api::Command>(),
     ]
@@ -88,6 +89,7 @@ pub fn taken_types() -> Vec<MessageType> {
         MessageType::of::<Event>(),
         MessageType::of::<nova_files_drives_api::Event>(),
         MessageType::of::<nova_files_preview_api::Event>(),
+        MessageType::of::<nova_files_search_api::Event>(),
         MessageType::of::<nova_files_settings_api::Event>(),
         MessageType::of::<nova_files_trash_api::Event>(),
     ]

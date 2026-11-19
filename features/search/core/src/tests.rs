@@ -5,7 +5,6 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use super::*;
-use crate::file_icons::FileIcons;
 
 const LIMIT: u32 = 50;
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
@@ -47,12 +46,11 @@ impl Drop for Scratch {
     }
 }
 
-fn client() -> (Client, Receiver<Event>) {
-    let (sink, events) = mpsc::channel();
-    (
-        Client::new(Arc::new(sink), None, &FileIcons::plain()),
-        events,
-    )
+type Asked = (Arc<dyn EventSink>, Arc<AtomicU64>);
+
+fn client() -> (Asked, Receiver<Event>) {
+    let (sink, events) = mpsc::channel::<Event>();
+    ((Arc::new(sink), Arc::new(AtomicU64::new(0))), events)
 }
 
 impl Searcher {
@@ -91,8 +89,9 @@ fn a_newer_search_cancels_one_waiting_for_the_index() {
     let searcher = scratch.searcher();
     let (client, events) = client();
     searcher.state().building = true;
-    searcher.search(&client, SearchId(1), "report".to_owned(), LIMIT);
-    searcher.search(&client, SearchId(2), "report".to_owned(), LIMIT);
+    let (sink, current) = &client;
+    searcher.search((sink, current), SearchId(1), "report".to_owned(), LIMIT);
+    searcher.search((sink, current), SearchId(2), "report".to_owned(), LIMIT);
     let live = Live::start(&scratch.place(), &scratch.root.join("home"), false);
     let mut state = searcher.state();
     state.live = live;

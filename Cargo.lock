@@ -3587,6 +3587,7 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-picker-api",
  "nova-files-preview-api",
+ "nova-files-search-api",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",
@@ -3649,13 +3650,14 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-drives-core",
  "nova-files-entries-core",
- "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
  "nova-files-picker-api",
  "nova-files-preview-api",
  "nova-files-preview-core",
  "nova-files-rename-core",
+ "nova-files-search-api",
+ "nova-files-search-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
  "nova-files-thumbnailer-launch",
@@ -3679,6 +3681,7 @@ dependencies = [
  "nova-files-core",
  "nova-files-drives-api",
  "nova-files-picker-api",
+ "nova-files-search-api",
  "rustix 1.1.6",
  "zbus",
 ]
@@ -3790,6 +3793,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-search-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-search-core"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-entries-core",
+ "nova-files-index",
+ "nova-files-search-api",
+]
+
+[[package]]
 name = "nova-files-settings-api"
 version = "0.1.0"
 dependencies = [
@@ -3885,6 +3906,7 @@ dependencies = [
  "nova-files-drives-api",
  "nova-files-picker-api",
  "nova-files-preview-api",
+ "nova-files-search-api",
  "nova-files-settings-api",
  "nova-files-shell",
  "nova-files-trash-api",
