@@ -19,7 +19,6 @@ use gpui::{
     ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
     prelude::FluentBuilder as _,
 };
-use nova_files_delete_ui::DeleteSelected;
 
 use crate::commands::{
     self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
@@ -124,12 +123,8 @@ impl MainWindow {
     }
 
     fn file_keys(root: Div, cx: &Context<Self>) -> Div {
-        root.on_action(cx.listener(|this, _: &TrashSelected, window, cx| {
-            if this.folder_rules().trashed {
-                window.dispatch_action(Box::new(DeleteSelected), cx);
-            } else {
-                this.trash_selected(cx);
-            }
+        root.on_action(cx.listener(|this, _: &TrashSelected, _, cx| {
+            this.trash_selected(cx);
         }))
     }
 

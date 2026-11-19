@@ -4107,6 +4107,7 @@ dependencies = [
  "chrono",
  "futures",
  "gpui",
+ "image",
  "nova-files-api",
  "nova-files-messages",
  "unicode-segmentation",
@@ -4268,15 +4269,10 @@ dependencies = [
  "image",
  "log",
  "nova-files-api",
- "nova-files-clipboard-ui",
- "nova-files-delete-ui",
- "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-picker-ui",
- "nova-files-rename-ui",
  "nova-files-settings-api",
  "nova-files-shell",
- "nova-files-thumbnails-ui",
  "usvg",
 ]
 
