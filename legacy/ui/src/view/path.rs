@@ -11,7 +11,7 @@ use super::bar::capsule;
 use super::drop::inside_edge;
 use super::place_icon;
 use super::row::icon;
-use nova_files_shell::{Look, MenuAt};
+use nova_files_shell::{Look, MenuAt, arrange};
 
 use crate::assets::Icon;
 use crate::crumbs::{self, Crumb, Shown};
@@ -101,8 +101,8 @@ impl MainWindow {
     }
 
     fn part_chips(&self, colors: &Colors, cx: &Context<Self>) -> Vec<impl IntoElement> {
-        self.parts
-            .menu(MenuAt::PathBarEnd, &self.scene(), cx)
+        let chips = self.parts.menu(MenuAt::PathBarEnd, &self.scene(), cx);
+        arrange(chips)
             .into_iter()
             .flatten()
             .map(|item| part_chip(item, colors))

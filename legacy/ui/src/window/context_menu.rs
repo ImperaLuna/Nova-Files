@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use gpui::{App, Context, Modifiers, Pixels, Point, point};
 use nova_files_api::{EntryId, HiddenFiles, ListingId, ViewMode};
-use nova_files_shell::MenuAt;
+use nova_files_shell::{
+    Look as ShellLook, MenuAt, MenuGroup, MenuItem as ShellItem, Placed, arrange,
+};
 
 use super::MainWindow;
 use crate::assets::Icon;
@@ -10,7 +12,7 @@ use crate::commands::{
     COPY, CUT, DETAILS, GALLERY, HIDDEN, ICONS, NEW_FOLDER, OPEN, PASTE, PREVIEW, PROPERTIES,
     RENAME, SELECT_ALL, TRASH,
 };
-use crate::menu::{Look, MenuAction, MenuItem};
+use crate::menu::{MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
 use crate::theme::size;
 
@@ -58,52 +60,73 @@ impl MainWindow {
         self.pick.is_none() && !self.is_on_start() && self.listing.is_some()
     }
 
-    fn part_menu(&self, at: MenuAt, cx: &App) -> Vec<Vec<MenuItem>> {
-        self.parts
-            .menu(at, &self.scene(), cx)
+    fn arranged(&self, at: MenuAt, window: Vec<Placed>, cx: &App) -> Vec<Vec<MenuItem>> {
+        let mut placed = window;
+        placed.extend(self.parts.menu(at, &self.scene(), cx));
+        arrange(placed)
             .into_iter()
             .map(|items| items.into_iter().map(MenuItem::from).collect())
             .collect()
     }
 
     fn entry_menu(&self, cx: &App) -> Vec<Vec<MenuItem>> {
-        let from_parts = self.part_menu(MenuAt::Entry, cx);
         if self.folder_rules().replaces_menu {
-            return from_parts;
+            return self.arranged(MenuAt::Entry, Vec::new(), cx);
         }
         let one = self.selected_count() == 1;
-        let lone = |item: MenuItem| one.then_some(item);
-        let rename = lone(MenuItem::run(Icon::Rename, &RENAME)).filter(|_| self.folder().is_some());
-        let new_tab = self.lone_folder().map(|folder| {
-            MenuItem::new(
+        let lone = |item: ShellItem| one.then_some(item);
+        let rename =
+            lone(ShellItem::run(Icon::Rename, &RENAME)).filter(|_| self.folder().is_some());
+        let open = [
+            lone(ShellItem::run(Icon::Open, &OPEN)),
+            lone(ShellItem::run(Icon::Eye, &PREVIEW)),
+        ];
+        let mut groups = self.arranged(
+            MenuAt::Entry,
+            vec![
+                Placed::new(
+                    MenuGroup::Open,
+                    Placed::FIRST,
+                    open.into_iter().flatten().collect(),
+                ),
+                Placed::new(
+                    MenuGroup::Edit,
+                    Placed::FIRST,
+                    vec![
+                        ShellItem::run(Icon::Cut, &CUT),
+                        ShellItem::run(Icon::Copy, &COPY),
+                    ],
+                ),
+                Placed::new(
+                    MenuGroup::Edit,
+                    Placed::SECOND,
+                    rename.into_iter().collect(),
+                ),
+                Placed::new(
+                    MenuGroup::Danger,
+                    Placed::FIRST,
+                    vec![ShellItem::run(Icon::Trash, &TRASH).with_look(ShellLook::Danger)],
+                ),
+                Placed::new(
+                    MenuGroup::Info,
+                    Placed::FIRST,
+                    vec![ShellItem::run(Icon::Info, &PROPERTIES)],
+                ),
+            ],
+            cx,
+        );
+        if let Some(folder) = self.lone_folder() {
+            let new_tab = MenuItem::new(
                 Icon::Plus,
                 super::tabs::OPEN_IN_NEW_TAB_LABEL,
                 MenuAction::OpenInNewTab(folder),
-            )
-        });
-        vec![
-            [
-                lone(MenuItem::run(Icon::Open, &OPEN)),
-                new_tab,
-                lone(MenuItem::run(Icon::Eye, &PREVIEW)),
-            ]
-            .into_iter()
-            .flatten()
-            .collect(),
-            [
-                Some(MenuItem::run(Icon::Cut, &CUT)),
-                Some(MenuItem::run(Icon::Copy, &COPY)),
-                rename,
-            ]
-            .into_iter()
-            .flatten()
-            .collect(),
-            vec![MenuItem::run(Icon::Trash, &TRASH).with_look(Look::Danger)],
-            vec![MenuItem::run(Icon::Info, &PROPERTIES)],
-        ]
-        .into_iter()
-        .chain(from_parts)
-        .collect()
+            );
+            match groups.first_mut() {
+                Some(first) => first.insert(first.len().min(1), new_tab),
+                None => groups.push(vec![new_tab]),
+            }
+        }
+        groups
     }
 
     fn lone_folder(&self) -> Option<PathBuf> {
@@ -113,7 +136,7 @@ impl MainWindow {
         }
     }
 
-    fn view_items(&self) -> Vec<MenuItem> {
+    fn view_items(&self) -> Vec<ShellItem> {
         let showing = self.folder_view().mode;
         [
             (ViewMode::Details, Icon::List, &DETAILS),
@@ -123,9 +146,9 @@ impl MainWindow {
         .into_iter()
         .map(|(mode, icon, spec)| {
             if mode == showing {
-                MenuItem::run(Icon::Check, spec).with_look(Look::On)
+                ShellItem::run(Icon::Check, spec).with_look(ShellLook::On)
             } else {
-                MenuItem::run(icon, spec)
+                ShellItem::run(icon, spec)
             }
         })
         .collect()
@@ -136,41 +159,46 @@ impl MainWindow {
             .listing
             .as_ref()
             .is_some_and(|listing| !listing.entries.is_empty());
-        let select_all = any.then(|| MenuItem::run(Icon::SelectAll, &SELECT_ALL));
-        let from_parts = self.part_menu(MenuAt::Sheet, cx);
+        let select_all = any.then(|| ShellItem::run(Icon::SelectAll, &SELECT_ALL));
+        let select = Placed::new(
+            MenuGroup::Select,
+            Placed::FIRST,
+            select_all.into_iter().collect(),
+        );
         if self.folder_rules().replaces_menu {
-            return from_parts
-                .into_iter()
-                .chain([select_all.into_iter().collect()])
-                .collect();
+            let after_parts = Placed::new(MenuGroup::Part, Placed::LAST, select.items);
+            return self.arranged(MenuAt::Sheet, vec![after_parts], cx);
         }
         if let Some(place) = self.gathered_shown() {
             return vec![
                 vec![super::gathering::add_item(place)],
-                select_all.into_iter().collect(),
+                select.items.into_iter().map(MenuItem::from).collect(),
             ];
         }
         if self.showing_found() {
-            return vec![select_all.into_iter().collect()];
+            return vec![select.items.into_iter().map(MenuItem::from).collect()];
         }
-        let paste = Self::clipboard_has_files(cx).then(|| MenuItem::run(Icon::Paste, &PASTE));
+        let paste = Self::clipboard_has_files(cx).then(|| ShellItem::run(Icon::Paste, &PASTE));
         let hidden = if self.settings.hidden_files == HiddenFiles::Shown {
-            MenuItem::run(Icon::Check, &HIDDEN).with_look(Look::On)
+            ShellItem::run(Icon::Check, &HIDDEN).with_look(ShellLook::On)
         } else {
-            MenuItem::run(Icon::Eye, &HIDDEN)
+            ShellItem::run(Icon::Eye, &HIDDEN)
         };
-        vec![
-            [Some(MenuItem::run(Icon::NewFolder, &NEW_FOLDER)), paste]
-                .into_iter()
-                .flatten()
-                .collect(),
-            select_all.into_iter().collect(),
-            self.view_items(),
-            vec![hidden],
-        ]
-        .into_iter()
-        .chain(from_parts)
-        .collect()
+        self.arranged(
+            MenuAt::Sheet,
+            vec![
+                Placed::new(
+                    MenuGroup::Edit,
+                    Placed::FIRST,
+                    vec![ShellItem::run(Icon::NewFolder, &NEW_FOLDER)],
+                ),
+                Placed::new(MenuGroup::Edit, Placed::SECOND, paste.into_iter().collect()),
+                select,
+                Placed::new(MenuGroup::View, Placed::FIRST, self.view_items()),
+                Placed::new(MenuGroup::Show, Placed::FIRST, vec![hidden]),
+            ],
+            cx,
+        )
     }
 
     fn under_cursor(&self) -> Point<Pixels> {

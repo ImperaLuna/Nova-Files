@@ -14,7 +14,7 @@ use nova_files_messages::{Envelope, Message, MessageType};
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{PageKind, PageRef};
-use crate::menu::{MenuAt, MenuItem, SidebarAt, SidebarRow};
+use crate::menu::{MenuAt, MenuGroup, MenuItem, SidebarAt, SidebarRow};
 use crate::scene::Scene;
 
 pub trait Part: Sized + 'static {
@@ -56,7 +56,7 @@ pub struct CommandSlot<P> {
 pub struct Slots<P> {
     pub(crate) events: HashMap<MessageType, EventSlot<P>>,
     pub(crate) commands: Vec<CommandSlot<P>>,
-    pub(crate) menus: Vec<(MenuAt, Items<P>)>,
+    pub(crate) menus: Vec<(MenuAt, MenuGroup, u8, Items<P>)>,
     pub(crate) pages: Vec<(TypeId, PageSlot<P>)>,
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
@@ -135,7 +135,11 @@ impl<P: Part> Slots<P> {
     }
 
     pub fn menu(&mut self, at: MenuAt, items: Items<P>) {
-        self.menus.push((at, items));
+        self.menu_in(at, MenuGroup::Part, 0, items);
+    }
+
+    pub fn menu_in(&mut self, at: MenuAt, group: MenuGroup, rank: u8, items: Items<P>) {
+        self.menus.push((at, group, rank, items));
     }
 
     pub fn page<K: PageKind>(

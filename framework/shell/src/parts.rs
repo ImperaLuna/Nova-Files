@@ -14,7 +14,7 @@ use nova_files_messages::{Envelope, MessageType};
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{Location, PageRef};
-use crate::menu::{MenuAt, MenuItem, SidebarAt, SidebarRow};
+use crate::menu::{MenuAt, Placed, SidebarAt, SidebarRow};
 use crate::part::{Card, Part, Slots};
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
@@ -37,7 +37,7 @@ trait OpenPart {
     fn deliver(&self, envelope: Envelope, cx: &mut App) -> Result<(), Envelope>;
     fn bind(&self, root: Div) -> Div;
     fn applies(&self, spec: &CommandSpec, scene: &Scene, cx: &App) -> Option<bool>;
-    fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<MenuItem>;
+    fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed>;
     fn page(&self, page: &PageRef) -> Option<AnyView>;
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
@@ -98,13 +98,13 @@ impl<P: Part> OpenPart for Opened<P> {
         Some((command.applies)(self.entity.read(cx), scene, cx))
     }
 
-    fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<MenuItem> {
+    fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed> {
         let part = self.entity.read(cx);
         self.slots
             .menus
             .iter()
-            .filter(|(place, _)| *place == at)
-            .flat_map(|(_, items)| items(part, scene, cx))
+            .filter(|(place, ..)| *place == at)
+            .map(|&(_, group, rank, items)| Placed::new(group, rank, items(part, scene, cx)))
             .collect()
     }
 
@@ -429,16 +429,17 @@ impl WindowParts {
             .unwrap_or(true)
     }
 
-    pub fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Vec<MenuItem>> {
+    pub fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed> {
         self.opened
             .iter()
-            .map(|part| {
-                part.menu(at, scene, cx)
-                    .into_iter()
-                    .filter(|item| self.applies(item.run, scene, cx))
-                    .collect::<Vec<_>>()
+            .flat_map(|part| part.menu(at, scene, cx))
+            .map(|mut placed| {
+                placed
+                    .items
+                    .retain(|item| self.applies(item.run, scene, cx));
+                placed
             })
-            .filter(|items| !items.is_empty())
+            .filter(|placed| !placed.items.is_empty())
             .collect()
     }
 

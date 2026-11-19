@@ -22,7 +22,7 @@ pub use entries::{Entries, EntriesAsked, Shown};
 pub use host::{Host, Link};
 pub use island::{Island, IslandAsk, IslandAsked, OnUndo, OnYes, Undo};
 pub use location::{Location, PageKind, PageRef};
-pub use menu::{Look, MenuAt, MenuItem, SidebarAt, SidebarRow};
+pub use menu::{Look, MenuAt, MenuGroup, MenuItem, Placed, SidebarAt, SidebarRow, arrange};
 pub use navigator::{NavAsk, NavEvent, Navigator};
 pub use part::{
     Applies, Card, Cell, Closing, Column, Columns, DropSlot, EmptyNote, Items, Listed, NameCell,
