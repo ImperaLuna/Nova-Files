@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::path::{Path, PathBuf};
 
-use gpui::{ClickEvent, Context, SharedString, UniformListScrollHandle, Window};
+use gpui::{App, ClickEvent, Context, SharedString, UniformListScrollHandle, Window};
 use nova_files_api::{EntryId, Listing, ListingId, Order};
 
 use super::MainWindow;
@@ -140,15 +140,18 @@ impl MainWindow {
         }
     }
 
-    pub fn tab_names(&self) -> Vec<SharedString> {
-        self.tab_looks().into_iter().map(|(name, _)| name).collect()
+    pub fn tab_names(&self, cx: &App) -> Vec<SharedString> {
+        self.tab_looks(cx)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect()
     }
 
-    pub(crate) fn tab_looks(&self) -> Vec<(SharedString, Icon)> {
+    pub(crate) fn tab_looks(&self, cx: &App) -> Vec<(SharedString, Icon)> {
         let shown = places_ui::shown(self.places(), self.pinned());
         self.tab_places()
             .iter()
-            .map(|place| self.tab_look(place.as_ref(), &shown))
+            .map(|place| self.tab_look(place.as_ref(), &shown, cx))
             .collect()
     }
 
@@ -156,14 +159,18 @@ impl MainWindow {
         &self,
         place: Option<&Location>,
         shown: &[places_ui::Shown],
+        cx: &App,
     ) -> (SharedString, Icon) {
         match place {
             Some(Location::Start) => (START_LABEL.into(), Icon::Start),
             Some(Location::Page(page)) => (page.title(), page.icon()),
-            Some(Location::Folder(folder)) => self.host.rules.named(folder).map_or_else(
-                || self.folder_look(folder, shown),
-                |named| (named.label, named.icon),
-            ),
+            Some(Location::Folder(folder)) => self
+                .host
+                .rules
+                .named(folder)
+                .map(|named| (named.label, named.icon))
+                .or_else(|| self.parts.folder_look(folder, cx))
+                .unwrap_or_else(|| self.folder_look(folder, shown)),
             None => (SharedString::default(), Icon::Folder),
         }
     }
@@ -178,9 +185,9 @@ impl MainWindow {
             )
     }
 
-    pub(crate) fn folder_name(&self, folder: &Path) -> SharedString {
+    pub(crate) fn folder_name(&self, folder: &Path, cx: &App) -> SharedString {
         let shown = places_ui::shown(self.places(), self.pinned());
-        self.tab_look(Some(&Location::Folder(folder.to_path_buf())), &shown)
+        self.tab_look(Some(&Location::Folder(folder.to_path_buf())), &shown, cx)
             .0
     }
 

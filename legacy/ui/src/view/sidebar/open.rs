@@ -21,7 +21,7 @@ impl MainWindow {
         let colors = Colors::of(cx);
         let places = self.tab_places();
         let rows =
-            self.tab_looks()
+            self.tab_looks(cx)
                 .into_iter()
                 .zip(places)
                 .enumerate()

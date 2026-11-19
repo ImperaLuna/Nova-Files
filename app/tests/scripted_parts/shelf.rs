@@ -5,6 +5,7 @@ use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, Pixels,
     Point, SharedString, Window, div, point,
 };
+use nova_files_shell::path_bar::Crumb;
 use nova_files_shell::{
     CardRank, Column, Host, Location, MenuAt, MenuGroup, MenuItem, PageKind, PageRef, Part, Parts,
     Placed, Scene, SidebarAt, SidebarRow, Slots, assets::Icon, command_spec,
@@ -44,6 +45,26 @@ impl PageKind for Shelved {
     fn icon(&self) -> Icon {
         Icon::Info
     }
+
+    fn parent(&self) -> Option<PathBuf> {
+        Some(PathBuf::from(SHELF_HOME))
+    }
+}
+
+const SHELF_HOME: &str = "/shelf/home";
+const OTHER_LOOK: &str = "Other place";
+
+fn shelf_crumbs(_: &Shelf, page: &Shelved, _: &gpui::App) -> Vec<Crumb> {
+    ["Shelf", "here"]
+        .into_iter()
+        .map(|label| Crumb {
+            opens: Some(Location::Page(PageRef::new(page.clone()))),
+            label: label.into(),
+            icon: Icon::Info,
+            shows_icon: true,
+            here: label == "here",
+        })
+        .collect()
 }
 
 struct Shelf {
@@ -98,6 +119,10 @@ impl Part for Shelf {
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::SECOND, nudge_items);
         slots.menu_in(MenuAt::Island, MenuGroup::Edit, Placed::SECOND, nudge_items);
         slots.page::<Shelved>(page);
+        slots.crumbs::<Shelved>(shelf_crumbs);
+        slots.folder_look(|_, folder, _| {
+            (folder == Path::new(OTHER)).then(|| (OTHER_LOOK.into(), Icon::Info))
+        });
         slots.column(|_, scene, _| {
             scene.in_folder(Path::new(SHOWN)).then_some(Column {
                 head: "Shelf".into(),
@@ -386,4 +411,31 @@ fn typing_on_a_part_page_hands_the_part_the_letters_so_far(cx: &mut TestAppConte
     cx.simulate_keystrokes("d o");
 
     assert_eq!(JUMPED.take(), "do");
+}
+
+#[gpui::test]
+fn a_part_page_names_its_crumbs_and_the_folder_above_it(cx: &mut TestAppContext) {
+    let (view, cx, _core) = shelved(cx);
+    assert!(cx.debug_bounds("crumb-1").is_none());
+    let host = view.read_with(cx, |view, _| view.host().clone());
+    host.nav.update(cx, |nav, cx| {
+        nav.go(Location::Page(PageRef::new(Shelved)), cx);
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("crumb-0").is_some());
+    assert!(cx.debug_bounds("crumb-1").is_some());
+    assert_eq!(
+        view.read_with(cx, |view, _| view.parent()),
+        Some(PathBuf::from(SHELF_HOME))
+    );
+}
+
+#[gpui::test]
+fn a_part_names_the_tab_of_a_folder_it_knows(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = shelved(cx);
+    assert_ne!(view.read_with(cx, MainWindow::tab_names), [OTHER_LOOK]);
+    view.update(cx, |view, _| view.open(Path::new(OTHER)));
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    assert_eq!(view.read_with(cx, MainWindow::tab_names), [OTHER_LOOK]);
 }
