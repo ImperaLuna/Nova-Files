@@ -133,6 +133,12 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         }
         Ok(())
     })?;
+    file_routes(&mut routes)?;
+    routes.on_leave(forget);
+    Ok(routes)
+}
+
+fn file_routes(routes: &mut Routes<Setup, Client>) -> Result<(), MessageType> {
     routes.on(|setup: &Setup, id, client: &Client, command| {
         operations::drop(id, client, command, setup);
         Ok(())
@@ -141,9 +147,7 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         trash_api::Command::List => {
             nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
         }
-    })?;
-    routes.on_leave(forget);
-    Ok(routes)
+    })
 }
 
 pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
