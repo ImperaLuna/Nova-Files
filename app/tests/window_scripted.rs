@@ -22,6 +22,7 @@ use nova_files_api::{
     HiddenFiles, Listing, ListingId, Message, Mode, Order, Palette, Place, PlaceKind, SortKey,
     Theme, ThumbnailSize, Unreadable,
 };
+use nova_files_look_api as look_api;
 use nova_files_settings_api::{
     self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
 };
@@ -528,7 +529,7 @@ fn the_window_asks_for_the_settings_and_the_theme(cx: &mut TestAppContext) {
     while let Some(message) = core.try_recv() {
         settings |=
             message.command::<settings_api::Command>() == Some(&settings_api::Command::Watch);
-        theme |= message.command::<Command>() == Some(&Command::Theme);
+        theme |= message.command::<look_api::Command>() == Some(&look_api::Command::Watch);
     }
     assert!(settings && theme);
 }
@@ -542,7 +543,7 @@ fn the_window_draws_with_the_theme_the_core_sends(cx: &mut TestAppContext) {
         mode: Mode::Light,
         palette: Palette::carbonfox(Mode::Light),
     };
-    core.send(Event::Theme(Arc::new(light.clone())));
+    core.send(look_api::Event::Theme(Arc::new(light.clone())));
     cx.run_until_parked();
     assert_eq!(cx.update(|_, cx| Colors::of(cx)), Colors::new(&light));
 }

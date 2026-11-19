@@ -160,7 +160,10 @@ impl RunningInstance {
 }
 
 pub fn sent_types() -> Vec<MessageType> {
-    vec![MessageType::of::<Command>()]
+    vec![
+        MessageType::of::<Command>(),
+        MessageType::of::<nova_files_look_api::Command>(),
+    ]
 }
 
 pub fn taken_types() -> Vec<MessageType> {
