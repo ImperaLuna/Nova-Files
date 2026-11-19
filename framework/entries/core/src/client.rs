@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use nova_files_api::{
-    ClientGone, Details, EntryId, Event, EventSink, Listing, ListingId, ThumbnailSize,
+    ClientGone, Details, EntryId, Event, EventSink, Listing, ListingId, Message, ThumbnailSize,
 };
 use nova_files_disk::ports::Icons;
 
@@ -96,9 +96,9 @@ impl ListingJob {
         self.current.load(Ordering::SeqCst) != self.id.0
     }
 
-    pub fn answer(&self, event: Event) {
+    pub fn answer<M: Message>(&self, message: M) {
         if !self.cancelled() {
-            self.events.deliver(event).ok();
+            self.events.deliver(message).ok();
         }
     }
 

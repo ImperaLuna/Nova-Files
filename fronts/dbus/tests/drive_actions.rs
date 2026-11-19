@@ -6,10 +6,10 @@
 
 use std::path::PathBuf;
 
-use nova_files_api::{
+use nova_files_dbus::{Bus, Udisks};
+use nova_files_drives_api::{
     Command, DriveAction, DriveFailure, DriveId, DriveService as _, Event, VolumeId,
 };
-use nova_files_dbus::{Bus, Udisks};
 
 mod support;
 mod udisks;
