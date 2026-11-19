@@ -15,7 +15,7 @@ use nova_files_messages::{Envelope, Message, MessageType};
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{Location, PageKind, PageRef};
-use crate::menu::{MenuAt, MenuGroup, MenuItem, SidebarAt, SidebarRow};
+use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
 use crate::scene::Scene;
 
 pub trait Part: Sized + 'static {
@@ -37,6 +37,7 @@ pub type Closing<P> = fn(&mut P, &mut Context<P>);
 pub type Listed<P> = fn(&mut P, &Listing, &mut Context<P>);
 pub type DropSlot<P> = Rc<dyn Fn(&mut P, &PageRef, Vec<PathBuf>, &mut Context<P>)>;
 pub type DropAim<P> = fn(&P, &Location, &[PathBuf], Modifiers, &App) -> Option<SharedString>;
+pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
 
 pub struct Column<P> {
@@ -71,6 +72,7 @@ pub struct Slots<P> {
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
     pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
+    pub(crate) row_menus: Vec<RowMenu<P>>,
     pub(crate) bars: Vec<Card<P>>,
     pub(crate) overlays: Vec<Card<P>>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
@@ -96,6 +98,7 @@ impl<P> Default for Slots<P> {
             listed: Vec::new(),
             drops: Vec::new(),
             drop_targets: Vec::new(),
+            row_menus: Vec::new(),
             bars: Vec::new(),
             overlays: Vec::new(),
             list_views: Vec::new(),
@@ -192,6 +195,10 @@ impl<P: Part> Slots<P> {
             }
         });
         self.drops.push((TypeId::of::<K>(), slot));
+    }
+
+    pub fn row_menu(&mut self, items: RowMenu<P>) {
+        self.row_menus.push(items);
     }
 
     pub fn drop_target(&mut self, aim: DropAim<P>, take: DropTake<P>) {

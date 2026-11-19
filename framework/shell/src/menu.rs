@@ -1,4 +1,7 @@
-use gpui::SharedString;
+use std::fmt;
+use std::rc::Rc;
+
+use gpui::{App, SharedString};
 
 use crate::assets::Icon;
 use crate::command::CommandSpec;
@@ -122,6 +125,43 @@ pub fn arrange(mut placed: Vec<Placed>) -> Vec<Vec<MenuItem>> {
         }
     }
     groups.into_iter().map(|(_, items)| items).collect()
+}
+
+pub type OnRun = Rc<dyn Fn(&mut App)>;
+
+#[derive(Clone)]
+pub struct RowItem {
+    pub icon: Icon,
+    pub label: SharedString,
+    pub look: Look,
+    pub run: OnRun,
+}
+
+impl RowItem {
+    pub fn new(
+        icon: Icon,
+        label: impl Into<SharedString>,
+        run: impl Fn(&mut App) + 'static,
+    ) -> Self {
+        Self {
+            icon,
+            label: label.into(),
+            look: Look::Plain,
+            run: Rc::new(run),
+        }
+    }
+
+    #[must_use]
+    pub const fn with_look(mut self, look: Look) -> Self {
+        self.look = look;
+        self
+    }
+}
+
+impl fmt::Debug for RowItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.label)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

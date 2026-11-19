@@ -15,7 +15,7 @@ use nova_files_messages::{Envelope, MessageType};
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::{Location, PageRef};
-use crate::menu::{MenuAt, Placed, SidebarAt, SidebarRow};
+use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::{Card, Part, Slots};
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
@@ -61,6 +61,7 @@ trait OpenPart {
         paths: Vec<PathBuf>,
         cx: &mut App,
     ) -> Result<(), Vec<PathBuf>>;
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem>;
     fn drop_label(
         &self,
         at: &Location,
@@ -276,6 +277,15 @@ impl<P: Part> OpenPart for Opened<P> {
         self.entity
             .update(cx, |part, cx| slot(part, page, paths, cx));
         Ok(())
+    }
+
+    fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+        let part = self.entity.read(cx);
+        self.slots
+            .row_menus
+            .iter()
+            .flat_map(|items| items(part, row, cx))
+            .collect()
     }
 
     fn drop_label(
@@ -553,6 +563,13 @@ impl WindowParts {
         for part in &self.opened {
             part.listed(listing, cx);
         }
+    }
+
+    pub fn row_menu(&self, row: &str, cx: &App) -> Vec<RowItem> {
+        self.opened
+            .iter()
+            .flat_map(|part| part.row_menu(row, cx))
+            .collect()
     }
 
     pub fn drop_label(
