@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::mem;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
@@ -60,9 +60,6 @@ impl MainWindow {
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);
         self.pick_folder_opened(reordered, cx);
-        if !same_folder && self.trash_open() {
-            self.list_trash();
-        }
         self.typed_path_arrived(same_folder);
         if (!same_folder || reordered || made)
             && let Some(cursor) = self.cursor()
@@ -107,6 +104,7 @@ impl MainWindow {
     }
 
     pub(super) fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
+        self.parts.watch(&event, cx);
         match event {
             Event::Pong => self.set_status(CoreStatus::Connected, cx),
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
@@ -189,6 +187,16 @@ impl MainWindow {
         cx.notify();
     }
 
+    fn missing_named(&self, id: ListingId, path: &Path) -> Option<Listing> {
+        let named = self.host.rules.named(path)?;
+        named.empty_when_missing.then(|| Listing {
+            id,
+            path: path.to_path_buf(),
+            entries: Arc::from([]),
+            folders: None,
+        })
+    }
+
     fn folder_refused(
         &mut self,
         id: ListingId,
@@ -197,7 +205,7 @@ impl MainWindow {
         cx: &mut Context<Self>,
     ) {
         if reason == Unreadable::Missing
-            && let Some(empty) = self.missing_trash(id, &path)
+            && let Some(empty) = self.missing_named(id, &path)
         {
             self.listing_arrived(empty, cx);
             return;

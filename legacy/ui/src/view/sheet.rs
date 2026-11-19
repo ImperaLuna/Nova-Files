@@ -25,8 +25,6 @@ use crate::window::{Aim, DraggedRow, LIBRARY_LABEL, MainWindow};
 const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
 const SIZE_LABEL: &str = "Size";
-const WAS_IN_LABEL: &str = "Was in";
-const TRASH_EMPTY_LABEL: &str = "Empty";
 const FOLDER_LABEL: &str = "Folder";
 const MODIFIED_HEADER_SELECTOR: &str = "modified-header";
 const FOLDER_HEADER_SELECTOR: &str = "folder-header";
@@ -93,7 +91,7 @@ impl MainWindow {
             )
             .child(self.entries(cx))
             .child(ctrl_scroll(cx))
-            .children(self.empty_trash(&colors))
+            .children(self.empty_note(&colors, cx))
             .children(self.no_matches(&colors))
             .children(self.match_count(&colors))
             .children(self.band_box().map(|band| {
@@ -234,14 +232,18 @@ impl MainWindow {
             ))
     }
 
-    fn empty_trash(&self, colors: &Colors) -> Option<impl IntoElement> {
+    fn empty_note(&self, colors: &Colors, cx: &Context<Self>) -> Option<impl IntoElement> {
         let empty = self
             .listing
             .as_ref()
             .is_some_and(|listing| listing.entries.is_empty());
-        (empty && self.trash_open()).then(|| {
+        if !empty {
+            return None;
+        }
+        let (glyph, note) = self.parts.empty_note(&self.scene(), cx)?;
+        Some(
             div()
-                .debug_selector(|| "trash-empty".to_owned())
+                .debug_selector(|| "empty-note".to_owned())
                 .absolute()
                 .inset_0()
                 .flex()
@@ -250,9 +252,9 @@ impl MainWindow {
                 .justify_center()
                 .gap(size::NAME_GAP)
                 .text_color(colors.text_dim)
-                .child(icon(Icon::Trash, size::EMPTY_ICON, colors.text_dim))
-                .child(TRASH_EMPTY_LABEL)
-        })
+                .child(icon(glyph, size::EMPTY_ICON, colors.text_dim))
+                .child(note),
+        )
     }
 }
 
@@ -343,7 +345,7 @@ fn entry_row(
 
 impl MainWindow {
     pub fn list_drop_folder(&self) -> Option<&Path> {
-        if self.searching() || self.trash_open() || self.gathered_shown().is_some() {
+        if self.searching() || self.folder_rules().trashed || self.gathered_shown().is_some() {
             return None;
         }
         Some(&self.listing.as_ref()?.path)
@@ -359,11 +361,6 @@ impl MainWindow {
         if let Some(column) = part_column {
             let text = column.cell(entry, cx).unwrap_or_default();
             return Some(detail(text.to_string(), &Colors::of(cx)).into_any_element());
-        }
-        if self.trash_open() {
-            let was_in = self.was_in(index).unwrap_or_default();
-            let colors = Colors::of(cx);
-            return Some(detail(was_in.to_string(), &colors).into_any_element());
         }
         if self.gathered_shown() == Some(Gathering::Games) {
             let library = self.library_of(&listing.path_of(entry)).unwrap_or_default();
@@ -387,7 +384,6 @@ impl MainWindow {
         });
         let folder = match self.gathered_shown() {
             _ if part.is_some() => part,
-            _ if self.trash_open() => Some(was_in_head()),
             Some(Gathering::Games) => Some(library_head()),
             Some(Gathering::Projects) => Some(folder_head()),
             None => self.showing_found().then(folder_head),
@@ -407,13 +403,6 @@ fn library_head() -> AnyElement {
     div()
         .debug_selector(|| "head-library".to_owned())
         .child(LIBRARY_LABEL)
-        .into_any_element()
-}
-
-fn was_in_head() -> AnyElement {
-    div()
-        .debug_selector(|| "head-was-in".to_owned())
-        .child(WAS_IN_LABEL)
         .into_any_element()
 }
 

@@ -257,7 +257,7 @@ async fn the_trash_has_no_properties(cx: &mut TestAppContext) {
     view.update(cx, MainWindow::trash_selected);
     view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["Projects"])
         .await;
-    view.update(cx, MainWindow::open_trash_in_new_tab);
+    open_trash(&view, cx, true).await;
     view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["notes.txt"])
         .await;
     click(cx, "name-0");

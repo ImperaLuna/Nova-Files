@@ -122,7 +122,7 @@ fn shelved(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestConte
         cx.set_global(parts);
         nova_files_ui::bind_window_keys(cx);
     });
-    let (view, cx, mut core) = window(cx);
+    let (view, cx, mut core) = window_with_parts(cx);
     answer_listing(&mut core, ENTRIES);
     cx.run_until_parked();
     (view, cx, core)

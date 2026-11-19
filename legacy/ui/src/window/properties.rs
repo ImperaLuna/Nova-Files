@@ -89,7 +89,7 @@ impl MainWindow {
     }
 
     pub fn show_properties(&mut self, cx: &mut Context<Self>) {
-        if self.in_trash() {
+        if self.folder_rules().trashed {
             return;
         }
         let paths = self.selected_paths();

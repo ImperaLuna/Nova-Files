@@ -7,6 +7,7 @@ use crate::per_tab::TabId;
 pub enum NavAsk {
     Go(Location),
     NewTab(Location),
+    Reload,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +41,11 @@ impl Navigator {
 
     pub fn open_in_new_tab(&mut self, location: Location, cx: &mut Context<Self>) {
         self.asks.push(NavAsk::NewTab(location));
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn reload(&mut self, cx: &mut Context<Self>) {
+        self.asks.push(NavAsk::Reload);
         cx.emit(NavEvent::Asked);
     }
 

@@ -13,6 +13,8 @@
 # - nova-files-drives-api
 # - nova-files-index
 # - nova-files-picker-api
+# - nova-files-shell
+# - nova-files-trash-ui
 # - nova-files-ui
 
 [package]
@@ -34,6 +36,8 @@ nova-files-core.workspace = true
 nova-files-dbus.workspace = true
 nova-files-drives-api.workspace = true
 nova-files-picker-api.workspace = true
+nova-files-shell.workspace = true
+nova-files-trash-ui.workspace = true
 nova-files-ui.workspace = true
 
 [dev-dependencies]
@@ -42,7 +46,6 @@ nova-files-look-api.workspace = true
 nova-files-places-api.workspace = true
 nova-files-properties-api.workspace = true
 nova-files-settings-api.workspace = true
-nova-files-shell.workspace = true
 nova-files-start-api.workspace = true
 nova-files-trash-api.workspace = true
 gpui = { workspace = true, features = ["test-support"] }

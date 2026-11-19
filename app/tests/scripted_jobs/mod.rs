@@ -1,5 +1,6 @@
 use nova_files_api::{JobId, NotOpened, Operation, Outcome, Tally};
 use nova_files_trash_api as trash_api;
+use nova_files_trash_ui::TrashPart;
 
 use super::*;
 
@@ -37,6 +38,8 @@ fn a_paused_job_says_so_until_it_resumes(cx: &mut TestAppContext) {
     assert!(line().is_some_and(|line| !line.contains("paused")));
 }
 
+const TRASH: &str = "/trash/files";
+
 fn trash_asks(core: &mut Core) -> usize {
     let mut asks = 0;
     while let Some(message) = core.try_recv() {
@@ -51,6 +54,10 @@ fn trash_asks(core: &mut Core) -> usize {
 fn the_trash_is_read_again_on_arriving_in_it(cx: &mut TestAppContext) {
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, ENTRIES);
+    core.send(trash_api::Event::Listed {
+        folder: Some(PathBuf::from(TRASH)),
+        items: Vec::new(),
+    });
     cx.run_until_parked();
     trash_asks(&mut core);
 
@@ -59,7 +66,9 @@ fn the_trash_is_read_again_on_arriving_in_it(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(trash_asks(&mut core), 0);
 
-    view.update(cx, MainWindow::open_trash);
+    let part = view.read_with(cx, |view, _| view.part::<TrashPart>().unwrap());
+    part.update(cx, |part, cx| part.open(cx));
+    cx.run_until_parked();
     answer_listing(&mut core, 0);
     cx.run_until_parked();
     assert_eq!(trash_asks(&mut core), 1);

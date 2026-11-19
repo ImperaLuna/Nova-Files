@@ -2,6 +2,7 @@ mod access;
 mod acting;
 mod aiming;
 mod clipboard;
+mod confirm;
 mod context_menu;
 mod dragging;
 mod drives;
@@ -26,7 +27,6 @@ mod slots;
 mod start;
 mod tab_order;
 mod tabs;
-mod trash;
 mod tree;
 mod views;
 
@@ -40,6 +40,7 @@ pub use navigate::tidy;
 pub use preview::{Previewed, QuickLook, Shown};
 pub use properties::Page as PropertiesPage;
 pub use search::{FocusTo, Scope, short_folder};
+pub use slots::from_shell;
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
 
 use std::collections::HashMap;
@@ -65,7 +66,6 @@ use nova_files_properties_api as properties_api;
 use nova_files_settings_api::{self as settings_api, Settings};
 use nova_files_shell::{FolderRules, Host, Link, Parts, WindowParts};
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
-use nova_files_trash_api as trash_api;
 
 use self::drives::Drives;
 use self::preview::QuickLooks;
@@ -86,7 +86,6 @@ use crate::tree::FolderTree;
 use jobs::Jobs;
 use renaming::{Renaming, Waiting};
 use tabs::Tabs;
-use trash::TrashState;
 
 const DEFAULT_SCALE_FACTOR: f32 = 2.0;
 
@@ -161,7 +160,6 @@ pub struct MainWindow {
     renaming: Option<Renaming>,
     waiting: Waiting,
     showing: Option<showing::Showing>,
-    trash: TrashState,
     tabs: Tabs,
     drop_asks: aiming::Asks,
     hover_open: hover_open::HoverOpen,
@@ -193,13 +191,7 @@ impl EventSink for ChannelSink<Envelope> {
 
 impl MainWindow {
     pub fn new(connector: &Connector, folder: &Path, cx: &mut Context<Self>) -> Self {
-        let mut window = Self::with_home(connector, folder, home_folder(), cx);
-        let data = std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .filter(|path| path.is_absolute());
-        window.trash = TrashState::new(&window.home, data);
-        window.claim_trash_rules();
-        window
+        Self::with_home(connector, folder, home_folder(), cx)
     }
 
     pub fn with_home(
@@ -227,8 +219,7 @@ impl MainWindow {
             CoreStatus::Gone
         };
         let events = Self::listen(events, cx);
-        let trash = TrashState::new(&home, None);
-        let (host, parts) = open_parts(connection.clone(), cx);
+        let (host, parts) = open_parts(connection.clone(), &home, cx);
         let mut window = Self {
             connector: connector.clone(),
             status,
@@ -281,7 +272,6 @@ impl MainWindow {
             renaming: None,
             waiting: Waiting::Nothing,
             showing: None,
-            trash,
             tabs: Tabs::default(),
             drop_asks: aiming::Asks::default(),
             hover_open: hover_open::HoverOpen::default(),
@@ -294,7 +284,6 @@ impl MainWindow {
             _events: events,
         };
         window.watching = window.watch_slots(cx);
-        window.claim_trash_rules();
         window.go_first(location, cx);
         window
     }
@@ -364,13 +353,8 @@ impl MainWindow {
             }
             Err(envelope) => envelope,
         };
-        match envelope.open::<trash_api::Event>() {
-            Ok(trash_api::Event::Listed(items)) => self.trash_listed(items, cx),
-            Err(envelope) => {
-                if let Err(envelope) = self.parts.deliver(envelope, cx) {
-                    log::error!("no part takes {envelope:?}");
-                }
-            }
+        if let Err(envelope) = self.parts.deliver(envelope, cx) {
+            log::error!("no part takes {envelope:?}");
         }
     }
 
@@ -452,14 +436,17 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             connection.send(look_api::Command::Watch)?;
             connection.send(places_api::Command::Places)?;
             connection.send(settings_api::Command::Watch)?;
-            connection.send(trash_api::Command::List)?;
             Ok(connection)
         })
         .ok()
 }
 
-fn open_parts(connection: Option<Arc<Connection>>, cx: &mut App) -> (Host, WindowParts) {
-    let host = Host::new(Link::new(connection), cx);
+fn open_parts(
+    connection: Option<Arc<Connection>>,
+    home: &Path,
+    cx: &mut App,
+) -> (Host, WindowParts) {
+    let host = Host::new(Link::new(connection), home.to_path_buf(), cx);
     let parts = cx
         .try_global::<Parts>()
         .cloned()

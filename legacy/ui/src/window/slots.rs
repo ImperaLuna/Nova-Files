@@ -1,6 +1,9 @@
-use gpui::{Context, Subscription};
+use std::path::Path;
+
+use gpui::{Context, Entity, Subscription};
 use nova_files_shell::{
-    self as shell, Host, IslandAsk, IslandAsked, NavAsk, NavEvent, PageRef, Scene, Shown, TabId,
+    self as shell, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent, PageRef, Part,
+    Scene, Shown, TabId,
 };
 
 use super::MainWindow;
@@ -32,6 +35,14 @@ impl MainWindow {
 
     pub const fn host(&self) -> &Host {
         &self.host
+    }
+
+    pub fn named_here(&self) -> Option<FolderName> {
+        self.host.rules.named(self.folder()?)
+    }
+
+    pub fn part<P: Part>(&self) -> Option<Entity<P>> {
+        self.parts.part::<P>()
     }
 
     pub fn scene(&self) -> Scene {
@@ -84,6 +95,7 @@ impl MainWindow {
             match ask {
                 NavAsk::Go(place) => self.go_to_shell(place, cx),
                 NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
+                NavAsk::Reload => self.reload(),
             }
         }
     }
@@ -113,6 +125,9 @@ impl MainWindow {
         let asks = self.host.island.update(cx, |island, _| island.take_asks());
         for ask in asks {
             match ask {
+                IslandAsk::StartJob(operation) => {
+                    self.start_job(operation);
+                }
                 IslandAsk::Note { label, undo } => {
                     self.show_note(label, undo.map(NoteUndo::Job), cx);
                 }
@@ -151,6 +166,14 @@ impl MainWindow {
         }
     }
 
+    fn reload(&mut self) {
+        if let Some(folder) = self.folder().map(Path::to_path_buf)
+            && !self.waiting()
+        {
+            self.request(&folder);
+        }
+    }
+
     fn tab_id(&self) -> TabId {
         self.tabs.ids[self.tabs.current]
     }
@@ -160,7 +183,7 @@ impl MainWindow {
     }
 }
 
-fn from_shell(place: shell::Location) -> Location {
+pub fn from_shell(place: shell::Location) -> Location {
     match place {
         shell::Location::Folder(folder) => Location::Folder(folder),
         shell::Location::Page(page) => match page.get::<Builtin>() {

@@ -30,6 +30,7 @@ fn window_at<'a>(
         .unwrap();
     let connector = core.connector.clone();
     let home = home.to_owned();
+    with_parts(cx);
     let (view, cx) =
         cx.add_window_view(|_, cx| MainWindow::at(&core.connector, location, home, cx));
     (view, cx, connector)
