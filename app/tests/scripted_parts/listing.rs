@@ -100,3 +100,20 @@ fn a_part_replaces_the_place_shown_without_a_step_back(cx: &mut TestAppContext) 
         assert_eq!(view.back_target(), None);
     });
 }
+
+#[gpui::test]
+fn a_failed_listing_shows_the_page_empty(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = piled(cx);
+    view.update(cx, |view, cx| view.open_page(PageRef::new(Pile), cx));
+    cx.run_until_parked();
+    let (id, _) = core.next_listing().unwrap();
+    let entries = view.read_with(cx, |view, _| view.host().entries.clone());
+    entries.update(cx, |entries, cx| entries.listing_failed(id, cx));
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.listed_page(), Some(&PageRef::new(Pile)));
+        assert!(view.entry_names().is_empty());
+        assert!(!view.waiting());
+    });
+}

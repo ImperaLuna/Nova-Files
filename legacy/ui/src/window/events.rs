@@ -181,6 +181,25 @@ impl MainWindow {
         cx.notify();
     }
 
+    pub(super) fn listing_failed(&mut self, id: ListingId, cx: &mut Context<Self>) {
+        if self.asked != Some(id) {
+            return;
+        }
+        let path = self
+            .requested
+            .as_ref()
+            .and_then(Location::folder)
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let empty = Listing {
+            id,
+            path,
+            entries: Arc::from([]),
+            folders: None,
+        };
+        self.listing_arrived(empty, cx);
+    }
+
     fn missing_named(&self, id: ListingId, path: &Path) -> Option<Listing> {
         let named = self.host.rules.named(path)?;
         named.empty_when_missing.then(|| Listing {

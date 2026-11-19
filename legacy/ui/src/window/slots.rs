@@ -117,9 +117,16 @@ impl MainWindow {
     }
 
     fn take_entries_asks(&mut self, cx: &mut Context<Self>) {
-        let (now, later) = self.host.entries.update(cx, |entries, _| {
-            (entries.take_select(), entries.take_select_later())
+        let (now, later, failed) = self.host.entries.update(cx, |entries, _| {
+            (
+                entries.take_select(),
+                entries.take_select_later(),
+                entries.take_failed(),
+            )
         });
+        if let Some(id) = failed {
+            self.listing_failed(id, cx);
+        }
         if let Some((folder, names)) = later {
             self.select_when_listed(folder, names, cx);
         }
