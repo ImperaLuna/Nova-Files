@@ -16,6 +16,7 @@ use gpui::{App, Entity, Modifiers, TestAppContext, VisualTestContext};
 use image::{ImageFormat, RgbImage};
 use nova_files_core::{IDLE_EXIT, Thumbnails};
 use nova_files_preview_api::PreviewContent;
+use nova_files_preview_ui::{PreviewPart, Previewed};
 use nova_files_shell::Parts;
 use nova_files_thumbnails_ui::ThumbnailsPart;
 use nova_files_ui::{MainWindow, WindowEvent};
@@ -79,6 +80,7 @@ async fn window_on_media<'a>(
     cx.executor().allow_parking();
     cx.update(|cx| {
         let mut parts = Parts::default();
+        parts.add::<PreviewPart>();
         parts.add::<ThumbnailsPart>();
         cx.set_global(parts);
     });
@@ -91,6 +93,15 @@ async fn window_on_media<'a>(
         .await;
     cx.run_until_parked();
     (temp, view, cx, core)
+}
+
+fn previewing(view: &MainWindow, cx: &App) -> bool {
+    view.part::<PreviewPart>()
+        .is_some_and(|part| part.read(cx).previewing())
+}
+
+fn previewed(view: &MainWindow, cx: &App) -> Option<Previewed> {
+    view.part::<PreviewPart>()?.read(cx).previewed(cx)
 }
 
 fn has_thumbnail(view: &MainWindow, index: usize, cx: &App) -> bool {
@@ -118,11 +129,11 @@ async fn the_quick_look_shows_the_picture_itself(cx: &mut TestAppContext) {
     let row = cx.debug_bounds("entry-1").unwrap();
     cx.simulate_click(row.center(), Modifiers::none());
     cx.simulate_keystrokes("space");
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.previewed().is_some_and(|shown| shown.picture)
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        previewed(view, cx).is_some_and(|shown| shown.picture)
     })
     .await;
-    let preview = view.read_with(cx, |view, _| view.previewed().unwrap().preview.unwrap());
+    let preview = view.read_with(cx, |view, cx| previewed(view, cx).unwrap().preview.unwrap());
     match &preview.content {
         PreviewContent::Picture(picture) => {
             assert_eq!((picture.width, picture.height), (SIDE, SIDE));
@@ -134,7 +145,7 @@ async fn the_quick_look_shows_the_picture_itself(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("preview-picture").is_some());
 
     cx.simulate_keystrokes("space");
-    view.read_with(cx, |view, _| assert!(!view.previewing()));
+    view.read_with(cx, |view, cx| assert!(!previewing(view, cx)));
 }
 
 #[gpui::test]
@@ -143,8 +154,8 @@ async fn a_smaller_window_gets_a_smaller_picture(cx: &mut TestAppContext) {
     cx.update(nova_files_ui::bind_window_keys);
     let (_temp, view, cx, _core) = window_on_media(cx, "preview-resize").await;
     let side = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
-        view.read_with(cx, |view, _| {
-            let shown = view.previewed()?;
+        view.read_with(cx, |view, cx| {
+            let shown = previewed(view, cx)?;
             match &shown.preview?.content {
                 PreviewContent::Picture(picture) if shown.picture => Some(picture.width),
                 _ => None,
@@ -155,16 +166,16 @@ async fn a_smaller_window_gets_a_smaller_picture(cx: &mut TestAppContext) {
     let row = cx.debug_bounds("entry-1").unwrap();
     cx.simulate_click(row.center(), Modifiers::none());
     cx.simulate_keystrokes("space");
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.previewed().is_some_and(|shown| shown.picture)
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        previewed(view, cx).is_some_and(|shown| shown.picture)
     })
     .await;
     assert_eq!(side(&view, cx), Some(SIDE));
 
     cx.simulate_resize(gpui::size(gpui::px(200.0), gpui::px(200.0)));
     cx.run_until_parked();
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.previewed()
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        previewed(view, cx)
             .and_then(|shown| shown.preview)
             .is_some_and(|preview| match &preview.content {
                 PreviewContent::Picture(picture) => picture.width < SIDE,

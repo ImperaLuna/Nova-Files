@@ -26,7 +26,7 @@
 # - nova-files-picker-ui
 # - nova-files-places-api
 # - nova-files-places-ui
-# - nova-files-preview-api
+# - nova-files-preview-ui
 # - nova-files-properties-api
 # - nova-files-properties-ui
 # - nova-files-rename-ui
@@ -59,7 +59,7 @@ nova-files-picker-api.workspace = true
 nova-files-picker-ui.workspace = true
 nova-files-places-api.workspace = true
 nova-files-places-ui.workspace = true
-nova-files-preview-api.workspace = true
+nova-files-preview-ui.workspace = true
 nova-files-properties-api.workspace = true
 nova-files-properties-ui.workspace = true
 nova-files-search-api.workspace = true
@@ -72,8 +72,6 @@ log = { version = "0.4.35", features = ["std"] }
 futures = { version = "0.3", default-features = false, features = ["std", "executor"] }
 gpui.workspace = true
 gpui_platform.workspace = true
-# Turns preview pictures into images GPUI draws; GPUI already builds it.
-image = { version = "0.25.10", default-features = false, features = ["png"] }
 # Grapheme boundaries, so the caret steps over a whole character; GPUI
 # already builds it.
 # Reads a theme icon's own size, so GPUI's SVG renderer draws it straight
@@ -81,5 +79,7 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 usvg = { version = "0.45.1", default-features = false }
 
 [dev-dependencies]
+# Makes the theme icon tests' pictures; GPUI already builds it.
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 nova-files-clipboard-ui.workspace = true
 nova-files-rename-ui.workspace = true

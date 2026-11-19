@@ -2,9 +2,9 @@ use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui::{Bounds, Context, Pixels, Size, Window, size};
-use nova_files_api::EntryId;
+use gpui::{App, Bounds, Context, Entity, Pixels, Size, Window, size};
 use nova_files_folders_api::ViewMode;
+use nova_files_preview_ui::PreviewPart;
 
 use super::MainWindow;
 use crate::grid::Grid;
@@ -27,6 +27,15 @@ impl GalleryBounds {
 }
 
 impl MainWindow {
+    pub(crate) fn preview(&self) -> Option<Entity<PreviewPart>> {
+        self.part::<PreviewPart>()
+    }
+
+    pub(crate) fn previewing(&self, cx: &App) -> bool {
+        self.preview()
+            .is_some_and(|preview| preview.read(cx).previewing())
+    }
+
     pub fn showing_gallery(&self) -> bool {
         !self.picker() && self.folder_view().mode == ViewMode::Gallery
     }
@@ -50,27 +59,25 @@ impl MainWindow {
     }
 
     pub(crate) fn keep_gallery(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let preview = self.preview();
         if !self.showing_gallery() {
-            if self.quick_looks.docked {
-                self.close_preview(None, cx);
+            if let Some(preview) = preview {
+                preview.update(cx, PreviewPart::undock);
             }
             return;
         }
         let Some(listing) = self.listing.as_ref() else {
             return;
         };
-        let (id, len) = (listing.id, listing.entries.len());
+        let len = listing.entries.len();
         if len == 0 {
             return;
         }
         if self.cursor().is_none() {
             self.move_cursor(Move::First, false, cx);
         }
-        if self.quick_looks.open.is_none()
-            && let Some(cursor) = self.cursor().and_then(|at| u32::try_from(at).ok())
-        {
-            self.preview_entry(id, EntryId(cursor), None, cx);
-            self.quick_looks.docked = true;
+        if let (Some(preview), Some(cursor)) = (preview, self.cursor()) {
+            preview.update(cx, |preview, cx| preview.dock(cursor, cx));
         }
         self.entries_drawn(self.strip_entries(len), window, cx);
     }

@@ -15,15 +15,14 @@ async fn with_text<'a>(
 }
 
 async fn wait_for_preview(view: &Entity<MainWindow>, cx: &VisualTestContext, name: &str) {
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.previewed()
-            .is_some_and(|shown| shown.name == name && shown.preview.is_some())
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        previewed(view, cx).is_some_and(|shown| shown.name == name && shown.preview.is_some())
     })
     .await;
 }
 
 fn previewed_name(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Option<String> {
-    view.read_with(cx, |view, _| view.previewed().map(|shown| shown.name))
+    view.read_with(cx, |view, cx| previewed(view, cx).map(|shown| shown.name))
 }
 
 fn selected(view: &Entity<MainWindow>, cx: &VisualTestContext) -> Vec<String> {
@@ -37,12 +36,12 @@ async fn space_shows_the_selected_file_and_closes_it_again(cx: &mut TestAppConte
     let (view, cx) = with_text(cx, &tree).await;
 
     cx.simulate_keystrokes("space");
-    assert!(!view.read_with(cx, |view, _| view.previewing()));
+    assert!(!view.read_with(cx, previewing));
 
     click(cx, "entry-1");
     cx.simulate_keystrokes("space");
     wait_for_preview(&view, cx, "a.txt").await;
-    let preview = view.read_with(cx, |view, _| view.previewed().unwrap().preview.unwrap());
+    let preview = view.read_with(cx, |view, cx| previewed(view, cx).unwrap().preview.unwrap());
     assert_eq!(
         preview.content,
         nova_files_preview_api::PreviewContent::Text {
@@ -93,7 +92,7 @@ async fn the_arrow_keys_step_through_the_folder_and_the_selection_follows(cx: &m
     cx.simulate_keystrokes("up left");
     wait_for_preview(&view, cx, "Projects").await;
     assert_eq!(selected(&view, cx), ["Projects"]);
-    let preview = view.read_with(cx, |view, _| view.previewed().unwrap().preview.unwrap());
+    let preview = view.read_with(cx, |view, cx| previewed(view, cx).unwrap().preview.unwrap());
     match &preview.content {
         nova_files_preview_api::PreviewContent::Folder { first, count } => {
             assert_eq!(*count, 1);
@@ -117,9 +116,9 @@ async fn the_buttons_step_and_close(cx: &mut TestAppContext) {
     click(cx, "preview-previous");
     wait_for_preview(&view, cx, "a.txt").await;
     click(cx, "preview-art");
-    assert!(view.read_with(cx, |view, _| view.previewing()));
+    assert!(view.read_with(cx, previewing));
     click(cx, "preview-close");
-    assert!(!view.read_with(cx, |view, _| view.previewing()));
+    assert!(!view.read_with(cx, previewing));
 }
 
 #[gpui::test]
@@ -132,7 +131,7 @@ async fn enter_on_a_folder_goes_into_it_and_closes_the_quick_look(cx: &mut TestA
     cx.simulate_keystrokes("space");
     wait_for_preview(&view, cx, "Projects").await;
     cx.simulate_keystrokes("enter");
-    assert!(!view.read_with(cx, |view, _| view.previewing()));
+    assert!(!view.read_with(cx, previewing));
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
 }
 
@@ -148,7 +147,7 @@ async fn going_to_another_folder_closes_the_quick_look(cx: &mut TestAppContext) 
     cx.simulate_keystrokes("alt-up");
     view.condition::<WindowEvent>(cx, |view, _| view.folder() != Some(tree.path()))
         .await;
-    assert!(!view.read_with(cx, |view, _| view.previewing()));
+    assert!(!view.read_with(cx, previewing));
 }
 
 #[gpui::test]
@@ -166,7 +165,7 @@ async fn a_click_beside_what_is_shown_closes_the_quick_look(cx: &mut TestAppCont
         scrim.origin + gpui::point(px(4.0), px(4.0)),
         Modifiers::none(),
     );
-    assert!(!view.read_with(cx, |view, _| view.previewing()));
+    assert!(!view.read_with(cx, previewing));
 }
 
 #[gpui::test]
@@ -221,8 +220,8 @@ async fn a_fresh_read_shows_the_file_as_it_is_now(cx: &mut TestAppContext) {
         view.sort_by(nova_files_api::SortKey::Name);
         cx.notify();
     });
-    view.condition::<WindowEvent>(cx, |view, _| {
-        view.previewed()
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        previewed(view, cx)
             .and_then(|shown| shown.preview)
             .is_some_and(|preview| {
                 preview.content
@@ -263,7 +262,7 @@ async fn a_space_inside_a_name_being_typed_does_not_open_the_quick_look(cx: &mut
 
     cx.simulate_keystrokes("m y space n");
     assert_eq!(selected(&view, cx), ["my notes.txt"]);
-    assert!(!view.read_with(cx, |view, _| view.previewing()));
+    assert!(!view.read_with(cx, previewing));
 }
 
 #[gpui::test]
@@ -336,7 +335,7 @@ async fn pictures_are_asked_to_fit_the_room_the_window_has(cx: &mut TestAppConte
     let (view, cx) = with_text(cx, &tree).await;
     let fit = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
         cx.run_until_parked();
-        view.read_with(cx, |view, _| view.preview_fit())
+        view.read_with(cx, preview_fit)
     };
 
     let drawn = fit(&view, cx).unwrap();
