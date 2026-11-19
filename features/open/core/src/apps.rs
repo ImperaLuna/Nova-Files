@@ -39,6 +39,33 @@ pub fn shared_types(paths: &[&Path], types: &MimeTypes) -> Shared {
     }
 }
 
+pub fn ancestries(paths: &[&Path], types: &MimeTypes) -> Vec<Vec<String>> {
+    paths.iter().map(|path| ancestry(path, types)).collect()
+}
+
+pub fn apps_for_each(ancestries: &[Vec<String>], places: &Places) -> Vec<Listed> {
+    let listed = |ancestry: &Vec<String>| {
+        let types: Vec<&str> = ancestry.iter().map(String::as_str).collect();
+        apps(&types, false, places)
+    };
+    let Some((first, rest)) = ancestries.split_first() else {
+        return Vec::new();
+    };
+    let others: Vec<HashSet<String>> = rest
+        .iter()
+        .map(|ancestry| {
+            listed(ancestry)
+                .into_iter()
+                .map(|each| each.app.id)
+                .collect()
+        })
+        .collect();
+    listed(first)
+        .into_iter()
+        .filter(|each| others.iter().all(|ids| ids.contains(&each.app.id)))
+        .collect()
+}
+
 fn ancestry(path: &Path, types: &MimeTypes) -> Vec<String> {
     if fs::metadata(path).is_ok_and(|found| found.is_dir()) {
         types.ancestry(FOLDER_TYPE)

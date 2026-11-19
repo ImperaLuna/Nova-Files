@@ -5,6 +5,10 @@
 #
 # Allowed outside crates:
 # - libc
+# - log
+# - rustix
+# - serde
+# - serde_json
 #
 # Allowed workspace crates:
 # - nova-files-api
@@ -49,6 +53,13 @@ workspace = true
 [dependencies]
 # malloc_trim, to give freed memory back after a listing (memory.rs).
 libc = "0.2.189"
+# Receives GPUI's start-up phases and frame times for the traces; GPUI already builds it.
+log = { version = "0.4.35", features = ["std"] }
+# Reads the monotonic clock for the frame trace.
+rustix = { version = "1.1.6", default-features = false, features = ["std", "time"] }
+# Read the library path out of Vulkan driver manifests (vulkan_drivers.rs).
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 nova-files-api.workspace = true
 nova-files-clipboard-ui.workspace = true
 nova-files-core.workspace = true
