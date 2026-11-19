@@ -36,9 +36,9 @@ use nova_files_trash_api as trash_api;
 
 use crate::backend::jobs::Client;
 use crate::backend::ops::Jobs;
-use crate::backend::trash;
 use nova_files_archives_core::inside::Inside;
 use nova_files_disk::window_state::Store as WindowStateStore;
+use nova_files_trash_core::Trashes;
 
 mod folders;
 mod look;
@@ -121,7 +121,7 @@ fn file_routes(routes: &mut Routes<Setup, Client>) -> Result<(), MessageType> {
     })?;
     routes.on(|setup: &Setup, _, client: &Client, command| match command {
         trash_api::Command::List => {
-            nova_files_trash_core::list(trash::trashes(setup.home.as_ref()), client.events())
+            nova_files_trash_core::list(Trashes::of_home(setup.home.as_ref()), client.events())
         }
     })
 }

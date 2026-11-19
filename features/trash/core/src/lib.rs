@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod kind;
 mod restoring;
 mod trashes;
 mod trashing;
@@ -10,6 +11,7 @@ use std::thread;
 use nova_files_messages::{ClientGone, EventSink};
 use nova_files_trash_api::Event;
 
+pub use kind::{TrashJobs, Undo};
 pub use restoring::{delete_from_trash, empty_trash, restore};
 pub use trashes::{Trashes, find, trash_of};
 pub use trashing::{Trasher, trash};
