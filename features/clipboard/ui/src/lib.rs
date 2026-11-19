@@ -95,7 +95,8 @@ fn entry_items(_: &ClipboardPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
 }
 
 fn sheet_items(_: &ClipboardPart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
-    if scene.rules.replaces_menu || !has_files(cx) {
+    let in_folder = scene.location.as_ref().and_then(Location::folder).is_some();
+    if scene.rules.replaces_menu || !in_folder || !has_files(cx) {
         return Vec::new();
     }
     vec![MenuItem::run(Icon::Paste, &PASTE)]

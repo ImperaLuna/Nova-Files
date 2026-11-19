@@ -154,11 +154,8 @@ impl MainWindow {
             let after_parts = Placed::new(MenuGroup::Part, Placed::LAST, select.items);
             return self.arranged(MenuAt::Sheet, vec![after_parts], cx);
         }
-        if let Some(place) = self.gathered_shown() {
-            return vec![
-                vec![super::gathering::add_item(place)],
-                select.items.into_iter().map(MenuItem::from).collect(),
-            ];
+        if self.listed_page().is_some() {
+            return self.arranged(MenuAt::Sheet, vec![select], cx);
         }
         if self.showing_found() {
             return vec![select.items.into_iter().map(MenuItem::from).collect()];

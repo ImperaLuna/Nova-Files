@@ -118,7 +118,6 @@ impl MainWindow {
         self.search.asked = None;
         self.search.failed = false;
         self.selection = None;
-        self.gathered.shown = None;
         self.listed_page = None;
         self.listing_replaced(listing, Place::Top, cx);
         cx.notify();
@@ -163,7 +162,7 @@ impl MainWindow {
     }
 
     pub(crate) fn showing_found(&self) -> bool {
-        self.gathered_shown().is_none()
+        self.listed_page.is_none()
             && self
                 .listing
                 .as_ref()

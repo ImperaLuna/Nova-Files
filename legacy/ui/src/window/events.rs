@@ -24,7 +24,6 @@ impl MainWindow {
         self.asked = None;
         self.search_left(cx);
         let arrived = match &self.requested {
-            Some(Location::Gathered(gathered)) => Location::Gathered(*gathered),
             Some(Location::Page(page)) => Location::Page(page.clone()),
             _ => Location::from(listing.path.as_path()),
         };
@@ -39,11 +38,7 @@ impl MainWindow {
         }
         self.listed_page = match &arrived {
             Location::Page(page) => Some(page.clone()),
-            Location::Start | Location::Folder(_) | Location::Gathered(_) => None,
-        };
-        self.gathered.shown = match &arrived {
-            Location::Gathered(place) => Some(*place),
-            Location::Start | Location::Folder(_) | Location::Page(_) => None,
+            Location::Start | Location::Folder(_) => None,
         };
         self.history.arrived(&arrived);
         let reordered = same_folder && self.shown_order != self.asked_order;
@@ -67,20 +62,15 @@ impl MainWindow {
             self.scroll_to_entry(cursor);
         }
         self.tell_parts_listed(reordered, cx);
-        cx.emit(match arrived {
-            Location::Gathered(gathered) => WindowEvent::GatheredShown(gathered),
-            Location::Start | Location::Folder(_) | Location::Page(_) => {
-                WindowEvent::Opened(listing_path)
-            }
-        });
+        cx.emit(WindowEvent::Opened(listing_path));
         cx.notify();
     }
 
     pub(super) fn place_on_screen_now(&self) -> Option<Location> {
         self.listing.as_ref()?;
-        self.gathered_shown()
-            .map(Location::Gathered)
-            .or_else(|| self.listed_page.clone().map(Location::Page))
+        self.listed_page
+            .clone()
+            .map(Location::Page)
             .or_else(|| self.folder().map(Location::from))
     }
 

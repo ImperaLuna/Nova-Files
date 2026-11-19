@@ -35,13 +35,18 @@ impl MainWindow {
             Location::Folder(folder) => {
                 self.request(folder);
             }
-            Location::Gathered(place) => {
-                self.request_gathered(*place);
-            }
             Location::Page(page) if self.parts.lists(page) => {
                 self.request_listed(page.clone());
             }
             Location::Page(page) => self.arrive_at_page(page.clone(), cx),
+        }
+    }
+
+    pub(super) fn request_place(&mut self, place: &Location) -> bool {
+        match place {
+            Location::Start => false,
+            Location::Page(page) => self.request_listed(page.clone()),
+            Location::Folder(folder) => self.request(folder),
         }
     }
 
