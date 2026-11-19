@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use gpui::{Context, SharedString, UniformListScrollHandle};
+use gpui::{App, Context, SharedString, UniformListScrollHandle};
 use nova_files_start_api::{Command, RecentFolder, RecentId};
 
 use super::rows::release;
@@ -33,6 +33,7 @@ impl MainWindow {
         self.forget_rows();
         self.listing = None;
         self.gathered.shown = None;
+        self.listed_page = None;
         self.details = HashMap::new();
         release(self.thumbnails.take_all(), None, cx);
         self.selection = None;
@@ -78,12 +79,14 @@ impl MainWindow {
         }
     }
 
-    pub(super) fn used(&self, folder: &Path) {
-        if !self.picker()
-            && let Some(connection) = &self.connection
-        {
+    pub(super) fn used(&self, folder: &Path, cx: &mut App) {
+        if self.picker() {
+            return;
+        }
+        if let Some(connection) = &self.connection {
             connection.send(Command::FolderUsed(folder.to_owned())).ok();
         }
+        self.parts.used(folder, cx);
     }
 }
 

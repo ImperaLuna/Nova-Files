@@ -1,28 +1,28 @@
 use std::path::{Component, Path, PathBuf};
 
 use gpui::Context;
-use nova_files_api::{Command, EntryId, EntryKind, ListingId, Message, Order, SortKey};
+use nova_files_api::{Command, EntryId, EntryKind, Envelope, ListingId, Message, Order, SortKey};
 
 use super::MainWindow;
 use crate::location::Location;
 
 impl MainWindow {
     pub fn open(&mut self, folder: &Path) {
-        self.forget_drive_to_open();
+        self.went_elsewhere();
         self.history.leave();
         self.request(folder);
     }
 
     pub fn go_back(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.back() {
-            self.forget_drive_to_open();
+            self.went_elsewhere();
             self.go_to(&place, cx);
         }
     }
 
     pub fn go_forward(&mut self, cx: &mut Context<Self>) {
         if let Some(place) = self.history.forward() {
-            self.forget_drive_to_open();
+            self.went_elsewhere();
             self.go_to(&place, cx);
         }
     }
@@ -37,8 +37,18 @@ impl MainWindow {
                 self.request_gathered(*place);
             }
             Location::Properties(paths) => self.arrive_at_properties(paths, cx),
+            Location::Page(page) if self.parts.lists(page) => {
+                self.request_listed(page.clone());
+            }
             Location::Page(page) => self.arrive_at_page(page.clone(), cx),
         }
+    }
+
+    pub(super) fn replace_with(&mut self, place: &Location, cx: &mut Context<Self>) {
+        self.went_elsewhere();
+        self.history.replace_with(place.clone());
+        self.go_to(place, cx);
+        cx.notify();
     }
 
     pub fn back_target(&self) -> Option<&Location> {
@@ -60,14 +70,23 @@ impl MainWindow {
         place: Location,
         command: impl FnOnce(ListingId, Order) -> M,
     ) -> bool {
-        self.falling_back = false;
         let id = ListingId(self.next_listing);
+        let command = Envelope::new(command(id, self.order));
+        self.send_listing(place, id, Some(command))
+    }
+
+    pub(super) fn send_listing(
+        &mut self,
+        place: Location,
+        id: ListingId,
+        command: Option<Envelope>,
+    ) -> bool {
+        self.falling_back = false;
         self.next_listing += 1;
         let order = self.order;
-        let sent = self
-            .connection
-            .as_ref()
-            .map(|connection| connection.send(command(id, order)));
+        let sent = command
+            .zip(self.connection.as_ref())
+            .map(|(command, connection)| connection.send_envelope(command));
         let sent = matches!(sent, Some(Ok(())));
         if sent {
             self.stop_measuring();

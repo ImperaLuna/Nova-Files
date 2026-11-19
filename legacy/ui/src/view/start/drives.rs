@@ -1,16 +1,16 @@
 use gpui::{
     AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _, relative,
+    StatefulInteractiveElement as _, Styled as _, div, prelude::FluentBuilder as _,
 };
 use nova_files_drives_api::DiskSpace;
 
 use super::titles;
 use crate::assets::Icon;
 use crate::columns;
-use crate::drives::{NEARLY_FULL, ShownDrive};
 use crate::theme::{Colors, radius, size, start, text};
 use crate::view::row::icon;
 use crate::window::MainWindow;
+use nova_files_drives_ui::{NEARLY_FULL, ShownDrive};
 
 const PER_ROW: usize = 3;
 const WHOLE: f32 = 100.0;
@@ -75,8 +75,8 @@ impl MainWindow {
             .bg(colors.raised)
             .cursor_pointer()
             .hover(|card| card.bg(colors.lifted))
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, _| {
-                this.open_drive(clicked.clone());
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.open_drive(clicked.clone(), cx);
             }))
             .child(
                 div()
@@ -102,27 +102,9 @@ impl MainWindow {
                         )
                     }),
             )
-            .child(bar(percent.map(filled), tint, colors))
+            .child(super::bar(percent.map(filled), tint, colors))
             .into_any_element()
     }
-}
-
-pub(in crate::view) fn bar(share: Option<f32>, tint: gpui::Rgba, colors: &Colors) -> AnyElement {
-    div()
-        .h(start::BAR)
-        .rounded(radius::SMALL)
-        .bg(colors.press)
-        .overflow_hidden()
-        .when_some(share, |bar, share| {
-            bar.child(
-                div()
-                    .h_full()
-                    .w(relative(share))
-                    .rounded(radius::SMALL)
-                    .bg(tint),
-            )
-        })
-        .into_any_element()
 }
 
 const fn card_index(row: usize, column: usize) -> usize {

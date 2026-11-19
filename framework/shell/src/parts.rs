@@ -1,13 +1,14 @@
 use std::any::{Any, TypeId};
 use std::collections::HashSet;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Div, Entity, FocusHandle, Global, KeyBinding,
-    Pixels, SharedString, Subscription,
+    Pixels, SharedString, Size, Subscription,
 };
-use nova_files_api::{Entry, Event, Listing, ListingId};
+use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
 use crate::assets::Icon;
 use crate::jump::Jump;
@@ -18,9 +19,14 @@ use crate::host::Host;
 use crate::location::{Location, PageRef};
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::{Card, DropOver, Part, Slots};
+use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
 use crate::text::TextField;
+
+mod window;
+
+pub use window::WindowParts;
 
 type ShownCell = Box<dyn Fn(&Entry, &App) -> Option<SharedString>>;
 
@@ -44,7 +50,7 @@ trait OpenPart {
     fn page(&self, page: &PageRef) -> Option<AnyView>;
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
-    fn start_cards(&self) -> Vec<AnyView>;
+    fn start_cards(&self) -> Vec<(u8, AnyView)>;
     fn bars(&self) -> Vec<AnyView>;
     fn overlays(&self) -> Vec<AnyView>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
@@ -58,6 +64,9 @@ trait OpenPart {
     fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
     fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>>;
     fn busy(&self, cx: &App) -> bool;
+    fn lists(&self, page: &PageRef) -> bool;
+    fn list_page(&self, page: &PageRef, id: ListingId, order: Order) -> Option<Envelope>;
+    fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement>;
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App);
     fn takes_drops(&self, page: &PageRef) -> bool;
     fn drop_on(
@@ -81,6 +90,17 @@ trait OpenPart {
     fn dims(&self, entry: &Entry, cx: &App) -> bool;
     fn focus(&self, cx: &App) -> Option<FocusHandle>;
     fn refused(&self, id: ListingId, path: &Path, cx: &mut App);
+    fn used(&self, folder: &Path, cx: &mut App);
+    fn rows_drawn(&self, id: ListingId, rows: &Range<usize>, cx: &mut App);
+    fn rescaled(&self, scale_factor: f32, cx: &mut App);
+    fn thumbnail_side(&self, side: u32, cx: &mut App);
+    fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Turn {
+    Shown,
+    Left,
 }
 
 struct Opened<P: Part> {
@@ -88,7 +108,7 @@ struct Opened<P: Part> {
     host: Host,
     slots: Slots<P>,
     pages: Vec<(TypeId, AnyView)>,
-    cards: Vec<AnyView>,
+    cards: Vec<(u8, AnyView)>,
     bars: Vec<AnyView>,
     overlays: Vec<AnyView>,
     list_views: Vec<AnyView>,
@@ -161,7 +181,7 @@ impl<P: Part> OpenPart for Opened<P> {
             .collect()
     }
 
-    fn start_cards(&self) -> Vec<AnyView> {
+    fn start_cards(&self) -> Vec<(u8, AnyView)> {
         self.cards.clone()
     }
 
@@ -268,6 +288,28 @@ impl<P: Part> OpenPart for Opened<P> {
     fn busy(&self, cx: &App) -> bool {
         let part = self.entity.read(cx);
         self.slots.busy.iter().any(|busy| busy(part, cx))
+    }
+
+    fn lists(&self, page: &PageRef) -> bool {
+        self.slots
+            .listing_pages
+            .iter()
+            .any(|(kind, _)| *kind == page.kind())
+    }
+
+    fn list_page(&self, page: &PageRef, id: ListingId, order: Order) -> Option<Envelope> {
+        self.slots
+            .listing_pages
+            .iter()
+            .find_map(|(_, list)| list(page, id, order))
+    }
+
+    fn stage(&self, scene: &Scene, room: Size<Pixels>, cx: &App) -> Option<AnyElement> {
+        let part = self.entity.read(cx);
+        self.slots
+            .stages
+            .iter()
+            .find_map(|stage| stage(part, scene, room, cx))
     }
 
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
@@ -393,6 +435,65 @@ impl<P: Part> OpenPart for Opened<P> {
             }
         });
     }
+
+    fn used(&self, folder: &Path, cx: &mut App) {
+        if self.slots.used.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for used in &self.slots.used {
+                used(part, folder, cx);
+            }
+        });
+    }
+
+    fn rows_drawn(&self, id: ListingId, rows: &Range<usize>, cx: &mut App) {
+        if self.slots.rows_drawn.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for drawn in &self.slots.rows_drawn {
+                drawn(part, id, rows.clone(), cx);
+            }
+        });
+    }
+
+    fn rescaled(&self, scale_factor: f32, cx: &mut App) {
+        if self.slots.rescaled.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for rescaled in &self.slots.rescaled {
+                rescaled(part, scale_factor, cx);
+            }
+        });
+    }
+
+    fn thumbnail_side(&self, side: u32, cx: &mut App) {
+        if self.slots.thumbnail_sides.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for changed in &self.slots.thumbnail_sides {
+                changed(part, side, cx);
+            }
+        });
+    }
+
+    fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App) {
+        let turns = match turn {
+            Turn::Shown => &self.slots.pages_shown,
+            Turn::Left => &self.slots.pages_left,
+        };
+        if turns.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for turned in turns {
+                turned(part, page, tab, cx);
+            }
+        });
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -488,7 +589,11 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
             (*kind, slot_view(&entity, draw, true, cx))
         })
         .collect();
-    let cards = card_views(&entity, host, &slots.start_cards, false, cx);
+    let ranks = slots.start_cards.iter().map(|(rank, _)| *rank);
+    let drawn: Vec<Card<P>> = slots.start_cards.iter().map(|(_, card)| *card).collect();
+    let cards = ranks
+        .zip(card_views(&entity, host, &drawn, false, cx))
+        .collect();
     let bars = card_views(&entity, host, &slots.bars, false, cx);
     let overlays = card_views(&entity, host, &slots.overlays, false, cx);
     let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
@@ -544,222 +649,6 @@ fn sends<P: Part>() -> Vec<MessageType> {
 
 fn specs<P: Part>() -> Vec<&'static CommandSpec> {
     slots_of::<P>().specs()
-}
-
-#[derive(Default)]
-pub struct WindowParts {
-    opened: Vec<Box<dyn OpenPart>>,
-}
-
-impl WindowParts {
-    pub fn deliver(&self, envelope: Envelope, cx: &mut App) -> Result<(), Envelope> {
-        let mut taken = false;
-        for part in &self.opened {
-            taken |= part.deliver(&envelope, cx);
-        }
-        if taken { Ok(()) } else { Err(envelope) }
-    }
-
-    pub fn bind(&self, root: Div) -> Div {
-        self.opened.iter().fold(root, |root, part| part.bind(root))
-    }
-
-    pub fn applies(&self, spec: &CommandSpec, scene: &Scene, cx: &App) -> bool {
-        self.opened
-            .iter()
-            .find_map(|part| part.applies(spec, scene, cx))
-            .unwrap_or(true)
-    }
-
-    pub fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed> {
-        self.opened
-            .iter()
-            .flat_map(|part| part.menu(at, scene, cx))
-            .map(|mut placed| {
-                placed
-                    .items
-                    .retain(|item| self.applies(item.run, scene, cx));
-                placed
-            })
-            .filter(|placed| !placed.items.is_empty())
-            .collect()
-    }
-
-    pub fn page(&self, page: &PageRef) -> Option<AnyView> {
-        self.opened.iter().find_map(|part| part.page(page))
-    }
-
-    pub fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn> {
-        self.opened.iter().find_map(|part| part.column(scene, cx))
-    }
-
-    pub fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow> {
-        self.opened
-            .iter()
-            .flat_map(|part| part.sidebar(at, scene, cx))
-            .collect()
-    }
-
-    pub fn start_cards(&self) -> Vec<AnyView> {
-        self.opened
-            .iter()
-            .flat_map(|part| part.start_cards())
-            .collect()
-    }
-
-    pub fn watch(&self, event: &Event, cx: &mut App) {
-        for part in &self.opened {
-            part.watch(event, cx);
-        }
-    }
-
-    pub fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)> {
-        self.opened
-            .iter()
-            .find_map(|part| part.empty_note(scene, cx))
-    }
-
-    pub fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
-        self.opened
-            .iter()
-            .find_map(|part| part.name_cell(entry, cx))
-    }
-
-    pub fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>> {
-        self.opened
-            .iter()
-            .find_map(|part| part.name_field(entry, cx))
-    }
-
-    pub fn busy(&self, cx: &App) -> bool {
-        self.opened.iter().any(|part| part.busy(cx))
-    }
-
-    pub fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
-        for part in &self.opened {
-            part.listed(listing, reordered, cx);
-        }
-    }
-
-    pub fn row_menu(&self, row: &str, cx: &App) -> Vec<Vec<RowItem>> {
-        self.opened
-            .iter()
-            .flat_map(|part| part.row_menu(row, cx))
-            .filter(|group| !group.is_empty())
-            .collect()
-    }
-
-    pub fn section_buttons(
-        &self,
-        at: SidebarAt,
-        scene: &Scene,
-        cx: &App,
-    ) -> Vec<(&'static str, RowItem)> {
-        self.opened
-            .iter()
-            .flat_map(|part| part.section_buttons(at, scene, cx))
-            .collect()
-    }
-
-    pub fn drop_label(&self, over: &DropOver<'_>, cx: &App) -> Option<SharedString> {
-        self.opened
-            .iter()
-            .find_map(|part| part.drop_label(over, cx))
-    }
-
-    pub fn drop_at(&self, over: &DropOver<'_>, cx: &mut App) -> bool {
-        self.opened.iter().any(|part| part.drop_at(over, cx))
-    }
-
-    pub fn takes_drops(&self, page: &PageRef) -> bool {
-        self.opened.iter().any(|part| part.takes_drops(page))
-    }
-
-    pub fn drop_on(&self, page: &PageRef, mut paths: Vec<PathBuf>, cx: &mut App) {
-        for part in &self.opened {
-            match part.drop_on(page, paths, cx) {
-                Ok(()) => return,
-                Err(back) => paths = back,
-            }
-        }
-    }
-
-    pub fn bars(&self) -> Vec<AnyView> {
-        self.opened.iter().flat_map(|part| part.bars()).collect()
-    }
-
-    pub fn overlays(&self) -> Vec<AnyView> {
-        self.opened
-            .iter()
-            .flat_map(|part| part.overlays())
-            .collect()
-    }
-
-    pub fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
-        self.opened
-            .iter()
-            .find_map(|part| part.list_view(scene, cx))
-    }
-
-    pub fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
-        self.opened
-            .iter()
-            .find_map(|part| part.row_icon(entry, side, cx))
-    }
-
-    pub fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool {
-        self.opened
-            .iter()
-            .any(|part| part.open_entry(entry, path, cx))
-    }
-
-    pub fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool {
-        self.opened.iter().any(|part| part.typed(jump, scene, cx))
-    }
-
-    pub fn closing(&self, cx: &mut App) {
-        for part in &self.opened {
-            part.closing(cx);
-        }
-    }
-
-    pub fn part<P: Part>(&self) -> Option<Entity<P>> {
-        self.opened.iter().find_map(|part| {
-            part.as_any()
-                .downcast_ref::<Opened<P>>()
-                .map(|opened| opened.entity.clone())
-        })
-    }
-
-    pub fn observe(&self, changed: impl Fn(&mut App) + 'static, cx: &mut App) -> Vec<Subscription> {
-        let changed: Rc<dyn Fn(&mut App)> = Rc::new(changed);
-        self.opened
-            .iter()
-            .map(|part| part.observe(Rc::clone(&changed), cx))
-            .collect()
-    }
-
-    pub fn selectable(&self, entry: &Entry, cx: &App) -> bool {
-        self.opened.iter().all(|part| part.selectable(entry, cx))
-    }
-
-    pub fn several(&self, cx: &App) -> bool {
-        self.opened.iter().all(|part| part.several(cx))
-    }
-
-    pub fn dims(&self, entry: &Entry, cx: &App) -> bool {
-        self.opened.iter().any(|part| part.dims(entry, cx))
-    }
-
-    pub fn focus(&self, cx: &App) -> Option<FocusHandle> {
-        self.opened.iter().find_map(|part| part.focus(cx))
-    }
-
-    pub fn refused(&self, id: ListingId, path: &Path, cx: &mut App) {
-        for part in &self.opened {
-            part.refused(id, path, cx);
-        }
-    }
 }
 
 fn each_once(types: impl Iterator<Item = MessageType>) -> Vec<MessageType> {

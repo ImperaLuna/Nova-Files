@@ -2,19 +2,29 @@ use std::fmt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gpui::{App, Context, EventEmitter, SharedString};
+use gpui::{App, Context, EventEmitter, FocusHandle, Pixels, Point, SharedString};
 
 use crate::location::Location;
+use crate::menu::RowItem;
 use crate::per_tab::TabId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NavAsk {
     Go(Location),
+    Replace(Location),
+    Focus(FocusHandle),
     NewTab(Location),
     Reload,
     Reveal(PathBuf),
     PickFolder(FolderPick),
     FocusList,
+    PopUp(PopUp),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PopUp {
+    pub at: Point<Pixels>,
+    pub groups: Vec<Vec<RowItem>>,
 }
 
 pub type OnPicked = Rc<dyn Fn(PathBuf, &mut App)>;
@@ -46,6 +56,7 @@ impl Eq for FolderPick {}
 pub enum NavEvent {
     Asked,
     Left,
+    TabShown(TabId),
     TabClosed(TabId),
 }
 
@@ -70,6 +81,16 @@ impl Navigator {
 
     pub fn go(&mut self, location: Location, cx: &mut Context<Self>) {
         self.asks.push(NavAsk::Go(location));
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn replace(&mut self, location: Location, cx: &mut Context<Self>) {
+        self.asks.push(NavAsk::Replace(location));
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn focus(&mut self, handle: FocusHandle, cx: &mut Context<Self>) {
+        self.asks.push(NavAsk::Focus(handle));
         cx.emit(NavEvent::Asked);
     }
 
@@ -103,6 +124,16 @@ impl Navigator {
         cx.emit(NavEvent::Asked);
     }
 
+    pub fn menu_at(
+        &mut self,
+        at: Point<Pixels>,
+        groups: Vec<Vec<RowItem>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.asks.push(NavAsk::PopUp(PopUp { at, groups }));
+        cx.emit(NavEvent::Asked);
+    }
+
     pub fn focus_list(&mut self, cx: &mut Context<Self>) {
         self.asks.push(NavAsk::FocusList);
         cx.emit(NavEvent::Asked);
@@ -128,8 +159,12 @@ impl Navigator {
         for closed in self.tabs.iter().filter(|old| !tabs.contains(old)) {
             cx.emit(NavEvent::TabClosed(*closed));
         }
+        let switched = self.tab != Some(tab);
         self.tab = Some(tab);
         self.tabs = tabs;
+        if switched {
+            cx.emit(NavEvent::TabShown(tab));
+        }
         cx.notify();
     }
 }

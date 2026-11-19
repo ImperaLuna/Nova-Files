@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use gpui::SharedString;
 use nova_files_drives_api::{DiskSpace, DriveId, DriveList, VolumeId};
 
-use crate::columns;
+use nova_files_shell::format;
 
 const SYSTEM_LABEL: &str = "System";
 const SYSTEM_FOLDER: &str = "/";
@@ -41,7 +41,7 @@ pub fn shown(list: &DriveList) -> Vec<ShownDrive> {
             .flatten()
             .find(|name| !name.is_empty())
             .map_or_else(
-                || format!("{} drive", columns::size(volume.size)),
+                || format!("{} drive", format::size(volume.size)),
                 str::to_owned,
             );
             ShownDrive {
@@ -73,7 +73,7 @@ pub fn here(drives: &[ShownDrive], here: &Path, home: &Path) -> Option<usize> {
 
 pub fn free(space: DiskSpace) -> (SharedString, bool) {
     (
-        format!("{} free", columns::size(space.free)).into(),
+        format!("{} free", format::size(space.free)).into(),
         space.percent_used() >= NEARLY_FULL,
     )
 }

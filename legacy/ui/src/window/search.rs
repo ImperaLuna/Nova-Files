@@ -1,15 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{AppContext as _, Context, Entity, Subscription};
+use gpui::{AppContext as _, Context, Entity, FocusHandle, Subscription};
 use nova_files_api::{Listing, ListingId};
 use nova_files_search_api::Command;
 
 use super::MainWindow;
 use super::events::Place;
 use crate::location::Location;
-use crate::pick::typed::HOME;
 use nova_files_shell::text::{TextField, TextFieldEvent};
+use nova_files_shell::typed::HOME;
 
 const PLACEHOLDER: &str = "Search";
 
@@ -20,11 +20,12 @@ pub enum Scope {
     HereOnly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FocusTo {
     Box,
     Results,
     List,
+    Handle(FocusHandle),
 }
 
 pub struct Search {
@@ -118,6 +119,7 @@ impl MainWindow {
         self.search.failed = false;
         self.selection = None;
         self.gathered.shown = None;
+        self.listed_page = None;
         self.listing_replaced(listing, Place::Top, cx);
         cx.notify();
     }

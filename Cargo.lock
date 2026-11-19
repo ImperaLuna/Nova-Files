@@ -3587,6 +3587,7 @@ dependencies = [
  "nova-files-dbus",
  "nova-files-delete-ui",
  "nova-files-drives-api",
+ "nova-files-drives-ui",
  "nova-files-folders-api",
  "nova-files-gathered-api",
  "nova-files-look-api",
@@ -3595,6 +3596,7 @@ dependencies = [
  "nova-files-open-ui",
  "nova-files-picker-api",
  "nova-files-places-api",
+ "nova-files-places-ui",
  "nova-files-preview-api",
  "nova-files-properties-api",
  "nova-files-search-api",
@@ -3769,6 +3771,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-drives-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-drives-api",
+ "nova-files-shell",
+]
+
+[[package]]
 name = "nova-files-entries-core"
 version = "0.1.0"
 dependencies = [
@@ -3921,6 +3933,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-places-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-places-api",
+ "nova-files-shell",
+]
+
+[[package]]
 name = "nova-files-preview-api"
 version = "0.1.0"
 dependencies = [
@@ -4023,6 +4044,7 @@ dependencies = [
 name = "nova-files-shell"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "futures",
  "gpui",
  "nova-files-api",
@@ -4144,7 +4166,6 @@ dependencies = [
 name = "nova-files-ui"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "futures",
  "gpui",
  "gpui_platform",
@@ -4154,12 +4175,14 @@ dependencies = [
  "nova-files-clipboard-ui",
  "nova-files-delete-ui",
  "nova-files-drives-api",
+ "nova-files-drives-ui",
  "nova-files-folders-api",
  "nova-files-gathered-api",
  "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-picker-ui",
  "nova-files-places-api",
+ "nova-files-places-ui",
  "nova-files-preview-api",
  "nova-files-properties-api",
  "nova-files-search-api",

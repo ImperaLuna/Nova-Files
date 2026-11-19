@@ -4,29 +4,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use futures::channel::oneshot;
 use gpui::{Context, Pixels, Point};
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickReply, PickRequest};
-use nova_files_places_api::{BookmarkChange, Command};
+use nova_files_shell::RowItem;
 
 use super::MainWindow;
-use crate::assets::Icon;
-use crate::menu::{MenuAction, MenuItem};
-
-const PICK_TITLE: &str = "Pin a folder";
-const PICK_LABEL: &str = "Pin to Places";
-const UNPIN_LABEL: &str = "Remove from Places";
+use crate::menu::MenuItem;
 
 static NEXT_OWN_PICK: AtomicU64 = AtomicU64::new(u64::MAX);
 
 impl MainWindow {
-    pub fn pick_folder_to_pin(&mut self, cx: &mut Context<Self>) {
-        self.pick_folder(PICK_TITLE, PICK_LABEL, cx, |this, path, _| {
-            this.change_pinned(BookmarkChange::Add {
-                path,
-                label: None,
-                at: None,
-            });
-        });
-    }
-
     pub(super) fn pick_folder(
         &self,
         title: &str,
@@ -63,39 +48,21 @@ impl MainWindow {
         .detach();
     }
 
-    pub(crate) fn open_pinned_menu(
-        &mut self,
-        path: PathBuf,
-        at: Point<Pixels>,
-        cx: &mut Context<Self>,
-    ) {
-        let items = vec![MenuItem::new(
-            Icon::Close,
-            UNPIN_LABEL,
-            MenuAction::Unpin(path),
-        )];
-        self.open_menu(at, items, cx);
+    pub(crate) fn open_row_menu(&mut self, row: &str, at: Point<Pixels>, cx: &mut Context<Self>) {
+        let groups = self.parts.row_menu(row, cx);
+        self.open_part_menu(at, groups, cx);
     }
 
-    pub(crate) fn open_row_menu(&mut self, row: &str, at: Point<Pixels>, cx: &mut Context<Self>) {
-        let groups: Vec<Vec<MenuItem>> = self
-            .parts
-            .row_menu(row, cx)
+    pub(crate) fn open_part_menu(
+        &mut self,
+        at: Point<Pixels>,
+        groups: Vec<Vec<RowItem>>,
+        cx: &mut Context<Self>,
+    ) {
+        let groups: Vec<Vec<MenuItem>> = groups
             .into_iter()
             .map(|group| group.into_iter().map(MenuItem::from).collect())
             .collect();
-        if !groups.is_empty() {
-            self.open_menu_groups(at, groups, false, cx);
-        }
-    }
-
-    pub(crate) fn unpin(&self, path: PathBuf) {
-        self.change_pinned(BookmarkChange::Remove { path });
-    }
-
-    fn change_pinned(&self, change: BookmarkChange) {
-        if let Some(connection) = &self.connection {
-            connection.send(Command::ChangeBookmark(change)).ok();
-        }
+        self.open_menu_groups(at, groups, false, cx);
     }
 }

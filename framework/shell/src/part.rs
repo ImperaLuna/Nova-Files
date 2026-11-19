@@ -1,13 +1,14 @@
 use std::any::TypeId;
 use std::collections::HashMap;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _, Modifiers,
-    Pixels, SharedString, Window,
+    Pixels, SharedString, Size, Window,
 };
-use nova_files_api::{Entry, Event, Listing, ListingId};
+use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
@@ -17,6 +18,7 @@ use crate::host::Host;
 use crate::jump::Jump;
 use crate::location::{Location, PageKind, PageRef};
 use crate::menu::{MenuAt, MenuGroup, MenuItem, RowItem, SidebarAt, SidebarRow};
+use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::text::TextField;
 
@@ -35,6 +37,7 @@ pub type Watch<P> = fn(&mut P, &Event, &mut Context<P>);
 pub type EmptyNote<P> = fn(&P, &Scene, &App) -> Option<(Icon, SharedString)>;
 pub type NameCell<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
 pub type NameField<P> = fn(&P, &Entry, &App) -> Option<Entity<TextField>>;
+pub type Stage<P> = fn(&P, &Scene, Size<Pixels>, &App) -> Option<AnyElement>;
 pub type Busy<P> = fn(&P, &App) -> bool;
 pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
@@ -58,7 +61,20 @@ pub type Selectable<P> = fn(&P, &Entry, &App) -> bool;
 pub type Several<P> = fn(&P, &App) -> bool;
 pub type Dims<P> = fn(&P, &Entry, &App) -> bool;
 pub type Focus<P> = fn(&P, &App) -> Option<FocusHandle>;
+pub type RowsDrawn<P> = fn(&mut P, ListingId, Range<usize>, &mut Context<P>);
+pub type Rescaled<P> = fn(&mut P, f32, &mut Context<P>);
+pub type ThumbnailSide<P> = fn(&mut P, u32, &mut Context<P>);
+pub type Used<P> = fn(&mut P, &Path, &mut Context<P>);
+pub type PageTurn<P> = Rc<dyn Fn(&mut P, &PageRef, TabId, &mut Context<P>)>;
 pub type Refused<P> = fn(&mut P, ListingId, &Path, &mut Context<P>);
+
+pub struct CardRank;
+
+impl CardRank {
+    pub const RECENT: u8 = 10;
+    pub const DRIVES: u8 = 20;
+    pub const LAST: u8 = u8::MAX;
+}
 
 pub struct Column<P> {
     pub head: SharedString,
@@ -68,6 +84,7 @@ pub struct Column<P> {
 
 type EventSlot<P> = Box<dyn Fn(&mut P, &Envelope, &mut Context<P>)>;
 type Bind<P> = Box<dyn Fn(Div, &Entity<P>, &Host) -> Div>;
+pub type ListSlot = Rc<dyn Fn(&PageRef, ListingId, Order) -> Option<Envelope>>;
 pub type PageSlot<P> =
     Rc<dyn Fn(&mut P, &PageRef, &mut Window, &mut Context<P>) -> Option<AnyElement>>;
 
@@ -82,15 +99,17 @@ pub struct Slots<P> {
     pub(crate) commands: Vec<CommandSlot<P>>,
     pub(crate) menus: Vec<(MenuAt, MenuGroup, u8, Items<P>)>,
     pub(crate) pages: Vec<(TypeId, PageSlot<P>)>,
+    pub(crate) listing_pages: Vec<(TypeId, ListSlot)>,
     pub(crate) columns: Vec<Columns<P>>,
     pub(crate) sidebar: Vec<(SidebarAt, Rows<P>)>,
-    pub(crate) start_cards: Vec<Card<P>>,
+    pub(crate) start_cards: Vec<(u8, Card<P>)>,
     pub(crate) watches: Vec<Watch<P>>,
     pub(crate) empty_notes: Vec<EmptyNote<P>>,
     pub(crate) sends: Vec<MessageType>,
     pub(crate) name_cells: Vec<NameCell<P>>,
     pub(crate) name_fields: Vec<NameField<P>>,
     pub(crate) busy: Vec<Busy<P>>,
+    pub(crate) stages: Vec<Stage<P>>,
     pub(crate) listed: Vec<Listed<P>>,
     pub(crate) drops: Vec<(TypeId, DropSlot<P>)>,
     pub(crate) drop_targets: Vec<(DropAim<P>, DropTake<P>)>,
@@ -108,6 +127,12 @@ pub struct Slots<P> {
     pub(crate) dims: Vec<Dims<P>>,
     pub(crate) focus: Vec<Focus<P>>,
     pub(crate) refused: Vec<Refused<P>>,
+    pub(crate) used: Vec<Used<P>>,
+    pub(crate) rows_drawn: Vec<RowsDrawn<P>>,
+    pub(crate) rescaled: Vec<Rescaled<P>>,
+    pub(crate) thumbnail_sides: Vec<ThumbnailSide<P>>,
+    pub(crate) pages_shown: Vec<PageTurn<P>>,
+    pub(crate) pages_left: Vec<PageTurn<P>>,
 }
 
 impl<P> Default for Slots<P> {
@@ -117,6 +142,7 @@ impl<P> Default for Slots<P> {
             commands: Vec::new(),
             menus: Vec::new(),
             pages: Vec::new(),
+            listing_pages: Vec::new(),
             columns: Vec::new(),
             sidebar: Vec::new(),
             start_cards: Vec::new(),
@@ -126,6 +152,7 @@ impl<P> Default for Slots<P> {
             name_cells: Vec::new(),
             name_fields: Vec::new(),
             busy: Vec::new(),
+            stages: Vec::new(),
             listed: Vec::new(),
             drops: Vec::new(),
             drop_targets: Vec::new(),
@@ -143,6 +170,12 @@ impl<P> Default for Slots<P> {
             dims: Vec::new(),
             focus: Vec::new(),
             refused: Vec::new(),
+            used: Vec::new(),
+            rows_drawn: Vec::new(),
+            rescaled: Vec::new(),
+            thumbnail_sides: Vec::new(),
+            pages_shown: Vec::new(),
+            pages_left: Vec::new(),
         }
     }
 }
@@ -198,6 +231,12 @@ impl<P: Part> Slots<P> {
         self.pages.push((TypeId::of::<K>(), slot));
     }
 
+    pub fn listing_page<K: PageKind>(&mut self, list: fn(&K, ListingId, Order) -> Envelope) {
+        let slot: ListSlot =
+            Rc::new(move |page, id, order| page.get::<K>().map(|page| list(page, id, order)));
+        self.listing_pages.push((TypeId::of::<K>(), slot));
+    }
+
     pub fn column(&mut self, column: Columns<P>) {
         self.columns.push(column);
     }
@@ -207,7 +246,11 @@ impl<P: Part> Slots<P> {
     }
 
     pub fn start_card(&mut self, card: Card<P>) {
-        self.start_cards.push(card);
+        self.start_card_at(CardRank::LAST, card);
+    }
+
+    pub fn start_card_at(&mut self, rank: u8, card: Card<P>) {
+        self.start_cards.push((rank, card));
     }
 
     pub fn watch(&mut self, watch: Watch<P>) {
@@ -228,6 +271,10 @@ impl<P: Part> Slots<P> {
 
     pub fn busy(&mut self, busy: Busy<P>) {
         self.busy.push(busy);
+    }
+
+    pub fn stage(&mut self, stage: Stage<P>) {
+        self.stages.push(stage);
     }
 
     pub fn listed(&mut self, listed: Listed<P>) {
@@ -303,6 +350,30 @@ impl<P: Part> Slots<P> {
         self.refused.push(refused);
     }
 
+    pub fn used(&mut self, used: Used<P>) {
+        self.used.push(used);
+    }
+
+    pub fn rows_drawn(&mut self, drawn: RowsDrawn<P>) {
+        self.rows_drawn.push(drawn);
+    }
+
+    pub fn rescaled(&mut self, rescaled: Rescaled<P>) {
+        self.rescaled.push(rescaled);
+    }
+
+    pub fn thumbnail_side(&mut self, changed: ThumbnailSide<P>) {
+        self.thumbnail_sides.push(changed);
+    }
+
+    pub fn page_shown<K: PageKind>(&mut self, shown: fn(&mut P, &K, TabId, &mut Context<P>)) {
+        self.pages_shown.push(page_turn(shown));
+    }
+
+    pub fn page_left<K: PageKind>(&mut self, left: fn(&mut P, &K, TabId, &mut Context<P>)) {
+        self.pages_left.push(page_turn(left));
+    }
+
     pub fn sends<M: Message>(&mut self) {
         self.sends.push(MessageType::of::<M>());
     }
@@ -318,4 +389,12 @@ impl<P: Part> Slots<P> {
     pub fn specs(&self) -> Vec<&'static CommandSpec> {
         self.commands.iter().map(|command| command.spec).collect()
     }
+}
+
+fn page_turn<P: 'static, K: PageKind>(turn: fn(&mut P, &K, TabId, &mut Context<P>)) -> PageTurn<P> {
+    Rc::new(move |part, page, tab, cx| {
+        if let Some(page) = page.get::<K>() {
+            turn(part, page, tab, cx);
+        }
+    })
 }

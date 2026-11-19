@@ -1,7 +1,8 @@
 use std::cell::Cell;
 
-use gpui::{App, Context, Modifiers, MouseButton, WeakEntity};
+use gpui::{App, Context, Modifiers, MouseButton, WeakEntity, point, px};
 use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
+use nova_files_places_ui::PlacesPart;
 use nova_files_shell::{
     Host, KnownFolder, KnownFolders, Location, Look, Part, Parts, Published, RowItem, SidebarAt,
     SidebarRow, Slots, assets::Icon,
@@ -144,6 +145,7 @@ fn rowed_window(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTest
     MOUNTED.set(0);
     MOUNTED_IN_TAB.set(0);
     let mut parts = Parts::default();
+    parts.add::<PlacesPart>();
     parts.add::<Rower>();
     cx.update(|cx| cx.set_global(parts));
     let (view, cx, mut core) = window_with_parts(cx);
@@ -262,4 +264,29 @@ fn the_window_draws_folders_with_the_icons_a_part_publishes(cx: &mut TestAppCont
     cx.run_until_parked();
     let icon = view.read_with(cx, |view, _| view.known_folders().icon_at(Path::new(BOOKS)));
     assert_eq!(icon, Icon::Documents);
+}
+
+#[gpui::test]
+fn a_part_opens_a_menu_of_choices_at_a_point(cx: &mut TestAppContext) {
+    let (view, cx) = rowed_window(cx);
+    let nav = view.read_with(cx, |view, _| view.host().nav.clone());
+    nav.update(cx, |nav, cx| {
+        nav.menu_at(
+            point(px(40.0), px(60.0)),
+            vec![
+                vec![
+                    RowItem::new(Icon::Check, "Mine", |_| {}).with_look(Look::On),
+                    RowItem::new(Icon::Check, "Others", |_| {}),
+                ],
+                vec![RowItem::new(Icon::Info, "More", |_| {})],
+            ],
+            cx,
+        );
+    });
+    cx.run_until_parked();
+    let shown = view.read_with(cx, |view, _| {
+        view.menu()
+            .map(|menu| (menu.lines.clone(), menu.items.len(), menu.at))
+    });
+    assert_eq!(shown, Some((vec![2], 3, point(px(40.0), px(60.0)))));
 }
