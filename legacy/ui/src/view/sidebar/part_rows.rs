@@ -21,10 +21,19 @@ impl MainWindow {
         colors: &Colors,
         cx: &Context<Self>,
     ) -> Vec<(u8, Stateful<Div>)> {
+        let tree = at == SidebarAt::Tree && !narrow;
         self.parts
             .sidebar(at, &self.scene(), cx)
             .into_iter()
-            .map(|place| (place.rank, self.part_row(place, narrow, colors, cx)))
+            .map(|place| {
+                let rank = place.rank;
+                let row = if tree {
+                    self.tree_row(place, colors, cx)
+                } else {
+                    self.part_row(place, narrow, colors, cx)
+                };
+                (rank, row)
+            })
             .collect()
     }
 
@@ -55,37 +64,26 @@ impl MainWindow {
         colors: &Colors,
         cx: &Context<Self>,
     ) -> Stateful<Div> {
-        let main = !self.picker();
-        let menu_row = place.id.clone();
-        let shown = place.opens.clone().map(from_shell);
-        let drops = shown
-            .as_ref()
-            .and_then(|shown| self.tab_drops_at(Some(shown), place.name.clone()));
-        let clicked = Clicked {
-            opens: place.opens.clone(),
-            open: place.open.clone(),
-        };
-        let middle = Clicked {
-            opens: place.opens.clone(),
-            open: place.new_tab.clone(),
-        };
         let wide = !narrow;
         let lead = place
             .expander
+            .clone()
             .filter(|_| wide)
             .map(|expander| expander_button(&place.id, expander, colors, cx));
         let tail = place
             .button
+            .clone()
             .filter(|_| wide)
             .map(|button| row_button(&place.id, button, colors, cx));
-        let row = row(
+        let shown = row(
             Row {
                 id: place.id.clone().into(),
                 selector: place.id.to_string(),
                 glyph: place.icon,
-                name: place.name,
+                name: place.name.clone(),
                 number: place
                     .number
+                    .clone()
                     .filter(|_| wide)
                     .map(|number| (number, number_tint(place.number_look, colors))),
                 here: place.here,
@@ -98,30 +96,56 @@ impl MainWindow {
         .when(wide && place.depth > 0, |row| {
             row.pl(size::TREE_INDENT * f32::from(place.depth))
         })
-        .children(tail)
-        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-            clicked.follow(this, false, cx);
-        }))
-        .map(|row| on_middle_click(row, main, cx, move |this, cx| middle.follow(this, true, cx)))
-        .when_some(shown, |row, shown| {
-            Self::opens_on_hover(row, HoverOpens::Place(shown), cx)
-        })
-        .when(main, |row| {
-            row.on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                    this.open_row_menu(&menu_row, event.position, cx);
-                }),
-            )
-        });
+        .children(tail);
+        self.part_row_acts(shown, place, cx)
+    }
+
+    pub(super) fn part_row_acts(
+        &self,
+        shown: Stateful<Div>,
+        place: SidebarRow,
+        cx: &Context<Self>,
+    ) -> Stateful<Div> {
+        let main = !self.picker();
+        let menu_row = place.id.clone();
+        let at = place.opens.clone().map(from_shell);
+        let drops = at
+            .as_ref()
+            .and_then(|at| self.tab_drops_at(Some(at), place.name.clone()));
+        let clicked = Clicked {
+            opens: place.opens.clone(),
+            open: place.open.clone(),
+        };
+        let middle = Clicked {
+            opens: place.opens,
+            open: place.new_tab,
+        };
+        let shown = shown
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                clicked.follow(this, false, cx);
+            }))
+            .map(|row| {
+                on_middle_click(row, main, cx, move |this, cx| middle.follow(this, true, cx))
+            })
+            .when_some(at, |row, at| {
+                Self::opens_on_hover(row, HoverOpens::Place(at), cx)
+            })
+            .when(main, |row| {
+                row.on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                        this.open_row_menu(&menu_row, event.position, cx);
+                    }),
+                )
+            });
         match drops {
-            Some(at) => self.drop_target(row, at, cx),
-            None => row,
+            Some(at) => self.drop_target(shown, at, cx),
+            None => shown,
         }
     }
 }
 
-fn expander_button(
+pub(super) fn expander_button(
     id: &str,
     expander: Expander,
     colors: &Colors,

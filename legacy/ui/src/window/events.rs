@@ -58,9 +58,6 @@ impl MainWindow {
         let listing_path = listing.path.clone();
         let made = wanted.is_some();
         self.selection = wanted.or_else(|| self.selection_for(&listing, same_folder));
-        if arrived.folder().is_some() {
-            self.tree_follows(&listing, !same_folder);
-        }
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);

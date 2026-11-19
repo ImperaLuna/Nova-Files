@@ -4,8 +4,6 @@ mod part_rows;
 mod places;
 mod tree;
 
-use std::path::PathBuf;
-
 use gpui::{
     AnyElement, ClickEvent, Context, Div, ElementId, InteractiveElement as _, IntoElement,
     ParentElement as _, Rgba, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
@@ -190,16 +188,5 @@ pub(super) fn on_middle_click(
                 act(this, cx);
             }
         }))
-    })
-}
-
-fn new_tab_on_middle_click(
-    element: Stateful<Div>,
-    folder: PathBuf,
-    main: bool,
-    cx: &Context<MainWindow>,
-) -> Stateful<Div> {
-    on_middle_click(element, main, cx, move |this, cx| {
-        this.open_in_new_tab(folder.clone(), cx);
     })
 }

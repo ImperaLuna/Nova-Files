@@ -3939,6 +3939,7 @@ name = "nova-files-places-ui"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "nova-files-api",
  "nova-files-places-api",
  "nova-files-shell",
 ]
