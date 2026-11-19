@@ -83,3 +83,20 @@ fn a_part_page_shows_the_listing_its_command_asks_for(cx: &mut TestAppContext) {
         assert_eq!(view.folder(), Some(Path::new(SHOWN)));
     });
 }
+
+#[gpui::test]
+fn a_part_replaces_the_place_shown_without_a_step_back(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = piled(cx);
+    let nav = view.read_with(cx, |view, _| view.host().nav.clone());
+    nav.update(cx, |nav, cx| {
+        nav.replace(nova_files_shell::Location::Page(PageRef::new(Pile)), cx);
+    });
+    cx.run_until_parked();
+    answer_listing(&mut core, 2);
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.listed_page(), Some(&PageRef::new(Pile)));
+        assert_eq!(view.back_target(), None);
+    });
+}

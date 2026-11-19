@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{AppContext as _, Context, Entity, Subscription};
+use gpui::{AppContext as _, Context, Entity, FocusHandle, Subscription};
 use nova_files_api::{Listing, ListingId};
 use nova_files_search_api::Command;
 
@@ -20,11 +20,12 @@ pub enum Scope {
     HereOnly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FocusTo {
     Box,
     Results,
     List,
+    Handle(FocusHandle),
 }
 
 pub struct Search {

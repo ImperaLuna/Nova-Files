@@ -207,6 +207,8 @@ impl MainWindow {
         for ask in asks {
             match ask {
                 NavAsk::Go(place) => self.go_to_shell(place, cx),
+                NavAsk::Replace(place) => self.replace_with(&from_shell(place), cx),
+                NavAsk::Focus(handle) => self.focus_later(FocusTo::Handle(handle), cx),
                 NavAsk::NewTab(place) => self.new_tab_at_shell(place, cx),
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),

@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gpui::{App, Context, EventEmitter, Pixels, Point, SharedString};
+use gpui::{App, Context, EventEmitter, FocusHandle, Pixels, Point, SharedString};
 
 use crate::location::Location;
 use crate::menu::RowItem;
@@ -11,6 +11,8 @@ use crate::per_tab::TabId;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NavAsk {
     Go(Location),
+    Replace(Location),
+    Focus(FocusHandle),
     NewTab(Location),
     Reload,
     Reveal(PathBuf),
@@ -79,6 +81,16 @@ impl Navigator {
 
     pub fn go(&mut self, location: Location, cx: &mut Context<Self>) {
         self.asks.push(NavAsk::Go(location));
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn replace(&mut self, location: Location, cx: &mut Context<Self>) {
+        self.asks.push(NavAsk::Replace(location));
+        cx.emit(NavEvent::Asked);
+    }
+
+    pub fn focus(&mut self, handle: FocusHandle, cx: &mut Context<Self>) {
+        self.asks.push(NavAsk::Focus(handle));
         cx.emit(NavEvent::Asked);
     }
 
