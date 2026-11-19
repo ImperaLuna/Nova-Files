@@ -6,12 +6,17 @@ use std::sync::Arc;
 use gpui::SharedString;
 
 use crate::assets::Icon;
+use crate::path_bar::PageCrumbs;
 
 pub trait PageKind: fmt::Debug + Clone + Eq + Send + Sync + 'static {
     fn title(&self) -> SharedString;
 
     fn icon(&self) -> Icon {
         Icon::Folder
+    }
+
+    fn crumbs(&self) -> Option<PageCrumbs> {
+        None
     }
 }
 
@@ -20,6 +25,7 @@ trait AnyPage: fmt::Debug + Send + Sync {
     fn same(&self, other: &dyn AnyPage) -> bool;
     fn title(&self) -> SharedString;
     fn icon(&self) -> Icon;
+    fn crumbs(&self) -> Option<PageCrumbs>;
 }
 
 impl<K: PageKind> AnyPage for K {
@@ -37,6 +43,10 @@ impl<K: PageKind> AnyPage for K {
 
     fn icon(&self) -> Icon {
         PageKind::icon(self)
+    }
+
+    fn crumbs(&self) -> Option<PageCrumbs> {
+        PageKind::crumbs(self)
     }
 }
 
@@ -58,6 +68,10 @@ impl PageRef {
 
     pub fn icon(&self) -> Icon {
         self.0.icon()
+    }
+
+    pub fn crumbs(&self) -> Option<PageCrumbs> {
+        self.0.crumbs()
     }
 
     pub fn kind(&self) -> TypeId {

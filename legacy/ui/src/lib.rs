@@ -5,7 +5,6 @@
 mod band;
 mod columns;
 mod commands;
-mod crumbs;
 mod drives;
 mod dropping;
 mod grid;
@@ -15,7 +14,6 @@ mod island;
 mod location;
 mod marks;
 mod menu;
-mod path_bar;
 mod pick;
 mod places;
 mod requests;

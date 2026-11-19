@@ -51,6 +51,16 @@ pub fn tick_box(ticked: bool, colors: &Colors) -> Div {
         })
 }
 
+pub fn capsule(colors: &Colors) -> Div {
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .h(size::CAPSULE_HEIGHT)
+        .rounded(radius::CONTROL)
+        .bg(colors.raised)
+}
+
 pub fn card_group(label: &'static str, cards: AnyElement, colors: &Colors) -> Div {
     div()
         .flex()

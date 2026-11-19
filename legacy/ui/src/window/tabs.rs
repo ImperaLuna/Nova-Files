@@ -285,8 +285,10 @@ impl MainWindow {
         self.forget_drive_to_open();
         self.close_preview(None, cx);
         self.close_menu(cx);
-        self.close_path_menu();
-        self.stop_typing_path(None, cx);
+        self.path_bar.update(cx, |bar, cx| {
+            bar.close_menu(cx);
+            bar.stop_typing(false, cx);
+        });
         self.renaming = None;
         self.details = HashMap::new();
         release(self.thumbnails.take_all(), None, cx);

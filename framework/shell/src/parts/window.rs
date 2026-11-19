@@ -183,6 +183,13 @@ impl WindowParts {
             .collect()
     }
 
+    pub fn path_chips(&self) -> Vec<AnyView> {
+        self.opened
+            .iter()
+            .flat_map(|part| part.path_chips())
+            .collect()
+    }
+
     pub fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
         self.opened
             .iter()

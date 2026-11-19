@@ -51,6 +51,7 @@ trait OpenPart {
     fn start_cards(&self) -> Vec<AnyView>;
     fn bars(&self) -> Vec<AnyView>;
     fn overlays(&self) -> Vec<AnyView>;
+    fn path_chips(&self) -> Vec<AnyView>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
@@ -98,6 +99,7 @@ struct Opened<P: Part> {
     cards: Vec<AnyView>,
     bars: Vec<AnyView>,
     overlays: Vec<AnyView>,
+    path_chips: Vec<AnyView>,
     list_views: Vec<AnyView>,
 }
 
@@ -178,6 +180,10 @@ impl<P: Part> OpenPart for Opened<P> {
 
     fn overlays(&self) -> Vec<AnyView> {
         self.overlays.clone()
+    }
+
+    fn path_chips(&self) -> Vec<AnyView> {
+        self.path_chips.clone()
     }
 
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
@@ -520,6 +526,7 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
     let cards = card_views(&entity, host, &slots.start_cards, false, cx);
     let bars = card_views(&entity, host, &slots.bars, false, cx);
     let overlays = card_views(&entity, host, &slots.overlays, false, cx);
+    let path_chips = card_views(&entity, host, &slots.path_chips, false, cx);
     let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
     let list_views = card_views(&entity, host, &views, true, cx);
     Box::new(Opened {
@@ -530,6 +537,7 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         cards,
         bars,
         overlays,
+        path_chips,
         list_views,
     })
 }
