@@ -87,16 +87,7 @@ pub fn drop_undo(note: &mut Option<Note>, job: JobId) -> bool {
     }
 }
 
-pub fn count(number: usize, one: &str, many: &str) -> String {
-    if number == 1 {
-        format!("1 {one}")
-    } else {
-        format!("{number} {many}")
-    }
-}
-
-pub const ITEM: &str = "item";
-pub const ITEMS: &str = "items";
+pub use nova_files_shell::format::{ITEM, ITEMS, count};
 const FOLDER: &str = "folder";
 const FOLDERS: &str = "folders";
 const FILE: &str = "file";
@@ -119,7 +110,7 @@ pub fn name_of(path: &Path) -> String {
 }
 
 pub fn short_path(path: &Path, home: &Path) -> String {
-    use crate::pick::HOME;
+    use nova_files_shell::typed::HOME;
     match path.strip_prefix(home) {
         Ok(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
         Ok(rest) => format!("{HOME}/{}", rest.to_string_lossy()),

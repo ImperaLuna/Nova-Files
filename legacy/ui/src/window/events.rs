@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
-use nova_files_places_api::Bookmark;
+use nova_files_places_ui::Known;
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::rows::release;
@@ -13,7 +13,6 @@ use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
-use crate::places;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Place {
@@ -25,8 +24,9 @@ impl MainWindow {
     fn listing_arrived(&mut self, listing: Listing, cx: &mut Context<Self>) {
         self.asked = None;
         self.search_left(cx);
-        let arrived = match self.requested {
-            Some(Location::Gathered(gathered)) => Location::Gathered(gathered),
+        let arrived = match &self.requested {
+            Some(Location::Gathered(gathered)) => Location::Gathered(*gathered),
+            Some(Location::Page(page)) => Location::Page(page.clone()),
             _ => Location::from(listing.path.as_path()),
         };
         let same_folder =
@@ -38,6 +38,13 @@ impl MainWindow {
                 self.used(folder);
             }
         }
+        self.listed_page = match &arrived {
+            Location::Page(page) => Some(page.clone()),
+            Location::Start
+            | Location::Folder(_)
+            | Location::Properties(_)
+            | Location::Gathered(_) => None,
+        };
         self.gathered.shown = match &arrived {
             Location::Gathered(place) => Some(*place),
             Location::Start | Location::Folder(_) | Location::Properties(_) | Location::Page(_) => {
@@ -55,7 +62,6 @@ impl MainWindow {
         if arrived.folder().is_some() {
             self.tree_follows(&listing, !same_folder);
         }
-        self.ask_disk_space();
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);
@@ -80,6 +86,7 @@ impl MainWindow {
         self.listing.as_ref()?;
         self.gathered_shown()
             .map(Location::Gathered)
+            .or_else(|| self.listed_page.clone().map(Location::Page))
             .or_else(|| self.folder().map(Location::from))
     }
 
@@ -147,19 +154,11 @@ impl MainWindow {
         }
     }
 
-    pub(super) fn places_arrived(
-        &mut self,
-        places: Vec<nova_files_places_api::Place>,
-        cx: &mut Context<Self>,
-    ) {
-        let known = places::known(&places);
-        self.places = places;
-        Published::set(known, cx);
-        self.sidebar_changed(cx);
-    }
-
-    pub(super) fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
-        self.pinned = pinned;
+    pub(super) fn places_changed(&mut self, cx: &mut Context<Self>) {
+        if let Some(known) = Published::<Known>::get(cx) {
+            self.places.clone_from(&known.places);
+            self.pinned = Arc::clone(&known.pinned);
+        }
         self.sidebar_changed(cx);
     }
 

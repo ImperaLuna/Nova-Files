@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription};
-use nova_files_api::HiddenFiles;
+use nova_files_api::{HiddenFiles, ListingId};
 use nova_files_picker_api::PickId;
 use nova_files_shell::{
     self as shell, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk, NavEvent,
@@ -174,13 +174,16 @@ impl MainWindow {
             .entries
             .update(cx, |entries, cx| entries.show(shown, cx));
         let (tab, tabs) = (self.tab_id(), self.tab_ids());
+        self.host.nav.update(cx, |nav, cx| nav.show(tab, tabs, cx));
+        self.tell_left(cx);
+    }
+
+    pub(super) fn tell_left(&mut self, cx: &mut Context<Self>) -> bool {
         let left = std::mem::take(&mut self.went) == Went::Elsewhere;
-        self.host.nav.update(cx, |nav, cx| {
-            nav.show(tab, tabs, cx);
-            if left {
-                cx.emit(NavEvent::Left);
-            }
-        });
+        if left {
+            self.host.nav.update(cx, |_, cx| cx.emit(NavEvent::Left));
+        }
+        left
     }
 
     fn take_nav_asks(&mut self, cx: &mut Context<Self>) {
@@ -193,6 +196,7 @@ impl MainWindow {
                 NavAsk::Reload => self.reload(),
                 NavAsk::Reveal(path) => self.show_in_folder(&path),
                 NavAsk::FocusList => self.focus_later(FocusTo::List, cx),
+                NavAsk::PopUp(pop_up) => self.open_part_menu(pop_up.at, pop_up.groups, cx),
                 NavAsk::PickFolder(pick) => {
                     self.pick_folder(&pick.title, &pick.accept, cx, move |_, path, cx| {
                         let picked = pick.picked.clone();
@@ -254,7 +258,23 @@ impl MainWindow {
 
     pub fn open_page(&mut self, page: PageRef, cx: &mut Context<Self>) {
         self.history.leave();
-        self.arrive_at_page(page, cx);
+        if self.parts.lists(&page) {
+            self.went_elsewhere();
+            self.request_listed(page);
+            cx.notify();
+        } else {
+            self.arrive_at_page(page, cx);
+        }
+    }
+
+    pub(super) fn request_listed(&mut self, page: PageRef) -> bool {
+        let id = ListingId(self.next_listing);
+        let command = self.parts.list_page(&page, id, self.order);
+        command.is_some() && self.send_listing(Location::Page(page), id, command)
+    }
+
+    pub const fn listed_page(&self) -> Option<&PageRef> {
+        self.listed_page.as_ref()
     }
 
     pub(super) fn arrive_at_page(&mut self, page: PageRef, cx: &mut Context<Self>) {
@@ -266,7 +286,7 @@ impl MainWindow {
 
     pub fn page_shown(&self) -> Option<&PageRef> {
         match self.location()? {
-            Location::Page(page) => Some(page),
+            Location::Page(page) if !self.parts.lists(page) => Some(page),
             _ => None,
         }
     }

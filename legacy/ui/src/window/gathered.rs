@@ -20,7 +20,7 @@ impl MainWindow {
     }
 
     pub fn open_gathered(&mut self, place: Gathering, cx: &mut Context<Self>) {
-        self.forget_drive_to_open();
+        self.went_elsewhere();
         self.history.leave();
         self.request_gathered(place);
         cx.notify();
@@ -35,7 +35,8 @@ impl MainWindow {
 
     pub(super) fn request_place(&mut self, place: &Location) -> bool {
         match place {
-            Location::Start | Location::Properties(_) | Location::Page(_) => false,
+            Location::Start | Location::Properties(_) => false,
+            Location::Page(page) => self.request_listed(page.clone()),
             Location::Folder(folder) => self.request(folder),
             Location::Gathered(gathering) => self.request_gathered(*gathering),
         }
