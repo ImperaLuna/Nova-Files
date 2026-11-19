@@ -20,6 +20,7 @@ use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::{Card, DropOver, Part, Slots};
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
+use crate::text::TextField;
 
 type ShownCell = Box<dyn Fn(&Entry, &App) -> Option<SharedString>>;
 
@@ -55,6 +56,8 @@ trait OpenPart {
     fn watch(&self, event: &Event, cx: &mut App);
     fn empty_note(&self, scene: &Scene, cx: &App) -> Option<(Icon, SharedString)>;
     fn name_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
+    fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>>;
+    fn busy(&self, cx: &App) -> bool;
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App);
     fn takes_drops(&self, page: &PageRef) -> bool;
     fn drop_on(
@@ -252,6 +255,19 @@ impl<P: Part> OpenPart for Opened<P> {
             .name_cells
             .iter()
             .find_map(|cell| cell(part, entry, cx))
+    }
+
+    fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>> {
+        let part = self.entity.read(cx);
+        self.slots
+            .name_fields
+            .iter()
+            .find_map(|field| field(part, entry, cx))
+    }
+
+    fn busy(&self, cx: &App) -> bool {
+        let part = self.entity.read(cx);
+        self.slots.busy.iter().any(|busy| busy(part, cx))
     }
 
     fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {
@@ -607,6 +623,16 @@ impl WindowParts {
         self.opened
             .iter()
             .find_map(|part| part.name_cell(entry, cx))
+    }
+
+    pub fn name_field(&self, entry: &Entry, cx: &App) -> Option<Entity<TextField>> {
+        self.opened
+            .iter()
+            .find_map(|part| part.name_field(entry, cx))
+    }
+
+    pub fn busy(&self, cx: &App) -> bool {
+        self.opened.iter().any(|part| part.busy(cx))
     }
 
     pub fn listed(&self, listing: &Listing, reordered: bool, cx: &mut App) {

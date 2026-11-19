@@ -88,13 +88,13 @@ impl MainWindow {
                     .child(cell)
                     .into_any_element();
             }
-            self.rename_field(index).map_or_else(
+            self.name_field((index, entry), cx).map_or_else(
                 || {
                     self.cell_name((index, name), grid, row, cx)
                         .into_any_element()
                 },
                 |field| {
-                    rename_box(field.clone(), &colors)
+                    rename_box(field, &colors)
                         .when(!grid.beside, |field| field.flex_none().w_full().ml_0())
                         .into_any_element()
                 },

@@ -235,12 +235,12 @@ impl MainWindow {
                     ),
             )
             .child(self.parts.name_cell(entry, cx).unwrap_or_else(|| {
-                self.rename_field(index).map_or_else(
+                self.name_field((index, entry), cx).map_or_else(
                     || {
                         entry_name(name.into(), marks, index, draggable.then_some(row), cx)
                             .into_any_element()
                     },
-                    |field| rename_box(field.clone(), colors).into_any_element(),
+                    |field| rename_box(field, colors).into_any_element(),
                 )
             }))
     }

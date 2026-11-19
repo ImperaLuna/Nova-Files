@@ -1,4 +1,5 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::ops::Range;
 use std::path::PathBuf;
 
 use gpui::{Context, EventEmitter};
@@ -25,6 +26,7 @@ pub struct Entries {
     shown: Shown,
     selects: Option<Vec<OsString>>,
     selects_later: Option<(PathBuf, Vec<OsString>)>,
+    drawn: Range<usize>,
 }
 
 impl EventEmitter<EntriesAsked> for Entries {}
@@ -81,6 +83,20 @@ impl Entries {
             .into_iter()
             .map(|entry| listing.path_of(entry))
             .collect()
+    }
+
+    pub fn drawn(&self, name: &OsStr) -> bool {
+        self.shown.listing.as_ref().is_some_and(|listing| {
+            listing
+                .entries
+                .iter()
+                .position(|entry| entry.name == name)
+                .is_some_and(|at| self.drawn.contains(&at))
+        })
+    }
+
+    pub const fn set_drawn(&mut self, drawn: Range<usize>) {
+        self.drawn = drawn;
     }
 
     pub fn show(&mut self, shown: Shown, cx: &mut Context<Self>) {

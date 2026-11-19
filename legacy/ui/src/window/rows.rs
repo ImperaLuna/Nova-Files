@@ -167,7 +167,10 @@ impl MainWindow {
         window: &Window,
         cx: &mut Context<Self>,
     ) {
-        self.rows_drawn = range;
+        self.rows_drawn = range.clone();
+        self.host
+            .entries
+            .update(cx, |entries, _| entries.set_drawn(range));
         cx.defer_in(window, |this, window, cx| {
             this.show_rows(this.rows_drawn.clone(), window, cx);
         });
