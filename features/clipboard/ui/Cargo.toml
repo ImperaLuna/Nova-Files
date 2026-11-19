@@ -7,7 +7,6 @@
 # - gpui
 #
 # Allowed workspace crates:
-# - nova-files-api
 # - nova-files-clipboard-api
 # - nova-files-shell
 
@@ -27,6 +26,5 @@ workspace = true
 
 [dependencies]
 gpui.workspace = true
-nova-files-api.workspace = true
 nova-files-clipboard-api.workspace = true
 nova-files-shell.workspace = true
