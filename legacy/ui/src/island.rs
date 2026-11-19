@@ -119,7 +119,7 @@ pub fn name_of(path: &Path) -> String {
 }
 
 pub fn short_path(path: &Path, home: &Path) -> String {
-    use crate::pick::HOME;
+    use nova_files_shell::typed::HOME;
     match path.strip_prefix(home) {
         Ok(rest) if rest.as_os_str().is_empty() => HOME.to_owned(),
         Ok(rest) => format!("{HOME}/{}", rest.to_string_lossy()),

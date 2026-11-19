@@ -19,9 +19,9 @@ use super::row::{RowIcon, entry_icon, icon, kind_glyph};
 use crate::assets::Icon;
 use crate::columns;
 use crate::kind::icon_kind;
-use crate::pick::typed::HOME;
 use crate::theme::{Colors, radius, size, start, text};
 use crate::window::MainWindow;
+use nova_files_shell::typed::HOME;
 
 const RECENT_LABEL: &str = "Jump back in";
 const DRIVES_LABEL: &str = "Drives";
