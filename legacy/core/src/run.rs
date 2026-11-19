@@ -38,7 +38,7 @@ use crate::inside::Inside;
 use crate::jobs::Client;
 use crate::ops::Jobs;
 use crate::trash;
-use crate::window_state::Store as WindowStateStore;
+use nova_files_disk::window_state::Store as WindowStateStore;
 
 mod folders;
 mod look;
