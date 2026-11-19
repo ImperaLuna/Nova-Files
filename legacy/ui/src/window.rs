@@ -50,8 +50,8 @@ use std::sync::Arc;
 use futures::StreamExt as _;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, Pixels, SharedString, Size, Subscription,
-    Task, UniformListScrollHandle,
+    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
+    SharedString, Size, Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
     ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
@@ -66,14 +66,15 @@ use nova_files_preview_api as preview_api;
 use nova_files_properties_api as properties_api;
 use nova_files_search_api as search_api;
 use nova_files_shell::Lines;
+use nova_files_shell::path_bar::PathBar;
 use nova_files_shell::{
-    FolderRules, Host, KnownFolders, Link, Opening, PageRef, Parts, ThumbnailsShown, WindowParts,
+    FolderRules, Host, KnownFolders, Link, Opening, PageRef, Parts, TabId, ThumbnailsShown,
+    WindowParts,
 };
 use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 use nova_files_thumbnails_api as thumbnails_api;
 use nova_files_transfer_api as transfer_api;
 
-use self::drives::Drives;
 use self::preview::QuickLooks;
 use self::rows::RowRead;
 use self::tree::TreeLine;
@@ -83,7 +84,6 @@ use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::location::Location;
 use crate::menu::Menu;
-use crate::path_bar::PathBar;
 use crate::selection::Selection;
 use crate::shown_thumbnails::ShownThumbnails;
 use crate::theme_icons::ThemeIcons;
@@ -156,7 +156,8 @@ pub struct MainWindow {
     pub(crate) history: History,
     pub(crate) recent: Vec<RecentFolder>,
     pub(crate) recent_asked: RecentId,
-    pub(crate) path_bar: PathBar,
+    pub(crate) path_bar: Entity<PathBar>,
+    pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,
     pub(crate) pick_size: Option<Size<Pixels>>,
     pub(crate) pick_bounds: Option<Subscription>,
@@ -164,8 +165,9 @@ pub struct MainWindow {
     hidden_files: Option<HiddenFiles>,
     thumbnails_shown: ThumbnailsShown,
     listed_page: Option<PageRef>,
+    shown_page: Option<(TabId, PageRef)>,
     known: KnownFolders,
-    pub(crate) drives: Drives,
+    pub(crate) drives: nova_files_drives_ui::KnownDrives,
     pub(crate) menu: Option<Menu>,
     pub(crate) search: search::Search,
     pub(crate) focus: FocusHandle,
@@ -217,7 +219,7 @@ impl MainWindow {
         Self::at(connector, &Location::from(folder), home, cx)
     }
 
-    const FIRST_ASKS: [Command; 1] = [Command::Ping];
+    const FIRST_ASKS: [Command; 2] = [Command::Ping, Command::WindowState];
 
     pub fn at(
         connector: &Connector,
@@ -282,18 +284,20 @@ impl MainWindow {
             history: History::default(),
             recent: Vec::new(),
             recent_asked: RecentId(0),
-            path_bar: PathBar::new(connector.clone()),
+            path_bar: cx.new(|_| PathBar::new(&host)),
+            asks_sent: 0,
             scroll: UniformListScrollHandle::new(),
             pick_size: None,
             pick_bounds: None,
             hidden_files: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
+            shown_page: None,
             known: KnownFolders::default(),
-            drives: Drives::default(),
+            drives: nova_files_drives_ui::KnownDrives::default(),
             menu: None,
             search: search::Search::new(cx),
-            focus: cx.focus_handle(),
+            focus: host.list.clone(),
             island: Island::default(),
             jobs: Jobs::default(),
             counted: SharedString::default(),
@@ -346,10 +350,6 @@ impl MainWindow {
             Ok(event) => return self.on_event(event, cx),
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<drives_api::Event>() {
-            Ok(event) => return self.drive_event(event, cx),
-            Err(envelope) => envelope,
-        };
         let envelope = match envelope.open::<folders_api::Event>() {
             Ok(folders_api::Event::Views(views)) => return self.folder_views_arrived(&views, cx),
             Err(envelope) => envelope,
@@ -360,11 +360,6 @@ impl MainWindow {
         };
         let envelope = match envelope.open::<open_api::Event>() {
             Ok(event) => return self.open_event(event, cx),
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<places_api::Event>() {
-            Ok(places_api::Event::Places(places)) => return self.places_arrived(places, cx),
-            Ok(places_api::Event::Bookmarks(pinned)) => return self.pinned_arrived(pinned, cx),
             Err(envelope) => envelope,
         };
         let envelope = match envelope.open::<preview_api::Event>() {
@@ -408,8 +403,27 @@ impl MainWindow {
             }
             Err(envelope) => envelope,
         };
+        self.hand_to_parts(envelope, cx);
+    }
+
+    fn hand_to_parts(&mut self, envelope: Envelope, cx: &mut Context<Self>) {
+        if self.tell_left(cx) {
+            let this = cx.entity().downgrade();
+            cx.defer(move |cx| {
+                this.update(cx, |this, cx| this.take(envelope, cx)).ok();
+            });
+            return;
+        }
+        let drives = envelope.get::<drives_api::Event>().is_some();
+        let places = envelope.get::<places_api::Event>().is_some();
         if let Err(envelope) = self.parts.deliver(envelope, cx) {
             log::error!("no part takes {envelope:?}");
+        }
+        if drives {
+            self.drives_changed(cx);
+        }
+        if places {
+            self.places_changed(cx);
         }
     }
 
@@ -487,9 +501,7 @@ fn connect(connector: &Connector, sink: ChannelSink<Envelope>) -> Option<Connect
             for command in MainWindow::FIRST_ASKS {
                 connection.send(command)?;
             }
-            connection.send(drives_api::Command::Drives)?;
             connection.send(folders_api::Command::Views)?;
-            connection.send(places_api::Command::Places)?;
             Ok(connection)
         })
         .ok()

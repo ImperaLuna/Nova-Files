@@ -187,6 +187,7 @@ impl MainWindow {
                 }
             }
             Some(FocusTo::List) => window.focus(&self.keys_home(cx), cx),
+            Some(FocusTo::Handle(handle)) => window.focus(&handle, cx),
             None => {}
         }
     }

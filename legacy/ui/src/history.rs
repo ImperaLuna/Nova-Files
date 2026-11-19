@@ -7,6 +7,7 @@ pub const MAX_PLACES: usize = 100;
 pub enum Step {
     Back,
     Forward,
+    Replace,
 }
 
 #[derive(Debug, Default)]
@@ -38,10 +39,15 @@ impl History {
         self.start(Step::Forward)
     }
 
+    pub fn replace_with(&mut self, place: Location) {
+        self.going = Some((Step::Replace, place));
+    }
+
     fn start(&mut self, step: Step) -> Option<Location> {
         let target = match step {
             Step::Back => self.back_target(),
             Step::Forward => self.forward_target(),
+            Step::Replace => None,
         }?
         .clone();
         self.going = Some((step, target.clone()));
@@ -76,6 +82,7 @@ impl History {
                     self.push_back(left);
                 }
             }
+            Some(Step::Replace) => {}
             None => {
                 self.forward.clear();
                 if let Some(left) = left {
@@ -235,5 +242,21 @@ mod tests {
         }
         assert_eq!(steps, MAX_PLACES);
         assert_eq!(history.forward_target(), Some(&at("/2")));
+    }
+
+    #[test]
+    fn a_replaced_place_takes_no_step_back() {
+        let mut history = History::default();
+        let (first, second, third) = (
+            Location::Folder("/a".into()),
+            Location::Folder("/b".into()),
+            Location::Folder("/c".into()),
+        );
+        history.arrived(&first);
+        history.arrived(&second);
+        history.replace_with(third.clone());
+        history.arrived(&third);
+        assert_eq!(history.here(), Some(&third));
+        assert_eq!(history.back_target(), Some(&first));
     }
 }

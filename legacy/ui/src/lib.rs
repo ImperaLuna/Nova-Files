@@ -5,8 +5,6 @@
 mod band;
 mod columns;
 mod commands;
-mod crumbs;
-mod drives;
 mod dropping;
 mod grid;
 mod history;
@@ -15,7 +13,6 @@ mod island;
 mod location;
 mod marks;
 mod menu;
-mod path_bar;
 mod pick;
 mod places;
 mod requests;
@@ -74,11 +71,9 @@ pub type RecoverGpu = Rc<dyn Fn(Option<&Path>)>;
 pub fn sent_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Command>(),
-        MessageType::of::<nova_files_drives_api::Command>(),
         MessageType::of::<nova_files_folders_api::Command>(),
         MessageType::of::<nova_files_gathered_api::Command>(),
         MessageType::of::<nova_files_open_api::Command>(),
-        MessageType::of::<nova_files_places_api::Command>(),
         MessageType::of::<nova_files_preview_api::Command>(),
         MessageType::of::<nova_files_properties_api::Command>(),
         MessageType::of::<nova_files_search_api::Command>(),
@@ -91,11 +86,9 @@ pub fn sent_types() -> Vec<MessageType> {
 pub fn taken_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
-        MessageType::of::<nova_files_drives_api::Event>(),
         MessageType::of::<nova_files_folders_api::Event>(),
         MessageType::of::<nova_files_gathered_api::Event>(),
         MessageType::of::<nova_files_open_api::Event>(),
-        MessageType::of::<nova_files_places_api::Event>(),
         MessageType::of::<nova_files_preview_api::Event>(),
         MessageType::of::<nova_files_properties_api::Event>(),
         MessageType::of::<nova_files_search_api::Event>(),

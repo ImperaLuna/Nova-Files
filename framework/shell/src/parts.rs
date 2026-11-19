@@ -1,5 +1,6 @@
 use std::any::{Any, TypeId};
 use std::collections::HashSet;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -18,6 +19,7 @@ use crate::host::Host;
 use crate::location::{Location, PageRef};
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::part::{Card, DropOver, Part, Slots};
+use crate::per_tab::TabId;
 use crate::scene::Scene;
 use crate::slot_view::{Draw, SlotView};
 use crate::text::TextField;
@@ -48,9 +50,10 @@ trait OpenPart {
     fn page(&self, page: &PageRef) -> Option<AnyView>;
     fn column(&self, scene: &Scene, cx: &App) -> Option<ShownColumn>;
     fn sidebar(&self, at: SidebarAt, scene: &Scene, cx: &App) -> Vec<SidebarRow>;
-    fn start_cards(&self) -> Vec<AnyView>;
+    fn start_cards(&self) -> Vec<(u8, AnyView)>;
     fn bars(&self) -> Vec<AnyView>;
     fn overlays(&self) -> Vec<AnyView>;
+    fn path_chips(&self) -> Vec<AnyView>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
@@ -88,6 +91,17 @@ trait OpenPart {
     fn dims(&self, entry: &Entry, cx: &App) -> bool;
     fn focus(&self, cx: &App) -> Option<FocusHandle>;
     fn refused(&self, id: ListingId, path: &Path, cx: &mut App);
+    fn used(&self, folder: &Path, cx: &mut App);
+    fn rows_drawn(&self, id: ListingId, rows: &Range<usize>, cx: &mut App);
+    fn rescaled(&self, scale_factor: f32, cx: &mut App);
+    fn thumbnail_side(&self, side: u32, cx: &mut App);
+    fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Turn {
+    Shown,
+    Left,
 }
 
 struct Opened<P: Part> {
@@ -95,9 +109,10 @@ struct Opened<P: Part> {
     host: Host,
     slots: Slots<P>,
     pages: Vec<(TypeId, AnyView)>,
-    cards: Vec<AnyView>,
+    cards: Vec<(u8, AnyView)>,
     bars: Vec<AnyView>,
     overlays: Vec<AnyView>,
+    path_chips: Vec<AnyView>,
     list_views: Vec<AnyView>,
 }
 
@@ -111,6 +126,11 @@ impl<P: Part> OpenPart for Opened<P> {
     }
 
     fn bind(&self, root: Div) -> Div {
+        let root = self
+            .slots
+            .befores
+            .iter()
+            .fold(root, |root, before| before(root, &self.entity, &self.host));
         self.slots.commands.iter().fold(root, |root, command| {
             (command.bind)(root, &self.entity, &self.host)
         })
@@ -168,7 +188,7 @@ impl<P: Part> OpenPart for Opened<P> {
             .collect()
     }
 
-    fn start_cards(&self) -> Vec<AnyView> {
+    fn start_cards(&self) -> Vec<(u8, AnyView)> {
         self.cards.clone()
     }
 
@@ -178,6 +198,10 @@ impl<P: Part> OpenPart for Opened<P> {
 
     fn overlays(&self) -> Vec<AnyView> {
         self.overlays.clone()
+    }
+
+    fn path_chips(&self) -> Vec<AnyView> {
+        self.path_chips.clone()
     }
 
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
@@ -422,6 +446,65 @@ impl<P: Part> OpenPart for Opened<P> {
             }
         });
     }
+
+    fn used(&self, folder: &Path, cx: &mut App) {
+        if self.slots.used.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for used in &self.slots.used {
+                used(part, folder, cx);
+            }
+        });
+    }
+
+    fn rows_drawn(&self, id: ListingId, rows: &Range<usize>, cx: &mut App) {
+        if self.slots.rows_drawn.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for drawn in &self.slots.rows_drawn {
+                drawn(part, id, rows.clone(), cx);
+            }
+        });
+    }
+
+    fn rescaled(&self, scale_factor: f32, cx: &mut App) {
+        if self.slots.rescaled.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for rescaled in &self.slots.rescaled {
+                rescaled(part, scale_factor, cx);
+            }
+        });
+    }
+
+    fn thumbnail_side(&self, side: u32, cx: &mut App) {
+        if self.slots.thumbnail_sides.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for changed in &self.slots.thumbnail_sides {
+                changed(part, side, cx);
+            }
+        });
+    }
+
+    fn page_turned(&self, page: &PageRef, tab: TabId, turn: Turn, cx: &mut App) {
+        let turns = match turn {
+            Turn::Shown => &self.slots.pages_shown,
+            Turn::Left => &self.slots.pages_left,
+        };
+        if turns.is_empty() {
+            return;
+        }
+        self.entity.update(cx, |part, cx| {
+            for turned in turns {
+                turned(part, page, tab, cx);
+            }
+        });
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -517,9 +600,14 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
             (*kind, slot_view(&entity, draw, true, cx))
         })
         .collect();
-    let cards = card_views(&entity, host, &slots.start_cards, false, cx);
+    let ranks = slots.start_cards.iter().map(|(rank, _)| *rank);
+    let drawn: Vec<Card<P>> = slots.start_cards.iter().map(|(_, card)| *card).collect();
+    let cards = ranks
+        .zip(card_views(&entity, host, &drawn, false, cx))
+        .collect();
     let bars = card_views(&entity, host, &slots.bars, false, cx);
     let overlays = card_views(&entity, host, &slots.overlays, false, cx);
+    let path_chips = card_views(&entity, host, &slots.path_chips, false, cx);
     let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
     let list_views = card_views(&entity, host, &views, true, cx);
     Box::new(Opened {
@@ -530,6 +618,7 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         cards,
         bars,
         overlays,
+        path_chips,
         list_views,
     })
 }

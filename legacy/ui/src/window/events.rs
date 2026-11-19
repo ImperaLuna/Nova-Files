@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
 use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
-use nova_files_places_api::Bookmark;
+use nova_files_places_ui::Known;
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::rows::release;
@@ -13,7 +13,6 @@ use super::{CoreStatus, MainWindow, WindowEvent};
 use crate::island;
 use crate::jump::TypeJump;
 use crate::location::Location;
-use crate::places;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Place {
@@ -36,7 +35,7 @@ impl MainWindow {
             self.menu = None;
             let fell_back = mem::take(&mut self.falling_back);
             if let (Location::Folder(folder), false) = (&arrived, fell_back) {
-                self.used(folder);
+                self.used(folder, cx);
             }
         }
         self.listed_page = match &arrived {
@@ -63,14 +62,14 @@ impl MainWindow {
         if arrived.folder().is_some() {
             self.tree_follows(&listing, !same_folder);
         }
-        self.ask_disk_space();
         self.search.reveal = None;
         let place = if same_folder { Place::Kept } else { Place::Top };
         self.listing_replaced(listing, place, cx);
         if !reordered && self.picking(cx).is_some() {
             self.selection = None;
         }
-        self.typed_path_arrived(same_folder);
+        self.path_bar
+            .update(cx, |bar, cx| bar.arrived(same_folder, cx));
         if (!same_folder || reordered || made)
             && let Some(cursor) = self.cursor()
         {
@@ -141,6 +140,11 @@ impl MainWindow {
                 self.details_arrived(first, &details, &icons, cx);
             }
             Event::FolderListed(stale) => self.dropped_listing(stale.id, cx),
+            Event::WindowState(bytes) => {
+                self.host
+                    .kept
+                    .update(cx, |kept, cx| kept.arrived(&bytes, cx));
+            }
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
             | Event::JobPaused(_)
@@ -152,25 +156,16 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
-            | Event::WindowState(_)
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. } => {}
         }
     }
 
-    pub(super) fn places_arrived(
-        &mut self,
-        places: Vec<nova_files_places_api::Place>,
-        cx: &mut Context<Self>,
-    ) {
-        let known = places::known(&places);
-        self.places = places;
-        Published::set(known, cx);
-        self.sidebar_changed(cx);
-    }
-
-    pub(super) fn pinned_arrived(&mut self, pinned: Arc<[Bookmark]>, cx: &mut Context<Self>) {
-        self.pinned = pinned;
+    pub(super) fn places_changed(&mut self, cx: &mut Context<Self>) {
+        if let Some(known) = Published::<Known>::get(cx) {
+            self.places.clone_from(&known.places);
+            self.pinned = Arc::clone(&known.pinned);
+        }
         self.sidebar_changed(cx);
     }
 
@@ -180,6 +175,25 @@ impl MainWindow {
         }
         cx.emit(WindowEvent::Places);
         cx.notify();
+    }
+
+    pub(super) fn listing_failed(&mut self, id: ListingId, cx: &mut Context<Self>) {
+        if self.asked != Some(id) {
+            return;
+        }
+        let path = self
+            .requested
+            .as_ref()
+            .and_then(Location::folder)
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let empty = Listing {
+            id,
+            path,
+            entries: Arc::from([]),
+            folders: None,
+        };
+        self.listing_arrived(empty, cx);
     }
 
     fn missing_named(&self, id: ListingId, path: &Path) -> Option<Listing> {
@@ -231,7 +245,7 @@ impl MainWindow {
         }
         self.ask_for_recent();
         self.parts.refused(id, &path, cx);
-        self.typed_path_refused(id, cx);
+        self.path_bar.update(cx, |bar, cx| bar.refused(id, cx));
         cx.emit(WindowEvent::Refused(path));
         cx.notify();
     }

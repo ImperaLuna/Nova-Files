@@ -24,8 +24,16 @@ const STRIP_ICONS: IconSize = IconSize::Small;
 const PICTURE_PLACES: [PlaceKind; 2] = [PlaceKind::Pictures, PlaceKind::Videos];
 
 impl MainWindow {
+    fn details_only(&self) -> bool {
+        self.showing_found()
+            || self.folder_rules().views == Views::DetailsOnly
+            || self
+                .listed_page()
+                .is_some_and(|page| page.views() == Views::DetailsOnly)
+    }
+
     pub fn folder_view(&self) -> FolderView {
-        if self.showing_found() || self.folder_rules().views == Views::DetailsOnly {
+        if self.details_only() {
             return FolderView::default();
         }
         self.folder()
@@ -115,10 +123,7 @@ impl MainWindow {
     }
 
     fn change_view(&mut self, view: FolderView, cx: &mut Context<Self>) {
-        if self.showing_found()
-            || self.folder_rules().views == Views::DetailsOnly
-            || view == self.folder_view()
-        {
+        if self.details_only() || view == self.folder_view() {
             return;
         }
         let Some(folder) = self.folder().map(Path::to_path_buf) else {

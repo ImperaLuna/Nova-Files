@@ -7,7 +7,8 @@
 //! of the channel as [`CoreMessage`]s. File operations run as jobs (see
 //! [`Operation`]). A [`FileIcon`] is how an entry's icon is drawn, and a
 //! [`ThumbnailSize`] how big its thumbnail is.
-//! A [`WindowRequest`] is a window another program asks for.
+//! A [`WindowRequest`] is a window another program asks for, and a
+//! [`WindowState`] what the windows keep between runs.
 
 #![forbid(unsafe_code)]
 
@@ -23,6 +24,7 @@ mod theme;
 mod thumbnail_size;
 pub mod uri;
 mod window;
+mod window_state;
 
 pub use access::{AccessChange, MODE_BITS, ModeChange, Reach};
 pub use file_icon::{FILE_ICON_PIXELS, FileIcon, IconFormat, IconKind, ThemeIcon};
@@ -44,6 +46,7 @@ pub use preview::{Fit, MAX_FIT_SIDE, Picture};
 pub use theme::{Color, DesktopLook, Mode, Palette, PaletteKey, SWATCH_COUNT, Theme};
 pub use thumbnail_size::ThumbnailSize;
 pub use window::WindowRequest;
+pub use window_state::WindowState;
 
 /// The application id: the D-Bus name, the Wayland app id and the name of
 /// the D-Bus service file. Set once, in `.cargo/config.toml`.

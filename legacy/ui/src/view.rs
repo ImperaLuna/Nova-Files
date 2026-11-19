@@ -5,7 +5,6 @@ mod icons;
 mod island;
 mod menu;
 mod path;
-mod path_menu;
 mod preview;
 mod properties;
 mod row;
