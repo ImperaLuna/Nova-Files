@@ -11,7 +11,7 @@ use nova_files_disk::ports::Icons;
 pub use nova_files_entries_core::ListingJob;
 use nova_files_entries_core::RowWatch;
 
-use crate::inside::{self, Inside, Within};
+use nova_files_archives_core::inside::{self, Inside, Within};
 use nova_files_look_core::FileIcons;
 
 use crate::list::{self, Stopped};
