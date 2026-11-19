@@ -83,7 +83,6 @@ use crate::menu::Menu;
 use crate::selection::Selection;
 use crate::theme_icons::ThemeIcons;
 use jobs::Jobs;
-use renaming::{Renaming, Waiting};
 use tabs::Tabs;
 
 const DEFAULT_SCALE_FACTOR: f32 = 2.0;
@@ -165,8 +164,6 @@ pub struct MainWindow {
     pub(crate) island: Island,
     jobs: Jobs,
     pub(crate) counted: SharedString,
-    renaming: Option<Renaming>,
-    waiting: Waiting,
     showing: Option<showing::Showing>,
     tabs: Tabs,
     drop_asks: aiming::Asks,
@@ -289,8 +286,6 @@ impl MainWindow {
             island: Island::default(),
             jobs: Jobs::default(),
             counted: SharedString::default(),
-            renaming: None,
-            waiting: Waiting::Nothing,
             showing: None,
             tabs: Tabs::default(),
             drop_asks: aiming::Asks::default(),

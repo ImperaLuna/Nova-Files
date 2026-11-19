@@ -54,6 +54,7 @@ nova-files-properties-api = { path = "features/properties/api" }
 nova-files-properties-core = { path = "features/properties/core" }
 nova-files-rename-api = { path = "features/rename/api" }
 nova-files-rename-core = { path = "features/rename/core" }
+nova-files-rename-ui = { path = "features/rename/ui" }
 nova-files-search-api = { path = "features/search/api" }
 nova-files-search-core = { path = "features/search/core" }
 nova-files-settings-api = { path = "features/settings/api" }

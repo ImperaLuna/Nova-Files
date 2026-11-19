@@ -235,7 +235,7 @@ impl MainWindow {
                     ),
             )
             .child(self.parts.name_cell(entry, cx).unwrap_or_else(|| {
-                self.name_field((index, entry), cx).map_or_else(
+                self.parts.name_field(entry, cx).map_or_else(
                     || {
                         entry_name(name.into(), marks, index, draggable.then_some(row), cx)
                             .into_any_element()

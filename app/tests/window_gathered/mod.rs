@@ -180,11 +180,12 @@ async fn a_place_offers_adding_a_folder_not_making_one(cx: &mut TestAppContext) 
     click(cx, "place-projects");
     wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
 
-    view.update(cx, |view, _| view.new_folder());
+    cx.dispatch_action(nova_files_rename_ui::NewFolder);
+    cx.run_until_parked();
 
-    view.read_with(cx, |view, _| {
+    view.read_with(cx, |view, cx| {
         assert_eq!(view.jobs_pending(), 0);
-        assert!(!view.renaming());
+        assert!(!view.renaming(cx));
     });
     cx.run_until_parked();
     let below = cx.debug_bounds("entry-0").unwrap();

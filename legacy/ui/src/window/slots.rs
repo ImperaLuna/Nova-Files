@@ -342,7 +342,7 @@ impl MainWindow {
             Some(NoteUndo::Send(_)) | None => None,
         });
         let undo = noted.or_else(|| self.jobs.last_undoable().map(shell::Undo::Job));
-        let busy = self.renaming() || self.parts.busy(cx);
+        let busy = self.renaming(cx);
         self.host
             .island
             .update(cx, |island, _| island.set_undoable(undo, busy));
