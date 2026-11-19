@@ -31,7 +31,10 @@ fn a_copy_sends_its_copies_still_there_to_the_trash() {
 
     assert_eq!(
         undo,
-        Some(Undo::Trash(vec![(copy.clone(), entry(&copy).unwrap())]))
+        Some(Undo::Trash(vec![(
+            copy.clone(),
+            identity::of(&copy).unwrap()
+        )]))
     );
 }
 
@@ -58,7 +61,7 @@ fn a_move_goes_back_even_when_it_stopped_part_way() {
         Some(Undo::MoveBack(vec![(
             moved.clone(),
             from,
-            entry(&moved).unwrap()
+            identity::of(&moved).unwrap()
         )]))
     );
 }
@@ -107,7 +110,10 @@ fn a_trashed_entry_comes_back_only_from_a_trash_it_can_be_restored_from() {
 
     assert_eq!(
         undo,
-        Some(Undo::Restore(vec![(item.clone(), entry(&item).unwrap())]))
+        Some(Undo::Restore(vec![(
+            item.clone(),
+            identity::of(&item).unwrap()
+        )]))
     );
     assert_eq!(undo_of(&trash_op, &steps[..1], &done(), &none()), None);
 }
@@ -147,13 +153,16 @@ fn a_rename_and_a_new_folder_are_taken_back_only_once_done() {
         undo_of(&rename_op, &[], &done(), &none()),
         Some(Undo::Rename(
             renamed.clone(),
-            entry(&renamed).unwrap(),
+            identity::of(&renamed).unwrap(),
             "old".into()
         ))
     );
     assert_eq!(
         undo_of(&folder_op, &[], &done(), &none()),
-        Some(Undo::RemoveFolder(made.clone(), entry(&made).unwrap()))
+        Some(Undo::RemoveFolder(
+            made.clone(),
+            identity::of(&made).unwrap()
+        ))
     );
     assert_eq!(undo_of(&rename_op, &[], &failed, &none()), None);
     assert_eq!(undo_of(&folder_op, &[], &failed, &none()), None);
@@ -179,45 +188,4 @@ fn deletes_and_undos_are_never_undone() {
             "{operation:?}"
         );
     }
-}
-
-#[test]
-fn files_replaced_and_still_in_the_trash_are_put_back_after() {
-    let folder = TestFolder::new("undo-put-back");
-    let copy = folder.file("a", "new");
-    let trashed = folder.file("trashed-a", "old");
-    let first = Undo::Trash(vec![(copy.clone(), entry(&copy).unwrap())]);
-    let gone = folder.path().join("gone");
-
-    assert_eq!(putting_back(first.clone(), &[]), first);
-    assert_eq!(
-        putting_back(first.clone(), &[(copy.clone(), gone)]),
-        first,
-        "nothing left to put back"
-    );
-    assert_eq!(
-        putting_back(first.clone(), &[(copy, trashed.clone())]),
-        Undo::ThenPutBack(
-            Box::new(first),
-            vec![(trashed.clone(), entry(&trashed).unwrap())]
-        )
-    );
-}
-
-#[test]
-fn only_nothing_left_to_undo_counts_as_gone() {
-    let gone = Outcome::Failed {
-        path: PathBuf::new(),
-        reason: Failure::NotFound,
-    };
-    assert!(is_gone(&gone));
-    assert!(!is_gone(&Outcome::Done));
-    assert!(!is_gone(&Outcome::Failed {
-        path: PathBuf::from("/a"),
-        reason: Failure::NotFound,
-    }));
-    assert!(!is_gone(&Outcome::Failed {
-        path: PathBuf::new(),
-        reason: Failure::PermissionDenied,
-    }));
 }

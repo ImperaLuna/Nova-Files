@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
-use nova_files_api::{Failure, JobId, Operation, Outcome};
-use nova_files_jobs::control::{Cancelled, Control};
+use nova_files_api::{Failure, Operation, Outcome};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, JobKind};
 
@@ -32,18 +31,6 @@ impl JobKind for Renames {
                 Vec::new(),
             ),
         }
-    }
-
-    fn rest(&self, operation: &Operation, _: &Control) -> Result<Operation, Cancelled> {
-        Ok(operation.clone())
-    }
-
-    fn undo(&self, _: &mut Running, _: &Operation, _: &Ended) -> Option<()> {
-        None
-    }
-
-    fn undoes(&self, _: &Operation) -> Option<JobId> {
-        None
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {

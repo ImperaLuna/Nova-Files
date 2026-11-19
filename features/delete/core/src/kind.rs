@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use nova_files_api::{Failure, JobId, Operation, Outcome};
+use nova_files_api::{Failure, Operation, Outcome};
 use nova_files_jobs::control::{Cancelled, Control};
+use nova_files_jobs::rest::still_there;
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, JobKind};
 
@@ -30,16 +31,13 @@ impl JobKind for Deletes {
         }
     }
 
-    fn rest(&self, operation: &Operation, _: &Control) -> Result<Operation, Cancelled> {
-        Ok(operation.clone())
-    }
-
-    fn undo(&self, _: &mut Running, _: &Operation, _: &Ended) -> Option<()> {
-        None
-    }
-
-    fn undoes(&self, _: &Operation) -> Option<JobId> {
-        None
+    fn rest(&self, operation: &Operation, control: &Control) -> Result<Operation, Cancelled> {
+        Ok(match operation {
+            Operation::Delete { paths } => Operation::Delete {
+                paths: still_there(paths, control)?,
+            },
+            other => other.clone(),
+        })
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
@@ -69,5 +67,19 @@ mod tests {
         assert_eq!(Deletes.first_path(&delete), PathBuf::from("/a"));
         assert_eq!(Deletes.first_path(&nothing), PathBuf::new());
         assert_eq!(Deletes.first_path(&trash), PathBuf::new());
+    }
+
+    #[test]
+    fn a_resumed_delete_leaves_out_what_is_gone() {
+        let folder = nova_files_jobs::test_folder::TestFolder::new("delete-kind-rest");
+        let file = folder.file("file", "f");
+        let gone = folder.path().join("gone");
+        let delete = Operation::Delete {
+            paths: vec![file.clone(), gone],
+        };
+
+        let left = Deletes.rest(&delete, &Control::default()).unwrap();
+
+        assert_eq!(left, Operation::Delete { paths: vec![file] });
     }
 }

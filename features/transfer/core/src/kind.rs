@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use nova_files_api::{Failure, JobId, Operation, Outcome};
+use nova_files_api::{Failure, Operation, Outcome};
 use nova_files_jobs::control::{Cancelled, Control};
+use nova_files_jobs::rest::still_there;
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, JobKind};
 
@@ -31,16 +32,14 @@ impl JobKind for Transfers {
         }
     }
 
-    fn rest(&self, operation: &Operation, _: &Control) -> Result<Operation, Cancelled> {
-        Ok(operation.clone())
-    }
-
-    fn undo(&self, _: &mut Running, _: &Operation, _: &Ended) -> Option<()> {
-        None
-    }
-
-    fn undoes(&self, _: &Operation) -> Option<JobId> {
-        None
+    fn rest(&self, operation: &Operation, control: &Control) -> Result<Operation, Cancelled> {
+        Ok(match operation {
+            Operation::Move { sources, into } => Operation::Move {
+                sources: still_there(sources, control)?,
+                into: into.clone(),
+            },
+            other => other.clone(),
+        })
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
@@ -76,5 +75,34 @@ mod tests {
         assert_eq!(Transfers.first_path(&copy), PathBuf::from("/s"));
         assert_eq!(Transfers.first_path(&empty), PathBuf::from("/into"));
         assert_eq!(Transfers.first_path(&delete), PathBuf::new());
+    }
+
+    #[test]
+    fn a_resumed_move_leaves_out_what_is_gone_and_a_copy_keeps_all() {
+        let folder = nova_files_jobs::test_folder::TestFolder::new("transfer-kind-rest");
+        let file = folder.file("file", "f");
+        let gone = folder.path().join("gone");
+        let into = folder.path().join("into");
+        let sources = vec![file.clone(), gone];
+        let moving = Operation::Move {
+            sources: sources.clone(),
+            into: into.clone(),
+        };
+        let copying = Operation::Copy {
+            sources,
+            into: into.clone(),
+        };
+
+        assert_eq!(
+            Transfers.rest(&moving, &Control::default()).unwrap(),
+            Operation::Move {
+                sources: vec![file],
+                into
+            }
+        );
+        assert_eq!(
+            Transfers.rest(&copying, &Control::default()).unwrap(),
+            copying
+        );
     }
 }
