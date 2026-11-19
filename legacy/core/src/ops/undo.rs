@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Failure, Operation, Outcome};
+use nova_files_api::{Operation, Outcome};
 
 use super::Ended;
 use super::journal::{Record, word};
@@ -13,6 +13,7 @@ use crate::trash::{self, Trashes};
 use nova_files_jobs::identity::{self, Identity, same, still};
 use nova_files_jobs::mover::Mover;
 use nova_files_jobs::parents::make_folders;
+use nova_files_jobs::undo::{gone, trash_again};
 use nova_files_transfer_core::How;
 use nova_files_transfer_core::transfer_to;
 use nova_files_trash_core::restore;
@@ -83,21 +84,11 @@ pub fn run(
     trashes: &Trashes,
     mover: &dyn Mover,
 ) -> Ended {
-    let gone = || {
-        let outcome = Outcome::Failed {
-            path: PathBuf::new(),
-            reason: Failure::NotFound,
-        };
-        (outcome, Vec::new())
-    };
     let Some(undo) = undo else {
         return gone();
     };
     match undo {
-        Undo::Trash(paths) => match still(paths) {
-            paths if paths.is_empty() => gone(),
-            paths => running.trash(&paths),
-        },
+        Undo::Trash(paths) => trash_again(running, paths),
         Undo::Restore(items) => match still(items)
             .into_iter()
             .filter(|item| trash::find(item, trashes).is_some())
