@@ -245,6 +245,8 @@ pub enum ConflictKind {
     /// The source's drive has no trash it may use, so it can't go to the
     /// trash; a client may offer to delete it for good instead.
     NoTrash,
+    /// The source is in a trash already, so only a delete takes it further.
+    InTrash,
     /// The archive is locked. A client answers with a password
     /// ([`Command::GivePassword`]), or skips it.
     ///
