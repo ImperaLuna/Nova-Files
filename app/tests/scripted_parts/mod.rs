@@ -8,7 +8,7 @@ use super::*;
 mod hooks;
 mod shelf;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Claim(PathBuf);
 
 #[derive(Debug)]
@@ -39,9 +39,27 @@ impl Part for Claimer {
     }
 }
 
+thread_local! {
+    static WITNESSED: Cell<usize> = const { Cell::new(0) };
+}
+
+struct Witness;
+
+impl Part for Witness {
+    fn open(_: &Host, _: &mut Context<Self>) -> Self {
+        Self
+    }
+
+    fn slots(slots: &mut Slots<Self>) {
+        slots.on_event(|_: &mut Self, Claim(_), _| WITNESSED.set(WITNESSED.get() + 1));
+    }
+}
+
 fn with_parts(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
+    WITNESSED.set(0);
     let mut parts = Parts::default();
     parts.add::<Claimer>();
+    parts.add::<Witness>();
     cx.update(|cx| cx.set_global(parts));
     let (view, cx, mut core) = window_with_parts(cx);
     answer_listing(&mut core, ENTRIES);
@@ -66,6 +84,11 @@ fn a_part_takes_its_own_events_and_its_rules_reach_the_window(cx: &mut TestAppCo
     cx.run_until_parked();
 
     assert!(rules(&view, cx).read_only);
+    assert_eq!(
+        WITNESSED.get(),
+        1,
+        "every part that takes an event hears it"
+    );
     assert_eq!(rules(&view, cx).views, Views::DetailsOnly);
     assert_eq!(
         view.read_with(cx, |view, _| view.folder_view()),
@@ -95,5 +118,6 @@ fn an_event_no_part_takes_leaves_the_window_connected(cx: &mut TestAppContext) {
 fn parts_list_the_event_types_they_take() {
     let mut parts = Parts::default();
     parts.add::<Claimer>();
+    parts.add::<Witness>();
     assert_eq!(parts.takes(), [MessageType::of::<Claim>()]);
 }

@@ -34,7 +34,7 @@ impl ShownColumn {
 }
 
 trait OpenPart {
-    fn deliver(&self, envelope: Envelope, cx: &mut App) -> Result<(), Envelope>;
+    fn deliver(&self, envelope: &Envelope, cx: &mut App) -> bool;
     fn bind(&self, root: Div) -> Div;
     fn applies(&self, spec: &CommandSpec, scene: &Scene, cx: &App) -> Option<bool>;
     fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed>;
@@ -75,12 +75,12 @@ struct Opened<P: Part> {
 }
 
 impl<P: Part> OpenPart for Opened<P> {
-    fn deliver(&self, envelope: Envelope, cx: &mut App) -> Result<(), Envelope> {
+    fn deliver(&self, envelope: &Envelope, cx: &mut App) -> bool {
         let Some(slot) = self.slots.events.get(&envelope.kind()) else {
-            return Err(envelope);
+            return false;
         };
         self.entity.update(cx, |part, cx| slot(part, envelope, cx));
-        Ok(())
+        true
     }
 
     fn bind(&self, root: Div) -> Div {
@@ -294,11 +294,11 @@ impl Parts {
     }
 
     pub fn takes(&self) -> Vec<MessageType> {
-        self.kinds.iter().flat_map(|kind| (kind.takes)()).collect()
+        each_once(self.kinds.iter().flat_map(|kind| (kind.takes)()))
     }
 
     pub fn sends(&self) -> Vec<MessageType> {
-        self.kinds.iter().flat_map(|kind| (kind.sends)()).collect()
+        each_once(self.kinds.iter().flat_map(|kind| (kind.sends)()))
     }
 
     pub fn bindings(&self) -> Vec<KeyBinding> {
@@ -408,14 +408,12 @@ pub struct WindowParts {
 }
 
 impl WindowParts {
-    pub fn deliver(&self, mut envelope: Envelope, cx: &mut App) -> Result<(), Envelope> {
+    pub fn deliver(&self, envelope: Envelope, cx: &mut App) -> Result<(), Envelope> {
+        let mut taken = false;
         for part in &self.opened {
-            match part.deliver(envelope, cx) {
-                Ok(()) => return Ok(()),
-                Err(back) => envelope = back,
-            }
+            taken |= part.deliver(&envelope, cx);
         }
-        Err(envelope)
+        if taken { Ok(()) } else { Err(envelope) }
     }
 
     pub fn bind(&self, root: Div) -> Div {
@@ -550,4 +548,14 @@ impl WindowParts {
             .map(|part| part.observe(Rc::clone(&changed), cx))
             .collect()
     }
+}
+
+fn each_once(types: impl Iterator<Item = MessageType>) -> Vec<MessageType> {
+    let mut once = Vec::new();
+    for kind in types {
+        if !once.contains(&kind) {
+            once.push(kind);
+        }
+    }
+    once
 }

@@ -42,7 +42,7 @@ pub struct Column<P> {
     pub cell: Cell<P>,
 }
 
-type EventSlot<P> = Box<dyn Fn(&mut P, Envelope, &mut Context<P>)>;
+type EventSlot<P> = Box<dyn Fn(&mut P, &Envelope, &mut Context<P>)>;
 type Bind<P> = Box<dyn Fn(Div, &Entity<P>, &Host) -> Div>;
 pub type PageSlot<P> =
     Rc<dyn Fn(&mut P, &PageRef, &mut Window, &mut Context<P>) -> Option<AnyElement>>;
@@ -102,12 +102,12 @@ impl<P> Default for Slots<P> {
 }
 
 impl<P: Part> Slots<P> {
-    pub fn on_event<E: Message>(&mut self, take: fn(&mut P, E, &mut Context<P>)) {
+    pub fn on_event<E: Message + Clone>(&mut self, take: fn(&mut P, E, &mut Context<P>)) {
         self.events.insert(
             MessageType::of::<E>(),
             Box::new(move |part, envelope, cx| {
-                if let Some(event) = envelope.taken_as::<E>() {
-                    take(part, event, cx);
+                if let Some(event) = envelope.get::<E>() {
+                    take(part, event.clone(), cx);
                 }
             }),
         );
