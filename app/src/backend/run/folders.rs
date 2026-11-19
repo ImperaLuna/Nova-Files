@@ -5,8 +5,8 @@ use nova_files_settings_api::Thumbnails;
 
 use super::Setup;
 use crate::backend::jobs::{self, Client};
-use crate::backend::trash;
 use nova_files_jobs::trash_info::FILES;
+use nova_files_trash_core::Trashes;
 
 pub(super) fn answer(client: &Client, command: Command, setup: &Setup) {
     match command {
@@ -28,7 +28,7 @@ pub(super) fn answer(client: &Client, command: Command, setup: &Setup) {
 }
 
 fn hidden_files(setup: &Setup, path: &Path) -> HiddenFiles {
-    let trash = trash::trashes(setup.home.as_ref()).home;
+    let trash = Trashes::of_home(setup.home.as_ref()).home;
     if trash.is_some_and(|trash| path.starts_with(trash.join(FILES))) {
         HiddenFiles::Shown
     } else {

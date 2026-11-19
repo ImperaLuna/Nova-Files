@@ -1,6 +1,6 @@
 use super::*;
-use crate::backend::ops::TestFolder;
 use nova_files_api::JobId;
+use nova_files_jobs::test_folder::TestFolder;
 use std::fs;
 
 fn none() -> Trashes {
