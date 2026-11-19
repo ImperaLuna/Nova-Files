@@ -4083,7 +4083,9 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-preview-api",
+ "nova-files-shell",
  "nova-files-thumbnails-api",
+ "nova-files-thumbnails-ui",
  "nova-files-ui",
 ]
 
