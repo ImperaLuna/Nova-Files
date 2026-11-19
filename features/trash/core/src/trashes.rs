@@ -2,6 +2,7 @@
 // https://specifications.freedesktop.org/trash-spec/latest/
 mod folder;
 mod info;
+mod known;
 mod read;
 mod sizes;
 

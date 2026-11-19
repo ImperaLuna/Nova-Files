@@ -294,3 +294,20 @@ fn the_stored_name_is_the_info_files_name_less_its_suffix() {
     assert_eq!(stored_of(OsStr::new(".trashinfo")), None);
     assert_eq!(stored_of(OsStr::new("a.trash")), None);
 }
+
+#[test]
+fn every_trash_on_a_drive_and_every_one_made_below_a_drive_top_is_looked_at() {
+    let tops = [PathBuf::from("/srv")];
+    let made = PathBuf::from("/srv/subvolume/.Trash-1000");
+
+    let roots = drive_roots(&tops, 1000, vec![made.clone()]);
+
+    assert_eq!(
+        roots,
+        [
+            PathBuf::from("/srv/.Trash/1000"),
+            PathBuf::from("/srv/.Trash-1000"),
+            made,
+        ]
+    );
+}
