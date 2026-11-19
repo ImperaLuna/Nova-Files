@@ -8,13 +8,13 @@ use nova_files_api::{Failure, Operation, Outcome};
 
 use super::Ended;
 use super::journal::{Record, word};
-use super::make::How;
 use super::plan::Entry;
 use super::running::Running;
 use super::stop::Stop;
-use super::transfer::transfer_to;
 use crate::trash::{self, Trashes};
 use nova_files_jobs::mover::Mover;
+use nova_files_transfer_core::How;
+use nova_files_transfer_core::transfer_to;
 use nova_files_trash_core::{make_folders, put_back, restore, trash};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -5,7 +5,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use super::*;
-use crate::file_icons::FileIcons;
+use nova_files_look_core::FileIcons;
+
+use nova_files_open_core::MimeTypes;
 
 const LIMIT: u32 = 50;
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
@@ -50,7 +52,15 @@ impl Drop for Scratch {
 fn client() -> (Client, Receiver<Event>) {
     let (sink, events) = mpsc::channel();
     (
-        Client::new(Arc::new(sink), None, &FileIcons::plain()),
+        Client::new(
+            Arc::new(sink),
+            None,
+            &Arc::new(FileIcons::new(
+                Arc::new(MimeTypes::default()),
+                None,
+                Vec::new(),
+            )),
+        ),
         events,
     )
 }

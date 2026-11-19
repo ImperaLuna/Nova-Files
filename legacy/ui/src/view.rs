@@ -93,6 +93,7 @@ impl MainWindow {
             .map(|root| Self::typed_keys(root, main, cx))
             .map(|root| Self::selection_keys(root, cx))
             .map(|root| Self::file_keys(root, cx))
+            .map(|root| self.parts.bind(root))
             .map(|root| Self::band_events(root, cx))
             .when(main, |root| Self::tab_keys(root, cx))
             .on_mouse_down(

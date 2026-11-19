@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
-use gpui::{Context, Modifiers, Pixels, Point, point};
+use gpui::{App, Context, Modifiers, Pixels, Point, point};
 use nova_files_api::{EntryId, HiddenFiles, ListingId};
 use nova_files_folders_api::ViewMode;
+use nova_files_shell::MenuAt;
 
 use super::MainWindow;
 use crate::assets::Icon;
@@ -31,7 +32,7 @@ impl MainWindow {
                 cx,
             );
         }
-        let groups = self.entry_menu();
+        let groups = self.entry_menu(cx);
         self.open_menu_groups(at, groups, false, cx);
     }
 
@@ -47,7 +48,7 @@ impl MainWindow {
             return;
         }
         let (at, groups) = if self.selected_count() > 0 {
-            (self.under_cursor(), self.entry_menu())
+            (self.under_cursor(), self.entry_menu(cx))
         } else {
             (self.list_corner(), self.space_menu(cx))
         };
@@ -58,12 +59,21 @@ impl MainWindow {
         self.pick.is_none() && !self.is_on_start() && self.listing.is_some()
     }
 
-    fn entry_menu(&self) -> Vec<Vec<MenuItem>> {
+    fn part_menu(&self, at: MenuAt, cx: &App) -> Vec<Vec<MenuItem>> {
+        self.parts
+            .menu(at, &self.scene(), cx)
+            .into_iter()
+            .map(|items| items.into_iter().map(MenuItem::from).collect())
+            .collect()
+    }
+
+    fn entry_menu(&self, cx: &App) -> Vec<Vec<MenuItem>> {
         if self.trash_open() {
             return vec![vec![MenuItem::run(Icon::Undo, &RESTORE)]];
         }
+        let from_parts = self.part_menu(MenuAt::Entry, cx);
         if self.folder_rules().replaces_menu {
-            return Vec::new();
+            return from_parts;
         }
         let one = self.selected_count() == 1;
         let lone = |item: MenuItem| one.then_some(item);
@@ -95,6 +105,9 @@ impl MainWindow {
             vec![MenuItem::run(Icon::Trash, &TRASH).with_look(Look::Danger)],
             vec![MenuItem::run(Icon::Info, &PROPERTIES)],
         ]
+        .into_iter()
+        .chain(from_parts)
+        .collect()
     }
 
     fn lone_folder(&self) -> Option<PathBuf> {
@@ -128,6 +141,13 @@ impl MainWindow {
             .as_ref()
             .is_some_and(|listing| !listing.entries.is_empty());
         let select_all = any.then(|| MenuItem::run(Icon::SelectAll, &SELECT_ALL));
+        let from_parts = self.part_menu(MenuAt::Sheet, cx);
+        if self.folder_rules().replaces_menu && !from_parts.is_empty() {
+            return from_parts
+                .into_iter()
+                .chain([select_all.into_iter().collect()])
+                .collect();
+        }
         if self.folder_rules().replaces_menu {
             let full = self.trash_open() && self.trash_count().is_some_and(|count| count > 0);
             let empty_trash = full.then(|| MenuItem::run(Icon::Trash, &EMPTY_TRASH));
@@ -163,6 +183,9 @@ impl MainWindow {
             self.view_items(),
             vec![hidden],
         ]
+        .into_iter()
+        .chain(from_parts)
+        .collect()
     }
 
     fn under_cursor(&self) -> Point<Pixels> {

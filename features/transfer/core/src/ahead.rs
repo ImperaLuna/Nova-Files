@@ -1,0 +1,140 @@
+use nova_files_api::ConflictKind;
+
+use nova_files_jobs::clash::clash;
+use nova_files_jobs::control::Control;
+use nova_files_jobs::plan::Item;
+
+pub struct Ahead<'a> {
+    items: &'a [Item],
+    found: Option<Vec<(ConflictKind, Vec<usize>)>>,
+}
+
+impl<'a> Ahead<'a> {
+    pub const fn new(items: &'a [Item]) -> Self {
+        Self { items, found: None }
+    }
+
+    pub fn more(&mut self, at: usize, kind: ConflictKind, control: &Control) -> u64 {
+        if !is_name_clash(kind) {
+            return 0;
+        }
+        let items = self.items;
+        let found = self.found.get_or_insert_with(|| look(items, control));
+        let more = found
+            .iter()
+            .find(|(found, _)| *found == kind)
+            .map_or(0, |(_, places)| {
+                places.len() - places.partition_point(|&index| index <= at)
+            });
+        u64::try_from(more).unwrap_or(u64::MAX)
+    }
+}
+
+const fn is_name_clash(kind: ConflictKind) -> bool {
+    matches!(
+        kind,
+        ConflictKind::FileExists
+            | ConflictKind::FolderExists
+            | ConflictKind::KindMismatch
+            | ConflictKind::SameFile
+    )
+}
+
+fn look(items: &[Item], control: &Control) -> Vec<(ConflictKind, Vec<usize>)> {
+    let mut found: Vec<(ConflictKind, Vec<usize>)> = Vec::new();
+    for (index, item) in items.iter().enumerate() {
+        if control.checkpoint().is_err() {
+            break;
+        }
+        if item.to.symlink_metadata().is_err() {
+            continue;
+        }
+        if let Ok(Some(kind)) = clash(&item.from, item.kind, &item.to)
+            && is_name_clash(kind)
+        {
+            match found.iter_mut().find(|(found, _)| *found == kind) {
+                Some((_, places)) => places.push(index),
+                None => found.push((kind, vec![index])),
+            }
+        }
+    }
+    found
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use super::*;
+    use nova_files_jobs::plan::{Entry, Kind};
+    use nova_files_jobs::test_folder::TestFolder;
+
+    fn item(from: &Path, to: &Path, kind: Kind) -> Item {
+        Item {
+            from: from.to_path_buf(),
+            to: to.to_path_buf(),
+            kind,
+            entry: Entry::default(),
+        }
+    }
+
+    #[test]
+    fn counts_the_later_items_whose_names_are_taken_by_kind() {
+        let folder = TestFolder::new("ops-ahead");
+        let file = Kind::File { size: 1 };
+        let sources = folder.path().join("sources");
+        let into = folder.path().join("into");
+        fs::create_dir_all(sources.join("e")).unwrap();
+        fs::create_dir_all(into.join("e")).unwrap();
+        for name in ["a", "b", "c", "d"] {
+            folder.file(&format!("sources/{name}"), name);
+        }
+        for name in ["a", "b", "d"] {
+            folder.file(&format!("into/{name}"), "there");
+        }
+        let items: Vec<_> = ["a", "b", "c", "d"]
+            .iter()
+            .map(|name| item(&sources.join(name), &into.join(name), file))
+            .chain([item(&sources.join("e"), &into.join("e"), Kind::Folder)])
+            .collect();
+        let control = Control::default();
+        let mut ahead = Ahead::new(&items);
+
+        assert_eq!(ahead.more(0, ConflictKind::FileExists, &control), 2);
+        assert_eq!(ahead.more(1, ConflictKind::FileExists, &control), 1);
+        assert_eq!(ahead.more(3, ConflictKind::FileExists, &control), 0);
+        assert_eq!(ahead.more(0, ConflictKind::FolderExists, &control), 1);
+        fs::remove_file(into.join("d")).unwrap();
+        assert_eq!(ahead.more(1, ConflictKind::FileExists, &control), 1);
+    }
+
+    #[test]
+    fn only_a_taken_name_is_counted_ahead() {
+        let folder = TestFolder::new("ops-ahead-other");
+        let from = folder.file("a", "a");
+        let to = folder.file("b", "b");
+        let items = [item(&from, &to, Kind::File { size: 1 })];
+        let control = Control::default();
+        let mut ahead = Ahead::new(&items);
+
+        assert_eq!(ahead.more(0, ConflictKind::NoSpace, &control), 0);
+        assert!(ahead.found.is_none(), "nothing looked at for it");
+    }
+
+    #[test]
+    fn a_cancel_stops_the_look() {
+        let folder = TestFolder::new("ops-ahead-cancel");
+        let from = folder.file("a", "a");
+        let to = folder.file("b", "b");
+        let items = [
+            item(&from, &to, Kind::File { size: 1 }),
+            item(&from, &to, Kind::File { size: 1 }),
+        ];
+        let control = Control::default();
+        control.cancel();
+        let mut ahead = Ahead::new(&items);
+
+        assert_eq!(ahead.more(0, ConflictKind::FileExists, &control), 0);
+    }
+}

@@ -3586,6 +3586,7 @@ dependencies = [
  "nova-files-dbus",
  "nova-files-drives-api",
  "nova-files-folders-api",
+ "nova-files-look-api",
  "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-settings-api",
@@ -3621,6 +3622,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-archives-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "nova-files-api",
+ "nova-files-jobs",
+ "nova-files-rename-api",
+ "rustix 1.1.6",
+]
+
+[[package]]
 name = "nova-files-clipboard-api"
 version = "0.1.0"
 dependencies = [
@@ -3631,27 +3643,30 @@ dependencies = [
 name = "nova-files-core"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "log",
  "nova-files-api",
+ "nova-files-archives-core",
  "nova-files-clipboard-api",
+ "nova-files-delete-core",
  "nova-files-disk",
  "nova-files-drives-api",
  "nova-files-drives-core",
- "nova-files-entries",
+ "nova-files-entries-core",
  "nova-files-folders-api",
  "nova-files-folders-core",
  "nova-files-index",
  "nova-files-jobs",
+ "nova-files-look-api",
+ "nova-files-look-core",
  "nova-files-messages",
  "nova-files-open-api",
  "nova-files-open-core",
  "nova-files-picker-api",
- "nova-files-rename-api",
  "nova-files-rename-core",
  "nova-files-settings-api",
  "nova-files-settings-core",
  "nova-files-thumbnailer-launch",
+ "nova-files-transfer-core",
  "nova-files-trash-api",
  "nova-files-trash-core",
  "rustix 1.1.6",
@@ -3670,10 +3685,21 @@ dependencies = [
  "nova-files-api",
  "nova-files-core",
  "nova-files-drives-api",
+ "nova-files-look-api",
  "nova-files-open-api",
  "nova-files-picker-api",
  "rustix 1.1.6",
  "zbus",
+]
+
+[[package]]
+name = "nova-files-delete-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-jobs",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -3700,7 +3726,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nova-files-entries"
+name = "nova-files-entries-core"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
@@ -3737,6 +3763,26 @@ dependencies = [
  "nova-files-disk",
  "nova-files-messages",
  "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-look-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
+name = "nova-files-look-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-disk",
+ "nova-files-look-api",
+ "nova-files-settings-api",
+ "nova-files-settings-core",
+ "toml_edit 0.25.18+spec-1.1.0",
 ]
 
 [[package]]
@@ -3805,6 +3851,7 @@ name = "nova-files-shell"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "nova-files-api",
  "nova-files-messages",
 ]
 
@@ -3825,6 +3872,16 @@ name = "nova-files-thumbnailer-launch"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+ "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-transfer-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-jobs",
  "rustix 1.1.6",
 ]
 
@@ -3864,6 +3921,7 @@ dependencies = [
  "nova-files-clipboard-api",
  "nova-files-drives-api",
  "nova-files-folders-api",
+ "nova-files-look-api",
  "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-settings-api",

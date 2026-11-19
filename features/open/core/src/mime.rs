@@ -5,6 +5,7 @@ use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
 
 use nova_files_api::{FileTypes, IconKind, glob_matches};
 
@@ -264,6 +265,43 @@ impl nova_files_disk::ports::Mimes for MimeTypes {
 
     fn icon_kind(&self, mime: &str) -> IconKind {
         Self::icon_kind(self, mime)
+    }
+}
+
+#[derive(Debug)]
+pub struct LazyMimes(pub Arc<OnceLock<MimeTypes>>);
+
+impl LazyMimes {
+    fn types(&self) -> &MimeTypes {
+        self.0.get_or_init(MimeTypes::from_env)
+    }
+}
+
+impl FileTypes for LazyMimes {
+    fn of(&self, name: &OsStr) -> Option<&str> {
+        self.types().of(name)
+    }
+
+    fn is_a(&self, mime: &str, wanted: &str) -> bool {
+        self.types().is_a(mime, wanted)
+    }
+}
+
+impl nova_files_disk::ports::Mimes for LazyMimes {
+    fn ancestry(&self, mime: &str) -> Vec<String> {
+        self.types().ancestry(mime)
+    }
+
+    fn name(&self, mime: &str) -> Option<String> {
+        self.types().name(mime)
+    }
+
+    fn icon_names(&self, mime: &str) -> Vec<String> {
+        self.types().icon_names(mime)
+    }
+
+    fn icon_kind(&self, mime: &str) -> IconKind {
+        self.types().icon_kind(mime)
     }
 }
 

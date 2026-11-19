@@ -23,7 +23,7 @@ pub use nova_files_open_api::NotOpened;
 use nova_files_open_api::{Event, TakeOut};
 
 pub use folders::{NotDefault, make_default_for_folders, opens_folders};
-pub use mime::MimeTypes;
+pub use mime::{LazyMimes, MimeTypes};
 pub use with::Worker as OpenWithWorker;
 
 const FLATPAK_INFO: &str = "/.flatpak-info";

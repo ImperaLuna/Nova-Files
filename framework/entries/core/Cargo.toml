@@ -1,0 +1,27 @@
+# nova-files-entries-core
+#
+# The core side of the list on screen: reading a folder, ordering it,
+# reading its details and icons a screenful at a time, and the per-client
+# listing a newer one cancels. Features list through it and watch rows
+# through the RowWatch port.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-disk
+
+[package]
+name = "nova-files-entries-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true
+nova-files-disk.workspace = true

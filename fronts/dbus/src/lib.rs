@@ -162,6 +162,7 @@ impl RunningInstance {
 pub fn sent_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Command>(),
+        MessageType::of::<nova_files_look_api::Command>(),
         MessageType::of::<nova_files_open_api::Command>(),
     ]
 }
