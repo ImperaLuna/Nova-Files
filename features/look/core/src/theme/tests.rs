@@ -9,8 +9,11 @@ use std::time::Duration;
 
 use nova_files_api::{Color, DesktopLook, Envelope, Palette};
 use nova_files_settings_api::{SettingChange, Settings};
+use nova_files_settings_core::Store as SettingsStore;
 
 use super::*;
+
+const SETTINGS_LISTENER: ClientId = ClientId(u64::MAX);
 
 const WAIT: Duration = Duration::from_secs(5);
 const LONG_COMMENT: usize = 4096;
@@ -37,10 +40,8 @@ fn inbox() -> (Arc<dyn EventSink>, Receiver<Event>) {
 }
 
 fn next(events: &Receiver<Event>) -> Arc<Theme> {
-    match events.recv_timeout(WAIT).unwrap() {
-        Event::Theme(theme) => theme,
-        other => panic!("not the theme: {other:?}"),
-    }
+    let Event::Theme(theme) = events.recv_timeout(WAIT).unwrap();
+    theme
 }
 
 fn carbonfox(mode: Mode) -> Theme {
@@ -90,7 +91,7 @@ fn the_appearance_setting_picks_dark_or_light() {
     .unwrap();
     let store = Store::open(Some(&config));
     let settings = SettingsStore::open(Some(&config));
-    store.follow(&settings);
+    settings.listen(SETTINGS_LISTENER, &store.follower());
     let (events, received) = inbox();
     store.listen(ClientId(0), &events);
     assert_eq!(next(&received).mode, Mode::Dark);
@@ -124,7 +125,7 @@ fn system_follows_the_desktop_and_its_accent_is_primary_unless_the_file_sets_one
     .unwrap();
     let store = Store::open(Some(&config));
     let settings = SettingsStore::open(Some(&config));
-    store.follow(&settings);
+    settings.listen(SETTINGS_LISTENER, &store.follower());
     let (events, received) = inbox();
     store.listen(ClientId(0), &events);
     next(&received);

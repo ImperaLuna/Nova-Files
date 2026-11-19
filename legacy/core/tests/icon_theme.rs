@@ -82,7 +82,7 @@ fn icons_through_the_core(root: &Path) {
     assert_eq!(icon_of_the_file(1), FileIcon::BuiltIn(IconKind::Picture));
 
     connection
-        .send(Command::DesktopIconThemes(vec![
+        .send(nova_files_look_api::Command::DesktopIconThemes(vec![
             "Missing".to_owned(),
             THEME.to_owned(),
         ]))

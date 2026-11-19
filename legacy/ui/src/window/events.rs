@@ -152,7 +152,6 @@ impl MainWindow {
             Event::RecentFolders { id, folders } => self.recent_arrived(id, folders, cx),
             Event::SizeMeasured { id, size, state } => self.size_measured(id, size, state, cx),
             Event::OpenWith(answer) => self.open_with_answered(answer, cx),
-            Event::Theme(theme) => Self::theme_arrived(&theme, cx),
             Event::DropWould { id, kind } => self.drop_would_arrived(id, kind, cx),
             event @ (Event::JobProgress { .. }
             | Event::ConflictAnswered { .. }
@@ -260,7 +259,7 @@ impl MainWindow {
         cx.notify();
     }
 
-    fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
+    pub(super) fn theme_arrived(theme: &Theme, cx: &mut Context<Self>) {
         let colors = Colors::new(theme);
         if Colors::of(cx) != colors {
             cx.set_global(colors);

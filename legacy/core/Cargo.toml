@@ -23,6 +23,8 @@
 # - nova-files-entries-core
 # - nova-files-index
 # - nova-files-jobs
+# - nova-files-look-api
+# - nova-files-look-core
 # - nova-files-messages
 # - nova-files-rename-core
 # - nova-files-settings-api
@@ -70,6 +72,8 @@ nova-files-drives-core.workspace = true
 nova-files-entries-core.workspace = true
 nova-files-index.workspace = true
 nova-files-jobs.workspace = true
+nova-files-look-api.workspace = true
+nova-files-look-core.workspace = true
 nova-files-messages.workspace = true
 nova-files-rename-core.workspace = true
 nova-files-settings-api.workspace = true
