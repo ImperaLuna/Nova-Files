@@ -62,6 +62,7 @@ pub struct Navigator {
     tab: Option<TabId>,
     tabs: Vec<TabId>,
     asks: Vec<NavAsk>,
+    closing: bool,
 }
 
 impl EventEmitter<NavEvent> for Navigator {}
@@ -123,6 +124,15 @@ impl Navigator {
     pub fn focus_list(&mut self, cx: &mut Context<Self>) {
         self.asks.push(NavAsk::FocusList);
         cx.emit(NavEvent::Asked);
+    }
+
+    pub fn close(&mut self, cx: &mut Context<Self>) {
+        self.closing = true;
+        cx.notify();
+    }
+
+    pub const fn closing(&self) -> bool {
+        self.closing
     }
 
     pub fn take_asks(&mut self) -> Vec<NavAsk> {
