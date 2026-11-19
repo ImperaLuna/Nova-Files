@@ -3,6 +3,7 @@
 pub mod assets;
 mod command;
 mod entries;
+pub mod format;
 mod host;
 mod island;
 pub mod kind;
