@@ -9,21 +9,18 @@ pub enum Location {
     Start,
     Folder(PathBuf),
     Gathered(Gathering),
-    Properties(Vec<PathBuf>),
     Page(PageRef),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Builtin {
     Gathered(Gathering),
-    Properties(Vec<PathBuf>),
 }
 
 impl PageKind for Builtin {
     fn title(&self) -> SharedString {
         SharedString::new_static(match self {
             Self::Gathered(_) => "Gathered",
-            Self::Properties(_) => "Properties",
         })
     }
 }
@@ -31,7 +28,7 @@ impl PageKind for Builtin {
 impl Location {
     pub fn folder(&self) -> Option<&Path> {
         match self {
-            Self::Start | Self::Gathered(_) | Self::Properties(_) | Self::Page(_) => None,
+            Self::Start | Self::Gathered(_) | Self::Page(_) => None,
             Self::Folder(path) => Some(path),
         }
     }
@@ -42,7 +39,6 @@ impl Location {
             Self::Page(page) => return shell::Location::Page(page.clone()),
             Self::Start => return shell::Location::start(),
             Self::Gathered(place) => Builtin::Gathered(*place),
-            Self::Properties(paths) => Builtin::Properties(paths.clone()),
         };
         shell::Location::Page(PageRef::new(builtin))
     }
@@ -64,6 +60,5 @@ mod tests {
         assert_eq!(Location::from(path).folder(), Some(path));
         assert_eq!(Location::Start.folder(), None);
         assert_eq!(Location::Gathered(Gathering::Games).folder(), None);
-        assert_eq!(Location::Properties(vec![path.to_owned()]).folder(), None);
     }
 }

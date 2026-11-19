@@ -34,3 +34,13 @@ pub enum Event {
     /// The pinned folders, in the user's order.
     Bookmarks(Arc<[Bookmark]>),
 }
+
+/// What a window knows of the places list: the standard folders and the
+/// pinned ones, as last told.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Known {
+    /// The standard folders that exist, in places-list order.
+    pub places: Vec<Place>,
+    /// The pinned folders, in the user's order.
+    pub pinned: Arc<[Bookmark]>,
+}

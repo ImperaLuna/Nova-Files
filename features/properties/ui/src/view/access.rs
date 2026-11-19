@@ -8,12 +8,11 @@ use gpui::{
 };
 use nova_files_properties_api::{Account, PathKind, Properties};
 
-use crate::assets::Icon;
-use crate::theme::{Colors, properties, radius, size, text};
-use crate::view::row::icon;
-use crate::window::{MainWindow, Who};
-use nova_files_shell::widgets::card_group as group;
-use nova_files_shell::widgets::tick_box;
+use nova_files_shell::assets::Icon;
+use nova_files_shell::theme::{Colors, properties, radius, size, text};
+use nova_files_shell::widgets::{card_group as group, icon, tick_box};
+
+use crate::{AccessLevel, PropertiesPart, Who, runs, shared_level};
 
 const LABEL: &str = "Access";
 const OWNER_LABEL: &str = "Owner";
@@ -23,52 +22,54 @@ const MIXED_LABEL: &str = "Mixed";
 const RUNS_LABEL: &str = "Run as a program";
 const INSIDE_LABEL: &str = "Also everything inside";
 
-impl MainWindow {
-    pub(super) fn access(&self, read: &[Arc<Properties>], cx: &Context<Self>) -> AnyElement {
-        let colors = Colors::of(cx);
-        let may = self.may_change_access();
-        let rows = Who::ALL
-            .into_iter()
-            .enumerate()
-            .map(|(index, who)| access_row(index, who, read, may, cx).into_any_element(&colors));
-        let tick = match read {
-            [one] if one.kind == PathKind::File => Some(
-                Tick {
-                    selector: "access-runs",
-                    label: RUNS_LABEL,
-                    ticked: crate::window::runs(one.mode),
-                    may,
-                }
-                .row(
-                    cx.listener(|this, _: &ClickEvent, _, _| this.toggle_runs()),
-                    &colors,
-                ),
+pub(super) fn card(
+    part: &PropertiesPart,
+    read: &[Arc<Properties>],
+    cx: &Context<PropertiesPart>,
+) -> AnyElement {
+    let colors = Colors::of(cx);
+    let may = part.may_change_access();
+    let rows = Who::ALL
+        .into_iter()
+        .enumerate()
+        .map(|(index, who)| access_row(index, who, read, may, cx).into_any_element(&colors));
+    let tick = match read {
+        [one] if one.kind == PathKind::File => Some(
+            Tick {
+                selector: "access-runs",
+                label: RUNS_LABEL,
+                ticked: runs(one.mode),
+                may,
+            }
+            .row(
+                cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_runs(cx)),
+                &colors,
             ),
-            _ if read.iter().any(|one| one.kind == PathKind::Folder) => Some(
-                Tick {
-                    selector: "access-inside",
-                    label: INSIDE_LABEL,
-                    ticked: self.reaches_inside(),
-                    may,
-                }
-                .row(
-                    cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_inside(cx)),
-                    &colors,
-                ),
+        ),
+        _ if read.iter().any(|one| one.kind == PathKind::Folder) => Some(
+            Tick {
+                selector: "access-inside",
+                label: INSIDE_LABEL,
+                ticked: part.reaches_inside(),
+                may,
+            }
+            .row(
+                cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_inside(cx)),
+                &colors,
             ),
-            _ => None,
-        };
-        let card = div()
-            .flex()
-            .flex_col()
-            .gap(size::PLACE_GAP)
-            .p(properties::ACCESS_PAD)
-            .rounded(radius::CARD)
-            .bg(colors.raised)
-            .children(rows)
-            .children(tick);
-        group(LABEL, card.into_any_element(), &colors).into_any_element()
-    }
+        ),
+        _ => None,
+    };
+    let card = div()
+        .flex()
+        .flex_col()
+        .gap(size::PLACE_GAP)
+        .p(properties::ACCESS_PAD)
+        .rounded(radius::CARD)
+        .bg(colors.raised)
+        .children(rows)
+        .children(tick);
+    group(LABEL, card.into_any_element(), &colors).into_any_element()
 }
 
 struct RowParts {
@@ -109,12 +110,11 @@ fn access_row(
     who: Who,
     read: &[Arc<Properties>],
     may: bool,
-    cx: &Context<MainWindow>,
+    cx: &Context<PropertiesPart>,
 ) -> RowParts {
     let colors = Colors::of(cx);
     let (name, role) = names(who, read);
-    let level = crate::window::shared_level(read, who)
-        .map_or(MIXED_LABEL, crate::window::AccessLevel::label);
+    let level = shared_level(read, who).map_or(MIXED_LABEL, AccessLevel::label);
     let chip = div()
         .id(("access", index))
         .debug_selector(move || format!("access-{index}"))

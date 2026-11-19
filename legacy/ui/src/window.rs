@@ -1,4 +1,3 @@
-mod access;
 mod acting;
 mod aiming;
 mod confirm;
@@ -12,12 +11,9 @@ mod gathering;
 mod hidden;
 mod hover_open;
 mod jobs;
-mod measuring;
 mod navigate;
-mod opens_with;
 mod pin;
 mod preview;
-mod properties;
 mod renaming;
 mod rows;
 mod search;
@@ -28,7 +24,6 @@ mod tab_order;
 mod tabs;
 mod views;
 
-pub use access::{Level as AccessLevel, Who, runs, shared_level};
 pub use aiming::Aim;
 pub use dragging::DraggedRow;
 pub use gathered::LIBRARY_LABEL;
@@ -36,7 +31,6 @@ pub use hover_open::{HOVER_OPEN_AFTER, HoverOpens};
 pub use jobs::SHOW_AFTER as JOB_SHOWS_AFTER;
 pub use navigate::tidy;
 pub use preview::{Previewed, QuickLook, Shown};
-pub use properties::Page as PropertiesPage;
 pub use search::{FocusTo, Scope, short_folder};
 pub use slots::from_shell;
 pub use tab_order::{DraggedTab, Side as TabSide, TabChip};
@@ -59,7 +53,6 @@ use nova_files_api::{
 use nova_files_drives_api as drives_api;
 use nova_files_folders_api::{self as folders_api, FolderView};
 use nova_files_gathered_api::{self as gathered_api, Gathering};
-use nova_files_open_api as open_api;
 use nova_files_places_api::{self as places_api, Bookmark, Place};
 use nova_files_preview_api as preview_api;
 use nova_files_properties_api as properties_api;
@@ -70,7 +63,6 @@ use nova_files_shell::{
     FolderRules, Host, KnownFolders, Link, Opening, PageRef, Parts, TabId, ThumbnailsShown,
     WindowParts,
 };
-use nova_files_start_api::{self as start_api, RecentFolder, RecentId};
 
 use self::preview::QuickLooks;
 use self::rows::RowRead;
@@ -144,8 +136,6 @@ pub struct MainWindow {
     pinned: Arc<[Bookmark]>,
     gathered: gathered::GatheredState,
     pub(crate) history: History,
-    pub(crate) recent: Vec<RecentFolder>,
-    pub(crate) recent_asked: RecentId,
     pub(crate) path_bar: Entity<PathBar>,
     pub(crate) asks_sent: u64,
     pub(crate) scroll: UniformListScrollHandle,
@@ -157,7 +147,7 @@ pub struct MainWindow {
     listed_page: Option<PageRef>,
     shown_page: Option<(TabId, PageRef)>,
     known: KnownFolders,
-    pub(crate) drives: nova_files_drives_ui::KnownDrives,
+    pub(crate) drives: nova_files_drives_api::KnownDrives,
     pub(crate) menu: Option<Menu>,
     pub(crate) search: search::Search,
     pub(crate) focus: FocusHandle,
@@ -169,7 +159,6 @@ pub struct MainWindow {
     drop_asks: aiming::Asks,
     hover_open: hover_open::HoverOpen,
     tab_order: tab_order::TabOrder,
-    properties: Option<properties::Page>,
     host: Host,
     pub(crate) parts: WindowParts,
     watching: Vec<Subscription>,
@@ -267,8 +256,6 @@ impl MainWindow {
             pinned: Arc::from([]),
             gathered: gathered::GatheredState::default(),
             history: History::default(),
-            recent: Vec::new(),
-            recent_asked: RecentId(0),
             path_bar: cx.new(|_| PathBar::new(&host)),
             asks_sent: 0,
             scroll: UniformListScrollHandle::new(),
@@ -279,7 +266,7 @@ impl MainWindow {
             listed_page: None,
             shown_page: None,
             known: KnownFolders::default(),
-            drives: nova_files_drives_ui::KnownDrives::default(),
+            drives: nova_files_drives_api::KnownDrives::default(),
             menu: None,
             search: search::Search::new(cx),
             focus: host.list.clone(),
@@ -291,7 +278,6 @@ impl MainWindow {
             drop_asks: aiming::Asks::default(),
             hover_open: hover_open::HoverOpen::default(),
             tab_order: tab_order::TabOrder::default(),
-            properties: None,
             host,
             parts,
             watching: Vec::new(),
@@ -302,16 +288,11 @@ impl MainWindow {
         window
     }
 
-    fn next_ask(&self) -> u64 {
-        self.host.asks.next()
-    }
-
     fn go_first(&mut self, location: &Location, cx: &mut Context<Self>) {
         match location {
             Location::Start => self.open_start(cx),
             Location::Folder(folder) => self.open(folder),
             Location::Gathered(place) => self.open_gathered(*place, cx),
-            Location::Properties(paths) => self.arrive_at_properties(paths, cx),
             Location::Page(page) => self.open_page(page.clone(), cx),
         }
     }
@@ -341,9 +322,6 @@ impl MainWindow {
             Ok(event) => return self.gathered_event(event, cx),
             Err(envelope) => envelope,
         };
-        if let Some(open_api::Event::OpenWith(answer)) = envelope.get::<open_api::Event>() {
-            return self.open_with_answered(answer.clone(), cx);
-        }
         let envelope = match envelope.open::<preview_api::Event>() {
             Ok(preview_api::Event::Previewed { id, preview }) => {
                 return self.preview_arrived(id, Some(preview), cx);
@@ -353,21 +331,14 @@ impl MainWindow {
             }
             Err(envelope) => envelope,
         };
-        let envelope = match envelope.open::<properties_api::Event>() {
-            Ok(event) => return self.properties_event(event, cx),
-            Err(envelope) => envelope,
-        };
+        if let Some(event) = envelope.get::<properties_api::Event>() {
+            self.save_probe_answered(event, cx);
+        }
         let envelope = match envelope.open::<search_api::Event>() {
             Ok(search_api::Event::FindFailed { id, .. }) if self.search.asked == Some(id) => {
                 return self.find_failed(id, cx);
             }
             Ok(_) => return,
-            Err(envelope) => envelope,
-        };
-        let envelope = match envelope.open::<start_api::Event>() {
-            Ok(start_api::Event::RecentFolders { id, folders }) => {
-                return self.recent_arrived(id, folders, cx);
-            }
             Err(envelope) => envelope,
         };
         self.hand_to_parts(envelope, cx);

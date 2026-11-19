@@ -1,12 +1,8 @@
 use std::sync::Arc;
 
-use gpui::{Context, Pixels, Point};
-use nova_files_api::{AccessChange, ModeChange, Operation, Reach};
+use nova_files_api::ModeChange;
 use nova_files_properties_api::Properties;
-
-use super::MainWindow;
-use crate::assets::Icon;
-use crate::menu::{Look, MenuAction, MenuItem};
+use nova_files_shell::assets::Icon;
 
 const READ: u32 = 0o4;
 const WRITE: u32 = 0o2;
@@ -101,7 +97,7 @@ impl Level {
         }
     }
 
-    const fn icon(self) -> Icon {
+    pub(crate) const fn icon(self) -> Icon {
         match self {
             Self::ReadWrite => Icon::Rename,
             Self::ReadOnly => Icon::Eye,
@@ -132,99 +128,6 @@ pub fn shared_level(read: &[Arc<Properties>], who: Who) -> Option<Level> {
     let mut levels = read.iter().map(|one| who.level(one.mode));
     let first = levels.next()?;
     levels.all(|level| level == first).then_some(first)
-}
-
-impl MainWindow {
-    pub fn may_change_access(&self) -> bool {
-        self.properties_page().is_some_and(|page| {
-            let read = page.read();
-            !read.is_empty()
-                && read
-                    .iter()
-                    .all(|one| one.may_change && one.read_only != Some(true))
-        })
-    }
-
-    pub fn reaches_inside(&self) -> bool {
-        self.properties_page().is_some_and(|page| page.inside)
-    }
-
-    pub fn toggle_inside(&mut self, cx: &mut Context<Self>) {
-        if self.properties_page().is_none() {
-            return;
-        }
-        if let Some(page) = self.properties.as_mut() {
-            page.inside = !page.inside;
-            cx.notify();
-        }
-    }
-
-    pub(crate) fn open_access_menu(&mut self, who: Who, at: Point<Pixels>, cx: &mut Context<Self>) {
-        if !self.may_change_access() {
-            return;
-        }
-        let shown = self
-            .properties_page()
-            .and_then(|page| shared_level(&page.read(), who));
-        let items = Level::ALL
-            .into_iter()
-            .map(|level| {
-                let action = MenuAction::SetAccess(who, level);
-                if shown == Some(level) {
-                    MenuItem::new(Icon::Check, level.label(), action).with_look(Look::On)
-                } else {
-                    MenuItem::new(level.icon(), level.label(), action)
-                }
-            })
-            .collect();
-        self.open_menu(at, items, cx);
-    }
-
-    pub(crate) fn set_access(&mut self, who: Who, level: Level) {
-        let (files, folders) = who.change_to(level);
-        self.change_access(files, folders);
-    }
-
-    pub fn toggle_runs(&mut self) {
-        let Some(mode) = self
-            .properties_page()
-            .and_then(|page| page.read().first().map(|one| one.mode))
-        else {
-            return;
-        };
-        self.change_access(run_change(!runs(mode), mode), ModeChange::default());
-    }
-
-    fn change_access(&mut self, files: ModeChange, folders: ModeChange) {
-        if !self.may_change_access() {
-            return;
-        }
-        let Some(page) = self.properties.as_ref() else {
-            return;
-        };
-        let reach = if page.inside {
-            Reach::Inside
-        } else {
-            Reach::Chosen
-        };
-        let paths = page.paths();
-        self.start_job(Operation::ChangeAccess {
-            paths,
-            change: AccessChange {
-                owner: None,
-                group: None,
-                files,
-                folders,
-                reach,
-            },
-        });
-    }
-
-    pub(super) fn access_changed(&mut self) {
-        if self.properties_page().is_some() {
-            self.ask_properties();
-        }
-    }
 }
 
 #[cfg(test)]
