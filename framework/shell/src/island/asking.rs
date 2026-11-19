@@ -12,6 +12,7 @@ const ORDER: [Answer; 5] = [
 
 const ALREADY_HERE: &str = " is already here";
 const NO_TRASH: &str = "its drive has no trash";
+const IN_TRASH: &str = "it is in the Trash already";
 const PASSWORD_NEEDED: &str = "needs a password";
 const PASSWORD_WRONG: &str = "wrong password";
 
@@ -27,6 +28,7 @@ pub fn words(conflict: &Conflict) -> (String, String) {
         ConflictKind::SourceChanged => failure(Failure::SourceChanged),
         ConflictKind::Unsupported => failure(Failure::Unsupported),
         ConflictKind::NoTrash => NO_TRASH,
+        ConflictKind::InTrash => IN_TRASH,
         ConflictKind::PasswordNeeded => PASSWORD_NEEDED,
         ConflictKind::PasswordWrong => PASSWORD_WRONG,
     };
@@ -92,6 +94,8 @@ mod tests {
         );
         let no_trash = conflict(ConflictKind::NoTrash, 0);
         assert_eq!(words(&no_trash).1, ": its drive has no trash");
+        let in_trash = conflict(ConflictKind::InTrash, 0);
+        assert_eq!(words(&in_trash).1, ": it is in the Trash already");
     }
 
     #[test]
@@ -102,6 +106,7 @@ mod tests {
         assert_eq!(answers(ConflictKind::SameFile), [Skip, KeepBoth]);
         assert_eq!(answers(ConflictKind::NoSpace), [Skip, Retry]);
         assert_eq!(answers(ConflictKind::SourceGone), [Skip]);
+        assert_eq!(answers(ConflictKind::InTrash), [Skip]);
         assert_eq!(label(KeepBoth), "Keep both");
         assert_eq!(selector(Replace), "island-replace");
     }

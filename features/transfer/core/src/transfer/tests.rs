@@ -129,3 +129,45 @@ fn a_folder_a_move_emptied_goes_unless_something_keeps_it() {
     assert!(remove_if_empty(&mut running, &mut Folders::default(), &empty, &mut nothing).is_err());
     assert!(empty.exists(), "a cancel leaves it");
 }
+
+#[test]
+fn folders_already_made_get_their_mode_and_times_after_a_cancel() {
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::{Duration, Instant, SystemTime};
+
+    const ASK_WAIT: Duration = Duration::from_secs(5);
+
+    let folder = TestFolder::new("transfer-finish-cancel");
+    let made = folder.path().join("made");
+    fs::create_dir(&made).unwrap();
+    fs::set_permissions(&made, fs::Permissions::from_mode(0o750)).unwrap();
+    let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+    File::open(&made).unwrap().set_modified(modified).unwrap();
+    let clash = folder.file("clash", "new");
+    let into = folder.path().join("into");
+    fs::create_dir(&into).unwrap();
+    fs::write(into.join("clash"), "old").unwrap();
+    let mut running = Running::for_test();
+    let shared = Arc::clone(&running.shared);
+    let canceller = thread::spawn(move || {
+        let deadline = Instant::now() + ASK_WAIT;
+        while shared.control.open().is_none() && Instant::now() < deadline {
+            thread::yield_now();
+        }
+        shared.control.cancel();
+    });
+
+    let (result, _) = transfer_to(
+        &mut running,
+        &[(made, into.join("made")), (clash, into.join("clash"))],
+        How::Copy,
+    );
+    canceller.join().unwrap();
+
+    assert!(matches!(result, Err(Stop::Cancelled)));
+    let copied = fs::metadata(into.join("made")).unwrap();
+    assert_eq!(copied.permissions().mode() & 0o7777, 0o750);
+    assert_eq!(copied.modified().unwrap(), modified);
+}
