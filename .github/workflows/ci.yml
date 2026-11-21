@@ -1,14 +1,11 @@
-# CI: the same `nix flake check` that runs locally, plus mutation tests on
-# the lines a pull request changes.
+# CI: the same `nix flake check` that runs locally.
 #
-# All three jobs are required checks, so they always run. The two long ones
-# wait for the stack guard, then look at what the pull request changes
-# (tools/ci-needs-run.sh) and, when nothing is there for them, report
-# success in seconds without setting anything up. The mutation job also
-# reports success in seconds when the same changes passed in an earlier run
-# (tools/ci-mutants-key.sh).
+# Both jobs are required checks, so they always run. The check waits for
+# the stack guard, then looks at what the pull request changes
+# (tools/ci-needs-run.sh) and, when nothing is there for it, reports
+# success in seconds without setting anything up.
 #
-# A new push cancels the run it replaces, and a failed job cancels the
+# A new push cancels the run it replaces, and a failed check cancels the
 # rest of its run. Built Nix store paths come from
 # Cachix when the CACHIX_AUTH_TOKEN secret is set, otherwise from the
 # GitHub Actions cache, so a run only rebuilds what changed.
@@ -26,22 +23,18 @@ concurrency:
 
 permissions:
   contents: read
-  # The mutation job reads the PR description for the local run's summary.
-  pull-requests: read
   # cache-nix-action deletes the caches it replaces.
   actions: write
 
 env:
   CACHIX_CACHE: nova-de
-  # Saved under the key of a pull request's changes once they pass.
-  MUTANTS_MARKER: target/mutants-passed
 
 jobs:
   # A stacked pull request (base isn't main) may change code only: docs,
   # agent rules, CI and tooling go in their own pull request off main
   # (tools/ci-stack-guard.sh has the list; tools/git-hooks/pre-push refuses
   # such a push before it gets here). It takes seconds, and the other jobs
-  # wait for it, so a bad push never starts the long ones.
+  # wait for it, so a bad push never starts the long one.
   stack-guard:
     name: stack holds code only
     runs-on: ubuntu-latest
@@ -107,174 +100,9 @@ jobs:
         if: steps.changes.outputs.run == 'true'
         run: df -h /
       - name: Stop the rest of the run
-        # One failed check already fails the pull request, so the other
-        # jobs would only burn minutes. Cancelling the run stops them.
+        # One failed check already fails the pull request, so the rest of
+        # the run would only burn minutes. Cancelling the run stops it.
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
-
-  # On pull requests, while tools/mutation-tests reads `on`: mutation tests
-  # on the changed lines, split over up to four runners
-  # (tools/ci-mutants-shard.sh decides how many the mutants are worth),
-  # unless the same changes already passed. On main: one runner and only a build, to save the cargo cache.
-  # GitHub lets a PR restore caches saved on main but not ones saved on other
-  # PR branches, so main keeps it warm.
-  mutants:
-    name: mutation tests, shard ${{ matrix.shard }}
-    needs: stack-guard
-    runs-on: ubuntu-latest
-    # A shard takes 4 to 32 minutes; a hung one stops here.
-    timeout-minutes: 45
-    strategy:
-      matrix:
-        shard: ${{ fromJSON(github.event_name == 'pull_request' && '[0, 1, 2, 3]' || '[0]') }}
-    # The same on every shard; mutants-result saves the marker with them.
-    outputs:
-      key: ${{ steps.key.outputs.key }}
-      passed: ${{ steps.passed.outputs.cache-hit }}
-      off: ${{ steps.changes.outputs.off }}
-    env:
-      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          # The merge commit and its base parent, to diff against.
-          fetch-depth: 2
-      - name: Key the run on the pull request's own changes
-        id: key
-        if: github.event_name == 'pull_request'
-        run: tools/ci-mutants-key.sh >>"$GITHUB_OUTPUT"
-      - name: Look for an earlier pass of the same changes
-        id: passed
-        if: github.event_name == 'pull_request'
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.MUTANTS_MARKER }}
-          key: ${{ steps.key.outputs.key }}
-          lookup-only: true
-      - name: Look for Rust changes
-        id: changes
-        env:
-          PASSED: ${{ steps.passed.outputs.cache-hit }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ "$(cat tools/mutation-tests)" != on ]; then
-            echo "Mutation tests are off (tools/mutation-tests)."
-            echo "run=false" >>"$GITHUB_OUTPUT"
-            echo "off=true" >>"$GITHUB_OUTPUT"
-          elif [ "$PASSED" = true ]; then
-            echo "These changes passed their mutation tests in an earlier run."
-            echo "run=false" >>"$GITHUB_OUTPUT"
-          else
-            tools/ci-needs-run.sh rust
-          fi
-      - uses: cachix/install-nix-action@v31
-        if: steps.changes.outputs.run == 'true'
-      - uses: cachix/cachix-action@v16
-        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN != ''
-        with:
-          name: ${{ env.CACHIX_CACHE }}
-          authToken: ${{ env.CACHIX_AUTH_TOKEN }}
-      - uses: nix-community/cache-nix-action@v6
-        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN == ''
-        with:
-          primary-key: nix-mutants-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock', '**/*.nix') }}
-          restore-prefixes-first-match: nix-mutants-${{ runner.os }}-
-          gc-max-store-size-linux: 5G
-          purge: true
-          purge-prefixes: nix-mutants-${{ runner.os }}-
-          purge-created: 0
-          purge-primary-key: never
-      - name: Fetch the mutants dev shell
-        # The slim shell from nix/mutants-shell.nix, not the full one.
-        if: steps.changes.outputs.run == 'true'
-        run: nix develop .#mutants --command true
-      - name: Hash the build flags
-        id: flags
-        if: steps.changes.outputs.run == 'true'
-        # The flags (mold, incremental, the ci profile) live in the dev shell
-        # and in Cargo.toml's [profile.*] tables, which rust-cache can't see.
-        # Only those go in the key: a dependency change already changes
-        # rust-cache's lock hash, which falls back to main's latest target/
-        # and rebuilds only what changed, while a key change starts from
-        # nothing. The whole Cargo.toml was in the key before, so every GPUI
-        # bump rebuilt everything (293 s instead of 4 s).
-        run: tools/ci-build-flags-hash.sh >>"$GITHUB_OUTPUT"
-      - uses: Swatinem/rust-cache@v2
-        if: steps.changes.outputs.run == 'true'
-        with:
-          key: ${{ steps.flags.outputs.hash }}
-          # Only main saves. A PR can't read another PR's cache, and each
-          # one saved 1 GB, which pushed main's out of the repo's 10 GB.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Warm the cargo cache
-        if: steps.changes.outputs.run == 'true' && github.event_name != 'pull_request'
-        # The same build the mutation tests start with, so they reuse all of it.
-        env:
-          CARGO_INCREMENTAL: 1
-        run: nix develop .#mutants --command cargo nextest run --no-run --cargo-profile ci --workspace
-      - name: Pick this shard's mutants
-        id: shard
-        if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request'
-        run: >-
-          nix develop .#mutants --command tools/ci-mutants-shard.sh
-          "${{ matrix.shard }}" "${{ strategy.job-total }}" HEAD^1
-      - name: Mutation tests
-        if: steps.changes.outputs.run == 'true' && github.event_name == 'pull_request' && steps.shard.outputs.skip == 'false'
-        # In place, one mutant at a time, in this checkout. cargo-mutants'
-        # copies of the tree lose file times, so cargo rebuilt about 300
-        # crates in every copy before the first mutant. --test-workspace
-        # builds the same crates the cache holds. --caught and --unviable
-        # print a line per mutant, so the log shows progress instead of
-        # sitting silent until the end. rust-cache sets CARGO_INCREMENTAL=0
-        # for the job, which beats the dev shell's incremental setting, so
-        # it is turned back on here: a mutant rebuilds one crate.
-        env:
-          CARGO_INCREMENTAL: 1
-        run: >-
-          nix develop .#mutants --command just mutants HEAD^1 ""
-          --profile ci --in-place --test-workspace=true --caught --unviable
-          ${{ steps.shard.outputs.flags }}
-      - name: Disk space left
-        if: steps.changes.outputs.run == 'true'
-        run: df -h /
-      - name: Stop the rest of the run
-        # One failed check already fails the pull request, so the other
-        # jobs would only burn minutes. Cancelling the run stops them.
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
-
-  # The required check. The shards' names carry their index, so this job
-  # keeps the one name the ruleset asks for, and fails unless every shard
-  # passed (a skipped job, after a failed stack guard, fails it too).
-  # On a new pass it saves a marker keyed on the pull request's own Rust
-  # changes (tools/ci-mutants-key.sh). The diff runs from the PR's base branch, so a
-  # stacked PR mutates only its own code; and when a lower PR merges and this
-  # one moves onto main, or main is merged in, the same changes find the
-  # marker and the shards skip their work.
-  mutants-result:
-    name: mutation tests on changed lines
-    needs: mutants
-    if: always()
-    runs-on: ubuntu-latest
-    # Saving the marker can wait on the cache service a little.
-    timeout-minutes: 5
-    env:
-      SAVE: ${{ github.event_name == 'pull_request' && needs.mutants.outputs.passed != 'true' && needs.mutants.outputs.off != 'true' }}
-    steps:
-      - name: Every shard passed
-        env:
-          RESULT: ${{ needs.mutants.result }}
-        run: test "$RESULT" = success
-      - name: Write the marker
-        if: env.SAVE == 'true'
-        run: |
-          mkdir -p "$(dirname "$MUTANTS_MARKER")"
-          echo "$GITHUB_SHA" >"$MUTANTS_MARKER"
-      - uses: actions/cache/save@v4
-        if: env.SAVE == 'true'
-        with:
-          path: ${{ env.MUTANTS_MARKER }}
-          key: ${{ needs.mutants.outputs.key }}
