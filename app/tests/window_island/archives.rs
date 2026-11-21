@@ -207,6 +207,12 @@ async fn compress_as_picks_the_format_the_next_compress_uses(cx: &mut TestAppCon
     assert!(cx.debug_bounds("compress-7z").is_none());
     assert!(cx.debug_bounds("compress-more-rows").is_none());
     click(cx, "compress-more");
+    let island = cx.debug_bounds("island").unwrap();
+    let make = cx.debug_bounds("compress-make").unwrap();
+    assert!(
+        make.right() <= island.right(),
+        "{make:?} outside {island:?}"
+    );
     assert!(cx.debug_bounds("compress-deflate").is_some());
     assert!(cx.debug_bounds("compress-lock").is_some());
     click(cx, "compress-tar-xz");
