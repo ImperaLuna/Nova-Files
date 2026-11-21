@@ -1,5 +1,5 @@
 use gpui::{
-    AnyElement, ClickEvent, Context, Corner, InteractiveElement as _, IntoElement,
+    Anchor, AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
     anchored, deferred, div, prelude::FluentBuilder as _,
 };
@@ -104,7 +104,7 @@ fn filter_button(pick: &Picking, cx: &Context<PickerPart>) -> Option<impl IntoEl
         false,
         &colors,
     )
-    .flex_shrink()
+    .flex_shrink_1()
     .min_w_0()
     .max_w_full()
     .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
@@ -123,7 +123,7 @@ fn filter_button(pick: &Picking, cx: &Context<PickerPart>) -> Option<impl IntoEl
         div().absolute().top_0().left_0().child(
             deferred(
                 anchored()
-                    .anchor(Corner::BottomLeft)
+                    .anchor(Anchor::BottomLeft)
                     .snap_to_window()
                     .child(
                         div()
@@ -154,7 +154,7 @@ fn filter_button(pick: &Picking, cx: &Context<PickerPart>) -> Option<impl IntoEl
         div()
             .relative()
             .flex()
-            .flex_shrink()
+            .flex_shrink_1()
             .min_w_0()
             .max_w(size::FILTER_MAX_WIDTH)
             .child(button)

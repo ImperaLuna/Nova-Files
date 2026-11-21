@@ -133,7 +133,7 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
     let home = TempFolder::tree("menu-several-home");
     let (view, cx) = island_window(cx, tree.path(), &home).await;
     click(cx, "name-0");
-    click_with(cx, "name-1", Modifiers::secondary_key());
+    click_with(cx, "name-1", Modifiers::control());
 
     right_click(cx, "name-0");
     assert_eq!(view.read_with(cx, |view, _| view.selected_count()), 2);

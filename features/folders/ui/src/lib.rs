@@ -6,7 +6,7 @@ mod switch;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use gpui::{App, Context, Pixels, ScrollWheelEvent, Window, px};
+use gpui::{App, Context, Pixels, ScrollEvent, Window, px};
 use nova_files_folders_api::{Command, Event, FolderView, FolderViews, ViewMode};
 use nova_files_places_api::{Known, PlaceKind};
 use nova_files_shell::actions::{BiggerIcons, ShowDetails, ShowGallery, ShowIcons, SmallerIcons};
@@ -139,7 +139,7 @@ impl FoldersPart {
         self.change_view(FolderView { icons, ..view }, cx);
     }
 
-    fn wheel(&mut self, event: &ScrollWheelEvent, cx: &mut Context<Self>) -> bool {
+    fn wheel(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) -> bool {
         if self.shown(cx).mode != ViewMode::Icons {
             return false;
         }

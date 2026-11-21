@@ -8,14 +8,14 @@ pub struct CommandSpec {
     pub id: &'static str,
     pub label: &'static str,
     pub keys: &'static [&'static str],
-    bind: fn(&str, Option<&str>) -> KeyBinding,
+    bind: fn(&'static str, Option<&str>) -> KeyBinding,
     make: fn() -> Box<dyn Action>,
 }
 
 impl CommandSpec {
     pub const fn new(
         (id, label, keys): (&'static str, &'static str, &'static [&'static str]),
-        bind: fn(&str, Option<&str>) -> KeyBinding,
+        bind: fn(&'static str, Option<&str>) -> KeyBinding,
         make: fn() -> Box<dyn Action>,
     ) -> Self {
         Self {
@@ -31,7 +31,7 @@ impl CommandSpec {
         (self.make)()
     }
 
-    pub fn binding(&self, keys: &str) -> KeyBinding {
+    pub fn binding(&self, keys: &'static str) -> KeyBinding {
         (self.bind)(keys, Some(WINDOW_KEYS))
     }
 

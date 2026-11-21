@@ -1,6 +1,4 @@
-use gpui::{
-    Bounds, MouseButton, Pixels, Point, ScrollDelta, ScrollWheelEvent, TouchPhase, point, px,
-};
+use gpui::{Bounds, MouseButton, Pixels, Point, ScrollDelta, ScrollEvent, TouchPhase, point, px};
 
 use super::*;
 
@@ -197,11 +195,12 @@ async fn a_box_in_a_scrolled_list_selects_the_rows_under_it(cx: &mut TestAppCont
 }
 
 fn scroll(cx: &mut VisualTestContext, position: Point<Pixels>, by: Pixels) {
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position,
         delta: ScrollDelta::Pixels(point(px(0.0), by)),
         modifiers: Modifiers::none(),
         touch_phase: TouchPhase::Moved,
+        source: gpui::ScrollSource::Pointer,
     });
     cx.run_until_parked();
 }
