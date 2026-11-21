@@ -432,10 +432,12 @@ fn column_heads(
                 .items_center()
                 .h_full()
                 .child(cells(
-                    head(SortKey::Name, NAME_LABEL),
+                    div().flex().child(head(SortKey::Name, NAME_LABEL)),
                     folder,
                     head(SortKey::Modified, MODIFIED_LABEL),
-                    head(SortKey::Size, SIZE_LABEL).mr(-size::HEAD_BUTTON_PAD),
+                    head(SortKey::Size, SIZE_LABEL)
+                        .justify_end()
+                        .mr(-size::HEAD_BUTTON_PAD),
                     MODIFIED_HEADER_SELECTOR.to_owned(),
                 )),
         )
@@ -459,7 +461,7 @@ fn column_head(
         .id(label)
         .debug_selector(move || selector)
         .flex()
-        .flex_none()
+        .flex_1()
         .items_center()
         .gap(size::HEAD_ARROW_GAP)
         .h(size::HEAD_BUTTON_HEIGHT)
