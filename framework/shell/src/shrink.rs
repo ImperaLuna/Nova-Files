@@ -2,7 +2,7 @@ use gpui::RenderImage;
 use image::{Frame, ImageFormat};
 
 // GPUI draws images in BGRA order.
-// https://github.com/ImperaLuna/zed/tree/2d5e9a92499dba81148304d079cd4ef00e54d0c5/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/939cf372f290301dbfbb783fe91fee4d08cf88de/crates/gpui
 const RED: usize = 0;
 const BLUE: usize = 2;
 
