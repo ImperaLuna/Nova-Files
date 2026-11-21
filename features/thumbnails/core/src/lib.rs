@@ -25,7 +25,7 @@ use nova_files_thumbnails_api::Event;
 const THUMBNAILS_FOLDER: &str = "thumbnails";
 const HELPER_NAME: &str = "nova-files-thumbnailer";
 const BATCH: usize = 8;
-const WORKERS: usize = 4;
+const WORKERS: usize = 6;
 const WORKER_THREAD: &str = "nova-files-thumbnails";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
