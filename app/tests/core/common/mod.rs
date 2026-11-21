@@ -35,6 +35,19 @@ impl Bench {
     }
 
     pub fn with(test: &str, idle_exit: Duration, prepare: impl FnOnce(&Path)) -> Self {
+        Self::spawned(test, idle_exit, prepare, None)
+    }
+
+    pub fn with_archiver(test: &str, archiver: nova_files::Archiver) -> Self {
+        Self::spawned(test, nova_files::IDLE_EXIT, |_| {}, Some(archiver))
+    }
+
+    fn spawned(
+        test: &str,
+        idle_exit: Duration,
+        prepare: impl FnOnce(&Path),
+        archiver: Option<nova_files::Archiver>,
+    ) -> Self {
         let root =
             std::env::temp_dir().join(format!("nova-files-jobs-{test}-{}", std::process::id()));
         fs::remove_dir_all(&root).ok();
@@ -47,7 +60,9 @@ impl Bench {
             data: root.join("home/.local/share"),
             drive_trashes: false,
         };
-        let core = Core(nova_files::spawn_with(idle_exit, Some(home), None, None).unwrap());
+        let core = Core(
+            nova_files::spawn_with_archiver(idle_exit, Some(home), None, None, archiver).unwrap(),
+        );
         Self { root, core }
     }
 
