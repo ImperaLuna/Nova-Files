@@ -2,8 +2,8 @@ use std::ops::Range;
 
 use gpui::{
     App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity, Focusable,
-    GlobalElementId, InspectorElementId, IntoElement, LayoutId, PaintQuad, Pixels, ShapedLine,
-    Style, TextAlign, TextRun, UnderlineStyle, Window, fill, point, px, relative,
+    GlobalElementId, InspectorElementId, LayoutId, PaintQuad, Pixels, ShapedLine, Style, TextAlign,
+    TextRun, UnderlineStyle, Window, fill, point, px, relative,
 };
 
 use super::field::TextField;
@@ -45,14 +45,6 @@ impl Mark {
             Self::Caret(caret) => focused.then(|| fill(caret, colors.caret)),
             Self::Selection(selected) => Some(fill(selected, colors.selection)),
         }
-    }
-}
-
-impl IntoElement for TextElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
     }
 }
 

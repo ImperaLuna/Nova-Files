@@ -2,7 +2,7 @@ use std::path::Path;
 
 use gpui::{
     AnyElement, ClickEvent, Context, Div, HitboxBehavior, InteractiveElement as _, IntoElement,
-    MouseButton, MouseDownEvent, ParentElement as _, ScrollWheelEvent, Stateful,
+    MouseButton, MouseDownEvent, ParentElement as _, ScrollEvent, Stateful,
     StatefulInteractiveElement as _, Styled as _, Window, canvas, div, prelude::FluentBuilder as _,
     transparent_black, uniform_list,
 };
@@ -271,8 +271,8 @@ fn ctrl_scroll(cx: &Context<MainWindow>) -> impl IntoElement {
     canvas(
         |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
         move |_, hitbox, window, _| {
-            window.on_mouse_event(move |event: &ScrollWheelEvent, _, window, cx| {
-                if !event.modifiers.secondary() || !hitbox.is_hovered(window) {
+            window.on_mouse_event(move |event: &ScrollEvent, _, window, cx| {
+                if !event.modifiers.control || !hitbox.is_hovered(window) {
                     return;
                 }
                 let taken = view
@@ -432,10 +432,12 @@ fn column_heads(
                 .items_center()
                 .h_full()
                 .child(cells(
-                    head(SortKey::Name, NAME_LABEL),
+                    div().flex().child(head(SortKey::Name, NAME_LABEL)),
                     folder,
                     head(SortKey::Modified, MODIFIED_LABEL),
-                    head(SortKey::Size, SIZE_LABEL).mr(-size::HEAD_BUTTON_PAD),
+                    head(SortKey::Size, SIZE_LABEL)
+                        .justify_end()
+                        .mr(-size::HEAD_BUTTON_PAD),
                     MODIFIED_HEADER_SELECTOR.to_owned(),
                 )),
         )
@@ -459,7 +461,7 @@ fn column_head(
         .id(label)
         .debug_selector(move || selector)
         .flex()
-        .flex_none()
+        .flex_1()
         .items_center()
         .gap(size::HEAD_ARROW_GAP)
         .h(size::HEAD_BUTTON_HEIGHT)

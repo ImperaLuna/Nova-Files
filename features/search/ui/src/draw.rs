@@ -22,7 +22,7 @@ impl SearchPart {
         let colors = Colors::of(cx);
         let capsule = capsule(&colors)
             .debug_selector(|| "search".to_owned())
-            .flex_shrink()
+            .flex_shrink_1()
             .w(size::SEARCH_WIDTH)
             .px(size::SEARCH_PAD)
             .gap(size::SEARCH_GAP);

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollEvent,
     SharedString, Size, Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
@@ -83,7 +83,7 @@ trait OpenPart {
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
     fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
     fn key_down(&self, event: &KeyDownEvent, scene: &Scene, cx: &mut App) -> bool;
-    fn wheel(&self, event: &ScrollWheelEvent, cx: &mut App) -> bool;
+    fn wheel(&self, event: &ScrollEvent, cx: &mut App) -> bool;
     fn closing(&self, cx: &mut App);
     fn observe(&self, changed: Rc<dyn Fn(&mut App)>, cx: &mut App) -> Subscription;
     fn watch(&self, event: &Event, cx: &mut App);
@@ -437,7 +437,7 @@ impl<P: Part> OpenPart for Opened<P> {
         })
     }
 
-    fn wheel(&self, event: &ScrollWheelEvent, cx: &mut App) -> bool {
+    fn wheel(&self, event: &ScrollEvent, cx: &mut App) -> bool {
         if self.slots.wheels.is_empty() {
             return false;
         }

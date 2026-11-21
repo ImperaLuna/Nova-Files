@@ -16,8 +16,7 @@ pub use row::{RowIcon, entry_kind};
 use gpui::{
     App, Context, Div, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection,
-    ParentElement as _, Render, ScrollWheelEvent, Styled as _, Window, div,
-    prelude::FluentBuilder as _,
+    ParentElement as _, Render, ScrollEvent, Styled as _, Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::commands::{
@@ -105,7 +104,7 @@ impl MainWindow {
         root.on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
             this.band_moved(event, cx);
         }))
-        .on_scroll_wheel(cx.listener(|this, _: &ScrollWheelEvent, _, cx| {
+        .on_scroll(cx.listener(|this, _: &ScrollEvent, _, cx| {
             this.band_scrolled(cx);
         }))
         .on_mouse_up(
