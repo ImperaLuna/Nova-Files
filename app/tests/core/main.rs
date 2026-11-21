@@ -13,6 +13,7 @@ mod files;
 #[path = "common/own_folders.rs"]
 mod own_folders;
 
+mod archive_names;
 mod conflicts;
 mod copy;
 mod deletes;

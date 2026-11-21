@@ -357,7 +357,7 @@ impl Render for TextField {
 }
 
 // GPUI's input handler counts UTF-16 units; the field counts bytes.
-// https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/939cf372f290301dbfbb783fe91fee4d08cf88de/crates/gpui
 impl EntityInputHandler for TextField {
     fn text_for_range(
         &mut self,

@@ -1,4 +1,5 @@
 /target
 /result
 /result-*
-/.claude/
+/.claude/*
+!/.claude/settings.json

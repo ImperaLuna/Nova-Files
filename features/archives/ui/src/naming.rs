@@ -1,26 +1,12 @@
 use std::ffi::{OsStr, OsString};
 
+use nova_files_api::archive::{SEVEN_ENDINGS, ending};
 use nova_files_api::numbered::{Naming, first_free, stem};
 use nova_files_api::{Entry, EntryKind, Packing};
-use nova_files_archives_api::{ENDINGS, SEVEN_ENDINGS};
-
-pub const fn extension(packing: Packing) -> &'static str {
-    match packing {
-        Packing::ZipDeflate | Packing::ZipZstd => ".zip",
-        Packing::TarZstd => ".tar.zst",
-        Packing::TarGzip => ".tar.gz",
-        Packing::TarXz => ".tar.xz",
-        Packing::SevenZip => ".7z",
-    }
-}
 
 pub fn opens(entry: &Entry, seven: bool) -> bool {
-    let name = entry.name.to_string_lossy().to_lowercase();
-    let ending = ENDINGS
-        .iter()
-        .find(|ending| name.len() > ending.len() && name.ends_with(*ending));
     entry.kind == EntryKind::File
-        && ending.is_some_and(|ending| seven || !SEVEN_ENDINGS.contains(ending))
+        && ending(&entry.name).is_some_and(|ending| seven || !SEVEN_ENDINGS.contains(&ending))
 }
 
 pub fn archive_name(
@@ -33,7 +19,7 @@ pub fn archive_name(
         EntryKind::File => stem(&first.name),
     };
     let mut name = base.to_os_string();
-    name.push(extension(packing));
+    name.push(packing.ending());
     first_free(&name, Naming::File, taken)
 }
 

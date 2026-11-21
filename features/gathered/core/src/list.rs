@@ -5,10 +5,11 @@ use std::sync::Arc;
 use std::thread;
 
 use nova_files_api::{
-    Entry, EntryId, EntryKind, Event, HiddenFiles, Listing, ListingId, Order, Unreadable,
+    Entry, EntryId, EntryKind, Event, HiddenFiles, Listing, ListingId, Order, SortKey, Unreadable,
 };
 use nova_files_entries_core::list::{self, Stopped};
-use nova_files_entries_core::{Client, memory, order};
+use nova_files_entries_core::sizes::{self, Homes};
+use nova_files_entries_core::{Client, FolderSizer, memory, order};
 use nova_files_gathered_api::{GatheredFolder, Holds};
 
 const THREAD: &str = "nova-files-list-gathered";
@@ -19,10 +20,11 @@ pub fn list(
     client: &Client,
     id: ListingId,
     folders: impl FnOnce() -> Arc<[GatheredFolder]> + Send + 'static,
-    order: Order,
-    hidden: HiddenFiles,
+    (order, hidden): (Order, HiddenFiles),
+    sizer: Option<&Arc<FolderSizer>>,
 ) {
     let job = client.start_listing(id);
+    let sizer = sizer.filter(|_| order.key == SortKey::Size).cloned();
     let spawned = thread::Builder::new()
         .name(THREAD.to_owned())
         .spawn(move || {
@@ -30,16 +32,26 @@ pub fn list(
                 return;
             }
             let folders = folders();
-            let Some(gathered) = gather(&folders, hidden, order, || job.cancelled()) else {
+            let gathered_in = if sizer.is_some() {
+                Order::default()
+            } else {
+                order
+            };
+            let Some(gathered) = gather(&folders, hidden, gathered_in, || job.cancelled()) else {
                 return;
             };
-            let (entries, homes): (Vec<Entry>, Vec<PathBuf>) = gathered.into_iter().unzip();
-            job.send(Listing {
-                id,
-                path: PathBuf::new(),
-                entries: entries.into(),
-                folders: Some(homes.into()),
-            });
+            if let Some(sizer) = sizer {
+                let place = (id, PathBuf::new());
+                sizes::list_measured_rows(&job, place, gathered, (order, Homes::PerRow), &sizer);
+            } else {
+                let (entries, homes): (Vec<Entry>, Vec<PathBuf>) = gathered.into_iter().unzip();
+                job.send(Listing {
+                    id,
+                    path: PathBuf::new(),
+                    entries: entries.into(),
+                    folders: Some(homes.into()),
+                });
+            }
             memory::give_back();
         });
     if spawned.is_err() {

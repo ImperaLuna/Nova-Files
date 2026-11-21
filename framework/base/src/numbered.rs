@@ -8,10 +8,16 @@ use std::ffi::{OsStr, OsString};
 use std::ops::RangeInclusive;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 
-const TARBALLS: [&[u8]; 4] = [b".tar.gz", b".tar.xz", b".tar.zst", b".tar.bz2"];
+use crate::archive::TARBALLS;
+
+/// The longest name, in bytes, most Linux file systems take.
+pub const NAME_MAX: usize = 255;
 
 /// The numbers tried after the name itself, in order.
 pub const NUMBERS: RangeInclusive<u32> = 2..=10_000;
+
+const UTF8_TAIL_MASK: u8 = 0b1100_0000;
+const UTF8_TAIL: u8 = 0b1000_0000;
 
 /// Where a name takes its number.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,7 +29,9 @@ pub enum Naming {
     Folder,
 }
 
-/// `name` with `number` in it, as `naming` places it.
+/// `name` with `number` in it, as `naming` places it. The part before the
+/// number gives up its end when the whole would pass [`NAME_MAX`], never
+/// in the middle of a UTF-8 character.
 pub fn numbered(name: &OsStr, number: u32, naming: Naming) -> OsString {
     let bytes = name.as_bytes();
     let split = match naming {
@@ -31,10 +39,20 @@ pub fn numbered(name: &OsStr, number: u32, naming: Naming) -> OsString {
         Naming::File => extension_start(bytes).unwrap_or(bytes.len()),
     };
     let (stem, extension) = bytes.split_at(split);
-    let mut numbered = stem.to_vec();
-    numbered.extend(format!(" ({number})").into_bytes());
+    let number = format!(" ({number})").into_bytes();
+    let room = NAME_MAX.saturating_sub(number.len() + extension.len());
+    let mut numbered = stem[..cut(stem, room)].to_vec();
+    numbered.extend(number);
     numbered.extend(extension);
     OsString::from_vec(numbered)
+}
+
+fn cut(stem: &[u8], room: usize) -> usize {
+    if stem.len() <= room {
+        return stem.len();
+    }
+    let continues = |at: usize| stem[at] & UTF8_TAIL_MASK == UTF8_TAIL;
+    (0..=room).rev().find(|&at| !continues(at)).unwrap_or(0)
 }
 
 /// `name` without its extension, a tarball's `.tar.gz` counting as one,
@@ -54,6 +72,16 @@ pub fn first_free(
     if !taken(name) {
         return Some(name.to_os_string());
     }
+    first_numbered(name, naming, taken)
+}
+
+/// The first numbered form of `name` (see [`NUMBERS`]) that `taken` says
+/// is free; `None` when all are taken.
+pub fn first_numbered(
+    name: &OsStr,
+    naming: Naming,
+    taken: impl Fn(&OsStr) -> bool,
+) -> Option<OsString> {
     NUMBERS
         .map(|number| numbered(name, number, naming))
         .find(|candidate| !taken(candidate))
@@ -61,7 +89,10 @@ pub fn first_free(
 
 fn extension_start(name: &[u8]) -> Option<usize> {
     let lower = name.to_ascii_lowercase();
-    if let Some(tarball) = TARBALLS.iter().find(|tarball| lower.ends_with(tarball)) {
+    if let Some(tarball) = TARBALLS
+        .iter()
+        .find(|tarball| lower.ends_with(tarball.as_bytes()))
+    {
         let start = name.len() - tarball.len();
         if start > 0 {
             return Some(start);
@@ -101,6 +132,35 @@ mod tests {
             numbered(OsStr::from_bytes(b"caf\xe9.txt"), 2, Naming::File).as_bytes(),
             b"caf\xe9 (2).txt"
         );
+    }
+
+    #[test]
+    fn a_long_name_gives_up_the_end_of_its_stem() {
+        let extension = ".txt";
+        let long = format!(
+            "{}{extension}",
+            "é".repeat((NAME_MAX - extension.len()) / 2)
+        );
+        let kept = file(&long, 2);
+        let kept = kept.to_str().expect("still UTF-8");
+        assert!(kept.len() <= NAME_MAX, "{} bytes", kept.len());
+        assert!(kept.ends_with("é (2).txt"), "{kept}");
+        let short = format!("{}{extension}", "a".repeat(NAME_MAX - extension.len()));
+        assert_eq!(file(&short, 2).len(), NAME_MAX);
+        let folder = "a".repeat(NAME_MAX);
+        let kept = numbered(OsStr::new(&folder), 10_000, Naming::Folder);
+        assert_eq!(kept.len(), NAME_MAX);
+        assert!(kept.as_bytes().ends_with(b"a (10000)"));
+    }
+
+    #[test]
+    fn a_long_name_that_is_not_utf8_gives_up_its_end() {
+        let mut bytes = vec![0xe9; NAME_MAX];
+        bytes[0] = b'x';
+        let kept = numbered(OsStr::from_bytes(&bytes), 2, Naming::File);
+        assert_eq!(kept.len(), NAME_MAX);
+        assert!(kept.as_bytes().starts_with(b"x\xe9"));
+        assert!(kept.as_bytes().ends_with(b"\xe9 (2)"));
     }
 
     #[test]

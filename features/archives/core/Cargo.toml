@@ -10,7 +10,6 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
-# - nova-files-archives-api
 # - nova-files-disk
 # - nova-files-entries-core
 # - nova-files-jobs
@@ -34,7 +33,6 @@ chrono = "0.4.45"
 # Talks to the helper process: pidfds, polling its pipes, signals.
 rustix = { version = "1.1.6", default-features = false, features = ["event", "fs", "process", "std", "time"] }
 nova-files-api.workspace = true
-nova-files-archives-api.workspace = true
 nova-files-disk.workspace = true
 nova-files-entries-core.workspace = true
 nova-files-jobs.workspace = true

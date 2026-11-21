@@ -3467,7 +3467,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "nova-files-api",
- "nova-files-archives-api",
  "nova-files-disk",
  "nova-files-entries-core",
  "nova-files-jobs",

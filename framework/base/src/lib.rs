@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 mod access;
+pub mod archive;
 mod file_icon;
 mod file_type;
 mod folder;

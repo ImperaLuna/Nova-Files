@@ -200,6 +200,7 @@ pub mod size {
     pub const ROW_PAD: Pixels = px(12.0);
     pub const NAME_GAP: Pixels = px(11.0);
     pub const COLUMN_GAP: Pixels = px(14.0);
+    pub const COLUMN_BLEED: Pixels = px(8.0);
     pub const SHEET_PAD: Pixels = px(8.0);
     pub const ROW_ICON: Pixels = px(22.0);
     pub const ICON_CELL_PAD: Pixels = px(8.0);
@@ -208,7 +209,7 @@ pub mod size {
     pub const ICON_CELL_BESIDE: Pixels = px(240.0);
     pub const ICON_NAME_LINE: Pixels = px(17.0);
     // GPUI lets a line cut short overrun by about the ellipsis.
-    // https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
+    // https://github.com/ImperaLuna/zed/tree/939cf372f290301dbfbb783fe91fee4d08cf88de/crates/gpui
     pub const ICON_NAME_OVERRUN: Pixels = px(6.0);
     pub const STAGE_PAD: Pixels = px(16.0);
     pub const STAGE_CAPTION: Pixels = px(40.0);

@@ -124,7 +124,7 @@ impl Shared {
             && state
                 .listing
                 .as_ref()
-                .is_some_and(|listing| listing.id == run.listed.id)
+                .is_some_and(|listing| Arc::ptr_eq(listing, &run.listed))
             && state.wanted.start < run.entries.end
             && run.entries.start < state.wanted.end
     }
@@ -160,7 +160,7 @@ impl Shared {
         let current = state
             .listing
             .as_ref()
-            .is_some_and(|listing| listing.id == run.listed.id);
+            .is_some_and(|listing| Arc::ptr_eq(listing, &run.listed));
         let Ok(first) = u32::try_from(run.entries.start) else {
             return Ok(());
         };
@@ -244,10 +244,18 @@ mod tests {
         state.next_run().map(|run| run.entries)
     }
 
-    fn run(id: u64, entries: Range<usize>) -> Run {
+    fn run(queue: &Shared, entries: Range<usize>) -> Run {
+        Run {
+            listed: queue.lock().listing.clone().unwrap(),
+            known: None,
+            entries,
+        }
+    }
+
+    fn run_of_another_listing(entries: Range<usize>) -> Run {
         Run {
             listed: Arc::new(Listing {
-                id: ListingId(id),
+                id: ListingId(0),
                 path: PathBuf::new(),
                 entries: Arc::new([]),
                 folders: None,
@@ -285,24 +293,37 @@ mod tests {
     #[test]
     fn a_run_is_wanted_while_some_of_it_is_asked_for() {
         let queue = shared(state(100, 10..20, &[]));
-        assert!(queue.still_wanted(&run(0, 15..30)));
-        assert!(queue.still_wanted(&run(0, 0..11)));
-        assert!(queue.still_wanted(&run(0, 19..20)));
+        assert!(queue.still_wanted(&run(&queue, 15..30)));
+        assert!(queue.still_wanted(&run(&queue, 0..11)));
+        assert!(queue.still_wanted(&run(&queue, 19..20)));
     }
 
     #[test]
     fn a_run_next_to_what_is_asked_for_is_not_wanted() {
         let queue = shared(state(100, 10..20, &[]));
-        assert!(!queue.still_wanted(&run(0, 0..10)));
-        assert!(!queue.still_wanted(&run(0, 20..30)));
+        assert!(!queue.still_wanted(&run(&queue, 0..10)));
+        assert!(!queue.still_wanted(&run(&queue, 20..30)));
     }
 
     #[test]
     fn a_run_of_another_listing_or_a_closed_queue_is_not_wanted() {
         let queue = shared(state(100, 0..20, &[]));
-        assert!(!queue.still_wanted(&run(1, 0..10)));
+        assert!(!queue.still_wanted(&run_of_another_listing(0..10)));
+        let current = run(&queue, 0..10);
         queue.update(|state| state.closed = true);
-        assert!(!queue.still_wanted(&run(0, 0..10)));
+        assert!(!queue.still_wanted(&current));
+    }
+
+    #[test]
+    fn a_run_from_before_the_listing_was_shown_again_is_not_wanted() {
+        let queue = shared(state(100, 0..20, &[]));
+        let before = run(&queue, 0..10);
+        let again = queue.lock().listing.as_deref().cloned().unwrap();
+
+        queue.update(|state| state.listing = Some(Arc::new(again)));
+
+        assert!(!queue.still_wanted(&before));
+        assert!(queue.still_wanted(&run(&queue, 0..10)));
     }
 
     #[test]
@@ -311,7 +332,12 @@ mod tests {
         let (sink, events) = mpsc::channel::<Event>();
 
         queue
-            .send(&run(1, 0..1), vec![Details::default()], Vec::new(), &sink)
+            .send(
+                &run_of_another_listing(0..1),
+                vec![Details::default()],
+                Vec::new(),
+                &sink,
+            )
             .ok();
 
         assert!(events.try_recv().is_err());

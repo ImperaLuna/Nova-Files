@@ -1,14 +1,14 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable as _, Pixels, Size, Subscription,
 };
+use nova_files_api::numbered::stem;
 use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId, Unreadable};
 use nova_files_picker_api::{PickAnswer, PickId, PickKind, PickRequest};
 use nova_files_properties_api::{Event as PropertiesEvent, PropertiesId};
 use nova_files_shell::text::{TextField, TextFieldEvent};
-use nova_files_shell::typed::stem;
 use nova_files_shell::{Click, ClickAnswer, Host, Location, Navigator, Part, SelectionMade, Slots};
 
 use crate::size::{PICKER, PickerState};
@@ -71,7 +71,7 @@ impl PickerPart {
             let text = suggested.to_string_lossy();
             name.update(cx, |field, cx| {
                 field.set_text(&text, cx);
-                field.select_range(stem(&text), cx);
+                field.select_range(0..stem(OsStr::new(&*text)).len(), cx);
             });
         }
         let name_events = cx.subscribe(&name, |this, _, event, cx| {

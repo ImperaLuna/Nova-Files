@@ -74,7 +74,7 @@ in
     ciArgs
     // {
       cargoArtifacts = ciArtifacts;
-      cargoNextestExtraArgs = "--workspace --no-tests=warn";
+      cargoNextestExtraArgs = "--workspace --no-tests=warn --test-threads=$NIX_BUILD_CORES";
       # The D-Bus tests start a private dbus-daemon; the archive tests open
       # 7z archives through 7-Zip.
       nativeCheckInputs = [
@@ -110,6 +110,12 @@ in
     pkgs.cargo
     pkgs.jq
   ];
+
+  framework-size = toolCheck "framework-size" "tools/check-framework-size.sh" [ ];
+
+  shared-part = toolCheck "shared-part" "tools/check-shared-part.sh --self-test" [ ];
+
+  fork-links = toolCheck "fork-links" "tools/check-fork-links.sh" [ ];
 
   clippy-config = toolCheck "clippy-config" "tools/check-clippy-config.sh" [ ];
 

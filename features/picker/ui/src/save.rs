@@ -3,8 +3,8 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use gpui::Context;
+use nova_files_api::numbered::{Naming, first_numbered};
 use nova_files_properties_api::{Command, PropertiesId};
-use nova_files_shell::typed;
 
 use crate::part::{Conflict, PickerPart, Recheck};
 
@@ -39,7 +39,10 @@ impl PickerPart {
                 .map(|listing| &*listing.entries)
                 .unwrap_or_default();
             let names: HashSet<OsString> = shown.iter().map(|entry| folded(&entry.name)).collect();
-            let keep_both = typed::keep_both(&name, |candidate| names.contains(&folded(candidate)));
+            let keep_both = first_numbered(&name, Naming::File, |candidate| {
+                names.contains(&folded(candidate))
+            })
+            .unwrap_or_else(|| name.clone());
             let there = shown
                 .iter()
                 .find(|entry| entry.name == name)
