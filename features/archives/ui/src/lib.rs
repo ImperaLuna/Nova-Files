@@ -6,14 +6,14 @@ mod picker;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use gpui::{App, Context, SharedString, Window};
+use gpui::{App, Context, SharedString, Subscription, Window};
 use nova_files_api::{Event as CoreEvent, ExtractTo, Listing, Operation, Packing};
 use nova_files_archives_api::{Command, Event};
 use nova_files_shell::actions::RenameSelected;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
     FolderRules, Host, Location, MenuAt, MenuGroup, MenuItem, Part, Placed, RenameWhenMade, Scene,
-    Slots, Views, command_spec,
+    SelectionMade, Slots, Views, command_spec,
 };
 
 use naming::{archive_name, opens};
@@ -73,6 +73,7 @@ pub struct ArchivesPart {
     folder: Option<PathBuf>,
     choice: Choice,
     picking: Option<Picking>,
+    _selections: Subscription,
 }
 
 impl ArchivesPart {
@@ -165,15 +166,28 @@ impl ArchivesPart {
     }
 
     fn compress_as(&mut self, _: &CompressAs, _: &mut Window, cx: &mut Context<Self>) {
-        self.picking = Some(Picking::default());
+        self.picking = Some(Picking {
+            choice: self.choice,
+            open: false,
+        });
+        cx.notify();
+    }
+
+    fn pick(&mut self, change: impl FnOnce(&mut Choice), cx: &mut Context<Self>) {
+        if let Some(picking) = self.picking.as_mut() {
+            change(&mut picking.choice);
+        }
         cx.notify();
     }
 
     fn compress_picked(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let Some(picked) = self.picking.take() else {
+            return;
+        };
+        self.choice = picked.choice;
         let packing = self.choice.packing(self.seven);
         let level = self.choice.level.number();
         let locked = self.choice.locked(self.seven);
-        self.picking = None;
         self.make((packing, level, locked), window, cx);
         cx.notify();
     }
@@ -284,8 +298,13 @@ fn compress_item(part: &ArchivesPart, scene: &Scene, cx: &App) -> Vec<MenuItem> 
 }
 
 impl Part for ArchivesPart {
-    fn open(host: &Host, _: &mut Context<Self>) -> Self {
+    fn open(host: &Host, cx: &mut Context<Self>) -> Self {
         host.link.send(Command::Formats).ok();
+        let selections = cx.subscribe(&host.entries, |part, entries, _: &SelectionMade, cx| {
+            if entries.read(cx).selected().is_empty() {
+                part.picking = None;
+            }
+        });
         Self {
             host: host.clone(),
             seven: false,
@@ -293,6 +312,7 @@ impl Part for ArchivesPart {
             folder: None,
             choice: Choice::default(),
             picking: None,
+            _selections: selections,
         }
     }
 

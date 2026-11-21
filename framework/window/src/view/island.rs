@@ -42,10 +42,10 @@ impl MainWindow {
                     cx,
                 )
             })
-        } else if let Some(view) = self.parts.island(&self.scene(cx), cx) {
-            return view.into_any_element();
         } else if let Some(confirm) = &self.island.confirm {
             Some(confirm_parts(confirm, &colors, cx))
+        } else if let Some(view) = self.parts.island(&self.scene(cx), cx) {
+            return view.into_any_element();
         } else if let Some((_, job)) = job {
             let shown = self.jobs_shown(cx);
             if shown.len() > 1 {

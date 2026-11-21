@@ -150,8 +150,9 @@ impl Choice {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct Picking {
+    pub choice: Choice,
     pub open: bool,
 }
 
@@ -168,7 +169,7 @@ pub fn island(
     let picking = part.picking?;
     let what = part.what(cx);
     let colors = Colors::of(cx);
-    let choice = part.choice;
+    let choice = picking.choice;
     let chosen = choice.format(part.seven);
     let mut parts = vec![
         label(&colors)
@@ -184,8 +185,7 @@ pub fn island(
     parts.extend(Format::offered(part.seven).map(|format| {
         chip(format.selector(), format.label(), format == chosen, &colors)
             .on_click(cx.listener(move |part, _: &ClickEvent, _, cx| {
-                part.choice.format = Some(format);
-                cx.notify();
+                part.pick(|choice| choice.format = Some(format), cx);
             }))
             .into_any_element()
     }));
@@ -247,8 +247,7 @@ fn more(
             methods.map(|(selector, words, zstd)| {
                 chip(selector, words, choice.zstd == zstd, colors)
                     .on_click(cx.listener(move |part, _: &ClickEvent, _, cx| {
-                        part.choice.zstd = zstd;
-                        cx.notify();
+                        part.pick(|choice| choice.zstd = zstd, cx);
                     }))
                     .into_any_element()
             }),
@@ -265,8 +264,7 @@ fn more(
                 colors,
             )
             .on_click(cx.listener(move |part, _: &ClickEvent, _, cx| {
-                part.choice.level = level;
-                cx.notify();
+                part.pick(|choice| choice.level = level, cx);
             }))
             .into_any_element()
         }),
@@ -278,8 +276,7 @@ fn more(
             .text_color(colors.text_soft)
             .child(tick_box(choice.locked, colors))
             .on_click(cx.listener(|part, _: &ClickEvent, _, cx| {
-                part.choice.locked = !part.choice.locked;
-                cx.notify();
+                part.pick(|choice| choice.locked = !choice.locked, cx);
             }));
         rows.push(row(PASSWORD, [tick.into_any_element()], colors));
     }
