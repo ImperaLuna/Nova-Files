@@ -1,31 +1,36 @@
 #![forbid(unsafe_code)]
 
 mod naming;
+mod picker;
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use gpui::{App, Context, Window};
+use gpui::{App, Context, SharedString, Subscription, Window};
 use nova_files_api::{Event as CoreEvent, ExtractTo, Listing, Operation, Packing};
 use nova_files_archives_api::{Command, Event};
 use nova_files_shell::actions::RenameSelected;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
     FolderRules, Host, Location, MenuAt, MenuGroup, MenuItem, Part, Placed, RenameWhenMade, Scene,
-    Slots, Views, command_spec,
+    SelectionMade, Slots, Views, command_spec,
 };
 
 use naming::{archive_name, opens};
+use picker::{Choice, Picking};
 
 mod actions {
     #![expect(
         clippy::derive_partial_eq_without_eq,
         reason = "GPUI's actions! macro derives PartialEq only"
     )]
-    gpui::actions!(nova_files_archives, [ExtractHere, ExtractTo, Compress]);
+    gpui::actions!(
+        nova_files_archives,
+        [ExtractHere, ExtractTo, Compress, CompressAs]
+    );
 }
 
-pub use actions::{Compress, ExtractHere, ExtractTo as ExtractToFolder};
+pub use actions::{Compress, CompressAs, ExtractHere, ExtractTo as ExtractToFolder};
 
 command_spec!(
     EXTRACT_HERE,
@@ -42,10 +47,16 @@ command_spec!(
     []
 );
 command_spec!(COMPRESS, Compress, "file.compress", "Compress", []);
+command_spec!(
+    COMPRESS_AS,
+    CompressAs,
+    "file.compress-as",
+    "Compress as…",
+    []
+);
 
 const PICK_TITLE: &str = "Extract to";
 const PICK_LABEL: &str = "Extract";
-const LEVEL: u8 = 6;
 const AFTER_RENAME: u8 = Placed::SECOND + 1;
 const OWNER: &str = "archives";
 const INSIDE: FolderRules = FolderRules {
@@ -60,15 +71,20 @@ pub struct ArchivesPart {
     seven: bool,
     made: RenameWhenMade,
     folder: Option<PathBuf>,
+    choice: Choice,
+    picking: Option<Picking>,
+    _selections: Subscription,
 }
 
 impl ArchivesPart {
-    pub const fn packing(&self) -> Packing {
-        if self.seven {
-            Packing::SevenZip
-        } else {
-            Packing::ZipDeflate
-        }
+    fn what(&self, cx: &App) -> SharedString {
+        let entries = self.host.entries.read(cx);
+        let names: Vec<&OsStr> = entries
+            .selected()
+            .iter()
+            .map(|entry| entry.name.as_os_str())
+            .collect();
+        picker::what(&names)
     }
 
     fn answered(&mut self, event: Event, cx: &mut Context<Self>) {
@@ -144,11 +160,48 @@ impl ArchivesPart {
     }
 
     fn compress(&mut self, _: &Compress, window: &mut Window, cx: &mut Context<Self>) {
+        let packing = self.choice.packing(self.seven);
+        let level = self.choice.level.number();
+        self.make((packing, level, false), window, cx);
+    }
+
+    fn compress_as(&mut self, _: &CompressAs, _: &mut Window, cx: &mut Context<Self>) {
+        self.picking = Some(Picking {
+            choice: self.choice,
+            open: false,
+        });
+        cx.notify();
+    }
+
+    fn pick(&mut self, change: impl FnOnce(&mut Choice), cx: &mut Context<Self>) {
+        if let Some(picking) = self.picking.as_mut() {
+            change(&mut picking.choice);
+        }
+        cx.notify();
+    }
+
+    fn compress_picked(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let Some(picked) = self.picking.take() else {
+            return;
+        };
+        self.choice = picked.choice;
+        let packing = self.choice.packing(self.seven);
+        let level = self.choice.level.number();
+        let locked = self.choice.locked(self.seven);
+        self.make((packing, level, locked), window, cx);
+        cx.notify();
+    }
+
+    fn make(
+        &mut self,
+        (packing, level, locked): (Packing, u8, bool),
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
         let scene = self.host.scene(cx);
         let Some(into) = writable_folder(&scene) else {
             return;
         };
-        let packing = self.packing();
         let entries = self.host.entries.read(cx);
         let Some(listing) = entries.listing().filter(|listing| listing.path == into) else {
             return;
@@ -170,8 +223,8 @@ impl ArchivesPart {
             into,
             name,
             packing,
-            level: LEVEL,
-            locked: false,
+            level,
+            locked,
         };
         self.host
             .island
@@ -185,6 +238,7 @@ impl ArchivesPart {
     fn listed(&mut self, listing: &Listing, _: bool, cx: &mut Context<Self>) {
         if self.folder.as_ref() != Some(&listing.path) {
             self.folder = Some(listing.path.clone());
+            self.picking = None;
             let folder = listing.path.clone();
             self.host.link.send(Command::ArchiveOf { folder }).ok();
         }
@@ -237,17 +291,28 @@ fn compress_item(part: &ArchivesPart, scene: &Scene, cx: &App) -> Vec<MenuItem> 
     if scene.rules.replaces_menu || !can_compress(part, scene, cx) {
         return Vec::new();
     }
-    vec![MenuItem::run(Icon::FileArchive, &COMPRESS)]
+    vec![
+        MenuItem::run(Icon::FileArchive, &COMPRESS),
+        MenuItem::run(Icon::FileArchive, &COMPRESS_AS),
+    ]
 }
 
 impl Part for ArchivesPart {
-    fn open(host: &Host, _: &mut Context<Self>) -> Self {
+    fn open(host: &Host, cx: &mut Context<Self>) -> Self {
         host.link.send(Command::Formats).ok();
+        let selections = cx.subscribe(&host.entries, |part, entries, _: &SelectionMade, cx| {
+            if entries.read(cx).selected().is_empty() {
+                part.picking = None;
+            }
+        });
         Self {
             host: host.clone(),
             seven: false,
             made: RenameWhenMade::default(),
             folder: None,
+            choice: Choice::default(),
+            picking: None,
+            _selections: selections,
         }
     }
 
@@ -257,6 +322,7 @@ impl Part for ArchivesPart {
         slots.command(&EXTRACT_HERE, has_archives, Self::extract_here);
         slots.command(&EXTRACT_TO, has_archives, Self::extract_to);
         slots.command(&COMPRESS, can_compress, Self::compress);
+        slots.command(&COMPRESS_AS, can_compress, Self::compress_as);
         slots.menu_in(
             MenuAt::Entry,
             MenuGroup::Archive,
@@ -265,6 +331,7 @@ impl Part for ArchivesPart {
         );
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, AFTER_RENAME, compress_item);
         slots.listed(Self::listed);
+        slots.island(picker::picking, picker::island);
         slots.watch(Self::watch);
     }
 }

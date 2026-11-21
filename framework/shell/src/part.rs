@@ -177,6 +177,7 @@ pub struct Slots<P> {
     pub(crate) layers: Vec<Card<P>>,
     pub(crate) path_chips: Vec<(u8, Card<P>)>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
+    pub(crate) islands: Vec<(Applies<P>, Card<P>)>,
     pub(crate) row_icons: Vec<RowIcon<P>>,
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
@@ -236,6 +237,7 @@ impl<P> Default for Slots<P> {
             layers: Vec::new(),
             path_chips: Vec::new(),
             list_views: Vec::new(),
+            islands: Vec::new(),
             row_icons: Vec::new(),
             opens: Vec::new(),
             typed: Vec::new(),
@@ -457,6 +459,10 @@ impl<P: Part> Slots<P> {
 
     pub fn list_view(&mut self, applies: Applies<P>, draw: Card<P>) {
         self.list_views.push((applies, draw));
+    }
+
+    pub fn island(&mut self, applies: Applies<P>, draw: Card<P>) {
+        self.islands.push((applies, draw));
     }
 
     pub fn row_icon(&mut self, icon: RowIcon<P>) {

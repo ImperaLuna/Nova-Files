@@ -20,7 +20,7 @@ use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::navigator::FolderPick;
 use crate::opening::Opening;
-use crate::part::{Click, ClickAnswer, DropOver, Part, Slots, Staged};
+use crate::part::{Applies, Card, Click, ClickAnswer, DropOver, Part, Slots, Staged};
 use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
@@ -78,6 +78,7 @@ trait OpenPart {
     fn layers(&self) -> Vec<AnyView>;
     fn path_chips(&self) -> Vec<(u8, AnyView)>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
+    fn island(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
     fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
@@ -154,6 +155,20 @@ struct Opened<P: Part> {
     layers: Vec<AnyView>,
     path_chips: Vec<(u8, AnyView)>,
     list_views: Vec<AnyView>,
+    islands: Vec<AnyView>,
+}
+
+fn first_applying<P: Part>(
+    slots: &[(Applies<P>, Card<P>)],
+    views: &[AnyView],
+    (part, scene): (&P, &Scene),
+    cx: &App,
+) -> Option<AnyView> {
+    slots
+        .iter()
+        .zip(views)
+        .find(|((applies, _), _)| applies(part, scene, cx))
+        .map(|(_, view)| view.clone())
 }
 
 impl<P: Part> OpenPart for Opened<P> {
@@ -359,12 +374,12 @@ impl<P: Part> OpenPart for Opened<P> {
 
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
         let part = self.entity.read(cx);
-        self.slots
-            .list_views
-            .iter()
-            .zip(&self.list_views)
-            .find(|((applies, _), _)| applies(part, scene, cx))
-            .map(|(_, view)| view.clone())
+        first_applying(&self.slots.list_views, &self.list_views, (part, scene), cx)
+    }
+
+    fn island(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
+        let part = self.entity.read(cx);
+        first_applying(&self.slots.islands, &self.islands, (part, scene), cx)
     }
 
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {

@@ -52,12 +52,13 @@ async fn an_archive_offers_extract_in_its_own_group(cx: &mut TestAppContext) {
                 "Copy",
                 "Rename",
                 "Compress",
+                "Compress as…",
                 "Move to Trash",
                 "Properties"
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![2, 4, 8, 9]
+            vec![2, 4, 9, 10]
         )
     );
 
@@ -177,4 +178,67 @@ async fn a_locked_archive_asks_for_its_password_on_the_island(cx: &mut TestAppCo
         .await;
     assert_eq!(fs::read_to_string(&given).unwrap(), "secret");
     assert!(cx.debug_bounds("island-password").is_none());
+}
+
+#[gpui::test]
+async fn compress_as_picks_the_format_the_next_compress_uses(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = archive_tree("archive-compress-as");
+    let home = TempFolder::tree("archive-compress-as-home");
+    let archiver = fake_helper(&home, MAKES_AN_EMPTY_ARCHIVE);
+    cx.update(|cx| {
+        nova_files_window::bind_text_keys(cx);
+        nova_files_window::bind_window_keys(cx);
+    });
+    let (view, cx) =
+        window_with_archiver(cx, (tree.path(), home.path()), Vec::new(), Some(archiver));
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+
+    right_click(cx, "name-2");
+    choose(&view, cx, "Compress as…");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("compress-7z").is_none());
+    assert!(cx.debug_bounds("compress-more-rows").is_none());
+    click(cx, "compress-more");
+    let island = cx.debug_bounds("island").unwrap();
+    let make = cx.debug_bounds("compress-make").unwrap();
+    assert!(
+        make.right() <= island.right(),
+        "{make:?} outside {island:?}"
+    );
+    assert!(cx.debug_bounds("compress-deflate").is_some());
+    assert!(cx.debug_bounds("compress-lock").is_some());
+    click(cx, "compress-tar-xz");
+    click(cx, "compress-cancel");
+    assert!(cx.debug_bounds("compress-make").is_none());
+    right_click(cx, "name-2");
+    choose(&view, cx, "Compress as…");
+    cx.run_until_parked();
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("compress-make").is_none());
+    right_click(cx, "name-2");
+    choose(&view, cx, "Compress as…");
+    cx.run_until_parked();
+    click(cx, "compress-more");
+    click(cx, "compress-tar-gz");
+    assert!(cx.debug_bounds("compress-deflate").is_none());
+    assert!(cx.debug_bounds("compress-lock").is_none());
+    click(cx, "compress-make");
+    wait_for_note(&view, cx, "Made notes.tar.gz").await;
+    assert!(cx.debug_bounds("compress-make").is_none());
+    assert!(tree.path().join("notes.tar.gz").exists());
+    view.condition::<WindowEvent>(cx, MainWindow::renaming)
+        .await;
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+
+    right_click(cx, "name-1");
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_names()),
+        ["bundle.zip"]
+    );
+    choose(&view, cx, "Compress");
+    wait_for_note(&view, cx, "Made bundle.tar.gz").await;
 }
