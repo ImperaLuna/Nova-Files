@@ -470,7 +470,11 @@ mod tests {
             opened_folder(Some("/run/user/7".into())),
             Path::new("/run/user/7/nova-files/opened")
         );
-        assert_eq!(opened_folder(None), env::temp_dir().join(OPENED));
+        let fallback = opened_folder(None);
+        assert_eq!(
+            fallback.strip_prefix(env::temp_dir()),
+            Ok(Path::new(OPENED))
+        );
     }
 
     #[test]

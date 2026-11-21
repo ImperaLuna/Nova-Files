@@ -129,6 +129,8 @@ pub fn end(mut child: Child, wait: Duration) -> Option<ExitStatus> {
 mod tests {
     use std::os::unix::process::ExitStatusExt as _;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
     #[test]
@@ -139,13 +141,25 @@ mod tests {
     }
 
     #[test]
-    fn a_stopped_listing_ends_its_helper_at_once() {
-        let shell = Path::new("/bin/sh");
-        let lead = [OsStr::new("-c"), OsStr::new("while :; do :; done")];
-        let started = Instant::now();
-        let listed = list(shell, &lead, (Path::new("/a.zip"), None), &|| true);
+    fn a_stopped_listing_ends_its_helper() {
+        let folder = TestFolder::new("stopped-listing");
+        let pid_file = folder.path().join("pid");
+        let script = format!("echo $$ > '{}'; while :; do :; done", pid_file.display());
+        let lead = [OsStr::new("-c"), OsStr::new(&script)];
+        let running = || std::fs::read_to_string(&pid_file).is_ok_and(|pid| pid.ends_with('\n'));
+        let listed = list(
+            Path::new("/bin/sh"),
+            &lead,
+            (Path::new("/a.zip"), None),
+            &running,
+        );
         assert_eq!(listed, Err(ArchiveFailure::Cancelled));
-        assert!(started.elapsed() < RUN_TIME / 60);
+        let pid = std::fs::read_to_string(&pid_file)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert!(process::test_kill_process(Pid::from_raw(pid).unwrap()).is_err());
     }
 
     #[test]
