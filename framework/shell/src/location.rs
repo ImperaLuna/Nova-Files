@@ -32,6 +32,10 @@ pub trait PageKind: fmt::Debug + Clone + Eq + Send + Sync + 'static {
         true
     }
 
+    fn measures_folders(&self) -> bool {
+        false
+    }
+
     fn parent(&self) -> Option<PathBuf> {
         None
     }
@@ -46,6 +50,7 @@ trait AnyPage: fmt::Debug + Send + Sync {
     fn views(&self) -> Views;
     fn folder_column(&self) -> bool;
     fn sorted(&self) -> bool;
+    fn measures_folders(&self) -> bool;
     fn parent(&self) -> Option<PathBuf>;
 }
 
@@ -80,6 +85,10 @@ impl<K: PageKind> AnyPage for K {
 
     fn sorted(&self) -> bool {
         PageKind::sorted(self)
+    }
+
+    fn measures_folders(&self) -> bool {
+        PageKind::measures_folders(self)
     }
 
     fn parent(&self) -> Option<PathBuf> {
@@ -121,6 +130,10 @@ impl PageRef {
 
     pub fn sorted(&self) -> bool {
         self.0.sorted()
+    }
+
+    pub fn measures_folders(&self) -> bool {
+        self.0.measures_folders()
     }
 
     pub fn parent(&self) -> Option<PathBuf> {

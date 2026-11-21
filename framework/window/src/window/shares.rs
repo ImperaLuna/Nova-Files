@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use gpui::Context;
 use nova_files_api::{EntryId, FolderSizes, SortKey};
 
+use nova_files_shell::PageRef;
+
 use super::MainWindow;
 
 #[derive(Debug, Default)]
@@ -38,6 +40,7 @@ impl MainWindow {
             }
         }
         if done
+            && !self.waiting()
             && self.shows_shares()
             && let Some(place) = self.place_on_screen_now()
         {
@@ -49,16 +52,19 @@ impl MainWindow {
     pub fn shows_shares(&self) -> bool {
         self.shown_order.key == SortKey::Size
             && self.folder_sizes == Some(FolderSizes::Measured)
-            && self.listed_page.is_none()
             && !self.searching()
-            && self.folder().is_some()
+            && self
+                .listed_page
+                .as_ref()
+                .map_or_else(|| self.folder().is_some(), PageRef::measures_folders)
     }
 
     pub(super) fn size_of_row(&self, index: usize) -> Option<u64> {
-        self.details
+        self.shares
+            .measured
             .get(&index)
-            .and_then(|read| read.details.size)
-            .or_else(|| self.shares.measured.get(&index).copied())
+            .copied()
+            .or_else(|| self.details.get(&index).and_then(|read| read.details.size))
     }
 
     pub fn share(&self, index: usize) -> Option<f32> {

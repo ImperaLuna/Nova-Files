@@ -25,7 +25,9 @@ pub trait MeasureFolders: Send + Sync {
     ) -> Option<Vec<u64>>;
 }
 
-type Sizes = Arc<HashMap<OsString, u64>>;
+type ByName = HashMap<OsString, u64>;
+
+type Sizes = Arc<ByName>;
 
 struct Kept {
     at: Instant,
@@ -51,30 +53,47 @@ impl FolderSizer {
             .map(|kept| (Arc::clone(&kept.sizes), kept.at.elapsed() < FRESH))
     }
 
-    fn keep(&self, folder: PathBuf, sizes: HashMap<OsString, u64>) {
+    fn keep(&self, measured: Vec<(PathBuf, ByName)>) {
+        let at = Instant::now();
+        let room = KEPT_FOLDERS.max(measured.len());
+        let fresh: Vec<PathBuf> = measured.iter().map(|(folder, _)| folder.clone()).collect();
         let mut kept = self.lock();
-        if kept.len() >= KEPT_FOLDERS && !kept.contains_key(&folder) {
+        for (folder, sizes) in measured {
+            kept.insert(
+                folder,
+                Kept {
+                    at,
+                    sizes: Arc::new(sizes),
+                },
+            );
+        }
+        while kept.len() > room {
             let oldest = kept
                 .iter()
+                .filter(|(folder, _)| !fresh.contains(folder))
                 .min_by_key(|(_, kept)| kept.at)
                 .map(|(folder, _)| folder.clone());
-            if let Some(oldest) = oldest {
-                kept.remove(&oldest);
-            }
+            let Some(oldest) = oldest else {
+                break;
+            };
+            kept.remove(&oldest);
         }
-        kept.insert(
-            folder,
-            Kept {
-                at: Instant::now(),
-                sizes: Arc::new(sizes),
-            },
-        );
+        drop(kept);
     }
 
     fn lock(&self) -> MutexGuard<'_, HashMap<PathBuf, Kept>> {
         self.kept.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
+
+pub enum Homes {
+    Shared,
+    PerRow,
+}
+
+type Row = (Entry, PathBuf);
+
+type KeptFor = HashMap<PathBuf, (Sizes, bool)>;
 
 pub fn list_measured(
     job: &ListingJob,
@@ -83,56 +102,126 @@ pub fn list_measured(
     order: Order,
     sizer: &FolderSizer,
 ) {
+    let rows = entries
+        .into_iter()
+        .map(|entry| (entry, path.clone()))
+        .collect();
+    list_measured_rows(job, (id, path), rows, (order, Homes::Shared), sizer);
+}
+
+pub fn list_measured_rows(
+    job: &ListingJob,
+    (id, path): (ListingId, PathBuf),
+    rows: Vec<Row>,
+    (order, homes): (Order, Homes),
+    sizer: &FolderSizer,
+) {
     let cancelled = || job.cancelled();
-    let known = sizer.known(&path);
-    let fresh = known
-        .as_ref()
-        .is_some_and(|(kept, fresh)| *fresh && every_folder_in(&entries, kept));
-    let listed = match &known {
-        Some((kept, _)) => {
-            arrange(&path, entries, order.descending, kept, cancelled).map(|(entries, known)| {
-                let listing = listing(id, path.clone(), entries);
-                job.send_known(listing.clone(), Some(known.into()));
+    let kept = sizer.kept_for(&rows);
+    let fresh = every_folder_fresh(&rows, &kept);
+    let listed = if kept.is_empty() {
+        order::arrange_paired(rows, |entry, home| home.join(&entry.name), order, cancelled).map(
+            |rows| {
+                let listing = listing(id, path, rows, &homes);
+                job.send(listing.clone());
                 listing
-            })
-        }
-        None => order::arrange(&path, entries, order, cancelled).map(|entries| {
-            let listing = listing(id, path.clone(), entries);
-            job.send(listing.clone());
+            },
+        )
+    } else {
+        arrange(rows, order.descending, &kept, cancelled).map(|(rows, known)| {
+            let listing = listing(id, path, rows, &homes);
+            job.send_known(listing.clone(), Some(known.into()));
             listing
-        }),
+        })
     };
     if let Some(listing) = listed.filter(|_| !fresh) {
         measure(job, &listing, sizer);
     }
 }
 
-fn every_folder_in(entries: &[Entry], kept: &HashMap<OsString, u64>) -> bool {
-    entries
-        .iter()
-        .filter(|entry| entry.kind == EntryKind::Folder)
-        .all(|entry| kept.contains_key(&entry.name))
+impl FolderSizer {
+    fn kept_for(&self, rows: &[Row]) -> KeptFor {
+        let mut kept = KeptFor::new();
+        for (_, home) in rows
+            .iter()
+            .filter(|(entry, _)| entry.kind == EntryKind::Folder)
+        {
+            if !kept.contains_key(home)
+                && let Some(known) = self.known(home)
+            {
+                kept.insert(home.clone(), known);
+            }
+        }
+        kept
+    }
 }
 
-fn listing(id: ListingId, path: PathBuf, entries: Vec<Entry>) -> Listing {
+fn every_folder_fresh(rows: &[Row], kept: &KeptFor) -> bool {
+    rows.iter()
+        .filter(|(entry, _)| entry.kind == EntryKind::Folder)
+        .all(|(entry, home)| {
+            kept.get(home)
+                .is_some_and(|(sizes, fresh)| *fresh && sizes.contains_key(&entry.name))
+        })
+}
+
+fn listing(id: ListingId, path: PathBuf, rows: Vec<Row>, homes: &Homes) -> Listing {
+    let (entries, folders): (Vec<Entry>, Vec<PathBuf>) = rows.into_iter().unzip();
     Listing {
         id,
         path,
         entries: entries.into(),
-        folders: None,
+        folders: matches!(homes, Homes::PerRow).then(|| folders.into()),
     }
 }
 
+fn home_of(listing: &Listing, index: usize) -> &Path {
+    listing
+        .folders
+        .as_ref()
+        .and_then(|folders| folders.get(index))
+        .map_or(listing.path.as_path(), PathBuf::as_path)
+}
+
 fn measure(job: &ListingJob, listing: &Listing, sizer: &FolderSizer) {
-    let folders: Vec<&Entry> = listing
-        .entries
-        .iter()
-        .filter(|entry| entry.kind == EntryKind::Folder)
-        .collect();
-    if folders.is_empty() {
+    let mut groups: Vec<(&Path, Vec<&Entry>)> = Vec::new();
+    for (index, entry) in listing.entries.iter().enumerate() {
+        if entry.kind != EntryKind::Folder {
+            continue;
+        }
+        let home = home_of(listing, index);
+        match groups.iter_mut().find(|(known, _)| *known == home) {
+            Some((_, folders)) => folders.push(entry),
+            None => groups.push((home, vec![entry])),
+        }
+    }
+    if groups.is_empty() {
         return;
     }
-    let id = listing.id;
+    let mut measured = Vec::new();
+    let mut to_keep = Vec::new();
+    for (home, folders) in &groups {
+        let Some((in_home, totals)) = measure_in(job, listing.id, home, folders, sizer) else {
+            return;
+        };
+        measured.extend(in_home);
+        to_keep.push((home.to_path_buf(), totals));
+    }
+    sizer.keep(to_keep);
+    job.answer(Event::FoldersMeasured {
+        id: listing.id,
+        sizes: measured,
+        done: true,
+    });
+}
+
+fn measure_in(
+    job: &ListingJob,
+    id: ListingId,
+    home: &Path,
+    folders: &[&Entry],
+    sizer: &FolderSizer,
+) -> Option<(Vec<(EntryId, u64)>, ByName)> {
     let by_slot = |sizes: Vec<(usize, u64)>| -> Vec<(EntryId, u64)> {
         sizes
             .into_iter()
@@ -148,43 +237,35 @@ fn measure(job: &ListingJob, listing: &Listing, sizer: &FolderSizer) {
     };
     let names: Vec<OsString> = folders.iter().map(|entry| entry.name.clone()).collect();
     let stopped = || job.cancelled();
-    let Some(totals) = sizer
+    let totals = sizer
         .measure
-        .measure(&listing.path, &names, &stopped, &told)
-        .filter(|_| !job.cancelled())
-    else {
-        return;
-    };
-    sizer.keep(
-        listing.path.clone(),
-        names.into_iter().zip(totals.iter().copied()).collect(),
-    );
-    job.answer(Event::FoldersMeasured {
-        id,
-        sizes: by_slot(totals.into_iter().enumerate().collect()),
-        done: true,
-    });
+        .measure(home, &names, &stopped, &told)
+        .filter(|_| !job.cancelled())?;
+    let by_name = names.into_iter().zip(totals.iter().copied()).collect();
+    Some((by_slot(totals.into_iter().enumerate().collect()), by_name))
 }
 
 fn arrange(
-    folder: &Path,
-    entries: Vec<Entry>,
+    rows: Vec<Row>,
     descending: bool,
-    sizes: &HashMap<OsString, u64>,
+    kept: &KeptFor,
     cancelled: impl Fn() -> bool,
-) -> Option<(Vec<Entry>, Vec<Details>)> {
-    let paths = entries
+) -> Option<(Vec<Row>, Vec<Details>)> {
+    let paths = rows
         .iter()
-        .map(|entry| (folder.join(&entry.name), entry.kind));
+        .map(|(entry, home)| (home.join(&entry.name), entry.kind));
     let read = details::read_batch(paths, cancelled)?;
-    let mut paired: Vec<(Entry, Details)> = entries
+    let mut paired: Vec<(Row, Details)> = rows
         .into_iter()
         .zip(read)
-        .map(|(entry, mut details)| {
+        .map(|((entry, home), mut details)| {
             if entry.kind == EntryKind::Folder {
-                details.size = sizes.get(&entry.name).copied();
+                details.size = kept
+                    .get(&home)
+                    .and_then(|(sizes, _)| sizes.get(&entry.name))
+                    .copied();
             }
-            (entry, details)
+            ((entry, home), details)
         })
         .collect();
     paired.sort_by(|(_, left), (_, right)| order::known_first(left.size, right.size, descending));
@@ -192,12 +273,15 @@ fn arrange(
         paired
             .into_iter()
             .zip(0..)
-            .map(|((entry, details), index)| {
+            .map(|(((entry, home), details), index)| {
                 (
-                    Entry {
-                        id: EntryId(index),
-                        ..entry
-                    },
+                    (
+                        Entry {
+                            id: EntryId(index),
+                            ..entry
+                        },
+                        home,
+                    ),
                     details,
                 )
             })
