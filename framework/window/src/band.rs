@@ -25,7 +25,7 @@ impl MainWindow {
             from: self.in_content(event.position),
             to: event.position,
             before: self.selection.clone(),
-            add: event.modifiers.secondary(),
+            add: event.modifiers.control,
             dragging: false,
         });
     }

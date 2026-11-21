@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _,
-    KeyDownEvent, Modifiers, Pixels, ScrollWheelEvent, SharedString, Size, Window,
+    KeyDownEvent, Modifiers, Pixels, ScrollEvent, SharedString, Size, Window,
 };
 use nova_files_api::{Entry, EntryId, Event, Listing, ListingId, Order};
 
@@ -69,7 +69,7 @@ pub struct DropOver<'a> {
 pub type RowMenu<P> = fn(&P, &str, &App) -> Vec<Vec<RowItem>>;
 pub type Typed<P> = fn(&mut P, &Jump, &Scene, &mut Context<P>) -> bool;
 pub type KeyDown<P> = fn(&mut P, &KeyDownEvent, &Scene, &mut Context<P>) -> bool;
-pub type Wheel<P> = fn(&mut P, &ScrollWheelEvent, &mut Context<P>) -> bool;
+pub type Wheel<P> = fn(&mut P, &ScrollEvent, &mut Context<P>) -> bool;
 pub type HeadButton<P> = fn(&P, &Scene, &App) -> Option<RowItem>;
 pub type DropTake<P> = fn(&mut P, Location, Vec<PathBuf>, Modifiers, &mut Context<P>);
 pub type Selectable<P> = fn(&P, &Entry, &App) -> bool;

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollWheelEvent,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollEvent,
     SharedString, Size, Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
@@ -316,7 +316,7 @@ impl WindowParts {
             .any(|part| part.key_down(event, scene, cx))
     }
 
-    pub fn wheel(&self, event: &ScrollWheelEvent, cx: &mut App) -> bool {
+    pub fn wheel(&self, event: &ScrollEvent, cx: &mut App) -> bool {
         self.opened.iter().any(|part| part.wheel(event, cx))
     }
 

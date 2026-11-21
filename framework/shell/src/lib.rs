@@ -68,4 +68,4 @@ pub use published::{KnownFolder, KnownFolders, Published, ThumbnailsShown};
 pub use rules::{FolderName, FolderRules, RulesBook, Views};
 pub use scene::{Scene, Showing};
 pub use text::{TextField, TextFieldEvent};
-pub use windows::{Asked, CloseWhen, Opener, WindowAsk, WindowLook, open_window};
+pub use windows::{Asked, CloseWhen, ForeignParent, Opener, WindowAsk, WindowLook, open_window};

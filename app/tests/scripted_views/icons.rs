@@ -1,6 +1,4 @@
-use gpui::{
-    Bounds, Modifiers, MouseButton, Pixels, Point, ScrollDelta, ScrollWheelEvent, TouchPhase,
-};
+use gpui::{Bounds, Modifiers, MouseButton, Pixels, Point, ScrollDelta, ScrollEvent, TouchPhase};
 use nova_files_folders_api::IconSize;
 
 use super::*;
@@ -54,11 +52,12 @@ fn sizes_asked(core: &mut Core) -> Vec<ThumbnailSize> {
 fn ctrl_scroll(cx: &mut VisualTestContext, lines: f32) {
     let position = cell(cx, 0).center();
     cx.simulate_mouse_move(position, None, Modifiers::none());
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position,
         delta: ScrollDelta::Lines(point(0.0, lines)),
-        modifiers: Modifiers::secondary_key(),
+        modifiers: Modifiers::control(),
         touch_phase: TouchPhase::Moved,
+        source: gpui::ScrollSource::Pointer,
     });
     cx.run_until_parked();
 }
@@ -281,22 +280,24 @@ fn only_ctrl_scroll_over_the_entries_steps_the_icons(cx: &mut TestAppContext) {
     let (view, cx, _) = icons(cx);
     let position = cell(cx, 0).center();
     cx.simulate_mouse_move(position, None, Modifiers::none());
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position,
         delta: ScrollDelta::Lines(point(0.0, 1.0)),
         modifiers: Modifiers::none(),
         touch_phase: TouchPhase::Moved,
+        source: gpui::ScrollSource::Pointer,
     });
     cx.run_until_parked();
     assert_eq!(icon_size(&view, cx), IconSize::Medium);
 
     let outside = point(px(1.0), px(1.0));
     cx.simulate_mouse_move(outside, None, Modifiers::none());
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position: outside,
         delta: ScrollDelta::Lines(point(0.0, 1.0)),
-        modifiers: Modifiers::secondary_key(),
+        modifiers: Modifiers::control(),
         touch_phase: TouchPhase::Moved,
+        source: gpui::ScrollSource::Pointer,
     });
     cx.run_until_parked();
     assert_eq!(icon_size(&view, cx), IconSize::Medium);

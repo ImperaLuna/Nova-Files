@@ -177,7 +177,7 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
             options.window_bounds = Some(WindowBounds::Windowed(Bounds::centered(None, size, cx)));
         }
         options.titlebar = look.titlebar;
-        options.foreign_parent = look.foreign_parent;
+        let _ = look.foreign_parent;
     }
     let connector = connector.clone();
     let location = match folder {

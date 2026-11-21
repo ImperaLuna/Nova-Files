@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gpui::{App, ForeignParent, Global, Pixels, Size, TitlebarOptions};
+use gpui::{App, Global, Pixels, Size, TitlebarOptions};
 use nova_files_api::Connector;
 
 use crate::opening::Opening;
@@ -33,4 +33,10 @@ pub fn open_window(ask: Asked, cx: &mut App) {
     if let Some(opener) = cx.try_global::<Opener>().cloned() {
         (opener.0)(ask, cx);
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ForeignParent {
+    Wayland(String),
+    X11(u32),
 }

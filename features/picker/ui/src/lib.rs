@@ -15,8 +15,9 @@ pub use window::{PickOpening, PickWindow, closes};
 use std::ffi::OsStr;
 use std::path::{Component, Path};
 
-use gpui::{ForeignParent, TitlebarOptions};
+use gpui::TitlebarOptions;
 use nova_files_picker_api::{ParentWindow, PickKind, PickRequest};
+use nova_files_shell::ForeignParent;
 
 const MNEMONIC: char = '_';
 

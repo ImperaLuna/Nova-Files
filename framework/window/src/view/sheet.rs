@@ -2,7 +2,7 @@ use std::path::Path;
 
 use gpui::{
     AnyElement, ClickEvent, Context, Div, HitboxBehavior, InteractiveElement as _, IntoElement,
-    MouseButton, MouseDownEvent, ParentElement as _, ScrollWheelEvent, Stateful,
+    MouseButton, MouseDownEvent, ParentElement as _, ScrollEvent, Stateful,
     StatefulInteractiveElement as _, Styled as _, Window, canvas, div, prelude::FluentBuilder as _,
     transparent_black, uniform_list,
 };
@@ -271,8 +271,8 @@ fn ctrl_scroll(cx: &Context<MainWindow>) -> impl IntoElement {
     canvas(
         |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
         move |_, hitbox, window, _| {
-            window.on_mouse_event(move |event: &ScrollWheelEvent, _, window, cx| {
-                if !event.modifiers.secondary() || !hitbox.is_hovered(window) {
+            window.on_mouse_event(move |event: &ScrollEvent, _, window, cx| {
+                if !event.modifiers.control || !hitbox.is_hovered(window) {
                     return;
                 }
                 let taken = view
