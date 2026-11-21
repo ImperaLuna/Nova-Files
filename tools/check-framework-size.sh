@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 # Fails when framework/base or what framework/shell offers outgrows its
-# ceiling. Each ceiling sits about 10% over the size when it was set, so
-# ordinary work fits; past it, move the new part into the feature that needs
-# it, or raise the ceiling in a pull request that says why.
+# ceiling. Test files (tests.rs, tests/) don't count; inline test modules
+# do. Each ceiling sits about 10% over the size when it was set, so ordinary
+# work fits; past it, move the new part into the feature that needs it, or
+# raise the ceiling in a pull request that says why.
 set -euo pipefail
 
-readonly BASE_CEILING=2150
+readonly BASE_CEILING=2100
 readonly SHELL_CEILING=1250
 
+code_files() { # <folder>
+    find "$1" -name '*.rs' -not -name tests.rs -not -path '*/tests/*' -print0
+}
+
 base_lines() {
-    find framework/base -name '*.rs' -print0 | xargs -0 cat | wc -l
+    code_files framework/base | xargs -0 cat | wc -l
 }
 
 shell_surface() {
-    find framework/shell -name '*.rs' -not -name tests.rs -not -path '*/tests/*' -print0 |
+    code_files framework/shell |
         xargs -0 grep -hE '^[[:space:]]*pub ' | wc -l
 }
 

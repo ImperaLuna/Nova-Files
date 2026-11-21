@@ -4,7 +4,6 @@
 # gpui_platform pins differ. A kept comment that links the fork states a fact
 # about the GPUI in use, so a move to a new pin rechecks each one.
 set -euo pipefail
-source "$(dirname "$0")/code-dirs.sh"
 
 readonly FORK=https://github.com/ImperaLuna/zed
 
@@ -12,9 +11,9 @@ pin_of() { # <crate>
     sed -n "s/^$1 = { git = \"${FORK//\//\\/}\", rev = \"\([0-9a-f]*\)\".*/\1/p" Cargo.toml
 }
 
-stale_links() { # <rev>; file paths on stdin, NUL-separated; prints bad lines
-    xargs -0 grep -HnE "${FORK}/(tree|blob)/" |
-        grep -vE "${FORK}/(tree|blob)/$1(/|[[:space:]]|\$)" || true
+stale_links() { # <rev>; file paths on stdin, NUL-separated; prints bad links
+    xargs -0 grep -HnoE "${FORK}/(tree|blob)/[^[:space:]>)]*" |
+        grep -vE "${FORK}/(tree|blob)/$1([^0-9a-f]|\$)" || true
 }
 
 expect_stale() { # <line> <rev> <count>
@@ -34,6 +33,8 @@ expect_stale "// ${FORK}/tree/nova/v0.233.10/crates/gpui" "$SAMPLE_REV" 1
 expect_stale "// ${FORK}/tree/${SAMPLE_REV}/crates/gpui" "$SAMPLE_REV" 0
 expect_stale "// ${FORK}/blob/${SAMPLE_REV}/crates/gpui/src/app.rs" "$SAMPLE_REV" 0
 expect_stale "// https://github.com/zed-industries/zed/issues/1" "$SAMPLE_REV" 0
+expect_stale "/// <${FORK}/tree/${SAMPLE_REV}>." "$SAMPLE_REV" 0
+expect_stale "// ${FORK}/tree/${SAMPLE_REV}/a and ${FORK}/tree/nova/v0.1/b" "$SAMPLE_REV" 1
 
 gpui=$(pin_of gpui)
 platform=$(pin_of gpui_platform)
@@ -46,7 +47,12 @@ if [[ "$gpui" != "$platform" ]]; then
     exit 1
 fi
 
-stale=$(find "${CODE_DIRS[@]}" -name '*.rs' -print0 | stale_links "$gpui")
+if [[ ! -f Cargo.toml ]]; then
+    echo "$0: run it from the repo root." >&2
+    exit 1
+fi
+stale=$(find . \( -name .git -o -name .claude -o -name target \) -prune -o -type f -not -name Cargo.lock -print0 |
+    stale_links "$gpui")
 if [[ -n "$stale" ]]; then
     echo "These links point at another GPUI than the pin ($gpui). Check each fact still holds there, then link $FORK/tree/$gpui/...:"
     echo "$stale"

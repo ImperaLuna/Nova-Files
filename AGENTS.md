@@ -217,7 +217,7 @@ Each rule above and what enforces it. "Review" means nothing does yet.
 | A stacked pull request changes code only | `tools/ci-stack-guard.sh` in CI |
 | framework/base and what framework/shell offers stay under their ceilings | `just framework-size` |
 | A pull request that grows the framework names it under "Shared part" | `tools/check-shared-part.sh` in CI (Shared part workflow) |
-| A link to the GPUI fork names the pinned version | `just fork-links` |
+| A link to the GPUI fork names the pinned commit | `just fork-links` |
 | Formatting | rustfmt (`just fmt`), nixfmt |
 
 When a rule marked Review is broken twice, fix it at the highest level that

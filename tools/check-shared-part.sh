@@ -23,8 +23,8 @@ growth() { # numstat on stdin; prints "<added> <removed> <net outside tests>"
 
 names_shared_part() { # body on stdin
     awk '
-        /^#+[[:space:]]+Shared part[[:space:]]*$/ { inside = 1; next }
-        inside && /^#/ { exit }
+        tolower($0) ~ /^#+[[:space:]]+shared part/ { inside = 1; next }
+        inside && /^#+[[:space:]]/ { exit }
         inside && /[^[:space:]]/ { found = 1; exit }
         END { exit !found }
     '
@@ -53,9 +53,9 @@ self_test() {
     local empty
     empty=$(mktemp)
     trap 'rm -f "$empty"' RETURN
-    expect fails "$FIXTURES/pr340.numstat" "$FIXTURES/pr340-body.md"
-    expect passes "$FIXTURES/pr340.numstat" "$FIXTURES/shared-part-body.md"
-    expect fails "$FIXTURES/pr340.numstat" "$FIXTURES/empty-section-body.md"
+    expect fails "$FIXTURES/pr340.numstat" "$FIXTURES/pr340-body.txt"
+    expect passes "$FIXTURES/pr340.numstat" "$FIXTURES/shared-part-body.txt"
+    expect fails "$FIXTURES/pr340.numstat" "$FIXTURES/empty-section-body.txt"
     expect passes "$FIXTURES/tests-only.numstat" "$empty"
     expect passes "$FIXTURES/shrinks.numstat" "$empty"
     expect passes "$empty" "$empty"

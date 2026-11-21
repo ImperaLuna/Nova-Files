@@ -26,6 +26,7 @@ jobs:
           # The merge commit and its base parent, to diff against.
           fetch-depth: 2
       - name: Lines added to the framework
+        shell: bash
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: git diff --no-renames --numstat HEAD^1 HEAD -- framework/ | tools/check-shared-part.sh
