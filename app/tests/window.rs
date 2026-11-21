@@ -101,6 +101,15 @@ fn window_showing<'a>(
     home: &Path,
     names: Vec<std::ffi::OsString>,
 ) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
+    window_with_archiver(cx, (folder, home), names, None)
+}
+
+fn window_with_archiver<'a>(
+    cx: &'a mut TestAppContext,
+    (folder, home): (&Path, &Path),
+    names: Vec<std::ffi::OsString>,
+    archiver: Option<nova_files::Archiver>,
+) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
     cx.executor().allow_parking();
     with_parts(cx);
     let core_home = nova_files::Home {
@@ -110,7 +119,14 @@ fn window_showing<'a>(
         data: home.join(".local/share"),
         drive_trashes: false,
     };
-    let core = nova_files::spawn_with(nova_files::IDLE_EXIT, Some(core_home), None, None).unwrap();
+    let core = nova_files::spawn_with_archiver(
+        nova_files::IDLE_EXIT,
+        Some(core_home),
+        None,
+        None,
+        archiver,
+    )
+    .unwrap();
     let (start, home) = (folder.to_owned(), home.to_owned());
     cx.add_window_view(|_, cx| {
         let mut view = MainWindow::with_home(&core.connector, &start, home, cx);

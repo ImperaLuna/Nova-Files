@@ -3,6 +3,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use nova_files_api::{ClientId, Command, CoreMessage, Envelope, Event, EventSink, MessageType};
+use nova_files_archives_api as archives_api;
 use nova_files_disk::home::Home;
 use nova_files_drives_api::{Command as DrivesCommand, DriveOffer, Event as DrivesEvent};
 use nova_files_drives_core::{Store as DrivesStore, disk_space};
@@ -35,7 +36,7 @@ use nova_files_trash_api as trash_api;
 
 use crate::backend::jobs::Client;
 use crate::backend::ops::Jobs;
-use nova_files_archives_core::inside::Inside;
+use nova_files_archives_core::inside::{Inside, within};
 use nova_files_disk::window_state::Store as WindowStateStore;
 use nova_files_trash_core::Trashes;
 
@@ -61,6 +62,7 @@ pub struct Setup {
     pub recent: RecentStore,
     pub folder_views: FolderViewsStore,
     pub inside: Arc<Inside>,
+    pub seven: bool,
 }
 
 pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
@@ -117,6 +119,17 @@ fn file_routes(routes: &mut Routes<Setup, Client>) -> Result<(), MessageType> {
     routes.on(|setup: &Setup, id, client: &Client, command| {
         operations::drop(id, client, command, setup);
         Ok(())
+    })?;
+    routes.on(|setup: &Setup, _, client: &Client, command| match command {
+        archives_api::Command::Formats => client
+            .events()
+            .deliver(archives_api::Event::Formats { seven: setup.seven }),
+        archives_api::Command::ArchiveOf { folder } => {
+            let archive = within(&folder).map(|within| within.archive);
+            client
+                .events()
+                .deliver(archives_api::Event::ArchiveOf { folder, archive })
+        }
     })?;
     routes.on(|setup: &Setup, _, client: &Client, command| match command {
         trash_api::Command::List => {
@@ -227,6 +240,7 @@ pub fn routed_types() -> Result<Vec<MessageType>, MessageType> {
 pub fn emitted_types() -> Vec<MessageType> {
     vec![
         MessageType::of::<Event>(),
+        MessageType::of::<archives_api::Event>(),
         MessageType::of::<DrivesEvent>(),
         MessageType::of::<folders_api::Event>(),
         MessageType::of::<gathered_api::Event>(),

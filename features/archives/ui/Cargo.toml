@@ -1,0 +1,32 @@
+# nova-files-archives-ui
+#
+# Archives' window half: Extract here, Extract to… and Compress in the
+# right-click menu, and the rename field on an archive just made.
+#
+# Allowed outside crates:
+# - gpui
+#
+# Allowed workspace crates:
+# - nova-files-api
+# - nova-files-archives-api
+# - nova-files-shell
+
+[package]
+name = "nova-files-archives-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+gpui.workspace = true
+nova-files-api.workspace = true
+nova-files-archives-api.workspace = true
+nova-files-shell.workspace = true

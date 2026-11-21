@@ -3583,7 +3583,9 @@ dependencies = [
  "libc",
  "log",
  "nova-files-api",
+ "nova-files-archives-api",
  "nova-files-archives-core",
+ "nova-files-archives-ui",
  "nova-files-clipboard-api",
  "nova-files-clipboard-ui",
  "nova-files-dbus",
@@ -3674,17 +3676,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-archives-api"
+version = "0.1.0"
+
+[[package]]
 name = "nova-files-archives-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "nova-files-api",
+ "nova-files-archives-api",
  "nova-files-disk",
  "nova-files-entries-core",
  "nova-files-jobs",
  "nova-files-open-api",
  "nova-files-rename-api",
  "rustix 1.1.6",
+]
+
+[[package]]
+name = "nova-files-archives-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-archives-api",
+ "nova-files-shell",
 ]
 
 [[package]]

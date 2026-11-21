@@ -73,7 +73,7 @@ impl MainWindow {
                 .child(rest)
                 .into_any_element(),
         ];
-        let mut placed = if self.folder_rules().trashed {
+        let mut placed = if self.folder_rules().read_only {
             Vec::new()
         } else {
             file_buttons()

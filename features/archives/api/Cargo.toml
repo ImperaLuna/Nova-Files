@@ -1,0 +1,18 @@
+# nova-files-archives-api
+#
+# What the archives feature's two halves say to each other: which archive
+# formats this system can make.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-archives-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
