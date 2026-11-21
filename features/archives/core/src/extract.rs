@@ -5,6 +5,7 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::{Conflict, ConflictKind, ExtractTo, Failure, Outcome};
+use nova_files_archives_api::ENDINGS;
 
 use crate::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow};
 use nova_files_jobs::Ended;
@@ -15,10 +16,6 @@ use nova_files_jobs::running::Running;
 use nova_files_jobs::stop::Stop;
 
 pub const STAGING_PREFIX: &str = ".nova-extract-";
-const ENDINGS: [&str; 13] = [
-    ".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2", ".tgz", ".txz", ".tzst", ".tbz2", ".tbz", ".tar",
-    ".zip", ".7z", ".rar",
-];
 const OWNER_WRITE: u32 = 0o200;
 const OWNER_ALL: u32 = 0o700;
 

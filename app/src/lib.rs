@@ -4,6 +4,7 @@ mod backend;
 mod trace;
 mod vulkan_drivers;
 
+use nova_files_archives_ui::ArchivesPart;
 use nova_files_clipboard_ui::ClipboardPart;
 use nova_files_delete_ui::DeletePart;
 use nova_files_drives_ui::DrivesPart;
@@ -37,6 +38,7 @@ pub use vulkan_drivers::{FILTER_VARIABLE, absent_vendor_drivers};
 #[must_use]
 pub fn parts() -> Parts {
     let mut parts = Parts::default();
+    parts.add::<ArchivesPart>();
     parts.add::<ClipboardPart>();
     parts.add::<DeletePart>();
     parts.add::<DrivesPart>();

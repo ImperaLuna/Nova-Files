@@ -76,6 +76,8 @@ impl MainWindow {
             lone(ShellItem::run(Icon::Open, &OPEN)),
             lone(ShellItem::run(Icon::Eye, &PREVIEW)),
         ];
+        let trash = (!self.folder_rules().read_only)
+            .then(|| ShellItem::run(Icon::Trash, &TRASH).with_look(ShellLook::Danger));
         let mut groups = self.arranged(
             MenuAt::Entry,
             vec![
@@ -87,7 +89,7 @@ impl MainWindow {
                 Placed::new(
                     MenuGroup::Danger,
                     Placed::FIRST,
-                    vec![ShellItem::run(Icon::Trash, &TRASH).with_look(ShellLook::Danger)],
+                    trash.into_iter().collect(),
                 ),
             ],
             cx,

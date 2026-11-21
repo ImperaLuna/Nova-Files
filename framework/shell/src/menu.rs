@@ -17,6 +17,7 @@ pub enum MenuAt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MenuGroup {
     Open,
+    Archive,
     Edit,
     Select,
     View,

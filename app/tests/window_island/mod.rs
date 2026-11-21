@@ -1,5 +1,6 @@
 use std::fs;
 
+mod archives;
 mod menus;
 mod renaming;
 mod trash;
