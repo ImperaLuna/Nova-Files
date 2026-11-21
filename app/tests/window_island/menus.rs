@@ -1,4 +1,5 @@
 use gpui::{Pixels, Point, point, px};
+use nova_files_api::FolderSizes;
 use nova_files_window::{Look, MenuAction};
 
 use super::*;
@@ -109,7 +110,8 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
                 "Details",
                 "Icons",
                 "Gallery",
-                "Show hidden files"
+                "Show hidden files",
+                "Folder sizes"
             ]
             .map(str::to_owned)
             .to_vec(),
@@ -168,7 +170,8 @@ async fn the_menu_key_opens_the_menu_with_its_first_item_marked(cx: &mut TestApp
             "Details",
             "Icons",
             "Gallery",
-            "Show hidden files"
+            "Show hidden files",
+            "Folder sizes"
         ]
     );
     assert_eq!(
@@ -201,7 +204,11 @@ async fn show_hidden_files_is_ticked_while_they_show(cx: &mut TestAppContext) {
     let hidden_item = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
         view.read_with(cx, |view, _| {
             let menu = view.menu().unwrap();
-            menu.items.last().unwrap().look
+            let item = menu
+                .items
+                .iter()
+                .find(|item| item.label == "Show hidden files");
+            item.unwrap().look
         })
     };
 
@@ -214,6 +221,32 @@ async fn show_hidden_files_is_ticked_while_they_show(cx: &mut TestAppContext) {
     assert_eq!(hidden_item(&view, cx), Look::On);
     choose(&view, cx, "Show hidden files");
     wait_for_names(&view, cx, &["Projects", "notes.txt"]).await;
+}
+
+#[gpui::test]
+async fn folder_sizes_is_ticked_until_turned_off(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-folder-sizes");
+    let home = TempFolder::tree("menu-folder-sizes-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let sizes_item = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| {
+            let menu = view.menu().unwrap();
+            let item = menu.items.iter().find(|item| item.label == "Folder sizes");
+            item.unwrap().look
+        })
+    };
+
+    right_click_space(cx, 2);
+    assert_eq!(sizes_item(&view, cx), Look::On);
+    choose(&view, cx, "Folder sizes");
+    view.condition::<WindowEvent>(cx, |_, cx| {
+        Published::<FolderSizes>::get(cx) == Some(&FolderSizes::Left)
+    })
+    .await;
+
+    right_click_space(cx, 2);
+    assert_eq!(sizes_item(&view, cx), Look::Plain);
 }
 
 #[gpui::test]

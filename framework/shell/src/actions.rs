@@ -40,6 +40,7 @@ gpui::actions!(
         NextTab,
         PreviousTab,
         ToggleHidden,
+        ToggleFolderSizes,
         ShowDetails,
         ShowIcons,
         ShowGallery,

@@ -25,6 +25,7 @@ fn every_key_reads() {
 appearance = "light"
 thumbnails = false
 hidden_files = true
+folder_sizes = false
 
 [keys]
 "go.back" = ["alt-left", "backspace"]
@@ -38,6 +39,7 @@ hidden_files = true
             appearance: Appearance::Light,
             thumbnails: Thumbnails::Hidden,
             hidden_files: HiddenFiles::Shown,
+            folder_sizes: FolderSizes::Left,
             keys: keys(&[("go.back", &["alt-left", "backspace"]), ("go.up", &[])]),
         }
     );
@@ -51,6 +53,10 @@ hidden_files = true
         read("hidden_files = false").0.hidden_files,
         HiddenFiles::Left
     );
+    assert_eq!(
+        read("folder_sizes = true").0.folder_sizes,
+        FolderSizes::Measured
+    );
 }
 
 #[test]
@@ -59,6 +65,7 @@ fn a_bad_value_costs_only_its_own_key() {
 appearance = "blue"
 thumbnails = "yes"
 hidden_files = 1
+folder_sizes = "on"
 colour = "dark"
 [keys]
 "go.back" = ["alt-left", 3]
@@ -68,8 +75,9 @@ colour = "dark"
     assert_eq!(settings.appearance, Appearance::System);
     assert_eq!(settings.thumbnails, Thumbnails::Shown);
     assert_eq!(settings.hidden_files, HiddenFiles::Left);
+    assert_eq!(settings.folder_sizes, FolderSizes::Measured);
     assert_eq!(settings.keys, keys(&[("go.up", &["alt-up"])]));
-    assert_eq!(problems.len(), 5, "{problems:?}");
+    assert_eq!(problems.len(), 6, "{problems:?}");
     assert!(problems.iter().any(|problem| problem.contains("colour")));
     let (settings, problems) = read("keys = 3\nthumbnails = false");
     assert_eq!(settings.thumbnails, Thumbnails::Hidden);
@@ -133,6 +141,14 @@ fn a_default_value_is_only_written_over_a_key_already_there() {
         )
         .unwrap(),
         "hidden_files = false\n"
+    );
+    assert_eq!(
+        edit("", &SettingChange::FolderSizes(FolderSizes::Measured)).unwrap(),
+        ""
+    );
+    assert_eq!(
+        edit("", &SettingChange::FolderSizes(FolderSizes::Left)).unwrap(),
+        "folder_sizes = false\n"
     );
 }
 

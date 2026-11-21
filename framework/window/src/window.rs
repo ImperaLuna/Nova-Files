@@ -40,8 +40,8 @@ use gpui::{
     Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
-    ListingId, Order,
+    ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderSizes,
+    HiddenFiles, Listing, ListingId, Order,
 };
 use nova_files_shell::Lines;
 use nova_files_shell::path_bar::PathBar;
@@ -118,6 +118,7 @@ pub struct MainWindow {
     pub(crate) bounds_watch: Option<Subscription>,
     pub(crate) home: PathBuf,
     hidden_files: Option<HiddenFiles>,
+    folder_sizes: Option<FolderSizes>,
     thumbnails_shown: ThumbnailsShown,
     listed_page: Option<PageRef>,
     shown_page: Option<(TabId, PageRef)>,
@@ -229,6 +230,7 @@ impl MainWindow {
             scroll: UniformListScrollHandle::new(),
             bounds_watch: None,
             hidden_files: None,
+            folder_sizes: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
             shown_page: None,

@@ -16,6 +16,7 @@ mod access;
 mod file_icon;
 mod file_type;
 mod folder;
+mod folder_sizes;
 mod hidden_files;
 mod job;
 mod message;
@@ -33,6 +34,7 @@ pub use file_type::{FileTypes, glob_matches};
 pub use folder::{
     Details, Entry, EntryId, EntryKind, Listing, ListingId, Order, SortKey, Unreadable,
 };
+pub use folder_sizes::FolderSizes;
 pub use hidden_files::HiddenFiles;
 pub use job::{
     Answer, Conflict, ConflictKind, ExtractTo, Failure, JobId, JobTag, Operation, Outcome, Packing,

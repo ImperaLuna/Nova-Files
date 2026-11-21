@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
-use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
+use nova_files_api::{Event, FolderSizes, HiddenFiles, Listing, ListingId, Unreadable};
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -209,6 +209,14 @@ impl MainWindow {
     pub(super) fn hidden_published(&mut self, cx: &mut Context<Self>) {
         if let Some(hidden) = Published::<HiddenFiles>::get(cx).copied() {
             self.hidden_arrived(hidden);
+            cx.emit(WindowEvent::Settings);
+            cx.notify();
+        }
+    }
+
+    pub(super) fn folder_sizes_published(&mut self, cx: &mut Context<Self>) {
+        if let Some(sizes) = Published::<FolderSizes>::get(cx).copied() {
+            self.folder_sizes_arrived(sizes);
             cx.emit(WindowEvent::Settings);
             cx.notify();
         }
