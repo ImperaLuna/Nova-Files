@@ -2,6 +2,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use nova_files_api::{ClientGone, Envelope};
+use nova_files_test_folder::TestFolder;
 
 use super::*;
 
@@ -141,36 +142,26 @@ fn listeners_hear_the_views_now_and_after_each_change() {
     );
 }
 
-struct TempState(PathBuf);
-
-impl Drop for TempState {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).ok();
-    }
-}
-
 #[test]
 fn views_set_are_there_after_a_restart() {
-    let state =
-        TempState(std::env::temp_dir().join(format!("nova-files-views-{}", std::process::id())));
-    std::fs::create_dir_all(state.0.join("nova-files")).unwrap();
-    let store = Store::open(Some(&state.0));
+    let state = TestFolder::new("views");
+    std::fs::create_dir_all(state.join("nova-files")).unwrap();
+    let store = Store::open(Some(state.path()));
     store.set(PathBuf::from("/a"), GALLERY);
     let wait = std::time::Instant::now();
-    while folders(&Store::open(Some(&state.0))).is_empty() {
+    while folders(&Store::open(Some(state.path()))).is_empty() {
         assert!(wait.elapsed() < WAIT, "never saved");
         std::thread::yield_now();
     }
 
-    let kept = folders(&Store::open(Some(&state.0)));
+    let kept = folders(&Store::open(Some(state.path())));
     assert_eq!(kept, [("/a".to_owned(), GALLERY)]);
 }
 
 #[test]
 fn a_file_that_cant_be_read_is_never_saved_over() {
-    let state =
-        std::env::temp_dir().join(format!("nova-files-views-unread-{}", std::process::id()));
-    std::fs::remove_dir_all(&state).ok();
+    let folder = TestFolder::new("views-unread");
+    let state = folder.join("state");
     let file = state.join(FILE);
     std::fs::create_dir_all(&file).unwrap();
     let unreadable = Store::open(Some(&state));
@@ -183,5 +174,4 @@ fn a_file_that_cant_be_read_is_never_saved_over() {
     assert_eq!(unreadable.saver.path(), None);
     assert_eq!(too_big.saver.path(), None);
     assert_eq!(missing.saver.path(), Some(file.as_path()));
-    std::fs::remove_dir_all(state).ok();
 }

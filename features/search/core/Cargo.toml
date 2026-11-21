@@ -29,3 +29,6 @@ nova-files-disk.workspace = true
 nova-files-entries-core.workspace = true
 nova-files-index.workspace = true
 nova-files-search-api.workspace = true
+
+[dev-dependencies]
+nova-files-test-folder.workspace = true

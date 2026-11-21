@@ -3594,6 +3594,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-disk",
  "nova-files-folders-api",
+ "nova-files-test-folder",
 ]
 
 [[package]]
@@ -3623,6 +3624,7 @@ dependencies = [
  "nova-files-entries-core",
  "nova-files-gathered-api",
  "nova-files-messages",
+ "nova-files-test-folder",
  "toml_edit 0.25.18+spec-1.1.0",
 ]
 
@@ -3674,6 +3676,7 @@ dependencies = [
  "nova-files-look-api",
  "nova-files-settings-api",
  "nova-files-settings-core",
+ "nova-files-test-folder",
  "toml_edit 0.25.18+spec-1.1.0",
 ]
 
@@ -3706,6 +3709,7 @@ dependencies = [
  "nova-files-disk",
  "nova-files-open-api",
  "nova-files-picker-api",
+ "nova-files-test-folder",
 ]
 
 [[package]]
@@ -3750,6 +3754,7 @@ dependencies = [
  "nova-files-disk",
  "nova-files-messages",
  "nova-files-places-api",
+ "nova-files-test-folder",
 ]
 
 [[package]]
@@ -3777,6 +3782,7 @@ dependencies = [
  "nova-files-disk",
  "nova-files-entries-core",
  "nova-files-preview-api",
+ "nova-files-test-folder",
  "nova-files-thumbnailer-launch",
  "rustix",
 ]
@@ -3866,6 +3872,7 @@ dependencies = [
  "nova-files-entries-core",
  "nova-files-index",
  "nova-files-search-api",
+ "nova-files-test-folder",
 ]
 
 [[package]]
@@ -3895,6 +3902,7 @@ dependencies = [
  "nova-files-disk",
  "nova-files-messages",
  "nova-files-settings-api",
+ "nova-files-test-folder",
  "toml_edit 0.25.18+spec-1.1.0",
 ]
 
@@ -3938,6 +3946,7 @@ dependencies = [
  "nova-files-entries-core",
  "nova-files-messages",
  "nova-files-start-api",
+ "nova-files-test-folder",
 ]
 
 [[package]]
@@ -3997,6 +4006,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-disk",
  "nova-files-entries-core",
+ "nova-files-test-folder",
  "nova-files-thumbnailer-launch",
  "nova-files-thumbnails-api",
 ]

@@ -216,7 +216,7 @@ mod tests {
         fn default_for(&self, types: &[&str]) -> Option<String> {
             default_app(types, &self.all_places()).map(|app| {
                 app.file
-                    .strip_prefix(&self.0)
+                    .strip_prefix(self.0.path())
                     .unwrap()
                     .to_string_lossy()
                     .into_owned()
@@ -231,7 +231,7 @@ mod tests {
         let names: Vec<String> = list_files(&places)
             .iter()
             .map(|file| {
-                file.strip_prefix(&tree.0)
+                file.strip_prefix(tree.0.path())
                     .unwrap()
                     .to_string_lossy()
                     .into_owned()

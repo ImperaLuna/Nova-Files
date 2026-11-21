@@ -57,13 +57,14 @@ fn bytes_of(changed: Vec<(usize, Size)>) -> Vec<(usize, u64)> {
 mod tests {
     use std::fs;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
     #[test]
     fn each_folder_counts_the_bytes_it_holds() {
-        let root =
-            std::env::temp_dir().join(format!("nova-files-folder-measure-{}", std::process::id()));
-        fs::remove_dir_all(&root).ok();
+        let folder = TestFolder::new("folder-measure");
+        let root = folder.path();
         fs::create_dir_all(root.join("big/inner")).unwrap();
         fs::create_dir_all(root.join("empty")).unwrap();
         fs::write(root.join("big/one"), [0_u8; 300]).unwrap();
@@ -74,13 +75,12 @@ mod tests {
         };
 
         let totals = FolderMeasure.measure(
-            &root,
+            root,
             &["big".into(), "empty".into(), "gone".into()],
             &|| false,
             &tell,
         );
 
-        fs::remove_dir_all(&root).ok();
         assert_eq!(totals, Some(vec![500, 0, 0]));
     }
 
@@ -104,9 +104,9 @@ mod tests {
 
     #[test]
     fn a_stopped_measure_gives_no_totals() {
-        let root = std::env::temp_dir();
+        let folder = TestFolder::new("folder-measure-stopped");
 
-        let totals = FolderMeasure.measure(&root, &["anything".into()], &|| true, &|_| {});
+        let totals = FolderMeasure.measure(folder.path(), &["anything".into()], &|| true, &|_| {});
 
         assert_eq!(totals, None);
     }

@@ -4,18 +4,15 @@ use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use nova_files_api::SortKey;
+use nova_files_test_folder::TestFolder;
 
 use super::*;
 
-struct Scratch(PathBuf);
+struct Scratch(TestFolder);
 
 impl Scratch {
     fn new(name: &str) -> Self {
-        let root =
-            std::env::temp_dir().join(format!("nova-gathered-list-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&root).ok();
-        fs::create_dir_all(&root).unwrap();
-        Self(root)
+        Self(TestFolder::new(&format!("gathered-list-{name}")))
     }
 
     fn at(&self, name: &str) -> PathBuf {
@@ -26,12 +23,6 @@ impl Scratch {
         for name in names {
             fs::create_dir_all(self.at(name)).unwrap();
         }
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }
 
@@ -85,7 +76,7 @@ fn folders_inside_and_one_projects_list_together_a_to_z() {
         many(scratch.at("work")),
     ];
     assert_eq!(
-        rows(&scratch.0, &folders, Order::default()),
+        rows(scratch.0.path(), &folders, Order::default()),
         [
             row("Bench", "Projects"),
             row("nova", "Projects"),
@@ -98,7 +89,7 @@ fn folders_inside_and_one_projects_list_together_a_to_z() {
         descending: true,
     };
     assert_eq!(
-        rows(&scratch.0, &folders, backwards)[0],
+        rows(scratch.0.path(), &folders, backwards)[0],
         row("zeta", "work")
     );
 }
@@ -112,7 +103,7 @@ fn a_folder_reached_twice_shows_once() {
         one(scratch.at("Projects/nova")),
     ];
     assert_eq!(
-        rows(&scratch.0, &folders, Order::default()),
+        rows(scratch.0.path(), &folders, Order::default()),
         [row("nova", "Projects")]
     );
 }
@@ -130,7 +121,7 @@ fn missing_and_unreadable_folders_add_nothing() {
         many(scratch.at("Projects")),
     ];
     assert_eq!(
-        rows(&scratch.0, &folders, Order::default()),
+        rows(scratch.0.path(), &folders, Order::default()),
         [row("nova", "Projects")]
     );
 }
@@ -142,14 +133,14 @@ fn hidden_folders_follow_the_setting_and_links_to_folders_count() {
     symlink(scratch.at("elsewhere"), scratch.at("Projects/linked")).unwrap();
     let folders = [many(scratch.at("Projects"))];
     assert_eq!(
-        rows(&scratch.0, &folders, Order::default()),
+        rows(scratch.0.path(), &folders, Order::default()),
         [row("linked", "Projects"), row("real", "Projects")]
     );
     let shown = gather(&folders, HiddenFiles::Shown, Order::default(), || false).unwrap();
     assert_eq!(shown.len(), 3);
     scratch.folders(&[".dotfiles"]);
     let dotfiles = [one(scratch.at(".dotfiles"))];
-    assert_eq!(rows(&scratch.0, &dotfiles, Order::default()), []);
+    assert_eq!(rows(scratch.0.path(), &dotfiles, Order::default()), []);
     let shown = gather(&dotfiles, HiddenFiles::Shown, Order::default(), || false).unwrap();
     assert_eq!(shown.len(), 1);
 }
@@ -172,7 +163,7 @@ fn newest_first_reads_each_folder_where_it_is() {
     };
     assert_eq!(
         rows(
-            &scratch.0,
+            scratch.0.path(),
             &[many(scratch.at("a")), many(scratch.at("b"))],
             newest
         ),
@@ -211,7 +202,11 @@ fn steam_tools_in_a_library_are_not_listed() {
     )
     .unwrap();
     assert_eq!(
-        rows(&scratch.0, &[many(scratch.at("common"))], Order::default()),
+        rows(
+            scratch.0.path(),
+            &[many(scratch.at("common"))],
+            Order::default()
+        ),
         [row("Celeste", "common"), row("wallpaper_engine", "common")]
     );
 }

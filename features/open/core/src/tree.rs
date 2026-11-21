@@ -1,16 +1,14 @@
 use std::fs;
-use std::path::PathBuf;
+
+use nova_files_test_folder::TestFolder;
 
 use super::defaults::Places;
 
-pub struct Tree(pub PathBuf);
+pub struct Tree(pub TestFolder);
 
 impl Tree {
     pub fn new(name: &str) -> Self {
-        let root = std::env::temp_dir().join(format!("nova-open-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&root).ok();
-        fs::create_dir_all(&root).unwrap();
-        Self(root)
+        Self(TestFolder::new(&format!("open-{name}")))
     }
 
     pub fn write(&self, path: &str, text: &str) -> &Self {
@@ -32,11 +30,5 @@ impl Tree {
 
     pub fn places(&self) -> Places {
         self.places_in(&["config"], &["share"], &[])
-    }
-}
-
-impl Drop for Tree {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }

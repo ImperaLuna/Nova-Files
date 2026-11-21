@@ -219,6 +219,7 @@ fn text(start: Vec<u8>, length: u64) -> PreviewContent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
     fn shown(start: &[u8], length: u64) -> PreviewContent {
         text(start.to_vec(), length)
@@ -226,7 +227,8 @@ mod tests {
 
     #[test]
     fn a_request_a_newer_one_replaced_never_answers() {
-        let dir = std::env::temp_dir();
+        let folder = TestFolder::new("preview-replaced");
+        let dir = folder.path().to_path_buf();
         let current = Arc::new(Current::new());
         let request = |id| Request {
             id: PreviewId(id),
@@ -303,14 +305,13 @@ mod tests {
 
     #[test]
     fn a_file_is_named_by_its_type_and_a_folder_is_not() {
-        let dir =
-            std::env::temp_dir().join(format!("nova-files-preview-named-{}", std::process::id()));
+        let folder = TestFolder::new("preview-named");
+        let dir = folder.join("dir");
         let file = dir.join("a.txt");
         let folder = dir.join("b.txt");
         fs::create_dir_all(&folder).unwrap();
         fs::write(&file, "a".repeat(4096)).unwrap();
         let (file, folder) = (previewed(&file), previewed(&folder));
-        fs::remove_dir_all(&dir).ok();
         assert_eq!(file.kind_name.as_deref(), Some("Plain text"));
         assert!(matches!(
             file.content,
@@ -321,15 +322,13 @@ mod tests {
 
     #[test]
     fn a_link_is_named_by_its_target() {
-        let dir =
-            std::env::temp_dir().join(format!("nova-files-preview-target-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
+        let folder = TestFolder::new("preview-target");
+        let dir = folder.path();
         let photo = dir.join("photo.png");
         fs::write(&photo, b"x").unwrap();
         let link = dir.join("current");
         std::os::unix::fs::symlink(&photo, &link).unwrap();
         let (to_link, to_photo) = (target(&link), target(&photo));
-        fs::remove_dir_all(&dir).ok();
         assert_eq!(to_link.file_name(), photo.file_name());
         assert_eq!(to_photo, photo);
     }

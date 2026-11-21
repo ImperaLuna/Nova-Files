@@ -3,14 +3,15 @@ use std::path::PathBuf;
 
 use nova_files_api::IconKind;
 use nova_files_picker_api::{FileFilter, FilterRule};
+use nova_files_test_folder::TestFolder;
 
 use super::*;
 
-struct Dir(PathBuf);
+struct Dir(TestFolder);
 
 impl Dir {
     fn new(name: &str) -> Self {
-        let dir = env::temp_dir().join(format!("nova-files-mime-{name}-{}", std::process::id()));
+        let dir = TestFolder::new(&format!("mime-{name}"));
         fs::create_dir_all(dir.join("mime")).unwrap();
         Self(dir)
     }
@@ -18,12 +19,6 @@ impl Dir {
     fn write(&self, file: &str, text: &str) -> &Self {
         fs::write(self.0.join(file), text).unwrap();
         self
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }
 
@@ -56,7 +51,7 @@ fn types(name: &str) -> (Dir, MimeTypes) {
             ALIASES_FILE,
             "image/x-old image/png\ntext/x-markdown text/markdown\n",
         );
-    let types = MimeTypes::load(std::slice::from_ref(&dir.0));
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0.path().to_path_buf()));
     (dir, types)
 }
 
@@ -107,7 +102,7 @@ fn kinds_follow_subclasses_aliases_and_media() {
 fn a_loop_of_subclasses_ends() {
     let dir = Dir::new("loop");
     dir.write(SUBCLASSES_FILE, "a/x a/y\na/y a/x\n");
-    let types = MimeTypes::load(std::slice::from_ref(&dir.0));
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0.path().to_path_buf()));
     assert!(types.is_a("a/x", "a/y"));
     assert!(!types.is_a("a/x", "a/z"));
 }
@@ -118,7 +113,11 @@ fn every_data_folder_is_read() {
     first.write(GLOBS_FILE, "50:application/pdf:*.pdf\n");
     let second = Dir::new("second");
     second.write(GLOBS_FILE, "50:image/png:*.png\n");
-    let types = MimeTypes::load(&[first.0.clone(), PathBuf::from("/nowhere"), second.0.clone()]);
+    let types = MimeTypes::load(&[
+        first.0.path().to_path_buf(),
+        PathBuf::from("/nowhere"),
+        second.0.path().to_path_buf(),
+    ]);
     assert_eq!(of(&types, "a.pdf"), Some("application/pdf"));
     assert_eq!(of(&types, "a.png"), Some("image/png"));
 }
@@ -161,7 +160,7 @@ fn a_large_globs_file_is_read_to_its_end() {
     let dir = Dir::new("large");
     let padding = "# padding\n".repeat(200_000);
     dir.write(GLOBS_FILE, &format!("{padding}50:application/pdf:*.pdf\n"));
-    let types = MimeTypes::load(std::slice::from_ref(&dir.0));
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0.path().to_path_buf()));
     assert_eq!(types.of(OsStr::new("a.pdf")), Some("application/pdf"));
 }
 
@@ -178,7 +177,7 @@ fn the_environment_names_the_data_folders() {
     dir.write(GLOBS_FILE, GLOBS);
     let status = std::process::Command::new(env::current_exe().unwrap())
         .args(["--exact", "mime::tests::from_env_child", "--ignored"])
-        .env("XDG_DATA_HOME", &dir.0)
+        .env("XDG_DATA_HOME", dir.0.path())
         .env("XDG_DATA_DIRS", dir.0.join("none"))
         .status()
         .unwrap();
@@ -227,7 +226,7 @@ fn any_rule_admits() {
 fn a_bare_star_matches_every_name() {
     let dir = Dir::new("bare-star");
     dir.write(GLOBS_FILE, "80:text/plain:*\n50:image/png:*.png\n");
-    let types = MimeTypes::load(std::slice::from_ref(&dir.0));
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0.path().to_path_buf()));
     assert_eq!(types.of(OsStr::new("notes")), Some("text/plain"));
     assert_eq!(types.of(OsStr::new("a.png")), Some("text/plain"));
 }
@@ -238,7 +237,7 @@ fn on_a_tie_the_first_data_folder_wins() {
     user.write(GLOBS_FILE, "50:text/x-personal:*.foo\n");
     let system = Dir::new("tie-system");
     system.write(GLOBS_FILE, "50:application/x-system:*.foo\n");
-    let types = MimeTypes::load(&[user.0.clone(), system.0.clone()]);
+    let types = MimeTypes::load(&[user.0.path().to_path_buf(), system.0.path().to_path_buf()]);
     assert_eq!(
         types.of(OsStr::new("document.foo")),
         Some("text/x-personal")
@@ -311,7 +310,7 @@ fn the_first_data_folder_names_a_type() {
         fs::create_dir_all(dir.0.join("mime/text")).unwrap();
         dir.write("mime/text/plain.xml", &format!("<comment>{name}</comment>"));
     }
-    let types = MimeTypes::load(&[user.0.clone(), system.0.clone()]);
+    let types = MimeTypes::load(&[user.0.path().to_path_buf(), system.0.path().to_path_buf()]);
     assert_eq!(types.name("text/plain").as_deref(), Some("Mine"));
 }
 
@@ -326,7 +325,7 @@ fn icon_types(name: &str) -> (Dir, MimeTypes) {
          application/vnd.oasis.opendocument.text:x-office-document\n",
     )
     .write(ICONS_FILE, "application/pdf:my-pdf\n");
-    let types = MimeTypes::load(std::slice::from_ref(&dir.0));
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0.path().to_path_buf()));
     (dir, types)
 }
 
@@ -370,7 +369,7 @@ fn the_first_data_folder_names_a_types_icon() {
         GENERIC_ICONS_FILE,
         "application/zip:package-x-generic\n# a:b\n",
     );
-    let types = MimeTypes::load(&[user.0.clone(), system.0.clone()]);
+    let types = MimeTypes::load(&[user.0.path().to_path_buf(), system.0.path().to_path_buf()]);
     assert_eq!(
         types.icon_names("application/zip"),
         ["application-zip", "mine", "application-x-generic"]

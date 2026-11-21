@@ -2,6 +2,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use nova_files_api::{ClientGone, Entry, Envelope};
+use nova_files_test_folder::TestFolder;
 
 use super::*;
 
@@ -177,8 +178,8 @@ fn showing_a_listing_starts_over_unless_a_newer_one_came() {
 
 #[test]
 fn a_found_file_is_thumbnailed_from_its_own_folder() {
-    let folder = env::temp_dir().join(format!("nova-files-thumb-job-{}", std::process::id()));
-    fs::create_dir_all(&folder).unwrap();
+    let test_folder = TestFolder::new("thumb-job");
+    let folder = test_folder.path().to_path_buf();
     fs::write(folder.join("photo.png"), b"png").unwrap();
     let found = Listing {
         id: LISTING,
@@ -193,7 +194,6 @@ fn a_found_file_is_thumbnailed_from_its_own_folder() {
     let job = job_for(&found, 0);
     let gone = job_for(&found, 1);
 
-    fs::remove_dir_all(&folder).ok();
     let job = job.unwrap();
     assert_eq!(job.source, folder.join("photo.png"));
     assert!(job.mtime > 0);

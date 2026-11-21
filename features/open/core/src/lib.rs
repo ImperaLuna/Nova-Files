@@ -251,6 +251,8 @@ mod tests {
     use std::collections::HashMap;
     use std::fs;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
     fn places(vars: &[(&str, &str)]) -> Places {
@@ -340,8 +342,8 @@ mod tests {
 
     #[test]
     fn a_launched_app_gets_the_file_and_token() {
-        let root = std::env::temp_dir().join(format!("nova-open-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let folder = TestFolder::new("open");
+        let root = folder.path();
         let out = root.join("out");
         let made = Command::new("mkfifo").arg(&out).status().unwrap();
         assert!(made.success());
@@ -358,10 +360,9 @@ mod tests {
         ];
         assert!(launch(&[], None, None).is_err());
         assert!(launch(&[OsString::from("/nonexistent/app")], None, None).is_err());
-        launch(&line, Some(&root), Some("tok")).unwrap();
+        launch(&line, Some(root), Some("tok")).unwrap();
         let written = fs::read_to_string(&out).unwrap();
         assert_eq!(written, format!("/h/a b.png tok {}", root.display()));
-        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
