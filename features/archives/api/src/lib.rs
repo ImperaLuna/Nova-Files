@@ -1,15 +1,5 @@
 #![forbid(unsafe_code)]
 
-/// The name endings, in lowercase, of the archives the core unpacks.
-pub const ENDINGS: [&str; 13] = [
-    ".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2", ".tgz", ".txz", ".tzst", ".tbz2", ".tbz", ".tar",
-    ".zip", ".7z", ".rar",
-];
-
-/// The endings in [`ENDINGS`] the core unpacks only with an installed
-/// 7-Zip (see [`Event::Formats`]).
-pub const SEVEN_ENDINGS: [&str; 2] = [".7z", ".rar"];
-
 use std::path::PathBuf;
 
 /// What a window asks the archives core.

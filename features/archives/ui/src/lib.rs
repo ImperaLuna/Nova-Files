@@ -16,7 +16,7 @@ use nova_files_shell::{
     SelectionMade, Slots, Views, command_spec,
 };
 
-use naming::{archive_name, opens};
+use naming::opens;
 use picker::{Choice, Picking};
 
 mod actions {
@@ -31,6 +31,7 @@ mod actions {
 }
 
 pub use actions::{Compress, CompressAs, ExtractAll, ExtractHere, ExtractTo as ExtractToFolder};
+pub use naming::archive_name;
 
 command_spec!(
     EXTRACT_HERE,

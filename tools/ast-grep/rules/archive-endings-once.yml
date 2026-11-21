@@ -1,0 +1,32 @@
+# An archive name ending (".zip", ".tar.gz", …) is written as text only in
+# framework/base/src/archive.rs. The icon, the name a new archive gets and
+# the names that open as an archive all read it from there, so a new format
+# is added in one place. Tests may spell endings out.
+id: archive-endings-once
+language: rust
+severity: error
+message: Archive name ending written as text. Use nova_files_api::archive or Packing::ending.
+files:
+  - "app/**/*.rs"
+  - "framework/**/*.rs"
+  - "features/**/*.rs"
+  - "fronts/**/*.rs"
+  - "helpers/**/*.rs"
+ignores:
+  - "framework/base/src/archive.rs"
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+rule:
+  kind: string_literal
+  regex: '^b?"(?i)\.(tar\.(gz|xz|zst|bz2)|tgz|txz|tzst|tbz2?|tar|zip|7z|rar)"$'
+  not:
+    any:
+      - inside:
+          kind: mod_item
+          stopBy: end
+          follows: { kind: attribute_item, regex: 'cfg\(test\)' }
+      - inside:
+          kind: function_item
+          stopBy: end
+          follows: { kind: attribute_item, regex: 'test\]$' }
