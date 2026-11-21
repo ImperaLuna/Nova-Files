@@ -16,6 +16,7 @@ use crate::island::progress::Running;
 use crate::island::{self, Confirm, Note, asking};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
+use crate::window::password::{asks_password, password_label};
 
 mod several;
 
@@ -28,15 +29,19 @@ impl MainWindow {
         let job = self.job_on_island(cx);
         let parts = if self.picker() {
             None
-        } else if let Some((id, conflict)) =
-            job.and_then(|(id, job)| Some((id, job.asking.as_ref()?)))
+        } else if let Some((id, job, conflict)) =
+            job.and_then(|(id, job)| Some((id, job, job.asking.as_ref()?)))
         {
-            Some(ask_parts(
-                conflict,
-                self.island.ticked_for_all(id, conflict.number),
-                &colors,
-                cx,
-            ))
+            Some(if asks_password(conflict) {
+                self.password_parts(conflict, password_label(&job.operation), &colors, cx)
+            } else {
+                ask_parts(
+                    conflict,
+                    self.island.ticked_for_all(id, conflict.number),
+                    &colors,
+                    cx,
+                )
+            })
         } else if let Some(confirm) = &self.island.confirm {
             Some(confirm_parts(confirm, &colors, cx))
         } else if let Some((_, job)) = job {
@@ -57,6 +62,45 @@ impl MainWindow {
             || self.quiet_count(&colors).into_any_element(),
             |parts| floating(parts, None, &colors).into_any_element(),
         )
+    }
+
+    fn password_parts(
+        &self,
+        conflict: &Conflict,
+        accept: &'static str,
+        colors: &Colors,
+        cx: &Context<Self>,
+    ) -> Vec<gpui::AnyElement> {
+        let (name, rest) = asking::words(conflict);
+        let mut parts = vec![
+            label(colors)
+                .child(
+                    div()
+                        .text_color(colors.text)
+                        .font_weight(text::STRONG_WEIGHT)
+                        .child(name),
+                )
+                .child(rest)
+                .into_any_element(),
+        ];
+        if let Some(shown) = &self.island.password {
+            parts.push(password_box(shown.field.clone(), colors).into_any_element());
+        }
+        parts.push(cancel_button(colors, cx).into_any_element());
+        parts.push(
+            worded("island-skip", asking::label(Answer::Skip), colors)
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                    this.answer_conflict(Answer::Skip, cx);
+                }))
+                .into_any_element(),
+        );
+        parts.push(
+            worded("island-unlock", accept, colors)
+                .text_color(colors.accept)
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.give_password(cx)))
+                .into_any_element(),
+        );
+        parts
     }
 
     fn selection_parts(&self, colors: &Colors, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
@@ -151,24 +195,13 @@ fn ask_parts(
             .child(rest)
             .into_any_element(),
     ];
-    parts.push(
-        square("island-cancel", colors)
-            .w_auto()
-            .px(size::TEXT_BUTTON_PAD)
-            .font_weight(text::STRONG_WEIGHT)
-            .child(SharedString::new_static(CANCEL_LABEL))
-            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.cancel_job(cx)))
-            .into_any_element(),
-    );
+    parts.push(cancel_button(colors, cx).into_any_element());
     let answer = |answer: Answer| {
-        square(asking::selector(answer), colors)
-            .w_auto()
-            .px(size::TEXT_BUTTON_PAD)
-            .font_weight(text::STRONG_WEIGHT)
-            .child(SharedString::new_static(asking::label(answer)))
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+        worded(asking::selector(answer), asking::label(answer), colors).on_click(cx.listener(
+            move |this, _: &ClickEvent, _, cx| {
                 this.answer_conflict(answer, cx);
-            }))
+            },
+        ))
     };
     let answers = asking::answers(conflict.kind);
     if let Some((&last, rest)) = answers.split_last() {
@@ -180,6 +213,40 @@ fn ask_parts(
         parts.push(for_all_tick(words, ticked, colors, cx).into_any_element());
     }
     parts
+}
+
+fn worded(
+    selector: &'static str,
+    words: impl Into<SharedString>,
+    colors: &Colors,
+) -> Stateful<Div> {
+    square(selector, colors)
+        .w_auto()
+        .px(size::TEXT_BUTTON_PAD)
+        .font_weight(text::STRONG_WEIGHT)
+        .child(words.into())
+}
+
+fn cancel_button(colors: &Colors, cx: &Context<MainWindow>) -> Stateful<Div> {
+    worded("island-cancel", CANCEL_LABEL, colors)
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.cancel_job(cx)))
+}
+
+fn password_box(field: gpui::Entity<nova_files_shell::text::TextField>, colors: &Colors) -> Div {
+    div()
+        .debug_selector(|| "island-password".to_owned())
+        .flex()
+        .flex_none()
+        .items_center()
+        .w(size::PASSWORD_WIDTH)
+        .h(size::RENAME_HEIGHT)
+        .px(size::RENAME_PAD)
+        .rounded(radius::SMALL)
+        .bg(colors.window)
+        .border(size::RING)
+        .border_color(colors.accept)
+        .text_color(colors.text)
+        .child(field)
 }
 
 fn for_all_tick(
@@ -375,12 +442,8 @@ fn text_button(
     colors: &Colors,
 ) -> impl IntoElement {
     let action = action.boxed_clone();
-    square(name, colors)
-        .w_auto()
-        .px(size::TEXT_BUTTON_PAD)
-        .font_weight(text::STRONG_WEIGHT)
+    worded(name, words, colors)
         .text_color(tint)
-        .child(words.into())
         .on_click(move |_: &ClickEvent, window, cx| {
             window.dispatch_action(action.boxed_clone(), cx);
         })

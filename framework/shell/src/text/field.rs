@@ -17,6 +17,7 @@ use super::{
 use crate::theme::{size, text as type_scale};
 
 const DOUBLE_CLICK: usize = 2;
+const DOT: char = '•';
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextFieldEvent {
@@ -31,6 +32,7 @@ pub struct TextField {
     pub(super) placeholder: SharedString,
     pub(super) layout: Option<(ShapedLine, Bounds<Pixels>)>,
     pub(super) scroll: Pixels,
+    pub(super) hidden: bool,
     selecting: bool,
 }
 
@@ -42,7 +44,38 @@ impl TextField {
             placeholder: SharedString::default(),
             layout: None,
             scroll: px(0.0),
+            hidden: false,
             selecting: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn hiding(mut self) -> Self {
+        self.hidden = true;
+        self
+    }
+
+    pub(super) fn shown(&self) -> String {
+        if self.hidden {
+            dots(self.edit.text())
+        } else {
+            self.edit.text().to_owned()
+        }
+    }
+
+    pub(super) fn shown_index(&self, offset: usize) -> usize {
+        if self.hidden {
+            dot_index(self.edit.text(), offset)
+        } else {
+            offset
+        }
+    }
+
+    fn text_offset(&self, index: usize) -> usize {
+        if self.hidden {
+            offset_of_dot(self.edit.text(), index)
+        } else {
+            index
         }
     }
 
@@ -91,11 +124,13 @@ impl TextField {
     }
 
     fn word_left(&mut self, _: &WordLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.select(cx, |edit| edit.move_left(Step::Word, false));
+        let hidden = self.hidden;
+        self.select(cx, |edit| word_left(edit, hidden, false));
     }
 
     fn word_right(&mut self, _: &WordRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.select(cx, |edit| edit.move_right(Step::Word, false));
+        let hidden = self.hidden;
+        self.select(cx, |edit| word_right(edit, hidden, false));
     }
 
     fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -107,11 +142,13 @@ impl TextField {
     }
 
     fn select_word_left(&mut self, _: &SelectWordLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.select(cx, |edit| edit.move_left(Step::Word, true));
+        let hidden = self.hidden;
+        self.select(cx, |edit| word_left(edit, hidden, true));
     }
 
     fn select_word_right(&mut self, _: &SelectWordRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.select(cx, |edit| edit.move_right(Step::Word, true));
+        let hidden = self.hidden;
+        self.select(cx, |edit| word_right(edit, hidden, true));
     }
 
     fn home(&mut self, _: &Home, _: &mut Window, cx: &mut Context<Self>) {
@@ -143,14 +180,33 @@ impl TextField {
     }
 
     fn delete_word_left(&mut self, _: &DeleteWordLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.edit(cx, |edit| edit.delete_backward(Step::Word));
+        let hidden = self.hidden;
+        self.edit(cx, |edit| {
+            if hidden {
+                edit.move_home(true);
+                edit.replace_selection("")
+            } else {
+                edit.delete_backward(Step::Word)
+            }
+        });
     }
 
     fn delete_word_right(&mut self, _: &DeleteWordRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.edit(cx, |edit| edit.delete_forward(Step::Word));
+        let hidden = self.hidden;
+        self.edit(cx, |edit| {
+            if hidden {
+                edit.move_end(true);
+                edit.replace_selection("")
+            } else {
+                edit.delete_forward(Step::Word)
+            }
+        });
     }
 
     fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
+        if self.hidden {
+            return;
+        }
         let selected = self.edit.selected_text();
         if !selected.is_empty() {
             cx.write_to_clipboard(ClipboardItem::new_string(selected.to_owned()));
@@ -158,7 +214,7 @@ impl TextField {
     }
 
     fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
-        if self.edit.selection().is_empty() {
+        if self.hidden || self.edit.selection().is_empty() {
             return;
         }
         self.copy(&Copy, window, cx);
@@ -179,6 +235,10 @@ impl TextField {
     fn mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
         let offset = self.offset_at(event.position);
+        if event.click_count >= DOUBLE_CLICK && self.hidden {
+            self.select(cx, TextEdit::select_all);
+            return;
+        }
         if event.click_count >= DOUBLE_CLICK {
             self.select(cx, |edit| edit.select_word_at(offset));
             return;
@@ -207,8 +267,38 @@ impl TextField {
         let Some((line, bounds)) = &self.layout else {
             return self.edit.text().len();
         };
-        line.closest_index_for_x(position.x - bounds.left() + self.scroll)
+        self.text_offset(line.closest_index_for_x(position.x - bounds.left() + self.scroll))
     }
+}
+
+fn word_left(edit: &mut TextEdit, hidden: bool, extend: bool) {
+    if hidden {
+        edit.move_home(extend);
+    } else {
+        edit.move_left(Step::Word, extend);
+    }
+}
+
+fn word_right(edit: &mut TextEdit, hidden: bool, extend: bool) {
+    if hidden {
+        edit.move_end(extend);
+    } else {
+        edit.move_right(Step::Word, extend);
+    }
+}
+
+fn dots(text: &str) -> String {
+    DOT.to_string().repeat(text.chars().count())
+}
+
+fn dot_index(text: &str, offset: usize) -> usize {
+    text.get(..offset).unwrap_or_default().chars().count() * DOT.len_utf8()
+}
+
+fn offset_of_dot(text: &str, index: usize) -> usize {
+    text.char_indices()
+        .nth(index / DOT.len_utf8())
+        .map_or(text.len(), |(at, _)| at)
 }
 
 impl EventEmitter<TextFieldEvent> for TextField {}
@@ -344,8 +434,8 @@ impl EntityInputHandler for TextField {
         Some(span(
             bounds,
             self.scroll,
-            line.x_for_index(range.start),
-            line.x_for_index(range.end),
+            line.x_for_index(self.shown_index(range.start)),
+            line.x_for_index(self.shown_index(range.end)),
         ))
     }
 
@@ -356,7 +446,10 @@ impl EntityInputHandler for TextField {
         _: &mut Context<Self>,
     ) -> Option<usize> {
         let (line, bounds) = self.layout.as_ref()?;
-        let offset = line.index_for_x(point.x - bounds.left() + self.scroll)?;
-        Some(self.edit.offset_to_utf16(offset))
+        let index = line.index_for_x(point.x - bounds.left() + self.scroll)?;
+        Some(self.edit.offset_to_utf16(self.text_offset(index)))
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -142,3 +142,39 @@ async fn an_opened_archive_can_only_be_copied_from(cx: &mut TestAppContext) {
     }
     assert!(labels.iter().any(|label| label == "Copy"), "{labels:?}");
 }
+
+#[gpui::test]
+async fn a_locked_archive_asks_for_its_password_on_the_island(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = archive_tree("archive-locked");
+    let home = TempFolder::tree("archive-locked-home");
+    let given = home.path().join("given");
+    let script = format!(
+        "#!/bin/sh\ncase \"$1\" in\nlist) printf '%s\\000' f 1 5 0 u 420 inner.txt '' ;;\n*) read -r given; printf '%s' \"$given\" > '{}' ;;\nesac\n",
+        given.display()
+    );
+    let archiver = fake_helper(&home, &script);
+    cx.update(|cx| {
+        nova_files_window::bind_text_keys(cx);
+        nova_files_window::bind_window_keys(cx);
+    });
+    let (view, cx) =
+        window_with_archiver(cx, (tree.path(), home.path()), Vec::new(), Some(archiver));
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+
+    right_click(cx, "name-1");
+    choose(&view, cx, "Extract here");
+    view.condition::<WindowEvent>(cx, |view, _| view.newest_question().is_some())
+        .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-password").is_some());
+    assert!(cx.debug_bounds("island-unlock").is_some());
+
+    cx.simulate_input("secret");
+    cx.simulate_keystrokes("enter");
+    view.condition::<WindowEvent>(cx, |view, _| view.note().is_some())
+        .await;
+    assert_eq!(fs::read_to_string(&given).unwrap(), "secret");
+    assert!(cx.debug_bounds("island-password").is_none());
+}
