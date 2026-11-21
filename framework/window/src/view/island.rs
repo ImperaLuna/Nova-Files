@@ -1,9 +1,9 @@
 use gpui::{
-    Action, BoxShadow, ClickEvent, Context, Div, ElementId, Hsla, InteractiveElement as _,
-    IntoElement, ParentElement as _, Pixels, Rgba, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled as _, div, point, prelude::FluentBuilder as _, px,
-    relative,
+    Action, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, Rgba, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
+    prelude::FluentBuilder as _, relative,
 };
+use nova_files_shell::island::look::{divider, floating, label, square, worded};
 use nova_files_shell::widgets::tick_box;
 
 use nova_files_api::{Answer, Conflict};
@@ -215,18 +215,6 @@ fn ask_parts(
     parts
 }
 
-fn worded(
-    selector: &'static str,
-    words: impl Into<SharedString>,
-    colors: &Colors,
-) -> Stateful<Div> {
-    square(selector, colors)
-        .w_auto()
-        .px(size::TEXT_BUTTON_PAD)
-        .font_weight(text::STRONG_WEIGHT)
-        .child(words.into())
-}
-
 fn cancel_button(colors: &Colors, cx: &Context<MainWindow>) -> Stateful<Div> {
     worded("island-cancel", CANCEL_LABEL, colors)
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.cancel_job(cx)))
@@ -331,93 +319,6 @@ fn note_parts(note: &Note, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gpu
             .into_any_element(),
     );
     parts
-}
-
-fn floating(
-    parts: Vec<gpui::AnyElement>,
-    above: Option<gpui::AnyElement>,
-    colors: &Colors,
-) -> impl IntoElement {
-    let row = div()
-        .flex()
-        .items_center()
-        .min_w_0()
-        .gap(size::ISLAND_GAP)
-        .children(parts);
-    div()
-        .absolute()
-        .left_0()
-        .right_0()
-        .bottom(size::ISLAND_BOTTOM)
-        .flex()
-        .justify_center()
-        .px(size::ISLAND_MARGIN)
-        .child(
-            div()
-                .id("island")
-                .debug_selector(|| "island".to_owned())
-                .occlude()
-                .flex()
-                .min_w_0()
-                .map(|island| match above {
-                    Some(above) => island
-                        .flex_col()
-                        .w(size::ISLAND_LIST_WIDTH)
-                        .p(size::ISLAND_LIST_PAD)
-                        .child(above)
-                        .child(row.h(size::ISLAND_LIST_LINE).pl(size::ISLAND_LIST_INSET)),
-                    None => island
-                        .items_center()
-                        .h(size::ISLAND_HEIGHT)
-                        .pl(size::ISLAND_PAD_LEFT)
-                        .pr(size::ISLAND_PAD_RIGHT)
-                        .child(row),
-                })
-                .rounded(radius::CARD)
-                .bg(colors.lifted)
-                .border(size::LINE)
-                .border_color(colors.line)
-                .shadow(vec![BoxShadow {
-                    color: Hsla::from(colors.shadow),
-                    offset: point(px(0.0), size::ISLAND_SHADOW_Y),
-                    blur_radius: size::ISLAND_SHADOW_BLUR,
-                    spread_radius: px(0.0),
-                }]),
-        )
-}
-
-fn label(colors: &Colors) -> Div {
-    div()
-        .flex()
-        .min_w_0()
-        .mr(size::ISLAND_TEXT_GAP)
-        .truncate()
-        .text_color(colors.text_soft)
-}
-
-fn divider(colors: &Colors) -> impl IntoElement {
-    div()
-        .flex_none()
-        .w(size::LINE)
-        .h(size::ISLAND_DIVIDER_HEIGHT)
-        .mx(size::ISLAND_GAP)
-        .bg(colors.line)
-}
-
-fn square(name: impl Into<SharedString>, colors: &Colors) -> Stateful<Div> {
-    let name = name.into();
-    div()
-        .id(ElementId::Name(name.clone()))
-        .debug_selector(move || name.to_string())
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .size(size::ICON_BUTTON)
-        .rounded(radius::ROW)
-        .cursor_pointer()
-        .hover(|button| button.bg(colors.hover))
-        .active(|button| button.bg(colors.press))
 }
 
 fn icon_button(
