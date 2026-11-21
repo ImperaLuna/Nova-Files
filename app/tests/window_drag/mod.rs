@@ -1,4 +1,4 @@
-use gpui::{MouseButton, Pixels, Point, point, px};
+use gpui::{ExternalDragPayload, MouseButton, Pixels, Point, point, px};
 use nova_files_window::HOVER_OPEN_AFTER;
 
 use super::*;
@@ -80,6 +80,31 @@ async fn a_name_dragged_onto_a_folder_moves_it_there_and_undo_moves_it_back(
     })
     .await;
     assert!(!projects.join("notes.txt").exists());
+}
+
+#[gpui::test]
+async fn a_drag_offers_its_files_to_other_apps(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-out");
+    let home = TempFolder::tree("drag-out-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let (start, beside) = (center(cx, "name-1"), center(cx, "modified-1"));
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(beside, Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    cx.simulate_mouse_move(
+        beside + point(px(1.0), px(0.0)),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+
+    let Some(ExternalDragPayload::Files(paths)) = view.read_with(cx, |view, _| view.drag_out())
+    else {
+        panic!("the drag offers no files");
+    };
+    assert_eq!(paths.entries(), [(tree.path().join("notes.txt"), false)]);
+    cx.simulate_mouse_up(beside, MouseButton::Left, Modifiers::none());
 }
 
 #[gpui::test]
