@@ -157,7 +157,7 @@ async fn a_locked_archive_asks_for_its_password_on_the_island(cx: &mut TestAppCo
     let home = TempFolder::tree("archive-locked-home");
     let given = home.path().join("given");
     let script = format!(
-        "#!/bin/sh\ncase \"$1\" in\nlist) printf '%s\\000' f 1 5 0 u 420 inner.txt '' ;;\n*) cat > '{}' ;;\nesac\n",
+        "#!/bin/sh\ncase \"$1\" in\nlist) printf '%s\\000' f 1 5 0 u 420 inner.txt '' ;;\n*) read -r given; printf '%s' \"$given\" > '{}' ;;\nesac\n",
         given.display()
     );
     let archiver = fake_helper(&home, &script);
