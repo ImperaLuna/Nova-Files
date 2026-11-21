@@ -298,6 +298,7 @@ pub mod size {
     pub const ISLAND_LIST_WIDTH: Pixels = px(450.0);
     pub const ISLAND_LIST_PAD: Pixels = px(6.0);
     pub const ISLAND_LIST_ROW: Pixels = px(40.0);
+    pub const ISLAND_ROW_NAME: Pixels = px(84.0);
     pub const ISLAND_LIST_ROWS: f32 = 6.5;
     pub const ISLAND_LIST_LINE: Pixels = px(34.0);
     pub const ISLAND_LIST_INSET: Pixels = px(10.0);
