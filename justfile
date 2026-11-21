@@ -10,7 +10,7 @@ default:
 
 # The checks CI runs, in the Nix sandbox.
 check:
-    nix flake check
+    tools/capped.sh nix flake check
     tools/local-pass.sh record check
 
 # Build one crate or the workspace.

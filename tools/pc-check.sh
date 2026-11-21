@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs `just check` on a claude/* branch in the shared checkout, capped so
-# the PC stays usable, then pushes the branch when --push is given and the
+# Runs `just check` (capped by tools/capped.sh) on a claude/* branch in the
+# shared checkout, then pushes the branch when --push is given and the
 # check passed. Holds .git/freeze.lock for the whole run and switches back
 # to where the checkout was.
 #
@@ -39,12 +39,7 @@ else
 fi
 echo "pc-check: $branch at $(git rev-parse --short HEAD)"
 
-cores=$(( $(nproc) / 2 ))
-systemd-run --user --scope --quiet \
-    -p CPUWeight=idle -p IOWeight=10 -p MemoryMax=6G -p MemorySwapMax=2G \
-    env TZ=UTC CARGO_BUILD_JOBS="$cores" \
-    NIX_CONFIG="cores = $cores"$'\n'"max-jobs = 1" \
-    nice -n 19 nix develop -c just check
+TZ=UTC nix develop -c just check
 
 if [ "$push" = --push ]; then
     git push -u origin "$branch"

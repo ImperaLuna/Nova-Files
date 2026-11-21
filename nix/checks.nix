@@ -74,7 +74,7 @@ in
     ciArgs
     // {
       cargoArtifacts = ciArtifacts;
-      cargoNextestExtraArgs = "--workspace --no-tests=warn";
+      cargoNextestExtraArgs = "--workspace --no-tests=warn --test-threads=$NIX_BUILD_CORES";
       # The D-Bus tests start a private dbus-daemon; the archive tests open
       # 7z archives through 7-Zip.
       nativeCheckInputs = [
