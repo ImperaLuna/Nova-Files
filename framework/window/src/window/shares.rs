@@ -38,6 +38,7 @@ impl MainWindow {
             }
         }
         if done
+            && !self.waiting()
             && self.shows_shares()
             && let Some(place) = self.place_on_screen_now()
         {
@@ -55,10 +56,11 @@ impl MainWindow {
     }
 
     pub(super) fn size_of_row(&self, index: usize) -> Option<u64> {
-        self.details
+        self.shares
+            .measured
             .get(&index)
-            .and_then(|read| read.details.size)
-            .or_else(|| self.shares.measured.get(&index).copied())
+            .copied()
+            .or_else(|| self.details.get(&index).and_then(|read| read.details.size))
     }
 
     pub fn share(&self, index: usize) -> Option<f32> {
