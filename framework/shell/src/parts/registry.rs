@@ -123,6 +123,8 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         .collect();
     let views: Vec<Card<P>> = slots.list_views.iter().map(|(_, draw)| *draw).collect();
     let list_views = card_views(&entity, host, &views, Fit::Fill, cx);
+    let drawn: Vec<Card<P>> = slots.islands.iter().map(|(_, draw)| *draw).collect();
+    let islands = card_views(&entity, host, &drawn, Fit::Cover, cx);
     Box::new(Opened {
         entity,
         host: host.clone(),
@@ -135,5 +137,6 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         layers,
         path_chips,
         list_views,
+        islands,
     })
 }
