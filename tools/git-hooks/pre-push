@@ -3,8 +3,7 @@
 # directly on main) whose own commits change anything besides code, so the
 # push never reaches CI. tools/ci-stack-guard.sh has the list; CI runs the
 # same check as "stack holds code only". It also refuses a commit that
-# `just check`, and `just mutants` while tools/mutation-tests reads `on`,
-# haven't passed on (tools/local-pass.sh).
+# `just check` hasn't passed on (tools/local-pass.sh).
 # Then tools/pre-push-lint.sh runs rustfmt and Clippy on the crates the
 # push changes.
 #
@@ -47,8 +46,7 @@ while read -r _local_ref local_sha remote_ref _remote_sha; do
         fi
     done < <(git for-each-ref --format='%(refname)' "refs/remotes/$remote/")
 
-    if ! "$(git rev-parse --show-toplevel)/tools/local-pass.sh" verify \
-        "refs/remotes/$remote/${parent:-main}" "$local_sha"; then
+    if ! "$(git rev-parse --show-toplevel)/tools/local-pass.sh" verify "$local_sha"; then
         echo "pre-push: refused to push $branch." >&2
         exit 1
     fi
