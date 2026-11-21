@@ -5,7 +5,7 @@ use super::*;
 use crate::window_sidebar::right_click;
 
 const MAKES_AN_EMPTY_ARCHIVE: &str = "#!/bin/sh\n: > \"$4\"\n";
-const HOLDS_ONE_FILE: &str = "#!/bin/sh\nprintf '%s\\000' f 0 5 0 u 420 inner.txt ''\n";
+const HOLDS_ONE_FILE: &str = "#!/bin/sh\nprintf '%s\\000' f 0 5 0 u 420 inner.zip ''\n";
 
 fn fake_helper(home: &TempFolder, script: &str) -> nova_files::Archiver {
     let helper = home.path().join("archiver");
@@ -131,12 +131,20 @@ async fn an_opened_archive_offers_extract_all_and_nothing_that_changes_it(cx: &m
     assert!(cx.debug_bounds("extract-all").is_some());
     right_click(cx, "name-0");
     let labels = offered(&view, cx).0;
-    for changes in ["Compress", "Rename", "Cut", "Move to Trash"] {
+    for changes in [
+        "Compress",
+        "Rename",
+        "Cut",
+        "Move to Trash",
+        "Extract here",
+        "Extract to…",
+    ] {
         assert!(
             !labels.iter().any(|label| label == changes),
             "{changes} in {labels:?}"
         );
     }
+    assert!(labels.iter().any(|label| label == "Copy"), "{labels:?}");
     cx.simulate_keystrokes("escape");
     click(cx, "extract-all");
     wait_for_note_starting(&view, cx, "Couldn't extract bundle.zip").await;

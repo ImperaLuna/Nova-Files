@@ -285,7 +285,7 @@ fn writable_folder(scene: &Scene) -> Option<PathBuf> {
 }
 
 fn has_archives(part: &ArchivesPart, scene: &Scene, cx: &App) -> bool {
-    !scene.picker && !scene.rules.trashed && part.inside.is_none() && !part.archives(cx).is_empty()
+    !scene.picker && !scene.rules.read_only && !part.archives(cx).is_empty()
 }
 
 const fn in_archive(part: &ArchivesPart, scene: &Scene, _: &App) -> bool {
