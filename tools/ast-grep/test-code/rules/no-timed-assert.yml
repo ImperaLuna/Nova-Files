@@ -1,8 +1,8 @@
 # An assert on measured time fails on a busy machine though the code is
 # right. Check what the time stood for instead (the helper is gone, the
 # result says Cancelled); a test that hangs is ended by nextest's timeout
-# (.config/nextest.toml). Inside a loop, a time check is the wait's timeout
-# and passes.
+# (.config/nextest.toml). Inside a `while` or `loop`, a time check is the
+# wait's timeout and passes; a `for` loop goes over cases and doesn't.
 id: no-timed-assert
 language: rust
 severity: error
@@ -31,4 +31,3 @@ rule:
       any:
         - kind: loop_expression
         - kind: while_expression
-        - kind: for_expression

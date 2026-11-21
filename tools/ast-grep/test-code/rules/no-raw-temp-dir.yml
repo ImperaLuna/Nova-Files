@@ -6,13 +6,8 @@ language: rust
 severity: error
 message: Make the folder with nova_files_test_folder::TestFolder, which names it per test and removes it.
 files:
-  - "app/**/*.rs"
-  - "framework/**/*.rs"
-  - "features/**/*.rs"
-  - "fronts/**/*.rs"
-  - "helpers/**/*.rs"
-ignores:
-  - "framework/test-folder/**"
+  - "**/tests/**/*.rs"
+  - "**/tests.rs"
 rule:
   pattern: $TEMP.join($$$NAME)
   has:

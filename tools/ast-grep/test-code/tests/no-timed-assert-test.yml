@@ -30,6 +30,14 @@ valid:
     }
 invalid:
   - |
+    fn each_packing_is_quick() {
+        for packing in PACKINGS {
+            let started = Instant::now();
+            make(packing);
+            assert!(started.elapsed() < QUICK);
+        }
+    }
+  - |
     fn a_stopped_listing_ends_its_helper_at_once() {
         let started = Instant::now();
         let listed = list(shell, &lead, (Path::new("/a.zip"), None), &|| true);
