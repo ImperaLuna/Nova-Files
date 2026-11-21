@@ -399,7 +399,7 @@ async fn sorting_games_by_size_measures_each_game(cx: &mut TestAppContext) {
     fs::create_dir_all(steam.join("Celeste")).unwrap();
     fs::create_dir_all(other.join("Hades")).unwrap();
     fs::write(steam.join("Celeste/data"), [0_u8; 100]).unwrap();
-    fs::write(other.join("Hades/data"), [0_u8; 40_000]).unwrap();
+    fs::write(other.join("Hades/data"), vec![0_u8; 40_000]).unwrap();
     write_gathered(
         tree.path(),
         &format!(
