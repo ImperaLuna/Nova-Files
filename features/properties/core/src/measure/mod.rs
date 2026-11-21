@@ -1,3 +1,4 @@
+mod folders;
 mod space;
 mod tally;
 mod walk;
@@ -13,6 +14,7 @@ use nova_files_api::{ClientGone, ClientId, Unreadable};
 use nova_files_messages::EventSink;
 use nova_files_properties_api::{Event, MeasureId, ScanState, Size};
 
+pub use folders::FolderMeasure;
 use tally::Tally;
 use walk::{Root, walk};
 

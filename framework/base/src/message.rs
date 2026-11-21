@@ -121,6 +121,18 @@ pub enum Event {
         details: Arc<[Details]>,
         icons: Arc<[FileIcon]>,
     },
+    /// How many bytes the folders of listing `id` hold so far, by entry,
+    /// sent after a listing by [`crate::SortKey::Size`] while
+    /// [`crate::FolderSizes::Measured`]: a few times a second for the
+    /// folders whose totals changed, then once with `done` set and every
+    /// folder's total. A client then lists the folder again to have it
+    /// sorted by those totals; that listing gives folders their sizes in
+    /// their [`Details`] and measures nothing more while they are fresh.
+    FoldersMeasured {
+        id: ListingId,
+        sizes: Vec<(EntryId, u64)>,
+        done: bool,
+    },
     /// The UI's window state as last saved, empty when there is none,
     /// answering [`Command::WindowState`].
     WindowState(Vec<u8>),

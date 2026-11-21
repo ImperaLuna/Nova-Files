@@ -129,6 +129,7 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
+            | Event::FoldersMeasured { .. }
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. } => {}
         }

@@ -54,15 +54,19 @@ const HIDDEN_MARK: u8 = b'.';
 /// when the disk couldn't say (the entry vanished, or can't be read).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Details {
-    /// The file's size in bytes. Always `None` for a folder.
+    /// The file's size in bytes. `None` for a folder, unless its listing
+    /// measured what the folder holds (see [`crate::FolderSizes`]).
     pub size: Option<u64>,
     /// When the contents last changed.
     pub modified: Option<SystemTime>,
 }
 
-/// What a listing's entries are ordered by. Folders always come before
-/// files; within each group the entries follow the key, and entries the
-/// key can't tell apart (folders by size, say) stay A to Z.
+/// What a listing's entries are ordered by. Folders come before files;
+/// within each group the entries follow the key, and entries the key can't
+/// tell apart (folders by size, say) stay A to Z.
+///
+/// By size with [`crate::FolderSizes::Measured`], folders and files sort
+/// together by what they hold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SortKey {
     #[default]
