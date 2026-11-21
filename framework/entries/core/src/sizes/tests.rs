@@ -12,6 +12,7 @@ use crate::client::Client;
 const QUIET: Duration = Duration::from_millis(300);
 const BIG: u64 = 900;
 const SMALL: u64 = 5;
+const FILE: usize = 50;
 
 struct Plain;
 
@@ -112,7 +113,7 @@ fn sample_folder(root: &Path) {
     fs::remove_dir_all(root).ok();
     fs::create_dir_all(root.join("big")).unwrap();
     fs::create_dir_all(root.join("small")).unwrap();
-    fs::write(root.join("file"), [0_u8; 50]).unwrap();
+    fs::write(root.join("file"), [0_u8; FILE]).unwrap();
 }
 
 #[test]
