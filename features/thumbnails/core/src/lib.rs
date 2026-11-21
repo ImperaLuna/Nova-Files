@@ -230,16 +230,20 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
             continue;
         }
         let jobs: Vec<launch::Job> = misses.iter().map(|(_, job)| job.clone()).collect();
-        launch::run(&setup.helper, &setup.folder, size, &jobs);
-        for (index, job) in misses {
-            if !wanted(index) {
-                continue;
-            }
-            if let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime)
-                && !answer(index, png)
+        let mut client_here = true;
+        launch::run(&setup.helper, &setup.folder, size, &jobs, |made| {
+            let Some((index, job)) = misses.get(made) else {
+                return client_here;
+            };
+            if wanted(*index)
+                && let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime)
             {
-                return;
+                client_here = answer(*index, png);
             }
+            client_here
+        });
+        if !client_here {
+            return;
         }
     }
 }
