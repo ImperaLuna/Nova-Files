@@ -7,7 +7,7 @@ use super::*;
 use nova_files_jobs::folders::Folders;
 use nova_files_jobs::journal::Journal;
 use nova_files_jobs::plan::Entry;
-use nova_files_jobs::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 
 const OTHER_DRIVE: &str = "/dev/shm";
 

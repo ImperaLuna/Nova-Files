@@ -3,8 +3,8 @@ use std::os::unix::fs::symlink;
 use std::os::unix::net::UnixListener;
 
 use super::*;
-use crate::test_folder::TestFolder;
 use nova_files_api::Outcome;
+use nova_files_test_folder::TestFolder;
 
 #[test]
 fn pairs_must_be_whole_paths_and_never_into_themselves() {

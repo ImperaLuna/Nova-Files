@@ -68,7 +68,7 @@ mod tests {
 
     use super::*;
     use nova_files_jobs::plan::{Entry, Kind};
-    use nova_files_jobs::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     fn item(from: &Path, to: &Path, kind: Kind) -> Item {
         Item {

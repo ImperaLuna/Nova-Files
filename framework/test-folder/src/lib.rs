@@ -11,7 +11,7 @@ impl TestFolder {
     pub fn new(test: &str) -> Self {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let name = format!(
-            "nova-files-ops-{test}-{}-{}",
+            "nova-files-{test}-{}-{}",
             process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
@@ -23,6 +23,10 @@ impl TestFolder {
 
     pub fn path(&self) -> &Path {
         &self.0
+    }
+
+    pub fn join(&self, name: impl AsRef<Path>) -> PathBuf {
+        self.0.join(name)
     }
 
     pub fn file(&self, name: &str, text: &str) -> PathBuf {

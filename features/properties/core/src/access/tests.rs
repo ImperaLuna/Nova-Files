@@ -7,7 +7,7 @@ use std::time::Duration;
 use rustix::process::geteuid;
 
 use super::*;
-use nova_files_jobs::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 
 const FILE: u32 = 0o644;
 const FOLDER: u32 = 0o755;

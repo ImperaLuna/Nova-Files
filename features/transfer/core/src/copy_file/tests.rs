@@ -10,7 +10,7 @@ use rustix::fs::{XattrFlags, getxattr, setxattr};
 
 use super::*;
 use nova_files_jobs::place::rename_no_replace;
-use nova_files_jobs::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 
 const MODE: u32 = 0o640;
 const SPARSE_SIZE: u64 = 64 * 1024 * 1024;

@@ -3472,6 +3472,7 @@ dependencies = [
  "nova-files-jobs",
  "nova-files-open-api",
  "nova-files-rename-api",
+ "nova-files-test-folder",
  "rustix",
 ]
 
@@ -3525,6 +3526,7 @@ dependencies = [
  "log",
  "nova-files-api",
  "nova-files-jobs",
+ "nova-files-test-folder",
  "rustix",
 ]
 
@@ -3647,6 +3649,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-disk",
  "nova-files-messages",
+ "nova-files-test-folder",
  "rustix",
 ]
 
@@ -3802,6 +3805,7 @@ dependencies = [
  "nova-files-jobs",
  "nova-files-messages",
  "nova-files-properties-api",
+ "nova-files-test-folder",
  "rustix",
  "uzers",
 ]
@@ -3830,6 +3834,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-jobs",
  "nova-files-rename-api",
+ "nova-files-test-folder",
 ]
 
 [[package]]
@@ -3943,6 +3948,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-test-folder"
+version = "0.1.0"
+
+[[package]]
 name = "nova-files-thumbnailer"
 version = "0.1.0"
 dependencies = [
@@ -4012,6 +4021,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-disk",
  "nova-files-jobs",
+ "nova-files-test-folder",
  "nova-files-transfer-api",
  "rustix",
 ]
@@ -4044,6 +4054,7 @@ dependencies = [
  "nova-files-index",
  "nova-files-jobs",
  "nova-files-messages",
+ "nova-files-test-folder",
  "nova-files-trash-api",
  "rustix",
 ]

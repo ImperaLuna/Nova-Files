@@ -4,7 +4,7 @@ use std::os::unix::fs::symlink;
 use super::*;
 use crate::control::Control;
 use crate::plan::plan_delete;
-use crate::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 
 fn folders_of(paths: &[PathBuf]) -> Folders {
     let plan = plan_delete(paths, &Control::default(), &|_| true).unwrap();

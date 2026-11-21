@@ -60,7 +60,7 @@ pub fn remember(home_trash: &Path, root: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nova_files_jobs::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn a_drive_trash_is_remembered_once_and_read_back() {

@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use rustix::process::{getegid, geteuid};
 
 use super::*;
-use nova_files_jobs::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 
 const PRIVATE_FILE: u32 = 0o640;
 const STICKY_FOLDER: u32 = 0o1700;

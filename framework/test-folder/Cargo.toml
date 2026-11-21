@@ -1,0 +1,18 @@
+# nova-files-test-folder
+#
+# A folder of its own for each test, made under the system temp folder and
+# removed when the test ends. Only ever a dev-dependency.
+#
+# Allowed outside crates: none
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-test-folder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

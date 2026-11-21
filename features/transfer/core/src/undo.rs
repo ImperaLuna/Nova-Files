@@ -75,7 +75,7 @@ fn move_back(running: &mut Running, pairs: &[(PathBuf, PathBuf)]) -> Ended {
 mod tests {
     use nova_files_jobs::JobKind as _;
     use nova_files_jobs::identity;
-    use nova_files_jobs::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     use super::*;
     use crate::Transfers;

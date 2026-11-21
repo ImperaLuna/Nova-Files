@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use super::*;
 use nova_files_jobs::plan::Entry;
-use nova_files_jobs::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 
 fn place_with_name_taken(taken: impl Fn(&Item) -> PathBuf) -> (Result<PathBuf, Stop>, u32) {
     let folder = TestFolder::new("transfer-look-again");
