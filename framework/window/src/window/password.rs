@@ -33,7 +33,7 @@ impl MainWindow {
             Some((job, conflict.number))
         });
         let Some((job, number)) = asked.filter(|_| !self.picker()) else {
-            self.island.password = None;
+            self.drop_password(window, cx);
             return;
         };
         let shown = self.island.password.as_ref();
@@ -46,13 +46,25 @@ impl MainWindow {
             TextFieldEvent::Cancelled => this.cancel_job(cx),
             TextFieldEvent::Changed => {}
         });
-        window.focus(&field.read(cx).focus_handle(cx), cx);
+        let home = self.keys_home(cx);
+        if window.focused(cx).is_none_or(|focused| focused == home) {
+            window.focus(&field.read(cx).focus_handle(cx), cx);
+        }
         self.island.password = Some(Password {
             job,
             number,
             field,
             _events: events,
         });
+    }
+
+    fn drop_password(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(shown) = self.island.password.take() else {
+            return;
+        };
+        if shown.field.read(cx).focus_handle(cx).is_focused(window) {
+            window.focus(&self.keys_home(cx), cx);
+        }
     }
 
     pub(crate) fn give_password(&self, cx: &mut Context<Self>) {

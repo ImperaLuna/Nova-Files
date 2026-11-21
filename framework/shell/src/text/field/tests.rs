@@ -1,4 +1,5 @@
-use super::{DOT, dot_index, dots, offset_of_dot};
+use super::super::edit::TextEdit;
+use super::{DOT, dot_index, dots, offset_of_dot, word_left, word_right};
 
 #[test]
 fn hidden_text_shows_one_dot_a_character() {
@@ -15,4 +16,15 @@ fn offsets_map_to_dots_and_back() {
         assert_eq!(offset_of_dot(text, index), offset, "{index}");
     }
     assert_eq!(offset_of_dot(text, 9 * dot), text.len());
+}
+
+#[test]
+fn word_steps_in_hidden_text_go_to_the_ends() {
+    let mut edit = TextEdit::new("my secret pw");
+    word_left(&mut edit, true, false);
+    assert_eq!(edit.selection(), 0..0);
+    word_right(&mut edit, true, false);
+    assert_eq!(edit.selection(), 12..12);
+    word_left(&mut edit, false, false);
+    assert_eq!(edit.selection(), 10..10);
 }

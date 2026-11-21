@@ -124,11 +124,13 @@ impl TextField {
     }
 
     fn word_left(&mut self, _: &WordLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.select(cx, |edit| edit.move_left(Step::Word, false));
+        let hidden = self.hidden;
+        self.select(cx, |edit| word_left(edit, hidden, false));
     }
 
     fn word_right(&mut self, _: &WordRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.select(cx, |edit| edit.move_right(Step::Word, false));
+        let hidden = self.hidden;
+        self.select(cx, |edit| word_right(edit, hidden, false));
     }
 
     fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -140,11 +142,13 @@ impl TextField {
     }
 
     fn select_word_left(&mut self, _: &SelectWordLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.select(cx, |edit| edit.move_left(Step::Word, true));
+        let hidden = self.hidden;
+        self.select(cx, |edit| word_left(edit, hidden, true));
     }
 
     fn select_word_right(&mut self, _: &SelectWordRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.select(cx, |edit| edit.move_right(Step::Word, true));
+        let hidden = self.hidden;
+        self.select(cx, |edit| word_right(edit, hidden, true));
     }
 
     fn home(&mut self, _: &Home, _: &mut Window, cx: &mut Context<Self>) {
@@ -176,11 +180,27 @@ impl TextField {
     }
 
     fn delete_word_left(&mut self, _: &DeleteWordLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.edit(cx, |edit| edit.delete_backward(Step::Word));
+        let hidden = self.hidden;
+        self.edit(cx, |edit| {
+            if hidden {
+                edit.move_home(true);
+                edit.replace_selection("")
+            } else {
+                edit.delete_backward(Step::Word)
+            }
+        });
     }
 
     fn delete_word_right(&mut self, _: &DeleteWordRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.edit(cx, |edit| edit.delete_forward(Step::Word));
+        let hidden = self.hidden;
+        self.edit(cx, |edit| {
+            if hidden {
+                edit.move_end(true);
+                edit.replace_selection("")
+            } else {
+                edit.delete_forward(Step::Word)
+            }
+        });
     }
 
     fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
@@ -248,6 +268,22 @@ impl TextField {
             return self.edit.text().len();
         };
         self.text_offset(line.closest_index_for_x(position.x - bounds.left() + self.scroll))
+    }
+}
+
+fn word_left(edit: &mut TextEdit, hidden: bool, extend: bool) {
+    if hidden {
+        edit.move_home(extend);
+    } else {
+        edit.move_left(Step::Word, extend);
+    }
+}
+
+fn word_right(edit: &mut TextEdit, hidden: bool, extend: bool) {
+    if hidden {
+        edit.move_end(extend);
+    } else {
+        edit.move_right(Step::Word, extend);
     }
 }
 
