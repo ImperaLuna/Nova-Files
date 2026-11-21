@@ -17,6 +17,7 @@ pub mod kind;
 mod layout;
 mod line;
 mod location;
+mod made;
 mod menu;
 mod navigator;
 mod opening;
@@ -48,6 +49,7 @@ pub use kept::Kept;
 pub use layout::{Grid, Layout, NAME_LINES};
 pub use line::{Line, Lines};
 pub use location::{Location, PageKind, PageRef, StartPage};
+pub use made::RenameWhenMade;
 pub use menu::{
     Expander, Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow,
     arrange,

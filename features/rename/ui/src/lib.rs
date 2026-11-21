@@ -3,15 +3,14 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use gpui::{
-    AnyWindowHandle, App, AppContext as _, Context, Entity, Focusable as _, Subscription, Window,
-};
-use nova_files_api::{Entry, EntryKind, Listing, Operation};
+use gpui::{App, AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
+use nova_files_api::{Entry, EntryKind, Event, Listing, Operation};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::text::{TextField, TextFieldEvent};
 use nova_files_shell::typed::stem;
 use nova_files_shell::{
-    Host, Location, MenuAt, MenuGroup, MenuItem, Part, Placed, Scene, Slots, command_spec,
+    Host, Location, MenuAt, MenuGroup, MenuItem, Part, Placed, RenameWhenMade, Scene, Slots,
+    command_spec,
 };
 
 mod name;
@@ -32,7 +31,7 @@ command_spec!(
 pub struct RenamePart {
     host: Host,
     renaming: Option<Renaming>,
-    made: Option<Made>,
+    made: RenameWhenMade,
     listing: Option<Listing>,
 }
 
@@ -48,12 +47,6 @@ impl Renaming {
     fn path(&self) -> PathBuf {
         self.folder.join(&self.name)
     }
-}
-
-struct Made {
-    folder: PathBuf,
-    name: OsString,
-    window: AnyWindowHandle,
 }
 
 impl RenamePart {
@@ -177,45 +170,27 @@ impl RenamePart {
             return;
         };
         let name = free_name(listing);
-        self.made = Some(Made {
-            folder: inside.clone(),
-            name: name.clone(),
-            window: window.window_handle(),
-        });
-        self.host.entries.update(cx, |entries, cx| {
-            entries.select_when_listed(inside.clone(), vec![name.clone()], cx);
-        });
+        self.made.wait(&self.host, inside.join(&name), window, cx);
         self.host.island.update(cx, |island, cx| {
             island.start_job(Operation::NewFolder { inside, name }, cx);
         });
     }
 
-    fn listed(&mut self, listing: &Listing, _: bool, cx: &mut Context<Self>) {
-        self.listing = Some(listing.clone());
-        if self
-            .made
-            .as_ref()
-            .is_some_and(|made| made.folder != listing.path)
-        {
-            self.made = None;
-        }
-        self.rename_made(listing, cx);
+    fn watch(&mut self, event: &Event, _: &mut Context<Self>) {
+        self.made.watch(event);
     }
 
-    fn rename_made(&mut self, listing: &Listing, cx: &mut Context<Self>) {
-        let Some(made) = self
-            .made
-            .take_if(|made| listing.entries.iter().any(|entry| entry.name == made.name))
-        else {
+    fn listed(&mut self, listing: &Listing, _: bool, cx: &mut Context<Self>) {
+        self.listing = Some(listing.clone());
+        let Some(made) = self.made.listed(listing) else {
             return;
         };
         let part = cx.entity().downgrade();
         cx.defer(move |cx| {
-            made.window
-                .update(cx, |_, window, cx| {
-                    part.update(cx, |part, cx| part.start(window, cx)).ok();
-                })
-                .ok();
+            made.update(cx, |_, window, cx| {
+                part.update(cx, |part, cx| part.start(window, cx)).ok();
+            })
+            .ok();
         });
     }
 }
@@ -264,7 +239,7 @@ impl Part for RenamePart {
         Self {
             host: host.clone(),
             renaming: None,
-            made: None,
+            made: RenameWhenMade::default(),
             listing: None,
         }
     }
@@ -288,5 +263,6 @@ impl Part for RenamePart {
         slots.name_field(field_of);
         slots.busy(renaming);
         slots.listed(Self::listed);
+        slots.watch(Self::watch);
     }
 }
