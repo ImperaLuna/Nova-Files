@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# Tells a CI job whether the pull request changes anything the job checks,
-# so a job with nothing to check reports success in seconds. GitHub requires
-# both jobs by name, so they always run; only their work is skipped.
+# Tells the check job whether the pull request changes anything it checks
+# (anything but Markdown, LICENSE and .gitignore), so with nothing to check
+# it reports success in seconds. GitHub requires the job by name, so it
+# always runs; only its work is skipped.
 #
-# Usage: tools/ci-needs-run.sh rust|code
-#   rust  any .rs file: the mutation job mutates only changed Rust lines.
-#   code  anything but Markdown, LICENSE and .gitignore: nix flake check.
+# Usage: tools/ci-needs-run.sh code
 # Writes run=true or run=false to $GITHUB_OUTPUT (stdout outside Actions).
 # Outside a pull request, such as a push to main, the answer is always true.
 set -euo pipefail
 
-mode=${1:?usage: tools/ci-needs-run.sh rust|code}
+mode=${1:?usage: tools/ci-needs-run.sh code}
 out=${GITHUB_OUTPUT:-/dev/stdout}
 
 if [ "${GITHUB_EVENT_NAME:-}" != "pull_request" ]; then
@@ -23,7 +22,6 @@ fi
 changed=$(git diff --name-only HEAD^1 HEAD)
 
 case $mode in
-rust) relevant=$(grep -E '\.rs$' <<<"$changed" || true) ;;
 code) relevant=$(grep -vE '(\.md|^LICENSE|^\.gitignore)$' <<<"$changed" || true) ;;
 *)
     echo "unknown mode: $mode" >&2
