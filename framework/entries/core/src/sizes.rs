@@ -25,7 +25,9 @@ pub trait MeasureFolders: Send + Sync {
     ) -> Option<Vec<u64>>;
 }
 
-type Sizes = Arc<HashMap<OsString, u64>>;
+type ByName = HashMap<OsString, u64>;
+
+type Sizes = Arc<ByName>;
 
 struct Kept {
     at: Instant,
@@ -51,24 +53,32 @@ impl FolderSizer {
             .map(|kept| (Arc::clone(&kept.sizes), kept.at.elapsed() < FRESH))
     }
 
-    fn keep(&self, folder: PathBuf, sizes: HashMap<OsString, u64>) {
+    fn keep(&self, measured: Vec<(PathBuf, ByName)>) {
+        let at = Instant::now();
+        let room = KEPT_FOLDERS.max(measured.len());
+        let fresh: Vec<PathBuf> = measured.iter().map(|(folder, _)| folder.clone()).collect();
         let mut kept = self.lock();
-        if kept.len() >= KEPT_FOLDERS && !kept.contains_key(&folder) {
+        for (folder, sizes) in measured {
+            kept.insert(
+                folder,
+                Kept {
+                    at,
+                    sizes: Arc::new(sizes),
+                },
+            );
+        }
+        while kept.len() > room {
             let oldest = kept
                 .iter()
+                .filter(|(folder, _)| !fresh.contains(folder))
                 .min_by_key(|(_, kept)| kept.at)
                 .map(|(folder, _)| folder.clone());
-            if let Some(oldest) = oldest {
-                kept.remove(&oldest);
-            }
+            let Some(oldest) = oldest else {
+                break;
+            };
+            kept.remove(&oldest);
         }
-        kept.insert(
-            folder,
-            Kept {
-                at: Instant::now(),
-                sizes: Arc::new(sizes),
-            },
-        );
+        drop(kept);
     }
 
     fn lock(&self) -> MutexGuard<'_, HashMap<PathBuf, Kept>> {
@@ -189,12 +199,15 @@ fn measure(job: &ListingJob, listing: &Listing, sizer: &FolderSizer) {
         return;
     }
     let mut measured = Vec::new();
+    let mut to_keep = Vec::new();
     for (home, folders) in &groups {
-        let Some(in_home) = measure_in(job, listing.id, home, folders, sizer) else {
+        let Some((in_home, totals)) = measure_in(job, listing.id, home, folders, sizer) else {
             return;
         };
         measured.extend(in_home);
+        to_keep.push((home.to_path_buf(), totals));
     }
+    sizer.keep(to_keep);
     job.answer(Event::FoldersMeasured {
         id: listing.id,
         sizes: measured,
@@ -208,7 +221,7 @@ fn measure_in(
     home: &Path,
     folders: &[&Entry],
     sizer: &FolderSizer,
-) -> Option<Vec<(EntryId, u64)>> {
+) -> Option<(Vec<(EntryId, u64)>, ByName)> {
     let by_slot = |sizes: Vec<(usize, u64)>| -> Vec<(EntryId, u64)> {
         sizes
             .into_iter()
@@ -228,11 +241,8 @@ fn measure_in(
         .measure
         .measure(home, &names, &stopped, &told)
         .filter(|_| !job.cancelled())?;
-    sizer.keep(
-        home.to_path_buf(),
-        names.into_iter().zip(totals.iter().copied()).collect(),
-    );
-    Some(by_slot(totals.into_iter().enumerate().collect()))
+    let by_name = names.into_iter().zip(totals.iter().copied()).collect();
+    Some((by_slot(totals.into_iter().enumerate().collect()), by_name))
 }
 
 fn arrange(

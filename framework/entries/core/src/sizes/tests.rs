@@ -159,7 +159,7 @@ fn the_oldest_folder_is_forgotten_past_the_cap() {
         asked: AtomicUsize::new(0),
     }));
     for at in 0..=KEPT_FOLDERS {
-        sizer.keep(PathBuf::from(format!("/f{at}")), HashMap::new());
+        sizer.keep(vec![(PathBuf::from(format!("/f{at}")), HashMap::new())]);
     }
 
     assert!(sizer.known(Path::new("/f0")).is_none());
@@ -224,4 +224,22 @@ fn folder_entry(name: &str) -> Entry {
         name: name.into(),
         kind: EntryKind::Folder,
     }
+}
+
+#[test]
+fn folders_measured_together_are_all_kept_past_the_cap() {
+    let sizer = FolderSizer::new(Arc::new(Fixed {
+        asked: AtomicUsize::new(0),
+    }));
+    let many: Vec<_> = (0..=KEPT_FOLDERS)
+        .map(|at| (PathBuf::from(format!("/g{at}")), HashMap::new()))
+        .collect();
+
+    sizer.keep(many);
+
+    assert!((0..=KEPT_FOLDERS).all(|at| {
+        sizer
+            .known(Path::new(&format!("/g{at}")))
+            .is_some_and(|(_, fresh)| fresh)
+    }));
 }
