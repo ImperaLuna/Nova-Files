@@ -127,7 +127,9 @@ fn listed(
 ) -> Result<Option<Listed>, Stop> {
     let mut password = None;
     loop {
-        let kind = match archiver.list_locked(archive, password.as_deref()) {
+        let control = &running.shared.control;
+        let stopped = || control.cancelled();
+        let kind = match archiver.list_locked(archive, password.as_deref(), &stopped) {
             Ok(entries) => return Ok(Some((entries, password))),
             Err(ArchiveFailure::NeedsPassword) => ConflictKind::PasswordNeeded,
             Err(ArchiveFailure::WrongPassword) => ConflictKind::PasswordWrong,

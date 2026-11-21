@@ -46,7 +46,7 @@ async fn the_menu_opens_a_files_properties_in_a_new_tab(cx: &mut TestAppContext)
         assert_eq!(menu.items.last().unwrap().label, "Properties");
         menu.items.len() - 1
     });
-    let selector: &'static str = ["menu-5", "menu-6", "menu-7"][last - 5];
+    let selector: &'static str = ["menu-5", "menu-6", "menu-7", "menu-8", "menu-9"][last - 5];
     click(cx, selector);
 
     let read = read_page(&view, cx).await;

@@ -43,6 +43,9 @@ fn make(
     if !asked.into.is_absolute() || !is_plain_name(asked.name) {
         return Err(Stop::because(&target, Failure::InvalidName));
     }
+    if asked.locked && !locks(asked.packing) {
+        return Err(Stop::because(&target, Failure::Unsupported));
+    }
     let first = asked
         .sources
         .first()
@@ -87,6 +90,13 @@ fn make(
             Err(Stop::at(&target, &error))
         }
     }
+}
+
+const fn locks(packing: Packing) -> bool {
+    matches!(
+        packing,
+        Packing::ZipDeflate | Packing::ZipZstd | Packing::SevenZip
+    )
 }
 
 fn locking_password(
@@ -147,6 +157,16 @@ fn stop_for(failure: ArchiveFailure, first: &Path, target: &Path) -> Stop {
 mod tests {
     use super::*;
     use nova_files_jobs::test_folder::TestFolder;
+
+    #[test]
+    fn only_zip_and_7z_take_a_password() {
+        assert!(locks(Packing::ZipDeflate));
+        assert!(locks(Packing::ZipZstd));
+        assert!(locks(Packing::SevenZip));
+        assert!(!locks(Packing::TarZstd));
+        assert!(!locks(Packing::TarGzip));
+        assert!(!locks(Packing::TarXz));
+    }
 
     #[test]
     fn totals_count_file_bytes_and_every_entry_once() {

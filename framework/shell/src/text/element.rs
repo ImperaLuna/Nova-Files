@@ -89,7 +89,7 @@ impl Element for TextElement {
         let (shown, text_color) = if edit.text().is_empty() {
             (field.placeholder.clone(), colors.text_dim.into())
         } else {
-            (edit.text().to_owned().into(), colors.text.into())
+            (field.shown().into(), colors.text.into())
         };
         let run = TextRun {
             len: shown.len(),
@@ -99,20 +99,23 @@ impl Element for TextElement {
             underline: None,
             strikethrough: None,
         };
-        let runs = runs(run, edit.marked());
+        let marked = edit
+            .marked()
+            .map(|marked| field.shown_index(marked.start)..field.shown_index(marked.end));
+        let runs = runs(run, marked);
         let font_size = style.font_size.to_pixels(window.rem_size());
         let line = window
             .text_system()
             .shape_line(shown, font_size, &runs, None);
 
-        let caret_x = line.x_for_index(edit.caret());
+        let caret_x = line.x_for_index(field.shown_index(edit.caret()));
         let scroll = scroll(field.scroll, caret_x, line.width(), bounds.size.width);
         let selection = edit.selection();
         let mark = Mark::new(
             bounds,
             scroll,
-            line.x_for_index(selection.start),
-            line.x_for_index(selection.end),
+            line.x_for_index(field.shown_index(selection.start)),
+            line.x_for_index(field.shown_index(selection.end)),
         );
         self.field.update(cx, |field, _| field.scroll = scroll);
         Prepainted { line, mark }

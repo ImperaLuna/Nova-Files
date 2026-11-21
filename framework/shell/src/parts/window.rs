@@ -294,6 +294,10 @@ impl WindowParts {
             .find_map(|part| part.list_view(scene, cx))
     }
 
+    pub fn island(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
+        self.opened.iter().find_map(|part| part.island(scene, cx))
+    }
+
     pub fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
         self.opened
             .iter()

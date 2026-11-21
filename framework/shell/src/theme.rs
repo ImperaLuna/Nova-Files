@@ -298,6 +298,7 @@ pub mod size {
     pub const ISLAND_LIST_WIDTH: Pixels = px(450.0);
     pub const ISLAND_LIST_PAD: Pixels = px(6.0);
     pub const ISLAND_LIST_ROW: Pixels = px(40.0);
+    pub const ISLAND_ROW_NAME: Pixels = px(84.0);
     pub const ISLAND_LIST_ROWS: f32 = 6.5;
     pub const ISLAND_LIST_LINE: Pixels = px(34.0);
     pub const ISLAND_LIST_INSET: Pixels = px(10.0);
@@ -307,6 +308,7 @@ pub mod size {
     pub const PROGRESS_WIDTH: Pixels = px(140.0);
     pub const PROGRESS_HEIGHT: Pixels = px(6.0);
     pub const PROGRESS_RIGHT: Pixels = px(12.0);
+    pub const PASSWORD_WIDTH: Pixels = px(180.0);
     pub const RENAME_HEIGHT: Pixels = px(26.0);
     pub const RENAME_PAD: Pixels = px(7.0);
     pub const TEXT_BUTTON_PAD: Pixels = px(12.0);

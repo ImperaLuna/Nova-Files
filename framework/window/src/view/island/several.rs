@@ -1,19 +1,18 @@
 use gpui::{
-    ClickEvent, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Transformation, div, radians, svg,
+    ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, div,
 };
 use nova_files_api::JobId;
 
-use super::{bar, floating, label, square};
+use nova_files_shell::island::look::{chevron, floating, label, square};
+
+use super::bar;
 use crate::assets::Icon;
 use crate::island::progress::Running;
 use crate::island::several::{fraction, left, line, title};
 use crate::theme::{Colors, size, text};
 use crate::view::row::icon;
 use crate::window::MainWindow;
-
-const POINT_UP: f32 = 270.0_f32.to_radians();
-const POINT_DOWN: f32 = 90.0_f32.to_radians();
 
 pub(super) fn island(
     jobs: &[(JobId, &Running)],
@@ -68,16 +67,8 @@ pub(super) fn island(
 }
 
 fn arrow(open: bool, colors: &Colors, cx: &Context<MainWindow>) -> impl IntoElement {
-    let angle = if open { POINT_DOWN } else { POINT_UP };
     square("island-jobs-open", colors)
-        .child(
-            svg()
-                .path(Icon::Chevron.path())
-                .flex_none()
-                .size(size::BUTTON_ICON)
-                .text_color(Hsla::from(colors.text_soft))
-                .with_transformation(Transformation::rotate(radians(angle))),
-        )
+        .child(chevron(open, colors))
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_jobs_open(cx)))
 }
 

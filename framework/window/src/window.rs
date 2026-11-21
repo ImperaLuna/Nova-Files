@@ -9,6 +9,7 @@ mod hidden;
 mod hover_open;
 mod jobs;
 mod navigate;
+pub mod password;
 mod pin;
 mod renaming;
 mod rows;

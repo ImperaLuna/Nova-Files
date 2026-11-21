@@ -87,15 +87,16 @@ impl Archiver {
     }
 
     pub fn list(&self, archive: &Path) -> Result<Vec<ArchiveEntry>, ArchiveFailure> {
-        self.list_locked(archive, None)
+        self.list_locked(archive, None, &|| false)
     }
 
     pub fn list_locked(
         &self,
         archive: &Path,
         password: Option<&str>,
+        stopped: &dyn Fn() -> bool,
     ) -> Result<Vec<ArchiveEntry>, ArchiveFailure> {
-        let output = helper::list(&self.helper, &self.lead(), archive, password)?;
+        let output = helper::list(&self.helper, &self.lead(), (archive, password), stopped)?;
         wire::entries(&output).ok_or(ArchiveFailure::Broken)
     }
 
