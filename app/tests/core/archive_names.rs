@@ -8,6 +8,7 @@ use nova_files_api::archive::ending;
 use nova_files_api::{Entry, EntryId, EntryKind, IconKind, Operation, Outcome, Packing};
 use nova_files_archives_ui::archive_name;
 use nova_files_shell::kind::icon_kind;
+use nova_files_test_folder::TestFolder;
 
 use common::Bench;
 
@@ -26,10 +27,8 @@ fn fake_archiver(helper: PathBuf) -> nova_files::Archiver {
 
 #[test]
 fn every_format_gets_the_same_name_from_the_window_and_the_core() {
-    let helper = std::env::temp_dir().join(format!(
-        "nova-files-archive-names-helper-{}",
-        std::process::id()
-    ));
+    let scripts = TestFolder::new("archive-names-helper");
+    let helper = scripts.join("archiver");
     let bench = Bench::with_archiver("archive-names", fake_archiver(helper.clone()));
     let client = bench.client();
     for packing in Packing::ALL {
@@ -81,5 +80,4 @@ fn every_format_gets_the_same_name_from_the_window_and_the_core() {
             );
         }
     }
-    fs::remove_file(helper).ok();
 }
