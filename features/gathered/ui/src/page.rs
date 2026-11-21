@@ -45,6 +45,10 @@ impl PageKind for GatheredPage {
     fn folder_column(&self) -> bool {
         self.place == Gathering::Projects
     }
+
+    fn measures_folders(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

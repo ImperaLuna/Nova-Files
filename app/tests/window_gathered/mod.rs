@@ -1,4 +1,5 @@
 use gpui::point;
+use nova_files_api::{FolderSizes, SortKey};
 use nova_files_gathered_api::Gathering;
 use nova_files_gathered_ui::{GatheredPage, GatheredPart};
 use nova_files_shell::PageRef;
@@ -387,4 +388,41 @@ async fn add_folder_opens_a_folder_picker(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     assert_eq!(cx.windows().len(), windows + 1);
+}
+
+#[gpui::test]
+async fn sorting_games_by_size_measures_each_game(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("gathered-sizes");
+    let steam = tree.path().join("SteamLibrary");
+    let other = tree.path().join("Other");
+    fs::create_dir_all(steam.join("Celeste")).unwrap();
+    fs::create_dir_all(other.join("Hades")).unwrap();
+    fs::write(steam.join("Celeste/data"), [0_u8; 100]).unwrap();
+    fs::write(other.join("Hades/data"), [0_u8; 40_000]).unwrap();
+    write_gathered(
+        tree.path(),
+        &format!(
+            "[[games]]\npath = \"{}\"\n\n[[games]]\npath = \"{}\"\n",
+            steam.display(),
+            other.display()
+        ),
+    );
+    let (view, cx) = open_on(cx, tree.path()).await;
+    view.condition::<WindowEvent>(cx, |_, cx| {
+        Published::<FolderSizes>::get(cx) == Some(&FolderSizes::Measured)
+    })
+    .await;
+    click(cx, "place-games");
+    wait_for_place(&view, cx, Gathering::Games, &["Celeste", "Hades"]).await;
+
+    view.update(cx, |view, _| view.sort_by(SortKey::Size));
+
+    wait_for_place(&view, cx, Gathering::Games, &["Hades", "Celeste"]).await;
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| {
+        assert!(view.shows_shares());
+        assert!(view.share(0).is_some_and(|got| (got - 1.0).abs() < 1e-6));
+        assert!(view.share(1).is_some_and(|got| got < 1.0));
+    });
 }

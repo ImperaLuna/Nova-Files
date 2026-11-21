@@ -169,3 +169,59 @@ fn the_oldest_folder_is_forgotten_past_the_cap() {
             .is_some()
     );
 }
+
+#[test]
+fn gathered_folders_are_measured_where_each_one_lives() {
+    let root = std::env::temp_dir().join(format!("nova-files-sizes-rows-{}", std::process::id()));
+    fs::remove_dir_all(&root).ok();
+    fs::create_dir_all(root.join("one/small")).unwrap();
+    fs::create_dir_all(root.join("two/big")).unwrap();
+    let (sender, events) = mpsc::channel::<Event>();
+    let icons: Arc<dyn Icons> = Arc::new(Plain);
+    let client = Client::new(Arc::new(sender), None, &icons);
+    let measure = Arc::new(Fixed {
+        asked: AtomicUsize::new(0),
+    });
+    let sizer = FolderSizer::new(Arc::clone(&measure) as Arc<dyn MeasureFolders>);
+    let order = Order {
+        key: SortKey::Size,
+        descending: true,
+    };
+    let rows = || {
+        vec![
+            (folder_entry("small"), root.join("one")),
+            (folder_entry("big"), root.join("two")),
+        ]
+    };
+    let listed = |id| {
+        let job = client.start_listing(ListingId(id));
+        let place = (ListingId(id), PathBuf::new());
+        list_measured_rows(&job, place, rows(), (order, Homes::PerRow), &sizer);
+    };
+
+    listed(1);
+    let first = take(&events);
+    listed(2);
+    let again = take(&events);
+
+    fs::remove_dir_all(&root).ok();
+    assert_eq!(measure.asked.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        first.measured.last(),
+        Some(&Event::FoldersMeasured {
+            id: ListingId(1),
+            sizes: vec![(EntryId(0), SMALL), (EntryId(1), BIG)],
+            done: true,
+        })
+    );
+    assert_eq!(again.names, ["big", "small"]);
+    assert!(again.measured.is_empty(), "{:?}", again.measured);
+}
+
+fn folder_entry(name: &str) -> Entry {
+    Entry {
+        id: EntryId(0),
+        name: name.into(),
+        kind: EntryKind::Folder,
+    }
+}

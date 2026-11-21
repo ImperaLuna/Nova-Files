@@ -2,7 +2,9 @@ use std::sync::mpsc::Receiver;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use nova_files_api::{ClientId, Command, CoreMessage, Envelope, Event, EventSink, MessageType};
+use nova_files_api::{
+    ClientId, Command, CoreMessage, Envelope, Event, EventSink, FolderSizes, MessageType,
+};
 use nova_files_archives_api as archives_api;
 use nova_files_disk::home::Home;
 use nova_files_drives_api::{Command as DrivesCommand, DriveOffer, Event as DrivesEvent};
@@ -160,9 +162,12 @@ fn gathered(setup: &Setup, id: ClientId, client: &Client, command: gathered_api:
             place,
             order,
         } => {
-            let hidden = setup.settings.current().hidden_files;
+            let settings = setup.settings.current();
+            let measured = settings.folder_sizes == FolderSizes::Measured;
+            let sizer = measured.then_some(&setup.folder_sizer);
             let folders = setup.gathered.folders_of(place);
-            nova_files_gathered_core::list(client.entries(), listing, folders, order, hidden);
+            let shown = (order, settings.hidden_files);
+            nova_files_gathered_core::list(client.entries(), listing, folders, shown, sizer);
         }
     }
 }
