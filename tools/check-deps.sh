@@ -196,7 +196,4 @@ while IFS=$'\t' read -r name manifest deps; do
 done < <(jq -r '.packages[] | [.name, .manifest_path,
     ([.dependencies[] | select(.kind != "dev") | .name] | unique | join(" "))] | @tsv' <<<"$metadata")
 
-readonly BASE_GOAL=1500
-base=$(find framework/base -name '*.rs' -print0 | xargs -0 cat | wc -l)
-echo "Lines in framework/base: $base (goal: $BASE_GOAL)"
 exit "$status"
