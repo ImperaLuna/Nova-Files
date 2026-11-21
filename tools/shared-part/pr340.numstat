@@ -1,0 +1,17 @@
+2	1	framework/base/src/job.rs
+1	0	framework/shell/src/island.rs
+139	0	framework/shell/src/island/look.rs
+6	0	framework/shell/src/part.rs
+22	7	framework/shell/src/parts.rs
+3	0	framework/shell/src/parts/registry.rs
+4	0	framework/shell/src/parts/window.rs
+8	5	framework/shell/src/text/element.rs
+105	12	framework/shell/src/text/field.rs
+30	0	framework/shell/src/text/field/tests.rs
+2	0	framework/shell/src/theme.rs
+10	1	framework/window/src/island.rs
+1	0	framework/window/src/view.rs
+86	121	framework/window/src/view/island.rs
+6	15	framework/window/src/view/island/several.rs
+1	0	framework/window/src/window.rs
+93	0	framework/window/src/window/password.rs
