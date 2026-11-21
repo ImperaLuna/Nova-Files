@@ -112,10 +112,10 @@ nova-files-undo-ui = { path = "features/undo/ui" }
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/zed-industries/zed", tag = "v1.29.2", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "0045bbc355400446f3e50b8d278663cbc9f295a2", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/zed-industries/zed", tag = "v1.29.2", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "0045bbc355400446f3e50b8d278663cbc9f295a2", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index and the nova-files binary (one
