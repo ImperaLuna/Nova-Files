@@ -1,8 +1,9 @@
 use std::time::Duration;
 
-use gpui::{App, SharedString, Task};
+use gpui::{App, Entity, SharedString, Subscription, Task};
 use nova_files_api::JobId;
 use nova_files_shell::Undo;
+use nova_files_shell::text::TextField;
 
 pub const NOTE_TIME: Duration = Duration::from_secs(6);
 
@@ -14,6 +15,14 @@ pub struct Island {
     pub jobs_open: bool,
     pub(crate) note_timer: Option<Task<()>>,
     pub(crate) note_owner: Option<nova_files_shell::NoteId>,
+    pub(crate) password: Option<Password>,
+}
+
+pub struct Password {
+    pub(crate) job: JobId,
+    pub(crate) number: u64,
+    pub(crate) field: Entity<TextField>,
+    pub(crate) _events: Subscription,
 }
 
 impl Island {

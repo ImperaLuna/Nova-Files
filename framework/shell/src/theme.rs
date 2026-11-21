@@ -307,6 +307,7 @@ pub mod size {
     pub const PROGRESS_WIDTH: Pixels = px(140.0);
     pub const PROGRESS_HEIGHT: Pixels = px(6.0);
     pub const PROGRESS_RIGHT: Pixels = px(12.0);
+    pub const PASSWORD_WIDTH: Pixels = px(180.0);
     pub const RENAME_HEIGHT: Pixels = px(26.0);
     pub const RENAME_PAD: Pixels = px(7.0);
     pub const TEXT_BUTTON_PAD: Pixels = px(12.0);
