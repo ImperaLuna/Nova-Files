@@ -8,8 +8,8 @@ use gpui::{App, Context, SharedString, Window};
 use nova_files_api::{Entry, Event, JobId, Operation};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
-    Column, FolderName, FolderRules, Host, Location, Look, MenuAt, MenuItem, Navigator, Part,
-    Scene, SidebarAt, SidebarRow, Slots, Views, command_spec,
+    Column, FolderName, FolderRules, Host, Location, Look, MenuAt, MenuGroup, MenuItem, Navigator,
+    Part, Placed, Scene, SidebarAt, SidebarRow, Slots, Views, command_spec,
 };
 use nova_files_trash_api::{self as trash_api, Trashed};
 
@@ -270,7 +270,7 @@ impl Part for TrashPart {
         slots.watch(Self::watch);
         slots.command(&RESTORE, in_trash, Self::restore);
         slots.command(&EMPTY_TRASH, in_trash, Self::ask_empty);
-        slots.menu(MenuAt::Entry, restore_items);
+        slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::FIRST, restore_items);
         slots.menu(MenuAt::Sheet, empty_items);
         slots.menu(MenuAt::Island, restore_button);
         slots.menu(MenuAt::PathBarEnd, empty_chip);

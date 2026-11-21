@@ -309,15 +309,61 @@ async fn the_trash_offers_restore_and_empty_trash(cx: &mut TestAppContext) {
     right_click(cx, "name-0");
     assert_eq!(
         offered(&view, cx),
-        (["Restore"].map(str::to_owned).to_vec(), vec![])
+        (
+            ["Open", "Preview", "Restore", "Delete for good"]
+                .map(str::to_owned)
+                .to_vec(),
+            vec![2, 3]
+        )
     );
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.menu().unwrap().items[3].look, Look::Danger);
+    });
     choose(&view, cx, "Restore");
     wait_for_names(&view, cx, &[]).await;
     assert!(tree.path().join("notes.txt").is_file());
 }
 
 #[gpui::test]
-async fn inside_a_trashed_folder_only_select_all_is_offered(cx: &mut TestAppContext) {
+async fn everything_in_the_trash_can_be_deleted_for_good_from_the_menu(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-trash-delete");
+    let home = TempFolder::tree("menu-trash-delete-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    click(cx, "name-0");
+    cx.simulate_keystrokes("ctrl-a delete");
+    wait_for_note(&view, cx, "Moved 2 items to Trash").await;
+    open_trash(&view, cx, false).await;
+    wait_for_names(&view, cx, &["Projects", "notes.txt"]).await;
+    view.condition::<WindowEvent>(cx, |view, cx| trash_count(view, cx) == Some(2))
+        .await;
+
+    cx.simulate_keystrokes("ctrl-a");
+    right_click(cx, "name-0");
+    assert_eq!(view.read_with(cx, |view, _| view.selected_count()), 2);
+    assert_eq!(
+        offered(&view, cx),
+        (
+            ["Restore", "Delete for good"].map(str::to_owned).to_vec(),
+            vec![1]
+        )
+    );
+    choose(&view, cx, "Delete for good");
+    cx.run_until_parked();
+    assert_eq!(
+        view.read_with(cx, |view, _| view
+            .confirm()
+            .map(|confirm| confirm.label.clone())),
+        Some("Delete 2 items for good?".into())
+    );
+    click(cx, "island-yes");
+    wait_for_names(&view, cx, &[]).await;
+    view.condition::<WindowEvent>(cx, |view, cx| trash_count(view, cx) == Some(0))
+        .await;
+}
+
+#[gpui::test]
+async fn inside_a_trashed_folder_files_only_open(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("menu-trashed");
     let home = TempFolder::tree("menu-trashed-home");
@@ -331,7 +377,16 @@ async fn inside_a_trashed_folder_only_select_all_is_offered(cx: &mut TestAppCont
     wait_for_names(&view, cx, &["nova"]).await;
 
     right_click(cx, "name-0");
-    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+    assert_eq!(
+        offered(&view, cx),
+        (
+            ["Open", "Open in new tab", "Preview"]
+                .map(str::to_owned)
+                .to_vec(),
+            vec![]
+        )
+    );
+    cx.simulate_keystrokes("escape");
     right_click_space(cx, 1);
     assert_eq!(
         offered(&view, cx),
