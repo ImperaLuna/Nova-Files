@@ -200,6 +200,7 @@ pub mod size {
     pub const ROW_PAD: Pixels = px(12.0);
     pub const NAME_GAP: Pixels = px(11.0);
     pub const COLUMN_GAP: Pixels = px(14.0);
+    pub const COLUMN_BLEED: Pixels = px(8.0);
     pub const SHEET_PAD: Pixels = px(8.0);
     pub const ROW_ICON: Pixels = px(22.0);
     pub const ICON_CELL_PAD: Pixels = px(8.0);
