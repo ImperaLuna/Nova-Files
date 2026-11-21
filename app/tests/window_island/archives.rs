@@ -5,7 +5,7 @@ use super::*;
 use crate::window_sidebar::right_click;
 
 const MAKES_AN_EMPTY_ARCHIVE: &str = "#!/bin/sh\n: > \"$4\"\n";
-const HOLDS_ONE_FILE: &str = "#!/bin/sh\nprintf '%s\\000' f 0 5 0 u 420 inner.txt ''\n";
+const HOLDS_ONE_FILE: &str = "#!/bin/sh\nprintf '%s\\000' f 0 5 0 u 420 inner.zip ''\n";
 
 fn fake_helper(home: &TempFolder, script: &str) -> nova_files::Archiver {
     let helper = home.path().join("archiver");
@@ -131,12 +131,20 @@ async fn an_opened_archive_offers_extract_all_and_nothing_that_changes_it(cx: &m
     assert!(cx.debug_bounds("extract-all").is_some());
     right_click(cx, "name-0");
     let labels = offered(&view, cx).0;
-    for changes in ["Compress", "Rename", "Cut", "Move to Trash"] {
+    for changes in [
+        "Compress",
+        "Rename",
+        "Cut",
+        "Move to Trash",
+        "Extract here",
+        "Extract to…",
+    ] {
         assert!(
             !labels.iter().any(|label| label == changes),
             "{changes} in {labels:?}"
         );
     }
+    assert!(labels.iter().any(|label| label == "Copy"), "{labels:?}");
     cx.simulate_keystrokes("escape");
     click(cx, "extract-all");
     wait_for_note_starting(&view, cx, "Couldn't extract bundle.zip").await;
@@ -199,6 +207,12 @@ async fn compress_as_picks_the_format_the_next_compress_uses(cx: &mut TestAppCon
     assert!(cx.debug_bounds("compress-7z").is_none());
     assert!(cx.debug_bounds("compress-more-rows").is_none());
     click(cx, "compress-more");
+    let island = cx.debug_bounds("island").unwrap();
+    let make = cx.debug_bounds("compress-make").unwrap();
+    assert!(
+        make.right() <= island.right(),
+        "{make:?} outside {island:?}"
+    );
     assert!(cx.debug_bounds("compress-deflate").is_some());
     assert!(cx.debug_bounds("compress-lock").is_some());
     click(cx, "compress-tar-xz");
@@ -233,4 +247,22 @@ async fn compress_as_picks_the_format_the_next_compress_uses(cx: &mut TestAppCon
     );
     choose(&view, cx, "Compress");
     wait_for_note(&view, cx, "Made bundle.tar.gz").await;
+}
+
+#[gpui::test]
+async fn extract_all_leaves_with_the_archive(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = archive_tree("archive-leave");
+    let home = TempFolder::tree("archive-leave-home");
+    let archiver = fake_helper(&home, HOLDS_ONE_FILE);
+    let inside = tree.path().join("bundle.zip");
+    let (view, cx) = window_with_archiver(cx, (&inside, home.path()), Vec::new(), Some(archiver));
+    wait_for_folder(&view, cx, &inside).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("extract-all").is_some());
+
+    view.update(cx, MainWindow::open_start);
+    cx.run_until_parked();
+
+    assert!(cx.debug_bounds("extract-all").is_none());
 }

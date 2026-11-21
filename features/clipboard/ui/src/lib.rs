@@ -73,6 +73,10 @@ impl ClipboardPart {
     }
 }
 
+const fn copyable(_: &ClipboardPart, scene: &Scene, _: &App) -> bool {
+    !scene.picker && !scene.rules.trashed
+}
+
 const fn writable(_: &ClipboardPart, scene: &Scene, _: &App) -> bool {
     !scene.picker && !scene.rules.read_only
 }
@@ -177,7 +181,7 @@ impl Part for ClipboardPart {
     }
 
     fn slots(slots: &mut Slots<Self>) {
-        slots.command(&COPY, writable, Self::copy);
+        slots.command(&COPY, copyable, Self::copy);
         slots.command(&CUT, writable, Self::cut);
         slots.command(&PASTE, pastes_here, Self::paste);
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::FIRST, entry_items);

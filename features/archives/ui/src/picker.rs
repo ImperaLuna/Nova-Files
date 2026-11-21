@@ -4,7 +4,7 @@ use gpui::{
 };
 use nova_files_api::Packing;
 use nova_files_shell::Scene;
-use nova_files_shell::island::look::{chevron, divider, floating, label, square, worded};
+use nova_files_shell::island::look::{Width, chevron, divider, floating_at, label, square, worded};
 use nova_files_shell::theme::{Colors, size, text};
 use nova_files_shell::widgets::tick_box;
 
@@ -220,7 +220,7 @@ pub fn island(
     let above = picking
         .open
         .then(|| more(choice, chosen, &colors, cx).into_any_element());
-    Some(floating(parts, above, &colors).into_any_element())
+    Some(floating_at(parts, above, Width::Fit, &colors).into_any_element())
 }
 
 pub fn what(names: &[&std::ffi::OsStr]) -> SharedString {

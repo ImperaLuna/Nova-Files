@@ -285,11 +285,16 @@ fn writable_folder(scene: &Scene) -> Option<PathBuf> {
 }
 
 fn has_archives(part: &ArchivesPart, scene: &Scene, cx: &App) -> bool {
-    !scene.picker && !scene.rules.trashed && part.inside.is_none() && !part.archives(cx).is_empty()
+    !scene.picker && !scene.rules.read_only && !part.archives(cx).is_empty()
 }
 
-const fn in_archive(part: &ArchivesPart, scene: &Scene, _: &App) -> bool {
-    !scene.picker && part.inside.is_some()
+fn in_archive(part: &ArchivesPart, scene: &Scene, _: &App) -> bool {
+    let here = scene.location.as_ref().and_then(Location::folder);
+    !scene.picker
+        && part
+            .inside
+            .as_ref()
+            .is_some_and(|archive| here.is_some_and(|here| here.starts_with(archive)))
 }
 
 fn extract_all_chip(part: &ArchivesPart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
