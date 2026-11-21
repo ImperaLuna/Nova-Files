@@ -4,6 +4,7 @@
 # never touches the disk.
 #
 # Allowed outside crates:
+# - base64
 # - futures
 # - gpui
 # - gpui-component
@@ -42,7 +43,7 @@ gpui_platform.workspace = true
 # Reads a theme icon's own size, so GPUI's SVG renderer draws it straight
 # at the row's size; GPUI already builds it.
 usvg = { version = "0.45.1", default-features = false }
-
-[dev-dependencies]
-# Makes the theme icon tests' pictures; GPUI already builds it.
+# Puts the pictures of dragged files into the SVG of the drag pile; GPUI
+# already builds both.
+base64 = "0.22.1"
 image = { version = "0.25.10", default-features = false, features = ["png"] }

@@ -5,17 +5,18 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui::{
-    App, AppContext as _, Context, Div, Entity, ExternalDragPayload, FileDragPaths,
+    App, AppContext as _, Context, Div, DragPicture, Entity, ExternalDragPayload, FileDragPaths,
     InteractiveElement as _, IntoElement, Modifiers, ParentElement as _, Render, SharedString,
     Styled as _, WeakEntity, Window, div,
 };
-use nova_files_api::{EntryId, EntryKind, ListingId};
+use nova_files_api::{Entry, EntryId, EntryKind, ListingId};
 use nova_files_shell::{DropOver, WindowParts};
 
 use super::MainWindow;
 use super::aiming::{Aim, Aims};
 use crate::dropping::{self, DropAt, Dropped, Sources};
 use crate::island;
+use crate::pile::PileDrawing;
 use crate::selection::{Selection, entry_at};
 use crate::theme::{Colors, radius, size, text};
 use nova_files_shell::Location;
@@ -31,6 +32,8 @@ pub struct DraggedRow {
 pub struct Drag {
     sources: OnceCell<Sources>,
     outward: OnceCell<FileDragPaths>,
+    pub(super) picture: OnceCell<DragPicture>,
+    pub(super) drawing: OnceCell<PileDrawing>,
     pub(super) aims: Aims,
 }
 
@@ -40,7 +43,21 @@ impl Drag {
     }
 
     pub fn outward(&self) -> Option<ExternalDragPayload> {
-        self.outward.get().cloned().map(ExternalDragPayload::Files)
+        let paths = self.outward.get().cloned()?;
+        let paths = match self.picture() {
+            Some(picture) => paths.with_picture(picture),
+            None => paths,
+        };
+        Some(ExternalDragPayload::Files(paths))
+    }
+
+    fn picture(&self) -> Option<DragPicture> {
+        if let Some(picture) = self.picture.get() {
+            return Some(picture.clone());
+        }
+        let picture = self.drawing.get()?.draw()?;
+        self.picture.set(picture.clone()).ok();
+        Some(picture)
     }
 
     pub fn says(
@@ -128,6 +145,7 @@ impl MainWindow {
     pub(crate) fn drag_started(
         &mut self,
         row: &DraggedRow,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Entity<DragChip> {
         if !self.selects((row.listing, row.id)) {
@@ -138,6 +156,7 @@ impl MainWindow {
         let what = island::what(&paths).into();
         if !selected.is_empty() {
             row.drag.outward.set(FileDragPaths::new(selected)).ok();
+            self.draw_pile(&row.drag, window, cx);
         }
         row.drag.sources.set(Sources::new(paths)).ok();
         let (drag, origin) = (Rc::clone(&row.drag), cx.entity().downgrade());
@@ -145,6 +164,16 @@ impl MainWindow {
     }
 
     fn selected_full_paths(&self) -> Vec<(PathBuf, bool)> {
+        let Some(listing) = &self.listing else {
+            return Vec::new();
+        };
+        self.selected_entries()
+            .into_iter()
+            .map(|entry| (listing.path_of(entry), entry.kind == EntryKind::Folder))
+            .collect()
+    }
+
+    pub(super) fn selected_entries(&self) -> Vec<&Entry> {
         let (Some(listing), Some((id, ids))) = (&self.listing, self.selection()) else {
             return Vec::new();
         };
@@ -153,7 +182,6 @@ impl MainWindow {
         }
         ids.into_iter()
             .filter_map(|id| entry_at(&listing.entries, id))
-            .map(|entry| (listing.path_of(entry), entry.kind == EntryKind::Folder))
             .collect()
     }
 

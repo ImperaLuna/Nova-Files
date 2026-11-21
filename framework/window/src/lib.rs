@@ -10,6 +10,7 @@ mod island;
 
 mod marks;
 mod menu;
+mod pile;
 mod places;
 mod requests;
 mod selecting;

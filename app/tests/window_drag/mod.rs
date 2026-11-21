@@ -83,7 +83,7 @@ async fn a_name_dragged_onto_a_folder_moves_it_there_and_undo_moves_it_back(
 }
 
 #[gpui::test]
-async fn a_drag_offers_its_files_to_other_apps(cx: &mut TestAppContext) {
+async fn a_drag_offers_its_files_and_a_pile_to_other_apps(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("drag-out");
     let home = TempFolder::tree("drag-out-home");
@@ -104,6 +104,7 @@ async fn a_drag_offers_its_files_to_other_apps(cx: &mut TestAppContext) {
         panic!("the drag offers no files");
     };
     assert_eq!(paths.entries(), [(tree.path().join("notes.txt"), false)]);
+    assert!(paths.picture().is_some_and(|picture| picture.scale >= 1));
     cx.simulate_mouse_up(beside, MouseButton::Left, Modifiers::none());
 }
 

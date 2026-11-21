@@ -121,7 +121,7 @@ pub fn drags(
     row: Option<DraggedRow>,
     cx: &Context<MainWindow>,
 ) -> Stateful<Div> {
-    let window = cx.entity();
+    let main = cx.entity();
     handle
         .on_mouse_down(
             MouseButton::Left,
@@ -129,8 +129,8 @@ pub fn drags(
         )
         .when_some(row, |handle, row| {
             handle
-                .on_drag(row, move |row, _, _, cx| {
-                    window.update(cx, |this, cx| this.drag_started(row, cx))
+                .on_drag(row, move |row, _, window, cx| {
+                    main.update(cx, |this, cx| this.drag_started(row, window, cx))
                 })
                 .external_drag_payload(|row: &DraggedRow, _, _| row.drag().outward())
         })

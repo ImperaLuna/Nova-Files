@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _,
-    KeyDownEvent, Modifiers, Pixels, ScrollEvent, SharedString, Size, Window,
+    KeyDownEvent, Modifiers, Pixels, RenderImage, ScrollEvent, SharedString, Size, Window,
 };
 use nova_files_api::{Entry, EntryId, Event, Listing, ListingId, Order};
 
@@ -53,6 +54,7 @@ pub struct Staged {
 }
 pub type Busy<P> = fn(&P, &App) -> bool;
 pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
+pub type RowPicture<P> = fn(&P, &Entry, &App) -> Option<Arc<RenderImage>>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Closing<P> = fn(&mut P, &mut Context<P>);
 pub type Listed<P> = fn(&mut P, &Listing, bool, &mut Context<P>);
@@ -179,6 +181,7 @@ pub struct Slots<P> {
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
     pub(crate) islands: Vec<(Applies<P>, Card<P>)>,
     pub(crate) row_icons: Vec<RowIcon<P>>,
+    pub(crate) row_pictures: Vec<RowPicture<P>>,
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
     pub(crate) key_downs: Vec<KeyDown<P>>,
@@ -239,6 +242,7 @@ impl<P> Default for Slots<P> {
             list_views: Vec::new(),
             islands: Vec::new(),
             row_icons: Vec::new(),
+            row_pictures: Vec::new(),
             opens: Vec::new(),
             typed: Vec::new(),
             key_downs: Vec::new(),
@@ -467,6 +471,10 @@ impl<P: Part> Slots<P> {
 
     pub fn row_icon(&mut self, icon: RowIcon<P>) {
         self.row_icons.push(icon);
+    }
+
+    pub fn row_picture(&mut self, picture: RowPicture<P>) {
+        self.row_pictures.push(picture);
     }
 
     pub fn opens(&mut self, opens: Opens<P>) {

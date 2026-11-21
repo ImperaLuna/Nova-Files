@@ -9,7 +9,7 @@ use nova_files_shell::shrink::shrink;
 
 // GPUI's renderer draws at twice the scale it is asked for.
 // https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
-const RENDERER_SCALE: f32 = 2.0;
+pub const RENDERER_SCALE: f32 = 2.0;
 const ROUNDING: f32 = 0.5;
 
 #[derive(Default)]

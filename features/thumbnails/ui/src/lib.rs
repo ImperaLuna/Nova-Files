@@ -138,15 +138,19 @@ impl ThumbnailsPart {
         self.wanted = 0..0;
     }
 
-    fn icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
+    fn picture(&self, entry: &Entry, cx: &App) -> Option<Arc<RenderImage>> {
         if self.on_screen(cx) != self.listing {
             return None;
         }
-        let image = self.thumbnail(usize::try_from(entry.id.0).ok()?)?;
+        self.thumbnail(usize::try_from(entry.id.0).ok()?).cloned()
+    }
+
+    fn icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {
+        let image = self.picture(entry, cx)?;
         Some(
             icon_slot(side)
                 .child(
-                    img(Arc::clone(image))
+                    img(image)
                         .size(side)
                         .object_fit(ObjectFit::Contain)
                         .rounded(radius::SMALL),
@@ -193,5 +197,6 @@ impl Part for ThumbnailsPart {
         slots.thumbnail_side(Self::side_changed);
         slots.listed(Self::listed);
         slots.row_icon(Self::icon);
+        slots.row_picture(Self::picture);
     }
 }
