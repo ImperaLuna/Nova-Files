@@ -3,8 +3,7 @@
 # `nix flake check` runs everything CI runs (nix/checks.nix), so a green run
 # here is a green run on GitHub. `nix develop` gives the same tools plus
 # rust-analyzer and `just`, whose recipes run one job, optionally for one
-# crate (see the justfile). CI's mutation job uses the slimmer
-# `nix develop .#mutants`. NixOS systems import `nixosModules.default`.
+# crate (see the justfile). NixOS systems import `nixosModules.default`.
 {
   description = "Nova Files, a fast file manager for Linux";
 
@@ -63,10 +62,6 @@
             inherit pkgs;
             build = build.${system};
             checks = self.checks.${system};
-          };
-          mutants = import ./nix/mutants-shell.nix {
-            inherit pkgs;
-            build = build.${system};
           };
         }
       );
