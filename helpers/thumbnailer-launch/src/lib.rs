@@ -1,6 +1,6 @@
 use std::env;
 use std::ffi::OsString;
-use std::io::{self, Read};
+use std::io::{BufRead as _, BufReader, Read};
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -17,7 +17,7 @@ const READER_THREAD: &str = "nova-files-thumbnail-reader";
 const PREVIEW_FLAG: &str = "--preview";
 const BYTES_PER_PIXEL: u64 = 4;
 const MAX_SIZE_LINE: usize = 22;
-const SIZE_LINE_END: u8 = b'\n';
+const LINE_END: u8 = b'\n';
 const SIZE_SEPARATOR: char = ' ';
 
 #[derive(Debug, Clone)]
@@ -28,7 +28,13 @@ pub struct Job {
     pub name: String,
 }
 
-pub fn run(helper: &Path, thumbnails: &Path, size: ThumbnailSize, jobs: &[Job]) {
+pub fn run(
+    helper: &Path,
+    thumbnails: &Path,
+    size: ThumbnailSize,
+    jobs: &[Job],
+    mut finished: impl FnMut(usize) -> bool,
+) {
     let mut command = command(helper);
     command.arg(thumbnails).arg(size.folder());
     for job in jobs {
@@ -42,18 +48,25 @@ pub fn run(helper: &Path, thumbnails: &Path, size: ThumbnailSize, jobs: &[Job]) 
         return;
     };
     let output = child.stdout.take();
-    let (done, finished) = mpsc::channel();
+    let (answered, answers) = mpsc::channel();
     thread::Builder::new()
         .name(READER_THREAD.to_owned())
         .spawn(move || {
-            if let Some(mut output) = output {
-                io::copy(&mut output, &mut io::sink()).ok();
+            let Some(output) = output else {
+                return;
+            };
+            for line in BufReader::new(output).split(LINE_END) {
+                if line.is_err() || answered.send(()).is_err() {
+                    return;
+                }
             }
-            done.send(()).ok();
         })
         .ok();
-    let deadline = PER_FILE.saturating_mul(u32::try_from(jobs.len()).unwrap_or(u32::MAX));
-    finished.recv_timeout(deadline).ok();
+    for index in 0..jobs.len() {
+        if answers.recv_timeout(PER_FILE).is_err() || !finished(index) {
+            break;
+        }
+    }
     end(&mut child);
 }
 
@@ -151,7 +164,7 @@ fn read_picture(mut output: impl Read, fit: Fit) -> Option<Picture> {
     let mut byte = [0];
     while line.len() < MAX_SIZE_LINE {
         output.read_exact(&mut byte).ok()?;
-        if byte[0] == SIZE_LINE_END {
+        if byte[0] == LINE_END {
             break;
         }
         line.push(byte[0]);
@@ -281,5 +294,45 @@ mod tests {
         Running::new().start(group, || false);
         let status = child.wait().unwrap();
         assert_eq!(status.signal(), Some(Signal::KILL.as_raw()));
+    }
+
+    fn helper_that_answers_then_hangs(lines: usize) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt as _;
+        let folder = env::temp_dir().join(format!("nova-files-launch-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let helper = folder.join(format!("answers-{lines}"));
+        let answers = "echo ok; ".repeat(lines);
+        std::fs::write(&helper, format!("#!/bin/sh\n{answers}exec sleep 30\n")).unwrap();
+        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o755)).unwrap();
+        helper
+    }
+
+    fn job(name: &str) -> Job {
+        Job {
+            source: PathBuf::from(format!("/folder/{name}")),
+            uri: format!("file:///folder/{name}"),
+            mtime: 1,
+            name: format!("{name}.png"),
+        }
+    }
+
+    #[test]
+    fn each_answer_is_reported_before_the_helper_exits() {
+        let helper = helper_that_answers_then_hangs(2);
+        let jobs = [job("a"), job("b"), job("c")];
+        let started = std::time::Instant::now();
+        let mut reported = Vec::new();
+        run(
+            &helper,
+            Path::new("/t"),
+            ThumbnailSize::Normal,
+            &jobs,
+            |index| {
+                reported.push(index);
+                index == 0
+            },
+        );
+        assert_eq!(reported, vec![0, 1]);
+        assert!(started.elapsed() < PER_FILE);
     }
 }
