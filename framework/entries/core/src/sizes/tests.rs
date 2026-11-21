@@ -138,10 +138,16 @@ fn folders_are_measured_then_sorted_with_files_by_what_they_hold() {
     );
     assert_eq!(
         listed.measured,
-        [Event::FoldersMeasured {
-            id: ListingId(1),
-            sizes: vec![(EntryId(0), 1)],
-        }]
+        [
+            Event::FoldersMeasured {
+                id: ListingId(1),
+                sizes: vec![(EntryId(0), 1)],
+            },
+            Event::FoldersMeasured {
+                id: ListingId(1),
+                sizes: vec![(EntryId(0), BIG), (EntryId(2), SMALL)],
+            },
+        ]
     );
     assert_eq!(listed.sizes, [Some(900), Some(50), Some(5)]);
     assert_eq!(measure.asked.load(Ordering::SeqCst), 1);

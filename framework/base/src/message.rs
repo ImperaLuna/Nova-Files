@@ -126,7 +126,10 @@ pub enum Event {
     /// [`crate::FolderSizes::Measured`], a few times a second for the
     /// folders whose totals changed. Once every folder is measured the
     /// listing comes again under the same `id`, sorted by those totals,
-    /// with each folder's total in its [`Details`].
+    /// with each folder's total in its [`Details`], followed by one more of
+    /// these with every folder's total by its place in that listing. Rows,
+    /// details and thumbnails asked for before the sorted listing do not
+    /// arrive after it.
     FoldersMeasured {
         id: ListingId,
         sizes: Vec<(EntryId, u64)>,

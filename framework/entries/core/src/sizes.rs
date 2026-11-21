@@ -128,16 +128,31 @@ pub fn list_measured_rows(
     let Some(listing) = listed else {
         return;
     };
-    if let Some(measured) = measure(job, &listing, sizer) {
-        let rows = rows_of(&listing);
-        send_sorted(
-            job,
-            (id, listing.path),
-            rows,
-            (order.descending, &homes),
-            &measured,
-        );
+    let Some(measured) = measure(job, &listing, sizer) else {
+        return;
+    };
+    let rows = rows_of(&listing);
+    let place = (id, listing.path);
+    if let Some(sorted) = send_sorted(job, place, rows, (order.descending, &homes), &measured) {
+        job.answer(Event::FoldersMeasured {
+            id,
+            sizes: every_total(&sorted, &measured),
+        });
     }
+}
+
+fn every_total(listing: &Listing, measured: &ByHome) -> Vec<(EntryId, u64)> {
+    listing
+        .entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| entry.kind == EntryKind::Folder)
+        .filter_map(|(index, entry)| {
+            let home = home_of(listing, index);
+            let bytes = measured.get(home)?.get(&entry.name)?;
+            Some((entry.id, *bytes))
+        })
+        .collect()
 }
 
 fn send_sorted(
