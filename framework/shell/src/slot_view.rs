@@ -31,7 +31,7 @@ impl Render for SlotView {
             Fit::Content => slot,
             Fit::Fill => slot.flex().flex_col().flex_1().min_h_0(),
             Fit::Cover => slot.absolute().inset_0(),
-            Fit::Shrink => slot.flex().flex_shrink().min_w_0(),
+            Fit::Shrink => slot.flex().flex_shrink_1().min_w_0(),
         }
     }
 }

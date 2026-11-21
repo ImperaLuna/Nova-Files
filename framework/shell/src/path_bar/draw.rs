@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use gpui::{
-    AnyElement, App, ClickEvent, Corner, Div, Entity, InteractiveElement as _, IntoElement,
+    Anchor, AnyElement, App, ClickEvent, Div, Entity, InteractiveElement as _, IntoElement,
     MouseButton, MouseDownEvent, ParentElement as _, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled as _, anchored, deferred, div, point,
     prelude::FluentBuilder as _, px, transparent_black, uniform_list,
@@ -66,7 +66,7 @@ pub fn draw(bar: &Entity<PathBar>, input: BarInput, drops: Drops<'_>, cx: &App) 
     };
     let mut row = div()
         .flex()
-        .flex_shrink()
+        .flex_shrink_1()
         .min_w_0()
         .overflow_hidden()
         .justify_end()
@@ -298,7 +298,7 @@ fn menu_card(bar: &Entity<PathBar>, here: &Here, cx: &App) -> AnyElement {
         .child(
             deferred(
                 anchored()
-                    .anchor(Corner::TopLeft)
+                    .anchor(Anchor::TopLeft)
                     .offset(point(px(0.0), size::MENU_OFFSET))
                     .snap_to_window()
                     .child(card),

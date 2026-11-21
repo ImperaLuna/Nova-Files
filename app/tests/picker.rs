@@ -223,7 +223,7 @@ async fn typing_goes_to_the_name_box_after_focus_is_lost(cx: &mut TestAppContext
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
     let (view, cx, _answers) = picker(cx, &tree, tree.path(), FILES).await;
-    cx.update(|window, _| window.blur());
+    cx.update(gpui::Window::blur);
     cx.run_until_parked();
     cx.simulate_input("plan");
     assert_eq!(name(&view, cx).as_deref(), Some("plan"));

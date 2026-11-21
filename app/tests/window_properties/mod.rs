@@ -123,8 +123,8 @@ async fn alt_enter_shows_several_entries_on_one_page(cx: &mut TestAppContext) {
     fs::write(tree.path().join("todo.txt"), "").unwrap();
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-0");
-    click_with(cx, "name-1", Modifiers::secondary_key());
-    click_with(cx, "name-2", Modifiers::secondary_key());
+    click_with(cx, "name-1", Modifiers::control());
+    click_with(cx, "name-2", Modifiers::control());
 
     cx.simulate_keystrokes("alt-enter");
     let read = read_page(&view, cx).await;
@@ -200,7 +200,7 @@ async fn one_of_two_coming_back_keeps_the_page(cx: &mut TestAppContext) {
     let notes = tree.path().join("notes.txt");
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-0");
-    click_with(cx, "name-1", Modifiers::secondary_key());
+    click_with(cx, "name-1", Modifiers::control());
     show_properties(&view, cx);
     read_page(&view, cx).await;
 
