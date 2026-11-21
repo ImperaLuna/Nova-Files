@@ -5,7 +5,7 @@ use super::*;
 use crate::window_sidebar::right_click;
 
 const MAKES_AN_EMPTY_ARCHIVE: &str = "#!/bin/sh\n: > \"$4\"\n";
-const HOLDS_ONE_FILE: &str = "#!/bin/sh\nprintf '%s\\000' f 0 5 0 u 420 inner.txt ''\n";
+const HOLDS_ONE_FILE: &str = "#!/bin/sh\nprintf '%s\\000' f 0 5 0 u 420 inner.zip ''\n";
 
 fn fake_helper(home: &TempFolder, script: &str) -> nova_files::Archiver {
     let helper = home.path().join("archiver");
@@ -115,7 +115,7 @@ async fn compress_names_the_archive_and_opens_its_rename_field(cx: &mut TestAppC
 }
 
 #[gpui::test]
-async fn nothing_inside_an_opened_archive_can_be_changed(cx: &mut TestAppContext) {
+async fn an_opened_archive_can_only_be_copied_from(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = archive_tree("archive-inside");
     let home = TempFolder::tree("archive-inside-home");
@@ -127,10 +127,18 @@ async fn nothing_inside_an_opened_archive_can_be_changed(cx: &mut TestAppContext
 
     right_click(cx, "name-0");
     let labels = offered(&view, cx).0;
-    for changes in ["Compress", "Rename", "Cut", "Move to Trash"] {
+    for changes in [
+        "Compress",
+        "Rename",
+        "Cut",
+        "Move to Trash",
+        "Extract here",
+        "Extract to…",
+    ] {
         assert!(
             !labels.iter().any(|label| label == changes),
             "{changes} in {labels:?}"
         );
     }
+    assert!(labels.iter().any(|label| label == "Copy"), "{labels:?}");
 }
