@@ -10,9 +10,24 @@ use crate::theme::{Colors, radius, size, text};
 const POINT_UP: f32 = 270.0_f32.to_radians();
 const POINT_DOWN: f32 = 90.0_f32.to_radians();
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Width {
+    List,
+    Fit,
+}
+
 pub fn floating(
     parts: Vec<gpui::AnyElement>,
     above: Option<gpui::AnyElement>,
+    colors: &Colors,
+) -> impl IntoElement {
+    floating_at(parts, above, Width::List, colors)
+}
+
+pub fn floating_at(
+    parts: Vec<gpui::AnyElement>,
+    above: Option<gpui::AnyElement>,
+    width: Width,
     colors: &Colors,
 ) -> impl IntoElement {
     let row = div()
@@ -39,7 +54,10 @@ pub fn floating(
                 .map(|island| match above {
                     Some(above) => island
                         .flex_col()
-                        .w(size::ISLAND_LIST_WIDTH)
+                        .map(|island| match width {
+                            Width::List => island.w(size::ISLAND_LIST_WIDTH),
+                            Width::Fit => island.min_w(size::ISLAND_LIST_WIDTH),
+                        })
                         .p(size::ISLAND_LIST_PAD)
                         .child(above)
                         .child(row.h(size::ISLAND_LIST_LINE).pl(size::ISLAND_LIST_INSET)),
