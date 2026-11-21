@@ -5,6 +5,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_api::{Command, Connection, Event, JobId, JobTag, Operation, Outcome, Tally};
+use nova_files_test_folder::TestFolder;
 
 pub const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -26,6 +27,7 @@ impl Drop for Core {
 
 pub struct Bench {
     pub root: PathBuf,
+    _folder: TestFolder,
     pub core: Core,
 }
 
@@ -48,9 +50,8 @@ impl Bench {
         prepare: impl FnOnce(&Path),
         archiver: Option<nova_files::Archiver>,
     ) -> Self {
-        let root =
-            std::env::temp_dir().join(format!("nova-files-jobs-{test}-{}", std::process::id()));
-        fs::remove_dir_all(&root).ok();
+        let folder = TestFolder::new(&format!("jobs-{test}"));
+        let root = folder.path().to_path_buf();
         fs::create_dir_all(root.join("home")).unwrap();
         prepare(&root);
         let home = nova_files::Home {
@@ -63,7 +64,11 @@ impl Bench {
         let core = Core(
             nova_files::spawn_with_archiver(idle_exit, Some(home), None, None, archiver).unwrap(),
         );
-        Self { root, core }
+        Self {
+            root,
+            _folder: folder,
+            core,
+        }
     }
 
     pub fn at(&self, name: &str) -> PathBuf {
@@ -74,12 +79,6 @@ impl Bench {
         let (sink, events) = mpsc::channel();
         let connection = self.core.connector.connect(sink).unwrap();
         Client { connection, events }
-    }
-}
-
-impl Drop for Bench {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.root).ok();
     }
 }
 

@@ -151,7 +151,7 @@ fn a_move_on_one_drive_renames_the_tree_whole() {
     let (_, outcome, changed) = client.run(moving(vec![source.clone()], &into));
 
     assert_eq!(outcome, Outcome::Done);
-    assert_eq!(changed, vec![into.clone(), bench.root.clone()]);
+    assert_eq!(changed, vec![into.clone(), bench.root]);
     assert!(!source.exists());
     assert_eq!(tree(&into.join("src")), before);
     assert_eq!(fs::metadata(into.join("src")).unwrap().ino(), inode);

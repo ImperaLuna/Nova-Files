@@ -3415,6 +3415,7 @@ dependencies = [
  "nova-files-start-api",
  "nova-files-start-core",
  "nova-files-start-ui",
+ "nova-files-test-folder",
  "nova-files-thumbnails-api",
  "nova-files-thumbnails-core",
  "nova-files-thumbnails-ui",
@@ -3516,6 +3517,7 @@ dependencies = [
  "nova-files-open-api",
  "nova-files-picker-api",
  "nova-files-search-api",
+ "nova-files-test-folder",
  "rustix",
  "zbus 5.19.0",
 ]

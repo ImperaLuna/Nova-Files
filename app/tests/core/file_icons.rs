@@ -1,23 +1,19 @@
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::fs;
 use std::sync::Arc;
-use std::{env, fs};
 
 use nova_files::MimeTypes;
 use nova_files_api::{EntryKind, FileIcon, IconFormat, IconKind, ThemeIcon};
 use nova_files_look_core::FileIcons;
+use nova_files_test_folder::TestFolder;
 
 const ICON_LIMIT: usize = 1024 * 1024;
 
-struct Data(PathBuf);
+struct Data(TestFolder);
 
 impl Data {
     fn new(name: &str) -> Self {
-        let dir = env::temp_dir().join(format!(
-            "nova-files-file-icons-{name}-{}",
-            std::process::id()
-        ));
-        fs::remove_dir_all(&dir).ok();
+        let dir = TestFolder::new(&format!("file-icons-{name}"));
         let write = |file: &str, text: &[u8]| {
             let path = dir.join(file);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -44,14 +40,10 @@ impl Data {
     }
 
     fn icons(&self) -> FileIcons {
-        let types = Arc::new(MimeTypes::load(std::slice::from_ref(&self.0)));
+        let types = Arc::new(MimeTypes::load(std::slice::from_ref(
+            &self.0.path().to_path_buf(),
+        )));
         FileIcons::new(types, Some("Mine".to_owned()), vec![self.0.join("icons")])
-    }
-}
-
-impl Drop for Data {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }
 
@@ -114,7 +106,9 @@ fn the_desktops_first_installed_theme_counts_when_the_files_name_none() {
     assert_eq!(theme(&text).path, mine);
 
     for files in [None, Some("Gone".to_owned())] {
-        let types = Arc::new(MimeTypes::load(std::slice::from_ref(&data.0)));
+        let types = Arc::new(MimeTypes::load(std::slice::from_ref(
+            &data.0.path().to_path_buf(),
+        )));
         let icons = FileIcons::new(types, files, bases.clone());
         let text = || icons.of(OsStr::new("a.txt"), EntryKind::File);
         icons.follow_desktop(&named(&["../Mine", "Missing", "Desk", "Mine"]));

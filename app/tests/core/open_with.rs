@@ -9,6 +9,7 @@ use crate::own_folders;
 
 use nova_files_api::Connection;
 use nova_files_open_api::{Command, Event, OpenWith, OpenWithAnswer, OpenWithId};
+use nova_files_test_folder::TestFolder;
 
 use crate::common::Core;
 use own_folders::run_again_in;
@@ -28,8 +29,8 @@ fn open_with_lists_launches_and_sets_the_default() {
         through_the_core(Path::new(&root));
         return;
     }
-    let root = std::env::temp_dir().join(format!("nova-files-open-with-{}", std::process::id()));
-    fs::remove_dir_all(&root).ok();
+    let folder = TestFolder::new("open-with");
+    let root = folder.path();
     let files = [
         (
             "data/mime/globs2",
@@ -81,7 +82,7 @@ fn open_with_lists_launches_and_sets_the_default() {
             .unwrap()
             .success()
     );
-    run_again_in(&root, ROOT_VAR, TEST_NAME);
+    run_again_in(root, ROOT_VAR, TEST_NAME);
 }
 
 fn entry(name: &str, code: &str, extra: &str) -> String {

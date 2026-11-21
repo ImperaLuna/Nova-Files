@@ -1,13 +1,12 @@
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
 use nova_files_dbus::Bus;
+use nova_files_test_folder::TestFolder;
 
 pub const WAIT: Duration = Duration::from_secs(10);
 
@@ -28,38 +27,16 @@ const BUS_CONFIG: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bu
 pub struct PrivateBus {
     daemon: Child,
     pub address: String,
-    _folder: TempFolder,
-}
-
-struct TempFolder(PathBuf);
-
-impl TempFolder {
-    fn new() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-dbus-test-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(name);
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
+    _folder: TestFolder,
 }
 
 impl PrivateBus {
     pub fn start() -> Self {
-        let folder = TempFolder::new();
-        let config = folder.0.join("bus.conf");
+        let folder = TestFolder::new("dbus-test");
+        let config = folder.join("bus.conf");
         fs::write(
             &config,
-            BUS_CONFIG.replace("@DIR@", &folder.0.to_string_lossy()),
+            BUS_CONFIG.replace("@DIR@", &folder.path().to_string_lossy()),
         )
         .unwrap();
         let mut daemon = Command::new("dbus-daemon")

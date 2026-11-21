@@ -2,7 +2,6 @@ use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::process;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
@@ -10,34 +9,27 @@ use std::time::Duration;
 pub mod picking;
 
 use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, VisualTestContext};
+use nova_files_test_folder::TestFolder;
 
-pub struct TempFolder(PathBuf);
+pub struct TempFolder {
+    tree: PathBuf,
+    _folder: TestFolder,
+}
 
 impl TempFolder {
     pub fn tree(test: &str) -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-{test}-test-{}-{}",
-            process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(name);
-        fs::remove_dir_all(&path).ok();
-        fs::remove_dir_all(path.with_extension("state")).ok();
-        fs::create_dir_all(path.join("Projects").join("nova")).unwrap();
-        fs::write(path.join("notes.txt"), "").unwrap();
-        Self(path)
+        let folder = TestFolder::new(&format!("{test}-test"));
+        let tree = folder.join("tree");
+        fs::create_dir_all(tree.join("Projects").join("nova")).unwrap();
+        fs::write(tree.join("notes.txt"), "").unwrap();
+        Self {
+            tree,
+            _folder: folder,
+        }
     }
 
     pub fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-        fs::remove_dir_all(self.0.with_extension("state")).ok();
+        &self.tree
     }
 }
 

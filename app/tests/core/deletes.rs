@@ -90,7 +90,7 @@ fn a_window_watching_jobs_hears_which_folders_a_delete_changed() {
             other => panic!("unexpected {other:?}"),
         }
     };
-    assert_eq!(changed, vec![bench.root.clone()]);
+    assert_eq!(changed, vec![bench.root]);
 }
 
 #[test]
