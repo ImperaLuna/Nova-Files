@@ -38,23 +38,52 @@ pub fn arrange_paired<T>(
         }
         SortKey::Name => entries,
         SortKey::Modified | SortKey::Size => {
-            let paths = entries
-                .iter()
-                .map(|(entry, carried)| (path(entry, carried), entry.kind));
-            let read = details::read_batch(paths, cancelled)?;
-            let mut paired: Vec<((Entry, T), Details)> = entries.into_iter().zip(read).collect();
-            paired.sort_by(|((left, _), left_details), ((right, _), right_details)| {
-                group(left)
-                    .cmp(&group(right))
-                    .then_with(|| by_key(order, left_details, right_details))
-            });
-            paired.into_iter().map(|(entry, _)| entry).collect()
+            let sorted = sorted_with_details(
+                entries,
+                path,
+                |_, _, _| {},
+                |(left, left_details), (right, right_details)| {
+                    group(left)
+                        .cmp(&group(right))
+                        .then_with(|| by_key(order, left_details, right_details))
+                },
+                cancelled,
+            )?;
+            return Some(sorted.into_iter().map(|(entry, _)| entry).collect());
         }
     };
     for ((entry, _), index) in entries.iter_mut().zip(0..) {
         entry.id = EntryId(index);
     }
     Some(entries)
+}
+
+pub(crate) fn sorted_with_details<T>(
+    entries: Vec<(Entry, T)>,
+    path: impl Fn(&Entry, &T) -> PathBuf,
+    fill: impl Fn(&Entry, &T, &mut Details),
+    compare: impl Fn((&Entry, &Details), (&Entry, &Details)) -> Ordering,
+    cancelled: impl Fn() -> bool,
+) -> Option<Vec<((Entry, T), Details)>> {
+    let paths = entries
+        .iter()
+        .map(|(entry, carried)| (path(entry, carried), entry.kind));
+    let read = details::read_batch(paths, cancelled)?;
+    let mut paired: Vec<((Entry, T), Details)> = entries
+        .into_iter()
+        .zip(read)
+        .map(|((entry, carried), mut details)| {
+            fill(&entry, &carried, &mut details);
+            ((entry, carried), details)
+        })
+        .collect();
+    paired.sort_by(|((left, _), left_details), ((right, _), right_details)| {
+        compare((left, left_details), (right, right_details))
+    });
+    for (((entry, _), _), index) in paired.iter_mut().zip(0..) {
+        entry.id = EntryId(index);
+    }
+    Some(paired)
 }
 
 fn group(entry: &Entry) -> bool {

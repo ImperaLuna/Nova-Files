@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use gpui::Context;
-use nova_files_api::{EntryId, FolderSizes, SortKey};
+use nova_files_api::{EntryId, FolderSizes, Listing, SortKey};
+
+use nova_files_shell::PageRef;
 
 use super::MainWindow;
 
@@ -25,40 +27,41 @@ impl Shares {
 }
 
 impl MainWindow {
-    pub(super) fn folders_measured(
-        &mut self,
-        sizes: &[(EntryId, u64)],
-        done: bool,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn folders_measured(&mut self, sizes: &[(EntryId, u64)], cx: &mut Context<Self>) {
         for &(id, bytes) in sizes {
             if let Ok(index) = usize::try_from(id.0) {
                 self.shares.measured.insert(index, bytes);
                 self.shares.seen(bytes);
             }
         }
-        if done
-            && self.shows_shares()
-            && let Some(place) = self.place_on_screen_now()
-        {
-            self.request_place(&place);
-        }
         cx.notify();
+    }
+
+    pub(super) fn sorted_again(&self, listing: &Listing) -> bool {
+        !self.waiting()
+            && !self.searching()
+            && self
+                .listing
+                .as_ref()
+                .is_some_and(|shown| shown.id == listing.id)
     }
 
     pub fn shows_shares(&self) -> bool {
         self.shown_order.key == SortKey::Size
             && self.folder_sizes == Some(FolderSizes::Measured)
-            && self.listed_page.is_none()
             && !self.searching()
-            && self.folder().is_some()
+            && self
+                .listed_page
+                .as_ref()
+                .map_or_else(|| self.folder().is_some(), PageRef::measures_folders)
     }
 
     pub(super) fn size_of_row(&self, index: usize) -> Option<u64> {
-        self.details
+        self.shares
+            .measured
             .get(&index)
-            .and_then(|read| read.details.size)
-            .or_else(|| self.shares.measured.get(&index).copied())
+            .copied()
+            .or_else(|| self.details.get(&index).and_then(|read| read.details.size))
     }
 
     pub fn share(&self, index: usize) -> Option<f32> {

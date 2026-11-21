@@ -359,8 +359,12 @@ async fn each_column_head_fills_its_column(cx: &mut TestAppContext) {
     let name = bounds("head-name");
     let modified = bounds("head-modified");
     let size = bounds("head-size");
-    let row = bounds("modified-0");
-    assert_eq!(modified.right(), row.right());
+    let column = bounds("modified-header");
+    assert!(column.left() <= modified.left(), "{modified:?} {column:?}");
+    assert!(
+        modified.right() <= column.right(),
+        "{modified:?} {column:?}"
+    );
     assert_eq!(
         modified.left() - name.right(),
         size.left() - modified.right()
@@ -384,7 +388,7 @@ async fn a_click_on_a_column_head_orders_the_list_by_it(cx: &mut TestAppContext)
     assert!(cx.debug_bounds("arrow-size").is_none());
     let head = cx.debug_bounds("head-modified").unwrap().left();
     let column = cx.debug_bounds("modified-header").unwrap().left();
-    assert!(head < column, "{head:?} {column:?}");
+    assert!(column <= head, "{head:?} {column:?}");
     let row = cx.debug_bounds("entry-0").unwrap();
     let first = cx.debug_bounds("head-name").unwrap().left() - row.left();
     let last = row.right() - cx.debug_bounds("head-size").unwrap().right();

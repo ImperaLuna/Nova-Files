@@ -21,7 +21,7 @@ impl MeasureFolders for FolderMeasure {
         stopped: &(dyn Fn() -> bool + Sync),
         told: Told<'_>,
     ) -> Option<Vec<u64>> {
-        let device = device_of(parent)?;
+        let device = device_of(&parent.canonicalize().ok()?)?;
         let roots: Vec<Root> = folders
             .iter()
             .enumerate()
@@ -82,6 +82,24 @@ mod tests {
 
         fs::remove_dir_all(&root).ok();
         assert_eq!(totals, Some(vec![500, 0, 0]));
+    }
+
+    #[test]
+    fn a_folder_opened_through_a_link_measures_what_its_folders_hold() {
+        let root = std::env::temp_dir().join(format!(
+            "nova-files-folder-measure-link-{}",
+            std::process::id()
+        ));
+        fs::remove_dir_all(&root).ok();
+        fs::create_dir_all(root.join("real/inner")).unwrap();
+        fs::write(root.join("real/inner/one"), [0_u8; 300]).unwrap();
+        std::os::unix::fs::symlink(root.join("real"), root.join("link")).unwrap();
+
+        let totals =
+            FolderMeasure.measure(&root.join("link"), &["inner".into()], &|| false, &|_| {});
+
+        fs::remove_dir_all(&root).ok();
+        assert_eq!(totals, Some(vec![300]));
     }
 
     #[test]

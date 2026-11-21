@@ -1,5 +1,5 @@
 // GPUI draws an SVG as a mask, so only its alpha matters.
-// https://github.com/ImperaLuna/zed/tree/nova/v0.233.10/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/2d5e9a92499dba81148304d079cd4ef00e54d0c5/crates/gpui
 pub const FOLDER: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path opacity=".5" d="M2.5 7A2.5 2.5 0 0 1 5 4.5h3.6c.75 0 1.45.33 1.93.9l.92 1.1H19A2.5 2.5 0 0 1 21.5 9v3h-19z"/><rect x="2.5" y="8.6" width="19" height="11.4" rx="2.8"/></svg>"##;
 macro_rules! file_with {
     ($mark:literal) => {

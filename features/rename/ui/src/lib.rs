@@ -1,13 +1,13 @@
 #![forbid(unsafe_code)]
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use gpui::{App, AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
+use nova_files_api::numbered::stem;
 use nova_files_api::{Entry, EntryKind, Event, Listing, Operation};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::text::{TextField, TextFieldEvent};
-use nova_files_shell::typed::stem;
 use nova_files_shell::{
     Host, Location, MenuAt, MenuGroup, MenuItem, Part, Placed, RenameWhenMade, Scene, Slots,
     command_spec,
@@ -108,7 +108,7 @@ impl RenamePart {
                 if is_folder {
                     0..text.len()
                 } else {
-                    stem(&text)
+                    0..stem(OsStr::new(&text)).len()
                 },
                 cx,
             );

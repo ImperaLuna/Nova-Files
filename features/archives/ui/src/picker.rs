@@ -45,14 +45,19 @@ impl Format {
             .filter(move |format| seven || *format != Self::Seven)
     }
 
-    const fn label(self) -> &'static str {
+    const fn packing(self, zstd: bool) -> Packing {
         match self {
-            Self::Seven => ".7z",
-            Self::Zip => ".zip",
-            Self::TarZstd => ".tar.zst",
-            Self::TarGzip => ".tar.gz",
-            Self::TarXz => ".tar.xz",
+            Self::Seven => Packing::SevenZip,
+            Self::Zip if zstd => Packing::ZipZstd,
+            Self::Zip => Packing::ZipDeflate,
+            Self::TarZstd => Packing::TarZstd,
+            Self::TarGzip => Packing::TarGzip,
+            Self::TarXz => Packing::TarXz,
         }
+    }
+
+    const fn label(self) -> &'static str {
+        self.packing(false).ending()
     }
 
     const fn selector(self) -> &'static str {
@@ -66,7 +71,7 @@ impl Format {
     }
 
     pub const fn locks(self) -> bool {
-        matches!(self, Self::Seven | Self::Zip)
+        self.packing(false).locks()
     }
 }
 
@@ -135,14 +140,7 @@ impl Choice {
     }
 
     pub const fn packing(self, seven: bool) -> Packing {
-        match self.format(seven) {
-            Format::Seven => Packing::SevenZip,
-            Format::Zip if self.zstd => Packing::ZipZstd,
-            Format::Zip => Packing::ZipDeflate,
-            Format::TarZstd => Packing::TarZstd,
-            Format::TarGzip => Packing::TarGzip,
-            Format::TarXz => Packing::TarXz,
-        }
+        self.format(seven).packing(self.zstd)
     }
 
     pub const fn locked(self, seven: bool) -> bool {

@@ -1,0 +1,32 @@
+# Prints how many lines a pull request adds to framework/, and fails when it
+# grows the framework without a "## Shared part" section in its description
+# (tools/check-shared-part.sh). It runs again when the description is
+# edited, so adding the section turns it green without a push.
+name: Shared part
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: shared-part-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  shared-part:
+    name: framework growth named
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The merge commit and its base parent, to diff against.
+          fetch-depth: 2
+      - name: Lines added to the framework
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: git diff --no-renames --numstat HEAD^1 HEAD -- framework/ | tools/check-shared-part.sh

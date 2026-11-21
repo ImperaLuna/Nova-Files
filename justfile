@@ -10,7 +10,7 @@ default:
 
 # The checks CI runs, in the Nix sandbox.
 check:
-    nix flake check
+    tools/capped.sh nix flake check
     tools/local-pass.sh record check
 
 # Build one crate or the workspace.
@@ -59,6 +59,14 @@ machete:
 # Dependencies a crate's Cargo.toml doesn't allow.
 deps:
     tools/check-deps.sh
+
+# framework/base and what framework/shell offers, against their ceilings.
+framework-size:
+    tools/check-framework-size.sh
+
+# Links to the GPUI fork that point at another version than the pin.
+fork-links:
+    tools/check-fork-links.sh
 
 # Bare numbers outside named constants.
 numbers:

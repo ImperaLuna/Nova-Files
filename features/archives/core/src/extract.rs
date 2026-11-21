@@ -1,11 +1,12 @@
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io;
+use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 
+use nova_files_api::archive::ending;
 use nova_files_api::{Conflict, ConflictKind, ExtractTo, Failure, Outcome};
-use nova_files_archives_api::ENDINGS;
 
 use crate::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow};
 use nova_files_jobs::Ended;
@@ -285,16 +286,8 @@ fn totals(entries: &[ArchiveEntry]) -> (u64, u64) {
 
 fn folder_name(archive: &Path) -> OsString {
     let name = archive.file_name().unwrap_or_default();
-    let Some(text) = name.to_str() else {
-        return archive.file_stem().unwrap_or(name).to_os_string();
-    };
-    let lower = text.to_lowercase();
-    let cut = ENDINGS
-        .iter()
-        .find(|ending| lower.ends_with(*ending) && lower.len() > ending.len())
-        .map_or(text.len(), |ending| text.len() - ending.len());
-    text.get(..cut)
-        .map_or_else(|| name.to_os_string(), Into::into)
+    let cut = ending(name).map_or(name.len(), |ending| name.len() - ending.len());
+    OsStr::from_bytes(&name.as_bytes()[..cut]).to_os_string()
 }
 
 fn stop_for(failure: ArchiveFailure, archive: &Path, into: &Path) -> Stop {
@@ -329,6 +322,10 @@ mod tests {
         assert_eq!(name("/a/notes.txt"), "notes.txt");
         assert_eq!(name("/a/.zip"), ".zip");
         assert_eq!(name("/a/x.7z"), "x");
+        assert_eq!(
+            folder_name(Path::new(OsStr::from_bytes(b"/a/caf\xe9.TAR.GZ"))).as_bytes(),
+            b"caf\xe9"
+        );
     }
 
     #[test]

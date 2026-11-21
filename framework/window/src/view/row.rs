@@ -37,7 +37,16 @@ pub fn cells(
     (size_cell, size_width): (impl IntoElement, Pixels),
     modified_selector: String,
 ) -> impl IntoElement {
-    let column = |width| div().flex().flex_none().w(width).min_w_0().truncate();
+    let column = |width: Pixels| {
+        div()
+            .flex()
+            .flex_none()
+            .w(width + size::COLUMN_BLEED + size::COLUMN_BLEED)
+            .mx(-size::COLUMN_BLEED)
+            .px(size::COLUMN_BLEED)
+            .min_w_0()
+            .truncate()
+    };
     div()
         .flex()
         .flex_1()

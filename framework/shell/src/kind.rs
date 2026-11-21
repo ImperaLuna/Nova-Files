@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::path::Path;
 
 use gpui::Rgba;
+use nova_files_api::archive::ending;
 use nova_files_api::{EntryKind, IconKind};
 
 use crate::assets::Icon;
@@ -53,19 +54,10 @@ const KNOWN: &[(&str, FileKind)] = &[
     ("yaml", FileKind::Code),
     ("yml", FileKind::Code),
     ("lock", FileKind::Code),
-    ("zip", FileKind::Archive),
-    ("tar", FileKind::Archive),
     ("gz", FileKind::Archive),
     ("xz", FileKind::Archive),
     ("zst", FileKind::Archive),
     ("bz2", FileKind::Archive),
-    ("tgz", FileKind::Archive),
-    ("txz", FileKind::Archive),
-    ("tzst", FileKind::Archive),
-    ("tbz2", FileKind::Archive),
-    ("tbz", FileKind::Archive),
-    ("7z", FileKind::Archive),
-    ("rar", FileKind::Archive),
     ("mp4", FileKind::Media),
     ("mkv", FileKind::Media),
     ("webm", FileKind::Media),
@@ -134,6 +126,9 @@ fn is_audio(name: &OsStr) -> bool {
 
 impl FileKind {
     pub fn of(name: &OsStr) -> Self {
+        if ending(name).is_some() {
+            return Self::Archive;
+        }
         let Some(extension) = Path::new(name).extension() else {
             return Self::Other;
         };
@@ -169,6 +164,8 @@ mod tests {
         assert_eq!(kind("notes.pdf"), FileKind::Document);
         assert_eq!(kind("lib.rs"), FileKind::Code);
         assert_eq!(kind("backup.tar.zst"), FileKind::Archive);
+        assert_eq!(kind("photos.7Z"), FileKind::Archive);
+        assert_eq!(kind("dump.sql.xz"), FileKind::Archive);
         assert_eq!(kind("data.xyz"), FileKind::Other);
         assert_eq!(kind("Makefile"), FileKind::Other);
         assert_eq!(kind(".bashrc"), FileKind::Other);
