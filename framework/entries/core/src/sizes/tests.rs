@@ -85,19 +85,46 @@ fn take(events: &Receiver<Event>) -> Listed {
     listed
 }
 
-#[test]
-fn folders_are_measured_then_sorted_with_files_by_what_they_hold() {
-    let root = std::env::temp_dir().join(format!("nova-files-sizes-{}", std::process::id()));
-    fs::remove_dir_all(&root).ok();
+struct Bench {
+    client: Client,
+    events: Receiver<Event>,
+    measure: Arc<Fixed>,
+    sizer: FolderSizer,
+}
+
+impl Bench {
+    fn new() -> Self {
+        let (sender, events) = mpsc::channel::<Event>();
+        let icons: Arc<dyn Icons> = Arc::new(Plain);
+        let measure = Arc::new(Fixed {
+            asked: AtomicUsize::new(0),
+        });
+        Self {
+            client: Client::new(Arc::new(sender), None, &icons),
+            events,
+            sizer: FolderSizer::new(Arc::clone(&measure) as Arc<dyn MeasureFolders>),
+            measure,
+        }
+    }
+}
+
+fn sample_folder(root: &Path) {
+    fs::remove_dir_all(root).ok();
     fs::create_dir_all(root.join("big")).unwrap();
     fs::create_dir_all(root.join("small")).unwrap();
     fs::write(root.join("file"), [0_u8; 50]).unwrap();
-    let (sender, events) = mpsc::channel::<Event>();
-    let icons: Arc<dyn Icons> = Arc::new(Plain);
-    let client = Client::new(Arc::new(sender), None, &icons);
-    let sizer = FolderSizer::new(Arc::new(Fixed {
-        asked: AtomicUsize::new(0),
-    }));
+}
+
+#[test]
+fn folders_are_measured_then_sorted_with_files_by_what_they_hold() {
+    let root = std::env::temp_dir().join(format!("nova-files-sizes-{}", std::process::id()));
+    sample_folder(&root);
+    let Bench {
+        client,
+        events,
+        measure,
+        sizer,
+    } = Bench::new();
 
     list(&client, &sizer, 1, &root);
     client.want_rows(ListingId(1), EntryId(0), 3, None);
@@ -116,22 +143,19 @@ fn folders_are_measured_then_sorted_with_files_by_what_they_hold() {
         }]
     );
     assert_eq!(listed.sizes, [Some(900), Some(50), Some(5)]);
+    assert_eq!(measure.asked.load(Ordering::SeqCst), 1);
 }
 
 #[test]
 fn a_folder_listed_again_is_sorted_by_its_last_totals_and_measured_again() {
     let root = std::env::temp_dir().join(format!("nova-files-sizes-again-{}", std::process::id()));
-    fs::remove_dir_all(&root).ok();
-    fs::create_dir_all(root.join("big")).unwrap();
-    fs::create_dir_all(root.join("small")).unwrap();
-    fs::write(root.join("file"), [0_u8; 50]).unwrap();
-    let (sender, events) = mpsc::channel::<Event>();
-    let icons: Arc<dyn Icons> = Arc::new(Plain);
-    let client = Client::new(Arc::new(sender), None, &icons);
-    let measure = Arc::new(Fixed {
-        asked: AtomicUsize::new(0),
-    });
-    let sizer = FolderSizer::new(Arc::clone(&measure) as Arc<dyn MeasureFolders>);
+    sample_folder(&root);
+    let Bench {
+        client,
+        events,
+        measure,
+        sizer,
+    } = Bench::new();
 
     list(&client, &sizer, 1, &root);
     take(&events);
@@ -169,13 +193,12 @@ fn gathered_folders_are_measured_where_each_one_lives() {
     fs::remove_dir_all(&root).ok();
     fs::create_dir_all(root.join("one/small")).unwrap();
     fs::create_dir_all(root.join("two/big")).unwrap();
-    let (sender, events) = mpsc::channel::<Event>();
-    let icons: Arc<dyn Icons> = Arc::new(Plain);
-    let client = Client::new(Arc::new(sender), None, &icons);
-    let measure = Arc::new(Fixed {
-        asked: AtomicUsize::new(0),
-    });
-    let sizer = FolderSizer::new(Arc::clone(&measure) as Arc<dyn MeasureFolders>);
+    let Bench {
+        client,
+        events,
+        measure,
+        sizer,
+    } = Bench::new();
     let order = Order {
         key: SortKey::Size,
         descending: true,
