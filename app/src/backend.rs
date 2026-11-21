@@ -71,6 +71,7 @@ pub fn spawn_with_archiver(
     let searcher = Searcher::new(index, home.as_ref().map(|home| home.folder.clone()));
     let window_state =
         nova_files_disk::window_state::Store::open(home.as_ref().map(|home| home.state.as_path()));
+    let seven = archiver.as_ref().is_some_and(Archiver::has_seven);
     let inside = Arc::new(inside::Inside::new(
         archiver.clone(),
         inside::opened_folder(std::env::var_os("XDG_RUNTIME_DIR")),
@@ -116,6 +117,7 @@ pub fn spawn_with_archiver(
                 recent,
                 folder_views,
                 inside,
+                seven,
             };
             run::run(&receiver, idle_exit, &setup);
         })?;

@@ -19,7 +19,9 @@ publish = false
 [workspace.dependencies]
 nova-files = { path = "app" }
 nova-files-api = { path = "framework/base" }
+nova-files-archives-api = { path = "features/archives/api" }
 nova-files-archives-core = { path = "features/archives/core" }
+nova-files-archives-ui = { path = "features/archives/ui" }
 nova-files-clipboard-api = { path = "features/clipboard/api" }
 nova-files-clipboard-ui = { path = "features/clipboard/ui" }
 nova-files-dbus = { path = "fronts/dbus" }
@@ -150,7 +152,7 @@ excessive_nesting = "deny"
 lto = "thin"
 codegen-units = 1
 
-# Checks and mutation tests in CI. The release profile's LTO makes every
+# Checks in CI. The release profile's LTO makes every
 # test binary link for minutes, and debug info swells target/ and the link,
 # so CI builds the code like dev but without either.
 [profile.ci]
