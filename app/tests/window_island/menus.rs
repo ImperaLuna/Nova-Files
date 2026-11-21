@@ -1,5 +1,5 @@
 use gpui::{Pixels, Point, point, px};
-use nova_files_api::FolderSizes;
+use nova_files_api::{FolderSizes, SortKey};
 use nova_files_window::{Look, MenuAction};
 
 use super::*;
@@ -416,4 +416,35 @@ async fn the_menu_key_opens_at_the_list_or_under_the_row(cx: &mut TestAppContext
     let row = cx.debug_bounds("entry-58").unwrap();
     let at = menu_at(&view, cx);
     assert!((at.y - row.bottom()).abs() < px(0.5), "{at:?} {row:?}");
+}
+
+#[gpui::test]
+async fn sorting_by_size_with_folder_sizes_sorts_folders_and_files_by_what_they_hold(
+    cx: &mut TestAppContext,
+) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-sizes-sorted");
+    let home = TempFolder::tree("menu-sizes-sorted-home");
+    fs::write(tree.path().join("Projects/nova/data"), [0_u8; 4000]).unwrap();
+    fs::write(tree.path().join("notes.txt"), [0_u8; 100]).unwrap();
+    fs::create_dir(tree.path().join("Empty")).unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    view.condition::<WindowEvent>(cx, |_, cx| {
+        Published::<FolderSizes>::get(cx) == Some(&FolderSizes::Measured)
+    })
+    .await;
+    view.update(cx, |view, _| view.sort_by(SortKey::Size));
+    wait_for_names(&view, cx, &["Projects", "notes.txt", "Empty"]).await;
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| {
+        assert!(view.shows_shares());
+        let near = |index, want: f32| {
+            view.share(index)
+                .is_some_and(|got| (got - want).abs() < 1e-6)
+        };
+        assert!(near(0, 1.0));
+        assert!(near(1, 0.025));
+    });
 }

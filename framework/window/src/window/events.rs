@@ -78,6 +78,7 @@ impl MainWindow {
         self.listing = Some(listing);
         self.core_moved = false;
         self.details = HashMap::new();
+        self.shares.forget(place == Place::Top);
         self.rows_wanted = 0..0;
         if place == Place::Top {
             self.scroll = UniformListScrollHandle::new();
@@ -111,6 +112,14 @@ impl MainWindow {
                 .is_some_and(|listing| listing.id == id) =>
             {
                 self.details_arrived(first, &details, &icons, cx);
+            }
+            Event::FoldersMeasured { id, sizes, done }
+                if self
+                    .listing
+                    .as_ref()
+                    .is_some_and(|listing| listing.id == id) =>
+            {
+                self.folders_measured(&sizes, done, cx);
             }
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::WindowState(bytes) => {

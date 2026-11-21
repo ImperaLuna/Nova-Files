@@ -13,6 +13,7 @@ mod pin;
 mod renaming;
 mod rows;
 mod search;
+mod shares;
 mod showing;
 mod slots;
 mod start;
@@ -92,6 +93,7 @@ pub struct MainWindow {
     pub(crate) connection: Option<Arc<Connection>>,
     pub(crate) listing: Option<Listing>,
     details: HashMap<usize, RowRead>,
+    shares: shares::Shares,
     theme_icons: ThemeIcons,
     pub(crate) scale_factor: f32,
     rows_wanted: Range<usize>,
@@ -204,6 +206,7 @@ impl MainWindow {
             connection,
             listing: None,
             details: HashMap::new(),
+            shares: shares::Shares::default(),
             theme_icons: ThemeIcons::default(),
             rows_wanted: 0..0,
             rows_drawn: 0..0,
