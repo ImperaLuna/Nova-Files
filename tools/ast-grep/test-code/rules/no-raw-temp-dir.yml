@@ -1,0 +1,25 @@
+# A folder made straight in the temp folder is named by hand, clashes when
+# two tests pick the same name, and stays behind when a test fails before
+# its clean-up. TestFolder names each one per test and removes it on drop.
+id: no-raw-temp-dir
+language: rust
+severity: error
+message: Make the folder with nova_files_test_folder::TestFolder, which names it per test and removes it.
+files:
+  - "app/**/*.rs"
+  - "framework/**/*.rs"
+  - "features/**/*.rs"
+  - "fronts/**/*.rs"
+  - "helpers/**/*.rs"
+ignores:
+  - "framework/test-folder/**"
+rule:
+  pattern: $TEMP.join($$$NAME)
+  has:
+    field: function
+    has:
+      field: value
+      kind: call_expression
+      has:
+        field: function
+        regex: '(^|::)temp_dir$'

@@ -1,0 +1,51 @@
+# Invalid cases are the timed asserts on main at 9faefa7.
+id: no-timed-assert
+valid:
+  - |
+    fn waits_for_the_save() {
+        let wait = std::time::Instant::now();
+        while folders(&Store::open(Some(&state.0))).is_empty() {
+            assert!(wait.elapsed() < WAIT, "never saved");
+        }
+    }
+  - |
+    fn waits_for_the_thread() {
+        let deadline = Instant::now() + WAIT;
+        loop {
+            assert!(Instant::now() < deadline, "the thread didn't end");
+        }
+    }
+  - |
+    fn stamps() {
+        assert_eq!(stamp(time.duration_since(UNIX_EPOCH).unwrap()), 3);
+    }
+  - |
+    fn gives_up_at_the_deadline() {
+        assert!(!shared.wait_ended(Instant::now() + EVERY));
+    }
+  - |
+    fn a_stopped_listing_ends_its_helper() {
+        assert_eq!(listed, Err(ArchiveFailure::Cancelled));
+        assert!(gone(pid));
+    }
+invalid:
+  - |
+    fn a_stopped_listing_ends_its_helper_at_once() {
+        let started = Instant::now();
+        let listed = list(shell, &lead, (Path::new("/a.zip"), None), &|| true);
+        assert_eq!(listed, Err(ArchiveFailure::Cancelled));
+        assert!(started.elapsed() < RUN_TIME / 60);
+    }
+  - |
+    fn each_answer_is_reported_before_the_helper_exits() {
+        assert_eq!(reported, vec![0, 1]);
+        assert!(started.elapsed() < PER_FILE);
+    }
+  - |
+    fn a_thumbnailer_that_closes_its_output_and_keeps_running_is_stopped_in_time() {
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            started.elapsed()
+        );
+    }
