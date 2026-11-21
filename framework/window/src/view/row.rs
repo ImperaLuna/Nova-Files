@@ -41,7 +41,7 @@ pub fn cells(
         div()
             .flex()
             .flex_none()
-            .w(width + size::COLUMN_BLEED * 2.0)
+            .w(width + size::COLUMN_BLEED + size::COLUMN_BLEED)
             .mx(-size::COLUMN_BLEED)
             .px(size::COLUMN_BLEED)
             .min_w_0()
