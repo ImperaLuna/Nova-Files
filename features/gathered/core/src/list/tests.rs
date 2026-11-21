@@ -192,3 +192,26 @@ fn a_cancel_stops_before_the_next_folder() {
     let folders = [many(scratch.at("a")), many(scratch.at("b"))];
     assert!(gather(&folders, HiddenFiles::Left, Order::default(), cancelled).is_none());
 }
+
+#[test]
+fn steam_tools_in_a_library_are_not_listed() {
+    let scratch = Scratch::new("steam-tools");
+    scratch.folders(&[
+        "common/Celeste/_CommonRedist",
+        "common/Proton 10.0",
+        "common/SteamLinuxRuntime_sniper",
+        "common/Steamworks Shared/_CommonRedist",
+        "common/wallpaper_engine",
+    ]);
+    fs::write(scratch.at("common/Celeste/Celeste.exe"), "").unwrap();
+    fs::write(scratch.at("common/Proton 10.0/toolmanifest.vdf"), "").unwrap();
+    fs::write(
+        scratch.at("common/SteamLinuxRuntime_sniper/toolmanifest.vdf"),
+        "",
+    )
+    .unwrap();
+    assert_eq!(
+        rows(&scratch.0, &[many(scratch.at("common"))], Order::default()),
+        [row("Celeste", "common"), row("wallpaper_engine", "common")]
+    );
+}
