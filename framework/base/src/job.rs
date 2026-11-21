@@ -99,7 +99,8 @@ pub enum Operation {
     /// already taken gives the archive the next free name, as "keep
     /// both" does. With `locked`, the job first holds at a
     /// [`ConflictKind::PasswordNeeded`] for the password that locks a
-    /// zip's files.
+    /// zip's or a 7z's files; a tarball can't be locked, and asking for
+    /// one fails with [`Failure::Unsupported`].
     Compress {
         sources: Vec<PathBuf>,
         into: PathBuf,
