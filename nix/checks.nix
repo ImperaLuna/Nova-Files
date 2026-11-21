@@ -111,6 +111,12 @@ in
     pkgs.jq
   ];
 
+  framework-size = toolCheck "framework-size" "tools/check-framework-size.sh" [ ];
+
+  shared-part = toolCheck "shared-part" "tools/check-shared-part.sh --self-test" [ ];
+
+  fork-links = toolCheck "fork-links" "tools/check-fork-links.sh" [ ];
+
   clippy-config = toolCheck "clippy-config" "tools/check-clippy-config.sh" [ ];
 
   file-length = toolCheck "file-length" "tools/check-file-length.sh" [ ];
