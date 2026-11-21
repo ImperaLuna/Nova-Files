@@ -104,18 +104,18 @@ mod tests {
     use std::{fs, io, thread};
 
     use landlock::RulesetStatus;
+    use nova_files_test_folder::TestFolder;
 
     use super::*;
 
     #[test]
     fn opens_nothing_and_connects_nowhere() {
-        let root =
-            std::env::temp_dir().join(format!("nova-archiver-locked-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let folder = TestFolder::new("archiver-locked");
+        let root = folder.path();
         fs::write(root.join("there.txt"), b"x").unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
-        let inside = root.clone();
+        let inside = root.to_path_buf();
         let held = fs::File::open(root.join("there.txt")).unwrap();
         let result = thread::spawn(move || {
             let status = lock_in(Vec::new()).unwrap();
@@ -129,7 +129,6 @@ mod tests {
         })
         .join()
         .unwrap();
-        fs::remove_dir_all(&root).ok();
         let (status, read, write, connected, held_reads) = result;
         assert!(held_reads);
         if status != RulesetStatus::NotEnforced {
@@ -143,13 +142,13 @@ mod tests {
 
     #[test]
     fn unpacking_writes_inside_its_folder_only() {
-        let root =
-            std::env::temp_dir().join(format!("nova-archiver-unpacking-{}", std::process::id()));
+        let folder = TestFolder::new("archiver-unpacking");
+        let root = folder.path();
         let inside = root.join("into");
         fs::create_dir_all(&inside).unwrap();
         fs::write(inside.join("there.txt"), b"x").unwrap();
         let folder = OwnedFd::from(fs::File::open(&inside).unwrap());
-        let (outside, into) = (root.clone(), inside);
+        let (outside, into) = (root.to_path_buf(), inside);
         let result = thread::spawn(move || {
             let status = lock_in(vec![unpacking(folder)]).unwrap();
             (
@@ -162,7 +161,6 @@ mod tests {
         })
         .join()
         .unwrap();
-        fs::remove_dir_all(&root).ok();
         let (status, write, made, read, escaped) = result;
         assert_eq!(write, Ok(()));
         assert_eq!(made, Ok(()));

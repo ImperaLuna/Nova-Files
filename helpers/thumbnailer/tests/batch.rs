@@ -7,6 +7,7 @@ use std::process::Command;
 
 use image::codecs::jpeg::JpegEncoder;
 use image::{ImageEncoder as _, ImageFormat, RgbImage};
+use nova_files_test_folder::TestFolder;
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
 const SOURCE_WIDTH: u32 = 400;
@@ -15,25 +16,6 @@ const NORMAL_SIZE: u32 = 128;
 const LARGE_SIZE: u32 = 256;
 const NORMAL: &str = "normal";
 const LARGE: &str = "large";
-
-struct TempFolder(PathBuf);
-
-impl TempFolder {
-    fn new(test: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "nova-files-thumbnailer-{test}-{}",
-            std::process::id()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
-}
 
 fn run(thumbnails: &Path, jobs: &[(&Path, &str)]) -> Vec<String> {
     run_with_data(thumbnails, jobs, &thumbnails.join("no-data"))
@@ -68,8 +50,8 @@ fn run_sized(thumbnails: &Path, size: &str, jobs: &[(&Path, &str)], data: &Path)
 
 #[test]
 fn images_get_scaled_thumbnails_with_their_uri_and_mtime() {
-    let folder = TempFolder::new("images");
-    let thumbnails = folder.0.join("thumbnails");
+    let folder = TestFolder::new("thumbnailer-images");
+    let thumbnails = folder.join("thumbnails");
     let image = RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT);
     let mut jobs = Vec::new();
     for (file, format) in [
@@ -77,7 +59,7 @@ fn images_get_scaled_thumbnails_with_their_uri_and_mtime() {
         ("b.png", ImageFormat::Png),
         ("c.webp", ImageFormat::WebP),
     ] {
-        let path = folder.0.join(file);
+        let path = folder.join(file);
         image.save_with_format(&path, format).unwrap();
         jobs.push(path);
     }
@@ -105,14 +87,14 @@ fn images_get_scaled_thumbnails_with_their_uri_and_mtime() {
 
 #[test]
 fn a_large_batch_makes_large_thumbnails_in_their_own_folder() {
-    let folder = TempFolder::new("large");
-    let thumbnails = folder.0.join("thumbnails");
-    let file = folder.0.join("a.png");
+    let folder = TestFolder::new("thumbnailer-large");
+    let thumbnails = folder.join("thumbnails");
+    let file = folder.join("a.png");
     RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
         .save_with_format(&file, ImageFormat::Png)
         .unwrap();
 
-    let answers = run_sized(&thumbnails, LARGE, &[(&file, "a.png")], &folder.0);
+    let answers = run_sized(&thumbnails, LARGE, &[(&file, "a.png")], folder.path());
 
     assert_eq!(answers, ["ok"]);
     assert!(!thumbnails.join(NORMAL).exists());
@@ -125,20 +107,20 @@ fn a_large_batch_makes_large_thumbnails_in_their_own_folder() {
 
 #[test]
 fn a_picture_smaller_than_the_size_keeps_its_own() {
-    let folder = TempFolder::new("small");
-    let thumbnails = folder.0.join("thumbnails");
-    let small = folder.0.join("b.png");
+    let folder = TestFolder::new("thumbnailer-small");
+    let thumbnails = folder.join("thumbnails");
+    let small = folder.join("b.png");
     RgbImage::new(LARGE_SIZE / 2, LARGE_SIZE / 4)
         .save_with_format(&small, ImageFormat::Png)
         .unwrap();
-    let wide = folder.0.join("c.png");
+    let wide = folder.join("c.png");
     RgbImage::new(LARGE_SIZE * 2, LARGE_SIZE / 4)
         .save_with_format(&wide, ImageFormat::Png)
         .unwrap();
     let jobs: [(&Path, &str); 2] = [(&small, "b.png"), (&wide, "c.png")];
 
     assert_eq!(
-        run_sized(&thumbnails, LARGE, &jobs, &folder.0),
+        run_sized(&thumbnails, LARGE, &jobs, folder.path()),
         ["ok", "ok"]
     );
 
@@ -155,9 +137,9 @@ const PHOTO_HEIGHT: u32 = 1200;
 
 #[test]
 fn a_photo_sized_image_is_within_the_decode_limit() {
-    let folder = TempFolder::new("photo");
-    let thumbnails = folder.0.join("thumbnails");
-    let source = folder.0.join("big.png");
+    let folder = TestFolder::new("thumbnailer-photo");
+    let thumbnails = folder.join("thumbnails");
+    let source = folder.join("big.png");
     RgbImage::new(PHOTO_WIDTH, PHOTO_HEIGHT)
         .save_with_format(&source, ImageFormat::Png)
         .unwrap();
@@ -173,9 +155,9 @@ const HUGE_PNG: &[u8] = &[
 
 #[test]
 fn an_image_too_big_to_decode_is_refused_without_a_failure_marker() {
-    let folder = TempFolder::new("huge");
-    let thumbnails = folder.0.join("thumbnails");
-    let source = folder.0.join("huge.png");
+    let folder = TestFolder::new("thumbnailer-huge");
+    let thumbnails = folder.join("thumbnails");
+    let source = folder.join("huge.png");
     fs::write(&source, HUGE_PNG).unwrap();
 
     assert_eq!(run(&thumbnails, &[(&source, "h.png")]), ["failed"]);
@@ -184,9 +166,9 @@ fn an_image_too_big_to_decode_is_refused_without_a_failure_marker() {
 
 #[test]
 fn an_image_is_known_by_its_content_not_its_name() {
-    let folder = TempFolder::new("content");
-    let thumbnails = folder.0.join("thumbnails");
-    let source = folder.0.join("photo");
+    let folder = TestFolder::new("thumbnailer-content");
+    let thumbnails = folder.join("thumbnails");
+    let source = folder.join("photo");
     RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
         .save_with_format(&source, ImageFormat::Png)
         .unwrap();
@@ -196,11 +178,11 @@ fn an_image_is_known_by_its_content_not_its_name() {
 
 #[test]
 fn a_broken_image_gets_a_failure_marker_and_other_files_are_left_alone() {
-    let folder = TempFolder::new("broken");
-    let thumbnails = folder.0.join("thumbnails");
-    let broken = folder.0.join("broken.jpg");
+    let folder = TestFolder::new("thumbnailer-broken");
+    let thumbnails = folder.join("thumbnails");
+    let broken = folder.join("broken.jpg");
     fs::write(&broken, b"not a jpeg").unwrap();
-    let video = folder.0.join("clip.mp4");
+    let video = folder.join("clip.mp4");
     fs::write(&video, b"").unwrap();
 
     let answers = run(&thumbnails, &[(&broken, "x.png"), (&video, "y.png")]);
@@ -214,9 +196,9 @@ fn a_broken_image_gets_a_failure_marker_and_other_files_are_left_alone() {
 
 #[test]
 fn a_file_that_cant_be_read_gets_no_failure_marker() {
-    let folder = TempFolder::new("unreadable");
-    let thumbnails = folder.0.join("thumbnails");
-    let missing = folder.0.join("missing.jpg");
+    let folder = TestFolder::new("thumbnailer-unreadable");
+    let thumbnails = folder.join("thumbnails");
+    let missing = folder.join("missing.jpg");
 
     assert_eq!(run(&thumbnails, &[(&missing, "x.png")]), ["failed"]);
     assert!(!thumbnails.join("fail/nova-files/x.png").exists());
@@ -224,9 +206,9 @@ fn a_file_that_cant_be_read_gets_no_failure_marker() {
 
 #[test]
 fn no_temp_files_are_left_behind() {
-    let folder = TempFolder::new("temp");
-    let thumbnails = folder.0.join("thumbnails");
-    let source = folder.0.join("a.png");
+    let folder = TestFolder::new("thumbnailer-temp");
+    let thumbnails = folder.join("thumbnails");
+    let source = folder.join("a.png");
     RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
         .save_with_format(&source, ImageFormat::Png)
         .unwrap();
@@ -245,9 +227,9 @@ const EXIF_ROTATE_90: &[u8] = &[
 
 #[test]
 fn a_rotated_photo_gets_an_upright_thumbnail() {
-    let folder = TempFolder::new("rotated");
-    let thumbnails = folder.0.join("thumbnails");
-    let source = folder.0.join("portrait.jpg");
+    let folder = TestFolder::new("thumbnailer-rotated");
+    let thumbnails = folder.join("thumbnails");
+    let source = folder.join("portrait.jpg");
     let mut jpeg = Vec::new();
     let mut encoder = JpegEncoder::new(&mut jpeg);
     encoder.set_exif_metadata(EXIF_ROTATE_90.to_vec()).unwrap();
@@ -266,9 +248,9 @@ fn a_rotated_photo_gets_an_upright_thumbnail() {
 
 #[test]
 fn bad_arguments_are_refused() {
-    let folder = TempFolder::new("refused");
+    let folder = TestFolder::new("thumbnailer-refused");
     let status = Command::new(HELPER)
-        .arg(&folder.0)
+        .arg(folder.path())
         .args([NORMAL, "/a.jpg", "file:///a.jpg", "1", "../escape.png"])
         .status()
         .unwrap();
@@ -277,9 +259,9 @@ fn bad_arguments_are_refused() {
 
 #[test]
 fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
-    let folder = TempFolder::new("system");
-    let thumbnails = folder.0.join("thumbnails");
-    let data = folder.0.join("data");
+    let folder = TestFolder::new("thumbnailer-system");
+    let thumbnails = folder.join("thumbnails");
+    let data = folder.join("data");
     fs::create_dir_all(data.join("mime")).unwrap();
     fs::create_dir_all(data.join("thumbnailers")).unwrap();
     fs::write(
@@ -287,11 +269,11 @@ fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
         "50:image/heif:*.heic\n50:video/mp4:*.mp4\n50:video/x-matroska:*.mkv\n",
     )
     .unwrap();
-    let made = folder.0.join("made.png");
+    let made = folder.join("made.png");
     RgbImage::new(SOURCE_WIDTH, SOURCE_HEIGHT)
         .save_with_format(&made, ImageFormat::Png)
         .unwrap();
-    let script = folder.0.join("thumbnail.sh");
+    let script = folder.join("thumbnail.sh");
     fs::write(
         &script,
         format!(
@@ -314,10 +296,10 @@ fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
         "[Thumbnailer Entry]\nExec=false %i %o\nMimeType=video/mp4;\n",
     )
     .unwrap();
-    let heic = folder.0.join("photo.heic");
+    let heic = folder.join("photo.heic");
     fs::write(&heic, b"\0\0\0\x18ftypheic").unwrap();
-    let missing = folder.0.join("missing.heic");
-    let (mp4, mkv) = (folder.0.join("clip.mp4"), folder.0.join("film.mkv"));
+    let missing = folder.join("missing.heic");
+    let (mp4, mkv) = (folder.join("clip.mp4"), folder.join("film.mkv"));
     fs::write(&mp4, b"").unwrap();
     fs::write(&mkv, b"").unwrap();
 
@@ -349,13 +331,13 @@ fn other_formats_go_to_the_system_thumbnailer_for_their_type() {
 
 #[test]
 fn a_thumbnailer_killed_by_a_signal_leaves_no_failure_marker() {
-    let folder = TempFolder::new("system-killed");
-    let thumbnails = folder.0.join("thumbnails");
-    let data = folder.0.join("data");
+    let folder = TestFolder::new("thumbnailer-system-killed");
+    let thumbnails = folder.join("thumbnails");
+    let data = folder.join("data");
     fs::create_dir_all(data.join("mime")).unwrap();
     fs::create_dir_all(data.join("thumbnailers")).unwrap();
     fs::write(data.join("mime/globs2"), "50:video/mp4:*.mp4\n").unwrap();
-    let script = folder.0.join("killed.sh");
+    let script = folder.join("killed.sh");
     fs::write(&script, "#!/bin/sh\nkill -KILL $$\n").unwrap();
     fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(
@@ -366,7 +348,7 @@ fn a_thumbnailer_killed_by_a_signal_leaves_no_failure_marker() {
         ),
     )
     .unwrap();
-    let mp4 = folder.0.join("clip.mp4");
+    let mp4 = folder.join("clip.mp4");
     fs::write(&mp4, b"").unwrap();
 
     let answers = run_with_data(&thumbnails, &[(&mp4, "m.png")], &data);

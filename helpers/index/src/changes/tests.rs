@@ -1,3 +1,5 @@
+use nova_files_test_folder::TestFolder;
+
 use super::*;
 use crate::Kind;
 
@@ -49,25 +51,26 @@ fn every_change() -> Vec<Change> {
     ]
 }
 
-struct TempLog(PathBuf);
+struct TempLog {
+    file: PathBuf,
+    _folder: TestFolder,
+}
 
 impl TempLog {
     fn new(name: &str) -> Self {
-        Self(std::env::temp_dir().join(format!("nova-files-log-{name}-{}", std::process::id())))
-    }
-}
-
-impl Drop for TempLog {
-    fn drop(&mut self) {
-        fs::remove_file(&self.0).ok();
+        let folder = TestFolder::new(&format!("log-{name}"));
+        Self {
+            file: folder.join("log"),
+            _folder: folder,
+        }
     }
 }
 
 #[test]
 fn every_change_reads_back_as_written() {
     let path = TempLog::new("round-trip");
-    let mut log = ChangeLog::create(&path.0, CRAWLED).unwrap();
-    let mut reader = LogReader::open(&path.0).unwrap();
+    let mut log = ChangeLog::create(&path.file, CRAWLED).unwrap();
+    let mut reader = LogReader::open(&path.file).unwrap();
     assert_eq!(reader.crawled(), CRAWLED);
     assert_eq!(reader.read_new().unwrap(), []);
     for change in every_change() {
@@ -76,7 +79,7 @@ fn every_change_reads_back_as_written() {
     assert_eq!(reader.read_new().unwrap(), every_change());
     assert_eq!(reader.read_new().unwrap(), []);
     assert_eq!(
-        LogReader::open(&path.0).unwrap().read_new().unwrap(),
+        LogReader::open(&path.file).unwrap().read_new().unwrap(),
         every_change()
     );
 }
@@ -84,11 +87,11 @@ fn every_change_reads_back_as_written() {
 #[test]
 fn a_reader_waits_for_a_record_to_be_whole() {
     let path = TempLog::new("half");
-    ChangeLog::create(&path.0, None).unwrap();
-    let mut reader = LogReader::open(&path.0).unwrap();
+    ChangeLog::create(&path.file, None).unwrap();
+    let mut reader = LogReader::open(&path.file).unwrap();
     assert_eq!(reader.crawled(), None);
     let whole = record(&every_change()[0]).unwrap();
-    let mut file = OpenOptions::new().append(true).open(&path.0).unwrap();
+    let mut file = OpenOptions::new().append(true).open(&path.file).unwrap();
     let (first, second) = whole.split_at(RECORD_FIXED + 2);
     for part in [&first[..2], &first[2..]] {
         file.write_all(part).unwrap();
@@ -101,7 +104,7 @@ fn a_reader_waits_for_a_record_to_be_whole() {
 #[test]
 fn a_long_log_is_read_in_full() {
     let path = TempLog::new("long");
-    let mut log = ChangeLog::create(&path.0, CRAWLED).unwrap();
+    let mut log = ChangeLog::create(&path.file, CRAWLED).unwrap();
     let change = Change::Removed {
         path: PathBuf::from("/home/me/a-fairly-long-folder-name/with-a-file-inside.txt"),
     };
@@ -110,7 +113,11 @@ fn a_long_log_is_read_in_full() {
         log.append(&change).unwrap();
     }
     assert_eq!(
-        LogReader::open(&path.0).unwrap().read_new().unwrap().len(),
+        LogReader::open(&path.file)
+            .unwrap()
+            .read_new()
+            .unwrap()
+            .len(),
         count
     );
 }
@@ -118,34 +125,34 @@ fn a_long_log_is_read_in_full() {
 #[test]
 fn creating_starts_the_log_over() {
     let path = TempLog::new("over");
-    let mut log = ChangeLog::create(&path.0, CRAWLED).unwrap();
+    let mut log = ChangeLog::create(&path.file, CRAWLED).unwrap();
     log.append(&every_change()[0]).unwrap();
-    fs::write(format!("{}.new", path.0.display()), b"left by a crash").unwrap();
-    ChangeLog::create(&path.0, None).unwrap();
-    let mut reader = LogReader::open(&path.0).unwrap();
+    fs::write(format!("{}.new", path.file.display()), b"left by a crash").unwrap();
+    ChangeLog::create(&path.file, None).unwrap();
+    let mut reader = LogReader::open(&path.file).unwrap();
     assert_eq!(reader.crawled(), None);
     assert_eq!(reader.read_new().unwrap(), []);
-    assert!(!Path::new(&format!("{}.new", path.0.display())).exists());
+    assert!(!Path::new(&format!("{}.new", path.file.display())).exists());
 }
 
 #[test]
 fn a_file_that_isnt_a_log_is_refused() {
     let path = TempLog::new("other");
-    fs::write(&path.0, [b'x'; LOG_HEADER_LEN]).unwrap();
+    fs::write(&path.file, [b'x'; LOG_HEADER_LEN]).unwrap();
     assert_eq!(
-        LogReader::open(&path.0).unwrap_err().kind(),
+        LogReader::open(&path.file).unwrap_err().kind(),
         io::ErrorKind::InvalidData
     );
     let mut other_version = header(None);
     other_version[H_VERSION] += 1;
-    fs::write(&path.0, other_version).unwrap();
+    fs::write(&path.file, other_version).unwrap();
     assert_eq!(
-        LogReader::open(&path.0).unwrap_err().kind(),
+        LogReader::open(&path.file).unwrap_err().kind(),
         io::ErrorKind::InvalidData
     );
-    fs::write(&path.0, &header(None)[..LOG_HEADER_LEN - 1]).unwrap();
+    fs::write(&path.file, &header(None)[..LOG_HEADER_LEN - 1]).unwrap();
     assert_eq!(
-        LogReader::open(&path.0).unwrap_err().kind(),
+        LogReader::open(&path.file).unwrap_err().kind(),
         io::ErrorKind::UnexpectedEof
     );
 }
@@ -176,12 +183,12 @@ fn damaged_records_are_errors() {
 #[test]
 fn logs_created_at_the_same_time_each_publish_their_own_file() {
     let path = TempLog::new("concurrent");
-    let lock = beside(&path.0, ".lock");
+    let lock = beside(&path.file, ".lock");
     for _ in 0..50 {
         let created: Vec<ChangeLog> = std::thread::scope(|scope| {
             let mut creators = Vec::new();
             for _ in 0..4 {
-                creators.push(scope.spawn(|| ChangeLog::create(&path.0, CRAWLED)));
+                creators.push(scope.spawn(|| ChangeLog::create(&path.file, CRAWLED)));
             }
             creators
                 .into_iter()
@@ -195,7 +202,7 @@ fn logs_created_at_the_same_time_each_publish_their_own_file() {
             log.append(&rescan).unwrap();
         }
         assert_eq!(
-            LogReader::open(&path.0).unwrap().read_new().unwrap(),
+            LogReader::open(&path.file).unwrap().read_new().unwrap(),
             [rescan]
         );
     }

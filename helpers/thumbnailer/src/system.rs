@@ -227,6 +227,7 @@ fn exits_within(child: &Child, timeout: Duration) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn exec_lines_split_like_desktop_entries() {
@@ -296,7 +297,8 @@ mod tests {
 
     #[test]
     fn only_installed_complete_thumbnailers_are_loaded() {
-        let root = env::temp_dir().join(format!("nova-thumbnailers-{}", std::process::id()));
+        let held = TestFolder::new("thumbnailers");
+        let root = held.join("root");
         let folder = root.join(THUMBNAILERS_FOLDER);
         fs::create_dir_all(&folder).unwrap();
         let program = env::current_exe().unwrap();
@@ -319,7 +321,6 @@ mod tests {
         .unwrap();
 
         let thumbnailers = Thumbnailers::load(std::slice::from_ref(&root));
-        fs::remove_dir_all(&root).ok();
 
         assert!(thumbnailers.0.contains_key("video/long"));
         assert!(!thumbnailers.0.contains_key("video/missing"));

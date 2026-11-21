@@ -132,6 +132,7 @@ fn unescape(field: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn mount_points_come_from_the_fifth_field_unescaped() {
@@ -188,7 +189,8 @@ mod tests {
     fn the_system_knows_its_own_mounts() {
         let mounts = SystemMounts::default();
         assert!(mounts.is_mount_root(Path::new("/")));
-        assert!(!mounts.is_mount_root(&std::env::temp_dir().join("nova-files-surely-not-a-mount")));
+        let folder = TestFolder::new("surely-not-a-mount");
+        assert!(!mounts.is_mount_root(&folder.join("surely-not-a-mount")));
         let listed = fs::read(MOUNTINFO)
             .map(|text| mount_points(&text))
             .unwrap_or_default();

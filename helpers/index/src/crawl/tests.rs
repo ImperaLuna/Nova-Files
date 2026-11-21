@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use nova_files_test_folder::TestFolder;
+
 use super::*;
 
 struct Mounts(HashSet<PathBuf>);
@@ -10,42 +12,30 @@ impl MountCheck for Mounts {
     }
 }
 
-struct Home(PathBuf);
+struct Home(TestFolder);
 
 impl Home {
     fn new(name: &str) -> Self {
-        let path =
-            std::env::temp_dir().join(format!("nova-files-crawl-{name}-{}", std::process::id()));
-        fs::create_dir_all(path.join("drive")).unwrap();
-        fs::write(path.join("drive/inside.txt"), b"").unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for Home {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
+        let folder = TestFolder::new(&format!("crawl-{name}"));
+        fs::create_dir_all(folder.join("drive")).unwrap();
+        fs::write(folder.join("drive/inside.txt"), b"").unwrap();
+        Self(folder)
     }
 }
 
 fn indexed(root: &Path, mounts: Mounts) -> crate::Index {
     let built = crawl_with(root, mounts, || false).unwrap();
-    let path = std::env::temp_dir().join(format!(
-        "nova-files-crawl-index-{}-{}",
-        std::process::id(),
-        root.as_os_str().len()
-    ));
+    let folder = TestFolder::new("crawl-index");
+    let path = folder.join("index");
     built.save(&path).unwrap();
-    let index = crate::Index::open(&path).unwrap();
-    fs::remove_file(&path).ok();
-    index
+    crate::Index::open(&path).unwrap()
 }
 
 #[test]
 fn a_mount_point_is_indexed_but_not_entered() {
     let home = Home::new("mount");
     let mounts = Mounts(std::iter::once(home.0.join("drive")).collect());
-    let index = indexed(&home.0, mounts);
+    let index = indexed(home.0.path(), mounts);
     assert_eq!(index.rows(), 2);
     let drive = index.entry(RowId(1)).unwrap();
     assert!(drive.flags.contains(Flags::OTHER_DRIVE));
@@ -55,7 +45,7 @@ fn a_mount_point_is_indexed_but_not_entered() {
 #[test]
 fn a_folder_that_isnt_a_mount_is_entered() {
     let home = Home::new("plain");
-    let index = indexed(&home.0, Mounts(HashSet::new()));
+    let index = indexed(home.0.path(), Mounts(HashSet::new()));
     assert_eq!(index.rows(), 3);
     assert_eq!(index.entry(RowId(1)).unwrap().flags, Flags::default());
 }

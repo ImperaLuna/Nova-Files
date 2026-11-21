@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use nova_files::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
 use nova_files_api::Packing;
+use nova_files_test_folder::TestFolder;
 
 const MOST_WAITS: u32 = 100;
 
@@ -27,12 +28,9 @@ fn archiver() -> Archiver {
     Archiver::at(PathBuf::from(env!("CARGO_BIN_EXE_nova-files-archiver")))
 }
 
-fn sources(name: &str) -> PathBuf {
-    let folder = std::env::temp_dir().join(format!(
-        "nova-archiver-compress-{name}-{}",
-        std::process::id()
-    ));
-    fs::remove_dir_all(&folder).ok();
+fn sources(name: &str) -> (TestFolder, PathBuf) {
+    let held = TestFolder::new(&format!("archiver-compress-{name}"));
+    let folder = held.path().to_path_buf();
     fs::create_dir_all(folder.join("docs/inner")).unwrap();
     fs::write(folder.join("docs/a.txt"), b"hello").unwrap();
     fs::set_permissions(folder.join("docs/a.txt"), fs::Permissions::from_mode(0o640)).unwrap();
@@ -40,7 +38,7 @@ fn sources(name: &str) -> PathBuf {
     std::os::unix::fs::symlink("a.txt", folder.join("docs/to-a")).unwrap();
     fs::write(folder.join("notes.txt"), b"notes").unwrap();
     fs::set_permissions(folder.join("docs"), fs::Permissions::from_mode(0o750)).unwrap();
-    folder
+    (held, folder)
 }
 
 fn make(folder: &Path, archive: &str, recipe: &Recipe<'_>) -> Result<PathBuf, ArchiveFailure> {
@@ -61,7 +59,7 @@ const fn recipe(packing: Packing) -> Recipe<'static> {
 
 #[test]
 fn every_packing_reads_back_whole() {
-    let folder = sources("every");
+    let (_held, folder) = sources("every");
     let modified = fs::metadata(folder.join("docs/a.txt")).unwrap().mtime();
     for (packing, name) in [
         (Packing::ZipDeflate, "a.zip"),
@@ -98,12 +96,11 @@ fn every_packing_reads_back_whole() {
         assert_eq!(fs::read(into.join("docs/inner/b.txt")).unwrap(), b"deep");
         assert_eq!(fs::read(into.join("notes.txt")).unwrap(), b"notes");
     }
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_password_locks_each_file_of_a_zip() {
-    let folder = sources("password");
+    let (_held, folder) = sources("password");
     let locked = Recipe {
         password: Some("pw"),
         ..recipe(Packing::ZipDeflate)
@@ -131,12 +128,11 @@ fn a_password_locks_each_file_of_a_zip() {
         .extract(&archive, &into, Some("pw"), go())
         .unwrap();
     assert_eq!(fs::read(into.join("docs/a.txt")).unwrap(), b"hello");
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn levels_past_either_end_are_the_ends() {
-    let folder = sources("levels");
+    let (_held, folder) = sources("levels");
     for level in [0, 1, 9, 200] {
         let recipe = Recipe {
             level,
@@ -145,12 +141,11 @@ fn levels_past_either_end_are_the_ends() {
         let archive = make(&folder, &format!("{level}.tar.zst"), &recipe).unwrap();
         assert_eq!(archiver().list(&archive).unwrap().len(), 6);
     }
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn it_never_writes_over_a_file_or_reads_what_is_gone() {
-    let folder = sources("refused");
+    let (_held, folder) = sources("refused");
     fs::write(folder.join("taken.zip"), b"mine").unwrap();
     assert_eq!(
         make(&folder, "taken.zip", &recipe(Packing::ZipDeflate)),
@@ -167,12 +162,11 @@ fn it_never_writes_over_a_file_or_reads_what_is_gone() {
         ),
         Err(ArchiveFailure::Gone)
     );
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn an_unknown_packing_is_a_usage_error() {
-    let folder = sources("usage");
+    let (_held, folder) = sources("usage");
     let status = std::process::Command::new(env!("CARGO_BIN_EXE_nova-files-archiver"))
         .args(["compress", "rar", "5"])
         .arg(folder.join("a.rar"))
@@ -181,12 +175,11 @@ fn an_unknown_packing_is_a_usage_error() {
         .unwrap();
     assert_eq!(status.status.code(), Some(1));
     assert!(!folder.join("a.rar").exists());
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_compress_without_sources_or_of_another_ask_is_a_usage_error() {
-    let folder = sources("usage-shape");
+    let (_held, folder) = sources("usage-shape");
     for args in [
         ["compress", "zip-deflate", "5", "a.zip", ""],
         ["show", "zip-deflate", "5", "a.zip", "notes.txt"],
@@ -200,7 +193,6 @@ fn a_compress_without_sources_or_of_another_ask_is_a_usage_error() {
         assert_eq!(status.status.code(), Some(1));
         assert!(!folder.join("a.zip").exists());
     }
-    fs::remove_dir_all(&folder).ok();
 }
 
 fn wordy(folder: &Path) -> PathBuf {
@@ -223,7 +215,7 @@ const WORDS: usize = 100_000;
 
 #[test]
 fn a_higher_level_makes_a_smaller_archive() {
-    let folder = sources("level-size");
+    let (_held, folder) = sources("level-size");
     let wordy = [wordy(&folder)];
     for (packing, name) in [(Packing::TarZstd, "tar.zst"), (Packing::ZipZstd, "zip")] {
         let size = |level| {
@@ -239,12 +231,11 @@ fn a_higher_level_makes_a_smaller_archive() {
         };
         assert!(size(9) < size(1), "{name}");
     }
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn each_file_is_told_with_its_bytes() {
-    let folder = sources("told");
+    let (_held, folder) = sources("told");
     for (packing, name) in [
         (Packing::ZipDeflate, "a.zip"),
         (Packing::TarGzip, "a.tar.gz"),
@@ -266,12 +257,11 @@ fn each_file_is_told_with_its_bytes() {
         told.sort_unstable();
         assert_eq!(told, [0, 0, 0, 4, 5, 5], "{name}");
     }
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_zip_carries_dos_times_too() {
-    let folder = sources("dos-time");
+    let (_held, folder) = sources("dos-time");
     let archive = make(&folder, "a.zip", &recipe(Packing::ZipDeflate)).unwrap();
     let mut zip = zip::ZipArchive::new(fs::File::open(&archive).unwrap()).unwrap();
     let year = zip
@@ -281,14 +271,13 @@ fn a_zip_carries_dos_times_too() {
         .unwrap()
         .year();
     assert!(year > FIRST_DOS_YEAR);
-    fs::remove_dir_all(&folder).ok();
 }
 
 const FIRST_DOS_YEAR: u16 = 1980;
 
 #[test]
 fn a_file_tar_cant_read_is_denied() {
-    let folder = sources("tar-denied");
+    let (_held, folder) = sources("tar-denied");
     let secret = folder.join("secret.txt");
     fs::write(&secret, b"s").unwrap();
     fs::set_permissions(&secret, fs::Permissions::from_mode(0o000)).unwrap();
@@ -303,12 +292,11 @@ fn a_file_tar_cant_read_is_denied() {
             Err(ArchiveFailure::Denied)
         );
     }
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn each_zip_packing_uses_its_own_method() {
-    let folder = sources("methods");
+    let (_held, folder) = sources("methods");
     for (packing, name, method) in [
         (
             Packing::ZipDeflate,
@@ -321,12 +309,11 @@ fn each_zip_packing_uses_its_own_method() {
         let mut zip = zip::ZipArchive::new(fs::File::open(&archive).unwrap()).unwrap();
         assert_eq!(zip.by_name("notes.txt").unwrap().compression(), method);
     }
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_link_on_its_own_goes_in_as_a_link() {
-    let folder = sources("link-source");
+    let (_held, folder) = sources("link-source");
     let archive = folder.join("link.zip");
     archiver()
         .compress(
@@ -340,12 +327,11 @@ fn a_link_on_its_own_goes_in_as_a_link() {
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].kind, ArchiveKind::Link);
     assert_eq!(entries[0].link, Path::new("a.txt"));
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn an_archive_made_inside_a_source_leaves_itself_out() {
-    let folder = sources("inside-source");
+    let (_held, folder) = sources("inside-source");
     let archive = folder.join("docs/docs.tar.gz");
     archiver()
         .compress(
@@ -367,5 +353,4 @@ fn an_archive_made_inside_a_source_leaves_itself_out() {
             Path::new("docs/to-a"),
         ]
     );
-    fs::remove_dir_all(&folder).ok();
 }

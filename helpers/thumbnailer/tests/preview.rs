@@ -13,6 +13,7 @@ use image::{ImageFormat, Rgb, RgbImage};
 use nova_files::{IDLE_EXIT, RunningCore, Thumbnails};
 use nova_files_api::{Connection, Fit, Picture};
 use nova_files_preview_api::{Command, Event, Preview, PreviewContent, PreviewId};
+use nova_files_test_folder::TestFolder;
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
 const WAIT: Duration = Duration::from_secs(10);
@@ -20,23 +21,6 @@ const WIDTH: u32 = 400;
 const HEIGHT: u32 = 200;
 const ORANGE: [u8; 3] = [253, 112, 20];
 const OPAQUE: u8 = 255;
-
-struct TempFolder(PathBuf);
-
-impl TempFolder {
-    fn new(test: &str) -> Self {
-        let path =
-            std::env::temp_dir().join(format!("nova-files-preview-{test}-{}", std::process::id()));
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
-}
 
 struct Client {
     _core: RunningCore,
@@ -90,10 +74,10 @@ fn orange_picture(path: &Path, format: ImageFormat) {
 
 #[test]
 fn a_big_picture_is_scaled_down_to_the_box() {
-    let temp = TempFolder::new("down");
-    let path = temp.0.join("photo.txt");
+    let temp = TestFolder::new("preview-down");
+    let path = temp.join("photo.txt");
     orange_picture(&path, ImageFormat::Png);
-    let client = Client::new(&temp.0);
+    let client = Client::new(temp.path());
 
     let shown = client.preview(
         1,
@@ -116,10 +100,10 @@ fn a_big_picture_is_scaled_down_to_the_box() {
 
 #[test]
 fn a_small_picture_keeps_its_size() {
-    let temp = TempFolder::new("keeps");
-    let path = temp.0.join("photo.jpg");
+    let temp = TestFolder::new("preview-keeps");
+    let path = temp.join("photo.jpg");
     orange_picture(&path, ImageFormat::Jpeg);
-    let client = Client::new(&temp.0);
+    let client = Client::new(temp.path());
 
     let shown = client.preview(
         1,
@@ -136,10 +120,10 @@ fn a_small_picture_keeps_its_size() {
 
 #[test]
 fn a_broken_picture_shows_its_icon() {
-    let temp = TempFolder::new("broken");
-    let path = temp.0.join("photo.png");
+    let temp = TestFolder::new("preview-broken");
+    let path = temp.join("photo.png");
     fs::write(&path, b"\x89PNG\r\n\x1a\nnot really").unwrap();
-    let client = Client::new(&temp.0);
+    let client = Client::new(temp.path());
 
     let shown = client.preview(
         1,
@@ -155,15 +139,15 @@ fn a_broken_picture_shows_its_icon() {
 
 #[test]
 fn stepping_through_pictures_answers_the_last() {
-    let temp = TempFolder::new("stepping");
+    let temp = TestFolder::new("preview-stepping");
     let paths: Vec<PathBuf> = (0..5)
         .map(|n| {
-            let path = temp.0.join(format!("photo-{n}.png"));
+            let path = temp.join(format!("photo-{n}.png"));
             orange_picture(&path, ImageFormat::Png);
             path
         })
         .collect();
-    let client = Client::new(&temp.0);
+    let client = Client::new(temp.path());
     let fit = Fit {
         width: 100,
         height: 100,
@@ -193,10 +177,10 @@ fn stepping_through_pictures_answers_the_last() {
 
 #[test]
 fn a_picture_too_wide_for_the_box_is_scaled_down() {
-    let temp = TempFolder::new("wide");
-    let path = temp.0.join("photo.png");
+    let temp = TestFolder::new("preview-wide");
+    let path = temp.join("photo.png");
     orange_picture(&path, ImageFormat::Png);
-    let client = Client::new(&temp.0);
+    let client = Client::new(temp.path());
 
     let shown = client.preview(
         1,
@@ -213,10 +197,10 @@ fn a_picture_too_wide_for_the_box_is_scaled_down() {
 
 #[test]
 fn a_text_file_is_not_sent_to_the_helper() {
-    let temp = TempFolder::new("text");
-    let path = temp.0.join("notes.png");
+    let temp = TestFolder::new("preview-text");
+    let path = temp.join("notes.png");
     fs::write(&path, "plain words").unwrap();
-    let client = Client::new(&temp.0);
+    let client = Client::new(temp.path());
 
     let shown = client.preview(
         1,

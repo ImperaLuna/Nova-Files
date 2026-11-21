@@ -3451,6 +3451,7 @@ dependencies = [
  "nova-files",
  "nova-files-api",
  "nova-files-open-api",
+ "nova-files-test-folder",
  "rustix",
  "tar",
  "zip",
@@ -3640,6 +3641,7 @@ name = "nova-files-index"
 version = "0.1.0"
 dependencies = [
  "memmap2",
+ "nova-files-test-folder",
  "rustix",
 ]
 
@@ -3965,6 +3967,7 @@ dependencies = [
  "nova-files-preview-api",
  "nova-files-preview-ui",
  "nova-files-shell",
+ "nova-files-test-folder",
  "nova-files-thumbnails-api",
  "nova-files-thumbnails-ui",
  "nova-files-window",
@@ -3976,6 +3979,7 @@ name = "nova-files-thumbnailer-launch"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+ "nova-files-test-folder",
  "rustix",
 ]
 

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use nova_files::{ArchiveFailure, Archiver, Extracting, Flow};
+use nova_files_test_folder::TestFolder;
 use zip::write::{FullFileOptions, SimpleFileOptions};
 
 const DAY: i64 = 86_400;
@@ -16,17 +17,11 @@ fn archiver() -> Archiver {
     Archiver::at(PathBuf::from(env!("CARGO_BIN_EXE_nova-files-archiver")))
 }
 
-fn folder(name: &str) -> PathBuf {
-    let folder = std::env::temp_dir().join(format!(
-        "nova-archiver-extract-{name}-{}",
-        std::process::id()
-    ));
-    if folder.exists() {
-        writable(&folder);
-        fs::remove_dir_all(&folder).unwrap();
-    }
+fn folder(name: &str) -> (TestFolder, PathBuf) {
+    let held = TestFolder::new(&format!("archiver-extract-{name}"));
+    let folder = held.path().to_path_buf();
     fs::create_dir_all(folder.join("into")).unwrap();
-    folder
+    (held, folder)
 }
 
 fn writable(path: &Path) {
@@ -70,7 +65,7 @@ fn extract(archive: &Path, into: &Path, password: Option<&str>) -> Result<u64, A
 
 #[test]
 fn unpacks_a_tar_with_its_permissions_times_and_links() {
-    let folder = folder("tar");
+    let (_held, folder) = folder("tar");
     let mut builder = tar::Builder::new(Vec::new());
     let mut docs = header(tar::EntryType::Directory, 0o750, 1_700_000_000, 0);
     builder.append_data(&mut docs, "docs/", &b""[..]).unwrap();
@@ -111,12 +106,11 @@ fn unpacks_a_tar_with_its_permissions_times_and_links() {
     );
     assert_eq!(fs::metadata(docs.join("same")).unwrap().ino(), file.ino());
     assert_eq!(fs::read(into.join("made/on/way.txt")).unwrap(), b"hi");
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn unpacks_a_zip_and_its_locked_entries_with_the_password() {
-    let folder = folder("zip");
+    let (_held, folder) = folder("zip");
     let archive = folder.join("a.zip");
     let mut zip = zip::ZipWriter::new(File::create(&archive).unwrap());
     let options = SimpleFileOptions::default();
@@ -150,12 +144,11 @@ fn unpacks_a_zip_and_its_locked_entries_with_the_password() {
         Path::new("a.txt")
     );
     assert_eq!(fs::read(into.join("secret.txt")).unwrap(), b"hidden");
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_hard_link_to_its_own_name_keeps_the_file() {
-    let folder = folder("self-link");
+    let (_held, folder) = folder("self-link");
     let mut builder = tar::Builder::new(Vec::new());
     let mut file = header(tar::EntryType::Regular, 0o644, 0, 1);
     builder.append_data(&mut file, "a", &b"x"[..]).unwrap();
@@ -167,12 +160,11 @@ fn a_hard_link_to_its_own_name_keeps_the_file() {
 
     assert_eq!(extract(&archive, &into, None), Ok(2));
     assert_eq!(fs::read(into.join("a")).unwrap(), b"x");
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn unpacks_a_zip_with_no_password_and_its_times() {
-    let folder = folder("zip-times");
+    let (_held, folder) = folder("zip-times");
     let archive = folder.join("a.zip");
     let mut zip = zip::ZipWriter::new(File::create(&archive).unwrap());
     let wall = zip::DateTime::from_date_and_time(2023, 11, 14, 22, 13, 20).unwrap();
@@ -193,12 +185,11 @@ fn unpacks_a_zip_with_no_password_and_its_times() {
     assert_eq!(unix.mtime(), 1_600_000_000);
     let dos = fs::metadata(into.join("dos.txt")).unwrap().mtime();
     assert!((1_700_000_000 - DAY..=1_700_000_000 + DAY).contains(&dos));
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn nothing_lands_outside_the_folder() {
-    let folder = folder("hostile");
+    let (_held, folder) = folder("hostile");
     let outside = folder.join("outside");
     fs::create_dir(&outside).unwrap();
     let mut builder = tar::Builder::new(Vec::new());
@@ -228,12 +219,11 @@ fn nothing_lands_outside_the_folder() {
     assert_eq!(fs::read_dir(&outside).unwrap().count(), 0);
     assert_eq!(fs::read(into.join("out/x.txt")).unwrap(), b"x");
     assert!(!into.join("hard").exists());
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_later_entry_takes_the_name_but_not_a_folders() {
-    let folder = folder("later");
+    let (_held, folder) = folder("later");
     let mut builder = tar::Builder::new(Vec::new());
     let mut locked = header(tar::EntryType::Directory, 0o555, 0, 0);
     builder.append_data(&mut locked, "ro/", &b""[..]).unwrap();
@@ -256,7 +246,6 @@ fn a_later_entry_takes_the_name_but_not_a_folders() {
     assert_eq!(fs::read(into.join("ro/a.txt")).unwrap(), b"new");
     assert_eq!(fs::metadata(into.join("ro")).unwrap().mode() & 0o777, 0o555);
     writable(&folder);
-    fs::remove_dir_all(&folder).ok();
 }
 
 fn many(folder: &Path, count: usize) -> PathBuf {
@@ -274,16 +263,15 @@ fn many(folder: &Path, count: usize) -> PathBuf {
 
 #[test]
 fn the_caller_stops_it() {
-    let folder = folder("stop");
+    let (_held, folder) = folder("stop");
     let archive = many(&folder, 3);
     let result = archiver().extract(&archive, &folder.join("into"), None, |_| Flow::Stop);
     assert_eq!(result, Err(ArchiveFailure::Cancelled));
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn stopping_a_held_run_ends_it_at_once() {
-    let folder = folder("stop-held");
+    let (_held, folder) = folder("stop-held");
     let archive = many(&folder, 3);
     let started = Instant::now();
     let result = archiver().extract(&archive, &folder.join("into"), None, |extracting| {
@@ -295,12 +283,11 @@ fn stopping_a_held_run_ends_it_at_once() {
     });
     assert_eq!(result, Err(ArchiveFailure::Cancelled));
     assert!(started.elapsed() < QUICK);
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn the_caller_holds_it_then_lets_it_go_on() {
-    let folder = folder("hold");
+    let (_held, folder) = folder("hold");
     let archive = many(&folder, 3);
     let mut told = Vec::new();
     let result = archiver().extract(&archive, &folder.join("into"), None, |extracting| {
@@ -322,12 +309,11 @@ fn the_caller_holds_it_then_lets_it_go_on() {
             .count(),
         3
     );
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn damage_and_missing_folders_are_told_apart() {
-    let folder = folder("damage");
+    let (_held, folder) = folder("damage");
     let archive = folder.join("a.tar.gz");
     fs::write(&archive, [0x1f, 0x8b, 8, 0, 0, 0]).unwrap();
     assert_eq!(
@@ -349,7 +335,6 @@ fn damage_and_missing_folders_are_told_apart() {
         extract(&archive, &folder.join("no-folder"), None),
         Err(ArchiveFailure::NotWritten)
     );
-    fs::remove_dir_all(&folder).ok();
 }
 
 fn found(folder: &Path) -> Vec<String> {
@@ -375,7 +360,7 @@ fn found(folder: &Path) -> Vec<String> {
 
 #[test]
 fn picked_entries_come_out_with_all_inside_them_and_nothing_else() {
-    let folder = folder("picked");
+    let (_held, folder) = folder("picked");
     let mut builder = tar::Builder::new(Vec::new());
     for (path, contents) in [
         ("docs/a.txt", "a"),
@@ -420,5 +405,4 @@ fn picked_entries_come_out_with_all_inside_them_and_nothing_else() {
             .unwrap();
         assert_eq!(found(&into), expected, "{}", archive.display());
     }
-    fs::remove_dir_all(&folder).ok();
 }
