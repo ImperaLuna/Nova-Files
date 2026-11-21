@@ -60,6 +60,14 @@ machete:
 deps:
     tools/check-deps.sh
 
+# framework/base and what framework/shell offers, against their ceilings.
+framework-size:
+    tools/check-framework-size.sh
+
+# Links to the GPUI fork that point at another version than the pin.
+fork-links:
+    tools/check-fork-links.sh
+
 # Bare numbers outside named constants.
 numbers:
     tools/check-bare-numbers.sh

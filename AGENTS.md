@@ -47,6 +47,12 @@ it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 - `helpers/`: separate programs and libraries one feature's core uses.
 - `app/`: wiring only, and the whole-window tests.
 
+A part one feature needs belongs in that feature. When a pull request
+grows the framework anyway, its description has a `## Shared part`
+section: what it adds and why it can't live in the feature. The framework
+has ceilings with room to grow (`just framework-size`); past one, move the
+part into its feature or raise the ceiling and say why.
+
 ## Engineering principles
 
 - One source of truth, no hard-coded values. Every value (a color, size,
@@ -83,6 +89,7 @@ leaves unsolved goes under "Known gaps" in the PR body. Only these stay:
 - A licence header (`// SPDX-License-Identifier:`).
 - A fact forced by the kernel, a filesystem, a spec or a dependency, true
   today, in one or two plain lines that link its source (`https://`). A
+  link to the GPUI fork names the pinned commit, so a new pin rechecks it. A
   workaround for an upstream bug links the issue and says how to remove it.
 
 A lint's reason goes in `#[expect(lint, reason = "...")]`. When a change
@@ -150,7 +157,8 @@ real home. A bug fix comes with a test that fails without it.
 ## Commands
 
 Work inside `nix develop`. `just` lists one command per job (`just test`,
-`just clippy nova-files-jobs`); most take an optional crate. Run
+`just clippy nova-files-jobs`); most take an optional crate.
+
 Every commit you push has passed `just check` (`nix flake check`) locally.
 It records its pass for that commit, and the pre-push hook refuses a commit
 without one. CI runs it again as the safety net.
@@ -207,6 +215,9 @@ Each rule above and what enforces it. "Review" means nothing does yet.
 | A bug fix comes with a test that fails without it | Review |
 | No explaining text in UI | Review |
 | A stacked pull request changes code only | `tools/ci-stack-guard.sh` in CI |
+| framework/base and what framework/shell offers stay under their ceilings | `just framework-size` |
+| A pull request that grows the framework names it under "Shared part" | `tools/check-shared-part.sh` in CI (Shared part workflow) |
+| A link to the GPUI fork names the pinned commit | `just fork-links` |
 | Formatting | rustfmt (`just fmt`), nixfmt |
 
 When a rule marked Review is broken twice, fix it at the highest level that
