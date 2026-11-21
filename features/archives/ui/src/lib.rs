@@ -26,11 +26,11 @@ mod actions {
     )]
     gpui::actions!(
         nova_files_archives,
-        [ExtractHere, ExtractTo, Compress, CompressAs]
+        [ExtractHere, ExtractTo, ExtractAll, Compress, CompressAs]
     );
 }
 
-pub use actions::{Compress, CompressAs, ExtractHere, ExtractTo as ExtractToFolder};
+pub use actions::{Compress, CompressAs, ExtractAll, ExtractHere, ExtractTo as ExtractToFolder};
 
 command_spec!(
     EXTRACT_HERE,
@@ -44,6 +44,13 @@ command_spec!(
     ExtractToFolder,
     "file.extract-to",
     "Extract to…",
+    []
+);
+command_spec!(
+    EXTRACT_ALL,
+    ExtractAll,
+    "file.extract-all",
+    "Extract all",
     []
 );
 command_spec!(COMPRESS, Compress, "file.compress", "Compress", []);
@@ -71,6 +78,7 @@ pub struct ArchivesPart {
     seven: bool,
     made: RenameWhenMade,
     folder: Option<PathBuf>,
+    inside: Option<PathBuf>,
     choice: Choice,
     picking: Option<Picking>,
     _selections: Subscription,
@@ -94,10 +102,11 @@ impl ArchivesPart {
                 if self.folder.as_ref() != Some(&folder) {
                     return;
                 }
-                match archive {
-                    Some(archive) => self.host.rules.claim(OWNER, archive, INSIDE),
+                match &archive {
+                    Some(archive) => self.host.rules.claim(OWNER, archive.clone(), INSIDE),
                     None => self.host.rules.give_up(OWNER),
                 }
+                self.inside = archive;
             }
         }
         cx.notify();
@@ -135,6 +144,11 @@ impl ArchivesPart {
 
     fn extract_here(&mut self, _: &ExtractHere, _: &mut Window, cx: &mut Context<Self>) {
         let archives = self.archives(cx);
+        self.extract(archives, None, cx);
+    }
+
+    fn extract_all(&mut self, _: &ExtractAll, _: &mut Window, cx: &mut Context<Self>) {
+        let archives = self.inside.iter().cloned().collect();
         self.extract(archives, None, cx);
     }
 
@@ -239,6 +253,7 @@ impl ArchivesPart {
         if self.folder.as_ref() != Some(&listing.path) {
             self.folder = Some(listing.path.clone());
             self.picking = None;
+            self.inside = None;
             let folder = listing.path.clone();
             self.host.link.send(Command::ArchiveOf { folder }).ok();
         }
@@ -270,7 +285,18 @@ fn writable_folder(scene: &Scene) -> Option<PathBuf> {
 }
 
 fn has_archives(part: &ArchivesPart, scene: &Scene, cx: &App) -> bool {
-    !scene.picker && !scene.rules.trashed && !part.archives(cx).is_empty()
+    !scene.picker && !scene.rules.trashed && part.inside.is_none() && !part.archives(cx).is_empty()
+}
+
+const fn in_archive(part: &ArchivesPart, scene: &Scene, _: &App) -> bool {
+    !scene.picker && part.inside.is_some()
+}
+
+fn extract_all_chip(part: &ArchivesPart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
+    if !in_archive(part, scene, cx) {
+        return Vec::new();
+    }
+    vec![MenuItem::run(Icon::FileArchive, &EXTRACT_ALL).with_selector("extract-all")]
 }
 
 fn can_compress(_: &ArchivesPart, scene: &Scene, _: &App) -> bool {
@@ -310,6 +336,7 @@ impl Part for ArchivesPart {
             seven: false,
             made: RenameWhenMade::default(),
             folder: None,
+            inside: None,
             choice: Choice::default(),
             picking: None,
             _selections: selections,
@@ -321,6 +348,8 @@ impl Part for ArchivesPart {
         slots.sends::<Command>();
         slots.command(&EXTRACT_HERE, has_archives, Self::extract_here);
         slots.command(&EXTRACT_TO, has_archives, Self::extract_to);
+        slots.command(&EXTRACT_ALL, in_archive, Self::extract_all);
+        slots.menu(MenuAt::PathBarEnd, extract_all_chip);
         slots.command(&COMPRESS, can_compress, Self::compress);
         slots.command(&COMPRESS_AS, can_compress, Self::compress_as);
         slots.menu_in(

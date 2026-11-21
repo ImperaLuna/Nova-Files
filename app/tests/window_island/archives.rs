@@ -34,6 +34,8 @@ async fn an_archive_offers_extract_in_its_own_group(cx: &mut TestAppContext) {
     let tree = archive_tree("archive-menu");
     let home = TempFolder::tree("archive-menu-home");
     let (view, cx) = island_window(cx, tree.path(), &home).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("extract-all").is_none());
 
     right_click(cx, "name-1");
     assert_eq!(
@@ -116,7 +118,7 @@ async fn compress_names_the_archive_and_opens_its_rename_field(cx: &mut TestAppC
 }
 
 #[gpui::test]
-async fn nothing_inside_an_opened_archive_can_be_changed(cx: &mut TestAppContext) {
+async fn an_opened_archive_offers_extract_all_and_nothing_that_changes_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = archive_tree("archive-inside");
     let home = TempFolder::tree("archive-inside-home");
@@ -126,6 +128,7 @@ async fn nothing_inside_an_opened_archive_can_be_changed(cx: &mut TestAppContext
     wait_for_folder(&view, cx, &inside).await;
     cx.run_until_parked();
 
+    assert!(cx.debug_bounds("extract-all").is_some());
     right_click(cx, "name-0");
     let labels = offered(&view, cx).0;
     for changes in ["Compress", "Rename", "Cut", "Move to Trash"] {
@@ -134,6 +137,9 @@ async fn nothing_inside_an_opened_archive_can_be_changed(cx: &mut TestAppContext
             "{changes} in {labels:?}"
         );
     }
+    cx.simulate_keystrokes("escape");
+    click(cx, "extract-all");
+    wait_for_note_starting(&view, cx, "Couldn't extract bundle.zip").await;
 }
 
 #[gpui::test]
