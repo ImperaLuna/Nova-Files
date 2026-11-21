@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 
@@ -12,6 +12,8 @@ use nova_files_entries_core::{Client, memory, order};
 use nova_files_gathered_api::{GatheredFolder, Holds};
 
 const THREAD: &str = "nova-files-list-gathered";
+const STEAM_TOOL_MANIFEST: &str = "toolmanifest.vdf";
+const STEAM_SHARED_REDISTRIBUTABLES: &str = "_CommonRedist";
 
 pub fn list(
     client: &Client,
@@ -113,6 +115,7 @@ fn rows_of(
                 list::keep_shown(entries, hidden)
                     .into_iter()
                     .filter(|entry| entry.kind == EntryKind::Folder)
+                    .filter(|entry| !is_steam_tool(&folder.path.join(&entry.name)))
                     .map(|entry| (entry.name, folder.path.clone()))
                     .collect(),
             ),
@@ -120,6 +123,18 @@ fn rows_of(
             Err(Stopped::Unreadable(_)) => Some(Vec::new()),
         },
     }
+}
+
+fn is_steam_tool(folder: &Path) -> bool {
+    folder.join(STEAM_TOOL_MANIFEST).is_file() || holds_only(folder, STEAM_SHARED_REDISTRIBUTABLES)
+}
+
+fn holds_only(folder: &Path, name: &str) -> bool {
+    let Ok(mut inside) = fs::read_dir(folder) else {
+        return false;
+    };
+    let first = inside.next();
+    matches!(first, Some(Ok(entry)) if entry.file_name() == name) && inside.next().is_none()
 }
 
 #[cfg(test)]
