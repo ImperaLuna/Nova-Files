@@ -11,8 +11,10 @@ use nova_files_entries_core::ListingJob;
 use nova_files_index::{Change, ChangeLog, Index, LogReader, MatchKind, Overlay, STAGES, Watcher};
 use nova_files_search_api::{Event, Hit, MAX_FOUND, MAX_HITS, Matched, SearchFailed, SearchId};
 
+pub use complete::complete;
 pub use index::{IndexError, IndexPlace, Unusable};
 
+mod complete;
 mod found;
 mod index;
 

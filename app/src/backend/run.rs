@@ -227,6 +227,10 @@ fn search(setup: &Setup, _: ClientId, client: &Client, command: search_api::Comm
             let asked = (client.events(), client.start_listing(id));
             setup.searcher.find(asked, id, query, within);
         }
+        search_api::Command::Complete { typed, limit } => {
+            let home = setup.home.as_ref().map(|home| home.folder.clone());
+            nova_files_search_core::complete(client.events(), home, typed, limit);
+        }
     }
 }
 

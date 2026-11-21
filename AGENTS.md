@@ -155,6 +155,11 @@ Every commit you push has passed `just check` (`nix flake check`) locally.
 It records its pass for that commit, and the pre-push hook refuses a commit
 without one. CI runs it again as the safety net.
 
+On the user's PC, run it as `tools/pc-check.sh <claude/branch> --push`: it
+takes the shared checkout's lock, caps CPU and memory, checks, pushes and
+switches back. `.claude/settings.json` lets that and routine git commands
+run without a prompt, so put fixes in new commits on the branch.
+
 Before asking Codex for review, review the whole PR diff yourself with the
 `/code-review` skill (high effort) and fix what it finds: Codex is the last
 check, not the first reviewer. For crash recovery, races and file

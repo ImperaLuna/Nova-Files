@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tools/pc-check.sh claude/*)",
+      "Bash(git status*)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Bash(git rev-parse *)",
+      "Bash(git fetch *)",
+      "Bash(git switch *)",
+      "Bash(git am *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push -u origin claude/*)",
+      "Bash(git push origin claude/*)"
+    ],
+    "deny": [
+      "Bash(git push *--force*)",
+      "Bash(git push *-f *)",
+      "Bash(git push *main*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)"
+    ]
+  }
+}

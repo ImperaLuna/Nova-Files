@@ -3,7 +3,10 @@
 use gpui::{App, Context, Window};
 use nova_files_api::Operation;
 use nova_files_shell::actions::TrashSelected;
-use nova_files_shell::{Host, Location, Part, Scene, Slots, command_spec};
+use nova_files_shell::assets::Icon;
+use nova_files_shell::{
+    Host, Location, Look, MenuAt, MenuGroup, MenuItem, Part, Placed, Scene, Slots, command_spec,
+};
 
 mod actions {
     #![expect(
@@ -103,6 +106,13 @@ fn count_of(number: usize) -> String {
     }
 }
 
+fn delete_items(part: &DeletePart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
+    if !scene.rules.trashed || part.deleting(scene, cx).is_none() {
+        return Vec::new();
+    }
+    vec![MenuItem::run(Icon::Trash, &DELETE).with_look(Look::Danger)]
+}
+
 const fn anywhere(_: &DeletePart, _: &Scene, _: &App) -> bool {
     true
 }
@@ -115,5 +125,11 @@ impl Part for DeletePart {
     fn slots(slots: &mut Slots<Self>) {
         slots.command(&DELETE, anywhere, Self::ask_delete);
         slots.before(Self::trash_in_the_trash);
+        slots.menu_in(
+            MenuAt::Entry,
+            MenuGroup::Danger,
+            Placed::FIRST,
+            delete_items,
+        );
     }
 }
