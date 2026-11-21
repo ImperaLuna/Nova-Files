@@ -49,6 +49,7 @@ impl MainWindow {
         self.settle_search(window, cx);
         self.settle_tab_focus(window, cx);
         self.settle_password(window, cx);
+        self.settle_question(window, cx);
         let colors = Colors::of(cx);
         let main = !self.picker();
         let narrow = window.viewport_size().width < theme::window::NARROW_WIDTH;

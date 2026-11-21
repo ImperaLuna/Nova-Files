@@ -5,10 +5,11 @@ use gpui::{App, AppContext as _, Global, KeyBinding};
 use nova_files_messages::MessageType;
 
 use super::cards::{card_views, slot_view};
-use super::declared::{each_once, sends, slots_of, specs, takes};
+use super::declared::{each_once, sends, slots_of, specs, takes, words};
 use super::{OpenPart, Opened, WindowParts};
 use crate::command::CommandSpec;
 use crate::host::Host;
+use crate::island::job_words::Words;
 use crate::location::Location;
 use crate::part::{Card, Part};
 use crate::slot_view::{Draw, Fit};
@@ -19,6 +20,7 @@ struct Kind {
     takes: fn() -> Vec<MessageType>,
     sends: fn() -> Vec<MessageType>,
     specs: fn() -> Vec<&'static CommandSpec>,
+    words: fn() -> Words,
 }
 
 #[derive(Clone, Default)]
@@ -40,6 +42,7 @@ impl Parts {
             takes: takes::<P>,
             sends: sends::<P>,
             specs: specs::<P>,
+            words: words::<P>,
         });
     }
 
@@ -72,7 +75,12 @@ impl Parts {
 
     pub fn open(&self, host: &Host, cx: &mut App) -> WindowParts {
         self.bind_new_keys(cx);
+        let mut words = Words::default();
+        for kind in &self.kinds {
+            words.extend(&(kind.words)());
+        }
         WindowParts {
+            words,
             opened: self
                 .kinds
                 .iter()
@@ -125,6 +133,8 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
     let list_views = card_views(&entity, host, &views, Fit::Fill, cx);
     let drawn: Vec<Card<P>> = slots.islands.iter().map(|(_, draw)| *draw).collect();
     let islands = card_views(&entity, host, &drawn, Fit::Cover, cx);
+    let asked: Vec<Card<P>> = slots.questions.iter().map(|&(_, _, draw)| draw).collect();
+    let questions = card_views(&entity, host, &asked, Fit::Cover, cx);
     Box::new(Opened {
         entity,
         host: host.clone(),
@@ -138,5 +148,6 @@ fn open<P: Part>(host: &Host, cx: &mut App) -> Box<dyn OpenPart> {
         path_chips,
         list_views,
         islands,
+        questions,
     })
 }

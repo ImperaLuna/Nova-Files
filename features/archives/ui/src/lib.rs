@@ -232,7 +232,8 @@ impl ArchivesPart {
         let Some(name) = archive_name(first, packing, |name| taken(listing, name)) else {
             return;
         };
-        self.made.wait(&self.host, into.join(&name), window, cx);
+        self.made
+            .wait(&self.host, (into.join(&name), compressed), window, cx);
         let operation = Operation::Compress {
             sources,
             into,
@@ -267,6 +268,13 @@ impl ArchivesPart {
             })
             .ok();
         });
+    }
+}
+
+fn compressed(operation: &Operation) -> Option<PathBuf> {
+    match operation {
+        Operation::Compress { into, name, .. } => Some(into.join(name)),
+        _ => None,
     }
 }
 

@@ -30,28 +30,37 @@ pub struct Done {
     pub leaving: HashMap<PathBuf, Entry>,
 }
 
-pub fn recover(folder: &Path) -> Vec<Left> {
+pub type Rebuild<'a> = &'a dyn Fn(&str, Option<PathBuf>, Vec<PathBuf>) -> Option<Operation>;
+
+pub fn recover(folder: &Path, rebuild: Rebuild<'_>) -> Vec<Left> {
     let Ok(entries) = fs::read_dir(folder) else {
         return Vec::new();
     };
     let mut left: Vec<_> = entries
         .flatten()
-        .filter_map(|entry| look_at(entry.path(), entry.file_name().to_str()))
+        .filter_map(|entry| look_at(entry.path(), entry.file_name().to_str(), rebuild))
         .collect();
     left.sort_by_key(|left| left.job);
     left
 }
 
-fn look_at(journal: PathBuf, name: Option<&str>) -> Option<Left> {
+fn look_at(journal: PathBuf, name: Option<&str>, rebuild: Rebuild<'_>) -> Option<Left> {
     let file = open(&journal)
         .inspect_err(|error| log::info!("{} is left alone: {error}", journal.display()))
         .ok()?;
     let written = read(&file, &journal)
         .inspect_err(|error| log::warn!("can't read {}: {error}", journal.display()))
         .ok()?;
+    if foreign(&written.lines, rebuild) {
+        log::info!(
+            "{} is left alone: no feature here knows its job",
+            journal.display()
+        );
+        return None;
+    }
     let done = clean(&written.lines);
     let job = name.and_then(|name| name.parse().ok());
-    let (Some(job), Some(operation)) = (job, operation(&written.lines)) else {
+    let (Some(job), Some(operation)) = (job, operation(&written.lines, rebuild)) else {
         log::warn!("{} names no job it can resume", journal.display());
         if let Err(error) = fs::remove_file(&journal) {
             log::warn!("can't remove {}: {error}", journal.display());
@@ -74,7 +83,7 @@ fn open(path: &Path) -> io::Result<File> {
     Ok(file)
 }
 
-fn operation(lines: &[Line]) -> Option<Operation> {
+fn operation(lines: &[Line], rebuild: Rebuild<'_>) -> Option<Operation> {
     if !lines.iter().any(|line| line.word == word::SOURCES_DONE) {
         return None;
     }
@@ -88,8 +97,20 @@ fn operation(lines: &[Line]) -> Option<Operation> {
         (word::RESTORE, None) => Some(Operation::Restore { items: sources }),
         (word::DELETE_FROM_TRASH, None) => Some(Operation::DeleteFromTrash { items: sources }),
         (word::EMPTY_TRASH, None) => Some(Operation::EmptyTrash),
-        _ => None,
+        (other, into) => rebuild(other, into, sources),
     }
+}
+
+fn foreign(lines: &[Line], rebuild: Rebuild<'_>) -> bool {
+    lines.first().is_some_and(|first| {
+        word::fields(&first.word).is_none()
+            && rebuild(
+                &first.word,
+                first_paths(lines, word::INTO).next(),
+                first_paths(lines, word::SOURCE).collect(),
+            )
+            .is_none()
+    })
 }
 
 fn first_paths<'a>(lines: &'a [Line], word: &'a str) -> impl Iterator<Item = PathBuf> + 'a {

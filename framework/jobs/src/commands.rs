@@ -32,6 +32,11 @@ impl<K: JobKind<Op = Operation>> Jobs<K> {
                 conflict,
                 password,
             } => self.give_password(job, &conflict, password),
+            Command::Reply {
+                job,
+                conflict,
+                reply,
+            } => self.reply(job, &conflict, reply),
             _ => {}
         }
         Ok(())

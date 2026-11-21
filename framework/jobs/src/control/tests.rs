@@ -3,7 +3,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use nova_files_api::ConflictKind;
+use nova_files_api::{ConflictKind, Question};
 
 use super::*;
 
@@ -154,4 +154,37 @@ fn says_whether_it_was_cancelled() {
     assert!(!control.cancelled());
     control.cancel();
     assert!(control.cancelled());
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct Key(u8);
+
+static REFUSED: Question = Question::new("refused", &[]);
+static ASKED: Question = Question::new("asked", &[Answer::Retry]);
+
+#[test]
+fn a_reply_answers_only_a_feature_question_that_takes_a_retry() {
+    let control = Control::default();
+    let space = conflict(ConflictKind::NoSpace);
+    control.raise(space.clone());
+    assert!(!control.reply(&space, Carried::new(Key(1)), || {}));
+    assert!(control.answer(&space, Answer::Retry, Scope::ThisOne, || {}));
+
+    let refused = conflict(ConflictKind::Asked(&REFUSED));
+    control.raise(refused.clone());
+    assert!(!control.reply(&refused, Carried::new(Key(1)), || {}));
+    assert!(control.answer(&refused, Answer::Skip, Scope::ThisOne, || {}));
+    assert_eq!(control.take_reply(), None);
+
+    let asked = conflict(ConflictKind::Asked(&ASKED));
+    control.raise(asked.clone());
+    let mut heard = false;
+    assert!(control.reply(&asked, Carried::new(Key(7)), || heard = true));
+    assert!(heard);
+    assert_eq!(control.answer_to(), Ok((Answer::Retry, Scope::ThisOne)));
+    assert_eq!(
+        control.take_reply().as_ref().and_then(Carried::get::<Key>),
+        Some(&Key(7))
+    );
+    assert_eq!(control.take_reply(), None);
 }

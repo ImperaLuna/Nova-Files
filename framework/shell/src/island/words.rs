@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 use nova_files_api::{Entry, EntryKind, Failure, Operation, Outcome, Tally};
 
+use super::job_words::{AnyJobWords, Words};
+
 pub use crate::format::{ITEM, ITEMS, count};
 const FOLDER: &str = "folder";
 const FOLDERS: &str = "folders";
@@ -13,6 +15,7 @@ pub const PART_GAP: &str = " · ";
 const LIST_GAP: &str = ", ";
 const TRASH: &str = "Trash";
 const ROOT: &str = "/";
+const FINISH: &str = "finish";
 
 pub fn what(paths: &[PathBuf]) -> String {
     match paths {
@@ -70,8 +73,13 @@ pub fn finished_note(
     outcome: &Outcome,
     here: Option<&Path>,
     tally: Tally,
+    words: &Words,
 ) -> Option<String> {
+    let feature = words.of(operation);
     match outcome {
+        Outcome::Done if matches!(operation, Operation::Feature(_)) => {
+            feature.and_then(|words| words.done(operation, here, tally).flatten())
+        }
         Outcome::Done => match operation {
             Operation::Copy { sources, .. } | Operation::Move { sources, .. } => {
                 answered_note(operation, sources, here, tally)
@@ -80,7 +88,7 @@ pub fn finished_note(
             _ => done_note(operation),
         },
         Outcome::Cancelled => None,
-        Outcome::Failed { path, reason } => Some(match verb(operation) {
+        Outcome::Failed { path, reason } => Some(match verb(operation, feature) {
             (verb, true) => format!("Couldn't {verb} {}: {}", name_of(path), failure(*reason)),
             (verb, false) => format!("Couldn't {verb}: {}", failure(*reason)),
         }),
@@ -148,12 +156,16 @@ fn done_note(operation: &Operation) -> Option<String> {
         | Operation::Extract { .. }
         | Operation::NewFolder { .. }
         | Operation::ChangeAccess { .. }
-        | Operation::Undo { .. } => return None,
+        | Operation::Undo { .. }
+        | Operation::Feature(_) => return None,
     })
 }
 
-const fn verb(operation: &Operation) -> (&'static str, bool) {
+fn verb(operation: &Operation, words: Option<&dyn AnyJobWords>) -> (&'static str, bool) {
     match operation {
+        Operation::Feature(_) => words
+            .and_then(|words| words.failed(operation))
+            .map_or((FINISH, false), |failed| (failed.verb, failed.names_item)),
         Operation::Copy { .. } => ("copy", true),
         Operation::Move { .. } => ("move", true),
         Operation::Trash { .. } => ("move to Trash", true),

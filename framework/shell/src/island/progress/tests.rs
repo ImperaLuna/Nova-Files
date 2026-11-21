@@ -49,7 +49,10 @@ fn time_left_comes_from_the_speed_since_the_totals_were_known() {
     let now = counted + Duration::from_secs(2);
     job.advanced(progress(300, 1000, 1, 2), now);
     assert_eq!(job.time_left(now), Some(Duration::from_secs(7)));
-    assert_eq!(job.line(now), "Copying 2 of 2 · 7 s left");
+    assert_eq!(
+        job.line(now, &Words::default()),
+        "Copying 2 of 2 · 7 s left"
+    );
     assert!((job.fraction() - 0.3).abs() < 1e-6);
 }
 
@@ -66,7 +69,7 @@ fn a_job_without_bytes_goes_by_items() {
     job.advanced(progress(0, 0, 2, 4), start + Duration::from_secs(2));
     assert_eq!(job.fraction(), 0.5);
     assert_eq!(
-        job.line(start + Duration::from_secs(2)),
+        job.line(start + Duration::from_secs(2), &Words::default()),
         "Moving 3 of 4 to Trash · 2 s left"
     );
 }
@@ -75,7 +78,7 @@ fn a_job_without_bytes_goes_by_items() {
 fn a_lone_source_goes_by_its_name_and_a_held_job_says_so() {
     let start = Instant::now();
     let mut job = Running::new(copy(&["Photos"]), start);
-    assert_eq!(job.line(start), "Copying Photos");
+    assert_eq!(job.line(start, &Words::default()), "Copying Photos");
     assert_eq!(job.fraction(), 0.0);
     job.asking = Some(Conflict {
         kind: ConflictKind::FileExists,
@@ -84,19 +87,25 @@ fn a_lone_source_goes_by_its_name_and_a_held_job_says_so() {
         number: 1,
         more: 0,
     });
-    assert_eq!(job.line(start), "Copying Photos · waiting");
+    assert_eq!(
+        job.line(start, &Words::default()),
+        "Copying Photos · waiting"
+    );
     job.asking = None;
     job.paused = true;
-    assert_eq!(job.line(start), "Copying Photos · paused");
+    assert_eq!(
+        job.line(start, &Words::default()),
+        "Copying Photos · paused"
+    );
 }
 
 #[test]
 fn before_the_count_several_sources_go_by_how_many() {
     let start = Instant::now();
     let job = Running::new(copy(&["a", "b", "c"]), start);
-    assert_eq!(job.line(start), "Copying 3 items");
+    assert_eq!(job.line(start, &Words::default()), "Copying 3 items");
     let empty = Running::new(Operation::EmptyTrash, start);
-    assert_eq!(empty.line(start), "Deleting");
+    assert_eq!(empty.line(start, &Words::default()), "Deleting");
 }
 
 #[test]
@@ -128,5 +137,5 @@ fn a_job_of_one_item_from_several_sources_counts_them() {
     let start = Instant::now();
     let mut job = Running::new(copy(&["a", "b"]), start);
     job.advanced(progress(0, 0, 0, 1), start);
-    assert_eq!(job.line(start), "Copying 2 items");
+    assert_eq!(job.line(start, &Words::default()), "Copying 2 items");
 }

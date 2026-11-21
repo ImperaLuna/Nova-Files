@@ -7,6 +7,10 @@ fn entry_of(path: &Path) -> PathBuf {
     PathBuf::from(format!("{}:{}", there.dev(), there.ino()))
 }
 
+fn operation(lines: &[Line]) -> Option<Operation> {
+    super::operation(lines, &|_, _, _| None)
+}
+
 fn line(word: &str, paths: &[&Path]) -> Line {
     Line {
         word: word.to_owned(),
@@ -229,4 +233,54 @@ fn an_undo_moving_entries_back_is_never_resumed() {
         operation(&[line(word::UNDO, &[]), line(word::SOURCES_DONE, &[])]),
         None
     );
+}
+
+#[test]
+fn a_job_the_shared_part_does_not_know_is_rebuilt_by_its_feature() {
+    #[derive(Debug, PartialEq, Eq)]
+    struct Pack(Vec<PathBuf>, Option<PathBuf>);
+    let a = Path::new("/a");
+    let into = Path::new("/into");
+    let lines = [
+        line("pack", &[]),
+        line(word::INTO, &[into]),
+        line(word::SOURCE, &[a]),
+        line(word::SOURCES_DONE, &[]),
+    ];
+    let rebuild = |word: &str, into: Option<PathBuf>, sources: Vec<PathBuf>| {
+        (word == "pack").then(|| Operation::feature(Pack(sources, into)))
+    };
+
+    assert_eq!(
+        super::operation(&lines, &rebuild),
+        Some(Operation::feature(Pack(vec![a.into()], Some(into.into()))))
+    );
+    assert_eq!(operation(&lines), None);
+}
+
+#[test]
+fn a_journal_no_feature_here_knows_is_left_as_it_was() {
+    let folder = TestFolder::new("left-foreign");
+    let source = folder.file("a", "kept");
+    let journals = folder.path().join("jobs");
+    fs::create_dir(&journals).unwrap();
+    let journal = journals.join("4");
+    let backup = folder.path().join(".nova-backup-a");
+    fs::write(
+        &journal,
+        format!(
+            "nova-files-job 1\npack\nsource {}\nbackup {} {}\n",
+            source.display(),
+            backup.display(),
+            source.display()
+        ),
+    )
+    .unwrap();
+    let written = fs::read(&journal).unwrap();
+
+    let found = recover(&journals, &|_, _, _| None);
+
+    assert!(found.is_empty());
+    assert_eq!(fs::read(&journal).unwrap(), written);
+    assert_eq!(fs::read_to_string(&source).unwrap(), "kept");
 }

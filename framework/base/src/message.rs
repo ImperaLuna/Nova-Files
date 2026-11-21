@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use crate::file_icon::FileIcon;
 use crate::folder::{Details, EntryId, Listing, ListingId, Order, Unreadable};
-use crate::job::{Answer, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope, Tally};
+use crate::job::{
+    Answer, Carried, Conflict, JobId, JobTag, Operation, Outcome, Progress, Scope, Tally,
+};
 use crate::thumbnail_size::ThumbnailSize;
 
 /// The most entries one [`Command::Rows`] may name: several screens of
@@ -95,6 +97,18 @@ pub enum Command {
         job: JobId,
         conflict: Conflict,
         password: String,
+    },
+    /// Answer `conflict`, a question of a feature's own
+    /// ([`ConflictKind::Asked`]) that job `job` holds at, with `reply`,
+    /// which only that feature reads: the job tries again with it. The
+    /// reply is never told to other clients or written to disk; every
+    /// client hears [`Event::ConflictAnswered`] with [`Answer::Retry`].
+    ///
+    /// [`ConflictKind::Asked`]: crate::ConflictKind::Asked
+    Reply {
+        job: JobId,
+        conflict: Conflict,
+        reply: Carried,
     },
 }
 

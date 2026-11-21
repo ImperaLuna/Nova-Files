@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -8,13 +8,14 @@ use gpui::{
     Action, AnyElement, App, Context, Div, Entity, FocusHandle, InteractiveElement as _,
     KeyDownEvent, Modifiers, Pixels, ScrollEvent, SharedString, Size, Window,
 };
-use nova_files_api::{Entry, EntryId, Event, Listing, ListingId, Order};
+use nova_files_api::{Conflict, Entry, EntryId, Event, JobId, Listing, ListingId, Order, Question};
 
 use crate::assets::Icon;
 use nova_files_messages::{Envelope, Message, MessageType};
 
 use crate::command::CommandSpec;
 use crate::host::Host;
+use crate::island::job_words::{JobWords, Words};
 use crate::jump::Jump;
 use crate::layout::Layout;
 use crate::location::{Location, PageKind, PageRef};
@@ -51,6 +52,14 @@ pub struct Staged {
     pub art: AnyElement,
     pub about: SharedString,
 }
+pub type Asks<P> = fn(&mut P, Option<Asking<'_>>, &mut Window, &mut Context<P>);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Asking<'a> {
+    pub job: JobId,
+    pub conflict: &'a Conflict,
+}
+
 pub type Busy<P> = fn(&P, &App) -> bool;
 pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
@@ -178,6 +187,7 @@ pub struct Slots<P> {
     pub(crate) path_chips: Vec<(u8, Card<P>)>,
     pub(crate) list_views: Vec<(Applies<P>, Card<P>)>,
     pub(crate) islands: Vec<(Applies<P>, Card<P>)>,
+    pub(crate) questions: Vec<(&'static Question, Asks<P>, Card<P>)>,
     pub(crate) row_icons: Vec<RowIcon<P>>,
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
@@ -200,6 +210,7 @@ pub struct Slots<P> {
     pub(crate) thumbnail_sides: Vec<ThumbnailSide<P>>,
     pub(crate) pages_shown: Vec<PageTurn<P>>,
     pub(crate) pages_left: Vec<PageTurn<P>>,
+    pub(crate) job_words: Words,
 }
 
 impl<P> Default for Slots<P> {
@@ -238,6 +249,7 @@ impl<P> Default for Slots<P> {
             path_chips: Vec::new(),
             list_views: Vec::new(),
             islands: Vec::new(),
+            questions: Vec::new(),
             row_icons: Vec::new(),
             opens: Vec::new(),
             typed: Vec::new(),
@@ -260,6 +272,7 @@ impl<P> Default for Slots<P> {
             thumbnail_sides: Vec::new(),
             pages_shown: Vec::new(),
             pages_left: Vec::new(),
+            job_words: Words::default(),
         }
     }
 }
@@ -463,6 +476,14 @@ impl<P: Part> Slots<P> {
 
     pub fn island(&mut self, applies: Applies<P>, draw: Card<P>) {
         self.islands.push((applies, draw));
+    }
+
+    pub fn question(&mut self, question: &'static Question, asks: Asks<P>, draw: Card<P>) {
+        self.questions.push((question, asks, draw));
+    }
+
+    pub fn job_words<J: Any>(&mut self, words: impl JobWords<J>) {
+        self.job_words.add(words);
     }
 
     pub fn row_icon(&mut self, icon: RowIcon<P>) {

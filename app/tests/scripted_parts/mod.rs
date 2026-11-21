@@ -12,6 +12,7 @@ mod kept;
 mod laying;
 mod listing;
 mod naming;
+mod own_jobs;
 mod picking;
 mod preview;
 mod rows;
