@@ -1,14 +1,16 @@
 use std::fs;
 use std::sync::mpsc::{self, Receiver};
 
+use nova_files_test_folder::TestFolder;
+
 use super::*;
 
 const REPORT_TIMEOUT: Duration = Duration::from_secs(5);
 
-fn temp(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("nova-files-watch-{name}-{}", std::process::id()));
-    fs::remove_dir_all(&path).ok();
-    path
+fn temp(name: &str) -> (TestFolder, PathBuf) {
+    let folder = TestFolder::new(&format!("watch-{name}"));
+    let path = folder.join(name);
+    (folder, path)
 }
 
 fn watch(folder: &Path) -> (ConfigWatch, Receiver<Changed>) {
@@ -26,7 +28,7 @@ fn files(names: &[&str]) -> Changed {
 
 #[test]
 fn a_save_by_rename_is_reported_once_with_its_file() {
-    let config = temp("rename");
+    let (_config_folder, config) = temp("rename");
     fs::create_dir_all(&config).unwrap();
     let (_watch, reports) = watch(&config);
     fs::write(config.join("settings.toml.tmp"), "appearance = \"dark\"").unwrap();
@@ -40,12 +42,11 @@ fn a_save_by_rename_is_reported_once_with_its_file() {
     assert!(changed.touches("settings.toml"));
     assert!(!changed.touches("theme.toml"));
     assert!(reports.recv_timeout(QUIET * 3).is_err());
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn a_save_in_place_is_reported() {
-    let config = temp("in-place");
+    let (_config_folder, config) = temp("in-place");
     fs::create_dir_all(&config).unwrap();
     fs::write(config.join("theme.toml"), "").unwrap();
     let (_watch, reports) = watch(&config);
@@ -54,12 +55,11 @@ fn a_save_in_place_is_reported() {
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
         files(&["theme.toml"])
     );
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn a_folder_made_later_is_watched_once_it_appears() {
-    let home = temp("later");
+    let (_home_folder, home) = temp("later");
     let config = home.join("config/nova-files");
     fs::create_dir_all(&home).unwrap();
     let (_watch, reports) = watch(&config);
@@ -71,12 +71,11 @@ fn a_folder_made_later_is_watched_once_it_appears() {
         changed = reports.recv_timeout(REPORT_TIMEOUT).unwrap();
     }
     assert_eq!(changed, files(&["settings.toml"]));
-    fs::remove_dir_all(home).ok();
 }
 
 #[test]
 fn above_the_folder_only_the_way_down_matters() {
-    let home = temp("above");
+    let (_home_folder, home) = temp("above");
     let config = home.join("nova-files");
     fs::create_dir_all(&home).unwrap();
     let (_watch, reports) = watch(&config);
@@ -85,12 +84,11 @@ fn above_the_folder_only_the_way_down_matters() {
     assert!(reports.recv_timeout(QUIET * 3).is_err());
     fs::create_dir_all(&config).unwrap();
     assert_eq!(reports.recv_timeout(REPORT_TIMEOUT).unwrap(), Changed::All);
-    fs::remove_dir_all(home).ok();
 }
 
 #[test]
 fn a_folder_that_goes_away_reports_everything_and_is_found_again() {
-    let home = temp("gone");
+    let (_home_folder, home) = temp("gone");
     let config = home.join("nova-files");
     fs::create_dir_all(&config).unwrap();
     let (_watch, reports) = watch(&config);
@@ -103,7 +101,6 @@ fn a_folder_that_goes_away_reports_everything_and_is_found_again() {
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
         files(&["settings.toml"])
     );
-    fs::remove_dir_all(home).ok();
 }
 
 fn first_files(reports: &Receiver<Changed>) -> Changed {
@@ -117,7 +114,7 @@ fn first_files(reports: &Receiver<Changed>) -> Changed {
 
 #[test]
 fn a_linked_file_saved_where_it_lives_is_reported_under_its_link() {
-    let home = temp("linked");
+    let (_home_folder, home) = temp("linked");
     let config = home.join("nova-files");
     let dotfiles = home.join("dotfiles");
     fs::create_dir_all(&config).unwrap();
@@ -136,12 +133,11 @@ fn a_linked_file_saved_where_it_lives_is_reported_under_its_link() {
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
         files(&["settings.toml"])
     );
-    fs::remove_dir_all(home).ok();
 }
 
 #[test]
 fn a_link_pointed_elsewhere_is_followed_to_its_new_file() {
-    let home = temp("relinked");
+    let (_home_folder, home) = temp("relinked");
     let config = home.join("nova-files");
     let (old, new) = (home.join("old"), home.join("new"));
     for folder in [&config, &old, &new] {
@@ -166,12 +162,11 @@ fn a_link_pointed_elsewhere_is_followed_to_its_new_file() {
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
         files(&["settings.toml"])
     );
-    fs::remove_dir_all(home).ok();
 }
 
 #[test]
 fn a_link_within_the_folder_leaves_the_folder_watched() {
-    let config = temp("link-within");
+    let (_config_folder, config) = temp("link-within");
     fs::create_dir_all(&config).unwrap();
     fs::write(config.join("real.toml"), "").unwrap();
     std::os::unix::fs::symlink(config.join("real.toml"), config.join("settings.toml")).unwrap();
@@ -186,12 +181,11 @@ fn a_link_within_the_folder_leaves_the_folder_watched() {
         reports.recv_timeout(REPORT_TIMEOUT).unwrap(),
         files(&["theme.toml"])
     );
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn a_link_to_the_folder_above_leaves_its_watch_for_a_swap() {
-    let home = temp("link-above");
+    let (_home_folder, home) = temp("link-above");
     let config = home.join("nova-files");
     let (old, new) = (home.join("old"), home.join("new"));
     fs::create_dir_all(&old).unwrap();
@@ -208,12 +202,11 @@ fn a_link_to_the_folder_above_leaves_its_watch_for_a_swap() {
     fs::remove_file(&config).unwrap();
     std::os::unix::fs::symlink(&new, &config).unwrap();
     assert_eq!(reports.recv_timeout(REPORT_TIMEOUT).unwrap(), Changed::All);
-    fs::remove_dir_all(home).ok();
 }
 
 #[test]
 fn a_linked_folder_pointed_elsewhere_is_watched_there() {
-    let home = temp("linked-folder");
+    let (_home_folder, home) = temp("linked-folder");
     let config = home.join("nova-files");
     let (old, new) = (home.join("old"), home.join("new"));
     fs::create_dir_all(&old).unwrap();
@@ -225,7 +218,6 @@ fn a_linked_folder_pointed_elsewhere_is_watched_there() {
     assert_eq!(reports.recv_timeout(REPORT_TIMEOUT).unwrap(), Changed::All);
     fs::write(new.join("settings.toml"), "").unwrap();
     assert_eq!(first_files(&reports), files(&["settings.toml"]));
-    fs::remove_dir_all(home).ok();
 }
 
 fn keep_saving(file: &Path, gap: Duration, how_long: Duration) -> u32 {
@@ -248,7 +240,7 @@ fn keep_saving(file: &Path, gap: Duration, how_long: Duration) -> u32 {
 
 #[test]
 fn saves_closer_than_the_quiet_time_are_one_report() {
-    let config = temp("busy");
+    let (_config_folder, config) = temp("busy");
     fs::create_dir_all(&config).unwrap();
     let (_watch, reports) = watch(&config);
     let late = keep_saving(&config.join("settings.toml"), QUIET / 4, LONGEST_WAIT / 3);
@@ -264,12 +256,11 @@ fn saves_closer_than_the_quiet_time_are_one_report() {
         "{} reports, {late} saves held back",
         bursts.len()
     );
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn a_folder_that_never_goes_quiet_is_still_reported() {
-    let config = temp("never-quiet");
+    let (_config_folder, config) = temp("never-quiet");
     fs::create_dir_all(&config).unwrap();
     let (_watch, reports) = watch(&config);
     let (done, finished) = mpsc::channel();
@@ -287,7 +278,6 @@ fn a_folder_that_never_goes_quiet_is_still_reported() {
         "reported only after the saves"
     );
     saver.join().unwrap();
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
@@ -312,18 +302,17 @@ fn a_burst_held_for_the_longest_wait_is_reported_at_once() {
 
 #[test]
 fn nothing_is_reported_once_the_watch_is_dropped() {
-    let config = temp("dropped");
+    let (_config_folder, config) = temp("dropped");
     fs::create_dir_all(&config).unwrap();
     let (watch, reports) = watch(&config);
     drop(watch);
     fs::write(config.join("settings.toml"), "").unwrap();
     assert!(reports.recv_timeout(QUIET * 3).is_err());
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn lost_events_move_the_watch_to_where_the_folder_is_now() {
-    let home = temp("overflow");
+    let (_home_folder, home) = temp("overflow");
     let config = home.join("nova-files");
     let (old, new) = (home.join("old"), home.join("new"));
     fs::create_dir_all(&old).unwrap();
@@ -350,7 +339,6 @@ fn lost_events_move_the_watch_to_where_the_folder_is_now() {
     fs::write(new.join("settings.toml"), "").unwrap();
     let events = read_events(&watched.inotify, &mut buffer).unwrap();
     assert_eq!(watched.handle(&events).unwrap(), files(&["settings.toml"]));
-    fs::remove_dir_all(home).ok();
 }
 
 #[test]

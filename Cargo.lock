@@ -3545,6 +3545,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "nova-files-api",
+ "nova-files-test-folder",
  "rustix",
 ]
 
@@ -3577,6 +3578,7 @@ version = "0.1.0"
 dependencies = [
  "nova-files-api",
  "nova-files-disk",
+ "nova-files-test-folder",
 ]
 
 [[package]]

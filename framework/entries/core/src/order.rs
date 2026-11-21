@@ -114,18 +114,16 @@ mod tests {
     use std::fs::{self, File};
     use std::time::{Duration, SystemTime};
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
     use crate::list;
 
-    struct TempFolder(PathBuf);
+    struct TempFolder(TestFolder);
 
     impl TempFolder {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir()
-                .join(format!("nova-files-order-{name}-{}", std::process::id()));
-            fs::remove_dir_all(&path).ok();
-            fs::create_dir_all(&path).unwrap();
-            Self(path)
+            Self(TestFolder::new(&format!("order-{name}")))
         }
 
         fn file(&self, name: &str, size: u64, age: u64) {
@@ -140,17 +138,11 @@ mod tests {
         }
 
         fn names(&self, key: SortKey, descending: bool) -> Vec<String> {
-            let entries = arranged(&self.0, Order { key, descending });
+            let entries = arranged(self.0.path(), Order { key, descending });
             entries
                 .iter()
                 .map(|entry| entry.name.to_string_lossy().into_owned())
                 .collect()
-        }
-    }
-
-    impl Drop for TempFolder {
-        fn drop(&mut self) {
-            fs::remove_dir_all(&self.0).ok();
         }
     }
 
@@ -217,7 +209,7 @@ mod tests {
     fn ids_follow_the_new_positions() {
         let folder = mixed("ids");
         let entries = arranged(
-            &folder.0,
+            folder.0.path(),
             Order {
                 key: SortKey::Size,
                 descending: true,
@@ -227,7 +219,7 @@ mod tests {
             assert_eq!(entry.id, EntryId(index));
         }
         let entries = arranged(
-            &folder.0,
+            folder.0.path(),
             Order {
                 key: SortKey::Name,
                 descending: true,
@@ -241,14 +233,14 @@ mod tests {
     #[test]
     fn an_entry_whose_details_cant_be_read_goes_last_either_way() {
         let folder = mixed("vanished");
-        let listed = list::read_folder(&folder.0, || false).unwrap();
+        let listed = list::read_folder(folder.0.path(), || false).unwrap();
         fs::remove_file(folder.0.join("small.txt")).unwrap();
         let last = |descending| {
             let order = Order {
                 key: SortKey::Size,
                 descending,
             };
-            let entries = arrange(&folder.0, listed.clone(), order, || false).unwrap();
+            let entries = arrange(folder.0.path(), listed.clone(), order, || false).unwrap();
             entries.last().unwrap().name.to_string_lossy().into_owned()
         };
         assert_eq!(last(false), "small.txt");
@@ -258,7 +250,7 @@ mod tests {
     #[test]
     fn a_cancel_stops_before_the_next_read() {
         let folder = mixed("cancel");
-        let listed = list::read_folder(&folder.0, || false).unwrap();
+        let listed = list::read_folder(folder.0.path(), || false).unwrap();
         let reads = Cell::new(0);
         let cancelled = || {
             reads.set(reads.get() + 1);
@@ -268,10 +260,13 @@ mod tests {
             key: SortKey::Modified,
             descending: false,
         };
-        assert_eq!(arrange(&folder.0, listed.clone(), order, cancelled), None);
+        assert_eq!(
+            arrange(folder.0.path(), listed.clone(), order, cancelled),
+            None
+        );
         let by_name = Order::default();
         assert_eq!(
-            arrange(&folder.0, listed.clone(), by_name, || true),
+            arrange(folder.0.path(), listed.clone(), by_name, || true),
             Some(listed)
         );
     }
