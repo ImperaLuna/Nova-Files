@@ -10,7 +10,6 @@ build.craneLib.devShell {
   # The checks' own tools come in through `checks`; these are the extras.
   packages = [
     pkgs.rust-analyzer
-    pkgs.cargo-mutants
     pkgs.just
     # For the D-Bus tests outside `nix flake check`.
     pkgs.dbus

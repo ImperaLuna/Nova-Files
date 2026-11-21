@@ -330,7 +330,7 @@ fn cached_rows_answer_and_rows_that_failed_before_are_not_tried_again() {
             .save_with_format(folder.join(name), ImageFormat::Png)
             .unwrap();
     }
-    let broken = folder.join("broken.png");
+    let broken = folder.join("0-broken.png");
     fs::write(&broken, b"not an image").unwrap();
     let thumbnails = temp.0.join("thumbnails");
     let first = thumbnailed_entries(
@@ -339,7 +339,7 @@ fn cached_rows_answer_and_rows_that_failed_before_are_not_tried_again() {
         ListingId(1),
         2,
     );
-    assert_eq!(first, [EntryId(0), EntryId(1)]);
+    assert_eq!(first, [EntryId(1), EntryId(2)]);
 
     let mtime = fs::metadata(&broken).unwrap().modified().unwrap();
     image.save_with_format(&broken, ImageFormat::Png).unwrap();
@@ -359,5 +359,5 @@ fn cached_rows_answer_and_rows_that_failed_before_are_not_tried_again() {
         ListingId(1),
         3,
     );
-    assert_eq!(again, [EntryId(0), EntryId(1), EntryId(3)]);
+    assert_eq!(again, [EntryId(1), EntryId(2), EntryId(3)]);
 }
