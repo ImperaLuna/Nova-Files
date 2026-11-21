@@ -69,7 +69,7 @@ fn by_key(order: Order, left: &Details, right: &Details) -> Ordering {
     }
 }
 
-fn known_first<T: Ord>(left: Option<T>, right: Option<T>, descending: bool) -> Ordering {
+pub(crate) fn known_first<T: Ord>(left: Option<T>, right: Option<T>, descending: bool) -> Ordering {
     match (left, right) {
         (Some(left), Some(right)) if descending => right.cmp(&left),
         (Some(left), Some(right)) => left.cmp(&right),

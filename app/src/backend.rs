@@ -113,6 +113,9 @@ pub fn spawn_with_archiver(
                 file_icons,
                 jobs: Arc::new(jobs),
                 measurer: nova_files_properties_core::Measurer::default(),
+                folder_sizer: Arc::new(nova_files_entries_core::FolderSizer::new(Arc::new(
+                    nova_files_properties_core::FolderMeasure,
+                ))),
                 drives: nova_files_drives_core::Store::default(),
                 recent,
                 folder_views,

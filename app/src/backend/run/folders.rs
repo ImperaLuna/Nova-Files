@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use nova_files_api::{Command, HiddenFiles};
+use nova_files_api::{Command, FolderSizes, HiddenFiles};
 use nova_files_archives_core::inside::Inside;
 use nova_files_entries_core::{InnerFolders, list_folder};
 use nova_files_settings_api::Thumbnails;
@@ -16,7 +16,9 @@ pub(super) fn answer(client: &Client, command: Command, setup: &Setup) {
         Command::ListFolder { id, path, order } => {
             let hidden = hidden_files(setup, &path);
             let inner: Arc<dyn InnerFolders> = Arc::<Inside>::clone(&setup.inside);
-            list_folder(client.entries(), (id, path), (order, hidden), &inner);
+            let measured = setup.settings.current().folder_sizes == FolderSizes::Measured;
+            let sizer = measured.then_some(&setup.folder_sizer);
+            list_folder(client.entries(), (id, path), (order, hidden), &inner, sizer);
         }
         Command::Rows {
             id,

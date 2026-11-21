@@ -45,7 +45,7 @@ fn listed(path: &str) -> Event {
     let inner: Arc<dyn InnerFolders> = Arc::new(OneArchive);
     let asked = (Order::default(), HiddenFiles::Shown);
 
-    list_folder(&client, (ListingId(1), path.into()), asked, &inner);
+    list_folder(&client, (ListingId(1), path.into()), asked, &inner, None);
 
     loop {
         match events.recv_timeout(WAIT).unwrap() {

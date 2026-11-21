@@ -1,4 +1,5 @@
 use gpui::{Pixels, Point, point, px};
+use nova_files_api::{FolderSizes, SortKey};
 use nova_files_window::{Look, MenuAction};
 
 use super::*;
@@ -110,7 +111,8 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
                 "Details",
                 "Icons",
                 "Gallery",
-                "Show hidden files"
+                "Show hidden files",
+                "Folder sizes"
             ]
             .map(str::to_owned)
             .to_vec(),
@@ -176,7 +178,8 @@ async fn the_menu_key_opens_the_menu_with_its_first_item_marked(cx: &mut TestApp
             "Details",
             "Icons",
             "Gallery",
-            "Show hidden files"
+            "Show hidden files",
+            "Folder sizes"
         ]
     );
     assert_eq!(
@@ -209,7 +212,11 @@ async fn show_hidden_files_is_ticked_while_they_show(cx: &mut TestAppContext) {
     let hidden_item = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
         view.read_with(cx, |view, _| {
             let menu = view.menu().unwrap();
-            menu.items.last().unwrap().look
+            let item = menu
+                .items
+                .iter()
+                .find(|item| item.label == "Show hidden files");
+            item.unwrap().look
         })
     };
 
@@ -222,6 +229,32 @@ async fn show_hidden_files_is_ticked_while_they_show(cx: &mut TestAppContext) {
     assert_eq!(hidden_item(&view, cx), Look::On);
     choose(&view, cx, "Show hidden files");
     wait_for_names(&view, cx, &["Projects", "notes.txt"]).await;
+}
+
+#[gpui::test]
+async fn folder_sizes_is_ticked_until_turned_off(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-folder-sizes");
+    let home = TempFolder::tree("menu-folder-sizes-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let sizes_item = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| {
+            let menu = view.menu().unwrap();
+            let item = menu.items.iter().find(|item| item.label == "Folder sizes");
+            item.unwrap().look
+        })
+    };
+
+    right_click_space(cx, 2);
+    assert_eq!(sizes_item(&view, cx), Look::On);
+    choose(&view, cx, "Folder sizes");
+    view.condition::<WindowEvent>(cx, |_, cx| {
+        Published::<FolderSizes>::get(cx) == Some(&FolderSizes::Left)
+    })
+    .await;
+
+    right_click_space(cx, 2);
+    assert_eq!(sizes_item(&view, cx), Look::Plain);
 }
 
 #[gpui::test]
@@ -392,4 +425,35 @@ async fn the_menu_key_opens_at_the_list_or_under_the_row(cx: &mut TestAppContext
     let row = cx.debug_bounds("entry-58").unwrap();
     let at = menu_at(&view, cx);
     assert!((at.y - row.bottom()).abs() < px(0.5), "{at:?} {row:?}");
+}
+
+#[gpui::test]
+async fn sorting_by_size_with_folder_sizes_sorts_folders_and_files_by_what_they_hold(
+    cx: &mut TestAppContext,
+) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-sizes-sorted");
+    let home = TempFolder::tree("menu-sizes-sorted-home");
+    fs::write(tree.path().join("Projects/nova/data"), [0_u8; 4000]).unwrap();
+    fs::write(tree.path().join("notes.txt"), [0_u8; 100]).unwrap();
+    fs::create_dir(tree.path().join("Empty")).unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    view.condition::<WindowEvent>(cx, |_, cx| {
+        Published::<FolderSizes>::get(cx) == Some(&FolderSizes::Measured)
+    })
+    .await;
+    view.update(cx, |view, _| view.sort_by(SortKey::Size));
+    wait_for_names(&view, cx, &["Projects", "notes.txt", "Empty"]).await;
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| {
+        assert!(view.shows_shares());
+        let near = |index, want: f32| {
+            view.share(index)
+                .is_some_and(|got| (got - want).abs() < 1e-6)
+        };
+        assert!(near(0, 1.0));
+        assert!(near(1, 0.025));
+    });
 }

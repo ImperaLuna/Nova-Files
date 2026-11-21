@@ -7,11 +7,11 @@ use gpui::{
     AnyElement, Context, Div, HighlightStyle, InteractiveElement as _, IntoElement, MouseButton,
     MouseDownEvent, ObjectFit, ParentElement as _, Pixels, RenderImage, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled as _, StyledImage as _, StyledText, div, img,
-    prelude::FluentBuilder as _,
+    prelude::FluentBuilder as _, relative,
 };
 use nova_files_api::{Entry, EntryKind, IconKind, Listing};
 
-use crate::theme::{Colors, radius, size, text};
+use crate::theme::{Colors, radius, size, space, text};
 use crate::window::{Aim, DraggedRow, MainWindow};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,7 +34,7 @@ pub fn cells(
     name: impl IntoElement,
     folder: Option<AnyElement>,
     modified: impl IntoElement,
-    size_cell: impl IntoElement,
+    (size_cell, size_width): (impl IntoElement, Pixels),
     modified_selector: String,
 ) -> impl IntoElement {
     let column = |width| div().flex().flex_none().w(width).min_w_0().truncate();
@@ -51,7 +51,7 @@ pub fn cells(
                 .debug_selector(|| modified_selector)
                 .child(modified),
         )
-        .child(column(size::SIZE_WIDTH).justify_end().child(size_cell))
+        .child(column(size_width).justify_end().child(size_cell))
 }
 
 pub fn detail(text_content: String, colors: &Colors) -> impl IntoElement {
@@ -61,6 +61,38 @@ pub fn detail(text_content: String, colors: &Colors) -> impl IntoElement {
         .text_color(colors.text_dim)
         .truncate()
         .child(text_content)
+}
+
+pub fn share_cell(text_content: String, share: Option<f32>, colors: &Colors) -> impl IntoElement {
+    let fill = share.map(|share| share.clamp(space::MIN_FILL, 1.0));
+    let largest = share.is_some_and(|share| share >= 1.0);
+    div()
+        .flex()
+        .flex_1()
+        .min_w_0()
+        .items_center()
+        .justify_between()
+        .gap(space::BAR_GAP)
+        .child(
+            div()
+                .flex_none()
+                .w(space::BAR_WIDTH)
+                .h(space::BAR_HEIGHT)
+                .rounded(radius::SHARE_BAR)
+                .bg(colors.press)
+                .children(fill.map(|fill| {
+                    div()
+                        .h_full()
+                        .w(relative(fill))
+                        .rounded(radius::SHARE_BAR)
+                        .bg(if largest {
+                            colors.here
+                        } else {
+                            colors.text_dim
+                        })
+                })),
+        )
+        .child(detail(text_content, colors))
 }
 
 pub fn entry_name(

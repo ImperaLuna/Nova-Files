@@ -1,10 +1,11 @@
-use nova_files_api::HiddenFiles;
+use nova_files_api::{FolderSizes, HiddenFiles};
 use nova_files_settings_api::{Appearance, SettingChange, Settings, Thumbnails};
 use toml_edit::{Array, DocumentMut, Item, Table, TableLike, Value};
 
 const APPEARANCE: &str = "appearance";
 const THUMBNAILS: &str = "thumbnails";
 const HIDDEN_FILES: &str = "hidden_files";
+const FOLDER_SIZES: &str = "folder_sizes";
 const KEYS: &str = "keys";
 
 const SYSTEM: &str = "system";
@@ -35,6 +36,11 @@ pub fn read(text: &str) -> (Settings, Vec<String>) {
                 Some(true) => settings.hidden_files = HiddenFiles::Shown,
                 Some(false) => settings.hidden_files = HiddenFiles::Left,
                 None => problems.push(format!("`{HIDDEN_FILES}` is true or false")),
+            },
+            FOLDER_SIZES => match item.as_bool() {
+                Some(true) => settings.folder_sizes = FolderSizes::Measured,
+                Some(false) => settings.folder_sizes = FolderSizes::Left,
+                None => problems.push(format!("`{FOLDER_SIZES}` is true or false")),
             },
             KEYS => read_keys(item, &mut settings, &mut problems),
             unknown => problems.push(format!("unknown setting `{unknown}`")),
@@ -78,6 +84,12 @@ pub fn edit(text: &str, change: &SettingChange) -> Option<String> {
             HIDDEN_FILES,
             (*hidden == HiddenFiles::Shown).into(),
             *hidden == defaults.hidden_files,
+        ),
+        SettingChange::FolderSizes(sizes) => set(
+            &mut document,
+            FOLDER_SIZES,
+            (*sizes == FolderSizes::Measured).into(),
+            *sizes == defaults.folder_sizes,
         ),
         SettingChange::Keys {
             action,

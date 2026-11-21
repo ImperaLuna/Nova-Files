@@ -2,10 +2,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 
-use nova_files_api::{Details, Entry, Event, HiddenFiles, Listing, ListingId, Order, Unreadable};
+use nova_files_api::{
+    Details, Entry, Event, HiddenFiles, Listing, ListingId, Order, SortKey, Unreadable,
+};
 
 use crate::client::{Client, ListingJob};
 use crate::list::{self, Stopped};
+use crate::sizes::{self, FolderSizer};
 use crate::{memory, order};
 
 const LIST_THREAD: &str = "nova-files-list";
@@ -21,20 +24,18 @@ pub fn list_folder(
     (id, path): (ListingId, PathBuf),
     (order, hidden): (Order, HiddenFiles),
     inner: &Arc<dyn InnerFolders>,
+    sizer: Option<&Arc<FolderSizer>>,
 ) {
     let job = client.start_listing(id);
     let job_path = path.clone();
     let inner = Arc::clone(inner);
+    let sizer = sizer.filter(|_| order.key == SortKey::Size).cloned();
     let spawned = thread::Builder::new()
         .name(LIST_THREAD.to_owned())
         .spawn(move || {
             let cancelled = || job.cancelled();
-            let listed = list::read_folder(&job_path, cancelled).map(|entries| {
-                let entries = list::keep_shown(entries, hidden);
-                order::arrange(&job_path, entries, order, cancelled)
-            });
-            let entries: Arc<[Entry]> = match listed {
-                Ok(Some(entries)) => entries.into(),
+            let entries = match list::read_folder(&job_path, cancelled) {
+                Ok(entries) => list::keep_shown(entries, hidden),
                 Err(Stopped::Unreadable(reason)) => {
                     let elsewhere = matches!(reason, Unreadable::NotAFolder | Unreadable::Missing)
                         .then(|| inner.list(&job_path, order, hidden))
@@ -49,15 +50,18 @@ pub fn list_folder(
                     }
                     return;
                 }
-                Ok(None) | Err(Stopped::Cancelled) => return,
+                Err(Stopped::Cancelled) => return,
             };
-            job.send(Listing {
-                id,
-                path: job_path,
-                entries: Arc::clone(&entries),
-                folders: None,
-            });
-            drop(entries);
+            if let Some(sizer) = sizer {
+                sizes::list_measured(&job, (id, job_path), entries, order, &sizer);
+            } else if let Some(entries) = order::arrange(&job_path, entries, order, cancelled) {
+                job.send(Listing {
+                    id,
+                    path: job_path,
+                    entries: entries.into(),
+                    folders: None,
+                });
+            }
             memory::give_back();
         });
     if spawned.is_err() {

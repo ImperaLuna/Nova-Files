@@ -14,6 +14,7 @@ mod pin;
 mod renaming;
 mod rows;
 mod search;
+mod shares;
 mod showing;
 mod slots;
 mod start;
@@ -41,8 +42,8 @@ use gpui::{
     Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, HiddenFiles, Listing,
-    ListingId, Order,
+    ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderSizes,
+    HiddenFiles, Listing, ListingId, Order,
 };
 use nova_files_shell::Lines;
 use nova_files_shell::path_bar::PathBar;
@@ -93,6 +94,7 @@ pub struct MainWindow {
     pub(crate) connection: Option<Arc<Connection>>,
     pub(crate) listing: Option<Listing>,
     details: HashMap<usize, RowRead>,
+    shares: shares::Shares,
     theme_icons: ThemeIcons,
     pub(crate) scale_factor: f32,
     rows_wanted: Range<usize>,
@@ -119,6 +121,7 @@ pub struct MainWindow {
     pub(crate) bounds_watch: Option<Subscription>,
     pub(crate) home: PathBuf,
     hidden_files: Option<HiddenFiles>,
+    folder_sizes: Option<FolderSizes>,
     thumbnails_shown: ThumbnailsShown,
     listed_page: Option<PageRef>,
     shown_page: Option<(TabId, PageRef)>,
@@ -204,6 +207,7 @@ impl MainWindow {
             connection,
             listing: None,
             details: HashMap::new(),
+            shares: shares::Shares::default(),
             theme_icons: ThemeIcons::default(),
             rows_wanted: 0..0,
             rows_drawn: 0..0,
@@ -230,6 +234,7 @@ impl MainWindow {
             scroll: UniformListScrollHandle::new(),
             bounds_watch: None,
             hidden_files: None,
+            folder_sizes: None,
             thumbnails_shown: ThumbnailsShown::Shown,
             listed_page: None,
             shown_page: None,

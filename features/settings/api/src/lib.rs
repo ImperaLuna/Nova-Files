@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use nova_files_api::HiddenFiles;
+use nova_files_api::{FolderSizes, HiddenFiles};
 
 /// What a client asks of the settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +45,8 @@ pub struct Settings {
     pub thumbnails: Thumbnails,
     /// Whether folders list their hidden entries.
     pub hidden_files: HiddenFiles,
+    /// Whether a folder sorted by size measures its folders.
+    pub folder_sizes: FolderSizes,
     /// Key overrides: an action's id (owned by the UI, such as `go.back`)
     /// to the keys that run it, in GPUI's keystroke syntax
     /// (`ctrl-shift-a`). An empty list leaves the action without keys. The
@@ -77,6 +79,7 @@ pub enum SettingChange {
     Appearance(Appearance),
     Thumbnails(Thumbnails),
     HiddenFiles(HiddenFiles),
+    FolderSizes(FolderSizes),
     /// The keys for the action named `action`; `None` drops the override,
     /// so the action gets its default keys back.
     Keys {
@@ -93,6 +96,7 @@ impl Settings {
             SettingChange::Appearance(appearance) => self.appearance = appearance,
             SettingChange::Thumbnails(thumbnails) => self.thumbnails = thumbnails,
             SettingChange::HiddenFiles(hidden) => self.hidden_files = hidden,
+            SettingChange::FolderSizes(sizes) => self.folder_sizes = sizes,
             SettingChange::Keys {
                 action,
                 keys: Some(keys),
@@ -123,6 +127,10 @@ mod tests {
         let shown = hidden.with(SettingChange::HiddenFiles(HiddenFiles::Shown));
         assert_eq!(shown.hidden_files, HiddenFiles::Shown);
         assert_eq!(shown.thumbnails, Thumbnails::Hidden);
+        assert_eq!(shown.folder_sizes, FolderSizes::Measured);
+        let left = shown.with(SettingChange::FolderSizes(FolderSizes::Left));
+        assert_eq!(left.folder_sizes, FolderSizes::Left);
+        assert_eq!(left.hidden_files, HiddenFiles::Shown);
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use gpui::{
     AnyElement, ClickEvent, Context, Div, HitboxBehavior, InteractiveElement as _, IntoElement,
-    MouseButton, MouseDownEvent, ParentElement as _, ScrollEvent, Stateful,
+    MouseButton, MouseDownEvent, ParentElement as _, Pixels, ScrollEvent, Stateful,
     StatefulInteractiveElement as _, Styled as _, Window, canvas, div, prelude::FluentBuilder as _,
     transparent_black, uniform_list,
 };
@@ -10,13 +10,15 @@ use gpui::{
 use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
 
 use super::drop::inside_edge;
-use super::row::{Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon};
+use super::row::{
+    Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon, share_cell,
+};
 
 use nova_files_shell::{PageRef, ShownColumn};
 
 use crate::assets::Icon;
 use crate::marks;
-use crate::theme::{Colors, opacity, radius, size, text};
+use crate::theme::{Colors, opacity, radius, size, space, text};
 use crate::window::{Aim, DraggedRow, MainWindow};
 use nova_files_shell::Grid;
 
@@ -136,6 +138,7 @@ impl MainWindow {
                 let colors = Colors::of(cx);
                 let query = this.search.marks().map(str::to_owned);
                 let part_column = this.parts.column(&this.scene(cx), cx);
+                let size_width = size_width(this.shows_shares());
                 let selected = |index: usize| {
                     listing
                         .entries
@@ -170,7 +173,7 @@ impl MainWindow {
                             ),
                             folder,
                             detail(columns.modified, &colors),
-                            detail(columns.size, &colors),
+                            (this.size_cell(index, columns.size, &colors), size_width),
                             format!("modified-{index}"),
                         );
                         entry_row(index, (listing_id, id), corners, &colors, cx)
@@ -379,6 +382,14 @@ impl MainWindow {
             .then(|| self.folder_link(listing.path_of(entry), index, cx))
     }
 
+    fn size_cell(&self, index: usize, text: String, colors: &Colors) -> AnyElement {
+        if self.shows_shares() {
+            share_cell(text, self.share(index), colors).into_any_element()
+        } else {
+            detail(text, colors).into_any_element()
+        }
+    }
+
     fn column_heads(&self, colors: &Colors, cx: &Context<Self>) -> impl IntoElement {
         let sorted = self.listed_page().is_none_or(PageRef::sorted);
         let order = (!self.searching() && sorted).then(|| self.shown_order());
@@ -393,7 +404,15 @@ impl MainWindow {
             let listed = self.listed_page().is_some_and(PageRef::folder_column);
             (self.showing_found() || listed).then(folder_head)
         });
-        column_heads(order, folder, colors, cx)
+        column_heads(order, folder, size_width(self.shows_shares()), colors, cx)
+    }
+}
+
+const fn size_width(shares: bool) -> Pixels {
+    if shares {
+        space::COLUMN_WIDTH
+    } else {
+        size::SIZE_WIDTH
     }
 }
 
@@ -407,6 +426,7 @@ fn folder_head() -> AnyElement {
 fn column_heads(
     order: Option<Order>,
     folder: Option<AnyElement>,
+    size_width: Pixels,
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> impl IntoElement {
@@ -435,9 +455,12 @@ fn column_heads(
                     div().flex().child(head(SortKey::Name, NAME_LABEL)),
                     folder,
                     head(SortKey::Modified, MODIFIED_LABEL),
-                    head(SortKey::Size, SIZE_LABEL)
-                        .justify_end()
-                        .mr(-size::HEAD_BUTTON_PAD),
+                    (
+                        head(SortKey::Size, SIZE_LABEL)
+                            .justify_end()
+                            .mr(-size::HEAD_BUTTON_PAD),
+                        size_width,
+                    ),
                     MODIFIED_HEADER_SELECTOR.to_owned(),
                 )),
         )

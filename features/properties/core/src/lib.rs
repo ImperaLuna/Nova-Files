@@ -8,5 +8,5 @@ mod properties;
 
 pub use access::change_access;
 pub use kind::AccessJobs;
-pub use measure::{LET_GO_WAIT, Measurer};
+pub use measure::{FolderMeasure, LET_GO_WAIT, Measurer};
 pub use properties::answer;

@@ -21,14 +21,16 @@ impl MainWindow {
         if index >= self.listing.as_ref()?.entries.len() {
             return None;
         }
-        let details = self
+        let modified = self
             .details
             .get(&index)
-            .map(|read| read.details)
-            .unwrap_or_default();
+            .and_then(|read| read.details.modified);
         Some(ColumnText {
-            modified: details.modified.map(columns::modified).unwrap_or_default(),
-            size: details.size.map(columns::size).unwrap_or_default(),
+            modified: modified.map(columns::modified).unwrap_or_default(),
+            size: self
+                .size_of_row(index)
+                .map(columns::size)
+                .unwrap_or_default(),
         })
     }
 
@@ -77,6 +79,9 @@ impl MainWindow {
                 (first + at, read)
             });
         self.details.extend(read);
+        if let Some(largest) = details.iter().filter_map(|read| read.size).max() {
+            self.shares.seen(largest);
+        }
         self.make_theme_icons(icons.iter(), cx);
         cx.notify();
     }

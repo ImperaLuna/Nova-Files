@@ -415,6 +415,16 @@ pub mod preview {
     pub const BIG_ICON: Pixels = px(96.0);
 }
 
+pub mod space {
+    use gpui::{Pixels, px};
+
+    pub const COLUMN_WIDTH: Pixels = px(190.0);
+    pub const BAR_WIDTH: Pixels = px(96.0);
+    pub const BAR_HEIGHT: Pixels = px(4.0);
+    pub const BAR_GAP: Pixels = px(12.0);
+    pub const MIN_FILL: f32 = 0.02;
+}
+
 pub mod radius {
     use gpui::{Pixels, px};
 
@@ -424,6 +434,7 @@ pub mod radius {
     pub const ROW: Pixels = px(10.0);
     pub const SMALL: Pixels = px(6.0);
     pub const TICK: Pixels = px(4.0);
+    pub const SHARE_BAR: Pixels = px(2.0);
 }
 
 #[cfg(test)]

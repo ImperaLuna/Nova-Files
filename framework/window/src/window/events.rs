@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{Context, UniformListScrollHandle};
-use nova_files_api::{Event, HiddenFiles, Listing, ListingId, Unreadable};
+use nova_files_api::{Event, FolderSizes, HiddenFiles, Listing, ListingId, Unreadable};
 use nova_files_shell::{KnownFolders, Published, ThumbnailsShown};
 
 use super::{CoreStatus, MainWindow, WindowEvent};
@@ -78,6 +78,7 @@ impl MainWindow {
         self.listing = Some(listing);
         self.core_moved = false;
         self.details = HashMap::new();
+        self.shares.forget(place == Place::Top);
         self.rows_wanted = 0..0;
         if place == Place::Top {
             self.scroll = UniformListScrollHandle::new();
@@ -112,6 +113,14 @@ impl MainWindow {
             {
                 self.details_arrived(first, &details, &icons, cx);
             }
+            Event::FoldersMeasured { id, sizes, done }
+                if self
+                    .listing
+                    .as_ref()
+                    .is_some_and(|listing| listing.id == id) =>
+            {
+                self.folders_measured(&sizes, done, cx);
+            }
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::WindowState(bytes) => {
                 self.host
@@ -129,6 +138,7 @@ impl MainWindow {
             | Event::UndoGone(_)) => self.job_event(event, cx),
             Event::FolderUnreadable { .. }
             | Event::DetailsRead { .. }
+            | Event::FoldersMeasured { .. }
             | Event::JobRunning { .. }
             | Event::JobInterrupted { .. } => {}
         }
@@ -209,6 +219,14 @@ impl MainWindow {
     pub(super) fn hidden_published(&mut self, cx: &mut Context<Self>) {
         if let Some(hidden) = Published::<HiddenFiles>::get(cx).copied() {
             self.hidden_arrived(hidden);
+            cx.emit(WindowEvent::Settings);
+            cx.notify();
+        }
+    }
+
+    pub(super) fn folder_sizes_published(&mut self, cx: &mut Context<Self>) {
+        if let Some(sizes) = Published::<FolderSizes>::get(cx).copied() {
+            self.folder_sizes_arrived(sizes);
             cx.emit(WindowEvent::Settings);
             cx.notify();
         }

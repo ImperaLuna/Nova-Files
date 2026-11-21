@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui::{App, Context, Entity, Subscription, Window};
-use nova_files_api::{Command, HiddenFiles, ListingId};
+use nova_files_api::{Command, FolderSizes, HiddenFiles, ListingId};
 use nova_files_shell::path_bar::PathBarEvent;
 use nova_files_shell::{
     self as shell, CloseWhen, EntriesAsked, FolderName, Host, IslandAsk, IslandAsked, NavAsk,
@@ -56,6 +56,7 @@ impl MainWindow {
                 }
             }),
             cx.observe_global::<Published<HiddenFiles>>(Self::hidden_published),
+            cx.observe_global::<Published<FolderSizes>>(Self::folder_sizes_published),
             cx.observe_global::<Published<ThumbnailsShown>>(Self::thumbnails_published),
             cx.observe_global::<Published<KnownFolders>>(Self::known_published),
         ]);

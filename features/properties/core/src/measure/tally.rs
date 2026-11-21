@@ -69,6 +69,10 @@ impl Tally {
             .fold(Size::default(), |total, slot| total.plus(slot.size()))
     }
 
+    pub fn sizes(&self) -> Vec<Size> {
+        self.slots.iter().map(Slot::size).collect()
+    }
+
     pub fn take_changed(&self) -> Vec<(usize, Size)> {
         self.slots
             .iter()

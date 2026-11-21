@@ -391,7 +391,7 @@ async fn a_click_on_a_column_head_orders_the_list_by_it(cx: &mut TestAppContext)
     assert_eq!(first, last);
 
     click(cx, "head-size");
-    shows(cx, ["Projects", "big.txt", "a.txt", "notes.txt"]).await;
+    shows(cx, ["big.txt", "a.txt", "Projects", "notes.txt"]).await;
     cx.run_until_parked();
     assert!(cx.debug_bounds("arrow-size").is_some());
     assert!(cx.debug_bounds("arrow-name").is_none());

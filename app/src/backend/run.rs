@@ -7,6 +7,7 @@ use nova_files_archives_api as archives_api;
 use nova_files_disk::home::Home;
 use nova_files_drives_api::{Command as DrivesCommand, DriveOffer, Event as DrivesEvent};
 use nova_files_drives_core::{Store as DrivesStore, disk_space};
+use nova_files_entries_core::FolderSizer;
 use nova_files_folders_api as folders_api;
 use nova_files_folders_core::Store as FolderViewsStore;
 use nova_files_gathered_api as gathered_api;
@@ -58,6 +59,7 @@ pub struct Setup {
     pub open_with: OpenWithWorker,
     pub jobs: Arc<Jobs>,
     pub measurer: Measurer,
+    pub folder_sizer: Arc<FolderSizer>,
     pub drives: DrivesStore,
     pub recent: RecentStore,
     pub folder_views: FolderViewsStore,
