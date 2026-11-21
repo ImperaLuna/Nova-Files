@@ -86,11 +86,8 @@ mod tests {
 
     #[test]
     fn a_folder_opened_through_a_link_measures_what_its_folders_hold() {
-        let root = std::env::temp_dir().join(format!(
-            "nova-files-folder-measure-link-{}",
-            std::process::id()
-        ));
-        fs::remove_dir_all(&root).ok();
+        let folder = TestFolder::new("folder-measure-link");
+        let root = folder.path();
         fs::create_dir_all(root.join("real/inner")).unwrap();
         fs::write(root.join("real/inner/one"), [0_u8; 300]).unwrap();
         std::os::unix::fs::symlink(root.join("real"), root.join("link")).unwrap();
@@ -98,7 +95,6 @@ mod tests {
         let totals =
             FolderMeasure.measure(&root.join("link"), &["inner".into()], &|| false, &|_| {});
 
-        fs::remove_dir_all(&root).ok();
         assert_eq!(totals, Some(vec![300]));
     }
 

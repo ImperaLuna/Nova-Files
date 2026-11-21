@@ -196,8 +196,8 @@ fn the_oldest_folder_is_forgotten_past_the_cap() {
 
 #[test]
 fn gathered_folders_are_measured_where_each_one_lives() {
-    let root = std::env::temp_dir().join(format!("nova-files-sizes-rows-{}", std::process::id()));
-    fs::remove_dir_all(&root).ok();
+    let folder = TestFolder::new("sizes-rows");
+    let root = folder.path();
     fs::create_dir_all(root.join("one/small")).unwrap();
     fs::create_dir_all(root.join("two/big")).unwrap();
     let Bench {
@@ -225,7 +225,6 @@ fn gathered_folders_are_measured_where_each_one_lives() {
     listed(1);
     let first = take(&events);
 
-    fs::remove_dir_all(&root).ok();
     assert_eq!(measure.asked.load(Ordering::SeqCst), 2);
     assert_eq!(first.listings, [["small", "big"], ["big", "small"]]);
 }
