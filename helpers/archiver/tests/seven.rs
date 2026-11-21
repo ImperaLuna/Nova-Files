@@ -248,8 +248,13 @@ fn a_damaged_7z_is_broken_and_other_files_unsupported() {
 fn stopping_a_7z_run_ends_it() {
     let (_held, folder) = sources("stop");
     let archive = make(&folder, None);
-    let stopped = archiver().extract(&archive, &folder.join("into"), None, |_| Flow::Stop);
+    let mut asked = 0;
+    let stopped = archiver().extract(&archive, &folder.join("into"), None, |_| {
+        asked += 1;
+        Flow::Stop
+    });
     assert_eq!(stopped, Err(ArchiveFailure::Cancelled));
+    assert_eq!(asked, 1);
 }
 
 #[test]

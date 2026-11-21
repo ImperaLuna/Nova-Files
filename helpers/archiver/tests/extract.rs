@@ -271,14 +271,17 @@ fn the_caller_stops_it() {
 fn stopping_a_held_run_ends_it() {
     let (_held, folder) = folder("stop-held");
     let archive = many(&folder, 3);
+    let mut after_stop = 0;
+    let mut stopped = false;
     let result = archiver().extract(&archive, &folder.join("into"), None, |extracting| {
-        if extracting == Extracting::Held {
-            Flow::Stop
-        } else {
-            Flow::Hold
+        if stopped {
+            after_stop += 1;
         }
+        stopped |= extracting == Extracting::Held;
+        if stopped { Flow::Stop } else { Flow::Hold }
     });
     assert_eq!(result, Err(ArchiveFailure::Cancelled));
+    assert_eq!(after_stop, 0);
 }
 
 #[test]

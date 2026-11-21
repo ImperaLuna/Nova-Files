@@ -146,20 +146,36 @@ mod tests {
         let pid_file = folder.path().join("pid");
         let script = format!("echo $$ > '{}'; while :; do :; done", pid_file.display());
         let lead = [OsStr::new("-c"), OsStr::new(&script)];
-        let running = || std::fs::read_to_string(&pid_file).is_ok_and(|pid| pid.ends_with('\n'));
+        let helper = std::cell::OnceCell::new();
+        let stopped = || {
+            let Some(pid) = std::fs::read_to_string(&pid_file)
+                .ok()
+                .filter(|pid| pid.ends_with('\n'))
+            else {
+                return false;
+            };
+            helper.get_or_init(|| {
+                let pid = Pid::from_raw(pid.trim().parse().unwrap()).unwrap();
+                process::pidfd_open(pid, PidfdFlags::empty()).unwrap()
+            });
+            true
+        };
         let listed = list(
             Path::new("/bin/sh"),
             &lead,
             (Path::new("/a.zip"), None),
-            &running,
+            &stopped,
         );
         assert_eq!(listed, Err(ArchiveFailure::Cancelled));
-        let pid = std::fs::read_to_string(&pid_file)
-            .unwrap()
-            .trim()
-            .parse()
-            .unwrap();
-        assert!(process::test_kill_process(Pid::from_raw(pid).unwrap()).is_err());
+        let mut exited = [PollFd::new(helper.get().unwrap(), PollFlags::IN)];
+        assert_eq!(
+            poll(
+                &mut exited,
+                Some(&Timespec::try_from(Duration::ZERO).unwrap())
+            )
+            .unwrap(),
+            1
+        );
     }
 
     #[test]

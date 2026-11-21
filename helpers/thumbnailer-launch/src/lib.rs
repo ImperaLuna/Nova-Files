@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn each_answer_is_reported_before_the_helper_exits() {
-        let (_helper_folder, helper) = helper_that_answers_then_hangs(2);
+        let (_helper_folder, helper) = helper_that_answers_then_hangs(3);
         let jobs = [job("a"), job("b"), job("c")];
         let mut reported = Vec::new();
         run(
