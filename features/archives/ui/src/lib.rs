@@ -270,7 +270,7 @@ fn writable_folder(scene: &Scene) -> Option<PathBuf> {
 }
 
 fn has_archives(part: &ArchivesPart, scene: &Scene, cx: &App) -> bool {
-    !scene.picker && !scene.rules.trashed && !part.archives(cx).is_empty()
+    !scene.picker && !scene.rules.read_only && !part.archives(cx).is_empty()
 }
 
 fn can_compress(_: &ArchivesPart, scene: &Scene, _: &App) -> bool {
