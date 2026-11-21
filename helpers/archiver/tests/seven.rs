@@ -82,7 +82,7 @@ fn make(folder: &Path, password: Option<&str>) -> PathBuf {
 
 fn kinds(archive: &Path, password: Option<&str>) -> Vec<(String, ArchiveKind, u64, u32, bool)> {
     let mut entries: Vec<_> = archiver()
-        .list_locked(archive, password)
+        .list_locked(archive, password, &|| false)
         .unwrap()
         .into_iter()
         .map(|entry| {
@@ -158,7 +158,7 @@ fn a_locked_7z_hides_its_names_until_the_password_is_right() {
         Err(ArchiveFailure::NeedsPassword)
     );
     assert_eq!(
-        archiver().list_locked(&archive, Some("nope")),
+        archiver().list_locked(&archive, Some("nope"), &|| false),
         Err(ArchiveFailure::WrongPassword)
     );
     let listed = kinds(&archive, Some("pw"));
