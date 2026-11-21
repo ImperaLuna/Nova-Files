@@ -95,6 +95,9 @@ impl MainWindow {
             Event::FolderListed(listing) if self.asked == Some(listing.id) => {
                 self.listing_arrived(listing, cx);
             }
+            Event::FolderListed(listing) if self.sorted_again(&listing) => {
+                self.listing_arrived(listing, cx);
+            }
             Event::FolderListed(listing) if self.search.asked == Some(listing.id) => {
                 self.found_arrived(listing, cx);
             }
@@ -113,13 +116,13 @@ impl MainWindow {
             {
                 self.details_arrived(first, &details, &icons, cx);
             }
-            Event::FoldersMeasured { id, sizes, done }
+            Event::FoldersMeasured { id, sizes }
                 if self
                     .listing
                     .as_ref()
                     .is_some_and(|listing| listing.id == id) =>
             {
-                self.folders_measured(&sizes, done, cx);
+                self.folders_measured(&sizes, cx);
             }
             Event::FolderListed(stale) => self.dropped_listing(stale.id),
             Event::WindowState(bytes) => {
