@@ -45,6 +45,15 @@ pub enum Command {
         query: String,
         within: Option<PathBuf>,
     },
+    /// Complete `typed`, a path as someone types it in a launcher
+    /// (`~/Doc`, `/etc/sy`, `~`): the entries of its folder whose names
+    /// start with what follows its last `/`, case aside. `~` is home. Dot
+    /// entries count only when that part starts with a dot. The answer is
+    /// one [`Event::Completed`], folders first and then by name, at most
+    /// `limit` entries (and at most [`MAX_HITS`]), or
+    /// [`Event::CompleteFailed`]. A folder that doesn't exist completes to
+    /// nothing. It reads the folder as it is now, without the index.
+    Complete { typed: String, limit: u32 },
 }
 
 /// Something the search feature's core half tells one client.
@@ -62,6 +71,16 @@ pub enum Event {
     SearchFailed { id: SearchId, reason: SearchFailed },
     /// [`Command::Find`] `id` couldn't run.
     FindFailed { id: ListingId, reason: SearchFailed },
+    /// The entries that complete [`Command::Complete`] `typed`.
+    Completed {
+        typed: String,
+        entries: Vec<Completion>,
+    },
+    /// [`Command::Complete`] `typed` couldn't run.
+    CompleteFailed {
+        typed: String,
+        reason: CompleteFailed,
+    },
 }
 
 /// Names one search request.
@@ -100,4 +119,25 @@ pub enum SearchFailed {
     NoIndex,
     /// The home folder couldn't be indexed.
     IndexFailed,
+}
+
+/// One entry that completes a typed path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Completion {
+    /// The entry's absolute path, home spelled out.
+    pub path: PathBuf,
+    /// Whether it is a folder, or a link to one.
+    pub folder: bool,
+}
+
+/// Why the core couldn't complete a typed path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CompleteFailed {
+    /// It starts with neither `/` nor `~`, or names another user's home
+    /// (`~alice`).
+    NotAPath,
+    /// It starts with `~` and there is no home folder.
+    NoHome,
+    /// Its folder couldn't be read.
+    Unreadable,
 }

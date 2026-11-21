@@ -145,6 +145,10 @@ impl Launcher {
             .unwrap();
     }
 
+    fn complete(&self, typed: &str, limit: u32) -> zbus::Result<Vec<(String, bool)>> {
+        self.search.call("Complete", &(typed, limit))
+    }
+
     fn stages(&self, id: u64) -> Vec<Vec<(String, String)>> {
         let mut stages = Vec::new();
         loop {
@@ -585,4 +589,77 @@ fn open_in_the_default_app(apps: &Path) {
     let written = written.recv_timeout(WAIT).unwrap();
     assert_eq!(written, format!("{} {TOKEN}", scratch.file().display()));
     assert!(opened.recv_timeout(QUIET).is_err());
+}
+
+#[test]
+fn a_typed_path_completes_to_its_folders_entries_without_the_index() {
+    let scratch = Scratch::new();
+    let home = scratch.home();
+    fs::create_dir_all(home.join("Downloads")).unwrap();
+    fs::create_dir_all(home.join(".dotfiles")).unwrap();
+    fs::write(home.join("doc.txt"), b"").unwrap();
+    std::os::unix::fs::symlink(home.join("Documents"), home.join("docs-link")).unwrap();
+    let service = service(&scratch, false);
+    let launcher = Launcher::new(&service.bus);
+    let at = |name: &str, folder: bool| (home.join(name).to_str().unwrap().to_owned(), folder);
+    assert_eq!(
+        launcher.complete("~/doc", LIMIT).unwrap(),
+        [
+            at("docs-link", true),
+            at("Documents", true),
+            at("doc.txt", false)
+        ]
+    );
+    assert_eq!(
+        launcher.complete("~", LIMIT).unwrap(),
+        [
+            at("docs-link", true),
+            at("Documents", true),
+            at("Downloads", true),
+            at("doc.txt", false)
+        ]
+    );
+    assert_eq!(
+        launcher.complete("~/.", LIMIT).unwrap(),
+        [at(".dotfiles", true)]
+    );
+    assert_eq!(
+        launcher.complete("~/Documents/", LIMIT).unwrap(),
+        [
+            at("Documents/notes", false),
+            at("Documents/report.pdf", false)
+        ]
+    );
+    assert_eq!(
+        launcher.complete("~/DOWN", 1).unwrap(),
+        [at("Downloads", true)]
+    );
+    let typed = format!("{}/Documents/rep", home.display());
+    assert_eq!(
+        launcher.complete(&typed, LIMIT).unwrap(),
+        [at("Documents/report.pdf", false)]
+    );
+}
+
+#[test]
+fn a_path_that_leads_nowhere_completes_to_nothing() {
+    let scratch = Scratch::new();
+    let service = service(&scratch, false);
+    let launcher = Launcher::new(&service.bus);
+    assert_eq!(launcher.complete("~/Nowhere/x", LIMIT).unwrap(), []);
+    assert_eq!(launcher.complete("~/Documents/notes/", LIMIT).unwrap(), []);
+}
+
+#[test]
+fn only_paths_from_root_or_home_complete() {
+    let scratch = Scratch::new();
+    let service = service(&scratch, false);
+    let launcher = Launcher::new(&service.bus);
+    for typed in ["Documents", "~alice/Doc"] {
+        let refused = zbus::fdo::Error::from(launcher.complete(typed, LIMIT).unwrap_err());
+        assert!(
+            matches!(refused, zbus::fdo::Error::InvalidArgs(_)),
+            "{typed}: {refused}"
+        );
+    }
 }
