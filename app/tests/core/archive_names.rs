@@ -29,7 +29,7 @@ fn fake_archiver(helper: PathBuf) -> nova_files::Archiver {
 fn every_format_gets_the_same_name_from_the_window_and_the_core() {
     let scripts = TestFolder::new("archive-names-helper");
     let helper = scripts.join("archiver");
-    let bench = Bench::with_archiver("archive-names", fake_archiver(helper.clone()));
+    let bench = Bench::with_archiver("archive-names", fake_archiver(helper));
     let client = bench.client();
     for packing in Packing::ALL {
         for (source, kind) in SOURCES {
