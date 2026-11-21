@@ -25,6 +25,7 @@ use nova_files_thumbnails_api::Event;
 const THUMBNAILS_FOLDER: &str = "thumbnails";
 const HELPER_NAME: &str = "nova-files-thumbnailer";
 const BATCH: usize = 8;
+const WORKERS: usize = 4;
 const WORKER_THREAD: &str = "nova-files-thumbnails";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,11 +69,18 @@ impl Queue {
             state: Mutex::new(State::default()),
             wake: Condvar::new(),
         });
-        let worker = Arc::clone(&shared);
-        thread::Builder::new()
-            .name(WORKER_THREAD.to_owned())
-            .spawn(move || work(&worker, &setup, events.as_ref()))
-            .ok()?;
+        let setup = Arc::new(setup);
+        for events in std::iter::repeat_n(events, WORKERS) {
+            let worker = Arc::clone(&shared);
+            let setup = Arc::clone(&setup);
+            let started = thread::Builder::new()
+                .name(WORKER_THREAD.to_owned())
+                .spawn(move || work(&worker, &setup, events.as_ref()));
+            if started.is_err() {
+                shared.update(|state| state.closed = true);
+                return None;
+            }
+        }
         Some(Self { shared })
     }
 
