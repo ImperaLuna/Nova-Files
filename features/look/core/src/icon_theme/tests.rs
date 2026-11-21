@@ -1,17 +1,16 @@
+use std::fs;
 use std::path::PathBuf;
-use std::{env, fs};
+
+use nova_files_test_folder::TestFolder;
 
 use super::index::{Folder, Sizes};
 use super::*;
 
-struct Base(PathBuf);
+struct Base(TestFolder);
 
 impl Base {
     fn new(name: &str) -> Self {
-        let dir = env::temp_dir().join(format!("nova-files-icons-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&dir).ok();
-        fs::create_dir_all(&dir).unwrap();
-        Self(dir)
+        Self(TestFolder::new(&format!("icons-{name}")))
     }
 
     fn index(&self, theme: &str, text: &str) -> &Self {
@@ -29,12 +28,6 @@ impl Base {
 
     fn path(&self, theme: &str, file: &str) -> PathBuf {
         self.0.join(theme).join(file)
-    }
-}
-
-impl Drop for Base {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }
 
@@ -93,7 +86,10 @@ fn names(names: &[&str]) -> Vec<String> {
 const SIZE: u32 = 48;
 
 fn themes(chosen: Option<&str>, bases: &[&Base]) -> IconThemes {
-    let bases = bases.iter().map(|base| base.0.clone()).collect();
+    let bases = bases
+        .iter()
+        .map(|base| base.0.path().to_path_buf())
+        .collect();
     IconThemes::new(chosen.map(str::to_owned), bases, SIZE, 1)
 }
 
@@ -296,28 +292,31 @@ fn the_chosen_theme_comes_from_the_first_settings_file_naming_one() {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, text).unwrap();
     };
-    assert_eq!(name::chosen(&config.0), None);
+    assert_eq!(name::chosen(config.0.path()), None);
     let comment = "x".repeat(64 * 1024);
     write(
         "kdeglobals",
         &format!("# {comment}\n[General]\nTheme=No\n[Icons]\nTheme=breeze-dark\n"),
     );
-    assert_eq!(name::chosen(&config.0).as_deref(), Some("breeze-dark"));
+    assert_eq!(
+        name::chosen(config.0.path()).as_deref(),
+        Some("breeze-dark")
+    );
     write(
         "gtk-4.0/settings.ini",
         "[Settings]\ngtk-icon-theme-name = \"Papirus\"\n",
     );
-    assert_eq!(name::chosen(&config.0).as_deref(), Some("Papirus"));
+    assert_eq!(name::chosen(config.0.path()).as_deref(), Some("Papirus"));
     write(
         "gtk-3.0/settings.ini",
         "[Settings]\ngtk-icon-theme-name=../x\n",
     );
-    assert_eq!(name::chosen(&config.0).as_deref(), Some("Papirus"));
+    assert_eq!(name::chosen(config.0.path()).as_deref(), Some("Papirus"));
     write(
         "gtk-3.0/settings.ini",
         "[Settings]\ngtk-icon-theme-name=Adwaita\n",
     );
-    assert_eq!(name::chosen(&config.0).as_deref(), Some("Adwaita"));
+    assert_eq!(name::chosen(config.0.path()).as_deref(), Some("Adwaita"));
     for not_a_name in ["", " ", "..", ".", "a/b", "''"] {
         assert_eq!(name::checked(not_a_name), None, "{not_a_name}");
     }

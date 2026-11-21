@@ -122,7 +122,7 @@ fn unescape(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use nova_files_test_folder::TestFolder;
 
     use super::*;
 
@@ -177,22 +177,12 @@ mod tests {
         );
     }
 
-    struct TempHome(PathBuf);
-
-    impl Drop for TempHome {
-        fn drop(&mut self) {
-            fs::remove_dir_all(&self.0).ok();
-        }
-    }
-
     #[test]
     fn reads_user_dirs_up_to_the_size_cap() {
-        let folder =
-            TempHome(env::temp_dir().join(format!("nova-files-user-dirs-{}", std::process::id())));
-        fs::create_dir_all(&folder.0).unwrap();
-        let small = folder.0.join("small");
-        let exact = folder.0.join("exact");
-        let big = folder.0.join("big");
+        let folder = TestFolder::new("user-dirs");
+        let small = folder.join("small");
+        let exact = folder.join("exact");
+        let big = folder.join("big");
         let cap = usize::try_from(USER_DIRS_MAX_BYTES).unwrap();
         fs::write(&small, "XDG_DOCUMENTS_DIR=\"$HOME/Docs\"\n").unwrap();
         fs::write(&exact, "a".repeat(cap)).unwrap();
@@ -201,24 +191,23 @@ mod tests {
         assert_eq!(read_user_dirs(&small), "XDG_DOCUMENTS_DIR=\"$HOME/Docs\"\n");
         assert_eq!(read_user_dirs(&exact).len(), cap);
         assert_eq!(read_user_dirs(&big), "");
-        assert_eq!(read_user_dirs(&folder.0.join("missing")), "");
+        assert_eq!(read_user_dirs(&folder.join("missing")), "");
         assert_eq!(USER_DIRS_MAX_BYTES, 65_536);
     }
 
     #[test]
     fn lists_home_then_existing_folders_in_order() {
-        let home =
-            TempHome(env::temp_dir().join(format!("nova-files-places-{}", std::process::id())));
-        fs::create_dir_all(home.0.join("Bilder")).unwrap();
-        fs::create_dir_all(home.0.join("Documents")).unwrap();
-        fs::create_dir_all(home.0.join("Downloads")).unwrap();
+        let home = TestFolder::new("places");
+        fs::create_dir_all(home.join("Bilder")).unwrap();
+        fs::create_dir_all(home.join("Documents")).unwrap();
+        fs::create_dir_all(home.join("Downloads")).unwrap();
         let user_dirs = "XDG_PICTURES_DIR=\"$HOME/Bilder\"\nXDG_DOWNLOAD_DIR=\"$HOME/\"\n";
 
         let home_folder = Home {
-            folder: home.0.clone(),
-            config: home.0.join(".config"),
-            state: home.0.join(".local/state"),
-            data: home.0.join(".local/share"),
+            folder: home.path().to_path_buf(),
+            config: home.join(".config"),
+            state: home.join(".local/state"),
+            data: home.join(".local/share"),
             drive_trashes: false,
         };
         fs::create_dir_all(&home_folder.config).unwrap();
@@ -235,20 +224,20 @@ mod tests {
         assert_eq!(
             found(existing),
             [
-                (PlaceKind::Home, home.0.clone()),
-                (PlaceKind::Documents, home.0.join("Documents")),
-                (PlaceKind::Pictures, home.0.join("Bilder")),
+                (PlaceKind::Home, home.path().to_path_buf()),
+                (PlaceKind::Documents, home.join("Documents")),
+                (PlaceKind::Pictures, home.join("Bilder")),
             ]
         );
         assert_eq!(
             found(wanted),
             [
-                (PlaceKind::Home, home.0.clone()),
-                (PlaceKind::Desktop, home.0.join("Desktop")),
-                (PlaceKind::Documents, home.0.join("Documents")),
-                (PlaceKind::Music, home.0.join("Music")),
-                (PlaceKind::Pictures, home.0.join("Bilder")),
-                (PlaceKind::Videos, home.0.join("Videos")),
+                (PlaceKind::Home, home.path().to_path_buf()),
+                (PlaceKind::Desktop, home.join("Desktop")),
+                (PlaceKind::Documents, home.join("Documents")),
+                (PlaceKind::Music, home.join("Music")),
+                (PlaceKind::Pictures, home.join("Bilder")),
+                (PlaceKind::Videos, home.join("Videos")),
             ]
         );
         assert_eq!(places(None), (Vec::new(), Vec::new()));

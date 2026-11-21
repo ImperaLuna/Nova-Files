@@ -1,7 +1,6 @@
 use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
@@ -13,6 +12,7 @@ use nova_files_api::{
 use nova_files_search_api::{
     Command as SearchCommand, Event as SearchEvent, Hit, MAX_HITS, Matched, SearchFailed, SearchId,
 };
+use nova_files_test_folder::TestFolder;
 
 use crate::common::Core;
 
@@ -20,17 +20,11 @@ const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 const CHANGE_TIMEOUT: Duration = Duration::from_secs(5);
 const LIMIT: u32 = 50;
 
-struct Scratch(PathBuf);
+struct Scratch(TestFolder);
 
 impl Scratch {
     fn new(files: &[&str]) -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-core-search-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let scratch = Self(std::env::temp_dir().join(name));
+        let scratch = Self(TestFolder::new("core-search"));
         fs::create_dir_all(scratch.home()).unwrap();
         for file in files {
             scratch.add(file);
@@ -96,12 +90,6 @@ impl EventSink for Both {
             },
         };
         self.0.send(heard).map_err(|_| ClientGone)
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }
 

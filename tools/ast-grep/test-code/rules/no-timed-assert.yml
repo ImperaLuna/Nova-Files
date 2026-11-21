@@ -1,0 +1,33 @@
+# An assert on measured time fails on a busy machine though the code is
+# right. Check what the time stood for instead (the helper is gone, the
+# result says Cancelled); a test that hangs is ended by nextest's timeout
+# (.config/nextest.toml). Inside a `while` or `loop`, a time check is the
+# wait's timeout and passes; a `for` loop goes over cases and doesn't.
+id: no-timed-assert
+language: rust
+severity: error
+message: Don't assert on measured time; assert what it stands for (the process is gone, the result is Cancelled). A hang is caught by nextest's timeout.
+files:
+  - "app/**/*.rs"
+  - "framework/**/*.rs"
+  - "features/**/*.rs"
+  - "fronts/**/*.rs"
+  - "helpers/**/*.rs"
+rule:
+  kind: macro_invocation
+  all:
+    - has:
+        field: macro
+        regex: '^(debug_)?assert(_eq|_ne)?$'
+    - has:
+        kind: token_tree
+        has:
+          kind: identifier
+          regex: '^elapsed$'
+          stopBy: end
+  not:
+    inside:
+      stopBy: end
+      any:
+        - kind: loop_expression
+        - kind: while_expression

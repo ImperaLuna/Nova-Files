@@ -50,6 +50,8 @@ fn read_only() -> Result<RulesetCreated, Box<dyn Error>> {
 mod tests {
     use std::{fs, io, thread};
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
     fn kernel_has_landlock() -> bool {
@@ -58,10 +60,10 @@ mod tests {
 
     #[test]
     fn writes_only_inside_the_folder() {
-        let root = std::env::temp_dir().join(format!("nova-thumb-sandbox-{}", std::process::id()));
+        let folder = TestFolder::new("thumb-sandbox");
+        let root = folder.path();
         let inside = root.join("thumbnails");
-        fs::create_dir_all(&root).unwrap();
-        let outside = root.clone();
+        let outside = root.to_path_buf();
         let result = thread::spawn(move || {
             lock_in(&inside).unwrap();
             let inside_write = fs::write(inside.join("ok.png"), b"x");
@@ -73,7 +75,6 @@ mod tests {
         })
         .join()
         .unwrap();
-        fs::remove_dir_all(&root).ok();
         assert!(result.0);
         if kernel_has_landlock() {
             assert_eq!(result.1, Err(io::ErrorKind::PermissionDenied));
@@ -82,11 +83,10 @@ mod tests {
 
     #[test]
     fn read_only_writes_nowhere() {
-        let root =
-            std::env::temp_dir().join(format!("nova-thumb-read-only-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let folder = TestFolder::new("thumb-read-only");
+        let root = folder.path();
         fs::write(root.join("there.txt"), b"x").unwrap();
-        let inside = root.clone();
+        let inside = root.to_path_buf();
         let result = thread::spawn(move || {
             lock_in_read_only().unwrap();
             (
@@ -96,7 +96,6 @@ mod tests {
         })
         .join()
         .unwrap();
-        fs::remove_dir_all(&root).ok();
         assert!(result.0);
         if kernel_has_landlock() {
             assert_eq!(result.1, Err(io::ErrorKind::PermissionDenied));

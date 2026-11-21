@@ -150,6 +150,7 @@ pub fn seven_on(path: Option<&OsStr>) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn the_helper_is_next_to_the_program() {
@@ -163,7 +164,8 @@ mod tests {
 
     #[test]
     fn finds_7zip_where_path_says_and_runnable_only() {
-        let root = env::temp_dir().join(format!("nova-seven-on-{}", std::process::id()));
+        let folder = TestFolder::new("seven-on");
+        let root = folder.path();
         let (first, second) = (root.join("a"), root.join("b"));
         std::fs::create_dir_all(&first).unwrap();
         std::fs::create_dir_all(second.join("7z")).unwrap();
@@ -177,7 +179,6 @@ mod tests {
         assert_eq!(seven_on(Some(&path)), Some(first.join("7zz")));
         assert_eq!(seven_on(Some(OsStr::new(""))), None);
         assert_eq!(seven_on(None), None);
-        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

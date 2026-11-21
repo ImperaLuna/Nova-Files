@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use nova_files_api::{FileIcon, IconKind, SortKey};
 use nova_files_disk::ports::Icons;
+use nova_files_test_folder::TestFolder;
 
 use super::*;
 use crate::client::Client;
@@ -110,7 +111,6 @@ impl Bench {
 }
 
 fn sample_folder(root: &Path) {
-    fs::remove_dir_all(root).ok();
     fs::create_dir_all(root.join("big")).unwrap();
     fs::create_dir_all(root.join("small")).unwrap();
     fs::write(root.join("file"), [0_u8; FILE]).unwrap();
@@ -118,8 +118,9 @@ fn sample_folder(root: &Path) {
 
 #[test]
 fn folders_are_measured_then_sorted_with_files_by_what_they_hold() {
-    let root = std::env::temp_dir().join(format!("nova-files-sizes-{}", std::process::id()));
-    sample_folder(&root);
+    let folder = TestFolder::new("sizes");
+    let root = folder.path();
+    sample_folder(root);
     let Bench {
         client,
         events,
@@ -127,11 +128,10 @@ fn folders_are_measured_then_sorted_with_files_by_what_they_hold() {
         sizer,
     } = Bench::new();
 
-    list(&client, &sizer, 1, &root);
+    list(&client, &sizer, 1, root);
     client.want_rows(ListingId(1), EntryId(0), 3, None);
     let listed = take(&events);
 
-    fs::remove_dir_all(&root).ok();
     assert_eq!(
         listed.listings,
         [["big", "small", "file"], ["big", "file", "small"]]
@@ -155,8 +155,9 @@ fn folders_are_measured_then_sorted_with_files_by_what_they_hold() {
 
 #[test]
 fn a_folder_listed_again_is_sorted_by_its_last_totals_and_measured_again() {
-    let root = std::env::temp_dir().join(format!("nova-files-sizes-again-{}", std::process::id()));
-    sample_folder(&root);
+    let folder = TestFolder::new("sizes-again");
+    let root = folder.path();
+    sample_folder(root);
     let Bench {
         client,
         events,
@@ -164,12 +165,11 @@ fn a_folder_listed_again_is_sorted_by_its_last_totals_and_measured_again() {
         sizer,
     } = Bench::new();
 
-    list(&client, &sizer, 1, &root);
+    list(&client, &sizer, 1, root);
     take(&events);
-    list(&client, &sizer, 2, &root);
+    list(&client, &sizer, 2, root);
     let again = take(&events);
 
-    fs::remove_dir_all(&root).ok();
     assert_eq!(
         again.listings,
         [["big", "file", "small"], ["big", "file", "small"]]
@@ -196,8 +196,8 @@ fn the_oldest_folder_is_forgotten_past_the_cap() {
 
 #[test]
 fn gathered_folders_are_measured_where_each_one_lives() {
-    let root = std::env::temp_dir().join(format!("nova-files-sizes-rows-{}", std::process::id()));
-    fs::remove_dir_all(&root).ok();
+    let folder = TestFolder::new("sizes-rows");
+    let root = folder.path();
     fs::create_dir_all(root.join("one/small")).unwrap();
     fs::create_dir_all(root.join("two/big")).unwrap();
     let Bench {
@@ -225,7 +225,6 @@ fn gathered_folders_are_measured_where_each_one_lives() {
     listed(1);
     let first = take(&events);
 
-    fs::remove_dir_all(&root).ok();
     assert_eq!(measure.asked.load(Ordering::SeqCst), 2);
     assert_eq!(first.listings, [["small", "big"], ["big", "small"]]);
 }

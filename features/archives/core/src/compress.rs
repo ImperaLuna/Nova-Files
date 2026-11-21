@@ -149,7 +149,7 @@ fn stop_for(failure: ArchiveFailure, first: &Path, target: &Path) -> Stop {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nova_files_jobs::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn totals_count_file_bytes_and_every_entry_once() {

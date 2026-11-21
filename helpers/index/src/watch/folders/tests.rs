@@ -1,4 +1,5 @@
 use super::*;
+use nova_files_test_folder::TestFolder;
 use rustix::fs::inotify::CreateFlags;
 
 fn folders(root: &Path) -> Folders {
@@ -37,9 +38,8 @@ fn events_from_unknown_watches_are_passed_over() {
 
 #[test]
 fn a_watch_the_kernel_dropped_is_forgotten() {
-    let root =
-        std::env::temp_dir().join(format!("nova-files-watch-ignored-{}", std::process::id()));
-    fs::create_dir_all(&root).unwrap();
+    let folder = TestFolder::new("watch-ignored");
+    let root = folder.path().to_path_buf();
     let mut folders = folders(&root);
     assert_eq!(folders.watch(root.clone(), Zone::Home), None);
     let wd = folders.by_path[&root];
@@ -51,13 +51,10 @@ fn a_watch_the_kernel_dropped_is_forgotten() {
     };
     assert_eq!(
         folders.handle(&[ignored]),
-        [Change::Rescan {
-            folder: root.clone()
-        }]
+        [Change::Rescan { folder: root }]
     );
     assert!(folders.by_wd.is_empty());
     assert!(folders.by_path.is_empty());
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
@@ -69,7 +66,8 @@ fn folders_not_read_by_the_crawl_are_not_watched() {
             folder == self.0
         }
     }
-    let root = std::env::temp_dir().join(format!("nova-files-watch-drive-{}", std::process::id()));
+    let folder = TestFolder::new("watch-drive");
+    let root = folder.join("root");
     fs::create_dir_all(root.join("drive/inside")).unwrap();
     fs::create_dir_all(root.join("plain")).unwrap();
     let built = crawl::crawl_with(&root, DriveIsMounted(root.join("drive")), || false).unwrap();
@@ -81,14 +79,15 @@ fn folders_not_read_by_the_crawl_are_not_watched() {
     let mut watched: Vec<&PathBuf> = folders.by_path.keys().collect();
     watched.sort();
     assert_eq!(watched, [&root, &root.join("plain")]);
-    fs::remove_file(&saved).ok();
-    fs::remove_dir_all(&root).ok();
 }
 
-fn watched_folder(test: &str, paths: &[&str], stopping: Stopping) -> (PathBuf, Folders) {
-    let root = std::env::temp_dir().join(format!("nova-files-{test}-{}", std::process::id()));
-    fs::remove_dir_all(&root).ok();
-    fs::create_dir_all(&root).unwrap();
+fn watched_folder(
+    test: &str,
+    paths: &[&str],
+    stopping: Stopping,
+) -> (TestFolder, PathBuf, Folders) {
+    let held = TestFolder::new(test);
+    let root = held.path().to_path_buf();
     for path in paths {
         if path.ends_with('/') {
             fs::create_dir_all(root.join(path)).unwrap();
@@ -100,7 +99,7 @@ fn watched_folder(test: &str, paths: &[&str], stopping: Stopping) -> (PathBuf, F
     let fd = inotify::init(CreateFlags::CLOEXEC.union(CreateFlags::NONBLOCK)).unwrap();
     let mut folders = Folders::new(fd, root.clone(), stopping);
     assert_eq!(folders.watch(root.clone(), Zone::Home), None);
-    (root, folders)
+    (held, root, folders)
 }
 
 fn event(folders: &Folders, folder: &Path, mask: ReadFlags, cookie: u32, name: &str) -> Event {
@@ -126,16 +125,17 @@ const DIR: ReadFlags = ReadFlags::ISDIR;
 
 #[test]
 fn a_new_tree_is_not_read_while_stopping() {
-    let (root, mut folders) = watched_folder("stopping", &["new/inner/file"], Box::new(|| true));
+    let (_held, root, mut folders) =
+        watched_folder("stopping", &["new/inner/file"], Box::new(|| true));
     let created = event(&folders, &root, ReadFlags::CREATE.union(DIR), 0, "new");
     assert_eq!(folders.handle(&[created]), []);
     assert!(!folders.by_path.contains_key(&root.join("new")));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_folder_made_and_moved_before_its_events_are_read_is_watched() {
-    let (root, mut folders) = watched_folder("made-moved", &["new/file"], Box::new(|| false));
+    let (_held, root, mut folders) =
+        watched_folder("made-moved", &["new/file"], Box::new(|| false));
     let changes = folders.handle(&[
         event(&folders, &root, ReadFlags::CREATE.union(DIR), 0, "old"),
         event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 3, "old"),
@@ -143,24 +143,23 @@ fn a_folder_made_and_moved_before_its_events_are_read_is_watched() {
     ]);
     assert!(added_paths(&changes).contains(&root.join("new/file").as_path()));
     assert!(folders.by_path.contains_key(&root.join("new")));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_file_moved_inside_home_is_added_at_its_new_path_too() {
-    let (root, mut folders) = watched_folder("file-moved", &["b.txt"], Box::new(|| false));
+    let (_held, root, mut folders) = watched_folder("file-moved", &["b.txt"], Box::new(|| false));
     let changes = folders.handle(&[
         event(&folders, &root, ReadFlags::MOVED_FROM, 4, "a.txt"),
         event(&folders, &root, ReadFlags::MOVED_TO, 4, "b.txt"),
     ]);
     assert!(matches!(&changes[0], Change::Moved { to, .. } if to == &root.join("b.txt")));
     assert_eq!(added_paths(&changes), [root.join("b.txt")]);
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_watched_folder_moved_inside_home_keeps_its_watches() {
-    let (root, mut folders) = watched_folder("folder-moved", &["new/file"], Box::new(|| false));
+    let (_held, root, mut folders) =
+        watched_folder("folder-moved", &["new/file"], Box::new(|| false));
     let (old, new) = (root.join("old"), root.join("new"));
     fs::create_dir(&old).unwrap();
     let zone = policy::enters(&Zone::Home, OsStr::new("old")).unwrap();
@@ -179,12 +178,11 @@ fn a_watched_folder_moved_inside_home_keeps_its_watches() {
     );
     assert!(folders.by_path.contains_key(&new));
     assert!(!folders.by_path.contains_key(&old));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_folder_moved_over_another_keeps_its_watch() {
-    let (root, mut folders) = watched_folder("over", &["x/", "y/"], Box::new(|| false));
+    let (_held, root, mut folders) = watched_folder("over", &["x/", "y/"], Box::new(|| false));
     let (x, y) = (root.join("x"), root.join("y"));
     let zone = policy::enters(&Zone::Home, OsStr::new("x")).unwrap();
     assert_eq!(folders.watch(x.clone(), zone.clone()), None);
@@ -202,12 +200,11 @@ fn a_folder_moved_over_another_keeps_its_watch() {
         },
     ]);
     assert_eq!(folders.by_path.get(&y), Some(&moving));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_dropped_watch_inside_home_asks_for_nothing() {
-    let (root, mut folders) = watched_folder("dropped", &["a/"], Box::new(|| false));
+    let (_held, root, mut folders) = watched_folder("dropped", &["a/"], Box::new(|| false));
     let a = root.join("a");
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone), None);
@@ -219,12 +216,11 @@ fn a_dropped_watch_inside_home_asks_for_nothing() {
     };
     assert_eq!(folders.handle(&[ignored]), []);
     assert!(!folders.by_path.contains_key(&a));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn home_moved_away_asks_for_a_rescan() {
-    let (root, mut folders) = watched_folder("home-moved", &["a/"], Box::new(|| false));
+    let (_held, root, mut folders) = watched_folder("home-moved", &["a/"], Box::new(|| false));
     let a = root.join("a");
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone), None);
@@ -242,12 +238,11 @@ fn home_moved_away_asks_for_a_rescan() {
         }]
     );
     assert!(folders.by_path.is_empty());
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_folder_watched_again_at_its_new_path_leaves_the_old_one() {
-    let (root, mut folders) = watched_folder("rewatched", &["a/"], Box::new(|| false));
+    let (_held, root, mut folders) = watched_folder("rewatched", &["a/"], Box::new(|| false));
     let (a, b) = (root.join("a"), root.join("b"));
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone.clone()), None);
@@ -264,18 +259,19 @@ fn a_folder_watched_again_at_its_new_path_leaves_the_old_one() {
         "a",
     )]);
     assert_eq!(folders.by_path.get(&b), Some(&wd));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_folder_that_left_its_parent_is_removed_before_the_parent_moves() {
-    let (root, mut folders) = watched_folder("left-then-moved", &["a/sub/"], Box::new(|| false));
+    let (_held, root, mut folders) =
+        watched_folder("left-then-moved", &["a/sub/"], Box::new(|| false));
     let (a, sub, b) = (root.join("a"), root.join("a/sub"), root.join("b"));
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone.clone()), None);
     let inner = policy::enters(&zone, OsStr::new("sub")).unwrap();
     assert_eq!(folders.watch(sub.clone(), inner), None);
-    let outside = std::env::temp_dir().join(format!("nova-files-left-{}", std::process::id()));
+    let outside_folder = TestFolder::new("left");
+    let outside = outside_folder.join("sub");
     fs::rename(&sub, &outside).unwrap();
     fs::rename(&a, &b).unwrap();
     let changes = folders.handle(&[
@@ -296,13 +292,12 @@ fn a_folder_that_left_its_parent_is_removed_before_the_parent_moves() {
     assert!(folders.by_path.contains_key(&b));
     assert!(!folders.by_path.contains_key(&b.join("sub")));
     assert!(!folders.by_path.contains_key(&sub));
-    fs::remove_dir_all(&outside).ok();
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn swapped_files_are_both_added_as_they_are() {
-    let (root, mut folders) = watched_folder("swap-files", &["a.txt", "b.txt"], Box::new(|| false));
+    let (_held, root, mut folders) =
+        watched_folder("swap-files", &["a.txt", "b.txt"], Box::new(|| false));
     let (a, b) = (root.join("a.txt"), root.join("b.txt"));
     rustix::fs::renameat_with(
         rustix::fs::CWD,
@@ -328,12 +323,11 @@ fn swapped_files_are_both_added_as_they_are() {
     added.sort();
     added.dedup();
     assert_eq!(added, [a.as_path(), &b]);
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_file_and_a_folder_swapped_are_both_read_again() {
-    let (root, mut folders) =
+    let (_held, root, mut folders) =
         watched_folder("swap-mixed", &["a.txt", "b/inner.txt"], Box::new(|| false));
     let (a, b) = (root.join("a.txt"), root.join("b"));
     let zone = policy::enters(&Zone::Home, OsStr::new("b")).unwrap();
@@ -373,12 +367,11 @@ fn a_file_and_a_folder_swapped_are_both_read_again() {
     let wd = folders.by_path[&a];
     assert_eq!(inotify::add_watch(&folders.inotify, &a, WATCHED), Ok(wd));
     assert!(!folders.by_path.contains_key(&b));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_hidden_folder_swapped_with_a_shown_one_is_read_as_it_is_now() {
-    let (root, mut folders) = watched_folder(
+    let (_held, root, mut folders) = watched_folder(
         "swap-hidden",
         &[".hidden/secret.txt", "shown/old.txt"],
         Box::new(|| false),
@@ -435,12 +428,11 @@ fn a_hidden_folder_swapped_with_a_shown_one_is_read_as_it_is_now() {
         Ok(wd)
     );
     assert!(!folders.by_path.contains_key(&hidden));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_profile_moved_over_a_folder_removes_it() {
-    let (root, mut folders) = watched_folder(
+    let (_held, root, mut folders) = watched_folder(
         "profile-over",
         &["dest/", ".app/profiles.ini"],
         Box::new(|| false),
@@ -459,20 +451,20 @@ fn a_profile_moved_over_a_folder_removes_it() {
     ]);
     assert_eq!(changes, [Change::Removed { path: dest.clone() }]);
     assert!(!folders.by_path.contains_key(&dest));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_new_folder_where_one_left_from_inside_is_kept() {
-    let (root, mut folders) = watched_folder("replaced-parent", &["a/sub/"], Box::new(|| false));
+    let (_held, root, mut folders) =
+        watched_folder("replaced-parent", &["a/sub/"], Box::new(|| false));
     let (a, sub) = (root.join("a"), root.join("a/sub"));
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone.clone()), None);
     let inner = policy::enters(&zone, OsStr::new("sub")).unwrap();
     assert_eq!(folders.watch(sub.clone(), inner), None);
     let a_wd = folders.by_path[&a];
-    let outside =
-        std::env::temp_dir().join(format!("nova-files-left-again-{}", std::process::id()));
+    let outside_folder = TestFolder::new("left-again");
+    let outside = outside_folder.join("sub");
     fs::rename(&sub, &outside).unwrap();
     fs::remove_dir(&a).unwrap();
     fs::create_dir_all(sub.join("new")).unwrap();
@@ -493,13 +485,11 @@ fn a_new_folder_where_one_left_from_inside_is_kept() {
     });
     assert!(matches!(last, Some(Change::Added { .. })), "{changes:?}");
     assert!(folders.by_path.contains_key(&sub.join("new")));
-    fs::remove_dir_all(&outside).ok();
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_folder_made_inside_one_that_then_moved_is_read_where_it_went() {
-    let (root, mut folders) = watched_folder("made-then-moved", &["a/"], Box::new(|| false));
+    let (_held, root, mut folders) = watched_folder("made-then-moved", &["a/"], Box::new(|| false));
     let (a, b) = (root.join("a"), root.join("b"));
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone), None);
@@ -514,12 +504,12 @@ fn a_folder_made_inside_one_that_then_moved_is_read_where_it_went() {
     let (sub, file) = (b.join("sub"), b.join("sub/file"));
     assert_eq!(added_paths(&changes), [sub.as_path(), &file]);
     assert!(folders.by_path.contains_key(&sub));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_file_written_in_a_folder_that_then_moved_is_read_where_it_went() {
-    let (root, mut folders) = watched_folder("written-then-moved", &["a/file"], Box::new(|| false));
+    let (_held, root, mut folders) =
+        watched_folder("written-then-moved", &["a/file"], Box::new(|| false));
     let (a, b) = (root.join("a"), root.join("b"));
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone), None);
@@ -532,12 +522,11 @@ fn a_file_written_in_a_folder_that_then_moved_is_read_where_it_went() {
     ]);
     let file = b.join("file");
     assert_eq!(added_paths(&changes), [file.as_path()]);
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn swapped_folders_are_both_read_again() {
-    let (root, mut folders) =
+    let (_held, root, mut folders) =
         watched_folder("swap", &["a/one.txt", "b/two.txt"], Box::new(|| false));
     let (a, b) = (root.join("a"), root.join("b"));
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
@@ -569,12 +558,11 @@ fn swapped_folders_are_both_read_again() {
         assert_eq!(inotify::add_watch(&folders.inotify, path, WATCHED), Ok(wd));
         assert_eq!(&folders.by_wd[&wd].path, path);
     }
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_folder_moved_twice_before_its_events_are_read_follows_both() {
-    let (root, mut folders) = watched_folder("twice", &["a/"], Box::new(|| false));
+    let (_held, root, mut folders) = watched_folder("twice", &["a/"], Box::new(|| false));
     let a = root.join("a");
     let zone = policy::enters(&Zone::Home, OsStr::new("a")).unwrap();
     assert_eq!(folders.watch(a.clone(), zone), None);
@@ -603,7 +591,6 @@ fn a_folder_moved_twice_before_its_events_are_read_follows_both() {
         ]
     );
     assert!(!folders.by_path.contains_key(&a) && !folders.by_path.contains_key(&b));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
@@ -629,7 +616,7 @@ fn another_drive_is_added_but_not_entered() {
 
 #[test]
 fn a_folder_made_where_one_moved_away_replaces_it() {
-    let (root, mut folders) = watched_folder("reused", &["same/file"], Box::new(|| false));
+    let (_held, root, mut folders) = watched_folder("reused", &["same/file"], Box::new(|| false));
     let changes = folders.handle(&[
         event(&folders, &root, ReadFlags::MOVED_FROM.union(DIR), 5, "same"),
         event(&folders, &root, ReadFlags::CREATE.union(DIR), 0, "same"),
@@ -638,12 +625,12 @@ fn a_folder_made_where_one_moved_away_replaces_it() {
     assert_eq!(changes[0], Change::Removed { path: same.clone() });
     assert!(added_paths(&changes).contains(&same.join("file").as_path()));
     assert!(folders.by_path.contains_key(&same));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn a_folder_that_can_be_read_again_is_read() {
-    let (root, mut folders) = watched_folder("readable", &["locked/file"], Box::new(|| false));
+    let (_held, root, mut folders) =
+        watched_folder("readable", &["locked/file"], Box::new(|| false));
     let changes = folders.handle(&[event(
         &folders,
         &root,
@@ -661,7 +648,6 @@ fn a_folder_that_can_be_read_again_is_read() {
         "locked",
     )]);
     assert!(matches!(again.as_slice(), [Change::Changed { .. }]));
-    fs::remove_dir_all(&root).ok();
 }
 
 #[test]
@@ -669,16 +655,17 @@ fn a_folder_that_cant_be_watched_gets_a_rescan() {
     let mut folders = folders(Path::new("/"));
     let missing = PathBuf::from("/nowhere/at/all");
     assert_eq!(folders.watch(missing, Zone::Home), None);
-    let file = std::env::temp_dir().join(format!("nova-files-watch-file-{}", std::process::id()));
+    let folder = TestFolder::new("watch-file");
+    let file = folder.join("file");
     fs::write(&file, b"").unwrap();
-    assert_eq!(folders.watch(file.clone(), Zone::Home), None);
-    fs::remove_file(&file).ok();
+    assert_eq!(folders.watch(file, Zone::Home), None);
 }
 
 #[test]
 fn a_folder_the_crawl_cant_read_either_is_left_unwatched_without_a_rescan() {
     use std::os::unix::fs::PermissionsExt as _;
-    let root = std::env::temp_dir().join(format!("nova-files-watch-locked-{}", std::process::id()));
+    let folder = TestFolder::new("watch-locked");
+    let root = folder.path().to_path_buf();
     let locked = root.join("locked");
     fs::create_dir_all(&locked).unwrap();
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
@@ -689,7 +676,6 @@ fn a_folder_the_crawl_cant_read_either_is_left_unwatched_without_a_rescan() {
         .then(|| folders.watch(locked.clone(), Zone::Home));
 
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o700)).unwrap();
-    fs::remove_dir_all(&root).ok();
     assert_eq!(watched.flatten(), None);
     assert!(!folders.by_path.contains_key(&locked));
 }

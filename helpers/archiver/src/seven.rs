@@ -358,6 +358,8 @@ fn mode(letters: &[u8]) -> u32 {
 mod tests {
     use std::path::PathBuf;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
     fn found(attributes: &[u8]) -> Found {
@@ -454,7 +456,8 @@ mod tests {
 
     #[test]
     fn finds_a_packed_files_size_among_the_sources() {
-        let root = std::env::temp_dir().join(format!("nova-seven-size-{}", std::process::id()));
+        let folder = TestFolder::new("seven-size");
+        let root = folder.path();
         std::fs::create_dir_all(root.join("docs/in")).unwrap();
         std::fs::write(root.join("docs/in/a.txt"), b"abc").unwrap();
         std::fs::write(root.join("one.txt"), b"12345").unwrap();
@@ -464,6 +467,5 @@ mod tests {
         assert_eq!(packed_size(&sources, b"one.txt"), 5);
         assert_eq!(packed_size(&sources, b"docs/in"), 0);
         assert_eq!(packed_size(&sources, b"other/a.txt"), 0);
-        std::fs::remove_dir_all(&root).ok();
     }
 }

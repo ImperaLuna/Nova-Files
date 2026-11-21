@@ -69,7 +69,7 @@ fn remove_folder(path: &Path) -> Ended {
 #[cfg(test)]
 mod tests {
     use nova_files_api::Failure;
-    use nova_files_jobs::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     use super::*;
 

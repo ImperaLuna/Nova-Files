@@ -12,6 +12,7 @@ use nova_files_look_api as look_api;
 use nova_files_settings_api::{
     self as settings_api, Appearance, SettingChange, Settings, Thumbnails,
 };
+use nova_files_test_folder::TestFolder;
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
 const NOTHING_MORE: Duration = Duration::from_millis(600);
@@ -19,14 +20,11 @@ const SHARED_MODE: u32 = 0o644;
 const PERMISSION_BITS: u32 = 0o7777;
 const LONG_COMMENT: usize = 4096;
 
-struct TempHome(PathBuf);
+struct TempHome(TestFolder);
 
 impl TempHome {
     fn new(name: &str) -> Self {
-        let path =
-            std::env::temp_dir().join(format!("nova-files-settings-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&path).ok();
-        fs::create_dir_all(&path).unwrap();
+        let path = TestFolder::new(&format!("settings-{name}"));
         Self(path)
     }
 
@@ -44,19 +42,13 @@ impl TempHome {
 
     fn core(&self) -> Core {
         let home = Home {
-            folder: self.0.clone(),
+            folder: self.0.path().to_path_buf(),
             config: self.0.join("config"),
             state: self.0.join("state"),
             data: self.0.join("share"),
             drive_trashes: false,
         };
         Core(nova_files::spawn_with(IDLE_EXIT, Some(home), None, None).unwrap())
-    }
-}
-
-impl Drop for TempHome {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }
 

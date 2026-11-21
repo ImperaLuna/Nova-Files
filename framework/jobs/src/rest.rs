@@ -21,7 +21,7 @@ pub fn still_there(paths: &[PathBuf], control: &Control) -> Result<Vec<PathBuf>,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn a_resumed_job_cancelled_while_its_paths_are_looked_at_stops() {

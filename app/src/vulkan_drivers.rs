@@ -256,6 +256,8 @@ fn search_roots(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
 mod tests {
     use std::os::unix::fs::symlink;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
     const NIXOS_DRIVERS: [(&str, &str); 14] = [
@@ -316,13 +318,11 @@ mod tests {
     const VGA_CLASS: &str = "0x030000";
     const USB_CLASS: &str = "0x0c0330";
 
-    struct FakeSystem(PathBuf);
+    struct FakeSystem(TestFolder);
 
     impl FakeSystem {
         fn new(name: &str) -> Self {
-            let root =
-                env::temp_dir().join(format!("nova-files-vulkan-{name}-{}", std::process::id()));
-            fs::remove_dir_all(&root).ok();
+            let root = TestFolder::new(&format!("vulkan-{name}"));
             for folder in [
                 "pci",
                 "drm",
@@ -372,12 +372,6 @@ mod tests {
 
         fn decide(&self) -> Option<String> {
             self.decide_with(|_| None)
-        }
-    }
-
-    impl Drop for FakeSystem {
-        fn drop(&mut self) {
-            fs::remove_dir_all(&self.0).ok();
         }
     }
 

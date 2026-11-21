@@ -132,7 +132,7 @@ mod tests {
 
     use super::*;
     use nova_files_jobs::control::Control;
-    use nova_files_jobs::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn a_folder_swapped_for_a_link_is_not_followed() {

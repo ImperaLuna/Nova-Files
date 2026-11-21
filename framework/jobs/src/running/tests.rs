@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use super::*;
 use crate::journal::hold;
-use crate::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 
 const ASK_WAIT: Duration = Duration::from_secs(5);
 

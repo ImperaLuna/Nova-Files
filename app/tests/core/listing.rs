@@ -2,8 +2,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::os::unix::ffi::OsStringExt as _;
 use std::os::unix::fs::{PermissionsExt as _, symlink};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::path::Path;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
@@ -11,37 +10,12 @@ use nova_files_api::{
     Command, Connection, Details, EntryId, EntryKind, Event, Listing, ListingId, Order,
     ThumbnailSize, Unreadable,
 };
+use nova_files_test_folder::TestFolder;
 
 use crate::common::Core;
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
 const NO_ACCESS: u32 = 0o000;
-
-struct TempFolder(PathBuf);
-
-impl TempFolder {
-    fn new() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-core-test-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(name);
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
-}
 
 struct Client {
     _core: Core,
@@ -68,7 +42,7 @@ fn client_at(home: &Path) -> Client {
 }
 
 fn client() -> Client {
-    let home = TempFolder::new();
+    let home = TestFolder::new("core-test");
     let client = client_at(home.path());
     drop(home);
     client
@@ -138,7 +112,7 @@ fn names(listing: &Listing) -> Vec<(String, EntryKind)> {
 
 #[test]
 fn lists_folders_first_then_files_each_a_to_z() {
-    let folder = TempFolder::new();
+    let folder = TestFolder::new("core-test");
     let root = folder.path();
     fs::create_dir(root.join("pictures")).unwrap();
     fs::create_dir(root.join("Archive")).unwrap();
@@ -168,7 +142,7 @@ fn lists_folders_first_then_files_each_a_to_z() {
 
 #[test]
 fn details_follow_the_listing() {
-    let folder = TempFolder::new();
+    let folder = TestFolder::new("core-test");
     let root = folder.path();
     fs::create_dir(root.join("folder")).unwrap();
     fs::write(root.join("five.txt"), "12345").unwrap();
@@ -186,8 +160,8 @@ fn details_follow_the_listing() {
     assert!(details.iter().all(|detail| detail.modified.is_some()));
 }
 
-fn big_folder(files: u32) -> (TempFolder, Client) {
-    let folder = TempFolder::new();
+fn big_folder(files: u32) -> (TestFolder, Client) {
+    let folder = TestFolder::new("core-test");
     for index in 0..files {
         fs::write(folder.path().join(format!("{index:05}.txt")), "").unwrap();
     }
@@ -253,7 +227,7 @@ fn rows_of_an_older_listing_are_not_read() {
 
 #[test]
 fn hidden_files_are_left_out_unless_the_settings_show_them() {
-    let folder = TempFolder::new();
+    let folder = TestFolder::new("core-test");
     fs::write(folder.path().join(".hidden"), "").unwrap();
     fs::write(folder.path().join("shown"), "").unwrap();
 
@@ -261,7 +235,7 @@ fn hidden_files_are_left_out_unless_the_settings_show_them() {
     assert_eq!(names(&left_out), [("shown".to_owned(), EntryKind::File)]);
     assert_eq!(left_out.entries[0].id, EntryId(0));
 
-    let home = TempFolder::new();
+    let home = TestFolder::new("core-test");
     let config = home.path().join(".config/nova-files");
     fs::create_dir_all(&config).unwrap();
     fs::write(config.join("settings.toml"), "hidden_files = true\n").unwrap();
@@ -277,7 +251,7 @@ fn hidden_files_are_left_out_unless_the_settings_show_them() {
 
 #[test]
 fn the_trash_lists_its_hidden_items_too() {
-    let home = TempFolder::new();
+    let home = TestFolder::new("core-test");
     let trash = home.path().join(".local/share/Trash/files");
     fs::create_dir_all(trash.join(".old")).unwrap();
     fs::write(trash.join(".env"), "").unwrap();
@@ -298,7 +272,7 @@ fn the_trash_lists_its_hidden_items_too() {
 
 #[test]
 fn empty_folder_lists_nothing() {
-    let folder = TempFolder::new();
+    let folder = TestFolder::new("core-test");
 
     let listing = listing(client().list(1, folder.path()));
 
@@ -307,7 +281,7 @@ fn empty_folder_lists_nothing() {
 
 #[test]
 fn name_that_is_not_utf8_comes_back_unchanged() {
-    let folder = TempFolder::new();
+    let folder = TestFolder::new("core-test");
     let name = OsString::from_vec(vec![b'b', 0xff, b'd']);
     fs::write(folder.path().join(&name), "").unwrap();
 
@@ -319,7 +293,7 @@ fn name_that_is_not_utf8_comes_back_unchanged() {
 
 #[test]
 fn missing_folder_is_reported_missing() {
-    let folder = TempFolder::new();
+    let folder = TestFolder::new("core-test");
     let gone = folder.path().join("gone");
 
     let event = client().list(3, &gone);
@@ -336,7 +310,7 @@ fn missing_folder_is_reported_missing() {
 
 #[test]
 fn file_is_not_a_folder() {
-    let folder = TempFolder::new();
+    let folder = TestFolder::new("core-test");
     let file = folder.path().join("file.txt");
     fs::write(&file, "").unwrap();
 
@@ -353,7 +327,7 @@ fn file_is_not_a_folder() {
 
 #[test]
 fn folder_without_permission_is_reported() {
-    let folder = TempFolder::new();
+    let folder = TestFolder::new("core-test");
     let locked = folder.path().join("locked");
     fs::create_dir(&locked).unwrap();
     fs::set_permissions(&locked, fs::Permissions::from_mode(NO_ACCESS)).unwrap();

@@ -171,25 +171,30 @@ mod tests {
     use std::path::PathBuf;
 
     use log::Level;
+    use nova_files_test_folder::TestFolder;
 
     use super::*;
 
-    struct TempFile(PathBuf);
+    struct TempFile {
+        file: PathBuf,
+        _folder: TestFolder,
+    }
 
     impl TempFile {
         fn new(name: &str) -> Self {
-            let path =
-                env::temp_dir().join(format!("nova-files-trace-{name}-{}", std::process::id()));
-            fs::remove_file(&path).ok();
-            Self(path)
+            let folder = TestFolder::new(&format!("trace-{name}"));
+            Self {
+                file: folder.join("trace"),
+                _folder: folder,
+            }
         }
 
         fn open(&self) -> TraceFile {
-            TraceFile::open(&self.0).unwrap()
+            TraceFile::open(&self.file).unwrap()
         }
 
         fn lines(&self) -> Vec<(u128, String)> {
-            fs::read_to_string(&self.0)
+            fs::read_to_string(&self.file)
                 .unwrap_or_default()
                 .lines()
                 .map(|line| {
@@ -197,12 +202,6 @@ mod tests {
                     (number.parse().unwrap(), rest.to_owned())
                 })
                 .collect()
-        }
-    }
-
-    impl Drop for TempFile {
-        fn drop(&mut self) {
-            fs::remove_file(&self.0).ok();
         }
     }
 
@@ -322,12 +321,12 @@ mod tests {
         let startup = TempFile::new("alone-startup");
         let frames = TempFile::new("alone-frames");
 
-        let (traces, errors) = open_traces(Some(startup.0.clone().into()), None);
+        let (traces, errors) = open_traces(Some(startup.file.clone().into()), None);
         assert!(errors.is_empty(), "{errors:?}");
         assert!(traces.is_some_and(|traces| traces.startup.is_some()));
         assert_eq!(startup.lines()[0].1, PROCESS_START);
 
-        let (traces, errors) = open_traces(None, Some(frames.0.clone().into()));
+        let (traces, errors) = open_traces(None, Some(frames.file.clone().into()));
         assert!(errors.is_empty(), "{errors:?}");
         assert!(traces.is_some_and(|traces| traces.frames.is_some()));
         assert_eq!(frames.lines(), Vec::new());
@@ -345,7 +344,7 @@ mod tests {
         let frames = TempFile::new("other-on");
         let (traces, errors) = open_traces(
             Some("/nonexistent/folder/trace".into()),
-            Some(frames.0.clone().into()),
+            Some(frames.file.into()),
         );
         assert_eq!(errors.len(), 1);
         assert!(errors[0].to_string().starts_with(STARTUP_TRACE));

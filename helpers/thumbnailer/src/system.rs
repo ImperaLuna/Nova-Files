@@ -227,6 +227,7 @@ fn exits_within(child: &Child, timeout: Duration) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn exec_lines_split_like_desktop_entries() {
@@ -256,26 +257,20 @@ mod tests {
     }
 
     #[test]
-    fn a_thumbnailer_that_closes_its_output_and_keeps_running_is_stopped_in_time() {
+    fn a_thumbnailer_that_closes_its_output_and_keeps_running_is_stopped() {
         let request = Request {
             input: Path::new("/in/a.mp4"),
             uri: "file:///in/a.mp4",
             output: Path::new("/out/a.png"),
             size: 128,
         };
-        let exec = ["sh", "-c", "exec >&-; exec sleep 30"].map(str::to_owned);
-        let started = std::time::Instant::now();
+        let exec = ["sh", "-c", "exec >&-; exec sleep infinity"].map(str::to_owned);
 
         let ran = run_within(&exec, &request, Duration::from_millis(200));
 
         assert_eq!(
             ran.map_err(|error| error.kind()),
             Err(io::ErrorKind::TimedOut)
-        );
-        assert!(
-            started.elapsed() < Duration::from_secs(5),
-            "{:?}",
-            started.elapsed()
         );
     }
 
@@ -296,7 +291,8 @@ mod tests {
 
     #[test]
     fn only_installed_complete_thumbnailers_are_loaded() {
-        let root = env::temp_dir().join(format!("nova-thumbnailers-{}", std::process::id()));
+        let held = TestFolder::new("thumbnailers");
+        let root = held.join("root");
         let folder = root.join(THUMBNAILERS_FOLDER);
         fs::create_dir_all(&folder).unwrap();
         let program = env::current_exe().unwrap();
@@ -319,7 +315,6 @@ mod tests {
         .unwrap();
 
         let thumbnailers = Thumbnailers::load(std::slice::from_ref(&root));
-        fs::remove_dir_all(&root).ok();
 
         assert!(thumbnailers.0.contains_key("video/long"));
         assert!(!thumbnailers.0.contains_key("video/missing"));

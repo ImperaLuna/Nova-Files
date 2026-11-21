@@ -25,3 +25,6 @@ workspace = true
 [dependencies]
 nova-files-api.workspace = true
 nova-files-disk.workspace = true
+
+[dev-dependencies]
+nova-files-test-folder.workspace = true

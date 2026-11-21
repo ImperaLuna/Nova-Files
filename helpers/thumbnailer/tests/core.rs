@@ -5,7 +5,7 @@
 )]
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
@@ -15,6 +15,7 @@ use nova_files_api::{
     ClientGone, Command, Connection, EntryId, Envelope, Event, EventSink, ListingId, Order,
     ThumbnailSize,
 };
+use nova_files_test_folder::TestFolder;
 use nova_files_thumbnails_api::Event as ThumbnailsEvent;
 
 const HELPER: &str = env!("CARGO_BIN_EXE_nova-files-thumbnailer");
@@ -24,25 +25,6 @@ const HEIGHT: u32 = 200;
 const NORMAL_SIZE: u32 = 128;
 const LARGE_SIZE: u32 = 256;
 const ROWS: u32 = 10;
-
-struct TempFolder(PathBuf);
-
-impl TempFolder {
-    fn new(test: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "nova-files-thumbs-core-{test}-{}",
-            std::process::id()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
-}
 
 #[derive(Debug)]
 enum Heard {
@@ -131,15 +113,15 @@ fn first_thumbnail(client: &Client, folder: &Path, size: ThumbnailSize) -> (Entr
 
 #[test]
 fn shown_images_get_thumbnails_then_come_from_the_cache() {
-    let temp = TempFolder::new("shown");
-    let folder = temp.0.join("media");
+    let temp = TestFolder::new("thumbs-core-shown");
+    let folder = temp.join("media");
     fs::create_dir(&folder).unwrap();
     fs::write(folder.join("clip.mp4"), b"").unwrap();
     fs::write(folder.join("notes.txt"), b"hello").unwrap();
     RgbImage::new(WIDTH, HEIGHT)
         .save_with_format(folder.join("photo.png"), ImageFormat::Png)
         .unwrap();
-    let thumbnails = temp.0.join("thumbnails");
+    let thumbnails = temp.join("thumbnails");
 
     let normal = ThumbnailSize::Normal;
     let (entry, png) = first_thumbnail(&client(&thumbnails, Path::new(HELPER)), &folder, normal);
@@ -153,20 +135,20 @@ fn shown_images_get_thumbnails_then_come_from_the_cache() {
     let cached = fs::read_dir(thumbnails.join("normal")).unwrap().count();
     assert_eq!(cached, 1);
 
-    let missing = temp.0.join("no-helper");
+    let missing = temp.join("no-helper");
     let (entry, again) = first_thumbnail(&client(&thumbnails, &missing), &folder, normal);
     assert_eq!((entry, again), (EntryId(2), png));
 }
 
 #[test]
 fn large_rows_get_large_thumbnails_of_their_own() {
-    let temp = TempFolder::new("large");
-    let folder = temp.0.join("media");
+    let temp = TestFolder::new("thumbs-core-large");
+    let folder = temp.join("media");
     fs::create_dir(&folder).unwrap();
     RgbImage::new(WIDTH * 2, HEIGHT * 2)
         .save_with_format(folder.join("photo.png"), ImageFormat::Png)
         .unwrap();
-    let thumbnails = temp.0.join("thumbnails");
+    let thumbnails = temp.join("thumbnails");
     let client = client(&thumbnails, Path::new(HELPER));
 
     let (_, normal) = first_thumbnail(&client, &folder, ThumbnailSize::Normal);
@@ -189,13 +171,13 @@ fn large_rows_get_large_thumbnails_of_their_own() {
 
 #[test]
 fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
-    let temp = TempFolder::new("back");
-    let folder = temp.0.join("media");
+    let temp = TestFolder::new("thumbs-core-back");
+    let folder = temp.join("media");
     fs::create_dir(&folder).unwrap();
     RgbImage::new(WIDTH, HEIGHT)
         .save_with_format(folder.join("photo.png"), ImageFormat::Png)
         .unwrap();
-    let client = client(&temp.0.join("thumbnails"), Path::new(HELPER));
+    let client = client(&temp.join("thumbnails"), Path::new(HELPER));
     let (entry, png) = first_thumbnail(&client, &folder, ThumbnailSize::Normal);
 
     let want = |first| {
@@ -230,13 +212,13 @@ fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
 
 #[test]
 fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
-    let temp = TempFolder::new("refused");
-    let folder = temp.0.join("media");
+    let temp = TestFolder::new("thumbs-core-refused");
+    let folder = temp.join("media");
     fs::create_dir(&folder).unwrap();
     RgbImage::new(WIDTH, HEIGHT)
         .save_with_format(folder.join("photo.png"), ImageFormat::Png)
         .unwrap();
-    let client = client(&temp.0.join("thumbnails"), Path::new(HELPER));
+    let client = client(&temp.join("thumbnails"), Path::new(HELPER));
     let (entry, png) = first_thumbnail(&client, &folder, ThumbnailSize::Normal);
 
     let missing = ListingId(2);
@@ -244,7 +226,7 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
         .connection
         .send(Command::ListFolder {
             id: missing,
-            path: temp.0.join("missing"),
+            path: temp.join("missing"),
             order: Order::default(),
         })
         .unwrap();
@@ -321,8 +303,8 @@ fn thumbnailed_entries(
 
 #[test]
 fn cached_rows_answer_and_rows_that_failed_before_are_not_tried_again() {
-    let temp = TempFolder::new("marked");
-    let folder = temp.0.join("media");
+    let temp = TestFolder::new("thumbs-core-marked");
+    let folder = temp.join("media");
     fs::create_dir(&folder).unwrap();
     let image = RgbImage::new(WIDTH, HEIGHT);
     for name in ["a.png", "b.png"] {
@@ -332,7 +314,7 @@ fn cached_rows_answer_and_rows_that_failed_before_are_not_tried_again() {
     }
     let broken = folder.join("0-broken.png");
     fs::write(&broken, b"not an image").unwrap();
-    let thumbnails = temp.0.join("thumbnails");
+    let thumbnails = temp.join("thumbnails");
     let first = thumbnailed_entries(
         &client(&thumbnails, Path::new(HELPER)),
         &folder,

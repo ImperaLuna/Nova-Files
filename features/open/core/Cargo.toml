@@ -30,4 +30,5 @@ nova-files-disk.workspace = true
 nova-files-open-api.workspace = true
 
 [dev-dependencies]
+nova-files-test-folder.workspace = true
 nova-files-picker-api.workspace = true

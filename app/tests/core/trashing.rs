@@ -61,7 +61,7 @@ fn files_and_folders_go_to_the_home_trash_with_their_info() {
         sizes.starts_with("5 ") && sizes.ends_with(" My%20Photos\n"),
         "{sizes}"
     );
-    for folder in [bench.root.clone(), trash.join("files"), trash.join("info")] {
+    for folder in [bench.root, trash.join("files"), trash.join("info")] {
         assert!(
             changed.contains(&folder),
             "{} in {changed:?}",

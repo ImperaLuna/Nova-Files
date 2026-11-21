@@ -34,7 +34,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn a_file_left_alone_is_still_the_same_one() {

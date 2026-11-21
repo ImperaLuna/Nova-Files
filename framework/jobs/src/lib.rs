@@ -24,8 +24,6 @@ pub mod running;
 pub mod set_aside;
 pub mod stop;
 pub mod sync;
-#[cfg(any(test, feature = "test-support"))]
-pub mod test_folder;
 pub mod trash_info;
 pub mod undo;
 

@@ -275,22 +275,22 @@ mod tests {
     use std::fs;
     use std::sync::mpsc::{self, Receiver};
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
-    struct Scratch(PathBuf);
+    struct Scratch(TestFolder);
 
     impl Scratch {
         fn new(name: &str) -> Self {
-            let root =
-                std::env::temp_dir().join(format!("nova-places-{name}-{}", std::process::id()));
-            fs::remove_dir_all(&root).ok();
+            let root = TestFolder::new(&format!("places-{name}"));
             fs::create_dir_all(root.join("config").join(bookmarks::FOLDER)).unwrap();
             Self(root)
         }
 
         fn home(&self) -> Home {
             Home {
-                folder: self.0.clone(),
+                folder: self.0.path().to_path_buf(),
                 config: self.0.join("config"),
                 state: self.0.join("state"),
                 data: self.0.join("share"),
@@ -318,12 +318,6 @@ mod tests {
 
         fn make_documents(&self) {
             fs::create_dir(self.0.join("Documents")).unwrap();
-        }
-    }
-
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            fs::remove_dir_all(&self.0).ok();
         }
     }
 
@@ -374,7 +368,7 @@ mod tests {
         )
         .unwrap();
         let (shared, _events) = scratch.listening();
-        let home = scratch.0.as_path();
+        let home = scratch.0.path();
         assert!(shared.touches_a_place(home, &Changed::All));
         assert!(shared.touches_a_place(home, &names(&["notes.txt", "Documents"])));
         assert!(shared.touches_a_place(home, &names(&["Tunes"])));

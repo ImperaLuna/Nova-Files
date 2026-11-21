@@ -1,6 +1,6 @@
 use super::*;
 use crate::trashes::{Trashes, info_text};
-use nova_files_jobs::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 use std::time::{Duration, UNIX_EPOCH};
 
 fn trash(folder: &TestFolder, name: &str, top: Option<&Path>) -> TrashFolder {

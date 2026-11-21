@@ -39,7 +39,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn finds_the_first_free_number() {

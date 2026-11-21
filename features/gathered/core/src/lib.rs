@@ -59,24 +59,23 @@ fn usual_folders(home: &Home) -> Vec<(Gathering, GatheredFolder)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
-    fn scratch(name: &str) -> Home {
-        let root =
-            std::env::temp_dir().join(format!("nova-gathered-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&root).ok();
-        fs::create_dir_all(&root).unwrap();
-        Home {
-            folder: root.clone(),
+    fn scratch(name: &str) -> (TestFolder, Home) {
+        let root = TestFolder::new(&format!("gathered-{name}"));
+        let home = Home {
+            folder: root.path().to_path_buf(),
             config: root.join("config"),
             state: root.join("state"),
             data: root.join("share"),
             drive_trashes: false,
-        }
+        };
+        (root, home)
     }
 
     #[test]
     fn a_folder_with_a_projects_file_at_its_top_is_one_project() {
-        let home = scratch("guess");
+        let (_held, home) = scratch("guess");
         for marker in PROJECT_MARKERS {
             let folder = home.folder.join(marker.replace('.', "dot-"));
             fs::create_dir_all(&folder).unwrap();
@@ -89,12 +88,11 @@ mod tests {
         fs::create_dir_all(deeper.join("inner")).unwrap();
         fs::write(deeper.join("inner").join("Cargo.toml"), "").unwrap();
         assert_eq!(guess(Gathering::Projects, &deeper), Holds::Many);
-        fs::remove_dir_all(&home.folder).ok();
     }
 
     #[test]
     fn only_the_usual_folders_that_exist_are_offered() {
-        let home = scratch("usual");
+        let (_held, home) = scratch("usual");
         assert_eq!(usual_folders(&home), []);
         fs::create_dir_all(home.folder.join(PROJECTS_IN_HOME)).unwrap();
         let found = usual_folders(&home);
@@ -107,6 +105,5 @@ mod tests {
         fs::remove_dir_all(home.folder.join(PROJECTS_IN_HOME)).unwrap();
         fs::write(home.folder.join(PROJECTS_IN_HOME), "").unwrap();
         assert_eq!(usual_folders(&home).len(), 1);
-        fs::remove_dir_all(&home.folder).ok();
     }
 }

@@ -14,6 +14,7 @@ use nova_files_dbus::{
     FILE_MANAGER_BUS_NAME, FILE_MANAGER_INTERFACE, FILE_MANAGER_MAX_URIS, FILE_MANAGER_OBJECT_PATH,
     Service, Started,
 };
+use nova_files_test_folder::TestFolder;
 use zbus::blocking::{Connection, Proxy};
 
 mod support;
@@ -234,9 +235,8 @@ fn finding_the_running_instance_starts_none() {
 
 #[test]
 fn finding_the_running_instance_gives_up_on_a_bus_that_never_answers() {
-    let folder = std::env::temp_dir().join(format!("nova-files-silent-{}", std::process::id()));
-    std::fs::remove_dir_all(&folder).ok();
-    std::fs::create_dir_all(&folder).unwrap();
+    let test_folder = TestFolder::new("silent");
+    let folder = test_folder.path();
     let socket = folder.join("bus");
     let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
     let _held = std::thread::spawn(move || listener.accept().map(|(stream, _)| stream));
@@ -246,6 +246,5 @@ fn finding_the_running_instance_gives_up_on_a_bus_that_never_answers() {
     std::thread::spawn(move || sender.send(nova_files_dbus::find_running(&bus).is_err()));
 
     let gave_up = found.recv_timeout(WAIT);
-    std::fs::remove_dir_all(&folder).ok();
     assert_eq!(gave_up, Ok(true));
 }

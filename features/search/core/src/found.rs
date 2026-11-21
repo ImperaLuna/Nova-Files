@@ -49,6 +49,8 @@ mod tests {
 
     use nova_files_search_api::Matched;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
     fn hit(path: PathBuf) -> Hit {
@@ -60,8 +62,8 @@ mod tests {
 
     #[test]
     fn hits_become_entries_in_their_own_folders_and_gone_ones_are_left_out() {
-        let root = std::env::temp_dir().join(format!("nova-files-found-{}", std::process::id()));
-        fs::remove_dir_all(&root).ok();
+        let folder = TestFolder::new("found");
+        let root = folder.path().to_path_buf();
         fs::create_dir_all(root.join("docs/notes")).unwrap();
         fs::write(root.join("docs/notes.txt"), b"").unwrap();
         symlink(root.join("docs/notes"), root.join("notes-link")).unwrap();
@@ -77,7 +79,6 @@ mod tests {
 
         let listing = listing(ListingId(7), root.clone(), hits.to_vec(), || false).unwrap();
 
-        fs::remove_dir_all(&root).ok();
         let shown: Vec<_> = listing
             .entries
             .iter()

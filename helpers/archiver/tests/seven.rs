@@ -10,15 +10,14 @@ mod common;
 use std::fs;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
 use common::Bench;
 use nova_files::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
 use nova_files_api::{Command, ConflictKind, Event, ExtractTo, Operation, Outcome, Packing, Tally};
+use nova_files_test_folder::TestFolder;
 
 const MANY: u32 = 500;
 const MOST_WAITS: u32 = 100;
-const QUICK: Duration = Duration::from_secs(5);
 
 fn helper() -> Archiver {
     Archiver::at(PathBuf::from(env!("CARGO_BIN_EXE_nova-files-archiver")))
@@ -46,10 +45,9 @@ fn go(entries: &mut u64) -> impl FnMut(Extracting) -> Flow + '_ {
     }
 }
 
-fn sources(name: &str) -> PathBuf {
-    let folder =
-        std::env::temp_dir().join(format!("nova-archiver-seven-{name}-{}", std::process::id()));
-    fs::remove_dir_all(&folder).ok();
+fn sources(name: &str) -> (TestFolder, PathBuf) {
+    let held = TestFolder::new(&format!("archiver-seven-{name}"));
+    let folder = held.path().to_path_buf();
     fs::create_dir_all(folder.join("docs/inner")).unwrap();
     fs::create_dir_all(folder.join("into")).unwrap();
     for (path, contents) in [
@@ -61,7 +59,7 @@ fn sources(name: &str) -> PathBuf {
     }
     fs::set_permissions(folder.join("docs/a.txt"), fs::Permissions::from_mode(0o640)).unwrap();
     std::os::unix::fs::symlink("a.txt", folder.join("docs/to-a")).unwrap();
-    folder
+    (held, folder)
 }
 
 fn make(folder: &Path, password: Option<&str>) -> PathBuf {
@@ -101,7 +99,7 @@ fn kinds(archive: &Path, password: Option<&str>) -> Vec<(String, ArchiveKind, u6
 
 #[test]
 fn a_7z_is_made_listed_and_unpacked_whole() {
-    let folder = sources("whole");
+    let (_held, folder) = sources("whole");
     let archive = make(&folder, None);
     assert_eq!(
         kinds(&archive, None),
@@ -146,12 +144,11 @@ fn a_7z_is_made_listed_and_unpacked_whole() {
             & 0o777,
         0o640
     );
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_locked_7z_hides_its_names_until_the_password_is_right() {
-    let folder = sources("locked");
+    let (_held, folder) = sources("locked");
     let archive = make(&folder, Some("pw"));
     assert_eq!(
         archiver().list(&archive),
@@ -183,12 +180,11 @@ fn a_locked_7z_hides_its_names_until_the_password_is_right() {
         .extract(&archive, &into, Some("pw"), go(&mut entries))
         .unwrap();
     assert_eq!(fs::read(into.join("notes.txt")).unwrap(), b"notes");
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn without_7zip_a_7z_is_unsupported() {
-    let folder = sources("without");
+    let (_held, folder) = sources("without");
     let archive = make(&folder, None);
     let into = folder.join("into");
     let mut entries = 0;
@@ -213,12 +209,11 @@ fn without_7zip_a_7z_is_unsupported() {
     );
     assert!(!folder.join("b.7z").exists());
     assert_eq!(entries, 0);
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_damaged_7z_is_broken_and_other_files_unsupported() {
-    let folder = sources("damage");
+    let (_held, folder) = sources("damage");
     let archive = make(&folder, None);
     let mut bytes = fs::read(&archive).unwrap();
     let cut = bytes.len() / 2;
@@ -247,18 +242,19 @@ fn a_damaged_7z_is_broken_and_other_files_unsupported() {
         ),
         Err(ArchiveFailure::Broken)
     );
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
-fn stopping_a_7z_run_ends_it_at_once() {
-    let folder = sources("stop");
+fn stopping_a_7z_run_ends_it() {
+    let (_held, folder) = sources("stop");
     let archive = make(&folder, None);
-    let started = Instant::now();
-    let stopped = archiver().extract(&archive, &folder.join("into"), None, |_| Flow::Stop);
+    let mut asked = 0;
+    let stopped = archiver().extract(&archive, &folder.join("into"), None, |_| {
+        asked += 1;
+        Flow::Stop
+    });
     assert_eq!(stopped, Err(ArchiveFailure::Cancelled));
-    assert!(started.elapsed() < QUICK);
-    fs::remove_dir_all(&folder).ok();
+    assert_eq!(asked, 1);
 }
 
 #[test]
@@ -325,7 +321,7 @@ fn a_job_asks_for_the_password_a_locked_7z_needs_to_list() {
 
 #[test]
 fn a_7z_gives_only_the_picked_entries() {
-    let folder = sources("picked");
+    let (_held, folder) = sources("picked");
     let archive = make(&folder, None);
     let into = folder.join("into");
     let mut entries = 0;
@@ -336,12 +332,11 @@ fn a_7z_gives_only_the_picked_entries() {
     assert_eq!(fs::read(into.join("docs/inner/b.txt")).unwrap(), b"deep");
     assert_eq!(fs::read(into.join("notes.txt")).unwrap(), b"notes");
     assert!(!into.join("docs/a.txt").exists());
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_listing_no_one_reads_is_a_usage_error() {
-    let folder = sources("unheard");
+    let (_held, folder) = sources("unheard");
     let many = folder.join("many");
     fs::create_dir(&many).unwrap();
     for number in 0..MANY {
@@ -376,12 +371,11 @@ fn a_listing_no_one_reads_is_a_usage_error() {
         .status()
         .unwrap();
     assert_eq!(status.code(), Some(1));
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_name_with_wildcards_picks_only_itself() {
-    let folder = sources("wildcards");
+    let (_held, folder) = sources("wildcards");
     for name in ["a?.txt", "ab.txt"] {
         fs::write(folder.join(name), name).unwrap();
     }
@@ -405,7 +399,6 @@ fn a_name_with_wildcards_picks_only_itself() {
         .map(|kind| kind.0)
         .collect();
     assert_eq!(names, ["a?.txt"]);
-    fs::remove_dir_all(&folder).ok();
 }
 
 fn shell_on_path() -> PathBuf {
@@ -417,7 +410,7 @@ fn shell_on_path() -> PathBuf {
 
 #[test]
 fn seven_zip_may_read_the_kernels_random_numbers() {
-    let folder = sources("random");
+    let (_held, folder) = sources("random");
     let program = folder.join("7zz");
     let shell = shell_on_path();
     fs::write(
@@ -440,12 +433,11 @@ fn seven_zip_may_read_the_kernels_random_numbers() {
         .output()
         .unwrap();
     assert_eq!(status.status.code(), Some(0));
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn a_picked_name_with_wildcards_is_taken_as_it_is() {
-    let folder = sources("picked-wild");
+    let (_held, folder) = sources("picked-wild");
     for name in ["report?.txt", "report1.txt"] {
         fs::write(folder.join(name), name).unwrap();
     }
@@ -475,5 +467,4 @@ fn a_picked_name_with_wildcards_is_taken_as_it_is() {
         .collect();
     landed.sort();
     assert_eq!(landed, ["report?.txt"]);
-    fs::remove_dir_all(&folder).ok();
 }

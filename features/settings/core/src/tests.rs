@@ -2,14 +2,14 @@ use std::fs;
 use std::sync::mpsc::Receiver;
 
 use nova_files_settings_api::{Appearance, Thumbnails};
+use nova_files_test_folder::TestFolder;
 
 use super::*;
 
-fn temp(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("nova-files-store-{name}-{}", std::process::id()));
-    fs::remove_dir_all(&path).ok();
-    fs::create_dir_all(&path).unwrap();
-    path
+fn temp(name: &str) -> (TestFolder, PathBuf) {
+    let folder = TestFolder::new(&format!("store-{name}"));
+    let path = folder.path().to_path_buf();
+    (folder, path)
 }
 
 fn shared(path: Option<PathBuf>) -> Arc<Mutex<Shared>> {
@@ -93,7 +93,7 @@ fn a_queued_change_counts_as_unsaved() {
 
 #[test]
 fn the_file_is_read_once_the_last_queued_save_is_done() {
-    let folder = temp("saves");
+    let (_held, folder) = temp("saves");
     let path = folder.join(FILE);
     let shared = shared(Some(path.clone()));
     {
@@ -128,17 +128,15 @@ fn the_file_is_read_once_the_last_queued_save_is_done() {
         dark().with(SettingChange::Thumbnails(Thumbnails::Hidden))
     );
     drop(locked);
-    fs::remove_dir_all(folder).ok();
 }
 
 #[test]
 fn the_store_holds_what_the_file_says() {
-    let config = temp("current");
+    let (_config_folder, config) = temp("current");
     let folder = config_watch::folder(&config);
     fs::create_dir_all(&folder).unwrap();
     fs::write(folder.join(FILE), "thumbnails = false\n").unwrap();
     let store = Store::open(Some(&config));
     assert_eq!(store.current().thumbnails, Thumbnails::Hidden);
     drop(store);
-    fs::remove_dir_all(config).ok();
 }

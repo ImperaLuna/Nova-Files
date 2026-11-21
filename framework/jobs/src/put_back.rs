@@ -44,7 +44,7 @@ mod tests {
 
     use super::*;
     use crate::set_aside::{Aside, SetAsideForJob};
-    use crate::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     struct Shelf {
         asked: Arc<Mutex<Vec<PathBuf>>>,

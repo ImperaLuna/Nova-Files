@@ -8,6 +8,7 @@ use std::time::Duration;
 use crate::own_folders;
 
 use nova_files_open_api::{Command, Event, NotOpened};
+use nova_files_test_folder::TestFolder;
 
 use crate::common::Core;
 use own_folders::run_again_in;
@@ -26,28 +27,25 @@ fn a_file_opens_in_its_default_app() {
 }
 
 fn run_again_in_folders_of_its_own() {
-    let root = std::env::temp_dir().join(format!("nova-files-open-{}", std::process::id()));
+    let folder = TestFolder::new("open");
+    let root = folder.path();
     fs::create_dir_all(root.join("data/mime")).unwrap();
     fs::create_dir_all(root.join("data/applications")).unwrap();
     fs::create_dir_all(root.join("config")).unwrap();
+    write(root, "data/mime/globs2", "50:text/x-nova-test:*.novatest\n");
     write(
-        &root,
-        "data/mime/globs2",
-        "50:text/x-nova-test:*.novatest\n",
-    );
-    write(
-        &root,
+        root,
         "data/mime/subclasses",
         "text/x-nova-test text/x-nova-parent\n",
     );
     write(
-        &root,
+        root,
         "config/mimeapps.list",
         "[Default Applications]\ntext/x-nova-parent=nova-test-viewer.desktop\n",
     );
     let viewer = root.join("viewer");
     write(
-        &root,
+        root,
         "viewer",
         &format!(
             "#!/bin/sh\nprintf '%s %s' \"$1\" \"$XDG_ACTIVATION_TOKEN\" > '{}'\n",
@@ -56,7 +54,7 @@ fn run_again_in_folders_of_its_own() {
     );
     fs::set_permissions(&viewer, fs::Permissions::from_mode(0o755)).unwrap();
     write(
-        &root,
+        root,
         "data/applications/nova-test-viewer.desktop",
         &format!(
             "[Desktop Entry]\nType=Application\nName=Viewer\nExec={} %f\n",
@@ -69,7 +67,7 @@ fn run_again_in_folders_of_its_own() {
         .unwrap();
     assert!(made.success());
 
-    run_again_in(&root, ROOT_VAR, TEST_NAME);
+    run_again_in(root, ROOT_VAR, TEST_NAME);
 }
 
 fn open_through_the_core(root: &Path) {
