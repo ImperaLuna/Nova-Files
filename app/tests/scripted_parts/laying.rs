@@ -111,7 +111,7 @@ fn asked(core: &mut Core) -> Option<(ListingId, Option<PathBuf>)> {
         .into_iter()
         .filter_map(|command| match command {
             SearchCommand::Find { id, within, .. } => Some((id, within)),
-            SearchCommand::Search { .. } => None,
+            SearchCommand::Search { .. } | SearchCommand::Complete { .. } => None,
         })
         .next_back()
 }

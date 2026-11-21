@@ -11,7 +11,8 @@ use futures::channel::oneshot;
 use nova_files_api::{ClientGone, Connector, Envelope, EventSink, WindowRequest};
 use nova_files_open_api as open_api;
 use nova_files_search_api::{
-    Command as SearchCommand, Event as SearchEvent, Hit, Matched, SearchFailed, SearchId,
+    Command as SearchCommand, CompleteFailed, Completion, Event as SearchEvent, Hit, Matched,
+    SearchFailed, SearchId,
 };
 use rustix::fs::{Mode, OFlags};
 use zbus::fdo;
@@ -208,6 +209,19 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
         self.open_window(request)
     }
 
+    async fn complete(&self, typed: String, limit: u32) -> fdo::Result<Vec<(String, bool)>> {
+        let command = SearchCommand::Complete { typed, limit };
+        match ask_core(&self.connector, command).await? {
+            SearchEvent::Completed { entries, .. } => {
+                Ok(entries.iter().filter_map(completed).collect())
+            }
+            SearchEvent::CompleteFailed { typed, reason } => Err(not_completed(&typed, reason)),
+            SearchEvent::Found { .. }
+            | SearchEvent::SearchFailed { .. }
+            | SearchEvent::FindFailed { .. } => Err(failed("the core gave an unexpected answer")),
+        }
+    }
+
     #[zbus(signal)]
     async fn found(
         emitter: &SignalEmitter<'_>,
@@ -253,7 +267,9 @@ impl EventSink for Stages {
                     )
                 })
             }
-            SearchEvent::FindFailed { .. } => Some(Ok(())),
+            SearchEvent::FindFailed { .. }
+            | SearchEvent::Completed { .. }
+            | SearchEvent::CompleteFailed { .. } => Some(Ok(())),
         };
         match sent {
             Some(Ok(())) => Ok(()),
@@ -265,6 +281,20 @@ impl EventSink for Stages {
 fn wire(hit: &Hit) -> Option<(String, String)> {
     let path = hit.path.to_str()?.to_owned();
     Some((path, matched_name(hit.matched).to_owned()))
+}
+
+fn completed(entry: &Completion) -> Option<(String, bool)> {
+    Some((entry.path.to_str()?.to_owned(), entry.folder))
+}
+
+fn not_completed(typed: &str, reason: CompleteFailed) -> fdo::Error {
+    match reason {
+        CompleteFailed::NotAPath => {
+            fdo::Error::InvalidArgs(format!("not a path from / or ~: {typed}"))
+        }
+        CompleteFailed::NoHome => failed("there is no home folder"),
+        CompleteFailed::Unreadable => failed(format!("can't read the folder of {typed}")),
+    }
 }
 
 const fn matched_name(matched: Matched) -> &'static str {
