@@ -11,9 +11,9 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{self, Pid, PidfdFlags, Signal};
 
 use super::ArchiveFailure;
+use crate::unpack::TICK;
 
 const RUN_TIME: Duration = Duration::from_mins(10);
-const STOP_CHECK: Duration = Duration::from_millis(100);
 const MAX_OUTPUT: u64 = 67_108_864;
 const READER_THREAD: &str = "nova-files-archive-reader";
 const LIST: &str = "list";
@@ -104,7 +104,7 @@ fn read_output(
         .map_err(|_| ArchiveFailure::NotRead)?;
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
-        match finished.recv_timeout(left.min(STOP_CHECK)) {
+        match finished.recv_timeout(left.min(TICK)) {
             Ok(Ok(Some(bytes))) => return Ok(bytes),
             Ok(Ok(None)) => return Err(ArchiveFailure::Broken),
             Err(RecvTimeoutError::Timeout) if stopped() => return Err(ArchiveFailure::Cancelled),
@@ -127,7 +127,6 @@ pub fn end(mut child: Child, wait: Duration) -> Option<ExitStatus> {
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::fs::PermissionsExt as _;
     use std::os::unix::process::ExitStatusExt as _;
 
     use super::*;
@@ -141,16 +140,12 @@ mod tests {
 
     #[test]
     fn a_stopped_listing_ends_its_helper_at_once() {
-        let root = std::env::temp_dir().join(format!("nova-list-stop-{}", std::process::id()));
-        std::fs::create_dir_all(&root).unwrap();
-        let helper = root.join("helper");
-        std::fs::write(&helper, "#!/bin/sh\nwhile :; do :; done\n").unwrap();
-        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let shell = Path::new("/bin/sh");
+        let lead = [OsStr::new("-c"), OsStr::new("while :; do :; done")];
         let started = Instant::now();
-        let listed = list(&helper, &[], (Path::new("/a.zip"), None), &|| true);
+        let listed = list(shell, &lead, (Path::new("/a.zip"), None), &|| true);
         assert_eq!(listed, Err(ArchiveFailure::Cancelled));
         assert!(started.elapsed() < RUN_TIME / 60);
-        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]
