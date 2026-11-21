@@ -2,14 +2,12 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use nova_files_api::{Details, Entry, EntryId, EntryKind, Event, Listing, ListingId, Order};
 
 use crate::client::ListingJob;
-use crate::{details, order};
-
-pub const FRESH: Duration = Duration::from_secs(10);
+use crate::order;
 
 const KEPT_FOLDERS: usize = 16;
 
@@ -47,10 +45,8 @@ impl FolderSizer {
         }
     }
 
-    fn known(&self, folder: &Path) -> Option<(Sizes, bool)> {
-        self.lock()
-            .get(folder)
-            .map(|kept| (Arc::clone(&kept.sizes), kept.at.elapsed() < FRESH))
+    fn known(&self, folder: &Path) -> Option<Sizes> {
+        self.lock().get(folder).map(|kept| Arc::clone(&kept.sizes))
     }
 
     fn keep(&self, measured: Vec<(PathBuf, ByName)>) {
@@ -93,7 +89,7 @@ pub enum Homes {
 
 type Row = (Entry, PathBuf);
 
-type KeptFor = HashMap<PathBuf, (Sizes, bool)>;
+type ByHome = HashMap<PathBuf, Sizes>;
 
 pub fn list_measured(
     job: &ListingJob,
@@ -118,7 +114,6 @@ pub fn list_measured_rows(
 ) {
     let cancelled = || job.cancelled();
     let kept = sizer.kept_for(&rows);
-    let fresh = every_folder_fresh(&rows, &kept);
     let listed = if kept.is_empty() {
         order::arrange_paired(rows, |entry, home| home.join(&entry.name), order, cancelled).map(
             |rows| {
@@ -128,20 +123,60 @@ pub fn list_measured_rows(
             },
         )
     } else {
-        arrange(rows, order.descending, &kept, cancelled).map(|(rows, known)| {
-            let listing = listing(id, path, rows, &homes);
-            job.send_known(listing.clone(), Some(known.into()));
-            listing
-        })
+        send_sorted(job, (id, path), rows, (order.descending, &homes), &kept)
     };
-    if let Some(listing) = listed.filter(|_| !fresh) {
-        measure(job, &listing, sizer);
+    let Some(listing) = listed else {
+        return;
+    };
+    let Some(measured) = measure(job, &listing, sizer) else {
+        return;
+    };
+    let rows = rows_of(&listing);
+    let place = (id, listing.path);
+    if let Some(sorted) = send_sorted(job, place, rows, (order.descending, &homes), &measured) {
+        job.answer(Event::FoldersMeasured {
+            id,
+            sizes: every_total(&sorted, &measured),
+        });
     }
 }
 
+fn every_total(listing: &Listing, measured: &ByHome) -> Vec<(EntryId, u64)> {
+    listing
+        .entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| entry.kind == EntryKind::Folder)
+        .filter_map(|(index, entry)| {
+            let home = home_of(listing, index);
+            let bytes = measured.get(home)?.get(&entry.name)?;
+            Some((entry.id, *bytes))
+        })
+        .collect()
+}
+
+fn send_sorted(
+    job: &ListingJob,
+    (id, path): (ListingId, PathBuf),
+    rows: Vec<Row>,
+    (descending, homes): (bool, &Homes),
+    sizes: &ByHome,
+) -> Option<Listing> {
+    let size_of = |entry: &Entry, home: &PathBuf| {
+        sizes
+            .get(home)
+            .and_then(|sizes| sizes.get(&entry.name))
+            .copied()
+    };
+    let (rows, known) = arrange(rows, descending, size_of, || job.cancelled())?;
+    let listing = listing(id, path, rows, homes);
+    job.send_known(listing.clone(), Some(known.into()));
+    Some(listing)
+}
+
 impl FolderSizer {
-    fn kept_for(&self, rows: &[Row]) -> KeptFor {
-        let mut kept = KeptFor::new();
+    fn kept_for(&self, rows: &[Row]) -> ByHome {
+        let mut kept = ByHome::new();
         for (_, home) in rows
             .iter()
             .filter(|(entry, _)| entry.kind == EntryKind::Folder)
@@ -156,13 +191,13 @@ impl FolderSizer {
     }
 }
 
-fn every_folder_fresh(rows: &[Row], kept: &KeptFor) -> bool {
-    rows.iter()
-        .filter(|(entry, _)| entry.kind == EntryKind::Folder)
-        .all(|(entry, home)| {
-            kept.get(home)
-                .is_some_and(|(sizes, fresh)| *fresh && sizes.contains_key(&entry.name))
-        })
+fn rows_of(listing: &Listing) -> Vec<Row> {
+    listing
+        .entries
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| (entry.clone(), home_of(listing, index).to_path_buf()))
+        .collect()
 }
 
 fn listing(id: ListingId, path: PathBuf, rows: Vec<Row>, homes: &Homes) -> Listing {
@@ -183,7 +218,7 @@ fn home_of(listing: &Listing, index: usize) -> &Path {
         .map_or(listing.path.as_path(), PathBuf::as_path)
 }
 
-fn measure(job: &ListingJob, listing: &Listing, sizer: &FolderSizer) {
+fn measure(job: &ListingJob, listing: &Listing, sizer: &FolderSizer) -> Option<ByHome> {
     let mut groups: Vec<(&Path, Vec<&Entry>)> = Vec::new();
     for (index, entry) in listing.entries.iter().enumerate() {
         if entry.kind != EntryKind::Folder {
@@ -196,23 +231,19 @@ fn measure(job: &ListingJob, listing: &Listing, sizer: &FolderSizer) {
         }
     }
     if groups.is_empty() {
-        return;
+        return None;
     }
     let mut measured = Vec::new();
-    let mut to_keep = Vec::new();
     for (home, folders) in &groups {
-        let Some((in_home, totals)) = measure_in(job, listing.id, home, folders, sizer) else {
-            return;
-        };
-        measured.extend(in_home);
-        to_keep.push((home.to_path_buf(), totals));
+        let totals = measure_in(job, listing.id, home, folders, sizer)?;
+        measured.push((home.to_path_buf(), totals));
     }
-    sizer.keep(to_keep);
-    job.answer(Event::FoldersMeasured {
-        id: listing.id,
-        sizes: measured,
-        done: true,
-    });
+    let by_home = measured
+        .iter()
+        .map(|(home, totals)| (home.clone(), Arc::new(totals.clone())))
+        .collect();
+    sizer.keep(measured);
+    Some(by_home)
 }
 
 fn measure_in(
@@ -221,7 +252,7 @@ fn measure_in(
     home: &Path,
     folders: &[&Entry],
     sizer: &FolderSizer,
-) -> Option<(Vec<(EntryId, u64)>, ByName)> {
+) -> Option<ByName> {
     let by_slot = |sizes: Vec<(usize, u64)>| -> Vec<(EntryId, u64)> {
         sizes
             .into_iter()
@@ -232,7 +263,6 @@ fn measure_in(
         job.answer(Event::FoldersMeasured {
             id,
             sizes: by_slot(sizes),
-            done: false,
         });
     };
     let names: Vec<OsString> = folders.iter().map(|entry| entry.name.clone()).collect();
@@ -241,52 +271,27 @@ fn measure_in(
         .measure
         .measure(home, &names, &stopped, &told)
         .filter(|_| !job.cancelled())?;
-    let by_name = names.into_iter().zip(totals.iter().copied()).collect();
-    Some((by_slot(totals.into_iter().enumerate().collect()), by_name))
+    Some(names.into_iter().zip(totals).collect())
 }
 
 fn arrange(
     rows: Vec<Row>,
     descending: bool,
-    kept: &KeptFor,
+    size_of: impl Fn(&Entry, &PathBuf) -> Option<u64>,
     cancelled: impl Fn() -> bool,
 ) -> Option<(Vec<Row>, Vec<Details>)> {
-    let paths = rows
-        .iter()
-        .map(|(entry, home)| (home.join(&entry.name), entry.kind));
-    let read = details::read_batch(paths, cancelled)?;
-    let mut paired: Vec<(Row, Details)> = rows
-        .into_iter()
-        .zip(read)
-        .map(|((entry, home), mut details)| {
+    let sorted = order::sorted_with_details(
+        rows,
+        |entry, home| home.join(&entry.name),
+        |entry, home, details| {
             if entry.kind == EntryKind::Folder {
-                details.size = kept
-                    .get(&home)
-                    .and_then(|(sizes, _)| sizes.get(&entry.name))
-                    .copied();
+                details.size = size_of(entry, home);
             }
-            ((entry, home), details)
-        })
-        .collect();
-    paired.sort_by(|(_, left), (_, right)| order::known_first(left.size, right.size, descending));
-    Some(
-        paired
-            .into_iter()
-            .zip(0..)
-            .map(|(((entry, home), details), index)| {
-                (
-                    (
-                        Entry {
-                            id: EntryId(index),
-                            ..entry
-                        },
-                        home,
-                    ),
-                    details,
-                )
-            })
-            .unzip(),
-    )
+        },
+        |(_, left), (_, right)| order::known_first(left.size, right.size, descending),
+        cancelled,
+    )?;
+    Some(sorted.into_iter().unzip())
 }
 
 #[cfg(test)]

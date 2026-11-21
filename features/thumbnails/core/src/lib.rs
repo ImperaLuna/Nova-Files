@@ -63,6 +63,18 @@ struct State {
     closed: bool,
 }
 
+impl State {
+    fn wants(&self, shown: &Arc<Listing>, index: usize, size: ThumbnailSize) -> bool {
+        !self.closed
+            && self
+                .shown
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(current, shown))
+            && self.size == size
+            && self.wanted.contains(&index)
+    }
+}
+
 impl Queue {
     pub fn start(setup: Thumbnails, events: Arc<dyn EventSink>) -> Option<Self> {
         let shared = Arc::new(Shared {
@@ -136,12 +148,26 @@ impl Shared {
         self.wake.notify_all();
     }
 
-    fn still_wanted(&self, id: ListingId, index: usize, size: ThumbnailSize) -> bool {
+    fn still_wanted(&self, shown: &Arc<Listing>, index: usize, size: ThumbnailSize) -> bool {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        !state.closed
-            && state.shown.as_ref().is_some_and(|shown| shown.id == id)
-            && state.size == size
-            && state.wanted.contains(&index)
+        state.wants(shown, index, size)
+    }
+
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "the lock is held through the send on purpose"
+    )]
+    fn deliver_if_wanted(
+        &self,
+        (shown, index, size): (&Arc<Listing>, usize, ThumbnailSize),
+        event: impl FnOnce() -> Option<Event>,
+        events: &dyn EventSink,
+    ) -> bool {
+        let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        if !state.wants(shown, index, size) {
+            return true;
+        }
+        event().is_none_or(|event| events.deliver(event).is_ok())
     }
 
     fn next_batch(&self) -> Option<Batch> {
@@ -194,22 +220,18 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
     }) = shared.next_batch()
     {
         let answer = |index: usize, png: Vec<u8>| {
-            if !shared.still_wanted(shown.id, index, size) {
-                return true;
-            }
-            let Ok(entry) = u32::try_from(index) else {
-                return true;
-            };
-            events
-                .deliver(Event::Thumbnail {
+            let event = || {
+                let entry = u32::try_from(index).ok()?;
+                Some(Event::Thumbnail {
                     id: shown.id,
                     entry: EntryId(entry),
                     size,
                     png: png.into(),
                 })
-                .is_ok()
+            };
+            shared.deliver_if_wanted((&shown, index, size), event, events)
         };
-        let wanted = |index: usize| shared.still_wanted(shown.id, index, size);
+        let wanted = |index: usize| shared.still_wanted(&shown, index, size);
         let sized = cache::sized(&setup.folder, size);
         let failed = cache::failed(&setup.folder);
         let mut misses = Vec::new();

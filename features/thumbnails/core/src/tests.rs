@@ -16,6 +16,10 @@ fn entry(index: u32, name: &str, kind: EntryKind) -> Entry {
     }
 }
 
+fn shown(shared: &Shared) -> Arc<Listing> {
+    shared.state.lock().unwrap().shown.clone().unwrap()
+}
+
 fn shared(entries: Vec<Entry>, wanted: Range<usize>, done: &[usize]) -> Shared {
     Shared {
         state: Mutex::new(State {
@@ -44,13 +48,15 @@ fn only_wanted_entries_of_the_shown_open_listing_are_still_wanted() {
     };
     let normal = ThumbnailSize::Normal;
     let queue = shared(files(), 0..1, &[]);
-    assert!(queue.still_wanted(LISTING, 0, normal));
-    assert!(!queue.still_wanted(LISTING, 1, normal));
-    assert!(!queue.still_wanted(ListingId(2), 0, normal));
-    assert!(!queue.still_wanted(LISTING, 0, ThumbnailSize::Large));
+    let listed = shown(&queue);
+    let same_again = Arc::new(Listing::clone(&listed));
+    assert!(queue.still_wanted(&listed, 0, normal));
+    assert!(!queue.still_wanted(&listed, 1, normal));
+    assert!(!queue.still_wanted(&same_again, 0, normal));
+    assert!(!queue.still_wanted(&listed, 0, ThumbnailSize::Large));
 
     queue.update(|state| state.closed = true);
-    assert!(!queue.still_wanted(LISTING, 0, normal));
+    assert!(!queue.still_wanted(&listed, 0, normal));
 }
 
 #[test]
@@ -155,8 +161,9 @@ fn showing_a_listing_starts_over_unless_a_newer_one_came() {
         entries: Arc::new([]),
         folders: None,
     };
+    let before = shown(&queue.shared);
     queue.show(&newer, || false);
-    assert!(queue.shared.still_wanted(LISTING, 0, ThumbnailSize::Normal));
+    assert!(queue.shared.still_wanted(&before, 0, ThumbnailSize::Normal));
 
     queue.show(&newer, || true);
     let state = queue.shared.state.lock().unwrap();
@@ -165,6 +172,7 @@ fn showing_a_listing_starts_over_unless_a_newer_one_came() {
         Some(ListingId(2))
     );
     assert_eq!((state.wanted.clone(), state.done.len()), (0..0, 0));
+    drop(state);
 }
 
 #[test]
