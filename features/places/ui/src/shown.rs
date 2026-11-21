@@ -31,7 +31,10 @@ pub fn shown(places: &[Place], pinned: &[Bookmark]) -> Vec<Shown> {
             .label
             .clone()
             .map_or_else(|| folder_name(&bookmark.path), SharedString::from),
-        icon: Icon::Folder,
+        icon: places
+            .iter()
+            .find(|place| place.path == bookmark.path)
+            .map_or(Icon::Folder, |place| place_icon(place.kind)),
         pinned: true,
     });
     let mut rows: Vec<Shown> = Vec::new();
@@ -147,6 +150,23 @@ mod tests {
             [false, false, false, true, true]
         );
         assert_eq!(rows[3].icon, Icon::Folder);
+    }
+
+    #[test]
+    fn a_pin_at_a_known_folder_draws_that_folder_s_icon() {
+        let rows = shown(
+            &[
+                place(PlaceKind::Music, "/home/me/Music"),
+                place(PlaceKind::Videos, "/home/me/Videos"),
+            ],
+            &[
+                pin("/home/me/Music", None),
+                pin("/home/me/Videos", Some("Films")),
+                pin("/home/me/Public", None),
+            ],
+        );
+        let icons: Vec<Icon> = rows.iter().map(|row| row.icon).collect();
+        assert_eq!(icons, [Icon::Music, Icon::Videos, Icon::Folder]);
     }
 
     #[test]

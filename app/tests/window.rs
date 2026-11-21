@@ -349,6 +349,25 @@ async fn columns_line_up_under_their_headers(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn each_column_head_fills_its_column(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("window");
+    let (_view, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+
+    let mut bounds = |selector| cx.debug_bounds(selector).unwrap();
+    let name = bounds("head-name");
+    let modified = bounds("head-modified");
+    let size = bounds("head-size");
+    let row = bounds("modified-0");
+    assert_eq!(modified.right(), row.right());
+    assert_eq!(
+        modified.left() - name.right(),
+        size.left() - modified.right()
+    );
+}
+
+#[gpui::test]
 async fn a_click_on_a_column_head_orders_the_list_by_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("window");

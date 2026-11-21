@@ -96,6 +96,7 @@ fn menu_card(colors: &Colors) -> Stateful<Div> {
             offset: point(px(0.0), size::MENU_SHADOW_Y),
             blur_radius: size::MENU_SHADOW_BLUR,
             spread_radius: px(0.0),
+            inset: false,
         }])
 }
 

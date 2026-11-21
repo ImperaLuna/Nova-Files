@@ -315,6 +315,7 @@ fn floating(
                     offset: point(px(0.0), size::ISLAND_SHADOW_Y),
                     blur_radius: size::ISLAND_SHADOW_BLUR,
                     spread_radius: px(0.0),
+                    inset: false,
                 }]),
         )
 }

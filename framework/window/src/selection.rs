@@ -13,12 +13,12 @@ pub enum Click {
 }
 
 impl Click {
-    pub fn of(modifiers: Modifiers, several: bool) -> Self {
+    pub const fn of(modifiers: Modifiers, several: bool) -> Self {
         if !several {
             Self::Only
         } else if modifiers.shift {
             Self::Range
-        } else if modifiers.secondary() {
+        } else if modifiers.control {
             Self::Toggle
         } else {
             Self::Only
