@@ -67,9 +67,6 @@ impl MainWindow {
     }
 
     fn entry_menu(&self, cx: &App) -> Vec<Vec<MenuItem>> {
-        if self.folder_rules().replaces_menu {
-            return self.arranged(MenuAt::Entry, Vec::new(), cx);
-        }
         let one = self.selected_count() == 1;
         let lone = |item: ShellItem| one.then_some(item);
         let open = [
