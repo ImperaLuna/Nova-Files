@@ -1,14 +1,19 @@
 #![forbid(unsafe_code)]
 
 mod naming;
+mod password;
 mod picker;
+mod words;
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use gpui::{App, Context, SharedString, Subscription, Window};
-use nova_files_api::{Event as CoreEvent, ExtractTo, Listing, Operation, Packing};
-use nova_files_archives_api::{Command, Event};
+use nova_files_api::{Event as CoreEvent, Listing, Operation};
+use nova_files_archives_api::{
+    Command, Compress as CompressJob, Event, Extract, ExtractTo, PASSWORD_NEEDED, PASSWORD_TO_LOCK,
+    PASSWORD_WRONG, Packing,
+};
 use nova_files_shell::actions::RenameSelected;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
@@ -18,6 +23,7 @@ use nova_files_shell::{
 
 use naming::opens;
 use picker::{Choice, Picking};
+use words::{CompressWords, ExtractWords};
 
 mod actions {
     #![expect(
@@ -82,6 +88,7 @@ pub struct ArchivesPart {
     inside: Option<PathBuf>,
     choice: Choice,
     picking: Option<Picking>,
+    password: Option<password::Asked>,
     _selections: Subscription,
 }
 
@@ -132,11 +139,11 @@ impl ArchivesPart {
             let Some(into) = into.or_else(|| archive.parent()).map(PathBuf::from) else {
                 continue;
             };
-            let operation = Operation::Extract {
+            let operation = Operation::feature(Extract {
                 archive,
                 into,
                 to: ExtractTo::Here,
-            };
+            });
             self.host
                 .island
                 .update(cx, |island, cx| island.start_job(operation, cx));
@@ -234,14 +241,14 @@ impl ArchivesPart {
         };
         self.made
             .wait(&self.host, (into.join(&name), compressed), window, cx);
-        let operation = Operation::Compress {
+        let operation = Operation::feature(CompressJob {
             sources,
             into,
             name,
             packing,
             level,
             locked,
-        };
+        });
         self.host
             .island
             .update(cx, |island, cx| island.start_job(operation, cx));
@@ -272,10 +279,9 @@ impl ArchivesPart {
 }
 
 fn compressed(operation: &Operation) -> Option<PathBuf> {
-    match operation {
-        Operation::Compress { into, name, .. } => Some(into.join(name)),
-        _ => None,
-    }
+    operation
+        .get::<CompressJob>()
+        .map(|made| made.into.join(&made.name))
 }
 
 fn taken(listing: &Listing, name: &OsStr) -> bool {
@@ -353,6 +359,7 @@ impl Part for ArchivesPart {
             inside: None,
             choice: Choice::default(),
             picking: None,
+            password: None,
             _selections: selections,
         }
     }
@@ -368,7 +375,7 @@ impl Part for ArchivesPart {
         slots.command(&COMPRESS_AS, can_compress, Self::compress_as);
         slots.menu_in(
             MenuAt::Entry,
-            MenuGroup::Archive,
+            MenuGroup::AfterOpen,
             Placed::FIRST,
             extract_items,
         );
@@ -376,5 +383,10 @@ impl Part for ArchivesPart {
         slots.listed(Self::listed);
         slots.island(picker::picking, picker::island);
         slots.watch(Self::watch);
+        slots.job_words::<Extract>(ExtractWords);
+        slots.job_words::<CompressJob>(CompressWords);
+        for question in [&PASSWORD_NEEDED, &PASSWORD_WRONG, &PASSWORD_TO_LOCK] {
+            slots.question(question, Self::asks, password::island);
+        }
     }
 }

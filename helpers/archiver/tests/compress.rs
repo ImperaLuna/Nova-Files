@@ -5,7 +5,7 @@ use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
 use nova_files::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
-use nova_files_api::Packing;
+use nova_files_archives_api::Packing;
 use nova_files_test_folder::TestFolder;
 
 const MOST_WAITS: u32 = 100;

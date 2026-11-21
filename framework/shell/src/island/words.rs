@@ -84,7 +84,6 @@ pub fn finished_note(
             Operation::Copy { sources, .. } | Operation::Move { sources, .. } => {
                 answered_note(operation, sources, here, tally)
             }
-            Operation::Extract { archive, .. } => Some(extracted_note(archive, tally)),
             _ => done_note(operation),
         },
         Outcome::Cancelled => None,
@@ -118,10 +117,6 @@ fn answered_note(
     Some(with_answers(vec![done], tally))
 }
 
-fn extracted_note(archive: &Path, tally: Tally) -> String {
-    with_answers(vec![format!("Extracted {}", name_of(archive))], tally)
-}
-
 pub fn with_answers(mut parts: Vec<String>, tally: Tally) -> String {
     if tally.replaced > 0 {
         parts.push(format!("replaced {}", tally.replaced));
@@ -150,10 +145,8 @@ fn done_note(operation: &Operation) -> Option<String> {
         }
         Operation::EmptyTrash => format!("{TRASH} emptied"),
         Operation::Rename { name, .. } => format!("Renamed to {}", lossy(name)),
-        Operation::Compress { name, .. } => format!("Made {}", lossy(name)),
         Operation::Copy { .. }
         | Operation::Move { .. }
-        | Operation::Extract { .. }
         | Operation::NewFolder { .. }
         | Operation::ChangeAccess { .. }
         | Operation::Undo { .. }
@@ -176,8 +169,6 @@ fn verb(operation: &Operation, words: Option<&dyn AnyJobWords>) -> (&'static str
         Operation::ChangeAccess { .. } => ("change", true),
         Operation::EmptyTrash => ("empty Trash", false),
         Operation::Undo { .. } => ("undo", false),
-        Operation::Extract { .. } => ("extract", true),
-        Operation::Compress { .. } => ("compress", true),
     }
 }
 

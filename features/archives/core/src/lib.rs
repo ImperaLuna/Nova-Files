@@ -13,9 +13,9 @@ use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::Packing;
+use nova_files_archives_api::Packing;
 
-pub use compress::{Asked, compress};
+pub use compress::compress;
 pub use extract::{Taking, extract};
 pub use kind::Archives;
 pub use unpack::{Extracting, Flow};

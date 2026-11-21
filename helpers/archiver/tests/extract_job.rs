@@ -13,17 +13,18 @@ use std::path::Path;
 
 use common::Bench;
 use nova_files_api::{
-    Answer, Command, Conflict, ConflictKind, ExtractTo, Failure, JobId, Operation, Outcome, Scope,
+    Answer, Carried, Command, Conflict, ConflictKind, Failure, JobId, Operation, Outcome, Scope,
     Tally,
 };
+use nova_files_archives_api::{Extract, ExtractTo, PASSWORD_NEEDED, PASSWORD_WRONG, Password};
 use zip::write::SimpleFileOptions;
 
 fn extract(bench: &Bench, archive: &str, to: ExtractTo) -> JobId {
-    bench.start(Operation::Extract {
+    bench.start(Operation::feature(Extract {
         archive: bench.at(archive),
         into: bench.at("into"),
         to,
-    })
+    }))
 }
 
 fn tar(archive: &Path, folders: &[(&str, u32)], files: &[(&str, &str)]) {
@@ -128,19 +129,19 @@ fn a_locked_archive_asks_for_its_password_until_it_is_right() {
     locked_zip(&bench.at("secret.zip"), "pw");
     let job = extract(&bench, "secret.zip", ExtractTo::Here);
     let needed = bench.held(job);
-    assert_eq!(needed.kind, ConflictKind::PasswordNeeded);
+    assert_eq!(needed.kind, ConflictKind::Asked(&PASSWORD_NEEDED));
     assert_eq!(needed.source, bench.at("secret.zip"));
-    bench.send(Command::GivePassword {
+    bench.send(Command::Reply {
         job,
         conflict: needed,
-        password: "wrong".to_owned(),
+        reply: Carried::new(Password("wrong".to_owned())),
     });
     let wrong = bench.held(job);
-    assert_eq!(wrong.kind, ConflictKind::PasswordWrong);
-    bench.send(Command::GivePassword {
+    assert_eq!(wrong.kind, ConflictKind::Asked(&PASSWORD_WRONG));
+    bench.send(Command::Reply {
         job,
         conflict: wrong,
-        password: "pw".to_owned(),
+        reply: Carried::new(Password("pw".to_owned())),
     });
     assert_eq!(bench.finished(job).0, Outcome::Done);
     assert_eq!(bench.landed(), ["secret.txt"]);
@@ -153,13 +154,13 @@ fn skipping_the_password_cancels_and_leaves_nothing() {
     locked_zip(&bench.at("secret.zip"), "pw");
     let job = extract(&bench, "secret.zip", ExtractTo::Here);
     let needed = bench.held(job);
-    bench.send(Command::GivePassword {
+    bench.send(Command::Reply {
         job,
         conflict: Conflict {
             kind: ConflictKind::NoSpace,
             ..needed.clone()
         },
-        password: "pw".to_owned(),
+        reply: Carried::new(Password("pw".to_owned())),
     });
     bench.send(Command::AnswerConflict {
         job,
@@ -219,11 +220,11 @@ fn a_skipped_folder_with_a_read_only_one_inside_leaves_nothing_behind() {
 #[test]
 fn a_relative_archive_path_is_an_invalid_name() {
     let bench = Bench::new("relative");
-    let job = bench.start(Operation::Extract {
+    let job = bench.start(Operation::feature(Extract {
         archive: "a.tar".into(),
         into: bench.at("into"),
         to: ExtractTo::Here,
-    });
+    }));
     assert_eq!(
         bench.finished(job).0,
         Outcome::Failed {

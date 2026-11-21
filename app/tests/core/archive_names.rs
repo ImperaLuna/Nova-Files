@@ -5,7 +5,8 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 
 use nova_files_api::archive::ending;
-use nova_files_api::{Entry, EntryId, EntryKind, IconKind, Operation, Outcome, Packing};
+use nova_files_api::{Entry, EntryId, EntryKind, IconKind, Operation, Outcome};
+use nova_files_archives_api::{Compress, Packing};
 use nova_files_archives_ui::archive_name;
 use nova_files_shell::kind::icon_kind;
 use nova_files_test_folder::TestFolder;
@@ -49,14 +50,14 @@ fn every_format_gets_the_same_name_from_the_window_and_the_core() {
             fs::write(into.join(&wanted), "mine").unwrap();
             let predicted = archive_name(&first, packing, |name| into.join(name).exists()).unwrap();
 
-            let (_, outcome, _) = client.run(Operation::Compress {
+            let (_, outcome, _) = client.run(Operation::feature(Compress {
                 sources: vec![path],
                 into: into.clone(),
                 name: wanted.clone(),
                 packing,
                 level: 6,
                 locked: false,
-            });
+            }));
 
             assert_eq!(outcome, Outcome::Done, "{packing:?} {source}");
             assert!(

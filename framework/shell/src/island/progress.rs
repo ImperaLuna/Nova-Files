@@ -169,8 +169,6 @@ fn doing(operation: &Operation, words: &Words) -> (&'static str, &'static str) {
         Operation::NewFolder { .. } => ("Making", ""),
         Operation::ChangeAccess { .. } => ("Changing", ""),
         Operation::Undo { .. } => ("Undoing", ""),
-        Operation::Extract { .. } => ("Extracting", ""),
-        Operation::Compress { .. } => ("Compressing", ""),
     }
 }
 
@@ -180,16 +178,12 @@ pub fn sources<'a>(operation: &'a Operation, words: &Words) -> &'a [std::path::P
             .of(operation)
             .and_then(|words| words.sources(operation))
             .unwrap_or_default(),
-        Operation::Copy { sources, .. }
-        | Operation::Move { sources, .. }
-        | Operation::Compress { sources, .. } => sources,
+        Operation::Copy { sources, .. } | Operation::Move { sources, .. } => sources,
         Operation::Trash { paths }
         | Operation::Delete { paths }
         | Operation::ChangeAccess { paths, .. } => paths,
         Operation::Restore { items } | Operation::DeleteFromTrash { items } => items,
-        Operation::Rename { path, .. } | Operation::Extract { archive: path, .. } => {
-            std::slice::from_ref(path)
-        }
+        Operation::Rename { path, .. } => std::slice::from_ref(path),
         Operation::NewFolder { inside, .. } => std::slice::from_ref(inside),
         Operation::EmptyTrash | Operation::Undo { .. } => &[],
     }

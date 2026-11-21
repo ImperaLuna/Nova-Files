@@ -12,18 +12,19 @@ use std::path::PathBuf;
 use common::Bench;
 use nova_files::{ArchiveKind, Archiver};
 use nova_files_api::{
-    Answer, Command, ConflictKind, Failure, Operation, Outcome, Packing, Scope, Tally,
+    Answer, Carried, Command, ConflictKind, Failure, Operation, Outcome, Scope, Tally,
 };
+use nova_files_archives_api::{Compress, PASSWORD_TO_LOCK, Packing, Password};
 
 fn compress(bench: &Bench, name: &str, locked: bool) -> nova_files_api::JobId {
-    bench.start(Operation::Compress {
+    bench.start(Operation::feature(Compress {
         sources: vec![bench.at("docs"), bench.at("notes.txt")],
         into: bench.at("into"),
         name: name.into(),
         packing: Packing::ZipDeflate,
         level: 5,
         locked,
-    })
+    }))
 }
 
 fn with_sources(test: &str) -> Bench {
@@ -68,18 +69,18 @@ fn locked_asks_for_the_password_first() {
     let bench = with_sources("compress-locked");
     let job = compress(&bench, "docs.zip", true);
     let needed = bench.held(job);
-    assert_eq!(needed.kind, ConflictKind::PasswordNeeded);
-    bench.send(Command::GivePassword {
+    assert_eq!(needed.kind, ConflictKind::Asked(&PASSWORD_TO_LOCK));
+    bench.send(Command::Reply {
         job,
         conflict: needed,
-        password: String::new(),
+        reply: Carried::new(Password(String::new())),
     });
     let again = bench.held(job);
-    assert_eq!(again.kind, ConflictKind::PasswordNeeded);
-    bench.send(Command::GivePassword {
+    assert_eq!(again.kind, ConflictKind::Asked(&PASSWORD_TO_LOCK));
+    bench.send(Command::Reply {
         job,
         conflict: again,
-        password: "pw".to_owned(),
+        reply: Carried::new(Password("pw".to_owned())),
     });
     assert_eq!(bench.finished(job).0, Outcome::Done);
     let entries = archiver().list(&bench.at("into/docs.zip")).unwrap();
@@ -108,14 +109,14 @@ fn a_bad_name_fails_and_leaves_nothing() {
 #[test]
 fn relative_paths_are_invalid_names() {
     let bench = with_sources("compress-relative");
-    let job = bench.start(Operation::Compress {
+    let job = bench.start(Operation::feature(Compress {
         sources: vec![bench.at("docs")],
         into: "into".into(),
         name: "a.zip".into(),
         packing: Packing::ZipDeflate,
         level: 5,
         locked: false,
-    });
+    }));
     assert_eq!(
         bench.finished(job).0,
         Outcome::Failed {
@@ -123,14 +124,14 @@ fn relative_paths_are_invalid_names() {
             reason: Failure::InvalidName,
         }
     );
-    let job = bench.start(Operation::Compress {
+    let job = bench.start(Operation::feature(Compress {
         sources: vec!["docs".into()],
         into: bench.at("into"),
         name: "a.zip".into(),
         packing: Packing::ZipDeflate,
         level: 5,
         locked: false,
-    });
+    }));
     assert_eq!(
         bench.finished(job).0,
         Outcome::Failed {

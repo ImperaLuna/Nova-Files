@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::Packing;
+use nova_files_archives_api::Packing;
 use std::process::{Child, ChildStdout, Stdio};
 use std::time::Duration;
 

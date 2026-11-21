@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use nova_files_api::{Failure, Operation, Outcome};
+use nova_files_archives_api::{Compress, Extract};
 use nova_files_jobs::identity::Identity;
 use nova_files_jobs::mover::Mover;
 use nova_files_jobs::running::Running;
@@ -8,7 +9,7 @@ use nova_files_jobs::undo::{landed, trash_again};
 use nova_files_jobs::{Ended, JobKind};
 
 use crate::inside;
-use crate::{Archiver, Asked, Taking, compress, extract};
+use crate::{Archiver, Taking, compress, extract};
 
 pub struct Archives<M> {
     pub archiver: Option<Archiver>,
@@ -22,8 +23,7 @@ impl<M: Mover + Send + Sync + 'static> JobKind for Archives<M> {
     fn claims(&self, operation: &Operation) -> bool {
         match operation {
             Operation::Copy { sources, .. } => copied_out(sources).is_some(),
-            Operation::Extract { .. } | Operation::Compress { .. } => true,
-            _ => false,
+            _ => operation.get::<Extract>().is_some() || operation.get::<Compress>().is_some(),
         }
     }
 
@@ -48,40 +48,25 @@ impl<M: Mover + Send + Sync + 'static> JobKind for Archives<M> {
                 Taking::Picked(&picked),
             );
         }
-        match operation {
-            Operation::Extract { archive, into, to } => extract(
+        if let Some(asked) = operation.get::<Extract>() {
+            return extract(
                 running,
                 (archiver, &self.files),
-                archive,
-                into,
-                Taking::All(*to),
-            ),
-            Operation::Compress {
-                sources,
-                into,
-                name,
-                packing,
-                level,
-                locked,
-            } => {
-                let asked = Asked {
-                    sources,
-                    into,
-                    name,
-                    packing: *packing,
-                    level: *level,
-                    locked: *locked,
-                };
-                compress(running, archiver, &asked)
-            }
-            _ => (
-                Outcome::Failed {
-                    path: PathBuf::new(),
-                    reason: Failure::Other,
-                },
-                Vec::new(),
-            ),
+                &asked.archive,
+                &asked.into,
+                Taking::All(asked.to),
+            );
         }
+        if let Some(asked) = operation.get::<Compress>() {
+            return compress(running, archiver, asked);
+        }
+        (
+            Outcome::Failed {
+                path: PathBuf::new(),
+                reason: Failure::Other,
+            },
+            Vec::new(),
+        )
     }
 
     fn undo(&self, running: &mut Running, _: &Operation, _: &Ended) -> Option<Self::Undo> {
@@ -97,9 +82,15 @@ impl<M: Mover + Send + Sync + 'static> JobKind for Archives<M> {
             Operation::Copy { sources, into } if copied_out(sources).is_some() => {
                 sources.first().unwrap_or(into).clone()
             }
-            Operation::Extract { archive, .. } => archive.clone(),
-            Operation::Compress { sources, into, .. } => sources.first().unwrap_or(into).clone(),
-            _ => PathBuf::new(),
+            _ => operation
+                .get::<Extract>()
+                .map(|asked| asked.archive.clone())
+                .or_else(|| {
+                    operation
+                        .get::<Compress>()
+                        .map(|asked| asked.sources.first().unwrap_or(&asked.into).clone())
+                })
+                .unwrap_or_default(),
         }
     }
 }
@@ -126,7 +117,7 @@ fn copied_out(sources: &[PathBuf]) -> Option<(PathBuf, Vec<PathBuf>)> {
 
 #[cfg(test)]
 mod tests {
-    use nova_files_api::{ExtractTo, Packing};
+    use nova_files_archives_api::{ExtractTo, Packing};
     use nova_files_jobs::mover::Moved;
 
     use super::*;
@@ -144,14 +135,14 @@ mod tests {
     }
 
     fn compress(sources: Vec<PathBuf>) -> Operation {
-        Operation::Compress {
+        Operation::feature(Compress {
             sources,
             into: "/into".into(),
             name: "a.zip".into(),
             packing: Packing::ZipDeflate,
             level: 5,
             locked: false,
-        }
+        })
     }
 
     #[test]
@@ -160,11 +151,11 @@ mod tests {
             archiver: None,
             files: NoFiles,
         };
-        let extract = Operation::Extract {
+        let extract = Operation::feature(Extract {
             archive: "/a.zip".into(),
             into: "/into".into(),
             to: ExtractTo::Here,
-        };
+        });
         let copy = Operation::Copy {
             sources: vec!["/s".into()],
             into: "/into".into(),

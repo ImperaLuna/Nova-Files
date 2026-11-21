@@ -3451,6 +3451,7 @@ dependencies = [
  "lzma-rust2",
  "nova-files",
  "nova-files-api",
+ "nova-files-archives-api",
  "nova-files-open-api",
  "nova-files-test-folder",
  "rustix",
@@ -3462,6 +3463,9 @@ dependencies = [
 [[package]]
 name = "nova-files-archives-api"
 version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
 
 [[package]]
 name = "nova-files-archives-core"
@@ -3469,6 +3473,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "nova-files-api",
+ "nova-files-archives-api",
  "nova-files-disk",
  "nova-files-entries-core",
  "nova-files-jobs",
