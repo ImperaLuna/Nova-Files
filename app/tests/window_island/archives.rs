@@ -242,3 +242,21 @@ async fn compress_as_picks_the_format_the_next_compress_uses(cx: &mut TestAppCon
     choose(&view, cx, "Compress");
     wait_for_note(&view, cx, "Made bundle.tar.gz").await;
 }
+
+#[gpui::test]
+async fn extract_all_leaves_with_the_archive(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = archive_tree("archive-leave");
+    let home = TempFolder::tree("archive-leave-home");
+    let archiver = fake_helper(&home, HOLDS_ONE_FILE);
+    let inside = tree.path().join("bundle.zip");
+    let (view, cx) = window_with_archiver(cx, (&inside, home.path()), Vec::new(), Some(archiver));
+    wait_for_folder(&view, cx, &inside).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("extract-all").is_some());
+
+    view.update(cx, MainWindow::open_start);
+    cx.run_until_parked();
+
+    assert!(cx.debug_bounds("extract-all").is_none());
+}
