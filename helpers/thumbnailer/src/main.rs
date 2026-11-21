@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-mod batch;
 mod data_dirs;
+mod jobs;
 mod mime;
 mod png_text;
 mod preview;
@@ -9,7 +9,8 @@ mod render;
 mod sandbox;
 mod system;
 
-use std::io::{self, Write as _};
+use std::io::{self, BufRead, Write};
+use std::path::Path;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -21,11 +22,11 @@ fn main() -> ExitCode {
         };
         return preview::run(&request);
     }
-    let Some(batch) = batch::Batch::from_args(args) else {
-        writeln!(io::stderr(), "{}", batch::USAGE).ok();
+    let Some(folder) = jobs::folder_from_args(args) else {
+        writeln!(io::stderr(), "{}", jobs::USAGE).ok();
         return ExitCode::FAILURE;
     };
-    if let Err(error) = sandbox::lock_in(&batch.folder) {
+    if let Err(error) = sandbox::lock_in(&folder) {
         writeln!(io::stderr(), "could not start the sandbox: {error}").ok();
         return ExitCode::FAILURE;
     }
@@ -34,12 +35,35 @@ fn main() -> ExitCode {
         mime: mime::MimeTypes::load(&dirs),
         thumbnailers: system::Thumbnailers::load(&dirs),
     };
-    let mut out = io::stdout().lock();
-    for job in &batch.jobs {
-        let outcome = render::render(&batch.folder, batch.size, job, &system);
-        if writeln!(out, "{}", outcome.word()).is_err() {
+    serve(
+        &folder,
+        &system,
+        &mut io::stdin().lock(),
+        &mut io::stdout().lock(),
+    )
+}
+
+fn serve(
+    folder: &Path,
+    system: &render::System,
+    input: &mut impl BufRead,
+    out: &mut impl Write,
+) -> ExitCode {
+    loop {
+        let job = match jobs::next_job(input) {
+            Ok(Some(job)) => job,
+            Ok(None) => return ExitCode::SUCCESS,
+            Err(error) => {
+                writeln!(io::stderr(), "{error}\n{}", jobs::USAGE).ok();
+                return ExitCode::FAILURE;
+            }
+        };
+        let outcome = render::render(folder, &job, system);
+        if writeln!(out, "{}", outcome.word())
+            .and_then(|()| out.flush())
+            .is_err()
+        {
             return ExitCode::FAILURE;
         }
     }
-    ExitCode::SUCCESS
 }

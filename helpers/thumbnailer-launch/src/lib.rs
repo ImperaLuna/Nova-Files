@@ -1,10 +1,11 @@
 use std::env;
-use std::ffi::OsString;
-use std::io::{BufRead as _, BufReader, Read};
+use std::io::{BufRead as _, BufReader, Read, Write as _};
+use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::sync::{Mutex, PoisonError, mpsc};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc::{self, Receiver};
+use std::sync::{Mutex, PoisonError};
 use std::thread;
 use std::time::Duration;
 
@@ -18,6 +19,7 @@ const PREVIEW_FLAG: &str = "--preview";
 const BYTES_PER_PIXEL: u64 = 4;
 const MAX_SIZE_LINE: usize = 22;
 const LINE_END: u8 = b'\n';
+const FIELD_END: u8 = 0;
 const SIZE_SEPARATOR: char = ' ';
 
 #[derive(Debug, Clone)]
@@ -28,46 +30,70 @@ pub struct Job {
     pub name: String,
 }
 
-pub fn run(
-    helper: &Path,
-    thumbnails: &Path,
-    size: ThumbnailSize,
-    jobs: &[Job],
-    mut finished: impl FnMut(usize) -> bool,
-) {
-    let mut command = command(helper);
-    command.arg(thumbnails).arg(size.folder());
-    for job in jobs {
-        command
-            .arg(&job.source)
-            .arg(&job.uri)
-            .arg(job.mtime.to_string())
-            .arg(OsString::from(&job.name));
-    }
-    let Ok(mut child) = command.spawn() else {
-        return;
-    };
-    let output = child.stdout.take();
-    let (answered, answers) = mpsc::channel();
-    thread::Builder::new()
-        .name(READER_THREAD.to_owned())
-        .spawn(move || {
-            let Some(output) = output else {
-                return;
-            };
-            for line in BufReader::new(output).split(LINE_END) {
-                if line.is_err() || answered.send(()).is_err() {
-                    return;
+pub struct Thumbnailer {
+    child: Child,
+    jobs: ChildStdin,
+    answers: Receiver<()>,
+}
+
+impl Thumbnailer {
+    pub fn start(helper: &Path, thumbnails: &Path) -> Option<Self> {
+        let mut child = command(helper)
+            .arg(thumbnails)
+            .stdin(Stdio::piped())
+            .spawn()
+            .ok()?;
+        let (Some(jobs), Some(output)) = (child.stdin.take(), child.stdout.take()) else {
+            end(&mut child);
+            return None;
+        };
+        let (answered, answers) = mpsc::channel();
+        let reading = thread::Builder::new()
+            .name(READER_THREAD.to_owned())
+            .spawn(move || {
+                for line in BufReader::new(output).split(LINE_END) {
+                    if line.is_err() || answered.send(()).is_err() {
+                        return;
+                    }
                 }
-            }
-        })
-        .ok();
-    for index in 0..jobs.len() {
-        if answers.recv_timeout(PER_FILE).is_err() || !finished(index) {
-            break;
+            });
+        if reading.is_err() {
+            end(&mut child);
+            return None;
         }
+        Some(Self {
+            child,
+            jobs,
+            answers,
+        })
     }
-    end(&mut child);
+
+    pub fn make(&mut self, size: ThumbnailSize, job: &Job) -> bool {
+        self.make_within(size, job, PER_FILE)
+    }
+
+    fn make_within(&mut self, size: ThumbnailSize, job: &Job, limit: Duration) -> bool {
+        let mtime = job.mtime.to_string();
+        let fields: &[&[u8]] = &[
+            size.folder().as_bytes(),
+            job.source.as_os_str().as_bytes(),
+            job.uri.as_bytes(),
+            mtime.as_bytes(),
+            job.name.as_bytes(),
+        ];
+        let mut bytes = Vec::new();
+        for field in fields {
+            bytes.extend_from_slice(field);
+            bytes.push(FIELD_END);
+        }
+        self.jobs.write_all(&bytes).is_ok() && self.answers.recv_timeout(limit).is_ok()
+    }
+}
+
+impl Drop for Thumbnailer {
+    fn drop(&mut self) {
+        end(&mut self.child);
+    }
 }
 
 #[derive(Debug, Default)]
@@ -296,15 +322,12 @@ mod tests {
         assert_eq!(status.signal(), Some(Signal::KILL.as_raw()));
     }
 
-    fn helper_that_answers_then_hangs(lines: usize) -> PathBuf {
-        use std::os::unix::fs::PermissionsExt as _;
+    fn fake_helper(name: &str, script: &str) -> Thumbnailer {
         let folder = env::temp_dir().join(format!("nova-files-launch-{}", std::process::id()));
         std::fs::create_dir_all(&folder).unwrap();
-        let helper = folder.join(format!("answers-{lines}"));
-        let answers = "echo ok; ".repeat(lines);
-        std::fs::write(&helper, format!("#!/bin/sh\n{answers}exec sleep 30\n")).unwrap();
-        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o755)).unwrap();
-        helper
+        let script_file = folder.join(name);
+        std::fs::write(&script_file, script).unwrap();
+        Thumbnailer::start(Path::new("bash"), &script_file).unwrap()
     }
 
     fn job(name: &str) -> Job {
@@ -316,23 +339,31 @@ mod tests {
         }
     }
 
+    const QUICK: Duration = Duration::from_millis(300);
+
     #[test]
-    fn each_answer_is_reported_before_the_helper_exits() {
-        let helper = helper_that_answers_then_hangs(2);
-        let jobs = [job("a"), job("b"), job("c")];
-        let started = std::time::Instant::now();
-        let mut reported = Vec::new();
-        run(
-            &helper,
-            Path::new("/t"),
-            ThumbnailSize::Normal,
-            &jobs,
-            |index| {
-                reported.push(index);
-                index == 0
-            },
+    fn one_helper_answers_job_after_job() {
+        let mut thumbnailer = fake_helper(
+            "answers",
+            "while read -r -d '' _ && read -r -d '' _ && read -r -d '' _ && read -r -d '' _ && read -r -d '' _; do echo ok; done",
         );
-        assert_eq!(reported, vec![0, 1]);
+        for name in ["a", "b", "c"] {
+            assert!(thumbnailer.make_within(ThumbnailSize::Normal, &job(name), QUICK));
+        }
+    }
+
+    #[test]
+    fn a_helper_that_dies_answers_no_more() {
+        let mut thumbnailer = fake_helper("dies", "head -c 1 > /dev/null; echo ok");
+        assert!(thumbnailer.make_within(ThumbnailSize::Normal, &job("a"), QUICK));
+        assert!(!thumbnailer.make_within(ThumbnailSize::Normal, &job("b"), QUICK));
+    }
+
+    #[test]
+    fn a_helper_past_the_limit_is_given_up_on() {
+        let mut thumbnailer = fake_helper("hangs", "exec sleep 30");
+        let started = std::time::Instant::now();
+        assert!(!thumbnailer.make_within(ThumbnailSize::Normal, &job("a"), QUICK));
         assert!(started.elapsed() < PER_FILE);
     }
 }

@@ -1,9 +1,11 @@
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs;
+use std::io::Write as _;
+use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
 
 use image::codecs::jpeg::JpegEncoder;
 use image::{ImageEncoder as _, ImageFormat, RgbImage};
@@ -44,26 +46,44 @@ fn run_with_data(thumbnails: &Path, jobs: &[(&Path, &str)], data: &Path) -> Vec<
 }
 
 fn run_sized(thumbnails: &Path, size: &str, jobs: &[(&Path, &str)], data: &Path) -> Vec<String> {
-    let mut command = Command::new(HELPER);
-    command
-        .arg(thumbnails)
-        .arg(size)
-        .env("XDG_DATA_DIRS", data)
-        .env("XDG_DATA_HOME", data);
+    let mut input = Vec::new();
     for (file, name) in jobs {
-        command
-            .arg(file)
-            .arg(format!("file://{}", file.display()))
-            .arg("1700000000")
-            .arg(name);
+        let uri = format!("file://{}", file.display());
+        input.extend(job(&[
+            size.as_bytes(),
+            file.as_os_str().as_bytes(),
+            uri.as_bytes(),
+            b"1700000000",
+            name.as_bytes(),
+        ]));
     }
-    let output = command.output().unwrap();
+    let output = helper(thumbnails, &input, data);
     assert!(output.status.success(), "{output:?}");
     String::from_utf8(output.stdout)
         .unwrap()
         .lines()
         .map(str::to_owned)
         .collect()
+}
+
+fn job(fields: &[&[u8]]) -> Vec<u8> {
+    fields
+        .iter()
+        .flat_map(|field| field.iter().copied().chain([0]))
+        .collect()
+}
+
+fn helper(thumbnails: &Path, input: &[u8], data: &Path) -> Output {
+    let mut child = Command::new(HELPER)
+        .arg(thumbnails)
+        .env("XDG_DATA_DIRS", data)
+        .env("XDG_DATA_HOME", data)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(input).unwrap();
+    child.wait_with_output().unwrap()
 }
 
 #[test]
@@ -265,14 +285,18 @@ fn a_rotated_photo_gets_an_upright_thumbnail() {
 }
 
 #[test]
-fn bad_arguments_are_refused() {
+fn bad_jobs_are_refused() {
     let folder = TempFolder::new("refused");
-    let status = Command::new(HELPER)
-        .arg(&folder.0)
-        .args([NORMAL, "/a.jpg", "file:///a.jpg", "1", "../escape.png"])
-        .status()
-        .unwrap();
-    assert!(!status.success());
+    let bad = job(&[
+        b"normal",
+        b"/a.jpg",
+        b"file:///a.jpg",
+        b"1",
+        b"../escape.png",
+    ]);
+    let output = helper(&folder.0, &bad, &folder.0);
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, Vec::<u8>::new());
 }
 
 #[test]

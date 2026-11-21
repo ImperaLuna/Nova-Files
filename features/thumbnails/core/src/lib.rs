@@ -187,14 +187,16 @@ struct Batch {
 }
 
 fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
+    let mut helper: Option<launch::Thumbnailer> = None;
     while let Some(Batch {
         shown,
         size,
         entries: batch,
     }) = shared.next_batch()
     {
+        let wanted = |index: usize| shared.still_wanted(shown.id, index, size);
         let answer = |index: usize, png: Vec<u8>| {
-            if !shared.still_wanted(shown.id, index, size) {
+            if !wanted(index) {
                 return true;
             }
             let Ok(entry) = u32::try_from(index) else {
@@ -209,10 +211,8 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
                 })
                 .is_ok()
         };
-        let wanted = |index: usize| shared.still_wanted(shown.id, index, size);
         let sized = cache::sized(&setup.folder, size);
         let failed = cache::failed(&setup.folder);
-        let mut misses = Vec::new();
         for index in batch {
             if !wanted(index) {
                 continue;
@@ -220,40 +220,44 @@ fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
             let Some(job) = job_for(&shown, index) else {
                 continue;
             };
-            if !wanted(index) {
-                continue;
-            }
-            if let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime) {
-                if !answer(index, png) {
-                    return;
+            let png = match cache::read_if_current(&sized, &job.name, job.mtime) {
+                Some(png) => Some(png),
+                None if cache::read_if_current(&failed, &job.name, job.mtime).is_some()
+                    || !wanted(index) =>
+                {
+                    None
                 }
-            } else if wanted(index)
-                && cache::read_if_current(&failed, &job.name, job.mtime).is_none()
-            {
-                misses.push((index, job));
-            }
-        }
-        misses.retain(|(index, _)| wanted(*index));
-        if misses.is_empty() {
-            continue;
-        }
-        let jobs: Vec<launch::Job> = misses.iter().map(|(_, job)| job.clone()).collect();
-        let mut client_here = true;
-        launch::run(&setup.helper, &setup.folder, size, &jobs, |made| {
-            let Some((index, job)) = misses.get(made) else {
-                return client_here;
+                None => make(&mut helper, setup, size, &job)
+                    .then(|| cache::read_if_current(&sized, &job.name, job.mtime))
+                    .flatten(),
             };
-            if wanted(*index)
-                && let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime)
+            if let Some(png) = png
+                && !answer(index, png)
             {
-                client_here = answer(*index, png);
+                return;
             }
-            client_here
-        });
-        if !client_here {
-            return;
         }
     }
+}
+
+fn make(
+    helper: &mut Option<launch::Thumbnailer>,
+    setup: &Thumbnails,
+    size: ThumbnailSize,
+    job: &launch::Job,
+) -> bool {
+    let running = match helper {
+        Some(running) => running,
+        None => match launch::Thumbnailer::start(&setup.helper, &setup.folder) {
+            Some(started) => helper.insert(started),
+            None => return false,
+        },
+    };
+    let made = running.make(size, job);
+    if !made {
+        *helper = None;
+    }
+    made
 }
 
 fn job_for(shown: &Listing, index: usize) -> Option<launch::Job> {

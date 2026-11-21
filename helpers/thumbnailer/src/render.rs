@@ -12,7 +12,7 @@ use image::{
     RgbaImage,
 };
 
-use crate::batch::{Job, Size};
+use crate::jobs::{Job, Size};
 use crate::mime::MimeTypes;
 use crate::png_text;
 use crate::sandbox::FOLDER_MODE;
@@ -48,7 +48,8 @@ impl Outcome {
     }
 }
 
-pub fn render(folder: &Path, size: Size, job: &Job, system: &System) -> Outcome {
+pub fn render(folder: &Path, job: &Job, system: &System) -> Outcome {
+    let size = job.size;
     let decoded = if built_in(&job.source) {
         decode(&job.source)
     } else {
