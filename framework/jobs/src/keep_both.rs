@@ -1,51 +1,16 @@
-use std::ffi::{OsStr, OsString};
 use std::io;
-use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 
+use nova_files_api::numbered::NUMBERS;
+pub use nova_files_api::numbered::{Naming, numbered};
+
 use crate::place::rename_no_replace;
-
-const TARBALLS: [&[u8]; 4] = [b".tar.gz", b".tar.xz", b".tar.zst", b".tar.bz2"];
-const FIRST: u32 = 2;
-const LAST: u32 = 10_000;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Naming {
-    File,
-    Folder,
-}
-
-pub fn numbered(name: &OsStr, number: u32, naming: Naming) -> OsString {
-    let bytes = name.as_bytes();
-    let split = match naming {
-        Naming::Folder => bytes.len(),
-        Naming::File => extension_start(bytes).unwrap_or(bytes.len()),
-    };
-    let (stem, extension) = bytes.split_at(split);
-    let mut numbered = stem.to_vec();
-    numbered.extend(format!(" ({number})").into_bytes());
-    numbered.extend(extension);
-    OsString::from_vec(numbered)
-}
-
-fn extension_start(name: &[u8]) -> Option<usize> {
-    let lower = name.to_ascii_lowercase();
-    if let Some(tarball) = TARBALLS.iter().find(|tarball| lower.ends_with(tarball)) {
-        let start = name.len() - tarball.len();
-        if start > 0 {
-            return Some(start);
-        }
-    }
-    name.iter()
-        .rposition(|&byte| byte == b'.')
-        .filter(|&dot| dot > 0)
-}
 
 pub fn free_path(taken: &Path, naming: Naming) -> io::Result<PathBuf> {
     let (Some(folder), Some(name)) = (taken.parent(), taken.file_name()) else {
         return Err(io::ErrorKind::InvalidInput.into());
     };
-    for number in FIRST..=LAST {
+    for number in NUMBERS {
         let candidate = folder.join(numbered(name, number, naming));
         match candidate.symlink_metadata() {
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(candidate),
@@ -75,33 +40,6 @@ mod tests {
 
     use super::*;
     use crate::test_folder::TestFolder;
-
-    fn file(name: &str, number: u32) -> OsString {
-        numbered(OsStr::new(name), number, Naming::File)
-    }
-
-    #[test]
-    fn numbers_go_before_the_extension() {
-        assert_eq!(file("photo.jpg", 2), "photo (2).jpg");
-        assert_eq!(file("notes", 3), "notes (3)");
-        assert_eq!(file("a.b.c", 2), "a.b (2).c");
-        assert_eq!(file(".bashrc", 2), ".bashrc (2)");
-        assert_eq!(file(".config.toml", 2), ".config (2).toml");
-        assert_eq!(file("backup.tar.gz", 2), "backup (2).tar.gz");
-        assert_eq!(file("Backup.TAR.ZST", 2), "Backup (2).TAR.ZST");
-        assert_eq!(file("x.tar.xz", 2), "x (2).tar.xz");
-        assert_eq!(file("y.tar.bz2", 2), "y (2).tar.bz2");
-        assert_eq!(file(".tar.gz", 2), ".tar (2).gz");
-        assert_eq!(file("plain.tar", 2), "plain (2).tar");
-        assert_eq!(
-            numbered(OsStr::new("my.photos"), 2, Naming::Folder),
-            "my.photos (2)"
-        );
-        assert_eq!(
-            numbered(OsStr::from_bytes(b"caf\xe9.txt"), 2, Naming::File).as_bytes(),
-            b"caf\xe9 (2).txt"
-        );
-    }
 
     #[test]
     fn finds_the_first_free_number() {

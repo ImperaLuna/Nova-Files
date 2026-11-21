@@ -19,6 +19,7 @@ mod folder;
 mod hidden_files;
 mod job;
 mod message;
+pub mod numbered;
 mod preview;
 mod theme;
 mod thumbnail_size;
