@@ -41,6 +41,10 @@ impl JobKind for Deletes {
         })
     }
 
+    fn examples(&self) -> Vec<Operation> {
+        vec![deleting(Vec::new())]
+    }
+
     fn first_path(&self, operation: &Operation) -> PathBuf {
         operation
             .get::<DeleteJob>()

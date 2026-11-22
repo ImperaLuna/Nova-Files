@@ -60,6 +60,13 @@ impl JobKind for Transfers {
         undo_of(how, landed(running))
     }
 
+    fn examples(&self) -> Vec<Operation> {
+        vec![
+            copy(Vec::new(), PathBuf::new()),
+            move_into(Vec::new(), PathBuf::new()),
+        ]
+    }
+
     fn first_path(&self, operation: &Operation) -> PathBuf {
         asked(operation).map_or_else(PathBuf::new, |(sources, into, _)| {
             sources.first().map_or(into, PathBuf::as_path).to_path_buf()

@@ -24,6 +24,13 @@ impl JobKind for AccessJobs {
             .map_or_else(gone, |job| change_access(running, &job.paths, &job.change))
     }
 
+    fn examples(&self) -> Vec<Operation> {
+        vec![nova_files_properties_api::change_access(
+            Vec::new(),
+            nova_files_properties_api::AccessChange::default(),
+        )]
+    }
+
     fn first_path(&self, operation: &Operation) -> PathBuf {
         operation
             .get::<ChangeAccessJob>()

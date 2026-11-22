@@ -70,6 +70,15 @@ impl<M: Mover + 'static> JobKind for TrashJobs<M> {
         }
     }
 
+    fn examples(&self) -> Vec<Operation> {
+        vec![
+            trashing(Vec::new()),
+            restoring(Vec::new()),
+            deleting(Vec::new()),
+            emptying(),
+        ]
+    }
+
     fn first_path(&self, operation: &Operation) -> PathBuf {
         match asked(operation) {
             Some(Asked::Trash(paths) | Asked::Restore(paths) | Asked::DeleteFromTrash(paths)) => {
