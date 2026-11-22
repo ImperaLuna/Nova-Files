@@ -38,12 +38,7 @@ impl TrashPart {
         (self.shown(scene) && !items.is_empty()).then_some(items)
     }
 
-    pub fn ask_for_good(
-        &mut self,
-        _: &DeleteForGood,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn ask_for_good(&mut self, _: &DeleteForGood, _: &mut Window, cx: &mut Context<Self>) {
         let scene = self.host.scene(cx);
         let Some(items) = self.for_good(&scene, cx) else {
             return;
