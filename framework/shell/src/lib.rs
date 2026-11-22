@@ -58,11 +58,11 @@ pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked, PopUp};
 pub use opening::Opening;
 pub use over::{LaidOver, OverAsk, OverLeft, OverWant};
 pub use part::{
-    Applies, BarRank, Busy, Card, CardRank, Cell, ChipRank, Click, ClickAnswer, Clicks, Closing,
-    Column, Columns, Dims, DropAim, DropOver, DropSlot, DropTake, EmptyNote, Focus, FolderLayout,
-    FolderPicks, HeadButton, Items, KeyDown, Listed, NameCell, NameField, Opens, Part, Refused,
-    Rescaled, Resized, RowIcon, RowMenu, Rows, RowsDrawn, Selectable, Several, Slots, Stage,
-    Staged, Staging, Started, ThumbnailSide, Typed, Used, Watch, Wheel,
+    Applies, Asking, Asks, BarRank, Busy, Card, CardRank, Cell, ChipRank, Click, ClickAnswer,
+    Clicks, Closing, Column, Columns, Dims, DropAim, DropOver, DropSlot, DropTake, EmptyNote,
+    Focus, FolderLayout, FolderPicks, HeadButton, Items, KeyDown, Listed, NameCell, NameField,
+    Opens, Part, Refused, Rescaled, Resized, RowIcon, RowMenu, Rows, RowsDrawn, Selectable,
+    Several, Slots, Stage, Staged, Staging, Started, ThumbnailSide, Typed, Used, Watch, Wheel,
 };
 pub use parts::{Parts, ShownColumn, Turn, WindowParts};
 pub use per_tab::{PerTab, TabId};

@@ -8,7 +8,7 @@ use gpui::{
     AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, RenderImage,
     ScrollEvent, SharedString, Size, Subscription, Window,
 };
-use nova_files_api::{Entry, Event, Listing, ListingId, Order};
+use nova_files_api::{ConflictKind, Entry, Event, Listing, ListingId, Order, Question};
 
 use crate::assets::Icon;
 use crate::jump::Jump;
@@ -21,7 +21,7 @@ use crate::location::PageRef;
 use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::navigator::FolderPick;
 use crate::opening::Opening;
-use crate::part::{Applies, Card, Click, ClickAnswer, DropOver, Part, Slots, Staged};
+use crate::part::{Applies, Asking, Card, Click, ClickAnswer, DropOver, Part, Slots, Staged};
 use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
@@ -80,6 +80,8 @@ trait OpenPart {
     fn path_chips(&self) -> Vec<(u8, AnyView)>;
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn island(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
+    fn asked(&self, asking: Option<Asking<'_>>, window: &mut Window, cx: &mut App);
+    fn question(&self, question: &'static Question) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
     fn row_picture(&self, entry: &Entry, cx: &App) -> Option<Arc<RenderImage>>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
@@ -158,6 +160,7 @@ struct Opened<P: Part> {
     path_chips: Vec<(u8, AnyView)>,
     list_views: Vec<AnyView>,
     islands: Vec<AnyView>,
+    questions: Vec<AnyView>,
 }
 
 fn first_applying<P: Part>(
@@ -382,6 +385,34 @@ impl<P: Part> OpenPart for Opened<P> {
     fn island(&self, scene: &Scene, cx: &App) -> Option<AnyView> {
         let part = self.entity.read(cx);
         first_applying(&self.slots.islands, &self.islands, (part, scene), cx)
+    }
+
+    fn asked(&self, asking: Option<Asking<'_>>, window: &mut Window, cx: &mut App) {
+        let mine = |question: &'static Question| {
+            asking.filter(|asking| asking.conflict.kind == ConflictKind::Asked(question))
+        };
+        let (shown, gone): (Vec<_>, Vec<_>) = self
+            .slots
+            .questions
+            .iter()
+            .partition(|(question, ..)| mine(question).is_some());
+        self.entity.update(cx, |part, cx| {
+            for (_, asks, _) in gone {
+                asks(part, None, window, cx);
+            }
+            for (question, asks, _) in shown {
+                asks(part, mine(question), window, cx);
+            }
+        });
+    }
+
+    fn question(&self, question: &'static Question) -> Option<AnyView> {
+        self.slots
+            .questions
+            .iter()
+            .zip(&self.questions)
+            .find(|((asked, ..), _)| *asked == question)
+            .map(|(_, view)| view.clone())
     }
 
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement> {

@@ -170,7 +170,8 @@ impl RenamePart {
             return;
         };
         let name = free_name(listing);
-        self.made.wait(&self.host, inside.join(&name), window, cx);
+        self.made
+            .wait(&self.host, (inside.join(&name), made_folder), window, cx);
         self.host.island.update(cx, |island, cx| {
             island.start_job(Operation::NewFolder { inside, name }, cx);
         });
@@ -264,5 +265,12 @@ impl Part for RenamePart {
         slots.busy(renaming);
         slots.listed(Self::listed);
         slots.watch(Self::watch);
+    }
+}
+
+fn made_folder(operation: &Operation) -> Option<PathBuf> {
+    match operation {
+        Operation::NewFolder { inside, name } => Some(inside.join(name)),
+        _ => None,
     }
 }

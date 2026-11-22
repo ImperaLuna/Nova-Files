@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use nova_files_api::{Conflict, Operation, Progress};
 
+use super::job_words::Words;
 use super::words::{ITEM, ITEMS, PART_GAP, count, name_of};
 
 pub const STEADY_AFTER: Duration = Duration::from_secs(1);
@@ -11,6 +12,7 @@ const MINUTES_IN_HOUR: u64 = 60;
 const WAITING: &str = "waiting";
 const PAUSED: &str = "paused";
 const LEFT: &str = "left";
+const WORKING: &str = "Working";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Start {
@@ -85,9 +87,9 @@ impl Running {
         Some(Duration::from_secs_f64(seconds))
     }
 
-    pub fn line(&self, now: Instant) -> String {
-        let (verb, after) = doing(&self.operation);
-        let sources = sources(&self.operation);
+    pub fn line(&self, now: Instant, words: &Words) -> String {
+        let (verb, after) = doing(&self.operation, words);
+        let sources = sources(&self.operation, words);
         let progress = &self.progress;
         let what = match sources {
             [one] => name_of(one),
@@ -150,8 +152,12 @@ pub fn short_left(left: Duration) -> String {
     }
 }
 
-const fn doing(operation: &Operation) -> (&'static str, &'static str) {
+fn doing(operation: &Operation, words: &Words) -> (&'static str, &'static str) {
     match operation {
+        Operation::Feature(_) => words
+            .of(operation)
+            .and_then(|words| words.doing(operation))
+            .map_or((WORKING, ""), |doing| (doing.verb, doing.after_items)),
         Operation::Copy { .. } => ("Copying", ""),
         Operation::Move { .. } => ("Moving", ""),
         Operation::Trash { .. } => ("Moving", " to Trash"),
@@ -168,8 +174,12 @@ const fn doing(operation: &Operation) -> (&'static str, &'static str) {
     }
 }
 
-pub fn sources(operation: &Operation) -> &[std::path::PathBuf] {
+pub fn sources<'a>(operation: &'a Operation, words: &Words) -> &'a [std::path::PathBuf] {
     match operation {
+        Operation::Feature(_) => words
+            .of(operation)
+            .and_then(|words| words.sources(operation))
+            .unwrap_or_default(),
         Operation::Copy { sources, .. }
         | Operation::Move { sources, .. }
         | Operation::Compress { sources, .. } => sources,

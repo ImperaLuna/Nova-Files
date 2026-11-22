@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use gpui::{AnyWindowHandle, App, Window};
 use nova_files_api::{Event, JobId, Listing, Operation, Outcome};
@@ -14,11 +14,20 @@ pub struct RenameWhenMade {
 struct Made {
     path: PathBuf,
     window: AnyWindowHandle,
+    makes: Makes,
     job: Option<JobId>,
 }
 
+pub type Makes = fn(&Operation) -> Option<PathBuf>;
+
 impl RenameWhenMade {
-    pub fn wait(&mut self, host: &Host, path: PathBuf, window: &Window, cx: &mut App) {
+    pub fn wait(
+        &mut self,
+        host: &Host,
+        (path, makes): (PathBuf, Makes),
+        window: &Window,
+        cx: &mut App,
+    ) {
         let (Some(folder), Some(name)) = (path.parent(), path.file_name()) else {
             return;
         };
@@ -29,6 +38,7 @@ impl RenameWhenMade {
         self.made = Some(Made {
             path,
             window: window.window_handle(),
+            makes,
             job: None,
         });
     }
@@ -39,7 +49,7 @@ impl RenameWhenMade {
         };
         match event {
             Event::JobStarted { job, operation, .. }
-                if makes(operation).as_deref() == Some(made.path.as_path()) =>
+                if (made.makes)(operation).as_deref() == Some(made.path.as_path()) =>
             {
                 made.job = Some(*job);
             }
@@ -63,13 +73,5 @@ impl RenameWhenMade {
         shown
             .then(|| self.made.take().map(|made| made.window))
             .flatten()
-    }
-}
-
-fn makes(operation: &Operation) -> Option<PathBuf> {
-    match operation {
-        Operation::NewFolder { inside, name } => Some(inside.join(name)),
-        Operation::Compress { into, name, .. } => Some(Path::new(into).join(name)),
-        _ => None,
     }
 }

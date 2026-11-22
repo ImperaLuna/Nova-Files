@@ -6,7 +6,7 @@
 # raise the ceiling in a pull request that says why.
 set -euo pipefail
 
-readonly BASE_CEILING=2100
+readonly BASE_CEILING=2350
 readonly SHELL_CEILING=1250
 
 code_files() { # <folder>

@@ -209,9 +209,23 @@ fn a_file_that_is_not_a_journal_is_refused() {
         "nova-files-job 1\nplanned /a x:2\n",
         "nova-files-job 1\ntrash-info /a 1:2 x\n",
         "nova-files-job 1\ntrash-info /a x 1:2\n",
+        "nova-files-job 1\nsource /a\npack\n",
+        "nova-files-job 1\npack /a\n",
     ] {
         fs::write(&path, text).unwrap();
         let error = read::read(&File::open(&path).unwrap(), &path).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     }
+}
+
+#[test]
+fn a_feature_names_its_own_job_on_the_first_line() {
+    let folder = TestFolder::new("journal-feature");
+    let path = folder.path().join("10");
+    fs::write(&path, "nova-files-job 1\npack\nsource /a\n").unwrap();
+
+    let written = read::read(&File::open(&path).unwrap(), &path).unwrap();
+
+    assert_eq!(written.lines[0].word, "pack");
+    assert_eq!(written.lines[1].paths, [PathBuf::from("/a")]);
 }

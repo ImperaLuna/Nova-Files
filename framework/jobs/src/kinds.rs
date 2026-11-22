@@ -25,6 +25,8 @@ trait Erased: Send + Sync {
     fn undo(&self, running: &mut Running, operation: &Operation, ended: &Ended) -> Option<AnyUndo>;
     fn undoes(&self, operation: &Operation) -> Option<JobId>;
     fn first_path(&self, operation: &Operation) -> PathBuf;
+    fn resume(&self, word: &str, into: Option<PathBuf>, sources: Vec<PathBuf>)
+    -> Option<Operation>;
 }
 
 impl<K> Erased for K
@@ -55,6 +57,15 @@ where
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
         JobKind::first_path(self, operation)
+    }
+
+    fn resume(
+        &self,
+        word: &str,
+        into: Option<PathBuf>,
+        sources: Vec<PathBuf>,
+    ) -> Option<Operation> {
+        JobKind::resume(self, word, into, sources)
     }
 }
 
@@ -140,6 +151,17 @@ impl JobKind for Kinds {
         self.claiming(operation)
             .map_or_else(PathBuf::new, |(_, kind)| kind.first_path(operation))
     }
+
+    fn resume(
+        &self,
+        word: &str,
+        into: Option<PathBuf>,
+        sources: Vec<PathBuf>,
+    ) -> Option<Operation> {
+        self.kinds
+            .iter()
+            .find_map(|kind| kind.resume(word, into.clone(), sources.clone()))
+    }
 }
 
 #[cfg(test)]
@@ -205,6 +227,10 @@ mod tests {
 
         fn first_path(&self, _: &Operation) -> PathBuf {
             PathBuf::from("/deleted")
+        }
+
+        fn resume(&self, word: &str, _: Option<PathBuf>, paths: Vec<PathBuf>) -> Option<Operation> {
+            (word == "gone").then_some(Operation::Delete { paths })
         }
     }
 
@@ -283,5 +309,19 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    #[test]
+    fn a_left_job_is_rebuilt_by_the_kind_that_knows_its_word() {
+        let kinds = Kinds::default().with(Renames::default()).with(Deletes);
+        let paths = vec![PathBuf::from("/a")];
+
+        assert_eq!(
+            JobKind::resume(&kinds, "gone", None, paths.clone()),
+            Some(Operation::Delete {
+                paths: paths.clone()
+            })
+        );
+        assert_eq!(JobKind::resume(&kinds, "kept", None, paths), None);
     }
 }

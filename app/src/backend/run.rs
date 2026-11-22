@@ -328,7 +328,8 @@ fn answer(
         | Command::ForgetJob(_)
         | Command::CancelJob(_)
         | Command::AnswerConflict { .. }
-        | Command::GivePassword { .. }) => operations::answer(id, client, command, setup),
+        | Command::GivePassword { .. }
+        | Command::Reply { .. }) => operations::answer(id, client, command, setup),
     }
 }
 
