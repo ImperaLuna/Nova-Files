@@ -27,6 +27,7 @@ use std::path::PathBuf;
 
 use nova_files_api::Operation;
 use nova_files_api::uri::{file_uri, path_from_file_uri};
+use nova_files_transfer_api::{copy, move_into};
 
 /// GNOME's format, which also says whether the files were cut.
 pub const GNOME_COPIED_FILES: &str = "x-special/gnome-copied-files";
@@ -155,10 +156,7 @@ impl FileClipboard {
     /// asks what to do as for any name that's taken.
     pub fn paste_into(&self, into: PathBuf) -> Option<Operation> {
         match self.action {
-            ClipboardAction::Copy => Some(Operation::Copy {
-                sources: self.paths.clone(),
-                into,
-            }),
+            ClipboardAction::Copy => Some(copy(self.paths.clone(), into)),
             ClipboardAction::Cut => {
                 let sources: Vec<PathBuf> = self
                     .paths
@@ -166,7 +164,7 @@ impl FileClipboard {
                     .filter(|path| path.parent() != Some(into.as_path()))
                     .cloned()
                     .collect();
-                (!sources.is_empty()).then_some(Operation::Move { sources, into })
+                (!sources.is_empty()).then(|| move_into(sources, into))
             }
         }
     }
@@ -409,17 +407,11 @@ mod tests {
         let into = PathBuf::from("/h/into");
         assert_eq!(
             files(ClipboardAction::Copy, &["/h/a"]).paste_into(into.clone()),
-            Some(Operation::Copy {
-                sources: vec![PathBuf::from("/h/a")],
-                into: into.clone(),
-            })
+            Some(copy(vec![PathBuf::from("/h/a")], into.clone()))
         );
         assert_eq!(
             files(ClipboardAction::Cut, &["/h/a", "/h/into/b"]).paste_into(into.clone()),
-            Some(Operation::Move {
-                sources: vec![PathBuf::from("/h/a")],
-                into: into.clone(),
-            })
+            Some(move_into(vec![PathBuf::from("/h/a")], into.clone()))
         );
         assert_eq!(
             files(ClipboardAction::Cut, &["/h/into/b"]).paste_into(into),

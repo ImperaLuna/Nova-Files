@@ -22,10 +22,7 @@ use files::{hidden, tree};
 const OTHER_DRIVE: &str = "/dev/shm";
 
 fn moving(sources: Vec<PathBuf>, into: &Path) -> Operation {
-    Operation::Move {
-        sources,
-        into: into.to_owned(),
-    }
+    nova_files_transfer_api::move_into(sources, into.to_owned())
 }
 
 fn small_tree(inside: &Path) -> PathBuf {
@@ -89,7 +86,11 @@ fn a_drop_on_one_drive_moves_and_across_drives_copies() {
     let far = other.join("far.txt");
     fs::write(&far, "far").unwrap();
     let (job, operation) = drop_onto(&client, vec![far.clone()], &into);
-    assert!(matches!(operation, Operation::Copy { .. }));
+    assert!(
+        operation
+            .get::<nova_files_transfer_api::CopyJob>()
+            .is_some()
+    );
     assert_eq!(client.ended(job).0, Outcome::Done);
     assert_eq!(
         fs::read_to_string(&far).unwrap(),

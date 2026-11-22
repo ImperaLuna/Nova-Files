@@ -158,8 +158,6 @@ fn doing(operation: &Operation, words: &Words) -> (&'static str, &'static str) {
             .of(operation)
             .and_then(|words| words.doing(operation))
             .map_or((WORKING, ""), |doing| (doing.verb, doing.after_items)),
-        Operation::Copy { .. } => ("Copying", ""),
-        Operation::Move { .. } => ("Moving", ""),
         Operation::Trash { .. } => ("Moving", " to Trash"),
         Operation::Restore { .. } => ("Restoring", ""),
         Operation::Delete { .. } | Operation::DeleteFromTrash { .. } | Operation::EmptyTrash => {
@@ -178,7 +176,6 @@ pub fn sources<'a>(operation: &'a Operation, words: &Words) -> &'a [std::path::P
             .of(operation)
             .and_then(|words| words.sources(operation))
             .unwrap_or_default(),
-        Operation::Copy { sources, .. } | Operation::Move { sources, .. } => sources,
         Operation::Trash { paths }
         | Operation::Delete { paths }
         | Operation::ChangeAccess { paths, .. } => paths,

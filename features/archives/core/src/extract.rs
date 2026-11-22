@@ -11,11 +11,11 @@ use nova_files_archives_api::{ExtractTo, PASSWORD_NEEDED, PASSWORD_WRONG, Passwo
 
 use crate::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow};
 use nova_files_jobs::Ended;
-use nova_files_jobs::journal::word;
 use nova_files_jobs::mover::Mover;
 use nova_files_jobs::plan::pairs_into;
 use nova_files_jobs::running::Running;
 use nova_files_jobs::stop::Stop;
+use nova_files_transfer_api::journal;
 
 pub const STAGING_PREFIX: &str = ".nova-extract-";
 const OWNER_WRITE: u32 = 0o200;
@@ -222,7 +222,8 @@ fn place(
         return Ok(Vec::new());
     }
     let locked = writable(&sources);
-    running.record_job(word::MOVE, Some(into), &sources);
+    running.record_job(journal::MOVE, Some(into), &sources);
+    running.follow(&sources);
     running.reporter.start_over();
     let (result, touched) = files.move_pairs(running, &pairs_into(&sources, into));
     for (source, mode) in locked {

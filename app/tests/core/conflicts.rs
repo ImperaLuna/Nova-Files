@@ -15,10 +15,7 @@ use common::{Bench, Client};
 use files::{hidden, tree};
 
 fn copy(sources: Vec<PathBuf>, into: &Path) -> Operation {
-    Operation::Copy {
-        sources,
-        into: into.to_owned(),
-    }
+    nova_files_transfer_api::copy(sources, into.to_owned())
 }
 
 fn copy_answering(

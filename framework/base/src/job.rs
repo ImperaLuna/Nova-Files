@@ -40,21 +40,6 @@ pub enum Operation {
     /// Make an empty folder named `name` in the folder `inside`. A name
     /// already taken fails the job.
     NewFolder { inside: PathBuf, name: OsString },
-    /// Copy each of `sources` (files, folders with all they hold, links as
-    /// links) into the folder `into`, under its own name. Each file is
-    /// written under a hidden name and only takes its own once whole.
-    Copy {
-        sources: Vec<PathBuf>,
-        into: PathBuf,
-    },
-    /// Move each of `sources` into the folder `into`, under its own name.
-    /// On one drive each is renamed; across drives it is copied as by
-    /// [`Operation::Copy`], and each source item goes only once its copy
-    /// is whole, folders last.
-    Move {
-        sources: Vec<PathBuf>,
-        into: PathBuf,
-    },
     /// Delete each of `paths`, folders with all they hold, for good: not
     /// to the trash. A link goes, never what it points to.
     Delete { paths: Vec<PathBuf> },

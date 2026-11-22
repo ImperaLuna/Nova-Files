@@ -4,8 +4,7 @@ use std::time::{Duration, Instant};
 
 use gpui::{App, Context, Task};
 use nova_files_api::{
-    Answer, Command, Conflict, ConflictKind, Event, JobId, JobTag, Message, Operation, Outcome,
-    Scope, Tally,
+    Answer, Command, Conflict, Event, JobId, JobTag, Message, Operation, Outcome, Scope, Tally,
 };
 
 use super::MainWindow;
@@ -69,10 +68,9 @@ impl Jobs {
                 let running = self.running.get_mut(&job)?;
                 let landed = progress.done_items > running.progress.done_items;
                 running.advanced(progress, now);
-                let into = match &running.operation {
-                    Operation::Copy { into, .. } | Operation::Move { into, .. } => into.as_path(),
-                    other => words.of(other)?.writes_into(other)?,
-                };
+                let into = words
+                    .of(&running.operation)?
+                    .writes_into(&running.operation)?;
                 let due = self
                     .read_again
                     .is_none_or(|last| now.saturating_duration_since(last) >= READ_AGAIN_EVERY);
@@ -188,11 +186,11 @@ impl MainWindow {
             return;
         };
         cx.notify();
-        let transfer = is_transfer(&operation);
+        let transfer = self.parts.words().batched(&operation).is_some();
         let others = self.transfers_running();
         let batching = others || !self.jobs.batch.is_empty();
         if transfer && batching && *outcome == Outcome::Done {
-            self.jobs.batch.keep(&operation, tally);
+            self.jobs.batch.keep(&operation, tally, self.parts.words());
             if !others {
                 let label = self.jobs.batch.note();
                 self.show_note(label, None, cx);
@@ -236,20 +234,19 @@ impl MainWindow {
     }
 
     fn job_conflict(&mut self, job: JobId, conflict: Conflict, cx: &mut Context<Self>) {
-        let copies = self
-            .jobs
-            .running
-            .get(&job)
-            .is_some_and(|running| matches!(running.operation, Operation::Copy { .. }));
-        if copies
-            && conflict.kind == ConflictKind::SameFile
+        let itself = self.jobs.running.get(&job).and_then(|running| {
+            self.parts
+                .words()
+                .answers_itself(&running.operation, &conflict.kind)
+        });
+        if let Some(answer) = itself
             && let Some(connection) = &self.connection
         {
             connection
                 .send(Command::AnswerConflict {
                     job,
                     conflict,
-                    answer: Answer::KeepBoth,
+                    answer,
                     scope: Scope::AllOfThisKind,
                 })
                 .ok();
@@ -334,7 +331,7 @@ impl MainWindow {
         self.jobs
             .running
             .values()
-            .any(|job| is_transfer(&job.operation))
+            .any(|job| self.parts.words().batched(&job.operation).is_some())
     }
 
     pub(crate) fn stop_job(&self, job: JobId) {
@@ -356,27 +353,14 @@ impl MainWindow {
     }
 }
 
-const fn is_transfer(operation: &Operation) -> bool {
-    matches!(operation, Operation::Copy { .. } | Operation::Move { .. })
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
-    use nova_files_api::Progress;
+    use nova_files_api::{ConflictKind, Progress};
+    use nova_files_shell::island::job_words::{Doing, Failed, JobWords};
 
     use super::*;
-
-    #[test]
-    fn only_copies_and_moves_are_transfers() {
-        let paths = vec![PathBuf::from("/home/a/notes.txt")];
-        assert!(is_transfer(&Operation::Copy {
-            sources: paths.clone(),
-            into: PathBuf::from("/home/b"),
-        }));
-        assert!(!is_transfer(&Operation::Trash { paths }));
-    }
 
     #[test]
     fn each_job_asked_for_gets_its_own_tag() {
@@ -434,42 +418,68 @@ mod tests {
         }
     }
 
+    #[derive(Debug, PartialEq, Eq)]
+    struct Landing {
+        sources: Vec<PathBuf>,
+        into: PathBuf,
+    }
+
+    struct LandingWords;
+
+    impl JobWords<Landing> for LandingWords {
+        fn doing(&self, _: &Landing) -> Doing {
+            Doing {
+                verb: "Landing",
+                after_items: "",
+            }
+        }
+
+        fn sources<'a>(&self, job: &'a Landing) -> &'a [PathBuf] {
+            &job.sources
+        }
+
+        fn done(&self, _: &Landing, _: Option<&std::path::Path>, _: Tally) -> Option<String> {
+            None
+        }
+
+        fn failed(&self, _: &Landing) -> Failed {
+            Failed {
+                verb: "land",
+                names_item: true,
+            }
+        }
+
+        fn writes_into<'a>(&self, job: &'a Landing) -> Option<&'a std::path::Path> {
+            Some(&job.into)
+        }
+    }
+
     #[test]
-    fn a_copy_reads_its_folder_again_as_files_land_but_not_too_often() {
+    fn a_job_that_writes_into_a_folder_reads_it_again_as_files_land_but_not_too_often() {
         let start = Instant::now();
         let mut jobs = Jobs::default();
+        let mut words = Words::default();
+        words.add(LandingWords);
         let job = JobId(1);
         let into = PathBuf::from("/b");
-        let copy = Operation::Copy {
+        let landing = Operation::feature(Landing {
             sources: vec![PathBuf::from("/a/x")],
             into: into.clone(),
-        };
-        jobs.running.insert(job, Running::new(copy, start));
+        });
+        jobs.running.insert(job, Running::new(landing, start));
+        assert_eq!(jobs.moved(&progress(job, 0), start, &words), None);
         assert_eq!(
-            jobs.moved(&progress(job, 0), start, &Words::default()),
-            None
-        );
-        assert_eq!(
-            jobs.moved(&progress(job, 1), start, &Words::default()),
+            jobs.moved(&progress(job, 1), start, &words),
             Some(into.clone())
         );
         jobs.read_again = Some(start);
         let soon = start + READ_AGAIN_EVERY / 2;
-        assert_eq!(jobs.moved(&progress(job, 2), soon, &Words::default()), None);
+        assert_eq!(jobs.moved(&progress(job, 2), soon, &words), None);
         let later = start + READ_AGAIN_EVERY;
-        assert_eq!(
-            jobs.moved(&progress(job, 2), later, &Words::default()),
-            None
-        );
-        assert_eq!(
-            jobs.moved(&progress(job, 3), later, &Words::default()),
-            Some(into)
-        );
+        assert_eq!(jobs.moved(&progress(job, 2), later, &words), None);
+        assert_eq!(jobs.moved(&progress(job, 3), later, &words), Some(into));
         assert_eq!(jobs.running[&job].progress, items(3));
-        assert_eq!(
-            jobs.moved(&progress(JobId(2), 3), later, &Words::default()),
-            None
-        );
+        assert_eq!(jobs.moved(&progress(JobId(2), 3), later, &words), None);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{Operation, Outcome};
+use nova_files_api::Outcome;
 use nova_files_jobs::Ended;
 use nova_files_jobs::identity::{Identity, same};
 use nova_files_jobs::journal::{Record, word};
@@ -18,17 +18,14 @@ pub enum Undo {
     MoveBack(Vec<(PathBuf, PathBuf, Identity)>),
 }
 
-pub fn undo_of(operation: &Operation, landed: Vec<(PathBuf, PathBuf, Identity)>) -> Option<Undo> {
+pub fn undo_of(how: How, landed: Vec<(PathBuf, PathBuf, Identity)>) -> Option<Undo> {
     if landed.is_empty() {
         return None;
     }
-    match operation {
-        Operation::Copy { .. } => Some(Undo::Trash(
-            landed.into_iter().map(|(to, _, made)| (to, made)).collect(),
-        )),
-        Operation::Move { .. } => Some(Undo::MoveBack(landed)),
-        _ => None,
-    }
+    Some(match how {
+        How::Copy => Undo::Trash(landed.into_iter().map(|(to, _, made)| (to, made)).collect()),
+        How::Move => Undo::MoveBack(landed),
+    })
 }
 
 pub fn run(running: &mut Running, undo: &Undo) -> Ended {
@@ -73,6 +70,7 @@ fn move_back(running: &mut Running, pairs: &[(PathBuf, PathBuf)]) -> Ended {
 
 #[cfg(test)]
 mod tests {
+    use nova_files_api::Operation;
     use nova_files_jobs::JobKind as _;
     use nova_files_jobs::identity;
     use nova_files_test_folder::TestFolder;
@@ -95,10 +93,8 @@ mod tests {
         let folder = TestFolder::new("undo-copy");
         let copy = folder.file("a (2)", "a");
         let source = folder.path().join("a");
-        let copy_op = Operation::Copy {
-            sources: vec![source.clone()],
-            into: folder.path().to_path_buf(),
-        };
+        let copy_op =
+            nova_files_transfer_api::copy(vec![source.clone()], folder.path().to_path_buf());
         let steps = vec![
             (source, copy.clone()),
             (folder.path().join("b"), folder.path().join("gone")),
@@ -120,10 +116,10 @@ mod tests {
         let folder = TestFolder::new("undo-move");
         let moved = folder.file("b", "b");
         let from = folder.path().join("from/b");
-        let move_op = Operation::Move {
-            sources: vec![from.clone(), folder.path().join("from/c")],
-            into: folder.path().to_path_buf(),
-        };
+        let move_op = nova_files_transfer_api::move_into(
+            vec![from.clone(), folder.path().join("from/c")],
+            folder.path().to_path_buf(),
+        );
 
         let undo = undo_after(
             &move_op,
@@ -144,10 +140,10 @@ mod tests {
     #[test]
     fn nothing_landed_is_nothing_to_undo() {
         let folder = TestFolder::new("undo-copy-nothing");
-        let copy_op = Operation::Copy {
-            sources: vec![folder.path().join("a")],
-            into: folder.path().to_path_buf(),
-        };
+        let copy_op = nova_files_transfer_api::copy(
+            vec![folder.path().join("a")],
+            folder.path().to_path_buf(),
+        );
 
         assert_eq!(undo_after(&copy_op, Vec::new(), Outcome::Done), None);
     }

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use nova_files_api::{Operation, Tally};
+use nova_files_api::{Answer, ConflictKind, Failure, Operation, Tally};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Doing {
@@ -21,6 +21,13 @@ pub struct Failed {
 pub struct Grouped {
     pub one: &'static str,
     pub many: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Batched {
+    pub done: &'static str,
+    pub done_after: &'static str,
+    pub nothing: &'static str,
 }
 
 pub trait JobWords<J>: 'static {
@@ -43,6 +50,18 @@ pub trait JobWords<J>: 'static {
     fn title(&self, _: &J) -> Option<String> {
         None
     }
+
+    fn batched(&self) -> Option<Batched> {
+        None
+    }
+
+    fn answers_itself(&self, _: &J, _: &ConflictKind) -> Option<Answer> {
+        None
+    }
+
+    fn why(&self, _: &J, _: Failure) -> Option<&'static str> {
+        None
+    }
 }
 
 pub trait AnyJobWords {
@@ -58,6 +77,9 @@ pub trait AnyJobWords {
     fn writes_into<'a>(&self, operation: &'a Operation) -> Option<&'a Path>;
     fn grouped(&self, operation: &Operation) -> Option<Grouped>;
     fn title(&self, operation: &Operation) -> Option<String>;
+    fn batched(&self, operation: &Operation) -> Option<Batched>;
+    fn answers_itself(&self, operation: &Operation, kind: &ConflictKind) -> Option<Answer>;
+    fn why(&self, operation: &Operation, reason: Failure) -> Option<&'static str>;
 }
 
 struct Typed<J, W> {
@@ -102,6 +124,22 @@ impl<J: Any, W: JobWords<J>> AnyJobWords for Typed<J, W> {
     fn title(&self, operation: &Operation) -> Option<String> {
         operation.get::<J>().and_then(|job| self.words.title(job))
     }
+
+    fn batched(&self, operation: &Operation) -> Option<Batched> {
+        operation.get::<J>().and_then(|_| self.words.batched())
+    }
+
+    fn answers_itself(&self, operation: &Operation, kind: &ConflictKind) -> Option<Answer> {
+        operation
+            .get::<J>()
+            .and_then(|job| self.words.answers_itself(job, kind))
+    }
+
+    fn why(&self, operation: &Operation, reason: Failure) -> Option<&'static str> {
+        operation
+            .get::<J>()
+            .and_then(|job| self.words.why(job, reason))
+    }
 }
 
 #[derive(Clone, Default)]
@@ -124,5 +162,16 @@ impl Words {
             .iter()
             .find(|words| words.doing(operation).is_some())
             .map(AsRef::as_ref)
+    }
+
+    pub fn batched(&self, operation: &Operation) -> Option<(usize, Batched)> {
+        self.0
+            .iter()
+            .enumerate()
+            .find_map(|(rank, words)| Some((rank, words.batched(operation)?)))
+    }
+
+    pub fn answers_itself(&self, operation: &Operation, kind: &ConflictKind) -> Option<Answer> {
+        self.of(operation)?.answers_itself(operation, kind)
     }
 }

@@ -69,10 +69,7 @@ mod tests {
             inside: "/a".into(),
             name: "new".into(),
         };
-        let copy = |sources: Vec<PathBuf>| Operation::Copy {
-            sources,
-            into: "/into".into(),
-        };
+        let copy = |sources: Vec<PathBuf>| nova_files_transfer_api::copy(sources, "/into".into());
 
         let kinds = kinds(Trashes::default(), None);
         let first_path = |operation| nova_files_jobs::JobKind::first_path(&kinds, &operation);

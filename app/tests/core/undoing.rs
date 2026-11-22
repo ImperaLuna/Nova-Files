@@ -43,10 +43,7 @@ fn undoing_a_copy_sends_the_copies_to_the_trash() {
     let client = bench.client();
     let job = undoable(
         &client,
-        Operation::Copy {
-            sources: vec![bench.at("a"), bench.at("dir")],
-            into: bench.at("into"),
-        },
+        nova_files_transfer_api::copy(vec![bench.at("a"), bench.at("dir")], bench.at("into")),
     );
 
     assert_eq!(undo(&client, job), Outcome::Done);
@@ -67,10 +64,7 @@ fn undoing_a_move_puts_entries_back_under_their_old_names() {
     let client = bench.client();
     let job = undoable(
         &client,
-        Operation::Move {
-            sources: vec![bench.at("dir")],
-            into: bench.at("into"),
-        },
+        nova_files_transfer_api::move_into(vec![bench.at("dir")], bench.at("into")),
     );
 
     assert_eq!(undo(&client, job), Outcome::Done);
@@ -88,10 +82,10 @@ fn undoing_a_merged_move_takes_back_only_what_went_in() {
     fs::create_dir_all(bench.at("into/dir")).unwrap();
     fs::write(bench.at("into/dir/kept"), "theirs").unwrap();
     let client = bench.client();
-    let job = client.start(Operation::Move {
-        sources: vec![bench.at("dir")],
-        into: bench.at("into"),
-    });
+    let job = client.start(nova_files_transfer_api::move_into(
+        vec![bench.at("dir")],
+        bench.at("into"),
+    ));
     let folder = answers::held(&client, job);
     answers::answer(&client, job, &folder, Answer::Merge, Scope::ThisOne);
     assert_eq!(client.ended(job).0, Outcome::Done);
@@ -130,9 +124,8 @@ fn replace_then_undo(test: &str, operation: fn(PathBuf, PathBuf) -> Operation) -
 
 #[test]
 fn undoing_a_copy_that_replaced_puts_the_replaced_file_back() {
-    let bench = replace_then_undo("undo-copy-replace", |source, into| Operation::Copy {
-        sources: vec![source],
-        into,
+    let bench = replace_then_undo("undo-copy-replace", |source, into| {
+        nova_files_transfer_api::copy(vec![source], into)
     });
 
     assert_eq!(fs::read_to_string(bench.at("a")).unwrap(), "new");
@@ -146,9 +139,8 @@ fn undoing_a_copy_that_replaced_puts_the_replaced_file_back() {
 
 #[test]
 fn undoing_a_move_that_replaced_puts_both_back() {
-    let bench = replace_then_undo("undo-move-replace", |source, into| Operation::Move {
-        sources: vec![source],
-        into,
+    let bench = replace_then_undo("undo-move-replace", |source, into| {
+        nova_files_transfer_api::move_into(vec![source], into)
     });
 
     assert_eq!(fs::read_to_string(bench.at("a")).unwrap(), "new");
@@ -167,10 +159,10 @@ fn undo_leaves_out_a_file_the_same_job_made_and_then_replaced() {
     fs::write(bench.at("a/report"), "a").unwrap();
     fs::write(bench.at("b/report"), "b").unwrap();
     let client = bench.client();
-    let job = client.start(Operation::Copy {
-        sources: vec![bench.at("a/report"), bench.at("b/report")],
-        into: bench.at("into"),
-    });
+    let job = client.start(nova_files_transfer_api::copy(
+        vec![bench.at("a/report"), bench.at("b/report")],
+        bench.at("into"),
+    ));
     let clash = answers::held(&client, job);
     answers::answer(&client, job, &clash, Answer::Replace, Scope::ThisOne);
     assert_eq!(client.ended(job).0, Outcome::Done);
@@ -191,10 +183,10 @@ fn a_replaced_file_whose_name_was_taken_again_stays_in_the_trash() {
     fs::create_dir(bench.at("into")).unwrap();
     fs::write(bench.at("into/a"), "old").unwrap();
     let client = bench.client();
-    let job = client.start(Operation::Copy {
-        sources: vec![bench.at("a")],
-        into: bench.at("into"),
-    });
+    let job = client.start(nova_files_transfer_api::copy(
+        vec![bench.at("a")],
+        bench.at("into"),
+    ));
     let clash = answers::held(&client, job);
     answers::answer(&client, job, &clash, Answer::Replace, Scope::ThisOne);
     assert_eq!(client.ended(job).0, Outcome::Done);
@@ -324,10 +316,7 @@ fn an_undo_with_nothing_left_to_take_back_finds_nothing() {
     let client = bench.client();
     let copied = undoable(
         &client,
-        Operation::Copy {
-            sources: vec![bench.at("a")],
-            into: bench.at("into"),
-        },
+        nova_files_transfer_api::copy(vec![bench.at("a")], bench.at("into")),
     );
     let trashed = undoable(
         &client,

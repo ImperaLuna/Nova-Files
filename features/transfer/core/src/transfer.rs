@@ -16,13 +16,14 @@ use nova_files_jobs::clash::{clash, conflict_for};
 use nova_files_jobs::control::{Cancelled, Control};
 use nova_files_jobs::failure::failure;
 use nova_files_jobs::folders::{Folders, Unreached};
-use nova_files_jobs::journal::{Record, word};
+use nova_files_jobs::journal::Record;
 use nova_files_jobs::keep_both::{Naming, free_path};
 use nova_files_jobs::place::rename_no_replace;
 use nova_files_jobs::plan::{Item, Kind, Plan, check, check_pairs, pairs_into, plan_pairs};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::stop::Stop;
 use nova_files_jobs::sync::sync_folders;
+use nova_files_transfer_api::journal;
 
 const LOOK_AGAIN: u32 = 3;
 
@@ -118,10 +119,11 @@ impl Done {
 
 pub fn transfer(running: &mut Running, sources: &[PathBuf], into: &Path, how: How) -> Ended {
     let name = match how {
-        How::Copy => word::COPY,
-        How::Move => word::MOVE,
+        How::Copy => journal::COPY,
+        How::Move => journal::MOVE,
     };
     running.record_job(name, Some(into), sources);
+    running.follow(sources);
     if let Err(stop) = check(sources, into) {
         return (stop.outcome(), Vec::new());
     }

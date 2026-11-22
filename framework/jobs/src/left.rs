@@ -90,8 +90,6 @@ fn operation(lines: &[Line], rebuild: Rebuild<'_>) -> Option<Operation> {
     let sources: Vec<_> = first_paths(lines, word::SOURCE).collect();
     let into = first_paths(lines, word::INTO).next();
     match (lines.first()?.word.as_str(), into) {
-        (word::COPY, Some(into)) => Some(Operation::Copy { sources, into }),
-        (word::MOVE, Some(into)) => Some(Operation::Move { sources, into }),
         (word::DELETE, None) => Some(Operation::Delete { paths: sources }),
         (word::TRASH, None) => Some(Operation::Trash { paths: sources }),
         (word::RESTORE, None) => Some(Operation::Restore { items: sources }),

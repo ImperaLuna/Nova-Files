@@ -7,6 +7,7 @@ use nova_files_jobs::mover::Mover;
 use nova_files_jobs::running::Running;
 use nova_files_jobs::undo::{landed, trash_again};
 use nova_files_jobs::{Ended, JobKind};
+use nova_files_transfer_api::CopyJob;
 
 use crate::inside;
 use crate::{Archiver, Taking, compress, extract};
@@ -21,10 +22,10 @@ impl<M: Mover + Send + Sync + 'static> JobKind for Archives<M> {
     type Undo = Vec<(PathBuf, Identity)>;
 
     fn claims(&self, operation: &Operation) -> bool {
-        match operation {
-            Operation::Copy { sources, .. } => copied_out(sources).is_some(),
-            _ => operation.get::<Extract>().is_some() || operation.get::<Compress>().is_some(),
-        }
+        operation.get::<CopyJob>().map_or_else(
+            || operation.get::<Extract>().is_some() || operation.get::<Compress>().is_some(),
+            |job| copied_out(&job.sources).is_some(),
+        )
     }
 
     fn run(
@@ -37,7 +38,7 @@ impl<M: Mover + Send + Sync + 'static> JobKind for Archives<M> {
             return trash_again(running, made.clone());
         }
         let archiver = self.archiver.as_ref();
-        if let Operation::Copy { sources, into } = operation
+        if let Some(CopyJob { sources, into }) = operation.get::<CopyJob>()
             && let Some((archive, picked)) = copied_out(sources)
         {
             return extract(
@@ -78,20 +79,21 @@ impl<M: Mover + Send + Sync + 'static> JobKind for Archives<M> {
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
-        match operation {
-            Operation::Copy { sources, into } if copied_out(sources).is_some() => {
-                sources.first().unwrap_or(into).clone()
-            }
-            _ => operation
-                .get::<Extract>()
-                .map(|asked| asked.archive.clone())
-                .or_else(|| {
-                    operation
-                        .get::<Compress>()
-                        .map(|asked| asked.sources.first().unwrap_or(&asked.into).clone())
-                })
-                .unwrap_or_default(),
-        }
+        operation
+            .get::<CopyJob>()
+            .filter(|job| copied_out(&job.sources).is_some())
+            .map(|job| job.sources.first().unwrap_or(&job.into).clone())
+            .or_else(|| {
+                operation
+                    .get::<Extract>()
+                    .map(|asked| asked.archive.clone())
+            })
+            .or_else(|| {
+                operation
+                    .get::<Compress>()
+                    .map(|asked| asked.sources.first().unwrap_or(&asked.into).clone())
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -156,10 +158,7 @@ mod tests {
             into: "/into".into(),
             to: ExtractTo::Here,
         });
-        let copy = Operation::Copy {
-            sources: vec!["/s".into()],
-            into: "/into".into(),
-        };
+        let copy = nova_files_transfer_api::copy(vec!["/s".into()], "/into".into());
 
         assert!(archives.claims(&extract) && archives.claims(&compress(Vec::new())));
         assert!(!archives.claims(&copy));

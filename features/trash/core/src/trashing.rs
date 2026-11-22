@@ -45,6 +45,7 @@ struct Trashed {
 
 pub fn trash(running: &mut Running, paths: &[PathBuf], home_trash: Option<&Path>) -> Ended {
     running.record_job(word::TRASH, None, paths);
+    running.follow(paths);
     if let Err(stop) = check(paths) {
         return (stop.outcome(), Vec::new());
     }
