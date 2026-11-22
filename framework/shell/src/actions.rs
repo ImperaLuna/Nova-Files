@@ -28,6 +28,7 @@ gpui::actions!(
         ToggleSelected,
         ClearSelection,
         TrashSelected,
+        DeleteSelected,
         RenameSelected,
         NewFolder,
         Undo,

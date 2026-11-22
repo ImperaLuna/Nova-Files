@@ -29,7 +29,6 @@ impl Allow {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FolderRules {
     allowed: u8,
-    trashed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,18 +53,7 @@ impl FolderRules {
             allowed |= allows[at].bit();
             at += 1;
         }
-        Self {
-            allowed,
-            trashed: false,
-        }
-    }
-
-    #[must_use]
-    pub const fn in_trash(self) -> Self {
-        Self {
-            trashed: true,
-            ..self
-        }
+        Self { allowed }
     }
 
     #[must_use]
@@ -76,11 +64,6 @@ impl FolderRules {
     #[must_use]
     pub fn meets(self, needs: &[Allow]) -> bool {
         needs.iter().all(|need| self.allows(*need))
-    }
-
-    #[must_use]
-    pub const fn trashed(self) -> bool {
-        self.trashed
     }
 
     #[must_use]
@@ -96,7 +79,6 @@ impl FolderRules {
     pub const fn with(self, other: Self) -> Self {
         Self {
             allowed: self.allowed & other.allowed,
-            trashed: self.trashed || other.trashed,
         }
     }
 }
@@ -110,6 +92,7 @@ pub struct RulesBook(Rc<RefCell<Book>>);
 struct Book {
     claims: Vec<Claim>,
     names: Vec<(&'static str, PathBuf, FolderName)>,
+    drops: Vec<(&'static str, PathBuf)>,
 }
 
 #[derive(Debug)]
@@ -134,6 +117,17 @@ impl RulesBook {
         let mut book = self.0.borrow_mut();
         book.claims.retain(|claim| claim.owner != owner);
         book.names.retain(|(named_by, _, _)| *named_by != owner);
+        book.drops.retain(|(taken_by, _)| *taken_by != owner);
+    }
+
+    pub fn take_drops(&self, owner: &'static str, at: PathBuf) {
+        let drops = &mut self.0.borrow_mut().drops;
+        drops.retain(|(taken_by, _)| *taken_by != owner);
+        drops.push((owner, at));
+    }
+
+    pub fn takes_drops(&self, folder: &Path) -> bool {
+        self.0.borrow().drops.iter().any(|(_, at)| at == folder)
     }
 
     pub fn name(&self, owner: &'static str, at: PathBuf, name: FolderName) {

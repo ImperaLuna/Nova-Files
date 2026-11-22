@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use gpui::{App, Context, Modifiers, SharedString};
-use nova_files_shell::{DropOver, Host, Location, Part, Slots};
+use nova_files_shell::{Allow, DropOver, Host, Location, Part, Slots};
 use nova_files_transfer_api::{
     Command, CopyJob, DropAskId, DropKind, Event, MoveJob, copy, move_into,
 };
@@ -92,7 +92,7 @@ impl TransferPart {
     }
 
     fn takes_into(&self, into: &Path) -> bool {
-        !self.host.rules.for_folder(into).trashed()
+        self.host.rules.for_folder(into).allows(Allow::Change)
     }
 
     fn aim(&self, over: &DropOver<'_>, _: &App) -> Option<SharedString> {
