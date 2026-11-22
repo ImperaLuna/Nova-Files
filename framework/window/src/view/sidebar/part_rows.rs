@@ -6,12 +6,12 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Transformation, Window, div,
     prelude::FluentBuilder as _, radians, svg,
 };
-use nova_files_shell::{Expander, Look, RowItem, SectionButton, SidebarAt, SidebarRow};
+use nova_files_shell::{Expander, Gap, Look, RowItem, SectionButton, SidebarAt, SidebarRow};
 
 use super::{Row, icon, on_middle_click, row, section_button};
 use crate::assets::Icon;
 use crate::theme::{Colors, radius, size};
-use crate::window::{HoverOpens, MainWindow};
+use crate::window::{Aim, DraggedRow, HoverOpens, MainWindow};
 
 impl MainWindow {
     pub(super) fn part_rows(
@@ -105,7 +105,39 @@ impl MainWindow {
             row.pl(size::TREE_INDENT * f32::from(place.depth))
         })
         .children(tail);
-        self.part_row_acts(shown, place, cx)
+        let gaps = [(place.above.clone(), false), (place.below.clone(), true)];
+        let id = place.id.clone();
+        let shown = self.part_row_acts(shown, place, cx);
+        if narrow || !cx.has_active_drag() {
+            return shown;
+        }
+        shown.relative().children(
+            gaps.into_iter()
+                .filter_map(|(gap, below)| gap.map(|gap| self.gap_line(&id, gap, below, cx))),
+        )
+    }
+
+    fn gap_line(&self, row: &str, gap: Gap, below: bool, cx: &Context<Self>) -> AnyElement {
+        let selector = format!("{row}-{}", if below { "below" } else { "above" });
+        let lit = Colors::of(cx).drop_edge;
+        let line = div()
+            .id(SharedString::from(selector.clone()))
+            .debug_selector(move || selector)
+            .absolute()
+            .left_0()
+            .right_0()
+            .h(size::PIN_LINE)
+            .rounded(radius::SMALL)
+            .occlude()
+            .map(|line| {
+                if below {
+                    line.bottom(size::PIN_LINE_OVERHANG)
+                } else {
+                    line.top(size::PIN_LINE_OVERHANG)
+                }
+            })
+            .drag_over::<DraggedRow>(move |style, _, _, _| style.bg(lit));
+        self.takes_drops(line, Aim::gap(gap), cx).into_any_element()
     }
 
     pub(super) fn part_row_acts(

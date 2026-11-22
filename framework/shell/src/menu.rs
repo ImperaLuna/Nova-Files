@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui::{App, SharedString};
@@ -203,6 +204,40 @@ impl fmt::Debug for RowItem {
     }
 }
 
+pub type OnGap = Rc<dyn Fn(Vec<PathBuf>, &mut App)>;
+
+#[derive(Clone)]
+pub struct Gap {
+    pub label: SharedString,
+    pub take: OnGap,
+}
+
+impl Gap {
+    pub fn new(
+        label: impl Into<SharedString>,
+        take: impl Fn(Vec<PathBuf>, &mut App) + 'static,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            take: Rc::new(take),
+        }
+    }
+}
+
+impl PartialEq for Gap {
+    fn eq(&self, other: &Self) -> bool {
+        self.label == other.label && Rc::ptr_eq(&self.take, &other.take)
+    }
+}
+
+impl Eq for Gap {}
+
+impl fmt::Debug for Gap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.label)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SidebarRow {
     pub id: SharedString,
@@ -218,6 +253,8 @@ pub struct SidebarRow {
     pub expander: Option<Expander>,
     pub button: Option<RowItem>,
     pub rank: u8,
+    pub above: Option<Gap>,
+    pub below: Option<Gap>,
 }
 
 #[derive(Debug, Clone)]
@@ -247,6 +284,8 @@ impl SidebarRow {
             expander: None,
             button: None,
             rank: Self::LAST,
+            above: None,
+            below: None,
         }
     }
 
@@ -313,6 +352,13 @@ impl SidebarRow {
     #[must_use]
     pub fn button(mut self, button: RowItem) -> Self {
         self.button = Some(button);
+        self
+    }
+
+    #[must_use]
+    pub fn gaps(mut self, above: Option<Gap>, below: Option<Gap>) -> Self {
+        self.above = above;
+        self.below = below;
         self
     }
 }

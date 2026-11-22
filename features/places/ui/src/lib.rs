@@ -11,7 +11,8 @@ use gpui::{App, Context, SharedString};
 use nova_files_places_api::{self as places_api, BookmarkChange, Known};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
-    Host, Location, Part, Published, RowItem, Scene, SectionButton, SidebarAt, SidebarRow, Slots,
+    Gap, Host, Location, Part, Published, RowItem, Scene, SectionButton, SidebarAt, SidebarRow,
+    Slots,
 };
 
 pub use folder_tree::{Toggle, TreeRow};
@@ -71,10 +72,16 @@ impl PlacesPart {
 }
 
 fn rows(part: &PlacesPart, scene: &Scene, _: &App) -> Vec<SidebarRow> {
+    let last_standard = part.shown.iter().rposition(|place| place.standard);
     part.shown
         .iter()
         .enumerate()
         .map(|(index, place)| {
+            let (above, below) = match part.pin_position(place) {
+                Some(at) => (Some(at), Some(at + 1)),
+                None if Some(index) == last_standard => (None, Some(0)),
+                None => (None, None),
+            };
             SidebarRow::new(
                 format!("{ROW_PREFIX}{index}"),
                 place.icon,
@@ -83,6 +90,7 @@ fn rows(part: &PlacesPart, scene: &Scene, _: &App) -> Vec<SidebarRow> {
             )
             .rank(SidebarRow::OWN)
             .here(scene.in_folder(&place.path))
+            .gaps(above.map(|at| part.gap(at)), below.map(|at| part.gap(at)))
         })
         .collect()
 }
@@ -140,6 +148,36 @@ impl PlacesPart {
                 },
             )),
         }
+    }
+
+    fn pin_position(&self, place: &Shown) -> Option<usize> {
+        if place.standard {
+            return None;
+        }
+        self.known
+            .pinned
+            .iter()
+            .position(|pin| pin.path == place.path)
+    }
+
+    fn gap(&self, at: usize) -> Gap {
+        let change = self.change();
+        let pinned: Vec<PathBuf> = self
+            .known
+            .pinned
+            .iter()
+            .map(|pin| pin.path.clone())
+            .collect();
+        Gap::new(PICK_LABEL, move |paths, _| {
+            let fresh = paths.into_iter().filter(|path| !pinned.contains(path));
+            for (offset, path) in fresh.enumerate() {
+                change(BookmarkChange::Add {
+                    path,
+                    label: None,
+                    at: u32::try_from(at + offset).ok(),
+                });
+            }
+        })
     }
 
     fn choose_item(&self) -> RowItem {
