@@ -1,5 +1,6 @@
 mod gallery;
 mod icons;
+mod peeks;
 mod slider;
 
 use nova_files_folders_api::{
