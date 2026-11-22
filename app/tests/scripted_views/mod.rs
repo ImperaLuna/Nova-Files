@@ -1,5 +1,6 @@
 mod gallery;
 mod icons;
+mod slider;
 
 use nova_files_folders_api::{
     Command as ViewsCommand, Event as ViewsEvent, FolderView, IconSize, ViewMode,

@@ -5,7 +5,7 @@ use super::*;
 
 const CELLS: u32 = 61;
 
-fn icons(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
+pub(super) fn icons(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
     cx.update(nova_files_window::bind_window_keys);
     let (view, cx, mut core) = window(cx);
     answer_listing(&mut core, CELLS);
@@ -16,7 +16,7 @@ fn icons(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext
     (view, cx, core)
 }
 
-fn cell(cx: &mut VisualTestContext, index: u32) -> Bounds<Pixels> {
+pub(super) fn cell(cx: &mut VisualTestContext, index: u32) -> Bounds<Pixels> {
     cx.run_until_parked();
     cx.debug_bounds(Box::leak(format!("entry-{index}").into_boxed_str()))
         .unwrap()
@@ -62,7 +62,7 @@ fn ctrl_scroll(cx: &mut VisualTestContext, lines: f32) {
     cx.run_until_parked();
 }
 
-fn icon_size(view: &Entity<MainWindow>, cx: &VisualTestContext) -> IconSize {
+pub(super) fn icon_size(view: &Entity<MainWindow>, cx: &VisualTestContext) -> IconSize {
     view.read_with(cx, |view, cx| folder_view(view, cx).icons)
 }
 
