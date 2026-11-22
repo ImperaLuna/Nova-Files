@@ -19,22 +19,45 @@ use nova_files_shell::{
 pub use grid::icon_side;
 use grid::layout_of;
 
-command_spec!(DETAILS, ShowDetails, "view.details", "Details", ["ctrl-1"]);
-command_spec!(ICONS, ShowIcons, "view.icons", "Icons", ["ctrl-2"]);
-command_spec!(GALLERY, ShowGallery, "view.gallery", "Gallery", ["ctrl-3"]);
+command_spec!(
+    DETAILS,
+    ShowDetails,
+    "view.details",
+    "Details",
+    ["ctrl-1"],
+    needs[Restyle]
+);
+command_spec!(
+    ICONS,
+    ShowIcons,
+    "view.icons",
+    "Icons",
+    ["ctrl-2"],
+    needs[Restyle]
+);
+command_spec!(
+    GALLERY,
+    ShowGallery,
+    "view.gallery",
+    "Gallery",
+    ["ctrl-3"],
+    needs[Restyle]
+);
 command_spec!(
     BIGGER_ICONS,
     BiggerIcons,
     "view.bigger",
     "Bigger icons",
-    ["ctrl-=", "ctrl-+"]
+    ["ctrl-=", "ctrl-+"],
+    needs[Restyle]
 );
 command_spec!(
     SMALLER_ICONS,
     SmallerIcons,
     "view.smaller",
     "Smaller icons",
-    ["ctrl--"]
+    ["ctrl--"],
+    needs[Restyle]
 );
 
 const ZOOM_STEP: Pixels = px(40.0);
@@ -174,7 +197,7 @@ impl FoldersPart {
 
     fn view_items(&self, scene: &Scene, cx: &App) -> Vec<MenuItem> {
         let in_folder = scene.location.as_ref().and_then(Location::folder).is_some();
-        if !in_folder || scene.rules.replaces_menu {
+        if !in_folder {
             return Vec::new();
         }
         let showing = self.shown(cx).mode;

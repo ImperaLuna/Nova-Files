@@ -46,7 +46,7 @@ impl DeletePart {
         if paths.is_empty() {
             return None;
         }
-        if !scene.rules.trashed {
+        if !scene.rules.trashed() {
             return Some(delete(paths));
         }
         let folder = scene.location.as_ref().and_then(Location::folder)?;
@@ -85,7 +85,7 @@ impl DeletePart {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let trashed = self.host.scene(cx).rules.trashed;
+        let trashed = self.host.scene(cx).rules.trashed();
         if trashed {
             self.ask_delete(&DeleteSelected, window, cx);
         }
@@ -122,7 +122,7 @@ fn count_of(number: usize) -> String {
 }
 
 fn delete_items(part: &DeletePart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
-    if !scene.rules.trashed || part.deleting(scene, cx).is_none() {
+    if !scene.rules.trashed() || part.deleting(scene, cx).is_none() {
         return Vec::new();
     }
     vec![MenuItem::run(Icon::Trash, &DELETE).with_look(Look::Danger)]

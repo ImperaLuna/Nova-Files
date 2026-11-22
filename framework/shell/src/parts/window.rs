@@ -57,10 +57,12 @@ impl WindowParts {
     }
 
     pub fn applies(&self, spec: &CommandSpec, scene: &Scene, cx: &App) -> bool {
-        self.opened
-            .iter()
-            .find_map(|part| part.applies(spec, scene, cx))
-            .unwrap_or(true)
+        scene.rules.meets(spec.needs)
+            && self
+                .opened
+                .iter()
+                .find_map(|part| part.applies(spec, scene, cx))
+                .unwrap_or(true)
     }
 
     pub fn menu(&self, at: MenuAt, scene: &Scene, cx: &App) -> Vec<Placed> {

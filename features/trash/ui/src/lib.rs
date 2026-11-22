@@ -12,7 +12,7 @@ use nova_files_shell::actions::TrashSelected;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
     Column, DropOver, FolderName, FolderRules, Host, Location, Look, MenuAt, MenuGroup, MenuItem,
-    Navigator, Part, Placed, Scene, SidebarAt, SidebarRow, Slots, Views, command_spec,
+    Navigator, Part, Placed, Scene, SidebarAt, SidebarRow, Slots, command_spec,
 };
 use nova_files_trash_api::{
     self as trash_api, DeleteFromTrashJob, EmptyTrashJob, IN_TRASH, NO_TRASH, RestoreJob, TrashJob,
@@ -36,7 +36,8 @@ command_spec!(
     TrashSelected,
     "file.trash",
     "Move to Trash",
-    ["delete"]
+    ["delete"],
+    needs[Change]
 );
 command_spec!(RESTORE, RestoreSelected, "file.restore", "Restore", []);
 command_spec!(
@@ -134,12 +135,7 @@ impl TrashPart {
             self.host.rules.give_up(OWNER);
             return;
         };
-        let rules = FolderRules {
-            read_only: true,
-            views: Views::DetailsOnly,
-            replaces_menu: true,
-            trashed: true,
-        };
+        let rules = FolderRules::allowing(&[]).in_trash();
         self.host.rules.claim(OWNER, folder.to_path_buf(), rules);
         let name = FolderName {
             label: TRASH_LABEL.into(),
@@ -205,7 +201,7 @@ impl TrashPart {
     }
 
     fn is_trash(&self, folder: &Path) -> bool {
-        self.host.rules.for_folder(folder).trashed && self.host.rules.named(folder).is_some()
+        self.host.rules.for_folder(folder).trashed() && self.host.rules.named(folder).is_some()
     }
 
     fn aim(&self, over: &DropOver<'_>, _: &App) -> Option<SharedString> {
@@ -270,20 +266,14 @@ fn short_path(path: &Path, home: &Path) -> String {
 }
 
 const fn may_trash(_: &TrashPart, scene: &Scene, _: &App) -> bool {
-    !scene.picker && !scene.rules.read_only
+    !scene.picker
 }
 
-fn trash_items(_: &TrashPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
-    if scene.rules.read_only {
-        return Vec::new();
-    }
+fn trash_items(_: &TrashPart, _: &Scene, _: &App) -> Vec<MenuItem> {
     vec![MenuItem::run(Icon::Trash, &TRASH).with_look(Look::Danger)]
 }
 
-fn trash_button(_: &TrashPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
-    if scene.rules.read_only {
-        return Vec::new();
-    }
+fn trash_button(_: &TrashPart, _: &Scene, _: &App) -> Vec<MenuItem> {
     vec![
         MenuItem::run(Icon::Trash, &TRASH)
             .with_selector("island-trash")
@@ -348,7 +338,7 @@ impl Part for TrashPart {
         slots.command(&RESTORE, in_trash, Self::restore);
         slots.command(&EMPTY_TRASH, in_trash, Self::ask_empty);
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::FIRST, restore_items);
-        slots.menu(MenuAt::Sheet, empty_items);
+        slots.menu_in(MenuAt::Sheet, MenuGroup::Edit, Placed::FIRST, empty_items);
         slots.menu(MenuAt::Island, restore_button);
         slots.menu_in(MenuAt::Entry, MenuGroup::Danger, Placed::FIRST, trash_items);
         slots.menu_in(

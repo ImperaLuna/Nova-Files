@@ -2,12 +2,15 @@ use std::fmt;
 
 use gpui::{Action, KeyBinding};
 
+use crate::rules::Allow;
+
 pub const WINDOW_KEYS: &str = "MainWindow";
 
 pub struct CommandSpec {
     pub id: &'static str,
     pub label: &'static str,
     pub keys: &'static [&'static str],
+    pub needs: &'static [Allow],
     bind: fn(&'static str, Option<&str>) -> KeyBinding,
     make: fn() -> Box<dyn Action>,
 }
@@ -22,9 +25,15 @@ impl CommandSpec {
             id,
             label,
             keys,
+            needs: &[],
             bind,
             make,
         }
+    }
+
+    #[must_use]
+    pub const fn needing(self, needs: &'static [Allow]) -> Self {
+        Self { needs, ..self }
     }
 
     pub fn action(&self) -> Box<dyn Action> {
@@ -63,5 +72,14 @@ macro_rules! command_spec {
             |keys, context| gpui::KeyBinding::new(keys, $action, context),
             || Box::new($action),
         );
+    };
+    ($(#[$doc:meta])* $name:ident, $action:ident, $id:literal, $label:literal, [$($keys:literal),*], needs [$($need:ident),+]) => {
+        $(#[$doc])*
+        pub const $name: $crate::CommandSpec = $crate::CommandSpec::new(
+            ($id, $label, &[$($keys),*]),
+            |keys, context| gpui::KeyBinding::new(keys, $action, context),
+            || Box::new($action),
+        )
+        .needing(&[$($crate::Allow::$need),+]);
     };
 }

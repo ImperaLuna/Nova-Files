@@ -17,8 +17,8 @@ use nova_files_archives_api::{
 use nova_files_shell::actions::RenameSelected;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
-    FolderRules, Host, Location, MenuAt, MenuGroup, MenuItem, Part, Placed, RenameWhenMade, Scene,
-    SelectionMade, Slots, Views, command_spec,
+    Allow, FolderRules, Host, Location, MenuAt, MenuGroup, MenuItem, Part, Placed, RenameWhenMade,
+    Scene, SelectionMade, Slots, command_spec,
 };
 
 use naming::opens;
@@ -44,14 +44,16 @@ command_spec!(
     ExtractHere,
     "file.extract-here",
     "Extract here",
-    []
+    [],
+    needs[Change]
 );
 command_spec!(
     EXTRACT_TO,
     ExtractToFolder,
     "file.extract-to",
     "Extract to…",
-    []
+    [],
+    needs[Change]
 );
 command_spec!(
     EXTRACT_ALL,
@@ -60,25 +62,28 @@ command_spec!(
     "Extract all",
     []
 );
-command_spec!(COMPRESS, Compress, "file.compress", "Compress", []);
+command_spec!(
+    COMPRESS,
+    Compress,
+    "file.compress",
+    "Compress",
+    [],
+    needs[Change]
+);
 command_spec!(
     COMPRESS_AS,
     CompressAs,
     "file.compress-as",
     "Compress as…",
-    []
+    [],
+    needs[Change]
 );
 
 const PICK_TITLE: &str = "Extract to";
 const PICK_LABEL: &str = "Extract";
 const AFTER_RENAME: u8 = Placed::SECOND + 1;
 const OWNER: &str = "archives";
-const INSIDE: FolderRules = FolderRules {
-    read_only: true,
-    views: Views::Any,
-    replaces_menu: false,
-    trashed: false,
-};
+const INSIDE: FolderRules = FolderRules::allowing(&[Allow::TakeOut, Allow::Restyle]);
 
 pub struct ArchivesPart {
     host: Host,
@@ -289,7 +294,7 @@ fn taken(listing: &Listing, name: &OsStr) -> bool {
 }
 
 fn writable_folder(scene: &Scene) -> Option<PathBuf> {
-    if scene.picker || scene.searching || scene.rules.read_only {
+    if scene.picker || scene.searching {
         return None;
     }
     scene
@@ -300,7 +305,7 @@ fn writable_folder(scene: &Scene) -> Option<PathBuf> {
 }
 
 fn has_archives(part: &ArchivesPart, scene: &Scene, cx: &App) -> bool {
-    !scene.picker && !scene.rules.read_only && !part.archives(cx).is_empty()
+    !scene.picker && !part.archives(cx).is_empty()
 }
 
 fn in_archive(part: &ArchivesPart, scene: &Scene, _: &App) -> bool {
@@ -324,7 +329,7 @@ fn can_compress(_: &ArchivesPart, scene: &Scene, _: &App) -> bool {
 }
 
 fn extract_items(part: &ArchivesPart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
-    if scene.rules.replaces_menu || !has_archives(part, scene, cx) {
+    if !has_archives(part, scene, cx) {
         return Vec::new();
     }
     vec![
@@ -334,7 +339,7 @@ fn extract_items(part: &ArchivesPart, scene: &Scene, cx: &App) -> Vec<MenuItem> 
 }
 
 fn compress_item(part: &ArchivesPart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
-    if scene.rules.replaces_menu || !can_compress(part, scene, cx) {
+    if !can_compress(part, scene, cx) {
         return Vec::new();
     }
     vec![

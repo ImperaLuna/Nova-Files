@@ -17,7 +17,8 @@ command_spec!(
     ToggleHidden,
     "view.hidden",
     "Show hidden files",
-    ["ctrl-h"]
+    ["ctrl-h"],
+    needs[Restyle]
 );
 
 command_spec!(
@@ -25,7 +26,8 @@ command_spec!(
     ToggleFolderSizes,
     "view.folder-sizes",
     "Folder sizes",
-    []
+    [],
+    needs[Restyle]
 );
 
 pub struct SettingsPart {
@@ -87,7 +89,7 @@ impl SettingsPart {
     )]
     fn show_items(&self, scene: &Scene, cx: &App) -> Vec<MenuItem> {
         let in_folder = scene.location.as_ref().and_then(Location::folder).is_some();
-        if scene.rules.replaces_menu || !in_folder {
+        if !in_folder {
             return Vec::new();
         }
         let hidden = Published::<HiddenFiles>::get(cx) == Some(&HiddenFiles::Shown);

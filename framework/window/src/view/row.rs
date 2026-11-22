@@ -10,6 +10,7 @@ use gpui::{
     prelude::FluentBuilder as _, relative,
 };
 use nova_files_api::{Entry, EntryKind, IconKind, Listing};
+use nova_files_shell::Allow;
 
 use crate::theme::{Colors, radius, size, space, text};
 use crate::window::{Aim, DraggedRow, MainWindow};
@@ -147,7 +148,7 @@ pub fn drags(
 
 impl MainWindow {
     pub(super) fn entries_drag(&self) -> bool {
-        !self.picker() && !self.folder_rules().read_only
+        !self.picker() && self.folder_rules().allows(Allow::Change)
     }
 }
 
