@@ -77,12 +77,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stuck_drives_hold_the_answer_for_one_wait_not_one_each() {
+    fn stuck_drives_answer_nothing_and_hold_back_no_other_drive() {
         const WAIT: Duration = Duration::from_millis(200);
         let (_hold, stuck) = mpsc::channel::<()>();
         let stuck = std::sync::Mutex::new(stuck);
         let paths = ["/stuck/a", "/stuck/b", "/stuck/c", "/"].map(PathBuf::from);
-        let started = Instant::now();
 
         let spaces = spaces(paths.to_vec(), WAIT, move |path| {
             if path.starts_with("/stuck") {
@@ -91,7 +90,6 @@ mod tests {
             Some(DiskSpace { total: 1, free: 1 })
         });
 
-        assert!(started.elapsed() < WAIT * 2, "{:?}", started.elapsed());
         let found: Vec<_> = spaces
             .iter()
             .map(|space| (space.path.as_path(), space.space))

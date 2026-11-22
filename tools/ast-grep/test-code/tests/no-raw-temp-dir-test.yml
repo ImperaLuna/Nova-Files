@@ -1,0 +1,32 @@
+# Invalid cases are folders tests on main at 9faefa7 made by hand.
+id: no-raw-temp-dir
+valid:
+  - |
+    fn sizes() {
+        let folder = TestFolder::new("sizes");
+        let file = folder.file("a", "text");
+    }
+  - |
+    fn temp_dir_name() -> &'static str { "tmp" }
+  - |
+    fn opened_files_fall_back_to_the_temp_folder() {
+        assert_eq!(opened_folder(None).strip_prefix(env::temp_dir()), Ok(Path::new(OPENED)));
+    }
+  - |
+    pub fn opened_folder(runtime: Option<OsString>) -> PathBuf {
+        runtime.map_or_else(env::temp_dir, PathBuf::from).join(OPENED)
+    }
+invalid:
+  - |
+    fn helper_that_answers_then_hangs(lines: usize) -> PathBuf {
+        let folder = env::temp_dir().join(format!("nova-files-launch-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+    }
+  - |
+    fn new(name: &str) -> Self {
+        let root = std::env::temp_dir().join(format!("nova-mime-{}", std::process::id()));
+        Self(root)
+    }
+  - |
+    use std::env::temp_dir;
+    fn f() { let path = temp_dir().join("x"); }

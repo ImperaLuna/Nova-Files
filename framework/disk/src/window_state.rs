@@ -74,30 +74,30 @@ mod tests {
     use std::path::PathBuf;
     use std::thread;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
-    fn temp(name: &str) -> PathBuf {
-        let path =
-            std::env::temp_dir().join(format!("nova-files-state-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&path).ok();
-        path
+    fn temp(name: &str) -> (TestFolder, PathBuf) {
+        let folder = TestFolder::new(&format!("state-{name}"));
+        let path = folder.join(name);
+        (folder, path)
     }
 
     #[test]
     fn a_missing_file_reads_as_empty_and_an_oversized_one_not_at_all() {
-        let home = temp("read");
+        let (_home_folder, home) = temp("read");
         let path = home.join(FILE);
         assert_eq!(read(&path), Some(Vec::new()));
         private_file::replace(&path, &vec![b'x'; MAX_BYTES], private_file::FILE_MODE).unwrap();
         assert_eq!(read(&path).map(|bytes| bytes.len()), Some(MAX_BYTES));
         private_file::replace(&path, &vec![b'x'; MAX_BYTES + 1], private_file::FILE_MODE).unwrap();
         assert_eq!(read(&path), None);
-        fs::remove_dir_all(home).ok();
     }
 
     #[test]
     fn a_file_that_cant_be_read_is_never_saved_over() {
-        let home = temp("unread");
+        let (_home_folder, home) = temp("unread");
         let file = home.join(FILE);
         fs::create_dir_all(&file).unwrap();
         let unreadable = Store::open(Some(&home));
@@ -110,7 +110,6 @@ mod tests {
         assert_eq!(unreadable.saver.path(), None);
         assert_eq!(too_big.saver.path(), None);
         assert_eq!(missing.saver.path(), Some(file.as_path()));
-        fs::remove_dir_all(home).ok();
     }
 
     fn picker(size: &str) -> Vec<u8> {
@@ -121,7 +120,7 @@ mod tests {
 
     #[test]
     fn the_store_keeps_what_was_saved_and_reads_it_back_next_time() {
-        let home = temp("store");
+        let (_home_folder, home) = temp("store");
         let store = Store::open(Some(&home));
         assert_eq!(store.bytes(), b"");
         store.save(&picker("900x600"));
@@ -141,7 +140,6 @@ mod tests {
             thread::yield_now();
         }
         assert_eq!(Store::open(Some(&home)).bytes(), picker("800x500"));
-        fs::remove_dir_all(home).ok();
     }
 
     #[test]

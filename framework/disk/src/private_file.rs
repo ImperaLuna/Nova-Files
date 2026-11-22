@@ -93,15 +93,15 @@ pub fn saved_at(path: &Path) -> io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
     const ALL_MODE_BITS: u32 = 0o777;
     const CAP: usize = 16;
 
-    fn temp(name: &str) -> PathBuf {
-        let path =
-            std::env::temp_dir().join(format!("nova-files-private-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&path).ok();
-        path
+    fn temp(name: &str) -> (TestFolder, PathBuf) {
+        let folder = TestFolder::new(&format!("private-{name}"));
+        let path = folder.join(name);
+        (folder, path)
     }
 
     fn bytes(read: Read) -> Vec<u8> {
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn a_replace_swaps_the_file_whole_and_leaves_no_temporary() {
-        let home = temp("replace");
+        let (_home_folder, home) = temp("replace");
         let path = home.join("folder/file");
         replace(&path, b"picker 900x600", FILE_MODE).unwrap();
         replace(&path, b"picker 1000x700", FILE_MODE).unwrap();
@@ -123,23 +123,21 @@ mod tests {
         assert_eq!(mode(path.parent().unwrap()), FOLDER_MODE);
         let left: Vec<_> = fs::read_dir(path.parent().unwrap()).unwrap().collect();
         assert_eq!(left.len(), 1);
-        fs::remove_dir_all(home).ok();
     }
 
     #[test]
     fn a_replace_keeps_bits_the_umask_would_take() {
-        let home = temp("umask");
+        let (_home_folder, home) = temp("umask");
         let path = home.join("folder/file");
         let shared = 0o664;
         replace(&path, b"shared", shared).unwrap();
         let mode = fs::metadata(&path).unwrap().permissions().mode() & ALL_MODE_BITS;
         assert_eq!(mode, shared);
-        fs::remove_dir_all(home).ok();
     }
 
     #[test]
     fn a_read_tells_missing_oversized_and_unreadable_apart() {
-        let home = temp("read");
+        let (_home_folder, home) = temp("read");
         let path = home.join("file");
         assert!(matches!(read(&path, CAP), Read::Missing));
         replace(&path, &[b'x'; CAP], FILE_MODE).unwrap();
@@ -147,12 +145,11 @@ mod tests {
         replace(&path, &[b'x'; CAP + 1], FILE_MODE).unwrap();
         assert!(matches!(read(&path, CAP), Read::TooBig));
         assert!(matches!(read(&home, CAP), Read::Failed(_)));
-        fs::remove_dir_all(home).ok();
     }
 
     #[test]
     fn a_save_through_a_link_to_nowhere_keeps_the_link() {
-        let home = temp("dangling");
+        let (_home_folder, home) = temp("dangling");
         fs::create_dir_all(&home).unwrap();
         let link = home.join("settings.toml");
         std::os::unix::fs::symlink("dotfiles.toml", &link).unwrap();
@@ -163,12 +160,11 @@ mod tests {
         assert_eq!(target, home.join("dotfiles.toml"));
         assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
         assert_eq!(bytes(read(&link, CAP)), b"saved");
-        fs::remove_dir_all(home).ok();
     }
 
     #[test]
     fn a_link_into_a_missing_folder_is_not_saved_over() {
-        let home = temp("unmounted");
+        let (_home_folder, home) = temp("unmounted");
         fs::create_dir_all(&home).unwrap();
         let link = home.join("bookmarks");
         std::os::unix::fs::symlink(home.join("drive/bookmarks"), &link).unwrap();
@@ -184,14 +180,12 @@ mod tests {
         );
         assert!(saved_at(&looped).is_err());
         assert_eq!(saved_at(&home.join("new")).unwrap(), home.join("new"));
-        fs::remove_dir_all(home).ok();
     }
 
     #[test]
     fn a_failed_replace_is_an_error() {
-        let home = temp("blocked");
+        let (_home_folder, home) = temp("blocked");
         fs::write(&home, b"").unwrap();
         assert!(replace(&home.join("file"), b"x", FILE_MODE).is_err());
-        fs::remove_file(home).ok();
     }
 }

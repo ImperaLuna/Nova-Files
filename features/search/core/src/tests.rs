@@ -4,6 +4,8 @@ use std::os::unix::fs::MetadataExt as _;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
+use nova_files_test_folder::TestFolder;
+
 use super::*;
 
 const LIMIT: u32 = 50;
@@ -12,14 +14,12 @@ const QUIET: Duration = Duration::from_millis(200);
 const DAMAGED: &[u8] = &[0; 8];
 
 struct Scratch {
-    root: PathBuf,
+    root: TestFolder,
 }
 
 impl Scratch {
     fn new(name: &str) -> Self {
-        let root =
-            std::env::temp_dir().join(format!("nova-files-searcher-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&root).ok();
+        let root = TestFolder::new(&format!("searcher-{name}"));
         fs::create_dir_all(root.join("home/docs")).unwrap();
         fs::write(root.join("home/docs/report.pdf"), b"").unwrap();
         Self { root }
@@ -37,12 +37,6 @@ impl Scratch {
 
     fn index_inode(&self) -> u64 {
         fs::metadata(self.place().index()).unwrap().ino()
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.root).ok();
     }
 }
 

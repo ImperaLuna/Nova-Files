@@ -1,26 +1,19 @@
 #![expect(clippy::unwrap_used, reason = "test setup should fail loudly")]
 
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::path::Path;
 
-pub struct TempFolder(PathBuf);
+use nova_files_test_folder::TestFolder;
+
+pub struct TempFolder(TestFolder);
 
 impl TempFolder {
     pub fn new() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-index-test-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(name);
-        fs::create_dir_all(&path).unwrap();
-        Self(path)
+        Self(TestFolder::new("index-test"))
     }
 
     pub fn path(&self) -> &Path {
-        &self.0
+        self.0.path()
     }
 
     pub fn with(self, paths: &[&str]) -> Self {
@@ -34,11 +27,5 @@ impl TempFolder {
             }
         }
         self
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }

@@ -79,6 +79,7 @@ fn split_once_nul(data: &[u8]) -> Option<(&[u8], &[u8])> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
     fn png(chunks: &[(&[u8], &[u8])]) -> Vec<u8> {
         let mut out = vec![0; PNG_SIGNATURE_LENGTH];
@@ -126,9 +127,8 @@ mod tests {
 
     #[test]
     fn a_thumbnail_at_the_size_cap_is_read_and_a_bigger_file_is_not() {
-        let folder =
-            std::env::temp_dir().join(format!("nova-files-cache-cap-{}", std::process::id()));
-        std::fs::create_dir_all(&folder).unwrap();
+        let test_folder = TestFolder::new("cache-cap");
+        let folder = test_folder.path();
         let cap = usize::try_from(MAX_THUMBNAIL_BYTES).unwrap();
         let at_cap = thumbnail_of_size(cap);
         std::fs::write(folder.join("at-cap.png"), &at_cap).unwrap();
@@ -136,9 +136,8 @@ mod tests {
         over.push(0);
         std::fs::write(folder.join("over.png"), &over).unwrap();
 
-        let read_at_cap = read_if_current(&folder, "at-cap.png", 42);
-        let read_over = read_if_current(&folder, "over.png", 42);
-        std::fs::remove_dir_all(&folder).unwrap();
+        let read_at_cap = read_if_current(folder, "at-cap.png", 42);
+        let read_over = read_if_current(folder, "over.png", 42);
 
         assert_eq!(read_at_cap, Some(at_cap));
         assert_eq!(read_over, None);

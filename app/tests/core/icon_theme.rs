@@ -8,6 +8,7 @@ use crate::own_folders;
 use nova_files_api::{
     Command, EntryId, Event, FileIcon, IconKind, ListingId, Order, ThumbnailSize,
 };
+use nova_files_test_folder::TestFolder;
 
 use crate::common::Core;
 use own_folders::run_again_in;
@@ -27,20 +28,21 @@ fn file_icons_follow_the_desktops_icon_theme() {
 }
 
 fn run_again_in_folders_of_its_own() {
-    let root = std::env::temp_dir().join(format!("nova-files-icon-theme-{}", std::process::id()));
-    write(&root, "data/mime/globs2", "50:image/png:*.png\n");
+    let folder = TestFolder::new("icon-theme");
+    let root = folder.path();
+    write(root, "data/mime/globs2", "50:image/png:*.png\n");
     write(
-        &root,
+        root,
         &format!("data/icons/{THEME}/index.theme"),
         "[Icon Theme]\nDirectories=m\n[m]\nSize=48\nType=Scalable\nMinSize=8\nMaxSize=256\n",
     );
     write(
-        &root,
+        root,
         &format!("data/icons/{THEME}/m/image-png.svg"),
         "<svg/>",
     );
-    write(&root, "files/a.png", "");
-    run_again_in(&root, ROOT_VAR, TEST_NAME);
+    write(root, "files/a.png", "");
+    run_again_in(root, ROOT_VAR, TEST_NAME);
 }
 
 fn icons_through_the_core(root: &Path) {

@@ -7,7 +7,7 @@
 
 [workspace]
 resolver = "3"
-members = ["app", "features/*/*", "framework/base", "framework/disk", "framework/entries/*", "framework/jobs", "framework/messages", "framework/shell", "framework/window", "fronts/*", "helpers/*"]
+members = ["app", "features/*/*", "framework/base", "framework/disk", "framework/entries/*", "framework/jobs", "framework/messages", "framework/shell", "framework/test-folder", "framework/window", "fronts/*", "helpers/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -71,6 +71,7 @@ nova-files-shell = { path = "framework/shell" }
 nova-files-start-api = { path = "features/start/api" }
 nova-files-start-core = { path = "features/start/core" }
 nova-files-start-ui = { path = "features/start/ui" }
+nova-files-test-folder = { path = "framework/test-folder" }
 nova-files-thumbnailer-launch = { path = "helpers/thumbnailer-launch" }
 nova-files-thumbnails-api = { path = "features/thumbnails/api" }
 nova-files-thumbnails-core = { path = "features/thumbnails/core" }

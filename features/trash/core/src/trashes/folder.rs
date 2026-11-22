@@ -178,7 +178,7 @@ mod tests {
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 
     use super::*;
-    use nova_files_jobs::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn the_top_of_a_mount_is_where_the_mount_changes() {

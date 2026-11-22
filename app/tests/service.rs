@@ -15,6 +15,7 @@ use std::thread;
 use std::time::Duration;
 
 use nova_files_dbus::{APP_ID, FILE_MANAGER_BUS_NAME, FILES_INTERFACE, Started};
+use nova_files_test_folder::TestFolder;
 use support::{PrivateBus, WAIT};
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, Proxy};
@@ -264,11 +265,10 @@ fn traced_start(trace: &std::path::Path) -> Output {
 
 #[test]
 fn the_start_up_trace_records_the_process_start() {
-    let trace = std::env::temp_dir().join(format!("nova-files-trace-{}", std::process::id()));
-    std::fs::remove_file(&trace).ok();
+    let folder = TestFolder::new("trace");
+    let trace = folder.join("trace");
     traced_start(&trace);
     let written = std::fs::read_to_string(&trace).unwrap();
-    std::fs::remove_file(&trace).ok();
     let labels: Vec<&str> = written
         .lines()
         .filter_map(|line| line.split_once(' ').map(|(_, label)| label))
@@ -305,9 +305,8 @@ fn a_frame_trace_that_cant_be_written_is_reported_and_the_start_goes_on() {
 
 #[test]
 fn make_default_makes_nova_files_open_folders() {
-    let root = std::env::temp_dir().join(format!("nova-files-default-{}", std::process::id()));
-    std::fs::remove_dir_all(&root).ok();
-    let _removed = Removed(root.clone());
+    let folder = TestFolder::new("default");
+    let root = folder.join("root");
     let (config, data) = (root.join("config"), root.join("data"));
     let make_default = || {
         let mut command = program("unix:path=/nonexistent/nova-files-bus", &["--make-default"]);
@@ -349,20 +348,11 @@ fn make_default_makes_nova_files_open_folders() {
     );
 }
 
-struct Removed(PathBuf);
-
-impl Drop for Removed {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).ok();
-    }
-}
-
-struct Folders(PathBuf);
+struct Folders(TestFolder);
 
 impl Folders {
     fn new(name: &str, default: bool) -> Self {
-        let root = std::env::temp_dir().join(format!("nova-files-{name}-{}", std::process::id()));
-        std::fs::remove_dir_all(&root).ok();
+        let root = TestFolder::new(name);
         let entry = root.join(format!("data/applications/{APP_ID}.desktop"));
         std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
         std::fs::write(
@@ -388,12 +378,6 @@ impl Folders {
             .env("XDG_CONFIG_DIRS", self.0.join("none"))
             .env("XDG_DATA_DIRS", self.0.join("none"))
             .env_remove("XDG_CURRENT_DESKTOP");
-    }
-}
-
-impl Drop for Folders {
-    fn drop(&mut self) {
-        std::fs::remove_dir_all(&self.0).ok();
     }
 }
 

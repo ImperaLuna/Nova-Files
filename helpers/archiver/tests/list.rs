@@ -5,17 +5,17 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use nova_files::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver};
+use nova_files_test_folder::TestFolder;
 use zip::write::SimpleFileOptions;
 
 fn archiver() -> Archiver {
     Archiver::at(PathBuf::from(env!("CARGO_BIN_EXE_nova-files-archiver")))
 }
 
-fn folder(name: &str) -> PathBuf {
-    let folder = std::env::temp_dir().join(format!("nova-archiver-{name}-{}", std::process::id()));
-    fs::remove_dir_all(&folder).ok();
-    fs::create_dir_all(&folder).unwrap();
-    folder
+fn folder(name: &str) -> (TestFolder, PathBuf) {
+    let held = TestFolder::new(&format!("archiver-{name}"));
+    let folder = held.path().to_path_buf();
+    (held, folder)
 }
 
 fn local_seconds(time: &str) -> i64 {
@@ -81,7 +81,7 @@ fn assert_tar_listing(entries: &[ArchiveEntry]) {
 
 #[test]
 fn lists_tar_in_every_wrapping() {
-    let folder = folder("tar");
+    let (_held, folder) = folder("tar");
     let tar = tar_bytes();
     let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     gzip.write_all(&tar).unwrap();
@@ -100,12 +100,11 @@ fn lists_tar_in_every_wrapping() {
         fs::write(&path, bytes).unwrap();
         assert_tar_listing(&archiver().list(&path).unwrap());
     }
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn lists_zip_with_its_unix_details_and_locked_entries() {
-    let folder = folder("zip");
+    let (_held, folder) = folder("zip");
     let path = folder.join("a.zip");
     let mut zip = zip::ZipWriter::new(File::create(&path).unwrap());
     let options = SimpleFileOptions::default()
@@ -153,12 +152,11 @@ fn lists_zip_with_its_unix_details_and_locked_entries() {
     assert_eq!(entries[4].kind, ArchiveKind::Link);
     assert!(entries[4].locked);
     assert_eq!(entries[4].link, Path::new(""));
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn zip_with_no_permissions_gets_plain_ones() {
-    let folder = folder("zip-bare");
+    let (_held, folder) = folder("zip-bare");
     let path = folder.join("a.zip");
     let mut zip = zip::ZipWriter::new(File::create(&path).unwrap());
     zip.add_directory("d/", SimpleFileOptions::default())
@@ -180,12 +178,11 @@ fn zip_with_no_permissions_gets_plain_ones() {
     assert_eq!(entries[0].kind, ArchiveKind::Folder);
     assert_eq!(entries[0].mode, 0o755);
     assert_eq!(entries[1].mode, 0o644);
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn zip_from_dos_gets_permissions_from_its_attributes() {
-    let folder = folder("zip-dos");
+    let (_held, folder) = folder("zip-dos");
     let path = folder.join("a.zip");
     let mut zip = zip::ZipWriter::new(File::create(&path).unwrap());
     let options = SimpleFileOptions::default()
@@ -205,12 +202,11 @@ fn zip_from_dos_gets_permissions_from_its_attributes() {
         .earliest()
         .unwrap();
     assert_eq!(entries[1].modified, local.timestamp());
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn hostile_paths_are_left_out() {
-    let folder = folder("hostile");
+    let (_held, folder) = folder("hostile");
     let path = folder.join("evil.tar");
     let mut builder = tar::Builder::new(Vec::new());
     for name in [&b"../escape"[..], b"/etc/evil", b"ok.txt"] {
@@ -227,12 +223,11 @@ fn hostile_paths_are_left_out() {
         paths(&entries),
         [Path::new("etc/evil"), Path::new("ok.txt")]
     );
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn other_files_and_damage_are_told_apart() {
-    let folder = folder("bad");
+    let (_held, folder) = folder("bad");
     let text = folder.join("notes.zip");
     fs::write(&text, b"just some text, not an archive at all").unwrap();
     assert_eq!(archiver().list(&text), Err(ArchiveFailure::Unsupported));
@@ -248,25 +243,23 @@ fn other_files_and_damage_are_told_apart() {
     );
     let nowhere = Archiver::at(folder.join("no-helper"));
     assert_eq!(nowhere.list(&text), Err(ArchiveFailure::NotRead));
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn an_archive_the_user_may_not_read_is_denied() {
     use std::os::unix::fs::PermissionsExt as _;
-    let folder = folder("denied");
+    let (_held, folder) = folder("denied");
     let path = folder.join("secret.tar");
     fs::write(&path, tar_bytes()).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
     if File::open(&path).is_err() {
         assert_eq!(archiver().list(&path), Err(ArchiveFailure::Denied));
     }
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn tars_joined_end_to_end_list_whole() {
-    let folder = folder("joined");
+    let (_held, folder) = folder("joined");
     let path = folder.join("both.tar");
     let mut second = tar::Builder::new(Vec::new());
     let mut header = tar::Header::new_gnu();
@@ -279,12 +272,11 @@ fn tars_joined_end_to_end_list_whole() {
     let entries = archiver().list(&path).unwrap();
     assert_eq!(entries.last().unwrap().path, Path::new("second.txt"));
     assert_eq!(entries.len(), 4);
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn old_tar_folders_end_in_a_slash() {
-    let folder = folder("old-tar");
+    let (_held, folder) = folder("old-tar");
     let path = folder.join("old.tar");
     let mut builder = tar::Builder::new(Vec::new());
     for (name, size) in [(&b"docs/"[..], 0), (b"docs/a.txt", 1)] {
@@ -305,32 +297,29 @@ fn old_tar_folders_end_in_a_slash() {
     );
     assert_eq!(entries[0].kind, ArchiveKind::Folder);
     assert_eq!(entries[1].kind, ArchiveKind::File);
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn an_empty_zip_lists_nothing() {
-    let folder = folder("empty");
+    let (_held, folder) = folder("empty");
     let path = folder.join("empty.zip");
     zip::ZipWriter::new(File::create(&path).unwrap())
         .finish()
         .unwrap();
     assert_eq!(archiver().list(&path), Ok(Vec::new()));
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn an_empty_tar_lists_nothing() {
-    let folder = folder("empty-tar");
+    let (_held, folder) = folder("empty-tar");
     let path = folder.join("empty.tar");
     fs::write(&path, tar::Builder::new(Vec::new()).into_inner().unwrap()).unwrap();
     assert_eq!(archiver().list(&path), Ok(Vec::new()));
-    fs::remove_dir_all(&folder).ok();
 }
 
 #[test]
 fn an_unknown_ask_is_a_usage_error() {
-    let folder = folder("usage");
+    let (_held, folder) = folder("usage");
     let archive = folder.join("a.tar");
     fs::write(&archive, tar_bytes()).unwrap();
     for extra in [None, Some(&folder)] {
@@ -343,5 +332,4 @@ fn an_unknown_ask_is_a_usage_error() {
         assert_eq!(status.status.code(), Some(1));
         assert_eq!(status.stdout, b"");
     }
-    fs::remove_dir_all(&folder).ok();
 }

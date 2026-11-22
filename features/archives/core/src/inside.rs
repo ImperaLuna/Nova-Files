@@ -276,6 +276,7 @@ const fn unreadable(failure: ArchiveFailure) -> Unreadable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
     fn entry(path: &str, kind: ArchiveKind, size: u64) -> ArchiveEntry {
         ArchiveEntry {
@@ -406,7 +407,8 @@ mod tests {
 
     #[test]
     fn a_path_is_inside_where_a_file_ends_it() {
-        let root = env::temp_dir().join(format!("nova-files-within-{}", process::id()));
+        let folder = TestFolder::new("within");
+        let root = folder.path();
         fs::create_dir_all(root.join("folder")).unwrap();
         fs::write(root.join("a.zip"), b"").unwrap();
         assert_eq!(
@@ -427,7 +429,6 @@ mod tests {
         assert_eq!(within(&root.join("folder")), None);
         assert_eq!(within(&root.join("a.zip/../folder")), None);
         assert_eq!(within(Path::new("a.zip/docs")), None);
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -469,13 +470,17 @@ mod tests {
             opened_folder(Some("/run/user/7".into())),
             Path::new("/run/user/7/nova-files/opened")
         );
-        assert_eq!(opened_folder(None), env::temp_dir().join(OPENED));
+        let fallback = opened_folder(None);
+        assert_eq!(
+            fallback.strip_prefix(env::temp_dir()),
+            Ok(Path::new(OPENED))
+        );
     }
 
     #[test]
     fn each_file_opened_gets_a_new_folder() {
-        let root = env::temp_dir().join(format!("nova-files-opened-{}", process::id()));
-        fs::remove_dir_all(&root).ok();
+        let folder = TestFolder::new("opened");
+        let root = folder.join("root");
         let inside = Inside::new(None, root.join("opened"));
         fs::create_dir_all(root.join(format!("opened/{}-0", process::id()))).unwrap();
         assert_eq!(
@@ -487,6 +492,5 @@ mod tests {
             Inside::new(None, root.join("file/opened")).new_folder(),
             None
         );
-        fs::remove_dir_all(&root).ok();
     }
 }

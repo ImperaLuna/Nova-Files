@@ -46,7 +46,7 @@ mod tests {
     use crate::audience::Audience;
     use crate::job::Job;
     use crate::progress::Reporter;
-    use crate::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     fn running() -> Running {
         let shared = Arc::new(Job::new(Operation::Copy {

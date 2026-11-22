@@ -160,7 +160,7 @@ nova-files-window.workspace = true
 nova-files-undo-ui.workspace = true
 [dev-dependencies]
 nova-files-clipboard-api.workspace = true
-nova-files-jobs = { workspace = true, features = ["test-support"] }
+nova-files-test-folder.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-folders-api.workspace = true
 nova-files-gathered-api.workspace = true

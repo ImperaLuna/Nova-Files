@@ -196,7 +196,7 @@ fn every_watching_client_hears_a_job_end_but_only_the_asker_hears_it_start() {
     );
 
     let (job, _, _) = client.run(Operation::NewFolder {
-        inside: bench.root.clone(),
+        inside: bench.root,
         name: "x".into(),
     });
 
@@ -216,7 +216,7 @@ fn a_client_that_left_hears_nothing_more() {
     let client = bench.client();
 
     client.run(Operation::NewFolder {
-        inside: bench.root.clone(),
+        inside: bench.root,
         name: "x".into(),
     });
 
@@ -233,7 +233,7 @@ fn a_client_that_never_watched_hears_nothing() {
     let client = bench.client();
 
     client.run(Operation::NewFolder {
-        inside: bench.root.clone(),
+        inside: bench.root,
         name: "x".into(),
     });
     bystander.send(Command::Ping);

@@ -2,7 +2,7 @@ use std::fs;
 use std::sync::mpsc::{self, Receiver};
 
 use super::*;
-use nova_files_jobs::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 
 const MANY: usize = 2000;
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);

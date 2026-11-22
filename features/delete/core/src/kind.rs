@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn a_resumed_delete_leaves_out_what_is_gone() {
-        let folder = nova_files_jobs::test_folder::TestFolder::new("delete-kind-rest");
+        let folder = nova_files_test_folder::TestFolder::new("delete-kind-rest");
         let file = folder.file("file", "f");
         let gone = folder.path().join("gone");
         let delete = Operation::Delete {

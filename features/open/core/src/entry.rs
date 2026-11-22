@@ -123,6 +123,8 @@ fn executable(path: &Path) -> bool {
 mod tests {
     use std::fs;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
     fn entry(exec: &str) -> Entry {
@@ -206,7 +208,8 @@ Name=New
 
     #[test]
     fn try_exec_must_name_an_installed_program() {
-        let root = std::env::temp_dir().join(format!("nova-entry-{}", std::process::id()));
+        let folder = TestFolder::new("entry");
+        let root = folder.path();
         let bin = root.join("bin");
         fs::create_dir_all(&bin).unwrap();
         let program = bin.join("viewer");
@@ -238,6 +241,5 @@ Name=New
         let file = root.join("viewer.desktop");
         assert_eq!(read(&file, None), None, "no PATH to find it in");
         assert_eq!(read(&root.join("missing.desktop"), Some(&path)), None);
-        fs::remove_dir_all(&root).unwrap();
     }
 }

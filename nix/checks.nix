@@ -127,6 +127,8 @@ in
 
   comments = toolCheck "comments" "tools/check-comments.sh" [ pkgs.ast-grep ];
 
+  test-code = toolCheck "test-code" "tools/check-test-code.sh" [ pkgs.ast-grep ];
+
   nix-fmt = toolCheck "nix-fmt" "nixfmt --check flake.nix nix/*.nix" [ pkgs.nixfmt ];
 
   # The installed desktop entry follows the freedesktop spec.

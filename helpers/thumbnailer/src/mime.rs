@@ -64,11 +64,14 @@ fn read_capped(path: &Path) -> Option<String> {
 mod tests {
     use std::fs;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
 
     #[test]
     fn extension_globs_by_weight_and_order() {
-        let root = std::env::temp_dir().join(format!("nova-mime-{}", std::process::id()));
+        let folder = TestFolder::new("mime");
+        let root = folder.join("root");
         let (first, second) = (root.join("a"), root.join("b"));
         fs::create_dir_all(first.join("mime")).unwrap();
         fs::create_dir_all(second.join("mime")).unwrap();
@@ -84,7 +87,6 @@ mod tests {
         .unwrap();
 
         let types = MimeTypes::load(&[first, second]);
-        fs::remove_dir_all(&root).ok();
 
         assert_eq!(types.of(Path::new("/x/clip.MP4")), Some("video/mp4"));
         assert_eq!(types.of(Path::new("/x/photo.heic")), Some("image/heic"));
@@ -94,14 +96,14 @@ mod tests {
 
     #[test]
     fn a_large_database_is_read_to_its_end() {
-        let root = std::env::temp_dir().join(format!("nova-mime-large-{}", std::process::id()));
+        let folder = TestFolder::new("mime-large");
+        let root = folder.path().to_path_buf();
         fs::create_dir_all(root.join("mime")).unwrap();
         let mut text = "# padding\n".repeat(200_000);
         text.push_str("50:video/mp4:*.mp4\n");
         fs::write(root.join(GLOBS_FILE), text).unwrap();
 
         let types = MimeTypes::load(std::slice::from_ref(&root));
-        fs::remove_dir_all(&root).ok();
 
         assert_eq!(types.of(Path::new("/x/clip.mp4")), Some("video/mp4"));
     }

@@ -96,7 +96,7 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::*;
-    use nova_files_jobs::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     const ANOTHER_DRIVE: &str = "/proc";
 

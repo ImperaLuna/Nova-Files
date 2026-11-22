@@ -1,0 +1,33 @@
+# Invalid cases are folders tests on main at 9faefa7 made by hand.
+id: no-raw-temp-dir-in-module
+valid:
+  - |
+    pub fn opened_folder(runtime: Option<OsString>) -> PathBuf {
+        runtime.map_or_else(env::temp_dir, PathBuf::from).join(OPENED)
+    }
+  - |
+    pub fn scratch() -> PathBuf {
+        std::env::temp_dir().join("nova-files-scratch")
+    }
+  - |
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn sizes() {
+            let folder = TestFolder::new("sizes");
+        }
+    }
+invalid:
+  - |
+    #[cfg(test)]
+    mod tests {
+        fn helper_that_answers_then_hangs(lines: usize) -> PathBuf {
+            let folder = env::temp_dir().join(format!("nova-files-launch-{}", std::process::id()));
+            std::fs::create_dir_all(&folder).unwrap();
+        }
+    }
+  - |
+    #[test]
+    fn user_dirs() {
+        let folder = TempHome(env::temp_dir().join(format!("nova-files-user-dirs-{}", std::process::id())));
+    }

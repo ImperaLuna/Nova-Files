@@ -10,6 +10,7 @@ use std::time::Duration;
 use nova_files_api::{Color, DesktopLook, Envelope, Palette};
 use nova_files_settings_api::{SettingChange, Settings};
 use nova_files_settings_core::Store as SettingsStore;
+use nova_files_test_folder::TestFolder;
 
 use super::*;
 
@@ -18,11 +19,11 @@ const SETTINGS_LISTENER: ClientId = ClientId(u64::MAX);
 const WAIT: Duration = Duration::from_secs(5);
 const LONG_COMMENT: usize = 4096;
 
-fn temp(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("nova-files-theme-{name}-{}", std::process::id()));
-    fs::remove_dir_all(&path).ok();
+fn temp(name: &str) -> (TestFolder, PathBuf) {
+    let folder = TestFolder::new(&format!("theme-{name}"));
+    let path = folder.path().to_path_buf();
     fs::create_dir_all(config_watch::folder(&path)).unwrap();
-    path
+    (folder, path)
 }
 
 struct Inbox(Mutex<Sender<Event>>);
@@ -53,7 +54,7 @@ fn carbonfox(mode: Mode) -> Theme {
 
 #[test]
 fn without_a_file_the_theme_is_dark_carbonfox() {
-    let config = temp("none");
+    let (_config_folder, config) = temp("none");
     let store = Store::open(Some(&config));
     let (events, received) = inbox();
     store.listen(ClientId(0), &events);
@@ -62,12 +63,11 @@ fn without_a_file_the_theme_is_dark_carbonfox() {
     let store = Store::open(None);
     store.listen(ClientId(0), &events);
     assert_eq!(*next(&received), carbonfox(Mode::Dark));
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn the_file_sets_its_colors_over_carbonfox() {
-    let config = temp("file");
+    let (_config_folder, config) = temp("file");
     let path = config_watch::folder(&config).join(FILE);
     fs::write(&path, "[dark]\nprimary = \"#123456\"\n").unwrap();
     let store = Store::open(Some(&config));
@@ -78,12 +78,11 @@ fn the_file_sets_its_colors_over_carbonfox() {
     assert_eq!(theme.palette.bg, carbonfox(Mode::Dark).palette.bg);
     fs::write(&path, "[dark]\nprimary = \"#654321\"\n").unwrap();
     assert_eq!(next(&received).palette.primary, Color(0x654321));
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn the_appearance_setting_picks_dark_or_light() {
-    let config = temp("appearance");
+    let (_config_folder, config) = temp("appearance");
     fs::write(
         config_watch::folder(&config).join(FILE),
         "[light]\nprimary = \"#ABCDEF\"\n",
@@ -112,12 +111,11 @@ fn the_appearance_setting_picks_dark_or_light() {
     assert_eq!(next(&received).mode, Mode::Dark);
     assert!(received.recv_timeout(config_watch::QUIET * 3).is_err());
     drop(settings);
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn system_follows_the_desktop_and_its_accent_is_primary_unless_the_file_sets_one() {
-    let config = temp("desktop");
+    let (_config_folder, config) = temp("desktop");
     fs::write(
         config_watch::folder(&config).join(FILE),
         "[dark]\nprimary = \"#ABCDEF\"\n",
@@ -159,12 +157,11 @@ fn system_follows_the_desktop_and_its_accent_is_primary_unless_the_file_sets_one
     });
     assert!(received.recv_timeout(config_watch::QUIET * 3).is_err());
     drop(settings);
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn a_client_that_left_hears_nothing_and_a_gone_store_stops_following() {
-    let config = temp("left");
+    let (_config_folder, config) = temp("left");
     let store = Store::open(Some(&config));
     let (events, received) = inbox();
     store.listen(ClientId(0), &events);
@@ -187,12 +184,11 @@ fn a_client_that_left_hears_nothing_and_a_gone_store_stops_following() {
             ))))
             .is_err()
     );
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn a_read_older_than_the_theme_is_done_again() {
-    let config = temp("stale");
+    let (_config_folder, config) = temp("stale");
     let store = Store::open(Some(&config));
     let mut locked = lock(&store.shared);
     let version = locked.version;
@@ -200,12 +196,11 @@ fn a_read_older_than_the_theme_is_done_again() {
     assert!(locked.take(ThemeFile::default(), version));
     drop(locked);
     drop(store);
-    fs::remove_dir_all(config).ok();
 }
 
 #[test]
 fn an_unreadable_or_oversized_file_reads_as_carbonfox() {
-    let config = temp("unreadable");
+    let (_config_folder, config) = temp("unreadable");
     let path = config_watch::folder(&config).join(FILE);
     let comment = format!("# {}\n", "x".repeat(LONG_COMMENT));
     fs::write(&path, comment + "[dark]\nbg = \"#000001\"\n").unwrap();
@@ -215,5 +210,4 @@ fn an_unreadable_or_oversized_file_reads_as_carbonfox() {
     fs::remove_file(&path).unwrap();
     fs::create_dir(&path).unwrap();
     assert_eq!(read(&path), ThemeFile::default());
-    fs::remove_dir_all(config).ok();
 }

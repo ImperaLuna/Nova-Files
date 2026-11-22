@@ -1,5 +1,4 @@
 use std::fs;
-use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
@@ -9,11 +8,12 @@ use nova_files_api::{
     ClientGone, Command, Conflict, Connection, Envelope, Event, EventSink, JobId, JobTag, Message,
     Operation, Outcome, Tally,
 };
+use nova_files_test_folder::TestFolder;
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct Bench {
-    root: PathBuf,
+    root: TestFolder,
     _core: RunningCore,
     connection: Connection,
     events: Receiver<Envelope>,
@@ -29,12 +29,7 @@ impl EventSink for Heard {
 
 impl Bench {
     pub fn new(test: &str) -> Self {
-        let root =
-            std::env::temp_dir().join(format!("nova-archiver-job-{test}-{}", std::process::id()));
-        if root.exists() {
-            fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).ok();
-            fs::remove_dir_all(&root).ok();
-        }
+        let root = TestFolder::new(&format!("archiver-job-{test}"));
         fs::create_dir_all(root.join("home")).unwrap();
         fs::create_dir_all(root.join("into")).unwrap();
         let home = Home {
@@ -128,11 +123,5 @@ impl Bench {
             .collect();
         names.sort();
         names
-    }
-}
-
-impl Drop for Bench {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.root).ok();
     }
 }

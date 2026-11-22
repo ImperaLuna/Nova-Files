@@ -1,0 +1,4 @@
+# A test that hangs fails here instead of holding CI until its job timeout,
+# so tests never need to assert how long something took.
+[profile.default]
+slow-timeout = { period = "120s", terminate-after = 5 }

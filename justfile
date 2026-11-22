@@ -76,6 +76,10 @@ numbers:
 comments *flags:
     tools/check-comments.sh {{ flags }}
 
+# Tests that assert measured time or make their own temp folders.
+test-code:
+    tools/check-test-code.sh
+
 # Rust files past the line limit.
 lengths:
     tools/check-file-length.sh

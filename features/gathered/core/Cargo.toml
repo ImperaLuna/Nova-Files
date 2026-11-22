@@ -36,3 +36,6 @@ nova-files-disk.workspace = true
 nova-files-entries-core.workspace = true
 nova-files-gathered-api.workspace = true
 nova-files-messages.workspace = true
+
+[dev-dependencies]
+nova-files-test-folder.workspace = true

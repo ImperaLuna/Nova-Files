@@ -8,7 +8,7 @@ use std::os::unix::fs::symlink;
 use rustix::io::Errno;
 
 use super::*;
-use crate::test_folder::TestFolder;
+use nova_files_test_folder::TestFolder;
 
 const OPEN: u32 = 0o755;
 const LOCKED: u32 = 0o555;

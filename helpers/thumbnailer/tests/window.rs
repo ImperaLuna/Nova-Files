@@ -18,6 +18,7 @@ use nova_files::{IDLE_EXIT, Thumbnails};
 use nova_files_preview_api::PreviewContent;
 use nova_files_preview_ui::{PreviewPart, Previewed};
 use nova_files_shell::Parts;
+use nova_files_test_folder::TestFolder;
 use nova_files_thumbnails_ui::ThumbnailsPart;
 use nova_files_window::{MainWindow, WindowEvent};
 
@@ -47,34 +48,24 @@ impl Drop for Watchdog {
     }
 }
 
-struct TempFolder(PathBuf);
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
-    }
-}
-
 async fn window_on_media<'a>(
     cx: &'a mut TestAppContext,
     test: &str,
 ) -> (
-    TempFolder,
+    TestFolder,
     Entity<MainWindow>,
     &'a mut VisualTestContext,
     nova_files::RunningCore,
 ) {
-    let temp = TempFolder(
-        std::env::temp_dir().join(format!("nova-files-thumbs-window-{test}-{}", process::id())),
-    );
-    let folder = temp.0.join("media");
+    let temp = TestFolder::new(&format!("thumbs-window-{test}"));
+    let folder = temp.join("media");
     fs::create_dir_all(&folder).unwrap();
     fs::write(folder.join("notes.txt"), b"hello").unwrap();
     RgbImage::new(SIDE, SIDE)
         .save_with_format(folder.join("photo.jpg"), ImageFormat::Jpeg)
         .unwrap();
     let setup = Thumbnails {
-        folder: temp.0.join("thumbnails"),
+        folder: temp.join("thumbnails"),
         helper: PathBuf::from(HELPER),
     };
     cx.executor().allow_parking();
@@ -85,7 +76,7 @@ async fn window_on_media<'a>(
         cx.set_global(parts);
     });
     let core = nova_files::spawn_with(IDLE_EXIT, None, Some(setup), None).unwrap();
-    let (start, home) = (folder.clone(), temp.0.clone());
+    let (start, home) = (folder.clone(), temp.path().to_path_buf());
     let (view, cx) =
         cx.add_window_view(|_, cx| MainWindow::with_home(&core.connector, &start, home, cx));
 

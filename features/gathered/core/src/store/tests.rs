@@ -3,25 +3,22 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use nova_files_gathered_api::{Gathering, Holds};
+use nova_files_test_folder::TestFolder;
 
 use super::*;
 
 const WAIT: Duration = Duration::from_secs(10);
 
-struct Scratch(PathBuf);
+struct Scratch(TestFolder);
 
 impl Scratch {
     fn new(name: &str) -> Self {
-        let root =
-            std::env::temp_dir().join(format!("nova-gathered-store-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&root).ok();
-        fs::create_dir_all(&root).unwrap();
-        Self(root)
+        Self(TestFolder::new(&format!("gathered-store-{name}")))
     }
 
     fn home(&self) -> Home {
         Home {
-            folder: self.0.clone(),
+            folder: self.0.path().to_path_buf(),
             config: self.0.join("config"),
             state: self.0.join("state"),
             data: self.0.join("share"),
@@ -43,12 +40,6 @@ impl Scratch {
         let (sink, events) = mpsc::channel();
         store.listen(ClientId(1), &(Arc::new(sink) as Arc<dyn EventSink>));
         (store, events)
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }
 

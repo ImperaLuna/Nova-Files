@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
@@ -17,6 +16,7 @@ use nova_files_api::WindowRequest;
 use nova_files_dbus::{
     ACTIVATION_TOKEN, APP_ID, PORTAL_NAME, PORTAL_PATH, SEARCH_INTERFACE, Started,
 };
+use nova_files_test_folder::TestFolder;
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
@@ -30,17 +30,11 @@ const TOKEN: &str = "launcher-token";
 
 type Found = (u64, Vec<(String, String)>, bool);
 
-struct Scratch(PathBuf);
+struct Scratch(TestFolder);
 
 impl Scratch {
     fn new() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let name = format!(
-            "nova-files-dbus-search-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let scratch = Self(std::env::temp_dir().join(name));
+        let scratch = Self(TestFolder::new("dbus-search"));
         fs::create_dir_all(scratch.home().join("Documents")).unwrap();
         fs::write(scratch.file(), b"report").unwrap();
         fs::write(scratch.untyped(), b"notes").unwrap();
@@ -71,12 +65,6 @@ impl Scratch {
             folder: self.0.join("cache"),
         });
         nova_files::spawn_with(idle_exit, Some(home), None, place).unwrap()
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).ok();
     }
 }
 
@@ -534,10 +522,8 @@ fn with_apps_of_its_own(name: &str, run: fn(&Path)) {
 }
 
 fn run_again_with_apps_of_its_own(name: &str) {
-    let root = std::env::temp_dir().join(format!(
-        "nova-files-dbus-apps-{}-{name}",
-        std::process::id()
-    ));
+    let folder = TestFolder::new(&format!("dbus-apps-{name}"));
+    let root = folder.path();
     let data = root.join("data");
     let config = root.join("config");
     fs::create_dir_all(data.join("mime")).unwrap();
@@ -564,8 +550,8 @@ fn run_again_with_apps_of_its_own(name: &str) {
     fifo_at(&root.join("out"));
     let status = std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--exact", name, "--test-threads=1"])
-        .env(APPS_VAR, &root)
-        .env("HOME", &root)
+        .env(APPS_VAR, root)
+        .env("HOME", root)
         .env("XDG_DATA_HOME", &data)
         .env("XDG_DATA_DIRS", &data)
         .env("XDG_CONFIG_HOME", &config)
@@ -573,7 +559,6 @@ fn run_again_with_apps_of_its_own(name: &str) {
         .env_remove("XDG_CURRENT_DESKTOP")
         .status()
         .unwrap();
-    fs::remove_dir_all(&root).unwrap();
     assert!(status.success());
 }
 

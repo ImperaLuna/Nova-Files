@@ -61,7 +61,7 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::*;
-    use crate::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     const FILE: Kind = Kind::File { size: 0 };
 

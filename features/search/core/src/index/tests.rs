@@ -1,16 +1,16 @@
 use std::fs;
 
+use nova_files_test_folder::TestFolder;
+
 use super::*;
 
 struct Scratch {
-    root: PathBuf,
+    root: TestFolder,
 }
 
 impl Scratch {
     fn new(name: &str) -> Self {
-        let root =
-            std::env::temp_dir().join(format!("nova-files-index-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&root).ok();
+        let root = TestFolder::new(&format!("index-{name}"));
         for folder in ["home/docs", "bench/photos"] {
             fs::create_dir_all(root.join(folder)).unwrap();
         }
@@ -22,12 +22,6 @@ impl Scratch {
         IndexPlace {
             folder: self.root.join("cache/nova-files"),
         }
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.root).ok();
     }
 }
 

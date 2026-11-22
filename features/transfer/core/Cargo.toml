@@ -36,3 +36,4 @@ nova-files-transfer-api.workspace = true
 
 [dev-dependencies]
 nova-files-jobs = { workspace = true, features = ["test-support"] }
+nova-files-test-folder.workspace = true

@@ -33,3 +33,6 @@ log = { version = "0.4.35", features = ["std"] }
 nova-files-api.workspace = true
 nova-files-disk.workspace = true
 nova-files-messages.workspace = true
+
+[dev-dependencies]
+nova-files-test-folder.workspace = true

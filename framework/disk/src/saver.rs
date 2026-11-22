@@ -75,16 +75,17 @@ fn write_each(path: &Path, what: &str, saves: &Receiver<Arc<[u8]>>) {
 mod tests {
     use std::fs;
 
+    use nova_files_test_folder::TestFolder;
+
     use super::*;
     use crate::private_file::Read;
 
     const SAVES_IN_A_ROW: u32 = 20;
 
-    fn temp(name: &str) -> PathBuf {
-        let path =
-            std::env::temp_dir().join(format!("nova-files-saver-{name}-{}", std::process::id()));
-        fs::remove_dir_all(&path).ok();
-        path
+    fn temp(name: &str) -> (TestFolder, PathBuf) {
+        let folder = TestFolder::new(&format!("saver-{name}"));
+        let path = folder.join(name);
+        (folder, path)
     }
 
     fn read(path: &Path) -> Vec<u8> {
@@ -96,7 +97,7 @@ mod tests {
 
     #[test]
     fn the_writer_writes_saves_in_order_and_goes_on_past_a_failure() {
-        let home = temp("order");
+        let (_home_folder, home) = temp("order");
         let path = home.join("file");
         let (queue, saves) = mpsc::channel();
         for save in 0..=SAVES_IN_A_ROW {
@@ -105,14 +106,12 @@ mod tests {
         drop(queue);
         write_each(&path, "test", &saves);
         assert_eq!(read(&path), SAVES_IN_A_ROW.to_string().as_bytes());
-        let blocked = temp("order-blocked");
+        let (_blocked_folder, blocked) = temp("order-blocked");
         fs::write(&blocked, b"").unwrap();
         let (queue, saves) = mpsc::channel();
         queue.send(b"x".to_vec().into()).unwrap();
         drop(queue);
         write_each(&blocked.join("file"), "test", &saves);
-        fs::remove_file(blocked).ok();
-        fs::remove_dir_all(home).ok();
     }
 
     #[test]

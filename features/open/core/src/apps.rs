@@ -199,7 +199,7 @@ mod tests {
             "image/png image/x-nova-picture\nimage/jpeg image/x-nova-picture\nimage/x-nova-moving image/png\n",
         );
         fs::create_dir_all(tree.0.join("folder")).unwrap();
-        let types = MimeTypes::load(std::slice::from_ref(&tree.0));
+        let types = MimeTypes::load(std::slice::from_ref(&tree.0.path().to_path_buf()));
         let shared = |names: &[&str]| {
             let paths: Vec<PathBuf> = names.iter().map(|name| tree.0.join(name)).collect();
             let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();

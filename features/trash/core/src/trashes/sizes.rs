@@ -79,7 +79,7 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::*;
-    use nova_files_jobs::test_folder::TestFolder;
+    use nova_files_test_folder::TestFolder;
 
     #[test]
     fn a_folder_counts_its_files_and_links_but_not_what_links_point_to() {

@@ -172,6 +172,7 @@ fn read(path: &Path) -> Option<Vec<PathBuf>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nova_files_test_folder::TestFolder;
 
     fn paths(names: &[&str]) -> Vec<PathBuf> {
         names.iter().map(PathBuf::from).collect()
@@ -214,8 +215,8 @@ mod tests {
 
     #[test]
     fn a_file_that_cant_be_read_is_never_saved_over() {
-        let state = std::env::temp_dir().join(format!("nova-files-recent-{}", std::process::id()));
-        fs::remove_dir_all(&state).ok();
+        let folder = TestFolder::new("recent");
+        let state = folder.join("state");
         let file = state.join(FILE);
         fs::create_dir_all(&file).unwrap();
         let unreadable = Store::open(Some(&state));
@@ -229,7 +230,6 @@ mod tests {
         assert_eq!(too_big.saver.path(), None);
         assert_eq!(readable.saver.path(), Some(file.as_path()));
         assert_eq!(*readable.folders.borrow(), paths(&["/a"]));
-        fs::remove_dir_all(state).ok();
     }
 
     #[test]

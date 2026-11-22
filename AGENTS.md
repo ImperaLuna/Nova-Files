@@ -151,8 +151,12 @@ logic. Fake only hardware, mounts and network, with recorded real data, not
 hand-written mocks.
 
 Tests start from what a new user has (folders missing, no saved state)
-unless they're about something else, and work in temp folders, never the
-real home. A bug fix comes with a test that fails without it.
+unless they're about something else, and work in a `TestFolder`
+(`nova-files-test-folder`), never the real home or a folder they name in
+the temp folder themselves. A test never asserts how long something took:
+it checks what the time stood for (the helper is gone, the result says
+Cancelled), and nextest ends a test that hangs. A bug fix comes with a test
+that fails without it.
 
 ## Commands
 
@@ -213,6 +217,7 @@ Each rule above and what enforces it. "Review" means nothing does yet.
 | No shell strings; argv lists only | Review |
 | Every wait on another process or the network has a timeout | Review |
 | A bug fix comes with a test that fails without it | Review |
+| Tests use `TestFolder` and never assert measured time | `just test-code` (ast-grep rules in `tools/ast-grep/test-code`); nextest's timeout (`.config/nextest.toml`) |
 | No explaining text in UI | Review |
 | A stacked pull request changes code only | `tools/ci-stack-guard.sh` in CI |
 | framework/base and what framework/shell offers stay under their ceilings | `just framework-size` |

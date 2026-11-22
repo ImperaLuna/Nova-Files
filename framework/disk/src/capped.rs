@@ -14,13 +14,16 @@ pub fn text(path: &Path, max_bytes: u64) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, fs};
+    use std::fs;
+
+    use nova_files_test_folder::TestFolder;
 
     use super::*;
 
     #[test]
     fn reads_up_to_the_cap_and_keeps_lines_that_are_not_utf8() {
-        let path = env::temp_dir().join(format!("nova-files-capped-{}", std::process::id()));
+        let folder = TestFolder::new("capped");
+        let path = folder.join("capped");
         fs::write(&path, b"Comment=Gr\xfcn\nName=Mine\n").unwrap();
 
         assert_eq!(

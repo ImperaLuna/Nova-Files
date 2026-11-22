@@ -1,6 +1,7 @@
 #[path = "../core/common/own_folders.rs"]
 mod own_folders;
 
+use nova_files_test_folder::TestFolder;
 use own_folders::run_again_in;
 
 use super::*;
@@ -33,11 +34,8 @@ async fn a_default_that_runs_in_a_terminal_leaves_the_others_to_choose(cx: &mut 
 }
 
 fn run_with(one_entry: &str, tag: &str, name: &str) {
-    let root = std::env::temp_dir().join(format!(
-        "nova-files-opens-with-{tag}-{}",
-        std::process::id()
-    ));
-    fs::remove_dir_all(&root).ok();
+    let folder = TestFolder::new(&format!("opens-with-{tag}"));
+    let root = folder.path();
     let files = [
         ("data/mime/globs2", format!("50:{MIME}:*.novatest\n")),
         (
@@ -57,7 +55,7 @@ fn run_with(one_entry: &str, tag: &str, name: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, text).unwrap();
     }
-    run_again_in(&root, ROOT_VAR, name);
+    run_again_in(root, ROOT_VAR, name);
 }
 
 fn entry(name: &str) -> String {

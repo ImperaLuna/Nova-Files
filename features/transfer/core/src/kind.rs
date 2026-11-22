@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn a_resumed_move_leaves_out_what_is_gone_and_a_copy_keeps_all() {
-        let folder = nova_files_jobs::test_folder::TestFolder::new("transfer-kind-rest");
+        let folder = nova_files_test_folder::TestFolder::new("transfer-kind-rest");
         let file = folder.file("file", "f");
         let gone = folder.path().join("gone");
         let into = folder.path().join("into");
