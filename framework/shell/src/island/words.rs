@@ -80,10 +80,13 @@ pub fn finished_note(
             _ => done_note(operation),
         },
         Outcome::Cancelled => None,
-        Outcome::Failed { path, reason } => Some(match verb(operation) {
-            (verb, true) => format!("Couldn't {verb} {}: {}", name_of(path), failure(*reason)),
-            (verb, false) => format!("Couldn't {verb}: {}", failure(*reason)),
-        }),
+        Outcome::Failed { path, reason } => {
+            let why = failure_in(operation, *reason);
+            Some(match verb(operation) {
+                (verb, true) => format!("Couldn't {verb} {}: {why}", name_of(path)),
+                (verb, false) => format!("Couldn't {verb}: {why}"),
+            })
+        }
     }
 }
 
@@ -169,6 +172,14 @@ const fn verb(operation: &Operation) -> (&'static str, bool) {
     }
 }
 
+const fn failure_in(operation: &Operation, reason: Failure) -> &'static str {
+    match (operation, reason) {
+        (Operation::Copy { .. } | Operation::Move { .. }, _) => failure(reason),
+        (_, Failure::Unsupported) => "Nova Files can't do that with it",
+        _ => failure(reason),
+    }
+}
+
 pub const fn failure(reason: Failure) -> &'static str {
     match reason {
         Failure::NameTaken => "the name is taken",
@@ -180,6 +191,7 @@ pub const fn failure(reason: Failure) -> &'static str {
         Failure::IntoItself => "a folder can't go inside itself",
         Failure::Unsupported => "it can't be copied",
         Failure::SourceChanged => "it changed while being copied",
+        Failure::NoRecord => "Trash has no record of where it came from",
         Failure::Damaged => "the archive is damaged",
         Failure::NotArchive => "it isn't an archive Nova Files opens",
         Failure::Other => "the system refused",

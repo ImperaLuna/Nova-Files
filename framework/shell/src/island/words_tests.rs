@@ -155,6 +155,29 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
 }
 
 #[test]
+fn only_a_copy_or_move_says_an_item_cannot_be_copied() {
+    let socket = Outcome::Failed {
+        path: PathBuf::from("/home/a/socket"),
+        reason: Failure::Unsupported,
+    };
+    let copy = Operation::Copy {
+        sources: paths(&["socket"]),
+        into: PathBuf::from("/home/b"),
+    };
+    let delete = Operation::DeleteFromTrash {
+        items: paths(&["socket"]),
+    };
+    assert_eq!(
+        finished_note(&copy, &socket, None, Tally::default()).as_deref(),
+        Some("Couldn't copy socket: it can't be copied")
+    );
+    assert_eq!(
+        finished_note(&delete, &socket, None, Tally::default()).as_deref(),
+        Some("Couldn't delete socket: Nova Files can't do that with it")
+    );
+}
+
+#[test]
 fn every_failure_reads_differently() {
     let reasons = [
         Failure::NameTaken,
@@ -166,6 +189,7 @@ fn every_failure_reads_differently() {
         Failure::IntoItself,
         Failure::Unsupported,
         Failure::SourceChanged,
+        Failure::NoRecord,
         Failure::Other,
     ];
     let words: std::collections::HashSet<_> = reasons.into_iter().map(failure).collect();
