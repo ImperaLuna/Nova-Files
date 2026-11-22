@@ -18,7 +18,7 @@ use nova_files_messages::Envelope;
 use crate::command::CommandSpec;
 use crate::host::Host;
 use crate::location::PageRef;
-use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
+use crate::menu::{MenuAt, Placed, RowItem, SectionButton, SidebarAt, SidebarRow};
 use crate::navigator::FolderPick;
 use crate::opening::Opening;
 use crate::part::{Applies, Asking, Card, Click, ClickAnswer, DropOver, Part, Slots, Staged};
@@ -125,7 +125,7 @@ trait OpenPart {
         at: SidebarAt,
         scene: &Scene,
         cx: &App,
-    ) -> Vec<(&'static str, RowItem)>;
+    ) -> Vec<(&'static str, SectionButton)>;
     fn drop_label(&self, over: &DropOver<'_>, cx: &App) -> Option<SharedString>;
     fn drop_at(&self, over: &DropOver<'_>, cx: &mut App) -> bool;
     fn as_any(&self) -> &dyn Any;
@@ -630,7 +630,7 @@ impl<P: Part> OpenPart for Opened<P> {
         at: SidebarAt,
         scene: &Scene,
         cx: &App,
-    ) -> Vec<(&'static str, RowItem)> {
+    ) -> Vec<(&'static str, SectionButton)> {
         let part = self.entity.read(cx);
         self.slots
             .head_buttons

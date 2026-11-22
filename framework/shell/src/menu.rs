@@ -131,6 +131,24 @@ pub fn arrange(mut placed: Vec<Placed>) -> Vec<Vec<MenuItem>> {
 pub type OnRun = Rc<dyn Fn(&mut App)>;
 
 #[derive(Clone)]
+pub enum SectionButton {
+    Runs(RowItem),
+    Opens {
+        icon: Icon,
+        groups: Vec<Vec<RowItem>>,
+    },
+}
+
+impl SectionButton {
+    pub const fn icon(&self) -> Icon {
+        match self {
+            Self::Runs(item) => item.icon,
+            Self::Opens { icon, .. } => *icon,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct RowItem {
     pub icon: Icon,
     pub label: SharedString,
