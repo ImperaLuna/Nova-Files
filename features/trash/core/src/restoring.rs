@@ -42,6 +42,7 @@ pub fn restore(
     files: &dyn Mover,
 ) -> Ended {
     running.record_job(word::RESTORE, None, items);
+    running.follow(items);
     put_back(running, items, trashes, files)
 }
 

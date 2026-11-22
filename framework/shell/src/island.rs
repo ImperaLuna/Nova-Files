@@ -5,6 +5,10 @@ pub mod progress;
 pub mod several;
 pub mod words;
 
+#[cfg(test)]
+#[path = "island/tests/jobs.rs"]
+mod test_jobs;
+
 use std::fmt;
 use std::rc::Rc;
 

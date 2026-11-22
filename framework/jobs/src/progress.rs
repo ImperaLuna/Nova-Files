@@ -102,10 +102,7 @@ mod tests {
         let audience = Audience::default();
         let (sink, heard) = mpsc::channel::<Event>();
         audience.join(ClientId(1), Arc::new(sink));
-        let shared = Arc::new(Job::new(Operation::Copy {
-            sources: Vec::new(),
-            into: "/".into(),
-        }));
+        let shared = Arc::new(Job::new(Operation::Undo { job: JobId(0) }));
         let mut reporter = Reporter::new(audience, Arc::default(), JobId(1), Arc::clone(&shared));
         let progress = |done_bytes, done_items| Progress {
             done_bytes,
@@ -136,10 +133,7 @@ mod tests {
 
     #[test]
     fn bytes_taken_back_are_no_longer_done() {
-        let shared = Arc::new(Job::new(Operation::Copy {
-            sources: Vec::new(),
-            into: "/".into(),
-        }));
+        let shared = Arc::new(Job::new(Operation::Undo { job: JobId(0) }));
         let mut reporter = Reporter::new(
             Audience::default(),
             Arc::default(),
@@ -156,10 +150,7 @@ mod tests {
 
     #[test]
     fn starting_over_keeps_only_the_totals() {
-        let shared = Arc::new(Job::new(Operation::Copy {
-            sources: Vec::new(),
-            into: "/".into(),
-        }));
+        let shared = Arc::new(Job::new(Operation::Undo { job: JobId(0) }));
         let mut reporter = Reporter::new(
             Audience::default(),
             Arc::default(),

@@ -1,4 +1,8 @@
-//! Dropping files on a folder: what a drop would do, and doing it.
+//! Copying and moving files, and dropping them on a folder: what a drop
+//! would do, and doing it.
+//!
+//! A copy or a move is a job: [`CopyJob`] and [`MoveJob`], started with
+//! [`nova_files_api::Command::StartJob`] as [`Operation::feature`] of one.
 //!
 //! A drop copies or moves its files as a job, like
 //! [`nova_files_api::Command::StartJob`]: the answer is
@@ -9,7 +13,45 @@
 
 use std::path::PathBuf;
 
-use nova_files_api::JobTag;
+use nova_files_api::{JobTag, Operation};
+
+/// Copy each of `sources` into the folder `into`, under its own name.
+///
+/// Files, folders with all they hold, and links as links. Each file is
+/// written under a hidden name and only takes its own once whole.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CopyJob {
+    pub sources: Vec<PathBuf>,
+    pub into: PathBuf,
+}
+
+/// Move each of `sources` into the folder `into`, under its own name.
+///
+/// On one drive each is renamed; across drives it is copied as by
+/// [`CopyJob`], and each source item goes only once its copy is whole,
+/// folders last.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MoveJob {
+    pub sources: Vec<PathBuf>,
+    pub into: PathBuf,
+}
+
+/// The job that copies `sources` into `into`.
+pub fn copy(sources: Vec<PathBuf>, into: PathBuf) -> Operation {
+    Operation::feature(CopyJob { sources, into })
+}
+
+/// The job that moves `sources` into `into`.
+pub fn move_into(sources: Vec<PathBuf>, into: PathBuf) -> Operation {
+    Operation::feature(MoveJob { sources, into })
+}
+
+/// The words a copy and a move open their journal with, so a job left
+/// by a crash is known again.
+pub mod journal {
+    pub const COPY: &str = "copy";
+    pub const MOVE: &str = "move";
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {

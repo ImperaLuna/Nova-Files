@@ -42,47 +42,9 @@ fn the_root_goes_by_a_slash() {
 }
 
 #[test]
-fn a_copy_names_where_it_went_only_when_that_is_not_on_screen() {
-    let here = Path::new("/home/a/Projects");
-    let copy = Operation::Copy {
-        sources: paths(&["x", "y"]),
-        into: here.to_path_buf(),
-    };
-    assert_eq!(
-        finished_note(
-            &copy,
-            &Outcome::Done,
-            Some(here),
-            Tally::default(),
-            &Words::default()
-        )
-        .as_deref(),
-        Some("Copied 2 items")
-    );
-    assert_eq!(
-        finished_note(
-            &copy,
-            &Outcome::Done,
-            None,
-            Tally::default(),
-            &Words::default()
-        )
-        .as_deref(),
-        Some("Copied 2 items to Projects")
-    );
-}
-
-#[test]
 fn each_done_job_has_its_note() {
     let into = PathBuf::from("/home/a/Music");
     let notes = [
-        (
-            Operation::Move {
-                sources: paths(&["song.ogg"]),
-                into: into.clone(),
-            },
-            Some("Moved song.ogg to Music"),
-        ),
         (
             Operation::Trash {
                 paths: paths(&["a", "b", "c"]),
@@ -196,21 +158,25 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
 }
 
 #[test]
-fn only_a_copy_or_move_says_an_item_cannot_be_copied() {
+fn a_feature_may_say_why_in_its_own_words() {
     let socket = Outcome::Failed {
         path: PathBuf::from("/home/a/socket"),
         reason: Failure::Unsupported,
     };
-    let copy = Operation::Copy {
-        sources: paths(&["socket"]),
-        into: PathBuf::from("/home/b"),
-    };
+    let fetching = crate::island::test_jobs::fetch(&["socket"], "/b");
     let delete = Operation::DeleteFromTrash {
         items: paths(&["socket"]),
     };
     assert_eq!(
-        finished_note(&copy, &socket, None, Tally::default(), &Words::default()).as_deref(),
-        Some("Couldn't copy socket: it can't be copied")
+        finished_note(
+            &fetching,
+            &socket,
+            None,
+            Tally::default(),
+            &crate::island::test_jobs::words()
+        )
+        .as_deref(),
+        Some("Couldn't fetch socket: it can't be copied")
     );
     assert_eq!(
         finished_note(&delete, &socket, None, Tally::default(), &Words::default()).as_deref(),
@@ -266,46 +232,16 @@ fn a_listing_counts_its_folders_and_files() {
 }
 
 #[test]
-fn a_note_says_what_the_answers_to_clashes_did() {
-    let into = PathBuf::from("/home/a/Documents");
-    let copy = Operation::Copy {
-        sources: paths(&["a", "b", "c", "d", "e"]),
-        into: into.clone(),
-    };
-    let moved = Operation::Move {
-        sources: paths(&["a"]),
-        into: into.clone(),
-    };
-    let tally = |replaced, skipped| Tally { replaced, skipped };
-    let note = |operation: &Operation, here: Option<&Path>, answered| {
-        finished_note(operation, &Outcome::Done, here, answered, &Words::default())
-    };
-
-    assert_eq!(
-        note(&copy, Some(&into), tally(2, 1)).as_deref(),
-        Some("Copied 4 items, replaced 2, skipped 1")
-    );
-    assert_eq!(
-        note(&copy, None, tally(3, 0)).as_deref(),
-        Some("Copied 5 items to Documents, replaced 3")
-    );
-    assert_eq!(
-        note(&moved, None, tally(1, 0)).as_deref(),
-        Some("Moved a to Documents, replaced 1")
-    );
-    assert_eq!(
-        note(&moved, None, tally(0, 1)).as_deref(),
-        Some("Nothing moved, skipped 1")
-    );
-    assert_eq!(
-        note(&copy, None, tally(0, 5)).as_deref(),
-        Some("Nothing copied, skipped 5")
-    );
+fn a_trash_note_leaves_out_the_answers() {
     let trash = Operation::Trash {
         paths: paths(&["a"]),
     };
+    let skipped = Tally {
+        replaced: 0,
+        skipped: 1,
+    };
     assert_eq!(
-        note(&trash, None, tally(0, 1)).as_deref(),
+        finished_note(&trash, &Outcome::Done, None, skipped, &Words::default()).as_deref(),
         Some("Moved a to Trash")
     );
 }

@@ -80,44 +80,18 @@ pub fn finished_note(
         Outcome::Done if matches!(operation, Operation::Feature(_)) => {
             feature.and_then(|words| words.done(operation, here, tally).flatten())
         }
-        Outcome::Done => match operation {
-            Operation::Copy { sources, .. } | Operation::Move { sources, .. } => {
-                answered_note(operation, sources, here, tally)
-            }
-            _ => done_note(operation),
-        },
+        Outcome::Done => done_note(operation),
         Outcome::Cancelled => None,
         Outcome::Failed { path, reason } => {
-            let why = failure_in(operation, *reason);
+            let why = feature
+                .and_then(|words| words.why(operation, *reason))
+                .unwrap_or_else(|| failure_in(*reason));
             Some(match verb(operation, feature) {
                 (verb, true) => format!("Couldn't {verb} {}: {why}", name_of(path)),
                 (verb, false) => format!("Couldn't {verb}: {why}"),
             })
         }
     }
-}
-
-fn answered_note(
-    operation: &Operation,
-    sources: &[PathBuf],
-    here: Option<&Path>,
-    tally: Tally,
-) -> Option<String> {
-    let skipped = usize::try_from(tally.skipped).unwrap_or(usize::MAX);
-    let went = sources.len().saturating_sub(skipped);
-    let what = if skipped == 0 {
-        what(sources)
-    } else {
-        count(went, ITEM, ITEMS)
-    };
-    let done = match operation {
-        Operation::Copy { .. } if went == 0 => "Nothing copied".to_owned(),
-        Operation::Move { .. } if went == 0 => "Nothing moved".to_owned(),
-        Operation::Copy { into, .. } => format!("Copied {what}{}", elsewhere(into, here)),
-        Operation::Move { into, .. } => format!("Moved {what} to {}", name_of(into)),
-        _ => return None,
-    };
-    Some(with_answers(vec![done], tally))
 }
 
 pub fn with_answers(mut parts: Vec<String>, tally: Tally) -> String {
@@ -130,14 +104,6 @@ pub fn with_answers(mut parts: Vec<String>, tally: Tally) -> String {
     parts.join(LIST_GAP)
 }
 
-fn elsewhere(into: &Path, here: Option<&Path>) -> String {
-    if here == Some(into) {
-        String::new()
-    } else {
-        format!(" to {}", name_of(into))
-    }
-}
-
 fn done_note(operation: &Operation) -> Option<String> {
     Some(match operation {
         Operation::Trash { paths } => format!("Moved {} to {TRASH}", what(paths)),
@@ -148,9 +114,7 @@ fn done_note(operation: &Operation) -> Option<String> {
         }
         Operation::EmptyTrash => format!("{TRASH} emptied"),
         Operation::Rename { name, .. } => format!("Renamed to {}", lossy(name)),
-        Operation::Copy { .. }
-        | Operation::Move { .. }
-        | Operation::NewFolder { .. }
+        Operation::NewFolder { .. }
         | Operation::ChangeAccess { .. }
         | Operation::Undo { .. }
         | Operation::Feature(_) => return None,
@@ -162,8 +126,6 @@ fn verb(operation: &Operation, words: Option<&dyn AnyJobWords>) -> (&'static str
         Operation::Feature(_) => words
             .and_then(|words| words.failed(operation))
             .map_or((FINISH, false), |failed| (failed.verb, failed.names_item)),
-        Operation::Copy { .. } => ("copy", true),
-        Operation::Move { .. } => ("move", true),
         Operation::Trash { .. } => ("move to Trash", true),
         Operation::Restore { .. } => ("restore", true),
         Operation::Delete { .. } | Operation::DeleteFromTrash { .. } => ("delete", true),
@@ -175,10 +137,9 @@ fn verb(operation: &Operation, words: Option<&dyn AnyJobWords>) -> (&'static str
     }
 }
 
-const fn failure_in(operation: &Operation, reason: Failure) -> &'static str {
-    match (operation, reason) {
-        (Operation::Copy { .. } | Operation::Move { .. }, _) => failure(reason),
-        (_, Failure::Unsupported) => "Nova Files can't do that with it",
+const fn failure_in(reason: Failure) -> &'static str {
+    match reason {
+        Failure::Unsupported => "Nova Files can't do that with it",
         _ => failure(reason),
     }
 }

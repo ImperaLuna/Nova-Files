@@ -90,10 +90,7 @@ fn a_crashed_copy_is_cleaned_up_and_resumes_where_it_left_off() {
     });
     let (source, into) = (bench.at("src"), bench.at("into"));
 
-    let operation = Operation::Copy {
-        sources: vec![source],
-        into: into.clone(),
-    };
+    let operation = nova_files_transfer_api::copy(vec![source], into.clone());
     assert_eq!(
         client.next(),
         Event::JobInterrupted {

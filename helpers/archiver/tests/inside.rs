@@ -13,8 +13,8 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use common::Bench;
 use nova_files_api::{
-    Carried, Command, ConflictKind, Details, EntryId, EntryKind, Event, ListingId, Operation,
-    Order, Outcome, SortKey, ThumbnailSize, Unreadable,
+    Carried, Command, ConflictKind, Details, EntryId, EntryKind, Event, ListingId, Order, Outcome,
+    SortKey, ThumbnailSize, Unreadable,
 };
 use nova_files_archives_api::{PASSWORD_NEEDED, Password};
 use nova_files_open_api::{self as open_api, NotOpened};
@@ -134,10 +134,10 @@ fn a_path_not_in_the_archive_is_missing() {
 fn copying_out_takes_only_the_picked_entries() {
     let bench = Bench::new("inside-copy");
     docs_zip(&bench.at("a.zip"));
-    let job = bench.start(Operation::Copy {
-        sources: vec![bench.at("a.zip/docs/a.txt"), bench.at("a.zip/top.txt")],
-        into: bench.at("into"),
-    });
+    let job = bench.start(nova_files_transfer_api::copy(
+        vec![bench.at("a.zip/docs/a.txt"), bench.at("a.zip/top.txt")],
+        bench.at("into"),
+    ));
     assert_eq!(bench.finished(job).0, Outcome::Done);
     assert_eq!(bench.landed(), ["a.txt", "top.txt"]);
     assert_eq!(fs::read(bench.at("into/a.txt")).unwrap(), b"aaaa");
@@ -147,10 +147,10 @@ fn copying_out_takes_only_the_picked_entries() {
 fn copying_out_a_folder_takes_all_inside_it() {
     let bench = Bench::new("inside-copy-folder");
     docs_zip(&bench.at("a.zip"));
-    let job = bench.start(Operation::Copy {
-        sources: vec![bench.at("a.zip/docs")],
-        into: bench.at("into"),
-    });
+    let job = bench.start(nova_files_transfer_api::copy(
+        vec![bench.at("a.zip/docs")],
+        bench.at("into"),
+    ));
     assert_eq!(bench.finished(job).0, Outcome::Done);
     assert_eq!(bench.landed(), ["docs"]);
     assert_eq!(fs::read(bench.at("into/docs/b.txt")).unwrap(), b"bb");
@@ -192,10 +192,10 @@ fn copying_out_a_locked_entry_asks_for_its_password() {
     zip.start_file("secret.txt", locked).unwrap();
     zip.write_all(b"hidden").unwrap();
     zip.finish().unwrap();
-    let job = bench.start(Operation::Copy {
-        sources: vec![bench.at("a.zip/secret.txt")],
-        into: bench.at("into"),
-    });
+    let job = bench.start(nova_files_transfer_api::copy(
+        vec![bench.at("a.zip/secret.txt")],
+        bench.at("into"),
+    ));
     let needed = bench.held(job);
     assert_eq!(needed.kind, ConflictKind::Asked(&PASSWORD_NEEDED));
     bench.send(Command::Reply {

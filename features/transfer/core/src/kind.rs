@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use nova_files_api::{Failure, Operation, Outcome};
 use nova_files_jobs::control::{Cancelled, Control};
@@ -6,28 +6,39 @@ use nova_files_jobs::rest::still_there;
 use nova_files_jobs::running::Running;
 use nova_files_jobs::undo::landed;
 use nova_files_jobs::{Ended, JobKind};
+use nova_files_transfer_api::{CopyJob, MoveJob, copy, journal, move_into};
 
 use crate::undo::{self, Undo, undo_of};
 use crate::{How, transfer};
 
 pub struct Transfers;
 
+pub fn asked(operation: &Operation) -> Option<(&[PathBuf], &Path, How)> {
+    operation
+        .get::<CopyJob>()
+        .map(|job| (job.sources.as_slice(), job.into.as_path(), How::Copy))
+        .or_else(|| {
+            operation
+                .get::<MoveJob>()
+                .map(|job| (job.sources.as_slice(), job.into.as_path(), How::Move))
+        })
+}
+
 impl JobKind for Transfers {
     type Op = Operation;
     type Undo = Undo;
 
     fn claims(&self, operation: &Operation) -> bool {
-        matches!(operation, Operation::Copy { .. } | Operation::Move { .. })
+        asked(operation).is_some()
     }
 
     fn run(&self, running: &mut Running, operation: &Operation, undo: Option<&Undo>) -> Ended {
         if let Some(undo) = undo {
             return undo::run(running, undo);
         }
-        match operation {
-            Operation::Copy { sources, into } => transfer(running, sources, into, How::Copy),
-            Operation::Move { sources, into } => transfer(running, sources, into, How::Move),
-            _ => (
+        match asked(operation) {
+            Some((sources, into, how)) => transfer(running, sources, into, how),
+            None => (
                 Outcome::Failed {
                     path: PathBuf::new(),
                     reason: Failure::Other,
@@ -38,25 +49,33 @@ impl JobKind for Transfers {
     }
 
     fn rest(&self, operation: &Operation, control: &Control) -> Result<Operation, Cancelled> {
-        Ok(match operation {
-            Operation::Move { sources, into } => Operation::Move {
-                sources: still_there(sources, control)?,
-                into: into.clone(),
-            },
-            other => other.clone(),
+        Ok(match operation.get::<MoveJob>() {
+            Some(job) => move_into(still_there(&job.sources, control)?, job.into.clone()),
+            None => operation.clone(),
         })
     }
 
     fn undo(&self, running: &mut Running, operation: &Operation, _: &Ended) -> Option<Undo> {
-        undo_of(operation, landed(running))
+        let (_, _, how) = asked(operation)?;
+        undo_of(how, landed(running))
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
-        match operation {
-            Operation::Copy { sources, into } | Operation::Move { sources, into } => {
-                sources.first().unwrap_or(into).clone()
-            }
-            _ => PathBuf::new(),
+        asked(operation).map_or_else(PathBuf::new, |(sources, into, _)| {
+            sources.first().map_or(into, PathBuf::as_path).to_path_buf()
+        })
+    }
+
+    fn resume(
+        &self,
+        word: &str,
+        into: Option<PathBuf>,
+        sources: Vec<PathBuf>,
+    ) -> Option<Operation> {
+        match (word, into) {
+            (journal::COPY, Some(into)) => Some(copy(sources, into)),
+            (journal::MOVE, Some(into)) => Some(move_into(sources, into)),
+            _ => None,
         }
     }
 }
@@ -67,21 +86,15 @@ mod tests {
 
     #[test]
     fn transfers_claim_copies_and_moves_and_start_at_the_first_source() {
-        let copy = Operation::Copy {
-            sources: vec!["/s".into()],
-            into: "/into".into(),
-        };
-        let empty = Operation::Move {
-            sources: Vec::new(),
-            into: "/into".into(),
-        };
+        let copying = copy(vec!["/s".into()], "/into".into());
+        let empty = move_into(Vec::new(), "/into".into());
         let delete = Operation::Delete {
             paths: vec!["/a".into()],
         };
 
-        assert!(Transfers.claims(&copy) && Transfers.claims(&empty));
+        assert!(Transfers.claims(&copying) && Transfers.claims(&empty));
         assert!(!Transfers.claims(&delete));
-        assert_eq!(Transfers.first_path(&copy), PathBuf::from("/s"));
+        assert_eq!(Transfers.first_path(&copying), PathBuf::from("/s"));
         assert_eq!(Transfers.first_path(&empty), PathBuf::from("/into"));
         assert_eq!(Transfers.first_path(&delete), PathBuf::new());
     }
@@ -93,25 +106,32 @@ mod tests {
         let gone = folder.path().join("gone");
         let into = folder.path().join("into");
         let sources = vec![file.clone(), gone];
-        let moving = Operation::Move {
-            sources: sources.clone(),
-            into: into.clone(),
-        };
-        let copying = Operation::Copy {
-            sources,
-            into: into.clone(),
-        };
+        let moving = move_into(sources.clone(), into.clone());
+        let copying = copy(sources, into.clone());
 
         assert_eq!(
             Transfers.rest(&moving, &Control::default()).unwrap(),
-            Operation::Move {
-                sources: vec![file],
-                into
-            }
+            move_into(vec![file], into)
         );
         assert_eq!(
             Transfers.rest(&copying, &Control::default()).unwrap(),
             copying
         );
+    }
+
+    #[test]
+    fn a_copy_or_move_left_by_a_crash_is_known_again() {
+        let into = PathBuf::from("/into");
+        let sources = vec![PathBuf::from("/s")];
+        assert_eq!(
+            Transfers.resume(journal::COPY, Some(into.clone()), sources.clone()),
+            Some(copy(sources.clone(), into.clone()))
+        );
+        assert_eq!(
+            Transfers.resume(journal::MOVE, Some(into.clone()), sources.clone()),
+            Some(move_into(sources.clone(), into))
+        );
+        assert_eq!(Transfers.resume(journal::COPY, None, sources), None);
+        assert_eq!(Transfers.resume("trash", None, Vec::new()), None);
     }
 }

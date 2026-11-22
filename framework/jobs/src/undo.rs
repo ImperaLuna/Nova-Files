@@ -49,10 +49,7 @@ mod tests {
     use nova_files_test_folder::TestFolder;
 
     fn running() -> Running {
-        let shared = Arc::new(Job::new(Operation::Copy {
-            sources: Vec::new(),
-            into: "/".into(),
-        }));
+        let shared = Arc::new(Job::new(Operation::Undo { job: JobId(0) }));
         let reporter = Reporter::new(
             Audience::default(),
             Arc::default(),

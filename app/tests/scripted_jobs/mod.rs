@@ -92,10 +92,13 @@ fn start_copies(core: &mut Core) -> Vec<JobId> {
         .commands()
         .into_iter()
         .filter_map(|command| match command {
-            Command::StartJob {
-                tag,
-                operation: operation @ Operation::Copy { .. },
-            } => Some((tag, operation)),
+            Command::StartJob { tag, operation }
+                if operation
+                    .get::<nova_files_transfer_api::CopyJob>()
+                    .is_some() =>
+            {
+                Some((tag, operation))
+            }
             _ => None,
         })
         .collect();

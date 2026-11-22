@@ -2,12 +2,11 @@ use std::time::Instant;
 
 use nova_files_api::{Operation, Tally};
 
-use super::job_words::Words;
+use super::job_words::{Batched, Words};
 use super::progress::{Running, short_left, sources};
-use super::words::{ITEM, ITEMS, PART_GAP, count, name_of, what, with_answers};
+use super::words::{ITEM, ITEMS, PART_GAP, count, with_answers};
 
 pub fn line(jobs: &[&Running], now: Instant, words: &Words) -> (String, String) {
-    let all = |kind: fn(&Operation) -> bool| jobs.iter().all(|job| kind(&job.operation));
     let grouped = |job: &&Running| {
         words
             .of(&job.operation)
@@ -17,14 +16,7 @@ pub fn line(jobs: &[&Running], now: Instant, words: &Words) -> (String, String) 
         .first()
         .and_then(grouped)
         .filter(|first| jobs.iter().all(|job| grouped(job) == Some(*first)));
-    let shared = if all(|operation| matches!(operation, Operation::Copy { .. })) {
-        ("copy", "copies")
-    } else if all(|operation| matches!(operation, Operation::Move { .. })) {
-        ("move", "moves")
-    } else {
-        ("job", "jobs")
-    };
-    let (one, many) = feature.map_or(shared, |grouped| (grouped.one, grouped.many));
+    let (one, many) = feature.map_or(("job", "jobs"), |grouped| (grouped.one, grouped.many));
     let many = count(jobs.len(), one, many);
     let left: Option<Vec<_>> = jobs.iter().map(|job| job.time_left(now)).collect();
     let rest = left
@@ -47,18 +39,10 @@ pub fn fraction(jobs: &[&Running]) -> f32 {
 }
 
 pub fn title(job: &Running, now: Instant, words: &Words) -> String {
-    if let Some(title) = words
+    words
         .of(&job.operation)
         .and_then(|words| words.title(&job.operation))
-    {
-        return title;
-    }
-    match &job.operation {
-        Operation::Copy { sources, into } | Operation::Move { sources, into } => {
-            format!("{} to {}", what(sources), name_of(into))
-        }
-        _ => job.line(now, words),
-    }
+        .unwrap_or_else(|| job.line(now, words))
 }
 
 pub fn left(job: &Running, now: Instant) -> Option<String> {
@@ -67,16 +51,18 @@ pub fn left(job: &Running, now: Instant) -> Option<String> {
 
 #[derive(Debug, Default)]
 pub struct Batch {
-    ended: Vec<(Operation, Tally)>,
+    ended: Vec<(usize, Batched, usize, Tally)>,
 }
 
 impl Batch {
-    pub fn keep(&mut self, operation: &Operation, tally: Tally) -> bool {
-        let kept = matches!(operation, Operation::Copy { .. } | Operation::Move { .. });
-        if kept {
-            self.ended.push((operation.clone(), tally));
-        }
-        kept
+    pub fn keep(&mut self, operation: &Operation, tally: Tally, words: &Words) -> bool {
+        let Some((rank, batched)) = words.batched(operation) else {
+            return false;
+        };
+        let gone = usize::try_from(tally.skipped).unwrap_or(usize::MAX);
+        let went = sources(operation, words).len().saturating_sub(gone);
+        self.ended.push((rank, batched, went, tally));
+        true
     }
 
     pub const fn is_empty(&self) -> bool {
@@ -84,38 +70,31 @@ impl Batch {
     }
 
     pub fn note(&mut self) -> String {
-        let ended = std::mem::take(&mut self.ended);
-        let (mut copied, mut moved, mut answers) = (0, 0, Tally::default());
-        let mut any_copy = false;
-        for (operation, tally) in &ended {
-            let gone = usize::try_from(tally.skipped).unwrap_or(usize::MAX);
-            let went = sources(operation, &Words::default())
-                .len()
-                .saturating_sub(gone);
-            if matches!(operation, Operation::Move { .. }) {
-                moved += went;
-            } else {
-                any_copy = true;
-                copied += went;
+        let mut ended = std::mem::take(&mut self.ended);
+        ended.sort_by_key(|(rank, ..)| *rank);
+        let mut answers = Tally::default();
+        let mut groups: Vec<(Batched, usize)> = Vec::new();
+        for (_, batched, went, tally) in &ended {
+            match groups.iter_mut().find(|(seen, _)| seen == batched) {
+                Some((_, total)) => *total += went,
+                None => groups.push((*batched, *went)),
             }
             answers.replaced += tally.replaced;
             answers.skipped += tally.skipped;
         }
         let mut parts = Vec::new();
-        if copied > 0 {
-            parts.push(format!("Copied {}", count(copied, ITEM, ITEMS)));
-        }
-        if moved > 0 {
-            let verb = if parts.is_empty() { "Moved" } else { "moved" };
-            parts.push(format!("{verb} {}", count(moved, ITEM, ITEMS)));
-        }
-        if parts.is_empty() {
-            let nothing = if any_copy {
-                "Nothing copied"
+        for (batched, went) in groups.iter().filter(|(_, went)| *went > 0) {
+            let verb = if parts.is_empty() {
+                batched.done
             } else {
-                "Nothing moved"
+                batched.done_after
             };
-            parts.push(nothing.to_owned());
+            parts.push(format!("{verb} {}", count(*went, ITEM, ITEMS)));
+        }
+        if parts.is_empty()
+            && let Some((first, _)) = groups.first()
+        {
+            parts.push(first.nothing.to_owned());
         }
         with_answers(parts, answers)
     }

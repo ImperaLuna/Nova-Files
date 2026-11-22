@@ -21,8 +21,6 @@ pub const PART_PREFIX: &str = ".nova-part-";
 pub const BACKUP_PREFIX: &str = ".nova-backup-";
 
 pub mod word {
-    pub const COPY: &str = "copy";
-    pub const MOVE: &str = "move";
     pub const DELETE: &str = "delete";
     pub const INTO: &str = "into";
     pub const SOURCE: &str = "source";
@@ -47,8 +45,8 @@ pub mod word {
 
     pub fn fields(word: &str) -> Option<usize> {
         match word {
-            COPY | MOVE | DELETE | TRASH | RESTORE | DELETE_FROM_TRASH | EMPTY_TRASH | UNDO
-            | PUT_BACK | PLAN_DONE | SOURCES_DONE => Some(0),
+            DELETE | TRASH | RESTORE | DELETE_FROM_TRASH | EMPTY_TRASH | UNDO | PUT_BACK
+            | PLAN_DONE | SOURCES_DONE => Some(0),
             INTO | SOURCE | PART => Some(1),
             MADE | MOVED | BACKUP | PLANNED | TRASHED => Some(PAIR),
             TRASH_INFO => Some(TRIPLE),

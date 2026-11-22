@@ -3454,6 +3454,7 @@ dependencies = [
  "nova-files-archives-api",
  "nova-files-open-api",
  "nova-files-test-folder",
+ "nova-files-transfer-api",
  "rustix",
  "tar",
  "zip",
@@ -3480,6 +3481,7 @@ dependencies = [
  "nova-files-open-api",
  "nova-files-rename-api",
  "nova-files-test-folder",
+ "nova-files-transfer-api",
  "rustix",
 ]
 
@@ -3498,6 +3500,7 @@ name = "nova-files-clipboard-api"
 version = "0.1.0"
 dependencies = [
  "nova-files-api",
+ "nova-files-transfer-api",
 ]
 
 [[package]]

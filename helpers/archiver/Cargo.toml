@@ -55,3 +55,4 @@ nova-files-api.workspace = true
 nova-files-archives-api.workspace = true
 nova-files.workspace = true
 nova-files-open-api.workspace = true
+nova-files-transfer-api.workspace = true

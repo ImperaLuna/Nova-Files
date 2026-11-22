@@ -1,6 +1,7 @@
 # nova-files-transfer-api
 #
-# What dropping files on a folder says and asks. Plain std types, no I/O.
+# The copy and move jobs, and what dropping files on a folder says and
+# asks. Plain std types, no I/O.
 #
 # Allowed outside crates: none
 # Allowed workspace crates:

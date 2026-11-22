@@ -6,6 +6,7 @@
 # Allowed outside crates: none
 # Allowed workspace crates:
 # - nova-files-api
+# - nova-files-transfer-api
 
 [package]
 name = "nova-files-clipboard-api"
@@ -20,3 +21,4 @@ workspace = true
 
 [dependencies]
 nova-files-api.workspace = true
+nova-files-transfer-api.workspace = true

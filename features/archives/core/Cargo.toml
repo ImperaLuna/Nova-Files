@@ -16,6 +16,7 @@
 # - nova-files-jobs
 # - nova-files-open-api
 # - nova-files-rename-api
+# - nova-files-transfer-api
 
 [package]
 name = "nova-files-archives-core"
@@ -40,6 +41,7 @@ nova-files-entries-core.workspace = true
 nova-files-jobs.workspace = true
 nova-files-open-api.workspace = true
 nova-files-rename-api.workspace = true
+nova-files-transfer-api.workspace = true
 
 [dev-dependencies]
 nova-files-test-folder.workspace = true

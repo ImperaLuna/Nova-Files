@@ -11,7 +11,7 @@ use super::clash::conflict_for;
 use super::control::Cancelled;
 use super::folders::Folders;
 use super::job::Job;
-use super::journal::{Journal, Record, remove_journal, word};
+use super::journal::{Journal, Record, remove_journal};
 use super::left::{Done, Left};
 use super::plan::{Kind, kind};
 use super::progress::Reporter;
@@ -250,10 +250,11 @@ impl Running {
         for source in sources {
             self.record(Record::Source(source));
         }
-        if matches!(name, word::COPY | word::MOVE | word::TRASH | word::RESTORE) {
-            self.sources = sources.iter().cloned().collect();
-        }
         self.record(Record::SourcesDone);
+    }
+
+    pub fn follow(&mut self, sources: &[PathBuf]) {
+        self.sources = sources.iter().cloned().collect();
     }
 
     fn step(&mut self, from: &Path, to: &Path) {
@@ -300,10 +301,7 @@ impl Running {
 #[cfg(any(test, feature = "test-support"))]
 impl Running {
     pub fn for_test() -> Self {
-        let shared = Arc::new(Job::new(nova_files_api::Operation::Copy {
-            sources: Vec::new(),
-            into: PathBuf::from("/"),
-        }));
+        let shared = Arc::new(Job::new(nova_files_api::Operation::Undo { job: JobId(0) }));
         let reporter = Reporter::new(
             crate::audience::Audience::default(),
             Arc::default(),

@@ -1,13 +1,18 @@
 #![forbid(unsafe_code)]
 
+mod words;
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use gpui::{App, Context, Modifiers, SharedString};
-use nova_files_api::Operation;
 use nova_files_shell::{DropOver, Host, Location, Part, Slots};
-use nova_files_transfer_api::{Command, DropAskId, DropKind, Event};
+use nova_files_transfer_api::{
+    Command, CopyJob, DropAskId, DropKind, Event, MoveJob, copy, move_into,
+};
+
+use crate::words::{CopyWords, MoveWords};
 
 pub const MOVE_TO: &str = "Move to";
 pub const COPY_TO: &str = "Copy to";
@@ -114,8 +119,8 @@ impl TransferPart {
 
     fn start(&self, kind: DropKind, sources: Vec<PathBuf>, into: PathBuf, cx: &mut App) {
         let operation = match kind {
-            DropKind::Copy => Operation::Copy { sources, into },
-            DropKind::Move => Operation::Move { sources, into },
+            DropKind::Copy => copy(sources, into),
+            DropKind::Move => move_into(sources, into),
         };
         self.host
             .island
@@ -176,6 +181,8 @@ impl Part for TransferPart {
         slots.drop_target(Self::aim, Self::take);
         slots.on_event(Self::answered);
         slots.sends::<Command>();
+        slots.job_words::<CopyJob>(CopyWords);
+        slots.job_words::<MoveJob>(MoveWords);
     }
 }
 
