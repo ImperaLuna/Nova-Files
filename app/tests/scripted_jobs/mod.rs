@@ -58,6 +58,7 @@ fn the_trash_is_read_again_on_arriving_in_it(cx: &mut TestAppContext) {
     core.send(trash_api::Event::Listed {
         folder: Some(PathBuf::from(TRASH)),
         items: Vec::new(),
+        unrecorded: 0,
     });
     cx.run_until_parked();
     trash_asks(&mut core);

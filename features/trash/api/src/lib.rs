@@ -23,5 +23,6 @@ pub enum Event {
     Listed {
         folder: Option<PathBuf>,
         items: Vec<Trashed>,
+        unrecorded: usize,
     },
 }

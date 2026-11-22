@@ -9,7 +9,7 @@ mod sizes;
 pub use folder::{TrashFolder, folder_for};
 pub use info::{info_text, stored_name};
 pub use nova_files_jobs::trash_info::{FILES, INFO, INFO_SUFFIX};
-pub use read::{find, info_of, list, trash_of};
+pub use read::{find, info_of, list, trash_of, unrecorded};
 pub use sizes::{add_folder_sizes, folder_size};
 
 use std::path::{Path, PathBuf};

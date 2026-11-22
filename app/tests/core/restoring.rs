@@ -23,15 +23,21 @@ fn home_trash(root: &Path) -> PathBuf {
     root.join("home/.local/share/Trash")
 }
 
-fn listed(bench: &Bench) -> Vec<Trashed> {
+fn heard(bench: &Bench) -> (Vec<Trashed>, usize) {
     let (sink, events) = mpsc::channel();
     let connection = bench.core.connector.connect(sink).unwrap();
     connection.send(trash_api::Command::List).unwrap();
     let trash_api::Event::Listed {
-        items: mut listed, ..
+        items: mut listed,
+        unrecorded,
+        ..
     } = events.recv_timeout(ANSWER_TIMEOUT).unwrap();
     listed.sort_by(|a, b| a.item.cmp(&b.item));
-    listed
+    (listed, unrecorded)
+}
+
+fn listed(bench: &Bench) -> Vec<Trashed> {
+    heard(bench).0
 }
 
 fn trashed(bench: &Bench, client: &Client, paths: &[PathBuf]) -> Vec<PathBuf> {
@@ -192,27 +198,50 @@ fn what_isnt_in_a_trash_fails_the_job_with_nothing_changed() {
     ));
 }
 
-#[test]
-fn an_entry_without_an_info_file_is_not_the_trashs_to_restore() {
-    let bench = Bench::new("restore-stray");
+fn unrecorded_folder(bench: &Bench) -> PathBuf {
     let files = home_trash(&bench.root).join("files");
-    fs::create_dir_all(&files).unwrap();
+    fs::create_dir_all(files.join("stray")).unwrap();
+    fs::write(files.join("stray/inside"), "kept").unwrap();
     fs::create_dir_all(home_trash(&bench.root).join("info")).unwrap();
-    fs::write(files.join("stray"), "theirs").unwrap();
+    files.canonicalize().unwrap().join("stray")
+}
+
+#[test]
+fn an_entry_without_an_info_file_cant_be_restored() {
+    let bench = Bench::new("restore-stray");
+    let stray = unrecorded_folder(&bench);
     let client = bench.client();
 
-    let (_, outcome, _) = client.run(Operation::DeleteFromTrash {
-        items: vec![files.canonicalize().unwrap().join("stray")],
+    let (_, outcome, _) = client.run(Operation::Restore {
+        items: vec![stray.clone()],
     });
 
-    assert!(matches!(
+    assert_eq!(
         outcome,
         Outcome::Failed {
-            reason: Failure::Unsupported,
-            ..
+            path: stray.clone(),
+            reason: Failure::NoRecord,
         }
-    ));
-    assert!(files.join("stray").exists());
+    );
+    assert!(stray.join("inside").exists());
+    assert_eq!(heard(&bench), (vec![], 1));
+}
+
+#[test]
+fn an_entry_without_an_info_file_can_be_deleted_for_good() {
+    let bench = Bench::new("restore-stray-delete");
+    let stray = unrecorded_folder(&bench);
+    let client = bench.client();
+
+    let (_, outcome, changed) = client.run(Operation::DeleteFromTrash {
+        items: vec![stray.clone()],
+    });
+
+    assert_eq!(outcome, Outcome::Done);
+    assert!(stray.symlink_metadata().is_err());
+    let trash = home_trash(&bench.root).canonicalize().unwrap();
+    assert_eq!(changed, vec![trash]);
+    assert_eq!(heard(&bench), (vec![], 0));
 }
 
 #[test]
@@ -251,14 +280,14 @@ fn deleting_from_the_trash_removes_entries_and_their_info_files() {
 }
 
 #[test]
-fn emptying_the_trash_deletes_all_it_lists() {
+fn emptying_the_trash_deletes_all_it_holds() {
     let bench = Bench::new("restore-empty");
     fs::write(bench.at("a"), "a").unwrap();
     fs::create_dir(bench.at("dir")).unwrap();
     let client = bench.client();
     let items = trashed(&bench, &client, &[bench.at("a"), bench.at("dir")]);
     let stray = items[0].with_file_name("stray");
-    fs::write(&stray, "theirs").unwrap();
+    fs::write(&stray, "no record").unwrap();
 
     let (_, outcome, _) = client.run(Operation::EmptyTrash);
 
@@ -269,7 +298,7 @@ fn emptying_the_trash_deletes_all_it_lists() {
             .iter()
             .all(|item| !item.exists() && !info_of(item).exists())
     );
-    assert!(stray.exists(), "only what the trash lists goes");
+    assert!(stray.symlink_metadata().is_err());
     let (_, again, changed) = client.run(Operation::EmptyTrash);
     assert_eq!((again, changed), (Outcome::Done, vec![]));
 }

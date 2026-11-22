@@ -199,6 +199,26 @@ fn a_trash_found_twice_counts_once() {
 }
 
 #[test]
+fn unrecorded_holds_what_files_has_without_a_readable_info() {
+    let folder = TestFolder::new("read-unrecorded");
+    let home = trash(&folder, "Trash", None);
+    put(&home, "kept", b"[Trash Info]\nPath=/kept\n");
+    let broken = put(&home, "broken", b"not an info");
+    let bare = home.files().join("bare");
+    fs::create_dir(&bare).unwrap();
+    fs::write(
+        info_of(&home, OsStr::new("gone")),
+        b"[Trash Info]\nPath=/gone\n",
+    )
+    .unwrap();
+
+    let mut unrecorded = unrecorded(&home);
+    unrecorded.sort();
+
+    assert_eq!(unrecorded, vec![bare, broken]);
+}
+
+#[test]
 fn finds_an_entry_only_in_a_known_trash() {
     let folder = TestFolder::new("read-find");
     let home = trash(&folder, "Trash", None);
