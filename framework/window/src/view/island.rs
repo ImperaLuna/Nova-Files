@@ -8,11 +8,11 @@ use nova_files_shell::island::look::{divider, floating, label, square, worded};
 use nova_files_shell::widgets::tick_box;
 
 use nova_files_api::{Answer, Conflict, ConflictKind};
-use nova_files_shell::{Look, MenuAt, MenuGroup, MenuItem, Placed, arrange};
+use nova_files_shell::{Look, MenuAt, arrange};
 
 use super::row::icon;
 use crate::assets::Icon;
-use crate::commands::{ClearSelection, TRASH, Undo};
+use crate::commands::{ClearSelection, Undo};
 use crate::island::progress::Running;
 use crate::island::{self, Confirm, Note, asking};
 use crate::theme::{Colors, radius, size, text};
@@ -39,7 +39,10 @@ impl MainWindow {
             }
             Some(ask_parts(
                 conflict,
-                self.island.ticked_for_all(id, conflict.number),
+                (
+                    self.island.ticked_for_all(id, conflict.number),
+                    self.parts.words(),
+                ),
                 &colors,
                 cx,
             ))
@@ -86,12 +89,7 @@ impl MainWindow {
                 .child(rest)
                 .into_any_element(),
         ];
-        let mut placed = if self.folder_rules().read_only {
-            Vec::new()
-        } else {
-            file_buttons()
-        };
-        placed.extend(self.parts.menu(MenuAt::Island, &self.scene(cx), cx));
+        let placed = self.parts.menu(MenuAt::Island, &self.scene(cx), cx);
         parts.extend(arrange(placed).into_iter().flatten().map(|item| {
             let action = item.run.action();
             if item.icon_only {
@@ -134,25 +132,13 @@ impl MainWindow {
     }
 }
 
-fn file_buttons() -> Vec<Placed> {
-    vec![Placed::new(
-        MenuGroup::Danger,
-        Placed::FIRST,
-        vec![
-            MenuItem::run(Icon::Trash, &TRASH)
-                .with_selector("island-trash")
-                .icon_only(),
-        ],
-    )]
-}
-
 fn ask_parts(
     conflict: &Conflict,
-    ticked: bool,
+    (ticked, words): (bool, &Words),
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> Vec<gpui::AnyElement> {
-    let (name, rest) = asking::words(conflict);
+    let (name, rest) = asking::words(conflict, words);
     let mut parts = vec![
         label(colors)
             .child(

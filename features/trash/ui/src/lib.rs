@@ -1,17 +1,25 @@
 #![forbid(unsafe_code)]
 
+mod words;
+
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use gpui::{App, Context, SharedString, Window};
+use gpui::{App, Context, Modifiers, SharedString, Window};
 use nova_files_api::{Entry, Event, JobId, Operation};
+use nova_files_shell::actions::TrashSelected;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
-    Column, FolderName, FolderRules, Host, Location, Look, MenuAt, MenuGroup, MenuItem, Navigator,
-    Part, Placed, Scene, SidebarAt, SidebarRow, Slots, Views, command_spec,
+    Column, DropOver, FolderName, FolderRules, Host, Location, Look, MenuAt, MenuGroup, MenuItem,
+    Navigator, Part, Placed, Scene, SidebarAt, SidebarRow, Slots, Views, command_spec,
 };
-use nova_files_trash_api::{self as trash_api, Trashed};
+use nova_files_trash_api::{
+    self as trash_api, DeleteFromTrashJob, EmptyTrashJob, IN_TRASH, NO_TRASH, RestoreJob, TrashJob,
+    Trashed,
+};
+
+use crate::words::{DeleteFromTrashWords, EmptyTrashWords, RestoreWords, TrashWords};
 
 mod actions {
     #![expect(
@@ -23,6 +31,13 @@ mod actions {
 
 pub use actions::{EmptyTrash, RestoreSelected};
 
+command_spec!(
+    TRASH,
+    TrashSelected,
+    "file.trash",
+    "Move to Trash",
+    ["delete"]
+);
 command_spec!(RESTORE, RestoreSelected, "file.restore", "Restore", []);
 command_spec!(
     EMPTY_TRASH,
@@ -43,6 +58,9 @@ const EVERYTHING: &str = "everything";
 const ITEM: &str = "item";
 const ITEMS: &str = "items";
 const HOME: &str = "~";
+const MOVE_TO: &str = "Move to";
+const NO_TRASH_REASON: &str = "its drive has no trash";
+const IN_TRASH_REASON: &str = "it is in the Trash already";
 
 pub struct TrashPart {
     host: Host,
@@ -168,8 +186,41 @@ impl TrashPart {
         let items = self.host.entries.read(cx).selected_paths();
         if !items.is_empty() {
             self.host.island.update(cx, |island, cx| {
-                island.start_job(Operation::Restore { items }, cx);
+                island.start_job(trash_api::restore(items), cx);
             });
+        }
+    }
+
+    fn trash_selected(&mut self, _: &TrashSelected, _: &mut Window, cx: &mut Context<Self>) {
+        let paths = self.host.entries.read(cx).selected_paths();
+        if !paths.is_empty() {
+            self.start_trash(paths, cx);
+        }
+    }
+
+    fn start_trash(&self, paths: Vec<PathBuf>, cx: &mut App) {
+        self.host.island.update(cx, |island, cx| {
+            island.start_job(trash_api::trash(paths), cx);
+        });
+    }
+
+    fn is_trash(&self, folder: &Path) -> bool {
+        self.host.rules.for_folder(folder).trashed && self.host.rules.named(folder).is_some()
+    }
+
+    fn aim(&self, over: &DropOver<'_>, _: &App) -> Option<SharedString> {
+        let Location::Folder(folder) = over.at else {
+            return None;
+        };
+        self.is_trash(folder)
+            .then(|| format!("{MOVE_TO} {}", over.name).into())
+    }
+
+    fn take(&mut self, at: Location, paths: Vec<PathBuf>, _: Modifiers, cx: &mut Context<Self>) {
+        if let Location::Folder(folder) = at
+            && self.is_trash(&folder)
+        {
+            self.start_trash(paths, cx);
         }
     }
 
@@ -178,7 +229,9 @@ impl TrashPart {
         let island = self.host.island.downgrade();
         let on_yes = Box::new(move |cx: &mut App| {
             island
-                .update(cx, |island, cx| island.start_job(Operation::EmptyTrash, cx))
+                .update(cx, |island, cx| {
+                    island.start_job(trash_api::empty_trash(), cx);
+                })
                 .ok();
         });
         self.host.island.update(cx, |island, cx| {
@@ -192,15 +245,12 @@ impl TrashPart {
     }
 }
 
-const fn touches_trash(operation: &Operation) -> bool {
-    matches!(
-        operation,
-        Operation::Trash { .. }
-            | Operation::Restore { .. }
-            | Operation::DeleteFromTrash { .. }
-            | Operation::EmptyTrash
-            | Operation::Undo { .. }
-    )
+fn touches_trash(operation: &Operation) -> bool {
+    matches!(operation, Operation::Undo { .. })
+        || operation.get::<TrashJob>().is_some()
+        || operation.get::<RestoreJob>().is_some()
+        || operation.get::<DeleteFromTrashJob>().is_some()
+        || operation.get::<EmptyTrashJob>().is_some()
 }
 
 fn count_of(number: usize) -> String {
@@ -217,6 +267,28 @@ fn short_path(path: &Path, home: &Path) -> String {
         Ok(rest) => format!("{HOME}/{}", rest.to_string_lossy()),
         Err(_) => path.to_string_lossy().into_owned(),
     }
+}
+
+const fn may_trash(_: &TrashPart, scene: &Scene, _: &App) -> bool {
+    !scene.picker && !scene.rules.read_only
+}
+
+fn trash_items(_: &TrashPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
+    if scene.rules.read_only {
+        return Vec::new();
+    }
+    vec![MenuItem::run(Icon::Trash, &TRASH).with_look(Look::Danger)]
+}
+
+fn trash_button(_: &TrashPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
+    if scene.rules.read_only {
+        return Vec::new();
+    }
+    vec![
+        MenuItem::run(Icon::Trash, &TRASH)
+            .with_selector("island-trash")
+            .icon_only(),
+    ]
 }
 
 fn in_trash(part: &TrashPart, scene: &Scene, _: &App) -> bool {
@@ -272,11 +344,26 @@ impl Part for TrashPart {
         slots.on_event(Self::listed);
         slots.sends::<trash_api::Command>();
         slots.watch(Self::watch);
+        slots.command(&TRASH, may_trash, Self::trash_selected);
         slots.command(&RESTORE, in_trash, Self::restore);
         slots.command(&EMPTY_TRASH, in_trash, Self::ask_empty);
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::FIRST, restore_items);
         slots.menu(MenuAt::Sheet, empty_items);
         slots.menu(MenuAt::Island, restore_button);
+        slots.menu_in(MenuAt::Entry, MenuGroup::Danger, Placed::FIRST, trash_items);
+        slots.menu_in(
+            MenuAt::Island,
+            MenuGroup::Danger,
+            Placed::FIRST,
+            trash_button,
+        );
+        slots.drop_target(Self::aim, Self::take);
+        slots.job_words::<TrashJob>(TrashWords);
+        slots.job_words::<RestoreJob>(RestoreWords);
+        slots.job_words::<DeleteFromTrashJob>(DeleteFromTrashWords);
+        slots.job_words::<EmptyTrashJob>(EmptyTrashWords);
+        slots.question_reason(&NO_TRASH, NO_TRASH_REASON);
+        slots.question_reason(&IN_TRASH, IN_TRASH_REASON);
         slots.menu(MenuAt::PathBarEnd, empty_chip);
         slots.column(|part, scene, _| {
             part.shown(scene).then_some(Column {

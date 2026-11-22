@@ -89,14 +89,7 @@ fn operation(lines: &[Line], rebuild: Rebuild<'_>) -> Option<Operation> {
     }
     let sources: Vec<_> = first_paths(lines, word::SOURCE).collect();
     let into = first_paths(lines, word::INTO).next();
-    match (lines.first()?.word.as_str(), into) {
-        (word::DELETE, None) => Some(Operation::Delete { paths: sources }),
-        (word::TRASH, None) => Some(Operation::Trash { paths: sources }),
-        (word::RESTORE, None) => Some(Operation::Restore { items: sources }),
-        (word::DELETE_FROM_TRASH, None) => Some(Operation::DeleteFromTrash { items: sources }),
-        (word::EMPTY_TRASH, None) => Some(Operation::EmptyTrash),
-        (other, into) => rebuild(other, into, sources),
-    }
+    rebuild(lines.first()?.word.as_str(), into, sources)
 }
 
 fn foreign(lines: &[Line], rebuild: Rebuild<'_>) -> bool {

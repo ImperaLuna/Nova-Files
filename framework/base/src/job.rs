@@ -40,9 +40,6 @@ pub enum Operation {
     /// Make an empty folder named `name` in the folder `inside`. A name
     /// already taken fails the job.
     NewFolder { inside: PathBuf, name: OsString },
-    /// Delete each of `paths`, folders with all they hold, for good: not
-    /// to the trash. A link goes, never what it points to.
-    Delete { paths: Vec<PathBuf> },
     /// Change the owner, group or permissions of each of `paths`, and,
     /// as `change` reaches, of what the folders among them hold. A link
     /// is never changed or followed. Running it again does nothing more,
@@ -53,19 +50,6 @@ pub enum Operation {
         paths: Vec<PathBuf>,
         change: AccessChange,
     },
-    /// Move each of `paths` to the desktop's trash, the one every app
-    /// shares, where it can be restored from. Each goes to the trash on
-    /// its own drive; nothing is copied across drives.
-    Trash { paths: Vec<PathBuf> },
-    /// Put each of `items`, entries in a trash as the trash feature lists
-    /// them, back where it was trashed from, making the folders it was in
-    /// when they are gone. What stands in the way there is asked about as
-    /// for a move.
-    Restore { items: Vec<PathBuf> },
-    /// Delete each of `items`, entries in a trash, for good.
-    DeleteFromTrash { items: Vec<PathBuf> },
-    /// Delete everything in every trash the user has, for good.
-    EmptyTrash,
     /// Undo job `job`, one [`Event::Undoable`] named: copies go to the
     /// trash, moves go back, trashed entries are restored, restored ones
     /// go back to the trash, a rename is renamed back and a new folder
@@ -198,11 +182,6 @@ pub enum ConflictKind {
     SourceChanged,
     /// A socket, device or pipe, which a copy can't carry.
     Unsupported,
-    /// The source's drive has no trash it may use, so it can't go to the
-    /// trash; a client may offer to delete it for good instead.
-    NoTrash,
-    /// The source is in a trash already, so only a delete takes it further.
-    InTrash,
     /// A question of the job's own feature, which that feature words and
     /// answers. A client answers it with [`Command::Reply`] or one of the
     /// answers the question takes.
@@ -276,7 +255,7 @@ impl ConflictKind {
             ),
             Answer::Retry => matches!(
                 self,
-                Self::NoSpace | Self::PermissionDenied | Self::SourceChanged | Self::NoTrash
+                Self::NoSpace | Self::PermissionDenied | Self::SourceChanged
             ),
         }
     }

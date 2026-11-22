@@ -3371,6 +3371,7 @@ dependencies = [
  "nova-files-clipboard-api",
  "nova-files-clipboard-ui",
  "nova-files-dbus",
+ "nova-files-delete-api",
  "nova-files-delete-core",
  "nova-files-delete-ui",
  "nova-files-disk",
@@ -3531,11 +3532,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-delete-api"
+version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
+
+[[package]]
 name = "nova-files-delete-core"
 version = "0.1.0"
 dependencies = [
  "log",
  "nova-files-api",
+ "nova-files-delete-api",
  "nova-files-jobs",
  "nova-files-test-folder",
  "rustix",
@@ -3547,7 +3556,9 @@ version = "0.1.0"
 dependencies = [
  "gpui",
  "nova-files-api",
+ "nova-files-delete-api",
  "nova-files-shell",
+ "nova-files-trash-api",
 ]
 
 [[package]]

@@ -372,8 +372,10 @@ mod tests {
     fn an_undo_withdrawn_comes_back_when_offered_again() {
         let mut jobs = Jobs::default();
         let (mine, other) = (JobId(1), JobId(2));
-        jobs.running
-            .insert(mine, Running::new(Operation::EmptyTrash, Instant::now()));
+        jobs.running.insert(
+            mine,
+            Running::new(Operation::Undo { job: JobId(0) }, Instant::now()),
+        );
         jobs.offered(mine);
         jobs.offered(other);
         assert_eq!(jobs.undoable, [mine]);
@@ -394,7 +396,7 @@ mod tests {
         let mut jobs = Jobs::default();
         let count = u64::try_from(UNDO_KEPT).unwrap_or(u64::MAX) + 1;
         for id in 0..count {
-            let running = Running::new(Operation::EmptyTrash, Instant::now());
+            let running = Running::new(Operation::Undo { job: JobId(0) }, Instant::now());
             jobs.running.insert(JobId(id), running);
             jobs.offered(JobId(id));
             jobs.withdrawn(JobId(id));
@@ -486,10 +488,8 @@ mod tests {
     fn other_jobs_read_nothing_again() {
         let start = Instant::now();
         let mut jobs = Jobs::default();
-        let trash = Operation::Trash {
-            paths: vec![PathBuf::from("/a/x")],
-        };
-        jobs.running.insert(JobId(1), Running::new(trash, start));
+        let undo = Operation::Undo { job: JobId(0) };
+        jobs.running.insert(JobId(1), Running::new(undo, start));
         let later = start + Duration::from_secs(1);
         assert_eq!(
             jobs.moved(&progress(JobId(1), 1), later, &Words::default()),
@@ -503,7 +503,7 @@ mod tests {
         let start = Instant::now();
         let mut jobs = Jobs::default();
         let job = JobId(1);
-        let empty = Operation::EmptyTrash;
+        let empty = Operation::Undo { job: JobId(0) };
         jobs.running.insert(job, Running::new(empty, start));
         jobs.running.get_mut(&job).unwrap().asking = Some(Conflict {
             kind: ConflictKind::FileExists,
@@ -534,14 +534,18 @@ mod tests {
         let mut jobs = Jobs::default();
         let shown = start + SHOW_AFTER;
         assert!(jobs.on_island(shown).is_none());
-        jobs.running
-            .insert(JobId(1), Running::new(Operation::EmptyTrash, start));
+        jobs.running.insert(
+            JobId(1),
+            Running::new(Operation::Undo { job: JobId(0) }, start),
+        );
         jobs.running.insert(
             JobId(2),
-            Running::new(Operation::EmptyTrash, start + SHOW_AFTER / 2),
+            Running::new(Operation::Undo { job: JobId(0) }, start + SHOW_AFTER / 2),
         );
-        jobs.running
-            .insert(JobId(3), Running::new(Operation::EmptyTrash, shown));
+        jobs.running.insert(
+            JobId(3),
+            Running::new(Operation::Undo { job: JobId(0) }, shown),
+        );
         assert_eq!(jobs.on_island(shown).map(|(id, _)| id), Some(JobId(1)));
         assert_eq!(
             jobs.on_island(shown + SHOW_AFTER).map(|(id, _)| id),

@@ -263,7 +263,7 @@ fn key_name(key: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::{PREVIOUS_TAB, SELECT_ALL, TRASH, UP};
+    use crate::commands::{PREVIOUS_TAB, SELECT_ALL, UP};
 
     fn label(spec: &CommandSpec) -> Option<String> {
         key_label(&spec.binding(spec.keys[0])).map(String::from)
@@ -273,7 +273,7 @@ mod tests {
     fn keys_read_as_printed_on_the_keyboard() {
         assert_eq!(label(&SELECT_ALL).as_deref(), Some("Ctrl A"));
         assert_eq!(label(&PREVIOUS_TAB).as_deref(), Some("Ctrl Shift Tab"));
-        assert_eq!(label(&TRASH).as_deref(), Some("Del"));
+        assert_eq!(key_name("delete"), "Del");
         assert_eq!(label(&UP).as_deref(), Some("Alt Up"));
         assert_eq!(key_name("space"), "Space");
         assert_eq!(key_name("escape"), "Esc");

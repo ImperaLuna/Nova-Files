@@ -8,8 +8,8 @@ use nova_files_api::{Command, Event, Failure, Operation, Outcome};
 
 use common::Bench;
 
-const fn delete(paths: Vec<PathBuf>) -> Operation {
-    Operation::Delete { paths }
+fn delete(paths: Vec<PathBuf>) -> Operation {
+    nova_files_delete_api::delete(paths)
 }
 
 #[test]

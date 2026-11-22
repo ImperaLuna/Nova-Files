@@ -8,8 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use nova_files_api::{
-    Answer, Command, Conflict, ConflictKind, EntryKind, Event, Failure, JobId, Operation, Outcome,
-    Scope,
+    Answer, Command, Conflict, ConflictKind, EntryKind, Event, Failure, JobId, Outcome, Scope,
 };
 use nova_files_trash_api::{self as trash_api, Trashed};
 
@@ -41,9 +40,7 @@ fn listed(bench: &Bench) -> Vec<Trashed> {
 }
 
 fn trashed(bench: &Bench, client: &Client, paths: &[PathBuf]) -> Vec<PathBuf> {
-    let (_, outcome, _) = client.run(Operation::Trash {
-        paths: paths.to_vec(),
-    });
+    let (_, outcome, _) = client.run(nova_files_trash_api::trash(paths.to_vec()));
     assert_eq!(outcome, Outcome::Done);
     listed(bench).into_iter().map(|entry| entry.item).collect()
 }
@@ -90,9 +87,7 @@ fn a_restore_puts_entries_back_and_their_info_files_go() {
     let client = bench.client();
     let items = trashed(&bench, &client, &[bench.at("a"), bench.at("dir")]);
 
-    let (_, outcome, changed) = client.run(Operation::Restore {
-        items: items.clone(),
-    });
+    let (_, outcome, changed) = client.run(nova_files_trash_api::restore(items.clone()));
 
     assert_eq!(outcome, Outcome::Done);
     assert_eq!(fs::read_to_string(bench.at("a")).unwrap(), "a");
@@ -117,7 +112,7 @@ fn a_restore_makes_the_folders_that_are_gone() {
     let items = trashed(&bench, &client, &[bench.at("x/y/a")]);
     fs::remove_dir_all(bench.at("x")).unwrap();
 
-    let (_, outcome, _) = client.run(Operation::Restore { items });
+    let (_, outcome, _) = client.run(nova_files_trash_api::restore(items));
 
     assert_eq!(outcome, Outcome::Done);
     assert_eq!(fs::read_to_string(bench.at("x/y/a")).unwrap(), "a");
@@ -129,9 +124,7 @@ fn restore_onto_a_taken_name(name: &str) -> (Bench, Client, Vec<PathBuf>, JobId,
     let client = bench.client();
     let items = trashed(&bench, &client, &[bench.at("a")]);
     fs::write(bench.at("a"), "new").unwrap();
-    let job = client.start(Operation::Restore {
-        items: items.clone(),
-    });
+    let job = client.start(nova_files_trash_api::restore(items.clone()));
     let conflict = held(&client, job);
     (bench, client, items, job, conflict)
 }
@@ -168,12 +161,8 @@ fn what_isnt_in_a_trash_fails_the_job_with_nothing_changed() {
     let items = trashed(&bench, &client, &[bench.at("a")]);
 
     for operation in [
-        Operation::Restore {
-            items: vec![items[0].clone(), bench.at("b")],
-        },
-        Operation::DeleteFromTrash {
-            items: vec![items[0].clone(), bench.at("b")],
-        },
+        nova_files_trash_api::restore(vec![items[0].clone(), bench.at("b")]),
+        nova_files_trash_api::delete_from_trash(vec![items[0].clone(), bench.at("b")]),
     ] {
         let (_, outcome, _) = client.run(operation);
 
@@ -186,9 +175,7 @@ fn what_isnt_in_a_trash_fails_the_job_with_nothing_changed() {
         );
     }
     assert!(items[0].exists() && bench.at("b").exists());
-    let (_, gone, _) = client.run(Operation::Restore {
-        items: vec![bench.at("c")],
-    });
+    let (_, gone, _) = client.run(nova_files_trash_api::restore(vec![bench.at("c")]));
     assert!(matches!(
         gone,
         Outcome::Failed {
@@ -212,9 +199,7 @@ fn an_entry_without_an_info_file_cant_be_restored() {
     let stray = unrecorded_folder(&bench);
     let client = bench.client();
 
-    let (_, outcome, _) = client.run(Operation::Restore {
-        items: vec![stray.clone()],
-    });
+    let (_, outcome, _) = client.run(nova_files_trash_api::restore(vec![stray.clone()]));
 
     assert_eq!(
         outcome,
@@ -233,9 +218,8 @@ fn an_entry_without_an_info_file_can_be_deleted_for_good() {
     let stray = unrecorded_folder(&bench);
     let client = bench.client();
 
-    let (_, outcome, changed) = client.run(Operation::DeleteFromTrash {
-        items: vec![stray.clone()],
-    });
+    let (_, outcome, changed) =
+        client.run(nova_files_trash_api::delete_from_trash(vec![stray.clone()]));
 
     assert_eq!(outcome, Outcome::Done);
     assert!(stray.symlink_metadata().is_err());
@@ -263,9 +247,7 @@ fn deleting_from_the_trash_removes_entries_and_their_info_files() {
         .cloned()
         .collect();
 
-    let (_, outcome, changed) = client.run(Operation::DeleteFromTrash {
-        items: gone.clone(),
-    });
+    let (_, outcome, changed) = client.run(nova_files_trash_api::delete_from_trash(gone.clone()));
 
     assert_eq!(outcome, Outcome::Done);
     assert!(
@@ -289,7 +271,7 @@ fn emptying_the_trash_deletes_all_it_holds() {
     let stray = items[0].with_file_name("stray");
     fs::write(&stray, "no record").unwrap();
 
-    let (_, outcome, _) = client.run(Operation::EmptyTrash);
+    let (_, outcome, _) = client.run(nova_files_trash_api::empty_trash());
 
     assert_eq!(outcome, Outcome::Done);
     assert_eq!(listed(&bench), vec![]);
@@ -299,7 +281,7 @@ fn emptying_the_trash_deletes_all_it_holds() {
             .all(|item| !item.exists() && !info_of(item).exists())
     );
     assert!(stray.symlink_metadata().is_err());
-    let (_, again, changed) = client.run(Operation::EmptyTrash);
+    let (_, again, changed) = client.run(nova_files_trash_api::empty_trash());
     assert_eq!((again, changed), (Outcome::Done, vec![]));
 }
 
@@ -315,7 +297,7 @@ fn emptying_the_trash_asks_about_an_entry_it_cant_read() {
         return;
     }
 
-    let job = client.start(Operation::EmptyTrash);
+    let job = client.start(nova_files_trash_api::empty_trash());
     let conflict = held(&client, job);
     fs::set_permissions(files, fs::Permissions::from_mode(SEARCHABLE)).unwrap();
 
@@ -395,9 +377,7 @@ fn a_crash_before_the_entry_went_back_keeps_it_listed_and_resumes() {
         interrupted,
         Event::JobInterrupted {
             job,
-            operation: Operation::Restore {
-                items: vec![item.clone()]
-            }
+            operation: nova_files_trash_api::restore(vec![item.clone()])
         }
     );
     assert_eq!(listed(&bench).len(), 1);
@@ -418,9 +398,9 @@ fn a_folder_and_what_was_in_it_go_back_together() {
     trashed(&bench, &client, &[bench.at("a/b.txt")]);
     let items = trashed(&bench, &client, &[bench.at("a")]);
 
-    let (_, outcome, _) = client.run(Operation::Restore {
-        items: items.into_iter().rev().collect(),
-    });
+    let (_, outcome, _) = client.run(nova_files_trash_api::restore(
+        items.into_iter().rev().collect(),
+    ));
 
     assert_eq!(outcome, Outcome::Done, "nothing to ask about");
     assert_eq!(fs::read_to_string(bench.at("a/b.txt")).unwrap(), "b");

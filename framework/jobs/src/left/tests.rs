@@ -133,26 +133,6 @@ fn a_recorded_path_that_is_no_info_file_is_left_alone() {
 }
 
 #[test]
-fn a_trash_job_resumes_with_the_paths_it_was_given() {
-    let a = Path::new("/a");
-    let b = Path::new("/b");
-
-    let resumed = operation(&[
-        line(word::TRASH, &[]),
-        line(word::SOURCE, &[a]),
-        line(word::SOURCE, &[b]),
-        line(word::SOURCES_DONE, &[]),
-    ]);
-
-    assert_eq!(
-        resumed,
-        Some(Operation::Trash {
-            paths: vec![a.into(), b.into()]
-        })
-    );
-}
-
-#[test]
 fn a_trash_job_remembers_what_it_trashed() {
     let a = Path::new("/a");
 
@@ -193,31 +173,6 @@ fn a_trash_job_cleans_up_only_its_last_info_file() {
         trashed("files/finished"),
     ]);
     assert!(finished.exists());
-}
-
-#[test]
-fn jobs_out_of_the_trash_resume_with_what_they_were_given() {
-    let a = Path::new("/t/files/a");
-    let given = |name: &str, sources: &[&Path]| {
-        let mut lines = vec![line(name, &[])];
-        lines.extend(sources.iter().map(|source| line(word::SOURCE, &[source])));
-        lines.push(line(word::SOURCES_DONE, &[]));
-        operation(&lines)
-    };
-
-    assert_eq!(
-        given(word::RESTORE, &[a]),
-        Some(Operation::Restore {
-            items: vec![a.into()]
-        })
-    );
-    assert_eq!(
-        given(word::DELETE_FROM_TRASH, &[a]),
-        Some(Operation::DeleteFromTrash {
-            items: vec![a.into()]
-        })
-    );
-    assert_eq!(given(word::EMPTY_TRASH, &[]), Some(Operation::EmptyTrash));
 }
 
 #[test]

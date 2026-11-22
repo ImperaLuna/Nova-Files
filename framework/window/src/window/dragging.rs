@@ -67,16 +67,15 @@ impl Drag {
         cx: &App,
     ) -> Option<SharedString> {
         let aim = self.aims.aimed()?;
-        if let Some(at) = dropping::shell_place(&aim.at) {
-            let over = DropOver {
-                at: &at,
-                name: &aim.name,
-                sources: &self.sources()?.paths,
-                modifiers,
-            };
-            if let Some(said) = parts.drop_label(&over, cx) {
-                return Some(said);
-            }
+        let at = dropping::shell_place(&aim.at);
+        let over = DropOver {
+            at: &at,
+            name: &aim.name,
+            sources: &self.sources()?.paths,
+            modifiers,
+        };
+        if let Some(said) = parts.drop_label(&over, cx) {
+            return Some(said);
         }
         dropping::label(&aim.at, &aim.name).map(SharedString::from)
     }
@@ -193,7 +192,7 @@ impl MainWindow {
     }
 
     pub(crate) fn drop_files(
-        &mut self,
+        &self,
         aim: Aim,
         sources: &Sources,
         modifiers: Modifiers,
@@ -203,23 +202,18 @@ impl MainWindow {
         if !self.drop_rule()(&at, sources) {
             return;
         }
-        if let Some(place) = dropping::shell_place(&at) {
-            let over = DropOver {
-                at: &place,
-                name: &name,
-                sources: &sources.paths,
-                modifiers,
-            };
-            if self.parts.drop_at(&over, cx) {
-                return;
-            }
+        let place = dropping::shell_place(&at);
+        let over = DropOver {
+            at: &place,
+            name: &name,
+            sources: &sources.paths,
+            modifiers,
+        };
+        if self.parts.drop_at(&over, cx) {
+            return;
         }
-        match dropping::dropped(at, sources.paths.clone()) {
-            None => {}
-            Some(Dropped::Job(operation)) => {
-                self.start_job(operation);
-            }
-            Some(Dropped::Page { page, paths }) => self.parts.drop_on(&page, paths, cx),
+        if let Some(Dropped::Page { page, paths }) = dropping::dropped(at, sources.paths.clone()) {
+            self.parts.drop_on(&page, paths, cx);
         }
     }
 
@@ -231,7 +225,9 @@ impl MainWindow {
         }
         let folder = place?.folder()?;
         Some(match self.host.rules.named(folder) {
-            Some(named) if self.host.rules.for_folder(folder).trashed => Aim::trash(named.label),
+            Some(named) if self.host.rules.for_folder(folder).trashed => {
+                Aim::trash(folder.to_path_buf(), named.label)
+            }
             _ => Aim::folder(folder.to_path_buf(), name),
         })
     }

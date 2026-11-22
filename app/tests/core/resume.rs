@@ -275,7 +275,7 @@ fn a_journal_that_is_not_one_is_left_alone() {
         fs::write(journals(root).join("7"), "not a journal\n").unwrap();
     });
 
-    let (_, outcome, _) = client.run(Operation::Delete { paths: Vec::new() });
+    let (_, outcome, _) = client.run(nova_files_delete_api::delete(Vec::new()));
 
     assert_eq!(outcome, Outcome::Done);
     assert!(journals(&bench.root).join("7").exists());
@@ -287,7 +287,7 @@ fn a_core_with_no_journals_lists_no_job() {
     let client = bench.client();
     client.send(Command::WatchJobs);
 
-    let (_, outcome, _) = client.run(Operation::Delete { paths: Vec::new() });
+    let (_, outcome, _) = client.run(nova_files_delete_api::delete(Vec::new()));
 
     assert_eq!(outcome, Outcome::Done);
     let left = fs::read_dir(journals(&bench.root)).unwrap().count();
@@ -511,10 +511,10 @@ fn a_journal_another_core_holds_is_left_alone() {
         client.next(),
         Event::JobInterrupted {
             job: JobId(43),
-            operation: Operation::Delete { paths: Vec::new() }
+            operation: nova_files_delete_api::delete(Vec::new())
         }
     );
-    let (_, outcome, _) = client.run(Operation::Delete { paths: Vec::new() });
+    let (_, outcome, _) = client.run(nova_files_delete_api::delete(Vec::new()));
     assert_eq!(outcome, Outcome::Done);
     assert!(bench.at(".nova-part-42-0").exists());
     drop(held);

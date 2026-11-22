@@ -78,7 +78,7 @@ mod tests {
         let audience = Audience::default();
         let undoable = |job| Undoable {
             job: JobId(job),
-            operation: Operation::EmptyTrash,
+            operation: Operation::Undo { job: JobId(99) },
             undo: job * 2,
         };
         for job in (0..=u64::try_from(KEPT).unwrap()).filter(|job| *job != 3) {
@@ -91,7 +91,7 @@ mod tests {
 
         let told_of = |job| Event::Undoable {
             job: JobId(job),
-            operation: Operation::EmptyTrash,
+            operation: Operation::Undo { job: JobId(99) },
         };
         assert_eq!(told.len(), KEPT);
         assert_eq!(told[0], told_of(1));

@@ -64,7 +64,9 @@ mod tests {
             inside: "/a".into(),
             name: "new".into(),
         };
-        let delete = Operation::Delete { paths: Vec::new() };
+        let delete = Operation::Undo {
+            job: nova_files_api::JobId(1),
+        };
 
         assert!(Renames.claims(&rename) && Renames.claims(&folder));
         assert!(!Renames.claims(&delete));

@@ -28,7 +28,6 @@ pub const ACTIONS: &[CommandSpec] = &[
     SELECT_ALL,
     TOGGLE_SELECTED,
     CLEAR_SELECTION,
-    TRASH,
     PREVIEW,
     PREVIEW_PREVIOUS,
     PREVIEW_NEXT,
@@ -140,13 +139,6 @@ spec!(
     ["escape"]
 );
 
-spec!(
-    TRASH,
-    TrashSelected,
-    "file.trash",
-    "Move to Trash",
-    ["delete"]
-);
 spec!(
     PREVIEW,
     TogglePreview,

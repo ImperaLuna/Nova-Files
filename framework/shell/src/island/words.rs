@@ -13,7 +13,6 @@ const FILES: &str = "files";
 const SELECTED: &str = "selected";
 pub const PART_GAP: &str = " · ";
 const LIST_GAP: &str = ", ";
-const TRASH: &str = "Trash";
 const ROOT: &str = "/";
 const FINISH: &str = "finish";
 
@@ -106,13 +105,6 @@ pub fn with_answers(mut parts: Vec<String>, tally: Tally) -> String {
 
 fn done_note(operation: &Operation) -> Option<String> {
     Some(match operation {
-        Operation::Trash { paths } => format!("Moved {} to {TRASH}", what(paths)),
-        Operation::Restore { items } => format!("Restored {}", count(items.len(), ITEM, ITEMS)),
-        Operation::Delete { paths } => format!("Deleted {}", what(paths)),
-        Operation::DeleteFromTrash { items } => {
-            format!("Deleted {}", count(items.len(), ITEM, ITEMS))
-        }
-        Operation::EmptyTrash => format!("{TRASH} emptied"),
         Operation::Rename { name, .. } => format!("Renamed to {}", lossy(name)),
         Operation::NewFolder { .. }
         | Operation::ChangeAccess { .. }
@@ -126,13 +118,9 @@ fn verb(operation: &Operation, words: Option<&dyn AnyJobWords>) -> (&'static str
         Operation::Feature(_) => words
             .and_then(|words| words.failed(operation))
             .map_or((FINISH, false), |failed| (failed.verb, failed.names_item)),
-        Operation::Trash { .. } => ("move to Trash", true),
-        Operation::Restore { .. } => ("restore", true),
-        Operation::Delete { .. } | Operation::DeleteFromTrash { .. } => ("delete", true),
         Operation::Rename { .. } => ("rename", true),
         Operation::NewFolder { .. } => ("make", true),
         Operation::ChangeAccess { .. } => ("change", true),
-        Operation::EmptyTrash => ("empty Trash", false),
         Operation::Undo { .. } => ("undo", false),
     }
 }

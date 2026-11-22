@@ -175,6 +175,11 @@ mod tests {
         undone_with: Arc<Mutex<Option<String>>>,
     }
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Gone {
+        paths: Vec<PathBuf>,
+    }
+
     struct Deletes;
 
     impl JobKind for Renames {
@@ -218,7 +223,7 @@ mod tests {
         type Undo = ();
 
         fn claims(&self, operation: &Operation) -> bool {
-            matches!(operation, Operation::Delete { .. })
+            operation.get::<Gone>().is_some()
         }
 
         fn run(&self, _: &mut Running, _: &Operation, _: Option<&()>) -> Ended {
@@ -230,7 +235,7 @@ mod tests {
         }
 
         fn resume(&self, word: &str, _: Option<PathBuf>, paths: Vec<PathBuf>) -> Option<Operation> {
-            (word == "gone").then_some(Operation::Delete { paths })
+            (word == "gone").then(|| Operation::feature(Gone { paths }))
         }
     }
 
@@ -245,9 +250,9 @@ mod tests {
     fn each_operation_runs_on_the_kind_that_claims_it() {
         let kinds = Kinds::default().with(Deletes).with(Renames::default());
         let mut running = Running::for_test();
-        let delete = Operation::Delete {
+        let delete = Operation::feature(Gone {
             paths: vec![PathBuf::from("/a")],
-        };
+        });
 
         assert_eq!(
             JobKind::run(&kinds, &mut running, &delete, None).0,
@@ -318,9 +323,9 @@ mod tests {
 
         assert_eq!(
             JobKind::resume(&kinds, "gone", None, paths.clone()),
-            Some(Operation::Delete {
+            Some(Operation::feature(Gone {
                 paths: paths.clone()
-            })
+            }))
         );
         assert_eq!(JobKind::resume(&kinds, "kept", None, paths), None);
     }

@@ -205,12 +205,7 @@ fn undoing_a_trash_restores_and_undoing_a_restore_trashes_again() {
     let bench = Bench::new("undo-trash");
     fs::write(bench.at("a"), "a").unwrap();
     let client = bench.client();
-    let trashed = undoable(
-        &client,
-        Operation::Trash {
-            paths: vec![bench.at("a")],
-        },
-    );
+    let trashed = undoable(&client, nova_files_trash_api::trash(vec![bench.at("a")]));
 
     assert_eq!(undo(&client, trashed), Outcome::Done);
 
@@ -220,18 +215,8 @@ fn undoing_a_trash_restores_and_undoing_a_restore_trashes_again() {
         .unwrap()
         .join("a");
     assert!(!item.exists());
-    undoable(
-        &client,
-        Operation::Trash {
-            paths: vec![bench.at("a")],
-        },
-    );
-    let restored = undoable(
-        &client,
-        Operation::Restore {
-            items: vec![item.clone()],
-        },
-    );
+    undoable(&client, nova_files_trash_api::trash(vec![bench.at("a")]));
+    let restored = undoable(&client, nova_files_trash_api::restore(vec![item.clone()]));
     assert!(bench.at("a").exists());
 
     assert_eq!(undo(&client, restored), Outcome::Done);
@@ -318,12 +303,7 @@ fn an_undo_with_nothing_left_to_take_back_finds_nothing() {
         &client,
         nova_files_transfer_api::copy(vec![bench.at("a")], bench.at("into")),
     );
-    let trashed = undoable(
-        &client,
-        Operation::Trash {
-            paths: vec![bench.at("b")],
-        },
-    );
+    let trashed = undoable(&client, nova_files_trash_api::trash(vec![bench.at("b")]));
     let made = undoable(
         &client,
         Operation::NewFolder {
@@ -399,9 +379,7 @@ fn a_delete_can_not_be_undone() {
     let bench = Bench::new("undo-delete");
     fs::write(bench.at("a"), "a").unwrap();
     let client = bench.client();
-    let (_, outcome, _) = client.run(Operation::Delete {
-        paths: vec![bench.at("a")],
-    });
+    let (_, outcome, _) = client.run(nova_files_delete_api::delete(vec![bench.at("a")]));
     assert_eq!(outcome, Outcome::Done);
 
     client.send(Command::Ping);

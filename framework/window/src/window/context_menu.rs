@@ -2,13 +2,11 @@ use std::path::PathBuf;
 
 use gpui::{App, Context, Modifiers, Pixels, Point, point};
 use nova_files_api::{EntryId, ListingId};
-use nova_files_shell::{
-    Look as ShellLook, MenuAt, MenuGroup, MenuItem as ShellItem, Placed, arrange,
-};
+use nova_files_shell::{MenuAt, MenuGroup, MenuItem as ShellItem, Placed, arrange};
 
 use super::MainWindow;
 use crate::assets::Icon;
-use crate::commands::{OPEN, PREVIEW, SELECT_ALL, TRASH};
+use crate::commands::{OPEN, PREVIEW, SELECT_ALL};
 use crate::menu::{MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
 use crate::theme::size;
@@ -73,22 +71,13 @@ impl MainWindow {
             lone(ShellItem::run(Icon::Open, &OPEN)),
             lone(ShellItem::run(Icon::Eye, &PREVIEW)),
         ];
-        let trash = (!self.folder_rules().read_only)
-            .then(|| ShellItem::run(Icon::Trash, &TRASH).with_look(ShellLook::Danger));
         let mut groups = self.arranged(
             MenuAt::Entry,
-            vec![
-                Placed::new(
-                    MenuGroup::Open,
-                    Placed::FIRST,
-                    open.into_iter().flatten().collect(),
-                ),
-                Placed::new(
-                    MenuGroup::Danger,
-                    Placed::FIRST,
-                    trash.into_iter().collect(),
-                ),
-            ],
+            vec![Placed::new(
+                MenuGroup::Open,
+                Placed::FIRST,
+                open.into_iter().flatten().collect(),
+            )],
             cx,
         );
         if let Some(folder) = self.lone_folder() {

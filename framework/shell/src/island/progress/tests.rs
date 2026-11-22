@@ -1,9 +1,7 @@
-use std::path::PathBuf;
-
 use nova_files_api::{Conflict, ConflictKind};
 
 use super::*;
-use crate::island::test_jobs::{fetch, words};
+use crate::island::test_jobs::{fetch, sweep, words};
 
 fn fetching(names: &[&str]) -> Operation {
     fetch(names, "/b")
@@ -51,18 +49,13 @@ fn time_left_comes_from_the_speed_since_the_totals_were_known() {
 #[test]
 fn a_job_without_bytes_goes_by_items() {
     let start = Instant::now();
-    let mut job = Running::new(
-        Operation::Trash {
-            paths: vec![PathBuf::from("/a/x"), PathBuf::from("/a/y")],
-        },
-        start,
-    );
+    let mut job = Running::new(sweep(&["x", "y"]), start);
     job.advanced(progress(0, 0, 0, 4), start);
     job.advanced(progress(0, 0, 2, 4), start + Duration::from_secs(2));
     assert_eq!(job.fraction(), 0.5);
     assert_eq!(
         job.line(start + Duration::from_secs(2), &words()),
-        "Moving 3 of 4 to Trash · 2 s left"
+        "Sweeping 3 of 4 away · 2 s left"
     );
 }
 
@@ -90,8 +83,8 @@ fn before_the_count_several_sources_go_by_how_many() {
     let start = Instant::now();
     let job = Running::new(fetching(&["a", "b", "c"]), start);
     assert_eq!(job.line(start, &words()), "Fetching 3 items");
-    let empty = Running::new(Operation::EmptyTrash, start);
-    assert_eq!(empty.line(start, &words()), "Deleting");
+    let empty = Running::new(sweep(&[]), start);
+    assert_eq!(empty.line(start, &words()), "Sweeping away");
 }
 
 #[test]

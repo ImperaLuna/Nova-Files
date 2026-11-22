@@ -259,7 +259,7 @@ async fn the_trash_has_no_properties(cx: &mut TestAppContext) {
     let tree = TempFolder::tree("properties-trash");
     let (view, cx) = properties_window(cx, tree.path()).await;
     click(cx, "name-1");
-    view.update(cx, MainWindow::trash_selected);
+    cx.dispatch_action(nova_files_shell::actions::TrashSelected);
     view.condition::<WindowEvent>(cx, |view, _| view.entry_names() == ["Projects"])
         .await;
     open_trash(&view, cx, true).await;

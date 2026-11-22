@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use nova_files_api::{Conflict, ConflictKind, Failure, Outcome};
+use nova_files_trash_api::{IN_TRASH, NO_TRASH};
 
 use crate::restoring::put_back;
 use crate::trashes::{
@@ -178,8 +179,8 @@ fn trash_one(
             }
         };
         let kind = match refused {
-            Refused::NoTrash => ConflictKind::NoTrash,
-            Refused::InTrash => ConflictKind::InTrash,
+            Refused::NoTrash => ConflictKind::Asked(&NO_TRASH),
+            Refused::InTrash => ConflictKind::Asked(&IN_TRASH),
             Refused::Failed(reason) => conflict_for(reason, Path::new(""), path)
                 .ok_or_else(|| Stop::because(path, reason))?,
         };

@@ -1,12 +1,18 @@
 #![forbid(unsafe_code)]
 
+mod words;
+
 use gpui::{App, Context, Window};
 use nova_files_api::Operation;
+use nova_files_delete_api::{DeleteJob, delete};
 use nova_files_shell::actions::TrashSelected;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
     Host, Location, Look, MenuAt, MenuGroup, MenuItem, Part, Placed, Scene, Slots, command_spec,
 };
+use nova_files_trash_api::{DeleteFromTrashJob, delete_from_trash};
+
+use crate::words::DeleteWords;
 
 mod actions {
     #![expect(
@@ -41,13 +47,13 @@ impl DeletePart {
             return None;
         }
         if !scene.rules.trashed {
-            return Some(Operation::Delete { paths });
+            return Some(delete(paths));
         }
         let folder = scene.location.as_ref().and_then(Location::folder)?;
         self.host
             .rules
             .named(folder)
-            .map(|_| Operation::DeleteFromTrash { items: paths })
+            .map(|_| delete_from_trash(paths))
     }
 
     fn ask_delete(&mut self, _: &DeleteSelected, _: &mut Window, cx: &mut Context<Self>) {
@@ -55,10 +61,8 @@ impl DeletePart {
         let Some(operation) = self.deleting(&scene, cx) else {
             return;
         };
-        let many = match &operation {
-            Operation::Delete { paths } => paths.len(),
-            Operation::DeleteFromTrash { items } => items.len(),
-            _ => return,
+        let Some(many) = how_many(&operation) else {
+            return;
         };
         let part = cx.entity().downgrade();
         let on_yes = Box::new(move |cx: &mut App| {
@@ -98,6 +102,17 @@ impl DeletePart {
     }
 }
 
+fn how_many(operation: &Operation) -> Option<usize> {
+    operation
+        .get::<DeleteJob>()
+        .map(|job| job.paths.len())
+        .or_else(|| {
+            operation
+                .get::<DeleteFromTrashJob>()
+                .map(|job| job.items.len())
+        })
+}
+
 fn count_of(number: usize) -> String {
     if number == 1 {
         format!("1 {ITEM}")
@@ -125,6 +140,7 @@ impl Part for DeletePart {
     fn slots(slots: &mut Slots<Self>) {
         slots.command(&DELETE, anywhere, Self::ask_delete);
         slots.before(Self::trash_in_the_trash);
+        slots.job_words::<DeleteJob>(DeleteWords);
         slots.menu_in(
             MenuAt::Entry,
             MenuGroup::Danger,

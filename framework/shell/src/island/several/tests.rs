@@ -3,7 +3,7 @@ use std::time::Duration;
 use nova_files_api::Progress;
 
 use super::*;
-use crate::island::test_jobs::{fetch, store, words};
+use crate::island::test_jobs::{fetch, store, sweep, words};
 
 const TOTAL_BYTES: u64 = 10;
 const HALF_THE_BYTES: u64 = TOTAL_BYTES / 2;
@@ -56,8 +56,8 @@ fn each_row_names_what_it_works_on_and_its_seconds_left() {
     let several = Running::new(fetch(&["a", "b"], "/b"), start);
     assert_eq!(title(&several, now, &words()), "Into /b");
     assert_eq!(left(&several, now), None);
-    let empty = Running::new(Operation::EmptyTrash, start);
-    assert_eq!(title(&empty, now, &words()), "Deleting");
+    let empty = Running::new(sweep(&[]), start);
+    assert_eq!(title(&empty, now, &words()), "Sweeping away");
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn one_note_says_what_the_jobs_did_together() {
         &words
     ));
     assert!(batch.keep(&moved, Tally::default(), &words));
-    assert!(!batch.keep(&Operation::EmptyTrash, Tally::default(), &words));
+    assert!(!batch.keep(&sweep(&["c"]), Tally::default(), &words));
     assert_eq!(batch.ended.len(), 3);
     assert_eq!(
         batch.note(),

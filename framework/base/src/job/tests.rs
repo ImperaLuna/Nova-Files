@@ -31,5 +31,5 @@ fn a_feature_job_opens_only_as_its_own_type() {
     let operation = Operation::feature(Pack(1));
     assert_eq!(operation.get::<Pack>(), Some(&Pack(1)));
     assert_eq!(operation.get::<u8>(), None);
-    assert_eq!(Operation::EmptyTrash.get::<Pack>(), None);
+    assert_eq!(Operation::Undo { job: JobId(1) }.get::<Pack>(), None);
 }

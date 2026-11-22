@@ -2,14 +2,9 @@ use std::ffi::OsString;
 
 use nova_files_api::JobId;
 
-use super::*;
+use crate::island::test_jobs::{fetch, sweep, words};
 
-fn paths(names: &[&str]) -> Vec<PathBuf> {
-    names
-        .iter()
-        .map(|name| Path::new("/home/a").join(name))
-        .collect()
-}
+use super::*;
 
 #[test]
 fn counts_say_one_or_many() {
@@ -46,31 +41,6 @@ fn each_done_job_has_its_note() {
     let into = PathBuf::from("/home/a/Music");
     let notes = [
         (
-            Operation::Trash {
-                paths: paths(&["a", "b", "c"]),
-            },
-            Some("Moved 3 items to Trash"),
-        ),
-        (
-            Operation::Restore {
-                items: paths(&["a"]),
-            },
-            Some("Restored 1 item"),
-        ),
-        (
-            Operation::Delete {
-                paths: paths(&["old"]),
-            },
-            Some("Deleted old"),
-        ),
-        (
-            Operation::DeleteFromTrash {
-                items: paths(&["a", "b"]),
-            },
-            Some("Deleted 2 items"),
-        ),
-        (Operation::EmptyTrash, Some("Trash emptied")),
-        (
             Operation::Rename {
                 path: into.clone(),
                 name: OsString::from("Songs"),
@@ -104,9 +74,7 @@ fn each_done_job_has_its_note() {
 
 #[test]
 fn a_cancel_says_nothing_and_a_failure_says_why() {
-    let trash = Operation::Trash {
-        paths: paths(&["a"]),
-    };
+    let trash = sweep(&["a"]);
     assert_eq!(
         finished_note(
             &trash,
@@ -122,8 +90,8 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
         reason: Failure::PermissionDenied,
     };
     assert_eq!(
-        finished_note(&trash, &failed, None, Tally::default(), &Words::default()).as_deref(),
-        Some("Couldn't move to Trash locked: permission denied")
+        finished_note(&trash, &failed, None, Tally::default(), &words()).as_deref(),
+        Some("Couldn't sweep locked: permission denied")
     );
     let new_folder = Operation::NewFolder {
         inside: PathBuf::from("/mnt/cd"),
@@ -145,15 +113,8 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
         Some("Couldn't make New folder: the drive is read-only")
     );
     assert_eq!(
-        finished_note(
-            &Operation::EmptyTrash,
-            &failed,
-            None,
-            Tally::default(),
-            &Words::default()
-        )
-        .as_deref(),
-        Some("Couldn't empty Trash: permission denied")
+        finished_note(&sweep(&[]), &failed, None, Tally::default(), &words()).as_deref(),
+        Some("Couldn't sweep: permission denied")
     );
 }
 
@@ -163,24 +124,15 @@ fn a_feature_may_say_why_in_its_own_words() {
         path: PathBuf::from("/home/a/socket"),
         reason: Failure::Unsupported,
     };
-    let fetching = crate::island::test_jobs::fetch(&["socket"], "/b");
-    let delete = Operation::DeleteFromTrash {
-        items: paths(&["socket"]),
-    };
+    let fetching = fetch(&["socket"], "/b");
+    let sweeping = sweep(&["socket"]);
     assert_eq!(
-        finished_note(
-            &fetching,
-            &socket,
-            None,
-            Tally::default(),
-            &crate::island::test_jobs::words()
-        )
-        .as_deref(),
+        finished_note(&fetching, &socket, None, Tally::default(), &words()).as_deref(),
         Some("Couldn't fetch socket: it can't be copied")
     );
     assert_eq!(
-        finished_note(&delete, &socket, None, Tally::default(), &Words::default()).as_deref(),
-        Some("Couldn't delete socket: Nova Files can't do that with it")
+        finished_note(&sweeping, &socket, None, Tally::default(), &words()).as_deref(),
+        Some("Couldn't sweep socket: Nova Files can't do that with it")
     );
 }
 
@@ -229,19 +181,4 @@ fn a_listing_counts_its_folders_and_files() {
         entry(2, "c", EntryKind::File),
     ];
     assert_eq!(count_of(&entries), "1 folder, 2 files");
-}
-
-#[test]
-fn a_trash_note_leaves_out_the_answers() {
-    let trash = Operation::Trash {
-        paths: paths(&["a"]),
-    };
-    let skipped = Tally {
-        replaced: 0,
-        skipped: 1,
-    };
-    assert_eq!(
-        finished_note(&trash, &Outcome::Done, None, skipped, &Words::default()).as_deref(),
-        Some("Moved a to Trash")
-    );
 }
