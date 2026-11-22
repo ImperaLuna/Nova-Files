@@ -19,7 +19,7 @@ use nova_files_api::{
     EntryId, EntryKind, EventSink, FileTypes, Listing, ListingId, MAX_ROWS, ThumbnailSize, uri,
 };
 use nova_files_disk::home;
-use nova_files_entries_core::RowWatch;
+use nova_files_entries_core::{RowPictures, RowWatch};
 use nova_files_thumbnailer_launch as launch;
 use nova_files_thumbnails_api::{Event, Peeked};
 
@@ -60,11 +60,20 @@ struct State {
     shown: Option<Arc<Listing>>,
     wanted: Range<usize>,
     size: ThumbnailSize,
+    peeks: bool,
     done: HashSet<usize>,
     closed: bool,
 }
 
 impl State {
+    fn take(&mut self, pictures: RowPictures) {
+        if pictures.size != self.size {
+            self.size = pictures.size;
+            self.done.clear();
+        }
+        self.peeks = pictures.peeks;
+    }
+
     fn wants(&self, shown: &Arc<Listing>, index: usize, size: ThumbnailSize) -> bool {
         !self.closed
             && self
@@ -115,15 +124,14 @@ impl Queue {
         });
     }
 
-    pub fn want(&self, id: ListingId, first: EntryId, count: u32, size: Option<ThumbnailSize>) {
+    pub fn want(&self, id: ListingId, first: EntryId, count: u32, pictures: Option<RowPictures>) {
         self.shared.update(|state| {
             if state.shown.as_ref().is_some_and(|shown| shown.id == id) {
                 let first = usize::try_from(first.0).unwrap_or(usize::MAX);
                 let count = usize::try_from(count.min(MAX_ROWS)).unwrap_or_default();
                 state.wanted = first..first.saturating_add(count);
-                if let Some(size) = size.filter(|size| *size != state.size) {
-                    state.size = size;
-                    state.done.clear();
+                if let Some(pictures) = pictures {
+                    state.take(pictures);
                 }
                 let wanted = state.wanted.clone();
                 state.done.retain(|index| wanted.contains(index));
@@ -137,8 +145,8 @@ impl RowWatch for Queue {
         Self::show(self, listing, current);
     }
 
-    fn want(&self, id: ListingId, first: EntryId, count: u32, size: Option<ThumbnailSize>) {
-        Self::want(self, id, first, count, size);
+    fn want(&self, id: ListingId, first: EntryId, count: u32, pictures: Option<RowPictures>) {
+        Self::want(self, id, first, count, pictures);
     }
 }
 
@@ -189,7 +197,11 @@ impl Shared {
                     .wanted
                     .clone()
                     .filter(|index| {
-                        !state.done.contains(index) && shown.entries.get(*index).is_some()
+                        !state.done.contains(index)
+                            && shown
+                                .entries
+                                .get(*index)
+                                .is_some_and(|entry| entry.kind == EntryKind::File || state.peeks)
                     })
                     .take(BATCH)
                     .collect();

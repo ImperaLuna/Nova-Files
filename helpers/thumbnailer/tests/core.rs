@@ -92,6 +92,7 @@ fn first_thumbnail(client: &Client, folder: &Path, size: ThumbnailSize) -> (Entr
             first: EntryId(0),
             count: ROWS,
             size,
+            peeks: false,
         })
         .unwrap();
     loop {
@@ -188,6 +189,7 @@ fn rows_scrolled_away_and_back_get_their_thumbnails_again() {
                 first: EntryId(first),
                 count: ROWS,
                 size: ThumbnailSize::Normal,
+                peeks: false,
             })
             .unwrap();
     };
@@ -245,6 +247,7 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
                 first: EntryId(first),
                 count: ROWS,
                 size: ThumbnailSize::Normal,
+                peeks: false,
             })
             .unwrap();
     }
@@ -289,6 +292,7 @@ fn thumbnailed_entries(
                     first: EntryId(0),
                     count: ROWS,
                     size: ThumbnailSize::Normal,
+                    peeks: false,
                 })
                 .unwrap(),
             Heard::Thumbnail(ThumbnailsEvent::Thumbnail { id: got, entry, .. }) if got == id => {

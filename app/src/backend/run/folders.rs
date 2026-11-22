@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use nova_files_api::{Command, FolderSizes, HiddenFiles};
 use nova_files_archives_core::inside::Inside;
-use nova_files_entries_core::{InnerFolders, list_folder};
+use nova_files_entries_core::{InnerFolders, RowPictures, list_folder};
 use nova_files_settings_api::Thumbnails;
 
 use super::Setup;
@@ -25,9 +25,15 @@ pub(super) fn answer(client: &Client, command: Command, setup: &Setup) {
             first,
             count,
             size,
+            peeks,
         } => {
             let shown = setup.settings.current().thumbnails == Thumbnails::Shown;
-            client.want_rows(id, first, count, shown.then_some(size));
+            client.want_rows(
+                id,
+                first,
+                count,
+                shown.then_some(RowPictures { size, peeks }),
+            );
         }
         _ => {}
     }

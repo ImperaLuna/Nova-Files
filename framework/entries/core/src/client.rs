@@ -12,7 +12,13 @@ const NO_LISTING: u64 = u64::MAX;
 
 pub trait RowWatch: Send + Sync {
     fn show(&self, listing: &Listing, current: &dyn Fn() -> bool);
-    fn want(&self, id: ListingId, first: EntryId, count: u32, size: Option<ThumbnailSize>);
+    fn want(&self, id: ListingId, first: EntryId, count: u32, pictures: Option<RowPictures>);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RowPictures {
+    pub size: ThumbnailSize,
+    pub peeks: bool,
 }
 
 pub struct Client {
@@ -43,13 +49,13 @@ impl Client {
         id: ListingId,
         first: EntryId,
         count: u32,
-        thumbnails: Option<ThumbnailSize>,
+        pictures: Option<RowPictures>,
     ) {
         if let Some(queue) = &self.details {
             queue.want(id, first, count);
         }
         if let Some(rows) = &self.rows {
-            rows.want(id, first, thumbnails.map_or(0, |_| count), thumbnails);
+            rows.want(id, first, pictures.map_or(0, |_| count), pictures);
         }
     }
 

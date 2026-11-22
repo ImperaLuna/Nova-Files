@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use nova_files_api::{ClientGone, EntryId, Event, EventSink, FileTypes, ListingId, ThumbnailSize};
+use nova_files_api::{ClientGone, EntryId, Event, EventSink, FileTypes, ListingId};
 use nova_files_disk::ports::Icons;
 pub use nova_files_entries_core::ListingJob;
-use nova_files_entries_core::RowWatch;
+use nova_files_entries_core::{RowPictures, RowWatch};
 
 use nova_files_look_core::FileIcons;
 use nova_files_preview_core as preview;
@@ -41,9 +41,9 @@ impl Client {
         id: ListingId,
         first: EntryId,
         count: u32,
-        thumbnails: Option<ThumbnailSize>,
+        pictures: Option<RowPictures>,
     ) {
-        self.entries.want_rows(id, first, count, thumbnails);
+        self.entries.want_rows(id, first, count, pictures);
     }
 
     pub fn deliver(&self, event: Event) -> Result<(), ClientGone> {

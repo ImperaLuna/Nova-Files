@@ -17,6 +17,10 @@ fn entry(index: u32, name: &str, kind: EntryKind) -> Entry {
     }
 }
 
+const fn pictures(size: ThumbnailSize) -> RowPictures {
+    RowPictures { size, peeks: true }
+}
+
 fn shown(shared: &Shared) -> Arc<Listing> {
     shared.state.lock().unwrap().shown.clone().unwrap()
 }
@@ -32,6 +36,7 @@ fn shared(entries: Vec<Entry>, wanted: Range<usize>, done: &[usize]) -> Shared {
             })),
             wanted,
             size: ThumbnailSize::Normal,
+            peeks: true,
             done: done.iter().copied().collect(),
             closed: false,
         }),
@@ -82,6 +87,33 @@ fn a_batch_holds_only_wanted_entries_not_done_yet() {
     assert_eq!(done, HashSet::from([0, 1, 2]));
 }
 
+#[test]
+fn folders_wait_until_a_view_wants_peeks() {
+    let entries = vec![
+        entry(0, "folder", EntryKind::Folder),
+        entry(1, "new.png", EntryKind::File),
+    ];
+    let queue = Queue {
+        shared: Arc::new(shared(entries, 0..2, &[])),
+    };
+    let rows = RowPictures {
+        size: ThumbnailSize::Normal,
+        peeks: false,
+    };
+    queue.want(LISTING, EntryId(0), 2, Some(rows));
+
+    let batch = queue.shared.next_batch().unwrap();
+
+    assert_eq!(batch.entries, [1]);
+    queue.want(
+        LISTING,
+        EntryId(0),
+        2,
+        Some(pictures(ThumbnailSize::Normal)),
+    );
+    assert_eq!(queue.shared.next_batch().unwrap().entries, [0]);
+}
+
 struct Gone(#[expect(dead_code, reason = "only dropped")] mpsc::Sender<()>);
 
 impl EventSink for Gone {
@@ -125,10 +157,15 @@ fn a_new_size_sends_every_wanted_thumbnail_again() {
         shared: Arc::new(shared(files, 0..2, &[0, 1])),
     };
 
-    queue.want(LISTING, EntryId(0), 2, Some(ThumbnailSize::Normal));
+    queue.want(
+        LISTING,
+        EntryId(0),
+        2,
+        Some(pictures(ThumbnailSize::Normal)),
+    );
     assert_eq!(queue.shared.state.lock().unwrap().done.len(), 2);
 
-    queue.want(LISTING, EntryId(0), 2, Some(ThumbnailSize::Large));
+    queue.want(LISTING, EntryId(0), 2, Some(pictures(ThumbnailSize::Large)));
     let state = queue.shared.state.lock().unwrap();
     let (size, done) = (state.size, state.done.len());
     drop(state);
@@ -141,7 +178,7 @@ fn hiding_thumbnails_keeps_the_size() {
     let queue = Queue {
         shared: Arc::new(shared(files, 0..1, &[0])),
     };
-    queue.want(LISTING, EntryId(0), 1, Some(ThumbnailSize::Large));
+    queue.want(LISTING, EntryId(0), 1, Some(pictures(ThumbnailSize::Large)));
 
     queue.want(LISTING, EntryId(0), 0, None);
 
@@ -301,7 +338,12 @@ fn folders_on_screen_get_a_peek_at_what_they_hold() {
     };
 
     queue.show(&listing, || true);
-    queue.want(LISTING, EntryId(0), 2, Some(ThumbnailSize::Normal));
+    queue.want(
+        LISTING,
+        EntryId(0),
+        2,
+        Some(pictures(ThumbnailSize::Normal)),
+    );
 
     let mut peeks: Vec<_> = (0..2)
         .map(|_| match heard.recv_timeout(WAIT).unwrap() {
