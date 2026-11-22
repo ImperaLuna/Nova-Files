@@ -1,5 +1,6 @@
 use std::fs;
 
+mod allows;
 mod archives;
 mod menus;
 mod renaming;
