@@ -25,7 +25,9 @@ use std::io::{self, Write as _};
 use std::path::Path;
 use std::rc::Rc;
 
-use gpui::{App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowOptions, size};
+use gpui::{
+    App, AppContext as _, Bounds, Global, Task, WindowBounds, WindowKind, WindowOptions, size,
+};
 use nova_files_api::{Command, Connector, Event, MessageType, WindowRequest};
 
 pub use assets::Icon;
@@ -179,6 +181,9 @@ fn open_window(connector: &Connector, opening: Opening, recover_gpu: &RecoverGpu
         }
         options.titlebar = look.titlebar;
         options.foreign_parent = look.foreign_parent;
+        if look.over_asker {
+            options.kind = WindowKind::Dialog;
+        }
     }
     let connector = connector.clone();
     let location = match folder {

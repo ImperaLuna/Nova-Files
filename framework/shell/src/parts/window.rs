@@ -17,7 +17,7 @@ use crate::island::job_words::Words;
 use crate::jump::Jump;
 use crate::layout::Layout;
 use crate::location::PageRef;
-use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
+use crate::menu::{MenuAt, Placed, RowItem, SectionButton, SidebarAt, SidebarRow};
 use crate::navigator::FolderPick;
 use crate::opening::Opening;
 use crate::part::Part;
@@ -199,7 +199,7 @@ impl WindowParts {
         at: SidebarAt,
         scene: &Scene,
         cx: &App,
-    ) -> Vec<(&'static str, RowItem)> {
+    ) -> Vec<(&'static str, SectionButton)> {
         self.opened
             .iter()
             .flat_map(|part| part.section_buttons(at, scene, cx))

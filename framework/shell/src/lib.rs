@@ -51,8 +51,8 @@ pub use line::{Line, Lines};
 pub use location::{Location, PageKind, PageRef, StartPage};
 pub use made::RenameWhenMade;
 pub use menu::{
-    Expander, Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SidebarAt, SidebarRow,
-    arrange,
+    Expander, Look, MenuAt, MenuGroup, MenuItem, OnRun, Placed, RowItem, SectionButton, SidebarAt,
+    SidebarRow, arrange,
 };
 pub use navigator::{FolderPick, NavAsk, NavEvent, Navigator, OnPicked, PopUp};
 pub use opening::Opening;

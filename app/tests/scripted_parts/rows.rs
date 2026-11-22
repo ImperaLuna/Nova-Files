@@ -6,8 +6,8 @@ use nova_files_picker_api::{PickId, PickKind, PickReply, PickRequest};
 use nova_files_picker_ui::PickOpening;
 use nova_files_places_ui::PlacesPart;
 use nova_files_shell::{
-    Host, KnownFolder, KnownFolders, Location, Look, Part, Parts, Published, RowItem, SidebarAt,
-    SidebarRow, Slots, assets::Icon,
+    Host, KnownFolder, KnownFolders, Location, Look, Part, Parts, Published, RowItem,
+    SectionButton, SidebarAt, SidebarRow, Slots, assets::Icon,
 };
 
 use super::super::*;
@@ -83,9 +83,9 @@ impl Part for Rower {
         });
         slots.row_menu(row_menu);
         slots.section_button(SidebarAt::Places, "rows-add", |_, _, _| {
-            Some(RowItem::new(Icon::Plus, "Add", |_| {
+            Some(SectionButton::Runs(RowItem::new(Icon::Plus, "Add", |_| {
                 ADDED.set(ADDED.get() + 1);
-            }))
+            })))
         });
         slots.sidebar(SidebarAt::Drives, |_, _, _| {
             vec![

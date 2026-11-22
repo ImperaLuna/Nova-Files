@@ -11,7 +11,7 @@ use gpui::{App, Context, SharedString};
 use nova_files_places_api::{self as places_api, BookmarkChange, Known};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
-    Host, Location, Part, Published, RowItem, Scene, SidebarAt, SidebarRow, Slots,
+    Host, Location, Part, Published, RowItem, Scene, SectionButton, SidebarAt, SidebarRow, Slots,
 };
 
 pub use folder_tree::{Toggle, TreeRow};
@@ -22,6 +22,7 @@ const PIN_BUTTON: &str = "pin";
 const PICK_TITLE: &str = "Pin a folder";
 const PICK_LABEL: &str = "Pin to Places";
 const UNPIN_LABEL: &str = "Remove from Places";
+const CHOOSE_LABEL: &str = "Choose a folder…";
 const ROW_PREFIX: &str = "place-";
 
 pub struct PlacesPart {
@@ -96,29 +97,72 @@ fn row_menu(part: &PlacesPart, row: &str, _: &App) -> Vec<Vec<RowItem>> {
     })]]
 }
 
-fn pin_button(part: &PlacesPart, scene: &Scene, _: &App) -> Option<RowItem> {
+fn pin_button(part: &PlacesPart, scene: &Scene, _: &App) -> Option<SectionButton> {
     if scene.picker {
         return None;
     }
-    let nav = part.host.nav.clone();
-    let change = Rc::new(part.change());
-    Some(RowItem::new(Icon::Plus, PICK_LABEL, move |cx| {
-        let change = Rc::clone(&change);
-        nav.update(cx, |nav, cx| {
-            nav.pick_folder(
-                PICK_TITLE,
-                PICK_LABEL,
-                move |path, _| {
+    let here = scene
+        .location
+        .as_ref()
+        .and_then(Location::folder)
+        .filter(|_| !scene.searching);
+    let group = here
+        .and_then(|folder| part.here_item(folder))
+        .into_iter()
+        .chain([part.choose_item()])
+        .collect();
+    Some(SectionButton::Opens {
+        icon: Icon::Plus,
+        groups: vec![group],
+    })
+}
+
+impl PlacesPart {
+    fn here_item(&self, folder: &Path) -> Option<RowItem> {
+        let change = self.change();
+        let path = folder.to_path_buf();
+        match self.shown.iter().find(|shown| shown.path == folder) {
+            Some(shown) if shown.pinned => Some(RowItem::new(
+                Icon::Close,
+                format!("Remove {} from Places", shown.name),
+                move |_| change(BookmarkChange::Remove { path: path.clone() }),
+            )),
+            Some(_) => None,
+            None => Some(RowItem::new(
+                Icon::Plus,
+                format!("Pin {} to Places", folder_name(folder)),
+                move |_| {
                     change(BookmarkChange::Add {
-                        path,
+                        path: path.clone(),
                         label: None,
                         at: None,
                     });
                 },
-                cx,
-            );
-        });
-    }))
+            )),
+        }
+    }
+
+    fn choose_item(&self) -> RowItem {
+        let nav = self.host.nav.clone();
+        let change = Rc::new(self.change());
+        RowItem::new(Icon::Folder, CHOOSE_LABEL, move |cx| {
+            let change = Rc::clone(&change);
+            nav.update(cx, |nav, cx| {
+                nav.pick_folder(
+                    PICK_TITLE,
+                    PICK_LABEL,
+                    move |path, _| {
+                        change(BookmarkChange::Add {
+                            path,
+                            label: None,
+                            at: None,
+                        });
+                    },
+                    cx,
+                );
+            });
+        })
+    }
 }
 
 impl Part for PlacesPart {

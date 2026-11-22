@@ -6,7 +6,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Transformation, Window, div,
     prelude::FluentBuilder as _, radians, svg,
 };
-use nova_files_shell::{Expander, Look, RowItem, SidebarAt, SidebarRow};
+use nova_files_shell::{Expander, Look, RowItem, SectionButton, SidebarAt, SidebarRow};
 
 use super::{Row, icon, on_middle_click, row, section_button};
 use crate::assets::Icon;
@@ -50,9 +50,17 @@ impl MainWindow {
             .section_buttons(at, &self.scene(cx), cx)
             .into_iter()
             .map(|(id, button)| {
-                section_button(id, button.icon, colors)
-                    .on_click(run_on_click(button, cx))
-                    .into_any_element()
+                let shown = section_button(id, button.icon(), colors);
+                match button {
+                    SectionButton::Runs(item) => shown.on_click(run_on_click(item, cx)),
+                    SectionButton::Opens { groups, .. } => {
+                        shown.on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+                            cx.stop_propagation();
+                            this.open_part_menu(event.position(), groups.clone(), cx);
+                        }))
+                    }
+                }
+                .into_any_element()
             })
             .collect()
     }

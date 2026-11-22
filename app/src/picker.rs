@@ -38,7 +38,7 @@ impl Picker for UiPicker {
             let types = self.types.get_or_init(|| Arc::new((self.load)()));
             request.types = Some(Arc::clone(types));
         }
-        let ask = Box::new(PickWindow(Box::new(request)));
+        let ask = Box::new(PickWindow::for_app(request));
         self.requests.send(Request::Open(ask));
     }
 
