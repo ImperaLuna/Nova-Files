@@ -359,7 +359,7 @@ fn entry_row(
 
 impl MainWindow {
     pub fn list_drop_folder(&self) -> Option<&Path> {
-        if self.searching() || self.folder_rules().trashed || self.listed_page().is_some() {
+        if self.searching() || self.folder_rules().trashed() || self.listed_page().is_some() {
             return None;
         }
         Some(&self.listing.as_ref()?.path)

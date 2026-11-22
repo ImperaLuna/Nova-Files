@@ -1,6 +1,6 @@
 use gpui::Context;
 use nova_files_api::MessageType;
-use nova_files_shell::{FolderRules, Host, Navigator, Part, Parts, Slots, Views};
+use nova_files_shell::{Allow, FolderRules, Host, Navigator, Part, Parts, Slots, Views};
 use nova_files_window::CoreStatus;
 
 use super::*;
@@ -37,16 +37,10 @@ impl Part for Claimer {
 
     fn slots(slots: &mut Slots<Self>) {
         slots.on_event(|claimer: &mut Self, Claim(under), _| {
-            claimer.host.rules.claim(
-                "claimer",
-                under,
-                FolderRules {
-                    read_only: true,
-                    views: Views::DetailsOnly,
-                    replaces_menu: false,
-                    trashed: false,
-                },
-            );
+            claimer
+                .host
+                .rules
+                .claim("claimer", under, FolderRules::allowing(&[Allow::TakeOut]));
         });
     }
 }
@@ -103,13 +97,13 @@ fn a_part_takes_its_own_events_and_its_rules_reach_the_window(cx: &mut TestAppCo
         .unwrap();
     cx.run_until_parked();
 
-    assert!(rules(&view, cx).read_only);
+    assert!(!rules(&view, cx).allows(Allow::Change));
     assert_eq!(
         WITNESSED.get(),
         1,
         "every part that takes an event hears it"
     );
-    assert_eq!(rules(&view, cx).views, Views::DetailsOnly);
+    assert_eq!(rules(&view, cx).views(), Views::DetailsOnly);
     assert_eq!(
         view.read_with(cx, folder_view),
         nova_files_folders_api::FolderView::default()

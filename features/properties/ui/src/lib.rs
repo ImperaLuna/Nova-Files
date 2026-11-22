@@ -33,7 +33,8 @@ command_spec!(
     ShowProperties,
     "file.properties",
     "Properties",
-    ["alt-enter"]
+    ["alt-enter"],
+    needs[TakeOut]
 );
 
 pub use access::{Level as AccessLevel, Who, runs, shared_level};
@@ -456,14 +457,11 @@ fn crumbs(part: &PropertiesPart, page: &PropertiesPage, cx: &App) -> Vec<Crumb> 
     crumbs
 }
 
-const fn shows(_: &PropertiesPart, scene: &Scene, _: &App) -> bool {
-    !scene.rules.trashed
+const fn anywhere(_: &PropertiesPart, _: &Scene, _: &App) -> bool {
+    true
 }
 
-fn info_items(_: &PropertiesPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
-    if scene.rules.replaces_menu {
-        return Vec::new();
-    }
+fn info_items(_: &PropertiesPart, _: &Scene, _: &App) -> Vec<MenuItem> {
     vec![MenuItem::run(Icon::Info, &PROPERTIES)]
 }
 
@@ -491,7 +489,7 @@ impl Part for PropertiesPart {
         slots.sends::<open_api::Command>();
         slots.watch(Self::watch);
         slots.job_words::<ChangeAccessJob>(words::ChangeAccessWords);
-        slots.command(&PROPERTIES, shows, Self::show);
+        slots.command(&PROPERTIES, anywhere, Self::show);
         slots.menu_in(MenuAt::Entry, MenuGroup::Info, Placed::FIRST, info_items);
         slots.crumbs::<PropertiesPage>(crumbs);
         slots.page_shown::<PropertiesPage>(Self::shown_turn);

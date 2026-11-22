@@ -112,10 +112,6 @@ impl MainWindow {
             Placed::FIRST,
             select_all.into_iter().collect(),
         );
-        if self.folder_rules().replaces_menu {
-            let after_parts = Placed::new(MenuGroup::Part, Placed::LAST, select.items);
-            return self.arranged(MenuAt::Sheet, vec![after_parts], cx);
-        }
         if self.listed_page().is_some() {
             return self.arranged(MenuAt::Sheet, vec![select], cx);
         }

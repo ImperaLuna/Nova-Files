@@ -22,13 +22,21 @@ use words::{NewFolderWords, RenameWords};
 
 pub use nova_files_shell::actions::{NewFolder, RenameSelected};
 
-command_spec!(RENAME, RenameSelected, "file.rename", "Rename", ["f2"]);
+command_spec!(
+    RENAME,
+    RenameSelected,
+    "file.rename",
+    "Rename",
+    ["f2"],
+    needs[Change]
+);
 command_spec!(
     NEW_FOLDER,
     NewFolder,
     "file.new-folder",
     "New folder",
-    ["ctrl-shift-n"]
+    ["ctrl-shift-n"],
+    needs[Change]
 );
 
 pub struct RenamePart {
@@ -54,7 +62,7 @@ impl Renaming {
 
 impl RenamePart {
     fn in_folder(&self, scene: &Scene) -> Option<PathBuf> {
-        if self.renaming.is_some() || scene.picker || scene.rules.read_only {
+        if self.renaming.is_some() || scene.picker {
             return None;
         }
         scene
@@ -214,21 +222,21 @@ const fn anywhere(_: &RenamePart, _: &Scene, _: &App) -> bool {
 
 fn rename_item(part: &RenamePart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
     let lone = part.host.entries.read(cx).selected().len() == 1;
-    if scene.rules.replaces_menu || !lone || part.in_folder(scene).is_none() {
+    if !lone || part.in_folder(scene).is_none() {
         return Vec::new();
     }
     vec![MenuItem::run(Icon::Rename, &RENAME)]
 }
 
 fn new_folder_item(part: &RenamePart, scene: &Scene, _: &App) -> Vec<MenuItem> {
-    if scene.rules.replaces_menu || part.folder(scene).is_none() {
+    if part.folder(scene).is_none() {
         return Vec::new();
     }
     vec![MenuItem::run(Icon::NewFolder, &NEW_FOLDER)]
 }
 
-fn island_button(part: &RenamePart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
-    if scene.rules.trashed || part.host.entries.read(cx).selected().len() != 1 {
+fn island_button(part: &RenamePart, _: &Scene, cx: &App) -> Vec<MenuItem> {
+    if part.host.entries.read(cx).selected().len() != 1 {
         return Vec::new();
     }
     vec![

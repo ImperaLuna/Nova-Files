@@ -92,7 +92,7 @@ impl TransferPart {
     }
 
     fn takes_into(&self, into: &Path) -> bool {
-        !self.host.rules.for_folder(into).trashed
+        !self.host.rules.for_folder(into).trashed()
     }
 
     fn aim(&self, over: &DropOver<'_>, _: &App) -> Option<SharedString> {

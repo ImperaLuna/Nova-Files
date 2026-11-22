@@ -13,7 +13,7 @@ pub struct Sizing {
 impl MainWindow {
     pub fn details_only(&self) -> bool {
         self.showing_found()
-            || self.folder_rules().views == Views::DetailsOnly
+            || self.folder_rules().views() == Views::DetailsOnly
             || self
                 .listed_page()
                 .is_some_and(|page| page.views() == Views::DetailsOnly)

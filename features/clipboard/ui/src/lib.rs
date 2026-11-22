@@ -21,9 +21,30 @@ mod actions {
 
 pub use actions::{CopySelected, CutSelected, Paste};
 
-command_spec!(COPY, CopySelected, "file.copy", "Copy", ["ctrl-c"]);
-command_spec!(CUT, CutSelected, "file.cut", "Cut", ["ctrl-x"]);
-command_spec!(PASTE, Paste, "file.paste", "Paste", ["ctrl-v"]);
+command_spec!(
+    COPY,
+    CopySelected,
+    "file.copy",
+    "Copy",
+    ["ctrl-c"],
+    needs[TakeOut]
+);
+command_spec!(
+    CUT,
+    CutSelected,
+    "file.cut",
+    "Cut",
+    ["ctrl-x"],
+    needs[TakeOut, Change]
+);
+command_spec!(
+    PASTE,
+    Paste,
+    "file.paste",
+    "Paste",
+    ["ctrl-v"],
+    needs[Change]
+);
 
 const ITEMS: &str = "items";
 const ROOT: &str = "/";
@@ -73,16 +94,12 @@ impl ClipboardPart {
     }
 }
 
-const fn copyable(_: &ClipboardPart, scene: &Scene, _: &App) -> bool {
-    !scene.picker && !scene.rules.trashed
-}
-
-const fn writable(_: &ClipboardPart, scene: &Scene, _: &App) -> bool {
-    !scene.picker && !scene.rules.read_only
+const fn not_picking(_: &ClipboardPart, scene: &Scene, _: &App) -> bool {
+    !scene.picker
 }
 
 const fn pastes_here(part: &ClipboardPart, scene: &Scene, cx: &App) -> bool {
-    writable(part, scene, cx) && !scene.searching
+    not_picking(part, scene, cx) && !scene.searching
 }
 
 fn has_files(cx: &App) -> bool {
@@ -92,10 +109,7 @@ fn has_files(cx: &App) -> bool {
         .is_some()
 }
 
-fn entry_items(_: &ClipboardPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
-    if scene.rules.replaces_menu {
-        return Vec::new();
-    }
+fn entry_items(_: &ClipboardPart, _: &Scene, _: &App) -> Vec<MenuItem> {
     vec![
         MenuItem::run(Icon::Cut, &CUT),
         MenuItem::run(Icon::Copy, &COPY),
@@ -104,16 +118,13 @@ fn entry_items(_: &ClipboardPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
 
 fn sheet_items(_: &ClipboardPart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
     let in_folder = scene.location.as_ref().and_then(Location::folder).is_some();
-    if scene.rules.replaces_menu || scene.searching || !in_folder || !has_files(cx) {
+    if scene.searching || !in_folder || !has_files(cx) {
         return Vec::new();
     }
     vec![MenuItem::run(Icon::Paste, &PASTE)]
 }
 
-fn island_buttons(_: &ClipboardPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
-    if scene.rules.trashed {
-        return Vec::new();
-    }
+fn island_buttons(_: &ClipboardPart, _: &Scene, _: &App) -> Vec<MenuItem> {
     vec![
         MenuItem::run(Icon::Copy, &COPY)
             .with_selector("island-copy")
@@ -181,8 +192,8 @@ impl Part for ClipboardPart {
     }
 
     fn slots(slots: &mut Slots<Self>) {
-        slots.command(&COPY, copyable, Self::copy);
-        slots.command(&CUT, writable, Self::cut);
+        slots.command(&COPY, not_picking, Self::copy);
+        slots.command(&CUT, not_picking, Self::cut);
         slots.command(&PASTE, pastes_here, Self::paste);
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::FIRST, entry_items);
         slots.menu_in(MenuAt::Sheet, MenuGroup::Edit, Placed::SECOND, sheet_items);

@@ -13,12 +13,23 @@ pub enum Views {
     DetailsOnly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Allow {
+    Change,
+    TakeOut,
+    Restyle,
+}
+
+impl Allow {
+    const fn bit(self) -> u8 {
+        1 << self as u8
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FolderRules {
-    pub read_only: bool,
-    pub views: Views,
-    pub replaces_menu: bool,
-    pub trashed: bool,
+    allowed: u8,
+    trashed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,21 +39,69 @@ pub struct FolderName {
     pub empty_when_missing: bool,
 }
 
+impl Default for FolderRules {
+    fn default() -> Self {
+        Self::allowing(&[Allow::Change, Allow::TakeOut, Allow::Restyle])
+    }
+}
+
 impl FolderRules {
     #[must_use]
-    pub fn with(self, other: Self) -> Self {
+    pub const fn allowing(allows: &[Allow]) -> Self {
+        let mut allowed = 0;
+        let mut at = 0;
+        while at < allows.len() {
+            allowed |= allows[at].bit();
+            at += 1;
+        }
         Self {
-            read_only: self.read_only || other.read_only,
-            views: if self.views == Views::DetailsOnly || other.views == Views::DetailsOnly {
-                Views::DetailsOnly
-            } else {
-                Views::Any
-            },
-            replaces_menu: self.replaces_menu || other.replaces_menu,
+            allowed,
+            trashed: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn in_trash(self) -> Self {
+        Self {
+            trashed: true,
+            ..self
+        }
+    }
+
+    #[must_use]
+    pub const fn allows(self, allow: Allow) -> bool {
+        self.allowed & allow.bit() != 0
+    }
+
+    #[must_use]
+    pub fn meets(self, needs: &[Allow]) -> bool {
+        needs.iter().all(|need| self.allows(*need))
+    }
+
+    #[must_use]
+    pub const fn trashed(self) -> bool {
+        self.trashed
+    }
+
+    #[must_use]
+    pub const fn views(self) -> Views {
+        if self.allows(Allow::Restyle) {
+            Views::Any
+        } else {
+            Views::DetailsOnly
+        }
+    }
+
+    #[must_use]
+    pub const fn with(self, other: Self) -> Self {
+        Self {
+            allowed: self.allowed & other.allowed,
             trashed: self.trashed || other.trashed,
         }
     }
 }
+#[cfg(test)]
+mod tests;
 
 #[derive(Debug, Clone, Default)]
 pub struct RulesBook(Rc<RefCell<Book>>);

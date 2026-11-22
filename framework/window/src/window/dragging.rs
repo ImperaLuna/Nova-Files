@@ -187,7 +187,7 @@ impl MainWindow {
     pub(crate) fn drop_rule(&self) -> impl Fn(&DropAt, &Sources) -> bool + 'static {
         let (picker, rules) = (self.picker(), self.host.rules.clone());
         move |at, sources| {
-            !picker && dropping::allowed(at, sources, |folder| rules.for_folder(folder).trashed)
+            !picker && dropping::allowed(at, sources, |folder| rules.for_folder(folder).trashed())
         }
     }
 
@@ -225,7 +225,7 @@ impl MainWindow {
         }
         let folder = place?.folder()?;
         Some(match self.host.rules.named(folder) {
-            Some(named) if self.host.rules.for_folder(folder).trashed => {
+            Some(named) if self.host.rules.for_folder(folder).trashed() => {
                 Aim::trash(folder.to_path_buf(), named.label)
             }
             _ => Aim::folder(folder.to_path_buf(), name),

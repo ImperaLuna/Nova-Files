@@ -317,7 +317,7 @@ impl<P: Part> Slots<P> {
                 let (entity, host) = (entity.clone(), host.clone());
                 root.on_action(move |action: &A, window, cx| {
                     let scene = host.scene(cx);
-                    if applies(entity.read(cx), &scene, cx) {
+                    if scene.rules.meets(spec.needs) && applies(entity.read(cx), &scene, cx) {
                         entity.update(cx, |part, cx| run(part, action, window, cx));
                     }
                 })
