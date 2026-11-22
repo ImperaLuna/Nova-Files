@@ -255,6 +255,7 @@ pub struct SidebarRow {
     pub rank: u8,
     pub above: Option<Gap>,
     pub below: Option<Gap>,
+    pub drags: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -286,6 +287,7 @@ impl SidebarRow {
             rank: Self::LAST,
             above: None,
             below: None,
+            drags: false,
         }
     }
 
@@ -359,6 +361,12 @@ impl SidebarRow {
     pub fn gaps(mut self, above: Option<Gap>, below: Option<Gap>) -> Self {
         self.above = above;
         self.below = below;
+        self
+    }
+
+    #[must_use]
+    pub const fn drags(mut self, drags: bool) -> Self {
+        self.drags = drags;
         self
     }
 }

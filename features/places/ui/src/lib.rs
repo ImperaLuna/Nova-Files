@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod folder_tree;
+mod pinning;
 mod shown;
 mod tree;
 
@@ -91,6 +92,7 @@ fn rows(part: &PlacesPart, scene: &Scene, _: &App) -> Vec<SidebarRow> {
             .rank(SidebarRow::OWN)
             .here(scene.in_folder(&place.path))
             .gaps(above.map(|at| part.gap(at)), below.map(|at| part.gap(at)))
+            .drags(place.pinned && !place.standard)
         })
         .collect()
 }
@@ -169,13 +171,8 @@ impl PlacesPart {
             .map(|pin| pin.path.clone())
             .collect();
         Gap::new(PICK_LABEL, move |paths, _| {
-            let fresh = paths.into_iter().filter(|path| !pinned.contains(path));
-            for (offset, path) in fresh.enumerate() {
-                change(BookmarkChange::Add {
-                    path,
-                    label: None,
-                    at: u32::try_from(at + offset).ok(),
-                });
+            for each in pinning::pin_at(&pinned, at, paths) {
+                change(each);
             }
         })
     }

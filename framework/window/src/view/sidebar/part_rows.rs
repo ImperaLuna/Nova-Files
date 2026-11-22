@@ -6,7 +6,9 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Transformation, Window, div,
     prelude::FluentBuilder as _, radians, svg,
 };
-use nova_files_shell::{Expander, Gap, Look, RowItem, SectionButton, SidebarAt, SidebarRow};
+use nova_files_shell::{
+    Expander, Gap, Location, Look, RowItem, SectionButton, SidebarAt, SidebarRow,
+};
 
 use super::{Row, icon, on_middle_click, row, section_button};
 use crate::assets::Icon;
@@ -149,6 +151,11 @@ impl MainWindow {
         let main = !self.picker();
         let menu_row = place.id.clone();
         let at = place.opens.clone();
+        let pin = at
+            .as_ref()
+            .and_then(Location::folder)
+            .filter(|_| main && place.drags)
+            .map(|path| DraggedRow::pin(path.to_path_buf(), place.name.clone()));
         let drops = at
             .as_ref()
             .and_then(|at| self.tab_drops_at(Some(at), place.name.clone()));
@@ -177,6 +184,12 @@ impl MainWindow {
                         this.open_row_menu(&menu_row, event.position, cx);
                     }),
                 )
+            })
+            .when_some(pin, |row, pin| {
+                let window = cx.entity();
+                row.on_drag(pin, move |pin, _, held, cx| {
+                    window.update(cx, |this, cx| this.drag_started(pin, held, cx))
+                })
             });
         match drops {
             Some(at) => self.drop_target(shown, at, cx),
@@ -230,7 +243,7 @@ fn small_button(selector: String, side: Pixels, colors: &Colors) -> Stateful<Div
 }
 
 struct Clicked {
-    opens: Option<nova_files_shell::Location>,
+    opens: Option<Location>,
     open: Option<RowItem>,
 }
 
