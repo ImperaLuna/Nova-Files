@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use nova_files_api::{Failure, Operation, Outcome};
@@ -39,6 +40,13 @@ impl JobKind for Renames {
 
     fn undo(&self, _: &mut Running, operation: &Operation, ended: &Ended) -> Option<Undo> {
         undo_of(operation, &ended.0)
+    }
+
+    fn examples(&self) -> Vec<Operation> {
+        vec![
+            nova_files_rename_api::rename(PathBuf::new(), OsString::new()),
+            nova_files_rename_api::new_folder(PathBuf::new(), OsString::new()),
+        ]
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {

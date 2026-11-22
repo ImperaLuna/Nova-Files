@@ -73,14 +73,18 @@ impl Parts {
             .collect()
     }
 
-    pub fn open(&self, host: &Host, cx: &mut App) -> WindowParts {
-        self.bind_new_keys(cx);
+    pub fn words(&self) -> Words {
         let mut words = Words::default();
         for kind in &self.kinds {
             words.extend(&(kind.words)());
         }
+        words
+    }
+
+    pub fn open(&self, host: &Host, cx: &mut App) -> WindowParts {
+        self.bind_new_keys(cx);
         WindowParts {
-            words,
+            words: self.words(),
             opened: self
                 .kinds
                 .iter()

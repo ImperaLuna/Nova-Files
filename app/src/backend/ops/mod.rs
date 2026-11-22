@@ -72,4 +72,17 @@ mod tests {
         assert_eq!(first_path(copy(vec!["/s".into()])), Path::new("/s"));
         assert_eq!(first_path(copy(Vec::new())), Path::new("/into"));
     }
+
+    #[test]
+    fn every_job_the_core_runs_has_its_island_words() {
+        let kinds = kinds(Trashes::default(), None);
+        let words = crate::parts().words();
+        let examples = nova_files_jobs::JobKind::examples(&kinds);
+
+        assert_ne!(examples.len(), 0);
+        for job in examples {
+            assert!(nova_files_jobs::JobKind::claims(&kinds, &job), "{job:?}");
+            assert!(words.of(&job).is_some(), "{job:?} has no island words");
+        }
+    }
 }

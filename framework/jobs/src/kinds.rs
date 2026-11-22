@@ -25,6 +25,7 @@ trait Erased: Send + Sync {
     fn undo(&self, running: &mut Running, operation: &Operation, ended: &Ended) -> Option<AnyUndo>;
     fn undoes(&self, operation: &Operation) -> Option<JobId>;
     fn first_path(&self, operation: &Operation) -> PathBuf;
+    fn examples(&self) -> Vec<Operation>;
     fn resume(&self, word: &str, into: Option<PathBuf>, sources: Vec<PathBuf>)
     -> Option<Operation>;
 }
@@ -57,6 +58,10 @@ where
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
         JobKind::first_path(self, operation)
+    }
+
+    fn examples(&self) -> Vec<Operation> {
+        JobKind::examples(self)
     }
 
     fn resume(
@@ -152,6 +157,10 @@ impl JobKind for Kinds {
             .map_or_else(PathBuf::new, |(_, kind)| kind.first_path(operation))
     }
 
+    fn examples(&self) -> Vec<Operation> {
+        self.kinds.iter().flat_map(|kind| kind.examples()).collect()
+    }
+
     fn resume(
         &self,
         word: &str,
@@ -219,6 +228,10 @@ mod tests {
         fn first_path(&self, _: &Operation) -> PathBuf {
             PathBuf::from("/renamed")
         }
+
+        fn examples(&self) -> Vec<Operation> {
+            vec![rename()]
+        }
     }
 
     impl JobKind for Deletes {
@@ -237,6 +250,10 @@ mod tests {
             PathBuf::from("/deleted")
         }
 
+        fn examples(&self) -> Vec<Operation> {
+            vec![Operation::feature(Gone { paths: Vec::new() })]
+        }
+
         fn resume(&self, word: &str, _: Option<PathBuf>, paths: Vec<PathBuf>) -> Option<Operation> {
             (word == "gone").then(|| Operation::feature(Gone { paths }))
         }
@@ -246,6 +263,16 @@ mod tests {
         Operation::feature(Named {
             name: "b".to_owned(),
         })
+    }
+
+    #[test]
+    fn the_kinds_together_give_every_kind_s_examples() {
+        let kinds = Kinds::default().with(Deletes).with(Renames::default());
+
+        assert_eq!(
+            JobKind::examples(&kinds),
+            [Operation::feature(Gone { paths: Vec::new() }), rename()]
+        );
     }
 
     #[test]

@@ -45,6 +45,10 @@ impl JobKind for Undoing {
     fn first_path(&self, _: &Operation) -> PathBuf {
         PathBuf::new()
     }
+
+    fn examples(&self) -> Vec<Operation> {
+        vec![Operation::feature(Made)]
+    }
 }
 
 struct Nowhere;

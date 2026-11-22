@@ -53,6 +53,8 @@ pub trait JobKind: Send + Sync + 'static {
 
     fn first_path(&self, op: &Self::Op) -> PathBuf;
 
+    fn examples(&self) -> Vec<Self::Op>;
+
     fn resume(&self, _: &str, _: Option<PathBuf>, _: Vec<PathBuf>) -> Option<Self::Op> {
         None
     }

@@ -1,7 +1,8 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use nova_files_api::{Failure, Operation, Outcome};
-use nova_files_archives_api::{Compress, Extract};
+use nova_files_archives_api::{Compress, Extract, ExtractTo, Packing};
 use nova_files_jobs::identity::Identity;
 use nova_files_jobs::mover::Mover;
 use nova_files_jobs::running::Running;
@@ -76,6 +77,24 @@ impl<M: Mover + Send + Sync + 'static> JobKind for Archives<M> {
             .map(|(to, _, made)| (to, made))
             .collect();
         (!made.is_empty()).then_some(made)
+    }
+
+    fn examples(&self) -> Vec<Operation> {
+        vec![
+            Operation::feature(Extract {
+                archive: PathBuf::new(),
+                into: PathBuf::new(),
+                to: ExtractTo::Here,
+            }),
+            Operation::feature(Compress {
+                sources: Vec::new(),
+                into: PathBuf::new(),
+                name: OsString::new(),
+                packing: Packing::ZipDeflate,
+                level: 1,
+                locked: false,
+            }),
+        ]
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
