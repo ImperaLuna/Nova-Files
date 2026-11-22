@@ -39,6 +39,16 @@ fn the_file_reads_back_what_was_written() {
 }
 
 #[test]
+fn views_saved_before_the_biggest_size_keep_their_size() {
+    let saved = b"nova-files folder-views 1\ni5/a\0";
+    let view = FolderView {
+        mode: ViewMode::Icons,
+        icons: IconSize::Larger,
+    };
+    assert_eq!(parse(saved), [(PathBuf::from("/a"), view)]);
+}
+
+#[test]
 fn anything_else_reads_as_no_views() {
     let too_many = vec![(PathBuf::from("/a"), ICONS); MAX_FOLDER_VIEWS + 1];
     for bytes in [
@@ -52,7 +62,7 @@ fn anything_else_reads_as_no_views() {
         b"nova-files folder-views 1\ni3relative\0".to_vec(),
         b"nova-files folder-views 1\nx3/a\0".to_vec(),
         b"nova-files folder-views 1\ni0/a\0".to_vec(),
-        b"nova-files folder-views 1\ni6/a\0".to_vec(),
+        b"nova-files folder-views 1\ni7/a\0".to_vec(),
         b"nova-files folder-views 1\ni3/a\0\0".to_vec(),
         to_bytes(&too_many),
     ] {

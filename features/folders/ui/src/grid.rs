@@ -31,6 +31,16 @@ mod tests {
     #[test]
     fn each_size_has_its_own_icon_side() {
         let sides: Vec<Pixels> = IconSize::ALL.into_iter().map(icon_side).collect();
-        assert_eq!(sides, [px(48.0), px(64.0), px(96.0), px(128.0), px(192.0)]);
+        assert_eq!(
+            sides,
+            [
+                px(48.0),
+                px(64.0),
+                px(96.0),
+                px(128.0),
+                px(192.0),
+                px(256.0)
+            ]
+        );
     }
 }

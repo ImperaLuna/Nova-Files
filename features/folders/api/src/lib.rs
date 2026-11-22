@@ -1,5 +1,5 @@
 //! How a folder is shown: as rows with columns, as a grid of icons at one
-//! of five sizes, or as a gallery of one big preview. Each folder keeps
+//! of six sizes, or as a gallery of one big preview. Each folder keeps
 //! the view it was last given; the core saves them between runs.
 //!
 //! A client asks with [`Command::Views`] and gets [`Event::Views`] then and
@@ -33,16 +33,18 @@ pub enum IconSize {
     #[default]
     Medium,
     Large,
+    Larger,
     Largest,
 }
 
 impl IconSize {
     /// Every size, smallest first.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Smallest,
         Self::Small,
         Self::Medium,
         Self::Large,
+        Self::Larger,
         Self::Largest,
     ];
 
@@ -114,9 +116,9 @@ mod tests {
         assert_eq!(IconSize::Largest.bigger(), IconSize::Largest);
         assert_eq!(IconSize::Smallest.smaller(), IconSize::Smallest);
         assert_eq!(IconSize::Smallest.bigger(), IconSize::Small);
-        assert_eq!(IconSize::Largest.smaller(), IconSize::Large);
+        assert_eq!(IconSize::Largest.smaller(), IconSize::Larger);
         assert_eq!(IconSize::Smallest.stepped(3), IconSize::Large);
-        assert_eq!(IconSize::Large.stepped(-3), IconSize::Smallest);
+        assert_eq!(IconSize::Larger.stepped(-4), IconSize::Smallest);
         assert_eq!(IconSize::Small.stepped(9), IconSize::Largest);
         assert_eq!(IconSize::Large.stepped(-9), IconSize::Smallest);
         for (at, size) in IconSize::ALL.into_iter().enumerate() {

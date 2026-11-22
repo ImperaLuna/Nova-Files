@@ -270,7 +270,7 @@ fn a_rename_under_an_icon_takes_the_cells_width(cx: &mut TestAppContext) {
 fn ctrl_scroll_takes_whole_steps_at_once(cx: &mut TestAppContext) {
     let (view, cx, _) = icons(cx);
     ctrl_scroll(cx, 2.5);
-    assert_eq!(icon_size(&view, cx), IconSize::Largest);
+    assert_eq!(icon_size(&view, cx), IconSize::Larger);
     ctrl_scroll(cx, -3.5);
     assert_eq!(icon_size(&view, cx), IconSize::Small);
 }

@@ -214,7 +214,14 @@ pub mod size {
     pub const STAGE_PAD: Pixels = px(16.0);
     pub const STAGE_CAPTION: Pixels = px(40.0);
     pub const STRIP_PAD: Pixels = px(8.0);
-    pub const ICON_SIDES: [Pixels; 5] = [px(48.0), px(64.0), px(96.0), px(128.0), px(192.0)];
+    pub const ICON_SIDES: [Pixels; 6] = [
+        px(48.0),
+        px(64.0),
+        px(96.0),
+        px(128.0),
+        px(192.0),
+        px(256.0),
+    ];
     pub const MODIFIED_WIDTH: Pixels = px(150.0);
     pub const SIZE_WIDTH: Pixels = px(92.0);
     pub const HEAD_HEIGHT: Pixels = px(38.0);
