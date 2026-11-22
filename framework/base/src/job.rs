@@ -218,6 +218,8 @@ pub enum Failure {
     Unsupported,
     /// The file changed while it was copied, so the copy isn't kept.
     SourceChanged,
+    /// A Trash item has no record of where it came from.
+    NoRecord,
     /// The archive is damaged or cut short.
     Damaged,
     /// The file isn't an archive Nova Files reads.

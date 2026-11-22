@@ -25,6 +25,16 @@ struct Leaving {
     trash: TrashFolder,
 }
 
+struct Unrecorded {
+    item: PathBuf,
+    trash: TrashFolder,
+}
+
+struct Picked {
+    recorded: Vec<Leaving>,
+    unrecorded: Vec<Unrecorded>,
+}
+
 pub fn restore(
     running: &mut Running,
     items: &[PathBuf],
@@ -41,7 +51,7 @@ pub fn put_back(
     trashes: &Trashes,
     files: &dyn Mover,
 ) -> Ended {
-    let mut leaving = match leaving(running, items, trashes) {
+    let mut leaving = match leaving(running, items, trashes).and_then(recorded_only) {
         Ok(leaving) => leaving,
         Err(stop) => return (stop.outcome(), Vec::new()),
     };
@@ -81,7 +91,7 @@ pub fn delete_from_trash(
 ) -> Ended {
     running.record_job(word::DELETE_FROM_TRASH, None, items);
     match leaving(running, items, trashes) {
-        Ok(leaving) => delete_leaving(running, &leaving, files),
+        Ok(picked) => delete_leaving(running, &picked, files),
         Err(stop) => (stop.outcome(), Vec::new()),
     }
 }
@@ -97,6 +107,18 @@ pub fn empty_trash(running: &mut Running, trashes: &Trashes, files: &dyn Mover) 
                 .map(move |listed| (trash.clone(), listed))
         })
         .collect();
+    let unrecorded = trashes
+        .all()
+        .into_iter()
+        .flat_map(|trash| {
+            trash::unrecorded(&trash)
+                .into_iter()
+                .map(move |item| Unrecorded {
+                    item,
+                    trash: trash.clone(),
+                })
+        })
+        .collect();
     let mut leaving = Vec::new();
     for (trash, listed) in listed {
         let read = running.retry_or_skip(&listed.item, || match found(&trash, &listed) {
@@ -109,18 +131,33 @@ pub fn empty_trash(running: &mut Running, trashes: &Trashes, files: &dyn Mover) 
             Err(stop) => return (stop.outcome(), Vec::new()),
         }
     }
-    delete_leaving(running, &leaving, files)
+    let picked = Picked {
+        recorded: leaving,
+        unrecorded,
+    };
+    delete_leaving(running, &picked, files)
 }
 
-fn delete_leaving(running: &mut Running, leaving: &[Leaving], files: &dyn Mover) -> Ended {
+fn delete_leaving(running: &mut Running, picked: &Picked, files: &dyn Mover) -> Ended {
+    let leaving = &picked.recorded;
     note_infos(running, leaving);
-    let items: Vec<_> = leaving.iter().map(|left| left.item.clone()).collect();
+    let items: Vec<_> = leaving
+        .iter()
+        .map(|left| left.item.clone())
+        .chain(picked.unrecorded.iter().map(|left| left.item.clone()))
+        .collect();
     let (result, _) = files.delete(running, &items);
     let dropped = drop_infos(leaving);
+    let gone = picked
+        .unrecorded
+        .iter()
+        .filter(|left| left.item.symlink_metadata().is_err())
+        .map(|left| left.trash.root.clone());
     let shown = leaving
         .iter()
         .map(|left| left.trash.root.clone())
         .filter(|root| dropped.iter().any(|changed| changed.starts_with(root)))
+        .chain(gone)
         .collect();
     ended(result, shown)
 }
@@ -132,19 +169,47 @@ fn ended(result: Result<(), Stop>, shown: BTreeSet<PathBuf>) -> Ended {
     )
 }
 
-fn leaving(running: &Running, items: &[PathBuf], trashes: &Trashes) -> Result<Vec<Leaving>, Stop> {
+fn leaving(running: &Running, items: &[PathBuf], trashes: &Trashes) -> Result<Picked, Stop> {
     let mut seen = HashSet::new();
-    let mut leaving = Vec::new();
+    let mut picked = Picked {
+        recorded: Vec::new(),
+        unrecorded: Vec::new(),
+    };
     for item in items.iter().filter(|item| seen.insert(*item)) {
-        item.symlink_metadata()
+        let there = item
+            .symlink_metadata()
             .map_err(|error| Stop::at(item, &error))?;
-        let (trash, listed) =
-            trash::find(item, trashes).ok_or_else(|| Stop::because(item, Failure::Unsupported))?;
-        if let Some(left) = leave(running, trash, listed).map_err(|error| Stop::at(item, &error))? {
-            leaving.push(left);
+        if let Some((trash, listed)) = trash::find(item, trashes) {
+            let left = leave(running, trash, listed).map_err(|error| Stop::at(item, &error))?;
+            picked.recorded.extend(left);
+        } else if let Some(trash) = trash::trash_of(item, trashes) {
+            let left = Unrecorded {
+                item: item.clone(),
+                trash,
+            };
+            picked
+                .unrecorded
+                .extend(unchanged(running, item, Entry::of(&there)).then_some(left));
+        } else {
+            return Err(Stop::because(item, Failure::Unsupported));
         }
     }
-    Ok(leaving)
+    Ok(picked)
+}
+
+fn recorded_only(picked: Picked) -> Result<Vec<Leaving>, Stop> {
+    match picked.unrecorded.first() {
+        Some(left) => Err(Stop::because(&left.item, Failure::NoRecord)),
+        None => Ok(picked.recorded),
+    }
+}
+
+fn unchanged(running: &Running, item: &Path, entry: Entry) -> bool {
+    running
+        .before
+        .leaving
+        .get(item)
+        .is_none_or(|before| before.is(&entry))
 }
 
 struct Found {
@@ -171,12 +236,7 @@ fn leave(running: &Running, trash: TrashFolder, listed: Trashed) -> io::Result<O
 }
 
 fn left(running: &Running, trash: TrashFolder, listed: Trashed, found: Found) -> Option<Leaving> {
-    let changed = running
-        .before
-        .leaving
-        .get(&listed.item)
-        .is_some_and(|before| !before.is(&found.item_entry));
-    (!changed).then_some(Leaving {
+    unchanged(running, &listed.item, found.item_entry).then_some(Leaving {
         item: listed.item,
         info: found.info,
         info_entry: found.info_entry,

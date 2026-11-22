@@ -87,6 +87,17 @@ pub fn list(trash: &TrashFolder) -> Vec<Trashed> {
         .collect()
 }
 
+pub fn unrecorded(trash: &TrashFolder) -> Vec<PathBuf> {
+    let Ok(files) = fs::read_dir(trash.files()) else {
+        return Vec::new();
+    };
+    files
+        .flatten()
+        .filter(|file| entry(trash, &file.file_name()).is_none())
+        .map(|file| file.path())
+        .collect()
+}
+
 pub fn find(item: &Path, trashes: &Trashes) -> Option<(TrashFolder, Trashed)> {
     let trash = trash_of(item, trashes)?;
     let found = entry(&trash, item.file_name()?)?;

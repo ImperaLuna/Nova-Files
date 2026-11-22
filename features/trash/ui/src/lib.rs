@@ -92,12 +92,16 @@ impl TrashPart {
     }
 
     fn listed(&mut self, event: trash_api::Event, cx: &mut Context<Self>) {
-        let trash_api::Event::Listed { folder, items } = event;
+        let trash_api::Event::Listed {
+            folder,
+            items,
+            unrecorded,
+        } = event;
         if folder != self.folder {
             self.claim(folder.as_deref());
             self.folder = folder;
         }
-        self.count = Some(items.len());
+        self.count = Some(items.len() + unrecorded);
         let files = self.folder.clone();
         self.listed = items
             .into_iter()
