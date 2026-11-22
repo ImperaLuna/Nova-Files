@@ -23,6 +23,7 @@ pub struct Sources {
     each: HashSet<PathBuf>,
     folders: HashSet<PathBuf>,
     all_folders: bool,
+    pinned_row: bool,
 }
 
 impl Sources {
@@ -37,6 +38,15 @@ impl Sources {
             each,
             folders,
             all_folders: false,
+            pinned_row: false,
+        }
+    }
+
+    pub fn pin(path: PathBuf) -> Self {
+        Self {
+            all_folders: true,
+            pinned_row: true,
+            ..Self::new(vec![path])
         }
     }
 
@@ -59,6 +69,9 @@ pub fn shell_place(at: &DropAt) -> Option<nova_files_shell::Location> {
 }
 
 pub fn allowed(at: &DropAt, sources: &Sources, rules: &RulesBook) -> bool {
+    if sources.pinned_row {
+        return matches!(at, DropAt::Gap(_));
+    }
     let taken_out = |folder: &PathBuf| rules.for_folder(folder).allows(Allow::TakeOut);
     if sources.paths.is_empty() || !sources.folders.iter().all(taken_out) {
         return false;
@@ -202,6 +215,16 @@ mod tests {
             label(&gap, "Pin to Places").as_deref(),
             Some("Pin to Places")
         );
+    }
+
+    #[test]
+    fn a_pinned_row_drops_only_into_a_gap() {
+        let rules = rules();
+        let pin = Sources::pin("/a/x".into());
+        let gap = DropAt::Gap(Gap::new("Pin to Places", |_, _| {}));
+        assert!(allowed(&gap, &pin, &rules));
+        assert!(!allowed(&folder("/b"), &pin, &rules));
+        assert!(!allowed(&folder(TRASH), &pin, &rules));
     }
 
     #[test]

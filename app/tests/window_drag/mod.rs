@@ -460,3 +460,46 @@ async fn a_folder_dropped_between_places_rows_is_pinned_there(cx: &mut TestAppCo
     assert!(projects.exists());
     assert!(cx.debug_bounds("place-0-below").is_none());
 }
+
+fn drop_on(cx: &mut VisualTestContext, from: &'static str, to: &'static str) {
+    start_drag(cx, from);
+    drag_over(cx, to);
+    let end = center(cx, to);
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+async fn a_pinned_row_dragged_to_another_line_moves_there(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-reorder");
+    let home = TempFolder::tree("drag-reorder-home");
+    fs::create_dir(tree.path().join("Work")).unwrap();
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let (projects, work) = (tree.path().join("Projects"), tree.path().join("Work"));
+    let order = |view: &MainWindow, cx: &App| -> Vec<std::path::PathBuf> {
+        pinned(view, cx).into_iter().map(|pin| pin.path).collect()
+    };
+
+    drop_on(cx, "name-0", "place-0-below");
+    view.condition::<WindowEvent>(cx, |view, cx| order(view, cx) == [projects.clone()])
+        .await;
+    drop_on(cx, "name-1", "place-0-below");
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        order(view, cx) == [work.clone(), projects.clone()]
+    })
+    .await;
+
+    drop_on(cx, "place-2", "place-1-above");
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        order(view, cx) == [projects.clone(), work.clone()]
+    })
+    .await;
+    drop_on(cx, "place-1", "entry-1");
+    cx.run_until_parked();
+    assert!(projects.exists() && work.exists());
+    assert_eq!(
+        view.read_with(cx, |view, cx| order(view, cx)),
+        [projects, work]
+    );
+}

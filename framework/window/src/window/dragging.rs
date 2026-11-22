@@ -23,9 +23,14 @@ use nova_files_shell::Location;
 
 #[derive(Debug, Clone)]
 pub struct DraggedRow {
-    listing: ListingId,
-    id: EntryId,
+    from: DraggedFrom,
     drag: Rc<Drag>,
+}
+
+#[derive(Debug, Clone)]
+enum DraggedFrom {
+    Entry(ListingId, EntryId),
+    Pin(PathBuf, SharedString),
 }
 
 #[derive(Debug, Default)]
@@ -90,8 +95,14 @@ impl Drag {
 impl DraggedRow {
     pub fn new(listing: ListingId, id: EntryId) -> Self {
         Self {
-            listing,
-            id,
+            from: DraggedFrom::Entry(listing, id),
+            drag: Rc::default(),
+        }
+    }
+
+    pub fn pin(path: PathBuf, name: SharedString) -> Self {
+        Self {
+            from: DraggedFrom::Pin(path, name),
             drag: Rc::default(),
         }
     }
@@ -149,8 +160,17 @@ impl MainWindow {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Entity<DragChip> {
-        if !self.selects((row.listing, row.id)) {
-            self.reselect(|_, _| Some(Selection::only(row.listing, row.id)), cx);
+        let (listing, id) = match &row.from {
+            DraggedFrom::Entry(listing, id) => (*listing, *id),
+            DraggedFrom::Pin(path, name) => {
+                row.drag.sources.set(Sources::pin(path.clone())).ok();
+                let (drag, origin) = (Rc::clone(&row.drag), cx.entity().downgrade());
+                let what = name.clone();
+                return cx.new(|_| DragChip { what, drag, origin });
+            }
+        };
+        if !self.selects((listing, id)) {
+            self.reselect(|_, _| Some(Selection::only(listing, id)), cx);
         }
         let selected = self.selected_full_paths();
         let paths: Vec<PathBuf> = selected.iter().map(|(path, _)| path.clone()).collect();
