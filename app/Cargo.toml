@@ -52,6 +52,7 @@
 # - nova-files-properties-api
 # - nova-files-properties-core
 # - nova-files-properties-ui
+# - nova-files-rename-api
 # - nova-files-rename-core
 # - nova-files-rename-ui
 # - nova-files-search-api
@@ -161,6 +162,7 @@ nova-files-window.workspace = true
 nova-files-undo-ui.workspace = true
 [dev-dependencies]
 nova-files-clipboard-api.workspace = true
+nova-files-rename-api.workspace = true
 nova-files-delete-api.workspace = true
 nova-files-test-folder.workspace = true
 nova-files-picker-api.workspace = true

@@ -3,6 +3,7 @@
 mod access;
 mod page;
 mod view;
+mod words;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -11,10 +12,11 @@ use std::sync::Arc;
 use gpui::{
     AnyElement, App, Context, Pixels, Point, SharedString, Subscription, WeakEntity, Window,
 };
-use nova_files_api::{AccessChange, Event as CoreEvent, JobId, ModeChange, Operation, Reach};
+use nova_files_api::{Event as CoreEvent, JobId};
 use nova_files_open_api::{self as open_api, OpenWith, OpenWithAnswer, OpenWithId};
 use nova_files_properties_api::{
-    Command, Event, MeasureId, Properties, PropertiesId, ScanState, Size,
+    AccessChange, ChangeAccessJob, Command, Event, MeasureId, ModeChange, Properties, PropertiesId,
+    Reach, ScanState, Size, change_access,
 };
 use nova_files_shell::actions::ShowProperties;
 use nova_files_shell::assets::Icon;
@@ -282,7 +284,7 @@ impl PropertiesPart {
         match event {
             CoreEvent::JobStarted { job, operation, .. }
             | CoreEvent::JobRunning { job, operation, .. }
-                if matches!(operation, Operation::ChangeAccess { .. }) =>
+                if operation.get::<ChangeAccessJob>().is_some() =>
             {
                 self.access_jobs.insert(*job);
             }
@@ -390,16 +392,16 @@ impl PropertiesPart {
         } else {
             Reach::Chosen
         };
-        let operation = Operation::ChangeAccess {
-            paths: page.paths(),
-            change: AccessChange {
+        let operation = change_access(
+            page.paths(),
+            AccessChange {
                 owner: None,
                 group: None,
                 files,
                 folders,
                 reach,
             },
-        };
+        );
         self.host
             .island
             .update(cx, |island, cx| island.start_job(operation, cx));
@@ -488,6 +490,7 @@ impl Part for PropertiesPart {
         slots.sends::<Command>();
         slots.sends::<open_api::Command>();
         slots.watch(Self::watch);
+        slots.job_words::<ChangeAccessJob>(words::ChangeAccessWords);
         slots.command(&PROPERTIES, shows, Self::show);
         slots.menu_in(MenuAt::Entry, MenuGroup::Info, Placed::FIRST, info_items);
         slots.crumbs::<PropertiesPage>(crumbs);

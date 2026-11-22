@@ -1,8 +1,10 @@
-//! A file or folder's properties, and how much space files and folders
-//! take: what the properties feature's two halves say to each other.
+//! A file or folder's properties, how much space files and folders take,
+//! and the job that changes who may use them: what the properties
+//! feature's two halves say to each other.
 
 #![forbid(unsafe_code)]
 
+mod access;
 mod properties;
 mod size;
 
@@ -11,6 +13,7 @@ use std::sync::Arc;
 
 use nova_files_api::Unreadable;
 
+pub use access::{AccessChange, ChangeAccessJob, ModeChange, Reach, change_access};
 pub use properties::{Account, PathKind, Properties, PropertiesId};
 pub use size::{MeasureId, ScanState, Share, Size};
 

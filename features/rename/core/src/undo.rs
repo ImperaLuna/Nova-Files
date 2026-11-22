@@ -8,6 +8,7 @@ use nova_files_jobs::identity::{self, Identity, same};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::stop::Stop;
 use nova_files_jobs::undo::gone;
+use nova_files_rename_api::{NewFolderJob, RenameJob};
 
 use crate::rename;
 
@@ -21,23 +22,22 @@ pub fn undo_of(operation: &Operation, outcome: &Outcome) -> Option<Undo> {
     if *outcome != Outcome::Done {
         return None;
     }
-    match operation {
-        Operation::Rename { path, name } if path.file_name() != Some(name.as_os_str()) => {
-            let renamed = path.with_file_name(name);
-            let entry = identity::of(&renamed)?;
-            Some(Undo::Rename(
-                renamed,
-                entry,
-                path.file_name()?.to_os_string(),
-            ))
+    if let Some(RenameJob { path, name }) = operation.get::<RenameJob>() {
+        if path.file_name() == Some(name.as_os_str()) {
+            return None;
         }
-        Operation::NewFolder { inside, name } => {
-            let made = inside.join(name);
-            let entry = identity::of(&made)?;
-            Some(Undo::RemoveFolder(made, entry))
-        }
-        _ => None,
+        let renamed = path.with_file_name(name);
+        let entry = identity::of(&renamed)?;
+        return Some(Undo::Rename(
+            renamed,
+            entry,
+            path.file_name()?.to_os_string(),
+        ));
     }
+    let NewFolderJob { inside, name } = operation.get::<NewFolderJob>()?;
+    let made = inside.join(name);
+    let entry = identity::of(&made)?;
+    Some(Undo::RemoveFolder(made, entry))
 }
 
 pub fn run(running: &Running, undo: &Undo) -> Ended {
@@ -77,10 +77,7 @@ mod tests {
     fn a_rename_to_its_own_name_is_nothing_to_undo() {
         let folder = TestFolder::new("undo-same-name");
         let path = folder.file("a", "a");
-        let rename_op = Operation::Rename {
-            path,
-            name: "a".into(),
-        };
+        let rename_op = nova_files_rename_api::rename(path, "a".into());
 
         assert_eq!(undo_of(&rename_op, &Outcome::Done), None);
     }
@@ -89,16 +86,11 @@ mod tests {
     fn a_rename_and_a_new_folder_are_taken_back_only_once_done() {
         let folder = TestFolder::new("undo-one-step");
         let renamed = folder.file("new", "x");
-        let rename_op = Operation::Rename {
-            path: folder.path().join("old"),
-            name: "new".into(),
-        };
+        let rename_op = nova_files_rename_api::rename(folder.path().join("old"), "new".into());
         let made = folder.path().join("made");
         fs::create_dir(&made).unwrap();
-        let folder_op = Operation::NewFolder {
-            inside: folder.path().to_path_buf(),
-            name: "made".into(),
-        };
+        let folder_op =
+            nova_files_rename_api::new_folder(folder.path().to_path_buf(), "made".into());
         let failed = Outcome::Failed {
             path: made.clone(),
             reason: Failure::NameTaken,

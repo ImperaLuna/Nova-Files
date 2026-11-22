@@ -3404,6 +3404,7 @@ dependencies = [
  "nova-files-properties-api",
  "nova-files-properties-core",
  "nova-files-properties-ui",
+ "nova-files-rename-api",
  "nova-files-rename-core",
  "nova-files-rename-ui",
  "nova-files-search-api",
@@ -3857,6 +3858,9 @@ dependencies = [
 [[package]]
 name = "nova-files-rename-api"
 version = "0.1.0"
+dependencies = [
+ "nova-files-api",
+]
 
 [[package]]
 name = "nova-files-rename-core"
@@ -3874,6 +3878,7 @@ version = "0.1.0"
 dependencies = [
  "gpui",
  "nova-files-api",
+ "nova-files-rename-api",
  "nova-files-shell",
 ]
 

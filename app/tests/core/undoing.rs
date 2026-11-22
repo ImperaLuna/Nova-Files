@@ -232,17 +232,11 @@ fn undoing_a_rename_and_a_new_folder() {
     let client = bench.client();
     let renamed = undoable(
         &client,
-        Operation::Rename {
-            path: bench.at("old"),
-            name: "new".into(),
-        },
+        nova_files_rename_api::rename(bench.at("old"), "new".into()),
     );
     let made = undoable(
         &client,
-        Operation::NewFolder {
-            inside: bench.root.clone(),
-            name: "made".into(),
-        },
+        nova_files_rename_api::new_folder(bench.root.clone(), "made".into()),
     );
 
     assert_eq!(undo(&client, renamed), Outcome::Done);
@@ -259,10 +253,7 @@ fn what_changed_since_is_left_alone() {
     let client = bench.client();
     let renamed = undoable(
         &client,
-        Operation::Rename {
-            path: bench.at("old"),
-            name: "new".into(),
-        },
+        nova_files_rename_api::rename(bench.at("old"), "new".into()),
     );
     fs::write(bench.at("other"), "someone else's").unwrap();
     fs::rename(bench.at("other"), bench.at("new")).unwrap();
@@ -306,10 +297,7 @@ fn an_undo_with_nothing_left_to_take_back_finds_nothing() {
     let trashed = undoable(&client, nova_files_trash_api::trash(vec![bench.at("b")]));
     let made = undoable(
         &client,
-        Operation::NewFolder {
-            inside: bench.root.clone(),
-            name: "made".into(),
-        },
+        nova_files_rename_api::new_folder(bench.root.clone(), "made".into()),
     );
     fs::write(bench.at("other"), "someone else's").unwrap();
     fs::rename(bench.at("other"), bench.at("into/a")).unwrap();
@@ -336,10 +324,7 @@ fn an_undo_runs_once_and_a_watcher_hears_what_can_be_undone() {
     let client = bench.client();
     let job = undoable(
         &client,
-        Operation::NewFolder {
-            inside: bench.root.clone(),
-            name: "made".into(),
-        },
+        nova_files_rename_api::new_folder(bench.root.clone(), "made".into()),
     );
     let watcher = bench.client();
 

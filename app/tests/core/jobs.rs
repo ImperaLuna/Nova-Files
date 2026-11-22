@@ -10,10 +10,7 @@ use nova_files_api::{Command, Event, Failure, Operation, Outcome};
 use common::{ANSWER_TIMEOUT, Bench};
 
 fn rename(path: &Path, name: &str) -> Operation {
-    Operation::Rename {
-        path: path.to_owned(),
-        name: name.into(),
-    }
+    nova_files_rename_api::rename(path.to_owned(), name.into())
 }
 
 #[test]
@@ -37,10 +34,7 @@ fn renames_a_folder_and_a_name_that_isnt_utf8() {
     let client = bench.client();
     let odd = OsStr::from_bytes(b"caf\xe9");
 
-    let operation = Operation::Rename {
-        path: bench.at("dir"),
-        name: odd.to_owned(),
-    };
+    let operation = nova_files_rename_api::rename(bench.at("dir"), odd.to_owned());
     let (_, outcome, _) = client.run(operation);
 
     assert_eq!(outcome, Outcome::Done);
@@ -112,10 +106,8 @@ fn renaming_the_root_or_a_vanished_file_fails() {
     let (_, gone, _) = client.run(rename(&bench.at("gone"), "x"));
     let (_, gone_same, _) = client.run(rename(&bench.at("gone"), "gone"));
     let (_, relative, _) = client.run(rename(Path::new("a/b"), "c"));
-    let (_, relative_folder, _) = client.run(Operation::NewFolder {
-        inside: "a".into(),
-        name: "b".into(),
-    });
+    let (_, relative_folder, _) =
+        client.run(nova_files_rename_api::new_folder("a".into(), "b".into()));
 
     assert_eq!(
         root,
@@ -153,10 +145,8 @@ fn makes_a_new_folder_and_never_replaces() {
     let bench = Bench::new("new-folder");
     fs::write(bench.at("taken"), "old").unwrap();
     let client = bench.client();
-    let new_folder = |name: &str| Operation::NewFolder {
-        inside: bench.root.clone(),
-        name: OsString::from(name),
-    };
+    let new_folder =
+        |name: &str| nova_files_rename_api::new_folder(bench.root.clone(), OsString::from(name));
 
     let (first, made, changed) = client.run(new_folder("Photos"));
     let (second, taken, _) = client.run(new_folder("taken"));
@@ -195,10 +185,7 @@ fn every_watching_client_hears_a_job_end_but_only_the_asker_hears_it_start() {
         Event::Pong
     );
 
-    let (job, _, _) = client.run(Operation::NewFolder {
-        inside: bench.root,
-        name: "x".into(),
-    });
+    let (job, _, _) = client.run(nova_files_rename_api::new_folder(bench.root, "x".into()));
 
     let Event::JobFinished { job: heard, .. } = watcher.next() else {
         panic!("the watcher heard the job end, and nothing before");
@@ -215,10 +202,7 @@ fn a_client_that_left_hears_nothing_more() {
     drop(gone.connection);
     let client = bench.client();
 
-    client.run(Operation::NewFolder {
-        inside: bench.root,
-        name: "x".into(),
-    });
+    client.run(nova_files_rename_api::new_folder(bench.root, "x".into()));
 
     assert!(gone_events.try_recv().is_err());
 }
@@ -232,10 +216,7 @@ fn a_client_that_never_watched_hears_nothing() {
     assert_eq!(heard.recv_timeout(ANSWER_TIMEOUT).unwrap(), Event::Pong);
     let client = bench.client();
 
-    client.run(Operation::NewFolder {
-        inside: bench.root,
-        name: "x".into(),
-    });
+    client.run(nova_files_rename_api::new_folder(bench.root, "x".into()));
     bystander.send(Command::Ping);
 
     assert_eq!(heard.recv_timeout(ANSWER_TIMEOUT).unwrap(), Event::Pong);

@@ -180,6 +180,11 @@ mod tests {
         paths: Vec<PathBuf>,
     }
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Named {
+        name: String,
+    }
+
     struct Deletes;
 
     impl JobKind for Renames {
@@ -187,10 +192,8 @@ mod tests {
         type Undo = String;
 
         fn claims(&self, operation: &Operation) -> bool {
-            matches!(
-                operation,
-                Operation::Rename { .. } | Operation::Undo { job: JobId(1) }
-            )
+            matches!(operation, Operation::Undo { job: JobId(1) })
+                || operation.get::<Named>().is_some()
         }
 
         fn run(&self, _: &mut Running, _: &Operation, undo: Option<&String>) -> Ended {
@@ -209,7 +212,7 @@ mod tests {
         fn undoes(&self, operation: &Operation) -> Option<JobId> {
             match operation {
                 Operation::Undo { job } => Some(*job),
-                _ => None,
+                Operation::Feature(_) => None,
             }
         }
 
@@ -240,10 +243,9 @@ mod tests {
     }
 
     fn rename() -> Operation {
-        Operation::Rename {
-            path: PathBuf::from("/a"),
-            name: "b".into(),
-        }
+        Operation::feature(Named {
+            name: "b".to_owned(),
+        })
     }
 
     #[test]

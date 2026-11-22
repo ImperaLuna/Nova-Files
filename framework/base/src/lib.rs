@@ -29,7 +29,7 @@ pub mod uri;
 mod window;
 mod window_state;
 
-pub use access::{AccessChange, MODE_BITS, ModeChange, Reach};
+pub use access::MODE_BITS;
 pub use file_icon::{FILE_ICON_PIXELS, FileIcon, IconFormat, IconKind, ThemeIcon};
 pub use file_type::{FileTypes, glob_matches};
 pub use folder::{

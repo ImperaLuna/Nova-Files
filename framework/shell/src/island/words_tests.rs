@@ -38,34 +38,15 @@ fn the_root_goes_by_a_slash() {
 
 #[test]
 fn each_done_job_has_its_note() {
-    let into = PathBuf::from("/home/a/Music");
     let notes = [
-        (
-            Operation::Rename {
-                path: into.clone(),
-                name: OsString::from("Songs"),
-            },
-            Some("Renamed to Songs"),
-        ),
-        (
-            Operation::NewFolder {
-                inside: into,
-                name: OsString::from("New folder"),
-            },
-            None,
-        ),
+        (sweep(&["a"]), Some("Swept")),
+        (fetch(&["a"], "/b"), None),
+        (Operation::feature(7_u8), None),
         (Operation::Undo { job: JobId(1) }, None),
     ];
     for (operation, note) in notes {
         assert_eq!(
-            finished_note(
-                &operation,
-                &Outcome::Done,
-                None,
-                Tally::default(),
-                &Words::default()
-            )
-            .as_deref(),
+            finished_note(&operation, &Outcome::Done, None, Tally::default(), &words()).as_deref(),
             note,
             "{operation:?}"
         );
@@ -93,24 +74,14 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
         finished_note(&trash, &failed, None, Tally::default(), &words()).as_deref(),
         Some("Couldn't sweep locked: permission denied")
     );
-    let new_folder = Operation::NewFolder {
-        inside: PathBuf::from("/mnt/cd"),
-        name: OsString::from("New folder"),
-    };
+    let new_folder = fetch(&["New folder"], "/mnt/cd");
     let read_only = Outcome::Failed {
         path: PathBuf::from("/mnt/cd/New folder"),
         reason: Failure::ReadOnly,
     };
     assert_eq!(
-        finished_note(
-            &new_folder,
-            &read_only,
-            None,
-            Tally::default(),
-            &Words::default()
-        )
-        .as_deref(),
-        Some("Couldn't make New folder: the drive is read-only")
+        finished_note(&new_folder, &read_only, None, Tally::default(), &words()).as_deref(),
+        Some("Couldn't fetch New folder: the drive is read-only")
     );
     assert_eq!(
         finished_note(&sweep(&[]), &failed, None, Tally::default(), &words()).as_deref(),

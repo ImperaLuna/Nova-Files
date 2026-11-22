@@ -57,18 +57,11 @@ impl Mover for Moves {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nova_files_api::Operation;
 
     #[test]
     fn a_job_that_cannot_start_fails_at_its_first_path() {
-        let rename = Operation::Rename {
-            path: "/a/b".into(),
-            name: "c".into(),
-        };
-        let folder = Operation::NewFolder {
-            inside: "/a".into(),
-            name: "new".into(),
-        };
+        let rename = nova_files_rename_api::rename("/a/b".into(), "c".into());
+        let folder = nova_files_rename_api::new_folder("/a".into(), "new".into());
         let copy = |sources: Vec<PathBuf>| nova_files_transfer_api::copy(sources, "/into".into());
 
         let kinds = kinds(Trashes::default(), None);

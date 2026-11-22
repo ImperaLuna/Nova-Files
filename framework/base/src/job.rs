@@ -13,10 +13,7 @@
 //! [`Event::JobStarted`]: crate::Event::JobStarted
 
 use std::any::Any;
-use std::ffi::OsString;
 use std::path::PathBuf;
-
-use crate::access::AccessChange;
 
 mod carried;
 
@@ -34,22 +31,6 @@ pub struct JobId(pub u64);
 /// What a job does to the disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Operation {
-    /// Give the file or folder at `path` the name `name`, in the same
-    /// folder. A name already taken fails the job; nothing is replaced.
-    Rename { path: PathBuf, name: OsString },
-    /// Make an empty folder named `name` in the folder `inside`. A name
-    /// already taken fails the job.
-    NewFolder { inside: PathBuf, name: OsString },
-    /// Change the owner, group or permissions of each of `paths`, and,
-    /// as `change` reaches, of what the folders among them hold. A link
-    /// is never changed or followed. Running it again does nothing more,
-    /// so a crash leaves no job to resume: the user may simply ask again.
-    /// Its progress counts what it looked at, without totals: it changes
-    /// as it goes rather than looking at everything first.
-    ChangeAccess {
-        paths: Vec<PathBuf>,
-        change: AccessChange,
-    },
     /// Undo job `job`, one [`Event::Undoable`] named: copies go to the
     /// trash, moves go back, trashed entries are restored, restored ones
     /// go back to the trash, a rename is renamed back and a new folder
@@ -72,7 +53,7 @@ impl Operation {
     pub fn get<T: Any>(&self) -> Option<&T> {
         match self {
             Self::Feature(job) => job.get(),
-            _ => None,
+            Self::Undo { .. } => None,
         }
     }
 }

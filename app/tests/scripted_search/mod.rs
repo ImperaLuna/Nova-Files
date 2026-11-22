@@ -646,10 +646,10 @@ fn renaming_a_result_renames_it_where_it_is(cx: &mut TestAppContext) {
 
     assert_eq!(
         started(&mut core),
-        [Operation::Rename {
-            path: PathBuf::from("/docs/report.pdf"),
-            name: "plan.pdf".into(),
-        }]
+        [nova_files_rename_api::rename(
+            PathBuf::from("/docs/report.pdf"),
+            "plan.pdf".into()
+        )]
     );
 }
 

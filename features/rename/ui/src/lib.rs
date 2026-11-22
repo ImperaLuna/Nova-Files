@@ -14,8 +14,11 @@ use nova_files_shell::{
 };
 
 mod name;
+mod words;
 
 use name::{free_name, renamed};
+use nova_files_rename_api::{NewFolderJob, RenameJob, new_folder, rename};
+use words::{NewFolderWords, RenameWords};
 
 pub use nova_files_shell::actions::{NewFolder, RenameSelected};
 
@@ -157,7 +160,7 @@ impl RenamePart {
             });
         }
         self.host.island.update(cx, |island, cx| {
-            island.start_job(Operation::Rename { path, name }, cx);
+            island.start_job(rename(path, name), cx);
         });
     }
 
@@ -173,7 +176,7 @@ impl RenamePart {
         self.made
             .wait(&self.host, (inside.join(&name), made_folder), window, cx);
         self.host.island.update(cx, |island, cx| {
-            island.start_job(Operation::NewFolder { inside, name }, cx);
+            island.start_job(new_folder(inside, name), cx);
         });
     }
 
@@ -247,6 +250,8 @@ impl Part for RenamePart {
 
     fn slots(slots: &mut Slots<Self>) {
         slots.command(&NEW_FOLDER, anywhere, Self::new_folder);
+        slots.job_words::<RenameJob>(RenameWords);
+        slots.job_words::<NewFolderJob>(NewFolderWords);
         slots.command(&RENAME, anywhere, Self::rename_selected);
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::SECOND, rename_item);
         slots.menu_in(
@@ -269,8 +274,7 @@ impl Part for RenamePart {
 }
 
 fn made_folder(operation: &Operation) -> Option<PathBuf> {
-    match operation {
-        Operation::NewFolder { inside, name } => Some(inside.join(name)),
-        _ => None,
-    }
+    operation
+        .get::<NewFolderJob>()
+        .map(|job| job.inside.join(&job.name))
 }
