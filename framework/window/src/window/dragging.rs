@@ -1,14 +1,15 @@
 // GPUI fixes a drag's value when the row is drawn, before any drag starts.
-// https://github.com/ImperaLuna/zed/tree/2d5e9a92499dba81148304d079cd4ef00e54d0c5/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/939cf372f290301dbfbb783fe91fee4d08cf88de/crates/gpui
 use std::cell::OnceCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui::{
-    App, AppContext as _, Context, Div, Entity, InteractiveElement as _, IntoElement, Modifiers,
-    ParentElement as _, Render, SharedString, Styled as _, WeakEntity, Window, div,
+    App, AppContext as _, Context, Div, Entity, ExternalDragPayload, FileDragPaths,
+    InteractiveElement as _, IntoElement, Modifiers, ParentElement as _, Render, SharedString,
+    Styled as _, WeakEntity, Window, div,
 };
-use nova_files_api::{EntryId, ListingId};
+use nova_files_api::{EntryId, EntryKind, ListingId};
 use nova_files_shell::{DropOver, WindowParts};
 
 use super::MainWindow;
@@ -29,12 +30,17 @@ pub struct DraggedRow {
 #[derive(Debug, Default)]
 pub struct Drag {
     sources: OnceCell<Sources>,
+    outward: OnceCell<FileDragPaths>,
     pub(super) aims: Aims,
 }
 
 impl Drag {
     pub fn sources(&self) -> Option<&Sources> {
         self.sources.get()
+    }
+
+    pub fn outward(&self) -> Option<ExternalDragPayload> {
+        self.outward.get().cloned().map(ExternalDragPayload::Files)
     }
 
     pub fn says(
@@ -127,14 +133,18 @@ impl MainWindow {
         if !self.selects((row.listing, row.id)) {
             self.reselect(|_, _| Some(Selection::only(row.listing, row.id)), cx);
         }
-        let paths = self.selected_full_paths();
+        let selected = self.selected_full_paths();
+        let paths: Vec<PathBuf> = selected.iter().map(|(path, _)| path.clone()).collect();
         let what = island::what(&paths).into();
+        if !selected.is_empty() {
+            row.drag.outward.set(FileDragPaths::new(selected)).ok();
+        }
         row.drag.sources.set(Sources::new(paths)).ok();
         let (drag, origin) = (Rc::clone(&row.drag), cx.entity().downgrade());
         cx.new(|_| DragChip { what, drag, origin })
     }
 
-    fn selected_full_paths(&self) -> Vec<PathBuf> {
+    fn selected_full_paths(&self) -> Vec<(PathBuf, bool)> {
         let (Some(listing), Some((id, ids))) = (&self.listing, self.selection()) else {
             return Vec::new();
         };
@@ -143,7 +153,7 @@ impl MainWindow {
         }
         ids.into_iter()
             .filter_map(|id| entry_at(&listing.entries, id))
-            .map(|entry| listing.path_of(entry))
+            .map(|entry| (listing.path_of(entry), entry.kind == EntryKind::Folder))
             .collect()
     }
 

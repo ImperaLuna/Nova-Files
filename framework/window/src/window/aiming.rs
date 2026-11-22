@@ -73,6 +73,10 @@ impl MainWindow {
         Some(says.to_string())
     }
 
+    pub fn drag_out(&self) -> Option<gpui::ExternalDragPayload> {
+        self.drag_over()?.outward()
+    }
+
     pub(crate) fn drag_over(&self) -> Option<Rc<Drag>> {
         self.drop_asks.over.upgrade()
     }

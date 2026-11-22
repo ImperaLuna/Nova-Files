@@ -137,9 +137,11 @@ pub fn drags(
             cx.listener(|this, _: &MouseDownEvent, _, _| this.pressed_name = true),
         )
         .when_some(row, |handle, row| {
-            handle.on_drag(row, move |row, _, _, cx| {
-                window.update(cx, |this, cx| this.drag_started(row, cx))
-            })
+            handle
+                .on_drag(row, move |row, _, _, cx| {
+                    window.update(cx, |this, cx| this.drag_started(row, cx))
+                })
+                .external_drag_payload(|row: &DraggedRow, _, _| row.drag().outward())
         })
 }
 
