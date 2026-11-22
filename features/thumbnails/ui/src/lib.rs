@@ -46,7 +46,10 @@ impl ThumbnailsPart {
             entry,
             size,
             png,
-        } = event;
+        } = event
+        else {
+            return;
+        };
         if let Ok(index) = usize::try_from(entry.0)
             && size == ThumbnailSize::to_fill(self.side)
             && self.wanted.contains(&index)

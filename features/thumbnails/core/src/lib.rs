@@ -2,6 +2,7 @@
 
 mod cache;
 mod md5;
+mod peek;
 #[cfg(test)]
 mod tests;
 
@@ -15,12 +16,12 @@ use std::thread;
 use std::time::UNIX_EPOCH;
 
 use nova_files_api::{
-    EntryId, EntryKind, EventSink, Listing, ListingId, MAX_ROWS, ThumbnailSize, uri,
+    EntryId, EntryKind, EventSink, FileTypes, Listing, ListingId, MAX_ROWS, ThumbnailSize, uri,
 };
 use nova_files_disk::home;
 use nova_files_entries_core::RowWatch;
 use nova_files_thumbnailer_launch as launch;
-use nova_files_thumbnails_api::Event;
+use nova_files_thumbnails_api::{Event, Peeked};
 
 const THUMBNAILS_FOLDER: &str = "thumbnails";
 const HELPER_NAME: &str = "nova-files-thumbnailer";
@@ -76,12 +77,19 @@ impl State {
 }
 
 impl Queue {
-    pub fn start(setup: Thumbnails, events: Arc<dyn EventSink>) -> Option<Self> {
+    pub fn start(
+        setup: Thumbnails,
+        events: Arc<dyn EventSink>,
+        types: Arc<dyn FileTypes>,
+    ) -> Option<Self> {
         let shared = Arc::new(Shared {
             state: Mutex::new(State::default()),
             wake: Condvar::new(),
         });
-        let setup = Arc::new(setup);
+        let setup = Arc::new(Setup {
+            paths: setup,
+            types,
+        });
         for events in std::iter::repeat_n(events, WORKERS) {
             let worker = Arc::clone(&shared);
             let setup = Arc::clone(&setup);
@@ -181,11 +189,7 @@ impl Shared {
                     .wanted
                     .clone()
                     .filter(|index| {
-                        !state.done.contains(index)
-                            && shown
-                                .entries
-                                .get(*index)
-                                .is_some_and(|entry| entry.kind == EntryKind::File)
+                        !state.done.contains(index) && shown.entries.get(*index).is_some()
                     })
                     .take(BATCH)
                     .collect();
@@ -212,75 +216,155 @@ struct Batch {
     entries: Vec<usize>,
 }
 
-fn work(shared: &Shared, setup: &Thumbnails, events: &dyn EventSink) {
+struct Setup {
+    paths: Thumbnails,
+    types: Arc<dyn FileTypes>,
+}
+
+fn work(shared: &Shared, setup: &Setup, events: &dyn EventSink) {
     while let Some(Batch {
         shown,
         size,
         entries: batch,
     }) = shared.next_batch()
     {
-        let answer = |index: usize, png: Vec<u8>| {
+        let (folders, files): (Vec<usize>, Vec<usize>) = batch.into_iter().partition(|index| {
+            shown
+                .entries
+                .get(*index)
+                .is_some_and(|entry| entry.kind == EntryKind::Folder)
+        });
+        let wanted = |index: usize| shared.still_wanted(&shown, index, size);
+        let mut client_here = thumbnails((&shown, size), &files, setup, &wanted, |index, png| {
             let event = || {
-                let entry = u32::try_from(index).ok()?;
                 Some(Event::Thumbnail {
                     id: shown.id,
-                    entry: EntryId(entry),
+                    entry: EntryId(u32::try_from(index).ok()?),
                     size,
                     png: png.into(),
                 })
             };
             shared.deliver_if_wanted((&shown, index, size), event, events)
-        };
-        let wanted = |index: usize| shared.still_wanted(&shown, index, size);
-        let sized = cache::sized(&setup.folder, size);
-        let failed = cache::failed(&setup.folder);
-        let mut misses = Vec::new();
-        for index in batch {
-            if !wanted(index) {
-                continue;
-            }
-            let Some(job) = job_for(&shown, index) else {
-                continue;
-            };
-            if !wanted(index) {
-                continue;
-            }
-            if let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime) {
-                if !answer(index, png) {
-                    return;
-                }
-            } else if wanted(index)
-                && cache::read_if_current(&failed, &job.name, job.mtime).is_none()
-            {
-                misses.push((index, job));
-            }
-        }
-        misses.retain(|(index, _)| wanted(*index));
-        if misses.is_empty() {
-            continue;
-        }
-        let jobs: Vec<launch::Job> = misses.iter().map(|(_, job)| job.clone()).collect();
-        let mut client_here = true;
-        launch::run(&setup.helper, &setup.folder, size, &jobs, |made| {
-            let Some((index, job)) = misses.get(made) else {
-                return client_here;
-            };
-            if wanted(*index)
-                && let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime)
-            {
-                client_here = answer(*index, png);
-            }
-            client_here
         });
+        for index in folders {
+            if !client_here {
+                return;
+            }
+            if !wanted(index) {
+                continue;
+            }
+            let Some(peeked) = peek_into(&shown, index, size, setup, || !wanted(index)) else {
+                continue;
+            };
+            let event = || {
+                Some(Event::Peek {
+                    id: shown.id,
+                    entry: EntryId(u32::try_from(index).ok()?),
+                    size,
+                    peeked,
+                })
+            };
+            client_here = shared.deliver_if_wanted((&shown, index, size), event, events);
+        }
         if !client_here {
             return;
         }
     }
 }
 
-fn job_for(shown: &Listing, index: usize) -> Option<launch::Job> {
-    let entry = shown.entries.get(index)?;
-    let source = shown.path_of(entry);
+fn thumbnails(
+    (shown, size): (&Listing, ThumbnailSize),
+    indexes: &[usize],
+    setup: &Setup,
+    wanted: &dyn Fn(usize) -> bool,
+    answer: impl FnMut(usize, Vec<u8>) -> bool,
+) -> bool {
+    let jobs = indexes
+        .iter()
+        .filter(|index| wanted(**index))
+        .filter_map(|index| {
+            let entry = shown.entries.get(*index)?;
+            Some((*index, job_at(shown.path_of(entry))?))
+        })
+        .collect();
+    make((&setup.paths, size), jobs, wanted, answer)
+}
+
+fn peek_into(
+    shown: &Listing,
+    index: usize,
+    size: ThumbnailSize,
+    setup: &Setup,
+    stop: impl Fn() -> bool,
+) -> Option<Vec<Peeked>> {
+    let folder = shown.path_of(shown.entries.get(index)?);
+    let picks = peek::look(&folder, setup.types.as_ref(), &stop)?;
+    let mut peeked: Vec<Peeked> = picks
+        .iter()
+        .map(|pick| Peeked {
+            name: pick.entry.name.clone(),
+            kind: pick.entry.kind,
+            png: None,
+        })
+        .collect();
+    let jobs = picks
+        .iter()
+        .enumerate()
+        .filter(|(_, pick)| pick.picture && !stop())
+        .filter_map(|(at, pick)| Some((at, job_at(folder.join(&pick.entry.name))?)))
+        .collect();
+    let going = |_: usize| !stop();
+    make((&setup.paths, size), jobs, &going, |at, png| {
+        if let Some(shown) = peeked.get_mut(at) {
+            shown.png = Some(png.into());
+        }
+        true
+    });
+    (!stop()).then_some(peeked)
+}
+
+fn make(
+    (paths, size): (&Thumbnails, ThumbnailSize),
+    jobs: Vec<(usize, launch::Job)>,
+    wanted: &dyn Fn(usize) -> bool,
+    mut answer: impl FnMut(usize, Vec<u8>) -> bool,
+) -> bool {
+    let sized = cache::sized(&paths.folder, size);
+    let failed = cache::failed(&paths.folder);
+    let mut misses = Vec::new();
+    for (at, job) in jobs {
+        if !wanted(at) {
+            continue;
+        }
+        if let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime) {
+            if !answer(at, png) {
+                return false;
+            }
+        } else if wanted(at) && cache::read_if_current(&failed, &job.name, job.mtime).is_none() {
+            misses.push((at, job));
+        }
+    }
+    misses.retain(|(at, _)| wanted(*at));
+    if misses.is_empty() {
+        return true;
+    }
+    let jobs: Vec<launch::Job> = misses.iter().map(|(_, job)| job.clone()).collect();
+    let mut client_here = true;
+    launch::run(&paths.helper, &paths.folder, size, &jobs, |made| {
+        let Some((at, job)) = misses.get(made) else {
+            return client_here;
+        };
+        if wanted(*at)
+            && let Some(png) = cache::read_if_current(&sized, &job.name, job.mtime)
+        {
+            client_here = answer(*at, png);
+        }
+        client_here
+    });
+    client_here
+}
+
+fn job_at(source: PathBuf) -> Option<launch::Job> {
     let mtime = fs::metadata(&source)
         .ok()?
         .modified()

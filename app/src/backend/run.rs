@@ -280,7 +280,8 @@ impl Served for Setup {
     type Client = Client;
 
     fn client(&self, events: Arc<dyn EventSink>) -> Client {
-        Client::new(events, self.thumbnails.as_ref(), &self.file_icons)
+        let types = Arc::new(LazyMimes(Arc::clone(&self.mime_types)));
+        Client::new(events, self.thumbnails.as_ref(), &self.file_icons, types)
     }
 
     fn busy(&self) -> bool {
