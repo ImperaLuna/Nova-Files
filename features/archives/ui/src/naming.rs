@@ -2,7 +2,8 @@ use std::ffi::{OsStr, OsString};
 
 use nova_files_api::archive::{SEVEN_ENDINGS, ending};
 use nova_files_api::numbered::{Naming, first_free, stem};
-use nova_files_api::{Entry, EntryKind, Packing};
+use nova_files_api::{Entry, EntryKind};
+use nova_files_archives_api::Packing;
 
 pub fn opens(entry: &Entry, seven: bool) -> bool {
     entry.kind == EntryKind::File

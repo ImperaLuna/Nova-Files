@@ -27,11 +27,6 @@ impl<K: JobKind<Op = Operation>> Jobs<K> {
                 answer,
                 scope,
             } => self.answer(job, &conflict, answer, scope),
-            Command::GivePassword {
-                job,
-                conflict,
-                password,
-            } => self.give_password(job, &conflict, password),
             Command::Reply {
                 job,
                 conflict,

@@ -1,8 +1,8 @@
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::{ConflictKind, Failure, Outcome, Packing};
+use nova_files_api::{Failure, Outcome};
+use nova_files_archives_api::{Compress, PASSWORD_TO_LOCK};
 
 use crate::extract::{ask_password, steer};
 use nova_files_jobs::Ended;
@@ -14,20 +14,11 @@ use nova_files_rename_api::is_plain_name;
 
 use crate::{ArchiveFailure, Archiver, Recipe};
 
-pub struct Asked<'a> {
-    pub sources: &'a [PathBuf],
-    pub into: &'a Path,
-    pub name: &'a OsStr,
-    pub packing: Packing,
-    pub level: u8,
-    pub locked: bool,
-}
-
-pub fn compress(running: &mut Running, archiver: Option<&Archiver>, asked: &Asked<'_>) -> Ended {
+pub fn compress(running: &mut Running, archiver: Option<&Archiver>, asked: &Compress) -> Ended {
     match make(running, archiver, asked) {
         Ok(Some(made)) => {
             running.steps.insert(made.0, made.1);
-            (Outcome::Done, vec![asked.into.to_path_buf()])
+            (Outcome::Done, vec![asked.into.clone()])
         }
         Ok(None) => (Outcome::Cancelled, Vec::new()),
         Err(stop) => (stop.outcome(), Vec::new()),
@@ -37,10 +28,10 @@ pub fn compress(running: &mut Running, archiver: Option<&Archiver>, asked: &Aske
 fn make(
     running: &mut Running,
     archiver: Option<&Archiver>,
-    asked: &Asked<'_>,
+    asked: &Compress,
 ) -> Result<Option<(PathBuf, PathBuf)>, Stop> {
-    let target = asked.into.join(asked.name);
-    if !asked.into.is_absolute() || !is_plain_name(asked.name) {
+    let target = asked.into.join(&asked.name);
+    if !asked.into.is_absolute() || !is_plain_name(&asked.name) {
         return Err(Stop::because(&target, Failure::InvalidName));
     }
     if asked.locked && !asked.packing.locks() {
@@ -50,7 +41,7 @@ fn make(
         .sources
         .first()
         .ok_or_else(|| Stop::because(&target, Failure::NotFound))?;
-    for source in asked.sources {
+    for source in &asked.sources {
         if !source.is_absolute() || source.file_name().is_none() {
             return Err(Stop::because(source, Failure::InvalidName));
         }
@@ -59,10 +50,10 @@ fn make(
             .map_err(|error| Stop::at(source, &error))?;
     }
     let archiver = archiver.ok_or_else(|| Stop::because(&target, Failure::Other))?;
-    let (bytes, items) = totals(asked.sources, &running.shared.control)?;
+    let (bytes, items) = totals(&asked.sources, &running.shared.control)?;
     running.reporter.planned(bytes, items);
     let password = if asked.locked {
-        let Some(password) = locking_password(running, first, asked.into)? else {
+        let Some(password) = locking_password(running, first, &asked.into)? else {
             return Ok(None);
         };
         Some(password)
@@ -78,7 +69,7 @@ fn make(
         level: asked.level,
         password: password.as_deref(),
     };
-    let made = archiver.compress(asked.sources, &part, &recipe, |told| steer(running, told));
+    let made = archiver.compress(&asked.sources, &part, &recipe, |told| steer(running, told));
     if let Err(failure) = made {
         fs::remove_file(&part).ok();
         return Err(stop_for(failure, first, &target));
@@ -98,7 +89,7 @@ fn locking_password(
     into: &Path,
 ) -> Result<Option<String>, Stop> {
     loop {
-        match ask_password(running, ConflictKind::PasswordNeeded, first, into)? {
+        match ask_password(running, &PASSWORD_TO_LOCK, first, into)? {
             Some(password) if password.is_empty() => {}
             given => return Ok(given),
         }

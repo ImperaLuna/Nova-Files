@@ -85,19 +85,6 @@ pub enum Command {
         answer: Answer,
         scope: Scope,
     },
-    /// Answer `conflict`, a [`ConflictKind::PasswordNeeded`] or
-    /// [`ConflictKind::PasswordWrong`] that job `job` holds at, with
-    /// `password`: the job tries again with it. The password is never
-    /// told to other clients or written to disk; every client hears
-    /// [`Event::ConflictAnswered`] with [`Answer::Retry`].
-    ///
-    /// [`ConflictKind::PasswordNeeded`]: crate::ConflictKind::PasswordNeeded
-    /// [`ConflictKind::PasswordWrong`]: crate::ConflictKind::PasswordWrong
-    GivePassword {
-        job: JobId,
-        conflict: Conflict,
-        password: String,
-    },
     /// Answer `conflict`, a question of a feature's own
     /// ([`ConflictKind::Asked`]) that job `job` holds at, with `reply`,
     /// which only that feature reads: the job tries again with it. The

@@ -332,19 +332,6 @@ impl<K: JobKind<Op = Operation>> Jobs<K> {
         drop(running);
     }
 
-    pub fn give_password(&self, job: JobId, conflict: &Conflict, password: String) {
-        let running = lock(&self.running);
-        if let Some(shared) = running.get(&job) {
-            shared.control.give_password(conflict, password, || {
-                self.audience.tell(&Event::ConflictAnswered {
-                    job,
-                    answer: Answer::Retry,
-                });
-            });
-        }
-        drop(running);
-    }
-
     pub fn reply(&self, job: JobId, conflict: &Conflict, reply: Carried) {
         let running = lock(&self.running);
         if let Some(shared) = running.get(&job) {

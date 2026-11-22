@@ -87,23 +87,6 @@ impl Control {
         self.settle(conflict, (answer, scope), None, heard)
     }
 
-    pub fn give_password(
-        &self,
-        conflict: &Conflict,
-        password: String,
-        heard: impl FnOnce(),
-    ) -> bool {
-        matches!(
-            conflict.kind,
-            ConflictKind::PasswordNeeded | ConflictKind::PasswordWrong
-        ) && self.settle(
-            conflict,
-            (Answer::Retry, Scope::ThisOne),
-            Some(Carried::new(password)),
-            heard,
-        )
-    }
-
     pub fn reply(&self, conflict: &Conflict, reply: Carried, heard: impl FnOnce()) -> bool {
         matches!(conflict.kind, ConflictKind::Asked(_))
             && self.settle(
@@ -141,10 +124,6 @@ impl Control {
         };
         self.changed.notify_all();
         taken
-    }
-
-    pub fn take_password(&self) -> Option<String> {
-        self.take_reply()?.get::<String>().cloned()
     }
 
     pub fn take_reply(&self) -> Option<Carried> {

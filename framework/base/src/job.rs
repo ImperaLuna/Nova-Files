@@ -88,32 +88,6 @@ pub enum Operation {
     ///
     /// [`Event::Undoable`]: crate::Event::Undoable
     Undo { job: JobId },
-    /// Unpack the archive `archive` (zip or tar, plain or compressed) into
-    /// the folder `into`, as `to` says. It unpacks first into a hidden
-    /// folder in `into`, then moves what it unpacked into place as
-    /// [`Operation::Move`] does, asking about names already taken. A
-    /// locked archive is a [`ConflictKind::PasswordNeeded`] conflict.
-    Extract {
-        archive: PathBuf,
-        into: PathBuf,
-        to: ExtractTo,
-    },
-    /// Make an archive named `name` in the folder `into` of `sources`,
-    /// each under its own name, a folder with all it holds, packed as
-    /// `packing` at `level`, from 1, fastest, to 9, smallest. A name
-    /// already taken gives the archive the next free name, as "keep
-    /// both" does. With `locked`, the job first holds at a
-    /// [`ConflictKind::PasswordNeeded`] for the password that locks a
-    /// zip's or a 7z's files; a tarball can't be locked, and asking for
-    /// one fails with [`Failure::Unsupported`].
-    Compress {
-        sources: Vec<PathBuf>,
-        into: PathBuf,
-        name: OsString,
-        packing: Packing,
-        level: u8,
-        locked: bool,
-    },
     /// A job one feature defines and runs: the feature's own type, which
     /// only that feature and the features that use its api open.
     Feature(Carried),
@@ -132,35 +106,6 @@ impl Operation {
             _ => None,
         }
     }
-}
-
-/// What kind of archive a compress makes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Packing {
-    /// `.zip`, compressed with Deflate, which every system opens.
-    ZipDeflate,
-    /// `.zip`, compressed with Zstandard: faster and smaller, but older
-    /// tools can't open it.
-    ZipZstd,
-    /// `.tar.zst`.
-    TarZstd,
-    /// `.tar.gz`.
-    TarGzip,
-    /// `.tar.xz`.
-    TarXz,
-    /// `.7z`, made by the installed 7-Zip: the smallest, and a password
-    /// hides its names too.
-    SevenZip,
-}
-
-/// Where an archive's entries go.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExtractTo {
-    /// Straight into the folder when the archive holds one entry at its
-    /// top; else into a new folder there named after the archive.
-    Here,
-    /// Straight into the folder.
-    Inside,
 }
 
 /// How far a job has got. Totals are known once the job has looked at
@@ -273,14 +218,6 @@ pub enum ConflictKind {
     NoTrash,
     /// The source is in a trash already, so only a delete takes it further.
     InTrash,
-    /// The archive is locked. A client answers with a password
-    /// ([`Command::GivePassword`]), or skips it.
-    ///
-    /// [`Command::GivePassword`]: crate::Command::GivePassword
-    PasswordNeeded,
-    /// The password given doesn't open the archive; asked as
-    /// [`ConflictKind::PasswordNeeded`] is.
-    PasswordWrong,
     /// A question of the job's own feature, which that feature words and
     /// answers. A client answers it with [`Command::Reply`] or one of the
     /// answers the question takes.
@@ -354,12 +291,7 @@ impl ConflictKind {
             ),
             Answer::Retry => matches!(
                 self,
-                Self::NoSpace
-                    | Self::PermissionDenied
-                    | Self::SourceChanged
-                    | Self::NoTrash
-                    | Self::PasswordNeeded
-                    | Self::PasswordWrong
+                Self::NoSpace | Self::PermissionDenied | Self::SourceChanged | Self::NoTrash
             ),
         }
     }

@@ -38,8 +38,8 @@ pub use folder::{
 pub use folder_sizes::FolderSizes;
 pub use hidden_files::HiddenFiles;
 pub use job::{
-    Answer, Carried, Conflict, ConflictKind, ExtractTo, Failure, JobId, JobTag, Operation, Outcome,
-    Packing, Progress, Question, Scope, Tally,
+    Answer, Carried, Conflict, ConflictKind, Failure, JobId, JobTag, Operation, Outcome, Progress,
+    Question, Scope, Tally,
 };
 pub use message::{Command, Event, MAX_ROWS};
 pub use nova_files_messages::{

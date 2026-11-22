@@ -13,8 +13,6 @@ const ORDER: [Answer; 5] = [
 const ALREADY_HERE: &str = " is already here";
 const NO_TRASH: &str = "its drive has no trash";
 const IN_TRASH: &str = "it is in the Trash already";
-const PASSWORD_NEEDED: &str = "needs a password";
-const PASSWORD_WRONG: &str = "wrong password";
 const WAITING: &str = "waiting for an answer";
 
 pub fn words(conflict: &Conflict) -> (String, String) {
@@ -30,8 +28,6 @@ pub fn words(conflict: &Conflict) -> (String, String) {
         ConflictKind::Unsupported => failure(Failure::Unsupported),
         ConflictKind::NoTrash => NO_TRASH,
         ConflictKind::InTrash => IN_TRASH,
-        ConflictKind::PasswordNeeded => PASSWORD_NEEDED,
-        ConflictKind::PasswordWrong => PASSWORD_WRONG,
         ConflictKind::Asked(_) => WAITING,
     };
     (name_of(&conflict.source), format!(": {reason}"))

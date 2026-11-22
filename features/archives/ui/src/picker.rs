@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
 };
-use nova_files_api::Packing;
+use nova_files_archives_api::Packing;
 use nova_files_shell::Scene;
 use nova_files_shell::island::look::{Width, chevron, divider, floating_at, label, square, worded};
 use nova_files_shell::theme::{Colors, size, text};

@@ -128,25 +128,6 @@ fn a_raised_conflict_waits_for_its_answer_or_a_cancel() {
 }
 
 #[test]
-fn a_password_answers_only_a_password_conflict() {
-    let control = Control::default();
-    let space = conflict(ConflictKind::NoSpace);
-    control.raise(space.clone());
-    assert!(!control.give_password(&space, "pw".to_owned(), || {}));
-    assert!(control.answer(&space, Answer::Retry, Scope::ThisOne, || {}));
-    assert_eq!(control.take_password(), None);
-
-    let needed = conflict(ConflictKind::PasswordNeeded);
-    control.raise(needed.clone());
-    let mut heard = false;
-    assert!(control.give_password(&needed, "pw".to_owned(), || heard = true));
-    assert!(heard);
-    assert_eq!(control.answer_to(), Ok((Answer::Retry, Scope::ThisOne)));
-    assert_eq!(control.take_password().as_deref(), Some("pw"));
-    assert_eq!(control.take_password(), None);
-}
-
-#[test]
 fn says_whether_it_was_cancelled() {
     let control = Control::default();
     assert!(!control.cancelled());

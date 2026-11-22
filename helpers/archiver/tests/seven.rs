@@ -13,7 +13,10 @@ use std::path::{Path, PathBuf};
 
 use common::Bench;
 use nova_files::{ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow, Recipe};
-use nova_files_api::{Command, ConflictKind, Event, ExtractTo, Operation, Outcome, Packing, Tally};
+use nova_files_api::{Carried, Command, ConflictKind, Event, Operation, Outcome, Tally};
+use nova_files_archives_api::{
+    Compress, Extract, ExtractTo, PASSWORD_NEEDED, PASSWORD_WRONG, Packing, Password,
+};
 use nova_files_test_folder::TestFolder;
 
 const MANY: u32 = 500;
@@ -262,40 +265,40 @@ fn a_job_asks_for_the_password_a_locked_7z_needs_to_list() {
     let bench = Bench::new("seven-job");
     fs::create_dir(bench.at("docs")).unwrap();
     fs::write(bench.at("docs/a.txt"), b"a").unwrap();
-    let job = bench.start(Operation::Compress {
+    let job = bench.start(Operation::feature(Compress {
         sources: vec![bench.at("docs")],
         into: bench.at("into"),
         name: "docs.7z".into(),
         packing: Packing::SevenZip,
         level: 5,
         locked: true,
-    });
+    }));
     let needed = bench.held(job);
-    bench.send(Command::GivePassword {
+    bench.send(Command::Reply {
         job,
         conflict: needed,
-        password: "pw".to_owned(),
+        reply: Carried::new(Password("pw".to_owned())),
     });
     assert_eq!(bench.finished(job), (Outcome::Done, Tally::default()));
     fs::rename(bench.at("into/docs.7z"), bench.at("docs.7z")).unwrap();
-    let job = bench.start(Operation::Extract {
+    let job = bench.start(Operation::feature(Extract {
         archive: bench.at("docs.7z"),
         into: bench.at("into"),
         to: ExtractTo::Here,
-    });
+    }));
     let needed = bench.held(job);
-    assert_eq!(needed.kind, ConflictKind::PasswordNeeded);
-    bench.send(Command::GivePassword {
+    assert_eq!(needed.kind, ConflictKind::Asked(&PASSWORD_NEEDED));
+    bench.send(Command::Reply {
         job,
         conflict: needed,
-        password: "nope".to_owned(),
+        reply: Carried::new(Password("nope".to_owned())),
     });
     let wrong = bench.held(job);
-    assert_eq!(wrong.kind, ConflictKind::PasswordWrong);
-    bench.send(Command::GivePassword {
+    assert_eq!(wrong.kind, ConflictKind::Asked(&PASSWORD_WRONG));
+    bench.send(Command::Reply {
         job,
         conflict: wrong,
-        password: "pw".to_owned(),
+        reply: Carried::new(Password("pw".to_owned())),
     });
     let mut planned = None;
     loop {

@@ -6,7 +6,8 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 
 use nova_files_api::archive::ending;
-use nova_files_api::{Conflict, ConflictKind, ExtractTo, Failure, Outcome};
+use nova_files_api::{Conflict, ConflictKind, Failure, Outcome, Question};
+use nova_files_archives_api::{ExtractTo, PASSWORD_NEEDED, PASSWORD_WRONG, Password};
 
 use crate::{ArchiveEntry, ArchiveFailure, ArchiveKind, Archiver, Extracting, Flow};
 use nova_files_jobs::Ended;
@@ -85,8 +86,7 @@ fn unpack(
     let (bytes, items) = totals(&entries);
     running.reporter.planned(bytes, items);
     if password.is_none() && entries.iter().any(|entry| entry.locked) {
-        let Some(given) = ask_password(running, ConflictKind::PasswordNeeded, archive, into)?
-        else {
+        let Some(given) = ask_password(running, &PASSWORD_NEEDED, archive, into)? else {
             return Ok(None);
         };
         password = Some(given);
@@ -101,8 +101,8 @@ fn unpack(
         );
         let kind = match unpacked {
             Ok(()) => return Ok(Some(staging)),
-            Err(ArchiveFailure::NeedsPassword) => ConflictKind::PasswordNeeded,
-            Err(ArchiveFailure::WrongPassword) => ConflictKind::PasswordWrong,
+            Err(ArchiveFailure::NeedsPassword) => &PASSWORD_NEEDED,
+            Err(ArchiveFailure::WrongPassword) => &PASSWORD_WRONG,
             Err(failure) => {
                 clear(&staging.root);
                 return Err(stop_for(failure, archive, into));
@@ -132,8 +132,8 @@ fn listed(
         let stopped = || control.cancelled();
         let kind = match archiver.list_locked(archive, password.as_deref(), &stopped) {
             Ok(entries) => return Ok(Some((entries, password))),
-            Err(ArchiveFailure::NeedsPassword) => ConflictKind::PasswordNeeded,
-            Err(ArchiveFailure::WrongPassword) => ConflictKind::PasswordWrong,
+            Err(ArchiveFailure::NeedsPassword) => &PASSWORD_NEEDED,
+            Err(ArchiveFailure::WrongPassword) => &PASSWORD_WRONG,
             Err(failure) => return Err(stop_for(failure, archive, into)),
         };
         let Some(given) = ask_password(running, kind, archive, into)? else {
@@ -145,12 +145,12 @@ fn listed(
 
 pub fn ask_password(
     running: &mut Running,
-    kind: ConflictKind,
+    question: &'static Question,
     archive: &Path,
     into: &Path,
 ) -> Result<Option<String>, Stop> {
     let conflict = Conflict {
-        kind,
+        kind: ConflictKind::Asked(question),
         source: archive.to_path_buf(),
         target: into.to_path_buf(),
         number: 0,
@@ -160,7 +160,12 @@ pub fn ask_password(
         return Ok(None);
     }
     Ok(Some(
-        running.shared.control.take_password().unwrap_or_default(),
+        running
+            .shared
+            .control
+            .take_reply()
+            .and_then(|reply| reply.get::<Password>().map(|given| given.0.clone()))
+            .unwrap_or_default(),
     ))
 }
 

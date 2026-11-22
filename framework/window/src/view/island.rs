@@ -17,7 +17,6 @@ use crate::island::progress::Running;
 use crate::island::{self, Confirm, Note, asking};
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
-use crate::window::password::{asks_password, password_label};
 
 mod several;
 
@@ -30,24 +29,20 @@ impl MainWindow {
         let job = self.job_on_island(cx);
         let parts = if self.picker() {
             None
-        } else if let Some((id, job, conflict)) =
-            job.and_then(|(id, job)| Some((id, job, job.asking.as_ref()?)))
+        } else if let Some((id, conflict)) =
+            job.and_then(|(id, job)| Some((id, job.asking.as_ref()?)))
         {
             if let ConflictKind::Asked(question) = conflict.kind
                 && let Some(view) = self.parts.question(question)
             {
                 return view.into_any_element();
             }
-            Some(if asks_password(conflict) {
-                self.password_parts(conflict, password_label(&job.operation), &colors, cx)
-            } else {
-                ask_parts(
-                    conflict,
-                    self.island.ticked_for_all(id, conflict.number),
-                    &colors,
-                    cx,
-                )
-            })
+            Some(ask_parts(
+                conflict,
+                self.island.ticked_for_all(id, conflict.number),
+                &colors,
+                cx,
+            ))
         } else if let Some(confirm) = &self.island.confirm {
             Some(confirm_parts(confirm, &colors, cx))
         } else if let Some(view) = self.parts.island(&self.scene(cx), cx) {
@@ -75,45 +70,6 @@ impl MainWindow {
             || self.quiet_count(&colors).into_any_element(),
             |parts| floating(parts, None, &colors).into_any_element(),
         )
-    }
-
-    fn password_parts(
-        &self,
-        conflict: &Conflict,
-        accept: &'static str,
-        colors: &Colors,
-        cx: &Context<Self>,
-    ) -> Vec<gpui::AnyElement> {
-        let (name, rest) = asking::words(conflict);
-        let mut parts = vec![
-            label(colors)
-                .child(
-                    div()
-                        .text_color(colors.text)
-                        .font_weight(text::STRONG_WEIGHT)
-                        .child(name),
-                )
-                .child(rest)
-                .into_any_element(),
-        ];
-        if let Some(shown) = &self.island.password {
-            parts.push(password_box(shown.field.clone(), colors).into_any_element());
-        }
-        parts.push(cancel_button(colors, cx).into_any_element());
-        parts.push(
-            worded("island-skip", asking::label(Answer::Skip), colors)
-                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                    this.answer_conflict(Answer::Skip, cx);
-                }))
-                .into_any_element(),
-        );
-        parts.push(
-            worded("island-unlock", accept, colors)
-                .text_color(colors.accept)
-                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.give_password(cx)))
-                .into_any_element(),
-        );
-        parts
     }
 
     fn selection_parts(&self, colors: &Colors, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
@@ -231,23 +187,6 @@ fn ask_parts(
 fn cancel_button(colors: &Colors, cx: &Context<MainWindow>) -> Stateful<Div> {
     worded("island-cancel", CANCEL_LABEL, colors)
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.cancel_job(cx)))
-}
-
-fn password_box(field: gpui::Entity<nova_files_shell::text::TextField>, colors: &Colors) -> Div {
-    div()
-        .debug_selector(|| "island-password".to_owned())
-        .flex()
-        .flex_none()
-        .items_center()
-        .w(size::PASSWORD_WIDTH)
-        .h(size::RENAME_HEIGHT)
-        .px(size::RENAME_PAD)
-        .rounded(radius::SMALL)
-        .bg(colors.window)
-        .border(size::RING)
-        .border_color(colors.accept)
-        .text_color(colors.text)
-        .child(field)
 }
 
 fn for_all_tick(
