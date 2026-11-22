@@ -3559,7 +3559,6 @@ dependencies = [
  "nova-files-api",
  "nova-files-delete-api",
  "nova-files-shell",
- "nova-files-trash-api",
 ]
 
 [[package]]

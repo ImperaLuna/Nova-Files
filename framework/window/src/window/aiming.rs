@@ -34,13 +34,6 @@ impl Aim {
             at: DropAt::Page(page),
         }
     }
-
-    pub const fn trash(folder: PathBuf, name: SharedString) -> Self {
-        Self {
-            at: DropAt::Trash(folder),
-            name,
-        }
-    }
 }
 
 impl Aims {

@@ -14,7 +14,7 @@ use super::row::{
     Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon, share_cell,
 };
 
-use nova_files_shell::{PageRef, ShownColumn};
+use nova_files_shell::{Allow, PageRef, ShownColumn};
 
 use crate::assets::Icon;
 use crate::marks;
@@ -359,7 +359,10 @@ fn entry_row(
 
 impl MainWindow {
     pub fn list_drop_folder(&self) -> Option<&Path> {
-        if self.searching() || self.folder_rules().trashed() || self.listed_page().is_some() {
+        if self.searching()
+            || !self.folder_rules().allows(Allow::Change)
+            || self.listed_page().is_some()
+        {
             return None;
         }
         Some(&self.listing.as_ref()?.path)

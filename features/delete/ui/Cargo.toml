@@ -30,4 +30,3 @@ gpui.workspace = true
 nova-files-api.workspace = true
 nova-files-delete-api.workspace = true
 nova-files-shell.workspace = true
-nova-files-trash-api.workspace = true
