@@ -426,6 +426,27 @@ pub mod space {
     pub const MIN_FILL: f32 = 0.02;
 }
 
+pub mod pile {
+    use gpui::{Pixels, px};
+
+    pub const MOST: usize = 3;
+    pub const CARD: Pixels = px(58.0);
+    pub const STEP_X: Pixels = px(9.0);
+    pub const STEP_Y: Pixels = px(7.0);
+    pub const TILT_DEGREES: f32 = 5.0;
+    pub const SEE_THROUGH: f32 = 0.88;
+    pub const EDGE: Pixels = px(1.5);
+    pub const ICON_PAD: Pixels = px(7.0);
+    pub const MARGIN: Pixels = px(10.0);
+    pub const SHADOW_Y: Pixels = px(3.0);
+    pub const SHADOW_BLUR: Pixels = px(5.0);
+    pub const CHIP_HEIGHT: Pixels = px(26.0);
+    pub const CHIP_OVERHANG: Pixels = px(10.0);
+    pub const NAME_GAP: Pixels = px(6.0);
+    pub const NAME_WIDTH: Pixels = px(180.0);
+    pub const FROM_POINTER: Pixels = px(12.0);
+}
+
 pub mod radius {
     use gpui::{Pixels, px};
 

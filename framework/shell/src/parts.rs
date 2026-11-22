@@ -2,10 +2,11 @@ use std::any::{Any, TypeId};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollEvent,
-    SharedString, Size, Subscription, Window,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, RenderImage,
+    ScrollEvent, SharedString, Size, Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 
@@ -80,6 +81,7 @@ trait OpenPart {
     fn list_view(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn island(&self, scene: &Scene, cx: &App) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
+    fn row_picture(&self, entry: &Entry, cx: &App) -> Option<Arc<RenderImage>>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
     fn typed(&self, jump: &Jump, scene: &Scene, cx: &mut App) -> bool;
     fn key_down(&self, event: &KeyDownEvent, scene: &Scene, cx: &mut App) -> bool;
@@ -388,6 +390,14 @@ impl<P: Part> OpenPart for Opened<P> {
             .row_icons
             .iter()
             .find_map(|icon| icon(part, entry, side, cx))
+    }
+
+    fn row_picture(&self, entry: &Entry, cx: &App) -> Option<Arc<RenderImage>> {
+        let part = self.entity.read(cx);
+        self.slots
+            .row_pictures
+            .iter()
+            .find_map(|picture| picture(part, entry, cx))
     }
 
     fn closing(&self, cx: &mut App) {

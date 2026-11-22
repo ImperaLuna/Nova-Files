@@ -2,6 +2,7 @@ mod acting;
 mod aiming;
 mod confirm;
 mod context_menu;
+mod drag_pile;
 mod dragging;
 mod events;
 mod gallery;

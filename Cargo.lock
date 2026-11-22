@@ -4100,6 +4100,7 @@ dependencies = [
 name = "nova-files-window"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "futures",
  "gpui",
  "gpui_platform",

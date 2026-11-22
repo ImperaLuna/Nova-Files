@@ -149,7 +149,7 @@ impl Icon {
         }
     }
 
-    const fn bytes(self) -> &'static [u8] {
+    pub const fn bytes(self) -> &'static [u8] {
         let source = match self {
             Self::Folder => svg::FOLDER,
             Self::File => svg::FILE,

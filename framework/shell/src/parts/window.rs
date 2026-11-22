@@ -1,10 +1,11 @@
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use gpui::{
-    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, ScrollEvent,
-    SharedString, Size, Subscription, Window,
+    AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, RenderImage,
+    ScrollEvent, SharedString, Size, Subscription, Window,
 };
 use nova_files_api::{Entry, Event, Listing, ListingId, Order};
 use nova_files_messages::Envelope;
@@ -302,6 +303,12 @@ impl WindowParts {
         self.opened
             .iter()
             .find_map(|part| part.row_icon(entry, side, cx))
+    }
+
+    pub fn row_picture(&self, entry: &Entry, cx: &App) -> Option<Arc<RenderImage>> {
+        self.opened
+            .iter()
+            .find_map(|part| part.row_picture(entry, cx))
     }
 
     pub fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool {
