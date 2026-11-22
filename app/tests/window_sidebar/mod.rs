@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, size};
+use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, SharedString, size};
 
 use super::*;
 
@@ -144,7 +144,8 @@ async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
     wait_for_folder(&view, cx, tree.path()).await;
     let windows = cx.windows().len();
 
-    click(cx, "pin");
+    assert_eq!(pin_menu(&view, cx), ["Choose a folder…"]);
+    click(cx, "menu-0");
     let projects = tree.path().join("Projects");
     answer_picker(cx, windows, &projects);
 
@@ -152,6 +153,35 @@ async fn the_plus_on_places_pins_the_folder_picked(cx: &mut TestAppContext) {
         pinned(view, cx).iter().any(|pin| pin.path == projects)
     })
     .await;
+}
+
+#[gpui::test]
+async fn the_plus_on_places_pins_and_unpins_the_folder_you_are_in(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-pin-here");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = window_on(cx, &projects, tree.path());
+    wait_for_folder(&view, cx, &projects).await;
+    let windows = cx.windows().len();
+
+    assert_eq!(
+        pin_menu(&view, cx),
+        ["Pin Projects to Places", "Choose a folder…"]
+    );
+    click(cx, "menu-0");
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        pinned(view, cx).iter().any(|pin| pin.path == projects)
+    })
+    .await;
+
+    assert_eq!(
+        pin_menu(&view, cx),
+        ["Remove Projects from Places", "Choose a folder…"]
+    );
+    click(cx, "menu-0");
+    view.condition::<WindowEvent>(cx, |view, cx| pinned(view, cx).is_empty())
+        .await;
+    assert_eq!(cx.windows().len(), windows);
 }
 
 #[gpui::test]
@@ -182,6 +212,16 @@ async fn a_part_asks_for_a_folder_and_gets_the_one_picked(cx: &mut TestAppContex
     cx.run_until_parked();
 
     assert_eq!(got.borrow().as_deref(), Some(projects.as_path()));
+}
+
+fn pin_menu(view: &Entity<MainWindow>, cx: &mut VisualTestContext) -> Vec<SharedString> {
+    click(cx, "pin");
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| {
+        view.menu()
+            .map(|menu| menu.items.iter().map(|item| item.label.clone()).collect())
+            .unwrap_or_default()
+    })
 }
 
 fn answer_picker(cx: &mut VisualTestContext, windows: usize, folder: &Path) {
