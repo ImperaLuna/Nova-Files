@@ -84,7 +84,8 @@ mod tests {
     #[test]
     fn a_pin_dropped_next_to_itself_stays() {
         let pinned = paths(&["/a", "/b", "/c"]);
-        assert!(pin_at(&pinned, 1, paths(&["/b"])).is_empty());
-        assert!(pin_at(&pinned, 2, paths(&["/b"])).is_empty());
+        let none: Vec<BookmarkChange> = Vec::new();
+        assert_eq!(pin_at(&pinned, 1, paths(&["/b"])), none);
+        assert_eq!(pin_at(&pinned, 2, paths(&["/b"])), none);
     }
 }
