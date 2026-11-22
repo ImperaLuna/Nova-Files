@@ -70,7 +70,7 @@ fn ctrl_plus_and_minus_step_the_icons_only_while_icons_show(cx: &mut TestAppCont
     assert_eq!(views_set(&mut core), []);
 
     cx.simulate_keystrokes("ctrl-2 ctrl-= ctrl-+");
-    assert_eq!(showing(&view, cx), icons(IconSize::Largest));
+    assert_eq!(showing(&view, cx), icons(IconSize::Larger));
     cx.simulate_keystrokes("ctrl--");
     assert_eq!(showing(&view, cx), icons(IconSize::Large));
 

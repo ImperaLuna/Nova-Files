@@ -24,7 +24,7 @@ const WHAT: &str = "folder views";
 const DETAILS: u8 = b'd';
 const ICONS: u8 = b'i';
 const GALLERY: u8 = b'g';
-const SIZES: [u8; 5] = *b"12345";
+const SIZES: [u8; 6] = *b"123456";
 
 pub struct Store {
     views: RefCell<FolderViews>,
