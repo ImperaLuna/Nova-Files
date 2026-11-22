@@ -25,6 +25,7 @@ nova-files-archives-ui = { path = "features/archives/ui" }
 nova-files-clipboard-api = { path = "features/clipboard/api" }
 nova-files-clipboard-ui = { path = "features/clipboard/ui" }
 nova-files-dbus = { path = "fronts/dbus" }
+nova-files-delete-api = { path = "features/delete/api" }
 nova-files-delete-core = { path = "features/delete/core" }
 nova-files-delete-ui = { path = "features/delete/ui" }
 nova-files-disk = { path = "framework/disk" }

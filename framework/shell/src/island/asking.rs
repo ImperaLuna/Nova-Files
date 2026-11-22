@@ -1,5 +1,6 @@
 use nova_files_api::{Answer, Conflict, ConflictKind, Failure};
 
+use super::job_words::Words;
 use super::words::{failure, name_of};
 
 const ORDER: [Answer; 5] = [
@@ -11,11 +12,9 @@ const ORDER: [Answer; 5] = [
 ];
 
 const ALREADY_HERE: &str = " is already here";
-const NO_TRASH: &str = "its drive has no trash";
-const IN_TRASH: &str = "it is in the Trash already";
 const WAITING: &str = "waiting for an answer";
 
-pub fn words(conflict: &Conflict) -> (String, String) {
+pub fn words(conflict: &Conflict, said: &Words) -> (String, String) {
     let reason = match conflict.kind {
         ConflictKind::FileExists
         | ConflictKind::FolderExists
@@ -26,9 +25,7 @@ pub fn words(conflict: &Conflict) -> (String, String) {
         ConflictKind::SourceGone => failure(Failure::NotFound),
         ConflictKind::SourceChanged => failure(Failure::SourceChanged),
         ConflictKind::Unsupported => failure(Failure::Unsupported),
-        ConflictKind::NoTrash => NO_TRASH,
-        ConflictKind::InTrash => IN_TRASH,
-        ConflictKind::Asked(_) => WAITING,
+        ConflictKind::Asked(question) => said.reason(question).unwrap_or(WAITING),
     };
     (name_of(&conflict.source), format!(": {reason}"))
 }
@@ -66,6 +63,8 @@ pub fn for_all(conflict: &Conflict) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use nova_files_api::Question;
+
     use super::*;
 
     fn conflict(kind: ConflictKind, more: u64) -> Conflict {
@@ -80,20 +79,33 @@ mod tests {
 
     #[test]
     fn a_taken_name_is_already_here() {
+        let said = Words::default();
         let clash = conflict(ConflictKind::FileExists, 0);
         assert_eq!(
-            words(&clash),
+            words(&clash, &said),
             ("notes.txt".to_owned(), " is already here".to_owned())
         );
         let full = conflict(ConflictKind::NoSpace, 0);
         assert_eq!(
-            words(&full),
+            words(&full, &said),
             ("notes.txt".to_owned(), ": the drive is full".to_owned())
         );
-        let no_trash = conflict(ConflictKind::NoTrash, 0);
-        assert_eq!(words(&no_trash).1, ": its drive has no trash");
-        let in_trash = conflict(ConflictKind::InTrash, 0);
-        assert_eq!(words(&in_trash).1, ": it is in the Trash already");
+    }
+
+    #[test]
+    fn a_feature_question_says_what_its_feature_gave_it() {
+        static LOCKED: Question = Question::new("locked", &[]);
+        static OTHER: Question = Question::new("other", &[]);
+        let mut said = Words::default();
+        said.add_reason(&LOCKED, "it is locked");
+        assert_eq!(
+            words(&conflict(ConflictKind::Asked(&LOCKED), 0), &said).1,
+            ": it is locked"
+        );
+        assert_eq!(
+            words(&conflict(ConflictKind::Asked(&OTHER), 0), &said).1,
+            ": waiting for an answer"
+        );
     }
 
     #[test]
@@ -104,7 +116,6 @@ mod tests {
         assert_eq!(answers(ConflictKind::SameFile), [Skip, KeepBoth]);
         assert_eq!(answers(ConflictKind::NoSpace), [Skip, Retry]);
         assert_eq!(answers(ConflictKind::SourceGone), [Skip]);
-        assert_eq!(answers(ConflictKind::InTrash), [Skip]);
         assert_eq!(label(KeepBoth), "Keep both");
         assert_eq!(selector(Replace), "island-replace");
     }

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use gpui::{Context, SharedString};
-use nova_files_api::{EntryId, EntryKind, Listing, Operation};
+use nova_files_api::{EntryId, EntryKind, Listing};
 use nova_files_shell::Undo;
 
 use super::MainWindow;
@@ -40,13 +40,6 @@ impl MainWindow {
             let size = self.details.get(&row)?.details.size?;
             Some(total.saturating_add(size))
         })
-    }
-
-    pub fn trash_selected(&mut self, _: &mut Context<Self>) {
-        let paths = self.selected_paths();
-        if !paths.is_empty() && !self.picker() && !self.folder_rules().read_only {
-            self.start_job(Operation::Trash { paths });
-        }
     }
 
     pub fn show_note(

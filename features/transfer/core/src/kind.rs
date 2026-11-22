@@ -88,8 +88,8 @@ mod tests {
     fn transfers_claim_copies_and_moves_and_start_at_the_first_source() {
         let copying = copy(vec!["/s".into()], "/into".into());
         let empty = move_into(Vec::new(), "/into".into());
-        let delete = Operation::Delete {
-            paths: vec!["/a".into()],
+        let delete = Operation::Undo {
+            job: nova_files_api::JobId(1),
         };
 
         assert!(Transfers.claims(&copying) && Transfers.claims(&empty));

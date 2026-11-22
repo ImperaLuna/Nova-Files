@@ -91,10 +91,17 @@ impl TransferPart {
         picked(modifiers).or_else(|| self.by_drive(sources, into))
     }
 
+    fn takes_into(&self, into: &Path) -> bool {
+        !self.host.rules.for_folder(into).trashed
+    }
+
     fn aim(&self, over: &DropOver<'_>, _: &App) -> Option<SharedString> {
         let Location::Folder(into) = over.at else {
             return None;
         };
+        if !self.takes_into(into) {
+            return None;
+        }
         let label = self
             .kind(over.sources, into, over.modifiers)
             .map_or_else(|| what(over.sources), |kind| label(kind, over.name));
@@ -111,6 +118,9 @@ impl TransferPart {
         let Location::Folder(into) = at else {
             return;
         };
+        if !self.takes_into(&into) {
+            return;
+        }
         match self.kind(&sources, &into, modifiers) {
             Some(kind) => self.start(kind, sources, into, cx),
             None => self.waiting.push((sources, into)),

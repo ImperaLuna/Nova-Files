@@ -25,7 +25,7 @@ use crate::commands::{
     SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown, SelectPageUp,
     SelectRight, SelectUp, ToggleSelected,
 };
-use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, TrashSelected};
+use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
 use crate::window::MainWindow;
@@ -73,7 +73,6 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
             .map(|root| Self::typed_keys(root, cx))
             .map(|root| Self::selection_keys(root, cx))
-            .map(|root| Self::file_keys(root, cx))
             .map(|root| self.parts.bind(root))
             .map(|root| Self::band_events(root, cx))
             .when(main, |root| Self::tab_keys(root, cx))
@@ -120,12 +119,6 @@ impl MainWindow {
         .on_action(cx.listener(|this, _: &CloseTab, _, cx| this.close_current_tab(cx)))
         .on_action(cx.listener(|this, _: &NextTab, _, cx| this.next_tab(cx)))
         .on_action(cx.listener(|this, _: &PreviousTab, _, cx| this.previous_tab(cx)))
-    }
-
-    fn file_keys(root: Div, cx: &Context<Self>) -> Div {
-        root.on_action(cx.listener(|this, _: &TrashSelected, _, cx| {
-            this.trash_selected(cx);
-        }))
     }
 
     fn body(

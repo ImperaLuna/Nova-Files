@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use nova_files_api::{Answer, ConflictKind, Failure, Operation, Tally};
+use nova_files_api::{Answer, ConflictKind, Failure, Operation, Question, Tally};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Doing {
@@ -143,29 +143,44 @@ impl<J: Any, W: JobWords<J>> AnyJobWords for Typed<J, W> {
 }
 
 #[derive(Clone, Default)]
-pub struct Words(Vec<Rc<dyn AnyJobWords>>);
+pub struct Words {
+    jobs: Vec<Rc<dyn AnyJobWords>>,
+    reasons: Vec<(&'static Question, &'static str)>,
+}
 
 impl Words {
     pub fn add<J: Any, W: JobWords<J>>(&mut self, words: W) {
-        self.0.push(Rc::new(Typed {
+        self.jobs.push(Rc::new(Typed {
             words,
             job: PhantomData,
         }));
     }
 
+    pub fn add_reason(&mut self, question: &'static Question, reason: &'static str) {
+        self.reasons.push((question, reason));
+    }
+
     pub fn extend(&mut self, more: &Self) {
-        self.0.extend(more.0.iter().cloned());
+        self.jobs.extend(more.jobs.iter().cloned());
+        self.reasons.extend(more.reasons.iter().copied());
+    }
+
+    pub fn reason(&self, question: &Question) -> Option<&'static str> {
+        self.reasons
+            .iter()
+            .find(|(asked, _)| *asked == question)
+            .map(|(_, reason)| *reason)
     }
 
     pub fn of<'a>(&'a self, operation: &Operation) -> Option<&'a dyn AnyJobWords> {
-        self.0
+        self.jobs
             .iter()
             .find(|words| words.doing(operation).is_some())
             .map(AsRef::as_ref)
     }
 
     pub fn batched(&self, operation: &Operation) -> Option<(usize, Batched)> {
-        self.0
+        self.jobs
             .iter()
             .enumerate()
             .find_map(|(rank, words)| Some((rank, words.batched(operation)?)))

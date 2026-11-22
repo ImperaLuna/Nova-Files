@@ -35,9 +35,9 @@ impl Aim {
         }
     }
 
-    pub const fn trash(name: SharedString) -> Self {
+    pub const fn trash(folder: PathBuf, name: SharedString) -> Self {
         Self {
-            at: DropAt::Trash,
+            at: DropAt::Trash(folder),
             name,
         }
     }

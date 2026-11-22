@@ -490,6 +490,10 @@ impl<P: Part> Slots<P> {
         self.job_words.add(words);
     }
 
+    pub fn question_reason(&mut self, question: &'static Question, reason: &'static str) {
+        self.job_words.add_reason(question, reason);
+    }
+
     pub fn row_icon(&mut self, icon: RowIcon<P>) {
         self.row_icons.push(icon);
     }

@@ -12,8 +12,8 @@ use nova_files_api::{
 
 use common::Bench;
 
-const fn trash(paths: Vec<PathBuf>) -> Operation {
-    Operation::Trash { paths }
+fn trash(paths: Vec<PathBuf>) -> Operation {
+    nova_files_trash_api::trash(paths)
 }
 
 fn home_trash(root: &Path) -> PathBuf {
@@ -197,7 +197,10 @@ fn what_is_in_the_trash_already_asks_and_skip_leaves_it() {
         scope: Scope::ThisOne,
     });
 
-    assert_eq!(conflict.kind, ConflictKind::InTrash);
+    assert_eq!(
+        conflict.kind,
+        ConflictKind::Asked(&nova_files_trash_api::IN_TRASH)
+    );
     assert!(!conflict.kind.accepts(Answer::Retry));
     assert_eq!(conflict.source, in_trash);
     let (outcome, _) = loop {
@@ -233,7 +236,10 @@ fn a_home_trash_it_may_not_make_asks_and_retry_tries_again() {
         scope: Scope::ThisOne,
     });
 
-    assert_eq!(conflict.kind, ConflictKind::NoTrash);
+    assert_eq!(
+        conflict.kind,
+        ConflictKind::Asked(&nova_files_trash_api::NO_TRASH)
+    );
     assert_eq!(
         client.next(),
         Event::ConflictAnswered {

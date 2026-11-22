@@ -1,22 +1,19 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use nova_files_api::Operation;
 use nova_files_shell::PageRef;
 
-pub const MOVE_TO: &str = "Move to";
 pub const ADD_TO: &str = "Add to";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DropAt {
     Folder(PathBuf),
-    Trash,
+    Trash(PathBuf),
     Page(PageRef),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Dropped {
-    Job(Operation),
     Page { page: PageRef, paths: Vec<PathBuf> },
 }
 
@@ -42,11 +39,12 @@ impl Sources {
     }
 }
 
-pub fn shell_place(at: &DropAt) -> Option<nova_files_shell::Location> {
+pub fn shell_place(at: &DropAt) -> nova_files_shell::Location {
     match at {
-        DropAt::Folder(folder) => Some(nova_files_shell::Location::Folder(folder.clone())),
-        DropAt::Page(page) => Some(nova_files_shell::Location::Page(page.clone())),
-        DropAt::Trash => None,
+        DropAt::Folder(folder) | DropAt::Trash(folder) => {
+            nova_files_shell::Location::Folder(folder.clone())
+        }
+        DropAt::Page(page) => nova_files_shell::Location::Page(page.clone()),
     }
 }
 
@@ -55,7 +53,7 @@ pub fn allowed(at: &DropAt, sources: &Sources, trashed: impl Fn(&Path) -> bool) 
         return false;
     }
     match at {
-        DropAt::Trash | DropAt::Page(_) => true,
+        DropAt::Trash(_) | DropAt::Page(_) => true,
         DropAt::Folder(into) => {
             !trashed(into)
                 && !sources.folders.contains(into)
@@ -66,20 +64,18 @@ pub fn allowed(at: &DropAt, sources: &Sources, trashed: impl Fn(&Path) -> bool) 
 
 pub fn dropped(at: DropAt, sources: Vec<PathBuf>) -> Option<Dropped> {
     Some(match at {
-        DropAt::Trash => Dropped::Job(Operation::Trash { paths: sources }),
         DropAt::Page(page) => Dropped::Page {
             page,
             paths: sources,
         },
-        DropAt::Folder(_) => return None,
+        DropAt::Folder(_) | DropAt::Trash(_) => return None,
     })
 }
 
 pub fn label(at: &DropAt, name: &str) -> Option<String> {
     match at {
         DropAt::Page(_) => Some(format!("{ADD_TO} {name}")),
-        DropAt::Trash => Some(format!("{MOVE_TO} {name}")),
-        DropAt::Folder(_) => None,
+        DropAt::Folder(_) | DropAt::Trash(_) => None,
     }
 }
 
@@ -114,7 +110,11 @@ mod tests {
         let trash = |folder: &Path| folder.starts_with(TRASH);
         assert!(allowed(&folder("/b"), &paths(&["/a/x", "/a/y"]), trash));
         assert!(allowed(&folder("/a/x2"), &paths(&["/a/x"]), trash));
-        assert!(allowed(&DropAt::Trash, &paths(&["/a/x"]), trash));
+        assert!(allowed(
+            &DropAt::Trash(TRASH.into()),
+            &paths(&["/a/x"]),
+            trash
+        ));
     }
 
     #[test]
@@ -131,22 +131,21 @@ mod tests {
         let trash = |folder: &Path| folder.starts_with(TRASH);
         let trashed = paths(&[&format!("{TRASH}/x")]);
         assert!(!allowed(&folder("/b"), &trashed, trash));
-        assert!(!allowed(&DropAt::Trash, &trashed, trash));
+        assert!(!allowed(&DropAt::Trash(TRASH.into()), &trashed, trash));
         assert!(!allowed(&folder(TRASH), &paths(&["/a/x"]), trash));
     }
 
     #[test]
-    fn the_window_drops_only_on_the_trash_places_and_pages() {
+    fn the_window_drops_only_on_places_and_leaves_folders_to_the_features() {
         let sources = vec![PathBuf::from("/a/x")];
+        let trash = DropAt::Trash(TRASH.into());
         assert_eq!(dropped(folder("/b"), sources.clone()), None);
         assert_eq!(label(&folder("/b"), "Backup"), None);
+        assert_eq!(dropped(trash.clone(), sources), None);
+        assert_eq!(label(&trash, "Trash"), None);
         assert_eq!(
-            dropped(DropAt::Trash, sources.clone()),
-            Some(Dropped::Job(Operation::Trash { paths: sources }))
-        );
-        assert_eq!(
-            label(&DropAt::Trash, "Trash").as_deref(),
-            Some("Move to Trash")
+            shell_place(&trash),
+            nova_files_shell::Location::Folder(TRASH.into())
         );
     }
 

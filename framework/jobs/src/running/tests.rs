@@ -117,7 +117,7 @@ fn a_journal_that_cant_be_opened_again_still_goes_when_the_job_ends() {
     let path = folder.file("1", "nova-files-job 1\n");
     let left = Left {
         job: JobId(1),
-        operation: nova_files_api::Operation::EmptyTrash,
+        operation: nova_files_api::Operation::Undo { job: JobId(0) },
         done: Done::default(),
         journal: path.clone(),
         file: File::open(&path).unwrap(),

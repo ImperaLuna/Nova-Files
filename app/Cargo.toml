@@ -18,6 +18,7 @@
 # - nova-files-clipboard-api
 # - nova-files-clipboard-ui
 # - nova-files-dbus
+# - nova-files-delete-api
 # - nova-files-delete-core
 # - nova-files-delete-ui
 # - nova-files-disk
@@ -160,6 +161,7 @@ nova-files-window.workspace = true
 nova-files-undo-ui.workspace = true
 [dev-dependencies]
 nova-files-clipboard-api.workspace = true
+nova-files-delete-api.workspace = true
 nova-files-test-folder.workspace = true
 nova-files-picker-api.workspace = true
 nova-files-folders-api.workspace = true

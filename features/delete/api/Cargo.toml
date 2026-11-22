@@ -1,0 +1,22 @@
+# nova-files-delete-api
+#
+# The job that deletes files and folders for good, for any feature to
+# start. Plain std types, no I/O.
+#
+# Allowed outside crates: none
+# Allowed workspace crates:
+# - nova-files-api
+
+[package]
+name = "nova-files-delete-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

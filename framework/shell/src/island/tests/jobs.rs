@@ -16,6 +16,11 @@ pub struct Store {
     pub into: PathBuf,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct Sweep {
+    pub paths: Vec<PathBuf>,
+}
+
 struct FetchWords;
 
 impl JobWords<Fetch> for FetchWords {
@@ -106,10 +111,37 @@ impl JobWords<Store> for StoreWords {
     }
 }
 
+struct SweepWords;
+
+impl JobWords<Sweep> for SweepWords {
+    fn doing(&self, _: &Sweep) -> Doing {
+        Doing {
+            verb: "Sweeping",
+            after_items: " away",
+        }
+    }
+
+    fn sources<'a>(&self, job: &'a Sweep) -> &'a [PathBuf] {
+        &job.paths
+    }
+
+    fn done(&self, _: &Sweep, _: Option<&Path>, _: Tally) -> Option<String> {
+        Some("Swept".to_owned())
+    }
+
+    fn failed(&self, job: &Sweep) -> Failed {
+        Failed {
+            verb: "sweep",
+            names_item: !job.paths.is_empty(),
+        }
+    }
+}
+
 pub fn words() -> Words {
     let mut words = Words::default();
     words.add(FetchWords);
     words.add(StoreWords);
+    words.add(SweepWords);
     words
 }
 
@@ -131,5 +163,11 @@ pub fn store(names: &[&str], into: &str) -> Operation {
     Operation::feature(Store {
         sources: under(names),
         into: PathBuf::from(into),
+    })
+}
+
+pub fn sweep(names: &[&str]) -> Operation {
+    Operation::feature(Sweep {
+        paths: under(names),
     })
 }

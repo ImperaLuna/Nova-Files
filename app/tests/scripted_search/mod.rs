@@ -214,10 +214,9 @@ fn deleting_a_result_for_good_names_it_where_it_is(cx: &mut TestAppContext) {
         .commands()
         .into_iter()
         .filter_map(|command| match command {
-            Command::StartJob {
-                operation: Operation::Delete { paths },
-                ..
-            } => Some(paths),
+            Command::StartJob { operation, .. } => operation
+                .get::<nova_files_delete_api::DeleteJob>()
+                .map(|job| job.paths.clone()),
             _ => None,
         })
         .collect();

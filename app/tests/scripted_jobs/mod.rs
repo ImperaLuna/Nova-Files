@@ -1,4 +1,4 @@
-use nova_files_api::{JobId, Operation, Outcome, Tally};
+use nova_files_api::{JobId, Outcome, Tally};
 use nova_files_open_api::{self as open_api, NotOpened};
 use nova_files_trash_api as trash_api;
 use nova_files_trash_ui::TrashPart;
@@ -16,10 +16,11 @@ fn a_paused_job_says_so_until_it_resumes(cx: &mut TestAppContext) {
         .commands()
         .into_iter()
         .find_map(|command| match command {
-            Command::StartJob {
-                tag,
-                operation: operation @ Operation::Trash { .. },
-            } => Some((tag, operation)),
+            Command::StartJob { tag, operation }
+                if operation.get::<trash_api::TrashJob>().is_some() =>
+            {
+                Some((tag, operation))
+            }
             _ => None,
         })
         .unwrap();

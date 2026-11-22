@@ -9,10 +9,11 @@ use nova_files_api::Outcome;
 use rustix::fs::{AtFlags, unlinkat};
 use rustix::io::Errno;
 
+use nova_files_delete_api::journal;
 use nova_files_jobs::Ended;
 use nova_files_jobs::failure::failure;
 use nova_files_jobs::folders::{Folders, Unreached};
-use nova_files_jobs::journal::{Record, word};
+use nova_files_jobs::journal::Record;
 use nova_files_jobs::plan::{Item, Kind, Plan, plan_delete};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::stop::Stop;
@@ -20,7 +21,7 @@ use nova_files_jobs::stop::Stop;
 pub use kind::Deletes;
 
 pub fn delete(running: &mut Running, paths: &[PathBuf]) -> Ended {
-    running.record_job(word::DELETE, None, paths);
+    running.record_job(journal::DELETE, None, paths);
     let (result, shown) = delete_paths(running, paths);
     (result.map_or_else(Stop::outcome, |()| Outcome::Done), shown)
 }
