@@ -18,7 +18,26 @@ const FETCH_WAIT: Duration = Duration::from_millis(100);
 
 static NEXT_OWN_PICK: AtomicU64 = AtomicU64::new(u64::MAX);
 
-pub struct PickWindow(pub Box<PickRequest>);
+pub struct PickWindow {
+    request: Box<PickRequest>,
+    over_asker: bool,
+}
+
+impl PickWindow {
+    pub fn for_app(request: PickRequest) -> Self {
+        Self {
+            request: Box::new(request),
+            over_asker: false,
+        }
+    }
+
+    fn own(request: PickRequest) -> Self {
+        Self {
+            request: Box::new(request),
+            over_asker: true,
+        }
+    }
+}
 
 pub struct PickOpening {
     pub id: PickId,
@@ -36,7 +55,7 @@ impl PickOpening {
 
 impl WindowAsk for PickWindow {
     fn folder(&mut self) -> Option<PathBuf> {
-        self.0.folder.take()
+        self.request.folder.take()
     }
 
     fn look(&self, connector: &Connector, cx: &mut App) -> WindowLook {
@@ -44,13 +63,14 @@ impl WindowAsk for PickWindow {
         let display = cx.primary_display().map(|display| display.bounds().size);
         WindowLook {
             size: Some(state.picker_size(display)),
-            titlebar: Some(titlebar(&self.0)),
-            foreign_parent: self.0.parent.as_ref().map(foreign_parent),
+            titlebar: Some(titlebar(&self.request)),
+            foreign_parent: self.request.parent.as_ref().map(foreign_parent),
+            over_asker: self.over_asker,
         }
     }
 
     fn opening(self: Box<Self>) -> Opening {
-        PickOpening::of(self.0)
+        PickOpening::of(self.request)
     }
 }
 
@@ -120,7 +140,7 @@ impl PickerPart {
             types: None,
             reply: PickReply::new(move |picked| drop(deliver.send(picked))),
         };
-        cx.defer(move |cx| open_window(Box::new(PickWindow(Box::new(request))), cx));
+        cx.defer(move |cx| open_window(Box::new(PickWindow::own(request)), cx));
         cx.spawn(async move |_, cx| {
             let Ok(PickAnswer::Picked { paths, .. }) = answer.await else {
                 return;

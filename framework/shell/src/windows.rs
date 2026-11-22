@@ -11,6 +11,7 @@ pub struct WindowLook {
     pub size: Option<Size<Pixels>>,
     pub titlebar: Option<TitlebarOptions>,
     pub foreign_parent: Option<ForeignParent>,
+    pub over_asker: bool,
 }
 
 pub trait WindowAsk: Send {
