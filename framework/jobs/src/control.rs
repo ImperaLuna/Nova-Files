@@ -1,6 +1,6 @@
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 
-use nova_files_api::{Answer, Conflict, ConflictKind, Scope};
+use nova_files_api::{Answer, Carried, Conflict, ConflictKind, Scope};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Wanted {
@@ -13,7 +13,7 @@ struct State {
     wanted: Wanted,
     open: Option<Conflict>,
     answer: Option<(Answer, Scope)>,
-    password: Option<String>,
+    reply: Option<Carried>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,7 +31,7 @@ impl Default for Control {
                 wanted: Wanted::Run,
                 open: None,
                 answer: None,
-                password: None,
+                reply: None,
             }),
             changed: Condvar::new(),
         }
@@ -99,9 +99,19 @@ impl Control {
         ) && self.settle(
             conflict,
             (Answer::Retry, Scope::ThisOne),
-            Some(password),
+            Some(Carried::new(password)),
             heard,
         )
+    }
+
+    pub fn reply(&self, conflict: &Conflict, reply: Carried, heard: impl FnOnce()) -> bool {
+        matches!(conflict.kind, ConflictKind::Asked(_))
+            && self.settle(
+                conflict,
+                (Answer::Retry, Scope::ThisOne),
+                Some(reply),
+                heard,
+            )
     }
 
     #[expect(
@@ -112,7 +122,7 @@ impl Control {
         &self,
         conflict: &Conflict,
         (answer, scope): (Answer, Scope),
-        password: Option<String>,
+        reply: Option<Carried>,
         heard: impl FnOnce(),
     ) -> bool {
         let taken = {
@@ -124,7 +134,7 @@ impl Control {
             if takes {
                 state.open = None;
                 state.answer = Some((answer, scope));
-                state.password = password;
+                state.reply = reply;
                 heard();
             }
             takes
@@ -134,7 +144,11 @@ impl Control {
     }
 
     pub fn take_password(&self) -> Option<String> {
-        self.lock().password.take()
+        self.take_reply()?.get::<String>().cloned()
+    }
+
+    pub fn take_reply(&self) -> Option<Carried> {
+        self.lock().reply.take()
     }
 
     pub fn cancelled(&self) -> bool {

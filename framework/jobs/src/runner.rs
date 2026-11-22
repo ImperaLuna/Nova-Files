@@ -8,8 +8,8 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nova_files_api::{
-    Answer, ClientGone, ClientId, Conflict, Connector, Event, EventSink, Failure, JobId, JobTag,
-    Operation, Outcome, Scope, Tally,
+    Answer, Carried, ClientGone, ClientId, Conflict, Connector, Event, EventSink, Failure, JobId,
+    JobTag, Operation, Outcome, Scope, Tally,
 };
 use nova_files_messages::Message;
 
@@ -52,6 +52,10 @@ pub trait JobKind: Send + Sync + 'static {
     }
 
     fn first_path(&self, op: &Self::Op) -> PathBuf;
+
+    fn resume(&self, _: &str, _: Option<PathBuf>, _: Vec<PathBuf>) -> Option<Self::Op> {
+        None
+    }
 }
 
 type Interrupted = Arc<Mutex<HashMap<JobId, Left>>>;
@@ -94,15 +98,18 @@ impl<K: JobKind<Op = Operation>> Jobs<K> {
     }
 
     fn recover(&self, folder: PathBuf) {
-        let (running, interrupted, audience) = (
+        let (running, interrupted, audience, kind) = (
             Arc::clone(&self.running),
             Arc::clone(&self.interrupted),
             self.audience.clone(),
+            Arc::clone(&self.kind),
         );
         let spawned = thread::Builder::new()
             .name(RECOVER_THREAD.to_owned())
             .spawn(move || {
-                let found = left::recover(&folder);
+                let found = left::recover(&folder, &|word, into, sources| {
+                    kind.resume(word, into, sources)
+                });
                 let running = lock(&running);
                 let mut interrupted = lock(&interrupted);
                 for left in found {
@@ -329,6 +336,19 @@ impl<K: JobKind<Op = Operation>> Jobs<K> {
         let running = lock(&self.running);
         if let Some(shared) = running.get(&job) {
             shared.control.give_password(conflict, password, || {
+                self.audience.tell(&Event::ConflictAnswered {
+                    job,
+                    answer: Answer::Retry,
+                });
+            });
+        }
+        drop(running);
+    }
+
+    pub fn reply(&self, job: JobId, conflict: &Conflict, reply: Carried) {
+        let running = lock(&self.running);
+        if let Some(shared) = running.get(&job) {
+            shared.control.reply(conflict, reply, || {
                 self.audience.tell(&Event::ConflictAnswered {
                     job,
                     answer: Answer::Retry,

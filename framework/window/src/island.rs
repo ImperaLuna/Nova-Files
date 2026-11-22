@@ -16,6 +16,7 @@ pub struct Island {
     pub(crate) note_timer: Option<Task<()>>,
     pub(crate) note_owner: Option<nova_files_shell::NoteId>,
     pub(crate) password: Option<Password>,
+    pub(crate) asked: Option<(JobId, u64)>,
 }
 
 pub struct Password {

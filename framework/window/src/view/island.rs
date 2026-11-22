@@ -3,10 +3,11 @@ use gpui::{
     Pixels, Rgba, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
     prelude::FluentBuilder as _, relative,
 };
+use nova_files_shell::island::job_words::Words;
 use nova_files_shell::island::look::{divider, floating, label, square, worded};
 use nova_files_shell::widgets::tick_box;
 
-use nova_files_api::{Answer, Conflict};
+use nova_files_api::{Answer, Conflict, ConflictKind};
 use nova_files_shell::{Look, MenuAt, MenuGroup, MenuItem, Placed, arrange};
 
 use super::row::icon;
@@ -32,6 +33,11 @@ impl MainWindow {
         } else if let Some((id, job, conflict)) =
             job.and_then(|(id, job)| Some((id, job, job.asking.as_ref()?)))
         {
+            if let ConflictKind::Asked(question) = conflict.kind
+                && let Some(view) = self.parts.question(question)
+            {
+                return view.into_any_element();
+            }
             Some(if asks_password(conflict) {
                 self.password_parts(conflict, password_label(&job.operation), &colors, cx)
             } else {
@@ -49,10 +55,15 @@ impl MainWindow {
         } else if let Some((_, job)) = job {
             let shown = self.jobs_shown(cx);
             if shown.len() > 1 {
-                return several::island(&shown, self.island.jobs_open, &colors, cx)
-                    .into_any_element();
+                return several::island(
+                    &shown,
+                    (self.island.jobs_open, self.parts.words()),
+                    &colors,
+                    cx,
+                )
+                .into_any_element();
             }
-            Some(job_parts(job, &colors, cx))
+            Some(job_parts(job, self.parts.words(), &colors, cx))
         } else if let Some(note) = &self.island.note {
             Some(note_parts(note, &colors, cx))
         } else if self.selected_count() > 0 {
@@ -255,10 +266,15 @@ fn for_all_tick(
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_for_all(cx)))
 }
 
-fn job_parts(job: &Running, colors: &Colors, cx: &Context<MainWindow>) -> Vec<gpui::AnyElement> {
+fn job_parts(
+    job: &Running,
+    words: &Words,
+    colors: &Colors,
+    cx: &Context<MainWindow>,
+) -> Vec<gpui::AnyElement> {
     let now = cx.background_executor().now();
     vec![
-        label(colors).child(job.line(now)).into_any_element(),
+        label(colors).child(job.line(now, words)).into_any_element(),
         bar(job.fraction(), size::PROGRESS_WIDTH, colors)
             .debug_selector(|| "island-progress".to_owned())
             .mr(size::PROGRESS_RIGHT)

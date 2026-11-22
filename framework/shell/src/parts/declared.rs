@@ -1,6 +1,7 @@
 use nova_files_messages::MessageType;
 
 use crate::command::CommandSpec;
+use crate::island::job_words::Words;
 use crate::part::{Part, Slots};
 
 pub(super) fn slots_of<P: Part>() -> Slots<P> {
@@ -19,6 +20,10 @@ pub(super) fn sends<P: Part>() -> Vec<MessageType> {
 
 pub(super) fn specs<P: Part>() -> Vec<&'static CommandSpec> {
     slots_of::<P>().specs()
+}
+
+pub(super) fn words<P: Part>() -> Words {
+    slots_of::<P>().job_words
 }
 
 pub(super) fn each_once(types: impl Iterator<Item = MessageType>) -> Vec<MessageType> {

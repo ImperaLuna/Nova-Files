@@ -4,6 +4,7 @@ use gpui::{
 };
 use nova_files_api::JobId;
 
+use nova_files_shell::island::job_words::Words;
 use nova_files_shell::island::look::{chevron, floating, label, square};
 
 use super::bar;
@@ -16,13 +17,13 @@ use crate::window::MainWindow;
 
 pub(super) fn island(
     jobs: &[(JobId, &Running)],
-    open: bool,
+    (open, words): (bool, &Words),
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> impl IntoElement {
     let now = cx.background_executor().now();
     let running: Vec<&Running> = jobs.iter().map(|(_, job)| *job).collect();
-    let (many, rest) = line(&running, now);
+    let (many, rest) = line(&running, now, words);
     let mut parts = vec![
         label(colors)
             .flex_1()
@@ -59,7 +60,7 @@ pub(super) fn island(
             .children(
                 jobs.iter()
                     .enumerate()
-                    .map(|(index, (id, job))| row(index, *id, job, colors, cx)),
+                    .map(|(index, (id, job))| row((index, *id, job), words, colors, cx)),
             )
             .into_any_element()
     });
@@ -73,9 +74,8 @@ fn arrow(open: bool, colors: &Colors, cx: &Context<MainWindow>) -> impl IntoElem
 }
 
 fn row(
-    index: usize,
-    id: JobId,
-    job: &Running,
+    (index, id, job): (usize, JobId, &Running),
+    words: &Words,
     colors: &Colors,
     cx: &Context<MainWindow>,
 ) -> impl IntoElement {
@@ -94,7 +94,7 @@ fn row(
                 .min_w_0()
                 .truncate()
                 .text_color(colors.text)
-                .child(title(job, now)),
+                .child(title(job, now, words)),
         )
         .child(
             div()

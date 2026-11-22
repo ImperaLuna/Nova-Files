@@ -12,10 +12,15 @@
 //! [`Command::WatchJobs`]: crate::Command::WatchJobs
 //! [`Event::JobStarted`]: crate::Event::JobStarted
 
+use std::any::Any;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
 use crate::access::AccessChange;
+
+mod carried;
+
+pub use carried::Carried;
 
 /// Names one job request, so a client can tell which [`JobId`] is the job
 /// it asked for. The client picks it; the core only echoes it.
@@ -109,6 +114,24 @@ pub enum Operation {
         level: u8,
         locked: bool,
     },
+    /// A job one feature defines and runs: the feature's own type, which
+    /// only that feature and the features that use its api open.
+    Feature(Carried),
+}
+
+impl Operation {
+    /// A feature's own job `job`.
+    pub fn feature<T: Any + Send + Sync + std::fmt::Debug + Eq>(job: T) -> Self {
+        Self::Feature(Carried::new(job))
+    }
+
+    /// The feature job this is, when it is a `T`.
+    pub fn get<T: Any>(&self) -> Option<&T> {
+        match self {
+            Self::Feature(job) => job.get(),
+            _ => None,
+        }
+    }
 }
 
 /// What kind of archive a compress makes.
@@ -258,6 +281,59 @@ pub enum ConflictKind {
     /// The password given doesn't open the archive; asked as
     /// [`ConflictKind::PasswordNeeded`] is.
     PasswordWrong,
+    /// A question of the job's own feature, which that feature words and
+    /// answers. A client answers it with [`Command::Reply`] or one of the
+    /// answers the question takes.
+    ///
+    /// [`Command::Reply`]: crate::Command::Reply
+    Asked(&'static Question),
+}
+
+/// A question one feature's jobs ask, beyond the shared ones.
+///
+/// A feature keeps each of its questions in a `static`; a question is
+/// that one `static` and no other, whatever its name says.
+pub struct Question {
+    name: &'static str,
+    takes: u8,
+}
+
+impl Question {
+    /// A question named `name` in logs, taking `takes` (Skip is always
+    /// taken).
+    pub const fn new(name: &'static str, takes: &[Answer]) -> Self {
+        let mut set = 0;
+        let mut at = 0;
+        while at < takes.len() {
+            set |= takes[at].bit();
+            at += 1;
+        }
+        Self { name, takes: set }
+    }
+
+    const fn takes(&self, answer: Answer) -> bool {
+        self.takes & answer.bit() != 0
+    }
+}
+
+impl PartialEq for Question {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+impl Eq for Question {}
+
+impl std::hash::Hash for Question {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::ptr::from_ref(self).hash(state);
+    }
+}
+
+impl std::fmt::Debug for Question {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name)
+    }
 }
 
 impl ConflictKind {
@@ -265,6 +341,9 @@ impl ConflictKind {
     /// nothing replaces a folder, the same file, or something of another
     /// kind.
     pub const fn accepts(self, answer: Answer) -> bool {
+        if let Self::Asked(question) = self {
+            return matches!(answer, Answer::Skip) || question.takes(answer);
+        }
         match answer {
             Answer::Skip => true,
             Answer::Replace => matches!(self, Self::FileExists),
@@ -303,6 +382,12 @@ pub enum Answer {
     Retry,
 }
 
+impl Answer {
+    const fn bit(self) -> u8 {
+        1 << self as u8
+    }
+}
+
 /// Which conflicts an answer covers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Scope {
@@ -311,3 +396,6 @@ pub enum Scope {
     /// It and every later conflict of the same kind in this job.
     AllOfThisKind,
 }
+
+#[cfg(test)]
+mod tests;

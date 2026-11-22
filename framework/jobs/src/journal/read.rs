@@ -49,14 +49,15 @@ fn parse(whole: &[u8], path: &Path) -> io::Result<Vec<Line>> {
         return Err(not_a_journal(path));
     }
     lines
-        .map(|line| {
+        .enumerate()
+        .map(|(at, line)| {
             let mut fields = line.split(|&byte| byte == b' ');
             let word = fields
                 .next()
                 .and_then(|word| std::str::from_utf8(word).ok());
             let paths: Option<Vec<_>> = fields.map(unescape).collect();
             match (word, paths) {
-                (Some(word), Some(paths)) if fits(word, &paths) => Ok(Line {
+                (Some(word), Some(paths)) if fits(word, &paths, at == 0) => Ok(Line {
                     word: word.to_owned(),
                     paths,
                 }),
@@ -69,7 +70,10 @@ fn parse(whole: &[u8], path: &Path) -> io::Result<Vec<Line>> {
 const PLANNED_ENTRIES: Range<usize> = 1..2;
 const TRASH_INFO_ENTRIES: Range<usize> = 1..3;
 
-fn fits(name: &str, fields: &[PathBuf]) -> bool {
+fn fits(name: &str, fields: &[PathBuf], first: bool) -> bool {
+    if word::fields(name).is_none() {
+        return first && fields.is_empty() && !name.is_empty();
+    }
     let entries = match name {
         word::PLANNED => PLANNED_ENTRIES,
         word::TRASH_INFO => TRASH_INFO_ENTRIES,

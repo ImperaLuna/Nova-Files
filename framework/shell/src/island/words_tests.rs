@@ -49,11 +49,25 @@ fn a_copy_names_where_it_went_only_when_that_is_not_on_screen() {
         into: here.to_path_buf(),
     };
     assert_eq!(
-        finished_note(&copy, &Outcome::Done, Some(here), Tally::default()).as_deref(),
+        finished_note(
+            &copy,
+            &Outcome::Done,
+            Some(here),
+            Tally::default(),
+            &Words::default()
+        )
+        .as_deref(),
         Some("Copied 2 items")
     );
     assert_eq!(
-        finished_note(&copy, &Outcome::Done, None, Tally::default()).as_deref(),
+        finished_note(
+            &copy,
+            &Outcome::Done,
+            None,
+            Tally::default(),
+            &Words::default()
+        )
+        .as_deref(),
         Some("Copied 2 items to Projects")
     );
 }
@@ -112,7 +126,14 @@ fn each_done_job_has_its_note() {
     ];
     for (operation, note) in notes {
         assert_eq!(
-            finished_note(&operation, &Outcome::Done, None, Tally::default()).as_deref(),
+            finished_note(
+                &operation,
+                &Outcome::Done,
+                None,
+                Tally::default(),
+                &Words::default()
+            )
+            .as_deref(),
             note,
             "{operation:?}"
         );
@@ -125,7 +146,13 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
         paths: paths(&["a"]),
     };
     assert_eq!(
-        finished_note(&trash, &Outcome::Cancelled, None, Tally::default()),
+        finished_note(
+            &trash,
+            &Outcome::Cancelled,
+            None,
+            Tally::default(),
+            &Words::default()
+        ),
         None
     );
     let failed = Outcome::Failed {
@@ -133,7 +160,7 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
         reason: Failure::PermissionDenied,
     };
     assert_eq!(
-        finished_note(&trash, &failed, None, Tally::default()).as_deref(),
+        finished_note(&trash, &failed, None, Tally::default(), &Words::default()).as_deref(),
         Some("Couldn't move to Trash locked: permission denied")
     );
     let new_folder = Operation::NewFolder {
@@ -145,11 +172,25 @@ fn a_cancel_says_nothing_and_a_failure_says_why() {
         reason: Failure::ReadOnly,
     };
     assert_eq!(
-        finished_note(&new_folder, &read_only, None, Tally::default()).as_deref(),
+        finished_note(
+            &new_folder,
+            &read_only,
+            None,
+            Tally::default(),
+            &Words::default()
+        )
+        .as_deref(),
         Some("Couldn't make New folder: the drive is read-only")
     );
     assert_eq!(
-        finished_note(&Operation::EmptyTrash, &failed, None, Tally::default()).as_deref(),
+        finished_note(
+            &Operation::EmptyTrash,
+            &failed,
+            None,
+            Tally::default(),
+            &Words::default()
+        )
+        .as_deref(),
         Some("Couldn't empty Trash: permission denied")
     );
 }
@@ -168,11 +209,11 @@ fn only_a_copy_or_move_says_an_item_cannot_be_copied() {
         items: paths(&["socket"]),
     };
     assert_eq!(
-        finished_note(&copy, &socket, None, Tally::default()).as_deref(),
+        finished_note(&copy, &socket, None, Tally::default(), &Words::default()).as_deref(),
         Some("Couldn't copy socket: it can't be copied")
     );
     assert_eq!(
-        finished_note(&delete, &socket, None, Tally::default()).as_deref(),
+        finished_note(&delete, &socket, None, Tally::default(), &Words::default()).as_deref(),
         Some("Couldn't delete socket: Nova Files can't do that with it")
     );
 }
@@ -237,7 +278,7 @@ fn a_note_says_what_the_answers_to_clashes_did() {
     };
     let tally = |replaced, skipped| Tally { replaced, skipped };
     let note = |operation: &Operation, here: Option<&Path>, answered| {
-        finished_note(operation, &Outcome::Done, here, answered)
+        finished_note(operation, &Outcome::Done, here, answered, &Words::default())
     };
 
     assert_eq!(

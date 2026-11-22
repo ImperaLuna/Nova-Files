@@ -7,12 +7,13 @@ use gpui::{
     AnyElement, AnyView, App, Div, Entity, FocusHandle, KeyDownEvent, Pixels, RenderImage,
     ScrollEvent, SharedString, Size, Subscription, Window,
 };
-use nova_files_api::{Entry, Event, Listing, ListingId, Order};
+use nova_files_api::{Entry, Event, Listing, ListingId, Order, Question};
 use nova_files_messages::Envelope;
 
 use super::{OpenPart, Opened, ShownColumn, Turn};
 use crate::assets::Icon;
 use crate::command::CommandSpec;
+use crate::island::job_words::Words;
 use crate::jump::Jump;
 use crate::layout::Layout;
 use crate::location::PageRef;
@@ -20,7 +21,7 @@ use crate::menu::{MenuAt, Placed, RowItem, SidebarAt, SidebarRow};
 use crate::navigator::FolderPick;
 use crate::opening::Opening;
 use crate::part::Part;
-use crate::part::{Click, ClickAnswer, DropOver, Staged};
+use crate::part::{Asking, Click, ClickAnswer, DropOver, Staged};
 use crate::path_bar::Crumb;
 use crate::per_tab::TabId;
 use crate::scene::Scene;
@@ -29,9 +30,14 @@ use crate::text::TextField;
 #[derive(Default)]
 pub struct WindowParts {
     pub(super) opened: Vec<Box<dyn OpenPart>>,
+    pub(super) words: Words,
 }
 
 impl WindowParts {
+    pub const fn words(&self) -> &Words {
+        &self.words
+    }
+
     pub fn peek(&self, envelope: &Envelope, cx: &mut App) {
         for part in &self.opened {
             part.peek(envelope, cx);
@@ -293,6 +299,16 @@ impl WindowParts {
         self.opened
             .iter()
             .find_map(|part| part.list_view(scene, cx))
+    }
+
+    pub fn asked(&self, asking: Option<Asking<'_>>, window: &mut Window, cx: &mut App) {
+        for part in &self.opened {
+            part.asked(asking, window, cx);
+        }
+    }
+
+    pub fn question(&self, question: &'static Question) -> Option<AnyView> {
+        self.opened.iter().find_map(|part| part.question(question))
     }
 
     pub fn island(&self, scene: &Scene, cx: &App) -> Option<AnyView> {

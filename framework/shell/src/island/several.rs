@@ -2,18 +2,30 @@ use std::time::Instant;
 
 use nova_files_api::{Operation, Tally};
 
+use super::job_words::Words;
 use super::progress::{Running, short_left, sources};
 use super::words::{ITEM, ITEMS, PART_GAP, count, name_of, what, with_answers};
 
-pub fn line(jobs: &[&Running], now: Instant) -> (String, String) {
+pub fn line(jobs: &[&Running], now: Instant, words: &Words) -> (String, String) {
     let all = |kind: fn(&Operation) -> bool| jobs.iter().all(|job| kind(&job.operation));
-    let many = if all(|operation| matches!(operation, Operation::Copy { .. })) {
-        count(jobs.len(), "copy", "copies")
-    } else if all(|operation| matches!(operation, Operation::Move { .. })) {
-        count(jobs.len(), "move", "moves")
-    } else {
-        count(jobs.len(), "job", "jobs")
+    let grouped = |job: &&Running| {
+        words
+            .of(&job.operation)
+            .and_then(|words| words.grouped(&job.operation))
     };
+    let feature = jobs
+        .first()
+        .and_then(grouped)
+        .filter(|first| jobs.iter().all(|job| grouped(job) == Some(*first)));
+    let shared = if all(|operation| matches!(operation, Operation::Copy { .. })) {
+        ("copy", "copies")
+    } else if all(|operation| matches!(operation, Operation::Move { .. })) {
+        ("move", "moves")
+    } else {
+        ("job", "jobs")
+    };
+    let (one, many) = feature.map_or(shared, |grouped| (grouped.one, grouped.many));
+    let many = count(jobs.len(), one, many);
     let left: Option<Vec<_>> = jobs.iter().map(|job| job.time_left(now)).collect();
     let rest = left
         .and_then(|left| left.into_iter().max())
@@ -34,12 +46,18 @@ pub fn fraction(jobs: &[&Running]) -> f32 {
     jobs.iter().map(|job| job.fraction()).sum::<f32>() / many
 }
 
-pub fn title(job: &Running, now: Instant) -> String {
+pub fn title(job: &Running, now: Instant, words: &Words) -> String {
+    if let Some(title) = words
+        .of(&job.operation)
+        .and_then(|words| words.title(&job.operation))
+    {
+        return title;
+    }
     match &job.operation {
         Operation::Copy { sources, into } | Operation::Move { sources, into } => {
             format!("{} to {}", what(sources), name_of(into))
         }
-        _ => job.line(now),
+        _ => job.line(now, words),
     }
 }
 
@@ -71,7 +89,9 @@ impl Batch {
         let mut any_copy = false;
         for (operation, tally) in &ended {
             let gone = usize::try_from(tally.skipped).unwrap_or(usize::MAX);
-            let went = sources(operation).len().saturating_sub(gone);
+            let went = sources(operation, &Words::default())
+                .len()
+                .saturating_sub(gone);
             if matches!(operation, Operation::Move { .. }) {
                 moved += went;
             } else {

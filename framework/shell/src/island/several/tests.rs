@@ -39,13 +39,13 @@ fn the_folded_line_counts_the_jobs_and_says_when_the_last_ends() {
     let slow = half_way(copy(&["c", "d"], "/b"), start, 4);
 
     assert_eq!(
-        line(&[&quick, &slow], now),
+        line(&[&quick, &slow], now, &Words::default()),
         ("2 copies".to_owned(), " · 4 s left".to_owned())
     );
     assert_eq!(fraction(&[&quick, &slow]), 0.5);
     let fresh = Running::new(copy(&["e"], "/b"), start);
     assert_eq!(
-        line(&[&quick, &fresh], now),
+        line(&[&quick, &fresh], now, &Words::default()),
         ("2 copies".to_owned(), String::new()),
         "not every one can say yet"
     );
@@ -56,8 +56,11 @@ fn the_folded_line_counts_the_jobs_and_says_when_the_last_ends() {
         },
         start,
     );
-    assert_eq!(line(&[&moving, &moving], now).0, "2 moves");
-    assert_eq!(line(&[&moving, &fresh], now).0, "2 jobs");
+    assert_eq!(
+        line(&[&moving, &moving], now, &Words::default()).0,
+        "2 moves"
+    );
+    assert_eq!(line(&[&moving, &fresh], now, &Words::default()).0, "2 jobs");
     assert_eq!(fraction(&[]), 0.0);
 }
 
@@ -67,13 +70,13 @@ fn each_row_names_what_it_works_on_and_its_seconds_left() {
     let job = half_way(copy(&["film.mkv"], "/home/a/Documents"), start, 6);
     let now = start + Duration::from_secs(6);
 
-    assert_eq!(title(&job, now), "film.mkv to Documents");
+    assert_eq!(title(&job, now, &Words::default()), "film.mkv to Documents");
     assert_eq!(left(&job, now).as_deref(), Some("6 s"));
     let several = Running::new(copy(&["a", "b"], "/b"), start);
-    assert_eq!(title(&several, now), "2 items to b");
+    assert_eq!(title(&several, now, &Words::default()), "2 items to b");
     assert_eq!(left(&several, now), None);
     let empty = Running::new(Operation::EmptyTrash, start);
-    assert_eq!(title(&empty, now), "Deleting");
+    assert_eq!(title(&empty, now, &Words::default()), "Deleting");
 }
 
 #[test]

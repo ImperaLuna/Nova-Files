@@ -12,6 +12,7 @@ use super::MainWindow;
 use crate::island;
 use crate::island::progress::Running;
 use crate::island::several::Batch;
+use nova_files_shell::island::job_words::Words;
 
 pub const SHOW_AFTER: Duration = Duration::from_millis(400);
 pub const READ_AGAIN_EVERY: Duration = Duration::from_millis(500);
@@ -62,21 +63,20 @@ impl Jobs {
         self.undoable.last().copied()
     }
 
-    pub(super) fn moved(&mut self, event: &Event, now: Instant) -> Option<PathBuf> {
+    pub(super) fn moved(&mut self, event: &Event, now: Instant, words: &Words) -> Option<PathBuf> {
         let (job, change): (_, fn(&mut Running)) = match *event {
             Event::JobProgress { job, progress } => {
                 let running = self.running.get_mut(&job)?;
                 let landed = progress.done_items > running.progress.done_items;
                 running.advanced(progress, now);
-                let (Operation::Copy { into, .. } | Operation::Move { into, .. }) =
-                    &running.operation
-                else {
-                    return None;
+                let into = match &running.operation {
+                    Operation::Copy { into, .. } | Operation::Move { into, .. } => into.as_path(),
+                    other => words.of(other)?.writes_into(other)?,
                 };
                 let due = self
                     .read_again
                     .is_none_or(|last| now.saturating_duration_since(last) >= READ_AGAIN_EVERY);
-                return (landed && due).then(|| into.clone());
+                return (landed && due).then(|| into.to_path_buf());
             }
             Event::ConflictAnswered { job, .. } => (job, |job| job.asking = None),
             Event::JobPaused(job) => (job, |job| job.paused = true),
@@ -134,7 +134,7 @@ impl MainWindow {
 
     pub(super) fn job_moved(&mut self, event: &Event, cx: &mut Context<Self>) {
         let now = cx.background_executor().now();
-        if let Some(into) = self.jobs.moved(event, now)
+        if let Some(into) = self.jobs.moved(event, now, self.parts.words())
             && self.read_again_if_changed(&[into])
         {
             self.jobs.read_again = Some(now);
@@ -204,7 +204,13 @@ impl MainWindow {
             .undoable
             .contains(&job)
             .then_some(nova_files_shell::Undo::Job(job));
-        let own = island::finished_note(&operation, outcome, self.folder(), tally);
+        let own = island::finished_note(
+            &operation,
+            outcome,
+            self.folder(),
+            tally,
+            self.parts.words(),
+        );
         let together = (transfer && !others && !self.jobs.batch.is_empty())
             .then(|| self.jobs.batch.note())
             .filter(|_| own.is_none());
@@ -304,7 +310,7 @@ impl MainWindow {
             .running
             .values()
             .max_by_key(|job| job.started)
-            .map(|job| job.line(now))
+            .map(|job| job.line(now, self.parts.words()))
     }
 
     pub fn newest_question(&self) -> Option<&Conflict> {
@@ -439,16 +445,31 @@ mod tests {
             into: into.clone(),
         };
         jobs.running.insert(job, Running::new(copy, start));
-        assert_eq!(jobs.moved(&progress(job, 0), start), None);
-        assert_eq!(jobs.moved(&progress(job, 1), start), Some(into.clone()));
+        assert_eq!(
+            jobs.moved(&progress(job, 0), start, &Words::default()),
+            None
+        );
+        assert_eq!(
+            jobs.moved(&progress(job, 1), start, &Words::default()),
+            Some(into.clone())
+        );
         jobs.read_again = Some(start);
         let soon = start + READ_AGAIN_EVERY / 2;
-        assert_eq!(jobs.moved(&progress(job, 2), soon), None);
+        assert_eq!(jobs.moved(&progress(job, 2), soon, &Words::default()), None);
         let later = start + READ_AGAIN_EVERY;
-        assert_eq!(jobs.moved(&progress(job, 2), later), None);
-        assert_eq!(jobs.moved(&progress(job, 3), later), Some(into));
+        assert_eq!(
+            jobs.moved(&progress(job, 2), later, &Words::default()),
+            None
+        );
+        assert_eq!(
+            jobs.moved(&progress(job, 3), later, &Words::default()),
+            Some(into)
+        );
         assert_eq!(jobs.running[&job].progress, items(3));
-        assert_eq!(jobs.moved(&progress(JobId(2), 3), later), None);
+        assert_eq!(
+            jobs.moved(&progress(JobId(2), 3), later, &Words::default()),
+            None
+        );
     }
 
     #[test]
@@ -460,7 +481,10 @@ mod tests {
         };
         jobs.running.insert(JobId(1), Running::new(trash, start));
         let later = start + Duration::from_secs(1);
-        assert_eq!(jobs.moved(&progress(JobId(1), 1), later), None);
+        assert_eq!(
+            jobs.moved(&progress(JobId(1), 1), later, &Words::default()),
+            None
+        );
         assert_eq!(jobs.running[&JobId(1)].progress, items(1));
     }
 
@@ -478,17 +502,20 @@ mod tests {
             number: 1,
             more: 0,
         });
-        jobs.moved(&Event::JobPaused(job), start);
+        jobs.moved(&Event::JobPaused(job), start, &Words::default());
         assert!(jobs.running[&job].paused);
-        jobs.moved(&Event::JobResumed(job), start);
+        jobs.moved(&Event::JobResumed(job), start, &Words::default());
         assert!(!jobs.running[&job].paused);
         let answer = Event::ConflictAnswered {
             job,
             answer: Answer::KeepBoth,
         };
-        jobs.moved(&answer, start);
+        jobs.moved(&answer, start, &Words::default());
         assert!(jobs.running[&job].asking.is_none());
-        assert_eq!(jobs.moved(&Event::JobPaused(JobId(2)), start), None);
+        assert_eq!(
+            jobs.moved(&Event::JobPaused(JobId(2)), start, &Words::default()),
+            None
+        );
     }
 
     #[test]

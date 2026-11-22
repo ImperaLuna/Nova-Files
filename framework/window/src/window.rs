@@ -12,6 +12,7 @@ mod jobs;
 mod navigate;
 pub mod password;
 mod pin;
+mod question;
 mod renaming;
 mod rows;
 mod search;
