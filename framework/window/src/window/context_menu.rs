@@ -6,7 +6,7 @@ use nova_files_shell::{MenuAt, MenuGroup, MenuItem as ShellItem, Placed, arrange
 
 use super::MainWindow;
 use crate::assets::Icon;
-use crate::commands::{OPEN, PREVIEW, SELECT_ALL};
+use crate::commands::{CommandSpec, OPEN, PREVIEW, SELECT_ALL};
 use crate::menu::{MenuAction, MenuItem};
 use crate::selection::{Click, Selection};
 use crate::theme::size;
@@ -49,6 +49,22 @@ impl MainWindow {
             (self.list_corner(), self.space_menu(cx))
         };
         self.open_menu_groups(at, groups, true, cx);
+    }
+
+    pub fn offered(&self, cx: &App) -> Vec<&'static CommandSpec> {
+        let entry = (self.selected_count() > 0).then(|| self.entry_menu(cx));
+        let menus = entry.into_iter().chain([self.space_menu(cx)]).flatten();
+        let in_menus = menus.flatten().filter_map(|item| match item.action {
+            MenuAction::Run(spec) => Some(spec),
+            MenuAction::OpenInNewTab(_) | MenuAction::Part(_) => None,
+        });
+        let scene = self.scene(cx);
+        let on_screen = [MenuAt::Island, MenuAt::PathBarEnd]
+            .into_iter()
+            .flat_map(|at| self.parts.menu(at, &scene, cx))
+            .flat_map(|placed| placed.items)
+            .map(|item| item.run);
+        in_menus.chain(on_screen).collect()
     }
 
     fn has_menus(&self) -> bool {
@@ -101,7 +117,7 @@ impl MainWindow {
         }
     }
 
-    fn space_menu(&self, cx: &Context<Self>) -> Vec<Vec<MenuItem>> {
+    fn space_menu(&self, cx: &App) -> Vec<Vec<MenuItem>> {
         let any = self
             .listing
             .as_ref()

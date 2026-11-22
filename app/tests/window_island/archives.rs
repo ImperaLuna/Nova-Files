@@ -5,16 +5,16 @@ use super::*;
 use crate::window_sidebar::right_click;
 
 const MAKES_AN_EMPTY_ARCHIVE: &str = "#!/bin/sh\n: > \"$4\"\n";
-const HOLDS_ONE_FILE: &str = "#!/bin/sh\nprintf '%s\\000' f 0 5 0 u 420 inner.zip ''\n";
+pub(super) const HOLDS_ONE_FILE: &str = "#!/bin/sh\nprintf '%s\\000' f 0 5 0 u 420 inner.zip ''\n";
 
-fn fake_helper(home: &TempFolder, script: &str) -> nova_files::Archiver {
+pub(super) fn fake_helper(home: &TempFolder, script: &str) -> nova_files::Archiver {
     let helper = home.path().join("archiver");
     fs::write(&helper, script).unwrap();
     fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
     nova_files::Archiver::at(helper)
 }
 
-fn archive_tree(test: &str) -> TempFolder {
+pub(super) fn archive_tree(test: &str) -> TempFolder {
     let tree = TempFolder::tree(test);
     fs::write(tree.path().join("bundle.zip"), "").unwrap();
     tree
