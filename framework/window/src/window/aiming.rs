@@ -7,7 +7,7 @@ use gpui::SharedString;
 use super::MainWindow;
 use super::dragging::Drag;
 use crate::dropping::DropAt;
-use nova_files_shell::PageRef;
+use nova_files_shell::{Gap, PageRef};
 
 #[derive(Debug, Clone)]
 pub struct Aim {
@@ -25,6 +25,13 @@ impl Aim {
         Self {
             at: DropAt::Folder(path),
             name: name.into(),
+        }
+    }
+
+    pub fn gap(gap: Gap) -> Self {
+        Self {
+            name: gap.label.clone(),
+            at: DropAt::Gap(gap),
         }
     }
 

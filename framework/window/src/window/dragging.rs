@@ -67,7 +67,9 @@ impl Drag {
         cx: &App,
     ) -> Option<SharedString> {
         let aim = self.aims.aimed()?;
-        let at = dropping::shell_place(&aim.at);
+        let Some(at) = dropping::shell_place(&aim.at) else {
+            return dropping::label(&aim.at, &aim.name).map(SharedString::from);
+        };
         let over = DropOver {
             at: &at,
             name: &aim.name,
@@ -153,11 +155,12 @@ impl MainWindow {
         let selected = self.selected_full_paths();
         let paths: Vec<PathBuf> = selected.iter().map(|(path, _)| path.clone()).collect();
         let what = island::what(&paths).into();
+        let selected_kinds = selected.clone();
         if !selected.is_empty() {
             row.drag.outward.set(FileDragPaths::new(selected)).ok();
             self.draw_pile(&row.drag, window, cx);
         }
-        row.drag.sources.set(Sources::new(paths)).ok();
+        row.drag.sources.set(Sources::of_rows(selected_kinds)).ok();
         let (drag, origin) = (Rc::clone(&row.drag), cx.entity().downgrade());
         cx.new(|_| DragChip { what, drag, origin })
     }
@@ -200,7 +203,13 @@ impl MainWindow {
         if !self.drop_rule()(&at, sources) {
             return;
         }
-        let place = dropping::shell_place(&at);
+        if let DropAt::Gap(gap) = &at {
+            (gap.take)(sources.paths.clone(), cx);
+            return;
+        }
+        let Some(place) = dropping::shell_place(&at) else {
+            return;
+        };
         let over = DropOver {
             at: &place,
             name: &name,

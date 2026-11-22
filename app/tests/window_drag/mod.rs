@@ -428,3 +428,35 @@ async fn files_dropped_on_a_tab_go_into_its_folder_or_the_trash(cx: &mut TestApp
     wait_for_note(&view, cx, "Moved Projects to Trash").await;
     assert!(!projects.exists());
 }
+
+#[gpui::test]
+async fn a_folder_dropped_between_places_rows_is_pinned_there(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-pin");
+    let home = TempFolder::tree("drag-pin-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    assert!(cx.debug_bounds("place-0-below").is_none());
+
+    start_drag(cx, "name-1");
+    drag_over(cx, "place-0-below");
+    let says = cx.update(|_, cx| view.read(cx).drop_says(Modifiers::none(), cx));
+    assert_ne!(says.as_deref(), Some("Pin to Places"));
+    let end = center(cx, "place-0-below");
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+
+    start_drag(cx, "name-0");
+    drag_over(cx, "place-0-below");
+    let says = cx.update(|_, cx| view.read(cx).drop_says(Modifiers::none(), cx));
+    assert_eq!(says.as_deref(), Some("Pin to Places"));
+    let end = center(cx, "place-0-below");
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    let projects = tree.path().join("Projects");
+    view.condition::<WindowEvent>(cx, |view, cx| {
+        pinned(view, cx).iter().map(|pin| &pin.path).eq([&projects])
+    })
+    .await;
+    assert!(tree.path().join("notes.txt").exists());
+    assert!(projects.exists());
+    assert!(cx.debug_bounds("place-0-below").is_none());
+}

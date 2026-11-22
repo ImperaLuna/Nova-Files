@@ -13,6 +13,7 @@ pub struct Shown {
     pub name: SharedString,
     pub icon: Icon,
     pub pinned: bool,
+    pub standard: bool,
 }
 
 pub fn shown(places: &[Place], pinned: &[Bookmark]) -> Vec<Shown> {
@@ -23,6 +24,7 @@ pub fn shown(places: &[Place], pinned: &[Bookmark]) -> Vec<Shown> {
             name: standard_name(place),
             icon,
             pinned: false,
+            standard: true,
         })
     });
     let pinned = pinned.iter().map(|bookmark| Shown {
@@ -36,6 +38,7 @@ pub fn shown(places: &[Place], pinned: &[Bookmark]) -> Vec<Shown> {
             .find(|place| place.path == bookmark.path)
             .map_or(Icon::Folder, |place| place_icon(place.kind)),
         pinned: true,
+        standard: false,
     });
     let mut rows: Vec<Shown> = Vec::new();
     for row in standard.chain(pinned) {

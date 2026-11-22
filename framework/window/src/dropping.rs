@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use nova_files_shell::{Allow, PageRef, RulesBook};
+use nova_files_shell::{Allow, Gap, PageRef, RulesBook};
 
 pub const ADD_TO: &str = "Add to";
 
@@ -9,6 +9,7 @@ pub const ADD_TO: &str = "Add to";
 pub enum DropAt {
     Folder(PathBuf),
     Page(PageRef),
+    Gap(Gap),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +22,7 @@ pub struct Sources {
     pub paths: Vec<PathBuf>,
     each: HashSet<PathBuf>,
     folders: HashSet<PathBuf>,
+    all_folders: bool,
 }
 
 impl Sources {
@@ -34,14 +36,25 @@ impl Sources {
             paths,
             each,
             folders,
+            all_folders: false,
+        }
+    }
+
+    pub fn of_rows(rows: Vec<(PathBuf, bool)>) -> Self {
+        let all_folders = rows.iter().all(|(_, folder)| *folder);
+        let paths = rows.into_iter().map(|(path, _)| path).collect();
+        Self {
+            all_folders,
+            ..Self::new(paths)
         }
     }
 }
 
-pub fn shell_place(at: &DropAt) -> nova_files_shell::Location {
+pub fn shell_place(at: &DropAt) -> Option<nova_files_shell::Location> {
     match at {
-        DropAt::Folder(folder) => nova_files_shell::Location::Folder(folder.clone()),
-        DropAt::Page(page) => nova_files_shell::Location::Page(page.clone()),
+        DropAt::Folder(folder) => Some(nova_files_shell::Location::Folder(folder.clone())),
+        DropAt::Page(page) => Some(nova_files_shell::Location::Page(page.clone())),
+        DropAt::Gap(_) => None,
     }
 }
 
@@ -52,6 +65,7 @@ pub fn allowed(at: &DropAt, sources: &Sources, rules: &RulesBook) -> bool {
     }
     match at {
         DropAt::Page(_) => true,
+        DropAt::Gap(_) => sources.all_folders,
         DropAt::Folder(into) => {
             (rules.takes_drops(into) || rules.for_folder(into).allows(Allow::Change))
                 && !sources.folders.contains(into)
@@ -66,13 +80,14 @@ pub fn dropped(at: DropAt, sources: Vec<PathBuf>) -> Option<Dropped> {
             page,
             paths: sources,
         },
-        DropAt::Folder(_) => return None,
+        DropAt::Folder(_) | DropAt::Gap(_) => return None,
     })
 }
 
 pub fn label(at: &DropAt, name: &str) -> Option<String> {
     match at {
         DropAt::Page(_) => Some(format!("{ADD_TO} {name}")),
+        DropAt::Gap(gap) => Some(gap.label.to_string()),
         DropAt::Folder(_) => None,
     }
 }
@@ -169,7 +184,23 @@ mod tests {
         assert_eq!(label(&trash, "Trash"), None);
         assert_eq!(
             shell_place(&trash),
-            nova_files_shell::Location::Folder(TRASH.into())
+            Some(nova_files_shell::Location::Folder(TRASH.into()))
+        );
+    }
+
+    #[test]
+    fn only_folders_dragged_from_the_list_drop_into_a_gap() {
+        let rules = rules();
+        let gap = DropAt::Gap(Gap::new("Pin to Places", |_, _| {}));
+        let folders = Sources::of_rows(vec![("/a/x".into(), true), ("/a/y".into(), true)]);
+        let mixed = Sources::of_rows(vec![("/a/x".into(), true), ("/a/n.txt".into(), false)]);
+        assert!(allowed(&gap, &folders, &rules));
+        assert!(!allowed(&gap, &mixed, &rules));
+        assert!(!allowed(&gap, &paths(&["/a/x"]), &rules));
+        assert_eq!(shell_place(&gap), None);
+        assert_eq!(
+            label(&gap, "Pin to Places").as_deref(),
+            Some("Pin to Places")
         );
     }
 

@@ -234,6 +234,8 @@ pub mod size {
     pub const PLACE_PAD: Pixels = px(10.0);
     pub const PLACE_ICON: Pixels = px(19.0);
     pub const PLACE_GAP: Pixels = px(1.0);
+    pub const PIN_LINE: Pixels = px(4.0);
+    pub const PIN_LINE_OVERHANG: Pixels = px(-2.0);
     pub const PLACE_NARROW_PAD: Pixels = px(12.0);
     pub const PLACE_NARROW_GAP: Pixels = px(8.0);
     pub const TREE_ROW_HEIGHT: Pixels = px(30.0);
