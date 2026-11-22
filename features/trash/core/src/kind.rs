@@ -66,7 +66,7 @@ impl<M: Mover + 'static> JobKind for TrashJobs<M> {
     fn undoes(&self, operation: &Operation) -> Option<JobId> {
         match operation {
             Operation::Undo { job } => Some(*job),
-            _ => None,
+            Operation::Feature(_) => None,
         }
     }
 

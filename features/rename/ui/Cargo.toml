@@ -8,6 +8,7 @@
 #
 # Allowed workspace crates:
 # - nova-files-api
+# - nova-files-rename-api
 # - nova-files-shell
 
 [package]
@@ -27,4 +28,5 @@ workspace = true
 [dependencies]
 gpui.workspace = true
 nova-files-api.workspace = true
+nova-files-rename-api.workspace = true
 nova-files-shell.workspace = true

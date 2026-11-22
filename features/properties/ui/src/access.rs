@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use nova_files_api::ModeChange;
+use nova_files_properties_api::ModeChange;
 use nova_files_properties_api::Properties;
 use nova_files_shell::assets::Icon;
 

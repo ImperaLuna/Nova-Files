@@ -76,10 +76,7 @@ pub fn finished_note(
 ) -> Option<String> {
     let feature = words.of(operation);
     match outcome {
-        Outcome::Done if matches!(operation, Operation::Feature(_)) => {
-            feature.and_then(|words| words.done(operation, here, tally).flatten())
-        }
-        Outcome::Done => done_note(operation),
+        Outcome::Done => feature.and_then(|words| words.done(operation, here, tally).flatten()),
         Outcome::Cancelled => None,
         Outcome::Failed { path, reason } => {
             let why = feature
@@ -103,24 +100,11 @@ pub fn with_answers(mut parts: Vec<String>, tally: Tally) -> String {
     parts.join(LIST_GAP)
 }
 
-fn done_note(operation: &Operation) -> Option<String> {
-    Some(match operation {
-        Operation::Rename { name, .. } => format!("Renamed to {}", lossy(name)),
-        Operation::NewFolder { .. }
-        | Operation::ChangeAccess { .. }
-        | Operation::Undo { .. }
-        | Operation::Feature(_) => return None,
-    })
-}
-
 fn verb(operation: &Operation, words: Option<&dyn AnyJobWords>) -> (&'static str, bool) {
     match operation {
         Operation::Feature(_) => words
             .and_then(|words| words.failed(operation))
             .map_or((FINISH, false), |failed| (failed.verb, failed.names_item)),
-        Operation::Rename { .. } => ("rename", true),
-        Operation::NewFolder { .. } => ("make", true),
-        Operation::ChangeAccess { .. } => ("change", true),
         Operation::Undo { .. } => ("undo", false),
     }
 }

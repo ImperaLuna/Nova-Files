@@ -1,9 +1,12 @@
 # nova-files-rename-api
 #
-# What a rename or a new folder may be called. Plain std, no I/O.
+# The rename and new folder jobs, and what a rename or a new folder may
+# be called. No I/O.
 #
 # Allowed outside crates: none
-# Allowed workspace crates: none
+#
+# Allowed workspace crates:
+# - nova-files-api
 
 [package]
 name = "nova-files-rename-api"
@@ -15,3 +18,6 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+nova-files-api.workspace = true

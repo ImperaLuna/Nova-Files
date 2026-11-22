@@ -5,7 +5,8 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use nova_files_api::{AccessChange, Failure, MODE_BITS, ModeChange, Outcome, Reach};
+use nova_files_api::{Failure, MODE_BITS, Outcome};
+use nova_files_properties_api::{AccessChange, ModeChange, Reach};
 use rustix::fs::{
     AtFlags, CWD, Dir, FileType, Gid, Mode, OFlags, Statx, StatxFlags, Uid, chmodat, chownat,
     openat, statx,

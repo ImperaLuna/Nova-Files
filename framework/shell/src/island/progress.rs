@@ -158,9 +158,6 @@ fn doing(operation: &Operation, words: &Words) -> (&'static str, &'static str) {
             .of(operation)
             .and_then(|words| words.doing(operation))
             .map_or((WORKING, ""), |doing| (doing.verb, doing.after_items)),
-        Operation::Rename { .. } => ("Renaming", ""),
-        Operation::NewFolder { .. } => ("Making", ""),
-        Operation::ChangeAccess { .. } => ("Changing", ""),
         Operation::Undo { .. } => ("Undoing", ""),
     }
 }
@@ -171,9 +168,6 @@ pub fn sources<'a>(operation: &'a Operation, words: &Words) -> &'a [std::path::P
             .of(operation)
             .and_then(|words| words.sources(operation))
             .unwrap_or_default(),
-        Operation::ChangeAccess { paths, .. } => paths,
-        Operation::Rename { path, .. } => std::slice::from_ref(path),
-        Operation::NewFolder { inside, .. } => std::slice::from_ref(inside),
         Operation::Undo { .. } => &[],
     }
 }

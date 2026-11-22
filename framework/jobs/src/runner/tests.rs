@@ -9,6 +9,9 @@ use crate::set_aside::{Aside, SetAsideForJob};
 const WAIT: Duration = Duration::from_secs(10);
 const PARTWAY: &str = "/gone/partway";
 
+#[derive(Debug, PartialEq, Eq)]
+struct Made;
+
 struct Undoing;
 
 impl JobKind for Undoing {
@@ -24,18 +27,18 @@ impl JobKind for Undoing {
                 },
                 Vec::new(),
             ),
-            _ => (Outcome::Done, Vec::new()),
+            Operation::Feature(_) => (Outcome::Done, Vec::new()),
         }
     }
 
     fn undo(&self, _: &mut Running, operation: &Operation, _: &Ended) -> Option<()> {
-        matches!(operation, Operation::NewFolder { .. }).then_some(())
+        operation.get::<Made>().map(|_| ())
     }
 
     fn undoes(&self, operation: &Operation) -> Option<JobId> {
         match operation {
             Operation::Undo { job } => Some(*job),
-            _ => None,
+            Operation::Feature(_) => None,
         }
     }
 
@@ -117,10 +120,7 @@ fn an_undo_that_stops_partway_on_a_missing_file_can_be_undone_again() {
     let (sender, heard) = mpsc::channel();
     let sink: Arc<dyn EventSink> = Arc::new(Heard(sender));
     jobs.watch(ClientId(1), &sink);
-    let made = Operation::NewFolder {
-        inside: PathBuf::from("/a"),
-        name: "made".into(),
-    };
+    let made = Operation::feature(Made);
     jobs.start(sink.as_ref(), JobTag(1), made).unwrap();
     let job = started(&heard);
     until_finished(&heard, job);

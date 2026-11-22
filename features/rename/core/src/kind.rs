@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use nova_files_api::{Failure, Operation, Outcome};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, JobKind};
+use nova_files_rename_api::{NewFolderJob, RenameJob};
 
 use crate::undo::{self, Undo, undo_of};
 use crate::{new_folder, rename};
@@ -14,27 +15,26 @@ impl JobKind for Renames {
     type Undo = Undo;
 
     fn claims(&self, operation: &Operation) -> bool {
-        matches!(
-            operation,
-            Operation::Rename { .. } | Operation::NewFolder { .. }
-        )
+        operation.get::<RenameJob>().is_some() || operation.get::<NewFolderJob>().is_some()
     }
 
     fn run(&self, running: &mut Running, operation: &Operation, undo: Option<&Undo>) -> Ended {
         if let Some(undo) = undo {
             return undo::run(running, undo);
         }
-        match operation {
-            Operation::Rename { path, name } => rename(path, name),
-            Operation::NewFolder { inside, name } => new_folder(inside, name),
-            _ => (
-                Outcome::Failed {
-                    path: PathBuf::new(),
-                    reason: Failure::Other,
-                },
-                Vec::new(),
-            ),
+        if let Some(job) = operation.get::<RenameJob>() {
+            return rename(&job.path, &job.name);
         }
+        if let Some(job) = operation.get::<NewFolderJob>() {
+            return new_folder(&job.inside, &job.name);
+        }
+        (
+            Outcome::Failed {
+                path: PathBuf::new(),
+                reason: Failure::Other,
+            },
+            Vec::new(),
+        )
     }
 
     fn undo(&self, _: &mut Running, operation: &Operation, ended: &Ended) -> Option<Undo> {
@@ -42,11 +42,13 @@ impl JobKind for Renames {
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
-        match operation {
-            Operation::Rename { path, .. } => path.clone(),
-            Operation::NewFolder { inside, name } => inside.join(name),
-            _ => PathBuf::new(),
+        if let Some(job) = operation.get::<RenameJob>() {
+            return job.path.clone();
         }
+        operation
+            .get::<NewFolderJob>()
+            .map(|job| job.inside.join(&job.name))
+            .unwrap_or_default()
     }
 }
 
@@ -56,14 +58,8 @@ mod tests {
 
     #[test]
     fn renames_claim_renaming_and_new_folders_and_name_where_they_start() {
-        let rename = Operation::Rename {
-            path: "/a/b".into(),
-            name: "c".into(),
-        };
-        let folder = Operation::NewFolder {
-            inside: "/a".into(),
-            name: "new".into(),
-        };
+        let rename = nova_files_rename_api::rename("/a/b".into(), "c".into());
+        let folder = nova_files_rename_api::new_folder("/a".into(), "new".into());
         let delete = Operation::Undo {
             job: nova_files_api::JobId(1),
         };
