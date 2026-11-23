@@ -264,6 +264,7 @@ impl MainWindow {
         self.jump = TypeJump::default();
         self.band = None;
         self.pressed_name = false;
+        self.lift = None;
         self.island.confirm = None;
         self.falling_back = false;
         self.search.asked = None;

@@ -31,7 +31,10 @@ fn bounds(cx: &mut VisualTestContext, selector: &'static str) -> Bounds<Pixels> 
 
 fn drag(cx: &mut VisualTestContext, from: Point<Pixels>, to: Point<Pixels>, modifiers: Modifiers) {
     cx.simulate_mouse_down(from, MouseButton::Left, modifiers);
-    cx.simulate_mouse_move(to, Some(MouseButton::Left), modifiers);
+    for _ in 0..2 {
+        cx.simulate_mouse_move(to, Some(MouseButton::Left), modifiers);
+        cx.run_until_parked();
+    }
     cx.simulate_mouse_up(to, MouseButton::Left, modifiers);
     cx.run_until_parked();
 }
