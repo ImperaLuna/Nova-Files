@@ -71,7 +71,7 @@ async fn the_trash_says_where_each_came_from_and_restores_it(cx: &mut TestAppCon
 }
 
 #[gpui::test]
-async fn empty_trash_asks_first(cx: &mut TestAppContext) {
+async fn empty_trash_empties_at_once(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("empty-note");
     let home = TempFolder::tree("trash-empty-home");
@@ -87,23 +87,7 @@ async fn empty_trash_asks_first(cx: &mut TestAppContext) {
     .await;
     click(cx, "empty-trash");
     cx.run_until_parked();
-    assert_eq!(
-        view.read_with(cx, |view, _| view
-            .confirm()
-            .map(|confirm| confirm.label.clone())),
-        Some("Delete 1 item in Trash for good?".into())
-    );
-    click(cx, "island-no");
-    cx.run_until_parked();
     assert!(view.read_with(cx, |view, _| view.confirm().is_none()));
-    assert_eq!(
-        view.read_with(cx, |view, _| view.entry_names()),
-        ["Projects"]
-    );
-
-    click(cx, "empty-trash");
-    cx.run_until_parked();
-    click(cx, "island-yes");
     wait_for_names(&view, cx, &[]).await;
     wait_for_note(&view, cx, "Trash emptied").await;
     assert!(!tree.path().join("Projects").exists());

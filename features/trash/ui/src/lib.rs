@@ -58,10 +58,6 @@ const ROW: &str = "place-trash";
 const WAS_IN_LABEL: &str = "Was in";
 const WAS_IN_HEAD: &str = "head-was-in";
 const EMPTY_LABEL: &str = "Empty";
-const DELETE_LABEL: &str = "Delete";
-const EVERYTHING: &str = "everything";
-const ITEM: &str = "item";
-const ITEMS: &str = "items";
 const HOME: &str = "~";
 const MOVE_TO: &str = "Move to";
 const NO_TRASH_REASON: &str = "its drive has no trash";
@@ -225,23 +221,9 @@ impl TrashPart {
         }
     }
 
-    fn ask_empty(&mut self, _: &EmptyTrash, _: &mut Window, cx: &mut Context<Self>) {
-        let what = self.count.map_or_else(|| EVERYTHING.to_owned(), count_of);
-        let island = self.host.island.downgrade();
-        let on_yes = Box::new(move |cx: &mut App| {
-            island
-                .update(cx, |island, cx| {
-                    island.start_job(trash_api::empty_trash(), cx);
-                })
-                .ok();
-        });
+    fn empty(&mut self, _: &EmptyTrash, _: &mut Window, cx: &mut Context<Self>) {
         self.host.island.update(cx, |island, cx| {
-            island.ask(
-                format!("Delete {what} in Trash for good?"),
-                DELETE_LABEL,
-                on_yes,
-                cx,
-            );
+            island.start_job(trash_api::empty_trash(), cx);
         });
     }
 }
@@ -252,14 +234,6 @@ fn touches_trash(operation: &Operation) -> bool {
         || operation.get::<RestoreJob>().is_some()
         || operation.get::<DeleteFromTrashJob>().is_some()
         || operation.get::<EmptyTrashJob>().is_some()
-}
-
-fn count_of(number: usize) -> String {
-    if number == 1 {
-        format!("1 {ITEM}")
-    } else {
-        format!("{number} {ITEMS}")
-    }
 }
 
 fn short_path(path: &Path, home: &Path) -> String {
@@ -341,7 +315,7 @@ impl Part for TrashPart {
         slots.watch(Self::watch);
         slots.command(&TRASH, may_trash, Self::trash_selected);
         slots.command(&RESTORE, in_trash, Self::restore);
-        slots.command(&EMPTY_TRASH, in_trash, Self::ask_empty);
+        slots.command(&EMPTY_TRASH, in_trash, Self::empty);
         slots.command(&DELETE_FOR_GOOD, in_trash, Self::delete_for_good);
         slots.before(Self::trash_key);
         slots.before(Self::delete_key);
