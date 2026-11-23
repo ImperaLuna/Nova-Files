@@ -18,7 +18,11 @@ pub const MAX_FOUND: u32 = 1000;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// Find files under home whose names match `query`, one word or
-    /// several separated by spaces. The answer is an [`Event::Found`] for
+    /// several separated by spaces. When one word matches the name, the
+    /// others may match a folder above it instead; those hits come after
+    /// the ones whose name matches every word. A word with `/` in it
+    /// follows the path: each part before the last `/` matches a folder
+    /// above, in that order, and the last part the name. The answer is an [`Event::Found`] for
     /// each stage, best first, at most `limit` hits each (and at most
     /// [`MAX_HITS`]), or [`Event::SearchFailed`]. The first search ever
     /// builds the home index, so it may take a while; later ones take

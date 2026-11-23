@@ -1,5 +1,6 @@
 use super::*;
 use crate::fold::{fold_into, starts_word};
+use crate::search::terms::Terms;
 
 const START: usize = 0;
 const SECOND_WORD: usize = 7;
@@ -11,17 +12,13 @@ const LATER_SPREAD: usize = 5;
 fn found(name: &str, query: &str, loose: bool) -> Option<Found> {
     let mut folded = Vec::new();
     fold_into(name.as_bytes(), &mut folded);
-    let words: Vec<Vec<u8>> = query
-        .split_whitespace()
-        .map(|word| {
-            let mut out = Vec::new();
-            fold_into(word.as_bytes(), &mut out);
-            out
+    let terms = Terms::parse(query);
+    let nowhere = vec![0; terms.len()];
+    terms
+        .meet(&nowhere, &folded, loose, |at| {
+            starts_word(name.as_bytes(), &folded, at)
         })
-        .collect();
-    self::query(&folded, &words, loose, |at| {
-        starts_word(name.as_bytes(), &folded, at)
-    })
+        .map(|met| met.found)
 }
 
 fn kind(name: &str, query: &str) -> Option<MatchKind> {

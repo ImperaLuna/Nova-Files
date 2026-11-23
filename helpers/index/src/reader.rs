@@ -97,6 +97,11 @@ impl Index {
         Some(OsStr::from_bytes(name))
     }
 
+    pub fn parent(&self, row: RowId) -> Option<RowId> {
+        let parent = self.word(self.layout.parents, row.0)?;
+        (parent != NO_PARENT).then_some(RowId(parent))
+    }
+
     pub fn end(&self, row: RowId) -> Option<RowId> {
         self.word(self.layout.ends, row.0).map(RowId)
     }
@@ -200,8 +205,7 @@ impl Index {
         let mut next = Some(row);
         while let Some(at) = next {
             names.push(self.name(at)?);
-            let parent = self.word(self.layout.parents, at.0)?;
-            next = (parent != NO_PARENT).then_some(RowId(parent));
+            next = self.parent(at);
             if next.is_some_and(|parent| parent >= at) {
                 return None;
             }
