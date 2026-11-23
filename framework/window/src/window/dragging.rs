@@ -154,6 +154,16 @@ pub(super) fn chip(label: SharedString, cx: &App) -> Div {
 }
 
 impl MainWindow {
+    pub(crate) fn cancel_drag(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if !cx.stop_active_drag(window) {
+            return false;
+        }
+        self.lift_dropped(cx);
+        self.pointer_carried(None, cx);
+        cx.notify();
+        true
+    }
+
     pub(crate) fn drag_started(
         &mut self,
         row: &DraggedRow,
@@ -170,7 +180,7 @@ impl MainWindow {
             }
         };
         if !self.selects((listing, id)) {
-            self.reselect(|_, _| Some(Selection::only(listing, id)), cx);
+            self.reselect_in_place(|_, _| Some(Selection::only(listing, id)), cx);
         }
         let selected = self.selected_full_paths();
         let paths: Vec<PathBuf> = selected.iter().map(|(path, _)| path.clone()).collect();

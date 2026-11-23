@@ -77,7 +77,6 @@ impl MainWindow {
             .pl(inside_edge(indent(depth) + size::TREE_PAD_LEFT))
             .pr(inside_edge(size::TREE_PAD_RIGHT))
             .rounded(radius::ROW)
-            .cursor_pointer()
             .whitespace_nowrap()
             .hover(|row| row.bg(colors.hover))
             .when(place.here, |row| {

@@ -1,9 +1,11 @@
+use std::path::PathBuf;
+
 use gpui::{ClickEvent, Context, KeyDownEvent, Modifiers, Window};
 use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId};
 use nova_files_shell::{self as shell, ClickAnswer, Entries};
 
 use crate::jump;
-use crate::selection::{Click, Move, Selection, entry_at};
+use crate::selection::{Click, Move, Reach, Selection, entry_at};
 use crate::window::MainWindow;
 
 pub const DOUBLE_CLICK: usize = 2;
@@ -88,11 +90,13 @@ impl MainWindow {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let double = event.click_count() == DOUBLE_CLICK;
+        let held = event.modifiers();
+        let plain = !held.control && !held.shift;
+        let double = plain && event.click_count() == DOUBLE_CLICK;
         if !double && self.selected_on_press.take() == Some(at) {
             return;
         }
-        if event.click_count() <= DOUBLE_CLICK {
+        if !plain || event.click_count() <= DOUBLE_CLICK {
             self.entry_chosen(at, event.modifiers(), double, cx);
         }
     }
@@ -136,8 +140,8 @@ impl MainWindow {
         entry_at(&shown.entries, id)
     }
 
-    pub(crate) fn move_cursor(&mut self, step: Move, extend: bool, cx: &mut Context<Self>) {
-        self.move_cursor_to(self.cursor(), step, extend, cx);
+    pub(crate) fn move_cursor(&mut self, step: Move, reach: Reach, cx: &mut Context<Self>) {
+        self.move_cursor_to(self.cursor(), step, reach, cx);
     }
 
     pub(crate) fn move_cursor_from(
@@ -146,14 +150,14 @@ impl MainWindow {
         step: Move,
         cx: &mut Context<Self>,
     ) {
-        self.move_cursor_to(from, step, false, cx);
+        self.move_cursor_to(from, step, Reach::Only, cx);
     }
 
     fn move_cursor_to(
         &mut self,
         from: Option<usize>,
         step: Move,
-        extend: bool,
+        reach: Reach,
         cx: &mut Context<Self>,
     ) {
         let Some(listing) = self.listing_id() else {
@@ -170,13 +174,16 @@ impl MainWindow {
         };
         self.reselect(
             |before, picks| {
-                Some(Selection::moved(
-                    before,
-                    listing,
-                    EntryId(to),
-                    extend,
-                    picks,
-                ))
+                Some(match reach {
+                    Reach::Ring => Selection::ringed(before, listing, EntryId(to)),
+                    Reach::Only | Reach::Extend => Selection::moved(
+                        before,
+                        listing,
+                        EntryId(to),
+                        reach == Reach::Extend,
+                        picks,
+                    ),
+                })
             },
             cx,
         );
@@ -237,7 +244,7 @@ impl MainWindow {
         let Ok(len) = u32::try_from(self.entry_count()) else {
             return;
         };
-        self.reselect(
+        self.reselect_in_place(
             |before, picks| Selection::all(before.as_ref(), listing, len, picks),
             cx,
         );
@@ -256,7 +263,7 @@ impl MainWindow {
     }
 
     pub(crate) fn clear_selection(&mut self, cx: &mut Context<Self>) {
-        self.reselect(|_, _| None, cx);
+        self.reselect_in_place(|_, _| None, cx);
     }
 
     pub(crate) fn open_selected(&mut self, cx: &mut Context<Self>) {
@@ -281,11 +288,18 @@ impl MainWindow {
             self.open_entry(id);
             return;
         }
-        if self.connection.is_none() {
-            return;
+        let folders: Vec<PathBuf> = entries
+            .iter()
+            .filter(|entry| entry.kind == EntryKind::Folder)
+            .map(|folder| listing.path_of(folder))
+            .collect();
+        if self.connection.is_some() {
+            for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
+                self.parts.open_entry(file, &listing.path_of(file), cx);
+            }
         }
-        for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
-            self.parts.open_entry(file, &listing.path_of(file), cx);
+        for folder in folders {
+            self.open_in_new_tab(folder, cx);
         }
     }
 

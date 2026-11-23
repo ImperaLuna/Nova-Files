@@ -91,6 +91,11 @@ impl MainWindow {
             )
             .children(entries)
             .children(self.parts.overlays())
+            .children(
+                (self.listing.is_some() && !self.showing_gallery(cx))
+                    .then(|| self.scroll_bar(cx))
+                    .flatten(),
+            )
             .child(ctrl_scroll(cx))
             .children(self.empty_note(&colors, cx))
             .children(self.band_box().map(|band| {
@@ -180,7 +185,6 @@ impl MainWindow {
                                 row.relative().child(cursor_ring(&colors))
                             })
                             .when(this.dims(index, cx), |row| row.opacity(opacity::DIMMED))
-                            .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
                                 this.row_clicked((listing_id, id), event, window, cx);
                             }))

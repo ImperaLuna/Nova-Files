@@ -73,16 +73,25 @@ pub fn double_click(cx: &mut VisualTestContext, selector: &'static str) {
 }
 
 pub fn counted_click(cx: &mut VisualTestContext, position: Point<Pixels>, click_count: usize) {
+    counted_click_with(cx, position, click_count, Modifiers::none());
+}
+
+pub fn counted_click_with(
+    cx: &mut VisualTestContext,
+    position: Point<Pixels>,
+    click_count: usize,
+    modifiers: Modifiers,
+) {
     cx.simulate_event(MouseDownEvent {
         position,
-        modifiers: Modifiers::none(),
+        modifiers,
         button: MouseButton::Left,
         click_count,
         first_mouse: false,
     });
     cx.simulate_event(MouseUpEvent {
         position,
-        modifiers: Modifiers::none(),
+        modifiers,
         button: MouseButton::Left,
         click_count,
     });

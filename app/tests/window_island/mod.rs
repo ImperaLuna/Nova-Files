@@ -2,6 +2,7 @@ use std::fs;
 
 mod allows;
 mod archives;
+mod focus;
 mod menus;
 mod renaming;
 mod trash;

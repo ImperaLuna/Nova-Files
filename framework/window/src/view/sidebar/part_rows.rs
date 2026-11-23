@@ -3,7 +3,7 @@ use std::f32::consts::FRAC_PI_2;
 use gpui::{
     AnyElement, App, ClickEvent, Context, Div, InteractiveElement as _, IntoElement, MouseButton,
     MouseDownEvent, ParentElement as _, Pixels, Rgba, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled as _, Transformation, Window, div,
+    StatefulInteractiveElement as _, Styled as _, Transformation, Window, deferred, div,
     prelude::FluentBuilder as _, radians, svg,
 };
 use nova_files_shell::{
@@ -122,14 +122,17 @@ impl MainWindow {
     fn gap_line(&self, row: &str, gap: Gap, below: bool, cx: &Context<Self>) -> AnyElement {
         let selector = format!("{row}-{}", if below { "below" } else { "above" });
         let lit = Colors::of(cx).drop_edge;
+        let group = SharedString::from(selector.clone());
         let line = div()
             .id(SharedString::from(selector.clone()))
             .debug_selector(move || selector)
+            .group(group.clone())
             .absolute()
             .left_0()
             .right_0()
-            .h(size::PIN_LINE)
-            .rounded(radius::SMALL)
+            .h(size::PIN_LINE_REACH)
+            .flex()
+            .items_center()
             .occlude()
             .map(|line| {
                 if below {
@@ -138,8 +141,14 @@ impl MainWindow {
                     line.top(size::PIN_LINE_OVERHANG)
                 }
             })
-            .drag_over::<DraggedRow>(move |style, _, _, _| style.bg(lit));
-        self.takes_drops(line, Aim::gap(gap), cx).into_any_element()
+            .child(
+                div()
+                    .w_full()
+                    .h(size::PIN_LINE)
+                    .rounded(radius::SMALL)
+                    .group_drag_over::<DraggedRow>(group, move |style| style.bg(lit)),
+            );
+        deferred(self.takes_drops(line, Aim::gap(gap), cx)).into_any_element()
     }
 
     pub(super) fn part_row_acts(

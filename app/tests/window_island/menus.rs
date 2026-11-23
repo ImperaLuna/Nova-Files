@@ -512,3 +512,77 @@ async fn sorting_by_size_with_folder_sizes_sorts_folders_and_files_by_what_they_
         assert!(near(1, 0.025));
     });
 }
+
+#[gpui::test]
+async fn a_menu_near_the_bottom_right_opens_up_and_left_of_the_pointer(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-corner");
+    let home = TempFolder::tree("menu-corner-home");
+    let (_view, cx) = island_window(cx, tree.path(), &home).await;
+
+    let window = cx.update(|window, _| window.viewport_size());
+    let at = point(window.width - px(40.0), window.height - px(120.0));
+    right_click_at(cx, at);
+    cx.run_until_parked();
+    let menu = cx.debug_bounds("menu").unwrap();
+    assert!(
+        menu.bottom() <= at.y && menu.right() <= at.x,
+        "{menu:?} {at:?}"
+    );
+
+    cx.simulate_keystrokes("escape");
+    let first = cx.debug_bounds("entry-0").unwrap().center();
+    right_click_at(cx, first);
+    cx.run_until_parked();
+    let menu = cx.debug_bounds("menu").unwrap();
+    assert!(
+        menu.top() >= first.y && menu.left() >= first.x,
+        "{menu:?} {first:?}"
+    );
+}
+
+#[gpui::test]
+async fn while_a_menu_is_open_the_list_stays_and_a_click_only_closes_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-open");
+    let home = TempFolder::tree("menu-open-home");
+    for index in 0..60 {
+        fs::write(tree.path().join(format!("file-{index:02}")), "").unwrap();
+    }
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let offset = |view: &Entity<MainWindow>, cx: &VisualTestContext| {
+        view.read_with(cx, |view, _| view.scroll().0.borrow().base_handle.offset())
+    };
+
+    right_click(cx, "entry-1");
+    assert!(view.read_with(cx, |view, _| view.menu().is_some()));
+    let row = cx.debug_bounds("entry-6").unwrap();
+    let over = point(row.left() + px(60.0), row.center().y);
+    cx.simulate_event(gpui::ScrollEvent {
+        position: over,
+        delta: gpui::ScrollDelta::Pixels(point(px(0.0), px(-300.0))),
+        ..gpui::ScrollEvent::default()
+    });
+    cx.run_until_parked();
+    assert_eq!(offset(&view, cx), point(px(0.0), px(0.0)), "the list moved");
+
+    let row = cx.debug_bounds("entry-4").unwrap();
+    let other = point(row.left() + px(60.0), row.center().y);
+    cx.simulate_click(other, Modifiers::none());
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_names()),
+        ["file-00"]
+    );
+
+    right_click(cx, "entry-1");
+    let row = cx.debug_bounds("entry-3").unwrap();
+    right_click_at(cx, point(row.left() + px(60.0), row.center().y));
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_some()));
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_names()),
+        ["file-02"]
+    );
+}

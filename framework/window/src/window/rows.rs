@@ -148,6 +148,7 @@ impl MainWindow {
             .as_ref()
             .map_or(0, |listing| listing.entries.len());
         self.entries_drawn(drawn.entries_of(&lines, len), window, cx);
+        self.bar_watch(cx);
     }
 
     pub(crate) fn entries_drawn(

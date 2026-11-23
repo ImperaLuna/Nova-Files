@@ -185,7 +185,7 @@ fn plain_crumb(selector: SharedString, colors: &Colors) -> Stateful<Div> {
         .rounded(radius::ROW)
         .whitespace_nowrap()
         .text_color(colors.text_dim)
-        .cursor_pointer()
+        .cursor_default()
         .hover(|button| button.bg(colors.hover).text_color(colors.text))
 }
 
@@ -345,7 +345,6 @@ fn menu_item(
         .px(size::MENU_ITEM_PAD)
         .rounded(radius::ROW)
         .whitespace_nowrap()
-        .cursor_pointer()
         .hover(|row| row.bg(colors.press).text_color(colors.text))
         .when(item.on, |row| {
             row.text_color(colors.text).font_weight(text::STRONG_WEIGHT)

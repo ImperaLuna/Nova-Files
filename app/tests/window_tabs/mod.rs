@@ -264,6 +264,7 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 3);
     aux_click(cx, "entry-0", MouseButton::Right);
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 3);
+    cx.simulate_keystrokes("escape");
 
     middle_click(cx, "tab-1");
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 2);
@@ -414,4 +415,52 @@ async fn a_tab_lands_by_the_half_of_the_row_it_is_let_go_over(cx: &mut TestAppCo
 #[gpui::test]
 async fn in_a_narrow_window_a_tab_lands_by_the_half_across(cx: &mut TestAppContext) {
     reorder_tabs_by_halves(cx, "tabs-halves-narrow", px(600.0)).await;
+}
+
+#[gpui::test]
+async fn ctrl_shift_t_brings_back_the_tab_closed_last(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("tabs-reopen");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = tabs_on(cx, tree.path()).await;
+    view.update(cx, |view, cx| view.open_in_new_tab(projects.clone(), cx));
+    wait_for_folder(&view, cx, &projects).await;
+
+    cx.simulate_keystrokes("ctrl-w");
+    wait_for_folder(&view, cx, tree.path()).await;
+    assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 1);
+    cx.simulate_keystrokes("ctrl-shift-t");
+    wait_for_folder(&view, cx, &projects).await;
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.tab_count(), 2);
+        assert_eq!(view.current_tab(), 1);
+    });
+    cx.simulate_keystrokes("ctrl-shift-t");
+    cx.run_until_parked();
+    assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 2);
+}
+
+#[gpui::test]
+async fn ctrl_n_opens_another_window_on_the_same_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("tabs-new-window");
+    let (_view, cx) = tabs_on(cx, tree.path()).await;
+    let before = cx.update(|_, cx| cx.windows().len());
+
+    cx.simulate_keystrokes("ctrl-n");
+    cx.run_until_parked();
+    let windows = cx.update(|_, cx| cx.windows());
+    assert_eq!(windows.len(), before + 1);
+    let opened = windows
+        .iter()
+        .filter_map(gpui::AnyWindowHandle::downcast::<MainWindow>)
+        .filter_map(|window| {
+            window
+                .read_with(cx, |view, _| view.folder().map(Path::to_path_buf))
+                .ok()
+                .flatten()
+        })
+        .filter(|folder| folder == tree.path())
+        .count();
+    assert_eq!(opened, 2);
 }
