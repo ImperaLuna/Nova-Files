@@ -2,11 +2,12 @@ use std::ops::Range;
 
 use gpui::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _, div,
-    prelude::FluentBuilder as _, transparent_black, uniform_list,
+    ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
+    StyledText, div, prelude::FluentBuilder as _, transparent_black, uniform_list,
 };
 use nova_files_api::{EntryId, Listing, ListingId};
 
+use super::full_name::full_name_on_hover;
 use super::row::{cursor_ring, detail, drags, entry_icon_sized, folder_aim};
 use super::sheet::rename_box;
 use crate::theme::{Colors, opacity, radius, size, text};
@@ -131,7 +132,7 @@ impl MainWindow {
                 .flex_col()
                 .flex_1()
                 .min_w_0()
-                .child(handle.truncate().child(name))
+                .child(handle.truncate().child(cut_name(index, name)))
                 .child(detail(size_text, &Colors::of(cx)));
         }
         div().w_full().child(
@@ -142,9 +143,14 @@ impl MainWindow {
                 .line_height(size::ICON_NAME_LINE)
                 .line_clamp(NAME_LINES)
                 .text_ellipsis()
-                .child(name),
+                .child(cut_name(index, name)),
         )
     }
+}
+
+fn cut_name(index: usize, name: String) -> impl IntoElement {
+    let name = SharedString::from(name);
+    full_name_on_hover(("name", index), StyledText::new(name.clone()), name)
 }
 
 fn item(

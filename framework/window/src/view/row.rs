@@ -12,6 +12,7 @@ use gpui::{
 use nova_files_api::{Entry, EntryId, EntryKind, IconKind, Listing, ListingId};
 use nova_files_shell::Allow;
 
+use super::full_name::full_name_on_hover;
 use crate::theme::{Colors, radius, size, space, text};
 use crate::window::{Aim, DraggedRow, MainWindow};
 
@@ -108,12 +109,13 @@ pub fn share_cell(text_content: String, share: Option<f32>, colors: &Colors) -> 
 
 pub fn entry_name(name: SharedString, marks: Vec<Range<usize>>, index: usize, cx: &App) -> Div {
     let mark = mark_style(&Colors::of(cx));
-    let text = StyledText::new(name).with_highlights(marks.into_iter().map(|range| (range, mark)));
+    let text =
+        StyledText::new(name.clone()).with_highlights(marks.into_iter().map(|range| (range, mark)));
     div()
         .debug_selector(move || format!("name-{index}"))
         .min_w_0()
         .truncate()
-        .child(text)
+        .child(full_name_on_hover(("name", index), text, name))
 }
 
 pub fn drags(
