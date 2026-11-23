@@ -558,3 +558,28 @@ async fn escape_drops_a_drag_and_letting_go_then_moves_nothing(cx: &mut TestAppC
         ["notes.txt"]
     );
 }
+
+#[gpui::test]
+async fn the_pin_line_takes_a_drop_a_few_pixels_off_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-pin-reach");
+    let home = TempFolder::tree("drag-pin-reach-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+
+    start_drag(cx, "name-0");
+    let line = center(cx, "place-0-below");
+    for off in [px(-5.0), px(5.0)] {
+        let at = line + point(px(0.0), off);
+        cx.simulate_mouse_move(at, Some(MouseButton::Left), Modifiers::none());
+        cx.simulate_mouse_move(
+            at + point(px(1.0), px(0.0)),
+            Some(MouseButton::Left),
+            Modifiers::none(),
+        );
+        cx.run_until_parked();
+        let says = cx.update(|_, cx| view.read(cx).drop_says(Modifiers::none(), cx));
+        assert_eq!(says.as_deref(), Some("Pin to Places"), "{off:?}");
+    }
+    cx.simulate_mouse_up(line, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+}

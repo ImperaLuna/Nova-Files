@@ -235,11 +235,11 @@ impl TextField {
     fn mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
         let offset = self.offset_at(event.position);
-        if event.click_count >= DOUBLE_CLICK && self.hidden {
+        if event.click_count > DOUBLE_CLICK || (event.click_count == DOUBLE_CLICK && self.hidden) {
             self.select(cx, TextEdit::select_all);
             return;
         }
-        if event.click_count >= DOUBLE_CLICK {
+        if event.click_count == DOUBLE_CLICK {
             self.select(cx, |edit| edit.select_word_at(offset));
             return;
         }

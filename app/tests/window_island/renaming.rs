@@ -207,3 +207,25 @@ async fn a_name_typed_then_scrolled_away_is_kept(cx: &mut TestAppContext) {
     assert!(!view.read_with(cx, MainWindow::renaming));
     assert!(!tree.path().join("file 01").exists());
 }
+
+#[gpui::test]
+async fn a_triple_click_in_the_field_selects_the_whole_name(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("rename-triple");
+    let home = TempFolder::tree("rename-triple-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("f2");
+    cx.run_until_parked();
+    let field = cx.debug_bounds("rename").unwrap();
+    let at = point(field.left() + px(12.0), field.center().y);
+    for count in 1..=2 {
+        counted_click(cx, at, count);
+    }
+    cx.run_until_parked();
+    assert_eq!(field_state(&view, cx, 1), ("notes.txt".to_owned(), 0..5));
+    counted_click(cx, at, 3);
+    cx.run_until_parked();
+    assert_eq!(field_state(&view, cx, 1), ("notes.txt".to_owned(), 0..9));
+}

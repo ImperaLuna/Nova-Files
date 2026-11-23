@@ -79,12 +79,12 @@ impl MainWindow {
         let colors = Colors::of(cx);
         let closable = self.tab_count() > 1;
         let on = index == self.current_tab();
-        let group = format!("tab-{index}");
+        let selector = format!("tab-{index}");
         let dragged = DraggedTab::new(cx.entity_id(), index, name.clone());
         row(
             Row {
                 id: ("tab", index).into(),
-                selector: group.clone(),
+                selector,
                 glyph,
                 name,
                 number: None,
@@ -95,20 +95,17 @@ impl MainWindow {
             narrow,
             &colors,
         )
-        .group(group.clone())
         .when(!narrow, |row| row.pr(inside_edge(size::TAB_CLOSE_RIGHT)))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.switch_tab(index, cx)))
         .map(|row| on_middle_click(row, true, cx, move |this, cx| this.close_tab(index, cx)))
         .map(|row| self.reorders(row, dragged, narrow, cx))
         .when(closable, |row| {
-            row.child(
-                close_button(index, on, &group, &colors).on_click(cx.listener(
-                    move |this, _: &ClickEvent, _, cx| {
-                        cx.stop_propagation();
-                        this.close_tab(index, cx);
-                    },
-                )),
-            )
+            row.child(close_button(index, &colors).on_click(cx.listener(
+                move |this, _: &ClickEvent, _, cx| {
+                    cx.stop_propagation();
+                    this.close_tab(index, cx);
+                },
+            )))
         })
     }
 }
@@ -167,7 +164,7 @@ fn landing_line(side: TabSide, narrow: bool, colors: &Colors) -> Div {
     }
 }
 
-fn close_button(index: usize, on: bool, group: &str, colors: &Colors) -> Stateful<Div> {
+fn close_button(index: usize, colors: &Colors) -> Stateful<Div> {
     let selector = format!("tab-close-{index}");
     div()
         .id(("tab-close", index))
@@ -179,11 +176,6 @@ fn close_button(index: usize, on: bool, group: &str, colors: &Colors) -> Statefu
         .size(size::TAB_CLOSE)
         .rounded(radius::SMALL)
         .text_color(colors.text_dim)
-        .when(!on, |button| {
-            button
-                .invisible()
-                .group_hover(group.to_owned(), gpui::Styled::visible)
-        })
         .hover(|button| button.bg(colors.press).text_color(colors.text))
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .child(icon(Icon::Close, size::TAB_CLOSE_ICON, colors.text_dim))

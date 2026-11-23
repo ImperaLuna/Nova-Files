@@ -180,7 +180,6 @@ impl MainWindow {
                                 row.relative().child(cursor_ring(&colors))
                             })
                             .when(this.dims(index, cx), |row| row.opacity(opacity::DIMMED))
-                            .cursor_pointer()
                             .on_click(cx.listener(move |this, event, window, cx| {
                                 this.row_clicked((listing_id, id), event, window, cx);
                             }))

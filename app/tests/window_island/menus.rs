@@ -512,3 +512,31 @@ async fn sorting_by_size_with_folder_sizes_sorts_folders_and_files_by_what_they_
         assert!(near(1, 0.025));
     });
 }
+
+#[gpui::test]
+async fn a_menu_near_the_bottom_right_opens_up_and_left_of_the_pointer(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-corner");
+    let home = TempFolder::tree("menu-corner-home");
+    let (_view, cx) = island_window(cx, tree.path(), &home).await;
+
+    let window = cx.update(|window, _| window.viewport_size());
+    let at = point(window.width - px(40.0), window.height - px(120.0));
+    right_click_at(cx, at);
+    cx.run_until_parked();
+    let menu = cx.debug_bounds("menu").unwrap();
+    assert!(
+        menu.bottom() <= at.y && menu.right() <= at.x,
+        "{menu:?} {at:?}"
+    );
+
+    cx.simulate_keystrokes("escape");
+    let first = cx.debug_bounds("entry-0").unwrap().center();
+    right_click_at(cx, first);
+    cx.run_until_parked();
+    let menu = cx.debug_bounds("menu").unwrap();
+    assert!(
+        menu.top() >= first.y && menu.left() >= first.x,
+        "{menu:?} {first:?}"
+    );
+}
