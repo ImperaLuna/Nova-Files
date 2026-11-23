@@ -229,3 +229,37 @@ async fn a_triple_click_in_the_field_selects_the_whole_name(cx: &mut TestAppCont
     cx.run_until_parked();
     assert_eq!(field_state(&view, cx, 1), ("notes.txt".to_owned(), 0..9));
 }
+
+#[gpui::test]
+async fn the_mouse_back_button_keeps_a_name_being_typed(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("rename-back");
+    let home = TempFolder::tree("rename-back-home");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    view.update(cx, |view, _| view.open(&projects));
+    wait_for_folder(&view, cx, &projects).await;
+    cx.run_until_parked();
+
+    click(cx, "name-0");
+    cx.simulate_keystrokes("f2");
+    cx.run_until_parked();
+    cx.simulate_input("kept");
+    let at = cx.debug_bounds("entry-0").unwrap().center();
+    cx.simulate_event(gpui::MouseDownEvent {
+        position: at,
+        modifiers: Modifiers::none(),
+        button: gpui::MouseButton::Navigate(gpui::NavigationDirection::Back),
+        click_count: 1,
+        first_mouse: false,
+    });
+    cx.simulate_event(gpui::MouseUpEvent {
+        position: at,
+        modifiers: Modifiers::none(),
+        button: gpui::MouseButton::Navigate(gpui::NavigationDirection::Back),
+        click_count: 1,
+    });
+    cx.run_until_parked();
+    view.condition::<WindowEvent>(cx, |_, _| projects.join("kept").exists())
+        .await;
+}

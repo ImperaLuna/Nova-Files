@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use gpui::{ClickEvent, Context, KeyDownEvent, Modifiers, Window};
 use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId};
 use nova_files_shell::{self as shell, ClickAnswer, Entries};
@@ -286,11 +288,18 @@ impl MainWindow {
             self.open_entry(id);
             return;
         }
-        if self.connection.is_none() {
-            return;
+        let folders: Vec<PathBuf> = entries
+            .iter()
+            .filter(|entry| entry.kind == EntryKind::Folder)
+            .map(|folder| listing.path_of(folder))
+            .collect();
+        if self.connection.is_some() {
+            for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
+                self.parts.open_entry(file, &listing.path_of(file), cx);
+            }
         }
-        for file in entries.iter().filter(|entry| entry.kind == EntryKind::File) {
-            self.parts.open_entry(file, &listing.path_of(file), cx);
+        for folder in folders {
+            self.open_in_new_tab(folder, cx);
         }
     }
 

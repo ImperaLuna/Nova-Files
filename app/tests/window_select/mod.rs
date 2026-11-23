@@ -302,3 +302,36 @@ async fn ctrl_arrows_move_the_ring_and_ctrl_space_picks_where_it_is(cx: &mut Tes
     cx.simulate_keystrokes("ctrl-home ctrl-space");
     assert_eq!(selected(&view, cx), ["b.txt", "notes.txt"]);
 }
+
+#[gpui::test]
+async fn enter_on_several_folders_opens_each_in_a_tab(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select-enter-folders");
+    fs::create_dir(tree.path().join("Work")).unwrap();
+    cx.update(nova_files_window::bind_window_keys);
+    let (view, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+    assert_eq!(
+        view.read_with(cx, |view, _| view.entry_names()),
+        ["Projects", "Work", "notes.txt"]
+    );
+
+    click(cx, "entry-0");
+    click_with(cx, "entry-1", Modifiers::shift());
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    let places = view.read_with(cx, |view, _| view.tab_places());
+    let folders: Vec<_> = places
+        .iter()
+        .filter_map(|place| place.as_ref().and_then(Location::folder))
+        .map(Path::to_path_buf)
+        .collect();
+    assert_eq!(
+        folders,
+        [
+            tree.path().to_path_buf(),
+            tree.path().join("Projects"),
+            tree.path().join("Work")
+        ]
+    );
+}

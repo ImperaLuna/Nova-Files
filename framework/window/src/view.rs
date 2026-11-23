@@ -308,6 +308,15 @@ fn pointer_watch(cx: &Context<MainWindow>) -> impl IntoElement {
                         .ok();
                 }
             });
+            let menus = view.clone();
+            window.on_mouse_event(move |_: &ScrollEvent, phase, _, cx| {
+                let open = menus
+                    .read_with(cx, |this, _| this.menu().is_some())
+                    .unwrap_or(false);
+                if phase == DispatchPhase::Capture && open {
+                    cx.stop_propagation();
+                }
+            });
             let released = view;
             window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
                 if phase == DispatchPhase::Bubble && event.button == MouseButton::Left {
