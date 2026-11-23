@@ -395,3 +395,84 @@ async fn a_cut_tree_name_shows_in_full_on_hover(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(cx.debug_bounds("full-name").is_some());
 }
+
+fn drag_grip(cx: &mut VisualTestContext, grip: &'static str, by: f32) {
+    cx.run_until_parked();
+    let start = cx.debug_bounds(grip).unwrap().center();
+    let end = start + point(px(by), px(0.0));
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(end, Some(MouseButton::Left), Modifiers::none());
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+}
+
+async fn settings_read(view: &Entity<MainWindow>, cx: &VisualTestContext) {
+    view.condition::<WindowEvent>(cx, |_, cx| Published::<Settings>::get(cx).is_some())
+        .await;
+}
+
+async fn saved(view: &Entity<MainWindow>, cx: &VisualTestContext, name: &str, width: Option<u16>) {
+    view.condition::<WindowEvent>(cx, |_, cx| {
+        Published::<Settings>::get(cx)
+            .is_some_and(|settings| settings.widths.get(name).copied() == width)
+    })
+    .await;
+}
+
+fn kept(cx: &mut VisualTestContext, name: &str) -> Option<u16> {
+    cx.update(|_, cx| {
+        Published::<nova_files_shell::Widths>::get(cx)
+            .and_then(|widths| widths.0.get(name).copied())
+    })
+}
+
+#[gpui::test]
+async fn the_sidebar_edge_drags_wider_and_a_double_click_puts_it_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-grip");
+    let (view, cx) = window_on(cx, tree.path(), tree.path());
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+    settings_read(&view, cx).await;
+    let width = |cx: &mut VisualTestContext| cx.debug_bounds("sidebar").unwrap().size.width;
+    let before = width(cx);
+
+    drag_grip(cx, "grip-sidebar", 50.0);
+    assert_eq!(width(cx), before + px(50.0));
+    assert_eq!(kept(cx, "sidebar"), Some(278));
+    saved(&view, cx, "sidebar", Some(278)).await;
+
+    drag_grip(cx, "grip-sidebar", 900.0);
+    assert_eq!(width(cx), px(420.0));
+
+    let grip = cx.debug_bounds("grip-sidebar").unwrap().center();
+    for count in 1..=2 {
+        counted_click(cx, grip, count);
+    }
+    cx.run_until_parked();
+    assert_eq!(width(cx), before);
+    assert_eq!(kept(cx, "sidebar"), None);
+    saved(&view, cx, "sidebar", None).await;
+}
+
+#[gpui::test]
+async fn a_column_drags_wider_and_stays_so_in_the_next_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("column-grip");
+    let (view, cx) = window_on(cx, tree.path(), tree.path());
+    wait_for_folder(&view, cx, tree.path()).await;
+    cx.run_until_parked();
+    settings_read(&view, cx).await;
+    let width = |cx: &mut VisualTestContext| cx.debug_bounds("modified-0").unwrap().size.width;
+    let before = width(cx);
+
+    drag_grip(cx, "grip-modified", -40.0);
+    assert_eq!(width(cx), before + px(40.0));
+    assert_eq!(kept(cx, "modified"), Some(190));
+    saved(&view, cx, "modified", Some(190)).await;
+
+    view.update(cx, |view, _| view.open(&tree.path().join("Projects")));
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+    cx.run_until_parked();
+    assert_eq!(width(cx), before + px(40.0));
+}

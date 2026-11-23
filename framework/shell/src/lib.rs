@@ -66,7 +66,7 @@ pub use part::{
 };
 pub use parts::{Parts, ShownColumn, Turn, WindowParts};
 pub use per_tab::{PerTab, TabId};
-pub use published::{KnownFolder, KnownFolders, Published, ThumbnailsShown};
+pub use published::{KnownFolder, KnownFolders, Published, Resizable, ThumbnailsShown, Widths};
 pub use rules::{Allow, FolderName, FolderRules, RulesBook, Views};
 pub use scene::{Scene, Showing};
 pub use text::{TextField, TextFieldEvent};

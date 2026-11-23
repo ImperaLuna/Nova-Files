@@ -56,6 +56,7 @@ use nova_files_shell::{
 use self::rows::RowRead;
 use crate::band::Band;
 use crate::edge_scroll::EdgeScroll;
+use crate::grip;
 use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::lift::Lift;
@@ -112,6 +113,7 @@ pub struct MainWindow {
     pub(crate) lift: Option<Lift>,
     pub(crate) edge: EdgeScroll,
     pub(crate) bar: ScrollBar,
+    pub(crate) grip: Option<grip::Held>,
     pub(crate) selected_on_press: Option<(ListingId, EntryId)>,
     pub(crate) selection_before_press: Option<Selection>,
     pub(crate) asked: Option<ListingId>,
@@ -229,6 +231,7 @@ impl MainWindow {
             lift: None,
             edge: EdgeScroll::default(),
             bar: ScrollBar::default(),
+            grip: None,
             selected_on_press: None,
             selection_before_press: None,
             scale_factor: DEFAULT_SCALE_FACTOR,

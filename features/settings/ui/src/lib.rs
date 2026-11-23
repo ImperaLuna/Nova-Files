@@ -9,7 +9,7 @@ use nova_files_shell::actions::{ToggleFolderSizes, ToggleHidden};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::{
     CommandSpec, Host, Location, Look, MenuAt, MenuGroup, MenuItem, Part, Placed, Published, Scene,
-    Slots, ThumbnailsShown, command_spec,
+    Slots, ThumbnailsShown, Widths, command_spec,
 };
 
 command_spec!(
@@ -32,13 +32,10 @@ command_spec!(
 
 pub struct SettingsPart {
     host: Host,
+    widths: Widths,
 }
 
 impl SettingsPart {
-    #[expect(
-        clippy::unused_self,
-        reason = "an event slot is a method; the settings live in globals"
-    )]
     fn settings_arrived(&mut self, event: settings_api::Event, cx: &mut Context<Self>) {
         let settings_api::Event::Settings(settings) = event;
         let shown = match settings.thumbnails {
@@ -48,6 +45,8 @@ impl SettingsPart {
         Published::set(settings.hidden_files, cx);
         Published::set(settings.folder_sizes, cx);
         Published::set(shown, cx);
+        self.widths = Widths(settings.widths.clone());
+        Published::set(self.widths.clone(), cx);
         Published::set(Arc::unwrap_or_clone(settings), cx);
         cx.notify();
     }
@@ -83,6 +82,27 @@ impl SettingsPart {
             .ok();
     }
 
+    fn widths_published(&mut self, cx: &mut Context<Self>) {
+        let Some(widths) = Published::<Widths>::get(cx) else {
+            return;
+        };
+        let names = widths.0.keys().chain(self.widths.0.keys());
+        let changes: Vec<SettingChange> = names
+            .filter(|name| widths.0.get(*name) != self.widths.0.get(*name))
+            .map(|name| SettingChange::Width {
+                name: name.clone(),
+                width: widths.0.get(name).copied(),
+            })
+            .collect();
+        self.widths = widths.clone();
+        for change in changes {
+            self.host
+                .link
+                .send(settings_api::Command::Change(change))
+                .ok();
+        }
+    }
+
     #[expect(
         clippy::unused_self,
         reason = "a menu slot is a method; the settings live in globals"
@@ -114,9 +134,14 @@ const fn always(_: &SettingsPart, _: &Scene, _: &App) -> bool {
 }
 
 impl Part for SettingsPart {
-    fn open(host: &Host, _: &mut Context<Self>) -> Self {
+    fn open(host: &Host, cx: &mut Context<Self>) -> Self {
         host.link.send(settings_api::Command::Watch).ok();
-        Self { host: host.clone() }
+        cx.observe_global::<Published<Widths>>(Self::widths_published)
+            .detach();
+        Self {
+            host: host.clone(),
+            widths: Widths::default(),
+        }
     }
 
     fn slots(slots: &mut Slots<Self>) {

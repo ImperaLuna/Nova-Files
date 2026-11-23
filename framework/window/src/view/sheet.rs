@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use gpui::{
-    AnyElement, ClickEvent, Context, Div, HitboxBehavior, InteractiveElement as _, IntoElement,
-    MouseButton, MouseDownEvent, ParentElement as _, Pixels, ScrollEvent, Stateful,
+    AnyElement, App, ClickEvent, Context, Div, HitboxBehavior, InteractiveElement as _,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, ScrollEvent, Stateful,
     StatefulInteractiveElement as _, Styled as _, Window, canvas, div, prelude::FluentBuilder as _,
     transparent_black, uniform_list,
 };
@@ -11,16 +11,16 @@ use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
 
 use super::drop::inside_edge;
 use super::row::{
-    Corners, cells, cursor_ring, detail, drags, entry_icon, entry_name, folder_aim, icon,
-    share_cell,
+    ColumnWidths, Corners, cells, cursor_ring, detail, drags, entry_icon, entry_name, folder_aim,
+    icon, share_cell,
 };
 
-use nova_files_shell::{Allow, PageRef, ShownColumn};
+use nova_files_shell::{Allow, PageRef, Resizable, ShownColumn};
 
 use crate::assets::Icon;
 use crate::dropping::shell_place;
 use crate::marks;
-use crate::theme::{Colors, opacity, radius, size, space, text};
+use crate::theme::{Colors, opacity, radius, size, text};
 use crate::window::{Aim, HoverOpens, MainWindow};
 use nova_files_shell::Grid;
 
@@ -28,6 +28,7 @@ const NAME_LABEL: &str = "Name";
 const MODIFIED_LABEL: &str = "Modified";
 const SIZE_LABEL: &str = "Size";
 const FOLDER_LABEL: &str = "Folder";
+const GRIP_CENTRE: f32 = 0.5;
 const MODIFIED_HEADER_SELECTOR: &str = "modified-header";
 const FOLDER_HEADER_SELECTOR: &str = "folder-header";
 
@@ -145,7 +146,7 @@ impl MainWindow {
                 let colors = Colors::of(cx);
                 let query = this.search.marks().map(str::to_owned);
                 let part_column = this.parts.column(&this.scene(cx), cx);
-                let size_width = size_width(this.shows_shares());
+                let widths = this.column_widths(cx);
                 let selected = |index: usize| {
                     listing
                         .entries
@@ -175,7 +176,7 @@ impl MainWindow {
                             this.name_cell(entry, ((listing_id, id), index), (name, marks), cx),
                             folder,
                             detail(columns.modified, &colors),
-                            (this.size_cell(index, columns.size, &colors), size_width),
+                            (this.size_cell(index, columns.size, &colors), widths),
                             format!("modified-{index}"),
                         );
                         entry_row(index, (listing_id, id), corners, &colors, cx)
@@ -420,15 +421,37 @@ impl MainWindow {
             let listed = self.listed_page().is_some_and(PageRef::folder_column);
             (self.showing_found() || listed).then(folder_head)
         });
-        column_heads(order, folder, size_width(self.shows_shares()), colors, cx)
+        let widths = self.column_widths(cx);
+        let grips = self.column_grips(folder.is_some(), widths, cx);
+        column_heads(order, folder, widths, colors, cx).children(grips)
     }
-}
 
-const fn size_width(shares: bool) -> Pixels {
-    if shares {
-        space::COLUMN_WIDTH
-    } else {
-        size::SIZE_WIDTH
+    fn column_widths(&self, cx: &App) -> ColumnWidths {
+        ColumnWidths {
+            folder: self.width_of(Resizable::Folder, cx),
+            modified: self.width_of(Resizable::Modified, cx),
+            size: self.width_of(Resizable::Size, cx),
+        }
+    }
+
+    fn column_grips(
+        &self,
+        folder: bool,
+        widths: ColumnWidths,
+        cx: &Context<Self>,
+    ) -> Vec<Stateful<Div>> {
+        let half = (size::COLUMN_GAP - size::GRIP_REACH) * GRIP_CENTRE;
+        let size_left = size::ROW_PAD + widths.size + half;
+        let modified_left = size_left + size::COLUMN_GAP + widths.modified;
+        let folder_left = modified_left + size::COLUMN_GAP + widths.folder;
+        let mut grips = vec![
+            self.grip(Resizable::Size, cx).right(size_left),
+            self.grip(Resizable::Modified, cx).right(modified_left),
+        ];
+        if folder {
+            grips.push(self.grip(Resizable::Folder, cx).right(folder_left));
+        }
+        grips
     }
 }
 
@@ -442,12 +465,13 @@ fn folder_head() -> AnyElement {
 fn column_heads(
     order: Option<Order>,
     folder: Option<AnyElement>,
-    size_width: Pixels,
+    widths: ColumnWidths,
     colors: &Colors,
     cx: &Context<MainWindow>,
-) -> impl IntoElement {
+) -> Div {
     let head = |key, label| column_head(key, label, order, colors, cx);
     div()
+        .relative()
         .flex()
         .flex_none()
         .items_end()
@@ -475,7 +499,7 @@ fn column_heads(
                         head(SortKey::Size, SIZE_LABEL)
                             .justify_end()
                             .mr(-size::HEAD_BUTTON_PAD),
-                        size_width,
+                        widths,
                     ),
                     MODIFIED_HEADER_SELECTOR.to_owned(),
                 )),
