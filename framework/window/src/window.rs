@@ -43,7 +43,7 @@ use gpui::{
     Subscription, Task, UniformListScrollHandle,
 };
 use nova_files_api::{
-    ClientGone, Command, Connection, Connector, Envelope, Event, EventSink, FolderSizes,
+    ClientGone, Command, Connection, Connector, EntryId, Envelope, Event, EventSink, FolderSizes,
     HiddenFiles, Listing, ListingId, Order,
 };
 use nova_files_shell::Lines;
@@ -108,6 +108,7 @@ pub struct MainWindow {
     pub(crate) band: Option<Band>,
     pub(crate) pressed_name: bool,
     pub(crate) lift: Option<Lift>,
+    pub(crate) selected_on_press: Option<(ListingId, EntryId)>,
     pub(crate) asked: Option<ListingId>,
     requested: Option<Location>,
     order: Order,
@@ -221,6 +222,7 @@ impl MainWindow {
             band: None,
             pressed_name: false,
             lift: None,
+            selected_on_press: None,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
             requested: None,

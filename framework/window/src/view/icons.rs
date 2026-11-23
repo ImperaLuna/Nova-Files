@@ -174,6 +174,12 @@ fn cell(
     div()
         .id(("entry", index))
         .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                this.entry_pressed(at, event.modifiers, cx);
+            }),
+        )
+        .on_mouse_down(
             MouseButton::Right,
             cx.listener(move |this, event: &MouseDownEvent, _, cx| {
                 cx.stop_propagation();

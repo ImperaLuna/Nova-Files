@@ -75,7 +75,6 @@ impl MainWindow {
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, _, cx| {
                     let on_name = std::mem::take(&mut this.pressed_name);
-                    this.entries_pressed(event.position, on_name);
                     this.band_pressed(event, on_name, cx);
                 }),
             )
@@ -327,6 +326,12 @@ fn entry_row(
 ) -> Stateful<Div> {
     div()
         .id(("entry", index))
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                this.entry_pressed(entry, event.modifiers, cx);
+            }),
+        )
         .on_mouse_down(
             MouseButton::Right,
             cx.listener(move |this, event: &MouseDownEvent, _, cx| {

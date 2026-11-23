@@ -143,3 +143,78 @@ async fn files_to_show_select_nothing_in_the_folder_fallen_back_to(cx: &mut Test
     cx.run_until_parked();
     assert_eq!(selected(&view, cx), Vec::<String>::new());
 }
+
+fn press(
+    cx: &mut VisualTestContext,
+    selector: &'static str,
+    modifiers: Modifiers,
+) -> gpui::Point<gpui::Pixels> {
+    cx.run_until_parked();
+    let at = cx.debug_bounds(selector).unwrap().center();
+    cx.simulate_mouse_down(at, gpui::MouseButton::Left, modifiers);
+    cx.run_until_parked();
+    at
+}
+
+fn release(cx: &mut VisualTestContext, at: gpui::Point<gpui::Pixels>, modifiers: Modifiers) {
+    cx.simulate_mouse_up(at, gpui::MouseButton::Left, modifiers);
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+async fn a_press_lights_a_row_before_the_button_comes_up(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select-press");
+    let (view, cx) = listed(cx, &tree).await;
+
+    let at = press(cx, "entry-1", Modifiers::none());
+    assert_eq!(selected(&view, cx), ["a.txt"]);
+    release(cx, at, Modifiers::none());
+    assert_eq!(selected(&view, cx), ["a.txt"]);
+
+    let at = press(cx, "entry-3", Modifiers::control());
+    assert_eq!(selected(&view, cx), ["a.txt", "notes.txt"]);
+    release(cx, at, Modifiers::control());
+    assert_eq!(selected(&view, cx), ["a.txt", "notes.txt"]);
+}
+
+#[gpui::test]
+async fn a_press_on_one_of_several_keeps_them_until_the_button_comes_up(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select-keep");
+    let (view, cx) = listed(cx, &tree).await;
+    click(cx, "entry-1");
+    click_with(cx, "entry-3", Modifiers::control());
+
+    let at = press(cx, "entry-1", Modifiers::none());
+    assert_eq!(selected(&view, cx), ["a.txt", "notes.txt"]);
+    release(cx, at, Modifiers::none());
+    assert_eq!(selected(&view, cx), ["a.txt"]);
+
+    click_with(cx, "entry-3", Modifiers::control());
+    let at = press(cx, "entry-3", Modifiers::control());
+    assert_eq!(selected(&view, cx), ["a.txt", "notes.txt"]);
+    release(cx, at, Modifiers::control());
+    assert_eq!(selected(&view, cx), ["a.txt"]);
+}
+
+#[gpui::test]
+async fn a_third_quick_click_in_the_folder_opened_only_selects(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select-third");
+    let (view, cx) = listed(cx, &tree).await;
+    let projects = tree.path().join("Projects");
+
+    let at = cx.debug_bounds("entry-0").unwrap().center();
+    counted_click(cx, at, 1);
+    counted_click(cx, at, 2);
+    wait_for_folder(&view, cx, &projects).await;
+    cx.run_until_parked();
+    counted_click(cx, at, 3);
+    cx.run_until_parked();
+    assert_eq!(
+        view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf)),
+        Some(projects)
+    );
+    assert_eq!(selected(&view, cx), ["nova"]);
+}

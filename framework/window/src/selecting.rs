@@ -1,4 +1,4 @@
-use gpui::{ClickEvent, Context, KeyDownEvent, Window};
+use gpui::{ClickEvent, Context, KeyDownEvent, Modifiers, Window};
 use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId};
 use nova_files_shell::{self as shell, ClickAnswer, Entries};
 
@@ -33,6 +33,17 @@ impl MainWindow {
         change: impl FnOnce(Option<Selection>, &dyn Fn(EntryId) -> bool) -> Option<Selection>,
         cx: &mut Context<Self>,
     ) {
+        self.reselect_in_place(change, cx);
+        if let Some(cursor) = self.cursor() {
+            self.scroll_to_entry(cursor, cx);
+        }
+    }
+
+    fn reselect_in_place(
+        &mut self,
+        change: impl FnOnce(Option<Selection>, &dyn Fn(EntryId) -> bool) -> Option<Selection>,
+        cx: &mut Context<Self>,
+    ) {
         let before = self.selection.take();
         let entries = self
             .listing
@@ -54,31 +65,64 @@ impl MainWindow {
         });
         self.publish(cx);
         self.host().entries.update(cx, Entries::selection_made);
-        if let Some(cursor) = self.cursor() {
-            self.scroll_to_entry(cursor, cx);
-        }
         cx.notify();
+    }
+
+    pub(crate) fn entry_pressed(
+        &mut self,
+        (listing, id): (ListingId, EntryId),
+        modifiers: Modifiers,
+        cx: &mut Context<Self>,
+    ) {
+        if self.picker() || self.selects((listing, id)) {
+            return;
+        }
+        self.entry_chosen((listing, id), modifiers, false, cx);
+        self.selected_on_press = Some((listing, id));
     }
 
     pub fn entry_clicked(
         &mut self,
-        (listing, id): (ListingId, EntryId),
+        at: (ListingId, EntryId),
         event: &ClickEvent,
         _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let double = event.click_count() == DOUBLE_CLICK;
+        if !double && self.selected_on_press.take() == Some(at) {
+            return;
+        }
+        if event.click_count() <= DOUBLE_CLICK {
+            self.entry_chosen(at, event.modifiers(), double, cx);
+        }
+    }
+
+    fn entry_chosen(
+        &mut self,
+        (listing, id): (ListingId, EntryId),
+        modifiers: Modifiers,
+        double: bool,
         cx: &mut Context<Self>,
     ) {
         let Some(entry) = self.entry(listing, id).cloned() else {
             return;
         };
-        let click = Click::of(event.modifiers(), self.parts.several(cx));
+        let click = Click::of(modifiers, self.parts.several(cx));
         let asked = shell::Click {
             only: click == Click::Only,
-            double: event.click_count() >= DOUBLE_CLICK,
+            double,
         };
         match self.parts.clicked(listing, &entry, asked, cx) {
-            None => self.main_clicked((listing, id), event, cx),
+            None if double => self.open_entries(&[id], cx),
+            None => self.reselect_in_place(
+                |before, picks| {
+                    let click = Click::of(modifiers, true);
+                    Some(Selection::clicked(before, listing, id, click, picks))
+                },
+                cx,
+            ),
             Some(ClickAnswer::Open) => self.open_entry(id),
-            Some(ClickAnswer::Select) => self.reselect(
+            Some(ClickAnswer::Select) => self.reselect_in_place(
                 |before, picks| Some(Selection::clicked(before, listing, id, click, picks)),
                 cx,
             ),
@@ -90,23 +134,6 @@ impl MainWindow {
     fn entry(&self, listing: ListingId, id: EntryId) -> Option<&Entry> {
         let shown = self.listing.as_ref().filter(|shown| shown.id == listing)?;
         entry_at(&shown.entries, id)
-    }
-
-    fn main_clicked(
-        &mut self,
-        (listing, id): (ListingId, EntryId),
-        event: &ClickEvent,
-        cx: &mut Context<Self>,
-    ) {
-        if event.click_count() >= DOUBLE_CLICK {
-            self.open_entries(&[id], cx);
-            return;
-        }
-        let click = Click::of(event.modifiers(), true);
-        self.reselect(
-            |before, picks| Some(Selection::clicked(before, listing, id, click, picks)),
-            cx,
-        );
     }
 
     pub(crate) fn move_cursor(&mut self, step: Move, extend: bool, cx: &mut Context<Self>) {

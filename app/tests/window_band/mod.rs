@@ -231,3 +231,26 @@ async fn a_new_folder_ends_the_box(cx: &mut TestAppContext) {
     assert_eq!(cx.debug_bounds("band"), None);
     assert_eq!(selected(&view, cx), ["Projects"]);
 }
+
+#[gpui::test]
+async fn a_click_on_a_row_cut_off_by_the_edge_leaves_the_list_where_it_is(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("band-edge");
+    for index in 0..80 {
+        fs::write(tree.path().join(format!("f{index:02}")), "").unwrap();
+    }
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let row = bounds(cx, "entry-1");
+    scroll(cx, row.center(), -row.size.height / 4.0);
+    let cut = bounds(cx, "entry-0");
+    assert!(
+        cut.top() < row.top() - row.size.height,
+        "the first row is cut off"
+    );
+
+    let at = point(cut.center().x, cut.bottom() - px(4.0));
+    cx.simulate_click(at, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(selected(&view, cx), ["Projects"]);
+    assert_eq!(bounds(cx, "entry-0"), cut);
+}

@@ -111,6 +111,9 @@ impl MainWindow {
             MouseButton::Left,
             cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
         )
+        .capture_any_mouse_down(
+            cx.listener(|this, event: &MouseDownEvent, _, _| this.pressed(event)),
+        )
         .capture_any_mouse_up(cx.listener(|this, _: &MouseUpEvent, _, cx| this.lift_dropped(cx)))
     }
 

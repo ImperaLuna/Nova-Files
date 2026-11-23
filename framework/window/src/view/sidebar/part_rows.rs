@@ -154,7 +154,7 @@ impl MainWindow {
         let pin = at
             .as_ref()
             .and_then(Location::folder)
-            .filter(|_| main && place.drags)
+            .filter(|_| main && place.drags && self.lifted())
             .map(|path| DraggedRow::pin(path.to_path_buf(), place.name.clone()));
         let drops = at
             .as_ref()

@@ -126,28 +126,30 @@ impl MainWindow {
         let line = self
             .tab_landing_line(index, cx)
             .map(|side| landing_line(side, narrow, &colors));
-        row.on_drag(dragged, |tab, _, _, cx| cx.new(|_| TabChip::new(tab)))
-            .on_drag_move(
-                cx.listener(move |this, moved: &DragMoveEvent<DraggedTab>, _, cx| {
-                    let (at, bounds) = (moved.event.position, moved.bounds);
-                    let after = if narrow {
-                        at.x > bounds.center().x
-                    } else {
-                        at.y > bounds.center().y
-                    };
-                    let side = if after {
-                        TabSide::After
-                    } else {
-                        TabSide::Before
-                    };
-                    let over = (index, bounds.contains(&at), side);
-                    this.tab_dragged_over(&moved.drag(cx).clone(), over, cx);
-                }),
-            )
-            .on_drop(cx.listener(|this, tab: &DraggedTab, _, cx| {
-                this.tab_dropped(tab, cx);
-            }))
-            .when_some(line, |row, line| row.relative().child(line))
+        row.when(self.lifted(), |row| {
+            row.on_drag(dragged, |tab, _, _, cx| cx.new(|_| TabChip::new(tab)))
+        })
+        .on_drag_move(
+            cx.listener(move |this, moved: &DragMoveEvent<DraggedTab>, _, cx| {
+                let (at, bounds) = (moved.event.position, moved.bounds);
+                let after = if narrow {
+                    at.x > bounds.center().x
+                } else {
+                    at.y > bounds.center().y
+                };
+                let side = if after {
+                    TabSide::After
+                } else {
+                    TabSide::Before
+                };
+                let over = (index, bounds.contains(&at), side);
+                this.tab_dragged_over(&moved.drag(cx).clone(), over, cx);
+            }),
+        )
+        .on_drop(cx.listener(|this, tab: &DraggedTab, _, cx| {
+            this.tab_dropped(tab, cx);
+        }))
+        .when_some(line, |row, line| row.relative().child(line))
     }
 }
 
