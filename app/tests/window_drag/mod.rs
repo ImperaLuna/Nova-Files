@@ -535,3 +535,26 @@ async fn a_file_dragged_by_its_icon_moves(cx: &mut TestAppContext) {
     wait_for_note(&view, cx, "Moved notes.txt to Projects").await;
     assert!(tree.path().join("Projects").join("notes.txt").exists());
 }
+
+#[gpui::test]
+async fn escape_drops_a_drag_and_letting_go_then_moves_nothing(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-escape");
+    let home = TempFolder::tree("drag-escape-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+
+    let (start, end) = (center(cx, "name-1"), center(cx, "entry-0"));
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    lift(cx, end);
+    assert!(cx.debug_bounds("drag-chip").is_some());
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("drag-chip").is_none());
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert!(tree.path().join("notes.txt").exists());
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_names()),
+        ["notes.txt"]
+    );
+}

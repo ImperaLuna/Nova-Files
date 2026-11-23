@@ -132,14 +132,26 @@ struct RequestLoop {
 
 impl Global for RequestLoop {}
 
+type OpenFolderWindow = Rc<dyn Fn(WindowRequest, &mut App)>;
+
+#[derive(Clone)]
+pub(crate) struct FolderWindows(pub(crate) OpenFolderWindow);
+
+impl Global for FolderWindows {}
+
 pub(crate) fn keep_opener(connector: &Connector, cx: &mut App) {
     if cx.has_global::<Opener>() {
         return;
     }
-    let connector = connector.clone();
+    let parts = connector.clone();
     cx.set_global(Opener(Rc::new(move |ask, cx| {
         let recover_gpu: RecoverGpu = Rc::new(|_: Option<&Path>| {});
-        open_window(&connector, Opening::Part(ask), &recover_gpu, cx);
+        open_window(&parts, Opening::Part(ask), &recover_gpu, cx);
+    })));
+    let folders = connector.clone();
+    cx.set_global(FolderWindows(Rc::new(move |request, cx| {
+        let recover_gpu: RecoverGpu = Rc::new(|_: Option<&Path>| {});
+        open_window(&folders, Opening::Folder(request), &recover_gpu, cx);
     })));
 }
 

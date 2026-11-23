@@ -4,13 +4,14 @@ use std::mem;
 use std::path::{Path, PathBuf};
 
 use gpui::{App, ClickEvent, Context, SharedString, UniformListScrollHandle, Window};
-use nova_files_api::{EntryId, Listing, ListingId, Order};
+use nova_files_api::{EntryId, Listing, ListingId, Order, WindowRequest};
 
 use super::MainWindow;
 use super::search::Over;
 use nova_files_shell::paths::name_of;
 use nova_files_shell::{PageRef, TabId};
 
+use crate::FolderWindows;
 use crate::assets::Icon;
 use crate::jump::TypeJump;
 use crate::places::START_LABEL;
@@ -50,6 +51,7 @@ pub struct Tabs {
     pub(super) current: usize,
     changed: bool,
     start_if_refused: Option<ListingId>,
+    closed: Vec<Location>,
 }
 
 impl Default for Tabs {
@@ -61,6 +63,7 @@ impl Default for Tabs {
             current: 0,
             changed: false,
             start_if_refused: None,
+            closed: Vec::new(),
         }
     }
 }
@@ -211,6 +214,9 @@ impl MainWindow {
         if self.tab_count() <= LAST || index >= self.tab_count() {
             return;
         }
+        if let Some(place) = self.tab_places().swap_remove(index) {
+            self.tabs.closed.push(place);
+        }
         match index.cmp(&self.tabs.current) {
             Ordering::Equal => {
                 drop(self.leave_tab(cx));
@@ -235,6 +241,25 @@ impl MainWindow {
 
     pub fn close_current_tab(&mut self, cx: &mut Context<Self>) {
         self.close_tab(self.tabs.current, cx);
+    }
+
+    pub fn new_window(&self, cx: &mut Context<Self>) {
+        if self.picker() {
+            return;
+        }
+        let request = WindowRequest {
+            folder: self.folder().map(Path::to_path_buf),
+            select: Vec::new(),
+        };
+        if let Some(windows) = cx.try_global::<FolderWindows>().cloned() {
+            cx.defer(move |cx| (windows.0)(request, cx));
+        }
+    }
+
+    pub fn reopen_tab(&mut self, cx: &mut Context<Self>) {
+        if let Some(place) = self.tabs.closed.pop() {
+            self.new_tab(&place, cx);
+        }
     }
 
     pub(super) fn tab_folder_refused(&mut self, id: ListingId, cx: &mut Context<Self>) -> bool {

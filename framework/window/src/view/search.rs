@@ -51,7 +51,11 @@ impl MainWindow {
             Some(FocusTo::Results) => {
                 window.focus(&self.focus, cx);
                 if self.cursor().is_none() {
-                    self.move_cursor(crate::selection::Move::Down, false, cx);
+                    self.move_cursor(
+                        crate::selection::Move::Down,
+                        crate::selection::Reach::Only,
+                        cx,
+                    );
                 }
             }
             Some(FocusTo::List) => window.focus(&self.keys_home(cx), cx),
