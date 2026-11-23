@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod grid;
+mod slider;
 mod switch;
 
 use std::collections::HashMap;
@@ -18,6 +19,7 @@ use nova_files_shell::{
 
 pub use grid::icon_side;
 use grid::layout_of;
+use slider::SizeSlider;
 
 command_spec!(
     DETAILS,
@@ -69,6 +71,7 @@ pub struct FoldersPart {
     views: HashMap<PathBuf, FolderView>,
     pending: HashMap<PathBuf, FolderView>,
     zoom_scroll: Pixels,
+    slider: SizeSlider,
 }
 
 impl FoldersPart {
@@ -244,6 +247,7 @@ impl Part for FoldersPart {
             views: HashMap::new(),
             pending: HashMap::new(),
             zoom_scroll: Pixels::ZERO,
+            slider: SizeSlider::default(),
         }
     }
 
