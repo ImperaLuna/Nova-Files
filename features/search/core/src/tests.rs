@@ -146,8 +146,56 @@ fn a_search_before_the_catch_up_answers_at_once_and_ends_with_what_changed() {
     assert!(events.recv_timeout(QUIET).is_err());
 }
 
+fn last_stage_after(change: impl FnOnce(&Path), text: &str, limit: u32) -> Vec<PathBuf> {
+    let scratch = Scratch::new("last-stage");
+    scratch.searcher().search_and_settle();
+    let home = scratch.root.join("home");
+    change(&home);
+    let (live, log) = Live::open(&scratch.place(), &home, false).unwrap();
+    let index = Arc::clone(&live.index);
+    let searcher = scratch.searcher();
+    searcher.state().live = Some(live);
+    let (client, events) = client();
+    let (sink, current) = &client;
+    searcher.search((sink, current), SearchId(1), text.to_owned(), limit);
+    let Event::Found { done: false, .. } = events.recv_timeout(ANSWER_TIMEOUT).unwrap() else {
+        panic!("expected a first stage");
+    };
+    searcher
+        .shared
+        .watch(&index, Watcher::start(&index, log, || {}).ok());
+    let Event::Found {
+        hits, done: true, ..
+    } = events.recv_timeout(ANSWER_TIMEOUT).unwrap()
+    else {
+        panic!("expected a last stage");
+    };
+    hits.into_iter()
+        .map(|hit| hit.path.strip_prefix(&home).unwrap().to_owned())
+        .collect()
+}
+
 #[test]
-fn a_watcher_that_cannot_start_fails_the_index() {
+fn what_the_catch_up_found_comes_before_loose_matches_that_fill_the_last_stage() {
+    let made = |home: &Path| fs::write(home.join("docs/rprt.txt"), b"").unwrap();
+    assert_eq!(
+        last_stage_after(|_| {}, "rprt", 1),
+        [Path::new("docs/report.pdf")]
+    );
+    assert_eq!(
+        last_stage_after(made, "rprt", 1),
+        [Path::new("docs/rprt.txt")]
+    );
+}
+
+#[test]
+fn the_last_stage_leaves_out_what_the_catch_up_found_gone() {
+    let removed = |home: &Path| fs::remove_file(home.join("docs/report.pdf")).unwrap();
+    assert!(last_stage_after(removed, "rprt", LIMIT).is_empty());
+}
+
+#[test]
+fn a_watcher_that_cannot_start_leaves_no_index_and_fails_it() {
     let scratch = Scratch::new("no-watcher");
     scratch.searcher().search_and_settle();
     let home = scratch.root.join("home");
@@ -157,6 +205,7 @@ fn a_watcher_that_cannot_start_fails_the_index() {
     searcher.state().live = Some(live);
     searcher.shared.watch(&index, None);
     assert!(searcher.state().failed);
+    assert!(searcher.state().live.is_none());
 }
 
 #[test]

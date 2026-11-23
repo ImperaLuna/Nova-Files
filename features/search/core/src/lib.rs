@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use std::collections::HashSet;
+use std::mem;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -69,14 +70,20 @@ struct Live {
 }
 
 struct Early {
+    index: Arc<Index>,
     read: usize,
     shown: HashSet<PathBuf>,
+    held: Vec<Hit>,
+}
+
+struct Last {
+    hits: Vec<Hit>,
+    outdated: bool,
 }
 
 enum Watching {
     CatchingUp,
     Running(Watcher),
-    Stopped,
 }
 
 impl Searcher {
@@ -209,42 +216,49 @@ impl Searcher {
             return true;
         }
         let catching_up = matches!(live.watching, Watching::CatchingUp);
-        let mut early = Early {
-            read: live.changes,
-            shown: HashSet::new(),
-        };
-        let mut held = Vec::new();
+        let mut shown = HashSet::new();
+        let mut early = None;
         for _ in 0..STAGES {
             if !wanted() {
-                return true;
+                break;
             }
             let Some(hits) = search.next() else {
                 break;
             };
-            if catching_up {
-                early.shown.extend(hits.iter().map(|hit| hit.path.clone()));
-            }
-            let hits: Vec<Hit> = hits.into_iter().map(told).collect();
             if catching_up && search.is_done() {
-                held = hits;
-            } else if !answer(hits, search.is_done()) {
-                return true;
+                early = Some(Early {
+                    index: Arc::clone(&live.index),
+                    read: live.changes,
+                    shown: mem::take(&mut shown),
+                    held: hits.into_iter().map(told).collect(),
+                });
+                break;
+            }
+            if catching_up {
+                shown.extend(hits.iter().map(|hit| hit.path.clone()));
+            }
+            if !answer(hits.into_iter().map(told).collect(), search.is_done()) {
+                break;
             }
         }
         drop(state);
-        if catching_up {
-            held.extend(self.changed_since(query, &early));
-            held.truncate(query.limit);
-            if wanted() {
-                answer(held, true);
-            }
-        } else if outdated {
+        let last = early.and_then(|early| self.caught_up(query, early, &wanted));
+        let outdated = last.as_ref().map_or(outdated, |last| last.outdated);
+        if let Some(last) = last {
+            answer(last.hits, true);
+        }
+        if outdated {
             self.start_build(true);
         }
         true
     }
 
-    fn changed_since(&self, query: &Query<'_>, early: &Early) -> Vec<Hit> {
+    fn caught_up(
+        &self,
+        query: &Query<'_>,
+        early: Early,
+        wanted: impl Fn() -> bool,
+    ) -> Option<Last> {
         let shared = &self.shared;
         let state = shared.state.lock().unwrap_or_else(PoisonError::into_inner);
         let mut state = shared
@@ -256,27 +270,18 @@ impl Searcher {
                     .is_some_and(|live| matches!(live.watching, Watching::CatchingUp))
             })
             .unwrap_or_else(PoisonError::into_inner);
-        let Some(live) = &mut state.live else {
-            return Vec::new();
+        if !wanted() {
+            return None;
+        }
+        let last = match &mut state.live {
+            Some(live) => live.last_stage(query, early),
+            None => Last {
+                hits: early.held,
+                outdated: false,
+            },
         };
-        live.read_log();
-        if live.changes == early.read {
-            return Vec::new();
-        }
-        let mut search = live
-            .index
-            .search_now(query.text, query.limit, &live.overlay);
-        if let Some(folder) = query.within {
-            search = search.within(folder);
-        }
-        let late: Vec<Hit> = search
-            .flatten()
-            .filter(|hit| !early.shown.contains(&hit.path))
-            .take(query.limit)
-            .map(told)
-            .collect();
         drop(state);
-        late
+        Some(last)
     }
 
     fn start_build(&self, fresh: bool) {
@@ -343,10 +348,15 @@ impl Shared {
             .live
             .as_mut()
             .filter(|live| Arc::ptr_eq(&live.index, index))
-            .map(|live| live.watching = watcher.map_or(Watching::Stopped, Watching::Running))
+            .map(|live| {
+                if let Some(watcher) = watcher {
+                    live.watching = Watching::Running(watcher);
+                }
+            })
             .is_some();
-        if current {
-            state.failed = !started;
+        if current && !started {
+            state.live = None;
+            state.failed = true;
         }
         drop(state);
         self.built.notify_all();
@@ -375,11 +385,34 @@ impl Live {
         Some((live, log))
     }
 
+    fn last_stage(&mut self, query: &Query<'_>, early: Early) -> Last {
+        self.read_log();
+        let outdated = self.lost || self.changes > REBUILD_AFTER;
+        if Arc::ptr_eq(&self.index, &early.index) && self.changes == early.read {
+            return Last {
+                hits: early.held,
+                outdated,
+            };
+        }
+        let mut search = self
+            .index
+            .search_now(query.text, query.limit, &self.overlay);
+        if let Some(folder) = query.within {
+            search = search.within(folder);
+        }
+        let hits = search
+            .flatten()
+            .filter(|hit| !early.shown.contains(&hit.path))
+            .take(query.limit)
+            .map(told)
+            .collect();
+        Last { hits, outdated }
+    }
+
     fn read_log(&mut self) {
         let stopped = match &self.watching {
             Watching::CatchingUp => false,
             Watching::Running(watcher) => !watcher.is_running(),
-            Watching::Stopped => true,
         };
         if stopped {
             self.lost = true;
