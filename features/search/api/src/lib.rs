@@ -60,9 +60,10 @@ pub enum Command {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// One stage of [`Command::Search`] `id`: names as typed come first,
-    /// then letters in order and typos. A search answered from the saved
-    /// index before it had caught up with the disk gets one more stage:
-    /// the matches among what changed since. `done` marks the last stage.
+    /// then letters in order and typos. `done` marks the last stage. A
+    /// search answered from the saved index before it had caught up with
+    /// the disk holds its last stage until then, and adds the matches
+    /// among what changed since.
     /// A path shows at most once per search.
     Found {
         id: SearchId,

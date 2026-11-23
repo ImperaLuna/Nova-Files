@@ -115,7 +115,7 @@ fn a_newer_search_cancels_one_waiting_for_the_index() {
 }
 
 #[test]
-fn a_search_before_the_catch_up_answers_at_once_and_adds_what_changed() {
+fn a_search_before_the_catch_up_answers_at_once_and_ends_with_what_changed() {
     let scratch = Scratch::new("catch-up");
     scratch.searcher().search_and_settle();
     fs::write(scratch.root.join("home/docs/report-late.pdf"), b"").unwrap();
@@ -127,14 +127,11 @@ fn a_search_before_the_catch_up_answers_at_once_and_adds_what_changed() {
     let (client, events) = client();
     let (sink, current) = &client;
     searcher.search((sink, current), SearchId(1), "report".to_owned(), LIMIT);
-    let mut saved = Vec::new();
-    for _ in 0..STAGES {
-        let Event::Found { hits, done, .. } = events.recv_timeout(ANSWER_TIMEOUT).unwrap() else {
-            panic!("expected hits");
-        };
-        assert!(!done);
-        saved.extend(hits.into_iter().map(|hit| hit.path));
-    }
+    let Event::Found { hits, done, .. } = events.recv_timeout(ANSWER_TIMEOUT).unwrap() else {
+        panic!("expected hits");
+    };
+    assert!(!done);
+    let saved: Vec<_> = hits.into_iter().map(|hit| hit.path).collect();
     assert_eq!(saved, [home.join("docs/report.pdf")]);
     assert!(events.recv_timeout(QUIET).is_err());
     searcher
@@ -146,6 +143,7 @@ fn a_search_before_the_catch_up_answers_at_once_and_adds_what_changed() {
     assert!(done);
     let late: Vec<_> = hits.into_iter().map(|hit| hit.path).collect();
     assert_eq!(late, [home.join("docs/report-late.pdf")]);
+    assert!(events.recv_timeout(QUIET).is_err());
 }
 
 #[test]

@@ -213,6 +213,7 @@ impl Searcher {
             read: live.changes,
             shown: HashSet::new(),
         };
+        let mut held = Vec::new();
         for _ in 0..STAGES {
             if !wanted() {
                 return true;
@@ -220,19 +221,22 @@ impl Searcher {
             let Some(hits) = search.next() else {
                 break;
             };
-            let last = search.is_done() && !catching_up;
             if catching_up {
                 early.shown.extend(hits.iter().map(|hit| hit.path.clone()));
             }
-            if !answer(hits.into_iter().map(told).collect(), last) {
+            let hits: Vec<Hit> = hits.into_iter().map(told).collect();
+            if catching_up && search.is_done() {
+                held = hits;
+            } else if !answer(hits, search.is_done()) {
                 return true;
             }
         }
         drop(state);
         if catching_up {
-            let late = self.changed_since(query, &early);
+            held.extend(self.changed_since(query, &early));
+            held.truncate(query.limit);
             if wanted() {
-                answer(late, true);
+                answer(held, true);
             }
         } else if outdated {
             self.start_build(true);
