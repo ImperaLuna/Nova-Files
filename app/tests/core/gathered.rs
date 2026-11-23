@@ -211,6 +211,7 @@ fn a_place_lists_and_says_when_its_folders_change() {
         first: EntryId(0),
         count: 2,
         size: ThumbnailSize::Normal,
+        peeks: false,
     });
     loop {
         if let Heard::Core(Event::DetailsRead { id, .. }) = client.next() {

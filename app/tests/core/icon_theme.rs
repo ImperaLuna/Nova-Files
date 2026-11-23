@@ -67,6 +67,7 @@ fn icons_through_the_core(root: &Path) {
                 first: EntryId(0),
                 count: 1,
                 size: ThumbnailSize::Normal,
+                peeks: false,
             })
             .unwrap();
         match wait_for(&events, |event| matches!(event, Event::DetailsRead { .. })) {

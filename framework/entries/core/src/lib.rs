@@ -9,6 +9,6 @@ pub mod memory;
 pub mod order;
 pub mod sizes;
 
-pub use client::{Client, ListingJob, RowWatch};
+pub use client::{Client, ListingJob, RowPictures, RowWatch};
 pub use folder::{Inner, InnerFolders, list_folder};
 pub use sizes::{FolderSizer, MeasureFolders};

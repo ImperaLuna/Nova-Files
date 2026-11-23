@@ -68,6 +68,7 @@ fn details(bench: &Bench, count: u32) -> Vec<Details> {
         first: EntryId(0),
         count,
         size: ThumbnailSize::Normal,
+        peeks: false,
     });
     loop {
         if let Event::DetailsRead {

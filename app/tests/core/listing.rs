@@ -67,6 +67,7 @@ impl Client {
                 first: EntryId(first),
                 count,
                 size: ThumbnailSize::Normal,
+                peeks: false,
             })
             .unwrap();
         let mut start = None;
@@ -218,6 +219,7 @@ fn rows_of_an_older_listing_are_not_read() {
             first: EntryId(0),
             count: 10,
             size: ThumbnailSize::Normal,
+            peeks: false,
         })
         .unwrap();
     let (start, _) = client.show_rows(5, 3, 1, 1);

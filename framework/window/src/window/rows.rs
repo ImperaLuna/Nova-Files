@@ -185,6 +185,7 @@ impl MainWindow {
             first: EntryId(first),
             count,
             size: self.thumbnail_size(cx),
+            peeks: !self.showing_details(cx),
         };
         if let Some(connection) = &self.connection {
             connection.send(command).ok();
@@ -237,6 +238,7 @@ impl MainWindow {
                 first: EntryId(0),
                 count: 0,
                 size: self.thumbnail_size(cx),
+                peeks: !self.showing_details(cx),
             };
             connection.send(forget).ok();
         }

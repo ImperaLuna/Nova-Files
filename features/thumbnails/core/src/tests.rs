@@ -17,6 +17,10 @@ fn entry(index: u32, name: &str, kind: EntryKind) -> Entry {
     }
 }
 
+const fn pictures(size: ThumbnailSize) -> RowPictures {
+    RowPictures { size, peeks: true }
+}
+
 fn shown(shared: &Shared) -> Arc<Listing> {
     shared.state.lock().unwrap().shown.clone().unwrap()
 }
@@ -32,6 +36,7 @@ fn shared(entries: Vec<Entry>, wanted: Range<usize>, done: &[usize]) -> Shared {
             })),
             wanted,
             size: ThumbnailSize::Normal,
+            peeks: true,
             done: done.iter().copied().collect(),
             closed: false,
         }),
@@ -61,7 +66,7 @@ fn only_wanted_entries_of_the_shown_open_listing_are_still_wanted() {
 }
 
 #[test]
-fn a_batch_holds_only_wanted_files_not_done_yet() {
+fn a_batch_holds_only_wanted_entries_not_done_yet() {
     let entries = vec![
         entry(0, "folder", EntryKind::Folder),
         entry(1, "new.png", EntryKind::File),
@@ -76,10 +81,37 @@ fn a_batch_holds_only_wanted_files_not_done_yet() {
 
     assert_eq!(
         (batch.shown.id, batch.size, batch.entries),
-        (LISTING, ThumbnailSize::Normal, vec![1])
+        (LISTING, ThumbnailSize::Normal, vec![0, 1])
     );
-    let state = queue.state.lock().unwrap();
-    assert_eq!(state.done, HashSet::from([1, 2]));
+    let done = queue.state.lock().unwrap().done.clone();
+    assert_eq!(done, HashSet::from([0, 1, 2]));
+}
+
+#[test]
+fn folders_wait_until_a_view_wants_peeks() {
+    let entries = vec![
+        entry(0, "folder", EntryKind::Folder),
+        entry(1, "new.png", EntryKind::File),
+    ];
+    let queue = Queue {
+        shared: Arc::new(shared(entries, 0..2, &[])),
+    };
+    let rows = RowPictures {
+        size: ThumbnailSize::Normal,
+        peeks: false,
+    };
+    queue.want(LISTING, EntryId(0), 2, Some(rows));
+
+    let batch = queue.shared.next_batch().unwrap();
+
+    assert_eq!(batch.entries, [1]);
+    queue.want(
+        LISTING,
+        EntryId(0),
+        2,
+        Some(pictures(ThumbnailSize::Normal)),
+    );
+    assert_eq!(queue.shared.next_batch().unwrap().entries, [0]);
 }
 
 struct Gone(#[expect(dead_code, reason = "only dropped")] mpsc::Sender<()>);
@@ -97,7 +129,7 @@ fn dropping_the_queue_stops_its_worker() {
         folder: PathBuf::from("/nonexistent/thumbnails"),
         helper: PathBuf::from("/nonexistent/helper"),
     };
-    let queue = Queue::start(setup, Arc::new(Gone(gone))).unwrap();
+    let queue = Queue::start(setup, Arc::new(Gone(gone)), Arc::new(ByEnding)).unwrap();
 
     drop(queue);
 
@@ -125,10 +157,15 @@ fn a_new_size_sends_every_wanted_thumbnail_again() {
         shared: Arc::new(shared(files, 0..2, &[0, 1])),
     };
 
-    queue.want(LISTING, EntryId(0), 2, Some(ThumbnailSize::Normal));
+    queue.want(
+        LISTING,
+        EntryId(0),
+        2,
+        Some(pictures(ThumbnailSize::Normal)),
+    );
     assert_eq!(queue.shared.state.lock().unwrap().done.len(), 2);
 
-    queue.want(LISTING, EntryId(0), 2, Some(ThumbnailSize::Large));
+    queue.want(LISTING, EntryId(0), 2, Some(pictures(ThumbnailSize::Large)));
     let state = queue.shared.state.lock().unwrap();
     let (size, done) = (state.size, state.done.len());
     drop(state);
@@ -141,7 +178,7 @@ fn hiding_thumbnails_keeps_the_size() {
     let queue = Queue {
         shared: Arc::new(shared(files, 0..1, &[0])),
     };
-    queue.want(LISTING, EntryId(0), 1, Some(ThumbnailSize::Large));
+    queue.want(LISTING, EntryId(0), 1, Some(pictures(ThumbnailSize::Large)));
 
     queue.want(LISTING, EntryId(0), 0, None);
 
@@ -191,11 +228,142 @@ fn a_found_file_is_thumbnailed_from_its_own_folder() {
         folders: Some(Arc::new([folder.clone(), folder.clone()])),
     };
 
-    let job = job_for(&found, 0);
-    let gone = job_for(&found, 1);
+    let job = job_at(found.path_of(&found.entries[0]));
+    let gone = job_at(found.path_of(&found.entries[1]));
 
     let job = job.unwrap();
     assert_eq!(job.source, folder.join("photo.png"));
     assert!(job.mtime > 0);
     assert!(gone.is_none());
+}
+
+#[derive(Debug)]
+struct ByEnding;
+
+impl FileTypes for ByEnding {
+    fn of(&self, name: &std::ffi::OsStr) -> Option<&str> {
+        match Path::new(name).extension()?.to_str()? {
+            "png" => Some("image/png"),
+            "mp4" => Some("video/mp4"),
+            "txt" => Some("text/plain"),
+            _ => None,
+        }
+    }
+
+    fn is_a(&self, mime: &str, wanted: &str) -> bool {
+        wanted
+            .strip_suffix('*')
+            .map_or(mime == wanted, |media| mime.starts_with(media))
+    }
+}
+
+fn names(picks: &[peek::Pick]) -> Vec<&str> {
+    picks
+        .iter()
+        .map(|pick| pick.entry.name.to_str().unwrap())
+        .collect()
+}
+
+fn numbered(found: &[(&str, EntryKind)]) -> Vec<Entry> {
+    found
+        .iter()
+        .zip(0..)
+        .map(|((name, kind), index)| entry(index, name, *kind))
+        .collect()
+}
+
+#[test]
+fn a_peek_takes_pictures_then_files_then_folders() {
+    let entries = numbered(&[
+        ("album", EntryKind::Folder),
+        ("b.txt", EntryKind::File),
+        ("c.png", EntryKind::File),
+        (".d.png", EntryKind::File),
+        ("e.mp4", EntryKind::File),
+        ("f", EntryKind::File),
+    ]);
+
+    let picks = peek::pick(entries, &ByEnding);
+
+    assert_eq!(names(&picks), ["c.png", "e.mp4", "b.txt"]);
+    assert_eq!(
+        picks.iter().map(|pick| pick.picture).collect::<Vec<_>>(),
+        [true, true, false]
+    );
+    let few = numbered(&[("b.txt", EntryKind::File), ("album", EntryKind::Folder)]);
+    assert_eq!(names(&peek::pick(few, &ByEnding)), ["b.txt", "album"]);
+}
+
+#[test]
+fn a_peek_shows_hidden_entries_only_when_nothing_else_is_there() {
+    let mixed = numbered(&[(".a", EntryKind::File), ("b.txt", EntryKind::File)]);
+    assert_eq!(names(&peek::pick(mixed, &ByEnding)), ["b.txt"]);
+
+    let hidden = numbered(&[(".a", EntryKind::File), (".b.png", EntryKind::File)]);
+    assert_eq!(names(&peek::pick(hidden, &ByEnding)), [".b.png", ".a"]);
+
+    assert_eq!(peek::pick(Vec::new(), &ByEnding), []);
+}
+
+struct Heard(mpsc::Sender<Event>);
+
+impl EventSink for Heard {
+    fn deliver_envelope(&self, envelope: Envelope) -> Result<(), ClientGone> {
+        if let Ok(event) = envelope.open::<Event>() {
+            self.0.send(event).map_err(|_| ClientGone)?;
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn folders_on_screen_get_a_peek_at_what_they_hold() {
+    let test_folder = TestFolder::new("thumb-peek");
+    let trip = test_folder.join("trip");
+    fs::create_dir(&trip).unwrap();
+    fs::write(trip.join("notes.txt"), b"hello").unwrap();
+    fs::write(trip.join("photo.png"), b"not really a png").unwrap();
+    fs::create_dir(test_folder.join("empty")).unwrap();
+    let setup = Thumbnails {
+        folder: test_folder.join("thumbnails"),
+        helper: test_folder.join("no-helper"),
+    };
+    let (sender, heard) = mpsc::channel();
+    let queue = Queue::start(setup, Arc::new(Heard(sender)), Arc::new(ByEnding)).unwrap();
+    let listing = Listing {
+        id: LISTING,
+        path: test_folder.path().to_path_buf(),
+        entries: numbered(&[("empty", EntryKind::Folder), ("trip", EntryKind::Folder)]).into(),
+        folders: None,
+    };
+
+    queue.show(&listing, || true);
+    queue.want(
+        LISTING,
+        EntryId(0),
+        2,
+        Some(pictures(ThumbnailSize::Normal)),
+    );
+
+    let mut peeks: Vec<_> = (0..2)
+        .map(|_| match heard.recv_timeout(WAIT).unwrap() {
+            Event::Peek { entry, peeked, .. } => (entry, peeked),
+            other @ Event::Thumbnail { .. } => {
+                panic!("expected a peek, got {other:?}")
+            }
+        })
+        .collect();
+    peeks.sort_by_key(|(entry, _)| entry.0);
+    let peeked = |name: &str| Peeked {
+        name: name.into(),
+        kind: EntryKind::File,
+        png: None,
+    };
+    assert_eq!(
+        peeks,
+        [
+            (EntryId(0), Vec::new()),
+            (EntryId(1), vec![peeked("photo.png"), peeked("notes.txt")]),
+        ]
+    );
 }

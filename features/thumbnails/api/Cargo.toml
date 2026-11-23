@@ -1,7 +1,7 @@
 # nova-files-thumbnails-api
 #
 # What the thumbnails feature's two halves say to each other: a listing
-# file's thumbnail.
+# file's thumbnail and a peek at a listing folder's entries.
 #
 # Allowed outside crates: none
 #

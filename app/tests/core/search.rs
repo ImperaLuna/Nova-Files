@@ -338,6 +338,7 @@ fn rows_of_found_files_get_their_details() {
         first: EntryId(0),
         count: 1,
         size: ThumbnailSize::Normal,
+        peeks: false,
     };
     client.connection.send(rows).unwrap();
     let Event::DetailsRead { id, details, .. } = client.answer() else {

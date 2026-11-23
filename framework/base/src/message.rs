@@ -33,7 +33,9 @@ pub enum Command {
     /// The entries of listing `id` the client shows or is about to show:
     /// `count` entries from `first`. The core reads the details of those it
     /// hasn't read yet, answering with [`Event::DetailsRead`], and the
-    /// thumbnails feature makes their thumbnails at `size`.
+    /// thumbnails feature makes their thumbnails at `size`, and, when
+    /// `peeks` is set, peeks into the folders among them for a view that
+    /// draws what folders hold.
     /// Each request replaces the one before, so entries scrolled away are
     /// dropped; a new `size` sends every thumbnail again. Entries never
     /// asked for never have their details read. At most [`MAX_ROWS`]
@@ -43,6 +45,7 @@ pub enum Command {
         first: EntryId,
         count: u32,
         size: ThumbnailSize,
+        peeks: bool,
     },
     /// Ask for the UI's window state; the answer is [`Event::WindowState`].
     WindowState,
