@@ -26,7 +26,7 @@ use crate::commands::{
     SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown, SelectPageUp,
     SelectRight, SelectUp, ToggleSelected,
 };
-use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab};
+use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, TypePath};
 use crate::selection::Move;
 use crate::theme::{self, Colors, size, text};
 use crate::window::MainWindow;
@@ -71,6 +71,7 @@ impl MainWindow {
             }))
             .when(main, |root| root.track_focus(&self.focus))
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
+            .on_action(cx.listener(|this, _: &TypePath, window, cx| this.type_path(window, cx)))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))

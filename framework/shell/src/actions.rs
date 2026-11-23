@@ -36,6 +36,7 @@ gpui::actions!(
         PreviewPrevious,
         PreviewNext,
         FocusSearch,
+        TypePath,
         NewTab,
         CloseTab,
         NextTab,

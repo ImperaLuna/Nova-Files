@@ -1,4 +1,4 @@
-use gpui::{px, size};
+use gpui::{point, px, size};
 use nova_files_window::TextField;
 
 use super::*;
@@ -338,4 +338,50 @@ async fn a_space_typed_into_the_path_stays_in_it(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(typed(&view, cx).0, "a ");
     assert!(!view.read_with(cx, previewing));
+}
+
+#[gpui::test]
+async fn ctrl_l_alt_d_and_f6_put_the_path_in_the_bar_selected(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path-keys");
+    let projects = tree.path().join("Projects");
+    let (view, cx) = typing_window(cx, &tree, &projects).await;
+
+    for keys in ["ctrl-l", "alt-d", "f6"] {
+        cx.simulate_keystrokes(keys);
+        cx.run_until_parked();
+        assert_eq!(typed(&view, cx), ("~/Projects".to_owned(), 0..10), "{keys}");
+        cx.simulate_keystrokes("escape");
+        cx.run_until_parked();
+        assert!(path_field(&view, cx).is_none());
+    }
+}
+
+#[gpui::test]
+async fn a_click_on_the_bar_beside_the_crumbs_types_in_a_deep_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("path-deep");
+    let deep = tree.path().join("a/b/c/d/e/f/g");
+    fs::create_dir_all(&deep).unwrap();
+    let (view, cx) = typing_window(cx, &tree, &deep).await;
+    cx.simulate_resize(size(px(560.0), px(400.0)));
+    cx.run_until_parked();
+
+    let path = cx.debug_bounds("path").unwrap();
+    cx.simulate_click(
+        point(path.right() - px(3.0), path.center().y),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    assert!(path_field(&view, cx).is_some());
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+
+    let here = cx.debug_bounds("crumb-7").unwrap();
+    cx.simulate_click(here.center(), Modifiers::none());
+    cx.run_until_parked();
+    assert!(
+        path_field(&view, cx).is_none(),
+        "a crumb still opens its folder"
+    );
 }

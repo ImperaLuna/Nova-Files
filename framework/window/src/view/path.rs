@@ -26,6 +26,14 @@ impl MainWindow {
         )
     }
 
+    pub(super) fn type_path(&self, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        let Some(folder) = self.folder().map(Path::to_path_buf) else {
+            return;
+        };
+        self.path_bar
+            .update(cx, |bar, cx| bar.start_typing(&folder, window, cx));
+    }
+
     pub fn path_menu_names(&self, cx: &gpui::App) -> Option<Vec<String>> {
         self.path_bar.read(cx).menu_names(self.spot())
     }
