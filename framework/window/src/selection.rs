@@ -10,12 +10,15 @@ pub enum Click {
     Only,
     Toggle,
     Range,
+    AddRange,
 }
 
 impl Click {
     pub const fn of(modifiers: Modifiers, several: bool) -> Self {
         if !several {
             Self::Only
+        } else if modifiers.shift && modifiers.control {
+            Self::AddRange
         } else if modifiers.shift {
             Self::Range
         } else if modifiers.control {
@@ -94,7 +97,8 @@ impl Selection {
                 selection.toggle(id);
                 selection.anchor = id;
             }
-            Click::Range => selection.range_to(id, picks),
+            Click::Range => selection.range_to(id, false, picks),
+            Click::AddRange => selection.range_to(id, true, picks),
         }
         selection.cursor = id;
         selection
@@ -148,13 +152,20 @@ impl Selection {
         }
     }
 
-    fn range_to(&mut self, id: EntryId, picks: impl Fn(EntryId) -> bool) {
+    fn range_to(&mut self, id: EntryId, add: bool, picks: impl Fn(EntryId) -> bool) {
         let (from, to) = if self.anchor <= id {
             (self.anchor.0, id.0)
         } else {
             (id.0, self.anchor.0)
         };
-        self.ids = (from..=to).map(EntryId).filter(|&id| picks(id)).collect();
+        let range = (from..=to).map(EntryId).filter(|&id| picks(id));
+        if add {
+            self.ids.extend(range);
+            self.ids.sort_unstable();
+            self.ids.dedup();
+        } else {
+            self.ids = range.collect();
+        }
     }
 
     pub fn carried(&self, before: &[Entry], listing: ListingId, after: &[Entry]) -> Option<Self> {
@@ -287,7 +298,15 @@ mod tests {
             control: true,
             ..Modifiers::none()
         };
-        assert_eq!(Click::of(both, true), Click::Range);
+        assert_eq!(Click::of(both, true), Click::AddRange);
+    }
+
+    #[test]
+    fn ctrl_shift_click_keeps_the_picks_and_adds_the_range() {
+        let picks = click(Selection::only(SHOWN, EntryId(0)), 6, Click::Toggle);
+        let added = click(picks, 2, Click::AddRange);
+        assert_eq!(ids(&added), [0, 2, 4, 5, 6]);
+        assert_eq!(added.cursor(), EntryId(2));
     }
 
     #[test]

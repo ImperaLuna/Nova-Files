@@ -218,3 +218,71 @@ async fn a_third_quick_click_in_the_folder_opened_only_selects(cx: &mut TestAppC
     );
     assert_eq!(selected(&view, cx), ["nova"]);
 }
+
+#[gpui::test]
+async fn ctrl_shift_click_adds_a_range_to_the_picks(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select-add-range");
+    let (view, cx) = listed(cx, &tree).await;
+
+    click(cx, "entry-0");
+    click_with(cx, "entry-2", Modifiers::control());
+    let both = Modifiers {
+        control: true,
+        shift: true,
+        ..Modifiers::none()
+    };
+    click_with(cx, "entry-3", both);
+    assert_eq!(selected(&view, cx), ["Projects", "b.txt", "notes.txt"]);
+}
+
+#[gpui::test]
+async fn two_quick_ctrl_clicks_tick_a_folder_on_and_off(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select-ctrl-twice");
+    let (view, cx) = listed(cx, &tree).await;
+
+    click(cx, "entry-1");
+    let at = cx.debug_bounds("entry-0").unwrap().center();
+    counted_click_with(cx, at, 1, Modifiers::control());
+    cx.run_until_parked();
+    assert_eq!(selected(&view, cx), ["Projects", "a.txt"]);
+    counted_click_with(cx, at, 2, Modifiers::control());
+    cx.run_until_parked();
+    assert_eq!(selected(&view, cx), ["a.txt"]);
+    assert_eq!(
+        view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf)),
+        Some(tree.path().to_path_buf())
+    );
+}
+
+#[gpui::test]
+async fn ctrl_a_leaves_the_list_where_it_is(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select-all-stays");
+    for index in 0..80 {
+        fs::write(tree.path().join(format!("f{index:02}")), "").unwrap();
+    }
+    cx.update(nova_files_window::bind_window_keys);
+    let (view, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+    click(cx, "entry-1");
+    let row = cx.debug_bounds("entry-5").unwrap();
+    cx.simulate_event(gpui::ScrollEvent {
+        position: row.center(),
+        delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.0), px(-1200.0))),
+        ..gpui::ScrollEvent::default()
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("entry-1").is_none());
+    let seen = (2..82)
+        .map(|index| &*format!("entry-{index}").leak())
+        .find(|selector| cx.debug_bounds(selector).is_some())
+        .unwrap();
+    let shown = cx.debug_bounds(seen);
+
+    cx.simulate_keystrokes("ctrl-a");
+    cx.run_until_parked();
+    assert_eq!(selected(&view, cx).len(), 82);
+    assert_eq!(cx.debug_bounds(seen), shown);
+}

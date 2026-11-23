@@ -88,11 +88,13 @@ impl MainWindow {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let double = event.click_count() == DOUBLE_CLICK;
+        let held = event.modifiers();
+        let plain = !held.control && !held.shift;
+        let double = plain && event.click_count() == DOUBLE_CLICK;
         if !double && self.selected_on_press.take() == Some(at) {
             return;
         }
-        if event.click_count() <= DOUBLE_CLICK {
+        if !plain || event.click_count() <= DOUBLE_CLICK {
             self.entry_chosen(at, event.modifiers(), double, cx);
         }
     }
@@ -237,7 +239,7 @@ impl MainWindow {
         let Ok(len) = u32::try_from(self.entry_count()) else {
             return;
         };
-        self.reselect(
+        self.reselect_in_place(
             |before, picks| Selection::all(before.as_ref(), listing, len, picks),
             cx,
         );
@@ -256,7 +258,7 @@ impl MainWindow {
     }
 
     pub(crate) fn clear_selection(&mut self, cx: &mut Context<Self>) {
-        self.reselect(|_, _| None, cx);
+        self.reselect_in_place(|_, _| None, cx);
     }
 
     pub(crate) fn open_selected(&mut self, cx: &mut Context<Self>) {

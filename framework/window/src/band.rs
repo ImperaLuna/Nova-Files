@@ -24,8 +24,8 @@ impl MainWindow {
         self.band = boxes.then(|| Band {
             from: self.in_content(event.position),
             to: event.position,
-            before: self.selection.clone(),
-            add: event.modifiers.control,
+            before: self.selection_before_press.clone(),
+            add: event.modifiers.control || event.modifiers.shift,
             dragging: false,
         });
     }
