@@ -7,8 +7,8 @@ order: speed, then a polished, soft and rounded UI.
 
 `README.md` is written by hand by the maintainer. Don't edit it.
 
-This file is the only agent instruction file (Claude Code and Codex both read
-it). Don't add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
+This file is the only agent instruction file (Claude Code reads it). Don't
+add a `CLAUDE.md` or `CLAUDE.local.md`: Claude Code then skips
 `AGENTS.md`.
 
 ## UI rules
@@ -172,13 +172,18 @@ takes the shared checkout's lock, caps CPU and memory, checks, pushes and
 switches back. `.claude/settings.json` lets that and routine git commands
 run without a prompt, so put fixes in new commits on the branch.
 
-Before asking Codex for review, review the whole PR diff yourself with the
-`/code-review` skill (high effort) and fix what it finds: Codex is the last
-check, not the first reviewer. For crash recovery, races and file
-operations, list the edge cases (a crash between steps, a link swapped in,
-two processes at once) and test them first. Ask Codex once per PR. Fix only
-findings that crash, lose or damage data, or that a user hits in normal
-use; answer the rest in their thread and resolve it, without a push.
+For crash recovery, races and file operations, list the edge cases (a
+crash between steps, a link swapped in, two processes at once) and test them
+first.
+
+Before a pull request is marked ready, its thread starts one fresh reviewer
+agent. It gets the diff, the ticket text if there is one, and this file,
+not the thread's conversation or reasoning; it follows "Review guidelines"
+below. Its findings are claims: reproduce or trace each one before fixing
+it. Fix only findings that crash, lose or damage data, or that a user hits
+in normal use; list the rest under "Known gaps" in the PR body. One round
+per PR; a second round only after a fix that changed behaviour. A pull
+request that changes only docs needs no reviewer.
 
 Scratch output (results, logs, traces, scripts, dumps) goes in
 `.claude/<ticket>/` inside this checkout, never in the home folder. Work in
