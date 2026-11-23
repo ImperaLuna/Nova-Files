@@ -371,3 +371,27 @@ async fn a_click_that_slips_on_a_pinned_place_still_opens_it(cx: &mut TestAppCon
     cx.simulate_mouse_up(slipped, MouseButton::Left, Modifiers::none());
     wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
 }
+
+#[gpui::test]
+async fn a_cut_tree_name_shows_in_full_on_hover(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-full-name");
+    fs::create_dir(
+        tree.path()
+            .join("zz a folder name far too long for the sidebar to hold"),
+    )
+    .unwrap();
+    let (view, cx) = window_on(cx, tree.path(), tree.path());
+    wait_for_folder(&view, cx, tree.path()).await;
+    click(cx, "tree-0-expander");
+    wait_for_tree(&view, cx).await;
+    cx.run_until_parked();
+
+    let row = cx.debug_bounds("tree-2").unwrap();
+    let at = point(row.right() - px(30.0), row.center().y);
+    cx.simulate_mouse_move(at, None, Modifiers::none());
+    cx.simulate_mouse_move(at + point(px(1.0), px(0.0)), None, Modifiers::none());
+    cx.executor().advance_clock(Duration::from_secs(1));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("full-name").is_some());
+}

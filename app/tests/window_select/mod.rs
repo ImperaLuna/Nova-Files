@@ -335,3 +335,32 @@ async fn enter_on_several_folders_opens_each_in_a_tab(cx: &mut TestAppContext) {
         ]
     );
 }
+
+fn hover_name(cx: &mut VisualTestContext, selector: &'static str) {
+    cx.run_until_parked();
+    let name = cx.debug_bounds(selector).unwrap();
+    let at = gpui::point(name.left() + px(4.0), name.center().y);
+    cx.simulate_mouse_move(at, None, Modifiers::none());
+    cx.simulate_mouse_move(at + gpui::point(px(1.0), px(0.0)), None, Modifiers::none());
+    cx.executor().advance_clock(Duration::from_secs(1));
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+async fn a_cut_name_shows_in_full_on_hover(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("full-name");
+    let long = format!("{} end.txt", "a long name that does not fit ".repeat(8));
+    fs::write(tree.path().join(&long), "").unwrap();
+    cx.update(nova_files_window::bind_window_keys);
+    let (_view, cx) = open_on(cx, tree.path()).await;
+
+    hover_name(cx, "name-2");
+    assert!(cx.debug_bounds("full-name").is_none(), "notes.txt fits");
+    hover_name(cx, "name-1");
+    let tip = cx.debug_bounds("full-name").expect("the long name is cut");
+    assert!(
+        tip.size.height > px(40.0),
+        "the whole name wraps inside the label"
+    );
+}

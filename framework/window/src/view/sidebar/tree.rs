@@ -1,10 +1,11 @@
 use gpui::{
-    Context, Div, InteractiveElement as _, ParentElement as _, Pixels, Stateful, Styled as _, div,
-    prelude::FluentBuilder as _,
+    Context, Div, InteractiveElement as _, ParentElement as _, Pixels, SharedString, Stateful,
+    Styled as _, StyledText, div, prelude::FluentBuilder as _,
 };
 
 use nova_files_shell::{SidebarAt, SidebarRow};
 
+use super::super::full_name::full_name_on_hover;
 use super::part_rows::expander_button;
 use super::{icon, inside_edge, section_head};
 use crate::theme::{Colors, radius, size, text};
@@ -94,7 +95,11 @@ impl MainWindow {
                     .flex_1()
                     .min_w_0()
                     .truncate()
-                    .child(place.name.clone()),
+                    .child(full_name_on_hover(
+                        SharedString::from(format!("{}-name", place.id)),
+                        StyledText::new(place.name.clone()),
+                        place.name.clone(),
+                    )),
             );
         self.part_row_acts(shown, place, cx)
     }

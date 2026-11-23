@@ -295,6 +295,7 @@ pub mod size {
     pub const DROP_EDGE: Pixels = RING;
     pub const DRAG_CHIP_PAD: Pixels = px(12.0);
     pub const DRAG_CHIP_PAD_Y: Pixels = px(6.0);
+    pub const FULL_NAME_WIDTH: Pixels = px(360.0);
     pub const MENU_ROW_HEIGHT: Pixels = px(32.0);
     pub const MENU_PAD: Pixels = px(5.0);
     pub const ISLAND_HEIGHT: Pixels = px(46.0);

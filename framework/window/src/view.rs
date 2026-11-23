@@ -1,5 +1,6 @@
 mod bar;
 mod drop;
+mod full_name;
 mod gallery;
 mod icons;
 mod island;

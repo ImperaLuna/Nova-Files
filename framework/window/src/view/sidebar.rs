@@ -7,10 +7,11 @@ mod tree;
 use gpui::{
     AnyElement, ClickEvent, Context, Div, ElementId, InteractiveElement as _, IntoElement,
     ParentElement as _, Rgba, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
-    div, prelude::FluentBuilder as _, transparent_black,
+    StyledText, div, prelude::FluentBuilder as _, transparent_black,
 };
 
 use super::drop::inside_edge;
+use super::full_name::full_name_on_hover;
 use super::row::icon;
 use crate::assets::Icon;
 use crate::theme::{Colors, radius, size, text};
@@ -125,6 +126,7 @@ pub(super) fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
     } = row;
     let tint = if here { colors.here } else { colors.text_dim };
     let number_selector = format!("{selector}-number");
+    let name_id = SharedString::from(format!("{selector}-name"));
     let here_selector = format!("{selector}-here");
     div()
         .id(id)
@@ -163,7 +165,17 @@ pub(super) fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
                 .when(here, |glyph| glyph.debug_selector(move || here_selector))
                 .child(icon(glyph, size::PLACE_ICON, tint)),
         )
-        .child(div().flex_1().min_w_0().truncate().child(name))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .child(full_name_on_hover(
+                    name_id,
+                    StyledText::new(name.clone()),
+                    name,
+                )),
+        )
         .children(number.map(|(number, color)| {
             div()
                 .debug_selector(move || number_selector)
