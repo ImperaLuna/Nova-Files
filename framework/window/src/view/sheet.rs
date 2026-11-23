@@ -91,6 +91,11 @@ impl MainWindow {
             )
             .children(entries)
             .children(self.parts.overlays())
+            .children(
+                (self.listing.is_some() && !self.showing_gallery(cx))
+                    .then(|| self.scroll_bar(cx))
+                    .flatten(),
+            )
             .child(ctrl_scroll(cx))
             .children(self.empty_note(&colors, cx))
             .children(self.band_box().map(|band| {

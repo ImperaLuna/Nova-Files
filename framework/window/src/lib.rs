@@ -9,6 +9,7 @@ mod dropping;
 mod edge_scroll;
 mod island;
 mod lift;
+mod scroll_bar;
 
 mod marks;
 mod menu;

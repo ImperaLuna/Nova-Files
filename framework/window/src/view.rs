@@ -304,6 +304,7 @@ fn pointer_watch(cx: &Context<MainWindow>) -> impl IntoElement {
                         .update(cx, |this, cx| {
                             this.band_moved(event, cx);
                             this.lift_moved(event, cx);
+                            this.bar_moved(event, cx);
                         })
                         .ok();
                 }
@@ -321,7 +322,10 @@ fn pointer_watch(cx: &Context<MainWindow>) -> impl IntoElement {
             window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
                 if phase == DispatchPhase::Bubble && event.button == MouseButton::Left {
                     released
-                        .update(cx, |this, cx| this.band_released(event, cx))
+                        .update(cx, |this, cx| {
+                            this.band_released(event, cx);
+                            this.bar_released(cx);
+                        })
                         .ok();
                 }
             });

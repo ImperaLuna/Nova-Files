@@ -357,3 +357,90 @@ async fn files_carried_to_the_bottom_edge_scroll_the_list(cx: &mut TestAppContex
     cx.simulate_mouse_up(edge, MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
 }
+
+fn list_offset(
+    view: &Entity<MainWindow>,
+    cx: &VisualTestContext,
+) -> (Pixels, Pixels, Bounds<Pixels>) {
+    view.read_with(cx, |view, _| {
+        let handle = view.scroll().0.borrow().base_handle.clone();
+        (-handle.offset().y, handle.max_offset().y, handle.bounds())
+    })
+}
+
+#[gpui::test]
+async fn a_long_folder_shows_a_scroll_bar_while_it_moves_and_hides_it_after(
+    cx: &mut TestAppContext,
+) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("bar-shows");
+    let (view, cx) = long_list(cx, &tree).await;
+    cx.run_until_parked();
+    let bar = bounds(cx, "scroll-bar");
+    let (_, _, list) = list_offset(&view, cx);
+    assert!(bar.right() <= list.right() && bar.bottom() < list.bottom() - px(60.0));
+    assert!(!view.read_with(cx, |view, _| view.scroll_bar_shown()));
+
+    scroll(cx, list.center(), px(-200.0));
+    assert!(view.read_with(cx, |view, _| view.scroll_bar_shown()));
+    held(cx, Duration::from_millis(1100));
+    assert!(!view.read_with(cx, |view, _| view.scroll_bar_shown()));
+}
+
+#[gpui::test]
+async fn a_short_folder_shows_no_scroll_bar(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("bar-short");
+    let (_view, cx) = lettered(cx, &tree).await;
+    assert!(cx.debug_bounds("scroll-bar").is_none());
+}
+
+#[gpui::test]
+async fn the_thumb_dragged_halfway_shows_the_middle_of_the_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("bar-drag");
+    let (view, cx) = long_list(cx, &tree).await;
+    cx.run_until_parked();
+    let (bar, thumb) = (bounds(cx, "scroll-bar"), bounds(cx, "scroll-thumb"));
+    let room = bar.size.height - thumb.size.height;
+
+    let from = thumb.center();
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(
+        from + point(px(0.0), room / 2.0),
+        Some(MouseButton::Left),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.scroll_bar_shown()));
+    cx.simulate_mouse_up(
+        from + point(px(0.0), room / 2.0),
+        MouseButton::Left,
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    let (scrolled, most, _) = list_offset(&view, cx);
+    assert!(
+        (scrolled - most / 2.0).abs() < px(2.0),
+        "{scrolled:?} of {most:?}"
+    );
+    assert_eq!(selected(&view, cx), Vec::<String>::new());
+}
+
+#[gpui::test]
+async fn a_click_on_the_bar_below_the_thumb_moves_a_page(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("bar-page");
+    let (view, cx) = long_list(cx, &tree).await;
+    cx.run_until_parked();
+    let (bar, thumb) = (bounds(cx, "scroll-bar"), bounds(cx, "scroll-thumb"));
+
+    cx.simulate_click(
+        point(thumb.center().x, bar.bottom() - px(4.0)),
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    let (scrolled, most, list) = list_offset(&view, cx);
+    assert_eq!(scrolled, list.size.height.min(most));
+    assert_eq!(selected(&view, cx), Vec::<String>::new());
+}
