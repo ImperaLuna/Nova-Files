@@ -444,3 +444,40 @@ async fn a_click_on_the_bar_below_the_thumb_moves_a_page(cx: &mut TestAppContext
     assert_eq!(scrolled, list.size.height.min(most));
     assert_eq!(selected(&view, cx), Vec::<String>::new());
 }
+
+#[gpui::test]
+async fn a_box_brought_back_to_its_row_selects_that_row_and_ends_outside_the_window(
+    cx: &mut TestAppContext,
+) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("band-back");
+    let (view, cx) = lettered(cx, &tree).await;
+
+    let from = bounds(cx, "modified-1").center();
+    let far = bounds(cx, "modified-3").center();
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    for to in [far, far, from + point(px(6.0), px(0.0))] {
+        cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+        cx.run_until_parked();
+    }
+    cx.simulate_mouse_up(
+        from + point(px(6.0), px(0.0)),
+        MouseButton::Left,
+        Modifiers::none(),
+    );
+    cx.run_until_parked();
+    assert_eq!(selected(&view, cx), ["a.txt"]);
+
+    let outside = point(px(-40.0), px(-40.0));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    for to in [far, outside] {
+        cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+        cx.run_until_parked();
+    }
+    cx.simulate_mouse_up(outside, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(cx.debug_bounds("band"), None);
+    cx.simulate_mouse_move(far, None, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(cx.debug_bounds("band"), None);
+}
