@@ -6,7 +6,7 @@ use nova_files_api::{EntryId, Fit, ListingId, Picture};
 use nova_files_preview_api::{Preview, PreviewContent, PreviewId};
 
 // GPUI draws images in BGRA order.
-// https://github.com/ImperaLuna/zed/tree/610fab89331e30736906b44f33bffe0cedcae37e/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/6fab5ba6d9562f331e9c581696432f52ec260429/crates/gpui
 const RED: usize = 0;
 const BLUE: usize = 2;
 const BYTES_PER_PIXEL: usize = 4;

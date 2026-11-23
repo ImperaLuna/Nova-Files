@@ -121,16 +121,24 @@ nova-files-undo-ui = { path = "features/undo/ui" }
 #   tested again from the pointer's last position on every later frame).
 #   Nova Files gets it too: a row or a menu no longer stays lit after the
 #   pointer leaves.
+# - IMP-403: a session lock unlocks only when the app asks, and the app is
+#   told the compositor's answer, for the Nova shell's lock screen. Nova
+#   Files never locks.
+# - IMP-412: a window can hold off the compositor's idle (screen blank,
+#   lock) while it asks, through Wayland's idle inhibit protocol, for the
+#   Nova shell's keep awake tile. Nova Files never asks.
+# - IMP-447: a custom shader rectangle can read a picture, for the Nova
+#   shell's wallpaper cards turned in 3D. Nova Files doesn't use it.
 # When all are merged upstream, point these back at zed-industries/zed.
 #
 # The crates.io release (0.2.2) draws through blade, which turns on ray
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "610fab89331e30736906b44f33bffe0cedcae37e", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "6fab5ba6d9562f331e9c581696432f52ec260429", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "610fab89331e30736906b44f33bffe0cedcae37e", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "6fab5ba6d9562f331e9c581696432f52ec260429", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index and the nova-files binary (one
