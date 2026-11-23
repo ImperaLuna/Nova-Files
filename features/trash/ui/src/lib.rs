@@ -58,7 +58,7 @@ const ROW: &str = "place-trash";
 const WAS_IN_LABEL: &str = "Was in";
 const WAS_IN_HEAD: &str = "head-was-in";
 const EMPTY_LABEL: &str = "Empty";
-pub(crate) const DELETE_LABEL: &str = "Delete";
+const DELETE_LABEL: &str = "Delete";
 const EVERYTHING: &str = "everything";
 const ITEM: &str = "item";
 const ITEMS: &str = "items";
@@ -254,7 +254,7 @@ fn touches_trash(operation: &Operation) -> bool {
         || operation.get::<EmptyTrashJob>().is_some()
 }
 
-pub(crate) fn count_of(number: usize) -> String {
+fn count_of(number: usize) -> String {
     if number == 1 {
         format!("1 {ITEM}")
     } else {
@@ -342,7 +342,7 @@ impl Part for TrashPart {
         slots.command(&TRASH, may_trash, Self::trash_selected);
         slots.command(&RESTORE, in_trash, Self::restore);
         slots.command(&EMPTY_TRASH, in_trash, Self::ask_empty);
-        slots.command(&DELETE_FOR_GOOD, in_trash, Self::ask_for_good);
+        slots.command(&DELETE_FOR_GOOD, in_trash, Self::delete_for_good);
         slots.before(Self::trash_key);
         slots.before(Self::delete_key);
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::FIRST, restore_items);

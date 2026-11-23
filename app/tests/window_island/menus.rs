@@ -350,13 +350,7 @@ async fn everything_in_the_trash_can_be_deleted_for_good_from_the_menu(cx: &mut 
     );
     choose(&view, cx, "Delete for good");
     cx.run_until_parked();
-    assert_eq!(
-        view.read_with(cx, |view, _| view
-            .confirm()
-            .map(|confirm| confirm.label.clone())),
-        Some("Delete 2 items for good?".into())
-    );
-    click(cx, "island-yes");
+    assert!(view.read_with(cx, |view, _| view.confirm().is_none()));
     wait_for_names(&view, cx, &[]).await;
     view.condition::<WindowEvent>(cx, |view, cx| trash_count(view, cx) == Some(0))
         .await;

@@ -110,7 +110,7 @@ async fn empty_trash_asks_first(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-async fn delete_in_the_trash_asks_then_deletes_for_good(cx: &mut TestAppContext) {
+async fn delete_in_the_trash_deletes_for_good_at_once(cx: &mut TestAppContext) {
     delete_in_the_trash(cx, "delete").await;
 }
 
@@ -136,13 +136,7 @@ async fn delete_in_the_trash(cx: &mut TestAppContext, key: &str) {
     click(cx, "name-0");
     cx.simulate_keystrokes(key);
     cx.run_until_parked();
-    assert_eq!(
-        view.read_with(cx, |view, _| view
-            .confirm()
-            .map(|confirm| confirm.label.clone())),
-        Some("Delete 1 item for good?".into())
-    );
-    click(cx, "island-yes");
+    assert!(view.read_with(cx, |view, _| view.confirm().is_none()));
     wait_for_names(&view, cx, &[]).await;
     assert!(!tree.path().join("notes.txt").exists());
 }
