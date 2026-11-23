@@ -19,6 +19,7 @@ use crate::common::Core;
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 const CHANGE_TIMEOUT: Duration = Duration::from_secs(5);
 const LIMIT: u32 = 50;
+const TYPED_STAGES: usize = 2;
 
 struct Scratch(TestFolder);
 
@@ -167,7 +168,10 @@ impl Client {
                 panic!("expected hits");
             };
             assert_eq!(id, asked);
-            stages.push(hits.into_iter().map(|hit| self.named(&hit)).collect());
+            let caught_up = stages.len() == TYPED_STAGES && hits.is_empty();
+            if !caught_up {
+                stages.push(hits.into_iter().map(|hit| self.named(&hit)).collect());
+            }
             if done {
                 return stages;
             }
