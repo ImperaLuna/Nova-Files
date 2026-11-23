@@ -2,10 +2,10 @@ use std::ops::Range;
 
 use gpui::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
+    ParentElement as _, Stateful, StatefulInteractiveElement as _, Styled as _, div,
     prelude::FluentBuilder as _, transparent_black, uniform_list,
 };
-use nova_files_api::Listing;
+use nova_files_api::{EntryId, Listing, ListingId};
 
 use super::row::{cursor_ring, detail, drags, entry_icon_sized, folder_aim};
 use super::sheet::rename_box;
@@ -60,27 +60,22 @@ impl MainWindow {
         };
         let colors = Colors::of(cx);
         let at = (listing.id, entry.id);
-        let row = self.entries_drag().then(|| DraggedRow::new(at.0, at.1));
+        let row = self.entry_drag(at, entry, cx);
         let name = entry.name.to_string_lossy().into_owned();
         let hidden = entry.is_hidden();
         let folder_at = folder_aim(listing, entry, &name);
-        let picture = drags(
-            div()
-                .id(("icon", index))
-                .debug_selector(move || format!("icon-{index}"))
-                .flex_none()
-                .when(hidden, |slot| slot.opacity(opacity::HIDDEN)),
-            row.clone(),
-            cx,
-        )
-        .child(
-            self.parts
-                .row_icon(entry, grid.icon, cx)
-                .unwrap_or_else(|| {
-                    entry_icon_sized(self.row_icon(index, entry.kind), grid.icon, &colors)
-                        .into_any_element()
-                }),
-        );
+        let picture = div()
+            .debug_selector(move || format!("icon-{index}"))
+            .flex_none()
+            .when(hidden, |slot| slot.opacity(opacity::HIDDEN))
+            .child(
+                self.parts
+                    .row_icon(entry, grid.icon, cx)
+                    .unwrap_or_else(|| {
+                        entry_icon_sized(self.row_icon(index, entry.kind), grid.icon, &colors)
+                            .into_any_element()
+                    }),
+            );
         let label = grid.names.then(|| {
             if let Some(cell) = self.parts.name_cell(entry, cx) {
                 return div()
@@ -89,10 +84,7 @@ impl MainWindow {
                     .into_any_element();
             }
             self.parts.name_field(entry, cx).map_or_else(
-                || {
-                    self.cell_name((index, name), grid, row, cx)
-                        .into_any_element()
-                },
+                || self.cell_name((index, name), grid, cx).into_any_element(),
                 |field| {
                     rename_box(field, &colors)
                         .when(!grid.beside, |field| field.flex_none().w_full().ml_0())
@@ -106,8 +98,11 @@ impl MainWindow {
             .when(self.selects(at), |cell| {
                 cell.bg(colors.selected).text_color(colors.text)
             })
-            .child(picture)
-            .children(label)
+            .child(
+                item(index, at, grid, row, cx)
+                    .child(picture)
+                    .children(label),
+            )
             .when(self.cursor() == Some(index), |cell| {
                 cell.child(cursor_ring(&colors))
             })
@@ -121,22 +116,11 @@ impl MainWindow {
             .into_any_element()
     }
 
-    fn cell_name(
-        &self,
-        (index, name): (usize, String),
-        grid: Grid,
-        row: Option<DraggedRow>,
-        cx: &Context<Self>,
-    ) -> Div {
-        let handle = drags(
-            div()
-                .id(("name", index))
-                .debug_selector(move || format!("name-{index}"))
-                .min_w_0()
-                .text_size(text::BODY),
-            row,
-            cx,
-        );
+    fn cell_name(&self, (index, name): (usize, String), grid: Grid, cx: &Context<Self>) -> Div {
+        let handle = div()
+            .debug_selector(move || format!("name-{index}"))
+            .min_w_0()
+            .text_size(text::BODY);
         if grid.beside {
             let size_text = self
                 .columns(index)
@@ -163,12 +147,29 @@ impl MainWindow {
     }
 }
 
+fn item(
+    index: usize,
+    at: (ListingId, EntryId),
+    grid: Grid,
+    row: Option<DraggedRow>,
+    cx: &Context<MainWindow>,
+) -> Stateful<Div> {
+    drags(div().id(("item", index)), at, row, cx)
+        .flex()
+        .w_full()
+        .items_center()
+        .when(grid.beside, |item| item.gap(size::NAME_GAP))
+        .when(!grid.beside, |item| {
+            item.flex_col().justify_start().gap(size::ICON_NAME_GAP)
+        })
+}
+
 fn cell(
     index: usize,
-    at: (nova_files_api::ListingId, nova_files_api::EntryId),
+    at: (ListingId, EntryId),
     grid: Grid,
     cx: &Context<MainWindow>,
-) -> gpui::Stateful<Div> {
+) -> Stateful<Div> {
     let colors = Colors::of(cx);
     div()
         .id(("entry", index))
@@ -184,10 +185,7 @@ fn cell(
         .flex()
         .flex_none()
         .items_center()
-        .when(grid.beside, |cell| cell.gap(size::NAME_GAP))
-        .when(!grid.beside, |cell| {
-            cell.flex_col().justify_start().gap(size::ICON_NAME_GAP)
-        })
+        .when(!grid.beside, |cell| cell.flex_col().justify_start())
         .w(grid.cell.width)
         .h(grid.cell.height)
         .p(size::ICON_CELL_PAD - size::DROP_EDGE)

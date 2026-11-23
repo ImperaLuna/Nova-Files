@@ -11,7 +11,8 @@ use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
 
 use super::drop::inside_edge;
 use super::row::{
-    Corners, cells, cursor_ring, detail, entry_icon, entry_name, folder_aim, icon, share_cell,
+    Corners, cells, cursor_ring, detail, drags, entry_icon, entry_name, folder_aim, icon,
+    share_cell,
 };
 
 use nova_files_shell::{Allow, PageRef, ShownColumn};
@@ -19,7 +20,7 @@ use nova_files_shell::{Allow, PageRef, ShownColumn};
 use crate::assets::Icon;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, space, text};
-use crate::window::{Aim, DraggedRow, MainWindow};
+use crate::window::{Aim, MainWindow};
 use nova_files_shell::Grid;
 
 const NAME_LABEL: &str = "Name";
@@ -74,6 +75,7 @@ impl MainWindow {
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, _, cx| {
                     let on_name = std::mem::take(&mut this.pressed_name);
+                    this.entries_pressed(event.position, on_name);
                     this.band_pressed(event, on_name, cx);
                 }),
             )
@@ -165,12 +167,7 @@ impl MainWindow {
                         let corners = Corners::of(index, selected);
                         let folder_at = folder_aim(listing, entry, &name);
                         let line = cells(
-                            this.name_cell(
-                                entry,
-                                (DraggedRow::new(listing_id, id), index),
-                                (name, marks),
-                                cx,
-                            ),
+                            this.name_cell(entry, ((listing_id, id), index), (name, marks), cx),
                             folder,
                             detail(columns.modified, &colors),
                             (this.size_cell(index, columns.size, &colors), size_width),
@@ -207,14 +204,15 @@ impl MainWindow {
     fn name_cell(
         &self,
         entry: &Entry,
-        (row, index): (DraggedRow, usize),
+        (at, index): ((ListingId, EntryId), usize),
         (name, marks): (String, Vec<std::ops::Range<usize>>),
         cx: &Context<Self>,
-    ) -> Div {
-        let draggable = self.entries_drag();
+    ) -> Stateful<Div> {
         let colors = &Colors::of(cx);
         let hidden = entry.is_hidden();
-        div()
+        let row = self.entry_drag(at, entry, cx);
+        drags(div().id(("name-cell", index)), at, row, cx)
+            .h_full()
             .flex()
             .items_center()
             .gap(size::NAME_GAP)
@@ -234,10 +232,7 @@ impl MainWindow {
             )
             .child(self.parts.name_cell(entry, cx).unwrap_or_else(|| {
                 self.parts.name_field(entry, cx).map_or_else(
-                    || {
-                        entry_name(name.into(), marks, index, draggable.then_some(row), cx)
-                            .into_any_element()
-                    },
+                    || entry_name(name.into(), marks, index, cx).into_any_element(),
                     |field| rename_box(field, colors).into_any_element(),
                 )
             }))

@@ -7,6 +7,7 @@ mod columns;
 mod commands;
 mod dropping;
 mod island;
+mod lift;
 
 mod marks;
 mod menu;

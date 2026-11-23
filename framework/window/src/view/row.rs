@@ -4,12 +4,12 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, Context, Div, HighlightStyle, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ObjectFit, ParentElement as _, Pixels, RenderImage, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled as _, StyledImage as _, StyledText, div, img,
+    AnyElement, App, Context, Div, HighlightStyle, InteractiveElement as _, IntoElement,
+    MouseButton, MouseDownEvent, ObjectFit, ParentElement as _, Pixels, RenderImage, SharedString,
+    Stateful, StatefulInteractiveElement as _, Styled as _, StyledImage as _, StyledText, div, img,
     prelude::FluentBuilder as _, relative,
 };
-use nova_files_api::{Entry, EntryKind, IconKind, Listing};
+use nova_files_api::{Entry, EntryId, EntryKind, IconKind, Listing, ListingId};
 use nova_files_shell::Allow;
 
 use crate::theme::{Colors, radius, size, space, text};
@@ -54,7 +54,8 @@ pub fn cells(
         .min_w_0()
         .items_center()
         .gap(size::COLUMN_GAP)
-        .child(div().flex_1().min_w_0().child(name))
+        .h_full()
+        .child(div().flex_1().min_w_0().h_full().child(name))
         .children(folder.map(|folder| column(size::FOLDER_WIDTH).child(folder)))
         .child(
             column(size::MODIFIED_WIDTH)
@@ -105,29 +106,19 @@ pub fn share_cell(text_content: String, share: Option<f32>, colors: &Colors) -> 
         .child(detail(text_content, colors))
 }
 
-pub fn entry_name(
-    name: SharedString,
-    marks: Vec<Range<usize>>,
-    index: usize,
-    row: Option<DraggedRow>,
-    cx: &Context<MainWindow>,
-) -> impl IntoElement {
+pub fn entry_name(name: SharedString, marks: Vec<Range<usize>>, index: usize, cx: &App) -> Div {
     let mark = mark_style(&Colors::of(cx));
     let text = StyledText::new(name).with_highlights(marks.into_iter().map(|range| (range, mark)));
-    drags(
-        div()
-            .id(("name", index))
-            .debug_selector(move || format!("name-{index}"))
-            .min_w_0()
-            .truncate(),
-        row,
-        cx,
-    )
-    .child(text)
+    div()
+        .debug_selector(move || format!("name-{index}"))
+        .min_w_0()
+        .truncate()
+        .child(text)
 }
 
 pub fn drags(
     handle: Stateful<Div>,
+    at: (ListingId, EntryId),
     row: Option<DraggedRow>,
     cx: &Context<MainWindow>,
 ) -> Stateful<Div> {
@@ -137,6 +128,10 @@ pub fn drags(
             MouseButton::Left,
             cx.listener(|this, _: &MouseDownEvent, _, _| this.pressed_name = true),
         )
+        .on_click(cx.listener(move |this, event, window, cx| {
+            cx.stop_propagation();
+            this.row_clicked(at, event, window, cx);
+        }))
         .when_some(row, |handle, row| {
             handle
                 .on_drag(row, move |row, _, window, cx| {
@@ -147,8 +142,17 @@ pub fn drags(
 }
 
 impl MainWindow {
-    pub(super) fn entries_drag(&self) -> bool {
-        !self.picker() && self.folder_rules().allows(Allow::Change)
+    pub(super) fn entry_drag(
+        &self,
+        (listing, id): (ListingId, EntryId),
+        entry: &Entry,
+        cx: &App,
+    ) -> Option<DraggedRow> {
+        let drags = self.lifted()
+            && !self.picker()
+            && self.folder_rules().allows(Allow::Change)
+            && self.parts.name_field(entry, cx).is_none();
+        drags.then(|| DraggedRow::new(listing, id))
     }
 }
 

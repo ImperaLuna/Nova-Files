@@ -57,6 +57,7 @@ use self::rows::RowRead;
 use crate::band::Band;
 use crate::island::Island;
 use crate::jump::TypeJump;
+use crate::lift::Lift;
 use crate::menu::Menu;
 use crate::selection::Selection;
 use crate::theme_icons::ThemeIcons;
@@ -106,6 +107,7 @@ pub struct MainWindow {
     went: Went,
     pub(crate) band: Option<Band>,
     pub(crate) pressed_name: bool,
+    pub(crate) lift: Option<Lift>,
     pub(crate) asked: Option<ListingId>,
     requested: Option<Location>,
     order: Order,
@@ -218,6 +220,7 @@ impl MainWindow {
             went: Went::Stayed,
             band: None,
             pressed_name: false,
+            lift: None,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
             requested: None,

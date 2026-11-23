@@ -102,6 +102,7 @@ impl MainWindow {
     fn band_events(root: Div, cx: &Context<Self>) -> Div {
         root.on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
             this.band_moved(event, cx);
+            this.lift_moved(event, cx);
         }))
         .on_scroll(cx.listener(|this, _: &ScrollEvent, _, cx| {
             this.band_scrolled(cx);
@@ -110,6 +111,7 @@ impl MainWindow {
             MouseButton::Left,
             cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
         )
+        .capture_any_mouse_up(cx.listener(|this, _: &MouseUpEvent, _, cx| this.lift_dropped(cx)))
     }
 
     fn tab_keys(root: Div, cx: &Context<Self>) -> Div {

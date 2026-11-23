@@ -40,8 +40,7 @@ fn drag(cx: &mut VisualTestContext, from: &'static str, to: &'static str, modifi
 fn drag_checked(cx: &mut VisualTestContext, from: &'static str, to: &'static str) {
     let (start, end) = (center(cx, from), center(cx, to));
     cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_move(end, Some(MouseButton::Left), Modifiers::none());
-    cx.run_until_parked();
+    lift(cx, end);
     assert!(cx.debug_bounds("drag-chip").is_some());
     cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
@@ -90,8 +89,7 @@ async fn a_drag_offers_its_files_and_a_pile_to_other_apps(cx: &mut TestAppContex
     let (view, cx) = drag_window(cx, tree.path(), &home).await;
     let (start, beside) = (center(cx, "name-1"), center(cx, "modified-1"));
     cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_move(beside, Some(MouseButton::Left), Modifiers::none());
-    cx.run_until_parked();
+    lift(cx, beside);
     cx.simulate_mouse_move(
         beside + point(px(1.0), px(0.0)),
         Some(MouseButton::Left),
@@ -160,12 +158,14 @@ async fn the_chip_names_the_drop_under_the_pointer(cx: &mut TestAppContext) {
 fn start_drag(cx: &mut VisualTestContext, from: &'static str) {
     let start = center(cx, from);
     cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_move(
-        start + point(px(20.0), px(0.0)),
-        Some(MouseButton::Left),
-        Modifiers::none(),
-    );
-    cx.run_until_parked();
+    lift(cx, start + point(px(20.0), px(0.0)));
+}
+
+fn lift(cx: &mut VisualTestContext, to: Point<Pixels>) {
+    for at in [to, to + point(px(1.0), px(0.0))] {
+        cx.simulate_mouse_move(at, Some(MouseButton::Left), Modifiers::none());
+        cx.run_until_parked();
+    }
 }
 
 fn drag_over(cx: &mut VisualTestContext, to: &'static str) {
@@ -273,14 +273,7 @@ async fn the_chip_names_the_folder_on_screen_over_its_list(cx: &mut TestAppConte
     let home = TempFolder::tree("drag-says-list-home");
     let (view, cx) = drag_window(cx, tree.path(), &home).await;
     let projects = tree.path().join("Projects");
-    let start = center(cx, "name-1");
-    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_move(
-        start + point(px(20.0), px(0.0)),
-        Some(MouseButton::Left),
-        Modifiers::none(),
-    );
-    cx.run_until_parked();
+    start_drag(cx, "name-1");
     view.update(cx, |view, cx| {
         view.open(&projects);
         cx.notify();
@@ -502,4 +495,43 @@ async fn a_pinned_row_dragged_to_another_line_moves_there(cx: &mut TestAppContex
         view.read_with(cx, |view, cx| order(view, cx)),
         [projects, work]
     );
+}
+
+#[gpui::test]
+async fn a_click_that_slips_a_little_selects_and_drags_nothing(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-slip");
+    let home = TempFolder::tree("drag-slip-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let start = center(cx, "name-1");
+    let slipped = start + point(px(4.0), px(2.0));
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    lift(cx, slipped);
+    assert!(cx.debug_bounds("drag-chip").is_none());
+    cx.simulate_mouse_up(slipped, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_names()),
+        ["notes.txt"]
+    );
+}
+
+#[gpui::test]
+async fn a_file_dragged_by_its_icon_moves(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-icon");
+    let home = TempFolder::tree("drag-icon-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let row = cx.debug_bounds("entry-1").unwrap();
+    let icon = point(
+        cx.debug_bounds("name-1").unwrap().left() - px(12.0),
+        row.center().y,
+    );
+    let folder = center(cx, "entry-0");
+    cx.simulate_mouse_down(icon, MouseButton::Left, Modifiers::none());
+    lift(cx, folder);
+    assert!(cx.debug_bounds("drag-chip").is_some());
+    cx.simulate_mouse_up(folder, MouseButton::Left, Modifiers::none());
+    wait_for_note(&view, cx, "Moved notes.txt to Projects").await;
+    assert!(tree.path().join("Projects").join("notes.txt").exists());
 }

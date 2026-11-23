@@ -328,11 +328,7 @@ async fn a_folder_dropped_on_games_is_added_to_it(cx: &mut TestAppContext) {
         cx.debug_bounds("name-0").unwrap().center(),
         cx.debug_bounds("place-games").unwrap().center(),
     );
-    cx.simulate_mouse_down(start, gpui::MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_move(end, Some(gpui::MouseButton::Left), Modifiers::none());
-    cx.run_until_parked();
-    cx.simulate_mouse_up(end, gpui::MouseButton::Left, Modifiers::none());
-    cx.run_until_parked();
+    drop_at(cx, start, end);
 
     view.condition::<WindowEvent>(cx, |view, _| {
         view.note()
@@ -360,11 +356,7 @@ async fn a_file_dropped_on_games_is_not_added(cx: &mut TestAppContext) {
         cx.debug_bounds("name-1").unwrap().center(),
         cx.debug_bounds("place-games").unwrap().center(),
     );
-    cx.simulate_mouse_down(start, gpui::MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_move(end, Some(gpui::MouseButton::Left), Modifiers::none());
-    cx.run_until_parked();
-    cx.simulate_mouse_up(end, gpui::MouseButton::Left, Modifiers::none());
-    cx.run_until_parked();
+    drop_at(cx, start, end);
 
     click(cx, "place-games");
     wait_for_place(&view, cx, Gathering::Games, &[]).await;
@@ -425,4 +417,18 @@ async fn sorting_games_by_size_measures_each_game(cx: &mut TestAppContext) {
         assert!(view.share(0).is_some_and(|got| (got - 1.0).abs() < 1e-6));
         assert!(view.share(1).is_some_and(|got| got < 1.0));
     });
+}
+
+fn drop_at(
+    cx: &mut VisualTestContext,
+    start: gpui::Point<gpui::Pixels>,
+    end: gpui::Point<gpui::Pixels>,
+) {
+    cx.simulate_mouse_down(start, gpui::MouseButton::Left, Modifiers::none());
+    for _ in 0..2 {
+        cx.simulate_mouse_move(end, Some(gpui::MouseButton::Left), Modifiers::none());
+        cx.run_until_parked();
+    }
+    cx.simulate_mouse_up(end, gpui::MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
 }
