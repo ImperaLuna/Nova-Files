@@ -293,8 +293,8 @@ async fn the_tree_opens_in_place_and_follows_the_folder_on_screen(cx: &mut TestA
     let from_row = |cx: &mut VisualTestContext, row: &'static str, part: &'static str| {
         cx.debug_bounds(part).unwrap().left() - cx.debug_bounds(row).unwrap().left()
     };
-    assert_eq!(from_row(cx, "tree-0", "tree-0-expander"), px(2.0));
-    assert_eq!(from_row(cx, "tree-1", "tree-1-expander"), px(24.0));
+    assert_eq!(from_row(cx, "tree-0", "tree-0-expander"), px(0.0));
+    assert_eq!(from_row(cx, "tree-1", "tree-1-expander"), px(22.0));
     assert_eq!(from_row(cx, "tree-2", "tree-2-guide-1"), px(18.0));
     assert_eq!(from_row(cx, "tree-2", "tree-2-guide-2"), px(40.0));
 

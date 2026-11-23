@@ -75,11 +75,10 @@ impl MainWindow {
         cx: &Context<Self>,
     ) -> Stateful<Div> {
         let wide = !narrow;
-        let lead = place
-            .expander
-            .clone()
-            .filter(|_| wide)
-            .map(|expander| expander_button(&place.id, expander, colors, cx));
+        let lead =
+            place.expander.clone().filter(|_| wide).map(|expander| {
+                expander_button(&place.id, expander, colors, cx).into_any_element()
+            });
         let tail = place
             .button
             .clone()
@@ -212,7 +211,7 @@ pub(super) fn expander_button(
     expander: Expander,
     colors: &Colors,
     cx: &Context<MainWindow>,
-) -> AnyElement {
+) -> Stateful<Div> {
     let angle = if expander.open { FRAC_PI_2 } else { 0.0 };
     small_button(format!("{id}-expander"), size::TREE_TOGGLE, colors)
         .on_click(run_on_click(expander.toggle, cx))
@@ -223,7 +222,6 @@ pub(super) fn expander_button(
                 .text_color(colors.text_faint)
                 .with_transformation(Transformation::rotate(radians(angle))),
         )
-        .into_any_element()
 }
 
 fn row_button(id: &str, button: RowItem, colors: &Colors, cx: &Context<MainWindow>) -> AnyElement {

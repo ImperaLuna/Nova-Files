@@ -114,3 +114,22 @@ fn a_folder_the_tree_couldnt_read_loses_its_arrow(cx: &mut TestAppContext) {
     });
     assert!(!shows(cx, "tree-1-expander"));
 }
+
+#[gpui::test]
+fn a_click_just_right_of_the_arrow_still_opens_the_branch(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = tree_opened(cx);
+    let (root_id, path) = core.tree_listing();
+    core.send_to_tree(Event::FolderListed(Listing {
+        id: root_id,
+        path,
+        entries: folders(&["a", "b"]),
+        folders: None,
+    }));
+    cx.run_until_parked();
+    let arrow = cx.debug_bounds("tree-1-expander").unwrap();
+    let past_old_arrow = point(arrow.left() + px(25.0), arrow.center().y);
+    cx.simulate_click(past_old_arrow, gpui::Modifiers::none());
+    cx.run_until_parked();
+    let (_, asked) = core.tree_listing();
+    assert_eq!(asked, Path::new(SHOWN).join("a"));
+}

@@ -249,9 +249,10 @@ pub mod size {
     pub const PLACE_NARROW_GAP: Pixels = px(8.0);
     pub const TREE_ROW_HEIGHT: Pixels = px(30.0);
     pub const TREE_ROW_GAP: Pixels = px(6.0);
-    pub const TREE_PAD_LEFT: Pixels = px(2.0);
     pub const TREE_PAD_RIGHT: Pixels = px(8.0);
     pub const TREE_TOGGLE: Pixels = px(20.0);
+    pub const TREE_TOGGLE_REACH: Pixels = px(26.0);
+    pub const TREE_TOGGLE_PULL: Pixels = px(-4.0);
     pub const TREE_TOGGLE_ICON: Pixels = px(12.0);
     pub const TREE_ICON: Pixels = px(17.0);
     pub const TREE_INDENT: Pixels = px(22.0);
