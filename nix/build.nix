@@ -34,8 +34,8 @@ let
   # changing a git dependency, set its hash to `pkgs.lib.fakeHash` and copy
   # the real one from the build error.
   outputHashes = {
-    "git+https://github.com/ImperaLuna/zed?rev=915fb0d79b03de29a8a15beb0fef11e0e465d8ec#915fb0d79b03de29a8a15beb0fef11e0e465d8ec" =
-      "sha256-po3boegd1pY3a40KpgZUD7PYTy0HFD3M/aMeX58PkVg=";
+    "git+https://github.com/ImperaLuna/zed?rev=4cc99ed469e7cc566898de34cbf4e4c993ba2d64#4cc99ed469e7cc566898de34cbf4e4c993ba2d64" =
+      "sha256-EIRsVvKahgBN8k63ui/GTQuMtjRmA3qV1OJLw2BApRs=";
     "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007" =
       "sha256-OqPeK1cr3OSZgIl+F3GMuXWz31PxFoOO0u4INN9GmgM=";
     "git+https://github.com/zed-industries/font-kit?rev=94b0f28166665e8fd2f53ff6d268a14955c82269#94b0f28166665e8fd2f53ff6d268a14955c82269" =

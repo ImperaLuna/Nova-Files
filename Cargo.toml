@@ -113,16 +113,20 @@ nova-files-undo-ui = { path = "features/undo/ui" }
 #   so both apps keep one fork line (a custom shader rectangle, session lock
 #   windows, a blur region). Nova Files uses none of them. Each commit's
 #   message says how to rebase it.
+# - IMP-396: three more for the Nova shell's stage (a layer surface's
+#   keyboard and layer changed after it opens, a display's name, and a
+#   layer surface keeping a resize when an older configure arrives). Nova
+#   Files uses none of them and opens no layer surface.
 # When all are merged upstream, point these back at zed-industries/zed.
 #
 # The crates.io release (0.2.2) draws through blade, which turns on ray
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "915fb0d79b03de29a8a15beb0fef11e0e465d8ec", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "4cc99ed469e7cc566898de34cbf4e4c993ba2d64", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "915fb0d79b03de29a8a15beb0fef11e0e465d8ec", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "4cc99ed469e7cc566898de34cbf4e4c993ba2d64", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index and the nova-files binary (one
