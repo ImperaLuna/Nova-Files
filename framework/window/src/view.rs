@@ -26,8 +26,11 @@ use crate::commands::{
     SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown, SelectPageUp,
     SelectRight, SelectUp, ToggleSelected,
 };
-use crate::commands::{CloseTab, NewTab, NextTab, PreviousTab, TypePath};
-use crate::selection::Move;
+use crate::commands::{
+    CloseTab, NewTab, NewWindow, NextTab, PreviousTab, Reload, ReopenTab, RingDown, RingFirst,
+    RingLast, RingLeft, RingRight, RingUp, TypePath,
+};
+use crate::selection::{Move, Reach};
 use crate::theme::{self, Colors, size, text};
 use crate::window::MainWindow;
 
@@ -122,6 +125,13 @@ impl MainWindow {
             this.new_tab(&nova_files_shell::Location::start(), cx);
         }))
         .on_action(cx.listener(|this, _: &CloseTab, _, cx| this.close_current_tab(cx)))
+        .on_action(cx.listener(|this, _: &ReopenTab, _, cx| this.reopen_tab(cx)))
+        .on_action(cx.listener(|this, _: &NewWindow, _, cx| this.new_window(cx)))
+        .on_action(cx.listener(|this, _: &Reload, _, cx| {
+            this.host()
+                .nav
+                .update(cx, nova_files_shell::Navigator::reload);
+        }))
         .on_action(cx.listener(|this, _: &NextTab, _, cx| this.next_tab(cx)))
         .on_action(cx.listener(|this, _: &PreviousTab, _, cx| this.previous_tab(cx)))
     }
@@ -192,67 +202,91 @@ impl MainWindow {
             this.open_selected(cx);
         }))
         .on_action(cx.listener(|this, _: &CursorUp, _, cx| {
-            this.move_cursor(Move::Up, false, cx);
+            this.move_cursor(Move::Up, Reach::Only, cx);
         }))
         .on_action(cx.listener(|this, _: &CursorDown, _, cx| {
-            this.move_cursor(Move::Down, false, cx);
+            this.move_cursor(Move::Down, Reach::Only, cx);
         }))
         .on_action(cx.listener(|this, _: &CursorPageUp, _, cx| {
-            this.move_cursor(Move::PageUp, false, cx);
+            this.move_cursor(Move::PageUp, Reach::Only, cx);
         }))
         .on_action(cx.listener(|this, _: &CursorPageDown, _, cx| {
-            this.move_cursor(Move::PageDown, false, cx);
+            this.move_cursor(Move::PageDown, Reach::Only, cx);
         }))
         .on_action(cx.listener(|this, _: &CursorFirst, _, cx| {
-            this.move_cursor(Move::First, false, cx);
+            this.move_cursor(Move::First, Reach::Only, cx);
         }))
         .on_action(cx.listener(|this, _: &CursorLast, _, cx| {
-            this.move_cursor(Move::Last, false, cx);
+            this.move_cursor(Move::Last, Reach::Only, cx);
+        }))
+        .on_action(cx.listener(|this, _: &RingUp, _, cx| {
+            this.move_cursor(Move::Up, Reach::Ring, cx);
+        }))
+        .on_action(cx.listener(|this, _: &RingDown, _, cx| {
+            this.move_cursor(Move::Down, Reach::Ring, cx);
+        }))
+        .on_action(cx.listener(|this, _: &RingFirst, _, cx| {
+            this.move_cursor(Move::First, Reach::Ring, cx);
+        }))
+        .on_action(cx.listener(|this, _: &RingLast, _, cx| {
+            this.move_cursor(Move::Last, Reach::Ring, cx);
+        }))
+        .on_action(cx.listener(|this, _: &RingLeft, _, cx| {
+            if this.showing_icons(cx) {
+                this.move_cursor(Move::Left, Reach::Ring, cx);
+            }
+        }))
+        .on_action(cx.listener(|this, _: &RingRight, _, cx| {
+            if this.showing_icons(cx) {
+                this.move_cursor(Move::Right, Reach::Ring, cx);
+            }
         }))
         .on_action(cx.listener(|this, _: &SelectUp, _, cx| {
-            this.move_cursor(Move::Up, true, cx);
+            this.move_cursor(Move::Up, Reach::Extend, cx);
         }))
         .on_action(cx.listener(|this, _: &SelectDown, _, cx| {
-            this.move_cursor(Move::Down, true, cx);
+            this.move_cursor(Move::Down, Reach::Extend, cx);
         }))
         .on_action(cx.listener(|this, _: &SelectPageUp, _, cx| {
-            this.move_cursor(Move::PageUp, true, cx);
+            this.move_cursor(Move::PageUp, Reach::Extend, cx);
         }))
         .on_action(cx.listener(|this, _: &SelectPageDown, _, cx| {
-            this.move_cursor(Move::PageDown, true, cx);
+            this.move_cursor(Move::PageDown, Reach::Extend, cx);
         }))
         .on_action(cx.listener(|this, _: &SelectFirst, _, cx| {
-            this.move_cursor(Move::First, true, cx);
+            this.move_cursor(Move::First, Reach::Extend, cx);
         }))
         .on_action(cx.listener(|this, _: &SelectLast, _, cx| {
-            this.move_cursor(Move::Last, true, cx);
+            this.move_cursor(Move::Last, Reach::Extend, cx);
         }))
         .on_action(cx.listener(|this, _: &SelectLeft, _, cx| {
             if this.showing_icons(cx) {
-                this.move_cursor(Move::Left, true, cx);
+                this.move_cursor(Move::Left, Reach::Extend, cx);
             }
         }))
         .on_action(cx.listener(|this, _: &SelectRight, _, cx| {
             if this.showing_icons(cx) {
-                this.move_cursor(Move::Right, true, cx);
+                this.move_cursor(Move::Right, Reach::Extend, cx);
             }
         }))
         .on_action(cx.listener(|this, _: &SelectAll, _, cx| this.select_all(cx)))
         .on_action(cx.listener(|this, _: &ToggleSelected, _, cx| this.toggle_cursor(cx)))
-        .on_action(cx.listener(|this, _: &ClearSelection, _, cx| {
-            this.clear_selection(cx);
+        .on_action(cx.listener(|this, _: &ClearSelection, window, cx| {
+            if !this.cancel_drag(window, cx) {
+                this.clear_selection(cx);
+            }
         }))
     }
 
     fn preview_keys(root: Div, cx: &Context<Self>) -> Div {
         root.on_action(cx.listener(|this, _: &PreviewPrevious, _, cx| {
             if this.showing_icons(cx) {
-                this.move_cursor(Move::Left, false, cx);
+                this.move_cursor(Move::Left, Reach::Only, cx);
             }
         }))
         .on_action(cx.listener(|this, _: &PreviewNext, _, cx| {
             if this.showing_icons(cx) {
-                this.move_cursor(Move::Right, false, cx);
+                this.move_cursor(Move::Right, Reach::Only, cx);
             }
         }))
     }

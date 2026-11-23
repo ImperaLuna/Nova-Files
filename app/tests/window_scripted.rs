@@ -359,6 +359,22 @@ fn reading_the_shown_folder_again_keeps_its_scroll_position(cx: &mut TestAppCont
 }
 
 #[gpui::test]
+fn f5_reads_the_shown_folder_again(cx: &mut TestAppContext) {
+    cx.update(nova_files_window::bind_window_keys);
+    let (_view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    assert_eq!(core.next_listing(), None);
+
+    cx.simulate_keystrokes("f5");
+    cx.run_until_parked();
+    assert_eq!(
+        core.next_listing().map(|(_, path)| path),
+        Some(PathBuf::from(SHOWN))
+    );
+}
+
+#[gpui::test]
 fn another_folder_starts_at_the_top(cx: &mut TestAppContext) {
     let (view, cx, mut core) = scrolled(cx);
 

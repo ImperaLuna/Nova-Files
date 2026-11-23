@@ -4,7 +4,7 @@ use gpui::{App, Context, Pixels, Size, Window};
 use nova_files_shell::{GalleryBounds, Layout, stage_room, strip};
 
 use super::MainWindow;
-use crate::selection::Move;
+use crate::selection::{Move, Reach};
 
 impl MainWindow {
     pub fn showing_gallery(&self, cx: &App) -> bool {
@@ -41,7 +41,7 @@ impl MainWindow {
             return;
         }
         if self.cursor().is_none() {
-            self.move_cursor(Move::First, false, cx);
+            self.move_cursor(Move::First, Reach::Only, cx);
         }
         self.entries_drawn(self.strip_entries(len, cx), window, cx);
     }

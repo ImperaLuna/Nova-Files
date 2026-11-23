@@ -17,6 +17,12 @@ pub const ACTIONS: &[CommandSpec] = &[
     CURSOR_PAGE_DOWN,
     CURSOR_FIRST,
     CURSOR_LAST,
+    RING_UP,
+    RING_DOWN,
+    RING_LEFT,
+    RING_RIGHT,
+    RING_FIRST,
+    RING_LAST,
     SELECT_UP,
     SELECT_DOWN,
     SELECT_PAGE_UP,
@@ -33,8 +39,11 @@ pub const ACTIONS: &[CommandSpec] = &[
     PREVIEW_NEXT,
     FIND,
     TYPE_PATH,
+    RELOAD,
+    NEW_WINDOW,
     NEW_TAB,
     CLOSE_TAB,
+    REOPEN_TAB,
     NEXT_TAB,
     PREVIOUS_TAB,
     MENU,
@@ -62,6 +71,44 @@ spec!(
 );
 spec!(CURSOR_FIRST, CursorFirst, "cursor.first", "First", ["home"]);
 spec!(CURSOR_LAST, CursorLast, "cursor.last", "Last", ["end"]);
+spec!(RING_UP, RingUp, "ring.up", "Ring to previous", ["ctrl-up"]);
+spec!(
+    RING_DOWN,
+    RingDown,
+    "ring.down",
+    "Ring to next",
+    ["ctrl-down"]
+);
+spec!(RING_LEFT, RingLeft, "ring.left", "Ring left", ["ctrl-left"]);
+spec!(
+    RING_RIGHT,
+    RingRight,
+    "ring.right",
+    "Ring right",
+    ["ctrl-right"]
+);
+spec!(
+    RING_FIRST,
+    RingFirst,
+    "ring.first",
+    "Ring to first",
+    ["ctrl-home"]
+);
+spec!(
+    RING_LAST,
+    RingLast,
+    "ring.last",
+    "Ring to last",
+    ["ctrl-end"]
+);
+spec!(RELOAD, Reload, "go.reload", "Reload", ["f5", "ctrl-r"]);
+spec!(
+    NEW_WINDOW,
+    NewWindow,
+    "window.new",
+    "New window",
+    ["ctrl-n"]
+);
 spec!(
     SELECT_UP,
     SelectUp,
@@ -166,6 +213,13 @@ spec!(
 
 spec!(NEW_TAB, NewTab, "tab.new", "New tab", ["ctrl-t"]);
 spec!(CLOSE_TAB, CloseTab, "tab.close", "Close tab", ["ctrl-w"]);
+spec!(
+    REOPEN_TAB,
+    ReopenTab,
+    "tab.reopen",
+    "Reopen closed tab",
+    ["ctrl-shift-t"]
+);
 spec!(NEXT_TAB, NextTab, "tab.next", "Next tab", ["ctrl-tab"]);
 spec!(
     PREVIOUS_TAB,

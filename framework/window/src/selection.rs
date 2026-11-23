@@ -31,6 +31,13 @@ impl Click {
 
 pub use nova_files_shell::Move;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reach {
+    Only,
+    Extend,
+    Ring,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selection {
     pub listing: ListingId,
@@ -114,6 +121,20 @@ impl Selection {
     ) -> Self {
         let click = if extend { Click::Range } else { Click::Only };
         Self::clicked(selection, listing, id, click, picks)
+    }
+
+    #[must_use]
+    pub fn ringed(selection: Option<Self>, listing: ListingId, id: EntryId) -> Self {
+        let mut selection = selection
+            .filter(|selection| selection.listing == listing)
+            .unwrap_or(Self {
+                listing,
+                ids: Vec::new(),
+                anchor: id,
+                cursor: id,
+            });
+        selection.cursor = id;
+        selection
     }
 
     #[must_use]

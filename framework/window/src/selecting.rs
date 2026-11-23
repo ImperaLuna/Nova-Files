@@ -3,7 +3,7 @@ use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId};
 use nova_files_shell::{self as shell, ClickAnswer, Entries};
 
 use crate::jump;
-use crate::selection::{Click, Move, Selection, entry_at};
+use crate::selection::{Click, Move, Reach, Selection, entry_at};
 use crate::window::MainWindow;
 
 pub const DOUBLE_CLICK: usize = 2;
@@ -138,8 +138,8 @@ impl MainWindow {
         entry_at(&shown.entries, id)
     }
 
-    pub(crate) fn move_cursor(&mut self, step: Move, extend: bool, cx: &mut Context<Self>) {
-        self.move_cursor_to(self.cursor(), step, extend, cx);
+    pub(crate) fn move_cursor(&mut self, step: Move, reach: Reach, cx: &mut Context<Self>) {
+        self.move_cursor_to(self.cursor(), step, reach, cx);
     }
 
     pub(crate) fn move_cursor_from(
@@ -148,14 +148,14 @@ impl MainWindow {
         step: Move,
         cx: &mut Context<Self>,
     ) {
-        self.move_cursor_to(from, step, false, cx);
+        self.move_cursor_to(from, step, Reach::Only, cx);
     }
 
     fn move_cursor_to(
         &mut self,
         from: Option<usize>,
         step: Move,
-        extend: bool,
+        reach: Reach,
         cx: &mut Context<Self>,
     ) {
         let Some(listing) = self.listing_id() else {
@@ -172,13 +172,16 @@ impl MainWindow {
         };
         self.reselect(
             |before, picks| {
-                Some(Selection::moved(
-                    before,
-                    listing,
-                    EntryId(to),
-                    extend,
-                    picks,
-                ))
+                Some(match reach {
+                    Reach::Ring => Selection::ringed(before, listing, EntryId(to)),
+                    Reach::Only | Reach::Extend => Selection::moved(
+                        before,
+                        listing,
+                        EntryId(to),
+                        reach == Reach::Extend,
+                        picks,
+                    ),
+                })
             },
             cx,
         );

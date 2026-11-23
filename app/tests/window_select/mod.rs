@@ -286,3 +286,19 @@ async fn ctrl_a_leaves_the_list_where_it_is(cx: &mut TestAppContext) {
     assert_eq!(selected(&view, cx).len(), 82);
     assert_eq!(cx.debug_bounds(seen), shown);
 }
+
+#[gpui::test]
+async fn ctrl_arrows_move_the_ring_and_ctrl_space_picks_where_it_is(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("select-ring");
+    let (view, cx) = listed(cx, &tree).await;
+
+    click(cx, "entry-0");
+    cx.simulate_keystrokes("ctrl-down ctrl-down");
+    assert_eq!(selected(&view, cx), ["Projects"]);
+    view.read_with(cx, |view, _| assert_eq!(view.cursor(), Some(2)));
+    cx.simulate_keystrokes("ctrl-space ctrl-end ctrl-space");
+    assert_eq!(selected(&view, cx), ["Projects", "b.txt", "notes.txt"]);
+    cx.simulate_keystrokes("ctrl-home ctrl-space");
+    assert_eq!(selected(&view, cx), ["b.txt", "notes.txt"]);
+}
