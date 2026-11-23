@@ -210,7 +210,7 @@ pub mod size {
     pub const ICON_CELL_BESIDE: Pixels = px(240.0);
     pub const ICON_NAME_LINE: Pixels = px(17.0);
     // GPUI lets a line cut short overrun by about the ellipsis.
-    // https://github.com/ImperaLuna/zed/tree/464347a20ec562c10159f2167640dff992fc2218/crates/gpui
+    // https://github.com/ImperaLuna/zed/tree/47424cdc3f1a49829960e1ecbcdcdd967d034265/crates/gpui
     pub const ICON_NAME_OVERRUN: Pixels = px(6.0);
     pub const STAGE_PAD: Pixels = px(16.0);
     pub const STAGE_CAPTION: Pixels = px(40.0);
