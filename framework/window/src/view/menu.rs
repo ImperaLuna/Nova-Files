@@ -1,8 +1,8 @@
 use gpui::{
     Action, Anchor, AnyElement, Bounds, BoxShadow, ClickEvent, Context, Div, Hsla,
-    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, MouseDownEvent,
-    ParentElement as _, Rgba, Size, Stateful, StatefulInteractiveElement as _, Styled as _, Window,
-    anchored, deferred, div, point, prelude::FluentBuilder as _, px,
+    InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseUpEvent, ParentElement as _, Rgba, Size, Stateful, StatefulInteractiveElement as _,
+    Styled as _, Window, anchored, deferred, div, point, prelude::FluentBuilder as _, px,
 };
 
 use super::row::icon;
@@ -68,6 +68,13 @@ impl MainWindow {
                             }))
                             .on_action(cx.listener(|this, _: &MenuClose, _, cx| {
                                 this.close_menu(cx);
+                            }))
+                            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                                if let Some(typed) = first_letter(event)
+                                    && this.jump_menu(typed, cx)
+                                {
+                                    cx.stop_propagation();
+                                }
                             }))
                             .on_mouse_down_out(cx.listener(
                                 |this, event: &MouseDownEvent, _, cx| {
@@ -183,8 +190,22 @@ fn menu_item(
         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
             this.choose(index, window, cx);
         }))
+        .on_mouse_up(
+            MouseButton::Right,
+            cx.listener(move |this, _: &MouseUpEvent, window, cx| {
+                this.choose(index, window, cx);
+            }),
+        )
         .child(icon(item.icon, size::MENU_ICON, style.tint))
         .child(div().min_w_0().truncate().child(item.label.clone()))
+}
+
+fn first_letter(event: &KeyDownEvent) -> Option<&str> {
+    let keys = &event.keystroke;
+    let plain = !keys.modifiers.control && !keys.modifiers.alt && !keys.modifiers.platform;
+    let typed = keys.key_char.as_deref()?;
+    (plain && typed.chars().count() == 1 && typed.chars().all(char::is_alphanumeric))
+        .then_some(typed)
 }
 
 fn key_cell(keys: gpui::SharedString, colors: &Colors) -> Div {

@@ -586,3 +586,55 @@ async fn while_a_menu_is_open_the_list_stays_and_a_click_only_closes_it(cx: &mut
         ["file-02"]
     );
 }
+
+#[gpui::test]
+async fn a_letter_marks_the_next_item_starting_with_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-letter");
+    let home = TempFolder::tree("menu-letter-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let marked = |view: &Entity<MainWindow>, cx: &VisualTestContext| {
+        view.read_with(cx, |view, _| view.menu().unwrap().active)
+    };
+
+    cx.simulate_keystrokes("shift-f10");
+    cx.simulate_keystrokes("d");
+    assert_eq!(marked(&view, cx), Some(2), "Details");
+    cx.simulate_keystrokes("s");
+    assert_eq!(marked(&view, cx), Some(5), "Show hidden files");
+    cx.simulate_keystrokes("s");
+    assert_eq!(marked(&view, cx), Some(1), "round again to Select all");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_names()),
+        ["Projects", "notes.txt"]
+    );
+}
+
+#[gpui::test]
+async fn a_right_press_slid_to_an_item_and_let_go_chooses_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("menu-slide");
+    let home = TempFolder::tree("menu-slide-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let at = below_rows(cx, 2);
+
+    cx.simulate_mouse_down(at, gpui::MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_some()));
+    cx.simulate_mouse_up(at, gpui::MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    assert!(
+        view.read_with(cx, |view, _| view.menu().is_some()),
+        "letting go where it opened keeps it open"
+    );
+    let select_all = cx.debug_bounds("menu-1").unwrap().center();
+    cx.simulate_mouse_move(select_all, None, Modifiers::none());
+    cx.simulate_mouse_up(select_all, gpui::MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_names()),
+        ["Projects", "notes.txt"]
+    );
+}

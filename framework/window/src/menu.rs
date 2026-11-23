@@ -185,6 +185,22 @@ impl MainWindow {
         }
     }
 
+    pub(crate) fn jump_menu(&mut self, typed: &str, cx: &mut Context<Self>) -> bool {
+        let Some(menu) = self.menu.as_mut() else {
+            return false;
+        };
+        let typed = typed.to_lowercase();
+        let count = menu.items.len();
+        let from = menu.active.map_or(0, |active| active + 1);
+        let next = (from..from + count)
+            .map(|index| index % count)
+            .find(|&index| menu.items[index].label.to_lowercase().starts_with(&typed));
+        let Some(next) = next else { return false };
+        menu.active = Some(next);
+        cx.notify();
+        true
+    }
+
     pub(crate) fn choose_marked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(index) = self.menu.as_ref().and_then(|menu| menu.active) {
             self.choose(index, window, cx);
