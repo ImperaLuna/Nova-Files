@@ -583,3 +583,45 @@ async fn the_pin_line_takes_a_drop_a_few_pixels_off_it(cx: &mut TestAppContext) 
     cx.simulate_mouse_up(line, MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
 }
+
+#[gpui::test]
+async fn a_folder_row_held_over_opens_and_the_drag_goes_on_into_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-hover-row");
+    let home = TempFolder::tree("drag-hover-row-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let projects = tree.path().join("Projects");
+    let here = |view: &Entity<MainWindow>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf))
+    };
+
+    start_drag(cx, "name-1");
+    drag_over(cx, "entry-0");
+    hold(cx, HOVER_OPEN_AFTER / 2);
+    drag_over(cx, "modified-1");
+    hold(cx, HOVER_OPEN_AFTER);
+    assert_eq!(here(&view, cx).as_deref(), Some(tree.path()));
+
+    drag_over(cx, "entry-0");
+    hold(cx, HOVER_OPEN_AFTER);
+    wait_for_folder(&view, cx, &projects).await;
+    drag_over(cx, "entry-0");
+    let end = center(cx, "entry-0");
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    wait_for_note(&view, cx, "Moved notes.txt to nova").await;
+    assert!(projects.join("nova/notes.txt").exists());
+}
+
+#[gpui::test]
+async fn a_folder_row_being_dragged_does_not_open_under_itself(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-hover-self");
+    let home = TempFolder::tree("drag-hover-self-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+
+    start_drag(cx, "name-0");
+    drag_over(cx, "entry-0");
+    hold(cx, HOVER_OPEN_AFTER * 2);
+    let here = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
+    assert_eq!(here.as_deref(), Some(tree.path()));
+}
