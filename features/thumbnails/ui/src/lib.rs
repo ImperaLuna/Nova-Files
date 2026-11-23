@@ -7,14 +7,10 @@ mod shown;
 use std::ops::Range;
 use std::sync::Arc;
 
-use gpui::{
-    AnyElement, App, Context, IntoElement as _, ObjectFit, ParentElement as _, Pixels, RenderImage,
-    Styled as _, StyledImage as _, Subscription, img,
-};
+use gpui::{AnyElement, App, Context, IntoElement as _, Pixels, RenderImage, Subscription};
 use nova_files_api::{Entry, EntryKind, HiddenFiles, Listing, ListingId, ThumbnailSize};
 use nova_files_shell::kind::icon_kind;
-use nova_files_shell::theme::{Colors, radius};
-use nova_files_shell::widgets::icon_slot;
+use nova_files_shell::theme::Colors;
 use nova_files_shell::{Host, Part, Published, Slots, ThumbnailsShown};
 use nova_files_thumbnails_api::{Event, Peeked};
 
@@ -226,16 +222,7 @@ impl ThumbnailsPart {
             return self.folder_icon(entry, side, cx);
         }
         let image = self.picture(entry, cx)?;
-        Some(
-            icon_slot(side)
-                .child(
-                    img(image)
-                        .size(side)
-                        .object_fit(ObjectFit::Contain)
-                        .rounded(radius::SMALL),
-                )
-                .into_any_element(),
-        )
+        Some(folder_look::picture(&image, side).into_any_element())
     }
 }
 
