@@ -264,6 +264,7 @@ async fn the_open_list_shows_each_tab_and_works_them(cx: &mut TestAppContext) {
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 3);
     aux_click(cx, "entry-0", MouseButton::Right);
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 3);
+    cx.simulate_keystrokes("escape");
 
     middle_click(cx, "tab-1");
     assert_eq!(view.read_with(cx, |view, _| view.tab_count()), 2);

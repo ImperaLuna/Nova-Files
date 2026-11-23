@@ -145,7 +145,8 @@ async fn an_opened_archive_offers_extract_all_and_nothing_that_changes_it(cx: &m
         );
     }
     assert!(labels.iter().any(|label| label == "Copy"), "{labels:?}");
-    cx.simulate_keystrokes("escape");
+    click(cx, "extract-all");
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
     click(cx, "extract-all");
     wait_for_note_starting(&view, cx, "Couldn't extract bundle.zip").await;
 }

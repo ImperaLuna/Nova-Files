@@ -1,8 +1,8 @@
 use gpui::{
     Action, Anchor, AnyElement, Bounds, BoxShadow, ClickEvent, Context, Div, Hsla,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Rgba, Size, Stateful,
-    StatefulInteractiveElement as _, Styled as _, Window, anchored, deferred, div, point,
-    prelude::FluentBuilder as _, px,
+    InteractiveElement as _, IntoElement, KeyBinding, MouseButton, MouseDownEvent,
+    ParentElement as _, Rgba, Size, Stateful, StatefulInteractiveElement as _, Styled as _, Window,
+    anchored, deferred, div, point, prelude::FluentBuilder as _, px,
 };
 
 use super::row::icon;
@@ -69,7 +69,14 @@ impl MainWindow {
                             .on_action(cx.listener(|this, _: &MenuClose, _, cx| {
                                 this.close_menu(cx);
                             }))
-                            .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close_menu(cx)))
+                            .on_mouse_down_out(cx.listener(
+                                |this, event: &MouseDownEvent, _, cx| {
+                                    this.close_menu(cx);
+                                    if event.button != MouseButton::Right {
+                                        cx.stop_propagation();
+                                    }
+                                },
+                            ))
                             .children(rows),
                     ),
             )
