@@ -6,7 +6,7 @@ use nova_files_shell::assets::Icon;
 use nova_files_shell::{Location, Look, MenuItem, Scene, command_spec};
 use nova_files_trash_api::delete_from_trash;
 
-use crate::{DELETE_LABEL, TrashPart, count_of};
+use crate::TrashPart;
 
 mod actions {
     #![expect(
@@ -38,36 +38,21 @@ impl TrashPart {
         (self.shown(scene) && !items.is_empty()).then_some(items)
     }
 
-    pub fn ask_for_good(&mut self, _: &DeleteForGood, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn delete_for_good(&mut self, _: &DeleteForGood, _: &mut Window, cx: &mut Context<Self>) {
         let scene = self.host.scene(cx);
         let Some(items) = self.for_good(&scene, cx) else {
             return;
         };
-        let question = format!("Delete {} for good?", count_of(items.len()));
-        let part = cx.entity().downgrade();
-        let on_yes = Box::new(move |cx: &mut App| {
-            part.update(cx, |part, cx| part.delete_if_still(&items, cx))
-                .ok();
-        });
-        self.host.island.update(cx, |island, cx| {
-            island.ask(question, DELETE_LABEL, on_yes, cx);
-        });
-    }
-
-    fn delete_if_still(&self, asked: &[PathBuf], cx: &mut Context<Self>) {
-        let scene = self.host.scene(cx);
-        if self.for_good(&scene, cx).as_deref() == Some(asked) {
-            let job = delete_from_trash(asked.to_vec());
-            self.host
-                .island
-                .update(cx, |island, cx| island.start_job(job, cx));
-        }
+        let job = delete_from_trash(items);
+        self.host
+            .island
+            .update(cx, |island, cx| island.start_job(job, cx));
     }
 
     fn key_under(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let under = self.under(&self.host.scene(cx));
         if under {
-            self.ask_for_good(&DeleteForGood, window, cx);
+            self.delete_for_good(&DeleteForGood, window, cx);
         }
         under
     }
