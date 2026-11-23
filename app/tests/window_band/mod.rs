@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use gpui::{Bounds, MouseButton, Pixels, Point, ScrollDelta, ScrollEvent, TouchPhase, point, px};
 
 use super::*;
@@ -230,4 +232,110 @@ async fn a_new_folder_ends_the_box(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(cx.debug_bounds("band"), None);
     assert_eq!(selected(&view, cx), ["Projects"]);
+}
+
+#[gpui::test]
+async fn a_click_on_a_row_cut_off_by_the_edge_leaves_the_list_where_it_is(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("band-edge");
+    for index in 0..80 {
+        fs::write(tree.path().join(format!("f{index:02}")), "").unwrap();
+    }
+    let (view, cx) = open_on(cx, tree.path()).await;
+    let row = bounds(cx, "entry-1");
+    scroll(cx, row.center(), -row.size.height / 4.0);
+    let cut = bounds(cx, "entry-0");
+    assert!(
+        cut.top() < row.top() - row.size.height,
+        "the first row is cut off"
+    );
+
+    let at = point(cut.center().x, cut.bottom() - px(4.0));
+    cx.simulate_click(at, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(selected(&view, cx), ["Projects"]);
+    assert_eq!(bounds(cx, "entry-0"), cut);
+}
+
+async fn long_list<'a>(
+    cx: &'a mut TestAppContext,
+    tree: &TempFolder,
+) -> (Entity<MainWindow>, &'a mut VisualTestContext) {
+    for index in 0..80 {
+        fs::write(tree.path().join(format!("f{index:02}")), "").unwrap();
+    }
+    open_on(cx, tree.path()).await
+}
+
+fn held(cx: &VisualTestContext, wait: Duration) {
+    cx.executor().advance_clock(wait);
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+async fn a_box_held_past_the_bottom_keeps_scrolling_and_growing(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("band-edge-hold");
+    let (view, cx) = long_list(cx, &tree).await;
+    let from = bounds(cx, "modified-1").center();
+    let below = point(from.x, bounds(cx, "entry-0").top() + px(2000.0));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(below, Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    let before = selected(&view, cx).len();
+
+    held(cx, Duration::from_millis(200));
+    assert_eq!(
+        cx.debug_bounds("entry-0"),
+        None,
+        "the list scrolled while held"
+    );
+    let grown = selected(&view, cx).len();
+    assert!(grown > before, "{before} then {grown}");
+    held(cx, Duration::from_secs(5));
+    assert_eq!(
+        selected(&view, cx).last().map(String::as_str),
+        Some("notes.txt")
+    );
+
+    cx.simulate_mouse_up(below, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    let row = bounds(cx, "entry-81");
+    held(cx, Duration::from_millis(500));
+    assert_eq!(
+        bounds(cx, "entry-81"),
+        row,
+        "letting go stops the scrolling"
+    );
+}
+
+#[gpui::test]
+async fn files_carried_to_the_bottom_edge_scroll_the_list(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("band-edge-carry");
+    let (_view, cx) = long_list(cx, &tree).await;
+    let start = bounds(cx, "name-2").center();
+    let list_bottom = (0..80)
+        .filter_map(|index| cx.debug_bounds(Box::leak(format!("entry-{index}").into_boxed_str())))
+        .map(|row| row.bottom())
+        .fold(px(0.0), Pixels::max);
+    let edge = point(start.x, list_bottom - px(4.0));
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    for at in [
+        start + point(px(20.0), px(0.0)),
+        edge,
+        edge + point(px(1.0), px(0.0)),
+    ] {
+        cx.simulate_mouse_move(at, Some(MouseButton::Left), Modifiers::none());
+        cx.run_until_parked();
+    }
+    assert!(cx.debug_bounds("drag-chip").is_some());
+    let top = bounds(cx, "entry-2");
+    held(cx, Duration::from_millis(300));
+    assert!(
+        cx.debug_bounds("entry-2")
+            .is_none_or(|row| row.top() < top.top())
+    );
+    cx.simulate_mouse_up(edge, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
 }

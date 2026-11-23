@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, SharedString, size};
+use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, SharedString, point, size};
 
 use super::*;
 
@@ -352,4 +352,22 @@ async fn the_system_drive_shows_its_free_space_and_opens(cx: &mut TestAppContext
         assert_eq!(view.tab_count(), 2);
         assert_eq!(view.current_tab(), 1);
     });
+}
+
+#[gpui::test]
+async fn a_click_that_slips_on_a_pinned_place_still_opens_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("sidebar-slip");
+    let (view, cx) = with_projects_pinned(cx, &tree).await;
+    cx.run_until_parked();
+    let start = cx.debug_bounds("place-1").unwrap().center();
+    let slipped = start + point(px(4.0), px(1.0));
+    cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
+    for _ in 0..2 {
+        cx.simulate_mouse_move(slipped, Some(MouseButton::Left), Modifiers::none());
+        cx.run_until_parked();
+    }
+    assert!(cx.debug_bounds("drag-chip").is_none());
+    cx.simulate_mouse_up(slipped, MouseButton::Left, Modifiers::none());
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
 }

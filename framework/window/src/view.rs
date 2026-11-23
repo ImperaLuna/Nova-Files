@@ -14,9 +14,10 @@ mod start;
 pub use row::{RowIcon, entry_kind};
 
 use gpui::{
-    App, Context, Div, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection,
-    ParentElement as _, Render, ScrollEvent, Styled as _, Window, div, prelude::FluentBuilder as _,
+    App, Context, DispatchPhase, Div, FocusHandle, InteractiveElement as _, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection,
+    ParentElement as _, Render, ScrollEvent, Styled as _, Window, canvas, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::commands::{
@@ -63,8 +64,10 @@ impl MainWindow {
                     window.refresh();
                 }
             })
-            .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, window, cx| {
-                this.pointer_moved(cx.has_active_drag(), window, cx);
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+                let dragging = cx.has_active_drag();
+                this.pointer_moved(dragging, window, cx);
+                this.pointer_carried(dragging.then_some(event.position), cx);
             }))
             .when(main, |root| root.track_focus(&self.focus))
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
@@ -100,18 +103,17 @@ impl MainWindow {
 
 impl MainWindow {
     fn band_events(root: Div, cx: &Context<Self>) -> Div {
-        root.on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
-            this.band_moved(event, cx);
-            this.lift_moved(event, cx);
-        }))
-        .on_scroll(cx.listener(|this, _: &ScrollEvent, _, cx| {
-            this.band_scrolled(cx);
-        }))
-        .on_mouse_up(
-            MouseButton::Left,
-            cx.listener(|this, event: &MouseUpEvent, _, cx| this.band_released(event, cx)),
-        )
-        .capture_any_mouse_up(cx.listener(|this, _: &MouseUpEvent, _, cx| this.lift_dropped(cx)))
+        root.child(pointer_watch(cx))
+            .on_scroll(cx.listener(|this, _: &ScrollEvent, _, cx| {
+                this.band_scrolled(cx);
+            }))
+            .capture_any_mouse_down(
+                cx.listener(|this, event: &MouseDownEvent, _, _| this.pressed(event)),
+            )
+            .capture_any_mouse_up(cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                this.lift_dropped(cx);
+                this.pointer_carried(None, cx);
+            }))
     }
 
     fn tab_keys(root: Div, cx: &Context<Self>) -> Div {
@@ -253,4 +255,34 @@ impl MainWindow {
             }
         }))
     }
+}
+
+fn pointer_watch(cx: &Context<MainWindow>) -> impl IntoElement {
+    let view = cx.entity().downgrade();
+    canvas(
+        |_, _, _| (),
+        move |_, (), window, _| {
+            let moved = view.clone();
+            window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+                if phase == DispatchPhase::Bubble {
+                    moved
+                        .update(cx, |this, cx| {
+                            this.band_moved(event, cx);
+                            this.lift_moved(event, cx);
+                        })
+                        .ok();
+                }
+            });
+            let released = view;
+            window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+                if phase == DispatchPhase::Bubble && event.button == MouseButton::Left {
+                    released
+                        .update(cx, |this, cx| this.band_released(event, cx))
+                        .ok();
+                }
+            });
+        },
+    )
+    .absolute()
+    .size_0()
 }

@@ -1,4 +1,4 @@
-use gpui::{Context, MouseButton, MouseMoveEvent, Pixels, Point, px};
+use gpui::{Context, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, px};
 
 use crate::window::MainWindow;
 
@@ -11,9 +11,10 @@ pub struct Lift {
 }
 
 impl MainWindow {
-    pub(crate) fn entries_pressed(&mut self, at: Point<Pixels>, on_entry: bool) {
-        self.lift = on_entry.then_some(Lift {
-            from: at,
+    pub(crate) fn pressed(&mut self, event: &MouseDownEvent) {
+        self.selected_on_press = None;
+        self.lift = (event.button == MouseButton::Left).then_some(Lift {
+            from: event.position,
             lifted: false,
         });
     }

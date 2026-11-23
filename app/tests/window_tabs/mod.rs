@@ -334,8 +334,10 @@ async fn a_tab_dragged_along_the_list_moves_there_and_moves_no_files(cx: &mut Te
     );
     cx.run_until_parked();
     assert!(cx.debug_bounds("tab-landing").is_none());
-    cx.simulate_mouse_move(below_middle, Some(MouseButton::Left), Modifiers::none());
-    cx.run_until_parked();
+    for _ in 0..2 {
+        cx.simulate_mouse_move(below_middle, Some(MouseButton::Left), Modifiers::none());
+        cx.run_until_parked();
+    }
     let line = cx.debug_bounds("tab-landing").unwrap();
     assert!(projects_tab.contains(&line.center()));
     assert!(line.center().y > projects_tab.center().y);
@@ -362,13 +364,15 @@ fn drag_tab(cx: &mut VisualTestContext, from: &'static str, to: Point<Pixels>) {
     let start = cx.debug_bounds(from).unwrap().center();
     cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_move(
-        start + point(px(3.0), px(3.0)),
+        start + point(px(6.0), px(6.0)),
         Some(MouseButton::Left),
         Modifiers::none(),
     );
     cx.run_until_parked();
-    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
-    cx.run_until_parked();
+    for _ in 0..2 {
+        cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+        cx.run_until_parked();
+    }
     cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
 }
