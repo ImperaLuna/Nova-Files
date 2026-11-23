@@ -1,5 +1,5 @@
 // GPUI fixes a drag's value when the row is drawn, before any drag starts.
-// https://github.com/ImperaLuna/zed/tree/610fab89331e30736906b44f33bffe0cedcae37e/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/6fab5ba6d9562f331e9c581696432f52ec260429/crates/gpui
 use std::cell::OnceCell;
 use std::path::PathBuf;
 use std::rc::Rc;
