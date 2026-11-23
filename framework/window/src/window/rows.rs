@@ -259,7 +259,7 @@ impl MainWindow {
 }
 
 // GPUI takes the window being drawn out of its list, so drop_image needs it passed in.
-// https://github.com/ImperaLuna/zed/tree/4cc99ed469e7cc566898de34cbf4e4c993ba2d64/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/610fab89331e30736906b44f33bffe0cedcae37e/crates/gpui
 pub(super) fn release(
     images: impl IntoIterator<Item = Arc<RenderImage>>,
     mut window: Option<&mut Window>,
