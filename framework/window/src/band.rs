@@ -36,6 +36,7 @@ impl MainWindow {
         }
         if event.pressed_button != Some(MouseButton::Left) {
             self.band = None;
+            self.edge_pointer(None, true, cx);
             cx.notify();
             return;
         }
@@ -48,6 +49,7 @@ impl MainWindow {
         }
         band.dragging = true;
         self.band_select(cx);
+        self.edge_pointer(Some(event.position), true, cx);
     }
 
     pub(crate) fn band_scrolled(&mut self, cx: &mut Context<Self>) {
@@ -64,6 +66,7 @@ impl MainWindow {
             self.band_select(cx);
         }
         self.band = None;
+        self.edge_pointer(None, true, cx);
         cx.notify();
         if !dragging && !add && self.row_at(event.position, cx).is_none() {
             self.clear_selection(cx);
@@ -90,7 +93,7 @@ impl MainWindow {
                 .saturating_add(column)
                 .min(len.saturating_sub(1)))
         };
-        self.reselect(
+        self.reselect_in_place(
             |_, picks| match lines {
                 Some((anchor, cursor)) => {
                     let (low, high) = (anchor.min(cursor), anchor.max(cursor));
@@ -159,7 +162,7 @@ impl MainWindow {
         position - self.list_bounds().origin - self.list_offset()
     }
 
-    fn list_bounds(&self) -> Bounds<Pixels> {
+    pub(crate) fn list_bounds(&self) -> Bounds<Pixels> {
         self.scroll.0.borrow().base_handle.bounds()
     }
 

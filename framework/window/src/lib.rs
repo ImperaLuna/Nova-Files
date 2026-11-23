@@ -6,6 +6,7 @@ mod band;
 mod columns;
 mod commands;
 mod dropping;
+mod edge_scroll;
 mod island;
 mod lift;
 

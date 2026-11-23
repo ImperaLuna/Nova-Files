@@ -39,7 +39,7 @@ impl MainWindow {
         }
     }
 
-    fn reselect_in_place(
+    pub(crate) fn reselect_in_place(
         &mut self,
         change: impl FnOnce(Option<Selection>, &dyn Fn(EntryId) -> bool) -> Option<Selection>,
         cx: &mut Context<Self>,

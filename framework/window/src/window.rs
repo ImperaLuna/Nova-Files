@@ -55,6 +55,7 @@ use nova_files_shell::{
 
 use self::rows::RowRead;
 use crate::band::Band;
+use crate::edge_scroll::EdgeScroll;
 use crate::island::Island;
 use crate::jump::TypeJump;
 use crate::lift::Lift;
@@ -108,6 +109,7 @@ pub struct MainWindow {
     pub(crate) band: Option<Band>,
     pub(crate) pressed_name: bool,
     pub(crate) lift: Option<Lift>,
+    pub(crate) edge: EdgeScroll,
     pub(crate) selected_on_press: Option<(ListingId, EntryId)>,
     pub(crate) asked: Option<ListingId>,
     requested: Option<Location>,
@@ -222,6 +224,7 @@ impl MainWindow {
             band: None,
             pressed_name: false,
             lift: None,
+            edge: EdgeScroll::default(),
             selected_on_press: None,
             scale_factor: DEFAULT_SCALE_FACTOR,
             asked: None,
