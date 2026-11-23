@@ -1,7 +1,9 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use gpui::{ClickEvent, Context, KeyDownEvent, Modifiers, Window};
 use nova_files_api::{Entry, EntryId, EntryKind, Listing, ListingId};
+use nova_files_shell::actions::RenameSelected;
 use nova_files_shell::{self as shell, ClickAnswer, Entries};
 
 use crate::jump;
@@ -9,6 +11,7 @@ use crate::selection::{Click, Move, Reach, Selection, entry_at};
 use crate::window::MainWindow;
 
 pub const DOUBLE_CLICK: usize = 2;
+pub const RENAME_AFTER: Duration = Duration::from_millis(500);
 
 impl MainWindow {
     pub fn selection(&self) -> Option<(ListingId, Vec<EntryId>)> {
@@ -87,18 +90,45 @@ impl MainWindow {
         &mut self,
         at: (ListingId, EntryId),
         event: &ClickEvent,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let held = event.modifiers();
         let plain = !held.control && !held.shift;
         let double = plain && event.click_count() == DOUBLE_CLICK;
+        self.slow_rename = None;
+        if plain && event.click_count() == 1 && self.clicked_again(at, event) {
+            self.rename_after_a_wait(window, cx);
+            return;
+        }
         if !double && self.selected_on_press.take() == Some(at) {
             return;
         }
         if !plain || event.click_count() <= DOUBLE_CLICK {
             self.entry_chosen(at, event.modifiers(), double, cx);
         }
+    }
+
+    fn clicked_again(&mut self, at: (ListingId, EntryId), event: &ClickEvent) -> bool {
+        let on_text = self.pressed_text.take() == Some(at);
+        let first = matches!(event, ClickEvent::Mouse(click) if click.down.first_mouse);
+        let alone_before = self
+            .selection_before_press
+            .as_ref()
+            .is_some_and(|before| before.listing == at.0 && before.ids() == [at.1]);
+        on_text && !first && alone_before
+    }
+
+    fn rename_after_a_wait(&mut self, window: &Window, cx: &Context<Self>) {
+        self.slow_rename = Some(cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(RENAME_AFTER).await;
+            this.update_in(cx, |this, window, cx| {
+                if this.slow_rename.take().is_some() {
+                    window.dispatch_action(Box::new(RenameSelected), cx);
+                }
+            })
+            .ok();
+        }));
     }
 
     fn entry_chosen(
