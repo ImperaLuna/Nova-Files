@@ -42,6 +42,16 @@ impl Terms {
         self.terms.len()
     }
 
+    pub fn narrows(&self, wider: &Self) -> bool {
+        self.terms.len() == wider.terms.len()
+            && self.terms.iter().zip(&wider.terms).all(|(term, wide)| {
+                term.along_path == wide.along_path
+                    && term.folders == wide.folders
+                    && term.name.starts_with(&wide.name)
+                    && (term.name.len() >= TYPO_MIN) == (wide.name.len() >= TYPO_MIN)
+            })
+    }
+
     pub fn enter(&self, reach: &mut [u8], folder: &[u8]) {
         for (term, reached) in self.terms.iter().zip(reach) {
             let wanted = if term.along_path {
@@ -105,6 +115,17 @@ impl Terms {
             anchored = true;
             met.found.kind = met.found.kind.max(found.kind);
             met.found.cost += found.cost;
+        }
+        if !anchored && loose {
+            let found = self
+                .terms
+                .iter()
+                .find_map(|term| matching::loose(folded, &term.name))?;
+            met.by_folders -= 1;
+            met.loosely = true;
+            met.found.kind = met.found.kind.max(found.kind);
+            met.found.cost += found.cost;
+            anchored = true;
         }
         anchored.then_some(met)
     }

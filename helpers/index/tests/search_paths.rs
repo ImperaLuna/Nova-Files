@@ -181,3 +181,12 @@ fn a_file_added_since_the_crawl_matches_along_its_path() {
     assert_eq!(home.stages("shader editor", &overlay).remove(0), shader);
     assert_eq!(home.stages("viewer/shader", &overlay).remove(0), paths(&[]));
 }
+
+#[test]
+fn a_loose_name_match_inside_a_folder_the_word_also_matches_is_still_found() {
+    let home = Home::new();
+    let stages = home.stages("ed", &Overlay::new());
+    let frame = PathBuf::from("projects/editor/src/components/render_frame.rs");
+    assert!(!stages[0].contains(&frame));
+    assert!(stages[1].contains(&frame));
+}
