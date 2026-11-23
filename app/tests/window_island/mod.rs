@@ -4,6 +4,7 @@ mod allows;
 mod archives;
 mod focus;
 mod menus;
+mod preview;
 mod renaming;
 mod trash;
 
