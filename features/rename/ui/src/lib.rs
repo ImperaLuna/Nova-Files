@@ -1,11 +1,12 @@
 #![forbid(unsafe_code)]
 
 use std::ffi::{OsStr, OsString};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use gpui::{App, AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
 use nova_files_api::numbered::stem;
-use nova_files_api::{Entry, EntryKind, Event, Listing, Operation};
+use nova_files_api::{Entry, EntryKind, Event, Listing, ListingId, Operation};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::text::{TextField, TextFieldEvent};
 use nova_files_shell::{
@@ -50,6 +51,7 @@ struct Renaming {
     folder: PathBuf,
     name: OsString,
     field: Entity<TextField>,
+    seen: bool,
     _events: Subscription,
     _blur: Subscription,
 }
@@ -89,6 +91,17 @@ impl RenamePart {
                 .any(|entry| listing.path_of(entry) == renaming.path())
         });
         listed && entries.drawn(&renaming.name)
+    }
+
+    fn rows_drawn(&mut self, _: ListingId, _: Range<usize>, cx: &mut Context<Self>) {
+        let Some(renaming) = self.renaming.as_mut() else {
+            return;
+        };
+        if self.host.entries.read(cx).drawn(&renaming.name) {
+            renaming.seen = true;
+        } else if renaming.seen {
+            self.finish(true, cx);
+        }
     }
 
     fn rename_selected(&mut self, _: &RenameSelected, window: &mut Window, cx: &mut Context<Self>) {
@@ -138,10 +151,12 @@ impl RenamePart {
             this.finish(drawn, cx);
         });
         window.focus(&focus, cx);
+        let seen = self.host.entries.read(cx).drawn(&name);
         self.renaming = Some(Renaming {
             folder,
             name,
             field,
+            seen,
             _events: events,
             _blur: blur,
         });
@@ -277,6 +292,7 @@ impl Part for RenamePart {
         slots.name_field(field_of);
         slots.busy(renaming);
         slots.listed(Self::listed);
+        slots.rows_drawn(Self::rows_drawn);
         slots.watch(Self::watch);
     }
 }

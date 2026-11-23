@@ -1,4 +1,5 @@
 use super::*;
+use gpui::{ScrollDelta, ScrollEvent, point};
 
 fn field_state(
     view: &Entity<MainWindow>,
@@ -175,4 +176,34 @@ async fn a_rename_that_moves_the_entry_off_screen_scrolls_to_it(cx: &mut TestApp
     .await;
     cx.run_until_parked();
     assert!(offset(&view, cx).y < top.y);
+}
+
+#[gpui::test]
+async fn a_name_typed_then_scrolled_away_is_kept(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("rename-scrolled");
+    let home = TempFolder::tree("rename-scrolled-home");
+    for index in 0..80 {
+        fs::write(tree.path().join(format!("file {index:02}")), "").unwrap();
+    }
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-2");
+    cx.simulate_keystrokes("f2");
+    cx.run_until_parked();
+    cx.simulate_input("kept");
+    let list = cx.debug_bounds("entry-5").unwrap().center();
+    cx.simulate_event(ScrollEvent {
+        position: list,
+        delta: ScrollDelta::Pixels(point(px(0.0), px(-2000.0))),
+        ..ScrollEvent::default()
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("entry-2").is_none());
+    view.condition::<WindowEvent>(cx, |view, _| {
+        view.entry_names().iter().any(|name| name == "kept")
+    })
+    .await;
+    assert!(!view.read_with(cx, MainWindow::renaming));
+    assert!(!tree.path().join("file 01").exists());
 }
