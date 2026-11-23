@@ -204,6 +204,7 @@ pub mod size {
     pub const SHEET_PAD: Pixels = px(8.0);
     pub const ROW_ICON: Pixels = px(22.0);
     pub const ICON_CELL_PAD: Pixels = px(8.0);
+    pub const ICON_CELL_APART: Pixels = px(2.0);
     pub const ICON_NAME_GAP: Pixels = px(6.0);
     pub const ICON_CELL_UNDER: Pixels = px(104.0);
     pub const ICON_CELL_BESIDE: Pixels = px(240.0);

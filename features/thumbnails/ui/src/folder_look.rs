@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, Div, InteractiveElement as _, IntoElement as _, ObjectFit, ParentElement as _,
-    Pixels, RenderImage, Styled as _, StyledImage as _, div, img, px,
+    AnyElement, Div, InteractiveElement as _, IntoElement as _, ParentElement as _, Pixels,
+    RenderImage, Styled as _, div, img, px,
 };
 use nova_files_api::IconKind;
 use nova_files_shell::kind::glyph_of;
@@ -104,11 +104,21 @@ fn peeked(item: &PeekItem, side: Pixels, colors: &Colors) -> AnyElement {
     )
 }
 
-fn picture(image: &Arc<RenderImage>, side: Pixels) -> Div {
+pub fn picture(image: &Arc<RenderImage>, side: Pixels) -> Div {
+    let drawn = image.size(0);
+    let longest = drawn.width.max(drawn.height).0.max(1);
+    let share = |along: i32| {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a thumbnail side is a few hundred pixels"
+        )]
+        let along = along as f32 / longest as f32;
+        side * along
+    };
     icon_slot(side).items_end().child(
         img(Arc::clone(image))
-            .size(side)
-            .object_fit(ObjectFit::Contain)
+            .w(share(drawn.width.0))
+            .h(share(drawn.height.0))
             .rounded(radius::SMALL),
     )
 }

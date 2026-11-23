@@ -1,5 +1,6 @@
 use gpui::{Bounds, Modifiers, MouseButton, Pixels, Point, ScrollDelta, ScrollEvent, TouchPhase};
 use nova_files_folders_api::IconSize;
+use nova_files_shell::theme::size::ICON_CELL_APART;
 
 use super::*;
 
@@ -86,9 +87,9 @@ fn icons_sit_in_lines_of_cells_without_column_heads(cx: &mut TestAppContext) {
     let across = per_line(cx);
     assert!(across > 1, "{across} to a line");
     let (first, second, below) = (cell(cx, 0), cell(cx, 1), cell(cx, across));
-    assert_eq!(second.left(), first.right());
+    assert!(second.left() > first.right(), "{second:?} beside {first:?}");
     assert_eq!(below.left(), first.left());
-    assert_eq!(below.top(), first.bottom());
+    assert!(below.top() > first.bottom(), "{below:?} under {first:?}");
 
     let wide = cx.update(|window, _| window.viewport_size());
     cx.simulate_resize(gpui::size(wide.width / 2.0, wide.height));
@@ -215,7 +216,7 @@ fn the_menu_key_opens_the_menu_under_the_cell(cx: &mut TestAppContext) {
         at.x > under.left() && at.x < under.right(),
         "{at:?} {under:?}"
     );
-    assert_eq!(at.y, under.bottom());
+    assert_eq!(at.y, under.bottom() + ICON_CELL_APART);
 }
 
 #[gpui::test]
