@@ -233,6 +233,12 @@ pub mod size {
     pub const HEAD_ARROW: Pixels = px(11.0);
     pub const HEAD_ARROW_GAP: Pixels = px(4.0);
     pub const SIDEBAR_WIDTH: Pixels = px(228.0);
+    pub const SIDEBAR_NARROWEST: Pixels = px(160.0);
+    pub const SIDEBAR_WIDEST: Pixels = px(420.0);
+    pub const COLUMN_NARROWEST: Pixels = px(60.0);
+    pub const COLUMN_WIDEST: Pixels = px(400.0);
+    pub const GRIP_REACH: Pixels = px(8.0);
+    pub const GRIP_LINE: Pixels = px(2.0);
     pub const PLACE_HEIGHT: Pixels = px(34.0);
     pub const DRIVES_MAX_HEIGHT: Pixels = px(200.0);
     pub const OPEN_MAX_SHARE: f32 = 0.42;

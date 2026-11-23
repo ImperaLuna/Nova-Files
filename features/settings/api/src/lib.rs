@@ -53,6 +53,10 @@ pub struct Settings {
     /// core keeps these as written; the UI checks them when it binds and
     /// keeps its default for any id or key it can't use.
     pub keys: BTreeMap<String, Vec<String>>,
+    /// Widths in pixels the user dragged things to: a name owned by the
+    /// UI (such as `sidebar`) to its width. A name left out keeps the UI's
+    /// default.
+    pub widths: BTreeMap<String, u16>,
 }
 
 /// Which colors the windows use.
@@ -86,6 +90,12 @@ pub enum SettingChange {
         action: String,
         keys: Option<Vec<String>>,
     },
+    /// The width of the thing named `name`; `None` drops it, so the UI's
+    /// default comes back.
+    Width {
+        name: String,
+        width: Option<u16>,
+    },
 }
 
 impl Settings {
@@ -105,6 +115,15 @@ impl Settings {
             }
             SettingChange::Keys { action, keys: None } => {
                 self.keys.remove(&action);
+            }
+            SettingChange::Width {
+                name,
+                width: Some(width),
+            } => {
+                self.widths.insert(name, width);
+            }
+            SettingChange::Width { name, width: None } => {
+                self.widths.remove(&name);
             }
         }
         self
@@ -152,5 +171,19 @@ mod tests {
         });
         assert!(!dropped.keys.contains_key("go.back"));
         assert!(dropped.keys.contains_key("go.up"));
+    }
+
+    #[test]
+    fn widths_are_set_and_dropped_per_name() {
+        let wide = Settings::default().with(SettingChange::Width {
+            name: "sidebar".to_owned(),
+            width: Some(300),
+        });
+        assert_eq!(wide.widths["sidebar"], 300);
+        let back = wide.with(SettingChange::Width {
+            name: "sidebar".to_owned(),
+            width: None,
+        });
+        assert!(back.widths.is_empty());
     }
 }

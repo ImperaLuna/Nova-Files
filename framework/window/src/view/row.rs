@@ -32,11 +32,18 @@ impl Corners {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ColumnWidths {
+    pub folder: Pixels,
+    pub modified: Pixels,
+    pub size: Pixels,
+}
+
 pub fn cells(
     name: impl IntoElement,
     folder: Option<AnyElement>,
     modified: impl IntoElement,
-    (size_cell, size_width): (impl IntoElement, Pixels),
+    (size_cell, widths): (impl IntoElement, ColumnWidths),
     modified_selector: String,
 ) -> impl IntoElement {
     let column = |width: Pixels| {
@@ -57,13 +64,13 @@ pub fn cells(
         .gap(size::COLUMN_GAP)
         .h_full()
         .child(div().flex_1().min_w_0().h_full().child(name))
-        .children(folder.map(|folder| column(size::FOLDER_WIDTH).child(folder)))
+        .children(folder.map(|folder| column(widths.folder).child(folder)))
         .child(
-            column(size::MODIFIED_WIDTH)
+            column(widths.modified)
                 .debug_selector(|| modified_selector)
                 .child(modified),
         )
-        .child(column(size_width).justify_end().child(size_cell))
+        .child(column(widths.size).justify_end().child(size_cell))
 }
 
 pub fn detail(text_content: String, colors: &Colors) -> impl IntoElement {

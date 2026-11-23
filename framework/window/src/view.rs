@@ -34,6 +34,7 @@ use crate::commands::{
 use crate::selection::{Move, Reach};
 use crate::theme::{self, Colors, size, text};
 use crate::window::MainWindow;
+use nova_files_shell::Resizable;
 
 impl Render for MainWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -159,7 +160,11 @@ impl MainWindow {
                     .px(size::GAP)
                     .pt(size::GAP)
                     .bg(colors.window)
-                    .child(self.sidebar(narrow, cx)),
+                    .child(self.sidebar(narrow, cx))
+                    .when(!narrow, |side| {
+                        side.relative()
+                            .child(self.grip(Resizable::Sidebar, cx).right_0())
+                    }),
             )
             .child(
                 div()
@@ -306,6 +311,7 @@ fn pointer_watch(cx: &Context<MainWindow>) -> impl IntoElement {
                             this.band_moved(event, cx);
                             this.lift_moved(event, cx);
                             this.bar_moved(event, cx);
+                            this.grip_moved(event, cx);
                         })
                         .ok();
                 }
@@ -321,14 +327,19 @@ fn pointer_watch(cx: &Context<MainWindow>) -> impl IntoElement {
             });
             let released = view;
             window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
-                if phase == DispatchPhase::Bubble && event.button == MouseButton::Left {
-                    released
-                        .update(cx, |this, cx| {
+                if event.button != MouseButton::Left {
+                    return;
+                }
+                released
+                    .update(cx, |this, cx| {
+                        if phase == DispatchPhase::Capture {
+                            this.grip_released(cx);
+                        } else {
                             this.band_released(event, cx);
                             this.bar_released(cx);
-                        })
-                        .ok();
-                }
+                        }
+                    })
+                    .ok();
             });
         },
     )

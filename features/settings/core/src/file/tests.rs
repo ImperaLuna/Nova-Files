@@ -30,6 +30,9 @@ folder_sizes = false
 [keys]
 "go.back" = ["alt-left", "backspace"]
 "go.up" = []
+
+[widths]
+sidebar = 300
 "#;
     let (settings, problems) = read(text);
     assert!(problems.is_empty(), "{problems:?}");
@@ -41,6 +44,7 @@ folder_sizes = false
             hidden_files: HiddenFiles::Shown,
             folder_sizes: FolderSizes::Left,
             keys: keys(&[("go.back", &["alt-left", "backspace"]), ("go.up", &[])]),
+            widths: BTreeMap::from([("sidebar".to_owned(), 300)]),
         }
     );
     assert_eq!(read("appearance = \"dark\"").0.appearance, Appearance::Dark);
@@ -195,4 +199,27 @@ fn text_that_isnt_toml_is_never_edited() {
         ),
         None
     );
+}
+
+#[test]
+fn widths_are_added_read_and_removed() {
+    let wide = SettingChange::Width {
+        name: "sidebar".to_owned(),
+        width: Some(310),
+    };
+    let edited = edit("", &wide).unwrap();
+    assert_eq!(read(&edited).0.widths["sidebar"], 310);
+    let back = SettingChange::Width {
+        name: "sidebar".to_owned(),
+        width: None,
+    };
+    assert_eq!(edit(&edited, &back).unwrap().trim(), "");
+    let (settings, problems) = read(
+        "[widths]
+sidebar = -4
+size = 120
+",
+    );
+    assert_eq!(settings.widths, BTreeMap::from([("size".to_owned(), 120)]));
+    assert_eq!(problems.len(), 1);
 }

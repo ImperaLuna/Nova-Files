@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -24,6 +25,34 @@ pub enum ThumbnailsShown {
     #[default]
     Shown,
     Hidden,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Resizable {
+    Sidebar,
+    Folder,
+    Modified,
+    Size,
+}
+
+impl Resizable {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Sidebar => "sidebar",
+            Self::Folder => "folder",
+            Self::Modified => "modified",
+            Self::Size => "size",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Widths(pub BTreeMap<String, u16>);
+
+impl Widths {
+    pub fn of(&self, part: Resizable) -> Option<u16> {
+        self.0.get(part.name()).copied()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

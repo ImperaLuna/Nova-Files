@@ -16,6 +16,7 @@ use super::row::icon;
 use crate::assets::Icon;
 use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
+use nova_files_shell::Resizable;
 
 impl MainWindow {
     pub(super) fn sidebar(&self, narrow: bool, cx: &Context<Self>) -> impl IntoElement {
@@ -47,7 +48,7 @@ impl MainWindow {
             .flex_col()
             .flex_1()
             .min_h_0()
-            .w(size::SIDEBAR_WIDTH)
+            .w(self.width_of(Resizable::Sidebar, cx))
             .children(open)
             .child(
                 div()
