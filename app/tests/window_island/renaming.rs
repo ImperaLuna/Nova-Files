@@ -263,3 +263,72 @@ async fn the_mouse_back_button_keeps_a_name_being_typed(cx: &mut TestAppContext)
     view.condition::<WindowEvent>(cx, |_, _| projects.join("kept").exists())
         .await;
 }
+
+fn click_at(cx: &mut VisualTestContext, at: gpui::Point<gpui::Pixels>, count: usize) {
+    counted_click(cx, at, count);
+    cx.run_until_parked();
+}
+
+fn wait(cx: &VisualTestContext) {
+    cx.executor()
+        .advance_clock(nova_files_window::RENAME_AFTER * 2);
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+async fn a_slow_second_click_on_the_name_starts_a_rename(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("slow-rename");
+    let home = TempFolder::tree("slow-rename-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let name = cx.debug_bounds("name-1").unwrap().center();
+
+    click_at(cx, name, 1);
+    wait(cx);
+    assert!(!view.read_with(cx, MainWindow::renaming));
+    click_at(cx, name, 1);
+    assert!(
+        !view.read_with(cx, MainWindow::renaming),
+        "it waits for a double-click first"
+    );
+    wait(cx);
+    assert_eq!(field_state(&view, cx, 1), ("notes.txt".to_owned(), 0..5));
+}
+
+#[gpui::test]
+async fn a_double_click_on_a_selected_name_opens_and_never_renames(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("slow-rename-double");
+    let home = TempFolder::tree("slow-rename-double-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let name = cx.debug_bounds("name-0").unwrap().center();
+
+    click_at(cx, name, 1);
+    wait(cx);
+    click_at(cx, name, 1);
+    click_at(cx, name, 2);
+    wait(cx);
+    assert!(!view.read_with(cx, MainWindow::renaming));
+    let here = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
+    assert_eq!(here, Some(tree.path().join("Projects")));
+}
+
+#[gpui::test]
+async fn a_second_click_on_the_icon_does_not_rename(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("slow-rename-icon");
+    let home = TempFolder::tree("slow-rename-icon-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let name = cx.debug_bounds("name-1").unwrap();
+    let icon = point(name.left() - px(16.0), name.center().y);
+
+    click_at(cx, name.center(), 1);
+    wait(cx);
+    click_at(cx, icon, 1);
+    wait(cx);
+    assert!(!view.read_with(cx, MainWindow::renaming));
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_names()),
+        ["notes.txt"]
+    );
+}

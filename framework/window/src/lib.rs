@@ -42,6 +42,7 @@ pub use menu::{Look, Menu, MenuAction, MenuItem};
 pub use nova_files_shell::Location;
 use nova_files_shell::{Asked, CloseWhen, Opener, Parts, assets, jump, text, theme};
 pub use requests::{Request, RequestSender, Requests, channel};
+pub use selecting::RENAME_AFTER;
 pub use text::{TextField, TextFieldEvent, bind_keys as bind_text_keys};
 pub use theme::Colors;
 pub use window::{CoreStatus, MainWindow, WindowEvent, home_folder};

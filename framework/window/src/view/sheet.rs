@@ -245,7 +245,16 @@ impl MainWindow {
             )
             .child(self.parts.name_cell(entry, cx).unwrap_or_else(|| {
                 self.parts.name_field(entry, cx).map_or_else(
-                    || entry_name(name.into(), marks, index, cx).into_any_element(),
+                    || {
+                        entry_name(name.into(), marks, index, cx)
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _: &MouseDownEvent, _, _| {
+                                    this.pressed_text = Some(at);
+                                }),
+                            )
+                            .into_any_element()
+                    },
                     |field| rename_box(field, colors).into_any_element(),
                 )
             }))
