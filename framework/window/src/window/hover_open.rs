@@ -55,6 +55,16 @@ impl MainWindow {
         });
     }
 
+    fn carries(&self, opens: &HoverOpens) -> bool {
+        let HoverOpens::Place(Location::Folder(folder)) = opens else {
+            return false;
+        };
+        self.drag_over().is_some_and(|drag| {
+            drag.sources()
+                .is_some_and(|sources| sources.paths.iter().any(|path| folder.starts_with(path)))
+        })
+    }
+
     fn hover_open_due(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some((opens, wait)) = &mut self.hover_open.over else {
             return;
@@ -67,7 +77,7 @@ impl MainWindow {
             return;
         }
         let opens = opens.clone();
-        if opens.on_screen(self.folder(), self.searching()) {
+        if opens.on_screen(self.folder(), self.searching()) || self.carries(&opens) {
             return;
         }
         match opens {
