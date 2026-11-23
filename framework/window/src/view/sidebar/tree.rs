@@ -1,6 +1,6 @@
 use gpui::{
-    Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Stateful,
-    Styled as _, div, prelude::FluentBuilder as _,
+    Context, Div, InteractiveElement as _, ParentElement as _, Pixels, Stateful, Styled as _, div,
+    prelude::FluentBuilder as _,
 };
 
 use nova_files_shell::{SidebarAt, SidebarRow};
@@ -60,10 +60,14 @@ impl MainWindow {
                     .bg(colors.line)
             })
             .collect();
-        let toggle = place.expander.clone().map_or_else(
-            || toggle_slot().into_any_element(),
-            |expander| expander_button(&place.id, expander, colors, cx),
-        );
+        let toggle = place
+            .expander
+            .clone()
+            .map_or_else(toggle_slot, |expander| {
+                expander_button(&place.id, expander, colors, cx)
+            })
+            .w(size::TREE_TOGGLE_REACH)
+            .mr(size::TREE_TOGGLE_PULL);
         let shown = div()
             .id(place.id.clone())
             .debug_selector(move || selector)
@@ -74,7 +78,7 @@ impl MainWindow {
             .w_full()
             .h(size::TREE_ROW_HEIGHT)
             .gap(size::TREE_ROW_GAP)
-            .pl(inside_edge(indent(depth) + size::TREE_PAD_LEFT))
+            .pl(inside_edge(indent(depth)))
             .pr(inside_edge(size::TREE_PAD_RIGHT))
             .rounded(radius::ROW)
             .whitespace_nowrap()
@@ -96,8 +100,9 @@ impl MainWindow {
     }
 }
 
-fn toggle_slot() -> Div {
+fn toggle_slot() -> Stateful<Div> {
     div()
+        .id("tree-toggle-slot")
         .flex()
         .flex_none()
         .items_center()
