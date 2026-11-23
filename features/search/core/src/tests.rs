@@ -67,7 +67,13 @@ impl Searcher {
         drop(
             self.shared
                 .built
-                .wait_while(state, |state| state.building)
+                .wait_while(state, |state| {
+                    state.building
+                        || state
+                            .live
+                            .as_ref()
+                            .is_some_and(|live| matches!(live.watching, Watching::CatchingUp))
+                })
                 .unwrap(),
         );
     }
@@ -86,12 +92,16 @@ fn a_newer_search_cancels_one_waiting_for_the_index() {
     let (sink, current) = &client;
     searcher.search((sink, current), SearchId(1), "report".to_owned(), LIMIT);
     searcher.search((sink, current), SearchId(2), "report".to_owned(), LIMIT);
-    let live = Live::start(&scratch.place(), &scratch.root.join("home"), false);
+    let (live, log) = Live::open(&scratch.place(), &scratch.root.join("home"), false).unwrap();
+    let index = Arc::clone(&live.index);
     let mut state = searcher.state();
-    state.live = live;
+    state.live = Some(live);
     state.building = false;
     searcher.shared.built.notify_all();
     drop(state);
+    searcher
+        .shared
+        .watch(&index, Watcher::start(&index, log, || {}).ok());
     let mut done = false;
     while !done {
         let Event::Found { id, done: last, .. } = events.recv_timeout(ANSWER_TIMEOUT).unwrap()
@@ -102,6 +112,53 @@ fn a_newer_search_cancels_one_waiting_for_the_index() {
         done = last;
     }
     assert!(events.recv_timeout(QUIET).is_err());
+}
+
+#[test]
+fn a_search_before_the_catch_up_answers_at_once_and_adds_what_changed() {
+    let scratch = Scratch::new("catch-up");
+    scratch.searcher().search_and_settle();
+    fs::write(scratch.root.join("home/docs/report-late.pdf"), b"").unwrap();
+    let home = scratch.root.join("home");
+    let (live, log) = Live::open(&scratch.place(), &home, false).unwrap();
+    let index = Arc::clone(&live.index);
+    let searcher = scratch.searcher();
+    searcher.state().live = Some(live);
+    let (client, events) = client();
+    let (sink, current) = &client;
+    searcher.search((sink, current), SearchId(1), "report".to_owned(), LIMIT);
+    let mut saved = Vec::new();
+    for _ in 0..STAGES {
+        let Event::Found { hits, done, .. } = events.recv_timeout(ANSWER_TIMEOUT).unwrap() else {
+            panic!("expected hits");
+        };
+        assert!(!done);
+        saved.extend(hits.into_iter().map(|hit| hit.path));
+    }
+    assert_eq!(saved, [home.join("docs/report.pdf")]);
+    assert!(events.recv_timeout(QUIET).is_err());
+    searcher
+        .shared
+        .watch(&index, Watcher::start(&index, log, || {}).ok());
+    let Event::Found { hits, done, .. } = events.recv_timeout(ANSWER_TIMEOUT).unwrap() else {
+        panic!("expected hits");
+    };
+    assert!(done);
+    let late: Vec<_> = hits.into_iter().map(|hit| hit.path).collect();
+    assert_eq!(late, [home.join("docs/report-late.pdf")]);
+}
+
+#[test]
+fn a_watcher_that_cannot_start_fails_the_index() {
+    let scratch = Scratch::new("no-watcher");
+    scratch.searcher().search_and_settle();
+    let home = scratch.root.join("home");
+    let (live, _) = Live::open(&scratch.place(), &home, false).unwrap();
+    let index = Arc::clone(&live.index);
+    let searcher = scratch.searcher();
+    searcher.state().live = Some(live);
+    searcher.shared.watch(&index, None);
+    assert!(searcher.state().failed);
 }
 
 #[test]

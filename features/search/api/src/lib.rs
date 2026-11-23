@@ -20,8 +20,8 @@ pub enum Command {
     /// Find files under home whose names match `query`, one word or
     /// several separated by spaces. The answer is an [`Event::Found`] for
     /// each stage, best first, at most `limit` hits each (and at most
-    /// [`MAX_HITS`]), or [`Event::SearchFailed`]. The first search builds
-    /// or opens the home index, so it may take a while; later ones take
+    /// [`MAX_HITS`]), or [`Event::SearchFailed`]. The first search ever
+    /// builds the home index, so it may take a while; later ones take
     /// milliseconds. A newer `Search` from the same client cancels this
     /// one, which then may stop answering.
     Search {
@@ -60,8 +60,10 @@ pub enum Command {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// One stage of [`Command::Search`] `id`: names as typed come first,
-    /// then letters in order and typos. `done` marks the last stage. A path
-    /// shows at most once per search.
+    /// then letters in order and typos. A search answered from the saved
+    /// index before it had caught up with the disk gets one more stage:
+    /// the matches among what changed since. `done` marks the last stage.
+    /// A path shows at most once per search.
     Found {
         id: SearchId,
         hits: Vec<Hit>,
