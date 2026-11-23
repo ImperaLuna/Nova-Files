@@ -5,7 +5,7 @@ use crate::{FileId, Kind, RowId, Stamp};
 
 pub const MAGIC: [u8; MAGIC_LEN] = *b"NOVAIDX\0";
 const MAGIC_LEN: usize = 8;
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 pub const HEADER_LEN: usize = 48;
 pub const DETAIL_LEN: usize = 48;
 pub const NO_PARENT: u32 = u32::MAX;
@@ -88,6 +88,7 @@ pub struct Layout {
     pub folded_at: usize,
     pub parents: usize,
     pub ends: usize,
+    pub letters: usize,
     pub traits: usize,
     pub folded: usize,
     pub word_starts: usize,
@@ -107,7 +108,8 @@ impl Layout {
             .checked_mul(WORD)?
             .checked_add(folded_at)?;
         let ends = rows.checked_mul(WORD)?.checked_add(parents)?;
-        let traits = rows.checked_mul(WORD)?.checked_add(ends)?;
+        let letters = rows.checked_mul(WORD)?.checked_add(ends)?;
+        let traits = rows.checked_mul(WORD)?.checked_add(letters)?;
         let folded = traits.checked_add(rows)?;
         let word_starts = folded.checked_add(folded_len)?;
         let details = word_starts
@@ -119,6 +121,7 @@ impl Layout {
             folded_at,
             parents,
             ends,
+            letters,
             traits,
             folded,
             word_starts,
@@ -224,6 +227,7 @@ pub fn write(out: &mut impl Write, crawled: i64, rows: &[Row], names: &[u8]) -> 
     let mut folded_at = Vec::with_capacity(rows.len() + 1);
     let mut word_starts = Vec::new();
     let mut traits_of: Vec<u8> = Vec::with_capacity(rows.len());
+    let mut letters = Vec::with_capacity(rows.len());
     let mut one = Vec::new();
     for (at, row) in rows.iter().enumerate() {
         let name = row.name(names);
@@ -233,6 +237,7 @@ pub fn write(out: &mut impl Write, crawled: i64, rows: &[Row], names: &[u8]) -> 
         for start in (0..one.len()).filter(|&start| fold::starts_word(name, &one, start)) {
             set_bit(&mut word_starts, folded.len() + start);
         }
+        letters.push(fold::letters(&one));
         folded.extend_from_slice(&one);
         let under_hidden = usize::try_from(row.parent)
             .ok()
@@ -259,6 +264,9 @@ pub fn write(out: &mut impl Write, crawled: i64, rows: &[Row], names: &[u8]) -> 
     }
     for row in rows {
         out.write_all(&row.end.to_le_bytes())?;
+    }
+    for mask in &letters {
+        out.write_all(&mask.to_le_bytes())?;
     }
     out.write_all(&traits_of)?;
     out.write_all(&folded)?;
@@ -381,7 +389,8 @@ mod tests {
         assert_eq!(layout.folded_at, PAGE);
         assert_eq!(layout.parents, PAGE + 4 * WORD);
         assert_eq!(layout.ends, layout.parents + 3 * WORD);
-        assert_eq!(layout.traits, layout.ends + 3 * WORD);
+        assert_eq!(layout.letters, layout.ends + 3 * WORD);
+        assert_eq!(layout.traits, layout.letters + 3 * WORD);
         assert_eq!(layout.folded, layout.traits + 3);
         assert_eq!(layout.word_starts, layout.folded + 9);
         assert_eq!(layout.details, 2 * PAGE);

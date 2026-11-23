@@ -109,6 +109,10 @@ impl Index {
         self.traits(row).is_some_and(format::traits_hidden)
     }
 
+    pub fn letters(&self, row: RowId) -> Option<u32> {
+        self.word(self.layout.letters, row.0)
+    }
+
     pub fn folded(&self, row: RowId) -> Option<&[u8]> {
         let (start, end) = self.folded_span(row)?;
         self.map.get(self.layout.folded..)?.get(start..end)
@@ -228,7 +232,7 @@ fn check_rows(bytes: &[u8], header: &Header, layout: &Layout) -> Result<(), Open
     let mut folded_at = column(layout.folded_at, layout.parents).map(u32::from_le_bytes);
     let mut name_start = folded_at.next().unwrap_or_default();
     let parents = column(layout.parents, layout.ends).map(u32::from_le_bytes);
-    let ends = column(layout.ends, layout.traits).map(u32::from_le_bytes);
+    let ends = column(layout.ends, layout.letters).map(u32::from_le_bytes);
     let traits = bytes.get(layout.traits..layout.folded).unwrap_or_default();
     let mut open: Vec<(u32, u32)> = Vec::new();
     for (((parent, end), &traits), at) in parents.zip(ends).zip(traits).zip(0..) {
