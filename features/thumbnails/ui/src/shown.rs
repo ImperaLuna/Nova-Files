@@ -1,5 +1,5 @@
 // GPUI keeps a drawn image in its atlas until drop_image, even after the last Arc goes.
-// https://github.com/ImperaLuna/zed/tree/6fab5ba6d9562f331e9c581696432f52ec260429/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/464347a20ec562c10159f2167640dff992fc2218/crates/gpui
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::Arc;

@@ -1,5 +1,5 @@
 // GPUI on Linux ends its run when the last window closes.
-// https://github.com/ImperaLuna/zed/tree/6fab5ba6d9562f331e9c581696432f52ec260429/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/464347a20ec562c10159f2167640dff992fc2218/crates/gpui
 #![forbid(unsafe_code)]
 
 mod band;

@@ -129,16 +129,26 @@ nova-files-undo-ui = { path = "features/undo/ui" }
 #   Nova shell's keep awake tile. Nova Files never asks.
 # - IMP-447: a custom shader rectangle can read a picture, for the Nova
 #   shell's wallpaper cards turned in 3D. Nova Files doesn't use it.
+# - IMP-455: a Wayland display's size is its logical size from xdg-output,
+#   so a screen at a fractional scale (1.25) isn't read as its size over 2.
+#   Nova Files gets it too: a display's bounds are right on such a screen.
+# - IMP-456/458: a region set while a frame draws rides on that frame's
+#   commit, an empty blur region drops the background effect, and a layer
+#   surface's new size goes out with its first picture of that size. Nova
+#   Files opens no layer surface; its windows get the region timing.
+# - IMP-461: a wanted frame is drawn when its frame callback doesn't come,
+#   and the blur region is clipped to the surface. Nova Files' windows get
+#   the frame fallback too.
 # When all are merged upstream, point these back at zed-industries/zed.
 #
 # The crates.io release (0.2.2) draws through blade, which turns on ray
 # tracing and makes NVIDIA's driver load CUDA. `version` picks Zed's real
 # gpui: the repo also holds a test fixture crate named gpui. Move both pins
 # together.
-gpui = { git = "https://github.com/ImperaLuna/zed", rev = "6fab5ba6d9562f331e9c581696432f52ec260429", version = "0.2.2" }
+gpui = { git = "https://github.com/ImperaLuna/zed", rev = "464347a20ec562c10159f2167640dff992fc2218", version = "0.2.2" }
 # The platform half of GPUI (windows, input, the renderer). Wayland and X11
 # are off by default; without them the app runs but never opens a window.
-gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "6fab5ba6d9562f331e9c581696432f52ec260429", features = ["wayland", "x11"] }
+gpui_platform = { git = "https://github.com/ImperaLuna/zed", rev = "464347a20ec562c10159f2167640dff992fc2218", features = ["wayland", "x11"] }
 
 [workspace.lints.rust]
 # Denied, not forbidden, so nova-files-index and the nova-files binary (one
