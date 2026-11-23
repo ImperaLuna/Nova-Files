@@ -199,6 +199,5 @@ fn cell(
         .border(size::DROP_EDGE)
         .border_color(transparent_black())
         .rounded(radius::ROW)
-        .cursor_pointer()
         .hover(|cell| cell.bg(colors.hover))
 }

@@ -134,7 +134,6 @@ pub(super) fn row(row: Row, narrow: bool, colors: &Colors) -> Stateful<Div> {
         .items_center()
         .h(size::PLACE_HEIGHT)
         .rounded(radius::ROW)
-        .cursor_pointer()
         .whitespace_nowrap()
         .map(|row| {
             if pressed {
