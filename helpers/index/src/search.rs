@@ -1,20 +1,18 @@
 mod matching;
+mod scan;
 mod terms;
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
-use std::num::NonZero;
 use std::ops::Range;
-use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
-use std::thread;
 
 use crate::fold;
 use crate::overlay::Overlay;
 use crate::reader::Index;
-use crate::{Kind, RowId};
 
 pub use matching::MatchKind;
+use scan::{Rank, Scan, Source};
 use terms::Terms;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,132 +32,28 @@ pub struct Search<'a> {
     within: Option<PathBuf>,
     rows: Range<u32>,
     stage: Stage,
+    query: String,
+    kept: Option<&'a Kept>,
+    stop: Option<&'a (dyn Fn() -> bool + Sync)>,
+    typed_rows: Option<Vec<u32>>,
+    loose_rows: Option<Vec<u32>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Kept {
+    query: String,
+    within: Option<PathBuf>,
+    typed: Vec<u32>,
+    any: Option<Vec<u32>>,
 }
 
 pub const STAGES: usize = 2;
-const SCAN_THREADS_MAX: usize = 16;
-const ROWS_PER_THREAD_MIN: usize = 32_768;
-const KEEP_SLACK: usize = 4;
-const KEEP_MIN: usize = 1024;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stage {
     AsTyped,
     Loose,
     Done,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Source {
-    Row(RowId),
-    Added(usize),
-}
-
-type Rank = (usize, MatchKind, bool, usize, usize, usize, Source);
-
-struct Scan<'a> {
-    index: &'a Index,
-    terms: &'a Terms,
-    loose: bool,
-    all_hidden: bool,
-    hidden_last: bool,
-    keep: Option<usize>,
-}
-
-struct Open {
-    ends: Vec<RowId>,
-    reach: Vec<u8>,
-    terms: usize,
-}
-
-impl Open {
-    fn above(scan: &Scan<'_>, first: RowId) -> Self {
-        let index = scan.index;
-        let mut open = Self {
-            ends: Vec::new(),
-            reach: vec![0; scan.terms.len()],
-            terms: scan.terms.len(),
-        };
-        let mut chain: Vec<RowId> =
-            std::iter::successors(index.parent(first), |&folder| index.parent(folder)).collect();
-        chain.pop();
-        for folder in chain.into_iter().rev() {
-            open.enter(scan, folder);
-        }
-        open
-    }
-
-    fn enter(&mut self, scan: &Scan<'_>, folder: RowId) {
-        let (Some(end), Some(name)) = (scan.index.end(folder), scan.index.folded(folder)) else {
-            return;
-        };
-        let from = self.reach.len() - self.terms;
-        self.reach.extend_from_within(from..);
-        scan.terms.enter(&mut self.reach[from + self.terms..], name);
-        self.ends.push(end);
-    }
-
-    fn leave_before(&mut self, row: RowId) {
-        while self.ends.last().is_some_and(|&end| end <= row) {
-            self.ends.pop();
-            self.reach.truncate(self.reach.len() - self.terms);
-        }
-    }
-
-    fn reach(&self) -> &[u8] {
-        &self.reach[self.reach.len() - self.terms..]
-    }
-}
-
-impl Scan<'_> {
-    fn ranked(&self, rows: Range<u32>) -> Vec<Rank> {
-        let index = self.index;
-        let mut ranked = Vec::new();
-        let mut open = Open::above(self, RowId(rows.start));
-        for row in rows.map(RowId) {
-            open.leave_before(row);
-            if let Some(rank) = self.rank(row, &open) {
-                ranked.push(rank);
-            }
-            if let Some(keep) = self.keep
-                && ranked.len() >= keep.saturating_mul(KEEP_SLACK).max(KEEP_MIN)
-            {
-                ranked.select_nth_unstable(keep);
-                ranked.truncate(keep);
-            }
-            if index.kind(row) == Some(Kind::Folder) {
-                open.enter(self, row);
-            }
-        }
-        ranked
-    }
-
-    fn rank(&self, row: RowId, open: &Open) -> Option<Rank> {
-        let index = self.index;
-        let reach = open.reach();
-        if !self
-            .terms
-            .could_meet(reach, index.letters(row)?, self.loose)
-        {
-            return None;
-        }
-        let folded = index.folded(row)?;
-        let starts_word = |at| index.starts_word(row, at);
-        let met = self.terms.meet(reach, folded, self.loose, starts_word)?;
-        if self.loose && !met.loosely {
-            return None;
-        }
-        let hidden = self.all_hidden || index.is_hidden(row);
-        Some((
-            met.by_folders,
-            met.found.kind,
-            hidden && self.hidden_last,
-            met.found.cost,
-            folded.len(),
-            open.ends.len(),
-            Source::Row(row),
-        ))
-    }
 }
 
 impl Index {
@@ -196,6 +90,11 @@ impl Index {
             within: None,
             rows: 1..self.rows(),
             stage,
+            query: query.to_owned(),
+            kept: None,
+            stop: None,
+            typed_rows: None,
+            loose_rows: None,
         }
     }
 }
@@ -217,7 +116,7 @@ impl Iterator for Search<'_> {
     }
 }
 
-impl Search<'_> {
+impl<'a> Search<'a> {
     #[must_use]
     pub fn within(mut self, folder: &Path) -> Self {
         let index = self.index;
@@ -236,13 +135,38 @@ impl Search<'_> {
         self.stage == Stage::Done
     }
 
+    #[must_use]
+    pub fn from(mut self, kept: &'a Kept) -> Self {
+        if self.terms.narrows(&Terms::parse(&kept.query)) {
+            self.kept = Some(kept);
+        }
+        self
+    }
+
+    #[must_use]
+    pub fn stopping(mut self, stop: &'a (dyn Fn() -> bool + Sync)) -> Self {
+        self.stop = Some(stop);
+        self
+    }
+
+    pub fn keep(self) -> Option<Kept> {
+        let typed = self.typed_rows?;
+        let any = self.loose_rows.map(|loose| merged(&typed, &loose));
+        Some(Kept {
+            query: self.query,
+            within: self.within,
+            typed,
+            any,
+        })
+    }
+
     fn stage_hits(&mut self, loose: bool) -> Vec<Hit> {
         let mut ranked = self.scan_rows(loose);
         ranked.extend(self.scan_added(loose));
         self.best(ranked)
     }
 
-    fn scan_rows(&self, loose: bool) -> Vec<Rank> {
+    fn scan_rows(&mut self, loose: bool) -> Vec<Rank> {
         let index = self.index;
         let changed = self.overlay.is_some_and(|overlay| !overlay.is_empty());
         let scan = Scan {
@@ -255,35 +179,27 @@ impl Search<'_> {
                 .is_some_and(|folder| is_hidden(index.root(), folder)),
             hidden_last: self.hidden_last,
             keep: (!changed).then_some(self.limit),
+            stop: self.stop,
         };
-        let rows = self.rows.clone();
-        let count = usize::try_from(rows.end.saturating_sub(rows.start)).unwrap_or_default();
-        let threads = thread::available_parallelism()
-            .map_or(1, NonZero::get)
-            .min(SCAN_THREADS_MAX)
-            .min(count / ROWS_PER_THREAD_MIN)
-            .max(1);
-        let share = u32::try_from(count.div_ceil(threads)).unwrap_or(u32::MAX);
-        let parts = (0..threads).scan(rows.start, |start, _| {
-            let end = start.saturating_add(share).min(rows.end);
-            Some(std::mem::replace(start, end)..end)
+        let kept = self.kept.filter(|kept| kept.within == self.within);
+        let pool = kept.and_then(|kept| {
+            if loose {
+                kept.any.as_deref()
+            } else {
+                Some(kept.typed.as_slice())
+            }
         });
-        thread::scope(|scope| {
-            #[expect(
-                clippy::needless_collect,
-                reason = "every part starts before the first is waited for"
-            )]
-            let running: Vec<_> = parts
-                .map(|part| {
-                    let scan = &scan;
-                    scope.spawn(move || scan.ranked(part))
-                })
-                .collect();
-            running
-                .into_iter()
-                .flat_map(|part| part.join().unwrap_or_else(|panic| resume_unwind(panic)))
-                .collect()
-        })
+        let scanned = match pool {
+            Some(rows) => scan.among(rows),
+            None => scan.over(self.rows.clone()),
+        };
+        let rows = (!scanned.stopped).then_some(scanned.rows);
+        if loose {
+            self.loose_rows = rows;
+        } else {
+            self.typed_rows = rows;
+        }
+        scanned.ranked
     }
 
     fn scan_added(&self, loose: bool) -> Vec<Rank> {
@@ -402,6 +318,23 @@ impl Search<'_> {
             (Source::Added(at), _) => self.added.get(at).map(|&path| path.to_owned()),
         }
     }
+}
+
+fn merged(one: &[u32], other: &[u32]) -> Vec<u32> {
+    let mut all = Vec::with_capacity(one.len() + other.len());
+    let (mut one, mut other) = (one.iter().peekable(), other.iter().peekable());
+    while let (Some(&&left), Some(&&right)) = (one.peek(), other.peek()) {
+        all.push(left.min(right));
+        if left <= right {
+            one.next();
+        }
+        if right <= left {
+            other.next();
+        }
+    }
+    all.extend(one);
+    all.extend(other);
+    all
 }
 
 fn is_inside(path: &Path, folder: &Path) -> bool {
