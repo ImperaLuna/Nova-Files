@@ -32,6 +32,7 @@ pub const ACTIONS: &[CommandSpec] = &[
     PREVIEW_PREVIOUS,
     PREVIEW_NEXT,
     FIND,
+    TYPE_PATH,
     NEW_TAB,
     CLOSE_TAB,
     NEXT_TAB,
@@ -155,6 +156,13 @@ spec!(
 );
 spec!(PREVIEW_NEXT, PreviewNext, "preview.next", "Next", ["right"]);
 spec!(FIND, FocusSearch, "search.focus", "Search", ["ctrl-f"]);
+spec!(
+    TYPE_PATH,
+    TypePath,
+    "path.type",
+    "Type a path",
+    ["ctrl-l", "alt-d", "f6"]
+);
 
 spec!(NEW_TAB, NewTab, "tab.new", "New tab", ["ctrl-t"]);
 spec!(CLOSE_TAB, CloseTab, "tab.close", "Close tab", ["ctrl-w"]);

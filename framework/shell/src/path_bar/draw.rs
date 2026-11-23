@@ -43,7 +43,7 @@ impl Here {
 
 pub type Drops<'a> = &'a dyn Fn(Stateful<Div>, &Crumb) -> Stateful<Div>;
 
-pub fn draw(bar: &Entity<PathBar>, input: BarInput, drops: Drops<'_>, cx: &App) -> Div {
+pub fn draw(bar: &Entity<PathBar>, input: BarInput, drops: Drops<'_>, cx: &App) -> Stateful<Div> {
     let colors = Colors::of(cx);
     let shell = capsule(&colors)
         .debug_selector(|| "path".to_owned())
@@ -51,7 +51,7 @@ pub fn draw(bar: &Entity<PathBar>, input: BarInput, drops: Drops<'_>, cx: &App) 
         .min_w(size::PATH_MIN_WIDTH)
         .px(size::CAPSULE_PAD);
     if let Some(field) = bar.read(cx).field() {
-        return shell.child(typing(bar, field.clone()));
+        return shell.id("path-shell").child(typing(bar, field.clone()));
     }
     let BarInput {
         on_screen,
@@ -65,6 +65,7 @@ pub fn draw(bar: &Entity<PathBar>, input: BarInput, drops: Drops<'_>, cx: &App) 
         asks,
     };
     let mut row = div()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .flex()
         .flex_shrink_1()
         .min_w_0()
@@ -103,7 +104,15 @@ pub fn draw(bar: &Entity<PathBar>, input: BarInput, drops: Drops<'_>, cx: &App) 
             }
         }
     }
-    shell.child(row).child(fill(bar, on_screen)).children(chips)
+    let chips = div()
+        .flex()
+        .items_center()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .children(chips);
+    types_on_click(shell, bar, on_screen)
+        .child(row)
+        .child(fill())
+        .child(chips)
 }
 
 fn typing(bar: &Entity<PathBar>, field: Entity<TextField>) -> Div {
@@ -118,22 +127,26 @@ fn typing(bar: &Entity<PathBar>, field: Entity<TextField>) -> Div {
         .child(field)
 }
 
-fn fill(bar: &Entity<PathBar>, on_screen: Option<PathBuf>) -> Stateful<Div> {
-    let fill = div()
-        .id("path-fill")
+fn fill() -> Div {
+    div()
         .debug_selector(|| "path-fill".to_owned())
         .flex_1()
         .self_stretch()
-        .min_w(size::PATH_FILL_MIN);
+        .min_w(size::PATH_FILL_MIN)
+}
+
+fn types_on_click(shell: Div, bar: &Entity<PathBar>, on_screen: Option<PathBuf>) -> Stateful<Div> {
+    let shell = shell.id("path-shell");
     match on_screen {
         Some(folder) => {
             let typing = bar.clone();
-            fill.cursor_text()
+            shell
+                .cursor_text()
                 .on_click(move |_: &ClickEvent, window, cx| {
                     typing.update(cx, |bar, cx| bar.start_typing(&folder, window, cx));
                 })
         }
-        None => fill,
+        None => shell,
     }
 }
 
