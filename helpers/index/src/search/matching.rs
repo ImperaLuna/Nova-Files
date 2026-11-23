@@ -16,13 +16,18 @@ pub struct Found {
     pub cost: usize,
 }
 
-pub fn query(name: &[u8], folded: &[u8], words: &[Vec<u8>], loose: bool) -> Option<Found> {
+pub fn query(
+    folded: &[u8],
+    words: &[Vec<u8>],
+    loose: bool,
+    starts_word: impl Fn(usize) -> bool,
+) -> Option<Found> {
     let mut all = Found {
         kind: MatchKind::Exact,
         cost: 0,
     };
     for word in words {
-        let found = exact(name, folded, word)
+        let found = exact(folded, word, &starts_word)
             .or_else(|| loose.then(|| self::loose(folded, word)).flatten())?;
         all.kind = all.kind.max(found.kind);
         all.cost += found.cost;
@@ -30,7 +35,7 @@ pub fn query(name: &[u8], folded: &[u8], words: &[Vec<u8>], loose: bool) -> Opti
     Some(all)
 }
 
-pub fn exact(name: &[u8], folded: &[u8], word: &[u8]) -> Option<Found> {
+pub fn exact(folded: &[u8], word: &[u8], starts_word: impl Fn(usize) -> bool) -> Option<Found> {
     let whole = folded == word;
     if whole || stem(folded) == Some(word) {
         return Some(Found {
@@ -40,7 +45,7 @@ pub fn exact(name: &[u8], folded: &[u8], word: &[u8]) -> Option<Found> {
     }
     let mut first = None;
     for at in occurrences(folded, word) {
-        if starts_word(name, folded, at) {
+        if starts_word(at) {
             return Some(Found {
                 kind: MatchKind::WordStart,
                 cost: at,
@@ -78,19 +83,6 @@ fn occurrences<'a>(folded: &'a [u8], query: &'a [u8]) -> impl Iterator<Item = us
         .enumerate()
         .filter(move |(_, window)| *window == query)
         .map(|(at, _)| at)
-}
-
-fn starts_word(name: &[u8], folded: &[u8], at: usize) -> bool {
-    let Some(before) = at.checked_sub(1) else {
-        return true;
-    };
-    let separated = folded
-        .get(before)
-        .is_some_and(|byte| byte.is_ascii() && !byte.is_ascii_alphanumeric());
-    let camel = name.is_ascii()
-        && name.get(before).is_some_and(u8::is_ascii_lowercase)
-        && name.get(at).is_some_and(u8::is_ascii_uppercase);
-    separated || camel
 }
 
 fn in_order(folded: &[u8], query: &[u8]) -> Option<usize> {

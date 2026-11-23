@@ -1,4 +1,3 @@
-mod fold;
 mod matching;
 
 use std::collections::HashSet;
@@ -6,9 +5,10 @@ use std::ffi::OsStr;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+use crate::RowId;
+use crate::fold;
 use crate::overlay::Overlay;
 use crate::reader::Index;
-use crate::{Kind, RowId};
 
 pub use matching::MatchKind;
 
@@ -122,7 +122,7 @@ impl Search<'_> {
         if !holds_root && !self.overlay.is_some_and(Overlay::moves) {
             self.rows = index
                 .row_of(folder)
-                .and_then(|row| Some(row.0.saturating_add(1)..index.entry(row)?.end.0))
+                .and_then(|row| Some(row.0.saturating_add(1)..index.end(row)?.0))
                 .unwrap_or(0..0);
         }
         self.within = Some(folder.to_owned());
@@ -146,43 +146,33 @@ impl Search<'_> {
             self.rows_found = vec![false; usize::try_from(rows).unwrap_or_default()];
         }
         let mut ranked = Vec::new();
-        let mut hidden_until: Vec<RowId> = Vec::new();
-        if let Some(folder) = &self.within
-            && is_hidden(index.root(), folder)
-        {
-            hidden_until.push(RowId(self.rows.end));
-        }
-        let mut folded = Vec::new();
+        let all_hidden = self
+            .within
+            .as_deref()
+            .is_some_and(|folder| is_hidden(index.root(), folder));
         for row in self.rows.clone().map(RowId) {
-            while hidden_until.last().is_some_and(|&end| end <= row) {
-                hidden_until.pop();
-            }
-            let (Some(name), Some(entry)) = (index.name(row), index.entry(row)) else {
+            let Some(folded) = index.folded(row) else {
                 continue;
             };
-            let name = name.as_encoded_bytes();
-            let hidden = !hidden_until.is_empty() || name.first() == Some(&b'.');
-            if hidden && entry.kind == Kind::Folder {
-                hidden_until.push(entry.end);
-            }
             let seen = self
                 .rows_found
                 .get_mut(usize::try_from(row.0).unwrap_or(usize::MAX));
             if loose && seen.as_deref() == Some(&true) {
                 continue;
             }
-            fold::fold_into(name, &mut folded);
-            let Some(found) = matching::query(name, &folded, &self.words, loose) else {
+            let starts_word = |at| index.starts_word(row, at);
+            let Some(found) = matching::query(folded, &self.words, loose, starts_word) else {
                 continue;
             };
             if let Some(seen) = seen {
                 *seen = true;
             }
+            let hidden = all_hidden || index.is_hidden(row);
             ranked.push((
                 found.kind,
                 hidden && self.hidden_last,
                 found.cost,
-                name.len(),
+                folded.len(),
                 Source::Row(row),
             ));
         }
@@ -212,7 +202,8 @@ impl Search<'_> {
                 continue;
             };
             fold::fold_into(name, &mut folded);
-            let Some(found) = matching::query(name, &folded, &self.words, loose) else {
+            let starts_word = |at| fold::starts_word(name, &folded, at);
+            let Some(found) = matching::query(&folded, &self.words, loose, starts_word) else {
                 continue;
             };
             if let Some(seen) = seen {
@@ -223,7 +214,7 @@ impl Search<'_> {
                 found.kind,
                 hidden && self.hidden_last,
                 found.cost,
-                name.len(),
+                folded.len(),
                 Source::Added(at),
             ));
         }

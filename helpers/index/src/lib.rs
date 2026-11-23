@@ -1,6 +1,7 @@
 mod build;
 mod changes;
 mod crawl;
+mod fold;
 mod format;
 mod mounts;
 mod overlay;

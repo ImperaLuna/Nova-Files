@@ -1,5 +1,5 @@
 use super::*;
-use crate::search::fold::fold_into;
+use crate::fold::{fold_into, starts_word};
 
 const START: usize = 0;
 const SECOND_WORD: usize = 7;
@@ -19,7 +19,9 @@ fn found(name: &str, query: &str, loose: bool) -> Option<Found> {
             out
         })
         .collect();
-    self::query(name.as_bytes(), &folded, &words, loose)
+    self::query(&folded, &words, loose, |at| {
+        starts_word(name.as_bytes(), &folded, at)
+    })
 }
 
 fn kind(name: &str, query: &str) -> Option<MatchKind> {
