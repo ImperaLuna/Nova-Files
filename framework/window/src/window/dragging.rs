@@ -170,7 +170,7 @@ impl MainWindow {
             }
         };
         if !self.selects((listing, id)) {
-            self.reselect(|_, _| Some(Selection::only(listing, id)), cx);
+            self.reselect_in_place(|_, _| Some(Selection::only(listing, id)), cx);
         }
         let selected = self.selected_full_paths();
         let paths: Vec<PathBuf> = selected.iter().map(|(path, _)| path.clone()).collect();

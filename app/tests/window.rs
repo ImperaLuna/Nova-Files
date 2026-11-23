@@ -41,7 +41,7 @@ use nova_files_trash_ui::TrashPart;
 use nova_files_window::{Colors, CoreStatus, Location, Look, MainWindow, WindowEvent};
 
 use common::picking::Picking as _;
-use common::{TempFolder, Watchdog, click_with, counted_click, double_click};
+use common::{TempFolder, Watchdog, click_with, counted_click, counted_click_with, double_click};
 
 fn disk_space_known(view: &MainWindow, folder: &Path, cx: &App) -> bool {
     view.part::<DrivesPart>()

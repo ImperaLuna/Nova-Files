@@ -23,7 +23,7 @@ impl MainWindow {
         }
         if !self.selects((listing, id)) {
             let only = Click::of(Modifiers::none(), true);
-            self.reselect(
+            self.reselect_in_place(
                 |before, picks| Some(Selection::clicked(before, listing, id, only, picks)),
                 cx,
             );

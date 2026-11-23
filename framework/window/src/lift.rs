@@ -13,6 +13,7 @@ pub struct Lift {
 impl MainWindow {
     pub(crate) fn pressed(&mut self, event: &MouseDownEvent) {
         self.selected_on_press = None;
+        self.selection_before_press = self.selection.clone();
         self.lift = (event.button == MouseButton::Left).then_some(Lift {
             from: event.position,
             lifted: false,

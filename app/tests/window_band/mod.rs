@@ -92,6 +92,24 @@ async fn ctrl_adds_the_box_to_the_selection(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn shift_adds_the_box_too_and_a_shift_click_on_space_keeps_the_picks(
+    cx: &mut TestAppContext,
+) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("band-shift");
+    let (view, cx) = lettered(cx, &tree).await;
+
+    click(cx, "entry-4");
+    let from = bounds(cx, "modified-1").center();
+    let to = bounds(cx, "modified-2").center();
+    drag(cx, from, to, Modifiers::shift());
+    assert_eq!(selected(&view, cx), ["a.txt", "b.txt", "notes.txt"]);
+    let below = bounds(cx, "entry-4").bottom_left() + point(px(40.0), px(60.0));
+    cx.simulate_click(below, Modifiers::shift());
+    assert_eq!(selected(&view, cx), ["a.txt", "b.txt", "notes.txt"]);
+}
+
+#[gpui::test]
 async fn a_box_starts_only_once_the_mouse_moves_a_few_pixels(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("band");
