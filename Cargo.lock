@@ -4042,6 +4042,7 @@ dependencies = [
  "nova-files-thumbnails-api",
  "nova-files-thumbnails-ui",
  "nova-files-window",
+ "resvg",
  "rustix",
 ]
 

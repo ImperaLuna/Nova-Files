@@ -9,6 +9,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use nova_files_api::{Entry, Fit, Picture, Unreadable};
 
@@ -77,6 +78,10 @@ pub enum PreviewContent {
     /// A picture the core could decode, upright, scaled down to the
     /// request's [`Fit`].
     Picture(Picture),
+    /// A picture that moves (a GIF, or an animated WebP or PNG): its
+    /// frames in order, all one size, scaled down like a
+    /// [`PreviewContent::Picture`].
+    Moving(Vec<Frame>),
     /// The start of a text file, at most [`PREVIEW_TEXT_BYTES`]; `cut`
     /// when the file goes on past it.
     Text { text: Arc<str>, cut: bool },
@@ -117,4 +122,11 @@ pub enum Mark {
     Type,
     Tag,
     Attribute,
+}
+
+/// One frame of a [`PreviewContent::Moving`] picture, shown for `delay`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Frame {
+    pub picture: Picture,
+    pub delay: Duration,
 }
