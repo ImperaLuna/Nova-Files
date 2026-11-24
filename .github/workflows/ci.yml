@@ -6,9 +6,9 @@
 # success in seconds without setting anything up.
 #
 # A new push cancels the run it replaces, and a failed check cancels the
-# rest of its run. Built Nix store paths come from
-# Cachix when the CACHIX_AUTH_TOKEN secret is set, otherwise from the
-# GitHub Actions cache, so a run only rebuilds what changed.
+# rest of its run. Built Nix store paths come from the GitHub Actions
+# cache (magic-nix-cache), so a run only rebuilds what changed. Cachix
+# holds only what a PC downloads (release-build.yml).
 name: CI
 
 on:
@@ -23,11 +23,8 @@ concurrency:
 
 permissions:
   contents: read
-  # cache-nix-action deletes the caches it replaces.
+  # "Stop the rest of the run" cancels the run.
   actions: write
-
-env:
-  CACHIX_CACHE: nova-de
 
 jobs:
   # A stacked pull request (base isn't main) may change code only: docs,
@@ -61,8 +58,6 @@ jobs:
     runs-on: ubuntu-latest
     # A normal run takes 2 to 17 minutes; a hung one stops here.
     timeout-minutes: 30
-    env:
-      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -78,21 +73,11 @@ jobs:
         run: tools/ci-free-disk.sh start
       - uses: cachix/install-nix-action@v31
         if: steps.changes.outputs.run == 'true'
-      - uses: cachix/cachix-action@v16
-        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN != ''
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+        if: steps.changes.outputs.run == 'true'
         with:
-          name: ${{ env.CACHIX_CACHE }}
-          authToken: ${{ env.CACHIX_AUTH_TOKEN }}
-      - uses: nix-community/cache-nix-action@v6
-        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN == ''
-        with:
-          primary-key: nix-check-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock', '**/*.nix') }}
-          restore-prefixes-first-match: nix-check-${{ runner.os }}-
-          gc-max-store-size-linux: 5G
-          purge: true
-          purge-prefixes: nix-check-${{ runner.os }}-
-          purge-created: 0
-          purge-primary-key: never
+          use-flakehub: false
+          diagnostic-endpoint: ""
       - name: nix flake check
         if: steps.changes.outputs.run == 'true'
         run: nix flake check --print-build-logs

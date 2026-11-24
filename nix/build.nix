@@ -29,7 +29,7 @@ let
   ];
 
   # Hashes of the git dependencies, so they are fetched as ordinary store
-  # paths that Cachix serves, not cloned at evaluation time on every run
+  # paths that the binary cache serves, not cloned at evaluation time on every run
   # (the zed fork's clone alone took a minute of each CI job). After
   # changing a git dependency, set its hash to `pkgs.lib.fakeHash` and copy
   # the real one from the build error.
