@@ -53,7 +53,7 @@ pub fn layer(
 ) -> AnyElement {
     let colors = Colors::of(cx);
     let current = open.current().map(|shown| about(shown, room));
-    let art = stage_art(open, listing, entry, (room, scale_factor), &colors);
+    let art = stage_art(open, listing, entry, (room, scale_factor, true), &colors);
     let (previous, next) = steps(index, listing.entries.len());
     div()
         .id("preview")
@@ -100,7 +100,7 @@ pub fn stage_art(
     open: &QuickLook,
     listing: &Listing,
     entry: &Entry,
-    (room, scale_factor): (gpui::Size<Pixels>, f32),
+    (room, scale_factor, scrolls): (gpui::Size<Pixels>, f32, bool),
     colors: &Colors,
 ) -> AnyElement {
     open.shown.as_ref().map_or_else(
@@ -109,8 +109,7 @@ pub fn stage_art(
             art(
                 shown,
                 shown_entry(shown, listing, entry),
-                room,
-                scale_factor,
+                (room, scale_factor, scrolls),
                 colors,
             )
         },
@@ -134,8 +133,7 @@ fn kept_open(element: impl IntoElement) -> Div {
 fn art(
     shown: &Shown,
     entry: &Entry,
-    room: gpui::Size<Pixels>,
-    scale_factor: f32,
+    (room, scale_factor, scrolls): (gpui::Size<Pixels>, f32, bool),
     colors: &Colors,
 ) -> AnyElement {
     let Some(preview) = shown.preview.as_deref() else {
@@ -152,10 +150,12 @@ fn art(
             |coded| code_art(coded, room, colors).into_any_element(),
         ),
         (PreviewContent::Folder { first, count }, _) => folder_art(first, *count, colors),
-        (PreviewContent::Document { .. }, _) => shown.pages.as_ref().map_or_else(
-            || big_icon(name, kind, colors),
-            |pages| pages_art(pages, room, colors),
-        ),
+        (PreviewContent::Document { .. }, _) => {
+            shown.pages.as_ref().filter(|_| scrolls).map_or_else(
+                || big_icon(name, kind, colors),
+                |pages| pages_art(pages, room, colors),
+            )
+        }
         (PreviewContent::Locked, _) => locked_art(colors),
         _ => big_icon(name, kind, colors),
     }
@@ -503,14 +503,18 @@ pub fn about(shown: &Shown, room: gpui::Size<Pixels>) -> String {
     let Some(preview) = shown.preview.as_deref() else {
         return String::new();
     };
-    shown.pages.as_ref().map_or_else(
-        || meta(preview),
-        |pages| {
-            let reading = pages.reading(room) + 1;
-            let count = pages.sizes.len();
-            format!("{}{SEPARATOR}{PAGE} {reading} {OF} {count}", meta(preview))
-        },
-    )
+    shown
+        .pages
+        .as_ref()
+        .filter(|pages| !pages.sizes.is_empty())
+        .map_or_else(
+            || meta(preview),
+            |pages| {
+                let reading = pages.reading(room) + 1;
+                let count = pages.sizes.len();
+                format!("{}{SEPARATOR}{PAGE} {reading} {OF} {count}", meta(preview))
+            },
+        )
 }
 
 fn meta(preview: &Preview) -> String {

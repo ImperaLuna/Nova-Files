@@ -9,6 +9,7 @@ const PAGE_WIDTH: Pixels = px(860.0);
 const PAGE_GAP: Pixels = px(12.0);
 const HALF: f32 = 0.5;
 const KEPT_SCREENS: f32 = 1.0;
+const MOST_WAITING: usize = 3;
 
 pub struct Pages {
     pub id: PreviewId,
@@ -16,6 +17,9 @@ pub struct Pages {
     pub scroll: ScrollHandle,
     pub drawn: BTreeMap<usize, Arc<RenderImage>>,
     pub asked: BTreeSet<usize>,
+    pub waiting: BTreeSet<usize>,
+    read_down: f32,
+    restore: Option<f32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,7 +45,59 @@ impl Pages {
             scroll: ScrollHandle::new(),
             drawn: BTreeMap::new(),
             asked: BTreeSet::new(),
+            waiting: BTreeSet::new(),
+            read_down: 0.0,
+            restore: None,
         }
+    }
+
+    pub fn carrying(mut self, before: Option<Self>) -> Self {
+        if let Some(before) = before.filter(|before| before.sizes.len() == self.sizes.len()) {
+            self.drawn = before.drawn;
+            self.restore = Some(before.read_down);
+        }
+        self
+    }
+
+    pub fn settle(&mut self, layout: &Layout, view: Pixels) {
+        if let Some(read_down) = self.restore.take() {
+            let last = (layout.total - view).max(px(0.0));
+            let scrolled = (layout.total * read_down).clamp(px(0.0), last);
+            self.scroll.set_offset(point(px(0.0), -scrolled));
+        }
+        if layout.total > px(0.0) {
+            self.read_down = self.scrolled() / layout.total;
+        }
+    }
+
+    pub fn next_asks(
+        &mut self,
+        layout: &Layout,
+        view: Pixels,
+    ) -> (Vec<usize>, Vec<Arc<RenderImage>>) {
+        let near = layout.near(self.scrolled(), view);
+        let far: Vec<usize> = self
+            .asked
+            .iter()
+            .chain(self.drawn.keys())
+            .copied()
+            .filter(|index| !near.contains(index))
+            .collect();
+        let mut gone = Vec::new();
+        for index in far {
+            self.asked.remove(&index);
+            gone.extend(self.drawn.remove(&index));
+        }
+        let reading = layout.at(self.scrolled(), view);
+        let mut wanted: Vec<usize> = near.filter(|index| !self.asked.contains(index)).collect();
+        wanted.sort_by_key(|index| index.abs_diff(reading));
+        let room = MOST_WAITING.saturating_sub(self.waiting.len());
+        wanted.truncate(room);
+        for index in &wanted {
+            self.asked.insert(*index);
+            self.waiting.insert(*index);
+        }
+        (wanted, gone)
     }
 
     pub fn scrolled(&self) -> Pixels {
@@ -181,5 +237,30 @@ mod tests {
         assert_eq!(pages.scrolled(), px(0.0));
         pages.scroll(Scroll::Last, room());
         assert_eq!(pages.reading(room()), 2);
+    }
+
+    #[test]
+    fn at_most_a_few_pages_wait_and_the_one_read_goes_first() {
+        let mut pages = Pages::new(PreviewId(1), Arc::from([LETTER; 10]));
+        let layout = Layout::of(&pages.sizes, room());
+        pages.scroll.set_offset(point(px(0.0), px(-1648.0)));
+        let (asking, gone) = pages.next_asks(&layout, px(500.0));
+        assert_eq!(asking, vec![4, 3, 5]);
+        assert!(gone.is_empty());
+        assert_eq!(pages.next_asks(&layout, px(500.0)).0, Vec::<usize>::new());
+        pages.waiting.remove(&4);
+        assert_eq!(pages.next_asks(&layout, px(500.0)).0, vec![2]);
+    }
+
+    #[test]
+    fn a_new_answer_for_the_same_pdf_keeps_the_place_read() {
+        let mut before = Pages::new(PreviewId(1), Arc::from([LETTER; 10]));
+        before.scroll.set_offset(point(px(0.0), px(-1648.0)));
+        before.settle(&Layout::of(&before.sizes, room()), px(500.0));
+        let wider = gpui::size(px(600.0), px(500.0));
+        let mut after = Pages::new(PreviewId(2), Arc::from([LETTER; 10])).carrying(Some(before));
+        let layout = Layout::of(&after.sizes, wider);
+        after.settle(&layout, px(500.0));
+        assert_eq!(after.reading(wider), 4);
     }
 }

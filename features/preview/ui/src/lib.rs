@@ -82,7 +82,13 @@ impl PreviewPart {
             .unwrap_or_default();
         Some(Staged {
             entry: open.entry,
-            art: draw::stage_art(open, listing, entry, (room, scale_factor), &Colors::of(cx)),
+            art: draw::stage_art(
+                open,
+                listing,
+                entry,
+                (room, scale_factor, !self.previewing()),
+                &Colors::of(cx),
+            ),
             about: about.into(),
         })
     }
@@ -274,24 +280,12 @@ impl PreviewPart {
             return;
         };
         let layout = Layout::of(&pages.sizes, room);
-        let near = layout.near(pages.scrolled(), room.height);
+        pages.settle(&layout, room.height);
         let width = device_side(layout.width, scale_factor);
-        let far: Vec<usize> = pages
-            .asked
-            .iter()
-            .copied()
-            .filter(|index| !near.contains(index))
-            .collect();
-        let mut gone = Vec::new();
-        for index in far {
-            pages.asked.remove(&index);
-            gone.extend(pages.drawn.remove(&index));
-        }
         let id = pages.id;
-        for index in near {
-            if pages.asked.insert(index) {
-                link.send(Command::Page { id, index, width }).ok();
-            }
+        let (asking, gone) = pages.next_asks(&layout, room.height);
+        for index in asking {
+            link.send(Command::Page { id, index, width }).ok();
         }
         release(gone, cx);
     }
@@ -301,8 +295,12 @@ impl PreviewPart {
         id: PreviewId,
         index: usize,
         picture: Option<Picture>,
-        cx: &Context<Self>,
+        cx: &mut Context<Self>,
     ) {
+        if let Some(pages) = self.shown_pages().filter(|pages| pages.id == id) {
+            pages.waiting.remove(&index);
+            cx.notify();
+        }
         let wanted = |this: &mut Self| {
             this.shown_pages()
                 .is_some_and(|pages| pages.id == id && pages.asked.contains(&index))
@@ -528,9 +526,19 @@ impl PreviewPart {
             }
             _ => None,
         };
-        let pages = match preview.as_deref().map(|preview| &preview.content) {
-            Some(PreviewContent::Document { pages }) => Some(Pages::new(id, Arc::clone(pages))),
-            _ => None,
+        let entry = open.entry;
+        let carried = open
+            .shown
+            .as_mut()
+            .filter(|shown| shown.entry == entry)
+            .and_then(|shown| shown.pages.take());
+        let pages = if let Some(PreviewContent::Document { pages }) =
+            preview.as_deref().map(|preview| &preview.content)
+        {
+            Some(Pages::new(id, Arc::clone(pages)).carrying(carried))
+        } else {
+            release(carried.into_iter().flat_map(Pages::images), cx);
+            None
         };
         let shown = Shown {
             entry: open.entry,
