@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -267,7 +269,7 @@ fn a_push_of_a_branch_with_a_slash_in_its_name_is_read_again() {
     reader.forget(ClientId(1));
 }
 
-fn marked(entries: &[(&str, Mark)]) -> std::collections::BTreeMap<std::ffi::OsString, Mark> {
+fn marked(entries: &[(&str, Mark)]) -> BTreeMap<OsString, Mark> {
     entries
         .iter()
         .map(|(name, mark)| ((*name).into(), *mark))
@@ -317,32 +319,61 @@ fn each_entry_is_marked_by_what_git_sees_in_it() {
     assert_eq!(marks_at(root.path()), None);
 }
 
+struct Following {
+    reader: Reader,
+    events: Arc<dyn EventSink>,
+    answers: mpsc::Receiver<Event>,
+}
+
+impl Following {
+    fn marks_of(repo: &Path) -> Self {
+        let (sender, answers) = mpsc::channel::<Event>();
+        let events: Arc<dyn EventSink> = Arc::new(sender);
+        let reader = Reader::default();
+        reader.mark(ClientId(1), &events, Some(repo.to_path_buf()));
+        let following = Self {
+            reader,
+            events,
+            answers,
+        };
+        assert_eq!(following.next(), Some(marked(&[])));
+        following
+    }
+
+    fn next(&self) -> Option<BTreeMap<OsString, Mark>> {
+        entries_of(self.answers.recv().unwrap())
+    }
+
+    fn until(&self, entries: &[(&str, Mark)]) {
+        let wanted = Some(marked(entries));
+        assert!(self.answers.iter().any(|event| entries_of(event) == wanted));
+    }
+
+    fn stop(self) {
+        self.reader.mark(ClientId(1), &self.events, None);
+        drop(self.events);
+        assert_eq!(self.answers.iter().count(), 0);
+    }
+}
+
+fn entries_of(event: Event) -> Option<BTreeMap<OsString, Mark>> {
+    match event {
+        Event::Marks { marks, .. } => marks.map(|marks| marks.entries),
+        Event::Repo { .. } => None,
+    }
+}
+
 #[test]
 fn marks_follow_an_edit_in_the_folder_and_a_commit() {
     let root = TestFolder::new("git-marks-follow");
     let repo = root.join("repo");
     committed(&repo);
-    let (sender, answers) = mpsc::channel::<Event>();
-    let events: Arc<dyn EventSink> = Arc::new(sender);
-    let reader = Reader::default();
-    reader.mark(ClientId(1), &events, Some(repo.clone()));
-    let marks_of = |event: Event| match event {
-        Event::Marks { marks, .. } => marks.map(|marks| marks.entries),
-        Event::Repo { .. } => None,
-    };
-    assert_eq!(marks_of(answers.recv().unwrap()), Some(marked(&[])));
+    let following = Following::marks_of(&repo);
     fs::write(repo.join("kept.txt"), "edited").unwrap();
-    let edited = Some(marked(&[("kept.txt", Mark::Changed)]));
-    assert!(answers.iter().any(|event| marks_of(event) == edited));
+    following.until(&[("kept.txt", Mark::Changed)]);
     git(&repo, &["commit", "--quiet", "-am", "edit"]);
-    assert!(
-        answers
-            .iter()
-            .any(|event| marks_of(event) == Some(marked(&[])))
-    );
-    reader.mark(ClientId(1), &events, None);
-    drop(events);
-    assert_eq!(answers.iter().count(), 0);
+    following.until(&[]);
+    following.stop();
 }
 
 #[test]
@@ -354,17 +385,8 @@ fn a_subfolder_is_marked_when_a_file_inside_it_is_edited() {
     fs::write(repo.join("src").join("main.rs"), "one").unwrap();
     git(&repo, &["add", "src"]);
     git(&repo, &["commit", "--quiet", "-m", "src"]);
-    let (sender, answers) = mpsc::channel::<Event>();
-    let events: Arc<dyn EventSink> = Arc::new(sender);
-    let reader = Reader::default();
-    reader.mark(ClientId(1), &events, Some(repo.clone()));
-    let marks_of = |event: Event| match event {
-        Event::Marks { marks, .. } => marks.map(|marks| marks.entries),
-        Event::Repo { .. } => None,
-    };
-    assert_eq!(marks_of(answers.recv().unwrap()), Some(marked(&[])));
+    let following = Following::marks_of(&repo);
     fs::write(repo.join("src").join("main.rs"), "edited").unwrap();
-    let edited = Some(marked(&[("src", Mark::Changed)]));
-    assert!(answers.iter().any(|event| marks_of(event) == edited));
-    reader.mark(ClientId(1), &events, None);
+    following.until(&[("src", Mark::Changed)]);
+    following.stop();
 }
