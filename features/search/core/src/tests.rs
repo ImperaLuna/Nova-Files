@@ -181,7 +181,7 @@ fn what_the_catch_up_found_comes_before_loose_matches_that_fill_the_last_stage()
 fn the_last_stage_leaves_out_what_the_catch_up_found_gone() {
     let removed = |home: &Path| fs::remove_file(home.join("docs/report.pdf")).unwrap();
     let (_, last) = stages_around_catch_up(removed, "rprt", LIMIT);
-    assert!(last.is_empty());
+    assert_eq!(last, paths(&[]));
 }
 
 #[test]
