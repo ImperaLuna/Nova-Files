@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod code;
+mod media;
 
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read as _};
@@ -41,6 +42,7 @@ pub struct Current {
     running: Running,
     paging: Arc<Running>,
     document: Mutex<Option<(PreviewId, Document)>>,
+    playing: media::Playing,
 }
 
 const NONE: u64 = u64::MAX;
@@ -54,6 +56,7 @@ impl Current {
             running: Running::new(),
             paging: Arc::new(Running::new()),
             document: Mutex::new(None),
+            playing: media::Playing::default(),
         }
     }
 
@@ -80,8 +83,11 @@ impl Current {
             .unwrap_or_else(PoisonError::into_inner)
             .take();
         drop(open);
+        self.playing.stop();
     }
 }
+
+pub use media::{control, player_beside};
 
 pub struct Request {
     pub id: PreviewId,
@@ -90,6 +96,7 @@ pub struct Request {
     pub current: Arc<Current>,
     pub types: Arc<dyn Mimes>,
     pub helper: Option<PathBuf>,
+    pub player: Option<PathBuf>,
 }
 
 pub fn answer(events: &Arc<dyn EventSink>, request: Request) {
@@ -100,10 +107,18 @@ pub fn answer(events: &Arc<dyn EventSink>, request: Request) {
         .name(THREAD_NAME.to_owned())
         .spawn(move || {
             let current = Arc::clone(&request.current);
-            if let Some(event) = event(&request)
-                && current.is(request.id)
-            {
-                sink.deliver(event).ok();
+            let Some(event) = event(&request).filter(|_| current.is(request.id)) else {
+                return;
+            };
+            let plays = matches!(
+                &event,
+                Event::Previewed { preview, .. }
+                    if matches!(preview.content, PreviewContent::Media { .. })
+            );
+            sink.deliver(event).ok();
+            if let Some(player) = request.player.as_deref().filter(|_| plays) {
+                let asked = (request.id, request.path.as_path(), request.fit);
+                media::start(&sink, &current, asked, player);
             }
         });
     if spawned.is_err() {
@@ -171,20 +186,9 @@ fn event(request: &Request) -> Option<Event> {
         if cancelled() {
             return None;
         }
-        match (start(path, &metadata), &request.helper) {
-            (Err(error), _) => return Some(unreadable(list::unreadable(&error))),
-            (Ok(Some(start)), Some(helper)) if is_picture(&start) || is_drawing(path) => {
-                picture(request, helper)?
-            }
-            (Ok(Some(start)), Some(helper)) if is_document(&start) => {
-                match document(request, helper) {
-                    Ok(content) => content,
-                    Err(Unopened::Cancelled) => return None,
-                    Err(Unopened::NotAPdf) => text(start, metadata.len()),
-                }
-            }
-            (Ok(Some(start)), _) => text(start, metadata.len()),
-            (Ok(None), _) => PreviewContent::Icon,
+        match file(request, &metadata) {
+            Ok(content) => content?,
+            Err(error) => return Some(unreadable(list::unreadable(&error))),
         }
     };
     let named = (!metadata.is_dir()).then(|| target(path));
@@ -216,6 +220,33 @@ fn event(request: &Request) -> Option<Event> {
     Some(Event::Previewed {
         id: *id,
         preview: Arc::new(preview),
+    })
+}
+
+fn file(request: &Request, metadata: &Metadata) -> io::Result<Option<PreviewContent>> {
+    let path = &request.path;
+    let media = request
+        .player
+        .as_ref()
+        .filter(|_| metadata.is_file())
+        .and_then(|_| {
+            let named = target(path);
+            media::kind(request.types.as_ref(), named.file_name()?)
+        });
+    if let Some(video) = media {
+        return Ok(Some(PreviewContent::Media { video }));
+    }
+    Ok(match (start(path, metadata)?, &request.helper) {
+        (Some(start), Some(helper)) if is_picture(&start) || is_drawing(path) => {
+            picture(request, helper)
+        }
+        (Some(start), Some(helper)) if is_document(&start) => match document(request, helper) {
+            Ok(content) => Some(content),
+            Err(Unopened::Cancelled) => None,
+            Err(Unopened::NotAPdf) => Some(text(start, metadata.len())),
+        },
+        (Some(start), _) => Some(text(start, metadata.len())),
+        (None, _) => Some(PreviewContent::Icon),
     })
 }
 
@@ -385,6 +416,7 @@ mod tests {
             current: Arc::clone(&current),
             types: Arc::new(PlainText),
             helper: None,
+            player: None,
         };
         let (old, new) = (request(1), request(2));
         current.set(new.id);
@@ -441,6 +473,7 @@ mod tests {
             current,
             types: Arc::new(PlainText),
             helper: None,
+            player: None,
         };
         match event(&request) {
             Some(Event::Previewed { preview, .. }) => preview,

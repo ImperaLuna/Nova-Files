@@ -35,6 +35,9 @@ pub enum Command {
         index: usize,
         width: u32,
     },
+    /// Steer the video or song that [`Command::Preview`] `id` showed as
+    /// [`PreviewContent::Media`] and now plays.
+    Control { id: PreviewId, control: Control },
     /// The client no longer shows a quick look: the core lets go of what
     /// it holds for the last preview, such as an open PDF.
     Closed,
@@ -54,6 +57,8 @@ pub enum Event {
         path: PathBuf,
         reason: Unreadable,
     },
+    /// What the video or song of preview `id` is doing, as it plays.
+    Played { id: PreviewId, played: Played },
     /// Page `index` of preview `id`'s document, as [`Command::Page`] asked;
     /// `None` when that page couldn't be drawn.
     Paged {
@@ -117,6 +122,9 @@ pub enum PreviewContent {
     Document { pages: Arc<[PageSize]> },
     /// A PDF that needs a password to open.
     Locked,
+    /// A video (`video`) or a song, which starts playing as soon as this
+    /// answer is sent; what it does comes as [`Event::Played`].
+    Media { video: bool },
     /// A folder's first entries, folders first and A to Z, at most
     /// [`PREVIEW_ENTRIES`], and how many it holds in all.
     Folder { first: Vec<Entry>, count: usize },
@@ -146,6 +154,49 @@ pub enum Mark {
     Type,
     Tag,
     Attribute,
+}
+
+/// The loudest volume, as a percentage.
+pub const MAX_VOLUME: u8 = 100;
+
+/// A change to a playing video or song.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Control {
+    Play,
+    Pause,
+    /// Jump to this time from the start.
+    Seek(Duration),
+    /// From 0 to [`MAX_VOLUME`]; later videos and songs start at it too.
+    Volume(u8),
+    /// Frames from now on fit this box.
+    Fit(Fit),
+}
+
+/// One thing a playing video or song did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Played {
+    /// The newest frame, upright, fitted to the request's box: a video's
+    /// picture, or a song's cover.
+    Frame(Picture),
+    /// Where playback is now.
+    At(Duration),
+    /// How long the whole video or song is.
+    Length(Duration),
+    Paused(bool),
+    /// A song's title, artist or album.
+    Tag(MediaTag, String),
+    /// Playback reached the end and holds the last frame.
+    Ended,
+    /// Nothing on this computer can play it: libmpv is not installed.
+    Unplayable,
+}
+
+/// Which of a song's tags a [`Played::Tag`] carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MediaTag {
+    Title,
+    Artist,
+    Album,
 }
 
 /// How big a page of a [`PreviewContent::Document`] is, in points (1/72

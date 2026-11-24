@@ -469,6 +469,7 @@ impl PreviewPart {
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::Unreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::Paged { id, index, picture } => self.page_arrived(id, index, picture, cx),
+            Event::Played { .. } => {}
         }
     }
 
