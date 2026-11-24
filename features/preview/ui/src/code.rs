@@ -4,6 +4,21 @@ use gpui::{App, Global, Rgba, SharedString};
 use nova_files_preview_api::{Mark, Run};
 use nova_files_shell::theme::{Code, text};
 
+const MONO_FAMILIES: [&str; 12] = [
+    "JetBrains Mono",
+    "JetBrainsMono Nerd Font",
+    "Fira Code",
+    "Cascadia Code",
+    "Source Code Pro",
+    "Hack",
+    "Iosevka",
+    "Noto Sans Mono",
+    "DejaVu Sans Mono",
+    "Ubuntu Mono",
+    "Liberation Mono",
+    "Adwaita Mono",
+];
+
 pub struct Coded {
     pub family: SharedString,
     pub lines: Vec<Line>,
@@ -83,7 +98,7 @@ pub fn mono_family(cx: &mut App) -> SharedString {
 }
 
 fn pick_mono(installed: &[String]) -> SharedString {
-    text::MONO_FAMILIES
+    MONO_FAMILIES
         .into_iter()
         .find(|wanted| installed.iter().any(|name| name == wanted))
         .unwrap_or(text::FAMILY)

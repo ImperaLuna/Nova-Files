@@ -206,20 +206,6 @@ pub mod text {
     use gpui::{FontWeight, Pixels, px};
 
     pub const FAMILY: &str = "Inter";
-    pub const MONO_FAMILIES: [&str; 12] = [
-        "JetBrains Mono",
-        "JetBrainsMono Nerd Font",
-        "Fira Code",
-        "Cascadia Code",
-        "Source Code Pro",
-        "Hack",
-        "Iosevka",
-        "Noto Sans Mono",
-        "DejaVu Sans Mono",
-        "Ubuntu Mono",
-        "Liberation Mono",
-        "Adwaita Mono",
-    ];
     pub const BODY: Pixels = px(13.0);
     pub const BODY_WEIGHT: FontWeight = FontWeight::MEDIUM;
     pub const DETAIL: Pixels = px(12.5);
@@ -468,11 +454,6 @@ pub mod preview {
     pub const TEXT_PAD_X: Pixels = px(26.0);
     pub const TEXT_PAD_Y: Pixels = px(22.0);
     pub const TEXT_LINE: Pixels = px(22.0);
-    pub const CODE_WIDTH: Pixels = px(720.0);
-    pub const CODE_PAD_X: Pixels = px(18.0);
-    pub const CODE_LINE: Pixels = px(20.0);
-    pub const CODE_GUTTER_GAP: Pixels = px(16.0);
-    pub const CODE_DIGIT: Pixels = px(8.0);
     pub const LIST_WIDTH: Pixels = px(400.0);
     pub const LIST_PAD_X: Pixels = px(18.0);
     pub const LIST_PAD_Y: Pixels = px(14.0);

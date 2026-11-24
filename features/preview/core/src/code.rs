@@ -7,6 +7,8 @@ use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet
 
 static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
 
+const LONGEST_LINE: usize = 2000;
+
 const PROSE: [&str; 4] = [
     "Plain Text",
     "Markdown",
@@ -14,7 +16,7 @@ const PROSE: [&str; 4] = [
     "reStructuredText",
 ];
 
-const MARKS: [(&str, Mark); 22] = [
+const MARKS: [(&str, Mark); 21] = [
     ("comment", Mark::Comment),
     ("string", Mark::Quoted),
     ("constant.character.escape", Mark::Quoted),
@@ -29,7 +31,6 @@ const MARKS: [(&str, Mark); 22] = [
     ("entity.name.function", Mark::Function),
     ("support.function", Mark::Function),
     ("variable.function", Mark::Function),
-    ("meta.function-call", Mark::Function),
     ("entity.name.type", Mark::Type),
     ("entity.name.class", Mark::Type),
     ("entity.name.struct", Mark::Type),
@@ -47,6 +48,9 @@ static SCOPES: LazyLock<Vec<(Scope, Mark)>> = LazyLock::new(|| {
 });
 
 pub fn runs(name: &OsStr, text: &str, cancelled: impl Fn() -> bool) -> Option<Vec<Run>> {
+    if text.split('\n').any(|line| line.len() > LONGEST_LINE) {
+        return None;
+    }
     let syntax = syntax(name, text)?;
     let mut state = ParseState::new(syntax);
     let mut stack = ScopeStack::new();
@@ -176,6 +180,20 @@ mod tests {
         assert!(runs(OsStr::new("notes.txt"), "just words\n", || false).is_none());
         assert!(runs(OsStr::new("README"), "just words\n", || false).is_none());
         assert!(runs(OsStr::new("notes.md"), "# Notes\n", || false).is_none());
+    }
+
+    #[test]
+    fn call_arguments_keep_their_own_colour() {
+        assert_eq!(
+            mark_of("run.py", "print(count, name)\n", "count"),
+            Mark::Plain
+        );
+    }
+
+    #[test]
+    fn minified_code_is_left_plain() {
+        let line = format!("var a={};\n", "1+".repeat(LONGEST_LINE));
+        assert!(runs(OsStr::new("app.min.js"), &line, || false).is_none());
     }
 
     #[test]

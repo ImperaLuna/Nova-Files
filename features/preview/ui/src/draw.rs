@@ -28,6 +28,11 @@ const ITEMS: &str = "items";
 const MORE: &str = "more";
 const OPEN_LABEL: &str = "Open";
 const BOTH_SIDES: f32 = 2.0;
+const CODE_WIDTH: Pixels = px(720.0);
+const CODE_PAD_X: Pixels = px(18.0);
+const CODE_LINE: Pixels = px(20.0);
+const CODE_GUTTER_GAP: Pixels = px(16.0);
+const CODE_DIGIT: Pixels = px(8.0);
 
 pub fn room(width: Pixels, height: Pixels) -> gpui::Size<Pixels> {
     let sides = preview::MARGIN * BOTH_SIDES + (preview::NAV + preview::GAP) * BOTH_SIDES;
@@ -182,10 +187,8 @@ const fn steps(index: usize, len: usize) -> (bool, bool) {
     (index > 0, index + 1 < len)
 }
 
-fn lines_fitting(height: Pixels) -> usize {
-    let lines = (f32::from(height - preview::TEXT_PAD_Y * BOTH_SIDES)
-        / f32::from(preview::TEXT_LINE))
-    .floor();
+fn lines_fitting(height: Pixels, line: Pixels) -> usize {
+    let lines = (f32::from(height - preview::TEXT_PAD_Y * BOTH_SIDES) / f32::from(line)).floor();
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -214,7 +217,7 @@ fn fitting_scale(size: gpui::Size<Pixels>, room: gpui::Size<Pixels>) -> f32 {
 }
 
 fn text_art(text_content: &str, room: gpui::Size<Pixels>, colors: &Colors) -> impl IntoElement {
-    let lines = lines_fitting(room.height);
+    let lines = lines_fitting(room.height, preview::TEXT_LINE);
     card(preview::TEXT_WIDTH, colors)
         .debug_selector(|| "preview-text".to_owned())
         .max_h(room.height)
@@ -233,21 +236,21 @@ fn text_art(text_content: &str, room: gpui::Size<Pixels>, colors: &Colors) -> im
 }
 
 fn code_art(coded: &Coded, room: gpui::Size<Pixels>, colors: &Colors) -> impl IntoElement {
-    let lines = code_lines_fitting(room.height).min(coded.lines.len());
+    let lines = lines_fitting(room.height, CODE_LINE).min(coded.lines.len());
     let digits = lines.max(1).ilog10() + 1;
     #[expect(
         clippy::cast_precision_loss,
         reason = "a line number has a handful of digits"
     )]
-    let gutter = preview::CODE_DIGIT * digits as f32;
-    card(preview::CODE_WIDTH, colors)
+    let gutter = CODE_DIGIT * digits as f32;
+    card(CODE_WIDTH, colors)
         .debug_selector(|| "preview-code".to_owned())
         .max_h(room.height)
-        .px(preview::CODE_PAD_X)
+        .px(CODE_PAD_X)
         .py(preview::TEXT_PAD_Y)
         .bg(colors.window)
         .font_family(coded.family.clone())
-        .line_height(preview::CODE_LINE)
+        .line_height(CODE_LINE)
         .text_color(colors.code.plain)
         .whitespace_nowrap()
         .children(
@@ -266,7 +269,7 @@ fn code_art(coded: &Coded, room: gpui::Size<Pixels>, colors: &Colors) -> impl In
                     });
                     div()
                         .flex()
-                        .gap(preview::CODE_GUTTER_GAP)
+                        .gap(CODE_GUTTER_GAP)
                         .child(
                             div()
                                 .flex_none()
@@ -282,19 +285,6 @@ fn code_art(coded: &Coded, room: gpui::Size<Pixels>, colors: &Colors) -> impl In
                         )
                 }),
         )
-}
-
-fn code_lines_fitting(height: Pixels) -> usize {
-    let lines = (f32::from(height - preview::TEXT_PAD_Y * BOTH_SIDES)
-        / f32::from(preview::CODE_LINE))
-    .floor();
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "a count of lines that fit a window, never negative"
-    )]
-    let lines = lines.max(1.0) as usize;
-    lines
 }
 
 fn folder_art(first: &[Entry], count: usize, colors: &Colors) -> AnyElement {
@@ -520,10 +510,10 @@ mod tests {
     fn as_many_lines_fit_as_the_room_holds() {
         let pads = preview::TEXT_PAD_Y * BOTH_SIDES;
         let line = preview::TEXT_LINE;
-        assert_eq!(lines_fitting(pads + line * 10.0), 10);
-        assert_eq!(lines_fitting(pads + line * 10.5), 10);
-        assert_eq!(lines_fitting(pads + line * 3.0), 3);
-        assert_eq!(lines_fitting(px(0.0)), 1);
+        assert_eq!(lines_fitting(pads + line * 10.0, preview::TEXT_LINE), 10);
+        assert_eq!(lines_fitting(pads + line * 10.5, preview::TEXT_LINE), 10);
+        assert_eq!(lines_fitting(pads + line * 3.0, preview::TEXT_LINE), 3);
+        assert_eq!(lines_fitting(px(0.0), preview::TEXT_LINE), 1);
     }
 
     fn preview(content: PreviewContent, kind_name: Option<&str>, bytes: u64) -> Preview {
