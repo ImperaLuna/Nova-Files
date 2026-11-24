@@ -105,7 +105,7 @@ fn matches_of_another_query_are_not_searched_from() {
     let home = Home::new();
     let (_, kept) = home.fresh("frame");
     let (fresh, _) = home.fresh("render");
-    assert!(!fresh[0].is_empty());
+    assert_ne!(fresh[0], Vec::<PathBuf>::new());
     assert_eq!(home.from("render", &kept.unwrap()).0, fresh);
 }
 
@@ -114,7 +114,7 @@ fn matches_inside_one_folder_are_not_searched_from_for_another() {
     let home = Home::new();
     let root = home.index.root().to_owned();
     let mut inside = home.index.search("rend", LIMIT).within(&root.join("src"));
-    assert!(!inside.by_ref().next().unwrap().is_empty());
+    assert_ne!(inside.by_ref().next(), Some(Vec::new()));
     let kept = inside.keep().unwrap();
     let everywhere = home.index.search("rende", LIMIT).from(&kept);
     assert_eq!(
