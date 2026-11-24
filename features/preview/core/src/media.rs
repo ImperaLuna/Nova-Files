@@ -3,13 +3,14 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use nova_files_api::{EventSink, Fit};
+use nova_files_api::{EventSink, Fit, Picture};
 use nova_files_disk::ports::Mimes;
 use nova_files_preview_api::{Control, Event, MAX_VOLUME, MediaTag, Played, PreviewId};
 use nova_files_thumbnailer_launch::{self as launch, Heard, Player, Running, Tag, Told};
 
 use crate::Current;
 
+const EARLY_CONTROLS: usize = 16;
 const VIDEO: &str = "video/";
 const AUDIO: &str = "audio/";
 const NOT_PLAYED: [&str; 7] = [
@@ -23,16 +24,30 @@ const AUDIO_EXTENSIONS: [&str; 9] = [
 #[derive(Debug)]
 pub struct Playing {
     running: Arc<Running>,
-    player: Mutex<Option<(PreviewId, Player)>>,
+    player: Mutex<Slot>,
     volume: AtomicU8,
+    frames: Arc<Mutex<Frames>>,
+}
+
+#[derive(Debug, Default)]
+struct Slot {
+    player: Option<(PreviewId, Player)>,
+    early: Option<(PreviewId, Vec<Told>)>,
+}
+
+#[derive(Debug, Default)]
+struct Frames {
+    drawing: bool,
+    waiting: Option<Picture>,
 }
 
 impl Default for Playing {
     fn default() -> Self {
         Self {
             running: Arc::new(Running::new()),
-            player: Mutex::new(None),
+            player: Mutex::default(),
             volume: AtomicU8::new(MAX_VOLUME),
+            frames: Arc::default(),
         }
     }
 }
@@ -44,6 +59,7 @@ impl Playing {
             .player
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
+            .player
             .take();
         drop(player);
     }
@@ -81,7 +97,19 @@ pub fn start(
     let volume = playing.volume.load(Ordering::SeqCst);
     let sink = Arc::clone(events);
     let watching = Arc::clone(current);
+    let frames = Arc::clone(&playing.frames);
+    *lock(&frames) = Frames::default();
     let heard = move |heard: Heard| {
+        let heard = match heard {
+            Heard::Frame(picture) => {
+                let ready = lock(&frames).held_back(picture);
+                let Some(picture) = ready else {
+                    return watching.is(id);
+                };
+                Heard::Frame(picture)
+            }
+            other => other,
+        };
         watching.is(id)
             && sink
                 .deliver(Event::Played {
@@ -95,8 +123,14 @@ pub fn start(
         .player
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
+    let early = slot.early.take().filter(|(early, _)| *early == id);
     match started {
-        Some(started) if current.is(id) => *slot = Some((id, started)),
+        Some(mut started) if current.is(id) => {
+            for told in early.into_iter().flat_map(|(_, told)| told) {
+                started.tell(told);
+            }
+            slot.player = Some((id, started));
+        }
         Some(_) => {}
         None if !current.is(id) => {}
         None => {
@@ -110,7 +144,7 @@ pub fn start(
     }
 }
 
-pub fn control(current: &Current, id: PreviewId, control: Control) {
+pub fn control(events: &dyn EventSink, current: &Current, id: PreviewId, control: Control) {
     let playing = &current.playing;
     let told = match control {
         Control::Play => Told::Play,
@@ -122,16 +156,57 @@ pub fn control(current: &Current, id: PreviewId, control: Control) {
             Told::Volume(volume)
         }
         Control::Fit(fit) => Told::Room(fit),
+        Control::Drawn if !current.is(id) => return,
+        Control::Drawn => {
+            let mut frames = lock(&playing.frames);
+            let waiting = frames.waiting.take();
+            frames.drawing = waiting.is_some();
+            drop(frames);
+            if let Some(picture) = waiting.filter(|_| current.is(id)) {
+                let played = Played::Frame(picture);
+                events.deliver(Event::Played { id, played }).ok();
+            }
+            return;
+        }
     };
-    let mut slot = playing
+    let current = current.is(id);
+    playing
         .player
         .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-    if let Some((shown, player)) = slot.as_mut()
-        && *shown == id
-    {
-        player.tell(told);
+        .unwrap_or_else(PoisonError::into_inner)
+        .tell(id, told, current);
+}
+
+impl Slot {
+    fn tell(&mut self, id: PreviewId, told: Told, current: bool) {
+        match (&mut self.player, &mut self.early) {
+            (Some((shown, player)), _) if *shown == id => {
+                player.tell(told);
+            }
+            (_, Some((early, told_early))) if *early == id => {
+                if told_early.len() < EARLY_CONTROLS {
+                    told_early.push(told);
+                }
+            }
+            _ if current => self.early = Some((id, vec![told])),
+            _ => {}
+        }
     }
+}
+
+impl Frames {
+    fn held_back(&mut self, picture: Picture) -> Option<Picture> {
+        if self.drawing {
+            self.waiting = Some(picture);
+            return None;
+        }
+        self.drawing = true;
+        Some(picture)
+    }
+}
+
+fn lock(frames: &Mutex<Frames>) -> std::sync::MutexGuard<'_, Frames> {
+    frames.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn played(heard: Heard) -> Played {
@@ -193,6 +268,23 @@ mod tests {
         fn icon_kind(&self, _: &str) -> nova_files_api::IconKind {
             nova_files_api::IconKind::Text
         }
+    }
+
+    fn picture(width: u32) -> Picture {
+        Picture {
+            width,
+            height: 1,
+            pixels: Arc::from(Vec::new()),
+        }
+    }
+
+    #[test]
+    fn only_the_newest_frame_waits_while_one_is_drawn() {
+        let mut frames = Frames::default();
+        assert_eq!(frames.held_back(picture(1)), Some(picture(1)));
+        assert_eq!(frames.held_back(picture(2)), None);
+        assert_eq!(frames.held_back(picture(3)), None);
+        assert_eq!(frames.waiting, Some(picture(3)));
     }
 
     #[test]

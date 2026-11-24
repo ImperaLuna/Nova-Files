@@ -20,6 +20,7 @@ use crate::PreviewPart;
 use crate::code::{self, Coded};
 use crate::looks::{QuickLook, Shown};
 use crate::pages::{Layout, Pages};
+use crate::player::{self, art_room, bar_width, media_art};
 
 const SEPARATOR: &str = " · ";
 const FILE_KIND: &str = "File";
@@ -48,12 +49,26 @@ pub fn room(width: Pixels, height: Pixels) -> gpui::Size<Pixels> {
 
 pub fn layer(
     (open, listing, entry, index): (&QuickLook, &Listing, &Entry, usize),
-    (room, scale_factor): (gpui::Size<Pixels>, f32),
+    (room, scale_factor, volume): (gpui::Size<Pixels>, f32, u8),
     cx: &Context<PreviewPart>,
 ) -> AnyElement {
     let colors = Colors::of(cx);
     let current = open.current().map(|shown| about(shown, room));
     let art = stage_art(open, listing, entry, (room, scale_factor, true), &colors);
+    let media = open.current().and_then(|shown| shown.media.as_ref());
+    let art = kept_open(art).debug_selector(|| "preview-art".to_owned());
+    let art = if media.is_some_and(|media| media.video) {
+        art.on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _: &MouseDownEvent, _, cx| this.play_or_pause(cx)),
+        )
+    } else {
+        art
+    };
+    let bar = media.map(|media| {
+        let width = bar_width(media, room, scale_factor);
+        player::bar(media, volume, width, &colors, cx)
+    });
     let (previous, next) = steps(index, listing.entries.len());
     div()
         .id("preview")
@@ -84,7 +99,8 @@ pub fn layer(
                 .items_center()
                 .gap(preview::GAP)
                 .min_w_0()
-                .child(kept_open(art).debug_selector(|| "preview-art".to_owned()))
+                .child(art)
+                .children(bar)
                 .child(caption(entry, current, &colors, cx)),
         )
         .child(kept_open(icon_button(
@@ -157,6 +173,11 @@ fn art(
             )
         }
         (PreviewContent::Locked, _) => locked_art(colors),
+        (PreviewContent::Media { .. }, _) => shown
+            .media
+            .as_ref()
+            .and_then(|media| media_art(media, art_room(room, scrolls), scale_factor, colors))
+            .unwrap_or_else(|| big_icon(name, kind, colors)),
         _ => big_icon(name, kind, colors),
     }
 }
@@ -231,7 +252,7 @@ fn picture_art(
         .border_color(colors.line)
 }
 
-fn logical_side(device: i32, scale_factor: f32) -> Pixels {
+pub fn logical_side(device: i32, scale_factor: f32) -> Pixels {
     #[expect(
         clippy::cast_precision_loss,
         reason = "a picture's side is a few thousand pixels at most"
@@ -255,7 +276,7 @@ fn lines_fitting(height: Pixels, line: Pixels) -> usize {
     lines
 }
 
-fn fitted(size: gpui::Size<Pixels>, room: gpui::Size<Pixels>) -> gpui::Size<Pixels> {
+pub fn fitted(size: gpui::Size<Pixels>, room: gpui::Size<Pixels>) -> gpui::Size<Pixels> {
     let scale = fitting_scale(size, room);
     gpui::size(size.width * scale, size.height * scale)
 }

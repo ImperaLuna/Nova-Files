@@ -4,6 +4,8 @@ mod code;
 mod draw;
 mod looks;
 mod pages;
+mod player;
+mod playing;
 
 use std::mem;
 use std::path::PathBuf;
@@ -11,7 +13,7 @@ use std::sync::Arc;
 
 use gpui::{AnyElement, App, Context, Pixels, RenderImage, Size, Subscription, Window};
 use nova_files_api::{Entry, EntryId, Fit, Listing, ListingId, Picture};
-use nova_files_preview_api::{Command, Event, Preview, PreviewContent, PreviewId};
+use nova_files_preview_api::{Command, Control, Event, Preview, PreviewContent, PreviewId};
 use nova_files_shell::actions::{
     ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp, CursorUp,
     DeleteSelected, Duplicate, MakeLink, NewFile, NewFolder, OpenSelected, PreviewNext,
@@ -27,6 +29,7 @@ use looks::{
     DEFAULT_FIT, QuickLook, QuickLooks, Shown, moved, render_image, render_moving, without_pixels,
 };
 use pages::{Layout, Pages, Scroll};
+use player::Media;
 
 pub struct PreviewPart {
     host: Host,
@@ -119,7 +122,7 @@ impl PreviewPart {
         let entry = listing.entries.get(index)?;
         Some(draw::layer(
             (open, listing, entry, index),
-            (room, scale_factor),
+            (room, scale_factor, self.looks.volume),
             cx,
         ))
     }
@@ -161,6 +164,10 @@ impl PreviewPart {
             return;
         }
         self.looks.fit = fit;
+        if let Some((media, fit)) = self.shown_media().map(|media| media.id).zip(fit) {
+            self.control(media, Control::Fit(fit));
+            return;
+        }
         if let Some(open) = self.looks.open.take() {
             self.show_entry(open.listing, open.entry, open.shown, cx);
         }
@@ -175,6 +182,7 @@ impl PreviewPart {
         if self.looks.open.is_some() {
             if self.looks.docked {
                 self.looks.docked = false;
+                self.start_playing();
                 cx.notify();
             } else {
                 self.dismiss(cx);
@@ -190,6 +198,9 @@ impl PreviewPart {
     fn dismiss(&mut self, cx: &mut Context<Self>) {
         if self.host.entries.read(cx).showing() == Showing::Gallery {
             self.looks.docked = true;
+            if let Some(media) = self.shown_media().map(|media| media.id) {
+                self.control(media, Control::Pause);
+            }
             cx.notify();
         } else {
             self.close(cx);
@@ -469,7 +480,7 @@ impl PreviewPart {
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::Unreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::Paged { id, index, picture } => self.page_arrived(id, index, picture, cx),
-            Event::Played { .. } => {}
+            Event::Played { id, played } => self.played(id, played, cx),
         }
     }
 
@@ -541,15 +552,23 @@ impl PreviewPart {
             release(carried.into_iter().flat_map(Pages::images), cx);
             None
         };
+        let media = match preview.as_deref().map(|preview| &preview.content) {
+            Some(PreviewContent::Media { video }) => Some(Media::new(id, *video)),
+            _ => None,
+        };
         let shown = Shown {
             entry: open.entry,
             preview,
             picture,
             code,
             pages,
+            media,
         };
         let before = open.shown.replace(shown);
         release(before.into_iter().flat_map(Shown::images), cx);
+        if self.previewing() {
+            self.start_playing();
+        }
         cx.notify();
     }
 }
@@ -625,6 +644,7 @@ impl Part for PreviewPart {
         slots.before(Self::holds::<Duplicate>);
         slots.before(Self::holds::<MakeLink>);
         slots.before(Self::holds::<Undo>);
+        slots.key_down(Self::key_down);
         slots.staged(Self::stage);
         slots.layer(Self::layer);
     }

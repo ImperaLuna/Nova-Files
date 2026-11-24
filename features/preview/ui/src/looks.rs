@@ -3,10 +3,13 @@ use std::sync::Arc;
 use gpui::{Pixels, RenderImage, Size};
 use image::{Delay, Frame, RgbaImage};
 use nova_files_api::{EntryId, Fit, ListingId, Picture};
-use nova_files_preview_api::{Frame as MovingFrame, Preview, PreviewContent, PreviewId};
+use nova_files_preview_api::{
+    Frame as MovingFrame, MAX_VOLUME, Preview, PreviewContent, PreviewId,
+};
 
 use crate::code::Coded;
 use crate::pages::Pages;
+use crate::player::Media;
 
 // GPUI draws images in BGRA order.
 // https://github.com/ImperaLuna/zed/tree/47424cdc3f1a49829960e1ecbcdcdd967d034265/crates/gpui
@@ -19,13 +22,26 @@ pub const DEFAULT_FIT: Fit = Fit {
     height: 1080,
 };
 
-#[derive(Default)]
 pub struct QuickLooks {
     pub open: Option<QuickLook>,
     pub fit: Option<Fit>,
     pub room: Option<(Size<Pixels>, f32)>,
     pub docked: bool,
+    pub volume: u8,
     next_id: u64,
+}
+
+impl Default for QuickLooks {
+    fn default() -> Self {
+        Self {
+            open: None,
+            fit: None,
+            room: None,
+            docked: false,
+            volume: MAX_VOLUME,
+            next_id: 0,
+        }
+    }
 }
 
 impl QuickLooks {
@@ -56,6 +72,7 @@ pub struct Shown {
     pub picture: Option<Arc<RenderImage>>,
     pub code: Option<Arc<Coded>>,
     pub pages: Option<Pages>,
+    pub media: Option<Media>,
 }
 
 impl Shown {
@@ -63,6 +80,7 @@ impl Shown {
         self.picture
             .into_iter()
             .chain(self.pages.into_iter().flat_map(Pages::images))
+            .chain(self.media.and_then(|media| media.frame))
     }
 }
 
@@ -164,6 +182,7 @@ mod tests {
             picture: None,
             code: None,
             pages: None,
+            media: None,
         };
         let moved_entry = |entry, from, to| moved(shown(entry), EntryId(from), EntryId(to)).entry;
         assert_eq!(moved_entry(2, 2, 5), EntryId(5));
