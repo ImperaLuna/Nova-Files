@@ -1,4 +1,4 @@
-//! Renaming and making folders: the jobs, and the names a rename or a
+//! Renaming and making folders and files: the jobs, and the names a rename or a
 //! new entry may take.
 
 #![forbid(unsafe_code)]
@@ -30,6 +30,15 @@ pub struct NewFolderJob {
     pub name: OsString,
 }
 
+/// Make an empty file named `name` in the folder `inside`.
+///
+/// A name already taken fails the job.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewFileJob {
+    pub inside: PathBuf,
+    pub name: OsString,
+}
+
 /// The job that renames `path` to `name`.
 pub fn rename(path: PathBuf, name: OsString) -> Operation {
     Operation::feature(RenameJob { path, name })
@@ -38,6 +47,11 @@ pub fn rename(path: PathBuf, name: OsString) -> Operation {
 /// The job that makes the folder `name` inside `inside`.
 pub fn new_folder(inside: PathBuf, name: OsString) -> Operation {
     Operation::feature(NewFolderJob { inside, name })
+}
+
+/// The job that makes the empty file `name` inside `inside`.
+pub fn new_file(inside: PathBuf, name: OsString) -> Operation {
+    Operation::feature(NewFileJob { inside, name })
 }
 
 /// Whether `name` names one entry inside a folder: not empty, not `.` or

@@ -127,6 +127,23 @@ async fn new_folder_makes_one_and_starts_renaming_it(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn new_file_makes_an_empty_one_and_starts_renaming_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("rename-new-file");
+    let home = TempFolder::tree("rename-new-file-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    cx.simulate_keystrokes("ctrl-alt-n");
+    wait_for_names(&view, cx, &["Projects", "New file", "notes.txt"]).await;
+    cx.run_until_parked();
+    assert_eq!(field_state(&view, cx, 1), ("New file".to_owned(), 0..8));
+    cx.simulate_input("plan.md");
+    cx.simulate_keystrokes("enter");
+    wait_for_names(&view, cx, &["Projects", "notes.txt", "plan.md"]).await;
+    assert_eq!(fs::read(tree.path().join("plan.md")).unwrap(), b"");
+}
+
+#[gpui::test]
 async fn a_double_click_in_the_field_stays_in_it(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("rename-press");
