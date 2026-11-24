@@ -25,6 +25,10 @@ const FIT: Fit = Fit {
     width: 32,
     height: 32,
 };
+const SMALLER: Fit = Fit {
+    width: 16,
+    height: 16,
+};
 const ID: PreviewId = PreviewId(1);
 
 struct Client {
@@ -149,4 +153,21 @@ fn pausing_and_seeking_are_reported_back() {
     );
     client.control(Control::Play);
     client.played_until(|played| *played == Played::Paused(false));
+}
+
+#[test]
+fn a_paused_video_is_drawn_again_at_a_new_size() {
+    let temp = TestFolder::new("play-resize");
+    let path = clip(&temp);
+    let client = Client::new(temp.path());
+    start(&client, &path);
+    client.played_until(|played| matches!(played, Played::Frame(_)));
+    client.control(Control::Pause);
+    client.played_until(|played| *played == Played::Paused(true));
+
+    client.control(Control::Fit(SMALLER));
+
+    client.played_until(|played| {
+        matches!(played, Played::Frame(frame) if (frame.width, frame.height) == (SMALLER.width, SMALLER.height))
+    });
 }

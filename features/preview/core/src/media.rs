@@ -12,6 +12,9 @@ use crate::Current;
 
 const VIDEO: &str = "video/";
 const AUDIO: &str = "audio/";
+const NOT_PLAYED: [&str; 7] = [
+    "mpegurl", "scpls", "x-ms-asx", "x-ms-wax", "x-ms-wvx", "playlist", "midi",
+];
 const VIDEO_EXTENSIONS: [&str; 8] = ["mp4", "m4v", "mkv", "webm", "mov", "avi", "ogv", "wmv"];
 const AUDIO_EXTENSIONS: [&str; 9] = [
     "mp3", "flac", "ogg", "oga", "opus", "m4a", "wav", "aac", "wma",
@@ -52,6 +55,7 @@ pub fn player_beside(helper: &Path) -> Option<PathBuf> {
 
 pub fn kind(types: &dyn Mimes, name: &OsStr) -> Option<bool> {
     match types.of(name) {
+        Some(mime) if NOT_PLAYED.iter().any(|word| mime.contains(word)) => None,
         Some(mime) if mime.starts_with(VIDEO) => Some(true),
         Some(mime) if mime.starts_with(AUDIO) => Some(false),
         Some(_) => None,
@@ -94,6 +98,7 @@ pub fn start(
     match started {
         Some(started) if current.is(id) => *slot = Some((id, started)),
         Some(_) => {}
+        None if !current.is(id) => {}
         None => {
             drop(slot);
             let unplayable = Event::Played {
@@ -145,5 +150,60 @@ fn played(heard: Heard) -> Played {
             },
             text,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct Named;
+
+    impl nova_files_api::FileTypes for Named {
+        fn of(&self, name: &OsStr) -> Option<&str> {
+            match Path::new(name).extension()?.to_str()? {
+                "m3u8" => Some("application/vnd.apple.mpegurl"),
+                "pls" => Some("audio/x-scpls"),
+                "mid" => Some("audio/midi"),
+                "flac" => Some("audio/flac"),
+                "mkv" => Some("video/x-matroska"),
+                _ => None,
+            }
+        }
+
+        fn is_a(&self, mime: &str, wanted: &str) -> bool {
+            mime == wanted
+        }
+    }
+
+    impl Mimes for Named {
+        fn ancestry(&self, mime: &str) -> Vec<String> {
+            vec![mime.to_owned()]
+        }
+
+        fn name(&self, _: &str) -> Option<String> {
+            None
+        }
+
+        fn icon_names(&self, _: &str) -> Vec<String> {
+            Vec::new()
+        }
+
+        fn icon_kind(&self, _: &str) -> nova_files_api::IconKind {
+            nova_files_api::IconKind::Text
+        }
+    }
+
+    #[test]
+    fn playlists_and_midi_are_not_played() {
+        let of = |name: &str| kind(&Named, OsStr::new(name));
+        assert_eq!(of("film.mkv"), Some(true));
+        assert_eq!(of("song.flac"), Some(false));
+        assert_eq!(of("SONG.OPUS"), Some(false));
+        assert_eq!(of("list.m3u8"), None);
+        assert_eq!(of("radio.pls"), None);
+        assert_eq!(of("tune.mid"), None);
+        assert_eq!(of("notes.txt"), None);
     }
 }
