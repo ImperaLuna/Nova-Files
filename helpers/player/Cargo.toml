@@ -1,0 +1,27 @@
+# nova-files-player
+#
+# The sandboxed player helper. It plays one video or song with libmpv, when
+# libmpv is installed, and sends its frames, time and tags to the core, which
+# sends back play, pause, seek and volume.
+#
+# Allowed outside crates:
+# - landlock
+# - libloading
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-player"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+landlock = "0.4"
+# Opens libmpv at run time, so Nova Files runs and builds without it.
+libloading = "0.8.9"
+

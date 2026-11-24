@@ -4049,6 +4049,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nova-files-player"
+version = "0.1.0"
+dependencies = [
+ "landlock",
+ "libloading",
+]
+
+[[package]]
 name = "nova-files-preview-api"
 version = "0.1.0"
 dependencies = [
