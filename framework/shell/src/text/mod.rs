@@ -66,6 +66,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-a", SelectAll, context),
         KeyBinding::new("backspace", Backspace, context),
         KeyBinding::new("delete", Delete, context),
+        KeyBinding::new("ctrl-d", Delete, context),
         KeyBinding::new("ctrl-backspace", DeleteWordLeft, context),
         KeyBinding::new("ctrl-delete", DeleteWordRight, context),
         KeyBinding::new("ctrl-c", Copy, context),
