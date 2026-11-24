@@ -1,7 +1,8 @@
 use gpui::{
     Action, AnyElement, ClickEvent, Div, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, Radians, Rgba, Stateful, StatefulInteractiveElement as _,
-    Styled as _, Transformation, div, prelude::FluentBuilder as _, relative, svg,
+    ParentElement as _, Pixels, Radians, Rgba, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled as _, Transformation, div, prelude::FluentBuilder as _,
+    relative, svg,
 };
 use nova_files_api::{EntryKind, IconKind};
 
@@ -15,6 +16,15 @@ pub fn icon(glyph: Icon, side: Pixels, tint: Rgba) -> impl IntoElement {
         .flex_none()
         .size(side)
         .text_color(Hsla::from(tint))
+}
+
+pub fn detail(text_content: impl Into<SharedString>, colors: &Colors) -> Div {
+    div()
+        .text_size(text::DETAIL)
+        .font_weight(text::DETAIL_WEIGHT)
+        .text_color(colors.text_dim)
+        .truncate()
+        .child(text_content.into())
 }
 
 pub fn icon_button(

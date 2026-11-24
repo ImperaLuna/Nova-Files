@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod branch;
 mod chip;
 mod page;
 
@@ -8,19 +9,23 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use gpui::{App, Context, SharedString, Window};
-use nova_files_api::Entry;
+use gpui::{AnyElement, App, Context, IntoElement as _, Window};
+use nova_files_api::{Entry, Listing};
 use nova_files_gathered_api::{
     Command, Event, Gathered, GatheredChange, GatheredFolder, Gathering, Holds,
 };
+use nova_files_git_api as git;
 use nova_files_shell::assets::Icon;
 use nova_files_shell::island::words::{name_of, short_path, what};
 use nova_files_shell::path_bar::Crumb;
+use nova_files_shell::theme::Colors;
+use nova_files_shell::widgets::detail;
 use nova_files_shell::{
     Column, Host, Location, MenuAt, MenuGroup, MenuItem, Navigator, PageKind, PageRef, Part,
     Placed, RowItem, Scene, SidebarAt, SidebarRow, Slots, Undo, command_spec, format,
 };
 
+pub use branch::{BRANCH_HEAD, BRANCH_LABEL};
 pub use page::{GAMES_LABEL, GatheredPage, PROJECTS_LABEL, look};
 
 mod actions {
@@ -57,6 +62,7 @@ pub struct GatheredPart {
     heard: bool,
     to_gather: Option<(Gathering, Vec<PathBuf>)>,
     adding: Option<Adding>,
+    repos: branch::Repos,
 }
 
 struct Adding {
@@ -95,10 +101,39 @@ impl GatheredPart {
         )
     }
 
-    fn library_cell(&self, entry: &Entry, cx: &App) -> Option<SharedString> {
+    fn library_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
         let entries = self.host.entries.read(cx);
         let path = entries.listing()?.path_of(entry);
-        Some(self.library_of(&path).unwrap_or_default().into())
+        let library = self.library_of(&path).unwrap_or_default();
+        Some(detail(library, &Colors::of(cx)).into_any_element())
+    }
+
+    pub fn repo_of_row(&self, index: usize, cx: &App) -> Option<git::Repo> {
+        let entries = self.host.entries.read(cx);
+        let listing = entries.listing()?;
+        let entry = listing.entries.get(index)?;
+        self.repos.of(&listing.path_of(entry)).cloned()
+    }
+
+    fn branch_cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
+        let entries = self.host.entries.read(cx);
+        let path = entries.listing()?.path_of(entry);
+        let repo = self.repos.of(&path)?;
+        Some(branch::cell(repo, &entry.name.to_string_lossy(), cx))
+    }
+
+    fn listed(&mut self, listing: &Listing, reordered: bool, cx: &mut Context<Self>) {
+        let scene = self.host.scene(cx);
+        let on_projects =
+            scene.on_page::<GatheredPage>() == Some(&GatheredPage::new(Gathering::Projects));
+        if on_projects && !reordered {
+            self.host.link.send(self.repos.ask(listing)).ok();
+        }
+    }
+
+    fn repo_heard(&mut self, event: git::Event, cx: &mut Context<Self>) {
+        self.repos.heard(event);
+        cx.notify();
     }
 
     fn arrived(&mut self, event: Event, cx: &mut Context<Self>) {
@@ -338,11 +373,18 @@ fn rows(_: &GatheredPart, scene: &Scene, _: &App) -> Vec<SidebarRow> {
         .collect()
 }
 
-fn library_column(_: &GatheredPart, scene: &Scene, _: &App) -> Option<Column<GatheredPart>> {
-    (scene.on_page::<GatheredPage>()?.place == Gathering::Games).then_some(Column {
-        head: LIBRARY_LABEL.into(),
-        selector: LIBRARY_HEAD,
-        cell: |part, entry, cx| part.library_cell(entry, cx),
+fn place_column(_: &GatheredPart, scene: &Scene, _: &App) -> Option<Column<GatheredPart>> {
+    Some(match scene.on_page::<GatheredPage>()?.place {
+        Gathering::Games => Column {
+            head: LIBRARY_LABEL.into(),
+            selector: LIBRARY_HEAD,
+            cell: |part, entry, cx| part.library_cell(entry, cx),
+        },
+        Gathering::Projects => Column {
+            head: BRANCH_LABEL.into(),
+            selector: BRANCH_HEAD,
+            cell: |part, entry, cx| part.branch_cell(entry, cx),
+        },
     })
 }
 
@@ -355,18 +397,22 @@ impl Part for GatheredPart {
             heard: false,
             to_gather: None,
             adding: None,
+            repos: branch::Repos::default(),
         }
     }
 
     fn slots(slots: &mut Slots<Self>) {
         slots.on_event(Self::arrived);
+        slots.on_event(Self::repo_heard);
         slots.sends::<Command>();
+        slots.sends::<git::Command>();
+        slots.listed(Self::listed);
         slots.listing_page::<GatheredPage>(GatheredPage::list);
         slots.command(&ADD_FOLDER, on_page, Self::add_folder);
         slots.menu_in(MenuAt::Sheet, MenuGroup::Edit, Placed::FIRST, add_items);
         slots.sidebar(SidebarAt::Places, rows);
         slots.drops::<GatheredPage>(|part, page, paths, cx| part.gather(page.place, paths, cx));
-        slots.column(library_column);
+        slots.column(place_column);
         slots.path_chip(chip::chip);
         slots.crumbs::<GatheredPage>(|_, page, _| crumbs(*page));
     }
