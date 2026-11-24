@@ -10,6 +10,7 @@ mod path;
 mod row;
 mod search;
 mod sheet;
+mod shortcuts;
 mod sidebar;
 mod start;
 
@@ -26,7 +27,7 @@ use crate::commands::{
     ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp, CursorUp,
     GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext, PreviewPrevious, SelectAll,
     SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown, SelectPageUp, SelectRight,
-    SelectUp, ToggleSelected,
+    SelectUp, ShowShortcuts, ToggleSelected,
 };
 use crate::commands::{
     CloseTab, NewTab, NewWindow, NextTab, PreviousTab, Reload, ReopenTab, RingDown, RingFirst,
@@ -86,6 +87,9 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &ClearFilter, _, cx| this.clear_filter(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
+            .on_action(cx.listener(|this, _: &ShowShortcuts, window, cx| {
+                this.toggle_shortcuts(window, cx);
+            }))
             .map(|root| Self::typed_keys(root, cx))
             .map(|root| Self::selection_keys(root, cx))
             .map(|root| self.parts.bind(root))
@@ -110,6 +114,7 @@ impl MainWindow {
             .child(self.body(narrow, &colors, window, cx))
             .children(self.parts.footers())
             .children(self.menu_overlay(window, cx))
+            .children(self.shortcuts_overlay(cx))
     }
 }
 
