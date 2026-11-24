@@ -7,7 +7,9 @@ use image::codecs::gif::GifDecoder;
 use image::codecs::png::PngDecoder;
 use image::codecs::webp::WebPDecoder;
 use image::imageops::FilterType;
-use image::{AnimationDecoder, ImageFormat, ImageReader, RgbaImage};
+use image::{AnimationDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
+
+use crate::render::{BYTES_PER_PIXEL, decode_limits, fit_within};
 
 const MAX_BYTES: u64 = 192 * 1024 * 1024;
 const MAX_FRAMES: usize = 2000;
@@ -27,16 +29,16 @@ pub fn frames(path: &Path, width: u32, height: u32) -> Option<Vec<Frame>> {
         .format()?;
     let reader = || File::open(path).ok().map(BufReader::new);
     let frames = match format {
-        ImageFormat::Gif => GifDecoder::new(reader()?).ok()?.into_frames(),
+        ImageFormat::Gif => limited(GifDecoder::new(reader()?).ok()?)?.into_frames(),
         ImageFormat::WebP => {
-            let decoder = WebPDecoder::new(reader()?).ok()?;
+            let decoder = limited(WebPDecoder::new(reader()?).ok()?)?;
             if !decoder.has_animation() {
                 return None;
             }
             decoder.into_frames()
         }
         ImageFormat::Png => {
-            let decoder = PngDecoder::new(reader()?).ok()?;
+            let decoder = limited(PngDecoder::new(reader()?).ok()?)?;
             if !decoder.is_apng().ok()? {
                 return None;
             }
@@ -52,7 +54,7 @@ pub fn frames(path: &Path, width: u32, height: u32) -> Option<Vec<Frame>> {
         };
         let delay = Duration::from(frame.delay());
         let image = fitted(frame.into_buffer(), width, height);
-        bytes += u64::from(image.width()) * u64::from(image.height()) * 4;
+        bytes += u64::from(image.width()) * u64::from(image.height()) * BYTES_PER_PIXEL;
         if bytes > MAX_BYTES {
             break;
         }
@@ -68,27 +70,18 @@ pub fn frames(path: &Path, width: u32, height: u32) -> Option<Vec<Frame>> {
     (kept.len() > 1).then_some(kept)
 }
 
+fn limited<D: image::ImageDecoder>(mut decoder: D) -> Option<D> {
+    let limits: Limits = decode_limits();
+    decoder.set_limits(limits).ok()?;
+    Some(decoder)
+}
+
 fn fitted(image: RgbaImage, width: u32, height: u32) -> RgbaImage {
-    if image.width() <= width && image.height() <= height {
+    let (fit_width, fit_height) = fit_within(image.width(), image.height(), width, height);
+    if (fit_width, fit_height) == image.dimensions() {
         return image;
     }
-    let scale = (f64::from(width) / f64::from(image.width()))
-        .min(f64::from(height) / f64::from(image.height()));
-    let side = |side: u32| {
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "a scaled-down side, between 1 and the original"
-        )]
-        let scaled = (f64::from(side) * scale).round().max(1.0) as u32;
-        scaled
-    };
-    image::imageops::resize(
-        &image,
-        side(image.width()),
-        side(image.height()),
-        FilterType::Triangle,
-    )
+    image::imageops::resize(&image, fit_width, fit_height, FilterType::Triangle)
 }
 
 #[cfg(test)]

@@ -47,13 +47,11 @@ pub fn run(request: &Request) -> ExitCode {
         return ExitCode::FAILURE;
     }
     let (file, width, height) = (&request.file, request.width, request.height);
-    let sent = if vector::is_svg(file) {
+    let sent = if !render::built_in(file) {
         let Some(image) = vector::draw(file, width, height) else {
             return ExitCode::FAILURE;
         };
         send_still(&image)
-    } else if !render::built_in(file) {
-        return ExitCode::FAILURE;
     } else if let Some(frames) = moving::frames(file, width, height) {
         send_moving(&frames)
     } else {

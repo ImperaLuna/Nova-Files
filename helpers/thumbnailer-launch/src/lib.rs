@@ -18,6 +18,8 @@ const PREVIEW_FLAG: &str = "--preview";
 const BYTES_PER_PIXEL: u64 = 4;
 const MAX_SIZE_LINE: usize = 32;
 const MAX_FRAMES: usize = 2000;
+const MIN_MOVING_FRAMES: usize = 2;
+const MAX_MOVING_BYTES: u64 = 256 * 1024 * 1024;
 const LINE_END: u8 = b'\n';
 const SIZE_SEPARATOR: char = ' ';
 
@@ -166,14 +168,21 @@ fn read_picture(mut output: impl Read, fit: Fit) -> Option<Vec<(Picture, Duratio
     let width: u32 = words.next()?.parse().ok()?;
     let height: u32 = words.next()?.parse().ok()?;
     let count: usize = match words.next() {
-        Some(count) => count.parse().ok().filter(|count| *count > 1)?,
+        Some(count) => count
+            .parse()
+            .ok()
+            .filter(|count| (MIN_MOVING_FRAMES..=MAX_FRAMES).contains(count))?,
         None => 1,
     };
     let fits = (1..=fit.width).contains(&width) && (1..=fit.height).contains(&height);
     if words.next().is_some() || !fits {
         return None;
     }
-    let length = usize::try_from(u64::from(width) * u64::from(height) * BYTES_PER_PIXEL).ok()?;
+    let frame_bytes = u64::from(width) * u64::from(height) * BYTES_PER_PIXEL;
+    if frame_bytes.saturating_mul(u64::try_from(count).ok()?) > MAX_MOVING_BYTES {
+        return None;
+    }
+    let length = usize::try_from(frame_bytes).ok()?;
     let mut frames = Vec::with_capacity(count.min(MAX_FRAMES));
     for _ in 0..count {
         let delay = if count == 1 {
@@ -243,6 +252,7 @@ mod tests {
         answer.truncate(answer.len() - 1);
         assert!(read_picture(answer.as_slice(), FIT).is_none());
         assert!(read_picture(b"2 1 1\n".as_slice(), FIT).is_none());
+        assert!(read_picture(b"2 1 4000000000\n".as_slice(), FIT).is_none());
     }
 
     #[test]

@@ -4,38 +4,20 @@ use std::path::Path;
 use image::RgbaImage;
 use resvg::{tiny_skia, usvg};
 
-const SVG_EXTENSIONS: [&str; 2] = ["svg", "svgz"];
-
-pub fn is_svg(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| {
-            SVG_EXTENSIONS
-                .iter()
-                .any(|svg| extension.eq_ignore_ascii_case(svg))
-        })
-}
+use crate::render::scaled_into;
 
 pub fn draw(path: &Path, width: u32, height: u32) -> Option<RgbaImage> {
     let data = fs::read(path).ok()?;
     let mut options = usvg::Options::default();
     options.fontdb_mut().load_system_fonts();
     let tree = usvg::Tree::from_data(&data, &options).ok()?;
-    let size = tree.size();
-    let scale = (width as f32 / size.width()).min(height as f32 / size.height());
-    if !scale.is_finite() || scale <= 0.0 {
-        return None;
-    }
-    let side = |side: f32| {
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "a side scaled into the box, at least 1"
-        )]
-        let scaled = (side * scale).round().max(1.0) as u32;
-        scaled
-    };
-    let (drawn_width, drawn_height) = (side(size.width()), side(size.height()));
+    let size = tree.size().to_int_size();
+    let (drawn_width, drawn_height) = scaled_into(size.width(), size.height(), width, height);
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "sides of a few thousand pixels at most"
+    )]
+    let scale = drawn_width as f32 / tree.size().width();
     let mut pixmap = tiny_skia::Pixmap::new(drawn_width, drawn_height)?;
     resvg::render(
         &tree,
@@ -71,12 +53,13 @@ mod tests {
     }
 
     #[test]
-    fn broken_drawings_and_other_names_are_refused() {
+    fn broken_drawings_and_other_files_are_refused() {
         let folder = TestFolder::new("vector-broken");
         let path = folder.join("bad.svg");
         fs::write(&path, "<svg").unwrap();
         assert!(draw(&path, 40, 40).is_none());
-        assert!(is_svg(Path::new("/a/b.SVG")));
-        assert!(!is_svg(Path::new("/a/b.png")));
+        let words = folder.join("notes.txt");
+        fs::write(&words, "plain words").unwrap();
+        assert!(draw(&words, 40, 40).is_none());
     }
 }

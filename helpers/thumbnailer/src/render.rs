@@ -130,10 +130,39 @@ pub fn built_in(path: &Path) -> bool {
     )
 }
 
-pub fn decode(path: &Path) -> ImageResult<DynamicImage> {
-    let mut reader = ImageReader::open(path)?.with_guessed_format()?;
+pub const BYTES_PER_PIXEL: u64 = 4;
+
+pub fn decode_limits() -> Limits {
     let mut limits = Limits::default();
     limits.max_alloc = Some(MAX_DECODE_BYTES);
+    limits
+}
+
+pub fn fit_within(width: u32, height: u32, box_width: u32, box_height: u32) -> (u32, u32) {
+    if width <= box_width && height <= box_height {
+        return (width, height);
+    }
+    scaled_into(width, height, box_width, box_height)
+}
+
+pub fn scaled_into(width: u32, height: u32, box_width: u32, box_height: u32) -> (u32, u32) {
+    let scale = (f64::from(box_width) / f64::from(width.max(1)))
+        .min(f64::from(box_height) / f64::from(height.max(1)));
+    let side = |side: u32| {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a side scaled into the box, between 1 and the box's side"
+        )]
+        let scaled = (f64::from(side) * scale).round().max(1.0) as u32;
+        scaled
+    };
+    (side(width), side(height))
+}
+
+pub fn decode(path: &Path) -> ImageResult<DynamicImage> {
+    let mut reader = ImageReader::open(path)?.with_guessed_format()?;
+    let mut limits = decode_limits();
     reader.limits(limits.clone());
     let mut decoder = reader.into_decoder()?;
     limits.reserve(decoder.total_bytes())?;

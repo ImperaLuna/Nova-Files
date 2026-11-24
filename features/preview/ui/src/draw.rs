@@ -166,6 +166,7 @@ fn picture_art(
         room,
     );
     img(Arc::clone(picture))
+        .id(("preview-picture", picture.id.0))
         .debug_selector(|| "preview-picture".to_owned())
         .w(drawn.width)
         .h(drawn.height)
