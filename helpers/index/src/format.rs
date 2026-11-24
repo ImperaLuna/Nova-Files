@@ -5,7 +5,7 @@ use crate::{FileId, Kind, RowId, Stamp};
 
 pub const MAGIC: [u8; MAGIC_LEN] = *b"NOVAIDX\0";
 const MAGIC_LEN: usize = 8;
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
 pub const HEADER_LEN: usize = 48;
 pub const DETAIL_LEN: usize = 48;
 pub const NO_PARENT: u32 = u32::MAX;
@@ -34,6 +34,7 @@ const KIND_FILE: u8 = 1;
 const KIND_LINK: u8 = 2;
 const KIND_BITS: u8 = 0b11;
 const HIDDEN_BIT: u8 = 1 << 2;
+const AS_FOLDED_BIT: u8 = 1 << 3;
 const FLAGS_SHIFT: u32 = 4;
 const FLAGS_BITS: u8 = 0b1111;
 
@@ -149,6 +150,10 @@ pub const fn traits_hidden(traits: u8) -> bool {
     traits & HIDDEN_BIT != 0
 }
 
+pub const fn traits_as_folded(traits: u8) -> bool {
+    traits & AS_FOLDED_BIT != 0
+}
+
 pub const fn traits_flags(traits: u8) -> u8 {
     traits >> FLAGS_SHIFT
 }
@@ -244,7 +249,12 @@ pub fn write(out: &mut impl Write, crawled: i64, rows: &[Row], names: &[u8]) -> 
             .and_then(|parent| traits_of.get(parent))
             .is_some_and(|&parent| traits_hidden(parent));
         let hidden = at != 0 && (under_hidden || name.first() == Some(&b'.'));
-        traits_of.push(traits(row.kind, hidden, row.flags));
+        let as_folded = if !name.is_empty() && name == one.as_slice() {
+            AS_FOLDED_BIT
+        } else {
+            0
+        };
+        traits_of.push(traits(row.kind, hidden, row.flags) | as_folded);
     }
     folded_at.push(u32::try_from(folded.len()).map_err(io::Error::other)?);
     let header = Header::current(

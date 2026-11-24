@@ -186,3 +186,61 @@ fn rebase_swaps_only_a_leading_folder() {
     );
     assert_eq!(rebase(Path::new("/h/dd"), from, to), None);
 }
+
+#[test]
+fn a_path_lands_where_every_step_in_order_takes_it() {
+    let overlay = after(&[
+        moved("/h/a", "/h/b"),
+        removed("/h/b/x"),
+        moved("/h/b", "/h/c/b"),
+        moved("/h/c/b/y", "/h/a"),
+        moved("/h/c", "/h/d"),
+        removed("/h/d/b/z"),
+        moved("/h/a", "/h/a2"),
+        moved("/h/q", "/h/a"),
+        moved("/h/a", "/h/q"),
+    ]);
+    let lands = [
+        ("/h/a/y/in", Some("/h/a2/in")),
+        ("/h/a/w", Some("/h/d/b/w")),
+        ("/h/c/b", Some("/h/d/b")),
+        ("/h/q/r", Some("/h/q/r")),
+        ("/h/other", Some("/h/other")),
+        ("/h/a", None),
+        ("/h/a/x/deep", None),
+        ("/h/a/y", None),
+        ("/h/a/z", None),
+        ("/h/b/x", None),
+        ("/h/c", None),
+        ("/h/q", None),
+        ("/h/a2", None),
+    ];
+    for (path, wanted) in lands {
+        assert_eq!(place(&overlay, path), wanted.map(PathBuf::from), "{path}");
+    }
+}
+
+fn whole(overlay: &Overlay, folder: &str) -> Whole {
+    overlay.place_whole(PathBuf::from(folder))
+}
+
+#[test]
+fn a_folder_moves_whole_unless_something_right_inside_it_changed_too() {
+    let overlay = after(&[
+        moved("/h/a", "/h/b"),
+        moved("/h/b/sub/x", "/h/x"),
+        removed("/h/b/gone"),
+    ]);
+    assert_eq!(
+        whole(&overlay, "/h/a/plain"),
+        Whole::At(PathBuf::from("/h/b/plain"))
+    );
+    assert_eq!(whole(&overlay, "/h/a/gone"), Whole::Gone);
+    assert_eq!(
+        whole(&after(&[moved("/h/a", "/h/b")]), "/h/a"),
+        Whole::At(PathBuf::from("/h/b"))
+    );
+    assert_eq!(whole(&overlay, "/h/a/sub"), Whole::Mixed);
+    assert_eq!(whole(&overlay, "/h/a"), Whole::Mixed);
+    assert_eq!(whole(&overlay, "/h"), Whole::Mixed);
+}

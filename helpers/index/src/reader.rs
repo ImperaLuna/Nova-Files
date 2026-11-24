@@ -90,6 +90,9 @@ impl Index {
     }
 
     pub fn name(&self, row: RowId) -> Option<&OsStr> {
+        if format::traits_as_folded(self.traits(row)?) {
+            return self.folded(row).map(OsStr::from_bytes);
+        }
         let raw = self.raw(row)?;
         let names = self.map.get(self.layout.names..)?;
         let at = usize::try_from(raw.name_at).ok()?;
