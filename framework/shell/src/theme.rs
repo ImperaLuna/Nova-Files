@@ -31,6 +31,7 @@ pub struct Colors {
     pub drop: Rgba,
     pub drop_edge: Rgba,
     pub changed: Rgba,
+    pub added: Rgba,
     pub tags: Tags,
     pub code: Code,
 }
@@ -126,6 +127,7 @@ impl Colors {
             drop: thin(palette.primary, share::DROP),
             drop_edge: color(palette.primary),
             changed: color(palette.warning),
+            added: color(palette.success),
             tags: Tags::new(palette, text_dim),
             code: Code {
                 plain: into_bg(palette.fg, share::SOFT),
@@ -319,6 +321,7 @@ pub mod size {
     pub const PART_WIDTH: Pixels = px(170.0);
     pub const MARK_DOT: Pixels = px(7.0);
     pub const MARK_GAP: Pixels = px(7.0);
+    pub const MARK_WIDTH: Pixels = px(16.0);
     pub const FOLDER_LINK_HEIGHT: Pixels = px(26.0);
     pub const FOLDER_LINK_PAD: Pixels = px(8.0);
     pub const CHIP_HEIGHT: Pixels = px(28.0);
@@ -595,6 +598,7 @@ mod tests {
         assert_eq!(colors.on_accept, color(palette.on_accent));
         assert_eq!(colors.danger, color(palette.error));
         assert_eq!(colors.changed, color(palette.warning));
+        assert_eq!(colors.added, color(palette.success));
         assert_eq!(colors.shadow, thin(palette.fg, share::SHADOW_LIGHT));
         let dark = Colors::default();
         assert_eq!(dark.shadow, thin(SHADOW_DARK_BASE, share::SHADOW_DARK));

@@ -55,6 +55,7 @@ impl Repos {
             Event::Repo { folder, .. } => {
                 self.known.remove(&folder);
             }
+            Event::Marks { .. } => {}
         }
     }
 

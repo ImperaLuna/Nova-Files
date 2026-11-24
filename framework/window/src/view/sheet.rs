@@ -257,6 +257,11 @@ impl MainWindow {
                     |field| rename_box(field, colors).into_any_element(),
                 )
             }))
+            .children(
+                self.parts
+                    .row_mark(entry, cx)
+                    .map(|mark| div().flex().flex_1().justify_end().child(mark)),
+            )
     }
 
     fn empty_note(&self, colors: &Colors, cx: &Context<Self>) -> Option<impl IntoElement> {

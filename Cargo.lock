@@ -3422,6 +3422,7 @@ dependencies = [
  "nova-files-gathered-ui",
  "nova-files-git-api",
  "nova-files-git-core",
+ "nova-files-git-ui",
  "nova-files-jobs",
  "nova-files-look-api",
  "nova-files-look-core",
@@ -3710,6 +3711,16 @@ dependencies = [
  "nova-files-git-api",
  "nova-files-test-folder",
  "rustix",
+]
+
+[[package]]
+name = "nova-files-git-ui"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "nova-files-api",
+ "nova-files-git-api",
+ "nova-files-shell",
 ]
 
 [[package]]
