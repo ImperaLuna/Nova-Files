@@ -100,6 +100,9 @@ pub fn start(
     let frames = Arc::clone(&playing.frames);
     *lock(&frames) = Frames::default();
     let heard = move |heard: Heard| {
+        if !watching.is(id) {
+            return false;
+        }
         let heard = match heard {
             Heard::Frame(picture) => {
                 let ready = lock(&frames).held_back(picture);

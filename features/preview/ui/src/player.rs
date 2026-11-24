@@ -108,9 +108,16 @@ impl Media {
         if self.sought == Some(step) {
             return None;
         }
-        self.sought = Some(step);
         let length = self.length?;
+        self.sought = Some(step);
         Some(length.mul_f64(f64::from(step) / f64::from(SEEK_STEPS - 1)))
+    }
+
+    pub fn moved_to(&mut self, at: Duration) {
+        self.at = at;
+        if self.state == State::Ended {
+            self.state = State::Paused;
+        }
     }
 
     pub const fn let_go(&mut self) {
@@ -349,7 +356,10 @@ fn seek_track(media: &Media, colors: &Colors, cx: &Context<PreviewPart>) -> Div 
             .items_center()
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |this, _: &MouseDownEvent, _, cx| this.seek_step(step, cx)),
+                cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                    this.let_go_of_seek();
+                    this.seek_step(step, cx);
+                }),
             )
             .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
                 if event.pressed_button == Some(MouseButton::Left) {
@@ -442,6 +452,8 @@ mod tests {
         media.heard(Played::Ended);
         media.heard(Played::Paused(true));
         assert_eq!(media.state, State::Ended);
+        media.moved_to(Duration::from_secs(3));
+        assert_eq!(media.state, State::Paused);
         media.heard(Played::Paused(false));
         assert_eq!(media.state, State::Playing);
     }

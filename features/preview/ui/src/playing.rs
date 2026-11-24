@@ -60,7 +60,7 @@ impl PreviewPart {
         };
         let id = media.id;
         if let Some(at) = media.at_step(step) {
-            media.at = at;
+            media.moved_to(at);
             self.control(id, Control::Seek(at));
             cx.notify();
         }
@@ -85,7 +85,7 @@ impl PreviewPart {
             return;
         };
         let (id, at) = (media.id, media.jumped(back));
-        media.at = at;
+        media.moved_to(at);
         self.control(id, Control::Seek(at));
     }
 
