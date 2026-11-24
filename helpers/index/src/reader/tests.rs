@@ -215,13 +215,14 @@ fn the_search_part_holds_folded_names_word_starts_and_what_is_hidden() {
     assert_eq!(index.kind(RowId(1)), Some(Kind::Folder));
     assert_eq!(index.end(RowId(1)), Some(RowId(3)));
     assert_eq!(index.folded(RowId(4)), None);
+    assert_eq!(index.end(RowId(4)), None);
 }
 
 #[test]
 fn released_details_read_back_from_the_file() {
     let (_folder, index) = opened("reader-released", &tree(), NAMES);
     let before = index.entry(RowId(3));
-    index.release_details();
+    index.release_details().unwrap();
     assert_eq!(index.entry(RowId(3)), before);
     assert_eq!(index.name(RowId(3)), Some(OsStr::new("b.txt")));
 }

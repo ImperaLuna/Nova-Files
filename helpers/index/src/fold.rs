@@ -17,6 +17,28 @@ pub fn fold_into(name: &[u8], out: &mut Vec<u8>) {
     }
 }
 
+const DIGIT_BIT: u32 = 26;
+const DOT_BIT: u32 = 27;
+const UNDERSCORE_BIT: u32 = 28;
+const DASH_BIT: u32 = 29;
+const SPACE_BIT: u32 = 30;
+const OTHER_BIT: u32 = 31;
+
+pub fn letters(folded: &[u8]) -> u32 {
+    folded.iter().fold(0, |mask, &byte| {
+        let bit = match byte {
+            b'a'..=b'z' => u32::from(byte - b'a'),
+            b'0'..=b'9' => DIGIT_BIT,
+            b'.' => DOT_BIT,
+            b'_' => UNDERSCORE_BIT,
+            b'-' => DASH_BIT,
+            b' ' => SPACE_BIT,
+            _ => OTHER_BIT,
+        };
+        mask | (1 << bit)
+    })
+}
+
 pub fn starts_word(name: &[u8], folded: &[u8], at: usize) -> bool {
     let Some(before) = at.checked_sub(1) else {
         return true;

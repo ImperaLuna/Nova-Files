@@ -78,10 +78,17 @@ fn stem(folded: &[u8]) -> Option<&[u8]> {
 }
 
 fn occurrences<'a>(folded: &'a [u8], query: &'a [u8]) -> impl Iterator<Item = usize> + 'a {
+    let (first, rest) = query.split_first().unzip();
+    let rest = rest.unwrap_or_default();
     folded
-        .windows(query.len())
+        .iter()
         .enumerate()
-        .filter(move |(_, window)| *window == query)
+        .filter(move |&(at, byte)| {
+            Some(byte) == first
+                && folded
+                    .get(at + 1..)
+                    .is_some_and(|after| after.starts_with(rest))
+        })
         .map(|(at, _)| at)
 }
 
