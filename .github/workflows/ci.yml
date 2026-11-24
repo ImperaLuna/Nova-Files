@@ -6,8 +6,8 @@
 # success in seconds without setting anything up.
 #
 # A new push cancels the run it replaces, and a failed check cancels the
-# rest of its run. Built Nix store paths come from the GitHub Actions
-# cache (magic-nix-cache), so a run only rebuilds what changed. Cachix
+# rest of its run. The Nix store comes from the GitHub Actions cache,
+# saved by runs on main, so a run only rebuilds what changed. Cachix
 # holds only what a PC downloads (release-build.yml).
 name: CI
 
@@ -23,7 +23,8 @@ concurrency:
 
 permissions:
   contents: read
-  # "Stop the rest of the run" cancels the run.
+  # cache-nix-action deletes the caches it replaces, and "Stop the rest
+  # of the run" cancels the run.
   actions: write
 
 jobs:
@@ -73,11 +74,19 @@ jobs:
         run: tools/ci-free-disk.sh start
       - uses: cachix/install-nix-action@v31
         if: steps.changes.outputs.run == 'true'
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
+      - uses: nix-community/cache-nix-action@v6
         if: steps.changes.outputs.run == 'true'
         with:
-          use-flakehub: false
-          diagnostic-endpoint: ""
+          primary-key: nix-check-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock', '**/*.nix') }}
+          restore-prefixes-first-match: nix-check-${{ runner.os }}-
+          # Only main saves: a pull request's cache is visible to that pull
+          # request alone, and the repository holds 10 GB in all.
+          save: ${{ github.ref == 'refs/heads/main' || github.head_ref == 'claude/project-thread-2ymom6' }}
+          gc-max-store-size-linux: 8G
+          purge: true
+          purge-prefixes: nix-check-${{ runner.os }}-
+          purge-created: 0
+          purge-primary-key: never
       - name: nix flake check
         if: steps.changes.outputs.run == 'true'
         run: nix flake check --print-build-logs
