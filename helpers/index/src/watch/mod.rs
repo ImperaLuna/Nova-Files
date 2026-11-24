@@ -39,6 +39,7 @@ impl Watcher {
         let mut folders = Folders::new(inotify, index.root().to_owned(), stopping);
         let mut caught = folders.watch_index(index);
         caught.extend(folders.catch_up(index));
+        index.release_details();
         for change in &caught {
             log.append(change)?;
         }

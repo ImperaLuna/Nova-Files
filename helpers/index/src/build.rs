@@ -3,7 +3,7 @@ use std::io::{self, BufWriter, Write as _};
 use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
 
-use crate::format::{self, Header, NO_PARENT, Row};
+use crate::format::{self, NO_PARENT, Row};
 use crate::{Details, Flags, RowId, Stamp};
 
 const FILE_MODE: u32 = 0o600;
@@ -88,14 +88,7 @@ impl Built {
     }
 
     fn write_to(&self, out: &mut impl io::Write) -> io::Result<()> {
-        let rows = u64::try_from(self.rows.len()).map_err(io::Error::other)?;
-        let names_len = u64::try_from(self.names.len()).map_err(io::Error::other)?;
-        let header = Header::current(rows, names_len, format::stored(self.crawled));
-        out.write_all(&header.write())?;
-        for row in &self.rows {
-            out.write_all(&row.write())?;
-        }
-        out.write_all(&self.names)
+        format::write(out, format::stored(self.crawled), &self.rows, &self.names)
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {

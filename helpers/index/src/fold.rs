@@ -17,6 +17,19 @@ pub fn fold_into(name: &[u8], out: &mut Vec<u8>) {
     }
 }
 
+pub fn starts_word(name: &[u8], folded: &[u8], at: usize) -> bool {
+    let Some(before) = at.checked_sub(1) else {
+        return true;
+    };
+    let separated = folded
+        .get(before)
+        .is_some_and(|byte| byte.is_ascii() && !byte.is_ascii_alphanumeric());
+    let camel = name.is_ascii()
+        && name.get(before).is_some_and(u8::is_ascii_lowercase)
+        && name.get(at).is_some_and(u8::is_ascii_uppercase);
+    separated || camel
+}
+
 const fn plain(letter: char) -> Option<&'static str> {
     Some(match letter {
         '\u{300}'..='\u{36f}' => "",
