@@ -39,9 +39,26 @@ pub struct NewFileJob {
     pub name: OsString,
 }
 
+/// Give each of `paths` the name at the same place in `names`, each in
+/// its own folder, as one step: every one is renamed or none is.
+///
+/// A name already taken by an entry that isn't itself being renamed
+/// fails the job; nothing is replaced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenameManyJob {
+    pub paths: Vec<PathBuf>,
+    pub names: Vec<OsString>,
+}
+
 /// The job that renames `path` to `name`.
 pub fn rename(path: PathBuf, name: OsString) -> Operation {
     Operation::feature(RenameJob { path, name })
+}
+
+/// The job that renames each of `paths` to the name beside it.
+pub fn rename_many(renames: impl IntoIterator<Item = (PathBuf, OsString)>) -> Operation {
+    let (paths, names) = renames.into_iter().unzip();
+    Operation::feature(RenameManyJob { paths, names })
 }
 
 /// The job that makes the folder `name` inside `inside`.

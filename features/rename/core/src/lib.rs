@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod kind;
+mod many;
 mod undo;
 
 use std::ffi::OsStr;
@@ -16,6 +17,7 @@ use nova_files_jobs::place::rename_no_replace;
 use nova_files_rename_api::is_plain_name;
 
 pub use kind::Renames;
+pub use many::rename_many;
 
 const FOLDER_MODE: u32 = 0o777;
 const FILE_MODE: u32 = 0o666;

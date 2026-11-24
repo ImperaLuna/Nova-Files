@@ -151,6 +151,7 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
                 "Cut",
                 "Copy",
                 "Copy path",
+                "Rename",
                 "Compress",
                 "Compress as…",
                 "Move to Trash",
@@ -158,7 +159,7 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![5, 6]
+            vec![6, 7]
         )
     );
 

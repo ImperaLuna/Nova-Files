@@ -85,19 +85,80 @@ async fn escape_or_the_same_name_leaves_it_as_it_was(cx: &mut TestAppContext) {
     assert!(tree.path().join("Projects").is_dir());
 }
 
-#[gpui::test]
-async fn rename_needs_one_entry_selected(cx: &mut TestAppContext) {
-    let _watchdog = Watchdog::start();
-    let tree = TempFolder::tree("rename");
-    let home = TempFolder::tree("rename-home");
-    let (view, cx) = island_window(cx, tree.path(), &home).await;
+fn pictures(test: &str) -> TempFolder {
+    let tree = TempFolder::tree(test);
+    for name in ["IMG_1.jpg", "IMG_2.jpg"] {
+        fs::write(tree.path().join(name), "").unwrap();
+    }
+    tree
+}
 
-    cx.simulate_keystrokes("ctrl-a");
+#[gpui::test]
+async fn f2_on_several_makes_one_change_in_every_name(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = pictures("rename-several");
+    let home = TempFolder::tree("rename-several-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let before = ["Projects", "IMG_1.jpg", "IMG_2.jpg", "notes.txt"];
+    wait_for_names(&view, cx, &before).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("shift-down");
     cx.run_until_parked();
-    assert!(cx.debug_bounds("island-rename").is_none());
+    assert!(cx.debug_bounds("island-rename").is_some());
     cx.simulate_keystrokes("f2");
     cx.run_until_parked();
+    assert_eq!(field_state(&view, cx, 2), ("IMG_2.jpg".to_owned(), 0..5));
+    assert!(cx.debug_bounds("new-name").is_none());
+    cx.simulate_input("Art 2");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("new-name").is_some());
+    cx.simulate_keystrokes("enter");
+    wait_for_names(
+        &view,
+        cx,
+        &["Projects", "Art 1.jpg", "Art 2.jpg", "notes.txt"],
+    )
+    .await;
+    assert_eq!(
+        view.read_with(cx, |view, _| view.selected_names()),
+        ["Art 1.jpg", "Art 2.jpg"]
+    );
+    wait_for_note(&view, cx, "Renamed 2 items").await;
+
+    click(cx, "island-undo");
+    wait_for_names(&view, cx, &before).await;
+}
+
+#[gpui::test]
+async fn names_that_would_clash_keep_the_field_open(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = pictures("rename-clash");
+    let home = TempFolder::tree("rename-clash-home");
+    fs::write(tree.path().join("Art 1.jpg"), "").unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+    let before = [
+        "Projects",
+        "Art 1.jpg",
+        "IMG_1.jpg",
+        "IMG_2.jpg",
+        "notes.txt",
+    ];
+    wait_for_names(&view, cx, &before).await;
+
+    click(cx, "name-2");
+    cx.simulate_keystrokes("shift-down f2");
+    cx.run_until_parked();
+    cx.simulate_input("Art 2");
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert!(view.read_with(cx, MainWindow::renaming));
+    assert!(tree.path().join("IMG_2.jpg").exists());
+
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
     assert!(!view.read_with(cx, MainWindow::renaming));
+    assert_eq!(view.read_with(cx, |view, _| view.entry_names()), before);
 }
 
 #[gpui::test]
