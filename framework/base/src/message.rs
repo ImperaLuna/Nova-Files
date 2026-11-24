@@ -24,11 +24,14 @@ pub enum Command {
     /// `id`. A newer `ListFolder` from the same client cancels this one,
     /// which then may never answer. An order by modified time or size reads
     /// every entry's details before the listing goes out. Hidden entries
-    /// are listed only while the [`crate::HiddenFiles`] setting shows them.
+    /// are listed only while the [`crate::HiddenFiles`] setting shows them,
+    /// and only entries whose names hold every word of `filter` are listed
+    /// (see [`crate::holds_every_word`]); an empty `filter` lists them all.
     ListFolder {
         id: ListingId,
         path: PathBuf,
         order: Order,
+        filter: String,
     },
     /// The entries of listing `id` the client shows or is about to show:
     /// `count` entries from `first`. The core reads the details of those it

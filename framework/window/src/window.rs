@@ -5,6 +5,7 @@ mod context_menu;
 mod drag_pile;
 mod dragging;
 mod events;
+mod filter;
 mod gallery;
 mod hidden;
 mod hover_open;
@@ -56,6 +57,7 @@ use nova_files_shell::{
 use self::rows::RowRead;
 use crate::band::Band;
 use crate::edge_scroll::EdgeScroll;
+use crate::filtering::Filter;
 use crate::grip;
 use crate::island::Island;
 use crate::jump::TypeJump;
@@ -107,6 +109,7 @@ pub struct MainWindow {
     sizing: views::Sizing,
     pub(crate) selection: Option<Selection>,
     pub(crate) jump: TypeJump,
+    filter: Filter,
     went: Went,
     pub(crate) band: Option<Band>,
     pub(crate) pressed_name: bool,
@@ -227,6 +230,7 @@ impl MainWindow {
             sizing: views::Sizing::default(),
             selection: None,
             jump: TypeJump::default(),
+            filter: Filter::default(),
             went: Went::Stayed,
             band: None,
             pressed_name: false,
@@ -364,6 +368,10 @@ impl MainWindow {
                 .map(|entry| entry.name.to_string_lossy().into_owned())
                 .collect()
         })
+    }
+
+    pub fn filter_text(&self) -> &str {
+        &self.filter.text
     }
 
     pub const fn scroll(&self) -> &UniformListScrollHandle {

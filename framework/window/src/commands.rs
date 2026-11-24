@@ -238,6 +238,7 @@ pub fn bind_keys(cx: &mut App) {
             .iter()
             .flat_map(|spec| spec.keys.iter().map(|keys| spec.binding(keys))),
     );
+    crate::filtering::bind_keys(cx);
 }
 
 #[cfg(test)]

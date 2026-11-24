@@ -10,5 +10,5 @@ pub mod order;
 pub mod sizes;
 
 pub use client::{Client, ListingJob, RowPictures, RowWatch};
-pub use folder::{Inner, InnerFolders, list_folder};
+pub use folder::{Inner, InnerFolders, Shown, list_folder};
 pub use sizes::{FolderSizer, MeasureFolders};
