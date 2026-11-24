@@ -4054,6 +4054,7 @@ version = "0.1.0"
 dependencies = [
  "landlock",
  "libloading",
+ "nova-files-test-folder",
 ]
 
 [[package]]

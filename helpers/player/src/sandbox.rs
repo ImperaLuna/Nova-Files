@@ -36,7 +36,9 @@ pub fn lock_in() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, fs, io, thread};
+    use std::{fs, io, thread};
+
+    use nova_files_test_folder::TestFolder;
 
     use super::*;
 
@@ -46,7 +48,8 @@ mod tests {
 
     #[test]
     fn reads_anything_and_writes_only_devices() {
-        let outside = env::temp_dir().join(format!("nova-files-player-{}", std::process::id()));
+        let folder = TestFolder::new("player-sandbox");
+        let outside = folder.join("outside");
         let result = thread::spawn(move || {
             lock_in().unwrap();
             (

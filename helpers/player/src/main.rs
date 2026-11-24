@@ -6,9 +6,9 @@ use std::ffi::{CString, OsString};
 use std::io::{self, BufRead as _, Write as _};
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{self, ExitCode};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -54,6 +54,10 @@ fn main() -> ExitCode {
         writeln!(io::stderr(), "{USAGE}").ok();
         return ExitCode::FAILURE;
     };
+    if let Err(error) = sandbox::lock_in() {
+        writeln!(io::stderr(), "could not start the sandbox: {error}").ok();
+        return ExitCode::FAILURE;
+    }
     let Some(mut mpv) = Mpv::load() else {
         return say(&Heard::Missing);
     };
@@ -63,10 +67,6 @@ fn main() -> ExitCode {
         .all(|(name, value)| mpv.set_option(name, value))
         && mpv.set_option("volume", &volume);
     if !set || !mpv.start() {
-        return ExitCode::FAILURE;
-    }
-    if let Err(error) = sandbox::lock_in() {
-        writeln!(io::stderr(), "could not start the sandbox: {error}").ok();
         return ExitCode::FAILURE;
     }
     for (name, format) in PROPERTIES {
@@ -94,9 +94,8 @@ fn request(args: impl IntoIterator<Item = OsString>) -> Option<Request> {
 
 fn play(mpv: &Mpv, room: Room) -> ExitCode {
     let room = Arc::new(AtomicU64::new(room.packed()));
-    let closed = Arc::new(AtomicBool::new(false));
     let commander = mpv.commander();
-    let (listening_room, listening_closed) = (Arc::clone(&room), Arc::clone(&closed));
+    let listening_room = Arc::clone(&room);
     let listening = thread::Builder::new()
         .name(READER_THREAD.to_owned())
         .spawn(move || {
@@ -112,14 +111,15 @@ fn play(mpv: &Mpv, room: Room) -> ExitCode {
                     None => {}
                 }
             }
-            listening_closed.store(true, Ordering::SeqCst);
+            process::exit(0);
         });
     if listening.is_err() {
         return ExitCode::FAILURE;
     }
     let mut pixels = Vec::new();
     let mut out = io::stdout().lock();
-    while !closed.load(Ordering::SeqCst) {
+    let mut drawn = None;
+    loop {
         let woken = mpv.wait_for_frame(FRAME_WAIT);
         while let Some(event) = mpv.next_event() {
             let heard = match event {
@@ -132,11 +132,12 @@ fn play(mpv: &Mpv, room: Room) -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
-        if !woken || !mpv.has_new_frame() {
+        let wanted = Room::unpacked(room.load(Ordering::SeqCst));
+        let fresh = woken && mpv.has_new_frame();
+        if !fresh && (drawn.is_none() || drawn == Some(wanted)) {
             continue;
         }
-        let Some((width, height)) = frame_size(mpv, Room::unpacked(room.load(Ordering::SeqCst)))
-        else {
+        let Some((width, height)) = frame_size(mpv, wanted) else {
             continue;
         };
         let length = (width as usize) * (height as usize) * BYTES_PER_PIXEL;
@@ -156,8 +157,8 @@ fn play(mpv: &Mpv, room: Room) -> ExitCode {
         if sent.is_err() {
             return ExitCode::FAILURE;
         }
+        drawn = Some(wanted);
     }
-    ExitCode::SUCCESS
 }
 
 fn frame_size(mpv: &Mpv, room: Room) -> Option<(u32, u32)> {
