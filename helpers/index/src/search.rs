@@ -47,6 +47,8 @@ pub struct Kept {
     any: Option<Vec<u32>>,
 }
 
+const KEPT_ROWS_MAX: usize = 262_144;
+
 pub const STAGES: usize = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -150,8 +152,11 @@ impl<'a> Search<'a> {
     }
 
     pub fn keep(self) -> Option<Kept> {
-        let typed = self.typed_rows?;
-        let any = self.loose_rows.map(|loose| merged(&typed, &loose));
+        let typed = self.typed_rows.filter(|rows| rows.len() <= KEPT_ROWS_MAX)?;
+        let any = self
+            .loose_rows
+            .map(|loose| merged(&typed, &loose))
+            .filter(|rows| rows.len() <= KEPT_ROWS_MAX);
         Some(Kept {
             query: self.query,
             within: self.within,
