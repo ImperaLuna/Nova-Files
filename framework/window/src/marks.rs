@@ -1,9 +1,11 @@
 use std::ops::Range;
 
+use nova_files_api::find_word;
+
 pub fn matched(name: &str, query: &str) -> Vec<Range<usize>> {
     let mut ranges: Vec<Range<usize>> = query
         .split_whitespace()
-        .filter_map(|word| find_ignoring_case(name, word))
+        .filter_map(|word| find_word(name, word))
         .collect();
     ranges.sort_by_key(|range| range.start);
     let mut joined: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
@@ -14,18 +16,6 @@ pub fn matched(name: &str, query: &str) -> Vec<Range<usize>> {
         }
     }
     joined
-}
-
-fn find_ignoring_case(name: &str, word: &str) -> Option<Range<usize>> {
-    name.char_indices().find_map(|(start, _)| {
-        let mut rest = name[start..].char_indices();
-        let same = word.chars().all(|wanted| {
-            rest.next()
-                .is_some_and(|(_, found)| found.to_lowercase().eq(wanted.to_lowercase()))
-        });
-        let end = rest.next().map_or(name.len(), |(at, _)| start + at);
-        same.then_some(start..end)
-    })
 }
 
 #[cfg(test)]
