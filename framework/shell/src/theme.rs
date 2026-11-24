@@ -31,6 +31,21 @@ pub struct Colors {
     pub drop: Rgba,
     pub drop_edge: Rgba,
     pub tags: Tags,
+    pub code: Code,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Code {
+    pub plain: Rgba,
+    pub comment: Rgba,
+    pub keyword: Rgba,
+    pub quoted: Rgba,
+    pub number: Rgba,
+    pub function: Rgba,
+    pub kind: Rgba,
+    pub tag: Rgba,
+    pub attribute: Rgba,
+    pub line_number: Rgba,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -64,6 +79,8 @@ mod share {
     pub const MARK: f32 = 0.34;
     pub const DROP: f32 = 0.16;
     pub const SCRIM: f32 = 0.72;
+    pub const CODE_KIND: f32 = 0.55;
+    pub const CODE_COMMENT: f32 = 0.48;
 }
 
 impl Colors {
@@ -108,6 +125,18 @@ impl Colors {
             drop: thin(palette.primary, share::DROP),
             drop_edge: color(palette.primary),
             tags: Tags::new(palette, text_dim),
+            code: Code {
+                plain: into_bg(palette.fg, share::SOFT),
+                comment: into_bg(palette.fg, share::CODE_COMMENT),
+                keyword: color(palette.secondary),
+                quoted: color(palette.success),
+                number: color(palette.warning),
+                function: color(palette.info),
+                kind: mix(color(palette.info), share::CODE_KIND, color(palette.fg)),
+                tag: color(palette.error),
+                attribute: mix(color(palette.warning), share::CODE_KIND, color(palette.fg)),
+                line_number: into_bg(palette.fg, share::FAINT),
+            },
         }
     }
 

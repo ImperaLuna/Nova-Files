@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod code;
 mod draw;
 mod looks;
 
@@ -397,10 +398,18 @@ impl PreviewPart {
             release(picture, cx);
             return;
         };
+        let code = match preview.as_deref().map(|preview| &preview.content) {
+            Some(PreviewContent::Code { text, runs, .. }) => {
+                let family = code::mono_family(cx);
+                Some(Arc::new(code::Coded::new(text, runs, family)))
+            }
+            _ => None,
+        };
         let shown = Shown {
             entry: open.entry,
             preview,
             picture,
+            code,
         };
         let before = open.shown.replace(shown);
         release(before.and_then(|before| before.picture), cx);
