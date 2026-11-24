@@ -6,6 +6,7 @@ use nova_files_git_api::{Head, Repo};
 use nova_files_shell::PageRef;
 
 use super::*;
+use crate::window_git::git;
 use crate::window_sidebar::right_click_at;
 
 fn gathered_shown(view: &MainWindow) -> Option<Gathering> {
@@ -58,23 +59,6 @@ async fn projects_lists_the_folders_it_gathers_and_follows_them(cx: &mut TestApp
 
     view.update_in(cx, |view, _, cx| view.go_back(cx));
     wait_for_folder(&view, cx, tree.path()).await;
-}
-
-fn git(folder: &Path, args: &[&str]) {
-    let ran = std::process::Command::new("git")
-        .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
-        .args([
-            "-c",
-            "init.defaultBranch=main",
-            "-c",
-            "commit.gpgsign=false",
-        ])
-        .arg("-C")
-        .arg(folder)
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(ran.status.success(), "git {args:?}: {ran:?}");
 }
 
 #[gpui::test]

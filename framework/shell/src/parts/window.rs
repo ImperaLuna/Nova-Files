@@ -323,6 +323,10 @@ impl WindowParts {
             .find_map(|part| part.row_icon(entry, side, cx))
     }
 
+    pub fn row_mark(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
+        self.opened.iter().find_map(|part| part.row_mark(entry, cx))
+    }
+
     pub fn row_picture(&self, entry: &Entry, cx: &App) -> Option<Arc<RenderImage>> {
         self.opened
             .iter()

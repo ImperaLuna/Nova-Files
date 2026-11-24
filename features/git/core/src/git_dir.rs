@@ -2,7 +2,7 @@ use std::fs::{self, File};
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
-const DOT_GIT: &str = ".git";
+pub const DOT_GIT: &str = ".git";
 const POINTER: &str = "gitdir:";
 const COMMON: &str = "commondir";
 const LONGEST_POINTER: u64 = 4096;

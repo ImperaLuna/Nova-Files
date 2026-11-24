@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -265,4 +267,126 @@ fn a_push_of_a_branch_with_a_slash_in_its_name_is_read_again() {
     git(&clone, &["push", "--quiet"]);
     assert!(answers.iter().any(|event| event == at(0)));
     reader.forget(ClientId(1));
+}
+
+fn marked(entries: &[(&str, Mark)]) -> BTreeMap<OsString, Mark> {
+    entries
+        .iter()
+        .map(|(name, mark)| ((*name).into(), *mark))
+        .collect()
+}
+
+#[test]
+fn each_entry_is_marked_by_what_git_sees_in_it() {
+    let root = TestFolder::new("git-marks");
+    let repo = root.join("repo");
+    committed(&repo);
+    for folder in ["src/deep", "docs", "target/debug"] {
+        fs::create_dir_all(repo.join(folder)).unwrap();
+    }
+    fs::write(repo.join("src/deep/lib.rs"), "one").unwrap();
+    fs::write(repo.join("docs/guide.md"), "one").unwrap();
+    fs::write(repo.join(".gitignore"), "target/\n*.log\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "--quiet", "-m", "tree"]);
+    fs::write(repo.join("kept.txt"), "edited").unwrap();
+    fs::write(repo.join("src/deep/lib.rs"), "edited").unwrap();
+    fs::write(repo.join("new.txt"), "new").unwrap();
+    fs::create_dir_all(repo.join("fresh")).unwrap();
+    fs::write(repo.join("fresh/a.txt"), "a").unwrap();
+    fs::write(repo.join("run.log"), "log").unwrap();
+    fs::write(repo.join("target/debug/app"), "bin").unwrap();
+
+    let top = marks_at(&repo).unwrap();
+    assert_eq!(top.repo.head, Head::Branch("main".to_owned()));
+    assert!(top.repo.changed);
+    assert_eq!(
+        top.entries,
+        marked(&[
+            ("fresh", Mark::New),
+            ("kept.txt", Mark::Changed),
+            ("new.txt", Mark::New),
+            ("run.log", Mark::Ignored),
+            ("src", Mark::Changed),
+            ("target", Mark::Ignored),
+        ])
+    );
+    let src = marks_at(&repo.join("src")).unwrap();
+    assert_eq!(src.entries, marked(&[("deep", Mark::Changed)]));
+    let docs = marks_at(&repo.join("docs")).unwrap();
+    assert!(docs.entries.is_empty());
+    assert!(!docs.repo.changed);
+    assert_eq!(marks_at(root.path()), None);
+}
+
+struct Following {
+    reader: Reader,
+    events: Arc<dyn EventSink>,
+    answers: mpsc::Receiver<Event>,
+}
+
+impl Following {
+    fn marks_of(repo: &Path) -> Self {
+        let (sender, answers) = mpsc::channel::<Event>();
+        let events: Arc<dyn EventSink> = Arc::new(sender);
+        let reader = Reader::default();
+        reader.mark(ClientId(1), &events, Some(repo.to_path_buf()));
+        let following = Self {
+            reader,
+            events,
+            answers,
+        };
+        assert_eq!(following.next(), Some(marked(&[])));
+        following
+    }
+
+    fn next(&self) -> Option<BTreeMap<OsString, Mark>> {
+        entries_of(self.answers.recv().unwrap())
+    }
+
+    fn until(&self, entries: &[(&str, Mark)]) {
+        let wanted = Some(marked(entries));
+        assert!(self.answers.iter().any(|event| entries_of(event) == wanted));
+    }
+
+    fn stop(self) {
+        self.reader.mark(ClientId(1), &self.events, None);
+        drop(self.events);
+        assert_eq!(self.answers.iter().count(), 0);
+    }
+}
+
+fn entries_of(event: Event) -> Option<BTreeMap<OsString, Mark>> {
+    match event {
+        Event::Marks { marks, .. } => marks.map(|marks| marks.entries),
+        Event::Repo { .. } => None,
+    }
+}
+
+#[test]
+fn marks_follow_an_edit_in_the_folder_and_a_commit() {
+    let root = TestFolder::new("git-marks-follow");
+    let repo = root.join("repo");
+    committed(&repo);
+    let following = Following::marks_of(&repo);
+    fs::write(repo.join("kept.txt"), "edited").unwrap();
+    following.until(&[("kept.txt", Mark::Changed)]);
+    git(&repo, &["commit", "--quiet", "-am", "edit"]);
+    following.until(&[]);
+    following.stop();
+}
+
+#[test]
+fn a_subfolder_is_marked_when_a_file_inside_it_is_edited() {
+    let root = TestFolder::new("git-marks-subfolder");
+    let repo = root.join("repo");
+    committed(&repo);
+    fs::create_dir(repo.join("src")).unwrap();
+    fs::write(repo.join("src").join("main.rs"), "one").unwrap();
+    git(&repo, &["add", "src"]);
+    git(&repo, &["commit", "--quiet", "-m", "src"]);
+    let following = Following::marks_of(&repo);
+    fs::write(repo.join("src").join("main.rs"), "edited").unwrap();
+    following.until(&[("src", Mark::Changed)]);
+    following.stop();
 }

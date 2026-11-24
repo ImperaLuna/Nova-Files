@@ -12,7 +12,7 @@ use rustix::event::{EventfdFlags, PollFd, PollFlags, Timespec, eventfd, poll};
 use rustix::fs::inotify::{self, CreateFlags, ReadFlags, WatchFlags};
 use rustix::io::Errno;
 
-use crate::git_dir::{common_dir, git_dir};
+use crate::git_dir::{DOT_GIT, common_dir, git_dir};
 
 const QUIET: Duration = Duration::from_millis(150);
 const LONGEST_WAIT: Duration = Duration::from_secs(2);
@@ -85,6 +85,31 @@ impl GitWatch {
             .join(REFS);
         self.watch(index, git_dir, false);
         self.watch_all(index, refs);
+    }
+
+    pub fn add_folder(&mut self, index: usize, folder: &Path) {
+        self.watch(index, folder.to_path_buf(), false);
+    }
+
+    pub fn add_subfolders(
+        &mut self,
+        index: usize,
+        folder: &Path,
+        ignored: impl Fn(&OsStr) -> bool,
+    ) {
+        let Ok(entries) = fs::read_dir(folder) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            if self.folders.len() >= MOST_WATCHES {
+                return;
+            }
+            let name = entry.file_name();
+            let is_folder = entry.file_type().is_ok_and(|kind| kind.is_dir());
+            if is_folder && name != DOT_GIT && !ignored(&name) {
+                self.watch(index, entry.path(), false);
+            }
+        }
     }
 
     fn watch(&mut self, index: usize, dir: PathBuf, in_refs: bool) {
