@@ -2,6 +2,7 @@ use std::fs;
 
 mod allows;
 mod archives;
+mod copy_path;
 mod focus;
 mod menus;
 mod preview;
