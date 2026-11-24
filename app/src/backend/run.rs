@@ -205,6 +205,7 @@ fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Co
             let current = client.current_preview();
             nova_files_preview_core::page(client.events(), current, id, index, width);
         }
+        preview_api::Command::Closed => client.current_preview().cancel(),
     }
 }
 

@@ -400,7 +400,7 @@ fn a_pdf_with_a_password_says_it_is_locked() {
 fn a_broken_pdf_shows_its_icon() {
     let temp = TestFolder::new("preview-broken-pdf");
     let path = temp.join("broken.pdf");
-    fs::write(&path, b"%PDF-1.4\nnothing else").unwrap();
+    fs::write(&path, b"%PDF-1.4\n\x00\xFFbroken stream").unwrap();
     let client = Client::new(temp.path());
 
     let shown = client.preview(
@@ -413,4 +413,27 @@ fn a_broken_pdf_shows_its_icon() {
     );
 
     assert_eq!(shown.content, PreviewContent::Icon);
+}
+
+#[test]
+fn a_text_that_mentions_the_pdf_signature_stays_text() {
+    let temp = TestFolder::new("preview-pdf-text");
+    let path = temp.join("notes.txt");
+    fs::write(&path, "a PDF starts with %PDF-1.7 and then its objects").unwrap();
+    let client = Client::new(temp.path());
+
+    let shown = client.preview(
+        1,
+        &path,
+        Fit {
+            width: 100,
+            height: 100,
+        },
+    );
+
+    assert!(
+        matches!(&shown.content, PreviewContent::Text { text, .. } if text.starts_with("a PDF")),
+        "{:?}",
+        shown.content
+    );
 }

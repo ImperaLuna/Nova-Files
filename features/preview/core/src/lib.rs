@@ -63,14 +63,23 @@ impl Current {
 
     fn set(&self, id: PreviewId) {
         self.id.store(id.0, Ordering::SeqCst);
-        self.running.stop();
-        self.paging.stop();
+        self.let_go();
     }
 
     pub fn cancel(&self) {
         self.id.store(NONE, Ordering::SeqCst);
+        self.let_go();
+    }
+
+    fn let_go(&self) {
         self.running.stop();
         self.paging.stop();
+        let open = self
+            .document
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        drop(open);
     }
 }
 
@@ -167,7 +176,13 @@ fn event(request: &Request) -> Option<Event> {
             (Ok(Some(start)), Some(helper)) if is_picture(&start) || is_drawing(path) => {
                 picture(request, helper)?
             }
-            (Ok(Some(start)), Some(helper)) if is_document(&start) => document(request, helper)?,
+            (Ok(Some(start)), Some(helper)) if is_document(&start) => {
+                match document(request, helper) {
+                    Ok(content) => content,
+                    Err(Unopened::Cancelled) => return None,
+                    Err(Unopened::NotAPdf) => text(start, metadata.len()),
+                }
+            }
             (Ok(Some(start)), _) => text(start, metadata.len()),
             (Ok(None), _) => PreviewContent::Icon,
         }
@@ -237,12 +252,17 @@ fn picture(request: &Request, helper: &Path) -> Option<PreviewContent> {
     })
 }
 
-fn document(request: &Request, helper: &Path) -> Option<PreviewContent> {
+enum Unopened {
+    Cancelled,
+    NotAPdf,
+}
+
+fn document(request: &Request, helper: &Path) -> Result<PreviewContent, Unopened> {
     let current = &request.current;
     let wanted = || current.is(request.id);
     let opened = launch::document(helper, &request.path, &current.paging, wanted);
-    Some(match opened {
-        None => PreviewContent::Icon,
+    Ok(match opened {
+        None => return Err(Unopened::NotAPdf),
         Some(Opened::Locked) => PreviewContent::Locked,
         Some(Opened::Pages(document)) => {
             let pages = document
@@ -258,7 +278,7 @@ fn document(request: &Request, helper: &Path) -> Option<PreviewContent> {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
             if !current.is(request.id) {
-                return None;
+                return Err(Unopened::Cancelled);
             }
             *open = Some((request.id, document));
             drop(open);

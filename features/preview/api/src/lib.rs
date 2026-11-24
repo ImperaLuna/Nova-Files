@@ -35,6 +35,9 @@ pub enum Command {
         index: usize,
         width: u32,
     },
+    /// The client no longer shows a quick look: the core lets go of what
+    /// it holds for the last preview, such as an open PDF.
+    Closed,
 }
 
 /// Something the preview feature's core half tells one client.

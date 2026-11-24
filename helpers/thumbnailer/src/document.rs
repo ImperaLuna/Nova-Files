@@ -18,6 +18,7 @@ const PAGES: &str = "pages";
 const NONE: &str = "none";
 const MAX_SIDE: f32 = 8192.0;
 const MAX_PAGES: usize = 100_000;
+const MAX_POINTS: f32 = 99_999.0;
 
 pub fn file_from_args(args: impl IntoIterator<Item = OsString>) -> Option<PathBuf> {
     let mut args = args.into_iter();
@@ -48,7 +49,8 @@ pub fn run(file: &PathBuf) -> ExitCode {
     let listed = writeln!(out, "{PAGES} {}", pages.len()).and_then(|()| {
         pages.iter().try_for_each(|page| {
             let (width, height) = page.render_dimensions();
-            writeln!(out, "{} {}", width.round(), height.round())
+            let side = |side: f32| side.round().clamp(1.0, MAX_POINTS);
+            writeln!(out, "{} {}", side(width), side(height))
         })
     });
     if finish(&listed.and_then(|()| out.flush())) != ExitCode::SUCCESS {
