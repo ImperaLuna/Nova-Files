@@ -1,5 +1,5 @@
 use nova_files_git_api::Mark;
-use nova_files_git_ui::GitPart;
+use nova_files_git_ui::{BRANCH_CHIP, CHIP_CHANGES, GitPart};
 
 use super::*;
 
@@ -51,11 +51,25 @@ async fn rows_in_a_repository_show_what_changed_and_dim_what_is_ignored(cx: &mut
     assert!(cx.debug_bounds("git-mark-fresh.txt").is_some());
     assert!(cx.debug_bounds("git-mark-target").is_none());
     assert!(cx.debug_bounds("git-mark-.gitignore").is_none());
+    assert!(cx.debug_bounds(BRANCH_CHIP).is_some());
+    assert!(cx.debug_bounds(CHIP_CHANGES).is_some());
 
-    git(&repo, &["add", "fresh.txt"]);
+    git(&repo, &["add", "--all"]);
     git(&repo, &["commit", "--quiet", "-am", "second"]);
     view.condition::<WindowEvent>(cx, |view, cx| {
         git_part(view, cx).mark_of("kept.txt").is_none()
     })
     .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds(BRANCH_CHIP).is_some());
+    assert!(cx.debug_bounds(CHIP_CHANGES).is_none());
+}
+
+#[gpui::test]
+async fn a_folder_outside_any_repository_has_no_branch_chip(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("git-no-chip");
+    let (_, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds(BRANCH_CHIP).is_none());
 }

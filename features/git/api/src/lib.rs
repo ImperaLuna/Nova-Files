@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+const AHEAD: char = '↑';
+const BEHIND: char = '↓';
+
 /// What a window asks the git core.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -73,6 +76,18 @@ pub struct Repo {
     pub behind: u32,
 }
 
+impl Repo {
+    /// Commits ahead and behind as `↑2 ↓1`, leaving out a zero count, or
+    /// `None` when both are zero.
+    #[must_use]
+    pub fn counts(&self) -> Option<String> {
+        let ahead = (self.ahead > 0).then(|| format!("{AHEAD}{}", self.ahead));
+        let behind = (self.behind > 0).then(|| format!("{BEHIND}{}", self.behind));
+        let both: Vec<String> = ahead.into_iter().chain(behind).collect();
+        (!both.is_empty()).then(|| both.join(" "))
+    }
+}
+
 /// What the repository has checked out.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Head {
@@ -80,4 +95,36 @@ pub enum Head {
     Branch(String),
     /// A commit that no branch points at here, by its short id.
     Detached(String),
+}
+
+impl Head {
+    /// The branch name, or the short commit id when detached.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Branch(name) | Self::Detached(name) => name,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn on_main(ahead: u32, behind: u32) -> Repo {
+        Repo {
+            head: Head::Branch("main".to_owned()),
+            changed: false,
+            ahead,
+            behind,
+        }
+    }
+
+    #[test]
+    fn counts_show_only_what_is_not_zero() {
+        assert_eq!(on_main(0, 0).counts(), None);
+        assert_eq!(on_main(2, 0).counts().as_deref(), Some("↑2"));
+        assert_eq!(on_main(0, 3).counts().as_deref(), Some("↓3"));
+        assert_eq!(on_main(2, 1).counts().as_deref(), Some("↑2 ↓1"));
+    }
 }
