@@ -84,10 +84,13 @@ fn row_mark(part: &GitPart, entry: &Entry, cx: &App) -> Option<AnyElement> {
 
 fn branch_chip(
     part: &mut GitPart,
-    _: &Scene,
+    scene: &Scene,
     _: &mut Window,
     cx: &mut Context<GitPart>,
 ) -> Option<AnyElement> {
+    if !scene.in_folder(part.asked.as_ref()?) {
+        return None;
+    }
     let repo = &part.marks.as_ref()?.repo;
     let colors = Colors::of(cx);
     let chip = div()

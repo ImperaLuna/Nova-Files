@@ -31,7 +31,7 @@ async fn rows_in_a_repository_show_what_changed_and_dim_what_is_ignored(cx: &mut
     let repo = tree.path().join("Projects/nova");
     git(&repo, &["init", "--quiet"]);
     fs::write(repo.join("kept.txt"), "one").unwrap();
-    fs::write(repo.join(".gitignore"), "target/\n").unwrap();
+    fs::write(repo.join(".gitignore"), "target/\n.config/\n.local/\n").unwrap();
     git(&repo, &["add", "."]);
     git(&repo, &["commit", "--quiet", "-m", "first"]);
     fs::write(repo.join("kept.txt"), "two").unwrap();
@@ -63,6 +63,10 @@ async fn rows_in_a_repository_show_what_changed_and_dim_what_is_ignored(cx: &mut
     cx.run_until_parked();
     assert!(cx.debug_bounds(BRANCH_CHIP).is_some());
     assert!(cx.debug_bounds(CHIP_CHANGES).is_none());
+
+    view.update(cx, |view, cx| view.new_tab(&Location::start(), cx));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds(BRANCH_CHIP).is_none());
 }
 
 #[gpui::test]
