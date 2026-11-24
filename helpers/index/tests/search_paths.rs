@@ -229,3 +229,27 @@ fn files_in_a_folder_moved_elsewhere_match_the_folders_now_above_them() {
     );
     assert_eq!(home.stages("projects pass", &overlay)[0], paths(&[]));
 }
+
+#[test]
+fn a_file_taken_out_of_a_renamed_folder_matches_where_it_went() {
+    let home = Home::new();
+    let root = home.folder.path();
+    let mut overlay = moved(&home, "projects/editor", "projects/studio");
+    overlay.apply(&Change::Moved {
+        from: root.join("projects/studio/src/main.rs"),
+        to: root.join("Documents/main.rs"),
+    });
+    overlay.apply(&Change::Removed {
+        path: root.join("projects/studio/notes.md"),
+    });
+    assert_eq!(
+        home.stages("documents main", &overlay)[0],
+        paths(&["Documents/main.rs"])
+    );
+    assert_eq!(home.stages("studio main", &overlay)[0], paths(&[]));
+    assert_eq!(home.stages("studio notes", &overlay)[0], paths(&[]));
+    assert_eq!(
+        home.stages("studio/components/frame", &overlay)[0],
+        paths(&["projects/studio/src/components/render_frame.rs"])
+    );
+}

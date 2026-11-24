@@ -3,10 +3,13 @@ mod placed;
 mod scan;
 mod terms;
 
-use std::collections::HashSet;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+use crate::RowId;
 use crate::overlay::Overlay;
 use crate::reader::Index;
 
@@ -36,7 +39,7 @@ pub struct Search<'a> {
     stop: Option<&'a (dyn Fn() -> bool + Sync)>,
     typed_rows: Option<Vec<u32>>,
     loose_rows: Option<Vec<u32>>,
-    moved: Vec<Range<u32>>,
+    moved: &'a [Range<u32>],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,16 +71,30 @@ impl Index {
     }
 
     fn moved_rows(&self, overlay: &Overlay) -> Vec<Range<u32>> {
+        let mut inside: HashMap<&Path, HashMap<&OsStr, RowId>> = HashMap::new();
         let mut moved: Vec<Range<u32>> = overlay
             .moved_from()
             .filter_map(|from| {
-                let row = self.row_of(from)?;
+                let (folder, name) = (from.parent()?, from.file_name()?);
+                let rows = match inside.entry(folder) {
+                    Entry::Occupied(known) => known.into_mut(),
+                    Entry::Vacant(new) => new.insert(self.named_in(folder)),
+                };
+                let row = *rows.get(name)?;
                 Some(row.0..self.end(row)?.0)
             })
             .collect();
         moved.sort_unstable_by_key(|rows| (rows.start, std::cmp::Reverse(rows.end)));
         moved.dedup_by(|inner, outer| inner.end <= outer.end);
         moved
+    }
+
+    fn named_in(&self, folder: &Path) -> HashMap<&OsStr, RowId> {
+        self.row_of(folder)
+            .into_iter()
+            .flat_map(|folder| self.children(folder))
+            .filter_map(|row| Some((self.name(row)?, row)))
+            .collect()
     }
 
     fn searching<'a>(
@@ -110,7 +127,9 @@ impl Index {
             stop: None,
             typed_rows: None,
             loose_rows: None,
-            moved: overlay.map_or_else(Vec::new, |overlay| self.moved_rows(overlay)),
+            moved: overlay.map_or(&[], |overlay| {
+                overlay.moved_rows(|| self.moved_rows(overlay))
+            }),
         }
     }
 }
@@ -200,7 +219,7 @@ impl<'a> Search<'a> {
             keep: (!changed).then_some(self.limit),
             stop: self.stop,
             overlay: self.overlay,
-            moved: &self.moved,
+            moved: self.moved,
         };
         let kept = self.kept.filter(|kept| kept.within == self.within);
         let pool = kept.and_then(|kept| {

@@ -1,14 +1,15 @@
 use std::num::NonZero;
 use std::ops::Range;
 use std::panic::resume_unwind;
+use std::path::Path;
 use std::thread;
 
 use super::matching::MatchKind;
 use super::placed;
 use super::terms::Terms;
-use crate::overlay::Overlay;
+use crate::overlay::{Overlay, Whole};
 use crate::reader::Index;
-use crate::{Kind, RowId};
+use crate::{Kind, RowId, fold};
 
 const SCAN_THREADS_MAX: usize = 16;
 pub const ROWS_PER_THREAD_MIN: usize = 32_768;
@@ -43,8 +44,18 @@ pub struct Scanned {
     pub stopped: bool,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Rows {
+    Indexed,
+    Placed,
+    Each,
+    Gone,
+}
+
 struct Open {
     ends: Vec<RowId>,
+    depths: Vec<usize>,
+    rows: Vec<Rows>,
     reach: Vec<u8>,
     terms: usize,
 }
@@ -54,6 +65,8 @@ impl Open {
         let index = scan.index;
         let mut open = Self {
             ends: Vec::new(),
+            depths: Vec::new(),
+            rows: Vec::new(),
             reach: vec![0; scan.terms.len()],
             terms: scan.terms.len(),
         };
@@ -71,20 +84,46 @@ impl Open {
             return;
         };
         let from = self.reach.len() - self.terms;
-        self.reach.extend_from_within(from..);
-        scan.terms.enter(&mut self.reach[from + self.terms..], name);
+        let (rows, depth) = if scan.is_moved(folder) {
+            match scan.whole(folder) {
+                Some(Whole::At(placed)) => {
+                    self.reach.resize(self.reach.len() + self.terms, 0);
+                    let reach = &mut self.reach[from + self.terms..];
+                    (Rows::Placed, scan.enter_all(reach, &placed))
+                }
+                Some(Whole::Gone) => (Rows::Gone, 0),
+                Some(Whole::Mixed) | None => (Rows::Each, 0),
+            }
+        } else {
+            self.reach.extend_from_within(from..);
+            scan.terms.enter(&mut self.reach[from + self.terms..], name);
+            (Rows::Indexed, self.depth() + 1)
+        };
+        self.reach.resize(from + self.terms + self.terms, 0);
         self.ends.push(end);
+        self.depths.push(depth);
+        self.rows.push(rows);
     }
 
     fn leave_before(&mut self, row: RowId) {
         while self.ends.last().is_some_and(|&end| end <= row) {
             self.ends.pop();
+            self.depths.pop();
+            self.rows.pop();
             self.reach.truncate(self.reach.len() - self.terms);
         }
     }
 
     fn reach(&self) -> &[u8] {
         &self.reach[self.reach.len() - self.terms..]
+    }
+
+    fn depth(&self) -> usize {
+        self.depths.last().copied().unwrap_or(0)
+    }
+
+    fn rows(&self) -> Rows {
+        self.rows.last().copied().unwrap_or(Rows::Indexed)
     }
 }
 
@@ -182,6 +221,9 @@ impl Scan<'_> {
 
     fn rank_placed(&self, row: RowId) -> Option<Rank> {
         let index = self.index;
+        if !self.terms.could_name(index.letters(row)?, self.loose) {
+            return None;
+        }
         let path = self.overlay?.place(index.path(row)?)?;
         let placed = placed::meet(self.terms, index.root(), &path, self.loose)?;
         let hidden = self.all_hidden || index.is_hidden(row);
@@ -196,9 +238,28 @@ impl Scan<'_> {
         ))
     }
 
+    fn whole(&self, folder: RowId) -> Option<Whole> {
+        Some(self.overlay?.place_whole(self.index.path(folder)?))
+    }
+
+    fn enter_all(&self, reach: &mut [u8], placed: &Path) -> usize {
+        let mut folded = Vec::new();
+        let inside = placed.strip_prefix(self.index.root()).unwrap_or(placed);
+        inside
+            .iter()
+            .inspect(|name| {
+                fold::fold_into(name.as_encoded_bytes(), &mut folded);
+                self.terms.enter(reach, &folded);
+            })
+            .count()
+    }
+
     fn rank(&self, row: RowId, open: &Open) -> Option<Rank> {
-        if self.is_moved(row) {
-            return self.rank_placed(row);
+        match open.rows() {
+            Rows::Gone => return None,
+            Rows::Each => return self.rank_placed(row),
+            Rows::Indexed if self.is_moved(row) => return self.rank_placed(row),
+            Rows::Indexed | Rows::Placed => {}
         }
         let index = self.index;
         let reach = open.reach();
@@ -221,7 +282,7 @@ impl Scan<'_> {
             hidden && self.hidden_last,
             met.found.cost,
             folded.len(),
-            open.ends.len(),
+            open.depth(),
             Source::Row(row),
         ))
     }

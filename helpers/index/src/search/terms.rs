@@ -65,6 +65,18 @@ impl Terms {
         }
     }
 
+    pub fn could_name(&self, letters: u32, loose: bool) -> bool {
+        let in_name = |term: &Term| {
+            let may_miss = u32::from(loose && term.name.len() >= TYPO_MIN);
+            (term.letters & !letters).count_ones() <= may_miss
+        };
+        self.terms.iter().any(in_name)
+            && self
+                .terms
+                .iter()
+                .all(|term| !term.along_path || in_name(term))
+    }
+
     pub fn could_meet(&self, reach: &[u8], letters: u32, loose: bool) -> bool {
         self.terms.iter().zip(reach).all(|(term, &reached)| {
             let may_miss = u32::from(loose && term.name.len() >= TYPO_MIN);
