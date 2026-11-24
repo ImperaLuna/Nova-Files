@@ -234,7 +234,7 @@ fn a_file_removed_between_two_searches_is_not_found_by_the_longer_one() {
     let searcher = scratch.searcher();
     searcher.search_and_settle();
     let report = scratch.root.join("home/docs/report.pdf");
-    assert_eq!(searcher.found("rep"), [report.clone()]);
+    assert_eq!(searcher.found("rep"), std::slice::from_ref(&report));
     searcher.live(|live| live.take(&[Change::Removed { path: report }]));
     assert_eq!(searcher.found("repo"), paths(&[]));
 }
