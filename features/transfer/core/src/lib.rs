@@ -5,6 +5,7 @@ mod attrs;
 mod copy_file;
 mod dropped;
 mod kind;
+mod links;
 mod make;
 mod transfer;
 mod undo;

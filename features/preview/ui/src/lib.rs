@@ -11,7 +11,7 @@ use gpui::{AnyElement, App, Context, Pixels, RenderImage, Size, Subscription, Wi
 use nova_files_api::{Entry, EntryId, Fit, Listing, ListingId};
 use nova_files_preview_api::{Command, Event, Preview, PreviewContent, PreviewId};
 use nova_files_shell::actions::{
-    ClearSelection, CursorDown, CursorUp, DeleteSelected, Duplicate, NewFile, NewFolder,
+    ClearSelection, CursorDown, CursorUp, DeleteSelected, Duplicate, MakeLink, NewFile, NewFolder,
     OpenSelected, PreviewNext, PreviewPrevious, RenameSelected, TogglePreview, TrashSelected, Undo,
 };
 use nova_files_shell::device::device_side;
@@ -473,6 +473,7 @@ impl Part for PreviewPart {
         slots.before(Self::holds::<NewFolder>);
         slots.before(Self::holds::<NewFile>);
         slots.before(Self::holds::<Duplicate>);
+        slots.before(Self::holds::<MakeLink>);
         slots.before(Self::holds::<Undo>);
         slots.staged(Self::stage);
         slots.layer(Self::layer);

@@ -304,6 +304,27 @@ async fn ctrl_copies_what_is_dragged(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+async fn ctrl_and_shift_link_what_is_dragged(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-link");
+    let home = TempFolder::tree("drag-link-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let both = Modifiers {
+        shift: true,
+        ..Modifiers::control()
+    };
+
+    drag(cx, "name-1", "entry-0", both);
+    wait_for_note(&view, cx, "Linked notes.txt in Projects").await;
+    let notes = tree.path().join("notes.txt");
+    assert_eq!(
+        fs::read_link(tree.path().join("Projects/notes.txt")).unwrap(),
+        notes
+    );
+    assert!(notes.is_file());
+}
+
+#[gpui::test]
 async fn a_drop_that_changes_nothing_does_nothing(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = TempFolder::tree("drag-nothing");

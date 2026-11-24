@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use nova_files_api::{Answer, ConflictKind, Failure, Tally};
 use nova_files_shell::island::job_words::{Batched, Doing, Failed, Grouped, JobWords};
 use nova_files_shell::island::words::{ITEM, ITEMS, count, failure, name_of, what, with_answers};
-use nova_files_transfer_api::{CopyJob, MoveJob};
+use nova_files_transfer_api::{CopyJob, LinkJob, MoveJob};
 
 struct Said {
     doing: &'static str,
@@ -37,6 +37,20 @@ const MOVE: Said = Said {
     grouped: Grouped {
         one: "move",
         many: "moves",
+    },
+};
+
+const LINK: Said = Said {
+    doing: "Linking",
+    verb: "link",
+    batched: Batched {
+        done: "Linked",
+        done_after: "linked",
+        nothing: "Nothing linked",
+    },
+    grouped: Grouped {
+        one: "link",
+        many: "links",
     },
 };
 
@@ -76,6 +90,35 @@ const fn failed(said: &Said) -> Failed {
     Failed {
         verb: said.verb,
         names_item: true,
+    }
+}
+
+pub struct LinkWords;
+
+impl JobWords<LinkJob> for LinkWords {
+    fn doing(&self, _: &LinkJob) -> Doing {
+        doing(&LINK)
+    }
+
+    fn sources<'a>(&self, job: &'a LinkJob) -> &'a [PathBuf] {
+        &job.sources
+    }
+
+    fn done(&self, job: &LinkJob, here: Option<&Path>, tally: Tally) -> Option<String> {
+        let where_to = if here == Some(job.into.as_path()) {
+            String::new()
+        } else {
+            format!(" in {}", name_of(&job.into))
+        };
+        Some(done_note(&LINK, &job.sources, &where_to, tally))
+    }
+
+    fn failed(&self, _: &LinkJob) -> Failed {
+        failed(&LINK)
+    }
+
+    fn writes_into<'a>(&self, job: &'a LinkJob) -> Option<&'a Path> {
+        Some(&job.into)
     }
 }
 

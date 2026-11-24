@@ -373,3 +373,19 @@ async fn duplicate_copies_beside_the_original_and_undo_takes_the_copy_back(
     cx.simulate_keystrokes("f2 home ctrl-d enter");
     wait_for_names(&view, cx, &["Projects", "otes.txt"]).await;
 }
+
+#[gpui::test]
+async fn make_link_puts_a_link_beside_the_file_and_undo_takes_it_back(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("make-link");
+    let home = TempFolder::tree("make-link-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("ctrl-m");
+    wait_for_names(&view, cx, &["Projects", "Link to notes.txt", "notes.txt"]).await;
+    let link = tree.path().join("Link to notes.txt");
+    assert_eq!(fs::read_link(&link).unwrap(), tree.path().join("notes.txt"));
+    cx.simulate_keystrokes("ctrl-z");
+    wait_for_names(&view, cx, &["Projects", "notes.txt"]).await;
+}
