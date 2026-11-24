@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use nova_files_api::{Failure, Operation, Outcome};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::{Ended, JobKind};
-use nova_files_rename_api::{NewFileJob, NewFolderJob, RenameJob};
+use nova_files_rename_api::{NewFileJob, NewFolderJob, RenameJob, RenameManyJob};
 
 use crate::undo::{self, Undo, undo_of};
-use crate::{new_file, new_folder, rename};
+use crate::{new_file, new_folder, rename, rename_many};
 
 pub struct Renames;
 
@@ -17,6 +17,7 @@ impl JobKind for Renames {
 
     fn claims(&self, operation: &Operation) -> bool {
         operation.get::<RenameJob>().is_some()
+            || operation.get::<RenameManyJob>().is_some()
             || operation.get::<NewFolderJob>().is_some()
             || operation.get::<NewFileJob>().is_some()
     }
@@ -27,6 +28,9 @@ impl JobKind for Renames {
         }
         if let Some(job) = operation.get::<RenameJob>() {
             return rename(&job.path, &job.name);
+        }
+        if let Some(job) = operation.get::<RenameManyJob>() {
+            return rename_many(&job.paths, &job.names);
         }
         if let Some(job) = operation.get::<NewFolderJob>() {
             return new_folder(&job.inside, &job.name);
@@ -50,6 +54,7 @@ impl JobKind for Renames {
     fn examples(&self) -> Vec<Operation> {
         vec![
             nova_files_rename_api::rename(PathBuf::new(), OsString::new()),
+            nova_files_rename_api::rename_many([]),
             nova_files_rename_api::new_folder(PathBuf::new(), OsString::new()),
             nova_files_rename_api::new_file(PathBuf::new(), OsString::new()),
         ]
@@ -58,6 +63,9 @@ impl JobKind for Renames {
     fn first_path(&self, operation: &Operation) -> PathBuf {
         if let Some(job) = operation.get::<RenameJob>() {
             return job.path.clone();
+        }
+        if let Some(job) = operation.get::<RenameManyJob>() {
+            return job.paths.first().cloned().unwrap_or_default();
         }
         operation
             .get::<NewFolderJob>()
@@ -84,7 +92,11 @@ mod tests {
             job: nova_files_api::JobId(1),
         };
 
+        let many = nova_files_rename_api::rename_many([("/a/b".into(), "c".into())]);
+
         assert!(Renames.claims(&rename) && Renames.claims(&folder) && Renames.claims(&file));
+        assert!(Renames.claims(&many));
+        assert_eq!(Renames.first_path(&many), PathBuf::from("/a/b"));
         assert!(!Renames.claims(&delete));
         assert_eq!(Renames.first_path(&rename), PathBuf::from("/a/b"));
         assert_eq!(Renames.first_path(&folder), PathBuf::from("/a/new"));

@@ -8,8 +8,9 @@ use nova_files_jobs::identity::{self, Identity, same};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::stop::Stop;
 use nova_files_jobs::undo::{gone, trash_again};
-use nova_files_rename_api::{NewFileJob, NewFolderJob, RenameJob};
+use nova_files_rename_api::{NewFileJob, NewFolderJob, RenameJob, RenameManyJob};
 
+use crate::many::{self, Renamed};
 use crate::rename;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +18,7 @@ pub enum Undo {
     Rename(PathBuf, Identity, OsString),
     RemoveFolder(PathBuf, Identity),
     TrashFile(PathBuf, Identity),
+    RenameMany(Renamed),
 }
 
 pub fn undo_of(operation: &Operation, outcome: &Outcome) -> Option<Undo> {
@@ -35,6 +37,9 @@ pub fn undo_of(operation: &Operation, outcome: &Outcome) -> Option<Undo> {
             path.file_name()?.to_os_string(),
         ));
     }
+    if let Some(job) = operation.get::<RenameManyJob>() {
+        return many::renamed(job).map(Undo::RenameMany);
+    }
     if let Some(NewFileJob { inside, name }) = operation.get::<NewFileJob>() {
         let made = inside.join(name);
         let entry = identity::of(&made)?;
@@ -51,6 +56,7 @@ pub fn run(running: &mut Running, undo: &Undo) -> Ended {
         Undo::TrashFile(path, was) => trash_again(running, vec![(path.clone(), *was)]),
         Undo::Rename(path, was, name) => if_same(running, (path, *was), || rename(path, name)),
         Undo::RemoveFolder(path, was) => if_same(running, (path, *was), || remove_folder(path)),
+        Undo::RenameMany(renamed) => many::put_back(renamed),
     }
 }
 

@@ -153,6 +153,7 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
                 "Cut",
                 "Copy",
                 "Copy path",
+                "Rename",
                 "Duplicate",
                 "Make link",
                 "Compress",
@@ -162,7 +163,7 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![7, 8]
+            vec![8, 9]
         )
     );
 
