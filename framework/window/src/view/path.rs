@@ -62,7 +62,7 @@ impl MainWindow {
         let at = self
             .tab_drops_at(Some(&place), crumb.label.clone())
             .unwrap_or_else(|| Aim::folder(folder.to_path_buf(), crumb.label.clone()));
-        self.drop_target(button, at, cx)
+        self.folder_target(button, at, cx)
     }
 
     fn path_chips(&self, colors: &Colors, cx: &Context<Self>) -> Vec<AnyElement> {

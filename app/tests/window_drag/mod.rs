@@ -625,3 +625,44 @@ async fn a_folder_row_being_dragged_does_not_open_under_itself(cx: &mut TestAppC
     let here = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
     assert_eq!(here.as_deref(), Some(tree.path()));
 }
+
+#[gpui::test]
+async fn a_folder_tile_held_over_opens_and_the_drag_goes_on_into_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-hover-tile");
+    let home = TempFolder::tree("drag-hover-tile-home");
+    let (view, cx) = drag_window(cx, tree.path(), &home).await;
+    let projects = tree.path().join("Projects");
+    cx.simulate_keystrokes("ctrl-2");
+    cx.run_until_parked();
+
+    start_drag(cx, "icon-1");
+    drag_over(cx, "icon-0");
+    hold(cx, HOVER_OPEN_AFTER);
+    wait_for_folder(&view, cx, &projects).await;
+    drag_over(cx, "entry-0");
+    let end = center(cx, "entry-0");
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    wait_for_note(&view, cx, "Moved notes.txt to nova").await;
+    assert!(projects.join("nova/notes.txt").exists());
+}
+
+#[gpui::test]
+async fn a_crumb_held_over_opens_its_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("drag-hover-crumb");
+    let nova = tree.path().join("Projects/nova");
+    fs::write(nova.join("plan.txt"), "").unwrap();
+    let (view, cx) = drag_window(cx, &nova, &tree).await;
+
+    start_drag(cx, "name-0");
+    drag_over(cx, "crumb-1");
+    hold(cx, HOVER_OPEN_AFTER);
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+    let end = center(cx, "crumb-0");
+    cx.simulate_mouse_move(end, Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::none());
+    wait_for_note(&view, cx, "Moved plan.txt to tree").await;
+    assert!(tree.path().join("plan.txt").exists());
+}
