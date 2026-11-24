@@ -43,7 +43,10 @@ fn listed(path: &str) -> Event {
     let icons: Arc<dyn Icons> = Arc::new(Plain);
     let client = Client::new(Arc::new(sender), None, &icons);
     let inner: Arc<dyn InnerFolders> = Arc::new(OneArchive);
-    let asked = (Order::default(), HiddenFiles::Shown);
+    let asked = Shown {
+        hidden: HiddenFiles::Shown,
+        ..Shown::default()
+    };
 
     list_folder(&client, (ListingId(1), path.into()), asked, &inner, None);
 

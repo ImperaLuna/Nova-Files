@@ -50,6 +50,7 @@ impl Part for Piler {
                 id,
                 path: PILE.into(),
                 order,
+                filter: String::new(),
             })
         });
         slots.listing_page::<Found>(|_, id: ListingId, order: Order| {
@@ -57,6 +58,7 @@ impl Part for Piler {
                 id,
                 path: PILE.into(),
                 order,
+                filter: String::new(),
             })
         });
     }

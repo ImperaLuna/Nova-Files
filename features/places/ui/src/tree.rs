@@ -82,6 +82,7 @@ impl TreePart {
             id,
             path: path.clone(),
             order: Order::default(),
+            filter: String::new(),
         });
         if sent.is_ok() {
             self.asked = Some((id, path));

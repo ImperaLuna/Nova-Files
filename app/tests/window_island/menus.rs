@@ -75,6 +75,7 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
                 "Copy path",
                 "Rename",
                 "Duplicate",
+                "Make link",
                 "Compress",
                 "Compress as…",
                 "Move to Trash",
@@ -82,12 +83,12 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![2, 9, 10]
+            vec![2, 10, 11]
         )
     );
     view.read_with(cx, |view, _| {
         let menu = view.menu().unwrap();
-        assert_eq!(menu.items[9].look, Look::Danger);
+        assert_eq!(menu.items[10].look, Look::Danger);
         assert!(matches!(menu.items[3].action, MenuAction::Run(_)));
     });
     cx.run_until_parked();
@@ -152,7 +153,9 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
                 "Cut",
                 "Copy",
                 "Copy path",
+                "Rename",
                 "Duplicate",
+                "Make link",
                 "Compress",
                 "Compress as…",
                 "Move to Trash",
@@ -160,7 +163,7 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![6, 7]
+            vec![8, 9]
         )
     );
 
@@ -417,6 +420,7 @@ async fn a_folder_opens_in_a_new_tab_from_its_menu(cx: &mut TestAppContext) {
             "Copy path",
             "Rename",
             "Duplicate",
+            "Make link",
             "Compress",
             "Compress as…",
             "Move to Trash",

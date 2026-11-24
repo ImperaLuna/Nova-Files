@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod code;
 mod draw;
 mod looks;
 
@@ -11,7 +12,7 @@ use gpui::{AnyElement, App, Context, Pixels, RenderImage, Size, Subscription, Wi
 use nova_files_api::{Entry, EntryId, Fit, Listing, ListingId};
 use nova_files_preview_api::{Command, Event, Preview, PreviewContent, PreviewId};
 use nova_files_shell::actions::{
-    ClearSelection, CursorDown, CursorUp, DeleteSelected, Duplicate, NewFile, NewFolder,
+    ClearSelection, CursorDown, CursorUp, DeleteSelected, Duplicate, MakeLink, NewFile, NewFolder,
     OpenSelected, PreviewNext, PreviewPrevious, RenameSelected, TogglePreview, TrashSelected, Undo,
 };
 use nova_files_shell::device::device_side;
@@ -397,10 +398,18 @@ impl PreviewPart {
             release(picture, cx);
             return;
         };
+        let code = match preview.as_deref().map(|preview| &preview.content) {
+            Some(PreviewContent::Code { text, runs, .. }) => {
+                let family = code::mono_family(cx);
+                Some(Arc::new(code::Coded::new(text, runs, family)))
+            }
+            _ => None,
+        };
         let shown = Shown {
             entry: open.entry,
             preview,
             picture,
+            code,
         };
         let before = open.shown.replace(shown);
         release(before.and_then(|before| before.picture), cx);
@@ -473,6 +482,7 @@ impl Part for PreviewPart {
         slots.before(Self::holds::<NewFolder>);
         slots.before(Self::holds::<NewFile>);
         slots.before(Self::holds::<Duplicate>);
+        slots.before(Self::holds::<MakeLink>);
         slots.before(Self::holds::<Undo>);
         slots.staged(Self::stage);
         slots.layer(Self::layer);

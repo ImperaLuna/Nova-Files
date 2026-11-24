@@ -6,6 +6,8 @@
 #
 # Allowed outside crates:
 # - rustix
+# - syntect
+# - two-face
 #
 # Allowed workspace crates:
 # - nova-files-api
@@ -28,6 +30,10 @@ workspace = true
 [dependencies]
 # Opens a file without blocking on a pipe or device.
 rustix = { version = "1.1.6", default-features = false, features = ["fs", "std"] }
+# Marks a source file's keywords, strings and comments for its colours.
+syntect = { version = "5.3.0", default-features = false, features = ["parsing", "regex-fancy"] }
+# More grammars for syntect (TOML, Nix, TypeScript and others), from bat.
+two-face = { version = "0.5.2", default-features = false, features = ["syntect-fancy"] }
 nova-files-api.workspace = true
 nova-files-disk.workspace = true
 nova-files-entries-core.workspace = true

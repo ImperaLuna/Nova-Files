@@ -76,6 +76,7 @@ fn first_thumbnail(client: &Client, folder: &Path, size: ThumbnailSize) -> (Entr
             id,
             path: folder.to_owned(),
             order: Order::default(),
+            filter: String::new(),
         })
         .unwrap();
     loop {
@@ -230,6 +231,7 @@ fn a_refused_folder_leaves_the_shown_one_its_thumbnails() {
             id: missing,
             path: temp.join("missing"),
             order: Order::default(),
+            filter: String::new(),
         })
         .unwrap();
     loop {
@@ -280,6 +282,7 @@ fn thumbnailed_entries(
             id,
             path: folder.to_owned(),
             order: Order::default(),
+            filter: String::new(),
         })
         .unwrap();
     let mut entries = Vec::new();

@@ -665,7 +665,10 @@ fn a_thumbnail_shrunk_after_hiding_is_not_kept(cx: &mut TestAppContext) {
 fn listing_asked(core: &mut Core) -> (ListingId, PathBuf, Order) {
     let mut asked = Vec::new();
     while let Some(message) = core.try_recv() {
-        if let Some(Command::ListFolder { id, path, order }) = message.into_command::<Command>() {
+        if let Some(Command::ListFolder {
+            id, path, order, ..
+        }) = message.into_command::<Command>()
+        {
             asked.push((id, path, order));
         }
     }

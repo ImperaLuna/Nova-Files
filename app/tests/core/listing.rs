@@ -55,6 +55,7 @@ impl Client {
                 id: ListingId(id),
                 path: path.to_owned(),
                 order: Order::default(),
+                filter: String::new(),
             })
             .unwrap();
         self.events.recv_timeout(ANSWER_TIMEOUT).unwrap()

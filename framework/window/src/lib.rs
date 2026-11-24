@@ -7,6 +7,7 @@ mod columns;
 mod commands;
 mod dropping;
 mod edge_scroll;
+mod filtering;
 mod grip;
 mod island;
 mod lift;

@@ -13,12 +13,12 @@ use nova_files_shell::{
     command_spec,
 };
 use nova_files_transfer_api::{
-    Command, CopyJob, DropAskId, DropKind, Event, MoveJob, copy, move_into,
+    Command, CopyJob, DropAskId, DropKind, Event, LinkJob, MoveJob, copy, link, move_into,
 };
 
-use crate::words::{CopyWords, MoveWords};
+use crate::words::{CopyWords, LinkWords, MoveWords};
 
-pub use nova_files_shell::actions::Duplicate;
+pub use nova_files_shell::actions::{Duplicate, MakeLink};
 
 command_spec!(
     DUPLICATE,
@@ -29,7 +29,17 @@ command_spec!(
     needs[TakeOut, Change]
 );
 
+command_spec!(
+    MAKE_LINK,
+    MakeLink,
+    "file.make-link",
+    "Make link",
+    ["ctrl-m"],
+    needs[Change]
+);
+
 pub const MOVE_TO: &str = "Move to";
+pub const LINK_IN: &str = "Link in";
 pub const COPY_TO: &str = "Copy to";
 const ITEMS: &str = "items";
 const ROOT: &str = "/";
@@ -146,6 +156,7 @@ impl TransferPart {
         let operation = match kind {
             DropKind::Copy => copy(sources, into),
             DropKind::Move => move_into(sources, into),
+            DropKind::Link => link(sources, into),
         };
         self.host
             .island
@@ -157,6 +168,15 @@ impl TransferPart {
         for (into, sources) in by_folder(paths) {
             if self.takes_into(&into) {
                 self.start(DropKind::Copy, sources, into, cx);
+            }
+        }
+    }
+
+    fn make_link(&mut self, _: &MakeLink, _: &mut Window, cx: &mut Context<Self>) {
+        let paths = self.host.entries.read(cx).selected_paths();
+        for (into, sources) in by_folder(paths) {
+            if self.takes_into(&into) {
+                self.start(DropKind::Link, sources, into, cx);
             }
         }
     }
@@ -196,11 +216,16 @@ fn duplicate_item(_: &TransferPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
     if scene.picker {
         return Vec::new();
     }
-    vec![MenuItem::run(Icon::Duplicate, &DUPLICATE)]
+    vec![
+        MenuItem::run(Icon::Duplicate, &DUPLICATE),
+        MenuItem::run(Icon::Link, &MAKE_LINK),
+    ]
 }
 
 const fn picked(modifiers: Modifiers) -> Option<DropKind> {
-    if modifiers.control {
+    if modifiers.control && modifiers.shift {
+        Some(DropKind::Link)
+    } else if modifiers.control {
         Some(DropKind::Copy)
     } else if modifiers.shift {
         Some(DropKind::Move)
@@ -213,6 +238,7 @@ fn label(kind: DropKind, name: &str) -> String {
     let verb = match kind {
         DropKind::Move => MOVE_TO,
         DropKind::Copy => COPY_TO,
+        DropKind::Link => LINK_IN,
     };
     format!("{verb} {name}")
 }
@@ -239,6 +265,8 @@ impl Part for TransferPart {
     fn slots(slots: &mut Slots<Self>) {
         slots.drop_target(Self::aim, Self::take);
         slots.command(&DUPLICATE, not_picking, Self::duplicate);
+        slots.command(&MAKE_LINK, not_picking, Self::make_link);
+        slots.job_words::<LinkJob>(LinkWords);
         slots.menu_in(
             MenuAt::Entry,
             MenuGroup::Edit,

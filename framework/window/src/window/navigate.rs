@@ -13,8 +13,9 @@ impl MainWindow {
         self.request(folder);
     }
 
-    pub(super) const fn went_elsewhere(&mut self) {
+    pub(super) fn went_elsewhere(&mut self) {
         self.went = Went::Elsewhere;
+        self.drop_filter();
     }
 
     pub fn go_back(&mut self, cx: &mut Context<Self>) {
@@ -70,7 +71,13 @@ impl MainWindow {
     pub(super) fn request(&mut self, folder: &Path) -> bool {
         let path = tidy(folder);
         let place = Location::Folder(path.clone());
-        self.ask_listing(place, |id, order| Command::ListFolder { id, path, order })
+        let filter = self.filter().text.clone();
+        self.ask_listing(place, |id, order| Command::ListFolder {
+            id,
+            path,
+            order,
+            filter,
+        })
     }
 
     pub(super) fn ask_listing<M: Message>(

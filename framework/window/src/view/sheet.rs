@@ -61,6 +61,7 @@ impl MainWindow {
                         })
                         .child(self.entries_area(entries, cx))
                         .child(self.island(cx))
+                        .children(self.filter_chip(cx))
                 }
             })
     }
@@ -143,7 +144,11 @@ impl MainWindow {
                 };
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
-                let query = this.search.marks().map(str::to_owned);
+                let query = this
+                    .search
+                    .marks()
+                    .map(str::to_owned)
+                    .or_else(|| this.filtering().then(|| this.filter().text.clone()));
                 let part_column = this.parts.column(&this.scene(cx), cx);
                 let widths = this.column_widths(cx);
                 let selected = |index: usize| {

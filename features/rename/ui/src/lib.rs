@@ -1,25 +1,34 @@
 #![forbid(unsafe_code)]
 
+use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use gpui::{App, AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
+use gpui::{
+    AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
+    IntoElement as _, ParentElement as _, SharedString, Styled as _, Subscription, Window, div,
+};
 use nova_files_api::numbered::stem;
 use nova_files_api::{Entry, EntryKind, Event, Listing, ListingId, Operation};
 use nova_files_shell::assets::Icon;
 use nova_files_shell::text::{TextField, TextFieldEvent};
+use nova_files_shell::theme::Colors;
 use nova_files_shell::{
     Host, Location, MenuAt, MenuGroup, MenuItem, Part, Placed, RenameWhenMade, Scene, Slots,
     command_spec,
 };
 
 mod name;
+mod several;
 mod words;
 
 use name::{free_name, renamed};
-use nova_files_rename_api::{NewFileJob, NewFolderJob, RenameJob, new_file, new_folder, rename};
-use words::{NewFileWords, NewFolderWords, RenameWords};
+use nova_files_rename_api::{
+    NewFileJob, NewFolderJob, RenameJob, RenameManyJob, new_file, new_folder, rename, rename_many,
+};
+use several::{Named, Plan};
+use words::{NewFileWords, NewFolderWords, RenameManyWords, RenameWords};
 
 pub use nova_files_shell::actions::{NewFile, NewFolder, RenameSelected};
 
@@ -54,6 +63,10 @@ type MadePath = fn(&Operation) -> Option<PathBuf>;
 const NEW_FOLDER_NAME: &str = "New folder";
 const NEW_FILE_NAME: &str = "New file";
 
+type Picked = ((PathBuf, OsString, bool), Vec<Other>, HashSet<OsString>);
+
+const NEW_NAME: &str = "new-name";
+
 pub struct RenamePart {
     host: Host,
     renaming: Option<Renaming>,
@@ -61,9 +74,18 @@ pub struct RenamePart {
     listing: Option<Listing>,
 }
 
+struct Other {
+    name: OsString,
+    is_folder: bool,
+}
+
 struct Renaming {
     folder: PathBuf,
     name: OsString,
+    is_folder: bool,
+    others: Vec<Other>,
+    unselected: HashSet<OsString>,
+    plan: Plan,
     field: Entity<TextField>,
     seen: bool,
     _events: Subscription,
@@ -73,6 +95,40 @@ struct Renaming {
 impl Renaming {
     fn path(&self) -> PathBuf {
         self.folder.join(&self.name)
+    }
+
+    fn planned(&self, typed: &str) -> Plan {
+        if self.others.is_empty() {
+            return Plan::default();
+        }
+        let others: Vec<Named<'_>> = self
+            .others
+            .iter()
+            .map(|other| Named {
+                name: &other.name,
+                is_folder: other.is_folder,
+            })
+            .collect();
+        let unselected = self.unselected.iter().map(OsString::as_os_str).collect();
+        several::plan(
+            Named {
+                name: &self.name,
+                is_folder: self.is_folder,
+            },
+            typed,
+            &others,
+            &unselected,
+        )
+    }
+
+    fn new_names(&self, name: &OsString) -> Vec<OsString> {
+        let others = self.others.iter().map(|other| {
+            self.plan
+                .others
+                .get(&other.name)
+                .map_or(&other.name, |planned| &planned.name)
+        });
+        others.chain([name]).cloned().collect()
     }
 }
 
@@ -107,6 +163,12 @@ impl RenamePart {
         listed && entries.drawn(&renaming.name)
     }
 
+    fn renames(&self, scene: &Scene, cx: &App) -> bool {
+        let selected = self.host.entries.read(cx).selected_count();
+        let several = selected > 1 && !scene.searching;
+        (selected == 1 || several) && self.in_folder(scene).is_some()
+    }
+
     fn rows_drawn(&mut self, _: ListingId, _: Range<usize>, cx: &mut Context<Self>) {
         let Some(renaming) = self.renaming.as_mut() else {
             return;
@@ -127,15 +189,11 @@ impl RenamePart {
         if self.in_folder(&scene).is_none() {
             return;
         }
-        let (path, name, is_folder) = match self.host.entries.read(cx).selected()[..] {
-            [entry] => (
-                self.path_of(entry, cx),
-                entry.name.clone(),
-                entry.kind == EntryKind::Folder,
-            ),
-            _ => return,
+        let Some((edited, others, unselected)) = self.picked(scene.searching, cx) else {
+            return;
         };
-        let Some(folder) = path.as_deref().and_then(Path::parent).map(PathBuf::from) else {
+        let (path, name, is_folder) = edited;
+        let Some(folder) = path.parent().map(PathBuf::from) else {
             return;
         };
         let text = name.to_string_lossy().into_owned();
@@ -152,9 +210,10 @@ impl RenamePart {
             );
         });
         let events = cx.subscribe_in(&field, window, |this, _, event, _, cx| match event {
+            TextFieldEvent::Submitted if this.clashes() => {}
             TextFieldEvent::Submitted => this.finish(true, cx),
             TextFieldEvent::Cancelled => this.finish(false, cx),
-            TextFieldEvent::Changed => {}
+            TextFieldEvent::Changed => this.plan_again(cx),
         });
         let focus = field.read(cx).focus_handle(cx);
         let blur = cx.on_blur(&focus, window, |this, _, cx| {
@@ -162,18 +221,76 @@ impl RenamePart {
                 .renaming
                 .as_ref()
                 .is_some_and(|renaming| this.shows(renaming, cx));
-            this.finish(drawn, cx);
+            this.finish(drawn && !this.clashes(), cx);
         });
         window.focus(&focus, cx);
         let seen = self.host.entries.read(cx).drawn(&name);
         self.renaming = Some(Renaming {
             folder,
             name,
+            is_folder,
+            others,
+            unselected,
+            plan: Plan::default(),
             field,
             seen,
             _events: events,
             _blur: blur,
         });
+        cx.notify();
+    }
+
+    fn picked(&self, searching: bool, cx: &App) -> Option<Picked> {
+        let entries = self.host.entries.read(cx);
+        let listing = entries.listing()?;
+        let mut selected = entries.selected();
+        if selected.is_empty() || (searching && selected.len() > 1) {
+            return None;
+        }
+        selected.sort_by_key(|entry| entry.id.0);
+        let under_cursor = |entry: &&&Entry| usize::try_from(entry.id.0).ok() == entries.cursor();
+        let edited = *selected
+            .iter()
+            .find(under_cursor)
+            .or_else(|| selected.first())?;
+        let others: Vec<Other> = selected
+            .iter()
+            .filter(|entry| entry.id != edited.id)
+            .map(|entry| Other {
+                name: entry.name.clone(),
+                is_folder: entry.kind == EntryKind::Folder,
+            })
+            .collect();
+        let unselected = if others.is_empty() {
+            HashSet::new()
+        } else {
+            let ids: HashSet<_> = selected.iter().map(|entry| entry.id).collect();
+            listing
+                .entries
+                .iter()
+                .filter(|entry| !ids.contains(&entry.id))
+                .map(|entry| entry.name.clone())
+                .collect()
+        };
+        let edited = (
+            listing.path_of(edited),
+            edited.name.clone(),
+            edited.kind == EntryKind::Folder,
+        );
+        Some((edited, others, unselected))
+    }
+
+    fn clashes(&self) -> bool {
+        self.renaming
+            .as_ref()
+            .is_some_and(|renaming| renaming.plan.clashes)
+    }
+
+    fn plan_again(&mut self, cx: &mut Context<Self>) {
+        let Some(renaming) = self.renaming.as_mut() else {
+            return;
+        };
+        renaming.plan = renaming.planned(renaming.field.read(cx).text());
         cx.notify();
     }
 
@@ -187,17 +304,29 @@ impl RenamePart {
             .update(cx, nova_files_shell::Navigator::focus_list);
         cx.notify();
         let name = renamed(&renaming.name, &typed);
-        if !keep || typed.is_empty() || name == renaming.name {
+        let untouched = name == renaming.name && renaming.plan.others.is_empty();
+        if !keep || typed.is_empty() || untouched {
             return;
         }
         let path = renaming.path();
+        let job = if renaming.others.is_empty() {
+            rename(path, name.clone())
+        } else {
+            let others = renaming
+                .plan
+                .others
+                .iter()
+                .map(|(old, planned)| (renaming.folder.join(old), planned.name.clone()));
+            rename_many(std::iter::once((path, name.clone())).chain(others))
+        };
         if !self.host.scene(cx).searching {
+            let names = renaming.new_names(&name);
             self.host.entries.update(cx, |entries, cx| {
-                entries.select_when_listed(renaming.folder, vec![name.clone()], cx);
+                entries.select_when_listed(renaming.folder, names, cx);
             });
         }
         self.host.island.update(cx, |island, cx| {
-            island.start_job(rename(path, name), cx);
+            island.start_job(job, cx);
         });
     }
 
@@ -255,6 +384,29 @@ fn field_of(part: &RenamePart, entry: &Entry, cx: &App) -> Option<Entity<TextFie
     (part.path_of(entry, cx)? == renaming.path()).then(|| renaming.field.clone())
 }
 
+fn new_name(part: &RenamePart, entry: &Entry, cx: &App) -> Option<AnyElement> {
+    let renaming = part.renaming.as_ref()?;
+    let planned = renaming.plan.others.get(&entry.name)?;
+    if part.path_of(entry, cx)?.parent()? != renaming.folder {
+        return None;
+    }
+    let colors = Colors::of(cx);
+    let name: SharedString = planned.name.to_string_lossy().into_owned().into();
+    Some(
+        div()
+            .debug_selector(|| NEW_NAME.to_owned())
+            .min_w_0()
+            .truncate()
+            .text_color(if planned.clashes {
+                colors.danger
+            } else {
+                colors.text
+            })
+            .child(name)
+            .into_any_element(),
+    )
+}
+
 const fn renaming(part: &RenamePart, _: &App) -> bool {
     part.renaming.is_some()
 }
@@ -264,8 +416,7 @@ const fn anywhere(_: &RenamePart, _: &Scene, _: &App) -> bool {
 }
 
 fn rename_item(part: &RenamePart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
-    let lone = part.host.entries.read(cx).selected().len() == 1;
-    if !lone || part.in_folder(scene).is_none() {
+    if !part.renames(scene, cx) {
         return Vec::new();
     }
     vec![MenuItem::run(Icon::Rename, &RENAME)]
@@ -281,8 +432,8 @@ fn new_folder_item(part: &RenamePart, scene: &Scene, _: &App) -> Vec<MenuItem> {
     ]
 }
 
-fn island_button(part: &RenamePart, _: &Scene, cx: &App) -> Vec<MenuItem> {
-    if part.host.entries.read(cx).selected().len() != 1 {
+fn island_button(part: &RenamePart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
+    if !part.renames(scene, cx) {
         return Vec::new();
     }
     vec![
@@ -307,6 +458,7 @@ impl Part for RenamePart {
         slots.command(&NEW_FILE, anywhere, Self::new_file);
         slots.job_words::<NewFileJob>(NewFileWords);
         slots.job_words::<RenameJob>(RenameWords);
+        slots.job_words::<RenameManyJob>(RenameManyWords);
         slots.job_words::<NewFolderJob>(NewFolderWords);
         slots.command(&RENAME, anywhere, Self::rename_selected);
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::SECOND, rename_item);
@@ -323,6 +475,7 @@ impl Part for RenamePart {
             island_button,
         );
         slots.name_field(field_of);
+        slots.name_cell(new_name);
         slots.busy(renaming);
         slots.listed(Self::listed);
         slots.rows_drawn(Self::rows_drawn);
