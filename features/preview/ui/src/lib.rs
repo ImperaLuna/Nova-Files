@@ -187,6 +187,7 @@ impl PreviewPart {
         self.looks.docked = false;
         if let Some(open) = self.looks.open.take() {
             release(open.shown.and_then(|shown| shown.picture), cx);
+            self.host.link.send(Command::Closed).ok();
             cx.notify();
         }
     }
@@ -356,6 +357,7 @@ impl PreviewPart {
         match event {
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::Unreadable { id, .. } => self.preview_arrived(id, None, cx),
+            Event::Paged { .. } => {}
         }
     }
 

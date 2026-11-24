@@ -1,8 +1,9 @@
 # nova-files-thumbnailer-launch
 #
 # Starts the sandboxed thumbnail helper and reads its answer: a batch of
-# thumbnails, or one picture for a quick look. Thumbnails and preview share
-# it, so neither feature's core needs the other's.
+# thumbnails, one picture for a quick look, or a PDF's pages one at a time.
+# Thumbnails and preview share it, so neither feature's core needs the
+# other's.
 #
 # Allowed outside crates:
 # - rustix

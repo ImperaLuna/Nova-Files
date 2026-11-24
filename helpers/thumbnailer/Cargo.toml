@@ -4,6 +4,7 @@
 # exits.
 #
 # Allowed outside crates:
+# - hayro
 # - image
 # - landlock
 # - resvg
@@ -22,6 +23,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# Reads PDF pages in pure Rust, so a document needs nothing installed.
+hayro = "0.9.0"
 # Only the formats the helper decodes itself; the rest go to the system's
 # thumbnailers. GPUI already builds image with more formats.
 image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }

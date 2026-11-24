@@ -14,9 +14,9 @@ use nova_files_api::{EventSink, Fit, Unreadable};
 use nova_files_disk::ports::Mimes;
 use nova_files_entries_core::list::{self, Stopped};
 use nova_files_preview_api::{
-    Event, Frame, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent, PreviewId,
+    Event, Frame, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, PageSize, Preview, PreviewContent, PreviewId,
 };
-use nova_files_thumbnailer_launch::{self as launch, Running};
+use nova_files_thumbnailer_launch::{self as launch, Document, Opened, Running};
 use rustix::fs::OFlags;
 
 const THREAD_NAME: &str = "nova-files-preview";
@@ -31,22 +31,29 @@ const PICTURE_SIGNATURES: [&[(usize, &[u8])]; 5] = [
     &[(0, b"GIF89a")],
 ];
 const DRAWING_EXTENSIONS: [&str; 2] = ["svg", "svgz"];
+const PDF_SIGNATURE: &[u8] = b"%PDF-";
+const PDF_SIGNATURE_WITHIN: usize = 1024;
 
 #[derive(Debug, Default)]
 pub struct Current {
     id: AtomicU64,
     decoding: Mutex<()>,
     running: Running,
+    paging: Arc<Running>,
+    document: Mutex<Option<(PreviewId, Document)>>,
 }
 
 const NONE: u64 = u64::MAX;
 
 impl Current {
-    pub const fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             id: AtomicU64::new(NONE),
             decoding: Mutex::new(()),
             running: Running::new(),
+            paging: Arc::new(Running::new()),
+            document: Mutex::new(None),
         }
     }
 
@@ -56,12 +63,23 @@ impl Current {
 
     fn set(&self, id: PreviewId) {
         self.id.store(id.0, Ordering::SeqCst);
-        self.running.stop();
+        self.let_go();
     }
 
     pub fn cancel(&self) {
         self.id.store(NONE, Ordering::SeqCst);
+        self.let_go();
+    }
+
+    fn let_go(&self) {
         self.running.stop();
+        self.paging.stop();
+        let open = self
+            .document
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        drop(open);
     }
 }
 
@@ -95,6 +113,39 @@ pub fn answer(events: &Arc<dyn EventSink>, request: Request) {
     }
 }
 
+pub fn page(
+    events: &Arc<dyn EventSink>,
+    current: &Arc<Current>,
+    id: PreviewId,
+    index: usize,
+    width: u32,
+) {
+    let sink = Arc::clone(events);
+    let current = Arc::clone(current);
+    let spawned = thread::Builder::new()
+        .name(THREAD_NAME.to_owned())
+        .spawn(move || {
+            let mut open = current
+                .document
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let picture = match open.as_mut() {
+                Some((shown, document)) if *shown == id && current.is(id) => {
+                    document.page(index, width)
+                }
+                _ => return,
+            };
+            drop(open);
+            if current.is(id) {
+                sink.deliver(Event::Paged { id, index, picture }).ok();
+            }
+        });
+    if spawned.is_err() {
+        let picture = None;
+        events.deliver(Event::Paged { id, index, picture }).ok();
+    }
+}
+
 fn event(request: &Request) -> Option<Event> {
     let Request { id, path, .. } = request;
     let cancelled = || !request.current.is(*id);
@@ -124,6 +175,13 @@ fn event(request: &Request) -> Option<Event> {
             (Err(error), _) => return Some(unreadable(list::unreadable(&error))),
             (Ok(Some(start)), Some(helper)) if is_picture(&start) || is_drawing(path) => {
                 picture(request, helper)?
+            }
+            (Ok(Some(start)), Some(helper)) if is_document(&start) => {
+                match document(request, helper) {
+                    Ok(content) => content,
+                    Err(Unopened::Cancelled) => return None,
+                    Err(Unopened::NotAPdf) => text(start, metadata.len()),
+                }
             }
             (Ok(Some(start)), _) => text(start, metadata.len()),
             (Ok(None), _) => PreviewContent::Icon,
@@ -194,6 +252,41 @@ fn picture(request: &Request, helper: &Path) -> Option<PreviewContent> {
     })
 }
 
+enum Unopened {
+    Cancelled,
+    NotAPdf,
+}
+
+fn document(request: &Request, helper: &Path) -> Result<PreviewContent, Unopened> {
+    let current = &request.current;
+    let wanted = || current.is(request.id);
+    let opened = launch::document(helper, &request.path, &current.paging, wanted);
+    Ok(match opened {
+        None => return Err(Unopened::NotAPdf),
+        Some(Opened::Locked) => PreviewContent::Locked,
+        Some(Opened::Pages(document)) => {
+            let pages = document
+                .sizes()
+                .iter()
+                .map(|size| PageSize {
+                    width: size.width,
+                    height: size.height,
+                })
+                .collect();
+            let mut open = current
+                .document
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if !current.is(request.id) {
+                return Err(Unopened::Cancelled);
+            }
+            *open = Some((request.id, document));
+            drop(open);
+            PreviewContent::Document { pages }
+        }
+    })
+}
+
 fn folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<PreviewContent, Stopped> {
     let mut first = list::read_folder(path, cancelled)?;
     let count = first.len();
@@ -223,6 +316,16 @@ fn is_drawing(path: &Path) -> bool {
             DRAWING_EXTENSIONS
                 .iter()
                 .any(|drawing| extension.eq_ignore_ascii_case(drawing))
+        })
+}
+
+fn is_document(start: &[u8]) -> bool {
+    start
+        .get(..start.len().min(PDF_SIGNATURE_WITHIN))
+        .is_some_and(|start| {
+            start
+                .windows(PDF_SIGNATURE.len())
+                .any(|bytes| bytes == PDF_SIGNATURE)
         })
 }
 
