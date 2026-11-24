@@ -17,6 +17,12 @@ pub struct Overlay {
     touched: HashSet<PathBuf>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Held {
+    Itself,
+    Inside,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Whole {
     At(PathBuf),
@@ -49,7 +55,11 @@ impl Gone {
     }
 
     fn holds(&self, path: &Path) -> bool {
-        self.renamed.contains(path) || path.ancestors().any(|folder| self.removed.contains(folder))
+        self.renamed.contains(path) || self.holds_under(path)
+    }
+
+    fn holds_under(&self, path: &Path) -> bool {
+        path.ancestors().any(|folder| self.removed.contains(folder))
     }
 }
 
@@ -132,12 +142,14 @@ impl Overlay {
     }
 
     pub fn place(&self, path: PathBuf) -> Option<PathBuf> {
-        self.follow(path, |_| {})
+        self.follow(path, Held::Itself, |_| {})
     }
 
     pub fn place_whole(&self, folder: PathBuf) -> Whole {
         let mut mixed = false;
-        let placed = self.follow(folder, |at| mixed |= self.touched.contains(at));
+        let placed = self.follow(folder, Held::Inside, |at| {
+            mixed |= self.touched.contains(at);
+        });
         match placed {
             _ if mixed => Whole::Mixed,
             Some(folder) => Whole::At(folder),
@@ -145,7 +157,7 @@ impl Overlay {
         }
     }
 
-    fn follow(&self, path: PathBuf, mut passing: impl FnMut(&Path)) -> Option<PathBuf> {
+    fn follow(&self, path: PathBuf, held: Held, mut passing: impl FnMut(&Path)) -> Option<PathBuf> {
         let mut path = path;
         let mut done = 0;
         loop {
@@ -155,7 +167,7 @@ impl Overlay {
                 .filter_map(|above| next_at(&self.moves_from, above, done))
                 .min();
             let until = next.unwrap_or(self.steps.len());
-            if self.gone_between(&path, done..until) {
+            if self.gone_between(&path, done..until, held) {
                 return None;
             }
             let Some(Step::Moved { from, to }) = next.and_then(|at| self.steps.get(at)) else {
@@ -164,12 +176,16 @@ impl Overlay {
             path = rebase(&path, from, to)?;
             done = until + 1;
         }
-        (!self.gone.holds(&path)).then_some(path)
+        let gone = match held {
+            Held::Itself => self.gone.holds(&path),
+            Held::Inside => self.gone.holds_under(&path),
+        };
+        (!gone).then_some(path)
     }
 
-    fn gone_between(&self, path: &Path, steps: Range<usize>) -> bool {
+    fn gone_between(&self, path: &Path, steps: Range<usize>, held: Held) -> bool {
         let within = |at: Option<usize>| at.is_some_and(|at| at < steps.end);
-        within(next_at(&self.renamed_at, path, steps.start))
+        held == Held::Itself && within(next_at(&self.renamed_at, path, steps.start))
             || path
                 .ancestors()
                 .any(|above| within(next_at(&self.removed_at, above, steps.start)))

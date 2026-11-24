@@ -212,6 +212,10 @@ fn files_in_a_renamed_folder_match_its_new_name_and_not_the_old_one() {
         home.stages("studio frame", &overlay)[0],
         paths(&["projects/studio/src/components/render_frame.rs"])
     );
+    assert_eq!(
+        home.stages("studio/notes", &overlay)[0],
+        paths(&["projects/studio/notes.md"])
+    );
     assert_eq!(home.stages("editor/main", &overlay)[0], paths(&[]));
     assert_eq!(
         home.stages("viewer/render", &overlay)[0],

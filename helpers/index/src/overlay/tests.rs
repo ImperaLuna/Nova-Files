@@ -236,6 +236,10 @@ fn a_folder_moves_whole_unless_something_right_inside_it_changed_too() {
         Whole::At(PathBuf::from("/h/b/plain"))
     );
     assert_eq!(whole(&overlay, "/h/a/gone"), Whole::Gone);
+    assert_eq!(
+        whole(&after(&[moved("/h/a", "/h/b")]), "/h/a"),
+        Whole::At(PathBuf::from("/h/b"))
+    );
     assert_eq!(whole(&overlay, "/h/a/sub"), Whole::Mixed);
     assert_eq!(whole(&overlay, "/h/a"), Whole::Mixed);
     assert_eq!(whole(&overlay, "/h"), Whole::Mixed);
