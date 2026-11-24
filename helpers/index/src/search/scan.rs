@@ -14,7 +14,7 @@ const SCAN_THREADS_MAX: usize = 16;
 pub const ROWS_PER_THREAD_MIN: usize = 32_768;
 const KEEP_SLACK: usize = 4;
 const KEEP_MIN: usize = 1024;
-const ROWS_BETWEEN_STOP_CHECKS: u32 = 8192;
+const ROWS_BETWEEN_STOP_CHECKS: u32 = 256;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Source {

@@ -256,6 +256,17 @@ fn rows_hold_the_files_details() {
 }
 
 #[test]
+fn names_read_the_same_once_the_details_are_released() {
+    let home = TempFolder::new().with(&["lower.txt", "Mixed/Case.TXT", "Mixed/plain"]);
+    let (index, _cache) = indexed(home.path());
+    let before = relative_paths(&index);
+    index.release_details().unwrap();
+    assert_eq!(relative_paths(&index), before);
+    assert!(before.contains(Path::new("Mixed/Case.TXT")));
+    assert!(before.contains(Path::new("lower.txt")));
+}
+
+#[test]
 fn names_that_arent_utf8_survive() {
     let home = TempFolder::new();
     let name = OsString::from_vec(vec![b'n', 0xff, b'.', b't']);
