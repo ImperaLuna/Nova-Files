@@ -6,9 +6,9 @@
 # success in seconds without setting anything up.
 #
 # A new push cancels the run it replaces, and a failed check cancels the
-# rest of its run. Built Nix store paths come from
-# Cachix when the CACHIX_AUTH_TOKEN secret is set, otherwise from the
-# GitHub Actions cache, so a run only rebuilds what changed.
+# rest of its run. The Nix store comes from the GitHub Actions cache,
+# saved by runs on main, so a run only rebuilds what changed. Cachix
+# holds only what a PC downloads (release-build.yml).
 name: CI
 
 on:
@@ -23,11 +23,9 @@ concurrency:
 
 permissions:
   contents: read
-  # cache-nix-action deletes the caches it replaces.
+  # cache-nix-action deletes the caches it replaces, and "Stop the rest
+  # of the run" cancels the run.
   actions: write
-
-env:
-  CACHIX_CACHE: nova-de
 
 jobs:
   # A stacked pull request (base isn't main) may change code only: docs,
@@ -61,8 +59,6 @@ jobs:
     runs-on: ubuntu-latest
     # A normal run takes 2 to 17 minutes; a hung one stops here.
     timeout-minutes: 30
-    env:
-      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -76,19 +72,18 @@ jobs:
         # build, by when the deletion is done, so nothing waits for it.
         if: steps.changes.outputs.run == 'true'
         run: tools/ci-free-disk.sh start
-      - uses: cachix/install-nix-action@v31
+      # Single-user Nix, so cache-nix-action can write the store it restores.
+      - uses: nixbuild/nix-quick-install-action@v35
         if: steps.changes.outputs.run == 'true'
-      - uses: cachix/cachix-action@v16
-        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN != ''
-        with:
-          name: ${{ env.CACHIX_CACHE }}
-          authToken: ${{ env.CACHIX_AUTH_TOKEN }}
       - uses: nix-community/cache-nix-action@v6
-        if: steps.changes.outputs.run == 'true' && env.CACHIX_AUTH_TOKEN == ''
+        if: steps.changes.outputs.run == 'true'
         with:
-          primary-key: nix-check-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock', '**/*.nix') }}
+          primary-key: nix-check-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock', '**/Cargo.toml', '**/*.nix') }}
           restore-prefixes-first-match: nix-check-${{ runner.os }}-
-          gc-max-store-size-linux: 5G
+          # Only main saves: a pull request's cache is visible to that pull
+          # request alone, and the repository holds 10 GB in all.
+          save: ${{ github.ref == 'refs/heads/main' }}
+          gc-max-store-size-linux: 10G
           purge: true
           purge-prefixes: nix-check-${{ runner.os }}-
           purge-created: 0

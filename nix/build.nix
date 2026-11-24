@@ -29,10 +29,10 @@ let
   ];
 
   # Hashes of the git dependencies, so they are fetched as ordinary store
-  # paths that Cachix serves, not cloned at evaluation time on every run
-  # (the zed fork's clone alone took a minute of each CI job). After
-  # changing a git dependency, set its hash to `pkgs.lib.fakeHash` and copy
-  # the real one from the build error.
+  # paths that the binary cache serves, not cloned at evaluation time on
+  # every run (the zed fork's clone alone took a minute of each CI job).
+  # After changing a git dependency, set its hash to `pkgs.lib.fakeHash`
+  # and copy the real one from the build error.
   outputHashes = {
     "git+https://github.com/ImperaLuna/zed?rev=47424cdc3f1a49829960e1ecbcdcdd967d034265#47424cdc3f1a49829960e1ecbcdcdd967d034265" =
       "sha256-hD5O9g8T78PeOWcOPBVdSsu5efrrP+fzDjOe3wCau48=";
