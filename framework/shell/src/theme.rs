@@ -31,6 +31,21 @@ pub struct Colors {
     pub drop: Rgba,
     pub drop_edge: Rgba,
     pub tags: Tags,
+    pub code: Code,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Code {
+    pub plain: Rgba,
+    pub comment: Rgba,
+    pub keyword: Rgba,
+    pub quoted: Rgba,
+    pub number: Rgba,
+    pub function: Rgba,
+    pub kind: Rgba,
+    pub tag: Rgba,
+    pub attribute: Rgba,
+    pub line_number: Rgba,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -64,6 +79,8 @@ mod share {
     pub const MARK: f32 = 0.34;
     pub const DROP: f32 = 0.16;
     pub const SCRIM: f32 = 0.72;
+    pub const CODE_KIND: f32 = 0.55;
+    pub const CODE_COMMENT: f32 = 0.48;
 }
 
 impl Colors {
@@ -108,6 +125,18 @@ impl Colors {
             drop: thin(palette.primary, share::DROP),
             drop_edge: color(palette.primary),
             tags: Tags::new(palette, text_dim),
+            code: Code {
+                plain: into_bg(palette.fg, share::SOFT),
+                comment: into_bg(palette.fg, share::CODE_COMMENT),
+                keyword: color(palette.secondary),
+                quoted: color(palette.success),
+                number: color(palette.warning),
+                function: color(palette.info),
+                kind: mix(color(palette.info), share::CODE_KIND, color(palette.fg)),
+                tag: color(palette.error),
+                attribute: mix(color(palette.warning), share::CODE_KIND, color(palette.fg)),
+                line_number: into_bg(palette.fg, share::FAINT),
+            },
         }
     }
 
@@ -177,6 +206,20 @@ pub mod text {
     use gpui::{FontWeight, Pixels, px};
 
     pub const FAMILY: &str = "Inter";
+    pub const MONO_FAMILIES: [&str; 12] = [
+        "JetBrains Mono",
+        "JetBrainsMono Nerd Font",
+        "Fira Code",
+        "Cascadia Code",
+        "Source Code Pro",
+        "Hack",
+        "Iosevka",
+        "Noto Sans Mono",
+        "DejaVu Sans Mono",
+        "Ubuntu Mono",
+        "Liberation Mono",
+        "Adwaita Mono",
+    ];
     pub const BODY: Pixels = px(13.0);
     pub const BODY_WEIGHT: FontWeight = FontWeight::MEDIUM;
     pub const DETAIL: Pixels = px(12.5);
@@ -425,6 +468,11 @@ pub mod preview {
     pub const TEXT_PAD_X: Pixels = px(26.0);
     pub const TEXT_PAD_Y: Pixels = px(22.0);
     pub const TEXT_LINE: Pixels = px(22.0);
+    pub const CODE_WIDTH: Pixels = px(720.0);
+    pub const CODE_PAD_X: Pixels = px(18.0);
+    pub const CODE_LINE: Pixels = px(20.0);
+    pub const CODE_GUTTER_GAP: Pixels = px(16.0);
+    pub const CODE_DIGIT: Pixels = px(8.0);
     pub const LIST_WIDTH: Pixels = px(400.0);
     pub const LIST_PAD_X: Pixels = px(18.0);
     pub const LIST_PAD_Y: Pixels = px(14.0);

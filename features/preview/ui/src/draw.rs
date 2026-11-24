@@ -2,9 +2,10 @@ use std::ffi::OsStr;
 use std::sync::Arc;
 
 use gpui::{
-    Action, AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement,
-    MouseButton, MouseDownEvent, ParentElement as _, Pixels, RenderImage, SharedString,
-    StatefulInteractiveElement as _, Styled as _, div, img, prelude::FluentBuilder as _, px,
+    Action, AnyElement, ClickEvent, Context, Div, HighlightStyle, InteractiveElement as _,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels, RenderImage,
+    SharedString, StatefulInteractiveElement as _, Styled as _, StyledText, div, img,
+    prelude::FluentBuilder as _, px,
 };
 use nova_files_api::{Entry, EntryKind, Listing};
 use nova_files_preview_api::{Preview, PreviewContent};
@@ -16,6 +17,7 @@ use nova_files_shell::theme::{Colors, preview, radius, size, text};
 use nova_files_shell::widgets::{icon, icon_button, kind_icon};
 
 use crate::PreviewPart;
+use crate::code::{self, Coded};
 use crate::looks::{QuickLook, Shown};
 
 const SEPARATOR: &str = " · ";
@@ -137,6 +139,10 @@ fn art(
             picture_art(picture, room, scale_factor, colors).into_any_element()
         }
         (PreviewContent::Text { text, .. }, _) => text_art(text, room, colors).into_any_element(),
+        (PreviewContent::Code { text, .. }, _) => shown.code.as_deref().map_or_else(
+            || text_art(text, room, colors).into_any_element(),
+            |coded| code_art(coded, room, colors).into_any_element(),
+        ),
         (PreviewContent::Folder { first, count }, _) => folder_art(first, *count, colors),
         _ => big_icon(name, kind, colors),
     }
@@ -224,6 +230,71 @@ fn text_art(text_content: &str, room: gpui::Size<Pixels>, colors: &Colors) -> im
                 .take(lines)
                 .map(|line| div().truncate().child(SharedString::from(line.to_owned()))),
         )
+}
+
+fn code_art(coded: &Coded, room: gpui::Size<Pixels>, colors: &Colors) -> impl IntoElement {
+    let lines = code_lines_fitting(room.height).min(coded.lines.len());
+    let digits = lines.max(1).ilog10() + 1;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a line number has a handful of digits"
+    )]
+    let gutter = preview::CODE_DIGIT * digits as f32;
+    card(preview::CODE_WIDTH, colors)
+        .debug_selector(|| "preview-code".to_owned())
+        .max_h(room.height)
+        .px(preview::CODE_PAD_X)
+        .py(preview::TEXT_PAD_Y)
+        .bg(colors.window)
+        .font_family(coded.family.clone())
+        .line_height(preview::CODE_LINE)
+        .text_color(colors.code.plain)
+        .whitespace_nowrap()
+        .children(
+            coded
+                .lines
+                .iter()
+                .take(lines)
+                .enumerate()
+                .map(|(index, line)| {
+                    let highlights = line.marks.iter().map(|(range, mark)| {
+                        let style = HighlightStyle {
+                            color: Some(code::color(*mark, &colors.code).into()),
+                            ..HighlightStyle::default()
+                        };
+                        (range.clone(), style)
+                    });
+                    div()
+                        .flex()
+                        .gap(preview::CODE_GUTTER_GAP)
+                        .child(
+                            div()
+                                .flex_none()
+                                .w(gutter)
+                                .text_right()
+                                .text_color(colors.code.line_number)
+                                .child(SharedString::from((index + 1).to_string())),
+                        )
+                        .child(
+                            div().min_w_0().truncate().child(
+                                StyledText::new(line.text.clone()).with_highlights(highlights),
+                            ),
+                        )
+                }),
+        )
+}
+
+fn code_lines_fitting(height: Pixels) -> usize {
+    let lines = (f32::from(height - preview::TEXT_PAD_Y * BOTH_SIDES)
+        / f32::from(preview::CODE_LINE))
+    .floor();
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a count of lines that fit a window, never negative"
+    )]
+    let lines = lines.max(1.0) as usize;
+    lines
 }
 
 fn folder_art(first: &[Entry], count: usize, colors: &Colors) -> AnyElement {
