@@ -266,7 +266,7 @@ fn files_whose_app_fails_say_so_and_the_rest_go_to_the_desktop(cx: &mut TestAppC
         .into_iter()
         .filter_map(|command| match command {
             open_api::Command::OpenFile { path, .. } => Some(path),
-            open_api::Command::OpenWith(_) => None,
+            open_api::Command::OpenWith(_) | open_api::Command::OpenTerminal { .. } => None,
         })
         .collect();
     assert_eq!(opened.len(), 2, "{opened:?}");
@@ -324,4 +324,41 @@ fn files_whose_app_fails_say_so_and_the_rest_go_to_the_desktop(cx: &mut TestAppC
         note(cx).as_deref(),
         Some("Can't open 1: its app didn't start")
     );
+}
+
+#[gpui::test]
+fn the_terminal_opens_in_the_folder_on_screen_or_says_why_not(cx: &mut TestAppContext) {
+    cx.update(nova_files_window::bind_window_keys);
+    let (view, cx, mut core) = window(cx);
+    answer_listing(&mut core, ENTRIES);
+    cx.run_until_parked();
+    core.commands();
+    cx.simulate_keystrokes("shift-f4");
+    cx.run_until_parked();
+    let here = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
+    let asked: Vec<PathBuf> = core
+        .sent::<open_api::Command>()
+        .into_iter()
+        .filter_map(|command| match command {
+            open_api::Command::OpenTerminal { folder, .. } => Some(folder),
+            open_api::Command::OpenFile { .. } | open_api::Command::OpenWith(_) => None,
+        })
+        .collect();
+    assert_eq!(asked, here.into_iter().collect::<Vec<_>>());
+    let note = |cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| view.note().map(|note| note.label.to_string()))
+    };
+
+    core.send(open_api::Event::TerminalNotOpened {
+        folder: asked[0].clone(),
+        reason: NotOpened::NoApp,
+    });
+    cx.run_until_parked();
+    assert_eq!(note(cx).as_deref(), Some("No terminal found"));
+    core.send(open_api::Event::TerminalNotOpened {
+        folder: asked[0].clone(),
+        reason: NotOpened::Failed,
+    });
+    cx.run_until_parked();
+    assert_eq!(note(cx).as_deref(), Some("Can't open a terminal here"));
 }

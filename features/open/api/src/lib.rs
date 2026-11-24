@@ -25,6 +25,15 @@ pub enum Command {
     /// List the apps that open some files, open them in one, or make one
     /// the default (see [`OpenWith`]).
     OpenWith(OpenWith),
+    /// Open the user's terminal in `folder`: the one `$TERMINAL` names,
+    /// else `xdg-terminal-exec`, else an installed app listed as a
+    /// terminal emulator. `activation` is as for [`Command::OpenFile`].
+    /// Nothing answers a terminal that started; one that didn't is
+    /// [`Event::TerminalNotOpened`].
+    OpenTerminal {
+        folder: PathBuf,
+        activation: Option<String>,
+    },
 }
 
 /// Something the open feature's core half tells one client.
@@ -36,6 +45,9 @@ pub enum Event {
     NotOpened { path: PathBuf, reason: NotOpened },
     /// The answer to a [`Command::OpenWith`] request.
     OpenWith(OpenWithAnswer),
+    /// [`Command::OpenTerminal`] started no terminal in `folder`, for
+    /// `reason`: [`NotOpened::NoApp`] when none is installed.
+    TerminalNotOpened { folder: PathBuf, reason: NotOpened },
 }
 
 /// Why [`Command::OpenFile`] started no app.

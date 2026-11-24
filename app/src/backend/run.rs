@@ -182,6 +182,9 @@ fn open(setup: &Setup, _: ClientId, client: &Client, command: open_api::Command)
         open_api::Command::OpenWith(request) => {
             setup.open_with.answer(client.events(), request);
         }
+        open_api::Command::OpenTerminal { folder, activation } => {
+            nova_files_open_core::open_terminal(client.events(), folder, activation);
+        }
     }
 }
 
