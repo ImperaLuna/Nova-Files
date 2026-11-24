@@ -10,15 +10,14 @@ enum Start {
     Split(&'static str),
 }
 
-// Each player's own option for where to start, matched by its desktop id.
-// https://mpv.io/manual/stable/#options-start
-// https://wiki.videolan.org/VLC_command-line_help/
-// https://github.com/celluloid-player/celluloid#command-line-options
-// https://sourceforge.net/p/smplayer/feature-requests/728
 const PLAYERS: [(&str, Start); 4] = [
+    // https://github.com/celluloid-player/celluloid#command-line-options
     ("celluloid", Start::Joined("--mpv-start=")),
+    // https://sourceforge.net/p/smplayer/feature-requests/728
     ("smplayer", Start::Split("-start")),
+    // https://wiki.videolan.org/VLC_command-line_help/
     ("vlc", Start::Joined("--start-time=")),
+    // https://mpv.io/manual/stable/#options-start
     ("mpv", Start::Joined("--start=")),
 ];
 
