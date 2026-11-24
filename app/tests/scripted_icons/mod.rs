@@ -26,6 +26,7 @@ fn shown_with_icons(
         first: EntryId(0),
         details: icons.iter().map(|_| sized(1)).collect(),
         icons: icons.into(),
+        kinds: Vec::new().into(),
     });
     cx.run_until_parked();
     (view, cx, core)

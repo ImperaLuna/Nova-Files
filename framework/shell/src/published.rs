@@ -31,6 +31,7 @@ pub enum ThumbnailsShown {
 pub enum Resizable {
     Sidebar,
     Folder,
+    Kind,
     Modified,
     Size,
 }
@@ -40,6 +41,7 @@ impl Resizable {
         match self {
             Self::Sidebar => "sidebar",
             Self::Folder => "folder",
+            Self::Kind => "type",
             Self::Modified => "modified",
             Self::Size => "size",
         }

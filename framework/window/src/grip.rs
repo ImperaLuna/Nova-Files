@@ -21,7 +21,7 @@ pub struct Held {
 const fn bounds(part: Resizable) -> (Pixels, Pixels) {
     match part {
         Resizable::Sidebar => (size::SIDEBAR_NARROWEST, size::SIDEBAR_WIDEST),
-        Resizable::Folder | Resizable::Modified | Resizable::Size => {
+        Resizable::Folder | Resizable::Kind | Resizable::Modified | Resizable::Size => {
             (size::COLUMN_NARROWEST, size::COLUMN_WIDEST)
         }
     }
@@ -50,6 +50,7 @@ impl MainWindow {
             Resizable::Size if self.shows_shares() => space::COLUMN_WIDTH,
             Resizable::Sidebar => size::SIDEBAR_WIDTH,
             Resizable::Folder => size::FOLDER_WIDTH,
+            Resizable::Kind => size::KIND_WIDTH,
             Resizable::Modified => size::MODIFIED_WIDTH,
             Resizable::Size => size::SIZE_WIDTH,
         }

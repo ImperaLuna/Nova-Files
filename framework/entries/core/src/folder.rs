@@ -52,7 +52,8 @@ pub fn list_folder(
                     let elsewhere = matches!(reason, Unreadable::NotAFolder | Unreadable::Missing)
                         .then(|| inner.list(&job_path, order, hidden))
                         .flatten()
-                        .map(|listed| list::keep_named_known(listed, &filter));
+                        .map(|listed| list::keep_named_known(listed, &filter))
+                        .map(|listed| order::arrange_known(listed, order, job.kinds()));
                     match elsewhere {
                         Some(listed) => send_inner(&job, (id, job_path), listed),
                         None => job.answer(Event::FolderUnreadable {
@@ -67,7 +68,9 @@ pub fn list_folder(
             };
             if let Some(sizer) = sizer {
                 sizes::list_measured(&job, (id, job_path), entries, order, &sizer);
-            } else if let Some(entries) = order::arrange(&job_path, entries, order, cancelled) {
+            } else if let Some(entries) =
+                order::arrange(&job_path, entries, order, job.kinds(), cancelled)
+            {
                 job.send(Listing {
                     id,
                     path: job_path,

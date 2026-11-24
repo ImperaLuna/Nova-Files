@@ -253,6 +253,7 @@ pub mod size {
         px(256.0),
     ];
     pub const MODIFIED_WIDTH: Pixels = px(150.0);
+    pub const KIND_WIDTH: Pixels = px(140.0);
     pub const SIZE_WIDTH: Pixels = px(92.0);
     pub const HEAD_HEIGHT: Pixels = px(38.0);
     pub const HEAD_TOP: Pixels = px(4.0);

@@ -120,13 +120,15 @@ pub enum Event {
     },
     /// Details for entries `first` onward of listing `id`, one per entry,
     /// in entry order, answering [`Command::Rows`], and each entry's icon
-    /// in the same order. Each entry's details come at most once per
-    /// listing.
+    /// and the system's name for its type ("PDF document") in the same
+    /// order; a folder, or a file of a type the system can't name, has no
+    /// name. Each entry's details come at most once per listing.
     DetailsRead {
         id: ListingId,
         first: EntryId,
         details: Arc<[Details]>,
         icons: Arc<[FileIcon]>,
+        kinds: Arc<[Option<Arc<str>>]>,
     },
     /// How many bytes the folders of listing `id` hold so far, by entry,
     /// sent after a listing by [`crate::SortKey::Size`] while

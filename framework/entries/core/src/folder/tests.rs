@@ -18,6 +18,10 @@ impl Icons for Plain {
         FileIcon::BuiltIn(IconKind::Folder)
     }
 
+    fn kind_name(&self, _: &OsStr, _: EntryKind) -> Option<Arc<str>> {
+        None
+    }
+
     fn follow_desktop(&self, _: &[String]) {}
 }
 

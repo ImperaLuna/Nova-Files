@@ -110,12 +110,13 @@ impl MainWindow {
                 first,
                 details,
                 icons,
+                kinds,
             } if self
                 .listing
                 .as_ref()
                 .is_some_and(|listing| listing.id == id) =>
             {
-                self.details_arrived(first, &details, &icons, cx);
+                self.details_arrived(first, &details, (&icons, &kinds), cx);
             }
             Event::FoldersMeasured { id, sizes }
                 if self

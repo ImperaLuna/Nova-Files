@@ -73,6 +73,11 @@ pub enum SortKey {
     Name,
     Modified,
     Size,
+    /// The system's name for a file's type (see [`Event::DetailsRead`]),
+    /// A to Z; files the system can't name come last either way.
+    ///
+    /// [`Event::DetailsRead`]: crate::Event::DetailsRead
+    Kind,
 }
 
 /// How a client wants a folder's entries ordered: by `key`, smallest
